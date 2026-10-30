@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use klipolo_meta::{Auth, MetaClient, MetaError, ResponseOut, SecretString, Usage};
+use klipolo_meta::{pricing, Auth, MetaClient, MetaError, ResponseOut, SecretString, Usage};
 use serde_json::{json, Value};
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
@@ -633,4 +633,65 @@ fn sam_usage_counts_video_frames() {
             .video_frames_processed,
         160
     );
+}
+
+// Pricing.
+
+fn assert_usd(actual: f64, expected: f64) {
+    assert!((actual - expected).abs() < 1e-12, "{actual} != {expected}");
+}
+
+fn spark_usage(input_tokens: u64, cached_tokens: u64, output_tokens: u64) -> Usage {
+    Usage {
+        input_tokens,
+        cached_tokens,
+        output_tokens,
+        ..Usage::default()
+    }
+}
+
+#[test]
+fn spark_usd_counts_cached_tokens() {
+    let usage = spark_usage(10_000, 4_000, 500);
+    assert_usd(
+        pricing::spark_usd(usage),
+        6000.0 * 1.25e-6 + 4000.0 * 0.15e-6 + 500.0 * 4.25e-6,
+    );
+}
+
+#[test]
+fn spark_usd_never_counts_more_cached_than_input() {
+    assert_usd(
+        pricing::spark_usd(spark_usage(100, 500, 0)),
+        100.0 * 0.15e-6,
+    );
+}
+
+#[test]
+fn asr_usd_prices_audio_by_the_hour() {
+    assert_usd(pricing::asr_usd(3_600_000), 0.18);
+    assert_usd(pricing::asr_usd(155_040), 0.18 * 155.04 / 3600.0);
+}
+
+#[test]
+fn spark_video_tokens_match_the_spike_counts() {
+    // The spike measured 42,340 input tokens at the default 2 fps and 22,060
+    // at 1 fps for 155 s, each with a prompt of about 180 tokens.
+    assert_eq!(pricing::spark_video_tokens(155.0, 2.0), 310 * 131 + 1550);
+    assert_eq!(pricing::spark_video_tokens(155.0, 1.0), 155 * 131 + 1550);
+    assert_eq!(pricing::spark_video_tokens(0.4, 2.0), 131 + 4);
+    assert_eq!(pricing::spark_video_tokens(0.0, 2.0), 0);
+    assert_eq!(pricing::spark_video_tokens(-3.0, 2.0), 0);
+    assert_eq!(pricing::spark_video_tokens(f64::NAN, 2.0), 0);
+}
+
+#[test]
+fn sam_usd_bills_at_least_50_frames_per_video() {
+    let frames = |video_frames_processed| Usage {
+        video_frames_processed,
+        ..Usage::default()
+    };
+    assert_usd(pricing::sam_usd(frames(160)), 0.032);
+    assert_usd(pricing::sam_usd(frames(10)), 0.01);
+    assert_usd(pricing::sam_usd(frames(0)), 0.0);
 }

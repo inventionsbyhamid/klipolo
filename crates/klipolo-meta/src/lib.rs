@@ -9,6 +9,8 @@ mod error;
 mod files;
 mod responses;
 
+pub mod pricing;
+
 pub use asr::{AsrResult, AsrTurn, TRANSCRIBE_MODEL};
 pub use client::{
     meta_base, relay_base, Auth, MetaClient, DEFAULT_META_BASE, DEFAULT_RELAY_BASE, META_BASE_ENV,
