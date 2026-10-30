@@ -16,7 +16,8 @@ dependencies = [
 
 [project.optional-dependencies]
 # Word alignment. Install the CPU builds from https://download.pytorch.org/whl/cpu;
-# 2.8 is the last release with torchaudio's forced_align.
+# 2.8 is the last release with torchaudio's forced_align. The image installs
+# exact versions from requirements-torch.lock and requirements.lock.
 align = [
     "torch==2.8.0",
     "torchaudio==2.8.0",
