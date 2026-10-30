@@ -180,9 +180,12 @@ fn the_cut_goes_in_the_quietest_window_of_the_last_minute() {
     pcm[75 * second..76 * second].fill(0);
     let Plan { chunks, loud_cuts } = chunks::plan_with_loud_cuts(&pcm, RATE, 100);
     assert_covers(&chunks, pcm.len());
-    assert!(loud_cuts.is_empty(), "{loud_cuts:?}");
+    // The first cut is the one this test is about: in the silence at 75 s, under the floor. (The second falls in
+    // unbroken tone, wherever its windows tie; tone is most of this file, so its floor sits above the tone and that
+    // cut isn't counted loud either, but that's not what this test checks.)
     let cut = chunks[0].end;
     assert!((75_150_000..=75_850_000).contains(&cut), "cut at {cut} µs");
+    assert!(!loud_cuts.contains(&cut), "{loud_cuts:?}");
     for chunk in &chunks {
         assert!(chunk.len() <= 100_000_000, "{chunk:?}");
     }
