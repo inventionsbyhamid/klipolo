@@ -111,14 +111,17 @@ fn user_messages_are_plain_and_name_settings_where_needed() {
         MetaError::Unauthorized,
         MetaError::RateLimited {
             retry_after: Some(7),
+            code: None,
             message: None,
         },
         MetaError::RateLimited {
             retry_after: None,
+            code: None,
             message: None,
         },
         MetaError::RateLimited {
             retry_after: Some(1),
+            code: None,
             message: Some("Too many requests at once \u{2014} wait".into()),
         },
         MetaError::Overloaded { message: None },
@@ -170,6 +173,7 @@ fn user_messages_are_plain_and_name_settings_where_needed() {
 fn wait_message(retry_after: Option<u64>) -> String {
     MetaError::RateLimited {
         retry_after,
+        code: None,
         message: None,
     }
     .user_message()
@@ -424,6 +428,7 @@ async fn other_statuses_map_to_their_errors() {
         transcribe_error(ResponseTemplate::new(429).insert_header("retry-after", "7")).await,
         MetaError::RateLimited {
             retry_after: Some(7),
+            code: None,
             message: None,
         }
     );
@@ -431,6 +436,7 @@ async fn other_statuses_map_to_their_errors() {
         transcribe_error(ResponseTemplate::new(429)).await,
         MetaError::RateLimited {
             retry_after: None,
+            code: None,
             message: None,
         }
     );
@@ -1085,6 +1091,7 @@ async fn align_quota_used_up_is_rate_limited() {
         error,
         MetaError::RateLimited {
             retry_after: Some(50_400),
+            code: Some("align_quota".into()),
             message: Some(quota.into()),
         }
     );
@@ -1104,10 +1111,40 @@ async fn relay_busy_is_rate_limited_with_its_reason() {
         error,
         MetaError::RateLimited {
             retry_after: Some(1),
+            code: Some("busy".into()),
             message: Some(busy.into()),
         }
     );
     assert_eq!(error.user_message(), busy);
+}
+
+/// Meta's own 429 names its code inside `error`; a "code" that isn't one (words, or text holding a secret) is dropped.
+#[tokio::test]
+async fn a_rate_limits_code_is_kept_only_when_it_is_a_code() {
+    let error = transcribe_error(ResponseTemplate::new(429).set_body_json(json!({
+        "error": {"code": "rate_limit_exceeded", "message": "Slow down."}
+    })))
+    .await;
+    assert_eq!(
+        error,
+        MetaError::RateLimited {
+            retry_after: None,
+            code: Some("rate_limit_exceeded".into()),
+            message: Some("Slow down.".into()),
+        }
+    );
+    for odd in [
+        json!({"error": "Too many requests"}),
+        json!({"error": "key relay-test-token", "message": "Busy."}),
+        json!({"error": {"code": 429, "message": "Busy."}}),
+        json!({"error": "x".repeat(65)}),
+    ] {
+        let error = transcribe_error(ResponseTemplate::new(429).set_body_json(odd.clone())).await;
+        assert!(
+            matches!(error, MetaError::RateLimited { code: None, .. }),
+            "{odd}: {error:?}"
+        );
+    }
 }
 
 #[test]

@@ -172,6 +172,7 @@ mod tests {
             (
                 MetaError::RateLimited {
                     retry_after: Some(50_400),
+                    code: Some("align_quota".into()),
                     message: Some(quota.into()),
                 },
                 Kind::RateLimited,
@@ -219,6 +220,7 @@ mod tests {
         }
         let limited = provider_error(MetaError::RateLimited {
             retry_after: Some(50_400),
+            code: Some("align_quota".into()),
             message: Some(quota.into()),
         });
         assert_eq!(limited.retry_after_s, Some(50_400));

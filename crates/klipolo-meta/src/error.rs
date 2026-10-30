@@ -21,10 +21,13 @@ pub enum MetaError {
     Unauthorized,
     /// 429: too many requests (Meta's rate limit, or the relay's `busy` or
     /// daily `align_quota`). `retry_after` is the `Retry-After` header in
-    /// seconds (up to a day for the quota); `message` the server's reason.
-    #[error("rate limited (429){}{}", retry_hint(*.retry_after), detail(.message.as_ref()))]
+    /// seconds (up to a day for the quota); `code` the server's error code
+    /// (the relay's `busy` or `align_quota`, Meta's own), which tells a busy
+    /// moment from a used-up allowance; `message` the server's reason.
+    #[error("rate limited (429){}{}{}", code_hint(.code.as_ref()), retry_hint(*.retry_after), detail(.message.as_ref()))]
     RateLimited {
         retry_after: Option<u64>,
+        code: Option<String>,
         message: Option<String>,
     },
     /// 503 and other server errors: Meta or the relay cannot answer right
@@ -60,6 +63,10 @@ fn detail(message: Option<&String>) -> String {
     }
 }
 
+fn code_hint(code: Option<&String>) -> String {
+    code.map(|c| format!(" {c}")).unwrap_or_default()
+}
+
 fn retry_hint(retry_after: Option<u64>) -> String {
     retry_after
         .map(|s| format!(", retry after {s} s"))
@@ -86,6 +93,7 @@ impl MetaError {
             },
             429 => Self::RateLimited {
                 retry_after: retry_after.and_then(parse_retry_after),
+                code: body_code(body, secrets),
                 message: body_message(body, secrets),
             },
             500..=599 => Self::Overloaded {
@@ -113,6 +121,7 @@ impl MetaError {
             Self::RateLimited {
                 retry_after,
                 message,
+                ..
             } => sentence(
                 message.as_deref().unwrap_or_default(),
                 &format!(
@@ -180,6 +189,28 @@ fn body_message(body: &[u8], secrets: &[&str]) -> Option<String> {
         Some((cut, _)) => format!("{}...", &text[..cut]),
         None => text,
     })
+}
+
+/// The longest error code kept.
+const MAX_CODE_CHARS: usize = 64;
+
+/// The error code in an error body: the relay's `{"error": code}` or Meta's
+/// `{"error": {"code": ..}}`. Only a code (lowercase letters, digits and
+/// underscores, redacted first) is kept, so it can never carry words or a
+/// secret.
+fn body_code(body: &[u8], secrets: &[&str]) -> Option<String> {
+    let value: Value = serde_json::from_slice(body).ok()?;
+    let error = value.get("error")?;
+    let code = error
+        .as_str()
+        .or_else(|| error.get("code").and_then(Value::as_str))?;
+    let code = redact(code, secrets);
+    let is_code = !code.is_empty()
+        && code.len() <= MAX_CODE_CHARS
+        && code
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+    is_code.then_some(code)
 }
 
 /// `text` with every secret replaced. Run before any truncation, so no part
@@ -319,6 +350,7 @@ mod tests {
     fn display_names_the_status() {
         let limited = |retry_after, message: Option<&str>| MetaError::RateLimited {
             retry_after,
+            code: None,
             message: message.map(str::to_owned),
         };
         assert_eq!(
