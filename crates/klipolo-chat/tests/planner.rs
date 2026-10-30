@@ -752,6 +752,50 @@ fn history_keeps_the_last_six_exchanges() {
 }
 
 #[test]
+fn a_second_answer_does_not_redo_a_tool_already_done() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let square = square_call("call_1");
+    let fixed = cut_call("call_4", 7.9, 29.8);
+    // The format was done in the first answer: a second, different setFormat is dropped.
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![square.clone(), cut_call("call_2", 12.3, 19.7)],
+            0.002,
+        ),
+        answer(
+            "",
+            vec![
+                fc(
+                    "call_3",
+                    "setFormat",
+                    r#"{"format": "portrait", "keepOthers": true}"#,
+                ),
+                fixed.clone(),
+            ],
+            0.002,
+        ),
+    ]);
+    let out = send(&model, &[], "square, and cut the rest", &i, &p).unwrap();
+    assert_eq!(out.calls, vec![parsed(&square), parsed(&fixed)]);
+
+    // A tool both done and refused in the first answer may be called again.
+    let done = cut_call("call_1", 0.5, 0.8);
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![done.clone(), cut_call("call_2", 12.3, 19.7)],
+            0.002,
+        ),
+        answer("", vec![done.clone(), fixed.clone()], 0.002),
+    ]);
+    let out = send(&model, &[], "cut the um and the rest", &i, &p).unwrap();
+    assert_eq!(out.calls, vec![parsed(&done), parsed(&fixed)]);
+    assert_eq!(out.compiled.refusals, vec![]);
+}
+
+#[test]
 fn an_empty_exchange_sends_no_empty_reply() {
     let (p, speech) = talk();
     let i = inputs(&p, speech);

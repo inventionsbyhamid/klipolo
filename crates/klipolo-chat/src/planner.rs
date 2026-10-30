@@ -10,8 +10,8 @@
 //! nothing), the whole input is sent again with nothing stored at the provider: the first answer's text and calls,
 //! then one output per call (the reason for a refused one, `DONE_OUTPUT` or `PROPOSED_OUTPUT` for the others, and
 //! `TOLD_PERSON` for one refused for the person, whose reason is never sent back). The calls of the second answer
-//! replace the refused ones: the first answer's other calls and the second's (an exact repeat dropped) are compiled
-//! once, in that order, against the same snapshot and inputs, so the message still makes one additions transaction and
+//! replace the refused ones: the first answer's other calls and the second's (a repeat of what was done dropped) are
+//! compiled once, in that order, against the same snapshot and inputs, so the message still makes one additions transaction and
 //! one proposal. A call refused back to the model again stays undone, and the reply says so.
 //!
 //! The reply is the model's text, then the sentences of refusals meant for the person, then what couldn't be done; all
@@ -233,15 +233,24 @@ pub async fn plan(
     let second = ask(model, &request, spent).await?;
     spent += second.usage_usd;
 
-    // The first answer's calls not sent back, then the second's, compiled once.
+    // The first answer's calls not sent back, then the second's, compiled once. The second answer redoes only what was
+    // refused: a call of a tool the first answer already did (and had none of refused) is dropped, as is an exact
+    // repeat of a call done.
     let mut calls: Vec<ToolCall> = (read.parsed.iter().zip(&outcomes))
         .filter(|(_, outcome)| !outcome.is_back())
         .filter_map(|(parsed, _)| parsed.as_ref().ok().cloned())
         .collect();
     let kept = calls.len();
+    let done: Vec<&str> = calls.iter().map(ToolCall::name).collect();
+    let refused: Vec<&str> = (first.calls.iter().zip(&outcomes))
+        .filter(|(_, outcome)| outcome.is_back())
+        .map(|(call, _)| call.name.as_str())
+        .collect();
     let again = Read::of(&second.calls);
     for call in again.calls {
-        if !calls[..kept].contains(&call) {
+        let repeat = calls[..kept].contains(&call);
+        let redone = done.contains(&call.name()) && !refused.contains(&call.name());
+        if !repeat && !redone {
             calls.push(call);
         }
     }
