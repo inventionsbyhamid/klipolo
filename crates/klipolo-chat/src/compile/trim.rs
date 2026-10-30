@@ -5,11 +5,11 @@
 //!   edge (it is padded the same way on a word). It becomes `TrimClip` while the clip is still one piece in the working
 //!   copy, else the same footage removed from its pieces.
 //! - Outward (longer) is an addition: `toSec` may reach into the clip next to it (or, for the last clip's end, past the
-//!   main track's end), and only as far as the clip's file has footage; the model would refuse more, so it is refused
-//!   here with how much there is.
+//!   main track's end; the first clip's start can't move before 0), and only as far as the clip's file has footage.
+//!   The model would refuse more, so it is refused here rather than clamped.
 //!
-//! A time on the wrong side gives the clip's range, "trimClip: c2 plays from 10.0 to 20.0 s; 45.0 is outside it.", so
-//! the model sees where the clip is, inside a folded run too.
+//! Every refusal of a clip that resolved gives its range and how far that end may move, "trimClip: c2 plays from 10.0
+//! to 20.0 s and can grow to 30.0; 45.0 is outside it.", so the model sees where the clip is, inside a folded run too.
 
 use klipolo_model::Project;
 use klipolo_model::coded::{CodedError, ErrorParam};
@@ -63,12 +63,34 @@ pub(super) fn plan(c: &Compiler, clip_ref: &str, edge: Edge, to_us: Us) -> Resul
     };
     let (clip, start, end) = c.map.clip(i);
     let main = &c.snapshot.timeline.main;
+    let file_us = source_duration_us(c.snapshot, &clip.source).unwrap_or(clip.source_out_us);
+    // How far each end may move out: into the clip next to it (past the main track's end for the last clip's end; never
+    // before 0), and only as far as the file has footage.
+    let latest_end = (main.get(i + 1))
+        .map_or(Us::MAX, |next| end.saturating_add(next.duration_us()))
+        .min(end.saturating_add(scaled(file_us - clip.source_out_us, clip.speed)));
+    let earliest_start = (i.checked_sub(1))
+        .map_or(0, |p| start.saturating_sub(main[p].duration_us()))
+        .max(start.saturating_sub(scaled(clip.source_in_us, clip.speed)));
     let plays = format!(
         "trimClip: {clip_ref} plays from {} to {} s",
         secs(start),
         secs(end)
     );
-    let outside = || to_model(format!("{plays}; {} is outside it.", secs(to_us)));
+    let reach = match edge {
+        Edge::End if latest_end > end => format!("{plays} and can grow to {}", secs(latest_end)),
+        Edge::End => format!("{plays} and can't grow longer"),
+        Edge::Start if earliest_start < start => {
+            format!("{plays} and can start as early as {}", secs(earliest_start))
+        }
+        Edge::Start => format!("{plays} and can't start earlier"),
+    };
+    let outside = || to_model(format!("{reach}; {} is outside it.", secs(to_us)));
+    // The evidence's reason, after the clip's range.
+    let on_evidence = |r: Refused| match r.reason.strip_prefix("trimClip: ") {
+        Some(why) => to_model(format!("{plays}; {why}")),
+        None => r,
+    };
     let trim = |to_us, source_us, removed| Trim {
         clip_ref: clip_ref.to_owned(),
         clip: i,
@@ -77,52 +99,32 @@ pub(super) fn plan(c: &Compiler, clip_ref: &str, edge: Edge, to_us: Us) -> Resul
         source_us,
         removed,
     };
-    let file_us = source_duration_us(c.snapshot, &clip.source).unwrap_or(clip.source_out_us);
     match edge {
         Edge::End if to_us == end => Err(to_model(format!(
-            "trimClip: {clip_ref} already ends at {} s.",
+            "{reach}; it already ends at {}.",
             secs(end)
         ))),
         Edge::Start if to_us == start => Err(to_model(format!(
-            "trimClip: {clip_ref} already starts at {} s.",
+            "{reach}; it already starts at {}.",
             secs(start)
         ))),
+        // Longer, within its reach, else refused rather than clamped (the model would refuse footage the file doesn't
+        // have). The `min`s only absorb a sped-up clip's rounding at the very end of its reach.
         Edge::End if to_us > end => {
-            // Longer: into the next clip, or past the end for the last one; as far as the file goes.
-            let next_end =
-                (main.get(i + 1)).map_or(Us::MAX, |next| end.saturating_add(next.duration_us()));
-            if to_us > next_end {
+            if to_us > latest_end {
                 return Err(outside());
             }
             let source_us = clip
                 .source_out_us
-                .saturating_add(unscaled(to_us - end, clip.speed));
-            if source_us > file_us {
-                let more = scaled(file_us - clip.source_out_us, clip.speed);
-                return Err(to_model(format!(
-                    "{plays}, and its file has {} s more after it; {} is past that.",
-                    secs(more),
-                    secs(to_us)
-                )));
-            }
+                .saturating_add(unscaled(to_us - end, clip.speed))
+                .min(file_us);
             Ok(trim(to_us, source_us, None))
         }
         Edge::Start if to_us < start => {
-            let previous_start = i
-                .checked_sub(1)
-                .map_or(0, |p| start.saturating_sub(main[p].duration_us()));
-            if to_us < previous_start {
+            if to_us < earliest_start {
                 return Err(outside());
             }
-            let back = unscaled(start - to_us, clip.speed);
-            if back > clip.source_in_us {
-                let more = scaled(clip.source_in_us, clip.speed);
-                return Err(to_model(format!(
-                    "{plays}, and its file has {} s more before it; {} is past that.",
-                    secs(more),
-                    secs(to_us)
-                )));
-            }
+            let back = unscaled(start - to_us, clip.speed).min(clip.source_in_us);
             Ok(trim(to_us, clip.source_in_us - back, None))
         }
         // Shorter: what goes is a cut from `toSec` to the clip's edge, which stands on the evidence like one.
@@ -130,11 +132,13 @@ pub(super) fn plan(c: &Compiler, clip_ref: &str, edge: Edge, to_us: Us) -> Resul
             if to_us <= start {
                 return Err(outside());
             }
-            let removed = c.checked(
-                "trimClip",
-                ("toSec", "the clip's end"),
-                RangeUs { start: to_us, end },
-            )?;
+            let removed = c
+                .checked(
+                    "trimClip",
+                    ("toSec", "the clip's end"),
+                    RangeUs { start: to_us, end },
+                )
+                .map_err(on_evidence)?;
             if removed.start <= start {
                 return Err(outside());
             }
@@ -145,11 +149,13 @@ pub(super) fn plan(c: &Compiler, clip_ref: &str, edge: Edge, to_us: Us) -> Resul
             if to_us >= end {
                 return Err(outside());
             }
-            let removed = c.checked(
-                "trimClip",
-                ("the clip's start", "toSec"),
-                RangeUs { start, end: to_us },
-            )?;
+            let removed = c
+                .checked(
+                    "trimClip",
+                    ("the clip's start", "toSec"),
+                    RangeUs { start, end: to_us },
+                )
+                .map_err(on_evidence)?;
             if removed.end >= end {
                 return Err(outside());
             }

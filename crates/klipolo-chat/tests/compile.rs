@@ -836,7 +836,9 @@ fn trims_stay_within_the_clip_or_its_neighbour_and_the_file() {
     // Shorter, to an invented time: refused like a cut.
     let invented = run("shorten c2", trim("c2", "end", 17.0));
     assert!(
-        refused_to_model(&invented, 0).starts_with("trimClip: toSec 17.0 is not within 0.3 s of"),
+        refused_to_model(&invented, 0).starts_with(
+            "trimClip: c2 plays from 10.0 to 20.0 s; toSec 17.0 is not within 0.3 s of"
+        ),
         "{:?}",
         invented.refusals
     );
@@ -870,27 +872,32 @@ fn trims_stay_within_the_clip_or_its_neighbour_and_the_file() {
             source_us: secs(55.0)
         }]
     );
-    // Refused with the clip's range: a time on the wrong side of it, past the clip next to it, or past its file.
+    // Refused with the clip's range and how far that end may move: a time on the wrong side of it, past the clip
+    // next to it, past its file, or where the end already is. The first clip's start can't move earlier.
     for (c, why) in [
         (
             trim("c2", "end", 5.0),
-            "trimClip: c2 plays from 10.0 to 20.0 s; 5.0 is outside it.",
+            "trimClip: c2 plays from 10.0 to 20.0 s and can grow to 30.0; 5.0 is outside it.",
         ),
         (
             trim("c2", "start", 25.0),
-            "trimClip: c2 plays from 10.0 to 20.0 s; 25.0 is outside it.",
+            "trimClip: c2 plays from 10.0 to 20.0 s and can start as early as 0.0; 25.0 is outside it.",
         ),
         (
             trim("c2", "end", 45.0),
-            "trimClip: c2 plays from 10.0 to 20.0 s; 45.0 is outside it.",
+            "trimClip: c2 plays from 10.0 to 20.0 s and can grow to 30.0; 45.0 is outside it.",
         ),
         (
             trim("c3", "end", 45.0),
-            "trimClip: c3 plays from 20.0 to 30.0 s, and its file has 10.0 s more after it; 45.0 is past that.",
+            "trimClip: c3 plays from 20.0 to 30.0 s and can grow to 40.0; 45.0 is outside it.",
         ),
         (
             trim("c2", "end", 20.0),
-            "trimClip: c2 already ends at 20.0 s.",
+            "trimClip: c2 plays from 10.0 to 20.0 s and can grow to 30.0; it already ends at 20.0.",
+        ),
+        (
+            trim("c1", "start", 0.0),
+            "trimClip: c1 plays from 0.0 to 10.0 s and can't start earlier; it already starts at 0.0.",
         ),
     ] {
         let out = run("trim 5 15 25 35 45", c);

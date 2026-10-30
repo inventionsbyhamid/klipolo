@@ -917,6 +917,22 @@ fn enum_words_are_the_models_own_names() {
 }
 
 #[test]
+fn trim_clip_says_how_far_an_end_can_move() {
+    let trim = (tool_list().into_iter())
+        .find(|t| t["name"] == "trimClip")
+        .expect("trimClip");
+    let description = trim["description"].as_str().unwrap();
+    assert!(
+        description.contains("at most into the clip next to it"),
+        "{description}"
+    );
+    assert!(
+        description.contains("The first clip's start can't move earlier."),
+        "{description}"
+    );
+}
+
+#[test]
 fn tools_are_the_same_bytes_every_time() {
     let first = serde_json::to_string(&tools()).unwrap();
     for _ in 0..3 {

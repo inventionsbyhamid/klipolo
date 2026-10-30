@@ -430,7 +430,8 @@ const TOOLS: &[Tool] = &[
     Tool {
         name: "trimClip",
         description: "Move the start or the end of one clip to a new time. Shortening a clip is proposed like other \
-                      removals; lengthening it shows more of its file.",
+                      removals; lengthening it shows more of its file, at most into the clip next to it. The first \
+                      clip's start can't move earlier.",
         parameters: || {
             vec![
                 (
