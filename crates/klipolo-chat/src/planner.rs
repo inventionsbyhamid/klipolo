@@ -16,7 +16,8 @@
 //!
 //! The reply is the model's text, then the sentences of refusals meant for the person, then what couldn't be done; all
 //! of it without em or en dashes (`sanitize::reply`). When nothing came of the answer but what couldn't be done, the
-//! model's text (which may claim it did it) is left out.
+//! model's text (which may claim it did it) is left out. With none of these, the reply is `askUser`'s questions, else a
+//! short sentence on what was done; otherwise the questions are only in `Compiled::questions`.
 //!
 //! Errors leave the project untouched: nothing is compiled, and each is one plain sentence (`ChatError`). A project
 //! whose context is over budget (`ChatContext::fits`) is refused before any model call.
