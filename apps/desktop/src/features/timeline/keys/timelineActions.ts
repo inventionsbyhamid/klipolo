@@ -21,6 +21,7 @@ import { useRange, type TimeRange } from '../../../state/range';
 import { useSelection } from '../../../state/selection';
 import { toast } from '../../../state/toasts';
 import { useTimelineFocus } from '../../../state/timelineFocus';
+import { formatTime as formatClock } from '../../../player/time';
 import { useUi } from '../../../state/ui';
 import { announce } from '../announce';
 import { dragging } from '../drag/controller';
@@ -237,6 +238,26 @@ export function deleteRange(range: TimeRange) {
       usePlayback.getState().seek(Math.min(range.startUs, end));
     });
   });
+}
+
+/**
+ * I and O: the selected time range starts or ends at the playhead, and screen readers hear the range it
+ * makes. With none yet, I selects from the playhead to the end, O from the start to the playhead.
+ */
+export function markRange(edge: 'in' | 'out') {
+  const project = useProject.getState().snapshot?.project;
+  if (!project) return;
+  const durationUs = videoDurationUs(project.timeline);
+  const at = Math.min(usePlayback.getState().playheadUs, durationUs);
+  const range = useRange.getState().range;
+  useSelection.getState().select(null);
+  if (edge === 'in') useRange.getState().select(at, range && range.endUs > at ? range.endUs : durationUs);
+  else useRange.getState().select(range && range.startUs < at ? range.startUs : 0, at);
+  const now = useRange.getState().range;
+  if (!now) return;
+  const from = formatClock(now.startUs);
+  const to = formatClock(now.endUs);
+  announce(t({ id: 'timeline.range.marked', message: `Selected ${from} to ${to}` }));
 }
 
 /** ↑ / ↓: the playhead to the previous (−1) or next (1) edit point, never past the end of the video. */

@@ -89,6 +89,8 @@ describe('a time range on the timeline', () => {
     act(() => usePlayback.setState({ playheadUs: 8 * S }));
     await userEvent.keyboard('o');
     expect(useRange.getState().range).toEqual({ startUs: 3 * S, endUs: 8 * S });
+    // Screen readers hear the range each key made.
+    expect(screen.getByRole('status')).toHaveTextContent('Selected 0:03.0 to 0:08.0');
   });
 
   it('empty_timeline_disables_export_with_reason', async () => {

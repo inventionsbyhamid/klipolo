@@ -1,12 +1,10 @@
 import { useEffect, useEffectEvent } from 'react';
-import { videoDurationUs } from '../../lib/timeline';
 import { flushBursts } from '../../state/bursts';
-import { usePlayback } from '../../state/playback';
-import { useProject } from '../../state/project';
 import { useRange } from '../../state/range';
 import { useSelection } from '../../state/selection';
 import type { RunOptions } from './command';
 import { inPopup, keyOf, otherAlone, OWNS_KEYS, PAGE_LIST, primaryHeld, within } from './shortcutKeys';
+import { markRange } from '../timeline/commands';
 import { useCommands } from './useCommands';
 
 /** Keys typed into a field belong to the field. */
@@ -23,21 +21,6 @@ const PRESSES =
 
 /** ⌘C, ⌘X, ⌘V and ⌘D leave the system's clipboard and keys alone when there is nothing of ours to act on. */
 const OPTIONAL = new Set(['copy', 'cut', 'paste', 'duplicate', 'paste-effects']);
-
-/**
- * I and O: the selected time range starts or ends at the playhead. With none yet, I selects from the
- * playhead to the end, O from the start to the playhead.
- */
-function markRange(edge: 'in' | 'out') {
-  const project = useProject.getState().snapshot?.project;
-  if (!project) return;
-  const durationUs = videoDurationUs(project.timeline);
-  const at = Math.min(usePlayback.getState().playheadUs, durationUs);
-  const range = useRange.getState().range;
-  useSelection.getState().select(null);
-  if (edge === 'in') useRange.getState().select(at, range && range.endUs > at ? range.endUs : durationUs);
-  else useRange.getState().select(range && range.startUs < at ? range.startUs : 0, at);
-}
 
 /**
  * Editor keyboard shortcuts, with ⌘ on a Mac and Ctrl on Windows and Linux; ⌃ alone on a Mac (the field's
