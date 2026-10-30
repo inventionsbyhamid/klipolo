@@ -58,3 +58,18 @@ def test_meta_key_is_left_out_of_repr():
 def test_bad_values_fail_with_the_variable_name(name, value):
     with pytest.raises(ValueError, match=name):
         load_settings({name: value})
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("DEVICE_CAP_USD", "nan"),
+        ("DEVICE_CAP_USD", "inf"),
+        ("GLOBAL_CAP_USD", "NaN"),
+        ("GLOBAL_CAP_USD", "Infinity"),
+        ("ALIGN_MINUTES_PER_DEVICE_PER_DAY", "inf"),
+    ],
+)
+def test_non_finite_values_fail_with_the_variable_name(name, value):
+    with pytest.raises(ValueError, match=name):
+        load_settings({name: value})

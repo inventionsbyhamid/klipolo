@@ -3,6 +3,7 @@
 META_API_KEY is held for the proxy and is never logged or shown in repr.
 """
 
+import math
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -26,6 +27,8 @@ def _number(env: Mapping[str, str], name: str, default: str, kind: type, minimum
         value = kind(raw)
     except ValueError:
         raise ValueError(f"{name} must be a {kind.__name__}, got {raw!r}") from None
+    if not math.isfinite(value):
+        raise ValueError(f"{name} must be a finite number, got {raw!r}")
     if value < minimum:
         raise ValueError(f"{name} must be at least {minimum}, got {raw!r}")
     return value
