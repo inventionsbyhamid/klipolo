@@ -493,10 +493,21 @@ impl Batch {
 }
 
 /// Whether a request of `n` turns over `span` is within `limits`. One turn may use all of `max_audio_ms`; more keep
-/// to `preferred_audio_ms`. Each turn's allowance for overlap keeps a millisecond spare for rounding to whole ms.
+/// to `preferred_audio_ms`.
+///
+/// The padded turns may add up to the audio plus `overlap_per_turn_ms` each, but an aligner leaves out a turn it can't
+/// time (too short for its text), and then the turns left must still fit. A turn's padded span is at least two pads,
+/// so with an allowance of `overlap_per_turn_ms` less two pads a turn, any turns may be left out and the rest still fit
+/// (one alone always does: its span is the request's). Turns that don't overlap always fit; only voices talking over
+/// each other are split up sooner. A millisecond a turn is kept spare for rounding to whole ms.
 fn fits(span: RangeUs, n: usize, padded_us: Us, text_bytes: usize, limits: &AlignLimits) -> bool {
     let audio = span.len();
-    let overlap = ms_us(limits.overlap_per_turn_ms.saturating_sub(1));
+    let overlap = ms_us(
+        limits
+            .overlap_per_turn_ms
+            .saturating_sub(2 * limits.pad_ms)
+            .saturating_sub(1),
+    );
     audio <= ms_us(limits.max_audio_ms)
         && (n == 1 || audio <= ms_us(limits.preferred_audio_ms))
         && n <= limits.max_turns

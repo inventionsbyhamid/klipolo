@@ -830,6 +830,45 @@ async fn a_turn_with_no_length_keeps_its_words() {
     assert_well_formed(&out);
 }
 
+/// The relay leaves out a turn too short for its text, and then the turns left must still cover at most the audio plus
+/// 1 s each, or the whole request is refused. So every request fits that bound whichever of its turns are left out:
+/// here seven short turns would otherwise make room for two voices talking over each other in one request.
+#[tokio::test]
+async fn align_requests_stay_within_the_bound_whatever_the_aligner_skips() {
+    let transcriber = FakeAsr::new(600, |_| {
+        let mut said: Vec<SpeakerTurn> = (0..7)
+            .map(|i| turn(300 + 100 * i, 350 + 100 * i, &format!("s{i}")))
+            .collect();
+        said.push(turn(1_000, 5_000, "first voice talking here"));
+        said.push(turn(1_000, 5_000, "second voice at once"));
+        Ok(heard(said))
+    });
+    let aligner = FakeAligner::new(|turns| Ok(timed_evenly(turns, 0.9)));
+    let clip = clip(&[tone(6.0)]);
+
+    transcribe_asset(&transcriber, &aligner, &clip.path, &[])
+        .await
+        .unwrap();
+
+    for call in aligner.calls() {
+        let audio_ms = call.samples as u64 * 1_000 / u64::from(RATE);
+        // The worst the aligner can leave: only the turns whose padded span is over 1 s.
+        let worst: u64 = call
+            .turns
+            .iter()
+            .map(|t| {
+                let padded = (t.end_ms + 250).min(audio_ms) - t.start_ms.saturating_sub(250);
+                padded.saturating_sub(1_000)
+            })
+            .sum();
+        assert!(
+            worst <= audio_ms,
+            "{worst} ms over {audio_ms} ms: {:?}",
+            call.turns
+        );
+    }
+}
+
 /// Requests keep to the aligner's limits: audio, turns, JSON size, and how much the turns may overlap; turns are sent
 /// in the WAV's own time, each turn once, never more requests at once than allowed. A turn too big for any request is
 /// spread.
