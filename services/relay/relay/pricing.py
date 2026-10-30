@@ -1,7 +1,7 @@
 """Meta Model API list prices and the cost of one call from its usage.
 
 `cost_usd` prices the usage numbers Meta returns. When a call's usage is never
-seen (the client dropped a stream, or a success came back without usage),
+seen (Meta's stream broke off, a timeout, a success without usage),
 `estimate_usage` builds a conservative stand-in from the request so the call
 is still charged.
 """
@@ -29,6 +29,9 @@ SAM_IMAGE_USD = 2.50 / 1000
 # Meta bills at least 50 frames per SAM video request.
 SAM_MIN_FRAMES = 50
 TRANSCRIBE_HOUR_USD = 0.18
+# The least an estimated call with media costs. Video sent by reference makes a
+# tiny request, so its byte estimate says almost nothing about its cost.
+MEDIA_ESTIMATE_FLOOR_USD = 0.10
 
 # Meta's SAM usage names video frames but no image count is documented, so the
 # relay counts the images in the request and adds them under this key.
@@ -41,14 +44,21 @@ _WAV_MIN_BYTES_PER_SECOND = 32_000
 
 def cost_usd(endpoint: str, model: str | None, usage: Mapping[str, Any]) -> float:
     """Price one call. Raises ValueError for an unpriced endpoint or model, or
-    for usage that is not a mapping of non-negative numbers."""
+    for usage that is not a mapping of non-negative numbers. An estimate
+    (`"estimated": true`) costs at least its `floor_usd`."""
     if endpoint == "files":
         return 0.0
     if model not in MODELS_BY_ENDPOINT.get(endpoint, ()):
         raise ValueError(f"no price for {model!r} on {endpoint!r}")
     if not isinstance(usage, Mapping):
         raise ValueError("usage must be an object")
+    cost = _cost(model, usage)
+    if usage.get("estimated") is True:
+        cost = max(cost, _count(usage, "floor_usd"))
+    return cost
 
+
+def _cost(model: str, usage: Mapping[str, Any]) -> float:
     if model in SPARK_MODELS:
         input_tokens = _count(usage, "input_tokens")
         details = usage.get("input_tokens_details") or {}
@@ -78,14 +88,16 @@ def estimate_usage(
     audio_bytes: int = 0,
     images: int = 0,
     has_video: bool = False,
+    media: bool = False,
 ) -> dict[str, Any]:
     """A conservative usage stand-in for a call whose real usage was not seen.
 
-    Spark: input tokens are about request bytes / 4, priced as input. This
-    under-estimates video sent by file_id or URL: the request is small but
-    Meta counts about 131 tokens per sampled frame. SAM: the 50-frame video
-    minimum plus each image in the request, also low for long videos.
-    Transcription: the audio's longest possible length.
+    Spark: input tokens are about request bytes / 4, priced as input. SAM:
+    the 50-frame video minimum plus each image in the request. Transcription:
+    the audio's longest possible length. Both byte and frame estimates are far
+    too low for video sent by file_id or URL (Meta counts about 131 tokens per
+    sampled frame), so a call with `media` costs at least
+    MEDIA_ESTIMATE_FLOOR_USD.
     """
     if model in SPARK_MODELS:
         usage: dict[str, Any] = {"input_tokens": math.ceil(request_bytes / 4), "output_tokens": 0}
@@ -97,6 +109,8 @@ def estimate_usage(
     else:
         usage = {}
     usage["estimated"] = True
+    if media:
+        usage["floor_usd"] = MEDIA_ESTIMATE_FLOOR_USD
     return usage
 
 

@@ -28,7 +28,7 @@ import math
 import re
 import sqlite3
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -224,6 +224,9 @@ class Meter:
     audio_bytes: int = 0
     images: int = 0
     has_video: bool = False
+    # Video, files or earlier context by reference, or SAM: the request size
+    # says little about the cost, so an estimate gets a floor.
+    media: bool = False
 
     def price(self, usage: Any) -> tuple[dict[str, Any], float]:
         if isinstance(usage, Mapping):
@@ -241,6 +244,7 @@ class Meter:
             audio_bytes=self.audio_bytes,
             images=self.images,
             has_video=self.has_video,
+            media=self.media,
         )
         return estimate, cost_usd(self.endpoint, self.model, estimate)
 
@@ -299,12 +303,20 @@ async def create_response(request: Request, device: RelayDevice, conn: Conn, set
         _check_response_options(payload)
         body = _encode(payload)
         inputs = payload.get("input")
+        has_video = bool(_count_parts(inputs, "input_video") or _count_parts(inputs, "input_file"))
         meter = Meter(
             "responses",
             model,
             request_bytes=len(body),
             images=_count_parts(inputs, "input_image"),
-            has_video=bool(_count_parts(inputs, "input_video") or _count_parts(inputs, "input_file")),
+            has_video=has_video,
+            media=(
+                model == SAM_MODEL
+                or has_video
+                or _has_key(inputs, "file_id")
+                or payload.get("previous_response_id") is not None
+                or payload.get("conversation") is not None
+            ),
         )
         return Call("POST", "responses", meter, content=body, headers={"content-type": "application/json"})
 
@@ -765,18 +777,24 @@ def _check_response_options(payload: dict[str, Any]) -> None:
         raise RelayError(400, "unsupported", "Only the default service tier is supported through the relay.")
 
 
-def _count_parts(value: Any, part_type: str) -> int:
-    count = 0
+def _objects(value: Any) -> Iterator[dict[str, Any]]:
+    """Every JSON object inside `value`, at any depth."""
     stack = [value]
     while stack:
         item = stack.pop()
         if isinstance(item, dict):
-            if item.get("type") == part_type:
-                count += 1
+            yield item
             stack.extend(item.values())
         elif isinstance(item, list):
             stack.extend(item)
-    return count
+
+
+def _count_parts(value: Any, part_type: str) -> int:
+    return sum(1 for item in _objects(value) if item.get("type") == part_type)
+
+
+def _has_key(value: Any, key: str) -> bool:
+    return any(key in item for item in _objects(value))
 
 
 def _file_call(method: str, file_id: str) -> Callable[[], Awaitable[Call]]:

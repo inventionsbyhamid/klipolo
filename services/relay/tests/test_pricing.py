@@ -116,3 +116,26 @@ def test_transcribe_estimate_assumes_16_khz_16_bit_mono():
 
     assert usage["audioDurationMs"] == 155000
     assert cost_usd("asr/transcribe", "muse-voice-transcribe-1.0", usage) == pytest.approx(0.18 * 155 / 3600)
+
+
+def test_media_estimate_is_at_least_the_floor():
+    small = estimate_usage("responses", "muse-spark-1.3", request_bytes=300, media=True)
+    large = estimate_usage("responses", "muse-spark-1.3", request_bytes=400_000, media=True)
+    sam = estimate_usage("responses", "sam-3.1", request_bytes=300, has_video=True, media=True)
+
+    assert small["floor_usd"] == 0.10
+    assert cost_usd("responses", "muse-spark-1.3", small) == pytest.approx(0.10)
+    # Above the floor the byte estimate stands.
+    assert cost_usd("responses", "muse-spark-1.3", large) == pytest.approx(100_000 * 1.25e-6)
+    assert cost_usd("responses", "sam-3.1", sam) == pytest.approx(0.10)
+
+
+def test_text_estimate_has_no_floor():
+    usage = estimate_usage("responses", "muse-spark-1.3", request_bytes=300)
+
+    assert "floor_usd" not in usage
+    assert cost_usd("responses", "muse-spark-1.3", usage) == pytest.approx(75 * 1.25e-6)
+
+
+def test_floor_applies_only_to_estimates():
+    assert cost_usd("responses", "muse-spark-1.3", {"input_tokens": 10, "floor_usd": 0.10}) == pytest.approx(10 * 1.25e-6)

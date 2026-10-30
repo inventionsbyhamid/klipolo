@@ -442,6 +442,35 @@ def test_meta_timeout_after_the_request_was_sent_charges_the_estimate(client, co
     assert_ledger_matches_spend(conn, device)
 
 
+VIDEO_BY_FILE = {"type": "input_video", "file_id": "file-1"}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        spark_request(input=[{"role": "user", "content": [{"type": "input_text", "text": "moments"}, VIDEO_BY_FILE]}]),
+        spark_request(input=[{"role": "user", "content": [{"type": "input_file", "file_url": "https://x/a.mp4"}]}]),
+        spark_request(input=[{"role": "user", "content": [{"type": "input_image", "file_id": "file-2"}]}]),
+        {"model": "sam-3.1", "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}]}]},
+        spark_request(previous_response_id="resp_0"),
+    ],
+    ids=["input-video", "input-file", "file-id", "sam", "earlier-context"],
+)
+def test_timeout_on_a_media_call_charges_at_least_the_floor(client, conn, meta, body):
+    device = add_device(conn)
+    meta.post("/responses").mock(side_effect=httpx.ReadTimeout("slow"))
+
+    response = client.post("/meta/v1/responses", json=body, headers=device.headers)
+
+    assert response.status_code == 504
+    [row] = ledger(conn, device)
+    usage = json.loads(row["usage_json"])
+    assert usage["estimated"] is True
+    assert usage["floor_usd"] == 0.10
+    assert row["cost_usd"] == pytest.approx(0.10)
+    assert_ledger_matches_spend(conn, device)
+
+
 def test_success_without_usage_charges_the_estimate(client, conn, meta):
     device = add_device(conn)
     body = spark_body()
