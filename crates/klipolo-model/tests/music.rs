@@ -8,7 +8,7 @@ use klipolo_model::media::music::{
     add_music_ops, is_music, refit_music_ops, with_music_refit, MusicOpts, MUSIC_FADE_IN_US,
     MUSIC_FADE_OUT_US,
 };
-use klipolo_model::ops::ClipPatch;
+use klipolo_model::ops::{ClipPatch, TrackTarget};
 use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::query::video_duration;
 use klipolo_model::time::Us;
@@ -88,6 +88,34 @@ fn speed(clip: &str, speed: f64) -> Op {
             ..ClipPatch::default()
         },
     }
+}
+
+/// A sound layer of the 8 s loop, `start` to `start + len` seconds, ducking `duck` (None: a sound effect).
+fn sound_layer(id: &str, start: f64, len: f64, duck: Option<f64>) -> Item {
+    Item {
+        content: ItemContent::Audio {
+            asset_id: "loop".into(),
+            source_in_us: 0,
+            volume: 1.0,
+            muted: false,
+            fade_in_us: 0,
+            fade_out_us: 0,
+            effect: None,
+            drift_ppm: 0.0,
+            centre_from: None,
+            tie: None,
+            duck,
+        },
+        ..still_item(id, start, len)
+    }
+}
+
+/// The free music layers (the beds), by start.
+fn beds(p: &Project) -> Vec<&Item> {
+    music(p)
+        .into_iter()
+        .filter(|i| i.attach.is_none())
+        .collect()
 }
 
 /// The music layers, by start.
@@ -678,4 +706,49 @@ fn speed_change_refits_music() {
             "{song} back at 1x"
         );
     }
+}
+
+#[test]
+fn attached_sounds_follow_the_cut_and_music_refits() {
+    let mut p = with_music(&video(30.0), "song", MusicOpts::default());
+    // Sounds tied to their moments: a whoosh inside the cut, one after it, and a ducked sting from 26 s that runs on
+    // 4 s past the end. The sting ducks, so it counts as music, but it is attached: the refit never touches it.
+    for item in [
+        sound_layer("inside", 10.5, 1.0, None),
+        sound_layer("after", 20.0, 1.0, None),
+        sound_layer("sting", 26.0, 8.0, Some(-12.0)),
+    ] {
+        apply(
+            &mut p,
+            Op::AddItem {
+                track: TrackTarget::Auto,
+                item,
+                attach: true,
+            },
+        );
+    }
+    let ops = with_music_refit(&p, vec![cut(10.0, 12.0)]).unwrap();
+    let after = apply_ops(&p, &ops).unwrap();
+    assert_eq!(video_duration(&after.timeline), secs(28.0));
+
+    // The bed ends with the video, fading out there.
+    let bed = beds(&after);
+    assert_eq!(spans(&bed), [(0.0, 28.0)]);
+    assert_eq!((fade_in(bed[0]), fade_out(bed[0])), (0.5, 2.0));
+    // The whoosh inside the cut is gone; the one after it moved back by the cut's 2 s.
+    assert!(after
+        .timeline
+        .tracks
+        .iter()
+        .all(|t| t.items.iter().all(|i| i.id != "inside")));
+    let moved = item_by_id(&after, "after");
+    assert_eq!((moved.start_us, moved.end_us()), (secs(18.0), secs(19.0)));
+    // The sting moved with its moment and kept its whole length and fades.
+    let sting = item_by_id(&after, "sting");
+    assert!(sting.attach.is_some());
+    assert_eq!((sting.start_us, sting.end_us()), (secs(24.0), secs(32.0)));
+    assert_eq!((fade_in(sting), fade_out(sting)), (0.0, 0.0));
+    assert!(ops.iter().all(
+        |op| !matches!(op, Op::UpdateItem { id, .. } | Op::RemoveItem { id } if id == "sting")
+    ));
 }
