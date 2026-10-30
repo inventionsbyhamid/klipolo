@@ -10,6 +10,9 @@
 //!   VideoToolbox's hardware encoder, then its software one; Linux has none yet, so the copy is a Mac feature).
 //! - **Sound:** the engine's own decode (`audio::decode`, 48 kHz), mixed to mono and encoded as AAC (Apple's encoder
 //!   where there is one), interleaved with the picture as it goes.
+//! - **Every frame:** an `EveryFrame` caller sees each decoded frame of the source at its own rate, before the copy
+//!   thins it, as a grey picture (`luma_frames`'s): the scene log finds its cuts there, to the source's frame, whatever
+//!   frame rate the copy keeps.
 //! - **Times:** the copy's time 0 is `range.start` on the source's file clock (its picture's: the video stream's first
 //!   frame is 0), and every frame keeps its own time from there, so a time in the copy plus
 //!   `range.start` is the same moment in the source. The picture on screen at `range.start` is the copy's first frame.
@@ -32,6 +35,7 @@ use klipolo_model::time::{RangeUs, Us};
 
 use crate::audio::decode;
 use crate::audio::mix::RATE;
+use crate::media::luma_frames::Grey;
 use crate::media::scan::{next_packet, set_discards};
 use crate::platform::activity::ffmpeg::luma::Hardware;
 use crate::platform::encode::{Backend, CodecRole, background_options, candidates};
@@ -59,6 +63,15 @@ pub struct SmallCopy {
     pub video_bps: u32,
     /// The sound's bitrate; 0 leaves the sound out.
     pub audio_bps: u32,
+}
+
+/// Every decoded frame of the source over the range, for a caller that measures frames one by one: its time on the
+/// source's file clock and its grey picture of `size` (as `luma_frames::each_frame` makes them), from the keyframe
+/// before the range to its end, at the source's own rate (before `SmallCopy::max_fps` thins them). Should `write` make
+/// the copy again (in software), the frames come again from the start: their times go back.
+pub struct EveryFrame<'a> {
+    pub size: (u32, u32),
+    pub see: &'a mut dyn FnMut(Us, &[u8]),
 }
 
 /// What a copy holds.
@@ -104,23 +117,32 @@ pub fn fitted_size(shown: (u32, u32), fit: (u32, u32)) -> (u32, u32) {
 }
 
 /// Writes the copy of `spec.range` of `src` to `out` (an MP4), first to a temporary file beside it that is renamed
-/// into place once whole (removed on failure). Blocking; `cancel` is checked between packets.
+/// into place once whole (removed on failure), handing `every` each decoded frame. Blocking; `cancel` is checked between
+/// packets.
 pub fn write(
     src: &Path,
     out: &Path,
     spec: &SmallCopy,
     cancel: &AtomicBool,
+    mut every: Option<EveryFrame<'_>>,
 ) -> Result<SmallCopyInfo, SmallCopyError> {
     let _ = ffmpeg::init();
     if spec.range.end <= spec.range.start || spec.range.start < 0 {
         return Err(SmallCopyError::Failed("an empty range".into()));
     }
     let tmp = partial_path(out);
-    let mut written = write_to(src, &tmp, spec, cancel, cfg!(target_os = "macos"));
+    let mut written = write_to(
+        src,
+        &tmp,
+        spec,
+        cancel,
+        cfg!(target_os = "macos"),
+        every.as_mut(),
+    );
     if matches!(written, Err(SmallCopyError::Failed(_))) && cfg!(target_os = "macos") {
         // The hardware decoder may refuse a stream part-way: once more in software.
         tracing::info!(error = ?written, "small copy: again with the software decoder");
-        written = write_to(src, &tmp, spec, cancel, false);
+        written = write_to(src, &tmp, spec, cancel, false, every.as_mut());
     }
     let finished = written.and_then(|info| {
         std::fs::rename(&tmp, out).map_err(|e| SmallCopyError::Failed(format!("rename: {e}")))?;
@@ -170,6 +192,7 @@ fn write_to(
     spec: &SmallCopy,
     cancel: &AtomicBool,
     hardware_decode: bool,
+    every: Option<&mut EveryFrame<'_>>,
 ) -> Result<SmallCopyInfo, SmallCopyError> {
     let probe = probe_media(src).map_err(|e| failed("probe", e))?;
     if probe.kind != MediaKind::Video {
@@ -267,7 +290,7 @@ fn write_to(
         last_slot: None,
         frames: 0,
     };
-    let pictures = copy.pictures(src, cancel, hardware_decode);
+    let pictures = copy.pictures(src, cancel, hardware_decode, every);
     let finished = pictures.and_then(|()| copy.finish());
     // Ends the decode thread (its next block has nowhere to go), whatever happened here.
     let has_audio = copy.sound.as_ref().is_some_and(|(_, _, n)| *n > 0);
@@ -298,8 +321,10 @@ impl Writer<'_> {
         src: &Path,
         cancel: &AtomicBool,
         hardware_decode: bool,
+        mut every: Option<&mut EveryFrame<'_>>,
     ) -> Result<(), SmallCopyError> {
         let range = self.spec.range;
+        let mut grey = every.as_ref().map(|e| Grey::new(e.size.0, e.size.1));
         let mut input = crate::media::open::input(src).map_err(|e| failed("open", e))?;
         let stream = input
             .streams()
@@ -390,6 +415,12 @@ impl Writer<'_> {
                 };
                 let at = ((pts - start) as f64 * seconds * 1e6).round() as Us;
                 let software = take_software(&mut frame);
+                if at < range.end
+                    && let (Some(every), Some(grey)) = (every.as_mut(), grey.as_mut())
+                {
+                    grey.of(&software).map_err(SmallCopyError::Failed)?;
+                    (every.see)(at, grey.pixels());
+                }
                 if at < range.start {
                     held = Some(software);
                     continue;

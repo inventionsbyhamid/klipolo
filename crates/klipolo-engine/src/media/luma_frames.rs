@@ -119,8 +119,9 @@ pub fn each_frame(
     Ok(seen)
 }
 
-/// The grey picture of the frame being handed out, and the scaler that makes it.
-struct Grey {
+/// The grey picture of the frame being handed out, and the scaler that makes it (also the small copy's, for its
+/// `EveryFrame` caller).
+pub(crate) struct Grey {
     width: u32,
     height: u32,
     pixels: Vec<u8>,
@@ -129,7 +130,7 @@ struct Grey {
 }
 
 impl Grey {
-    fn new(width: u32, height: u32) -> Self {
+    pub(crate) fn new(width: u32, height: u32) -> Self {
         Self {
             width,
             height,
@@ -138,7 +139,13 @@ impl Grey {
         }
     }
 
-    fn of(&mut self, frame: &ffmpeg::frame::Video) -> Result<(), String> {
+    /// The grey picture of the last frame made (`of`), row by row.
+    pub(crate) fn pixels(&self) -> &[u8] {
+        &self.pixels
+    }
+
+    /// Makes `frame`'s grey picture (a software frame).
+    pub(crate) fn of(&mut self, frame: &ffmpeg::frame::Video) -> Result<(), String> {
         let (format, w, h) = (frame.format(), frame.width(), frame.height());
         let y_only = is_8bit_yuv(format);
         let key = (if y_only { Pixel::GRAY8 } else { format }, w, h);

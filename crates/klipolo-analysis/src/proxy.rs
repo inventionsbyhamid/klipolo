@@ -119,7 +119,7 @@ pub fn make_in_chunks(
             video_bps: VIDEO_BPS,
             audio_bps: AUDIO_BPS,
         };
-        let info = small_copy::write(src, &path, &spec, cancel).map_err(video_error)?;
+        let info = small_copy::write(src, &path, &spec, cancel, None).map_err(video_error)?;
         chunks.push(ProxyChunk {
             path,
             range,
