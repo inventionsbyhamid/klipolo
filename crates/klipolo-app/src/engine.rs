@@ -85,6 +85,13 @@ where
 {
     let engine = state.slot.get_or_start(start).await?;
     engine.set_event_sink(sink);
+    // A (re)loaded page numbers its seeks from 1 again, and the engine's count starts over on every attach: so does the
+    // transport's, keeping its place.
+    state
+        .transport
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .seq = 0;
     let mut info = engine.info();
     if native_wanted(setting) {
         match present_natively(&engine, host).await {
@@ -250,6 +257,11 @@ pub fn engine_set_view(state: State<'_, EngineState>, view: ViewSpec) {
 /// Shows the frame at `at_us`. `seq` names the seek: frames carry it, and a seek older than the newest is ignored.
 #[tauri::command]
 pub fn engine_seek(state: State<'_, EngineState>, at_us: Us, seq: u32) {
+    seek(&state, at_us, seq);
+}
+
+/// `engine_seek`: moves the transport and the engine to `at_us`, unless `seq` is older than the newest seek.
+pub fn seek(state: &EngineState, at_us: Us, seq: u32) {
     let mut transport = state
         .transport
         .lock()
@@ -338,6 +350,67 @@ mod tests {
 
     fn quiet() -> EventSink {
         Arc::new(|_| {})
+    }
+
+    /// An engine on the feed with no GPU (the socket presents).
+    async fn blank_engine(feed: FeedRx) -> Result<Engine, String> {
+        let options = EngineOptions {
+            allowed_origins: allowed_origins(),
+            max_preview_pixels: 1920 * 1080,
+            socket_playback_pixels: 1920 * 1080,
+            socket_rgba_only: false,
+            adapter: "test".into(),
+            gpu_class: klipolo_engine::platform::gpu::GpuClass::Integrated,
+        };
+        let backend = klipolo_engine::session::blank::BlankBackend::new();
+        Engine::start(options, feed, backend).await
+    }
+
+    /// A reloaded page attaches again and numbers its seeks from 1, as the engine expects (it starts its count over on
+    /// every attach): none of them may be dropped as older than the previous page's.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_reloaded_page_seeks_from_one_again() {
+        let projects = ProjectState::default();
+        projects.open(Project::new("Test"));
+        let state = EngineState::new(None, None);
+        let socket = Some("socket");
+        attach(
+            &state,
+            || blank_engine(projects.feed()),
+            &Detached,
+            quiet(),
+            socket,
+        )
+        .await
+        .unwrap();
+        seek(&state, 1_000_000, 9);
+        assert_eq!(
+            state.transport(),
+            Transport {
+                at_us: 1_000_000,
+                seq: 9
+            }
+        );
+
+        attach(
+            &state,
+            || blank_engine(projects.feed()),
+            &Detached,
+            quiet(),
+            socket,
+        )
+        .await
+        .unwrap();
+        assert_eq!(state.transport().at_us, 1_000_000, "the place is kept");
+        seek(&state, 2_000_000, 1);
+        assert_eq!(
+            state.transport(),
+            Transport {
+                at_us: 2_000_000,
+                seq: 1
+            },
+            "the new page's first seek moves it"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
