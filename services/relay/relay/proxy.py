@@ -458,6 +458,7 @@ async def create_response(request: Request, device: RelayDevice, conn: Conn, set
         _check_model("responses", model, settings)
         _check_fields(payload)
         _check_response_options(payload)
+        _check_video_fps(payload)
         if model in SPARK_MODELS:
             payload["max_output_tokens"] = _max_output_tokens(payload.get("max_output_tokens"))
         body = _encode(payload)
@@ -1101,6 +1102,21 @@ def _check_response_options(payload: dict[str, Any]) -> None:
         raise RelayError(400, "unsupported", "Only function tools are supported through the relay.")
     if payload.get("service_tier") not in (None, "auto", "default"):
         raise RelayError(400, "unsupported", "Only the default service tier is supported through the relay.")
+
+
+# The media amount in a reservation covers video sampled at up to 2 frames a
+# second, the most Klipolo's scene log uses.
+MAX_VIDEO_FPS = 2
+
+
+def _check_video_fps(payload: dict[str, Any]) -> None:
+    for item in _objects(payload):
+        if _type(item) == "input_video" and "fps" in item:
+            fps = item["fps"]
+            if isinstance(fps, bool) or not isinstance(fps, int | float) or not 0 < fps <= MAX_VIDEO_FPS:
+                raise RelayError(
+                    400, "invalid_request", f"input_video fps must be a number above 0 and at most {MAX_VIDEO_FPS}."
+                )
 
 
 def _objects(value: Any) -> Iterator[dict[str, Any]]:

@@ -811,6 +811,27 @@ def test_only_text_only_requests_skip_the_media_reservation(client, conn, meta, 
     assert row["cost_usd"] == pytest.approx(reserved_cost(sent, media=media))
 
 
+@pytest.mark.parametrize(
+    ("fps", "status"),
+    [(2, 200), (1, 200), (0.5, 200), (2.5, 400), (30, 400), (0, 400), (-1, 400), ("2", 400), (True, 400), (None, 400)],
+)
+def test_input_video_fps_is_at_most_2(client, conn, meta, fps, status):
+    # The media amount in a reservation assumes at most 2 frames a second.
+    device = add_device(conn)
+    route = meta.post("/responses").respond(200, json=spark_body())
+    body = spark_request(input=[user({"type": "input_video", "file_id": "file-1", "fps": fps})])
+
+    response = client.post("/meta/v1/responses", json=body, headers=device.headers)
+
+    assert response.status_code == status
+    assert route.called is (status == 200)
+    if status == 400:
+        assert response.json() == {
+            "error": "invalid_request",
+            "message": "input_video fps must be a number above 0 and at most 2.",
+        }
+
+
 def test_success_without_usage_charges_the_reservation(client, conn, meta):
     device = add_device(conn)
     body = spark_body()
