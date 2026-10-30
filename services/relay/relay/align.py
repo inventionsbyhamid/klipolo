@@ -66,6 +66,11 @@ RECEPTIVE_FIELD = 400
 # each side, and the emissions joined. Shorter slices take one pass.
 WINDOW_FRAMES = 1500
 CONTEXT_FRAMES = 100
+# CTC needs at least one frame per letter, but forced alignment's memory
+# grows with frames x letters, so a turn may hold at most 0.6 letters per
+# frame (30 a second; fast speech is about 20). More text than that is
+# skipped as too short for its audio.
+MAX_LETTERS_PER_FRAME = 0.6
 
 MAX_AUDIO_SECONDS = 600
 MAX_TURNS = 300
@@ -167,7 +172,7 @@ def plan(turns: Sequence[Turn], n_samples: int) -> tuple[list[PlannedTurn], list
             reason = PAST_END
         elif not tokens:
             reason = NOTHING_TO_ALIGN
-        elif end <= start or emission_frames(end - start) < frames_needed(tokens):
+        elif end <= start or frames_needed(tokens) > MAX_LETTERS_PER_FRAME * emission_frames(end - start):
             reason = TOO_SHORT
         else:
             planned.append(PlannedTurn(index, start, end, words))

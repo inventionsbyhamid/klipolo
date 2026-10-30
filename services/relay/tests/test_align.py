@@ -93,6 +93,17 @@ def test_turn_too_short_for_its_text_is_skipped():
     assert skipped == [] and planned[0].seconds == pytest.approx(0.5)
 
 
+def test_turn_with_more_letters_than_its_audio_can_hold_is_skipped():
+    # A 1 s turn is a 1.5 s slice: 74 frames, room for 0.6 x 74 = 44.4 letters.
+    assert emission_frames(seconds(1.5)) == 74
+    fits = ["abcdefghij"] * 4 + ["abcd"]
+    too_many = ["abcdefghij"] * 4 + ["abcde"]
+    planned, skipped = plan([Turn(2000, 3000, " ".join(fits)), Turn(2000, 3000, " ".join(too_many))], seconds(10))
+    assert [p.index for p in planned] == [0]
+    assert [(s.turn, s.reason) for s in skipped] == [(1, TOO_SHORT)]
+    assert align.MAX_LETTERS_PER_FRAME == 0.6
+
+
 def test_repeated_letters_need_a_frame_between_them():
     # "aa" needs 3 frames (a, blank, a); "ab" needs 2.
     assert align.frames_needed(["aa"]) == 3
