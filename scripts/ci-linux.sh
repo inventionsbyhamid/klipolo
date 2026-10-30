@@ -91,7 +91,7 @@ run "export fonts on lavapipe" env WGPU_BACKEND=vulkan KLIPOLO_REQUIRE_GPU=1 car
 # The slow-disk tests, which only trial builds compile (`render::pool::slow_stats` makes a file's stat slow), and the
 # stalled software decoder's, fixtures included, and the GPU one on lavapipe (the preview's redraw signal stays wired to
 # its decoder pool). They time stats of 1-3 s, so two test threads at most: a busy machine mustn't make them flaky.
-run "test slow disks (trial; GPU on lavapipe)" env WGPU_BACKEND=vulkan \
+run "test slow disks (trial; GPU on lavapipe)" env WGPU_BACKEND=vulkan KLIPOLO_REQUIRE_GPU=1 \
   cargo test -p klipolo-engine --locked --no-fail-fast --features trial --test decode --test gpu --test stalls -- \
   --include-ignored --test-threads=2 a_disk_ a_slow_ drawn_again_when_it_answers
 
