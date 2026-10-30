@@ -174,8 +174,12 @@ export async function play(): Promise<void> {
 }
 
 export async function pause(): Promise<void> {
-  const at = await enginePause();
-  set({ playing: false, anchorUs: at, anchorMs: Date.now() });
+  try {
+    const at = await enginePause();
+    set({ playing: false, anchorUs: at, anchorMs: Date.now() });
+  } catch (error) {
+    set({ message: String(error) });
+  }
 }
 
 export function togglePlay(): Promise<void> {
