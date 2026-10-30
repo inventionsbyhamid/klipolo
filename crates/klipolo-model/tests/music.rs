@@ -653,6 +653,21 @@ fn music_a_hair_short_of_the_end_still_follows_it() {
     let m = music(&short);
     assert_eq!(spans(&m), [(0.0, 8.0), (8.0, 14.005)]);
     assert_eq!(fade_out(m[1]), 2.0);
+
+    // A song set by hand to end 5 ms before the video does still follows the end when more footage comes.
+    let opts = MusicOpts {
+        end_us: Some(secs(29.995)),
+        ..MusicOpts::default()
+    };
+    let p = with_music(&video(30.0), "song", opts);
+    let more = vec![Op::InsertClip {
+        clip: take(100.0, 110.0),
+        index: None,
+    }];
+    let long = apply_ops(&p, &with_music_refit(&p, more).unwrap()).unwrap();
+    let m = music(&long);
+    assert_eq!(spans(&m), [(0.0, 40.0)]);
+    assert_eq!(fade_out(m[0]), 2.0);
 }
 
 #[test]
