@@ -13,7 +13,7 @@ def test_defaults_match_the_documented_caps():
     assert settings.global_cap_usd == 40.00
     assert settings.align_minutes_per_device_per_day == 120
     assert settings.align_concurrency == 2
-    assert settings.align_threads == 8
+    assert settings.align_threads == 3
     assert settings.meta_api_key == ""
     assert settings.allowed_models == {"muse-spark-1.3", "muse-spark-1.2", "muse-voice-transcribe-1.0"}
 
@@ -87,3 +87,20 @@ def test_meta_key_is_stripped(raw, key):
     # A stray newline from an env file would break the Authorization header;
     # a blank key means the relay is not configured.
     assert load_settings({"META_API_KEY": raw}).meta_api_key == key
+
+
+def test_align_warmup_is_off_unless_turned_on():
+    assert load_settings({}).align_warmup is False
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("1", True), ("true", True), ("Yes", True), ("on", True), ("0", False), ("false", False), ("no", False), ("off", False), ("", False)],
+)
+def test_align_warmup_reads_common_flag_values(value, expected):
+    assert load_settings({"ALIGN_WARMUP": value}).align_warmup is expected
+
+
+def test_bad_align_warmup_fails_with_the_variable_name():
+    with pytest.raises(ValueError, match="ALIGN_WARMUP"):
+        load_settings({"ALIGN_WARMUP": "maybe"})

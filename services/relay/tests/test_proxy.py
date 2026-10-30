@@ -1489,6 +1489,24 @@ def test_refused_calls_free_their_slot(client, conn, meta):
     assert client.app.state.in_flight.count() == 0
 
 
+@pytest.mark.parametrize("first_reserves", [0.0, 0.25])
+def test_a_slot_that_reserved_nothing_frees_while_its_device_has_another_call(first_reserves):
+    # Uncapped calls, calls refused at admission and alignments never
+    # reserve. Freeing one must not touch the other call's reservation.
+    in_flight = proxy.InFlight()
+    first, second = in_flight.acquire("device"), in_flight.acquire("device")
+    if first_reserves:
+        first.reserve(first_reserves)
+
+    second.release()
+    assert (in_flight.count(), in_flight.count("device")) == (1, 1)
+    assert in_flight.reserved("device") == (first_reserves, first_reserves)
+
+    first.release()
+    assert in_flight.count() == 0
+    assert in_flight.reserved("device") == (0.0, 0.0)
+
+
 # Charging.
 
 

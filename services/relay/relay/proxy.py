@@ -203,7 +203,9 @@ class InFlight:
         left = self._by_device[device_id] - 1
         if left:
             self._by_device[device_id] = left
-            self._reserved_by_device[device_id] -= reserved
+            # The device's other calls may not have reserved anything yet.
+            if reserved:
+                self._reserved_by_device[device_id] -= reserved
         else:
             del self._by_device[device_id]
             self._reserved_by_device.pop(device_id, None)
