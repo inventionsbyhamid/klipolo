@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use klipolo_model::project::Project;
 use klipolo_model::query::main_track_duration;
-use klipolo_model::speech::silence::{KEEP_US, pauses, threshold};
+use klipolo_model::speech::silence::{KEEP_US, pauses_under, threshold};
 use klipolo_model::speech::{LEVEL_WINDOW_US, Levels, Speech, WordKind, run_spans, spoken};
 use klipolo_model::time::{RangeUs, Us, merge_ranges};
 use klipolo_model::timeline::ItemContent;
@@ -117,9 +117,9 @@ fn heard_us(levels: &Levels) -> Us {
 /// The file's pauses in its sound time (`silence::pauses`, at their shortest), sorted; one that reaches the file's
 /// start or end keeps no breath there, since nothing is said beyond it. None when nobody speaks in the file.
 fn file_pauses(levels: &Levels) -> Option<Vec<RangeUs>> {
-    threshold(levels)?;
+    let th = threshold(levels)?;
     let end = heard_us(levels);
-    let mut gaps = pauses(levels, 0);
+    let mut gaps = pauses_under(levels, th, 0);
     if let Some(first) = gaps.first_mut().filter(|r| r.start == KEEP_US) {
         first.start = 0;
     }
