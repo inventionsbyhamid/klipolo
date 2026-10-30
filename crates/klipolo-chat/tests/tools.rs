@@ -520,6 +520,38 @@ fn bad_arguments_name_the_tool_and_the_field() {
             Some("startSec"),
             "cutRange: startSec must be between 0 and 86400 seconds, not -1.",
         ),
+        // A number past the longest time reads as that, never as hundreds of digits.
+        (
+            "cutRange",
+            r#"{"startSec": 1e9, "endSec": 2e9}"#,
+            Some("startSec"),
+            "cutRange: startSec must be between 0 and 86400 seconds; got a number past 86400.",
+        ),
+        (
+            "cutRange",
+            r#"{"startSec": 1, "endSec": 1e300}"#,
+            Some("endSec"),
+            "cutRange: endSec must be between 0 and 86400 seconds; got a number past 86400.",
+        ),
+        (
+            "cutRange",
+            r#"{"startSec": -1e300, "endSec": 2}"#,
+            Some("startSec"),
+            "cutRange: startSec must be between 0 and 86400 seconds; got a number below -86400.",
+        ),
+        (
+            "removeSilences",
+            r#"{"minPauseSec": 1e9}"#,
+            Some("minPauseSec"),
+            "removeSilences: minPauseSec must be between 0.3 and 10 seconds; got a number past 86400.",
+        ),
+        // Seconds read with at most three decimals.
+        (
+            "cutRange",
+            r#"{"startSec": 12.123456789, "endSec": 3.00000001}"#,
+            Some("endSec"),
+            "cutRange: endSec (3) must be after startSec (12.123).",
+        ),
         (
             "cutRange",
             r#"{"startSec": 1, "endSec": 2, "reason": "boring"}"#,
@@ -885,6 +917,22 @@ fn enum_words_are_the_models_own_names() {
 }
 
 #[test]
+fn trim_clip_says_how_far_an_end_can_move() {
+    let trim = (tool_list().into_iter())
+        .find(|t| t["name"] == "trimClip")
+        .expect("trimClip");
+    let description = trim["description"].as_str().unwrap();
+    assert!(
+        description.contains("at most into the clip next to it"),
+        "{description}"
+    );
+    assert!(
+        description.contains("The first clip's start can't move earlier."),
+        "{description}"
+    );
+}
+
+#[test]
 fn tools_are_the_same_bytes_every_time() {
     let first = serde_json::to_string(&tools()).unwrap();
     for _ in 0..3 {
@@ -931,6 +979,9 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "Set only what the person asked for",
         "use null",
         "Never invent a time",
+        // The times the compiler accepts as evidence: the start and the end too ("cut the first 5 seconds").
+        "the start (0.0), the end (the duration)",
+        "\"the last 10 s\" runs to the end",
         "mean the selection",
         "mean the playhead",
         "call each one, in the order asked",

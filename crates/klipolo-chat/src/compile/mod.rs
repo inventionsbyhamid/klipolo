@@ -1,0 +1,589 @@
+//! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
+//! context was built from, out as edits.
+//! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer) are one
+//!   `Transaction` the app applies at once: one undo step. An addition is judged by what its part does, not by its
+//!   tool: one that takes something away (the model's own `removals`, as a format dropped with what was placed in it)
+//!   is compiled again with the removals and proposed.
+//! - Removals (`cutRange`, `keepOnly`, `removeSilences`, `removeFillers`, a trim that makes a clip shorter) are one
+//!   `Proposal`: a `Transaction` for the project as the additions leave it, judged by the model's own review (what it
+//!   takes away, on the timeline), applied as one undo step when the person says so.
+//! - `findMoments` gives moments, `followSubject` and `blurObjects` jobs for their runners, `askUser` questions, `undo`
+//!   a flag. `cannotDo` is a refusal shown to the person, as is a tool that needs an analysis the clip doesn't have yet
+//!   (`STILL_LISTENING`, `ANALYZE_FIRST`); every other refusal goes back to the model with its reason.
+//!
+//! All calls compile on one working copy, in two phases: the additions in call order, then the removals in call order
+//! on what the additions made, as the app applies them. Each call's ops are one part of its phase's batch
+//! (`apply_part`), tried on a copy and checked as the batch would end there (`finish_parts`): a call that fails is a
+//! `Refusal` with its index, and the others still compile. The removals' working copy ends as `apply_ops` of the
+//! proposal on the additions' result, so the review takes it as it is (`review_applied`) rather than applying again.
+//!
+//! The model's times are the snapshot's timeline, as its context showed them. A range must stand on the context or the
+//! message (`evidence`), else it is refused; it snaps to what it stands on, and is then mapped into the working copy by
+//! content (`map`), so an earlier call in the answer never shifts what a later one names. A clip ref resolves through
+//! the `Refs` the context was built with, never through the project's own order. `undo` doesn't mix with edits: the
+//! edits were compiled against the project before it, so they are refused back to the model.
+//!
+//! Undo labels are message ids with values, worded by the UI: `chat.<tool>` (`chat.cutRange {startUs, endUs}`), and
+//! `chat.andMore {first, more}` for a step of several calls. Splitting by concern: `additions`, `removals`, `trim`
+//! (both), `map`.
+
+mod additions;
+mod map;
+mod removals;
+mod trim;
+
+use std::collections::HashMap;
+
+use klipolo_model::coded::{CodedError, ErrorParam};
+use klipolo_model::ops::{Op, Origin, Transaction};
+use klipolo_model::project::AssetKind;
+use klipolo_model::risk::{Review, removals};
+use klipolo_model::speech::{Speech, run_spans};
+use klipolo_model::time::{RangeUs, Us};
+use klipolo_model::timeline::ClipSource;
+use klipolo_model::{ModelError, Project, finish_parts};
+
+use crate::context::{Refs, SceneLog, View, secs};
+use crate::evidence::{Evidence, Unfounded};
+use crate::sanitize;
+use crate::tools::{Moment, ToolCall};
+use map::Map;
+use trim::Trim;
+
+/// What the person is told when a tool needs a clip's analysis and Klipolo is still making it.
+pub const STILL_LISTENING: &str = "Klipolo is still listening to this clip";
+/// What the person is told when a tool needs a clip's analysis and none was started.
+pub const ANALYZE_FIRST: &str = "Analyze this clip first";
+
+/// How far a file's analysis (transcript, loudness, scene log) is. A file missing from `Inputs::analysis` counts as
+/// not started.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AnalysisState {
+    NotStarted,
+    Transcribing,
+    Done,
+}
+
+/// Everything besides the project that a message's calls compile against, all from the snapshot the message's context
+/// was built from: the caller compiles against that same project.
+#[derive(Clone, Debug, Default)]
+pub struct Inputs {
+    /// What the person wrote: the times in it count as evidence (`evidence::typed_times`).
+    pub message: String,
+    pub view: View,
+    /// The refs the context named clips by.
+    pub refs: Refs,
+    /// Transcripts and loudness (`levels`) by asset id.
+    pub speech: Speech,
+    /// Scene logs by asset id.
+    pub scenes: HashMap<String, SceneLog>,
+    /// Each file's analysis, by asset id.
+    pub analysis: HashMap<String, AnalysisState>,
+}
+
+/// What one message's calls compiled to.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Compiled {
+    /// Applied at once, one undo step.
+    pub additions: Option<Transaction>,
+    /// Shown for the person to apply (one undo step) or discard, against the project once `additions` are applied.
+    pub proposal: Option<Proposal>,
+    /// Timeline ranges to point the person at, on the project once `additions` are applied.
+    pub moments: Vec<Moment>,
+    pub jobs: Vec<Job>,
+    /// `askUser`'s questions, without dashes (`sanitize::reply`).
+    pub questions: Vec<String>,
+    /// The calls that compiled to nothing, by call index.
+    pub refusals: Vec<Refusal>,
+    /// The model asked to undo the last change.
+    pub undo: bool,
+}
+
+/// Removals for the person to approve.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Proposal {
+    pub tx: Transaction,
+    /// `tx` judged against the project once the additions are applied: `after` is what Apply commits.
+    pub review: Review,
+    /// How much footage goes: the length of `ranges`.
+    pub removed_us: Us,
+    /// The main-track footage that goes, on the timeline once the additions are applied (red on the timeline).
+    pub ranges: Vec<RangeUs>,
+}
+
+/// Work for a runner that tracks or blurs (Plan 5), named by one short noun phrase.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Job {
+    Follow { description: String },
+    Blur { description: String },
+}
+
+/// A call that compiled to nothing, and why, in one plain sentence on one line.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Refusal {
+    pub call_index: usize,
+    pub reason: String,
+    pub audience: Audience,
+    /// The clip the refusal is about, by its ref in the context (`c4`): set when a clip isn't analyzed yet, so the
+    /// person sees which one `STILL_LISTENING` or `ANALYZE_FIRST` means (the panel shows it beside the sentence).
+    pub clip: Option<String>,
+}
+
+/// Who a refusal's reason is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Audience {
+    /// Sent back to the model as the call's result, for it to try again or explain.
+    Model,
+    /// Shown to the person as it is, never retried: `cannotDo` (without dashes, `sanitize::reply`), and a clip that
+    /// isn't analyzed yet.
+    Person,
+}
+
+/// Compiles `calls` against `project`, the snapshot `inputs` come from.
+pub fn compile(project: &Project, inputs: &Inputs, calls: &[ToolCall]) -> Compiled {
+    let c = Compiler {
+        snapshot: project,
+        inputs,
+        evidence: Evidence::new(
+            project,
+            &inputs.speech,
+            &inputs.scenes,
+            &inputs.view,
+            &inputs.message,
+        ),
+        map: Map::new(project),
+    };
+    c.run(calls)
+}
+
+/// One call's ops and its undo label.
+struct Edit {
+    ops: Vec<Op>,
+    label: CodedError,
+}
+
+/// Why a call compiled to nothing.
+struct Refused {
+    reason: String,
+    audience: Audience,
+    clip: Option<String>,
+}
+
+/// Records that call `call_index` compiled to nothing.
+fn refuse(out: &mut Compiled, call_index: usize, r: Refused) {
+    out.refusals.push(Refusal {
+        call_index,
+        reason: r.reason,
+        audience: r.audience,
+        clip: r.clip,
+    });
+}
+
+/// A reason for the model.
+fn to_model(reason: String) -> Refused {
+    Refused {
+        reason,
+        audience: Audience::Model,
+        clip: None,
+    }
+}
+
+/// `chat.<tool>` with its values.
+fn label(tool: &str, params: Vec<(&str, ErrorParam)>) -> CodedError {
+    CodedError {
+        code: format!("chat.{tool}"),
+        params: (params.into_iter())
+            .map(|(k, v)| (k.to_owned(), v))
+            .collect(),
+    }
+}
+
+/// A time in microseconds as a label's value.
+fn us(t: Us) -> ErrorParam {
+    ErrorParam::Number(t as f64)
+}
+
+/// One phase's batch: its calls' ops applied part by part to the working copy.
+struct Phase {
+    /// The parts so far, the batch not finished: what the next call's ops meet.
+    work: Project,
+    /// `work` as the batch would end here (transitions refitted, validated): the phase's result.
+    done: Project,
+    ops: Vec<Op>,
+    labels: Vec<CodedError>,
+}
+
+impl Phase {
+    fn new(start: Project) -> Self {
+        Self {
+            work: start.clone(),
+            done: start,
+            ops: Vec::new(),
+            labels: Vec::new(),
+        }
+    }
+
+    /// `edit` tried on a copy of the working copy: its ops applied as one part, and the batch still ending valid. The
+    /// phase stays as it was until `keep`.
+    fn try_edit(&self, edit: Edit) -> Result<Tried, ModelError> {
+        if edit.ops.is_empty() {
+            return Ok(Tried {
+                edit,
+                after: None,
+                removes: false,
+            });
+        }
+        let mut work = self.work.clone();
+        klipolo_model::apply_part(&mut work, &edit.ops)?;
+        let mut done = work.clone();
+        finish_parts(&mut done)?;
+        let removes = !removals(&self.done, &done).is_empty();
+        Ok(Tried {
+            edit,
+            after: Some((work, done)),
+            removes,
+        })
+    }
+
+    /// Makes a tried edit part of the batch. An edit with no ops (a format the video already has) adds nothing.
+    fn keep(&mut self, tried: Tried) {
+        let Some((work, done)) = tried.after else {
+            return;
+        };
+        self.work = work;
+        self.done = done;
+        self.ops.extend(tried.edit.ops);
+        self.labels.push(tried.edit.label);
+    }
+
+    /// `try_edit`, then `keep`.
+    fn add(&mut self, edit: Edit) -> Result<(), ModelError> {
+        let tried = self.try_edit(edit)?;
+        self.keep(tried);
+        Ok(())
+    }
+
+    /// The phase's ops as one chat transaction, labelled for its first call and how many more.
+    fn transaction(&self) -> Option<Transaction> {
+        let (label, params) = match self.labels.as_slice() {
+            [] => return None,
+            [one] => (one.code.clone(), one.params.clone()),
+            [first, rest @ ..] => (
+                "chat.andMore".to_owned(),
+                [
+                    (
+                        "first".to_owned(),
+                        ErrorParam::Coded(Box::new(first.clone())),
+                    ),
+                    ("more".to_owned(), ErrorParam::from(rest.len())),
+                ]
+                .into(),
+            ),
+        };
+        Some(Transaction {
+            label,
+            params: (!params.is_empty()).then_some(params),
+            ops: self.ops.clone(),
+            origin: Some(Origin::Chat),
+        })
+    }
+}
+
+/// An edit tried on a phase's working copy (`Phase::try_edit`).
+struct Tried {
+    edit: Edit,
+    /// The working copy with it, and the batch as it would end there; None for an edit with no ops.
+    after: Option<(Project, Project)>,
+    /// It takes away something the batch had before it (the model's own `removals`).
+    removes: bool,
+}
+
+/// A call waiting for the removals' phase.
+enum Removal<'c> {
+    /// A removal tool.
+    Call(&'c ToolCall),
+    /// A trim that makes a clip shorter.
+    Shorter(Trim),
+    /// An addition tool whose edit takes something away (a format dropped with what was placed in it).
+    Moved(&'c ToolCall),
+    /// A trim that makes a clip longer and takes something away.
+    Longer(Trim),
+}
+
+struct Compiler<'a> {
+    snapshot: &'a Project,
+    inputs: &'a Inputs,
+    evidence: Evidence,
+    map: Map<'a>,
+}
+
+impl Compiler<'_> {
+    fn run(&self, calls: &[ToolCall]) -> Compiled {
+        let mut out = Compiled {
+            undo: calls.iter().any(|c| matches!(c, ToolCall::Undo)),
+            ..Compiled::default()
+        };
+        // In call order: the additions compile now; removals and moments wait for the project the additions make.
+        let mut adding = Phase::new(self.snapshot.clone());
+        let mut waiting: Vec<(usize, Removal)> = Vec::new();
+        let mut moments: Vec<(usize, &[Moment])> = Vec::new();
+        // Once a format change is proposed, the later ones in the answer follow it there, so they apply in call order.
+        let mut format_proposed = false;
+        for (i, call) in calls.iter().enumerate() {
+            if out.undo && is_edit(call) {
+                let reason = format!(
+                    "{}: not done, because undo is in the same answer. Call undo on its own, then the other changes.",
+                    call.name()
+                );
+                refuse(&mut out, i, to_model(reason));
+                continue;
+            }
+            if let Some(said) = self.missing_analysis(call) {
+                refuse(&mut out, i, said);
+                continue;
+            }
+            if format_proposed && matches!(call, ToolCall::SetFormat { .. }) {
+                waiting.push((i, Removal::Moved(call)));
+                continue;
+            }
+            let addition = match call {
+                ToolCall::Undo => continue,
+                ToolCall::AskUser { question } => {
+                    out.questions.push(sanitize::reply(question));
+                    continue;
+                }
+                ToolCall::CannotDo { reason } => {
+                    let said = Refused {
+                        reason: sanitize::reply(reason),
+                        audience: Audience::Person,
+                        clip: None,
+                    };
+                    refuse(&mut out, i, said);
+                    continue;
+                }
+                ToolCall::FollowSubject { description } => {
+                    out.jobs.push(Job::Follow {
+                        description: description.clone(),
+                    });
+                    continue;
+                }
+                ToolCall::BlurObjects { description } => {
+                    out.jobs.push(Job::Blur {
+                        description: description.clone(),
+                    });
+                    continue;
+                }
+                ToolCall::FindMoments { moments: found, .. } => {
+                    moments.push((i, found));
+                    continue;
+                }
+                ToolCall::CutRange { .. }
+                | ToolCall::KeepOnly { .. }
+                | ToolCall::RemoveSilences { .. }
+                | ToolCall::RemoveFillers => {
+                    waiting.push((i, Removal::Call(call)));
+                    continue;
+                }
+                ToolCall::TrimClip { clip, edge, to_us } => {
+                    match trim::plan(self, clip, *edge, *to_us) {
+                        Ok(shorter) if shorter.removed.is_some() => {
+                            waiting.push((i, Removal::Shorter(shorter)));
+                            continue;
+                        }
+                        Ok(longer) => (
+                            trim::lengthen(self, &adding.work, &longer),
+                            Removal::Longer(longer),
+                        ),
+                        Err(r) => (Err(r), Removal::Moved(call)),
+                    }
+                }
+                ToolCall::SplitAt { .. }
+                | ToolCall::SetFormat { .. }
+                | ToolCall::SetCaptions { .. }
+                | ToolCall::FixCaptionWords { .. } => {
+                    (self.addition(&adding.work, call), Removal::Moved(call))
+                }
+            };
+            let (edit, if_it_removes) = addition;
+            let tried = edit.and_then(|edit| {
+                (adding.try_edit(edit)).map_err(|e| to_model(format!("{}: {e}", call.name())))
+            });
+            match tried {
+                // Judged by what it does, not by its tool: proposed with the removals.
+                Ok(tried) if tried.removes => {
+                    format_proposed |= matches!(call, ToolCall::SetFormat { .. });
+                    waiting.push((i, if_it_removes));
+                }
+                Ok(tried) => adding.keep(tried),
+                Err(r) => refuse(&mut out, i, r),
+            }
+        }
+
+        // The project as the additions leave it: what the app applies them to, and what the proposal starts from.
+        let with_additions = adding.done.clone();
+        for (i, found) in moments {
+            match self.moments(&with_additions, found) {
+                Ok(m) => out.moments.extend(m),
+                Err(r) => refuse(&mut out, i, r),
+            }
+        }
+        // The removals in call order, on top.
+        let mut removing = Phase::new(with_additions);
+        for (i, removal) in waiting {
+            let work = &removing.work;
+            let (call_name, edit) = match removal {
+                Removal::Call(call) => (call.name(), removals::compile(self, work, call)),
+                Removal::Shorter(t) => ("trimClip", trim::shorten(self, work, &t)),
+                Removal::Moved(call) => (call.name(), self.addition(work, call)),
+                Removal::Longer(t) => ("trimClip", trim::lengthen(self, work, &t)),
+            };
+            let added = edit.and_then(|edit| {
+                (removing.add(edit)).map_err(|e| to_model(format!("{call_name}: {e}")))
+            });
+            if let Err(r) = added {
+                refuse(&mut out, i, r);
+            }
+        }
+
+        out.additions = adding.transaction();
+        if let Some(tx) = removing.transaction() {
+            let review = tx.review_applied(&adding.done, removing.done);
+            let ranges = review.removals.ranges.clone();
+            out.proposal = Some(Proposal {
+                removed_us: ranges.iter().map(RangeUs::len).sum(),
+                ranges,
+                tx,
+                review,
+            });
+        }
+        out.refusals.sort_by_key(|r| r.call_index);
+        out
+    }
+
+    /// An addition tool's edit on `work` (a trim is planned apart, `trim::plan`).
+    fn addition(&self, work: &Project, call: &ToolCall) -> Result<Edit, Refused> {
+        match call {
+            ToolCall::SplitAt { at_us } => additions::split_at(self, work, *at_us),
+            ToolCall::SetFormat {
+                format,
+                keep_others,
+            } => Ok(additions::set_format(work, *format, *keep_others)),
+            ToolCall::SetCaptions { on, style } => Ok(additions::set_captions(work, *on, *style)),
+            ToolCall::FixCaptionWords { find, replace } => {
+                additions::fix_caption_words(self, work, find, replace)
+            }
+            other => Err(to_model(format!("{}: not an addition.", other.name()))),
+        }
+    }
+
+    /// The person's refusal when `call` needs an analysis some clip on the main track lacks: its voice files' for
+    /// removing fillers and pauses, and its picture's too for finding moments. Not started anywhere wins over still
+    /// being made, since analyzing is something the person can do; the refusal names the first clip it is about.
+    fn missing_analysis(&self, call: &ToolCall) -> Option<Refused> {
+        let pictures = match call {
+            ToolCall::RemoveFillers | ToolCall::RemoveSilences { .. } => false,
+            ToolCall::FindMoments { .. } => true,
+            _ => return None,
+        };
+        let p = self.snapshot;
+        let spans = run_spans(p);
+        let mut voices: HashMap<&str, Vec<&str>> = HashMap::new();
+        for s in &spans {
+            voices
+                .entry(s.clip.as_str())
+                .or_default()
+                .push(s.asset.as_str());
+        }
+        let state =
+            |id: &str| (self.inputs.analysis.get(id).copied()).unwrap_or(AnalysisState::NotStarted);
+        // The first clip, in timeline order, with a file never analyzed, and the first with one still being made.
+        let (mut not_started, mut transcribing) = (None, None);
+        for clip in &p.timeline.main {
+            let mut files = voices.get(clip.id.as_str()).cloned().unwrap_or_default();
+            if pictures
+                && let ClipSource::Asset { id } = &clip.source
+                && p.asset(id).is_some_and(|a| a.kind == AssetKind::Video)
+            {
+                files.push(id.as_str());
+            }
+            for file in files {
+                match state(file) {
+                    AnalysisState::NotStarted => not_started = not_started.or(Some(&clip.id)),
+                    AnalysisState::Transcribing => transcribing = transcribing.or(Some(&clip.id)),
+                    AnalysisState::Done => {}
+                }
+            }
+        }
+        let (said, clip) = match (not_started, transcribing) {
+            (Some(clip), _) => (ANALYZE_FIRST, clip),
+            (None, Some(clip)) => (STILL_LISTENING, clip),
+            (None, None) => return None,
+        };
+        Some(Refused {
+            reason: said.to_owned(),
+            audience: Audience::Person,
+            clip: self.inputs.refs.ref_of(clip),
+        })
+    }
+
+    /// `findMoments`' ranges, each standing on the evidence, where they play once the additions are applied.
+    fn moments(&self, with_additions: &Project, found: &[Moment]) -> Result<Vec<Moment>, Refused> {
+        let mut out = Vec::new();
+        for (k, m) in found.iter().enumerate() {
+            let range = self.checked(
+                "findMoments",
+                (
+                    &format!("ranges[{k}].startSec"),
+                    &format!("ranges[{k}].endSec"),
+                ),
+                m.range,
+            )?;
+            out.extend(
+                (self.map.range(with_additions, range).into_iter()).map(|range| Moment {
+                    range,
+                    label: m.label.clone(),
+                }),
+            );
+        }
+        Ok(out)
+    }
+
+    /// `r` as the evidence snaps it, or the reason it stands on nothing, naming the call's fields.
+    fn checked(
+        &self,
+        tool: &str,
+        (start, end): (&str, &str),
+        r: RangeUs,
+    ) -> Result<RangeUs, Refused> {
+        self.evidence.range(r).map_err(|miss| {
+            to_model(match miss {
+                Unfounded::Start => unfounded(tool, start, r.start),
+                Unfounded::End => unfounded(tool, end, r.end),
+                Unfounded::Empty(at) => format!(
+                    "{tool}: {start} and {end} both fall on {} s, so nothing lies between them.",
+                    secs(at)
+                ),
+            })
+        })
+    }
+}
+
+/// Why a time stands on nothing.
+fn unfounded(tool: &str, field: &str, t: Us) -> String {
+    format!(
+        "{tool}: {field} {} is not within 0.3 s of a word, a pause, a scene, a clip's start or end, the selection, the \
+         playhead, the video's start or end, or a time the person said. Use a time from the context.",
+        secs(t)
+    )
+}
+
+/// Whether `call` changes the edit (now or through a runner).
+fn is_edit(call: &ToolCall) -> bool {
+    !matches!(
+        call,
+        ToolCall::Undo
+            | ToolCall::AskUser { .. }
+            | ToolCall::CannotDo { .. }
+            | ToolCall::FindMoments { .. }
+    )
+}

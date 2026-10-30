@@ -4,7 +4,8 @@
 //! strict JSON Schema: every object closed (`additionalProperties: false`) with every property required, and a value
 //! the person may leave unsaid nullable (`"type": ["number", "null"]`). A provider's adapter wraps each tool in its own
 //! wire shape (the Responses API's `{"type": "function", "strict": true, ...}`). The list is built the same way and in
-//! the same order every time, so a provider's prompt cache can reuse it.
+//! the same order every time, so a provider's prompt cache can reuse it. The tools keep their order; a schema's
+//! `properties` read by name (serde_json sorts an object's keys), and its `required` list keeps the order given.
 //!
 //! `ToolCall::parse` reads one `FunctionCall` (the tool's name and the JSON text of its arguments) into a `ToolCall`:
 //! times become timeline microseconds, words become the model's own types (`FormatKind`, `Edge`,
@@ -225,7 +226,10 @@ impl fmt::Display for ToolError {
             Problem::Empty => write!(f, "{tool}: {field} must not be empty."),
             Problem::OutOfRange { min, max, got } => write!(
                 f,
-                "{tool}: {field} must be between {min} and {max} seconds, not {got}."
+                "{tool}: {field} must be between {} and {} seconds{}.",
+                said_secs(*min),
+                said_secs(*max),
+                given(*got)
             ),
             Problem::NotAfter {
                 start_field,
@@ -233,7 +237,9 @@ impl fmt::Display for ToolError {
                 end,
             } => write!(
                 f,
-                "{tool}: {field} ({end}) must be after {start_field} ({start})."
+                "{tool}: {field} ({}) must be after {start_field} ({}).",
+                said_secs(*end),
+                said_secs(*start)
             ),
             Problem::NotOnePhrase => write!(
                 f,
@@ -245,6 +251,29 @@ impl fmt::Display for ToolError {
 }
 
 impl std::error::Error for ToolError {}
+
+/// The longest time the model stores, in seconds: a number given past it, either way, is said as "a number past 86400"
+/// rather than printed (`given`).
+const LONGEST_SECS: f64 = (MAX_TIME_US / US_PER_SEC) as f64;
+
+/// Seconds as an error says them: at most three decimals ("12.123", "15", "-1").
+fn said_secs(secs: f64) -> String {
+    // `+ 0.0` turns a rounded -0 into 0.
+    format!("{}", (secs * 1000.0).round() / 1000.0 + 0.0)
+}
+
+/// What was given, after the rule it breaks: ", not 15", or past the longest time either way "; got a number past
+/// 86400", so a model's `1e300` never comes back as hundreds of digits.
+fn given(got: f64) -> String {
+    let longest = said_secs(LONGEST_SECS);
+    if got > LONGEST_SECS {
+        format!("; got a number past {longest}")
+    } else if got < -LONGEST_SECS {
+        format!("; got a number below -{longest}")
+    } else {
+        format!(", not {}", said_secs(got))
+    }
+}
 
 /// The caption styles `setCaptions` offers, in the schema's order, each with how the model is told it looks. The
 /// other built-ins (Loud, Arcade) stay out of chat.
@@ -315,7 +344,7 @@ impl Word for BuiltinCaptionStyle {
 struct Tool {
     name: &'static str,
     description: &'static str,
-    /// Its parameters, in the order the model is shown them.
+    /// Its parameters: `required` lists them in this order, `properties` by name (serde_json sorts object keys).
     parameters: fn() -> Vec<(&'static str, Value)>,
     read: fn(&mut Args) -> Result<ToolCall, ToolError>,
 }
@@ -402,7 +431,8 @@ const TOOLS: &[Tool] = &[
     Tool {
         name: "trimClip",
         description: "Move the start or the end of one clip to a new time. Shortening a clip is proposed like other \
-                      removals; lengthening it shows more of its file.",
+                      removals; lengthening it shows more of its file, at most into the clip next to it. The first \
+                      clip's start can't move earlier.",
         parameters: || {
             vec![
                 (
@@ -753,7 +783,7 @@ impl Args {
     fn time_secs(&mut self, key: &str) -> Result<(f64, Us), ToolError> {
         let value = self.take(key)?;
         let secs = self.number(key, &value, SECONDS)?;
-        let bounds = 0.0..=(MAX_TIME_US / US_PER_SEC) as f64;
+        let bounds = 0.0..=LONGEST_SECS;
         Ok((secs, self.within(key, secs, &bounds)?))
     }
 
