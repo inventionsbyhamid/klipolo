@@ -6,7 +6,9 @@
 //! Times are whole milliseconds from the start of the WAV sent, as the services count them; the pipeline turns them
 //! into the clip's sound time.
 
+pub mod images;
 pub mod meta;
+pub mod meta_images;
 
 use std::future::Future;
 use std::pin::Pin;
