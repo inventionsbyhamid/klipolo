@@ -48,7 +48,7 @@ export function Tooltip({ label, shortcut, side = 'bottom', describes = false, c
       <T.Portal>
         <T.Content
           side={side}
-          sideOffset={6}
+          sideOffset={4}
           className="tooltip"
         >
           {label}

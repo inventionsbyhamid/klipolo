@@ -9,7 +9,7 @@ export function PopoverContent({ className, ...props }: ComponentProps<typeof P.
   return (
     <P.Portal>
       <P.Content
-        sideOffset={6}
+        sideOffset={4}
         collisionPadding={8}
         className={cn('popover', className)}
         {...props}

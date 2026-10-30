@@ -74,7 +74,7 @@ export function MenuContent({
     <DropdownMenu.Portal>
       <DropdownMenu.Content
         align={align}
-        sideOffset={6}
+        sideOffset={4}
         onPointerDown={() => tracker?.set(true)}
         onPointerDownOutside={() => tracker?.set(true)}
         onCloseAutoFocus={(e) => {
