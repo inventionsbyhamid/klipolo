@@ -433,6 +433,30 @@ fn unknown_tool_is_a_parse_error_naming_it() {
 }
 
 #[test]
+fn caption_styles_say_which_light_up_each_word() {
+    // "Word by word captions that light up" is karaoke or highlight; bold pops words in but lights none up.
+    let said = parameters_of("setCaptions")["properties"]["style"]["description"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let of = |key: &str| {
+        let at = said.find(&format!("{key}: ")).unwrap();
+        said[at..].split(". ").next().unwrap().to_owned()
+    };
+    for key in ["karaoke", "highlight"] {
+        let looks = of(key);
+        assert!(
+            looks.contains("lights up") && looks.contains("word by word"),
+            "{looks}"
+        );
+    }
+    assert!(of("bold").contains("no word lights up"), "{}", of("bold"));
+    for key in ["clean", "boxed"] {
+        assert!(!of(key).contains("lights up"), "{}", of(key));
+    }
+}
+
+#[test]
 fn style_enum_matches_caption_style_ids() {
     let style = &parameters_of("setCaptions")["properties"]["style"];
     assert_eq!(
