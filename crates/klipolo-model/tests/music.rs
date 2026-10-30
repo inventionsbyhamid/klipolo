@@ -583,12 +583,24 @@ fn music_goes_on_an_audio_track_of_its_own() {
     let p = video(30.0);
     let mut silent = asset(&p, "take").clone();
     silent.has_audio = false;
-    assert!(add_music_ops(&p, &silent, MusicOpts::default()).is_err());
+    let e = add_music_ops(&p, &silent, MusicOpts::default()).unwrap_err();
+    assert_eq!(e.coded().code, "model.music.noSound");
+    assert_eq!(e, refused("That file has no sound to play as music."));
+    let no_room = "Music has to start before the video ends, and end after it starts.";
     let late = MusicOpts {
         start_us: secs(30.0),
         ..MusicOpts::default()
     };
-    assert!(add_music_ops(&p, asset(&p, "song"), late).is_err());
+    let backwards = MusicOpts {
+        start_us: secs(10.0),
+        end_us: Some(secs(5.0)),
+        ..MusicOpts::default()
+    };
+    for opts in [late, backwards] {
+        let e = add_music_ops(&p, asset(&p, "song"), opts).unwrap_err();
+        assert_eq!(e.coded().code, "model.music.noRoom", "{opts:?}");
+        assert_eq!(e, refused(no_room), "{opts:?}");
+    }
 }
 
 #[test]
