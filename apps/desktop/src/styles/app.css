@@ -920,7 +920,7 @@
 }
 
 .tl-lane.is-empty {
-  background: rgb(7 10 20 / 0.45);
+  background: color-mix(in srgb, var(--color-night) 45%, transparent);
 }
 
 .tl-lane.is-drop {
@@ -961,14 +961,14 @@
   padding: 0;
   border-radius: 0;
   background: var(--color-clip-deep);
-  box-shadow: inset 0 0 0 1px rgb(127 146 218 / 0.55);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-clip-2) 55%, transparent);
   color: var(--color-ink);
   text-align: left;
   transition: box-shadow var(--dur-fast) var(--ease-out);
 }
 
 .tl-clip:not([data-first]) {
-  border-left: 1px solid rgb(7 10 20 / 0.85);
+  border-left: 1px solid color-mix(in srgb, var(--color-night) 85%, transparent);
 }
 
 .tl-clip[data-first] {
@@ -1010,7 +1010,7 @@
   overflow: hidden;
   padding: 1px 6px;
   border-radius: var(--radius-xs);
-  background: rgb(7 10 20 / 0.78);
+  background: color-mix(in srgb, var(--color-night) 78%, transparent);
   color: var(--color-ink);
   font-size: var(--text-2xs);
   line-height: var(--lh-2xs);
@@ -1133,7 +1133,7 @@
 .tl-item.is-overlay {
   overflow: hidden;
   padding: 0 6px;
-  background: rgb(233 237 247 / 0.16);
+  background: color-mix(in srgb, var(--color-lane-overlay) 16%, transparent);
   box-shadow: inset 2px 0 0 var(--color-paper);
 }
 
@@ -1183,8 +1183,8 @@
   align-items: flex-start;
   overflow: hidden;
   border-radius: var(--radius-sm);
-  background: rgb(154 136 236 / 0.14);
-  box-shadow: inset 0 0 0 1px rgb(154 136 236 / 0.5);
+  background: color-mix(in srgb, var(--color-lane-music) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-lane-music) 50%, transparent);
 }
 
 .tl-item.is-music canvas {
@@ -1196,7 +1196,7 @@
   padding: 0 6px;
   border-radius: var(--radius-xs);
   background: var(--color-lane-music);
-  box-shadow: 0 0 0 3px rgb(15 21 40 / 0.9);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-bay) 90%, transparent);
   color: var(--color-navy);
   font-weight: var(--weight-strong);
   line-height: 15px;
