@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 license.workspace = true
 publish = false
-description = "Clip analysis: the 16 kHz mono WAV Meta's speech models take, its chunks at silences, the per-file cache and the clip's timed words"
+description = "Clip analysis: the 16 kHz mono WAV Meta's speech models take, its chunks at silences, the per-file cache, the clip's timed words and its scene log"
 
 [dependencies]
 # Several requests at once (`StreamExt::buffer_unordered`).
@@ -26,8 +26,8 @@ serde_json = "1"
 # The content key, at the lockfile's version (the engine builds it).
 sha2 = "0.10.9"
 thiserror = "2"
-# Reading the WAV off the async threads (`spawn_blocking`) and the dev CLI's one-thread runtime (`rt`), waiting out a
-# busy answer (`time`), one device's slots for the Meta adapter (`sync`).
+# Reading the WAV and searching for cuts off the async threads (`spawn_blocking`) and the dev CLI's one-thread runtime
+# (`rt`), waiting out a busy answer (`time`), one device's slots for the Meta adapter (`sync`).
 tokio = { version = "1", features = ["rt", "sync", "time"] }
 
 [dev-dependencies]

@@ -1,18 +1,21 @@
 //! The scene log: clip A's 7 hard cuts found to the frame, the small copy's chunks (made only on a Mac: VideoToolbox;
-//! elsewhere the committed fixture stands in for it), and Spark's real answer read through the Meta adapter against a
-//! mock Meta and relay, its requests within the relay's contract, one video call at a time, and the upload deleted on
-//! every path.
+//! elsewhere the committed fixture stands in for it), Spark's real answer read through the Meta adapter against a mock
+//! Meta and relay (the upload deleted on every path), and chunk answers merged and snapped to cuts and words.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use klipolo_analysis::cuts::{self, Finder, Histogram};
 use klipolo_analysis::providers::meta::Meta;
-use klipolo_analysis::providers::{ProviderErrorKind, SceneKind, SceneLogger, SceneMoment};
-use klipolo_analysis::proxy;
+use klipolo_analysis::providers::{
+    BoxFuture, ProviderError, ProviderErrorKind, SceneAnswer, SceneKind, SceneLogger, SceneMoment,
+};
+use klipolo_analysis::proxy::{self, ProxyChunk, ProxyInfo};
+use klipolo_analysis::scenes::{self, SceneItem, WordEdges};
 use klipolo_meta::{MetaClient, SecretString};
+use klipolo_model::speech::{Word, WordKind};
 use klipolo_model::time::{RangeUs, Us};
 use serde_json::{Value, json};
 use wiremock::matchers::{header, method, path};
@@ -589,4 +592,428 @@ async fn one_video_call_at_a_time_through_the_relay() {
             );
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Frame rate and cost
+
+#[test]
+fn fps_and_estimate_follow_the_clip_length() {
+    assert_eq!(scenes::fps_for(155 * S), 2.0);
+    assert_eq!(scenes::fps_for(300 * S), 2.0);
+    assert_eq!(scenes::fps_for(300 * S + 1), 1.0);
+    let meta = Meta::new(MetaClient::direct(SecretString::from(KEY)));
+    // Clip A: 310 frames × 131 + 1,550 s of sound × 10... + 450 prompt in; 1,500 + 8 × 155 out.
+    let clip_a = (42_610.0 * 1.25 + 2_740.0 * 4.25) / 1e6;
+    assert!((scenes::estimate_usd(&meta, 155 * S) - clip_a).abs() < 1e-12);
+    // 25 minutes at 1 fps: three chunks of 513.33 s.
+    let chunk =
+        ((514.0 * 131.0 + 5_134.0 + 450.0) * 1.25 + (1_500.0 + 8.0 * 513.333_334) * 4.25) / 1e6;
+    assert!(
+        (scenes::estimate_usd(&meta, 1500 * S) - 3.0 * chunk).abs() < 1e-6,
+        "{}",
+        scenes::estimate_usd(&meta, 1500 * S)
+    );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Merging chunks and snapping
+
+fn moment(kind: SceneKind, start_s: f64, end_s: f64, text: &str) -> SceneMoment {
+    SceneMoment {
+        start_ms: (start_s * 1000.0).round() as u64,
+        end_ms: (end_s * 1000.0).round() as u64,
+        kind,
+        who: String::new(),
+        text: text.into(),
+        on_screen_text: String::new(),
+    }
+}
+
+fn item(kind: SceneKind, start_s: f64, end_s: f64, text: &str) -> SceneItem {
+    SceneItem {
+        start_us: (start_s * 1e6).round() as Us,
+        end_us: (end_s * 1e6).round() as Us,
+        kind,
+        who: String::new(),
+        text: text.into(),
+        on_screen_text: String::new(),
+    }
+}
+
+fn word(text: &str, start_s: f64, end_s: f64) -> Word {
+    Word {
+        text: text.into(),
+        start_us: (start_s * 1e6).round() as Us,
+        end_us: (end_s * 1e6).round() as Us,
+        confidence: 0.9,
+        kind: if text.is_empty() {
+            WordKind::Pause
+        } else {
+            WordKind::Word
+        },
+    }
+}
+
+/// (start s, end s, kind, text) of each item, for readable comparisons.
+fn summary(items: &[SceneItem]) -> Vec<(f64, f64, SceneKind, String)> {
+    items
+        .iter()
+        .map(|i| {
+            (
+                i.start_us as f64 / 1e6,
+                i.end_us as f64 / 1e6,
+                i.kind,
+                i.text.clone(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn drops_items_in_last_3s_of_non_final_chunk() {
+    let first = vec![
+        moment(SceneKind::Action, 596.9, 597.5, "kept: before the last 3 s"),
+        moment(SceneKind::Speech, 597.0, 599.0, "dropped: at the last 3 s"),
+        moment(
+            SceneKind::Reaction,
+            599.5,
+            600.0,
+            "dropped: in the last 3 s",
+        ),
+    ];
+    let last = vec![
+        moment(
+            SceneKind::Text,
+            17.5,
+            18.0,
+            "kept: the next chunk from 597 s",
+        ),
+        moment(SceneKind::Shot, 118.0, 120.0, "kept: the clip's last 3 s"),
+    ];
+    let items = scenes::merge(vec![
+        (range(0.0, 600.0), first),
+        (range(580.0, 700.0), last),
+    ]);
+    assert_eq!(
+        summary(&items),
+        vec![
+            (
+                596.9,
+                597.5,
+                SceneKind::Action,
+                "kept: before the last 3 s".into()
+            ),
+            (
+                597.5,
+                598.0,
+                SceneKind::Text,
+                "kept: the next chunk from 597 s".into()
+            ),
+            (
+                698.0,
+                700.0,
+                SceneKind::Shot,
+                "kept: the clip's last 3 s".into()
+            ),
+        ]
+    );
+    // One chunk is the last chunk: its last 3 s are kept.
+    let only = scenes::merge(vec![(
+        range(0.0, 155.0),
+        vec![moment(SceneKind::Speech, 153.0, 155.0, "the end")],
+    )]);
+    assert_eq!(
+        summary(&only),
+        vec![(153.0, 155.0, SceneKind::Speech, "the end".into())]
+    );
+}
+
+#[test]
+fn merges_overlapping_chunks_without_duplicates() {
+    // Three chunks of a 25-minute clip, timed in each chunk: the overlaps are 580 to 600 s and 1160 to 1180 s.
+    let c0 = vec![
+        moment(SceneKind::Speech, 10.0, 20.0, "intro"),
+        moment(SceneKind::Shot, 590.0, 590.5, "cut to the kitchen"),
+        // Cut off by the chunk's end: the next chunk saw it go on to 620 s.
+        moment(SceneKind::Speech, 595.0, 600.0, "a long answer"),
+        moment(SceneKind::Topic, 596.5, 597.0, "on to cooking"),
+        moment(SceneKind::Action, 598.0, 599.0, "waves (late in the chunk)"),
+    ];
+    let c1 = vec![
+        moment(SceneKind::Shot, 10.2, 10.6, "kitchen again"),
+        moment(SceneKind::Speech, 15.0, 40.0, "the long answer again"),
+        moment(SceneKind::Topic, 17.2, 17.5, "cooking again"),
+        moment(SceneKind::Reaction, 17.5, 18.0, "laughs"),
+        moment(SceneKind::Action, 18.2, 19.0, "waves"),
+        moment(SceneKind::Text, 300.0, 305.0, "a title"),
+        moment(SceneKind::Topic, 598.5, 599.0, "late in the chunk"),
+    ];
+    let c2 = vec![
+        moment(
+            SceneKind::Speech,
+            10.0,
+            15.0,
+            "in the chunk before's stretch",
+        ),
+        moment(SceneKind::Action, 337.0, 340.0, "bows"),
+    ];
+    let items = scenes::merge(vec![
+        (range(0.0, 600.0), c0),
+        (range(580.0, 1180.0), c1),
+        (range(1160.0, 1500.0), c2),
+    ]);
+    assert_eq!(
+        summary(&items),
+        vec![
+            (10.0, 20.0, SceneKind::Speech, "intro".into()),
+            (590.0, 590.6, SceneKind::Shot, "cut to the kitchen".into()),
+            (595.0, 620.0, SceneKind::Speech, "a long answer".into()),
+            (596.5, 597.5, SceneKind::Topic, "on to cooking".into()),
+            (597.5, 598.0, SceneKind::Reaction, "laughs".into()),
+            (598.2, 599.0, SceneKind::Action, "waves".into()),
+            (880.0, 885.0, SceneKind::Text, "a title".into()),
+            (1497.0, 1500.0, SceneKind::Action, "bows".into()),
+        ]
+    );
+    // No moment twice: no two items of one kind start within 2 s of each other.
+    for (i, a) in items.iter().enumerate() {
+        for b in &items[i + 1..] {
+            assert!(
+                a.kind != b.kind || (a.start_us - b.start_us).abs() > scenes::SAME_MOMENT_US,
+                "{a:?} and {b:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn snaps_to_cut_within_tolerance_and_not_beyond() {
+    let cuts = [frame_us(404), frame_us(722)]; // 13.467 s and 24.067 s
+    // In sound time; the sound starts 0.2 s after the picture, so each is 0.2 s later in file time.
+    let words = [
+        word("near", 12.9, 13.0),  // 13.1 to 13.2
+        word("Hello", 30.0, 30.4), // 30.2 to 30.6
+        word("there", 30.5, 31.0), // 30.7 to 31.2
+        word("", 31.0, 32.0),      // a pause: no edges of its own
+        word("again", 40.0, 40.5), // 40.2 to 40.7
+        word("late", 49.6, 49.8),  // 49.8 to 50.0
+        word("early", 50.3, 50.6), // 50.5 to 50.8
+    ];
+    let edges = scenes::word_edges(&words, 200_000);
+    assert_eq!(
+        edges,
+        WordEdges {
+            starts: vec![
+                13_100_000, 30_200_000, 30_700_000, 40_200_000, 49_800_000, 50_500_000
+            ],
+            ends: vec![
+                13_200_000, 30_600_000, 31_200_000, 40_700_000, 50_000_000, 50_800_000
+            ],
+        }
+    );
+    let exactly = SceneItem {
+        start_us: frame_us(404) - scenes::CUT_SNAP_US,
+        end_us: frame_us(722) - scenes::CUT_SNAP_US,
+        ..item(SceneKind::Shot, 0.0, 0.0, "exactly 1.5 s")
+    };
+    let mut items = vec![
+        item(SceneKind::Shot, 12.0, 22.6, "both edges 1.467 s from a cut"),
+        exactly,
+        item(SceneKind::Shot, 11.9, 25.6, "1.567 s and 1.533 s: too far"),
+        item(
+            SceneKind::Speech,
+            13.0,
+            13.2,
+            "a cut wins over a nearer word",
+        ),
+        item(SceneKind::Speech, 29.5, 31.9, "words 0.7 s away"),
+        item(SceneKind::Speech, 39.1, 41.8, "words 1.1 s away: too far"),
+        item(
+            SceneKind::Action,
+            50.2,
+            50.3,
+            "the start moves past the end",
+        ),
+    ];
+    scenes::snap(&mut items, &cuts, &edges);
+    let edges_of = |i: &SceneItem| (i.start_us, i.end_us);
+    assert_eq!(edges_of(&items[0]), (frame_us(404), frame_us(722)));
+    assert_eq!(edges_of(&items[1]), (frame_us(404), frame_us(722)));
+    assert_eq!(edges_of(&items[2]), (11_900_000, 25_600_000));
+    assert_eq!(edges_of(&items[3]), (frame_us(404), frame_us(404)));
+    assert_eq!(edges_of(&items[4]), (30_200_000, 31_200_000));
+    assert_eq!(edges_of(&items[5]), (39_100_000, 41_800_000));
+    // Start to the next word's start (50.5), end to the last word's end (50.0): the end never lands before the start.
+    assert_eq!(edges_of(&items[6]), (50_500_000, 50_500_000));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The whole log, through a fake logger
+
+/// Answers each call with the next of its answers, counting calls.
+struct Fake {
+    answers: Mutex<Vec<Result<SceneAnswer, ProviderError>>>,
+    calls: AtomicUsize,
+    fps: Mutex<Vec<f64>>,
+}
+
+impl Fake {
+    fn new(answers: Vec<Result<SceneAnswer, ProviderError>>) -> Self {
+        Self {
+            answers: Mutex::new(answers.into_iter().rev().collect()),
+            calls: AtomicUsize::new(0),
+            fps: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl SceneLogger for Fake {
+    fn model(&self) -> &str {
+        "fake-scenes"
+    }
+
+    fn max_in_flight(&self) -> usize {
+        1
+    }
+
+    fn estimate_usd(&self, seconds: f64, fps: f64) -> f64 {
+        seconds * fps * 1e-4
+    }
+
+    fn watch<'a>(
+        &'a self,
+        _video: &'a Path,
+        fps: f64,
+    ) -> BoxFuture<'a, Result<SceneAnswer, ProviderError>> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        self.fps.lock().unwrap().push(fps);
+        let next = self
+            .answers
+            .lock()
+            .unwrap()
+            .pop()
+            .expect("an answer per call");
+        Box::pin(async move { next })
+    }
+}
+
+fn answer(moments: Vec<SceneMoment>, cost_usd: f64) -> Result<SceneAnswer, ProviderError> {
+    Ok(SceneAnswer { moments, cost_usd })
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_scene_log_snaps_a_fakes_moments_to_the_clips_cuts_and_words() {
+    let mut copy = proxy::existing(&clip_a()).unwrap();
+    // The sound starts 0.2 s after the picture: words are 0.2 s later in file time.
+    copy.audio_lead_us = 200_000;
+    let words = [
+        word("floating", 40.0, 40.6), // 40.2 to 40.8
+        word("up", 44.5, 44.7),       // 44.7 to 44.9
+    ];
+    let fake = Fake::new(vec![answer(
+        vec![
+            moment(SceneKind::Shot, 12.8, 13.5, "cut to a student"),
+            moment(
+                SceneKind::Speech,
+                13.5,
+                23.0,
+                "asks how they stay entertained",
+            ),
+            moment(SceneKind::Action, 40.5, 45.0, "raises an arm"),
+        ],
+        0.0123,
+    )]);
+    let log = scenes::log(&fake, &copy, &words).await.unwrap();
+    assert_eq!(
+        (log.model.as_str(), log.fps, log.cost_usd),
+        ("fake-scenes", 2.0, 0.0123)
+    );
+    assert_eq!(*fake.fps.lock().unwrap(), vec![2.0]);
+    assert_clip_a_cuts(&log.cuts);
+    let (a, b) = (log.cuts[0], log.cuts[1]);
+    assert_eq!(
+        log.items
+            .iter()
+            .map(|i| (i.start_us, i.end_us, i.kind))
+            .collect::<Vec<_>>(),
+        vec![
+            (a, a, SceneKind::Shot),
+            (a, b, SceneKind::Speech),
+            (40_200_000, 44_900_000, SceneKind::Action),
+        ]
+    );
+}
+
+/// The copy can't be read for its cuts (gone, here): the log Spark gave is still kept, snapped to the words alone.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failed_cut_search_leaves_the_log_snapped_to_words() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut copy = proxy::existing(&clip_a()).unwrap();
+    copy.chunks[0].path = dir.path().join("gone.mp4");
+    let words = [word("floating", 40.0, 40.6)];
+    let fake = Fake::new(vec![answer(
+        vec![
+            moment(SceneKind::Shot, 12.8, 13.5, "cut to a student"),
+            moment(SceneKind::Action, 40.5, 45.0, "raises an arm"),
+        ],
+        0.01,
+    )]);
+    let log = scenes::log(&fake, &copy, &words).await.unwrap();
+    assert!(log.cuts.is_empty());
+    assert_eq!(
+        log.items
+            .iter()
+            .map(|i| (i.start_us, i.end_us))
+            .collect::<Vec<_>>(),
+        vec![(12_800_000, 13_500_000), (40_000_000, 45_000_000)]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_used_up_credit_stops_the_scene_log_with_its_sentence() {
+    let mut copy = proxy::existing(&clip_a()).unwrap();
+    // Three chunks of a 25-minute clip (the same file stands in for each).
+    copy.duration_us = 1500 * S;
+    copy.chunks = proxy::plan(1500 * S, proxy::CHUNK_US, proxy::OVERLAP_US)
+        .into_iter()
+        .map(|range| ProxyChunk {
+            path: clip_a(),
+            range,
+            bytes: 1,
+        })
+        .collect();
+    let sentence = "This device used its Klipolo credit. Add your Meta API key in Settings.";
+    let fake = Fake::new(vec![
+        answer(vec![], 0.1),
+        Err(ProviderError::new(ProviderErrorKind::Budget, sentence)),
+        answer(vec![], 0.1),
+    ]);
+    let err = scenes::log(&fake, &copy, &[]).await.unwrap_err();
+    assert!(err.is_stop());
+    assert_eq!(err.user_message(), sentence);
+    assert_eq!(
+        fake.calls.load(Ordering::SeqCst),
+        2,
+        "the third chunk was sent"
+    );
+    // A clip over 5 minutes is watched at 1 frame a second.
+    assert_eq!(*fake.fps.lock().unwrap(), vec![1.0, 1.0]);
+}
+
+#[test]
+fn the_scene_log_future_can_move_between_threads() {
+    fn sends<T: Send>(_: &T) {}
+    let fake = Fake::new(vec![]);
+    let copy = ProxyInfo {
+        duration_us: 0,
+        audio_lead_us: 0,
+        width: 0,
+        height: 0,
+        fps: 0.0,
+        has_audio: false,
+        chunks: vec![],
+    };
+    let future = scenes::log(&fake, &copy, &[]);
+    sends(&future);
 }

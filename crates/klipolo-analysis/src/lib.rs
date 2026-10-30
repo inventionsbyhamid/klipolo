@@ -1,8 +1,8 @@
 //! Clip analysis for Meta's models: the 16 kHz mono WAV Voice Transcribe takes (`audio`), that WAV cut at silences
 //! into requests of at most ten minutes (`chunks`), the per-file cache that keeps what a clip's analysis found
-//! (`cache`), the clip's timed words (`transcript`, with `fillers`), and a small copy of the clip for the scene log
-//! (`proxy`) with its hard cuts (`cuts`). The speech services sit behind interfaces this crate owns (`providers`),
-//! with Meta as one adapter.
+//! (`cache`), the clip's timed words (`transcript`, with `fillers`), and its scene log (`scenes`), made from a small copy
+//! of the clip (`proxy`) and snapped to its hard cuts (`cuts`). The services sit behind interfaces this crate owns
+//! (`providers`), with Meta as one adapter.
 
 pub mod audio;
 pub mod cache;
@@ -12,6 +12,7 @@ pub mod error;
 pub mod fillers;
 pub mod providers;
 pub mod proxy;
+pub mod scenes;
 pub mod transcript;
 
 pub use error::{AnalysisError, VideoError};
