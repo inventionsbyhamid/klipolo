@@ -436,6 +436,34 @@ mod tests {
     }
 
     #[test]
+    fn decimating_in_blocks_matches_one_block() {
+        // However the decoder splits the sound, the output is the same, bit for bit.
+        let mut x = 0x2545_f491_4f6c_dd1du64;
+        let input: Vec<f32> = (0..20_000)
+            .map(|_| {
+                x = x
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                (x >> 40) as f32 / (1u64 << 24) as f32 * 2.0 - 1.0
+            })
+            .collect();
+        let run = |block: usize| {
+            let mut d = Decimator::new();
+            let mut out = Vec::new();
+            for part in input.chunks(block) {
+                d.push(part, &mut out);
+            }
+            d.finish(&mut out);
+            out.iter().map(|s| s.to_bits()).collect::<Vec<u32>>()
+        };
+        let whole = run(input.len());
+        assert_eq!(whole.len(), input.len().div_ceil(3));
+        for block in [1, 2, 7, 4096] {
+            assert!(run(block) == whole, "blocks of {block}");
+        }
+    }
+
+    #[test]
     fn the_buffer_stays_small() {
         let mut d = Decimator::new();
         let mut out = Vec::new();
