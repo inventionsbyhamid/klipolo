@@ -85,6 +85,13 @@ where
 {
     let engine = state.slot.get_or_start(start).await?;
     engine.set_event_sink(sink);
+    // A (re)loaded page numbers its seeks from 1 again, and the engine's count starts over on every attach: so does the
+    // transport's, keeping its place.
+    state
+        .transport
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .seq = 0;
     let mut info = engine.info();
     if native_wanted(setting) {
         match present_natively(&engine, host).await {
@@ -247,9 +254,29 @@ pub fn engine_set_view(state: State<'_, EngineState>, view: ViewSpec) {
     }
 }
 
+/// The window was hidden or minimised (`false`): the engine pauses with silence and lets its decoders go, until it
+/// is shown again (`true`).
+#[tauri::command]
+pub fn engine_set_visible(state: State<'_, EngineState>, visible: bool) {
+    set_visible(&state, visible);
+}
+
+/// `engine_set_visible`, for the running engine (nothing before the first attach).
+pub fn set_visible(state: &EngineState, visible: bool) {
+    if let Some(engine) = state.slot.running() {
+        tracing::info!(visible, "the window's visibility changed");
+        engine.set_visible(visible);
+    }
+}
+
 /// Shows the frame at `at_us`. `seq` names the seek: frames carry it, and a seek older than the newest is ignored.
 #[tauri::command]
 pub fn engine_seek(state: State<'_, EngineState>, at_us: Us, seq: u32) {
+    seek(&state, at_us, seq);
+}
+
+/// `engine_seek`: moves the transport and the engine to `at_us`, unless `seq` is older than the newest seek.
+pub fn seek(state: &EngineState, at_us: Us, seq: u32) {
     let mut transport = state
         .transport
         .lock()
@@ -338,6 +365,239 @@ mod tests {
 
     fn quiet() -> EventSink {
         Arc::new(|_| {})
+    }
+
+    /// An engine on the feed with no GPU (the socket presents).
+    async fn blank_engine(feed: FeedRx) -> Result<Engine, String> {
+        let options = EngineOptions {
+            allowed_origins: allowed_origins(),
+            max_preview_pixels: 1920 * 1080,
+            socket_playback_pixels: 1920 * 1080,
+            socket_rgba_only: false,
+            adapter: "test".into(),
+            gpu_class: klipolo_engine::platform::gpu::GpuClass::Integrated,
+        };
+        let backend = klipolo_engine::session::blank::BlankBackend::new();
+        Engine::start(options, feed, backend).await
+    }
+
+    /// A project with one 10 s video on the main track (the blank backend never opens the file).
+    fn one_clip() -> Project {
+        use klipolo_model::project::{Asset, AssetKind};
+        use klipolo_model::timeline::{Clip, ClipSource};
+        let mut project = Project::new("Test");
+        project.assets = vec![Asset {
+            id: "v".into(),
+            kind: AssetKind::Video,
+            path: "/media/v.mp4".into(),
+            name: "v.mp4".into(),
+            duration_us: 10_000_000,
+            width: 1920,
+            height: 1080,
+            fps: 30.0,
+            rotation: Some(0),
+            has_audio: false,
+            audio_lead_us: Some(0),
+        }];
+        project.timeline.main = vec![Clip::new(
+            ClipSource::Asset { id: "v".into() },
+            0,
+            10_000_000,
+        )];
+        project
+    }
+
+    /// Hidden or minimised, the window pauses playback (the engine lets its decoders go), and shown again it stays
+    /// paused where it stopped.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn hiding_the_window_pauses_playback() {
+        let projects = ProjectState::default();
+        projects.open(one_clip());
+        let state = EngineState::new(None, None);
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let sink: EventSink = {
+            let seen = seen.clone();
+            Arc::new(move |event| seen.lock().unwrap().push(event))
+        };
+        let socket = Some("socket");
+        let engine = attach(
+            &state,
+            || blank_engine(projects.feed()),
+            &Detached,
+            sink,
+            socket,
+        );
+        engine.await.unwrap();
+        state
+            .slot
+            .running()
+            .unwrap()
+            .set_view(klipolo_engine::api::ViewSpec {
+                format: klipolo_model::project::FormatKind::Landscape,
+                width: 64,
+                height: 36,
+            });
+        state.slot.running().unwrap().play(0, 1.0, 0).await.unwrap();
+
+        set_visible(&state, false);
+        let hidden = |e: &EngineEvent| {
+            matches!(
+                e,
+                EngineEvent::State {
+                    playing: false,
+                    reason: klipolo_engine::api::StateReason::Hidden,
+                    ..
+                }
+            )
+        };
+        for _ in 0..200 {
+            if seen.lock().unwrap().iter().any(hidden) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(
+            seen.lock().unwrap().iter().any(hidden),
+            "playback stopped because the window was hidden"
+        );
+        set_visible(&state, true);
+    }
+
+    /// What the page hears: the crash guard's events never reach it, every other event does, and the transport
+    /// follows playback's starts and stops.
+    #[test]
+    fn the_sink_drops_guard_events_and_moves_the_transport() {
+        use klipolo_engine::api::StateReason;
+        use klipolo_model::contrib::ContribId;
+        use tauri::ipc::InvokeResponseBody;
+
+        let sent = Arc::new(Mutex::new(Vec::<String>::new()));
+        let channel = {
+            let sent = sent.clone();
+            Channel::new(move |body| {
+                if let InvokeResponseBody::Json(json) = body {
+                    sent.lock().unwrap().push(json);
+                }
+                Ok(())
+            })
+        };
+        let transport = Arc::new(Mutex::new(Transport { at_us: 0, seq: 4 }));
+        let sink = event_sink(channel, transport.clone());
+
+        sink(EngineEvent::FirstDraw {
+            contrib: ContribId::builtin("effect.blur"),
+            seq: 1,
+        });
+        sink(EngineEvent::DrewSafely {
+            contrib: ContribId::builtin("effect.blur"),
+            seq: 1,
+        });
+        assert!(
+            sent.lock().unwrap().is_empty(),
+            "guard events stay in the app"
+        );
+
+        sink(EngineEvent::State {
+            playing: true,
+            at_us: 2_000_000,
+            reason: StateReason::Play,
+            rate: 1.0,
+        });
+        assert_eq!(
+            *transport.lock().unwrap(),
+            Transport {
+                at_us: 2_000_000,
+                seq: 4
+            }
+        );
+        sink(EngineEvent::State {
+            playing: false,
+            at_us: 7_500_000,
+            reason: StateReason::Ended,
+            rate: 1.0,
+        });
+        assert_eq!(
+            *transport.lock().unwrap(),
+            Transport {
+                at_us: 7_500_000,
+                seq: 4
+            },
+            "a stop moves the place and keeps the seek count"
+        );
+        sink(EngineEvent::Ready { session: 2 });
+
+        let sent = sent.lock().unwrap();
+        assert_eq!(sent.len(), 3, "{sent:?}");
+        assert!(sent[0].contains(r#""type":"state""#) && sent[0].contains(r#""playing":true"#));
+        assert!(sent[2].contains(r#""type":"ready""#));
+    }
+
+    /// A file that isn't a readable video is refused with a message that names it (and never its folder).
+    #[test]
+    fn a_file_that_cannot_open_is_named() {
+        let dir = tempfile::tempdir().unwrap();
+        let empty = dir.path().join("empty.mp4");
+        std::fs::write(&empty, b"").unwrap();
+        let garbage = dir.path().join("garbage.mov");
+        std::fs::write(&garbage, vec![7u8; 4096]).unwrap();
+        let missing = dir.path().join("missing.mp4");
+        for path in [&empty, &garbage, &missing] {
+            let error = crate::state::single_video_project(path).unwrap_err();
+            let name = path.file_name().unwrap().to_string_lossy();
+            assert!(
+                error.starts_with(&format!("{name} couldn't be opened.")),
+                "{error}"
+            );
+            let folder = dir.path().to_string_lossy();
+            assert!(!error.contains(folder.as_ref()), "{error}");
+        }
+    }
+
+    /// A reloaded page attaches again and numbers its seeks from 1, as the engine expects (it starts its count over on
+    /// every attach): none of them may be dropped as older than the previous page's.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_reloaded_page_seeks_from_one_again() {
+        let projects = ProjectState::default();
+        projects.open(Project::new("Test"));
+        let state = EngineState::new(None, None);
+        let socket = Some("socket");
+        attach(
+            &state,
+            || blank_engine(projects.feed()),
+            &Detached,
+            quiet(),
+            socket,
+        )
+        .await
+        .unwrap();
+        seek(&state, 1_000_000, 9);
+        assert_eq!(
+            state.transport(),
+            Transport {
+                at_us: 1_000_000,
+                seq: 9
+            }
+        );
+
+        attach(
+            &state,
+            || blank_engine(projects.feed()),
+            &Detached,
+            quiet(),
+            socket,
+        )
+        .await
+        .unwrap();
+        assert_eq!(state.transport().at_us, 1_000_000, "the place is kept");
+        seek(&state, 2_000_000, 1);
+        assert_eq!(
+            state.transport(),
+            Transport {
+                at_us: 2_000_000,
+                seq: 1
+            },
+            "the new page's first seek moves it"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

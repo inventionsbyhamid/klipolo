@@ -4,6 +4,7 @@ import {
   enginePause,
   enginePlay,
   engineSeek,
+  engineSetVisible,
   projectSummary,
   type EngineEvent,
   type EngineInfo,
@@ -129,13 +130,22 @@ export function socketFailed() {
   set({ status: 'unavailable', message: "The preview isn't available right now." });
 }
 
-/** Attaches to the engine (once per page load) and reads the open project. */
+/** The window was hidden or shown (minimised, the app hidden, another space): the engine pauses and lets its
+ * decoders go while hidden. */
+function onVisibility() {
+  void engineSetVisible(document.visibilityState === 'visible').catch(() => undefined);
+}
+
+/** Attaches to the engine (once per page load), reads the open project and follows the window's visibility. */
 export async function startSession(): Promise<void> {
   try {
     const project = await projectSummary();
     set({ project });
     const info = await engineAttach(onEvent);
     set({ info, presenter: info.presenter });
+    // The engine listens once attached.
+    onVisibility();
+    document.addEventListener('visibilitychange', onVisibility);
     // Shows the first frame where the transport is.
     await seek(state.anchorUs);
   } catch (error) {
@@ -164,8 +174,12 @@ export async function play(): Promise<void> {
 }
 
 export async function pause(): Promise<void> {
-  const at = await enginePause();
-  set({ playing: false, anchorUs: at, anchorMs: Date.now() });
+  try {
+    const at = await enginePause();
+    set({ playing: false, anchorUs: at, anchorMs: Date.now() });
+  } catch (error) {
+    set({ message: String(error) });
+  }
 }
 
 export function togglePlay(): Promise<void> {

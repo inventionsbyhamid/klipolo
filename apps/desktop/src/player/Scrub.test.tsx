@@ -10,6 +10,7 @@ const bridge = vi.hoisted(() => ({
   projectSummary: vi.fn(() => Promise.resolve({ name: 'clip.mp4', durationUs: 10_000_000 })),
   enginePlay: vi.fn(() => Promise.resolve(0)),
   enginePause: vi.fn(() => Promise.resolve(0)),
+  engineSetVisible: vi.fn(() => Promise.resolve()),
 }));
 vi.mock('../bridge/engine', () => bridge);
 

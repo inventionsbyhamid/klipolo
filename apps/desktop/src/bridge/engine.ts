@@ -89,6 +89,11 @@ export function engineView(rect: ViewRect | null): Promise<void> {
   return invoke<void>('engine_view', { rect });
 }
 
+/** Hidden or minimised (false): the engine pauses with silence and lets its decoders go; shown again (true). */
+export function engineSetVisible(visible: boolean): Promise<void> {
+  return invoke<void>('engine_set_visible', { visible });
+}
+
 /** Shows the frame at `atUs`. `seq` names the seek: frames carry it, so older ones can be dropped. */
 export function engineSeek(atUs: number, seq: number): Promise<void> {
   return invoke<void>('engine_seek', { atUs, seq });
