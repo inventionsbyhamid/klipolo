@@ -51,7 +51,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         ),
         align_concurrency=_number(env, "ALIGN_CONCURRENCY", "2", int, 1),
         align_threads=_number(env, "ALIGN_THREADS", "8", int, 1),
-        meta_api_key=env.get("META_API_KEY", ""),
+        meta_api_key=env.get("META_API_KEY", "").strip(),
         allowed_models=frozenset(
             name.strip() for name in env.get("ALLOWED_MODELS", DEFAULT_ALLOWED_MODELS).split(",") if name.strip()
         ),

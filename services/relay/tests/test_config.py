@@ -80,3 +80,10 @@ def test_allowed_models_are_read_from_a_comma_separated_list():
     settings = load_settings({"ALLOWED_MODELS": " sam-3.1, muse-spark-1.3 ,,"})
 
     assert settings.allowed_models == {"sam-3.1", "muse-spark-1.3"}
+
+
+@pytest.mark.parametrize(("raw", "key"), [("  fake-key\n", "fake-key"), (" \n", "")])
+def test_meta_key_is_stripped(raw, key):
+    # A stray newline from an env file would break the Authorization header;
+    # a blank key means the relay is not configured.
+    assert load_settings({"META_API_KEY": raw}).meta_api_key == key
