@@ -104,6 +104,18 @@ describe('importing media', () => {
     ]);
   });
 
+  it('names skipped files as they are, a # in a name included', async () => {
+    const unsupported = "This file type isn't supported.";
+    vi.mocked(bridge.importMedia).mockResolvedValueOnce({
+      assets: [],
+      skipped: ['Take #3.mov', '#1.txt', 'b.txt', 'c.txt', 'd.txt'].map((name) => ({ name, reason: unsupported })),
+    });
+    await importFiles(['/x']);
+    expect(useToasts.getState().toasts.map((t) => t.text)).toEqual([
+      "Skipped 5 files. Take #3.mov, #1.txt, b.txt and 2 more: this file type isn't supported.",
+    ]);
+  });
+
   it('nothing is placed into a project opened while the files were read', async () => {
     let read!: (value: { assets: Asset[]; skipped: [] }) => void;
     vi.mocked(bridge.importMedia).mockReturnValue(new Promise((resolve) => (read = resolve)));

@@ -22,11 +22,13 @@ function listNames(names: string[]): string {
   );
   if (names.length <= NAMES_SHOWN) return shown;
   const more = names.length - NAMES_SHOWN;
-  return t({
+  // The names stay outside the plural: a `#` in one ("Take #3.mov") is part of the name, not the count.
+  const andMore = t({
     id: 'media.skipped.namesMore',
-    message: plural(more, { one: `${shown} and # more`, other: `${shown} and # more` }),
-    comment: '{shown} lists the first file names, e.g. “a.heic, b.pdf, c.zip”',
+    message: plural(more, { one: 'and # more', other: 'and # more' }),
+    comment: 'After the first file names, e.g. “a.heic, b.pdf, c.zip and 2 more”',
   });
+  return `${shown} ${andMore}`;
 }
 
 /**
@@ -47,12 +49,12 @@ function skippedMessage(skipped: SkippedFile[]): string {
       });
     })
     .join(' ');
-  const count = skipped.length;
-  return t({
+  const lead = t({
     id: 'media.skipped',
-    message: plural(count, { 1: `Skipped ${parts}`, other: `Skipped # files. ${parts}` }),
-    comment: '{parts} names the skipped files and why, e.g. “a.heic, b.pdf: this file type isn’t supported.”',
+    message: plural(skipped.length, { 1: 'Skipped', other: 'Skipped # files.' }),
+    comment: 'Before the skipped files and why, e.g. “a.heic, b.pdf: this file type isn’t supported.”',
   });
+  return `${lead} ${parts}`;
 }
 
 /**

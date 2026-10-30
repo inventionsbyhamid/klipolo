@@ -30,6 +30,13 @@ describe('the English-only message shim', () => {
     );
   });
 
+  it('a # in a value stays as written; only the # in the branch text is the count', () => {
+    const message = '{n, plural, one {{name} and # more} other {{name} and # more}}';
+    expect(formatMessage(message, { n: 2, name: 'Take #3.mov' })).toBe('Take #3.mov and 2 more');
+    // The plural macro gets its branches already filled in, so it can't tell: callers keep values outside it.
+    expect(`Take #3.mov ${plural(2, { one: 'and # more', other: 'and # more' })}`).toBe('Take #3.mov and 2 more');
+  });
+
   it('the macros return English: t, msg, plural and select', () => {
     const name = 'intro.mov';
     expect(t({ id: 'media.added', message: `Added ${name}` })).toBe('Added intro.mov');
