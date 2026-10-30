@@ -12,6 +12,7 @@ use std::ops::Range;
 use std::path::Path;
 
 use klipolo_engine::audio::decode::{self, DecodeError};
+use klipolo_engine::render::probe::probe_media;
 use klipolo_model::time::Us;
 use klipolo_platform::durable::{self, Durability};
 use serde::{Deserialize, Serialize};
@@ -56,18 +57,19 @@ pub enum AudioError {
 /// reports `has_audio: false` (not an error). The WAV is written beside `out` under a temporary name and renamed into
 /// place once whole, so `out` is never half-written; a failure removes the temporary file.
 pub fn extract_wav_16k(src: &Path, out: &Path) -> Result<AudioInfo, AudioError> {
-    let channels = match decode::probe(src) {
-        Ok(probe) => usize::from(probe.channels.max(1)),
-        // The engine's probe for a file that opens but has no sound stream.
-        Err(e) if e == "No Stream" => {
-            return Ok(AudioInfo {
-                duration_us: 0,
-                has_audio: false,
-                peak_dbfs: SILENCE_DBFS,
-            });
-        }
-        Err(e) => return Err(AudioError::Decode(e)),
-    };
+    if !probe_media(src).map_err(AudioError::Decode)?.has_audio {
+        return Ok(AudioInfo {
+            duration_us: 0,
+            has_audio: false,
+            peak_dbfs: SILENCE_DBFS,
+        });
+    }
+    let channels = usize::from(
+        decode::probe(src)
+            .map_err(AudioError::Decode)?
+            .channels
+            .max(1),
+    );
     let tmp = durable::temp_path(out);
     let written = write_wav(src, channels, &tmp).and_then(|info| {
         std::fs::rename(&tmp, out)?;
