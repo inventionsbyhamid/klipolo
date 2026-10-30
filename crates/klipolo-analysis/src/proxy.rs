@@ -6,7 +6,8 @@
 //!
 //! **Cuts** are found while the copy is made, from every frame of the source at its own rate (the engine's
 //! `EveryFrame`, into a `cuts::Finder` per chunk), so they land on the source's frames whatever frame rate the copy
-//! keeps. A ready copy's are found by decoding it at its own rate (`existing`).
+//! keeps. A ready copy's are found by decoding it at its own rate (`existing`). The same frames tell a caller how far the
+//! copy has got (`make_reporting`).
 //!
 //! **Background work:** the copy is made while someone edits, so its software decode keeps to half the cores
 //! (`small_copy::background_threads`); the caller runs it on a thread of low priority (the app: utility QoS).
@@ -18,7 +19,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
-use klipolo_engine::media::small_copy::{self, SmallCopy, SmallCopyError};
+use klipolo_engine::media::small_copy::{self, EveryFrame, SmallCopy, SmallCopyError};
 use klipolo_engine::render::probe::{MediaInfo, MediaKind, probe_media};
 use klipolo_model::time::{RangeUs, Us, secs_to_us};
 
@@ -106,13 +107,65 @@ pub fn make(
     make_in_chunks(src, out_dir, short_side, (CHUNK_US, OVERLAP_US), cancel)
 }
 
+/// `make`, telling `seen` the clip's file time of each source frame it decodes: through each chunk in turn (a chunk
+/// starts again at its range's start, at the keyframe before it), from the start again should the copy be made again
+/// in software. For a progress bar: the furthest time seen over the clip's length.
+pub fn make_reporting(
+    src: &Path,
+    out_dir: &Path,
+    short_side: u32,
+    cancel: &AtomicBool,
+    seen: &mut dyn FnMut(Us),
+) -> Result<ProxyInfo, VideoError> {
+    make_chunks(
+        src,
+        out_dir,
+        short_side,
+        (CHUNK_US, OVERLAP_US),
+        cancel,
+        seen,
+    )
+}
+
 /// `make` with chunks of at most `max_us` overlapping by `overlap_us` (tests use short ones).
 pub fn make_in_chunks(
     src: &Path,
     out_dir: &Path,
     short_side: u32,
+    chunking: (Us, Us),
+    cancel: &AtomicBool,
+) -> Result<ProxyInfo, VideoError> {
+    make_chunks(src, out_dir, short_side, chunking, cancel, &mut |_| {})
+}
+
+/// A chunk's cut finder, telling `seen` each frame's time as well.
+struct Watched<'a> {
+    finder: &'a mut Finder,
+    seen: &'a mut dyn FnMut(Us),
+}
+
+impl EveryFrame for Watched<'_> {
+    fn size(&self) -> (u32, u32) {
+        self.finder.size()
+    }
+
+    fn see(&mut self, at: Us, pixels: &[u8]) {
+        self.finder.see(at, pixels);
+        (self.seen)(at);
+    }
+
+    fn again(&mut self) {
+        self.finder.again();
+    }
+}
+
+fn make_chunks(
+    src: &Path,
+    out_dir: &Path,
+    short_side: u32,
     (max_us, overlap_us): (Us, Us),
     cancel: &AtomicBool,
+    seen: &mut dyn FnMut(Us),
 ) -> Result<ProxyInfo, VideoError> {
     let clip = probe(src)?;
     let duration_us = secs_to_us(clip.duration);
@@ -141,8 +194,12 @@ pub fn make_in_chunks(
         };
         // Every frame of the source, at its own rate, into this chunk's finder (told when the copy starts again).
         let mut finder = Finder::new();
-        let info =
-            small_copy::write(src, &path, &spec, cancel, Some(&mut finder)).map_err(video_error)?;
+        let mut watched = Watched {
+            finder: &mut finder,
+            seen: &mut *seen,
+        };
+        let info = small_copy::write(src, &path, &spec, cancel, Some(&mut watched))
+            .map_err(video_error)?;
         found.push((range, finder.finish()));
         chunks.push(ProxyChunk {
             path,
