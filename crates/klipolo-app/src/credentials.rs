@@ -230,7 +230,8 @@ pub struct Credentials {
     generation: AtomicU64,
     register_timeout: Duration,
     register_backoff: Duration,
-    /// When [`Self::ready`]'s last registration failed, and the sentence it gave.
+    /// When [`Self::ready`]'s last registration failed, and the sentence it gave. About the credentials held then:
+    /// every change clears it (`change`), so a new key or code is never paused by, or shown, an older one's failure.
     failed: Mutex<Option<(Instant, String)>>,
 }
 
@@ -282,7 +283,7 @@ impl Credentials {
     /// If registering fails, `problem` says why. With a key the feature still runs (`meta` is the key's adapter, words
     /// are timed approximately). With a code there is no token to pay with, so `meta` is None: show `problem`, not the
     /// ask for a key or code. After a failure, calls within [`REGISTER_BACKOFF`] don't try again (callers waiting
-    /// for the attempt included); they give the same sentence at once.
+    /// for the attempt included); they give the same sentence at once, until the key or code changes.
     pub async fn ready(&self) -> Ready {
         let unregistered = {
             let held = lock(&self.held);
@@ -479,7 +480,6 @@ impl Credentials {
             tracing::warn!(%error, "secret store");
         }
         self.change(|held| held.token = Some(token.clone()));
-        *lock(&self.failed) = None;
         Ok(info)
     }
 
@@ -507,11 +507,13 @@ impl Credentials {
             .await
     }
 
-    /// Applies `edit` to the held secrets, rebuilds the adapter from them and moves the generation on.
+    /// Applies `edit` to the held secrets, rebuilds the adapter from them and moves the generation on. A registration
+    /// failure noted for the credentials before is forgotten: the next use tries again with these.
     fn change(&self, edit: impl FnOnce(&mut Held)) {
         let mut held = lock(&self.held);
         edit(&mut held);
         *lock(&self.meta) = client_for(&held, &self.endpoints).map(Meta::new);
+        *lock(&self.failed) = None;
         self.generation.fetch_add(1, Ordering::SeqCst);
     }
 
