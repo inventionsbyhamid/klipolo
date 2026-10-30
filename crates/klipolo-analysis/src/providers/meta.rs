@@ -182,14 +182,14 @@ fn transcription(heard: AsrResult) -> Transcription {
 }
 
 /// A Meta client error in Klipolo's terms: its sentence for the person, its `Display` (already redacted) for logs.
-/// A 429 is `Busy` when the relay says `busy` (wait and try again); any other (the relay's daily `align_quota`, Meta's
-/// own rate limit) is `RateLimited`, a stop.
+/// A 429 is `Busy` when the relay says `busy` or gives no code at all (Traefik's rate limit; wait and try again); any
+/// other (the relay's daily `align_quota`, Meta's own rate limit) is `RateLimited`, a stop.
 pub fn provider_error(e: MetaError) -> ProviderError {
     let (kind, retry_after_s) = match &e {
         MetaError::Budget { .. } => (ProviderErrorKind::Budget, None),
-        MetaError::RateLimited {
-            retry_after, code, ..
-        } if code.as_deref() == Some(RELAY_BUSY) => (ProviderErrorKind::Busy, *retry_after),
+        MetaError::RateLimited { retry_after, .. } if e.is_busy() => {
+            (ProviderErrorKind::Busy, *retry_after)
+        }
         MetaError::RateLimited { retry_after, .. } => {
             (ProviderErrorKind::RateLimited, *retry_after)
         }

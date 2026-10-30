@@ -55,6 +55,9 @@ pub enum MetaError {
 /// The most of a server's message kept in an error.
 const MAX_MESSAGE_CHARS: usize = 300;
 
+/// The relay's 429 code for a device's (or the relay's) calls at once.
+const RELAY_BUSY_CODE: &str = "busy";
+
 /// ": message" for `Display`, or nothing when there is no message.
 fn detail(message: Option<&String>) -> String {
     match message {
@@ -103,6 +106,19 @@ impl MetaError {
                 message: body_message(body, secrets)
                     .unwrap_or_else(|| format!("The server answered with status {status}.")),
             },
+        }
+    }
+
+    /// A busy moment to wait out (`retry_after`) and send again, not a
+    /// used-up allowance: the relay's 429 `busy`, or a 429 with no error code
+    /// at all (Traefik's plain-text rate limit in front of the relay). The
+    /// relay's daily `align_quota` and Meta's own rate limit are stops.
+    pub fn is_busy(&self) -> bool {
+        match self {
+            Self::RateLimited { code, .. } => {
+                code.is_none() || code.as_deref() == Some(RELAY_BUSY_CODE)
+            }
+            _ => false,
         }
     }
 

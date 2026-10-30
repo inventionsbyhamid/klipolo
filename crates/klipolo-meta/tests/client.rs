@@ -1118,6 +1118,47 @@ async fn relay_busy_is_rate_limited_with_its_reason() {
     assert_eq!(error.user_message(), busy);
 }
 
+/// Traefik's rate limit in front of the relay answers 429 in plain text, with no error code: a busy moment to wait out
+/// and send again, like the relay's own `busy`, never a stop.
+#[tokio::test]
+async fn a_429_with_no_error_code_is_busy() {
+    let traefik = ResponseTemplate::new(429).set_body_raw("Too Many Requests", "text/plain");
+    let error = transcribe_error(traefik).await;
+    assert_eq!(
+        error,
+        MetaError::RateLimited {
+            retry_after: None,
+            code: None,
+            message: None,
+        }
+    );
+    assert!(error.is_busy());
+    assert_eq!(
+        error.user_message(),
+        "Too many requests right now. Try again in a moment."
+    );
+}
+
+#[test]
+fn only_a_busy_moment_is_busy() {
+    let limited = |code: Option<&str>| MetaError::RateLimited {
+        retry_after: Some(1),
+        code: code.map(str::to_owned),
+        message: None,
+    };
+    assert!(limited(Some("busy")).is_busy());
+    assert!(limited(None).is_busy());
+    // A used-up allowance or Meta's own rate limit is a stop, not a moment.
+    assert!(!limited(Some("align_quota")).is_busy());
+    assert!(!limited(Some("rate_limit_exceeded")).is_busy());
+    assert!(!limited(Some("meta_error")).is_busy());
+    assert!(!MetaError::Overloaded { message: None }.is_busy());
+    assert!(!MetaError::Budget {
+        message: String::new()
+    }
+    .is_busy());
+}
+
 /// Meta's own 429 names its code inside `error`; a "code" that isn't one (words, or text holding a secret) is dropped.
 #[tokio::test]
 async fn a_rate_limits_code_is_kept_only_when_it_is_a_code() {
