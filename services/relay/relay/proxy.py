@@ -75,11 +75,16 @@ META_BASE_URL = "https://api.meta.ai/v1"
 # Video calls take tens of seconds before the first byte.
 UPSTREAM_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=300.0, pool=10.0)
 
-# Inline media is at most 50 MB, which is about 67 MB as base64.
-MAX_JSON_BYTES = 72 * 1024 * 1024
+# Media goes up through the Files API and is referred to by file_id, so a
+# Responses body is text: prompts, tools and earlier turns.
+MAX_JSON_BYTES = 8 * 1024 * 1024
 MAX_UPLOAD_BYTES = 1024**3
 # Multipart framing and the small form fields around an upload.
 UPLOAD_OVERHEAD_BYTES = 64 * 1024
+# How long a client may take to send its body: a slow client can't hold a
+# slot and its reservation open for long.
+JSON_BODY_DEADLINE_S = 60.0
+UPLOAD_DEADLINE_S = 15 * 60.0
 MAX_AUDIO_BYTES = 32 * 1024 * 1024
 MAX_TRANSCRIBE_SPEC_BYTES = 64 * 1024
 MAX_ERROR_BYTES = 64 * 1024
@@ -387,10 +392,6 @@ class Call:
     headers: dict[str, str] = field(default_factory=dict)
 
 
-class _UploadTooLarge(Exception):
-    pass
-
-
 # Endpoints.
 
 
@@ -557,9 +558,9 @@ async def _forward(
     upstream_request = client.build_request(call.method, url, headers=headers, content=call.content, files=call.files)
 
     try:
+        # An upload that is too large or too slow raises RelayError from its
+        # body stream, which passes through here unchanged.
         upstream = await client.send(upstream_request, stream=True)
-    except _UploadTooLarge:
-        raise RelayError(413, "too_large", "The file is larger than 1 GiB.") from None
     except httpx.HTTPError as exc:
         raise await _transport_error(exc, settings, device_id, call) from None
 
@@ -908,22 +909,42 @@ def _declared_length(request: Request, limit: int, too_large: str) -> int | None
     return int(declared)
 
 
+def _too_slow() -> RelayError:
+    return RelayError(408, "request_timeout", "The request took too long to arrive. Try again.")
+
+
 async def _read_body(request: Request, limit: int, too_large: str) -> bytes:
     _declared_length(request, limit, too_large)
     body = bytearray()
-    async for chunk in request.stream():
-        body += chunk
-        if len(body) > limit:
-            raise RelayError(413, "too_large", too_large)
+    try:
+        with anyio.fail_after(JSON_BODY_DEADLINE_S):
+            async for chunk in request.stream():
+                body += chunk
+                if len(body) > limit:
+                    raise RelayError(413, "too_large", too_large)
+    except TimeoutError:
+        raise _too_slow() from None
     return bytes(body)
 
 
 async def _limited_stream(request: Request, limit: int) -> AsyncIterator[bytes]:
+    """The upload body as it arrives, cut off with 413 past `limit` or with
+    408 past UPLOAD_DEADLINE_S."""
+    deadline = anyio.current_time() + UPLOAD_DEADLINE_S
+    chunks = request.stream().__aiter__()
     size = 0
-    async for chunk in request.stream():
+    while True:
+        try:
+            # The time limit covers one wait only, never a yield.
+            with anyio.fail_after(max(deadline - anyio.current_time(), 0)):
+                chunk = await chunks.__anext__()
+        except StopAsyncIteration:
+            return
+        except TimeoutError:
+            raise _too_slow() from None
         size += len(chunk)
         if size > limit:
-            raise _UploadTooLarge
+            raise RelayError(413, "too_large", "The file is larger than 1 GiB.")
         yield chunk
 
 

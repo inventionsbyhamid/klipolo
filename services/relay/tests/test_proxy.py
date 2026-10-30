@@ -424,6 +424,18 @@ def test_transcribe_request_part_nested_too_deeply_is_400(client, conn, meta):
     assert not route.called
 
 
+def test_json_body_over_8_mib_is_413(client, conn, meta):
+    device = add_device(conn)
+    route = meta.post("/responses")
+
+    response = client.post(
+        "/meta/v1/responses", json=spark_request(input="x" * (8 * 1024 * 1024)), headers=device.headers
+    )
+
+    assert response.status_code == 413
+    assert not route.called
+
+
 def test_json_body_over_the_limit_is_413(client, conn, meta, monkeypatch):
     monkeypatch.setattr(proxy, "MAX_JSON_BYTES", 100)
     device = add_device(conn)
@@ -1550,12 +1562,14 @@ class AsgiCall:
     each chunk arrive and hang up whenever it likes. Once the client has hung
     up, sends are dropped, as uvicorn does."""
 
-    def __init__(self, app, path, body, headers, query_string=b""):
+    def __init__(self, app, path, body, headers, query_string=b"", stall_after=None):
         self.app = app
         self.path = path
         self.query_string = query_string
         self.body = body
-        self.headers = {**headers, "content-type": "application/json", "content-length": str(len(body))}
+        # Send only this many body bytes, then go quiet.
+        self.stall_after = stall_after
+        self.headers = {"content-type": "application/json", **headers, "content-length": str(len(body))}
         self.status = None
         self.chunks = []
         self.hang_up = anyio.Event()
@@ -1568,7 +1582,11 @@ class AsgiCall:
             nonlocal body_sent
             if not body_sent:
                 body_sent = True
+                if self.stall_after is not None:
+                    return {"type": "http.request", "body": self.body[: self.stall_after], "more_body": True}
                 return {"type": "http.request", "body": self.body, "more_body": False}
+            if self.stall_after is not None:
+                await anyio.sleep_forever()
             await self.hang_up.wait()
             return {"type": "http.disconnect"}
 
@@ -1874,3 +1892,30 @@ async def test_raw_non_ascii_query_is_400(app, conn, meta):
     assert call.status == 400
     assert json.loads(b"".join(call.chunks))["error"] == "invalid_request"
     assert not meta.calls
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("path", "content_type", "deadline"),
+    [
+        ("/meta/v1/responses", "application/json", "JSON_BODY_DEADLINE_S"),
+        ("/meta/v1/asr/transcribe", "multipart/form-data; boundary=b", "JSON_BODY_DEADLINE_S"),
+        ("/meta/v1/files", "multipart/form-data; boundary=b", "UPLOAD_DEADLINE_S"),
+    ],
+    ids=["responses", "transcribe", "upload"],
+)
+async def test_body_that_arrives_too_slowly_is_408(app, conn, meta, monkeypatch, path, content_type, deadline):
+    monkeypatch.setattr(proxy, deadline, 0.2)
+    device = add_device(conn)
+    meta.post("/files").respond(200, json={"id": "file-1"})
+    call = AsgiCall(app, path, b"x" * 1000, {**device.headers, "content-type": content_type}, stall_after=10)
+
+    await call.run()
+
+    assert call.status == 408
+    assert json.loads(b"".join(call.chunks)) == {
+        "error": "request_timeout",
+        "message": "The request took too long to arrive. Try again.",
+    }
+    assert ledger(conn) == []
+    assert app.state.in_flight.count() == 0
