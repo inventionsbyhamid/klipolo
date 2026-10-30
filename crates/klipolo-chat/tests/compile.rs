@@ -577,18 +577,21 @@ fn no_analysis_gives_a_friendly_refusal() {
             i.analysis.insert("talk".into(), state);
         }
         let out = compile(&p, &i, &calls);
+        // The sentence as it is, and the clip it is about by its ref, so "this clip" is never in doubt.
         let expected: Vec<Refusal> = (0..3)
             .map(|k| Refusal {
                 call_index: k,
                 reason: said.into(),
                 audience: Audience::Person,
+                clip: Some("c1".into()),
             })
             .collect();
         assert_eq!(out.refusals, expected, "{state:?}");
         assert_eq!(out.proposal, None);
         assert!(out.moments.is_empty());
     }
-    // Two files, one never analyzed and one still being heard: analyzing is what the person can do.
+    // Two files, one still being heard and one never analyzed: analyzing is what the person can do, so the refusal
+    // names the clip that needs it.
     let two = project(
         vec![file("talk", 30.0, true), file("more", 10.0, true)],
         vec![clip("t", "talk", 0.0, 30.0), clip("m", "more", 0.0, 10.0)],
@@ -599,7 +602,25 @@ fn no_analysis_gives_a_friendly_refusal() {
         ("more".into(), AnalysisState::NotStarted),
     ]);
     let out = compile(&two, &i, &calls[..1]);
-    assert_eq!(out.refusals[0].reason, ANALYZE_FIRST);
+    assert_eq!(
+        (
+            out.refusals[0].reason.as_str(),
+            out.refusals[0].clip.as_deref()
+        ),
+        (ANALYZE_FIRST, Some("c2"))
+    );
+    // Only the second still being heard: that one is named.
+    i.analysis.insert("talk".into(), AnalysisState::Done);
+    i.analysis
+        .insert("more".into(), AnalysisState::Transcribing);
+    let out = compile(&two, &i, &calls[..1]);
+    assert_eq!(
+        (
+            out.refusals[0].reason.as_str(),
+            out.refusals[0].clip.as_deref()
+        ),
+        (STILL_LISTENING, Some("c2"))
+    );
     // Both done: the fillers are proposed.
     let done = compile(&two, &inputs(&two, speech, "remove the ums"), &calls[..1]);
     assert_eq!(done.refusals, vec![]);
@@ -1188,6 +1209,7 @@ fn questions_jobs_and_cannot_do_pass_through() {
             call_index: 1,
             reason: "Klipolo can't add music yet, sorry.".into(),
             audience: Audience::Person,
+            clip: None,
         }]
     );
     assert_eq!(

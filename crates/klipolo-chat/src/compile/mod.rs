@@ -32,7 +32,7 @@ mod map;
 mod removals;
 mod trim;
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 
 use klipolo_model::coded::{CodedError, ErrorParam};
 use klipolo_model::ops::{Op, Origin, Transaction};
@@ -124,6 +124,9 @@ pub struct Refusal {
     pub call_index: usize,
     pub reason: String,
     pub audience: Audience,
+    /// The clip the refusal is about, by its ref in the context (`c4`): set when a clip isn't analyzed yet, so the
+    /// person sees which one `STILL_LISTENING` or `ANALYZE_FIRST` means (the panel shows it beside the sentence).
+    pub clip: Option<String>,
 }
 
 /// Who a refusal's reason is for.
@@ -163,6 +166,7 @@ struct Edit {
 struct Refused {
     reason: String,
     audience: Audience,
+    clip: Option<String>,
 }
 
 /// Records that call `call_index` compiled to nothing.
@@ -171,6 +175,7 @@ fn refuse(out: &mut Compiled, call_index: usize, r: Refused) {
         call_index,
         reason: r.reason,
         audience: r.audience,
+        clip: r.clip,
     });
 }
 
@@ -179,6 +184,7 @@ fn to_model(reason: String) -> Refused {
     Refused {
         reason,
         audience: Audience::Model,
+        clip: None,
     }
 }
 
@@ -331,10 +337,6 @@ impl Compiler<'_> {
                 continue;
             }
             if let Some(said) = self.missing_analysis(call) {
-                let said = Refused {
-                    reason: said.to_owned(),
-                    audience: Audience::Person,
-                };
                 refuse(&mut out, i, said);
                 continue;
             }
@@ -348,6 +350,7 @@ impl Compiler<'_> {
                     let said = Refused {
                         reason: sanitize::reply(reason),
                         audience: Audience::Person,
+                        clip: None,
                     };
                     refuse(&mut out, i, said);
                     continue;
@@ -459,38 +462,54 @@ impl Compiler<'_> {
         }
     }
 
-    /// The person's sentence when `call` needs an analysis some clip on the main track lacks: the voice files' for
-    /// removing fillers and pauses, and the pictures' too for finding moments. Not started anywhere wins over still
-    /// being made, since analyzing is something the person can do.
-    fn missing_analysis(&self, call: &ToolCall) -> Option<&'static str> {
+    /// The person's refusal when `call` needs an analysis some clip on the main track lacks: its voice files' for
+    /// removing fillers and pauses, and its picture's too for finding moments. Not started anywhere wins over still
+    /// being made, since analyzing is something the person can do; the refusal names the first clip it is about.
+    fn missing_analysis(&self, call: &ToolCall) -> Option<Refused> {
         let pictures = match call {
             ToolCall::RemoveFillers | ToolCall::RemoveSilences { .. } => false,
             ToolCall::FindMoments { .. } => true,
             _ => return None,
         };
         let p = self.snapshot;
-        let mut assets: BTreeSet<String> = run_spans(p).into_iter().map(|s| s.asset).collect();
-        if pictures {
-            assets.extend(p.timeline.main.iter().filter_map(|c| match &c.source {
-                ClipSource::Asset { id }
-                    if p.asset(id).is_some_and(|a| a.kind == AssetKind::Video) =>
-                {
-                    Some(id.clone())
+        let spans = run_spans(p);
+        let mut voices: HashMap<&str, Vec<&str>> = HashMap::new();
+        for s in &spans {
+            voices
+                .entry(s.clip.as_str())
+                .or_default()
+                .push(s.asset.as_str());
+        }
+        let state =
+            |id: &str| (self.inputs.analysis.get(id).copied()).unwrap_or(AnalysisState::NotStarted);
+        // The first clip, in timeline order, with a file never analyzed, and the first with one still being made.
+        let (mut not_started, mut transcribing) = (None, None);
+        for clip in &p.timeline.main {
+            let mut files = voices.get(clip.id.as_str()).cloned().unwrap_or_default();
+            if pictures
+                && let ClipSource::Asset { id } = &clip.source
+                && p.asset(id).is_some_and(|a| a.kind == AssetKind::Video)
+            {
+                files.push(id.as_str());
+            }
+            for file in files {
+                match state(file) {
+                    AnalysisState::NotStarted => not_started = not_started.or(Some(&clip.id)),
+                    AnalysisState::Transcribing => transcribing = transcribing.or(Some(&clip.id)),
+                    AnalysisState::Done => {}
                 }
-                _ => None,
-            }));
+            }
         }
-        let state = |id: &String| {
-            (self.inputs.analysis.get(id).copied()).unwrap_or(AnalysisState::NotStarted)
+        let (said, clip) = match (not_started, transcribing) {
+            (Some(clip), _) => (ANALYZE_FIRST, clip),
+            (None, Some(clip)) => (STILL_LISTENING, clip),
+            (None, None) => return None,
         };
-        let states: Vec<AnalysisState> = assets.iter().map(state).collect();
-        if states.contains(&AnalysisState::NotStarted) {
-            Some(ANALYZE_FIRST)
-        } else if states.contains(&AnalysisState::Transcribing) {
-            Some(STILL_LISTENING)
-        } else {
-            None
-        }
+        Some(Refused {
+            reason: said.to_owned(),
+            audience: Audience::Person,
+            clip: self.inputs.refs.ref_of(clip),
+        })
     }
 
     /// `findMoments`' ranges, each standing on the evidence, where they play once the additions are applied.
