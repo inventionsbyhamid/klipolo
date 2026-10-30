@@ -112,7 +112,7 @@ When `compose.yml` changes, paste it into the service's compose in Coolify (or s
 
 To roll back, set `RELAY_TAG` to the previous pinned tag and restart.
 
-**Restart only when the relay is idle.** On SIGTERM the relay finishes the calls in flight, including streams it drains after a client left and alignments. `compose.yml` gives it 330 s, and only Coolify's API start call keeps that; the Restart and Stop buttons allow 30 s. Neither is enough for two 10-minute alignments at once, which take about 10.5 minutes. A call cut off mid-stream is billed by Meta but never recorded. Before a restart, check that nothing is running:
+**Restart only when the relay is idle.** On SIGTERM the relay finishes the calls in flight, including streams it drains after a client left and alignments. `compose.yml` gives it 330 s. Only a redeploy through Coolify's API keeps that: `PATCH /api/v1/services/<uuid>` with `{"instant_deploy": true}`, which recreates the container without stopping it first (the API's `start` refuses a running service). The Restart and Stop buttons allow 30 s. Neither is enough for two 10-minute alignments at once, which take about 10.5 minutes. A call cut off mid-stream is billed by Meta but never recorded. Before a restart, check that nothing is running:
 
 ```sh
 C=$(docker ps --filter name=^klipolo-relay- --format '{{.Names}}')
