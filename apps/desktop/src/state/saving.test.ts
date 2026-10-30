@@ -46,7 +46,7 @@ describe('save state', () => {
     await followSaves();
     useProject.setState({ snapshot: opened(3) });
     useProject.setState({ snapshot: opened(4) });
-    tell({ ok: false, message: 'Your disk is full, so changes aren’t being saved. Free up some space.' });
+    tell({ ok: false, message: "Your disk is full, so changes aren't being saved. Free up some space." });
     expect(saveState()).toBe('failing');
     expect(useToasts.getState().toasts.map((t) => [t.kind, t.persistent])).toEqual([['error', true]]);
     tell({ ok: true, opening: 1, revision: 4 });

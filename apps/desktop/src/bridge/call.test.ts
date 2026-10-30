@@ -10,7 +10,7 @@ describe('call', () => {
   it('words a coded error from Rust in the language shown, and passes a sentence through', async () => {
     vi.mocked(invoke).mockRejectedValueOnce({ code: 'engine.play.rateUnavailable', params: {} });
     await expect(call('engine_play', { fromUs: 0, rate: 3 })).rejects.toThrow(
-      'That playback speed isn’t available.',
+      "That playback speed isn't available.",
     );
     // A code without a case of its own is worded from Rust's tables: the model's, with its values.
     vi.mocked(invoke).mockRejectedValueOnce({ code: 'model.project.name', params: {} });
@@ -24,7 +24,7 @@ describe('call', () => {
     expect(
       codedMessage({ code: 'engine.audioDamaged', params: { file: 'interview.mov', atUs: 2_412_000_000 } }),
     ).toBe(
-      'The sound of interview.mov can’t be read after 40:12, so it’s silent from there. The file may be damaged.',
+      "The sound of interview.mov can't be read after 40:12, so it's silent from there. The file may be damaged.",
     );
   });
 });

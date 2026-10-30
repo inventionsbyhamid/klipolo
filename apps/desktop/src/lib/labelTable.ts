@@ -101,7 +101,7 @@ export const TABLE = {
   }),
   'undo.source.fillGaps': msg({
     id: 'undo.source.fillGaps',
-    message: 'Fill gaps with the camera’s sound',
+    message: "Fill gaps with the camera's sound",
     comment:
       'Undo history entry: the camera’s own sound plays where the separately recorded sound has nothing',
   }),

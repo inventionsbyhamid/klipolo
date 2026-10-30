@@ -13,19 +13,19 @@ function isCoded(error: unknown): error is CodedError {
 
 /** The app's own codes (`crates/klipolo-app`: the project and the preview commands), with their English. */
 const APP_CODES: Record<string, string> = {
-  'engine.play.rateUnavailable': 'That playback speed isn’t available.',
+  'engine.play.rateUnavailable': "That playback speed isn't available.",
   'engine.play.noProject': 'Open a project to play it.',
   'engine.play.noVideo': 'Add a video to play it.',
   'engine.stopped': 'The preview has stopped.',
-  'engine.notReady': 'The preview isn’t ready yet.',
+  'engine.notReady': "The preview isn't ready yet.",
   'engine.audioDamaged':
-    'The sound of {file} can’t be read after {atUs}, so it’s silent from there. The file may be damaged.',
-  'engine.waitingForDisk': 'Waiting for the disk with {name}. Check that it’s connected and awake.',
+    "The sound of {file} can't be read after {atUs}, so it's silent from there. The file may be damaged.",
+  'engine.waitingForDisk': "Waiting for the disk with {name}. Check that it's connected and awake.",
   'project.none': 'No project is open.',
   'project.moved': 'The video changed. Try again.',
-  'project.createFailed': 'Couldn’t create the project.',
-  'project.noVideosFolder': 'Klipolo couldn’t find your Movies folder.',
-  'project.libraryFailed': 'Klipolo couldn’t make its projects folder. Check the disk, then try again.',
+  'project.createFailed': "Couldn't create the project.",
+  'project.noVideosFolder': "Klipolo couldn't find your Movies folder.",
+  'project.libraryFailed': "Klipolo couldn't make its projects folder. Check the disk, then try again.",
 };
 
 /**
@@ -58,7 +58,9 @@ export function isCode(error: unknown, code: string): boolean {
   return isCoded(cause) && cause.code === code;
 }
 
-/** What `error` (from `call`) says, kept as Rust sent it when it is a code (chat keeps its replies so); else its words. */
+/**
+ * What `error` (from `call`) says, kept as Rust sent it when it is a code (chat keeps its replies so); else its words.
+ */
 export function saidOf(error: unknown): Said {
   const cause = error instanceof Error ? error.cause : undefined;
   if (isCoded(cause)) return cause;

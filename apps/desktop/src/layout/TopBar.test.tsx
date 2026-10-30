@@ -45,7 +45,7 @@ describe('TopBar', () => {
     useProject.setState({ snapshot: { ...snapshot, history: { ...snapshot.history, revision: 4 } } });
     rerender(<TopBar />);
     expect(screen.getByText('Saving…')).toBeInTheDocument();
-    useSaving.setState({ failing: 'Your disk is full, so changes aren’t being saved. Free up some space.' });
+    useSaving.setState({ failing: "Your disk is full, so changes aren't being saved. Free up some space." });
     rerender(<TopBar />);
     expect(screen.getByText('Not saved').title).toMatch(/disk is full/);
   });
