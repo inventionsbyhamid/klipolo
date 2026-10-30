@@ -16,8 +16,8 @@ interface Window {
   toUs: number;
 }
 
-/** Which lane the overlay covers: the Overlays lane, or the Sounds or Music lane. */
-export type ProposalOverlayProps = Window & { lane: 'layers' | AudioRole; tracks: Track[] };
+/** Which lane the overlay covers: the Overlays lane, or the Sounds or Music lane (`rowPx` tall). */
+export type ProposalOverlayProps = Window & { lane: 'layers' | AudioRole; tracks: Track[]; rowPx?: number };
 
 /**
  * What goes on one lane, in start order, with the furthest end reached so far (`reach`), so the window's are found by
@@ -73,23 +73,23 @@ function affectedBy(proposal: Proposal): Map<string, boolean> {
   return found;
 }
 
-type LaneKind = 'main' | 'layers' | AudioRole;
+/** A lane's ghosts: the main lane's, the Overlays lane's, or an audio lane's at its height (`sounds:22`). */
+type LaneKind = string;
 
 /**
  * Each lane's ghosts, built once per proposal and per lane content (a patch keeps an unchanged track's arrays),
  * so scrolling and zooming only search them.
  */
-const built = new WeakMap<Proposal, Record<LaneKind, WeakMap<object, Ghosts>>>();
+const built = new WeakMap<Proposal, Map<LaneKind, WeakMap<object, Ghosts>>>();
 function ghostsFor(proposal: Proposal, lane: LaneKind, key: object, build: () => Ghost[]): Ghosts {
   let lanes = built.get(proposal);
-  if (!lanes) {
-    lanes = { main: new WeakMap(), layers: new WeakMap(), sounds: new WeakMap(), music: new WeakMap() };
-    built.set(proposal, lanes);
-  }
-  let ghosts = lanes[lane].get(key);
+  if (!lanes) built.set(proposal, (lanes = new Map()));
+  let byKey = lanes.get(lane);
+  if (!byKey) lanes.set(lane, (byKey = new WeakMap()));
+  let ghosts = byKey.get(key);
   if (!ghosts) {
     ghosts = index(build());
-    lanes[lane].set(key, ghosts);
+    byKey.set(key, ghosts);
   }
   return ghosts;
 }
@@ -112,11 +112,11 @@ export function mainGhosts(proposal: Proposal): Ghosts {
   );
 }
 
-/** The Sounds or the Music lane's sound layers that go or get shorter. */
-function audioGhosts(proposal: Proposal, tracks: Track[], role: AudioRole): Ghosts {
-  const box = audioBox(role);
+/** The Sounds or the Music lane's sound layers that go or get shorter, in a lane `rowPx` tall. */
+function audioGhosts(proposal: Proposal, tracks: Track[], role: AudioRole, rowPx: number): Ghosts {
+  const box = audioBox(role, rowPx);
   const gone = affectedBy(proposal);
-  return ghostsFor(proposal, role, tracks, () =>
+  return ghostsFor(proposal, `${role}:${rowPx}`, tracks, () =>
     audioLines(tracks)[role].lines.flatMap((line) => layerGhosts(line.items, gone, () => box)),
   );
 }
@@ -141,7 +141,7 @@ function layersGhosts(proposal: Proposal, tracks: Track[]): Ghosts {
 function laneGhosts(proposal: Proposal, props: ProposalOverlayProps): Ghosts {
   return props.lane === 'layers'
     ? layersGhosts(proposal, props.tracks)
-    : audioGhosts(proposal, props.tracks, props.lane);
+    : audioGhosts(proposal, props.tracks, props.lane, props.rowPx ?? 0);
 }
 
 /** The window's part of `ghosts`: the index of each that reaches into [fromUs, toUs), in start order. */

@@ -7,10 +7,11 @@ import { LaneRow } from './lanes/LaneRow';
 import { LayersLane, layersLanePx } from './lanes/LayersLane';
 import { MainLane } from './lanes/MainLane';
 import type { LineView } from './lanes/TrackLane';
-import { CLIP_INNER_PX, MUSIC_LANE_PX, SOUNDS_LANE_PX } from './layout';
+import { CLIP_INNER_PX } from './layout';
 import { createZoomRest } from './media/zoomRest';
 import { ViewportContext, ZoomRestContext } from './media/ViewportContext';
 import { ProposalOverlay } from './ProposalOverlay';
+import { useLaneSizes } from './useLaneSizes';
 import type { Viewport } from './useViewport';
 
 interface TimelineLanesProps {
@@ -42,6 +43,7 @@ export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_IN
   // A waiting proposal's removed layers, outlined on their lanes: the lanes' own window and zoom.
   const ghostWindow = { pps: view.pps, fromUs: view.fromUs, toUs: view.toUs };
   const sounds = audioLines(tracks);
+  const sizes = useLaneSizes();
   return (
     <ViewportContext value={drawWindow}>
       <ZoomRestContext value={zoomRest}>
@@ -73,24 +75,38 @@ export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_IN
           icon="pulse"
           name={t({ id: 'timeline.lane.sounds', message: 'Sound effects' })}
           empty={sounds.sounds.items.length === 0}
-          height={SOUNDS_LANE_PX}
+          height={sizes.sounds}
           width={width}
           onSeek={onSeek}
         >
-          <AudioLane role="sounds" tracks={tracks} assets={assets} recordings={recordings} {...view} />
-          <ProposalOverlay lane="sounds" tracks={tracks} {...ghostWindow} />
+          <AudioLane
+            role="sounds"
+            rowPx={sizes.sounds}
+            tracks={tracks}
+            assets={assets}
+            recordings={recordings}
+            {...view}
+          />
+          <ProposalOverlay lane="sounds" rowPx={sizes.sounds} tracks={tracks} {...ghostWindow} />
         </LaneRow>
         <LaneRow
           lane="music"
           icon="music"
           name={t({ id: 'timeline.lane.music', message: 'Music' })}
           empty={sounds.music.items.length === 0}
-          height={MUSIC_LANE_PX}
+          height={sizes.music}
           width={width}
           onSeek={onSeek}
         >
-          <AudioLane role="music" tracks={tracks} assets={assets} recordings={recordings} {...view} />
-          <ProposalOverlay lane="music" tracks={tracks} {...ghostWindow} />
+          <AudioLane
+            role="music"
+            rowPx={sizes.music}
+            tracks={tracks}
+            assets={assets}
+            recordings={recordings}
+            {...view}
+          />
+          <ProposalOverlay lane="music" rowPx={sizes.music} tracks={tracks} {...ghostWindow} />
         </LaneRow>
       </ZoomRestContext>
     </ViewportContext>

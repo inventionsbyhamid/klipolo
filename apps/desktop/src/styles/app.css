@@ -788,7 +788,8 @@
   min-height: 0;
   margin-top: var(--lane-gap);
   overflow-x: auto;
-  overflow-y: hidden;
+  /* A short window with three overlay rows can't hold every lane: they scroll rather than clip the Music lane. */
+  overflow-y: auto;
   scrollbar-width: none;
   overscroll-behavior-x: contain;
 }
@@ -909,7 +910,7 @@
 
 .tl-row.is-grow {
   flex: 1 1 auto;
-  min-height: 44px;
+  min-height: 24px;
 }
 
 .tl-lane {
