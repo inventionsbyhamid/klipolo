@@ -3,10 +3,10 @@
  * literal's values are already in the message, so `t` returns it worded and `msg` keeps it as a descriptor.
  *
  * One limit for porters: `plural` and `select` get their branches with the values already filled in, so `plural`
- * turns every `#` in a branch into the count, a `#` inside a value too ("Take #3.mov" would read "Take 23.mov"). Keep
- * values that may hold a `#` (file names, titles, anything a person typed) outside the branches: word the plural part on
- * its own and join it with the value (`useImportMedia.ts`). `i18n._` with an ICU message (`{n, plural, one {{name} …}}`)
- * has no such limit: there values are filled in after the count.
+ * turns every `#` in a branch into the count, a `#` inside a value too ("Take #3.mov" would read "Take 23.mov").
+ * Keep values that may hold a `#` (file names, titles, anything a person typed) outside the branches: word the plural
+ * part on its own and join it with the value (`useImportMedia.ts`). `i18n._` with an ICU message
+ * (`{n, plural, one {{name} …}}`) has no such limit: there values are filled in after the count.
  */
 import { i18n, type MessageDescriptor } from './core';
 import { choose } from './format';

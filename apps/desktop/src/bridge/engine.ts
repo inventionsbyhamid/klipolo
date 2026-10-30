@@ -10,8 +10,8 @@ export type { EngineEvent, EngineInfo, ViewRect, ViewSpec };
 
 /**
  * The GPU preview engine (Rust owns it, `crates/klipolo-app/src/engine.rs`). Frames reach the screen through a native
- * layer under the webview (macOS), or over the frame socket (`frameSocket.ts`) into the page's canvas. Times are integer
- * microseconds, as in Rust.
+ * layer under the webview (macOS), or over the frame socket (`frameSocket.ts`) into the page's canvas. Times are
+ * integer microseconds, as in Rust.
  */
 export const engine = {
   /**

@@ -23,7 +23,7 @@ describe('suppressContextMenu', () => {
     expect(rightClick(document.querySelector('button')!)).toBe(false);
   });
 
-  it('keeps the menu only where text can be edited: not on a disabled or read-only field, a checkbox or a slider', () => {
+  it('keeps the menu only where text can be edited: not disabled, read-only, a checkbox or a slider', () => {
     const stop = suppressContextMenu(document);
     document.body.innerHTML = [
       '<input id="text" type="text">',

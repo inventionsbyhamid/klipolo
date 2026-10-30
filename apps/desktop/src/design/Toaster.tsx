@@ -13,7 +13,8 @@ const WITH_ACTION_MS = 10000;
 
 /**
  * An open menu, popover or dialog. Only Radix's topmost layer hears Escape, so a persistent toast that appeared over
- * one gives way to an Escape pressed in it (it closes, as any toast would); keeping the key would leave the layer stuck.
+ * one gives way to an Escape pressed in it (it closes, as any toast would); keeping the key would leave the layer
+ * stuck.
  */
 const LAYER = '[role="dialog"], [role="alertdialog"], [data-radix-popper-content-wrapper]';
 

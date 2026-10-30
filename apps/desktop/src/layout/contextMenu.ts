@@ -1,4 +1,7 @@
-/** Inputs whose text can be typed and selected (cut, copy, paste and spelling apply); not checkboxes, sliders or buttons. */
+/**
+ * Inputs whose text can be typed and selected (cut, copy, paste and spelling apply); not checkboxes, sliders or
+ * buttons.
+ */
 const TEXT_INPUTS = new Set(['', 'text', 'search', 'url', 'tel', 'email', 'password', 'number']);
 
 /** Whether `el` is in a field whose text can be edited now: enabled, not read-only, and holding text. */

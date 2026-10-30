@@ -35,8 +35,8 @@ export const useProject = create<ProjectStore>((set, get) => {
 
   /**
    * The change lands with `pending` back down in the same store change: two changes, not three. An edit Rust refused
-   * because another change landed first (`project.moved`: chat) takes the project as it is now, in its turn, and says so (unless `quietMoved`: the caller says it in its own words): false, as nothing the
-   * person did was applied.
+   * because another change landed first (`project.moved`: chat) takes the project as it is now, in its turn, and says
+   * so (unless `quietMoved`: the caller says it in its own words): false, as nothing the person did was applied.
    */
   async function run(
     task: () => Promise<Snapshot | null>,

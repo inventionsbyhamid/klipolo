@@ -19,7 +19,12 @@ export function Library() {
             Captions
           </button>
         </div>
-        <button className="icon-btn" aria-label="Add files" title="Add files (Command O)" onClick={() => void importMedia()}>
+        <button
+          className="icon-btn"
+          aria-label="Add files"
+          title="Add files (Command O)"
+          onClick={() => void importMedia()}
+        >
           <Icon name="plus" />
         </button>
       </div>

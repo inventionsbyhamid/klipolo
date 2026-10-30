@@ -33,7 +33,10 @@ export const bridge = {
    * never rebases it.
    */
   apply: (tx: Transaction) => call<SnapshotPatch>('project_apply', { tx, ...applyBase() }),
-  /** Undo and redo go with the copy's revision too: Rust refuses them when its history's top is a change not seen yet. */
+  /**
+   * Undo and redo go with the copy's revision too: Rust refuses them when its history's top is a change not seen
+   * yet.
+   */
   undo: () => call<SnapshotPatch>('project_undo', { ...applyBase() }),
   redo: () => call<SnapshotPatch>('project_redo', { ...applyBase() }),
   /** The whole open project, when a change doesn't follow the revision the UI has (and when the page loads). */
