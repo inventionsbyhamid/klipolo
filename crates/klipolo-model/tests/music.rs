@@ -5,8 +5,8 @@ mod common;
 use common::*;
 use klipolo_model::history::Document;
 use klipolo_model::media::music::{
-    add_music_ops, is_music, refit_music_ops, with_music_refit, MusicOpts, MUSIC_FADE_IN_US,
-    MUSIC_FADE_OUT_US,
+    add_music_ops, apply_with_music_refit, is_music, refit_music_ops, with_music_refit, MusicOpts,
+    MUSIC_FADE_IN_US, MUSIC_FADE_OUT_US,
 };
 use klipolo_model::ops::{ClipPatch, TrackTarget};
 use klipolo_model::project::{Asset, AssetKind};
@@ -296,10 +296,14 @@ fn cut_in_the_middle_refits_music_in_the_same_step() {
         let with_bed = doc.project().clone();
         assert_eq!(spans(&music(&with_bed)), before_cut, "{song}");
 
-        // The cut, as the timeline sends it, comes back with the music's refit after it.
+        // The cut, as the timeline sends it, comes back with the music's refit after it, and the project it makes.
         let ops = with_music_refit(doc.project(), vec![cut(10.0, 12.0)]).unwrap();
         assert_eq!(ops[0], cut(10.0, 12.0), "the edit itself goes first");
         assert!(ops.len() > 1, "{song}: no refit in {ops:?}");
+        let done = apply_with_music_refit(doc.project(), vec![cut(10.0, 12.0)]).unwrap();
+        assert_eq!(done.ops, ops);
+        assert_eq!(done.refused, None);
+        assert_eq!(done.project, apply_ops(doc.project(), &ops).unwrap());
         doc.apply(&tx(ops)).unwrap();
 
         let p = doc.project();

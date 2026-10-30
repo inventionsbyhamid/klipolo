@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
 use crate::apply::{apply_ops, id_taken};
-use crate::error::{invalid, Result};
+use crate::error::{invalid, ModelError, Result};
 use crate::ids::{new_id, Id};
 use crate::layout::{Anchor, BoxN, Layout};
 use crate::messages::code;
@@ -196,30 +196,66 @@ pub fn refit_music_ops(before: &Project, after: &Project) -> Vec<Op> {
     ops
 }
 
-/// `ops` with the music's refit after them ([`refit_music_ops`] against their result), as one batch for one undo step:
-/// what the app's history is to run every edit through. An edit that is refused is refused as before; a refit that the
-/// batch would refuse (a bug) is left out, so the edit itself still goes through.
+/// `ops` with the music's refit after them ([`refit_music_ops`] against their result), as one batch for one undo step.
+/// An edit that is refused is refused as before. A refit the batch would refuse (a bug) is left out so the edit still
+/// goes through, and isn't reported here: the app's history uses [`apply_with_music_refit`], which says so.
 pub fn with_music_refit(before: &Project, ops: Vec<Op>) -> Result<Vec<Op>> {
-    apply_with_music_refit(before, ops).map(|(ops, _)| ops)
+    apply_with_music_refit(before, ops).map(|done| done.ops)
 }
 
-/// [`with_music_refit`] and the project its ops make from `before` (what `apply_ops` gives), so a caller can record
-/// that project (`Document::commit_tx`) instead of applying the ops again. Applies once when nothing needs a refit,
-/// twice when something does.
-pub fn apply_with_music_refit(before: &Project, ops: Vec<Op>) -> Result<(Vec<Op>, Project)> {
+/// What [`apply_with_music_refit`] made.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Refitted {
+    /// The edit's ops, then the music's refit when it needs one.
+    pub ops: Vec<Op>,
+    /// What `apply_ops` makes of `ops` from the project before, for `Document::commit_tx`.
+    pub project: Project,
+    /// Why the refit was left out: the batch refused it, which is a bug to log (and a panic in debug builds). None
+    /// when it went in or nothing needed one.
+    pub refused: Option<ModelError>,
+}
+
+/// [`with_music_refit`], with the project its ops make from `before` (so a caller can record it with
+/// `Document::commit_tx` instead of applying the ops again) and a refused refit told, not hidden. Applies once when
+/// nothing needs a refit, twice when something does.
+pub fn apply_with_music_refit(before: &Project, ops: Vec<Op>) -> Result<Refitted> {
     let after = apply_ops(before, &ops)?;
     let refit = refit_music_ops(before, &after);
+    let done = fold(before, ops, after, refit);
+    debug_assert!(
+        done.refused.is_none(),
+        "the music's refit was refused: {:?}",
+        done.refused
+    );
+    Ok(done)
+}
+
+/// `refit` after `ops` (which made `after` from `before`) as one batch, or `ops` alone, with why, when the batch is
+/// refused.
+fn fold(before: &Project, ops: Vec<Op>, after: Project, refit: Vec<Op>) -> Refitted {
     if refit.is_empty() {
-        return Ok((ops, after));
+        return Refitted {
+            ops,
+            project: after,
+            refused: None,
+        };
     }
     let own = ops.len();
     let mut all = ops;
     all.extend(refit);
     match apply_ops(before, &all) {
-        Ok(next) => Ok((all, next)),
-        Err(_) => {
+        Ok(project) => Refitted {
+            ops: all,
+            project,
+            refused: None,
+        },
+        Err(why) => {
             all.truncate(own);
-            Ok((all, after))
+            Refitted {
+                ops: all,
+                project: after,
+                refused: Some(why),
+            }
         }
     }
 }
@@ -441,5 +477,30 @@ impl NewIds<'_> {
                 return id;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_refused_refit_is_left_out_and_told() {
+        let before = Project::new("Refit");
+        let ops = vec![Op::Rename {
+            name: "Renamed".into(),
+        }];
+        let after = apply_ops(&before, &ops).unwrap();
+        let bad = vec![Op::RemoveItem { id: "nope".into() }];
+        let done = fold(&before, ops.clone(), after.clone(), bad);
+        assert_eq!(done.ops, ops, "the edit alone");
+        assert_eq!(done.project, after);
+        assert_eq!(
+            done.refused,
+            Some(ModelError::NotFound {
+                kind: "layer",
+                id: "nope".into()
+            })
+        );
     }
 }
