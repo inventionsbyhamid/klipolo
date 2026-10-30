@@ -420,6 +420,7 @@ fn meta_402_returns_budget_error_and_no_changes() {
     assert_eq!(e.kind, ChatErrorKind::Budget);
     assert_eq!(e.message, said);
     assert_eq!(e.usage_usd, 0.0);
+    assert_eq!(e.model_calls, 1);
     assert_eq!(p, before);
 
     // Out of credit in the refusal round: still nothing changes, and the first call still counts.
@@ -435,6 +436,7 @@ fn meta_402_returns_budget_error_and_no_changes() {
     assert_eq!(e.kind, ChatErrorKind::Budget);
     assert_plain(&e.message);
     assert_eq!(e.usage_usd, 0.004);
+    assert_eq!(e.model_calls, 2);
     assert_eq!(p, before);
 }
 
@@ -516,6 +518,7 @@ fn too_long_a_context_is_refused_before_any_model_call() {
     assert_eq!(e.message, TOO_LONG);
     assert_plain(&e.message);
     assert_eq!(model.seen().len(), 0);
+    assert_eq!(e.model_calls, 0);
 }
 
 #[test]

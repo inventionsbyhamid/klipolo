@@ -127,6 +127,8 @@ pub struct ChatError {
     pub usage_usd: f64,
     /// What went wrong, for logs only (`ModelError`'s text, already without secrets): never shown.
     pub detail: String,
+    /// The model calls made for the message, the failed one included: 0 when nothing was sent.
+    pub model_calls: usize,
 }
 
 impl fmt::Display for ChatError {
@@ -138,7 +140,7 @@ impl fmt::Display for ChatError {
 impl std::error::Error for ChatError {}
 
 impl ChatError {
-    fn from_model(e: ModelError, usage_usd: f64) -> Self {
+    fn from_model(e: ModelError, usage_usd: f64, model_calls: usize) -> Self {
         let detail = e.to_string();
         let (kind, message) = match e {
             ModelError::Budget(said) => {
@@ -161,6 +163,7 @@ impl ChatError {
             message,
             usage_usd,
             detail,
+            model_calls,
         }
     }
 }
@@ -182,6 +185,7 @@ pub async fn plan(
             message: TOO_LONG.to_owned(),
             usage_usd: 0.0,
             detail: format!("context of {} tokens", ctx.tokens),
+            model_calls: 0,
         });
     }
     let owned;
@@ -201,7 +205,7 @@ pub async fn plan(
         input: opening(history, ctx, user),
     };
     let mut spent = 0.0;
-    let first = ask(model, &request, spent).await?;
+    let first = ask(model, &request, spent, 1).await?;
     spent += first.usage_usd;
     let read = Read::of(&first.calls);
     let compiled = compile(project, inputs, &read.calls);
@@ -231,7 +235,7 @@ pub async fn plan(
             output: outcome.output().to_owned(),
         });
     }
-    let second = ask(model, &request, spent).await?;
+    let second = ask(model, &request, spent, 2).await?;
     spent += second.usage_usd;
 
     // The first answer's calls not sent back, then the second's, compiled once. The second answer redoes only what was
@@ -308,15 +312,16 @@ fn opening(history: &[Turn], ctx: &ChatContext, user: &str) -> Vec<Item> {
     input
 }
 
-/// One model call; its error as the person's sentence, with what was spent before it and on it.
+/// The message's `nth` model call; its error as the person's sentence, with what was spent before it and on it.
 async fn ask(
     model: &dyn LanguageModel,
     request: &ModelRequest,
     spent: f64,
+    nth: usize,
 ) -> Result<ModelResponse, ChatError> {
     (model.respond(request).await).map_err(|e| {
         let usage_usd = spent + e.usage_usd();
-        ChatError::from_model(e, usage_usd)
+        ChatError::from_model(e, usage_usd, nth)
     })
 }
 

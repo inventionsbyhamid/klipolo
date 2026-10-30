@@ -99,6 +99,34 @@ async fn every_case_is_judged_and_the_cost_added_up_without_the_key() {
 }
 
 #[tokio::test]
+async fn a_failed_case_counts_its_model_calls_and_says_why() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/responses"))
+        .respond_with(
+            ResponseTemplate::new(402)
+                .set_body_json(json!({"error": {"message": "Your key has no credit left."}})),
+        )
+        .mount(&server)
+        .await;
+    let env = [
+        ("MODEL_API_KEY", KEY.to_owned()),
+        ("KLIPOLO_META_BASE", server.uri()),
+    ];
+    let out = run(&env, &["--only", "vertical", "--only", "undo"]).await;
+    let (stdout, stderr) = text(&out);
+    assert_eq!(out.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(
+        stdout.contains("why: Budget: Your key has no credit left."),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("0/2 passed (target 2); 2 model calls; total $0.0000"),
+        "{stdout}"
+    );
+}
+
+#[tokio::test]
 async fn without_a_key_nothing_is_sent() {
     let server = meta_that_undoes().await;
     let out = run(&[("KLIPOLO_META_BASE", server.uri())], &[]).await;

@@ -251,7 +251,7 @@ fn run(args: &Args) -> Result<bool, String> {
         ));
         let (verdict, spent, calls_made) = match &planned {
             Ok(out) => (judge(case, out), out.usage_usd, out.answers.len()),
-            Err(e) => (Err(failed(e)), e.usage_usd, 0),
+            Err(e) => (Err(failed(e)), e.usage_usd, e.model_calls),
         };
         cost += spent;
         model_calls += calls_made;
