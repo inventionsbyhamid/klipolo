@@ -26,8 +26,8 @@ serde_json = "1"
 # The content key, at the lockfile's version (the engine builds it).
 sha2 = "0.10.9"
 thiserror = "2"
-# Reading the WAV and searching for cuts off the async threads (`spawn_blocking`) and the dev CLI's one-thread runtime
-# (`rt`), waiting out a busy answer (`time`), one device's slots for the Meta adapter (`sync`).
+# Reading the WAV off the async threads (`spawn_blocking`) and the dev CLI's one-thread runtime (`rt`), waiting out a
+# busy answer (`time`), one device's slots for the Meta adapter (`sync`).
 tokio = { version = "1", features = ["rt", "sync", "time"] }
 
 [dev-dependencies]

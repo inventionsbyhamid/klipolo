@@ -14,16 +14,19 @@
 //! quarter second more than 0.130; 0.18 sits about 1.4 times from each. A cut between two shots of the same look and
 //! light (the same room from another camera) changes the histogram too little to be found.
 //!
+//! **Where the frames come from:** `detect` decodes a file at its own rate; `proxy::make` feeds a `Finder` every frame
+//! of the source, at its own rate, while it makes the copy it uploads (which keeps fewer), so the cuts are the
+//! source's own frames either way.
+//!
 //! **Times** are on the video's file clock (its first frame is 0).
 
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
 use klipolo_engine::media::luma_frames::{self, LumaError};
-use klipolo_model::time::Us;
+use klipolo_model::time::{RangeUs, Us};
 
 use crate::error::VideoError;
-use crate::proxy::ProxyInfo;
 
 /// Samples a second: 4.
 pub const SAMPLE_US: Us = 250_000;
@@ -151,22 +154,19 @@ pub fn detect(video: &Path, cancel: &AtomicBool) -> Result<Vec<Us>, VideoError> 
     Ok(finder.finish())
 }
 
-/// The hard cuts of every chunk of a clip's small copy, in the clip's file time, once each (a cut in an overlap is
-/// found by both chunks). Blocking; `cancel` stops it.
-pub fn of_proxy(proxy: &ProxyInfo, cancel: &AtomicBool) -> Result<Vec<Us>, VideoError> {
-    let mut all = Vec::new();
-    for chunk in &proxy.chunks {
-        let found = detect(&chunk.path, cancel)?;
-        all.extend(
-            found
-                .into_iter()
-                .map(|at| at + chunk.range.start)
-                .filter(|at| (chunk.range.start..chunk.range.end).contains(at)),
-        );
-    }
+/// Each chunk's cuts (the clip's time) kept inside its chunk, in order, once each: a cut in an overlap is found by
+/// both chunks, to the frame.
+pub fn merge(chunks: Vec<(RangeUs, Vec<Us>)>) -> Vec<Us> {
+    let mut all: Vec<Us> = chunks
+        .into_iter()
+        .flat_map(|(range, cuts)| {
+            cuts.into_iter()
+                .filter(move |at| (range.start..range.end).contains(at))
+        })
+        .collect();
     all.sort_unstable();
     all.dedup_by(|later, earlier| *later - *earlier < SAME_CUT_US);
-    Ok(all)
+    all
 }
 
 /// Two cuts closer than this (under two frames at 30 fps) are one cut found twice.

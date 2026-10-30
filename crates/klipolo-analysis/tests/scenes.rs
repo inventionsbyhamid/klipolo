@@ -175,6 +175,8 @@ fn a_ready_copy_is_one_chunk_with_the_clips_facts() {
         (640, 360, true, 0)
     );
     assert!((copy.fps - 30.0).abs() < 1e-6, "{}", copy.fps);
+    // Found by decoding it at its own rate.
+    assert_clip_a_cuts(&copy.cuts);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -234,7 +236,7 @@ fn makes_a_small_copy_on_this_mac_and_finds_the_same_cuts_in_it() {
     let info = probe_media(&chunk.path).unwrap();
     assert!((info.duration - 155.0).abs() < 0.2, "{}", info.duration);
     assert_eq!(info.audio.map(|a| a.channels), Some(1));
-    assert_clip_a_cuts(&cuts::of_proxy(&copy, &cancel).unwrap());
+    assert_clip_a_cuts(&copy.cuts);
 
     // In four chunks of 53.75 s at 320 x 180, the cuts still land on their frames across the joins.
     let dir = tempfile::tempdir().unwrap();
@@ -248,7 +250,7 @@ fn makes_a_small_copy_on_this_mac_and_finds_the_same_cuts_in_it() {
     for chunk in &chunked.chunks {
         eprintln!("chunk {:?}: {} bytes", chunk.range, chunk.bytes);
     }
-    assert_clip_a_cuts(&cuts::of_proxy(&chunked, &cancel).unwrap());
+    assert_clip_a_cuts(&chunked.cuts);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -945,12 +947,11 @@ async fn the_scene_log_snaps_a_fakes_moments_to_the_clips_cuts_and_words() {
     );
 }
 
-/// The copy can't be read for its cuts (gone, here): the log Spark gave is still kept, snapped to the words alone.
+/// A copy with no cuts (a single shot): the log is snapped to the words alone.
 #[tokio::test(flavor = "multi_thread")]
-async fn a_failed_cut_search_leaves_the_log_snapped_to_words() {
-    let dir = tempfile::tempdir().unwrap();
+async fn a_copy_without_cuts_is_snapped_to_words_alone() {
     let mut copy = proxy::existing(&clip_a()).unwrap();
-    copy.chunks[0].path = dir.path().join("gone.mp4");
+    copy.cuts.clear();
     let words = [word("floating", 40.0, 40.6)];
     let fake = Fake::new(vec![answer(
         vec![
@@ -1013,6 +1014,7 @@ fn the_scene_log_future_can_move_between_threads() {
         fps: 0.0,
         has_audio: false,
         chunks: vec![],
+        cuts: vec![],
     };
     let future = scenes::log(&fake, &copy, &[]);
     sends(&future);

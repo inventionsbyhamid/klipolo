@@ -3,17 +3,22 @@
 //! small (about 26 MB for ten minutes). The engine writes them (`klipolo_engine::media::small_copy`):
 //! VideoToolbox on a Mac; Linux has no H.264 encoder, so tests there use a ready file (`existing`).
 //!
+//! **Cuts** are found while the copy is made, from every frame of the source at its own rate (the engine's
+//! `EveryFrame`, into a `cuts::Finder` per chunk), so they land on the source's frames whatever frame rate the copy
+//! keeps. A ready copy's are found by decoding it at its own rate (`existing`).
+//!
 //! **Times:** a chunk's time 0 is its `range.start` on the clip's file clock (its picture's), so every time measured in
-//! a chunk (Spark's moments, its cuts) plus `range.start` is the clip's own time. The sound is placed by the clip's
-//! audio lead, as the preview plays it (`ProxyInfo::audio_lead_us`).
+//! a chunk (Spark's moments) plus `range.start` is the clip's own time. The cuts are in the clip's time already. The
+//! sound is placed by the clip's audio lead, as the preview plays it (`ProxyInfo::audio_lead_us`).
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
-use klipolo_engine::media::small_copy::{self, SmallCopy, SmallCopyError};
+use klipolo_engine::media::small_copy::{self, EveryFrame, SmallCopy, SmallCopyError};
 use klipolo_engine::render::probe::{MediaInfo, MediaKind, probe_media};
 use klipolo_model::time::{RangeUs, Us, secs_to_us};
 
+use crate::cuts::{self, Finder};
 use crate::error::VideoError;
 
 /// The longest chunk: what one Spark call watches.
@@ -55,6 +60,8 @@ pub struct ProxyInfo {
     pub has_audio: bool,
     /// In order, each overlapping the next.
     pub chunks: Vec<ProxyChunk>,
+    /// The clip's hard cuts (file time, each the first frame of a new shot), found in every frame of the source.
+    pub cuts: Vec<Us>,
 }
 
 /// The chunks for a clip of `duration_us`: as few as keep each within `max_us`, all the same length, each overlapping
@@ -106,6 +113,7 @@ pub fn make_in_chunks(
     // The long side in proportion: 640 for 360.
     let fit = (short_side * FIT.0 / FIT.1, short_side);
     let mut chunks = Vec::new();
+    let mut found = Vec::new();
     let mut made = None;
     for (k, range) in plan(duration_us, max_us, overlap_us)
         .into_iter()
@@ -119,7 +127,23 @@ pub fn make_in_chunks(
             video_bps: VIDEO_BPS,
             audio_bps: AUDIO_BPS,
         };
-        let info = small_copy::write(src, &path, &spec, cancel, None).map_err(video_error)?;
+        let mut finder = Finder::new();
+        let mut last = Us::MIN;
+        let mut see = |at: Us, pixels: &[u8]| {
+            if at < last {
+                // The copy is being made again (in software): its frames start again.
+                finder = Finder::new();
+            }
+            last = at;
+            finder.push(at, pixels);
+        };
+        let every = EveryFrame {
+            size: cuts::PICTURE,
+            see: &mut see,
+        };
+        let info =
+            small_copy::write(src, &path, &spec, cancel, Some(every)).map_err(video_error)?;
+        found.push((range, finder.finish()));
         chunks.push(ProxyChunk {
             path,
             range,
@@ -136,11 +160,12 @@ pub fn make_in_chunks(
         fps: made.fps,
         has_audio: made.has_audio,
         chunks,
+        cuts: cuts::merge(found),
     })
 }
 
 /// A small MP4 made already (by an earlier run, or a test's fixture) as a one-chunk copy, used as it is: it must be at
-/// most `CHUNK_US` long.
+/// most `CHUNK_US` long. Its cuts are found by decoding it at its own rate, so it should keep every frame. Blocking.
 pub fn existing(file: &Path) -> Result<ProxyInfo, VideoError> {
     let clip = probe(file)?;
     let duration_us = secs_to_us(clip.duration);
@@ -152,6 +177,7 @@ pub fn existing(file: &Path) -> Result<ProxyInfo, VideoError> {
     let bytes = std::fs::metadata(file)
         .map_err(|e| VideoError::Failed(format!("size: {e}")))?
         .len();
+    let cuts = cuts::detect(file, &AtomicBool::new(false))?;
     Ok(ProxyInfo {
         duration_us,
         audio_lead_us: clip.audio_lead_us,
@@ -167,6 +193,7 @@ pub fn existing(file: &Path) -> Result<ProxyInfo, VideoError> {
             },
             bytes,
         }],
+        cuts,
     })
 }
 

@@ -16,22 +16,18 @@
 //!   chunk's end may have cut off.
 //! - **Calls:** as many chunks at once as the logger takes (one through the relay). The first failure ends the log
 //!   with that error (a used-up credit included); nothing is retried here beyond the adapter's busy retries.
-//! - **Cuts** are searched for in every chunk of the copy while the logger watches. A search that fails leaves the log
-//!   snapped to the words alone; it never fails the log.
+//! - **Cuts** come with the copy (`ProxyInfo::cuts`, found in every frame of the source); a copy without any leaves
+//!   the log snapped to the words alone.
 //!
 //! **Times** are the clip's file time (its picture's clock, the first frame at 0), which is the small copy's time plus
 //! its chunk's start. Words are in sound time; `word_edges` is the one place they are turned into file time, by the
 //! clip's audio lead.
-
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use futures::{StreamExt, TryStreamExt};
 use klipolo_model::speech::{Word, WordKind};
 use klipolo_model::time::{RangeUs, Us};
 use serde::{Deserialize, Serialize};
 
-use crate::cuts;
 use crate::error::AnalysisError;
 use crate::providers::{SceneKind, SceneLogger, SceneMoment};
 use crate::proxy::{self, CHUNK_US, OVERLAP_US, ProxyInfo};
@@ -210,41 +206,22 @@ fn nearest(sorted: &[Us], at: Us, within: Us) -> Option<Us> {
         .min_by_key(|t| ((t - at).abs(), *t))
 }
 
-/// Sets its flag when dropped: a scene log given up stops its cut search too.
-struct StopOnDrop(Arc<AtomicBool>);
-
-impl Drop for StopOnDrop {
-    fn drop(&mut self) {
-        self.0.store(true, Ordering::Relaxed);
-    }
-}
-
-/// The scene log of the clip whose small copy is `proxy`, snapped to its cuts and to `words` (its transcript, in sound
-/// time; empty for none). The cuts are found while the logger watches.
+/// The scene log of the clip whose small copy is `proxy`, snapped to its cuts (`ProxyInfo::cuts`) and to `words` (its
+/// transcript, in sound time; empty for none).
 pub async fn log(
     logger: &dyn SceneLogger,
     proxy: &ProxyInfo,
     words: &[Word],
 ) -> Result<SceneLog, AnalysisError> {
     let fps = fps_for(proxy.duration_us);
-    let stop = Arc::new(AtomicBool::new(false));
-    let _stop_cuts = StopOnDrop(stop.clone());
-    // A cut search that fails leaves the log snapped to the words alone: the calls are paid for, and the moments are
-    // still right to about half a second. It never ends the log early.
-    let cuts = {
-        let (proxy, stop) = (proxy.clone(), stop.clone());
-        async move {
-            let found = tokio::task::spawn_blocking(move || cuts::of_proxy(&proxy, &stop)).await;
-            Ok::<_, AnalysisError>(found.ok().and_then(Result::ok).unwrap_or_default())
-        }
-    };
     // Chunk by index, not by a borrowed chunk: a stream closure over borrowed items keeps the future from being `Send`.
-    let watched = futures::stream::iter(0..proxy.chunks.len())
+    let answers = futures::stream::iter(0..proxy.chunks.len())
         .map(|k| logger.watch(&proxy.chunks[k].path, fps))
         .buffered(logger.max_in_flight().max(1))
         .map_err(AnalysisError::from)
-        .try_collect::<Vec<_>>();
-    let (cuts, answers) = futures::try_join!(cuts, watched)?;
+        .try_collect::<Vec<_>>()
+        .await?;
+    let cuts = proxy.cuts.clone();
     let cost_usd = answers.iter().map(|a| a.cost_usd).sum();
     let chunks = proxy
         .chunks
