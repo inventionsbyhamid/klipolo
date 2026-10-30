@@ -30,6 +30,8 @@ pub const SHADER_PRESETS: [(&str, &str); 8] = [
 
 /// The motion graphic presets' definitions: the lower third (name, role and accent) and the centred title card (title,
 /// subtitle and accent). The engine's `SCENE_BODIES` lists the same, in this order, with each folder's `scene.json`.
+/// Their nodes are laid out in the frame, so a layer showing one must fill it in every format: place it with
+/// `Layout::full_frame()`, never a rect that only covers the primary's canvas.
 pub const SCENE_PRESETS: [(&str, &str); 2] =
     [preset!("scene.lower-third"), preset!("scene.title-card")];
 

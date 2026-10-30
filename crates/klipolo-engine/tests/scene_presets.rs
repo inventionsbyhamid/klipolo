@@ -21,6 +21,7 @@ use klipolo_engine::plan::{Layer, PlanContext, frame_plan};
 use klipolo_engine::registry::Registry;
 use klipolo_engine::registry::pack::{check_definition, names_clean, setting_text_clean};
 use klipolo_model::contrib::{ContribId, ContribKind};
+use klipolo_model::layout::Layout;
 use klipolo_model::params::{ParamKind, ParamValue};
 use klipolo_model::project::{FormatKind, Project};
 use klipolo_model::scene::Scene;
@@ -49,8 +50,8 @@ fn scene_json(local: &str) -> (String, Scene) {
     (text, scene)
 }
 
-/// A project of one layer `layer` showing preset `local` from 0 for `seconds`, with `params`, filling the frame in every
-/// format (its own full rect in 9:16 and 1:1, as the app places a template: derived from 16:9 it would be a square).
+/// A project of one layer `layer` showing preset `local` from 0 for `seconds`, with `params`, placed as every template
+/// is: `Layout::full_frame`, so it fills the frame in every format (derived from 16:9 it would be a square in 9:16).
 fn project(local: &str, seconds: f64, params: &[(&str, &str)]) -> Project {
     let mut p = Project::new("Presets");
     let values: BTreeMap<String, ParamValue> = params
@@ -58,11 +59,8 @@ fn project(local: &str, seconds: f64, params: &[(&str, &str)]) -> Project {
         .map(|(k, v)| (k.to_string(), ParamValue::Text(v.to_string())))
         .collect();
     let content = ItemContent::generator(ContribId::builtin(local), values);
-    let full = bx(0.0, 0.0, 1.0, 1.0);
-    let mut layer = item("layer", 0.0, seconds, full, content);
-    for format in [FormatKind::Portrait, FormatKind::Square] {
-        layer.layout.overrides.insert(format, full);
-    }
+    let mut layer = item("layer", 0.0, seconds, bx(0.0, 0.0, 1.0, 1.0), content);
+    layer.layout = Layout::full_frame();
     p.timeline.tracks.push(overlay_track("titles", vec![layer]));
     p
 }

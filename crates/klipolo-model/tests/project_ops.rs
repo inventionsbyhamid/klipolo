@@ -368,6 +368,60 @@ fn removing_a_secondary_format_drops_its_overrides() {
     );
 }
 
+/// A template layer (a motion graphic that fills the frame) placed with `Layout::full_frame` covers the whole canvas
+/// in 16:9, 9:16 and 1:1, starting in a 16:9-only project and through every format change after: formats added later,
+/// the primary switched, a format dropped and added back. A layer whose rect merely covers the 16:9 canvas is derived
+/// in 9:16 as the square at the top instead.
+#[test]
+fn a_full_frame_layer_fills_every_format_through_format_changes() {
+    use klipolo_model::contrib::ContribId;
+    use klipolo_model::layout::{Anchor, Layout};
+    let template = |id: &str, start: f64| Item {
+        id: id.into(),
+        start_us: klipolo_model::time::secs_to_us(start),
+        duration_us: 2_000_000,
+        attach: None,
+        layout: Layout::full_frame(),
+        content: ItemContent::generator(
+            ContribId::builtin("scene.lower-third"),
+            Default::default(),
+        ),
+        effects: Vec::new(),
+    };
+    let mut p = fixture();
+    p.settings.formats = vec![Landscape];
+    let mut plain = template("plain", 4.0);
+    plain.layout = Layout::new(Anchor::TopLeft, BoxN::FULL);
+    let mut track = Track::new(TrackKind::Overlay, "Titles");
+    track.items = vec![template("card", 1.0), plain];
+    p.timeline.tracks.push(track);
+    let fills = |p: &Project, id: &str| {
+        [Landscape, Portrait, Square]
+            .map(|f| resolve_rect(&layer(p, id).layout, p.settings.primary_format, f) == BoxN::FULL)
+    };
+    assert_eq!(fills(&p, "card"), [true; 3]);
+    assert_eq!(
+        fills(&p, "plain"),
+        [true, false, true],
+        "derived in 9:16, not full"
+    );
+    for (primary, formats) in [
+        (Landscape, &[Landscape][..]),
+        (Landscape, &[Landscape, Portrait, Square][..]),
+        (Portrait, &[Landscape, Portrait, Square][..]),
+        (Portrait, &[Portrait][..]),
+        (Square, &[Square, Landscape][..]),
+        (Landscape, &[Landscape, Portrait, Square][..]),
+    ] {
+        p = apply_ops(&p, &[set_formats(primary, formats)]).unwrap();
+        assert_eq!(
+            fills(&p, "card"),
+            [true; 3],
+            "after {primary:?} {formats:?}"
+        );
+    }
+}
+
 /// The camera bubble follows the new primary (captions keep a centre per format instead: `tests/caption_styles.rs`).
 #[test]
 fn the_camera_follows_the_new_primary() {
