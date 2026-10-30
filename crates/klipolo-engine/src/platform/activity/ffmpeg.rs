@@ -8,7 +8,7 @@
 //! FFmpeg's demuxer still allocates each packet's data. **Memory:** the decoder's frames (its references plus the two
 //! held here: about 25 MB for 1080p H.264 in software) and FFmpeg's buffers.
 
-mod luma;
+pub(crate) mod luma;
 
 use std::path::Path;
 use std::sync::Arc;
