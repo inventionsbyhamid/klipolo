@@ -477,7 +477,7 @@ fn short_ref(index: usize) -> String {
 }
 
 /// Timeline seconds with one decimal, rounded to the nearest tenth ("12.4").
-fn secs(us: Us) -> String {
+pub(crate) fn secs(us: Us) -> String {
     let t = tenths(us);
     format!("{}.{}", t / 10, t % 10)
 }
@@ -687,8 +687,8 @@ fn clip_line(out: &mut String, p: &Project, i: usize, start: Us, brief: Brief) {
 }
 
 /// The playhead and the selection (None when empty), both kept within the video: as Now shows them and as thinning
-/// keeps lines near them.
-fn within_video(p: &Project, view: &View) -> (Us, Option<RangeUs>) {
+/// keeps lines near them, and as the compiler takes them for evidence.
+pub(crate) fn within_video(p: &Project, view: &View) -> (Us, Option<RangeUs>) {
     let length = video_duration(&p.timeline);
     let selection = view.selection.map(|r| RangeUs {
         start: r.start.max(0),
@@ -901,6 +901,17 @@ fn write_line(out: &mut String, said: &[Said], line: &Range<usize>, sentence_sta
         out.push_str(&mark);
     }
     out.push('\n');
+}
+
+/// Where the scene items play on the timeline, each as one line of Scenes shows it: the compiler's evidence.
+pub(crate) fn scene_spans(p: &Project, scenes: &HashMap<String, SceneLog>) -> Vec<RangeUs> {
+    let starts = clip_starts(&p.timeline.main);
+    (scene_pieces(p, &starts, scenes).iter())
+        .map(|s| RangeUs {
+            start: s.start_us,
+            end: s.end_us,
+        })
+        .collect()
 }
 
 /// A scene item where it plays on the timeline.
