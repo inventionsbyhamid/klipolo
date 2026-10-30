@@ -226,6 +226,8 @@ fn assert_relay_takes(body: &Value) {
     assert!(body.get("reasoning").is_none());
     let max = body["max_output_tokens"].as_u64().expect("an output cap");
     assert!((1..=RELAY_MAX_OUTPUT_TOKENS).contains(&max), "{max}");
+    // Room for long reasoning: billed only when used.
+    assert_eq!(max, 8192);
     assert_eq!(body["model"], CHAT_MODEL);
     assert_eq!(body["tool_choice"], "auto");
     assert_eq!(body["parallel_tool_calls"], true);
