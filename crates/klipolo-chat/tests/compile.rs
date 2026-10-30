@@ -1089,6 +1089,178 @@ fn an_outward_trim_before_a_cut_shifts_the_cut_by_content() {
     );
 }
 
+/// Each main clip's part of its file, as (source in, source out).
+fn sources(p: &Project) -> Vec<(Us, Us)> {
+    (p.timeline.main.iter())
+        .map(|c| (c.source_in_us, c.source_out_us))
+        .collect()
+}
+
+#[test]
+fn cuts_follow_the_footage_through_a_sped_up_clip() {
+    // long.mov (60 s): c1 plays its 0 to 10 s at twice the speed (0 to 5 s on the timeline), c2 its 20 to 40 s.
+    let mut fast = clip("a", "long", 0.0, 10.0);
+    fast.speed = 2.0;
+    let p = project(
+        vec![file("long", 60.0, false)],
+        vec![fast, clip("b", "long", 20.0, 40.0)],
+    );
+    let i = inputs(&p, Speech::default(), "cut 1 to 2 and 3 to 4");
+    let out = compile(&p, &i, &[cut(1.0, 2.0), cut(3.0, 4.0)]);
+    assert_eq!(out.refusals, vec![]);
+    let proposal = out.proposal.expect("a proposal");
+    // The first takes the file's 2 to 4 s; the second names its 6 to 8 s, at 2 to 3 s once the first is gone.
+    assert_eq!(
+        proposal.tx.ops,
+        vec![
+            Op::DeleteRanges {
+                ranges: vec![span(1.0, 2.0)]
+            },
+            Op::DeleteRanges {
+                ranges: vec![span(2.0, 3.0)]
+            },
+        ]
+    );
+    assert_eq!(proposal.ranges, vec![span(1.0, 2.0), span(3.0, 4.0)]);
+    assert_eq!(
+        sources(&proposal.review.after),
+        vec![
+            (0, secs(2.0)),
+            (secs(4.0), secs(6.0)),
+            (secs(8.0), secs(10.0)),
+            (secs(20.0), secs(40.0)),
+        ]
+    );
+}
+
+#[test]
+fn cuts_follow_the_footage_of_a_copied_clip() {
+    // broll.mov's first 10 s twice: c1 at 0 to 10 s, its copy c2 at 10 to 20 s.
+    let p = project(
+        vec![file("broll", 30.0, false)],
+        vec![clip("a", "broll", 0.0, 10.0), clip("b", "broll", 0.0, 10.0)],
+    );
+    let i = inputs(&p, Speech::default(), "cut 5 to 6 and 12 to 14");
+    let out = compile(&p, &i, &[cut(5.0, 6.0), cut(12.0, 14.0)]);
+    assert_eq!(out.refusals, vec![]);
+    let proposal = out.proposal.expect("a proposal");
+    // The second names the copy's 2 to 4 s of the file: only the copy loses it, though c1 still plays it too.
+    assert_eq!(
+        proposal.tx.ops,
+        vec![
+            Op::DeleteRanges {
+                ranges: vec![span(5.0, 6.0)]
+            },
+            Op::DeleteRanges {
+                ranges: vec![span(11.0, 13.0)]
+            },
+        ]
+    );
+    assert_eq!(proposal.ranges, vec![span(5.0, 6.0), span(12.0, 14.0)]);
+    assert_eq!(
+        sources(&proposal.review.after),
+        vec![
+            (0, secs(5.0)),
+            (secs(6.0), secs(10.0)),
+            (0, secs(2.0)),
+            (secs(4.0), secs(10.0)),
+        ]
+    );
+}
+
+#[test]
+fn a_shorter_clip_after_a_cut_in_it_removes_the_same_footage() {
+    let p = three_clips();
+    let i = inputs(&p, Speech::default(), "cut 12 to 14 and end c2 at 15");
+    let out = compile(&p, &i, &[cut(12.0, 14.0), trim("c2", "end", 15.0)]);
+    assert_eq!(out.refusals, vec![]);
+    let proposal = out.proposal.expect("a proposal");
+    // The cut leaves c2 in two pieces (the file's 20 to 22 s and 24 to 30 s), so the trim removes the file's 25 to
+    // 30 s from where the second piece plays it, 13 to 18 s, rather than trimming the first piece.
+    assert_eq!(
+        proposal.tx.ops,
+        vec![
+            Op::DeleteRanges {
+                ranges: vec![span(12.0, 14.0)]
+            },
+            Op::DeleteRanges {
+                ranges: vec![span(13.0, 18.0)]
+            },
+        ]
+    );
+    assert_eq!(proposal.ranges, vec![span(12.0, 14.0), span(15.0, 20.0)]);
+    assert_eq!(
+        sources(&proposal.review.after),
+        vec![
+            (0, secs(10.0)),
+            (secs(20.0), secs(22.0)),
+            (secs(24.0), secs(25.0)),
+            (secs(40.0), secs(50.0)),
+        ]
+    );
+}
+
+#[test]
+fn a_call_failing_part_way_leaves_the_working_copy_as_it_was() {
+    let p = project(
+        vec![file("talk", 30.0, true)],
+        vec![clip("t", "talk", 0.0, 30.0)],
+    );
+    let word = |text: &str, a: f64, b: f64| Word {
+        text: text.into(),
+        start_us: secs(a),
+        end_us: secs(b),
+        confidence: 0.9,
+        kind: WordKind::Word,
+    };
+    // "Caden" twice; the second was heard as taking no time, so it can't hold a fix: the call's second op fails.
+    let mut speech = Speech::default();
+    speech.transcripts.insert(
+        "talk".into(),
+        transcript(
+            vec![
+                word("Caden", 1.0, 1.4),
+                word("welcome", 1.5, 2.0),
+                word("Caden", 3.0, 3.0),
+            ],
+            30.0,
+        ),
+    );
+    let i = inputs(&p, speech, "captions on, Kaiden not Caden, and Welcome");
+    let out = compile(
+        &p,
+        &i,
+        &[
+            call("setCaptions", r#"{"on": true, "style": null}"#),
+            call(
+                "fixCaptionWords",
+                r#"{"find": "Caden", "replace": "Kaiden"}"#,
+            ),
+            call(
+                "fixCaptionWords",
+                r#"{"find": "welcome", "replace": "Welcome"}"#,
+            ),
+        ],
+    );
+    assert!(refused_to_model(&out, 1).starts_with("fixCaptionWords: "));
+    // The first "Caden" fix, applied before the second failed, is gone with the call; the next call met the copy as
+    // it was.
+    let additions = out.additions.expect("the others apply");
+    let welcome = Op::FixWords {
+        asset_id: "talk".into(),
+        start_us: secs(1.5),
+        end_us: secs(2.0),
+        text: Some("Welcome".into()),
+    };
+    assert!(matches!(
+        additions.ops.as_slice(),
+        [Op::SetCaptions { .. }, w] if *w == welcome
+    ));
+    let after = apply_ops(&p, &additions.ops).unwrap();
+    assert_eq!(after.word_fixes.len(), 1);
+    assert_eq!(after.word_fixes[0].text, "Welcome");
+}
+
 #[test]
 fn split_snaps_to_evidence_but_is_never_refused() {
     let p = broll(30.0);
