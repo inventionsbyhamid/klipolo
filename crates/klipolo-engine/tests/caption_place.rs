@@ -1,7 +1,8 @@
 //! Where the caption block sits, as the canvas's hit box mirrors it:
-//! holds six cases of `block_centre` and `max_width_share` (Bold, Arcade at a seam, ad-safe, a placed block, landscape
-//! and square), and `src/lib/captionBlock.test.ts` checks the TS `captionBlock` against them, so the block the person
-//! drags sits where the engine draws it. Rewrite it with `KLIPOLO_UPDATE_PARITY=1`.
+//! `apps/desktop/src/lib/caption-place-parity.json` holds six cases of `block_centre` and `max_width_share` (Bold,
+//! Arcade at a seam, ad-safe, a placed block, landscape and square), and `apps/desktop/src/lib/captionBlock.test.ts`
+//! checks the TS `captionBlock` against them, so the block the person drags sits where the engine draws it. Rewrite it
+//! with `KLIPOLO_UPDATE_PARITY=1`.
 
 use std::fs;
 use std::path::PathBuf;
@@ -93,8 +94,8 @@ fn cases() -> Vec<Case> {
 
 #[test]
 fn caption_place_parity_fixture_is_current() {
-    let path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/lib/caption-place-parity.json");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/desktop/src/lib/caption-place-parity.json");
     let text = serde_json::to_string_pretty(&cases()).unwrap() + "\n";
     if std::env::var_os("KLIPOLO_UPDATE_PARITY").is_some() {
         fs::write(&path, &text).unwrap();
@@ -102,6 +103,6 @@ fn caption_place_parity_fixture_is_current() {
     let committed = fs::read_to_string(&path).expect("missing: run with KLIPOLO_UPDATE_PARITY=1");
     assert!(
         committed == text,
-        "src/lib/caption-place-parity.json is stale: run with KLIPOLO_UPDATE_PARITY=1"
+        "apps/desktop/src/lib/caption-place-parity.json is stale: run with KLIPOLO_UPDATE_PARITY=1"
     );
 }

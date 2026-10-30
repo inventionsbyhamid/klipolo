@@ -1,7 +1,7 @@
-//! Pins TS `resolveRect`/`cameraRect`/`containRect`/`textScale` (src/lib/layout.ts) to Rust: gizmos hit-test with
-//! The TS functions, the engine draws with these. Also `shownFromUs` (src/lib/timeline.ts): where the editor puts
-//! the playhead to show a layer, past a title's intro animation.
-//! Regenerate with `KLIPOLO_UPDATE_PARITY=1 cargo test -p klipolo-engine --test parity`.
+//! Pins TS `resolveRect`/`cameraRect`/`containRect`/`textScale` (apps/desktop/src/lib/layout.ts) to Rust: gizmos
+//! hit-test with the TS functions, the engine draws with these. Also `shownFromUs`
+//! (apps/desktop/src/lib/timeline.ts): where the editor puts the playhead to show a layer, past a title's intro
+//! animation. Regenerate with `KLIPOLO_UPDATE_PARITY=1 cargo test -p klipolo-engine --test parity`.
 
 use std::fs;
 use std::path::PathBuf;
@@ -238,7 +238,8 @@ fn sorted_keys(v: Value) -> Value {
 
 #[test]
 fn layout_parity_fixture_is_current() {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/lib/layout-parity.json");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/desktop/src/lib/layout-parity.json");
     let text = serde_json::to_string_pretty(&build()).unwrap() + "\n";
     if std::env::var_os("KLIPOLO_UPDATE_PARITY").is_some() {
         fs::write(&path, &text).unwrap();
@@ -246,6 +247,6 @@ fn layout_parity_fixture_is_current() {
     let committed = fs::read_to_string(&path).expect("missing: run with KLIPOLO_UPDATE_PARITY=1");
     assert!(
         committed == text,
-        "src/lib/layout-parity.json is stale: run with KLIPOLO_UPDATE_PARITY=1"
+        "apps/desktop/src/lib/layout-parity.json is stale: run with KLIPOLO_UPDATE_PARITY=1"
     );
 }

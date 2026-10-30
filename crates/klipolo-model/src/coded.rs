@@ -1,8 +1,8 @@
 //! What Rust says to people: a stable code plus the values its message needs, worded by the UI in the
 //! person's language (`src/i18n/codes.ts`). Rust never sends English for the UI to show. Each crate keeps a table of
 //! its codes with their English (`Messages`), used for logs, MCP replies and the bench, and as the source text of the
-//! UI's catalogue (the descriptors are generated from `src/bindings/*Codes.json`). `coded_msg!` refuses to compile
-//! a code its table doesn't have.
+//! UI's catalogue (the descriptors are generated from `apps/desktop/src/bindings/*Codes.json`). `coded_msg!`
+//! refuses to compile a code its table doesn't have.
 
 use std::collections::BTreeMap;
 

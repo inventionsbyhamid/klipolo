@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# The Linux gate: format, compile, lint and test the workspace's crates on Linux (with the engine's fixture tests), and
-# the engine's GPU tests on Mesa lavapipe. Run inside ci/linux.Dockerfile's image, from the repository root:
+# The Linux gate: format, compile, lint and test the workspace's crates on Linux (with the engine's fixture tests),
+# check that the page's committed bindings are current, typecheck and test the page, and run the engine's GPU tests on
+# Mesa lavapipe. Run inside ci/linux.Dockerfile's image, from the repository root:
 #   docker build -f ci/linux.Dockerfile -t klipolo-ci ci
 #   docker run --rm --name klipolo-gate --cpus 16 --memory 24g -v "$PWD":/src -w /src klipolo-ci scripts/ci-linux.sh
 # The image runs as uid 1000, so the checkout must be owned by uid 1000. After an rsync, chown everything except
@@ -12,6 +13,9 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
+# The page's generated files as checked out, before any test step writes the bindings again ("bindings are current").
+generated=$(mktemp -d)
+cp -R apps/desktop/src/bindings apps/desktop/src/lib "$generated/"
 export CARGO_INCREMENTAL=0 CARGO_TERM_COLOR=never
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PWD/target/ci-linux}"
 results=()
@@ -66,6 +70,15 @@ run "test engine fixtures (no GPU)" cargo test -p klipolo-engine --locked --no-f
   ffmpeg_and_the_stored_index_start_the_picture_at_the_same_place
 # The 16 kHz WAV for speech from the fixtures (a clip with sound, a stereo one, one with none).
 run "test analysis fixtures" cargo test -p klipolo-analysis --locked --test audio --test cli -- --ignored
+# Import on the fixtures: unreadable files named with why, a portrait phone video's rotation and an NTSC rate kept.
+run "test app fixtures" cargo test -p klipolo-app --locked -- --ignored
+# The generated bindings and code lists are committed (the release build runs `pnpm build` from a clean checkout):
+# written again, they must match the checkout, files added or gone included.
+run "bindings are current" scripts/check-bindings.sh "$generated"
+# The page: its packages (pnpm's store kept in .build, as the Rust builds are in target/), typecheck and tests (jsdom).
+run "pnpm install" pnpm install --frozen-lockfile --store-dir .build/pnpm-store
+run "page typecheck" pnpm -C apps/desktop typecheck
+run "page tests" pnpm -C apps/desktop test
 # What the engine's probe reads for sync (the sound lead, creation time and audio format), on the fixtures.
 run "test engine sync inputs (fixtures)" cargo test -p klipolo-engine --locked --test sync_inputs -- --ignored
 # KLIPOLO_REQUIRE_GPU: a GPU test that finds no adapter fails here instead of skipping (`test_support::adapter_or_skip`).

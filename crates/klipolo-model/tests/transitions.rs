@@ -464,8 +464,9 @@ fn unrefitted(p: &Project, op: &Op) -> Project {
     raw
 }
 
-/// The UI mirror (`src/lib/transitions.ts`) is checked against these cases: the longest transition at every cut,
-/// every transition's window, and the lengths `normalize` refits an edit's transitions to (`fittedTransitionsUs`).
+/// The UI mirror (`apps/desktop/src/lib/transitions.ts`) is checked against these cases: the longest transition at
+/// every cut, every transition's window, and the lengths `normalize` refits an edit's transitions to
+/// (`fittedTransitionsUs`).
 #[test]
 fn the_ui_mirror_has_the_same_limits() {
     // "b" plays broll 2–8 s (2 s spare after it), "c" broll 5–10 s; a 2 s dissolve joins "b" and "c".
@@ -546,7 +547,8 @@ fn the_ui_mirror_has_the_same_limits() {
         })
         .collect();
     assert_golden(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/lib/transition-parity.json"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/desktop/src/lib/transition-parity.json"),
         &cases,
     );
 }

@@ -22,7 +22,7 @@ pub const MAX_TABLE_COLUMNS: usize = 4;
 /// Longest row label, in characters.
 pub const MAX_ROW_LABEL: usize = 40;
 
-/// A point in 0–1 coordinates of the layer (or the canvas), from the top left.
+/// A point in 0 to 1 coordinates of the layer (or the canvas), from the top left.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, TS, schemars::JsonSchema)]
 #[ts(export)]
 pub struct PointN {

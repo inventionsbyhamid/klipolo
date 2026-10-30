@@ -113,6 +113,13 @@ const PATHS = {
     </>
   ),
   full: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,
+  check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
+  info: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 11v5.5M12 7.7v.1" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof PATHS;

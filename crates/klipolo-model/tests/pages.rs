@@ -347,13 +347,13 @@ const JOIN_PAIRS: [[&str; 2]; 26] = [
 ];
 
 /// The fixture "Fix the words" is checked against (`src/features/captions/wordFix.parity.test.ts`
-/// `caption-place-parity.json`: the scripts written without spaces (`joins_unspaced`, as its runs over every
-/// code point), and pairs of words paged in Clean, Boxed and Bold with what each shows and whether the second is drawn
-/// right after the first (no space before it in the pages' text). So a fix's edges are judged as the captions draw
-/// them, in every style. And the table the app reads (`src/lib/caption-edge-kept.json`): the
-/// characters a style that shows only `?` and `!` keeps at a word's edge (`edge_kept`, through `shown`), as runs over
-/// every code point, from Rust's own Unicode tables, so "Fix the words" trims as the captions do whatever Unicode the
-/// webview knows (and no copy of the rule can drift). Rewrite both with `KLIPOLO_UPDATE_PARITY=1`.
+/// `caption-place-parity.json`: the scripts written without spaces (`joins_unspaced`, as its runs over
+/// every code point), and pairs of words paged in Clean, Boxed and Bold with what each shows and whether the second is
+/// drawn right after the first (no space before it in the pages' text). So a fix's edges are judged as the captions
+/// draw them, in every style. And the table the app reads (`apps/desktop/src/lib/caption-edge-kept.json`): the
+/// The characters a style that shows only `?` and `!` keeps at a word's edge (`edge_kept`, through
+/// `shown`), as runs over every code point, from Rust's own Unicode tables, so "Fix the words" trims as the captions do
+/// whatever Unicode the webview knows (and no copy of the rule can drift). Rewrite both with `KLIPOLO_UPDATE_PARITY=1`.
 #[test]
 fn caption_join_parity_fixture_is_current() {
     use klipolo_model::captions::shown;
@@ -421,7 +421,8 @@ fn caption_join_parity_fixture_is_current() {
         unicode: format!("{major}.{minor}.{update}"),
         kept,
     };
-    let lib = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/lib");
+    let lib =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/desktop/src/lib");
     for (name, text) in [
         (
             "caption-join-parity.json",
@@ -440,7 +441,7 @@ fn caption_join_parity_fixture_is_current() {
         assert_eq!(
             std::fs::read_to_string(&path).unwrap_or_default(),
             text,
-            "src/lib/{name} is stale: run with KLIPOLO_UPDATE_PARITY=1"
+            "apps/desktop/src/lib/{name} is stale: run with KLIPOLO_UPDATE_PARITY=1"
         );
     }
 }

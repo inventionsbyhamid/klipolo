@@ -6,7 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 
 fn bindings_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/bindings")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/desktop/src/bindings")
 }
 
 #[test]
