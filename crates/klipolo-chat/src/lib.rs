@@ -3,11 +3,13 @@
 //! into typed edits. `compile`: those edits checked against the project and turned into ops, additions to apply at once
 //! and removals to propose, with `evidence` holding the model's times to what the context showed. `sanitize`: the
 //! model's text for the person without em or en dashes. `model`: the language model as an interface this crate owns.
+//! `planner`: one message sent to it, with at most one refusal round, out as a reply and compiled edits.
 
 pub mod compile;
 pub mod context;
 pub mod evidence;
 pub mod model;
+pub mod planner;
 pub mod prompt;
 pub mod sanitize;
 pub mod tools;
@@ -21,5 +23,9 @@ pub use context::{
     estimate_tokens,
 };
 pub use model::{BoxFuture, Item, LanguageModel, ModelError, ModelRequest, ModelResponse};
+pub use planner::{
+    ChatError, ChatErrorKind, DONE_OUTPUT, KEPT_TURNS, PROPOSED_OUTPUT, PlanOut, TOLD_PERSON,
+    TOO_LONG, Turn, plan, remember,
+};
 pub use prompt::system_prompt;
 pub use tools::{FunctionCall, Moment, Problem, ToolCall, ToolError, tools};

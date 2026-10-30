@@ -1,0 +1,523 @@
+//! The planner: one chat message to the language model (`model::LanguageModel`), out as a reply for the
+//! person and compiled edits (`compile`): additions applied at once, removals proposed.
+//!
+//! The request is the system prompt, the tools and the project context, in that order and the same bytes for every
+//! message on one project revision, so a provider's prompt cache reuses them; then the conversation (`Turn`s, the last
+//! `KEPT_TURNS`), then the new message last.
+//!
+//! One refusal round, never more than two model calls a message. When a call of the first answer is refused back to
+//! the model (its arguments unreadable, or the compiler's `Audience::Model` refusal, such as a time that stands on
+//! nothing), the whole input is sent again with nothing stored at the provider: the first answer's text and calls,
+//! then one output per call (the reason for a refused one, `DONE_OUTPUT` or `PROPOSED_OUTPUT` for the others, and
+//! `TOLD_PERSON` for one refused for the person, whose reason is never sent back). The calls of the second answer
+//! replace the refused ones: the first answer's other calls and the second's (an exact repeat dropped) are compiled
+//! once, in that order, against the same snapshot and inputs, so the message still makes one additions transaction and
+//! one proposal. A call refused back to the model again stays undone, and the reply says so.
+//!
+//! The reply is the model's text, then the sentences of refusals meant for the person, then what couldn't be done; all
+//! of it without em or en dashes (`sanitize::reply`). When nothing came of the answer but what couldn't be done, the
+//! model's text (which may claim it did it) is left out.
+//!
+//! Errors leave the project untouched: nothing is compiled, and each is one plain sentence (`ChatError`). A project
+//! whose context is over budget (`ChatContext::fits`) is refused before any model call.
+
+use std::fmt;
+
+use klipolo_model::Project;
+use klipolo_model::time::US_PER_SEC;
+use serde::{Deserialize, Serialize};
+
+use crate::compile::{Audience, Compiled, Inputs, compile};
+use crate::context::ChatContext;
+use crate::model::{Item, LanguageModel, ModelError, ModelRequest, ModelResponse};
+use crate::prompt::system_prompt;
+use crate::sanitize;
+use crate::tools::{FunctionCall, ToolCall, tools};
+
+/// The exchanges the conversation keeps.
+pub const KEPT_TURNS: usize = 6;
+
+/// A call's output for the model: it is done (applied, started or asked).
+pub const DONE_OUTPUT: &str = "done";
+/// A call's output for the model: it is proposed, for the person to apply or discard.
+pub const PROPOSED_OUTPUT: &str = "proposed";
+/// A call's output for the model when it was refused for the person: the reason is theirs, not sent back.
+pub const TOLD_PERSON: &str = "Not done. The person was told why.";
+
+/// Said when the context is over budget.
+pub const TOO_LONG: &str =
+    "This project is too long for chat right now. Select a part and ask again.";
+/// Said when the credit is used up and the provider gave no sentence of its own.
+pub const OUT_OF_CREDIT: &str = "Your AI credit has run out.";
+pub const BUSY: &str = "Klipolo AI is busy right now. Try again in a moment.";
+pub const UNAVAILABLE: &str = "Klipolo AI isn't answering right now. Try again in a moment.";
+pub const NO_CONNECTION: &str =
+    "Couldn't reach Klipolo AI. Check your internet connection and try again.";
+pub const NOT_ACCEPTED: &str =
+    "Your API key or access code was not accepted. Check it in Settings.";
+pub const FAILED: &str = "Something went wrong with that message. Try again.";
+
+/// One exchange: what the person wrote, the reply, and a one-line note of what came of it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Turn {
+    pub user: String,
+    pub reply: String,
+    /// What was applied, proposed, asked or not done (`PlanOut::note`).
+    pub note: String,
+}
+
+/// Adds `turn` to `history`, keeping the last `KEPT_TURNS`.
+pub fn remember(history: &mut Vec<Turn>, turn: Turn) {
+    history.push(turn);
+    let over = history.len().saturating_sub(KEPT_TURNS);
+    history.drain(..over);
+}
+
+/// What one message came to.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlanOut {
+    /// For the person: one or two plain sentences, no em or en dashes.
+    pub reply: String,
+    /// The edits, against the project the context was built from.
+    pub compiled: Compiled,
+    /// Both model calls, in US dollars.
+    pub usage_usd: f64,
+    /// One line on what was applied, proposed, asked or not done, for `Turn::note`.
+    pub note: String,
+    /// The calls compiled into `compiled`, in order (`compiled`'s call indexes are into this).
+    pub calls: Vec<ToolCall>,
+    /// Each model answer's calls as it made them: one answer, or two after a refusal round.
+    pub answers: Vec<Vec<FunctionCall>>,
+}
+
+impl PlanOut {
+    /// This message as a `Turn` of the conversation.
+    pub fn turn(&self, user: &str) -> Turn {
+        Turn {
+            user: user.to_owned(),
+            reply: self.reply.clone(),
+            note: self.note.clone(),
+        }
+    }
+}
+
+/// What kind of failure stopped a message.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChatErrorKind {
+    /// The project's context is over budget; nothing was sent.
+    TooLong,
+    Budget,
+    Busy,
+    Unavailable,
+    Network,
+    Refused,
+    Other,
+}
+
+/// Why a message came to nothing: the project is untouched.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChatError {
+    pub kind: ChatErrorKind,
+    /// One plain sentence for the person, no em or en dashes.
+    pub message: String,
+    /// What the model calls made before the failure cost, in US dollars.
+    pub usage_usd: f64,
+}
+
+impl fmt::Display for ChatError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for ChatError {}
+
+impl ChatError {
+    fn from_model(e: ModelError, usage_usd: f64) -> Self {
+        let (kind, message) = match e {
+            ModelError::Budget(said) => {
+                let said = sanitize::reply(said.trim());
+                let said = if said.is_empty() {
+                    OUT_OF_CREDIT.to_owned()
+                } else {
+                    said
+                };
+                (ChatErrorKind::Budget, said)
+            }
+            ModelError::Busy => (ChatErrorKind::Busy, BUSY.to_owned()),
+            ModelError::Unavailable => (ChatErrorKind::Unavailable, UNAVAILABLE.to_owned()),
+            ModelError::Network => (ChatErrorKind::Network, NO_CONNECTION.to_owned()),
+            ModelError::Refused => (ChatErrorKind::Refused, NOT_ACCEPTED.to_owned()),
+            ModelError::Other(_) => (ChatErrorKind::Other, FAILED.to_owned()),
+        };
+        Self {
+            kind,
+            message,
+            usage_usd,
+        }
+    }
+}
+
+/// Sends `user` to `model` about `project`, with the last `KEPT_TURNS` of `history`, `ctx` built from `project` and
+/// `inputs` from the same snapshot. The person's message counts as evidence for the times it says, whatever
+/// `inputs.message` holds.
+pub async fn plan(
+    model: &dyn LanguageModel,
+    history: &[Turn],
+    ctx: &ChatContext,
+    user: &str,
+    inputs: &Inputs,
+    project: &Project,
+) -> Result<PlanOut, ChatError> {
+    if !ctx.fits() {
+        return Err(ChatError {
+            kind: ChatErrorKind::TooLong,
+            message: TOO_LONG.to_owned(),
+            usage_usd: 0.0,
+        });
+    }
+    let owned;
+    let inputs = if inputs.message == user {
+        inputs
+    } else {
+        owned = Inputs {
+            message: user.to_owned(),
+            ..inputs.clone()
+        };
+        &owned
+    };
+
+    let mut request = ModelRequest {
+        system: system_prompt().to_owned(),
+        tools: tools(),
+        input: opening(history, ctx, user),
+    };
+    let mut spent = 0.0;
+    let first = ask(model, &request, spent).await?;
+    spent += first.usage_usd;
+    let read = Read::of(&first.calls);
+    let compiled = compile(project, inputs, &read.calls);
+    let outcomes = read.outcomes(&compiled);
+    if !outcomes.iter().any(Outcome::is_back) {
+        return Ok(finish(
+            &first.text,
+            read.calls,
+            compiled,
+            &[],
+            spent,
+            vec![first.calls],
+        ));
+    }
+
+    // The refusal round: everything again, then the first answer and what came of each of its calls.
+    let text = first.text.trim();
+    if !text.is_empty() {
+        request.input.push(Item::Assistant {
+            text: text.to_owned(),
+        });
+    }
+    (request.input).extend(first.calls.iter().cloned().map(Item::FunctionCall));
+    for (call, outcome) in first.calls.iter().zip(&outcomes) {
+        request.input.push(Item::FunctionCallOutput {
+            call_id: call.call_id.clone(),
+            output: outcome.output().to_owned(),
+        });
+    }
+    let second = ask(model, &request, spent).await?;
+    spent += second.usage_usd;
+
+    // The first answer's calls not sent back, then the second's, compiled once.
+    let mut calls: Vec<ToolCall> = (read.parsed.iter().zip(&outcomes))
+        .filter(|(_, outcome)| !outcome.is_back())
+        .filter_map(|(parsed, _)| parsed.as_ref().ok().cloned())
+        .collect();
+    let kept = calls.len();
+    let again = Read::of(&second.calls);
+    for call in again.calls {
+        if !calls[..kept].contains(&call) {
+            calls.push(call);
+        }
+    }
+    let compiled = compile(project, inputs, &calls);
+    // Still refused back to the model: by name, as the model called them.
+    let mut unfinished: Vec<String> = (compiled.refusals.iter())
+        .filter(|r| r.audience == Audience::Model)
+        .map(|r| calls[r.call_index].name().to_owned())
+        .collect();
+    unfinished.extend(again.unreadable);
+    Ok(finish(
+        &second.text,
+        calls,
+        compiled,
+        &unfinished,
+        spent,
+        vec![first.calls, second.calls],
+    ))
+}
+
+/// The first request's input: the context, the conversation, the new message.
+fn opening(history: &[Turn], ctx: &ChatContext, user: &str) -> Vec<Item> {
+    let kept = &history[history.len().saturating_sub(KEPT_TURNS)..];
+    let mut input = Vec::with_capacity(2 + 2 * kept.len());
+    input.push(Item::Context {
+        text: ctx.text.clone(),
+    });
+    for turn in kept {
+        input.push(Item::User {
+            text: turn.user.clone(),
+        });
+        let text = match (turn.reply.trim(), turn.note.trim()) {
+            (reply, "") => reply.to_owned(),
+            ("", note) => format!("({note})"),
+            (reply, note) => format!("{reply}\n({note})"),
+        };
+        input.push(Item::Assistant { text });
+    }
+    input.push(Item::User {
+        text: user.to_owned(),
+    });
+    input
+}
+
+/// One model call; its error as the person's sentence, with what was spent before it.
+async fn ask(
+    model: &dyn LanguageModel,
+    request: &ModelRequest,
+    spent: f64,
+) -> Result<ModelResponse, ChatError> {
+    (model.respond(request).await).map_err(|e| ChatError::from_model(e, spent))
+}
+
+/// One answer's calls, read.
+struct Read {
+    /// Each call as read, in the answer's order.
+    parsed: Vec<Result<ToolCall, String>>,
+    /// The calls read, in order: what is compiled.
+    calls: Vec<ToolCall>,
+    /// The names called by the calls that couldn't be read.
+    unreadable: Vec<String>,
+}
+
+impl Read {
+    fn of(calls: &[FunctionCall]) -> Self {
+        let parsed: Vec<Result<ToolCall, String>> = (calls.iter())
+            .map(|c| ToolCall::parse(c).map_err(|e| e.to_string()))
+            .collect();
+        Self {
+            calls: (parsed.iter().flatten().cloned()).collect(),
+            unreadable: (calls.iter().zip(&parsed))
+                .filter(|(_, p)| p.is_err())
+                .map(|(c, _)| c.name.clone())
+                .collect(),
+            parsed,
+        }
+    }
+
+    /// What came of each call of the answer, `compiled` being its calls read.
+    fn outcomes(&self, compiled: &Compiled) -> Vec<Outcome> {
+        let mut at = 0;
+        (self.parsed.iter())
+            .map(|parsed| {
+                let Err(reason) = parsed else {
+                    let i = at;
+                    at += 1;
+                    return match compiled.refusals.iter().find(|r| r.call_index == i) {
+                        Some(r) if r.audience == Audience::Model => Outcome::Back(r.reason.clone()),
+                        Some(_) => Outcome::Told,
+                        None if compiled.proposed_calls.contains(&i) => Outcome::Proposed,
+                        None => Outcome::Done,
+                    };
+                };
+                Outcome::Back(reason.clone())
+            })
+            .collect()
+    }
+}
+
+/// What came of one call of the first answer.
+enum Outcome {
+    /// Refused back to the model, with the reason.
+    Back(String),
+    /// Refused for the person.
+    Told,
+    Proposed,
+    Done,
+}
+
+impl Outcome {
+    fn is_back(&self) -> bool {
+        matches!(self, Outcome::Back(_))
+    }
+
+    /// The call's output for the model in the refusal round.
+    fn output(&self) -> &str {
+        match self {
+            Outcome::Back(reason) => reason,
+            Outcome::Told => TOLD_PERSON,
+            Outcome::Proposed => PROPOSED_OUTPUT,
+            Outcome::Done => DONE_OUTPUT,
+        }
+    }
+}
+
+/// The message's result from the last answer's `text` and what `calls` compiled to; `unfinished` names the calls
+/// still refused back to the model.
+fn finish(
+    text: &str,
+    calls: Vec<ToolCall>,
+    compiled: Compiled,
+    unfinished: &[String],
+    usage_usd: f64,
+    answers: Vec<Vec<FunctionCall>>,
+) -> PlanOut {
+    let came_of_it = compiled.additions.is_some()
+        || compiled.proposal.is_some()
+        || !compiled.moments.is_empty()
+        || !compiled.jobs.is_empty()
+        || !compiled.questions.is_empty()
+        || compiled.undo;
+    let mut parts: Vec<String> = Vec::new();
+    let text = text.trim();
+    if !text.is_empty() && (unfinished.is_empty() || came_of_it) {
+        parts.push(text.to_owned());
+    }
+    for r in &compiled.refusals {
+        if r.audience == Audience::Person {
+            let said = full_stop(r.reason.trim());
+            if !said.is_empty() && !parts.contains(&said) {
+                parts.push(said);
+            }
+        }
+    }
+    if !unfinished.is_empty() {
+        parts.push(could_not(unfinished));
+    }
+    if parts.is_empty() {
+        parts.extend(compiled.questions.iter().map(|q| full_stop(q.trim())));
+    }
+    if parts.is_empty() {
+        parts.push(
+            match (compiled.additions.is_some(), compiled.proposal.is_some()) {
+                (true, true) => "Done. The removals are waiting for you to apply them.",
+                (true, false) => "Done.",
+                (false, true) => "Here is what I would remove. Apply it or discard it.",
+                (false, false) => "Nothing changed.",
+            }
+            .to_owned(),
+        );
+    }
+    let reply = sanitize::reply(&parts.join(" "));
+    PlanOut {
+        note: note(&calls, &compiled),
+        reply,
+        compiled,
+        usage_usd,
+        calls,
+        answers,
+    }
+}
+
+/// `text` ending in a full stop, a question mark or an exclamation mark.
+fn full_stop(text: &str) -> String {
+    if text.is_empty() || text.ends_with(['.', '?', '!']) {
+        text.to_owned()
+    } else {
+        format!("{text}.")
+    }
+}
+
+/// What a tool does, as the reply names it when it couldn't be done.
+fn task(tool: &str) -> &'static str {
+    match tool {
+        "cutRange" => "the cut",
+        "keepOnly" => "keeping only that part",
+        "removeSilences" => "removing the pauses",
+        "removeFillers" => "removing the filler words",
+        "trimClip" => "the trim",
+        "splitAt" => "the split",
+        "setFormat" => "the format change",
+        "setCaptions" => "the captions change",
+        "fixCaptionWords" => "the word fix",
+        "findMoments" => "finding those moments",
+        "followSubject" => "following the subject",
+        "blurObjects" => "the blur",
+        "undo" => "the undo",
+        _ => "part of this",
+    }
+}
+
+/// "I couldn't do the cut, so I left it unchanged." for the tools named.
+fn could_not(tools: &[String]) -> String {
+    let mut tasks: Vec<&str> = Vec::new();
+    for t in tools {
+        let task = task(t);
+        if !tasks.contains(&task) {
+            tasks.push(task);
+        }
+    }
+    let list = match tasks.as_slice() {
+        [one] => (*one).to_owned(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+        [] => "part of this".to_owned(),
+    };
+    let it = if tasks.len() > 1 { "those" } else { "it" };
+    format!("I couldn't do {list}, so I left {it} unchanged.")
+}
+
+/// One line on what `calls` came to: "Applied setFormat. Proposed cutRange (10.0 s). Asked: Which part? Not done:
+/// trimClip."
+fn note(calls: &[ToolCall], compiled: &Compiled) -> String {
+    let refused = |i: usize| compiled.refusals.iter().any(|r| r.call_index == i);
+    let mut applied: Vec<&'static str> = Vec::new();
+    let mut proposed: Vec<&'static str> = Vec::new();
+    let mut not_done: Vec<&'static str> = Vec::new();
+    let add = |list: &mut Vec<&'static str>, name: &'static str| {
+        if !list.contains(&name) {
+            list.push(name);
+        }
+    };
+    for (i, call) in calls.iter().enumerate() {
+        let name = call.name();
+        if refused(i) {
+            if !matches!(call, ToolCall::CannotDo { .. }) {
+                add(&mut not_done, name);
+            }
+        } else if compiled.proposed_calls.contains(&i) {
+            add(&mut proposed, name);
+        } else if !matches!(
+            call,
+            ToolCall::AskUser { .. } | ToolCall::CannotDo { .. } | ToolCall::Undo
+        ) {
+            add(&mut applied, name);
+        }
+    }
+    let mut parts: Vec<String> = Vec::new();
+    if !applied.is_empty() {
+        parts.push(format!("Applied {}.", applied.join(", ")));
+    }
+    if let Some(p) = &compiled.proposal {
+        let tenths = (p.removed_us.max(0) + US_PER_SEC / 20) / (US_PER_SEC / 10);
+        parts.push(format!(
+            "Proposed {} ({}.{} s).",
+            proposed.join(", "),
+            tenths / 10,
+            tenths % 10
+        ));
+    }
+    if compiled.undo {
+        parts.push("Asked to undo.".to_owned());
+    }
+    for q in &compiled.questions {
+        parts.push(format!("Asked: {}", full_stop(q.trim())));
+    }
+    if !not_done.is_empty() {
+        parts.push(format!("Not done: {}.", not_done.join(", ")));
+    }
+    if parts.is_empty() {
+        return "Nothing changed.".to_owned();
+    }
+    (parts.join(" ").split_whitespace())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
