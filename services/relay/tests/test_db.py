@@ -51,6 +51,27 @@ def test_connect_creates_the_parent_directory(tmp_path):
     assert path.exists()
 
 
+def test_connect_closes_the_connection_when_setup_fails(tmp_path, monkeypatch):
+    path = tmp_path / "relay.db"
+    path.write_bytes(b"this is not a database" * 100)
+    opened = []
+    real_connect = sqlite3.connect
+
+    def spy(*args, **kwargs):
+        connection = real_connect(*args, **kwargs)
+        opened.append(connection)
+        return connection
+
+    monkeypatch.setattr(sqlite3, "connect", spy)
+
+    with pytest.raises(sqlite3.DatabaseError, match="not a database"):
+        db.connect(path)
+
+    assert len(opened) == 1
+    with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+        opened[0].execute("SELECT 1")
+
+
 def test_reconnecting_keeps_existing_rows(tmp_path):
     path = tmp_path / "relay.db"
     first = db.connect(path)

@@ -56,11 +56,15 @@ def connect(path: str | PathLike[str]) -> sqlite3.Connection:
     conn = sqlite3.connect(
         path, timeout=_BUSY_TIMEOUT_S, isolation_level=None, check_same_thread=False
     )
-    conn.row_factory = sqlite3.Row
-    _enable_wal(conn)
-    conn.execute("PRAGMA synchronous = NORMAL")
-    conn.execute("PRAGMA foreign_keys = ON")
-    _migrate(conn)
+    try:
+        conn.row_factory = sqlite3.Row
+        _enable_wal(conn)
+        conn.execute("PRAGMA synchronous = NORMAL")
+        conn.execute("PRAGMA foreign_keys = ON")
+        _migrate(conn)
+    except BaseException:
+        conn.close()
+        raise
     return conn
 
 
