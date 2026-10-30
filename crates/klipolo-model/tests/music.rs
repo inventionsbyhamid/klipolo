@@ -614,6 +614,22 @@ fn music_added_before_any_footage_plays_whole_then_fits_the_video() {
         id: "take-0".into(),
     }];
     assert_eq!(with_music_refit(&p, gone.clone()).unwrap(), gone);
+
+    // Music from 5 s on an empty video fits the first footage as well.
+    let late = MusicOpts {
+        start_us: secs(5.0),
+        ..MusicOpts::default()
+    };
+    let p = with_music(&empty, "song", late);
+    assert_eq!(spans(&music(&p)), [(5.0, 125.0)]);
+    let first = vec![Op::InsertClip {
+        clip: take(0.0, 45.0),
+        index: None,
+    }];
+    let p = apply_ops(&p, &with_music_refit(&p, first).unwrap()).unwrap();
+    let m = music(&p);
+    assert_eq!(spans(&m), [(5.0, 45.0)]);
+    assert_eq!((fade_in(m[0]), fade_out(m[0])), (0.5, 2.0));
 }
 
 #[test]

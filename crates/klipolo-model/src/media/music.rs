@@ -187,10 +187,12 @@ pub fn refit_music_ops(before: &Project, after: &Project) -> Vec<Op> {
             };
             // It reached the old end: it ends there (or under 10 ms before it, a remainder too short for a layer, or
             // past it), or it plays its file to the end and stops under `TAIL_US` before it (a short last piece left out).
+            // An empty video has no end to reach: all its music waits for the first footage, wherever it starts.
             let short = old_end.saturating_sub(last.end_us());
-            let reached = first.start_us <= old_end
-                && (short <= MIN_DURATION_US
-                    || (short < TAIL_US && last.duration_us >= room(last, file_len)));
+            let reached = old_end == 0
+                || (first.start_us <= old_end
+                    && (short <= MIN_DURATION_US
+                        || (short < TAIL_US && last.duration_us >= room(last, file_len))));
             // Or the video got shorter and now ends inside it: it is cut there, fading out, instead of stopping dead
             // past the end.
             let crosses = new_end < old_end && first.start_us < new_end && new_end < last.end_us();
