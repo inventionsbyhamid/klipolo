@@ -10,7 +10,7 @@
 
 use klipolo_model::time::{RangeUs, Us};
 
-use crate::audio;
+use crate::audio::{self, AudioError};
 
 /// The window a cut is centred in.
 pub const WINDOW_MS: u32 = 300;
@@ -161,11 +161,9 @@ impl Levels {
 }
 
 /// The part of a mono or multichannel 16-bit WAV (`audio::extract_wav_16k`'s) within `range`, as a WAV of its own:
-/// a Voice Transcribe request. A range past the end stops at the end. Empty when `wav` isn't a 16-bit PCM WAV.
-pub fn wav_slice(wav: &[u8], range: RangeUs) -> Vec<u8> {
-    let Some(layout) = audio::layout(wav) else {
-        return Vec::new();
-    };
+/// a Voice Transcribe request. A range past the end stops at the end. `NotWav` unless `wav` is a 16-bit PCM WAV.
+pub fn wav_slice(wav: &[u8], range: RangeUs) -> Result<Vec<u8>, AudioError> {
+    let layout = audio::layout(wav).ok_or(AudioError::NotWav)?;
     let frame = 2 * usize::from(layout.channels);
     let frames = layout.data.len() / frame;
     let start = sample_at(range.start, layout.rate).min(frames);
@@ -178,5 +176,5 @@ pub fn wav_slice(wav: &[u8], range: RangeUs) -> Vec<u8> {
         bytes.len() as u32,
     ));
     out.extend_from_slice(bytes);
-    out
+    Ok(out)
 }

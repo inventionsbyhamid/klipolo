@@ -54,8 +54,10 @@ pub enum AudioError {
     Io(#[from] io::Error),
     #[error("The sound is too long for one WAV file")]
     TooLong,
-    #[error("This is not a 16-bit mono WAV")]
+    #[error("This is not a 16-bit PCM WAV")]
     NotWav,
+    #[error("This WAV is not mono")]
+    NotMono,
 }
 
 /// Writes `src`'s sound to `out` as a mono 16-bit PCM WAV at 16 kHz, its sample 0 the sound stream's first sample (sound
@@ -361,9 +363,10 @@ pub struct MonoPcm {
 
 /// The samples of a mono 16-bit PCM WAV (what `extract_wav_16k` writes), for `chunks::plan`.
 pub fn read_pcm(wav: &[u8]) -> Result<MonoPcm, AudioError> {
-    let layout = layout(wav)
-        .filter(|l| l.channels == 1)
-        .ok_or(AudioError::NotWav)?;
+    let layout = layout(wav).ok_or(AudioError::NotWav)?;
+    if layout.channels != 1 {
+        return Err(AudioError::NotMono);
+    }
     let samples = wav[layout.data]
         .chunks_exact(2)
         .map(|b| i16::from_le_bytes([b[0], b[1]]))
@@ -500,7 +503,10 @@ mod tests {
             }
         );
         assert!(
-            matches!(read_pcm(&wav_header(16_000, 2, 0)), Err(AudioError::NotWav)),
+            matches!(
+                read_pcm(&wav_header(16_000, 2, 0)),
+                Err(AudioError::NotMono)
+            ),
             "stereo"
         );
         assert!(matches!(read_pcm(b"RIFF"), Err(AudioError::NotWav)));

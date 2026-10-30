@@ -5,7 +5,7 @@ use std::f64::consts::PI;
 use std::ops::Range;
 use std::sync::OnceLock;
 
-use klipolo_analysis::audio;
+use klipolo_analysis::audio::{self, AudioError};
 use klipolo_analysis::chunks::{self, Plan};
 use klipolo_model::time::RangeUs;
 
@@ -144,7 +144,7 @@ fn chunks_cover_the_whole_file_without_gaps_or_overlap() {
     let wav = wav_of(pcm);
     let mut joined = Vec::with_capacity(pcm.len());
     for chunk in &chunks {
-        let part = chunks::wav_slice(&wav, *chunk);
+        let part = chunks::wav_slice(&wav, *chunk).unwrap();
         assert!(part.len() <= 32 * 1024 * 1024, "{} bytes", part.len());
         let read = audio::read_pcm(&part).unwrap();
         assert_eq!(read.rate, RATE);
@@ -232,7 +232,7 @@ fn a_file_under_the_limit_is_one_chunk() {
 }
 
 #[test]
-fn a_slice_past_the_end_stops_at_the_end_and_a_non_wav_gives_nothing() {
+fn a_slice_past_the_end_stops_at_the_end_and_a_non_wav_is_an_error() {
     let pcm: Vec<i16> = (0..16_000).map(|i| i as i16).collect();
     let wav = wav_of(&pcm);
     let part = chunks::wav_slice(
@@ -241,16 +241,22 @@ fn a_slice_past_the_end_stops_at_the_end_and_a_non_wav_gives_nothing() {
             start: 500_000,
             end: 9_000_000,
         },
-    );
+    )
+    .unwrap();
     assert_eq!(audio::read_pcm(&part).unwrap().samples, &pcm[8_000..]);
-    assert!(
-        chunks::wav_slice(
-            b"not a wav at all",
-            RangeUs {
-                start: 0,
-                end: 1_000
-            }
-        )
-        .is_empty()
-    );
+    let range = RangeUs {
+        start: 0,
+        end: 1_000,
+    };
+    assert!(matches!(
+        chunks::wav_slice(b"not a wav at all", range),
+        Err(AudioError::NotWav)
+    ));
+    // A float WAV is a WAV, but not one Voice Transcribe takes.
+    let mut float = wav.clone();
+    float[20] = 3;
+    assert!(matches!(
+        chunks::wav_slice(&float, range),
+        Err(AudioError::NotWav)
+    ));
 }
