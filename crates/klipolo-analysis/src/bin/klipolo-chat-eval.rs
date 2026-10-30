@@ -330,8 +330,9 @@ fn judge(case: &Case, out: &PlanOut) -> Result<(), String> {
     let mut why = Vec::new();
     for (k, expect) in case.expect.iter().enumerate() {
         if !candidates.iter().any(|c| calls_match(&expect.calls, c)) {
-            let names: Vec<&str> = expect.calls.iter().map(|c| c.name.as_str()).collect();
-            why.push(format!("#{k}: calls are not {}", names.join(" and ")));
+            // Said against the calls compiled last: the first answer's, or the refusal round's.
+            let last = candidates.last().map(Vec::as_slice).unwrap_or_default();
+            why.push(format!("#{k}: {}", mismatch(&expect.calls, last)));
             continue;
         }
         match outcome_fails(&expect.outcome, out) {
@@ -380,6 +381,34 @@ fn calls_match(expected: &[ExpectedCall], actual: &[(String, Value)]) -> bool {
         false
     }
     expected.len() == actual.len() && assign(expected, actual, &mut vec![false; actual.len()])
+}
+
+/// Why `actual` doesn't match `expected`: other tools, or the first argument of a tool that doesn't fit.
+fn mismatch(expected: &[ExpectedCall], actual: &[(String, Value)]) -> String {
+    let mut want: Vec<&str> = expected.iter().map(|c| c.name.as_str()).collect();
+    let mut got: Vec<&str> = actual.iter().map(|(name, _)| name.as_str()).collect();
+    want.sort_unstable();
+    got.sort_unstable();
+    if want != got {
+        let list = |names: &[&str]| match names {
+            [] => "no call".to_owned(),
+            names => names.join(" and "),
+        };
+        return format!("{} instead of {}", list(&got), list(&want));
+    }
+    for e in expected {
+        for (key, rule) in &e.args {
+            let wrong = (actual.iter())
+                .filter(|(name, _)| *name == e.name)
+                .map(|(_, args)| args.get(key))
+                .find(|got| !got.is_some_and(|got| value_matches(rule, got)));
+            if let Some(got) = wrong {
+                let got = got.map_or("missing".to_owned(), Value::to_string);
+                return format!("{}.{key} is {got}, not {rule}", e.name);
+            }
+        }
+    }
+    "the calls don't pair up with the expected ones".to_owned()
 }
 
 /// Whether `got` matches `want`: a number within 0.01, `{min, max}` a range, a string ignoring case, `{contains}` a
@@ -551,6 +580,31 @@ mod tests {
             &[expected("askUser", json!({}))],
             &got(&[("askUser", json!({"question": "Which part?"}))])
         ));
+    }
+
+    #[test]
+    fn a_mismatch_names_the_tools_or_the_argument() {
+        let want = [expected(
+            "cutRange",
+            json!({"startSec": {"min": 85.0, "max": 87.0}, "endSec": {"min": 92.3, "max": 97.1}}),
+        )];
+        let got = |name: &str, args: Value| vec![(name.to_owned(), args)];
+        assert_eq!(
+            mismatch(
+                &want,
+                &got("cutRange", json!({"startSec": 85.5, "endSec": 99.3}))
+            ),
+            r#"cutRange.endSec is 99.3, not {"max":97.1,"min":92.3}"#
+        );
+        assert_eq!(
+            mismatch(&want, &got("cutRange", json!({"startSec": 85.5}))),
+            r#"cutRange.endSec is missing, not {"max":97.1,"min":92.3}"#
+        );
+        assert_eq!(
+            mismatch(&want, &got("askUser", json!({}))),
+            "askUser instead of cutRange"
+        );
+        assert_eq!(mismatch(&want, &[]), "no call instead of cutRange");
     }
 
     #[test]
