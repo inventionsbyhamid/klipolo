@@ -1,13 +1,18 @@
 //! Background music that fits the video (`media::music`): a short song tiles back to back and a long one is cut at the
-//! video's end, fading out there, on an audio track of its own.
+//! video's end, fading out there, on an audio track of its own; after an edit that moves the video's end, music that
+//! reached the old end is fitted to the new one in the same undo step.
 mod common;
 use common::*;
-use klipolo_model::media::music::{add_music_ops, is_music, MusicOpts};
+use klipolo_model::history::Document;
+use klipolo_model::media::music::{
+    add_music_ops, is_music, refit_music_ops, with_music_refit, MusicOpts, MUSIC_FADE_IN_US,
+    MUSIC_FADE_OUT_US,
+};
 use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::query::video_duration;
 use klipolo_model::time::Us;
 use klipolo_model::timeline::{Clip, ClipSource, Item, ItemContent, Track, TrackKind};
-use klipolo_model::{apply_ops, validate, Project};
+use klipolo_model::{apply_ops, validate, Op, Project, RangeUs, Transaction};
 
 /// A plain video `len` seconds long (one clip of a 10 minute take), with an 8 s loop and a 2 minute song.
 fn video(len: f64) -> Project {
@@ -54,6 +59,24 @@ fn asset<'a>(p: &'a Project, id: &str) -> &'a Asset {
 fn with_music(p: &Project, asset: &str, opts: MusicOpts) -> Project {
     let ops = add_music_ops(p, self::asset(p, asset), opts).unwrap();
     apply_ops(p, &ops).unwrap_or_else(|e| panic!("refused: {e}"))
+}
+
+fn tx(ops: Vec<Op>) -> Transaction {
+    Transaction {
+        label: "edit".into(),
+        ops,
+        origin: None,
+        ..Default::default()
+    }
+}
+
+fn cut(from: f64, to: f64) -> Op {
+    Op::DeleteRanges {
+        ranges: vec![RangeUs {
+            start: secs(from),
+            end: secs(to),
+        }],
+    }
 }
 
 /// The music layers, by start.
@@ -213,6 +236,185 @@ fn long_song_is_cut_with_fade_out_at_the_end() {
 }
 
 #[test]
+fn cut_in_the_middle_refits_music_in_the_same_step() {
+    for (song, before_cut, after_cut) in [
+        (
+            "loop",
+            vec![(0.0, 8.0), (8.0, 16.0), (16.0, 24.0), (24.0, 30.0)],
+            vec![(0.0, 8.0), (8.0, 16.0), (16.0, 24.0), (24.0, 28.0)],
+        ),
+        ("song", vec![(0.0, 30.0)], vec![(0.0, 28.0)]),
+    ] {
+        let mut doc = Document::new(video(30.0)).unwrap();
+        let p = doc.project().clone();
+        doc.apply(&tx(add_music_ops(
+            &p,
+            asset(&p, song),
+            MusicOpts::default(),
+        )
+        .unwrap()))
+            .unwrap();
+        let with_bed = doc.project().clone();
+        assert_eq!(spans(&music(&with_bed)), before_cut, "{song}");
+
+        // The cut, as the timeline sends it, comes back with the music's refit after it.
+        let ops = with_music_refit(doc.project(), vec![cut(10.0, 12.0)]).unwrap();
+        assert_eq!(ops[0], cut(10.0, 12.0), "the edit itself goes first");
+        assert!(ops.len() > 1, "{song}: no refit in {ops:?}");
+        doc.apply(&tx(ops)).unwrap();
+
+        let p = doc.project();
+        assert_eq!(video_duration(&p.timeline), secs(28.0));
+        let m = music(p);
+        assert_eq!(
+            spans(&m),
+            after_cut,
+            "{song}: the music still ends with the video"
+        );
+        assert_one_bed(p, song);
+        assert_eq!(
+            fade_out(m[m.len() - 1]),
+            2.0,
+            "{song}: the fade-out moved to the end"
+        );
+        assert_eq!(fade_in(m[0]), 0.5, "{song}");
+
+        // One undo takes back the cut and the refit together.
+        doc.undo().unwrap();
+        assert_eq!(*doc.project(), with_bed, "{song}");
+    }
+}
+
+#[test]
+fn a_cut_past_a_piece_removes_it_and_more_footage_adds_pieces() {
+    let p = with_music(&video(30.0), "loop", MusicOpts::default());
+
+    // Cutting 18 s to 30 s leaves 18 s: the third piece is cut short and the fourth goes.
+    let ops = with_music_refit(&p, vec![cut(18.0, 30.0)]).unwrap();
+    let short = apply_ops(&p, &ops).unwrap();
+    assert_eq!(
+        spans(&music(&short)),
+        [(0.0, 8.0), (8.0, 16.0), (16.0, 18.0)]
+    );
+    assert_one_bed(&short, "loop");
+    assert_eq!(
+        fade_out(music(&short)[2]),
+        1.0,
+        "2 s piece: fades over half of it"
+    );
+
+    // 22 s more footage at the end: the short piece plays on to the song's end and new pieces follow to the new end.
+    let more = vec![Op::InsertClip {
+        clip: take(100.0, 122.0),
+        index: None,
+    }];
+    let ops = with_music_refit(&short, more).unwrap();
+    let long = apply_ops(&short, &ops).unwrap();
+    assert_eq!(video_duration(&long.timeline), secs(40.0));
+    let m = music(&long);
+    assert_eq!(
+        spans(&m),
+        [
+            (0.0, 8.0),
+            (8.0, 16.0),
+            (16.0, 24.0),
+            (24.0, 32.0),
+            (32.0, 40.0)
+        ]
+    );
+    assert_one_bed(&long, "loop");
+    assert_eq!(
+        fade_out(m[4]),
+        2.0,
+        "the 2 s fade-out is back, ending at the new end"
+    );
+    assert_eq!(
+        sound(m[2]).source_in,
+        0,
+        "the third piece kept its place in the song"
+    );
+
+    // A long song grows with the video up to the song's own length, then starts again.
+    let p = with_music(&video(100.0), "song", MusicOpts::default());
+    let more = vec![Op::InsertClip {
+        clip: take(200.0, 250.0),
+        index: None,
+    }];
+    let long = apply_ops(&p, &with_music_refit(&p, more).unwrap()).unwrap();
+    assert_eq!(spans(&music(&long)), [(0.0, 120.0), (120.0, 150.0)]);
+    assert_one_bed(&long, "song");
+}
+
+#[test]
+fn music_not_touching_the_end_is_left_alone() {
+    // Music told to end at 20 s, and a sound effect that runs to the video's end.
+    let opts = MusicOpts {
+        end_us: Some(secs(20.0)),
+        ..MusicOpts::default()
+    };
+    let mut p = with_music(&video(30.0), "loop", opts);
+    let whoosh = Item {
+        content: ItemContent::Audio {
+            asset_id: "loop".into(),
+            source_in_us: 0,
+            volume: 1.0,
+            muted: false,
+            fade_in_us: 0,
+            fade_out_us: 0,
+            effect: None,
+            drift_ppm: 0.0,
+            centre_from: None,
+            tie: None,
+            duck: None,
+        },
+        ..still_item("whoosh", 25.0, 5.0)
+    };
+    assert!(
+        !is_music(&whoosh),
+        "a sound that doesn't duck is a sound effect"
+    );
+    apply(
+        &mut p,
+        Op::AddItem {
+            track: klipolo_model::ops::TrackTarget::Auto,
+            item: whoosh,
+            attach: false,
+        },
+    );
+    let edit = vec![cut(2.0, 6.0)];
+    let after = apply_ops(&p, &edit).unwrap();
+    assert!(refit_music_ops(&p, &after).is_empty());
+    assert_eq!(with_music_refit(&p, edit.clone()).unwrap(), edit);
+    assert_eq!(
+        spans(&music(&after)),
+        [(0.0, 8.0), (8.0, 16.0), (16.0, 20.0)]
+    );
+    assert_eq!(item_by_id(&after, "whoosh").end_us(), secs(30.0));
+
+    // An edit that leaves the video's end where it was changes no music, even music that reaches it.
+    let p = with_music(&video(30.0), "loop", MusicOpts::default());
+    let rename = vec![Op::Rename {
+        name: "Renamed".into(),
+    }];
+    assert_eq!(with_music_refit(&p, rename.clone()).unwrap(), rename);
+
+    // Music on a locked track stays as it is: a refit would make the edit fail.
+    let mut locked = p.clone();
+    let id = music(&p)[0].id.clone();
+    for t in &mut locked.timeline.tracks {
+        if t.items.iter().any(|i| i.id == id) {
+            t.locked = true;
+        }
+    }
+    let edit = vec![cut(2.0, 6.0)];
+    let after = apply_ops(&locked, &edit).unwrap();
+    assert!(refit_music_ops(&locked, &after).is_empty());
+    assert_eq!(with_music_refit(&locked, edit.clone()).unwrap(), edit);
+    // And an edit that is refused is refused as it was.
+    assert!(with_music_refit(&p, vec![Op::RemoveClip { id: "nope".into() }]).is_err());
+}
+
+#[test]
 fn fades_never_exceed_half_the_length() {
     let check = |p: &Project, what: &str| {
         validate(p).unwrap_or_else(|e| panic!("{what}: {e}"));
@@ -248,6 +450,26 @@ fn fades_never_exceed_half_the_length() {
     // 17 s of an 8 s loop: the last piece is 1 s and fades over its half.
     let p = with_music(&video(17.0), "loop", MusicOpts::default());
     assert_eq!(fade_out(music(&p)[2]), 0.5);
+
+    // Cuts that leave a short last piece, or a very short video, keep them inside too, and growing back restores them.
+    let p = with_music(&video(30.0), "loop", MusicOpts::default());
+    for (from, to) in [(5.0, 10.0), (0.5, 29.0), (0.0, 29.98), (1.0, 23.5)] {
+        let short = apply_ops(&p, &with_music_refit(&p, vec![cut(from, to)]).unwrap()).unwrap();
+        check(&short, &format!("cut {from} to {to}"));
+        let back = vec![Op::InsertClip {
+            clip: take(300.0, 300.0 + (to - from)),
+            index: None,
+        }];
+        let grown = apply_ops(&short, &with_music_refit(&short, back).unwrap()).unwrap();
+        check(&grown, &format!("cut {from} to {to}, then grown back"));
+        let m = music(&grown);
+        assert_eq!(m.last().unwrap().end_us(), secs(30.0), "cut {from} to {to}");
+        assert_eq!(
+            (fade_in(m[0]), fade_out(m[m.len() - 1])),
+            (0.5, 2.0),
+            "cut {from} to {to}: the fades are back"
+        );
+    }
 }
 
 #[test]
@@ -319,4 +541,91 @@ fn music_goes_on_an_audio_track_of_its_own() {
         ..MusicOpts::default()
     };
     assert!(add_music_ops(&p, asset(&p, "song"), late).is_err());
+}
+
+#[test]
+fn music_added_before_any_footage_plays_whole_then_fits_the_video() {
+    let mut empty = video(30.0);
+    empty.timeline.main.clear();
+    let p = with_music(&empty, "song", MusicOpts::default());
+    assert_eq!(spans(&music(&p)), [(0.0, 120.0)], "the whole song");
+
+    let first = vec![Op::InsertClip {
+        clip: take(0.0, 45.0),
+        index: None,
+    }];
+    let p = apply_ops(&p, &with_music_refit(&p, first).unwrap()).unwrap();
+    let m = music(&p);
+    assert_eq!(spans(&m), [(0.0, 45.0)]);
+    assert_eq!((fade_in(m[0]), fade_out(m[0])), (0.5, 2.0));
+    assert_eq!(MUSIC_FADE_IN_US, secs(0.5));
+    assert_eq!(MUSIC_FADE_OUT_US, secs(2.0));
+
+    // Deleting every clip to start over keeps the music for the footage that comes next.
+    let gone = vec![Op::RemoveClip {
+        id: "take-0".into(),
+    }];
+    assert_eq!(with_music_refit(&p, gone.clone()).unwrap(), gone);
+}
+
+#[test]
+fn music_a_hair_short_of_the_end_still_follows_it() {
+    // 16.005 s of an 8 s loop: two whole pieces, and the last 5 ms (under the shortest layer) left silent.
+    let p = with_music(&video(16.005), "loop", MusicOpts::default());
+    assert_eq!(spans(&music(&p)), [(0.0, 8.0), (8.0, 16.0)]);
+    let short = apply_ops(&p, &with_music_refit(&p, vec![cut(2.0, 4.0)]).unwrap()).unwrap();
+    let m = music(&short);
+    assert_eq!(spans(&m), [(0.0, 8.0), (8.0, 14.005)]);
+    assert_eq!(fade_out(m[1]), 2.0);
+}
+
+#[test]
+fn music_stops_at_the_next_layer_on_its_track() {
+    // A sound placed on the music's own track after the video's end: more footage plays the music up to it, not over
+    // it or onto another track.
+    let mut p = with_music(&video(30.0), "loop", MusicOpts::default());
+    let track = track_of(&p, &music(&p)[0].id).id.clone();
+    let tail = Item {
+        content: ItemContent::Audio {
+            asset_id: "loop".into(),
+            source_in_us: 0,
+            volume: 1.0,
+            muted: false,
+            fade_in_us: 0,
+            fade_out_us: 0,
+            effect: None,
+            drift_ppm: 0.0,
+            centre_from: None,
+            tie: None,
+            duck: None,
+        },
+        ..still_item("tail", 35.0, 1.0)
+    };
+    apply(
+        &mut p,
+        Op::AddItem {
+            track: klipolo_model::ops::TrackTarget::Track { id: track.clone() },
+            item: tail,
+            attach: false,
+        },
+    );
+    let more = vec![Op::InsertClip {
+        clip: take(100.0, 110.0),
+        index: None,
+    }];
+    let long = apply_ops(&p, &with_music_refit(&p, more).unwrap()).unwrap();
+    let m = music(&long);
+    assert_eq!(
+        spans(&m),
+        [
+            (0.0, 8.0),
+            (8.0, 16.0),
+            (16.0, 24.0),
+            (24.0, 32.0),
+            (32.0, 35.0)
+        ]
+    );
+    assert!(m.iter().all(|i| track_of(&long, &i.id).id == track));
+    assert_eq!(fade_out(m[4]), 1.5, "3 s piece: fades over half of it");
+    assert_eq!(item_by_id(&long, "tail").start_us, secs(35.0));
 }

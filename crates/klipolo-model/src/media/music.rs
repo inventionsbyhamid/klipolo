@@ -5,18 +5,25 @@
 //!
 //! **What counts as music** ([`is_music`]): a sound layer with `duck` set. Music added here always sets it, to 0 dB
 //! when ducking is off (`ItemContent::Audio::duck` at 0 lowers nothing), so turning ducking off keeps a song music;
-//! `None` is a sound effect. The timeline's Music and Sounds lanes split on it.
+//! `None` is a sound effect. The timeline's Music and Sounds lanes split on it, and the refit acts on it.
+//!
+//! **Refit** ([`refit_music_ops`]): free music doesn't move when the main track does (`ripple_items`), so after an edit
+//! that moves the video's end, each run of music pieces that reached the old end is fitted to the new one: cut shorter
+//! (pieces past the end go) or played on (the last piece to the file's end, then new pieces), with its fade-out moved
+//! to the new end. [`with_music_refit`] folds that into the edit's own batch, so one undo takes back both.
 
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
+use crate::apply::{apply_ops, id_taken};
 use crate::error::{invalid, Result};
 use crate::ids::{new_id, Id};
 use crate::layout::{Anchor, BoxN, Layout};
 use crate::messages::code;
-use crate::ops::{Op, TrackTarget};
+use crate::ops::{ItemPatch, Op, TrackTarget};
 use crate::project::{Asset, Project};
 use crate::query::video_duration;
-use crate::time::{Us, MIN_DURATION_US};
+use crate::time::{Us, MIN_DURATION_US, OVERLAP_TOLERANCE_US};
 use crate::timeline::{Item, ItemContent, Track, TrackKind};
 
 /// 30 %: under a voice without hiding it.
@@ -143,6 +150,80 @@ pub fn add_music_ops(p: &Project, asset: &Asset, opts: MusicOpts) -> Result<Vec<
     Ok(ops)
 }
 
+/// The ops that fit the music of `after` to its video's end, when an edit from `before` moved it: every run of free
+/// music pieces (one file, back to back, on an unlocked track) that reached `before`'s end is cut at the new end or
+/// played on to it, its fade-out ending there; a run that starts at or past the new end goes. Music that stopped
+/// earlier, or is attached, or on a locked track, is left as it is. Empty when the end didn't move, and when the video
+/// is now empty (every clip deleted): the music waits as it is for the footage that comes next, and fits that.
+pub fn refit_music_ops(before: &Project, after: &Project) -> Vec<Op> {
+    let (old_end, new_end) = (
+        video_duration(&before.timeline),
+        video_duration(&after.timeline),
+    );
+    if old_end == new_end || new_end == 0 {
+        return Vec::new();
+    }
+    let mut ops = Vec::new();
+    let mut ids = NewIds {
+        p: after,
+        used: HashSet::new(),
+        from: HashMap::new(),
+    };
+    for track in after
+        .timeline
+        .tracks
+        .iter()
+        .filter(|t| t.kind == TrackKind::Audio && !t.locked)
+    {
+        for run in runs(track) {
+            let bed = &track.items[run.clone()];
+            let (first, last) = (&bed[0], &bed[bed.len() - 1]);
+            let reached = first.start_us <= old_end
+                && last.end_us().saturating_add(MIN_DURATION_US) >= old_end;
+            if !reached {
+                continue;
+            }
+            // Up to the new end, or the next layer on the track when one stands before it.
+            let end = track
+                .items
+                .get(run.end)
+                .map_or(new_end, |next| next.start_us.min(new_end));
+            if let Some(file) = played(last).and_then(|(id, _)| after.asset(id)) {
+                refit(bed, &track.id, file.duration_us, end, &mut ids, &mut ops);
+            }
+        }
+    }
+    ops
+}
+
+/// `ops` with the music's refit after them ([`refit_music_ops`] against their result), as one batch for one undo step:
+/// what the app's history is to run every edit through. An edit that is refused is refused as before; a refit that the
+/// batch would refuse (a bug) is left out, so the edit itself still goes through.
+pub fn with_music_refit(before: &Project, ops: Vec<Op>) -> Result<Vec<Op>> {
+    apply_with_music_refit(before, ops).map(|(ops, _)| ops)
+}
+
+/// [`with_music_refit`] and the project its ops make from `before` (what `apply_ops` gives), so a caller can record
+/// that project (`Document::commit_tx`) instead of applying the ops again. Applies once when nothing needs a refit,
+/// twice when something does.
+pub fn apply_with_music_refit(before: &Project, ops: Vec<Op>) -> Result<(Vec<Op>, Project)> {
+    let after = apply_ops(before, &ops)?;
+    let refit = refit_music_ops(before, &after);
+    if refit.is_empty() {
+        return Ok((ops, after));
+    }
+    let own = ops.len();
+    let mut all = ops;
+    all.extend(refit);
+    match apply_ops(before, &all) {
+        Ok(next) => Ok((all, next)),
+        Err(_) => {
+            all.truncate(own);
+            Ok((all, after))
+        }
+    }
+}
+
 /// The lowest audio track with nothing on it that isn't locked or muted (a muted one would silence the music).
 fn empty_audio_track(p: &Project) -> Option<&Track> {
     p.timeline
@@ -204,6 +285,96 @@ fn pieces(span: Range<Us>, file_len: Us, source_in: Us) -> Vec<Piece> {
     out
 }
 
+/// The runs of music pieces on `track` a refit treats as one song: free music of one file without clock drift, each
+/// piece starting where the one before ends. Indexes into `track.items`, in order.
+fn runs(track: &Track) -> Vec<Range<usize>> {
+    let piece = |item: &Item| {
+        is_music(item)
+            && item.attach.is_none()
+            && matches!(item.content, ItemContent::Audio { drift_ppm, .. } if drift_ppm == 0.0)
+    };
+    let mut out: Vec<Range<usize>> = Vec::new();
+    for (i, item) in track.items.iter().enumerate() {
+        if !piece(item) {
+            continue;
+        }
+        let follows = out.last().is_some_and(|run| {
+            let before = &track.items[run.end - 1];
+            run.end == i
+                && played(before).map(|(id, _)| id) == played(item).map(|(id, _)| id)
+                && item.start_us.abs_diff(before.end_us()) <= OVERLAP_TOLERANCE_US.unsigned_abs()
+        });
+        match out.last_mut() {
+            Some(run) if follows => run.end = i + 1,
+            _ => out.push(i..i + 1),
+        }
+    }
+    out
+}
+
+/// Fits one run of music, `bed` on track `track`, of a file `file_len` long, to end at `end`.
+fn refit(bed: &[Item], track: &Id, file_len: Us, end: Us, ids: &mut NewIds, ops: &mut Vec<Op>) {
+    let (first, last) = (&bed[0], &bed[bed.len() - 1]);
+    let want_in = meant(fades(first).0, first.duration_us, MUSIC_FADE_IN_US);
+    let want_out = meant(fades(last).1, last.duration_us, MUSIC_FADE_OUT_US);
+    // The fade-in belongs to the first piece; others keep theirs (none, as added).
+    let fade_in = |k: usize| if k == 0 { want_in } else { fades(&bed[k]).0 };
+    if end < last.end_us() {
+        // Shorter: the pieces from the new end on go, and the one it falls in is cut there.
+        let keep = bed
+            .iter()
+            .rposition(|i| i.start_us.saturating_add(MIN_DURATION_US) <= end);
+        let gone = keep.map_or(0, |k| k + 1);
+        ops.extend(
+            bed[gone..]
+                .iter()
+                .map(|i| Op::RemoveItem { id: i.id.clone() }),
+        );
+        if let Some(k) = keep {
+            let piece = &bed[k];
+            let room = played(piece).map_or(0, |(_, from)| file_len.saturating_sub(from));
+            let len = end.saturating_sub(piece.start_us).min(room);
+            update(piece, len, fade_in(k), want_out, ops);
+        }
+        return;
+    }
+    // Longer: the last piece plays on to the file's end, then new pieces from the file's start fill up to the new end.
+    let k = bed.len() - 1;
+    let room = played(last).map_or(0, |(_, from)| file_len.saturating_sub(from));
+    let len = end
+        .saturating_sub(last.start_us)
+        .min(room)
+        .max(last.duration_us);
+    let more = pieces(last.start_us.saturating_add(len)..end, file_len, 0);
+    let out = if more.is_empty() { want_out } else { 0 };
+    if len != last.duration_us || fades(last) != fit(fade_in(k), out, len) {
+        update(last, len, fade_in(k), out, ops);
+    }
+    let n = more.len();
+    for (m, piece) in more.into_iter().enumerate() {
+        let fade_out = if m + 1 == n { want_out } else { 0 };
+        ops.push(Op::AddItem {
+            track: TrackTarget::Track { id: track.clone() },
+            item: piece.item(last, ids.next(&first.id), 0, fade_out),
+            attach: false,
+        });
+    }
+}
+
+/// Sets `piece` to `len` with these fades (kept within half of it).
+fn update(piece: &Item, len: Us, fade_in: Us, fade_out: Us, ops: &mut Vec<Op>) {
+    let mut content = piece.content.clone();
+    set_sound(&mut content, None, fade_in, fade_out, len);
+    ops.push(Op::UpdateItem {
+        id: piece.id.clone(),
+        patch: ItemPatch {
+            duration_us: Some(len),
+            content: Some(content),
+            ..ItemPatch::default()
+        },
+    });
+}
+
 /// A sound's file start (when given) and its fades, each within half of `len`, so the two never overlap
 /// (`model.audio.fades`).
 fn set_sound(content: &mut ItemContent, from: Option<Us>, fade_in: Us, fade_out: Us, len: Us) {
@@ -224,4 +395,51 @@ fn set_sound(content: &mut ItemContent, from: Option<Us>, fade_in: Us, fade_out:
 fn fit(fade_in: Us, fade_out: Us, len: Us) -> (Us, Us) {
     let half = len.max(0) / 2;
     (fade_in.clamp(0, half), fade_out.clamp(0, half))
+}
+
+fn fades(item: &Item) -> (Us, Us) {
+    match item.content {
+        ItemContent::Audio {
+            fade_in_us,
+            fade_out_us,
+            ..
+        } => (fade_in_us, fade_out_us),
+        _ => (0, 0),
+    }
+}
+
+fn played(item: &Item) -> Option<(&Id, Us)> {
+    item.content.played()
+}
+
+/// The fade a piece was meant to have: its own, unless it is as long as half the piece allows, when it was likely cut
+/// to fit (a short last piece) and the music's default may come back now that there's room.
+fn meant(fade: Us, len: Us, default: Us) -> Us {
+    if fade.saturating_mul(2) >= len {
+        fade.max(default)
+    } else {
+        fade
+    }
+}
+
+/// Ids for new pieces: `{first piece}-n`, the smallest n from 2 not in the project nor given out already. Each base's
+/// search goes on from where it stopped, so a refit that adds many pieces stays linear.
+struct NewIds<'a> {
+    p: &'a Project,
+    used: HashSet<Id>,
+    from: HashMap<Id, u64>,
+}
+
+impl NewIds<'_> {
+    fn next(&mut self, base: &str) -> Id {
+        let n = self.from.entry(base.to_owned()).or_insert(2);
+        loop {
+            let id = format!("{base}-{n}");
+            *n = n.saturating_add(1);
+            if !self.used.contains(&id) && !id_taken(self.p, &id) {
+                self.used.insert(id.clone());
+                return id;
+            }
+        }
+    }
 }
