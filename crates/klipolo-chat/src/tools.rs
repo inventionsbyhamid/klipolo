@@ -4,7 +4,8 @@
 //! strict JSON Schema: every object closed (`additionalProperties: false`) with every property required, and a value
 //! the person may leave unsaid nullable (`"type": ["number", "null"]`). A provider's adapter wraps each tool in its own
 //! wire shape (the Responses API's `{"type": "function", "strict": true, ...}`). The list is built the same way and in
-//! the same order every time, so a provider's prompt cache can reuse it.
+//! the same order every time, so a provider's prompt cache can reuse it. The tools keep their order; a schema's
+//! `properties` read by name (serde_json sorts an object's keys), and its `required` list keeps the order given.
 //!
 //! `ToolCall::parse` reads one `FunctionCall` (the tool's name and the JSON text of its arguments) into a `ToolCall`:
 //! times become timeline microseconds, words become the model's own types (`FormatKind`, `Edge`,
@@ -315,7 +316,7 @@ impl Word for BuiltinCaptionStyle {
 struct Tool {
     name: &'static str,
     description: &'static str,
-    /// Its parameters, in the order the model is shown them.
+    /// Its parameters: `required` lists them in this order, `properties` by name (serde_json sorts object keys).
     parameters: fn() -> Vec<(&'static str, Value)>,
     read: fn(&mut Args) -> Result<ToolCall, ToolError>,
 }
