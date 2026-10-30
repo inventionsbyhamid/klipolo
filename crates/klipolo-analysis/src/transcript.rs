@@ -1,7 +1,8 @@
 //! A clip's words from its 16 kHz WAV (what `audio::extract_wav_16k` wrote), in four steps:
-//! - `Sound::load`: the WAV read once and cut into transcription requests at pauses (`chunks::plan_with_loud_cuts`),
-//!   planned one second under the transcriber's limit so a last chunk under `MIN_CHUNK_US` can join the one before.
-//!   A chunk with nothing louder than `SILENT_PEAK_DBFS` makes no request; a silent clip makes none at all.
+//! - `Sound::load`: the WAV's samples read once, straight from the file, and cut into transcription requests at pauses
+//!   (`chunks::plan_with_loud_cuts`), planned one second under the transcriber's limit so a last chunk under
+//!   `MIN_CHUNK_US` can join the one before. Each request's WAV is made from the samples when it is sent. A chunk with
+//!   nothing louder than `SILENT_PEAK_DBFS` makes no request; a silent clip makes none at all.
 //! - `hear`: each chunk's speaker turns from the `Transcriber`, `TRANSCRIBE_IN_FLIGHT` requests at once. The first
 //!   failure stops the step.
 //! - `align`: the turns' word times from the `Aligner`, in requests within its `AlignLimits`. Each request is the WAV
@@ -32,7 +33,7 @@ use klipolo_model::speech::{PAUSE_US, Transcript, Word, WordKind};
 use klipolo_model::time::{RangeUs, Us};
 use serde::{Deserialize, Serialize};
 
-use crate::audio::{self, AudioError};
+use crate::audio::{self, AudioError, MonoPcm};
 use crate::chunks::{self, sample_at, us};
 use crate::error::AnalysisError;
 use crate::fillers::is_filler;
@@ -93,12 +94,12 @@ pub struct TranscriptOut {
     pub approximate_reason: Option<String>,
 }
 
-/// A clip's WAV, read once: the bytes each request slices, its length, and the transcription requests.
+/// A clip's sound, read once: its samples (each request's WAV is made from them), its length, and the transcription
+/// requests.
 #[derive(Clone, Debug)]
 pub struct Sound {
-    wav: Arc<Vec<u8>>,
+    samples: Arc<Vec<i16>>,
     rate: u32,
-    samples: usize,
     /// The WAV's length.
     pub duration_us: Us,
     /// The transcription requests in order, silent ones left out: none when the whole WAV is silent.
@@ -108,42 +109,54 @@ pub struct Sound {
 }
 
 impl Sound {
-    /// `wav` (a mono 16-bit PCM WAV) cut into requests of at most `max_audio_s` each. Only the bytes are kept: the
-    /// samples are read, planned from and dropped.
-    pub fn from_wav(wav: Vec<u8>, max_audio_s: u32) -> Result<Self, AudioError> {
-        let pcm = audio::read_pcm(&wav)?;
-        let (rate, samples) = (pcm.rate, pcm.samples.len());
+    /// `pcm` (mono 16-bit samples) cut into requests of at most `max_audio_s` each.
+    pub fn from_pcm(pcm: MonoPcm, max_audio_s: u32) -> Self {
+        let MonoPcm { rate, samples } = pcm;
+        if rate == 0 {
+            return Self {
+                samples: Arc::new(Vec::new()),
+                rate: 1,
+                duration_us: 0,
+                chunks: Vec::new(),
+                loud_cuts: Vec::new(),
+            };
+        }
+        let n = samples.len();
         let plan =
-            chunks::plan_with_loud_cuts(&pcm.samples, rate, max_audio_s.saturating_sub(1).max(1));
+            chunks::plan_with_loud_cuts(&samples, rate, max_audio_s.saturating_sub(1).max(1));
         let mut ranges = plan.chunks;
-        let n = ranges.len();
-        if n >= 2 && ranges[n - 1].len() < MIN_CHUNK_US {
-            ranges[n - 2].end = ranges[n - 1].end;
+        let last = ranges.len();
+        if last >= 2 && ranges[last - 1].len() < MIN_CHUNK_US {
+            ranges[last - 2].end = ranges[last - 1].end;
             ranges.pop();
         }
         ranges.retain(|r| {
-            let from = sample_at(r.start, rate).min(samples);
-            let to = sample_at(r.end, rate).clamp(from, samples);
-            audible(&pcm.samples[from..to])
+            let from = sample_at(r.start, rate).min(n);
+            let to = sample_at(r.end, rate).clamp(from, n);
+            audible(&samples[from..to])
         });
         let mut loud_cuts = plan.loud_cuts;
         loud_cuts.retain(|cut| ranges.iter().any(|r| r.start == *cut));
-        Ok(Self {
-            wav: Arc::new(wav),
+        Self {
+            samples: Arc::new(samples),
             rate,
-            samples,
-            duration_us: us(samples, rate),
+            duration_us: us(n, rate),
             chunks: ranges,
             loud_cuts,
-        })
+        }
     }
 
-    /// `from_wav` of the file at `path`, read on a blocking thread.
+    /// `from_pcm` of a mono 16-bit PCM WAV's bytes.
+    pub fn from_wav(wav: &[u8], max_audio_s: u32) -> Result<Self, AudioError> {
+        Ok(Self::from_pcm(audio::read_pcm(wav)?, max_audio_s))
+    }
+
+    /// `from_pcm` of the WAV file at `path`, read on a blocking thread straight into its samples
+    /// (`audio::read_pcm_file`): the file's bytes are never held as well.
     pub async fn load(path: &Path, max_audio_s: u32) -> Result<Self, AnalysisError> {
         let path = path.to_owned();
         let sound = tokio::task::spawn_blocking(move || {
-            let wav = std::fs::read(&path)?;
-            Self::from_wav(wav, max_audio_s)
+            audio::read_pcm_file(&path).map(|pcm| Self::from_pcm(pcm, max_audio_s))
         })
         .await
         .map_err(|e| AudioError::Io(std::io::Error::other(e.to_string())))??;
@@ -155,9 +168,24 @@ impl Sound {
         self.chunks.is_empty()
     }
 
-    /// The time of the first sample `wav_slice` takes for a range starting at `t`.
+    /// A request's WAV: the samples in `range` (a range past the end stops at the end) behind a WAV header. Made from
+    /// samples already read, so it can't fail, and it can be made again for a retry.
+    fn wav_of(&self, range: RangeUs) -> Vec<u8> {
+        let n = self.samples.len();
+        let from = sample_at(range.start, self.rate).min(n);
+        let to = sample_at(range.end, self.rate).clamp(from, n);
+        let bytes = 2 * (to - from);
+        let mut wav = Vec::with_capacity(44 + bytes);
+        wav.extend_from_slice(&audio::wav_header(self.rate, 1, bytes as u32));
+        for s in &self.samples[from..to] {
+            wav.extend_from_slice(&s.to_le_bytes());
+        }
+        wav
+    }
+
+    /// The time of the first sample `wav_of` takes for a range starting at `t`.
     fn slice_start(&self, t: Us) -> Us {
-        us(sample_at(t, self.rate).min(self.samples), self.rate)
+        us(sample_at(t, self.rate).min(self.samples.len()), self.rate)
     }
 }
 
@@ -231,9 +259,10 @@ pub async fn hear(
     let mut heard: Vec<(usize, Vec<Turn>, f64)> =
         stream::iter(sound.chunks.iter().copied().enumerate())
             .map(|(i, range)| async move {
-                // Sliced only when its request starts, so at most `TRANSCRIBE_IN_FLIGHT` slices exist at once.
-                let wav = chunks::wav_slice(&sound.wav, range)?;
-                let said = transcriber.transcribe(wav, keywords).await?;
+                // Made only when its request starts, so at most `TRANSCRIBE_IN_FLIGHT` WAVs exist at once.
+                let said = transcriber
+                    .transcribe(sound.wav_of(range), keywords)
+                    .await?;
                 Ok::<_, AnalysisError>((i, turns_in(said.turns, range, i), said.cost_usd))
             })
             .buffer_unordered(TRANSCRIBE_IN_FLIGHT)
@@ -355,13 +384,7 @@ async fn request(
     batch: &Batch,
     turns: &[Turn],
 ) -> Result<(Us, Alignment), ProviderError> {
-    let wav = chunks::wav_slice(&sound.wav, batch.span).map_err(|e| ProviderError {
-        detail: e.to_string(),
-        ..ProviderError::new(
-            ProviderErrorKind::Failed,
-            "Klipolo could not read this clip's sound.",
-        )
-    })?;
+    let wav = sound.wav_of(batch.span);
     let offset = sound.slice_start(batch.span.start);
     let sent: Vec<AlignTurn> = batch
         .turns
