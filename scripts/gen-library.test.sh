@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # The bundled pack's checks (Python 3 stdlib only): scripts/gen-library.py run twice into temporary folders writes the
 # same bytes both times, and the same bytes as assets/library, whose manifest lists each file's SHA-256; every sound is
-# 48 kHz 16-bit mono and under 3 s; every music bed is 16 to 30 s and loops at a zero crossing; every sticker is a
-# 1024 x 1024 RGBA PNG with transparent corners; the pack is the one the plan lists, CC0-1.0, and under 3 MB.
+# 48 kHz 16-bit mono and under 3 s; every music bed is 16 to 30 s and loops at a zero crossing without a click (two
+# copies back to back are as smooth at the join as anywhere else); every sticker is a 1024 x 1024 RGBA PNG with
+# transparent corners; the pack is the one the plan lists, CC0-1.0, and under 3 MB.
 #   scripts/gen-library.test.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -101,9 +102,13 @@ def _():
         seconds = p.nframes / p.framerate
         assert 16 <= seconds <= 30, f"{i['id']}: {seconds:.2f} s"
         assert i["duration_ms"] == round(p.nframes * 1000 / p.framerate), i["id"]
-        step = max(abs(b - a) for a, b in zip(s, s[1:]))
-        assert abs(s[0]) <= 64 and s[-1] * s[0] <= 0, f"{i['id']}: the seam isn't at a zero crossing ({s[-1]}, {s[0]})"
-        assert abs(s[0] - s[-1]) <= step, f"{i['id']}: the seam jumps {abs(s[0] - s[-1])}, the largest step is {step}"
+        assert s[-1] * s[0] <= 0, f"{i['id']}: the seam isn't at a zero crossing ({s[-1]}, {s[0]})"
+        # Played twice back to back, the join is as smooth as the bed itself: the largest second difference (a click
+        # shows as one) within 60 samples of the join is no larger than any in the bed away from its ends.
+        n, tiled = len(s), s + s
+        d2 = [abs(tiled[k + 1] - 2 * tiled[k] + tiled[k - 1]) for k in range(1, 2 * n - 1)]
+        join, body = max(d2[n - 61:n + 59]), max(d2[2000:n - 2000])
+        assert join <= body, f"{i['id']}: the join clicks: second difference {join} there, {body} at most elsewhere"
         peak = max(abs(v) for v in s)
         assert 8000 < peak < 32767, f"{i['id']}: peak {peak}"
 

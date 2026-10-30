@@ -6,7 +6,7 @@ Python 3 standard library only, and deterministic: fixed seeds, no clocks, and n
 roots (sines and exponentials are computed here, never by the platform's maths library), so every machine writes the
 same bytes. It writes, into assets/library or --out DIR:
   sounds/<id>.wav     48 kHz 16-bit mono, each under 3 s, starting and ending at silence
-  music/<id>.wav      24 kHz 16-bit mono beds of 16 s that loop: they start and end at a zero crossing
+  music/<id>.wav      24 kHz 16-bit mono beds of 16 s, drawn exactly periodic so they loop without a click
   stickers/<id>.png   1024 x 1024 RGBA, the shape with a border on a transparent canvas
   manifest.json       each item's id, name, category, file, length or size, tags, sha256 and licence
   LICENSE.txt         the CC0 dedication
@@ -268,14 +268,15 @@ def loop_steps(freq):
     return round(freq * LOOP)
 
 
-def loop_osc(i, steps):
-    """sin(2 pi f t) at sample i of the loop, for f = `steps` / 16 Hz."""
-    return osc((i * steps % LOOP_N) / LOOP_N)
+def loop_osc(i, steps, phase=0.0):
+    """sin(2 pi (f t + phase)) at sample i of the loop, for f = `steps` / 16 Hz."""
+    return osc((i * steps % LOOP_N) / LOOP_N + phase)
 
 
 def seam(samples):
-    """A loop's seam at a zero crossing: turned (by at most 10 ms) to start at the crossing nearest its start, then
-    1 ms fades at both ends, so its first and last samples are silence and the loop joins without a click."""
+    """A loop's seam at a zero crossing. A bed is drawn exactly periodic (every sine a whole number of cycles in 16 s,
+    every tail carried round to the start), so its end already runs into its start; it is only turned, by at most
+    10 ms, to start at the zero crossing nearest its start. No fade: one would put a kink, a click, in the join."""
     n, best = len(samples), None
     for i in range(-240, 241):
         a, b = samples[(i - 1) % n], samples[i % n]
@@ -284,8 +285,7 @@ def seam(samples):
             if best is None or score < best[0]:
                 best = (score, i)
     turn = best[1] % n if best else 0
-    turned = samples[turn:] + samples[:turn]
-    return edges(turned, 0.001, 0.001, MUSIC_RATE)
+    return samples[turn:] + samples[:turn]
 
 
 AMBIENT_CHORDS = [
@@ -298,11 +298,18 @@ AMBIENT_CHORDS = [
 
 def soft_ambient():
     """A calm pad: four chords (Cmaj9, Am9, Fmaj9, G6/9) melting into each other every 4 s, each note with a soft
-    octave and a slowly beating twin, breathing every 8 s, and a faint high shimmer."""
+    octave and a slowly beating twin, breathing every 8 s, and a faint high shimmer. Each sine starts at its own fixed
+    phase: started together, they would all line up into a soft thump at the top of every loop."""
+    noise = Noise(3)
+
+    def voice(f):
+        return loop_steps(f), (noise() + 1) / 2
+
     chords = [
-        [(loop_steps(f), loop_steps(2 * f), loop_steps(f) + 4) for f in map(note, chord)] for chord in AMBIENT_CHORDS
+        [(voice(f), voice(2 * f), (loop_steps(f) + 4, (noise() + 1) / 2)) for f in map(note, chord)]
+        for chord in AMBIENT_CHORDS
     ]
-    shimmer = [loop_steps(note(n)) for n in ["E5", "G5", "B5"]]
+    shimmer = [voice(note(n)) for n in ["E5", "G5", "B5"]]
     out = []
     for i in range(LOOP_N):
         t = i / MUSIC_RATE
@@ -313,9 +320,9 @@ def soft_ambient():
                 continue
             w = cos(PI * d / 8)
             for one, octave, twin in chord:  # the twin is 0.25 Hz higher: a slow beat
-                total += w * w * (loop_osc(i, one) + 0.22 * loop_osc(i, octave) + 0.4 * loop_osc(i, twin)) / 5
+                total += w * w * (loop_osc(i, *one) + 0.22 * loop_osc(i, *octave) + 0.4 * loop_osc(i, *twin)) / 5
         for k, f in enumerate(shimmer):
-            total += 0.05 * (0.5 + 0.5 * sin(TAU * (t / 4 + k / 3))) * loop_osc(i, f)
+            total += 0.05 * (0.5 + 0.5 * sin(TAU * (t / 4 + k / 3))) * loop_osc(i, *f)
         out.append(total * (0.85 + 0.15 * sin(TAU * t / 8)))
     return seam(normalised(out, 0.7))
 
