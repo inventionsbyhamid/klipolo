@@ -42,14 +42,16 @@ run "engine fixtures" scripts/gen-engine-fixtures.sh
 # Formatting, every crate and module (rustfmt walks every module whatever its cfg).
 run "cargo fmt --all --check" cargo fmt --all --check
 run "cargo check --workspace --all-targets" cargo check --workspace --all-targets --locked
-run "clippy model, cursor, platform, engine, fonts, speech-wire" \
+run "clippy model, cursor, platform, engine, fonts, speech-wire, meta, analysis" \
   cargo clippy -p klipolo-model -p klipolo-cursor -p klipolo-platform -p klipolo-engine -p klipolo-fonts \
-  -p klipolo-speech-wire --all-targets --locked -- -D warnings
+  -p klipolo-speech-wire -p klipolo-meta -p klipolo-analysis --all-targets --locked -- -D warnings
 # What only trial builds compile (the slow-disk hook `render::pool::slow_stats`, the decoders' measurement counters),
 # linted too so it can't rot.
 run "clippy engine (trial)" cargo clippy -p klipolo-engine --all-targets --features trial --locked -- -D warnings
-run "test model, cursor, platform, fonts, speech-wire" cargo test \
-  -p klipolo-model -p klipolo-cursor -p klipolo-platform -p klipolo-fonts -p klipolo-speech-wire --locked --no-fail-fast
+# The Meta client's tests answer from a local mock server; nothing here reaches Meta.
+run "test model, cursor, platform, fonts, speech-wire, meta, analysis" cargo test \
+  -p klipolo-model -p klipolo-cursor -p klipolo-platform -p klipolo-fonts -p klipolo-speech-wire -p klipolo-meta \
+  -p klipolo-analysis --locked --no-fail-fast
 # The fonts crate's download tests against a local server (`test-hosts`); nothing here reaches Google.
 run "test fonts (local download server)" cargo test -p klipolo-fonts --features test-hosts --locked
 # Export tests that need an H.264 encoder skip themselves: the LGPL FFmpeg has none on Linux.
@@ -59,6 +61,8 @@ run "test engine fixtures (no GPU)" cargo test -p klipolo-engine --locked --no-f
   --test decode --test probe --test audio --test video_start -- --ignored --exact \
   decodes_a_frame_from_the_fixture unknown_fps_is_probed imports_probe_without_an_ffprobe_tool pcm_cache_keeps_mono_mono \
   ffmpeg_and_the_stored_index_start_the_picture_at_the_same_place
+# The 16 kHz WAV for speech from the fixtures (a clip with sound, a stereo one, one with none).
+run "test analysis fixtures" cargo test -p klipolo-analysis --locked --test audio -- --ignored
 # What the engine's probe reads for sync (the sound lead, creation time and audio format), on the fixtures.
 run "test engine sync inputs (fixtures)" cargo test -p klipolo-engine --locked --test sync_inputs -- --ignored
 # KLIPOLO_REQUIRE_GPU: a GPU test that finds no adapter fails here instead of skipping (`test_support::adapter_or_skip`).
