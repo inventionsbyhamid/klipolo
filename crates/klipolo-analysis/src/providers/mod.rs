@@ -7,6 +7,7 @@
 //! into the clip's sound time.
 
 pub mod meta;
+pub mod meta_chat;
 
 use std::future::Future;
 use std::pin::Pin;
