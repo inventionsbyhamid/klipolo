@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { applyPatch } from '../../lib/patch';
 import { renderCounts } from '../../lib/renderCount';
 import { fixtureSnapshot } from '../../test/fixtures';
-import { longProject } from '../../test/longProject';
+import { longProject, longProjectWithSound } from '../../test/longProject';
 import { renderWithProviders } from '../../test/render';
 
 vi.mock('../../bridge/commands', () => ({ bridge: { apply: vi.fn() }, mediaUrl: (p: string) => p }));
@@ -222,5 +222,29 @@ describe('a 1-hour, 300-layer project', () => {
     expect(ghosts('layer')).toBeLessThanOrEqual(10);
     act(() => useProposal.getState().show(null));
     expect(ghosts('footage') + ghosts('layer')).toBe(0);
+  });
+
+  it('an hour of sound effects and music draws only the window in the Sounds and Music lanes, banded zoomed out', () => {
+    useProject.setState({ snapshot: { ...fixtureSnapshot(), project: longProjectWithSound() }, pending: 0 });
+    renderWithProviders(<Timeline />);
+    const inLane = (lane: string, what: string) =>
+      document.querySelectorAll(`[data-lane="${lane}"] ${what}`).length;
+    // The 0 to 60 s window: 5 effects (one every 12 s) and one piece of music, of 300 and 20.
+    expect(inLane('sounds', '[data-block-id]')).toBe(5);
+    expect(inLane('music', '[data-block-id]')).toBe(1);
+    expect(blocks()).toBeLessThanOrEqual(150);
+    // Half an hour in: still the window's alone.
+    scrollTo(1800 * 40);
+    expect(inLane('sounds', '[data-block-id]')).toBeLessThanOrEqual(10);
+    expect(inLane('music', '[data-block-id]')).toBeLessThanOrEqual(2);
+    // Fitted (the hour in 1176 px): each effect is 0.33 px, so they band; the 3-minute pieces (59 px) stay blocks.
+    scrollTo(0);
+    renderCounts.clear();
+    act(() => useUi.setState({ pxPerSecond: 1176 / 3600 }));
+    expect(inLane('sounds', '[data-block-id]')).toBe(0);
+    expect(inLane('sounds', '[data-band]')).toBeGreaterThan(0);
+    expect(inLane('sounds', '[data-band]')).toBeLessThanOrEqual(6);
+    expect(inLane('music', '[data-block-id]')).toBe(20);
+    expect(blocks()).toBeLessThanOrEqual(MOUNT_BUDGET);
   });
 });

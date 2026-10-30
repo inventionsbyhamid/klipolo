@@ -35,3 +35,39 @@ export function longProject(): Project {
   }));
   return p;
 }
+
+/**
+ * `longProject` with an hour of sound too: 300 one-second sound effects (one every 12 s) on one audio track, and the
+ * music as twenty 3-minute pieces back to back on another (ducking set, so they are music).
+ */
+export function longProjectWithSound(): Project {
+  const p = longProject();
+  const song = fixtureProject().timeline.tracks.find((t) => t.kind === 'audio')!.items[0];
+  const audio = song.content.type === 'audio' ? song.content : null;
+  if (!audio) throw new Error('the fixture has no song');
+  const effects: Item[] = Array.from({ length: 300 }, (_, i) => ({
+    ...song,
+    id: `fx${i}`,
+    startUs: i * 12 * S,
+    durationUs: S,
+    content: { ...audio, assetId: 'mic' },
+  }));
+  const music: Item[] = Array.from({ length: 20 }, (_, i) => ({
+    ...song,
+    id: `song${i}`,
+    startUs: i * 180 * S,
+    durationUs: 180 * S,
+    content: { ...audio, duck: -12 },
+  }));
+  const track = (id: string, items: Item[]) => ({
+    id,
+    kind: 'audio' as const,
+    name: id,
+    hidden: false,
+    muted: false,
+    locked: false,
+    items,
+  });
+  p.timeline.tracks = [...p.timeline.tracks, track('sfx', effects), track('bed', music)];
+  return p;
+}
