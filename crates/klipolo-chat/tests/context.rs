@@ -18,6 +18,7 @@ use klipolo_chat::{
 };
 use klipolo_model::ops::ClipPatch;
 use klipolo_model::project::{Asset, AssetKind, CaptionSettings};
+use klipolo_model::query::main_track_duration;
 use klipolo_model::speech::{Speech, Transcript, Word, WordKind};
 use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::{Clip, ClipSource};
@@ -528,13 +529,12 @@ fn repeated(copies: usize) -> Inputs {
     inputs
 }
 
-/// Project and Now are whole however long the project: every clip, the playhead and the selection.
-fn assert_project_and_now_whole(text: &str, clips: usize) {
-    let project = section(text, "Project");
-    for i in 1..=clips {
-        assert!(project.contains(&format!("\nc{i} ")), "c{i} in {project}");
-    }
-    assert!(project.contains("Captions: on, style karaoke\n"));
+/// Project and Now are whole however long the project: every clip (on its own line or in a run of pieces of one file),
+/// the playhead and the selection.
+fn assert_project_and_now_whole(ctx: &ChatContext, project: &Project) {
+    assert_every_clip_listed_once(ctx, project);
+    let text = &ctx.text;
+    assert!(section(text, "Project").contains("Captions: on, style karaoke\n"));
     assert_eq!(
         section(text, "Now").trim_end(),
         "Playhead: 1000.0 in c7\nSelection: 990.0-995.5"
@@ -554,17 +554,21 @@ fn late_view() -> View {
 #[test]
 fn context_for_30_minutes_stays_under_12k_tokens() {
     // 12 copies: 31 minutes.
-    let text = repeated(12).context(&late_view()).text;
-    let tokens = estimate_tokens(&text);
+    let inputs = repeated(12);
+    let ctx = inputs.context(&late_view());
+    let text = &ctx.text;
+    let tokens = estimate_tokens(text);
     assert!(tokens <= MAX_CONTEXT_TOKENS, "{tokens} tokens");
-    assert_project_and_now_whole(&text, 12);
+    assert_project_and_now_whole(&ctx, &inputs.project);
+    // Every clip on its own line: there was no need to shorten the clip list.
+    assert!(section(text, "Project").contains("\nc12 1705.4-1860.5 astronauts.mp4\n"));
     // Scene items are told more briefly first: kind and who. The transcript stays whole, to the last copy.
-    let scenes = timed_lines(&text, "Scenes");
+    let scenes = timed_lines(text, "Scenes");
     assert_eq!(scenes.len(), 12 * 20, "every item of every copy");
     assert!(text.contains("\n## Scenes (kind and who only)\n"), "{text}");
     assert_eq!(scenes[2], "[12.8-13.5] scene_cut (student Kaiden)");
     assert!(text.contains("\n## Transcript\n"));
-    let lines = timed_lines(&text, "Transcript");
+    let lines = timed_lines(text, "Transcript");
     let last = lines.last().unwrap();
     assert!(
         last.starts_with("[1856.")
@@ -576,10 +580,14 @@ fn context_for_30_minutes_stays_under_12k_tokens() {
 #[test]
 fn longer_projects_fall_back_to_sentence_starts_then_fewer_lines() {
     // An hour (24 copies): the transcript's lines keep their first 8 words.
-    let text = repeated(24).context(&late_view()).text;
+    let inputs = repeated(24);
+    let ctx = inputs.context(&late_view());
+    let text = ctx.text.clone();
     let tokens = estimate_tokens(&text);
     assert!(tokens <= MAX_CONTEXT_TOKENS, "{tokens} tokens");
-    assert_project_and_now_whole(&text, 24);
+    assert_project_and_now_whole(&ctx, &inputs.project);
+    // The clip list, shortened on the way, gets its lines back: they fit beside the sentence starts.
+    assert!(section(&text, "Project").contains("\nc24 3565.9-3721.0 astronauts.mp4\n"));
     assert!(
         text.contains("\n## Transcript (sentence starts)\n"),
         "{text}"
@@ -609,10 +617,12 @@ fn longer_projects_fall_back_to_sentence_starts_then_fewer_lines() {
     assert!(lines.iter().all(|l| !l.contains("[pause")));
 
     // Two hours (48 copies): every second (third ...) line of both, still from start to end.
-    let text = repeated(48).context(&late_view()).text;
+    let inputs = repeated(48);
+    let ctx = inputs.context(&late_view());
+    let text = ctx.text.clone();
     let tokens = estimate_tokens(&text);
     assert!(tokens <= MAX_CONTEXT_TOKENS, "{tokens} tokens");
-    assert_project_and_now_whole(&text, 48);
+    assert_project_and_now_whole(&ctx, &inputs.project);
     let heading = |name: &str| {
         text.lines()
             .find(|l| l.starts_with(&format!("## {name} (")))
@@ -783,4 +793,95 @@ fn a_moment_item_inside_a_clip_is_kept() {
     let scenes = timed_lines(&text, "Scenes");
     line_with(&scenes, "[29.0-29.0] laugh (male astronaut): Laughs");
     assert!(scenes.iter().all(|l| !l.contains("Giggles")), "{scenes:#?}");
+}
+
+/// `inputs` with `holes` cuts of 30 ms at even steps along the timeline, as removing pauses leaves a project: about
+/// `holes` more clips.
+fn cut_into_pieces(mut inputs: Inputs, holes: usize) -> Inputs {
+    let step = main_track_duration(&inputs.project.timeline.main) / (holes as Us + 1);
+    let ranges: Vec<RangeUs> = (1..=holes as Us)
+        .map(|k| RangeUs {
+            start: k * step,
+            end: k * step + 30_000,
+        })
+        .collect();
+    inputs.project = apply_ops(&inputs.project, &[Op::DeleteRanges { ranges }]).unwrap();
+    inputs
+}
+
+/// Every clip's ref resolves to it, and the Project section lists each exactly once: on its own line or inside one
+/// `cA-cB` run.
+fn assert_every_clip_listed_once(ctx: &ChatContext, project: &Project) {
+    let n = project.timeline.main.len();
+    for (i, clip) in project.timeline.main.iter().enumerate() {
+        assert_eq!(
+            ctx.refs.clip(&format!("c{}", i + 1)),
+            Some(clip.id.as_str())
+        );
+    }
+    assert_eq!(ctx.refs.clip(&format!("c{}", n + 1)), None);
+    let mut listed = vec![0; n + 1];
+    for line in section(&ctx.text, "Project")
+        .lines()
+        .filter(|l| l.starts_with('c'))
+    {
+        let first = line.split(' ').next().unwrap();
+        let (a, b) = first.split_once('-').unwrap_or((first, first));
+        let index = |r: &str| -> usize { r.strip_prefix('c').unwrap().parse().unwrap() };
+        for count in &mut listed[index(a)..=index(b)] {
+            *count += 1;
+        }
+    }
+    assert!(
+        listed[1..].iter().all(|&k| k == 1),
+        "each of {n} clips listed once"
+    );
+}
+
+#[test]
+fn many_clips_stay_within_the_budget() {
+    // Clip A in about a thousand pieces: the clip lines lose their file notes; the transcript stays whole.
+    let inputs = cut_into_pieces(two_clips(), 1000);
+    let n = inputs.project.timeline.main.len();
+    assert!(n > 1000, "{n} clips");
+    let ctx = inputs.context(&view_at(50.0));
+    assert_eq!(ctx.tokens, estimate_tokens(&ctx.text));
+    assert!(ctx.tokens <= MAX_CONTEXT_TOKENS, "{} tokens", ctx.tokens);
+    assert_every_clip_listed_once(&ctx, &inputs.project);
+    let project = section(&ctx.text, "Project");
+    assert!(!project.contains("(file "), "{project}");
+    assert!(ctx.text.contains("\n## Transcript\n"));
+    // A scene item plays on across the holes: still one line.
+    let scenes = timed_lines(&ctx.text, "Scenes");
+    assert_eq!(scenes.len(), 19, "{scenes:#?}");
+
+    // The 31 minutes in about 3000 pieces: each run of pieces from one file is one line.
+    let inputs = cut_into_pieces(repeated(12), 3000);
+    let n = inputs.project.timeline.main.len();
+    let ctx = inputs.context(&view_at(50.0));
+    assert!(ctx.tokens <= MAX_CONTEXT_TOKENS, "{} tokens", ctx.tokens);
+    assert_every_clip_listed_once(&ctx, &inputs.project);
+    let project = section(&ctx.text, "Project");
+    assert!(
+        project.ends_with(&format!(" astronauts.mp4 ({n} pieces)\n")) && project.contains("\nc1-c"),
+        "{project}"
+    );
+    assert!(
+        ctx.text.contains("\n## Transcript\n"),
+        "the transcript is whole"
+    );
+    assert_eq!(timed_lines(&ctx.text, "Scenes").len(), 12 * 20);
+    // Lists of clips read as ranges.
+    let none = build_context(
+        &inputs.project,
+        &Speech::default(),
+        &HashMap::new(),
+        &HashMap::new(),
+        &view_at(50.0),
+    );
+    assert_eq!(
+        section(&none.text, "Transcript").trim_end(),
+        format!("Not transcribed yet: c1-c{n}.")
+    );
+    assert!(none.tokens <= MAX_CONTEXT_TOKENS);
 }

@@ -15,10 +15,14 @@
 //! same bytes, so the provider's prompt cache can reuse the prefix: the maps given are only looked up, never walked.
 //!
 //! Budget: at most `MAX_CONTEXT_TOKENS` (`estimate_tokens`, `CHARS_PER_TOKEN` characters a token). A longer project is
-//! told more briefly, step by step until it fits, each step named in its section's heading: scene items keep only
-//! their kind and who (`## Scenes (kind and who only)`); then transcript lines keep their first `START_WORDS` words,
+//! told more briefly, step by step until it fits: scene items keep only their kind and who (`## Scenes (kind and who
+//! only)`); clip lines lose their file notes; runs of clips from one file become one line (`c3-c41 12.0-301.5
+//! interview.mov (39 pieces)`; every ref still resolves); then transcript lines keep their first `START_WORDS` words,
 //! with their times (`## Transcript (sentence starts)`); then both sections show every second line, every third ...
-//! from start to end (`every 2nd line`). Project and Now are always whole.
+//! from start to end (`every 2nd line`). When Transcript or Scenes had to be told briefly as well, the clip lines get
+//! back what still fits. Lists of clips read as ranges (`c1-c500`). Project and Now are never cut: a
+//! project whose clip list alone is over the budget (thousands of clips alternating between files) gives a longer
+//! text, and `ChatContext::tokens` says so.
 //!
 //! The speaker turns and scene items are neutral inputs keyed by asset id (what the analysis stored, in that file's
 //! time): no provider's type reaches this crate.
@@ -136,6 +140,16 @@ impl Refs {
 pub struct ChatContext {
     pub text: String,
     pub refs: Refs,
+    /// `estimate_tokens(&text)`. Over `MAX_CONTEXT_TOKENS` only when even the briefest form is longer (a project of
+    /// thousands of clips alternating between files): the planner refuses to send it (`fits`).
+    pub tokens: usize,
+}
+
+impl ChatContext {
+    /// Whether the text is within `MAX_CONTEXT_TOKENS`.
+    pub fn fits(&self) -> bool {
+        self.tokens <= MAX_CONTEXT_TOKENS
+    }
 }
 
 /// About how many tokens `text` takes: `CHARS_PER_TOKEN` characters each, rounded up.
@@ -172,11 +186,15 @@ pub fn build_context(
         ClipSource::Recording { .. } => false,
     });
 
-    let mut text = String::new();
-    project_section(&mut text, project, &starts);
-    text.push('\n');
-    now_section(&mut text, project, view);
-    text.push('\n');
+    // Project and Now; then Transcript and Scenes.
+    let head = |brief: Brief| {
+        let mut head = String::new();
+        project_section(&mut head, project, &starts, brief);
+        head.push('\n');
+        now_section(&mut head, project, view);
+        head.push('\n');
+        head
+    };
     let body = |brief: Brief| {
         let mut body = String::new();
         transcript_section(&mut body, &said, &lines, &untranscribed, brief);
@@ -184,32 +202,57 @@ pub fn build_context(
         scenes_section(&mut body, &pieces, &unlogged, brief);
         body
     };
-    // What Transcript and Scenes may take, in characters, beside Project and Now.
-    let room = (MAX_CONTEXT_TOKENS * CHARS_PER_TOKEN).saturating_sub(text.chars().count());
-    let fits = |body: &str| body.chars().count() <= room;
+    let budget = MAX_CONTEXT_TOKENS * CHARS_PER_TOKEN;
+    let size = |text: &str| text.chars().count();
     let mut brief = Brief::WHOLE;
-    let mut told = body(brief);
-    for briefer in [Brief::SHORT_SCENES, Brief::SENTENCE_STARTS] {
-        if fits(&told) {
+    let (mut top, mut told) = (head(brief), body(brief));
+    for briefer in [
+        Brief::SHORT_SCENES,
+        Brief::PLAIN_CLIPS,
+        Brief::CLIP_RUNS,
+        Brief::SENTENCE_STARTS,
+    ] {
+        if size(&top) + size(&told) <= budget {
             break;
         }
         brief = briefer;
+        top = head(brief);
         told = body(brief);
     }
-    if !fits(&told) {
+    // What Transcript and Scenes may take, in characters, beside Project and Now.
+    let room = budget.saturating_sub(size(&top));
+    if size(&told) > room {
         // Every n-th line: from the share that would fit, then one more at a time (headings and notes don't shrink).
         let most = lines.len().max(pieces.len()).max(2);
-        let mut every = told.chars().count().div_ceil(room.max(1)).clamp(2, most);
+        let mut every = size(&told).div_ceil(room.max(1)).clamp(2, most);
         loop {
             told = body(Brief { every, ..brief });
-            if fits(&told) || every == most {
+            if size(&told) <= room || every == most {
                 break;
             }
             every += 1;
         }
     }
-    text.push_str(&told);
+    // Transcript and Scenes are told as briefly as they must be: give the clip lines back what still fits.
+    for fuller in [
+        Brief {
+            clip_runs: false,
+            ..brief
+        },
+        Brief {
+            clip_runs: false,
+            plain_clips: false,
+            ..brief
+        },
+    ] {
+        let more = head(fuller);
+        if more != top && size(&more) + size(&told) <= budget {
+            top = more;
+        }
+    }
+    let text = top + &told;
     ChatContext {
+        tokens: estimate_tokens(&text),
         text,
         refs: Refs::of(project),
     }
@@ -220,6 +263,10 @@ pub fn build_context(
 struct Brief {
     /// Scene items as their kind and who only.
     short_scenes: bool,
+    /// Clip lines without their file notes.
+    plain_clips: bool,
+    /// Runs of clips from one file as one line each (`clip_lines`).
+    clip_runs: bool,
     /// Transcript lines as their first `START_WORDS` words.
     sentence_starts: bool,
     /// Every n-th line of both sections, from the first (1: all).
@@ -229,6 +276,8 @@ struct Brief {
 impl Brief {
     const WHOLE: Brief = Brief {
         short_scenes: false,
+        plain_clips: false,
+        clip_runs: false,
         sentence_starts: false,
         every: 1,
     };
@@ -236,9 +285,17 @@ impl Brief {
         short_scenes: true,
         ..Brief::WHOLE
     };
+    const PLAIN_CLIPS: Brief = Brief {
+        plain_clips: true,
+        ..Brief::SHORT_SCENES
+    };
+    const CLIP_RUNS: Brief = Brief {
+        clip_runs: true,
+        ..Brief::PLAIN_CLIPS
+    };
     const SENTENCE_STARTS: Brief = Brief {
         sentence_starts: true,
-        ..Brief::SHORT_SCENES
+        ..Brief::CLIP_RUNS
     };
 
     /// "every 3rd line", when not every line shows.
@@ -323,13 +380,46 @@ fn one_line(text: &str) -> String {
     out
 }
 
-/// The refs of the main clips `pick` chooses, comma separated.
+/// The refs of the main clips `pick` chooses (`ref_list`).
 fn clips_where(project: &Project, pick: impl Fn(&Clip) -> bool) -> String {
-    let refs: Vec<String> = (project.timeline.main.iter().enumerate())
+    let picked: Vec<usize> = (project.timeline.main.iter().enumerate())
         .filter(|(_, clip)| pick(clip))
-        .map(|(i, _)| short_ref(i))
+        .map(|(i, _)| i)
         .collect();
-    refs.join(", ")
+    ref_list(&picked)
+}
+
+/// Clip refs by index (ascending), comma separated, three or more in a row as a range: `c1, c2, c5-c40`.
+fn ref_list(indices: &[usize]) -> String {
+    let mut parts = Vec::new();
+    let mut i = 0;
+    while i < indices.len() {
+        let mut j = i;
+        while j + 1 < indices.len() && indices[j + 1] == indices[j] + 1 {
+            j += 1;
+        }
+        if j - i >= 2 {
+            parts.push(format!(
+                "{}-{}",
+                short_ref(indices[i]),
+                short_ref(indices[j])
+            ));
+        } else {
+            parts.extend(indices[i..=j].iter().map(|&k| short_ref(k)));
+        }
+        i = j + 1;
+    }
+    parts.join(", ")
+}
+
+/// A clip's file or recording name.
+fn source_name(p: &Project, clip: &Clip) -> String {
+    match &clip.source {
+        ClipSource::Asset { id } => p
+            .asset(id)
+            .map_or("missing file".to_owned(), |a| one_line(&a.name)),
+        ClipSource::Recording { .. } => "recording".to_owned(),
+    }
 }
 
 fn format_name(format: FormatKind) -> &'static str {
@@ -346,7 +436,7 @@ fn speed(speed: f64) -> String {
     fixed.trim_end_matches('0').trim_end_matches('.').to_owned()
 }
 
-fn project_section(out: &mut String, p: &Project, starts: &[Us]) {
+fn project_section(out: &mut String, p: &Project, starts: &[Us], brief: Brief) {
     let primary = p.settings.primary_format;
     let mut formats = vec![format!("{} (primary)", format_name(primary))];
     formats.extend(
@@ -370,39 +460,70 @@ fn project_section(out: &mut String, p: &Project, starts: &[Us]) {
         return;
     }
     out.push_str("Clips on the main track:\n");
-    for (i, (clip, &start)) in p.timeline.main.iter().zip(starts).enumerate() {
-        let name = match &clip.source {
-            ClipSource::Asset { id } => p
-                .asset(id)
-                .map_or("missing file".to_owned(), |a| one_line(&a.name)),
-            ClipSource::Recording { .. } => "recording".to_owned(),
-        };
-        let end = start.saturating_add(clip.duration_us());
-        let _ = write!(out, "{} {}-{} {name}", short_ref(i), secs(start), secs(end));
-        let mut notes = Vec::new();
-        if let ClipSource::Asset { id } = &clip.source
-            && let Some(a) = p.asset(id)
-            && a.kind != AssetKind::Image
-            && (clip.source_in_us > 0 || clip.source_out_us < a.duration_us)
-        {
-            notes.push(format!(
-                "file {}-{} of {}",
-                secs(clip.source_in_us),
-                secs(clip.source_out_us),
-                secs(a.duration_us)
-            ));
+    let main = &p.timeline.main;
+    let mut i = 0;
+    while i < main.len() {
+        // With `clip_runs`, clips i..j play one file (or recording) back to back: one line for them all.
+        let mut j = i + 1;
+        while brief.clip_runs && j < main.len() && main[j].source == main[i].source {
+            j += 1;
         }
-        if clip.speed != 1.0 {
-            notes.push(format!("speed {}x", speed(clip.speed)));
+        if j - i > 1 {
+            let end = starts[j - 1].saturating_add(main[j - 1].duration_us());
+            let _ = writeln!(
+                out,
+                "{}-{} {}-{} {} ({} pieces)",
+                short_ref(i),
+                short_ref(j - 1),
+                secs(starts[i]),
+                secs(end),
+                source_name(p, &main[i]),
+                j - i
+            );
+        } else {
+            clip_line(out, p, i, starts[i], brief);
         }
-        if clip.muted {
-            notes.push("muted".to_owned());
-        }
-        if !notes.is_empty() {
-            let _ = write!(out, " ({})", notes.join(", "));
-        }
-        out.push('\n');
+        i = j;
     }
+}
+
+/// One clip's line: `c2 13.0-144.0 interview.mov (file 24.0-155.0 of 155.0, speed 1.50x, muted)`; with
+/// `plain_clips`, no file note.
+fn clip_line(out: &mut String, p: &Project, i: usize, start: Us, brief: Brief) {
+    let clip = &p.timeline.main[i];
+    let end = start.saturating_add(clip.duration_us());
+    let _ = write!(
+        out,
+        "{} {}-{} {}",
+        short_ref(i),
+        secs(start),
+        secs(end),
+        source_name(p, clip)
+    );
+    let mut notes = Vec::new();
+    if !brief.plain_clips
+        && let ClipSource::Asset { id } = &clip.source
+        && let Some(a) = p.asset(id)
+        && a.kind != AssetKind::Image
+        && (clip.source_in_us > 0 || clip.source_out_us < a.duration_us)
+    {
+        notes.push(format!(
+            "file {}-{} of {}",
+            secs(clip.source_in_us),
+            secs(clip.source_out_us),
+            secs(a.duration_us)
+        ));
+    }
+    if clip.speed != 1.0 {
+        notes.push(format!("speed {}x", speed(clip.speed)));
+    }
+    if clip.muted {
+        notes.push("muted".to_owned());
+    }
+    if !notes.is_empty() {
+        let _ = write!(out, " ({})", notes.join(", "));
+    }
+    out.push('\n');
 }
 
 fn now_section(out: &mut String, p: &Project, view: &View) {
@@ -610,7 +731,9 @@ struct ScenePiece<'a> {
 }
 
 /// Every scene item's pieces on the timeline, in timeline order: each clip of its file on the main track plays the
-/// part of it inside the clip. Pieces that meet both in the file and on the timeline (a clip split in two) are one.
+/// part of it inside the clip. A piece that starts where the item's last piece ends on the timeline, further on in the
+/// file, carries it on (a clip split in two, or holes cut in it by removing pauses): one line, not one per clip. A
+/// copy (the file going back) or a piece elsewhere on the timeline is a piece of its own.
 fn scene_pieces<'a>(
     p: &Project,
     starts: &[Us],
@@ -637,7 +760,7 @@ fn scene_pieces<'a>(
             }
             let (from_t, to_t) = (at(from), at(to));
             if let Some(&(j, file_end)) = latest.get(&(id.as_str(), k))
-                && file_end == from
+                && file_end <= from
                 && out[j].end_us == from_t
             {
                 out[j].end_us = to_t;
