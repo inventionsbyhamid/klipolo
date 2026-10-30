@@ -73,22 +73,105 @@ fn write_partial(partial: &Path, png: &[u8]) -> io::Result<()> {
 
 /// Gives `partial` the first free `<slug>-<n>.png` name. A hard link fails rather than replace a file that is there,
 /// so a name taken a moment ago (by another save, or by the person) is skipped, never overwritten. A disk that can't
-/// link gets a rename after a check instead.
+/// link (exFAT, FAT, some network shares) claims the name with a new empty file first, which fails just the same when
+/// the name is taken, and then moves the partial over that placeholder, which is its own.
 fn place(partial: &Path, folder: &Path, slug: &str) -> io::Result<PathBuf> {
+    place_with(&|from, to| fs::hard_link(from, to), partial, folder, slug)
+}
+
+/// `place` with its link step given, so the way round a disk that can't link is tested too.
+fn place_with(
+    link: &dyn Fn(&Path, &Path) -> io::Result<()>,
+    partial: &Path,
+    folder: &Path,
+    slug: &str,
+) -> io::Result<PathBuf> {
     for n in 1..=MAX_NUMBER {
         let target = folder.join(format!("{slug}-{n}.png"));
-        match fs::hard_link(partial, &target) {
+        match link(partial, &target) {
             Ok(()) => return Ok(target),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => continue,
-            Err(_) if !target.exists() => {
-                fs::rename(partial, &target)?;
-                return Ok(target);
-            }
-            Err(_) => continue,
+            Err(_) => match File::create_new(&target) {
+                Ok(_placeholder) => {
+                    if let Err(e) = fs::rename(partial, &target) {
+                        let _ = fs::remove_file(&target);
+                        return Err(e);
+                    }
+                    return Ok(target);
+                }
+                Err(e) if e.kind() == ErrorKind::AlreadyExists => continue,
+                Err(e) => return Err(e),
+            },
         }
     }
     Err(io::Error::new(
         ErrorKind::AlreadyExists,
         "every name for this picture is taken",
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Barrier};
+
+    use super::*;
+
+    /// A disk that can't hard-link (exFAT, FAT, some network shares).
+    fn no_link(_: &Path, _: &Path) -> io::Result<()> {
+        Err(io::Error::new(ErrorKind::Unsupported, "no hard links here"))
+    }
+
+    fn partial_with(folder: &Path, bytes: &[u8]) -> PathBuf {
+        let partial = folder.join(format!(".cup-{}.png.partial", uuid::Uuid::new_v4()));
+        fs::write(&partial, bytes).unwrap();
+        partial
+    }
+
+    #[test]
+    fn a_disk_that_cannot_link_still_never_overwrites() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("cup-1.png"), b"the person's own").unwrap();
+        let partial = partial_with(dir.path(), b"new picture");
+
+        let placed = place_with(&no_link, &partial, dir.path(), "cup").unwrap();
+
+        assert_eq!(placed, dir.path().join("cup-2.png"));
+        assert_eq!(
+            fs::read(dir.path().join("cup-1.png")).unwrap(),
+            b"the person's own"
+        );
+        assert_eq!(fs::read(&placed).unwrap(), b"new picture");
+        assert!(!partial.exists());
+    }
+
+    /// Two pictures saved at once with the same slug on a disk that can't link each get a name of their own: neither
+    /// replaces the other.
+    #[test]
+    fn two_saves_at_once_without_links_keep_both_pictures() {
+        for _ in 0..200 {
+            let dir = tempfile::tempdir().unwrap();
+            let start = Arc::new(Barrier::new(2));
+            let saves: Vec<_> = [b"first".as_slice(), b"second".as_slice()]
+                .into_iter()
+                .map(|bytes| {
+                    let folder = dir.path().to_path_buf();
+                    let partial = partial_with(&folder, bytes);
+                    let start = Arc::clone(&start);
+                    std::thread::spawn(move || {
+                        start.wait();
+                        place_with(&no_link, &partial, &folder, "cup").unwrap()
+                    })
+                })
+                .collect();
+            let mut placed: Vec<PathBuf> = saves.into_iter().map(|s| s.join().unwrap()).collect();
+            placed.sort();
+            assert_eq!(
+                placed,
+                [dir.path().join("cup-1.png"), dir.path().join("cup-2.png")]
+            );
+            let mut kept: Vec<Vec<u8>> = placed.iter().map(|p| fs::read(p).unwrap()).collect();
+            kept.sort();
+            assert_eq!(kept, [b"first".to_vec(), b"second".to_vec()]);
+        }
+    }
 }
