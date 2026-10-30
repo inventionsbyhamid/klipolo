@@ -892,6 +892,8 @@ fn typed_times_count_as_evidence() {
         ("split at 30 where she laughs", vec![30.0]),
         ("cut 12-15 please", vec![12.0, 15.0]),
         ("cut between 12 and 15 please", vec![12.0, 15.0]),
+        // Two-digit seconds read as a clock even where they could be a ratio.
+        ("cut at 16:10", vec![970.0]),
     ] {
         let want: Vec<Us> = times.into_iter().map(secs).collect();
         assert_eq!(typed_times(message, d), want, "{message}");

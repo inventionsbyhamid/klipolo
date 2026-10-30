@@ -165,8 +165,8 @@ impl Evidence {
 ///   please", "after 45 because"), when it follows a time just read ("12-15 please", "12 and 15"), or when only a
 ///   joining word (`JOINING`: "to", "and", "then" ...) or the phrase's end comes next ("12 to 15", "at 12, then").
 ///   Otherwise, before another word, it is a count ("3 pauses", "3 pauses and 2 ums", "2 clips").
-/// - A clock is minutes and two-digit seconds ("1:05", "1:10.5"), or hours too ("1:02:05"). "1:5" and an aspect ratio
-///   (`RATIOS`: "9:16", "16:9" ...) are none.
+/// - A clock is minutes and two-digit seconds ("1:05", "1:10.5"), or hours too ("1:02:05"). "1:5" and the aspect
+///   ratios are none ("16:9" fails the two digits, "9:16" is in `RATIOS`); "16:10" stays a clock.
 /// - "first N" gives 0 and N, "last N" the duration less N and the duration, when N has a unit or is a clock ("the
 ///   first 5 seconds", "the last 10 s", "the last minute"); "the first 3" is a count.
 /// - A number touching a letter is none, unless the letters are its unit ("12.5s"): a ref, an ordinal or a speed
@@ -232,17 +232,9 @@ const JOINING: [&str; 8] = [
     "to", "and", "or", "until", "till", "through", "thru", "then",
 ];
 
-/// Aspect ratios, which read like clocks.
-const RATIOS: [(&str, &str); 8] = [
-    ("9", "16"),
-    ("16", "9"),
-    ("1", "1"),
-    ("4", "5"),
-    ("5", "4"),
-    ("4", "3"),
-    ("3", "4"),
-    ("21", "9"),
-];
+/// Aspect ratios that pass for a clock (two-digit seconds): only 9:16. The others are no clock already ("16:9",
+/// "4:3", "21:9", "1:1" have one-digit seconds). "16:10" stays a clock, 16 minutes 10 seconds, as people write times.
+const RATIOS: [(&str, &str); 1] = [("9", "16")];
 
 /// Characters that end a phrase: a bare number before one is a time whatever word comes next.
 const PHRASE_ENDS: [char; 6] = ['.', ',', ';', ':', '!', '?'];
