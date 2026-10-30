@@ -15,7 +15,7 @@ use tokio::sync::{mpsc, watch};
 
 use super::{Cmd, EventSink, FeedRx, PreviewBackend, Transient};
 use crate::api::{EngineEvent, Presenter, StateReason, ViewSpec};
-use crate::audio::plan::{AudioPlan, audio_plan};
+use crate::audio::plan::{AudioPlan, audio_plan, ducking_speech};
 use crate::frames::server::{FrameServer, FrameSink};
 use crate::media::cursor::CursorTracks;
 use crate::plan::{MediaMap, PlanContext};
@@ -86,12 +86,14 @@ struct Current {
 }
 
 impl Current {
-    /// What `ctx` plays: the committed revision's plan when the dry run can't change it (no replan), else planned now.
+    /// What `ctx` plays: the committed revision's plan when the dry run can't change it (no replan), else planned now,
+    /// ducking under the speech where the dry run puts it.
     fn sound(&self) -> Arc<AudioPlan> {
         if self.quiet {
             self.sound.clone()
         } else {
-            Arc::new(audio_plan(&self.ctx.project, &self.ctx.registry))
+            let speech = ducking_speech(&self.ctx.project, &self.speech);
+            Arc::new(audio_plan(&self.ctx.project, &self.ctx.registry, speech))
         }
     }
 }

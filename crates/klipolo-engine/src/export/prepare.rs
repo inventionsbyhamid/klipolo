@@ -183,10 +183,19 @@ pub(super) async fn prepare<W: std::io::Write>(
     // Set-up side by side: the sound (decode, and measure on the first run), the encoder probe and the GPU device.
     let audio = sound.then(|| {
         let (project, registry) = ((*project).clone(), ctx.registry.clone());
-        let (quality, pcm_dir, levels) =
-            handle.read(|j| (j.quality, j.pcm_dir.clone(), j.levels.clone()));
+        let (quality, pcm_dir, levels, speech) = handle.read(|j| {
+            let speech: Arc<[_]> = j.speech_ranges.as_slice().into();
+            (j.quality, j.pcm_dir.clone(), j.levels.clone(), speech)
+        });
         tokio::task::spawn_blocking(move || {
-            ExportAudio::prepare(&project, &registry, quality, pcm_dir.as_deref(), levels)
+            ExportAudio::prepare(
+                &project,
+                &registry,
+                quality,
+                pcm_dir.as_deref(),
+                levels,
+                speech,
+            )
         })
     });
     let qualities: Vec<_> = handle.read(|j| j.outputs.iter().map(|o| o.quality).collect());

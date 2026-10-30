@@ -1,15 +1,24 @@
 //! The layers' sound, after the main track's (`audio_plan`): every audio item (at its volume, fades and effect) and every
 //! overlay video's own sound (at its speed and volume), unless the layer is muted. A muted track adds nothing, and
-//! neither does a hidden overlay track; while any track is soloed only soloed tracks add theirs (`Solo::sounds`).
+//! neither does a hidden overlay track; while any track is soloed only soloed tracks add theirs (`Solo::sounds`). A
+//! sound layer that ducks is lowered under `speech` (`Duck`), when anyone is known to speak.
+
+use std::sync::Arc;
 
 use klipolo_model::project::Project;
+use klipolo_model::time::RangeUs;
 use klipolo_model::timeline::{ItemContent, Solo};
 
-use super::{AudioSource, Crossfade, audible, chain, drift_rate, enabled};
+use super::{AudioSource, Crossfade, Duck, audible, chain, drift_rate, enabled};
 use crate::registry::Registry;
 
 /// Pushes the layers' sources onto `sources`. Solo is resolved once per plan (O(tracks)); each track then asks in O(1).
-pub(super) fn layers(p: &Project, registry: &Registry, sources: &mut Vec<AudioSource>) {
+pub(super) fn layers(
+    p: &Project,
+    registry: &Registry,
+    speech: &Arc<[RangeUs]>,
+    sources: &mut Vec<AudioSource>,
+) {
     let solo = Solo::of(&p.timeline.tracks);
     for track in &p.timeline.tracks {
         if !solo.sounds(track) {
@@ -61,11 +70,19 @@ pub(super) fn layers(p: &Project, registry: &Registry, sources: &mut Vec<AudioSo
             if gain <= 0.0 || item.duration_us <= 0 {
                 continue;
             }
-            // A separated one-sided source plays from the channel its clip played it from.
-            let centre_from = match &item.content {
-                ItemContent::Audio { centre_from, .. } => *centre_from,
-                _ => None,
+            // A separated one-sided source plays from the channel its clip played it from; a sound layer may duck.
+            let (centre_from, duck) = match &item.content {
+                ItemContent::Audio {
+                    centre_from, duck, ..
+                } => (*centre_from, *duck),
+                _ => (None, None),
             };
+            let duck = duck
+                .filter(|&db| db < 0.0 && !speech.is_empty())
+                .map(|db| Duck {
+                    db: db as f32,
+                    speech: speech.clone(),
+                });
             sources.push(AudioSource {
                 path: registry.resolve_path(&asset.path).into_owned(),
                 start_us: item.start_us,
@@ -79,6 +96,7 @@ pub(super) fn layers(p: &Project, registry: &Registry, sources: &mut Vec<AudioSo
                 crossfade: Crossfade::default(),
                 filter,
                 centre_from,
+                duck,
             });
         }
     }

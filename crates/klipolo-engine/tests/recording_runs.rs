@@ -44,7 +44,7 @@ static ALLOC: Counting = Counting;
 #[test]
 fn a_drifting_mic_plays_at_its_rate_and_stays_in_sync_after_an_hour() {
     let p = common::recording_project(&[("mic", SourceRole::Mic, 0, 3_600.0, 100.0)]);
-    let sources: Vec<AudioSource> = audio_plan(&p, &Registry::builtin()).sources;
+    let sources: Vec<AudioSource> = audio_plan(&p, &Registry::builtin(), Arc::default()).sources;
     assert_eq!(sources.len(), 1);
     assert!((sources[0].rate - 1.0001).abs() < 1e-9);
     // After an hour of output at 48 kHz, the read position is an hour of the device's (fast) clock.
@@ -57,7 +57,7 @@ fn a_drifting_mic_plays_at_its_rate_and_stays_in_sync_after_an_hour() {
 fn a_gap_between_runs_is_silent_and_each_run_starts_at_its_time() {
     let p =
         common::recording_project_runs("mic", SourceRole::Mic, &[(0, 10.0), (12_000_000, 18.0)]);
-    let spans: Vec<(i64, i64, i64)> = audio_plan(&p, &Registry::builtin())
+    let spans: Vec<(i64, i64, i64)> = audio_plan(&p, &Registry::builtin(), Arc::default())
         .sources
         .iter()
         .map(|s| (s.start_us, s.end_us, s.source_in_us))
@@ -79,7 +79,7 @@ fn a_clip_override_mutes_one_source_only_there() {
             ..SourceMix::default()
         },
     );
-    let paths: Vec<String> = audio_plan(&p, &Registry::builtin())
+    let paths: Vec<String> = audio_plan(&p, &Registry::builtin(), Arc::default())
         .sources
         .iter()
         .map(|s| s.path.clone())
@@ -125,7 +125,11 @@ fn fast_mic() -> Project {
 
 #[test]
 fn the_mixer_reads_a_drifting_run_where_its_rate_puts_it() {
-    let plan = Arc::new(audio_plan(&fast_mic(), &Registry::builtin()));
+    let plan = Arc::new(audio_plan(
+        &fast_mic(),
+        &Registry::builtin(),
+        Arc::default(),
+    ));
     let mic = plan.sources[0].clone();
     let pcm = frame_numbers(70);
     let lookup = |_: &AudioSource| Some(pcm.clone());
@@ -150,7 +154,7 @@ fn the_mixer_reads_a_drifting_run_where_its_rate_puts_it() {
 fn a_split_of_a_drifting_run_plays_straight_through_the_cut() {
     let mut p = fast_mic();
     common::split_at(&mut p, 30.0);
-    let plan = Arc::new(audio_plan(&p, &Registry::builtin()));
+    let plan = Arc::new(audio_plan(&p, &Registry::builtin(), Arc::default()));
     assert_eq!(plan.sources.len(), 2);
     let first = plan.sources[0].clone();
     let pcm = frame_numbers(70);
@@ -180,7 +184,7 @@ fn a_drifting_voice_renders_without_allocating() {
     let lookup = |_: &AudioSource| Some(pcm.clone());
     let plan = AudioPlan {
         sources: vec![
-            audio_plan(&fast_mic(), &Registry::builtin())
+            audio_plan(&fast_mic(), &Registry::builtin(), Arc::default())
                 .sources
                 .remove(0),
         ],
@@ -216,7 +220,7 @@ fn a_source_s_effects_play_in_its_clip_and_go_with_it_when_separated() {
     ];
     let registry = Registry::builtin();
     let filters = |p: &Project| -> Vec<Option<String>> {
-        audio_plan(p, &registry)
+        audio_plan(p, &registry, Arc::default())
             .sources
             .iter()
             .map(|s| s.filter.as_deref().map(str::to_owned))
@@ -263,11 +267,12 @@ fn a_sync_change_moves_a_separated_sound_as_it_moves_the_clip_s_own() {
         .collect();
     separate.push(nudge.clone());
     let spans = |p: &Project| {
-        let mut spans: Vec<(i64, i64, i64, u64)> = audio_plan(p, &Registry::builtin())
-            .sources
-            .iter()
-            .map(|s| (s.start_us, s.end_us, s.source_in_us, s.rate.to_bits()))
-            .collect();
+        let mut spans: Vec<(i64, i64, i64, u64)> =
+            audio_plan(p, &Registry::builtin(), Arc::default())
+                .sources
+                .iter()
+                .map(|s| (s.start_us, s.end_us, s.source_in_us, s.rate.to_bits()))
+                .collect();
         spans.sort_unstable();
         spans
     };
@@ -320,9 +325,9 @@ fn a_one_sided_mic_played_centred_sounds_as_a_mono_one() {
             p.recordings[0].sources[1].mix.effects =
                 vec![EffectInstance::new(builtin::audio_effect("voice"))];
         }
-        let as_recorded = audio_plan(&p, &registry);
+        let as_recorded = audio_plan(&p, &registry, Arc::default());
         p.recordings[0].sources[1].mix.centre_from = Some(0);
-        let centred = audio_plan(&p, &registry);
+        let centred = audio_plan(&p, &registry, Arc::default());
 
         let (reference, _) = play(&as_recorded, &mono);
         let (heard, allocations) = play(&centred, &stereo);
@@ -374,7 +379,7 @@ fn the_second_run_of_a_paused_file_plays_from_its_file_time() {
         run(27_000_000, 20_000_000, 30_000_000),
     ];
     klipolo_model::validate(&p).expect("two runs of one file, apart in it");
-    let plan = Arc::new(audio_plan(&p, &Registry::builtin()));
+    let plan = Arc::new(audio_plan(&p, &Registry::builtin(), Arc::default()));
     let spans: Vec<(i64, i64, i64)> = plan
         .sources
         .iter()

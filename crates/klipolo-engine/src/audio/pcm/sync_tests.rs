@@ -44,6 +44,7 @@ pub(super) fn plan(keys: &[&PcmKey]) -> AudioPlan {
                 crossfade: Default::default(),
                 filter: None,
                 centre_from: None,
+                duck: None,
             })
             .collect(),
         loudness: Loudness::Off,

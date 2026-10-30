@@ -2,6 +2,8 @@
 //! the actor, assets the backend loads in the background, and the cursor tracks Auto zooms follow.
 //! Caption pages are built from the feed's speech for every format once per revision that may page differently (and per
 //! new speech); a dry run that can move words makes its previewed format's only and keeps the others'. Where
+//! someone speaks, which ducking sound layers go down under, is worked out from it once per revision (and per new
+//! speech when something ducks).
 
 use std::sync::Arc;
 
@@ -11,12 +13,12 @@ use tokio::task::JoinHandle;
 
 use super::{Actor, Current};
 use crate::api::{EngineEvent, StateReason};
-use crate::audio::plan::{audio_plan, may_change_sound};
+use crate::audio::plan::{AudioPlan, audio_plan, ducking_speech, ducks, may_change_sound};
 use crate::media;
 use crate::plan::PlanContext;
 use crate::plan::captions::{may_move_captions, pages_may_differ};
 use crate::plan::zoom::{ZoomBuild, ZoomFor, ZoomTrack};
-use crate::session::PreviewBackend;
+use crate::session::{PreviewBackend, ProjectFeed};
 
 /// Zoom springs being simulated on a blocking thread, and what they're for.
 pub(crate) struct ZoomJob {
@@ -48,6 +50,24 @@ pub(super) async fn redrawn(signal: &Option<Arc<tokio::sync::Notify>>) {
     match signal {
         Some(signal) => signal.notified().await,
         None => std::future::pending().await,
+    }
+}
+
+/// The sound of feed `f`, the same revision as `c`: `c`'s, unless new speech moves where one of its sound layers ducks;
+/// then planned again (and still `c`'s when that changed nothing, so nothing that holds it starts over).
+fn same_sound(c: &Current, f: &ProjectFeed) -> Arc<AudioPlan> {
+    if Arc::ptr_eq(&c.speech, &f.speech) || !ducks(&f.project) {
+        return c.sound.clone();
+    }
+    let sound = audio_plan(
+        &f.project,
+        &f.registry,
+        ducking_speech(&f.project, &f.speech),
+    );
+    if sound == *c.sound {
+        c.sound.clone()
+    } else {
+        Arc::new(sound)
     }
 }
 
@@ -128,7 +148,7 @@ impl<B: PreviewBackend> Actor<B> {
                 // Its committed context: a dry run's is planned again from it by `refresh`.
                 Some(c) if Arc::ptr_eq(&c.ctx.project, &f.project) => {
                     kept = true;
-                    (c.ctx.clone(), c.sound.clone())
+                    (c.ctx.clone(), same_sound(c, &f))
                 }
                 _ => {
                     // An edit keeps the zoom springs that didn't change; while playing, the takes and follow paths
@@ -141,8 +161,11 @@ impl<B: PreviewBackend> Actor<B> {
                     build = zoom;
                     // Planned once for the revision: the cache, the loudness and playback all take this one.
                     let sound = match same {
-                        Some(c) => c.sound.clone(),
-                        None => Arc::new(audio_plan(&f.project, &ctx.registry)),
+                        Some(c) => same_sound(c, &f),
+                        None => {
+                            let speech = ducking_speech(&f.project, &f.speech);
+                            Arc::new(audio_plan(&f.project, &ctx.registry, speech))
+                        }
                     };
                     (ctx, sound)
                 }

@@ -29,6 +29,7 @@ fn plan(gain: f64) -> Arc<AudioPlan> {
             crossfade: Default::default(),
             filter: None,
             centre_from: None,
+            duck: None,
         }],
         loudness: Loudness::Off,
     })

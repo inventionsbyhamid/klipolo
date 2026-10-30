@@ -350,7 +350,7 @@ fn pa3_engine_at_real_scale() {
     wav(&system, 2, |n, c| 0.1 * noise(2 + c as u64, n));
     let p = two_hours(&mic.display().to_string(), &system.display().to_string());
     let registry = Registry::builtin();
-    let plan = Arc::new(audio_plan(&p, &registry));
+    let plan = Arc::new(audio_plan(&p, &registry, Arc::default()));
     let store = PcmStore::new(dir.path().join("cache"));
     let keys = [
         PcmKey {
@@ -428,7 +428,7 @@ fn pa3_engine_at_real_scale() {
     for (k, run) in runs.enumerate() {
         run.drift_ppm = if k % 2 == 0 { 100.0 } else { -80.0 };
     }
-    let drifting = Arc::new(audio_plan(&drifting, &registry));
+    let drifting = Arc::new(audio_plan(&drifting, &registry, Arc::default()));
     let (straight, drifted) = compare(
         &format!(
             "   full mix pass: straight → every recorded sound drift-corrected ({})",
@@ -499,7 +499,7 @@ fn pa3_engine_at_real_scale() {
             load()
         ),
         20,
-        || audio_plan(&p, &registry),
+        || audio_plan(&p, &registry, Arc::default()),
         || drag.iter().any(|op| may_change_sound(&p, op)),
     );
     println!("end: {}", load());

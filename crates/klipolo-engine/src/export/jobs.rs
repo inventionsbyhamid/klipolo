@@ -7,10 +7,12 @@ use klipolo_model::captions::sidecar::CaptionFile;
 use klipolo_model::project::{FormatKind, Project};
 use klipolo_model::query::video_duration;
 use klipolo_model::speech::Speech;
+use klipolo_model::time::RangeUs;
 
 use super::caption_file::job_captions;
 use super::job::{AUDIO_BITRATE, ExportJob, JobOutput, JobState, PartStatus};
 use crate::api::{ExportCompatibility, ExportJobInfo, ExportJobState, ExportQuality, PlannedFile};
+use crate::audio::plan::ducking_speech;
 
 /// `<exports>/.jobs`.
 pub fn jobs_root(exports_dir: &Path) -> PathBuf {
@@ -30,12 +32,14 @@ fn fnv64(bytes: &[u8]) -> u64 {
 }
 
 /// The hash a job resumes under: the project's content (its name doesn't change the pictures), its caption pages
-/// (`captions.json`'s bytes) and caption file (its kind and text), the frame rate, quality and every
-/// output's format, size and encoder settings.
+/// (`captions.json`'s bytes) and caption file (its kind and text), where someone speaks when a sound layer
+/// ducks under it (`ExportJob::speech_ranges`; nothing when none does, so a job without ducking hashes as before), the
+/// frame rate, quality and every output's format, size and encoder settings.
 pub fn settings_hash(
     project: &Project,
     captions_json: &[u8],
     caption_file: Option<&(CaptionFile, String)>,
+    speech: &[RangeUs],
     fps: u32,
     quality: ExportQuality,
     outputs: &[JobOutput],
@@ -55,6 +59,13 @@ pub fn settings_hash(
     if let Some((kind, text)) = caption_file {
         bytes.extend_from_slice(kind.extension().as_bytes());
         bytes.extend_from_slice(text.as_bytes());
+    }
+    if !speech.is_empty() {
+        bytes.extend_from_slice(b"speech");
+        for r in speech {
+            bytes.extend_from_slice(&r.start.to_le_bytes());
+            bytes.extend_from_slice(&r.end.to_le_bytes());
+        }
     }
     format!("{:016x}", fnv64(&bytes))
 }
@@ -206,14 +217,16 @@ impl ExportJob {
     }
 
     /// Whether `saved` (the project as saved now) and `speech` (what was said in *its* files now) still make what this
-    /// job renders, its caption pages included. For a project that isn't open, `speech` is that project's transcripts
-    /// from the speech store, not the open project's: with captions on, any other speech makes the job look stale.
+    /// job renders, its caption pages and where its sound ducks included. For a project that isn't open, `speech` is
+    /// that project's transcripts from the speech store, not the open project's: with captions on, or a sound layer
+    /// ducking, any other speech makes the job look stale.
     pub fn is_current(&self, saved: &Project, speech: &Speech) -> bool {
         job_captions(saved, speech, &self.outputs, self.caption_file).is_ok_and(|f| {
             let hash = settings_hash(
                 saved,
                 &f.json,
                 f.file.as_ref(),
+                &ducking_speech(saved, speech),
                 self.fps,
                 self.quality,
                 &self.outputs,

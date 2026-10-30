@@ -7,6 +7,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use klipolo_model::project::{Loudness, Project};
+use klipolo_model::time::RangeUs;
 
 use super::job::Levels;
 use super::protocol::ErrorCode;
@@ -46,15 +47,17 @@ pub struct ExportAudio {
 
 impl ExportAudio {
     /// Decodes the project's sound and measures it (unless `levels` has the measurement already). Blocking (run it
-    /// off the async threads).
+    /// off the async threads). `speech` is where someone speaks, frozen with the job (`ExportJob::speech_ranges`): a
+    /// ducking sound layer goes down under it as it does in the preview.
     pub fn prepare(
         project: &Project,
         registry: &Registry,
         quality: ExportQuality,
         pcm_dir: Option<&Path>,
         levels: Option<Levels>,
+        speech: Arc<[RangeUs]>,
     ) -> Result<(Self, Levels), WorkerError> {
-        let plan = Arc::new(audio_plan(project, registry));
+        let plan = Arc::new(audio_plan(project, registry, speech));
         let dir = pcm_dir.map_or_else(
             || std::env::temp_dir().join("klipolo-pcm"),
             Path::to_path_buf,
@@ -95,6 +98,11 @@ impl ExportAudio {
             gain: 10f32.powf(levels.gain_db as f32 / 20.0),
         };
         Ok((audio, levels))
+    }
+
+    /// What it mixes: the same plan the preview plays for the same project and speech.
+    pub fn plan(&self) -> &Arc<AudioPlan> {
+        &self.plan
     }
 
     /// The mix from the start of the timeline, limited at `ceiling_dbtp`.
