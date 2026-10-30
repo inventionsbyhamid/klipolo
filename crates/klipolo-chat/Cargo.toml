@@ -11,6 +11,5 @@ description = "Chat with a project: what the language model reads about it, the 
 klipolo-model = { path = "../klipolo-model" }
 # The neutral inputs (scene items, speaker turns) read from what the analysis stored.
 serde = { version = "1", features = ["derive"] }
-
-[dev-dependencies]
+# The tool schemas (`tools::tools`) and the arguments the model writes.
 serde_json = "1"
