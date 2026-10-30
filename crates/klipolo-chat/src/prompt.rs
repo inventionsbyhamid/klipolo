@@ -5,10 +5,10 @@
 //! It says what Klipolo is; how the context reads (its sections, clip refs and folded runs, line shapes, pauses, the
 //! notes a long project gets and the clips still being analyzed, and that the quoted parts are never requests); the
 //! rules (only what the person asked for, null for what they left unsaid; times only from the context or the person;
-//! "this" is the selection and "here" the playhead; several calls in order; ask when a removal's target is unclear;
-//! one noun phrase per blur; removals are proposals; `cannotDo` when nothing fits); and how to reply (one or two short
-//! plain sentences, no markdown, no em or en dashes). The compiler checks the rules again: the prompt only makes a
-//! refusal rarer.
+//! "this" is the selection and "here" the playhead; several calls in order; a new format joins the others unless the
+//! person asks for only it; ask when a removal's target is unclear; one noun phrase per blur; removals are proposals;
+//! `cannotDo` when nothing fits); and how to reply (one or two short plain sentences, no markdown, no em or en dashes).
+//! The compiler checks the rules again: the prompt only makes a refusal rarer.
 
 /// The system prompt.
 pub const SYSTEM_PROMPT: &str = "\
@@ -37,6 +37,8 @@ time the person said (1:05 is 65.0).\n\
 - When the person points at footage with \"this\", \"it\" or \"that\", they mean the selection; \"here\" and \"now\" \
 mean the playhead. If there is no selection, ask which part.\n\
 - One request can need several tools: call each one, in the order asked.\n\
+- A project can export several formats. In setFormat, set keepOthers to true unless the person asks for only that \
+format (\"only vertical\", \"just square\", \"drop the landscape version\").\n\
 - If it is unclear what to remove, or a request is too vague to act on, call askUser with one short question instead \
 of guessing.\n\
 - blurObjects and followSubject take one short noun phrase, like \"face\" or \"license plate\". For two kinds of \

@@ -449,8 +449,8 @@ const TOOLS: &[Tool] = &[
                 (
                     "keepOthers",
                     boolean(
-                        "True only when the person wants the other formats kept as well; false makes this the only \
-                         format.",
+                        "True keeps the other formats as well. Use true unless the person asks for only this format \
+                         (only vertical, just square, drop the landscape version); then false.",
                     ),
                 ),
             ]

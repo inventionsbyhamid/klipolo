@@ -225,9 +225,10 @@ fn parses_each_tool_from_spike_shaped_calls() {
     let fixture: Fixture =
         serde_json::from_str(include_str!("fixtures/calls_spike_shaped.json")).unwrap();
     use ToolCall::*;
+    // A format joins the others unless the person asks for only it.
     let portrait = SetFormat {
         format: FormatKind::Portrait,
-        keep_others: false,
+        keep_others: true,
     };
     let karaoke = SetCaptions {
         on: true,
@@ -290,7 +291,7 @@ fn parses_each_tool_from_spike_shaped_calls() {
             vec![
                 SetFormat {
                     format: FormatKind::Square,
-                    keep_others: false,
+                    keep_others: true,
                 },
                 RemoveSilences {
                     min_pause_us: Some(1_000_000),
@@ -376,6 +377,13 @@ fn parses_each_tool_from_spike_shaped_calls() {
             vec![SetFormat {
                 format: FormatKind::Landscape,
                 keep_others: true,
+            }],
+        ),
+        (
+            "Just vertical, drop the landscape version",
+            vec![SetFormat {
+                format: FormatKind::Portrait,
+                keep_others: false,
             }],
         ),
     ];
@@ -926,6 +934,8 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "mean the selection",
         "mean the playhead",
         "call each one, in the order asked",
+        "set keepOthers to true unless the person asks for only that format",
+        "\"only vertical\", \"just square\", \"drop the landscape version\"",
         "unclear what to remove",
         "askUser",
         "one short noun phrase",
@@ -943,16 +953,31 @@ fn system_prompt_explains_the_context_and_the_rules() {
 #[test]
 fn the_prompt_names_only_real_tools() {
     let names = tool_names();
+    let arguments: BTreeSet<String> = (tool_list().iter())
+        .flat_map(|t| {
+            t["parameters"]["properties"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .cloned()
+        })
+        .collect();
     let prompt = klipolo_chat::prompt::system_prompt();
     let mut named = BTreeSet::new();
     for word in prompt.split(|c: char| !c.is_ascii_alphabetic()) {
-        // A tool's name is camelCase: a lowercase start and a capital inside (`cA` of `cA-cB` is a ref).
+        // A tool's or an argument's name is camelCase: a lowercase start and a capital inside (`cA` of `cA-cB` is a
+        // ref).
         let camel = word.len() > 2
             && word.starts_with(|c: char| c.is_ascii_lowercase())
             && word.contains(|c: char| c.is_ascii_uppercase());
         if camel {
-            assert!(names.contains(&word.to_owned()), "{word} is no tool");
-            named.insert(word);
+            assert!(
+                names.contains(&word.to_owned()) || arguments.contains(word),
+                "{word} is no tool or argument"
+            );
+            if names.contains(&word.to_owned()) {
+                named.insert(word);
+            }
         }
     }
     assert!(named.len() >= 6, "{named:?}");
