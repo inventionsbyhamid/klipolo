@@ -25,7 +25,7 @@
       "alpha": false
     }
   ],
-  "description": "A name and a role at the bottom left on a dark plate that fades to the right, with an accent bar and line. The plate wipes in from the left and the words slide in. It fills the frame.",
+  "description": "A name and a role at the bottom left on a dark plate, with an accent bar and line. It wipes in from the left and fills the frame. Leave the role empty to show the name alone.",
   "tags": [
     "lower third",
     "name",

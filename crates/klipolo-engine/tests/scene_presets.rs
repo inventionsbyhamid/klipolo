@@ -6,8 +6,8 @@
 //! - the title card's settings bind: the project keeps them, the plan hands them over, and its nodes show them;
 //! - drawn (lavapipe in CI): the lower third's title area shows its name in the preview and in an exported file, and
 //!   the title card its title and accent; in 16:9, 9:16 and 1:1 both keep their shape (their heights are 1080p pixels,
-//!   not shares of the frame) and the lower third stays above 9:16's bottom 20 %. `PRESET_STILLS=<folder>` keeps a
-//!   still of each.
+//!   not shares of the frame) and the lower third stays above 9:16's bottom 20 %; an empty role or subtitle shows
+//!   nothing. `PRESET_STILLS=<folder>` keeps a still of each.
 
 mod support;
 
@@ -551,6 +551,40 @@ async fn templates_keep_their_shape_in_every_format() {
         aspects.iter().all(|(_, a)| (a / wide - 1.0).abs() <= 0.2),
         "the mark keeps its shape in every format: {aspects:?}"
     );
+}
+
+/// Left empty, the role and the subtitle show nothing: the lower third is its name alone and the title card its title
+/// alone, the project takes the blanks, and no frame notes a problem.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs a GPU (lavapipe in CI)"]
+async fn an_empty_role_or_subtitle_leaves_its_line_out() {
+    let mut h = Headless::new(Registry::builtin()).await.unwrap();
+    for (local, at, filled, blank) in [
+        (LOWER_THIRD, 1.5, ("title", "name"), ("role", "role")),
+        (
+            TITLE_CARD,
+            2.0,
+            ("title", "title"),
+            ("subtitle", "subtitle"),
+        ),
+    ] {
+        let (json, _) = scene_json(local);
+        let p = project(local, 4.0, &[(filled.0, "Ana Lee"), (blank.0, "")]);
+        klipolo_model::validate(&p).unwrap();
+        let (img, notes) = scene_frame(&mut h, &Arc::new(p), at, SIZE).await;
+        assert!(notes.is_empty(), "{local}: {notes:?}");
+        keep_still(&format!("{local}-blank-{}", blank.0), &img);
+        assert!(
+            ink_bounds_in(&img, node_px(&json, filled.1, SIZE)).is_some(),
+            "{local}: its {} shows",
+            filled.0
+        );
+        assert!(
+            ink_bounds_in(&img, node_px(&json, blank.1, SIZE)).is_none(),
+            "{local}: an empty {} shows nothing",
+            blank.0
+        );
+    }
 }
 
 /// Frame `at` of `path` decoded to RGBA (BT.601 here, BT.709 in the file: white stays white).

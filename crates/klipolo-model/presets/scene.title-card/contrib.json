@@ -25,7 +25,7 @@
       "alpha": false
     }
   ],
-  "description": "A big centred title over a soft dark wash, with an accent mark and a subtitle under it. The words rise in one by one and everything fades out at the end. It fills the frame.",
+  "description": "A big centred title over a soft dark wash, with an accent mark and a subtitle. The words rise in one by one. It fills the frame. Leave the subtitle empty to show the title alone.",
   "tags": [
     "title",
     "title card",
