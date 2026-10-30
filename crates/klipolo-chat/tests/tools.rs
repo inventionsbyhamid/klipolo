@@ -963,6 +963,9 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "Set only what the person asked for",
         "use null",
         "Never invent a time",
+        // The times the compiler accepts as evidence: the start and the end too ("cut the first 5 seconds").
+        "the start (0.0), the end (the duration)",
+        "\"the last 10 s\" runs to the end",
         "mean the selection",
         "mean the playhead",
         "call each one, in the order asked",
