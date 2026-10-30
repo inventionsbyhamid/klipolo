@@ -752,6 +752,35 @@ fn typed_times_count_as_evidence() {
     );
     assert_eq!(typed_times("keep 1.5 minutes", d), vec![secs(90.0)]);
     assert_eq!(typed_times("cut the boring part", d), Vec::<Us>::new());
+    // Between words that join times, or at the end of a phrase.
+    for (message, times) in [
+        ("split at 12", vec![12.0]),
+        ("cut from 12 to 15", vec![12.0, 15.0]),
+        ("cut 12 to 15", vec![12.0, 15.0]),
+        ("cut 12-15", vec![12.0, 15.0]),
+        ("cut between 1:05 and 1:20", vec![65.0, 80.0]),
+        ("split at 12, then add captions", vec![12.0]),
+    ] {
+        let want: Vec<Us> = times.into_iter().map(secs).collect();
+        assert_eq!(typed_times(message, d), want, "{message}");
+    }
+    // Counts, refs, speeds, ordinals and aspect ratios are no time.
+    for message in [
+        "remove 3 pauses",
+        "cut 2 clips",
+        "cut the last two sentences",
+        "keep the first 3",
+        "make it 9:16",
+        "make it 16:9 again",
+        "trim c3",
+        "play at 2x",
+        "slow it to 0.5x",
+        "the 2nd clip",
+        "at 1:5",
+        "cut 5m",
+    ] {
+        assert_eq!(typed_times(message, d), Vec::<Us>::new(), "{message}");
+    }
 
     let p = broll(120.0);
     for (message, a, b, removed) in [

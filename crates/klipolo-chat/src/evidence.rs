@@ -157,33 +157,48 @@ impl Evidence {
     }
 }
 
-/// The times the person typed in `message`, sorted, on a main track `duration_us` long. Read leniently, never
-/// invented: a message without a time gives none.
-/// - A number is seconds ("12", "12.5 s", "12.5s"), or minutes with a unit ("2 min", "1.5 minutes").
-/// - A clock is minutes and seconds ("1:05", "1:10.5"), or hours too ("1:02:05").
-/// - "first N" gives 0 and N, "last N" the duration less N and the duration ("the last 10 s"); "the last minute" is
-///   one. N may be a word from one to twenty, or thirty to sixty by tens, when a unit or first/last goes with it.
+/// The times the person typed in `message`, sorted, on a main track `duration_us` long. Read leniently but never
+/// invented: a message without a time gives none, and neither do counts, refs, speeds or shapes.
+/// - A number with a seconds or minutes word is that time ("12.5 s", "12.5s", "2 min", "1.5 minutes"). "m" is not
+///   minutes: "5m" may as well be metres or a size. A number word needs its unit ("five seconds").
+/// - A bare number is seconds when only a joining word (`JOINING`: "to", "and", "then" ...) or the phrase's end comes
+///   next ("at 12", "12 to 15", "12-15", "at 12, then"); before any other word it is a count ("3 pauses", "2 clips").
+/// - A clock is minutes and two-digit seconds ("1:05", "1:10.5"), or hours too ("1:02:05"). "1:5" and an aspect ratio
+///   (`RATIOS`: "9:16", "16:9" ...) are none.
+/// - "first N" gives 0 and N, "last N" the duration less N and the duration, when N has a unit or is a clock ("the
+///   first 5 seconds", "the last 10 s", "the last minute"); "the first 3" is a count.
+/// - A number touching a letter is none, unless the letters are its unit ("12.5s"): a ref, an ordinal or a speed
+///   ("c3", "2nd", "0.5x").
 pub fn typed_times(message: &str, duration_us: Us) -> Vec<Us> {
     let tokens = tokens(message);
     let mut out = Vec::new();
     for (k, token) in tokens.iter().enumerate() {
-        let next_unit = tokens.get(k + 1).and_then(Token::unit);
         let before = k.checked_sub(1).map(|j| &tokens[j]);
-        let side = before.and_then(Token::side);
-        let amount = match token {
-            Token::Number(n) => Some(n * next_unit.unwrap_or(1.0)),
-            Token::Clock(n) => Some(*n),
-            Token::Word(w) => match (number_word(w), next_unit) {
-                (Some(n), Some(unit)) => Some(n * unit),
-                (Some(n), None) if side.is_some() => Some(n),
+        let after = tokens.get(k + 1);
+        let side = before.filter(|_| !token.joined).and_then(Token::side);
+        let unit = after.and_then(Token::unit);
+        let amount = match &token.kind {
+            Kind::Number(_) | Kind::Clock(_) if touches_letters(token, before, after) => continue,
+            Kind::Number(n) => match unit {
+                Some(unit) => n * unit,
+                None if side.is_some() || before_a_word(token, after) => continue,
+                None => *n,
+            },
+            Kind::Clock(t) => *t,
+            Kind::NotTime => continue,
+            Kind::Word(w) => match (number_word(w), unit) {
+                (Some(n), Some(unit)) => n * unit,
+                (Some(_), None) => continue,
                 // "the last minute": first or last right before the unit.
-                (None, _) => token.unit().filter(|_| side.is_some()),
-                (Some(_), None) => None,
+                (None, _) => match token.unit() {
+                    Some(unit) if side.is_some() => unit,
+                    _ => continue,
+                },
             },
         };
-        let Some(amount) = amount.filter(|a| a.is_finite() && *a >= 0.0) else {
+        if !amount.is_finite() || amount < 0.0 {
             continue;
-        };
+        }
         let amount_us = secs_to_us(amount.min((MAX_TIME_US / US_PER_SEC) as f64));
         match side {
             Some(Side::First) => out.extend([0, amount_us]),
@@ -198,12 +213,60 @@ pub fn typed_times(message: &str, duration_us: Us) -> Vec<Us> {
     out
 }
 
+/// Words that join a time to the next, so a bare number before one is still a time.
+const JOINING: [&str; 8] = [
+    "to", "and", "or", "until", "till", "through", "thru", "then",
+];
+
+/// Aspect ratios, which read like clocks.
+const RATIOS: [(&str, &str); 8] = [
+    ("9", "16"),
+    ("16", "9"),
+    ("1", "1"),
+    ("4", "5"),
+    ("5", "4"),
+    ("4", "3"),
+    ("3", "4"),
+    ("21", "9"),
+];
+
+/// Characters that end a phrase: a bare number before one is a time whatever word comes next.
+const PHRASE_ENDS: [char; 6] = ['.', ',', ';', ':', '!', '?'];
+
+/// A number or clock with letters right before it ("c3") or right after that aren't its unit ("2nd", "0.5x").
+fn touches_letters(token: &Token, before: Option<&Token>, after: Option<&Token>) -> bool {
+    let glued_before = token.joined && before.is_some();
+    let glued_after = after.is_some_and(|a| a.joined && a.unit().is_none());
+    glued_before || glued_after
+}
+
+/// A bare number with a word after it, in the same phrase, that neither joins times nor is a unit: a count.
+fn before_a_word(token: &Token, after: Option<&Token>) -> bool {
+    !token.ends_phrase
+        && after.is_some_and(|a| match &a.kind {
+            Kind::Word(w) => !JOINING.contains(&w.as_str()) && a.unit().is_none(),
+            _ => false,
+        })
+}
+
+/// One piece of a message.
 #[derive(Clone, Debug, PartialEq)]
-enum Token {
+struct Token {
+    kind: Kind,
+    /// Nothing between it and the piece before ("c" and "3" in "c3", "12.5" and "s" in "12.5s").
+    joined: bool,
+    /// A phrase ends right after it (`PHRASE_ENDS`).
+    ends_phrase: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum Kind {
     /// Digits, with a decimal part or not.
     Number(f64),
     /// "1:05" in seconds.
     Clock(f64),
+    /// Digits and colons that are no clock: "9:16", "1:5".
+    NotTime,
     /// Letters, lowercase.
     Word(String),
 }
@@ -217,18 +280,20 @@ enum Side {
 impl Token {
     /// Seconds a unit word stands for.
     fn unit(&self) -> Option<f64> {
-        let Token::Word(w) = self else { return None };
+        let Kind::Word(w) = &self.kind else {
+            return None;
+        };
         match w.as_str() {
             "s" | "sec" | "secs" | "second" | "seconds" => Some(1.0),
-            "m" | "min" | "mins" | "minute" | "minutes" => Some(60.0),
+            "min" | "mins" | "minute" | "minutes" => Some(60.0),
             _ => None,
         }
     }
 
     fn side(&self) -> Option<Side> {
-        match self {
-            Token::Word(w) if w == "first" => Some(Side::First),
-            Token::Word(w) if w == "last" => Some(Side::Last),
+        match &self.kind {
+            Kind::Word(w) if w == "first" => Some(Side::First),
+            Kind::Word(w) if w == "last" => Some(Side::Last),
             _ => None,
         }
     }
@@ -267,14 +332,39 @@ fn number_word(w: &str) -> Option<f64> {
         .map(|n| (n as f64 + 3.0) * 10.0)
 }
 
+/// Digit groups joined by ':' as a number, a clock (two-digit groups after the first, not an aspect ratio) or neither.
+fn number_or_clock(groups: &[String]) -> Kind {
+    let Some(values) = groups
+        .iter()
+        .map(|g| g.parse().ok())
+        .collect::<Option<Vec<f64>>>()
+    else {
+        return Kind::NotTime;
+    };
+    let two_digits =
+        (groups.iter().skip(1)).all(|g| g.split('.').next().is_some_and(|d| d.len() == 2));
+    let ratio = |a: &str, b: &str| RATIOS.contains(&(a, b));
+    match values.as_slice() {
+        [n] => Kind::Number(*n),
+        _ if !two_digits => Kind::NotTime,
+        [_, _] if ratio(&groups[0], &groups[1]) => Kind::NotTime,
+        [m, s] => Kind::Clock(m * 60.0 + s),
+        [h, m, s] => Kind::Clock(h * 3600.0 + m * 60.0 + s),
+        _ => Kind::NotTime,
+    }
+}
+
 /// `message` as numbers, clocks and words; everything else separates them.
 fn tokens(message: &str) -> Vec<Token> {
     let chars: Vec<char> = message.to_lowercase().chars().collect();
-    let mut out = Vec::new();
+    let mut out: Vec<Token> = Vec::new();
+    // Where the last piece ended.
+    let mut last_end = None;
     let mut i = 0;
     while i < chars.len() {
+        let start = i;
         let c = chars[i];
-        if c.is_ascii_digit() {
+        let kind = if c.is_ascii_digit() {
             // Groups of digits joined by ':' (a clock), the last with a decimal part.
             let mut groups: Vec<String> = Vec::new();
             let mut group = String::new();
@@ -293,23 +383,29 @@ fn tokens(message: &str) -> Vec<Token> {
                 i += 1;
             }
             groups.push(group);
-            let values: Vec<f64> = groups.iter().filter_map(|g| g.parse().ok()).collect();
-            match values.as_slice() {
-                [n] => out.push(Token::Number(*n)),
-                [m, s] => out.push(Token::Clock(m * 60.0 + s)),
-                [h, m, s] => out.push(Token::Clock(h * 3600.0 + m * 60.0 + s)),
-                _ => {}
-            }
+            number_or_clock(&groups)
         } else if c.is_alphabetic() {
             let mut word = String::new();
             while i < chars.len() && chars[i].is_alphabetic() {
                 word.push(chars[i]);
                 i += 1;
             }
-            out.push(Token::Word(word));
+            Kind::Word(word)
         } else {
+            if PHRASE_ENDS.contains(&c)
+                && let Some(last) = out.last_mut()
+            {
+                last.ends_phrase = true;
+            }
             i += 1;
-        }
+            continue;
+        };
+        out.push(Token {
+            kind,
+            joined: last_end == Some(start),
+            ends_phrase: false,
+        });
+        last_end = Some(i);
     }
     out
 }
