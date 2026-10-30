@@ -8,8 +8,9 @@ mod support;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use klipolo_engine::api::ExportQuality;
 use klipolo_engine::audio::loudness::{Estimate, estimate_until, measure};
@@ -21,11 +22,16 @@ use klipolo_engine::export::job::ExportJob;
 use klipolo_engine::export::naming::plan_files;
 use klipolo_engine::export::runner::Batch;
 use klipolo_engine::registry::Registry;
+use klipolo_engine::session::blank::BlankBackend;
+use klipolo_engine::session::{
+    Engine, EngineOptions, PreviewBackend, ProjectFeed, RenderRequest, Rendered,
+};
 use klipolo_model::project::{FormatKind, Loudness, Project};
 use klipolo_model::speech::{Levels, Speech, Transcript, Word, WordKind};
-use klipolo_model::time::RangeUs;
+use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::{ItemContent, Track, TrackKind};
 use support::*;
+use tokio::sync::watch;
 
 const DUCK_DB: f64 = -12.0;
 /// The tone's peak. At the bed's 50 % it plays at 0.125, far under the soft clip's knee and the limiter's ceiling.
@@ -465,6 +471,93 @@ fn the_export_job_freezes_the_speech_it_ducks_under() {
     let job = ExportJob::create(&batch(plain.clone(), &said), 30).unwrap();
     assert!(job.speech_ranges.is_empty(), "nothing ducks");
     assert!(job.is_current(&plain, &Speech::default()));
+}
+
+/// A preview that draws nothing and keeps every sound plan the engine gets ready to play (`prepare_audio`).
+struct Prepared {
+    frames: BlankBackend,
+    plans: Arc<Mutex<Vec<Arc<AudioPlan>>>>,
+}
+
+impl PreviewBackend for Prepared {
+    async fn render(&mut self, req: RenderRequest) -> Result<Rendered, String> {
+        self.frames.render(req).await
+    }
+    fn reset(&mut self) {}
+    fn prepare_audio(&mut self, plan: Arc<AudioPlan>, _at_us: Us) {
+        self.plans.lock().unwrap().push(plan);
+    }
+}
+
+/// The preview's side: the project feed sends the same revision again when a transcript finishes, with new speech; a
+/// project that ducks has its sound planned again, now going down under the words, and the same words sent again keep
+/// the plan it has.
+#[tokio::test]
+async fn the_preview_ducks_once_the_words_arrive() {
+    let plans = Arc::new(Mutex::new(Vec::new()));
+    let backend = Prepared {
+        frames: BlankBackend::new(),
+        plans: plans.clone(),
+    };
+    let (feed, rx) = watch::channel(None);
+    let options = EngineOptions {
+        allowed_origins: vec!["tauri://localhost".into()],
+        max_preview_pixels: 921_600,
+        socket_playback_pixels: 921_600,
+        socket_rgba_only: false,
+        adapter: "Test".into(),
+        gpu_class: klipolo_engine::platform::gpu::GpuClass::Integrated,
+    };
+    let _engine = Engine::start(options, rx, backend).await.unwrap();
+    let project = Arc::new(with_music(Some(DUCK_DB)));
+    let send = |speech: &Arc<Speech>| {
+        feed.send_replace(Some(ProjectFeed {
+            project_id: "p".into(),
+            revision: 0,
+            opened: 1,
+            project: project.clone(),
+            speech: speech.clone(),
+            text_language: "en".into(),
+            registry: Registry::builtin(),
+        }));
+    };
+    let bed = |plan: &Arc<AudioPlan>| {
+        let bed = plan.sources.iter().find(|s| s.path.ends_with("music"));
+        bed.unwrap().duck.clone()
+    };
+    // Nothing heard yet: the bed plays at its volume.
+    send(&Arc::default());
+    until(&plans, |p| !p.is_empty()).await;
+    assert!(plans.lock().unwrap().iter().all(|p| bed(p).is_none()));
+    // The transcript finishes: the same revision, new speech. The bed goes down under the words.
+    let words = transcript(&[(1.0, 2.0, WordKind::Word)], 60.0, true);
+    let said = Arc::new(heard_in(&[("mic", words)], &[]));
+    send(&said);
+    until(&plans, |p| p.last().is_some_and(|p| bed(p).is_some())).await;
+    let ducked = plans.lock().unwrap().last().unwrap().clone();
+    let duck = bed(&ducked).unwrap();
+    assert_eq!((duck.db, &*duck.speech), (-12.0, &[range(1.0, 2.0)][..]));
+    // The same words again (a new copy): the plan it has is kept.
+    let n = plans.lock().unwrap().len();
+    send(&Arc::new((*said).clone()));
+    until(&plans, |p| p.len() > n).await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(
+        plans.lock().unwrap()[n..]
+            .iter()
+            .all(|p| Arc::ptr_eq(p, &ducked))
+    );
+}
+
+/// Waits (up to 2 s) until the plans the preview prepared satisfy `ok`.
+async fn until(plans: &Mutex<Vec<Arc<AudioPlan>>>, ok: impl Fn(&[Arc<AudioPlan>]) -> bool) {
+    for _ in 0..200 {
+        if ok(&plans.lock().unwrap()) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the sound plans never got there");
 }
 
 /// A 16-bit stereo WAV of the tone, `seconds` long.
