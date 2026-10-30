@@ -77,7 +77,10 @@ MAX_AUDIO_SECONDS = 600
 MAX_TURNS = 300
 # Ten minutes of PCM plus room for the WAV header and any extra chunks.
 MAX_AUDIO_BYTES = MAX_AUDIO_SECONDS * SAMPLE_RATE * 2 + 64 * 1024
-MAX_TURNS_BYTES = 1024 * 1024
+# 128 KB of turns is far more text than 10 minutes of audio can hold (at
+# most 0.6 letters per frame, about 18,000 letters), and parsing it takes a
+# fraction of a second.
+MAX_TURNS_BYTES = 128 * 1024
 MAX_BODY_BYTES = MAX_AUDIO_BYTES + MAX_TURNS_BYTES + 64 * 1024
 # The turns' padded slices may add up to the audio's length plus this much
 # per turn: the 0.5 s of padding and up to 0.5 s of overlap between turns.
@@ -703,7 +706,7 @@ async def _read_form(request: Request, boundary: bytes, audio_file: BinaryIO) ->
         elif names[-1] == "turns":
             turns.extend(data[start:end])
             if len(turns) > MAX_TURNS_BYTES:
-                raise RelayError(413, "too_large", "The turns are larger than 1 MB.")
+                raise RelayError(413, "too_large", "The turns are larger than 128 KB.")
 
     parser = MultipartParser(
         boundary,

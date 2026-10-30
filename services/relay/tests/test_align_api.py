@@ -18,7 +18,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from relay import db
-from relay.align import FAILED, NO_TEXT, emission_frames
+from relay.align import FAILED, NO_TEXT, TOO_SHORT, emission_frames
 from relay.app import create_app
 from relay.config import load_settings
 from relay.devices import hash_token
@@ -430,6 +430,25 @@ def test_upload_larger_than_ten_minutes_of_audio_is_413(client, auth, fake):
     assert fake.calls == 0
 
 
+def turns_of_size(size):
+    """One turn whose JSON is exactly `size` bytes."""
+    empty = json.dumps([{"startMs": 0, "endMs": 1000, "text": ""}])
+    return json.dumps([{"startMs": 0, "endMs": 1000, "text": "a" * (size - len(empty))}])
+
+
+def test_turns_larger_than_128_kb_are_413(client, auth, fake):
+    body = assert_error(post(client, auth, turns=turns_of_size(128 * 1024 + 1)), 413, "too_large")
+    assert body["message"] == "The turns are larger than 128 KB."
+    assert fake.calls == 0
+
+
+def test_turns_of_128_kb_are_accepted(client, auth, fake):
+    response = post(client, auth, turns=turns_of_size(128 * 1024))
+    assert response.status_code == 200
+    # Far more letters than 1.5 s of audio can hold.
+    assert response.json()["skipped"] == [{"turn": 0, "reason": TOO_SHORT}]
+
+
 def test_declared_length_over_the_limit_is_413_before_reading(client, auth):
     response = client.post(
         "/v1/align",
@@ -451,7 +470,7 @@ def test_declared_length_over_the_limit_is_413_before_reading(client, auth):
         (json.dumps(["hi"]), "Turn 0 is not valid."),
         (json.dumps([{"startMs": 0, "endMs": 900, "text": "hi"}] * 301), "Send at most 300 turns."),
         ("[" + "1e400" + "]", "Turn 0 is not valid."),
-        ("[" * 100_000 + "]" * 100_000, "Send turns as a JSON list"),
+        ("[" * 30_000 + "]" * 30_000, "Send turns as a JSON list"),
     ],
     ids=["not-json", "object", "missing-end", "string-start", "fraction", "text-number", "string-turn", "301", "inf", "deep"],
 )
