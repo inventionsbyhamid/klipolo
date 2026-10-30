@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="t">
+  <title id="t">Klipolo</title>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#121A33"/>
+  <path d="M19 11h26a8 8 0 0 1 8 8v16a8 8 0 0 1-8 8H30l-12 10 2-10h-1a8 8 0 0 1-8-8V19a8 8 0 0 1 8-8z" fill="#F4F6FA"/>
+  <g fill="#121A33">
+    <rect x="16" y="19" width="12" height="6" rx="1.5"/>
+    <rect x="38" y="19" width="10" height="6" rx="1.5"/>
+    <rect x="16" y="29" width="6" height="6" rx="1.5"/>
+    <rect x="23.5" y="29" width="4.5" height="6" rx="1.5"/>
+    <rect x="38" y="29" width="10" height="6" rx="1.5"/>
+  </g>
+  <rect x="29.5" y="17" width="7" height="20" rx="1.5" fill="#E1322B"/>
+</svg>
