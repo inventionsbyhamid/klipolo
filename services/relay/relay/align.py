@@ -14,11 +14,15 @@ AI. It takes multipart `audio` (WAV, 16 kHz mono 16-bit, at most 10 minutes)
 and `turns` (JSON, at most 300 `{"startMs", "endMs", "text"}`) and returns
 `{"words": [...], "skipped": [{"turn", "reason"}]}`. Each device gets
 ALIGN_MINUTES_PER_DEVICE_PER_DAY minutes of aligned audio per UTC day. The
+turns' slices may add up to little more than the audio (400 otherwise), and
+they are taken from the day's minutes before any work starts (429 when they
+do not fit); slices that were not aligned are given back afterwards. The
 audio sits in a temp file only while the request runs; nothing is stored.
 """
 
 import json
 import logging
+import math
 import os
 import sqlite3
 import struct
@@ -69,6 +73,9 @@ MAX_TURNS = 300
 MAX_AUDIO_BYTES = MAX_AUDIO_SECONDS * SAMPLE_RATE * 2 + 64 * 1024
 MAX_TURNS_BYTES = 1024 * 1024
 MAX_BODY_BYTES = MAX_AUDIO_BYTES + MAX_TURNS_BYTES + 64 * 1024
+# The turns' padded slices may add up to the audio's length plus this much
+# per turn: the 0.5 s of padding and up to 0.5 s of overlap between turns.
+SLACK_PER_TURN_S = 2 * PAD_MS / 1000 + 0.5
 # Requests in the relay at once: per device, and per alignment worker
 # (ALIGN_CONCURRENCY) including those waiting for one.
 MAX_REQUESTS_PER_DEVICE = 2
@@ -343,6 +350,9 @@ _BAD_FORM = "Send multipart/form-data with one audio part and one turns part."
 _NOT_WAV = "Send the audio as a WAV file: 16 kHz, mono, 16-bit PCM."
 _BAD_TURNS = "Send turns as a JSON list of objects with startMs, endMs and text."
 _TOO_LARGE = "The upload is too large. Send at most 10 minutes of 16 kHz mono 16-bit audio."
+_COVERS_TOO_MUCH = (
+    "The turns add up to more than the audio. Each turn should cover its own part of the audio, with little overlap."
+)
 
 
 class _TurnIn(BaseModel):
@@ -358,12 +368,20 @@ class AlignerUnavailable(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class Reservation:
+    day: str
+    seconds: float
+
+
 @router.post("/v1/align")
 async def align_words(request: Request, device: Device, conn: Conn, settings: AppSettings) -> Any:
     check_quota(device, settings)
     device_id = device["device_id"]
     slot = request.app.state.align_in_flight.acquire(device_id)
     path = None
+    reservation = None
+    result = Alignment()
     try:
         boundary = _boundary(request)
         fd, path = tempfile.mkstemp(prefix="align-", suffix=".wav")
@@ -372,8 +390,9 @@ async def align_words(request: Request, device: Device, conn: Conn, settings: Ap
         turns = parse_turns(turns_raw)
         n_samples = await run_in_threadpool(wav_samples, path)
         planned, skipped = plan(turns, n_samples)
-        result = Alignment()
+        seconds = check_coverage(planned, n_samples)
         if planned:
+            reservation = await run_in_threadpool(reserve_seconds, conn, device_id, seconds, settings)
             started = time.monotonic()
             async with request.app.state.align_gate:
                 try:
@@ -389,8 +408,6 @@ async def align_words(request: Request, device: Device, conn: Conn, settings: Ap
                 device_id[:8],
                 time.monotonic() - started,
             )
-        if result.seconds:
-            await run_in_threadpool(charge_seconds, conn, device_id, result.seconds)
         return {
             "words": result.words,
             "skipped": [s.as_json() for s in sorted(skipped + result.skipped, key=lambda s: s.turn)],
@@ -398,6 +415,11 @@ async def align_words(request: Request, device: Device, conn: Conn, settings: Ap
     except ClientDisconnect:
         return error_response(400, "client_disconnected", "The request was cut off.")
     finally:
+        if reservation is not None and reservation.seconds - result.seconds > 1e-6:
+            with anyio.CancelScope(shield=True):
+                await run_in_threadpool(
+                    refund_seconds, conn, device_id, reservation, reservation.seconds - result.seconds
+                )
         if path is not None:
             try:
                 os.unlink(path)
@@ -406,36 +428,85 @@ async def align_words(request: Request, device: Device, conn: Conn, settings: Ap
         slot.release()
 
 
+def check_coverage(planned: Sequence[PlannedTurn], n_samples: int) -> float:
+    """The seconds of audio the planned turns run through the model, or 400
+    when that is far more than the audio sent. This bounds the work, and the
+    minutes charged, by the length of the upload."""
+    seconds = sum(turn.seconds for turn in planned)
+    if seconds > n_samples / SAMPLE_RATE + SLACK_PER_TURN_S * len(planned):
+        raise RelayError(400, "invalid_request", _COVERS_TOO_MUCH)
+    return seconds
+
+
 def check_quota(device: Any, settings: Settings) -> None:
-    """429 once the device has used today's minutes. A request that starts
-    under the limit is finished and charged in full."""
-    minutes = settings.align_minutes_per_device_per_day
+    """429 before the upload is read when today's minutes are used up."""
     used = device["align_seconds_day"] if device["align_day"] == _today() else 0.0
-    if used >= minutes * 60:
-        now = datetime.now(UTC)
-        midnight = datetime.combine(now.date() + timedelta(days=1), datetime.min.time(), UTC)
-        raise RelayError(
-            429,
-            "align_quota",
-            f"This device has used today's {minutes:.10g} minutes of word timing. It resets at midnight UTC.",
-            headers={"Retry-After": str(max(1, int((midnight - now).total_seconds())))},
-        )
+    if used >= settings.align_minutes_per_device_per_day * 60:
+        raise _quota_error(settings, used)
 
 
-def charge_seconds(conn: sqlite3.Connection, device_id: str, seconds: float) -> None:
-    """Add the aligned seconds to the device's count for today, starting a
-    new count on a new UTC day. The work is done by now, so a failed write
-    is logged and the words still go back."""
+def reserve_seconds(
+    conn: sqlite3.Connection, device_id: str, seconds: float, settings: Settings
+) -> Reservation:
+    """Take the planned seconds from today's minutes before any work, in one
+    transaction, so two requests in flight cannot both pass the limit. 429
+    when they do not fit."""
     day = _today()
+    with db.transaction(conn):
+        row = conn.execute(
+            "SELECT align_seconds_day, align_day FROM devices WHERE device_id = ?", (device_id,)
+        ).fetchone()
+        used = row["align_seconds_day"] if row["align_day"] == day else 0.0
+        if used + seconds > settings.align_minutes_per_device_per_day * 60 + 1e-6:
+            raise _quota_error(settings, used, seconds)
+        conn.execute(
+            "UPDATE devices SET align_seconds_day = ?, align_day = ? WHERE device_id = ?",
+            (used + seconds, day, device_id),
+        )
+    return Reservation(day, seconds)
+
+
+def refund_seconds(conn: sqlite3.Connection, device_id: str, reservation: Reservation, seconds: float) -> None:
+    """Give back reserved seconds that were not aligned: skipped or failed
+    turns, a model that would not load. A failed write is logged; the device
+    is then charged too much, never too little."""
     try:
         with db.transaction(conn):
             conn.execute(
-                "UPDATE devices SET align_seconds_day = CASE WHEN align_day = ? THEN align_seconds_day + ? ELSE ? END,"
-                " align_day = ? WHERE device_id = ?",
-                (day, seconds, seconds, day, device_id),
+                "UPDATE devices SET align_seconds_day = MAX(0, align_seconds_day - ?)"
+                " WHERE device_id = ? AND align_day = ?",
+                (seconds, device_id, reservation.day),
             )
     except sqlite3.Error:
-        logger.exception("could not charge %.1f s of alignment to device %s", seconds, device_id[:8])
+        logger.exception("could not refund %.1f s of alignment to device %s", seconds, device_id[:8])
+
+
+def _quota_error(settings: Settings, used: float, needed: float | None = None) -> RelayError:
+    minutes = settings.align_minutes_per_device_per_day
+    left = minutes * 60 - used
+    if needed is None or left <= 0:
+        message = f"This device has used today's {minutes:.10g} minutes of word timing. It resets at midnight UTC."
+    else:
+        message = (
+            f"This request needs {_amount(needed, math.ceil)} of word timing and this device has "
+            f"{_amount(left, math.floor)} left today. Send less audio or try again after midnight UTC."
+        )
+    now = datetime.now(UTC)
+    midnight = datetime.combine(now.date() + timedelta(days=1), datetime.min.time(), UTC)
+    return RelayError(
+        429,
+        "align_quota",
+        message,
+        headers={"Retry-After": str(max(1, int((midnight - now).total_seconds())))},
+    )
+
+
+def _amount(seconds: float, rounding: Callable[[float], int]) -> str:
+    if seconds < 90:
+        count, unit = rounding(seconds), "second"
+    else:
+        count, unit = rounding(seconds / 60), "minute"
+    return f"{count} {unit}" + ("" if count == 1 else "s")
 
 
 def parse_turns(raw: bytes) -> list[Turn]:

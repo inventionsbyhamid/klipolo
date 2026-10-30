@@ -207,7 +207,7 @@ def test_a_turn_the_model_fails_on_is_skipped_not_500(client, auth, fake):
 def test_a_model_that_cannot_load_is_503_and_not_charged(client, auth, fake):
     fake.load_error = RuntimeError("no model")
     assert_error(post(client, auth), 503, "align_unavailable")
-    assert align_usage(client.app.state.settings) == (0, None)
+    assert align_usage(client.app.state.settings)[0] == 0
 
 
 # Daily minutes.
@@ -248,12 +248,73 @@ def test_daily_minutes_reset_on_a_new_utc_day(client, auth):
     assert align_usage(settings) == (pytest.approx(1.5), today())
 
 
-def test_a_request_may_start_with_minutes_left_and_go_over(client, auth):
+def test_a_request_larger_than_the_minutes_left_is_429(client, auth, fake):
     settings = client.app.state.settings
     set_align_usage(settings, 120 * 60 - 1, today())
+    # The request needs 1.5 s; 1 s is left.
+    response = post(client, auth)
+    body = assert_error(response, 429, "align_quota")
+    assert body["message"] == (
+        "This request needs 2 seconds of word timing and this device has 1 second left today. "
+        "Send less audio or try again after midnight UTC."
+    )
+    assert 0 < int(response.headers["retry-after"]) <= 86400
+    assert fake.calls == 0
+    assert align_usage(settings) == (120 * 60 - 1, today())
+
+
+def test_a_request_that_just_fits_the_minutes_left_is_aligned(client, auth):
+    settings = client.app.state.settings
+    set_align_usage(settings, 120 * 60 - 1.5, today())
     assert post(client, auth).status_code == 200
-    assert align_usage(settings)[0] == pytest.approx(120 * 60 + 0.5)
+    assert align_usage(settings)[0] == pytest.approx(120 * 60)
     assert_error(post(client, auth), 429, "align_quota")
+
+
+def test_failed_turns_give_their_reserved_seconds_back(client, auth, fake):
+    fake.fail_on = {"boom"}
+    turns = [{"startMs": 250, "endMs": 1250, "text": "fine"}, {"startMs": 1500, "endMs": 1750, "text": "boom"}]
+    assert post(client, auth, turns=turns).status_code == 200
+    # Only the first turn's 0 to 1.5 s slice is kept.
+    assert align_usage(client.app.state.settings) == (pytest.approx(1.5), today())
+
+
+def test_two_requests_cannot_race_past_the_daily_minutes(client, auth, fake):
+    settings = client.app.state.settings
+    # Room for one 1.5 s request, not two.
+    set_align_usage(settings, 120 * 60 - 2, today())
+    fake.gate = threading.Event()
+    results = []
+    first = run_in_thread(client, auth, results)
+    assert fake.entered.acquire(timeout=5)
+    assert_error(post(client, auth), 429, "align_quota")
+    fake.gate.set()
+    first.join(10)
+    assert results == [200]
+    assert align_usage(settings)[0] == pytest.approx(120 * 60 - 0.5)
+
+
+def test_turns_covering_the_audio_many_times_are_400_without_model_calls(client, auth, fake):
+    turns = [{"startMs": 0, "endMs": 600_000, "text": "a"}] * 300
+    body = assert_error(post(client, auth, audio=make_wav(seconds=600), turns=turns), 400, "invalid_request")
+    assert body["message"] == (
+        "The turns add up to more than the audio. Each turn should cover its own part of the audio, "
+        "with little overlap."
+    )
+    assert fake.calls == 0
+    assert align_usage(client.app.state.settings) == (0, None)
+
+
+def test_turns_may_overlap_a_little(client, auth):
+    # Ten 1 s turns over 10 s of audio, each overlapping the next by 0.4 s.
+    turns = [{"startMs": i * 1000 - 400 * (i > 0), "endMs": (i + 1) * 1000, "text": "word"} for i in range(10)]
+    assert post(client, auth, audio=make_wav(seconds=10), turns=turns).status_code == 200
+
+
+def test_two_turns_over_the_same_audio_are_400(client, auth, fake):
+    turns = [{"startMs": 0, "endMs": 10_000, "text": "one"}, {"startMs": 0, "endMs": 10_000, "text": "two"}]
+    assert_error(post(client, auth, audio=make_wav(seconds=10), turns=turns), 400, "invalid_request")
+    assert fake.calls == 0
 
 
 def test_daily_minutes_come_from_the_setting(tmp_path, temp_dir):
@@ -396,8 +457,10 @@ def test_bad_turns_are_400(client, auth, fake, turns, phrase):
 
 
 def test_three_hundred_turns_are_accepted(client, auth):
-    turns = [{"startMs": i * 6, "endMs": i * 6 + 5, "text": "a"} for i in range(300)]
-    assert post(client, auth, turns=turns).status_code == 200
+    turns = [{"startMs": i * 1000, "endMs": i * 1000 + 500, "text": "a"} for i in range(300)]
+    response = post(client, auth, audio=make_wav(seconds=300), turns=turns)
+    assert response.status_code == 200
+    assert len(response.json()["words"]) == 300
 
 
 def test_turns_part_over_one_megabyte_is_413(client, auth):
