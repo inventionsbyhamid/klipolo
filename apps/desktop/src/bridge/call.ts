@@ -28,7 +28,10 @@ const APP_CODES: Record<string, string> = {
   'project.libraryFailed': 'Klipolo couldn’t make its projects folder. Check the disk, then try again.',
 };
 
-/** Every code list Rust exports (`modelCodes.json`, `fontsCodes.json`; `cargo test` writes them), by code. */
+/**
+ * Every code list Rust exports (`modelCodes.json`, `fontsCodes.json`), by code: committed, and written again by
+ * `pnpm bindings`.
+ */
 const RUST_CODES = new Map(
   Object.values(
     import.meta.glob<{ code: string; message: string }[]>('../bindings/*Codes.json', {
