@@ -110,6 +110,10 @@ CHARGE_RETRY_DELAY_S = 0.5
 # it holds the admission lock meanwhile, so one short try only.
 HELD_CHARGE_BUSY_TIMEOUT_S = 0.25
 
+# How long one send to a streaming client may take. A client that stops
+# reading is then treated as gone, so it can't hold its slot and reservation.
+SEND_TIMEOUT_S = 60.0
+
 MAX_IN_FLIGHT_PER_DEVICE = 4
 MAX_IN_FLIGHT_TOTAL = 32
 
@@ -699,7 +703,8 @@ class MeteredStream(Response):
 
 
 class _Client:
-    """The client end of a stream. Once it has hung up, sends are dropped."""
+    """The client end of a stream. Once it has hung up, or stopped reading for
+    SEND_TIMEOUT_S, sends are dropped."""
 
     def __init__(self, send: Any) -> None:
         self._send = send
@@ -714,10 +719,15 @@ class _Client:
         if self.gone:
             return
         try:
-            await self._send(message)
+            with anyio.move_on_after(SEND_TIMEOUT_S) as wait:
+                await self._send(message)
         except Exception:
             # Usually OSError: the connection is gone. Any failure to send
             # counts as a hang-up, so only Meta's side can end the reading.
+            self.gone = True
+            return
+        if wait.cancelled_caught:
+            logger.info("Client stopped reading for %.0f s; treating it as gone", SEND_TIMEOUT_S)
             self.gone = True
 
 

@@ -2130,3 +2130,28 @@ async def test_body_that_arrives_too_slowly_is_408(app, conn, meta, monkeypatch,
     }
     assert ledger(conn) == []
     assert app.state.in_flight.count() == 0
+
+
+@pytest.mark.anyio
+async def test_a_client_that_stops_reading_is_dropped_and_the_stream_still_drained(app, conn, meta, monkeypatch):
+    monkeypatch.setattr(proxy, "SEND_TIMEOUT_S", 0.2)
+    device = add_device(conn)
+    upstream = MetaStream([sse(CREATED), sse(DELTA), sse(DELTA), sse(completed())])
+    stream_from_meta(meta, upstream)
+    call = AsgiCall(app, "/meta/v1/responses", streamed(spark_request()), device.headers)
+
+    async def on_chunk(count):
+        if count == 2:
+            # The client's receive window is full: this send never finishes.
+            await anyio.sleep_forever()
+
+    call.on_chunk = on_chunk
+    await call.run()
+
+    assert len(call.chunks) == 2
+    assert upstream.served == 4
+    assert upstream.closed
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(SPARK_COST)
+    assert app.state.in_flight.count() == 0
+    assert app.state.in_flight.reserved(device.device_id) == (0.0, 0.0)
