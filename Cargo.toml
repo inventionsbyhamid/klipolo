@@ -2,6 +2,9 @@
 members = ["crates/*"]
 resolver = "2"
 
+[workspace.package]
+license = "AGPL-3.0-only"
+
 [profile.release]
 codegen-units = 1
 # Thin LTO: fat LTO over wgpu + FFmpeg bindings costs minutes and GBs of RAM for no measurable gain (Cap uses thin).

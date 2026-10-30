@@ -2,6 +2,7 @@
 name = "klipolo-platform"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 publish = false
 description = "Klipolo's OS services (clock, durable files, followed folders, power, QoS, memory pressure, paths, processes, audio route, eyedropper, network path, install place) with macOS, Windows and Linux backends"
 

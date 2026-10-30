@@ -2,7 +2,7 @@
 name = "klipolo-speech-wire"
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
+license.workspace = true
 description = "Klipolo's speech workers' shared wire: the protocol, the request loop every engine runs behind (`serve`), words and the worker's lowered priority. Pure Rust, so whisper's worker and klipolo-asr share it without sharing a ggml."
 publish = false
 

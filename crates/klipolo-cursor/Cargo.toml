@@ -2,6 +2,7 @@
 name = "klipolo-cursor"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 publish = false
 description = "Klipolo's cursor layer, pure: the cursor file (format 2), the bounded track, presses, shapes, smoothing, facts, their timeline mapping, the summary and the screen activity track"
 

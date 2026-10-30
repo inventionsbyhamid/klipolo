@@ -2,7 +2,8 @@
 name = "klipolo-model"
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
+license.workspace = true
+publish = false
 description = "Klipolo project model v2: types, operations, validation and undo"
 
 [dependencies]

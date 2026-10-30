@@ -2,6 +2,7 @@
 name = "klipolo-fonts"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 publish = false
 description = "Klipolo's fonts: the bundled set, aliases, CSS face matching, the one resolver, the fallback chain, the font index and search, the Google catalogue and its download store"
 

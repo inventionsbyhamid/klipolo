@@ -2,6 +2,7 @@
 name = "klipolo-engine"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 publish = false
 description = "Klipolo preview and export engine (wgpu compositor with vendored Cap modules)"
 
