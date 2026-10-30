@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Removals } from '../bindings/Removals';
+import { useProject } from './project';
 
 /** A short reason shown on a proposed cut ("um", "pause"), over the time it covers. */
 export interface ProposalTag {
@@ -53,4 +54,15 @@ export function noRemovals(): Removals {
     sounds: [],
     formats: [],
   };
+}
+
+/**
+ * Drops the waiting proposal when another project opens, or the same one opens again: its cuts are times on the
+ * project it was made for. Returns the stop.
+ */
+export function clearProposalOnProjectSwitch(): () => void {
+  return useProject.subscribe((s, prev) => {
+    if (s.snapshot?.project.id !== prev.snapshot?.project.id || s.snapshot?.opening !== prev.snapshot?.opening)
+      useProposal.getState().show(null);
+  });
 }

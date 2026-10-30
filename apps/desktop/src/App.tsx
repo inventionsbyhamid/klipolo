@@ -14,6 +14,8 @@ import { errorMessage } from './lib/errors';
 import { PlayerBar } from './player/PlayerBar';
 import { Preview } from './preview/Preview';
 import { useProject } from './state/project';
+import { clearProposalOnProjectSwitch } from './state/proposal';
+import { clearRangeOnProjectSwitch } from './state/range';
 import { followSaves } from './state/saving';
 import { toast } from './state/toasts';
 import { keepPlayheadInVideo } from './state/transport';
@@ -42,6 +44,8 @@ export function App() {
     started = true;
     void followSaves();
     keepPlayheadInVideo();
+    clearRangeOnProjectSwitch();
+    clearProposalOnProjectSwitch();
     // Until chat proposes cuts: Control Shift P shows a sample proposal (development builds only).
     if (import.meta.env.DEV) void import('./dev/sampleProposal').then((dev) => dev.listenForSampleProposal());
     void openProject();

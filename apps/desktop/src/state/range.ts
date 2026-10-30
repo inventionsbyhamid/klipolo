@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useProject } from './project';
 
 /** A stretch of the video's time the person selected on the timeline (µs, start before end). */
 export interface TimeRange {
@@ -26,3 +27,14 @@ export const useRange = create<RangeStore>((set) => ({
   },
   clear: () => set({ range: null }),
 }));
+
+/**
+ * Clears the time range when another project opens, or the same one opens again: a range belongs to the timeline it
+ * was drawn on. Returns the stop.
+ */
+export function clearRangeOnProjectSwitch(): () => void {
+  return useProject.subscribe((s, prev) => {
+    if (s.snapshot?.project.id !== prev.snapshot?.project.id || s.snapshot?.opening !== prev.snapshot?.opening)
+      useRange.getState().clear();
+  });
+}
