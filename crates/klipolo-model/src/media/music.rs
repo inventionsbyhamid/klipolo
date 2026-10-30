@@ -12,10 +12,9 @@
 //! (pieces past the end go) or played on (the last piece to the file's end, then new pieces), with its fade-out moved
 //! to the new end. [`with_music_refit`] folds that into the edit's own batch, so one undo takes back both.
 
-use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
-use crate::apply::{apply_ops, id_taken};
+use crate::apply::apply_ops;
 use crate::error::{invalid, ModelError, Result};
 use crate::ids::{new_id, Id};
 use crate::layout::{Anchor, BoxN, Layout};
@@ -164,11 +163,6 @@ pub fn refit_music_ops(before: &Project, after: &Project) -> Vec<Op> {
         return Vec::new();
     }
     let mut ops = Vec::new();
-    let mut ids = NewIds {
-        p: after,
-        used: HashSet::new(),
-        from: HashMap::new(),
-    };
     for track in after
         .timeline
         .tracks
@@ -189,7 +183,7 @@ pub fn refit_music_ops(before: &Project, after: &Project) -> Vec<Op> {
                 .get(run.end)
                 .map_or(new_end, |next| next.start_us.min(new_end));
             if let Some(file) = played(last).and_then(|(id, _)| after.asset(id)) {
-                refit(bed, &track.id, file.duration_us, end, &mut ids, &mut ops);
+                refit(after, bed, &track.id, file.duration_us, end, &mut ops);
             }
         }
     }
@@ -353,8 +347,10 @@ fn runs(track: &Track) -> Vec<Range<usize>> {
 /// Fits one run of music, `bed` on track `track`, of a file `file_len` long, to end at `end` ([`plan`]): the run's
 /// pieces past the plan go, those it keeps change only where their length or fades do, and new ones follow on the
 /// track. The fade-in stays on the first piece and the fade-out moves to the last.
-fn refit(bed: &[Item], track: &Id, file_len: Us, end: Us, ids: &mut NewIds, ops: &mut Vec<Op>) {
+fn refit(p: &Project, bed: &[Item], track: &Id, file_len: Us, end: Us, ops: &mut Vec<Op>) {
     let (first, last) = (&bed[0], &bed[bed.len() - 1]);
+    // New pieces are `{first piece}-n`, numbered on past every such id in the project: one look at its ids per run.
+    let mut next = None;
     let want_in = meant(fades(first).0, first.duration_us, MUSIC_FADE_IN_US);
     let want_out = meant(fades(last).1, last.duration_us, MUSIC_FADE_OUT_US);
     let plan = plan(bed, file_len, end);
@@ -385,11 +381,16 @@ fn refit(bed: &[Item], track: &Id, file_len: Us, end: Us, ids: &mut NewIds, ops:
                     update(layer, piece.len, fade_in, fade_out, ops);
                 }
             }
-            None => ops.push(Op::AddItem {
-                track: TrackTarget::Track { id: track.clone() },
-                item: piece.item(last, ids.next(&first.id), fade_in, fade_out),
-                attach: false,
-            }),
+            None => {
+                let n = next.get_or_insert_with(|| next_suffix(p, &first.id));
+                let id = format!("{}-{n}", first.id);
+                *n = n.saturating_add(1);
+                ops.push(Op::AddItem {
+                    track: TrackTarget::Track { id: track.clone() },
+                    item: piece.item(last, id, fade_in, fade_out),
+                    attach: false,
+                });
+            }
         }
     }
 }
@@ -502,26 +503,30 @@ fn meant(fade: Us, len: Us, default: Us) -> Us {
     }
 }
 
-/// Ids for new pieces: `{first piece}-n`, the smallest n from 2 not in the project nor given out already. Each base's
-/// search goes on from where it stopped, so a refit that adds many pieces stays linear.
-struct NewIds<'a> {
-    p: &'a Project,
-    used: HashSet<Id>,
-    from: HashMap<Id, u64>,
-}
-
-impl NewIds<'_> {
-    fn next(&mut self, base: &str) -> Id {
-        let n = self.from.entry(base.to_owned()).or_insert(2);
-        loop {
-            let id = format!("{base}-{n}");
-            *n = n.saturating_add(1);
-            if !self.used.contains(&id) && !id_taken(self.p, &id) {
-                self.used.insert(id.clone());
-                return id;
-            }
-        }
-    }
+/// The first n from 2 past every `{base}-n` id in `p` (whatever it names: a layer, a track, a clip, a file), so
+/// `{base}-n`, `{base}-(n+1)`... are free. O(ids) once, where finding the smallest free n one id at a time would look
+/// through the project for each.
+fn next_suffix(p: &Project, base: &str) -> u64 {
+    let timeline = &p.timeline;
+    std::iter::once(&p.id)
+        .chain(p.assets.iter().map(|a| &a.id))
+        .chain(p.recordings.iter().map(|r| &r.id))
+        .chain(p.luts.iter().map(|l| &l.id))
+        .chain(timeline.main.iter().map(|c| &c.id))
+        .chain(
+            timeline
+                .tracks
+                .iter()
+                .flat_map(|t| std::iter::once(&t.id).chain(t.items.iter().map(|i| &i.id))),
+        )
+        .filter_map(|id| {
+            id.strip_prefix(base)?
+                .strip_prefix('-')?
+                .parse::<u64>()
+                .ok()
+        })
+        .fold(1, u64::max)
+        .saturating_add(1)
 }
 
 #[cfg(test)]
@@ -546,5 +551,20 @@ mod tests {
                 id: "nope".into()
             })
         );
+    }
+
+    #[test]
+    fn new_pieces_are_numbered_past_every_id_in_use() {
+        let mut p = Project::new("Ids");
+        assert_eq!(next_suffix(&p, "bed"), 2, "none yet");
+        let mut track = Track::new(TrackKind::Audio, "Audio 1");
+        track.id = "bed-10".into();
+        p.timeline.tracks.push(track);
+        for id in ["bed-2-track", "bed-x", "bedroom-40", "other-50"] {
+            let mut t = Track::new(TrackKind::Audio, "Audio");
+            t.id = id.into();
+            p.timeline.tracks.push(t);
+        }
+        assert_eq!(next_suffix(&p, "bed"), 11);
     }
 }
