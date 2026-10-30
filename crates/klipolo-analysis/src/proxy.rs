@@ -118,7 +118,8 @@ pub fn make_in_chunks(
     let fit = (short_side * FIT.0 / FIT.1, short_side);
     let mut chunks = Vec::new();
     let mut found = Vec::new();
-    let mut made = None;
+    // The copy's facts, from its first chunk (every chunk is made the same way).
+    let mut first = None;
     for (k, range) in plan(duration_us, max_us, overlap_us)
         .into_iter()
         .enumerate()
@@ -141,9 +142,9 @@ pub fn make_in_chunks(
             range,
             bytes: info.bytes,
         });
-        made = Some(info);
+        first.get_or_insert(info);
     }
-    let made = made.ok_or_else(|| VideoError::Failed("no chunk".into()))?;
+    let made = first.ok_or_else(|| VideoError::Failed("no chunk".into()))?;
     Ok(ProxyInfo {
         duration_us,
         audio_lead_us: clip.audio_lead_us,
