@@ -281,6 +281,13 @@ ol {
   text-decoration: none;
 }
 
+@media (prefers-color-scheme: dark) {
+  .brand-icon {
+    border-radius: 22%;
+    box-shadow: 0 0 0 1px var(--line);
+  }
+}
+
 .brand-name {
   font-stretch: var(--narrow);
   font-weight: 800;
