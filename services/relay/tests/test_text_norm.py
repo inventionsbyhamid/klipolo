@@ -114,3 +114,21 @@ def test_forms_only_use_alignable_characters():
         assert set(form) <= ALIGNABLE | {" "}
         assert form == form.strip()
         assert "  " not in form
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["1" * 5000 + ":05", "$" + "9" * 5000, "$" + "9" * 5000 + ".50", "9" * 5000 + "th", "1" * 5000 + "s"],
+    ids=["time", "dollars", "dollars-cents", "ordinal", "plural"],
+)
+def test_huge_digit_runs_are_read_digit_by_digit_without_error(text):
+    ((original, form),) = normalize(text)
+    assert original == text
+    words = form.split()
+    assert len(words) >= 5000
+    assert set(form) <= ALIGNABLE | {" "}
+
+
+def test_only_one_or_two_digit_hours_are_times():
+    assert normalize("123:05") == [("123:05", "one hundred twenty three zero five")]
+    assert normalize("9:05") == [("9:05", "nine oh five")]

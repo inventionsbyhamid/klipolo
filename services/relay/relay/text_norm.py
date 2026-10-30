@@ -39,11 +39,12 @@ _MAX_CARDINAL_DIGITS = 15
 _NUMBER = re.compile(
     r"""
     (?P<currency>\$)?
-    (?P<number>[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)
     (?:
-        :(?P<minutes>[0-9]{2})(?![0-9])
-      | \.(?P<decimals>[0-9]+)
-    )?
+        # A time only with a one or two digit hour, so no long digit run
+        # is ever turned into an int.
+        (?<![0-9])(?P<hour>[0-9]{1,2}):(?P<minutes>[0-9]{2})(?![0-9])
+      | (?P<number>[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.(?P<decimals>[0-9]+))?
+    )
     (?:(?P<suffix>st|nd|rd|th|s)(?![a-z]))?
     """,
     re.VERBOSE,
@@ -65,7 +66,7 @@ def _normalize_word(word: str) -> str:
 
 
 def _spell_number(match: re.Match[str]) -> str:
-    digits = match["number"].replace(",", "")
+    digits = (match["number"] or match["hour"]).replace(",", "")
     suffix = match["suffix"]
     if match["minutes"] is not None:
         minutes = int(match["minutes"])
@@ -75,7 +76,7 @@ def _spell_number(match: re.Match[str]) -> str:
     elif (digits.startswith("0") and len(digits) > 1) or len(digits) > _MAX_CARDINAL_DIGITS:
         words = _digit_by_digit(digits)
     elif match["decimals"] is not None and match["currency"] and len(match["decimals"]) == 2:
-        words = f"{_cardinal(int(digits))} {_dollars(int(digits))}"
+        words = f"{_cardinal(int(digits))} {_dollars(digits)}"
         if int(match["decimals"]):
             words += f" {_cardinal(int(match['decimals']))}"
         return words
@@ -91,7 +92,7 @@ def _spell_number(match: re.Match[str]) -> str:
     elif suffix == "s":
         words = _last_word(words, _plural)
     if match["currency"]:
-        words += f" {_dollars(int(digits))}"
+        words += f" {_dollars(digits)}"
     return words
 
 
@@ -128,8 +129,8 @@ def _year(number: int) -> str:
     return f"{_cardinal(century)} {_cardinal(rest)}"
 
 
-def _dollars(amount: int) -> str:
-    return "dollar" if amount == 1 else "dollars"
+def _dollars(digits: str) -> str:
+    return "dollar" if digits == "1" else "dollars"
 
 
 def _last_word(words: str, change) -> str:
