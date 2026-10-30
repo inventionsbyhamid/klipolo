@@ -8,15 +8,42 @@ an end and a score from 0 to 1. Words the transcript invented score near 0.
 Planning (normalizing the text, slicing, clamping, skipping turns that cannot
 be aligned) and assembling the words is plain Python, so it is tested without
 torch. torch and the model load once, on first use or at a startup warm-up.
+
+`POST /v1/align` is open to every registered device, with or without relay
+AI. It takes multipart `audio` (WAV, 16 kHz mono 16-bit, at most 10 minutes)
+and `turns` (JSON, at most 300 `{"startMs", "endMs", "text"}`) and returns
+`{"words": [...], "skipped": [{"turn", "reason"}]}`. Each device gets
+ALIGN_MINUTES_PER_DEVICE_PER_DAY minutes of aligned audio per UTC day. The
+audio sits in a temp file only while the request runs; nothing is stored.
 """
 
+import json
 import logging
+import os
+import sqlite3
+import tempfile
 import threading
+import time
 import warnings
+import wave
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from datetime import UTC, datetime, timedelta
+from typing import Any, BinaryIO, Protocol
 
+import anyio
+from fastapi import APIRouter, Request
+from pydantic import BaseModel, TypeAdapter, ValidationError
+from python_multipart.exceptions import MultipartParseError
+from python_multipart.multipart import MultipartParser, MultipartState, parse_options_header
+from starlette.concurrency import run_in_threadpool
+from starlette.requests import ClientDisconnect
+
+from relay import db
+from relay.config import Settings
+from relay.deps import AppSettings, Conn
+from relay.devices import Device
+from relay.errors import RelayError, error_response
 from relay.text_norm import normalize
 
 logger = logging.getLogger(__name__)
@@ -34,6 +61,19 @@ RECEPTIVE_FIELD = 400
 # each side, and the emissions joined. Shorter slices take one pass.
 WINDOW_FRAMES = 1500
 CONTEXT_FRAMES = 100
+
+MAX_AUDIO_SECONDS = 600
+MAX_TURNS = 300
+# Ten minutes of PCM plus room for the WAV header and any extra chunks.
+MAX_AUDIO_BYTES = MAX_AUDIO_SECONDS * SAMPLE_RATE * 2 + 64 * 1024
+MAX_TURNS_BYTES = 1024 * 1024
+MAX_BODY_BYTES = MAX_AUDIO_BYTES + MAX_TURNS_BYTES + 64 * 1024
+# Requests in the relay at once: per device, and per alignment worker
+# (ALIGN_CONCURRENCY) including those waiting for one.
+MAX_REQUESTS_PER_DEVICE = 2
+REQUESTS_PER_WORKER = 4
+
+router = APIRouter()
 
 NO_TEXT = "The turn has no text."
 ENDS_BEFORE_START = "The turn ends before it starts."
@@ -281,3 +321,263 @@ class MmsAligner:
             score = sum(span.score * (span.end - span.start) for span in token_spans) / max(1, frames)
             spans.append((token_spans[0].start, token_spans[-1].end, float(score)))
         return spans
+
+
+def warm_up(aligner: Aligner) -> None:
+    """Load the model in the background, so the server answers at once and
+    the first alignment does not wait for it."""
+
+    def load() -> None:
+        try:
+            aligner.load()
+        except Exception:
+            logger.exception("alignment model could not load at startup; will retry on first use")
+
+    threading.Thread(target=load, name="align-warmup", daemon=True).start()
+
+
+# The endpoint.
+
+_BAD_FORM = "Send multipart/form-data with one audio part and one turns part."
+_NOT_WAV = "Send the audio as a WAV file: 16 kHz, mono, 16-bit PCM."
+_BAD_TURNS = "Send turns as a JSON list of objects with startMs, endMs and text."
+_TOO_LARGE = "The upload is too large. Send at most 10 minutes of 16 kHz mono 16-bit audio."
+
+
+class _TurnIn(BaseModel):
+    startMs: int
+    endMs: int
+    text: str
+
+
+_TURN = TypeAdapter(_TurnIn)
+
+
+class AlignerUnavailable(Exception):
+    pass
+
+
+@router.post("/v1/align")
+async def align_words(request: Request, device: Device, conn: Conn, settings: AppSettings) -> Any:
+    check_quota(device, settings)
+    device_id = device["device_id"]
+    slot = request.app.state.align_in_flight.acquire(device_id)
+    path = None
+    try:
+        boundary = _boundary(request)
+        fd, path = tempfile.mkstemp(prefix="align-", suffix=".wav")
+        with os.fdopen(fd, "wb") as audio_file:
+            turns_raw = await _read_form(request, boundary, audio_file)
+        turns = parse_turns(turns_raw)
+        n_samples = await run_in_threadpool(wav_samples, path)
+        planned, skipped = plan(turns, n_samples)
+        result = Alignment()
+        if planned:
+            started = time.monotonic()
+            async with request.app.state.align_gate:
+                try:
+                    result = await anyio.to_thread.run_sync(_align_file, request.app.state.aligner, path, planned)
+                except AlignerUnavailable:
+                    raise RelayError(
+                        503, "align_unavailable", "Word timing is not available right now. Try again later."
+                    ) from None
+            logger.info(
+                "aligned %.1f s of audio in %d turns for device %s in %.1f s",
+                result.seconds,
+                len(planned),
+                device_id[:8],
+                time.monotonic() - started,
+            )
+        if result.seconds:
+            await run_in_threadpool(charge_seconds, conn, device_id, result.seconds)
+        return {
+            "words": result.words,
+            "skipped": [s.as_json() for s in sorted(skipped + result.skipped, key=lambda s: s.turn)],
+        }
+    except ClientDisconnect:
+        return error_response(400, "client_disconnected", "The request was cut off.")
+    finally:
+        if path is not None:
+            try:
+                os.unlink(path)
+            except FileNotFoundError:
+                pass
+        slot.release()
+
+
+def check_quota(device: Any, settings: Settings) -> None:
+    """429 once the device has used today's minutes. A request that starts
+    under the limit is finished and charged in full."""
+    minutes = settings.align_minutes_per_device_per_day
+    used = device["align_seconds_day"] if device["align_day"] == _today() else 0.0
+    if used >= minutes * 60:
+        now = datetime.now(UTC)
+        midnight = datetime.combine(now.date() + timedelta(days=1), datetime.min.time(), UTC)
+        raise RelayError(
+            429,
+            "align_quota",
+            f"This device has used today's {minutes:.10g} minutes of word timing. It resets at midnight UTC.",
+            headers={"Retry-After": str(max(1, int((midnight - now).total_seconds())))},
+        )
+
+
+def charge_seconds(conn: sqlite3.Connection, device_id: str, seconds: float) -> None:
+    """Add the aligned seconds to the device's count for today, starting a
+    new count on a new UTC day. The work is done by now, so a failed write
+    is logged and the words still go back."""
+    day = _today()
+    try:
+        with db.transaction(conn):
+            conn.execute(
+                "UPDATE devices SET align_seconds_day = CASE WHEN align_day = ? THEN align_seconds_day + ? ELSE ? END,"
+                " align_day = ? WHERE device_id = ?",
+                (day, seconds, seconds, day, device_id),
+            )
+    except sqlite3.Error:
+        logger.exception("could not charge %.1f s of alignment to device %s", seconds, device_id[:8])
+
+
+def parse_turns(raw: bytes) -> list[Turn]:
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        raise RelayError(400, "invalid_request", _BAD_TURNS) from None
+    if not isinstance(data, list):
+        raise RelayError(400, "invalid_request", _BAD_TURNS)
+    if len(data) > MAX_TURNS:
+        raise RelayError(400, "invalid_request", f"Send at most {MAX_TURNS} turns.")
+    turns = []
+    for index, item in enumerate(data):
+        try:
+            turn = _TURN.validate_python(item)
+        except ValidationError:
+            raise RelayError(
+                400,
+                "invalid_request",
+                f"Turn {index} is not valid. Each turn needs startMs and endMs as whole numbers and text as a string.",
+            ) from None
+        turns.append(Turn(turn.startMs, turn.endMs, turn.text))
+    return turns
+
+
+def wav_samples(path: str) -> int:
+    """How many samples the WAV file holds, or 400 with the reason it can't
+    be used."""
+    try:
+        with wave.open(path, "rb") as audio:
+            if audio.getcomptype() != "NONE":
+                raise RelayError(400, "invalid_request", _NOT_WAV)
+            if audio.getnchannels() != 1:
+                raise RelayError(400, "invalid_request", "The audio must be mono.")
+            if audio.getsampwidth() != 2:
+                raise RelayError(400, "invalid_request", "The audio must be 16-bit PCM.")
+            if audio.getframerate() != SAMPLE_RATE:
+                raise RelayError(400, "invalid_request", "The audio must be 16 kHz.")
+            declared = audio.getnframes()
+            if declared > MAX_AUDIO_SECONDS * SAMPLE_RATE:
+                raise RelayError(400, "invalid_request", "The audio is longer than 10 minutes.")
+            # A header can claim more audio than the file holds.
+            n_samples = len(audio.readframes(declared)) // 2
+    except (wave.Error, EOFError):
+        raise RelayError(400, "invalid_request", _NOT_WAV) from None
+    if n_samples == 0:
+        raise RelayError(400, "invalid_request", "The audio is empty.")
+    return n_samples
+
+
+def _align_file(aligner: Aligner, path: str, planned: Sequence[PlannedTurn]) -> Alignment:
+    """The CPU work, in a worker thread."""
+    try:
+        aligner.load()
+    except Exception as exc:
+        logger.exception("alignment model could not load")
+        raise AlignerUnavailable from exc
+    with wave.open(path, "rb") as audio:
+
+        def read_pcm(start: int, end: int) -> bytes:
+            audio.setpos(start)
+            return audio.readframes(end - start)
+
+        return align_turns(aligner, read_pcm, planned)
+
+
+def _today() -> str:
+    return datetime.now(UTC).date().isoformat()
+
+
+def _boundary(request: Request) -> bytes:
+    kind, options = parse_options_header(request.headers.get("content-type", ""))
+    boundary = options.get(b"boundary")
+    if kind != b"multipart/form-data" or not boundary:
+        raise RelayError(400, "invalid_request", _BAD_FORM)
+    declared = request.headers.get("content-length")
+    if declared is not None:
+        if not declared.isdigit():
+            raise RelayError(400, "invalid_request", "The Content-Length header is not valid.")
+        if int(declared) > MAX_BODY_BYTES:
+            raise RelayError(413, "too_large", _TOO_LARGE)
+    return boundary
+
+
+async def _read_form(request: Request, boundary: bytes, audio_file: BinaryIO) -> bytes:
+    """Stream the body: the audio part into `audio_file`, the turns part into
+    memory. Exactly one of each, within the size limits."""
+    names: list[str] = []
+    headers: dict[bytes, bytes] = {}
+    header_name, header_value = bytearray(), bytearray()
+    turns = bytearray()
+    audio_bytes = 0
+
+    def on_part_begin() -> None:
+        if len(names) == 2:
+            raise RelayError(400, "invalid_request", _BAD_FORM)
+        names.append("")
+        headers.clear()
+
+    def on_header_end() -> None:
+        headers[bytes(header_name).lower()] = bytes(header_value)
+        header_name.clear()
+        header_value.clear()
+
+    def on_headers_finished() -> None:
+        _, disposition = parse_options_header(headers.get(b"content-disposition", b""))
+        names[-1] = disposition.get(b"name", b"").decode("utf-8", "replace")
+        if names.count(names[-1]) > 1:
+            raise RelayError(400, "invalid_request", _BAD_FORM)
+
+    def on_part_data(data: bytes, start: int, end: int) -> None:
+        nonlocal audio_bytes
+        if names[-1] == "audio":
+            audio_bytes += end - start
+            if audio_bytes > MAX_AUDIO_BYTES:
+                raise RelayError(413, "too_large", _TOO_LARGE)
+            audio_file.write(data[start:end])
+        elif names[-1] == "turns":
+            turns.extend(data[start:end])
+            if len(turns) > MAX_TURNS_BYTES:
+                raise RelayError(413, "too_large", "The turns are larger than 1 MB.")
+
+    parser = MultipartParser(
+        boundary,
+        {
+            "on_part_begin": on_part_begin,
+            "on_header_field": lambda data, start, end: header_name.extend(data[start:end]),
+            "on_header_value": lambda data, start, end: header_value.extend(data[start:end]),
+            "on_header_end": on_header_end,
+            "on_headers_finished": on_headers_finished,
+            "on_part_data": on_part_data,
+        },
+    )
+    received = 0
+    try:
+        async for chunk in request.stream():
+            received += len(chunk)
+            if received > MAX_BODY_BYTES:
+                raise RelayError(413, "too_large", _TOO_LARGE)
+            parser.write(chunk)
+        parser.finalize()
+    except (MultipartParseError, ValueError):
+        raise RelayError(400, "invalid_request", _BAD_FORM) from None
+    if parser.state != MultipartState.END or sorted(names) != ["audio", "turns"]:
+        raise RelayError(400, "invalid_request", _BAD_FORM)
+    return bytes(turns)

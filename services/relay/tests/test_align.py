@@ -314,3 +314,76 @@ def test_model_uses_the_configured_threads(mms):
     import torch
 
     assert torch.get_num_threads() == mms.threads
+
+
+# The endpoint with the real model (slow).
+
+
+@pytest.fixture
+def mms_client(client, mms):
+    client.app.state.aligner = mms
+    token = client.post("/v1/devices", json={"device_id": "6b0e2f8e-7d61-4c39-9a51-3d7f0c6c9e11"}).json()["token"]
+    client.headers["Authorization"] = f"Bearer {token}"
+    return client
+
+
+def post_align(client, turns):
+    _, _, case = fixture_case()
+    audio = (FIXTURES / case["audio"]).read_bytes()
+    return client.post(
+        "/v1/align",
+        files={"audio": ("audio.wav", audio, "audio/wav"), "turns": (None, json.dumps(turns))},
+    )
+
+
+@pytest.mark.slow
+def test_unspoken_text_gets_low_scores_not_500(mms_client):
+    _, _, case = fixture_case()
+    spoken = case["turns"][0]
+    unspoken = {**spoken, "text": "purple elephants juggle seven frozen bananas beneath a quiet volcano"}
+    response = post_align(mms_client, [spoken, unspoken])
+    assert response.status_code == 200, response.text
+    body = response.json()
+    scores = {turn: sorted(w["score"] for w in body["words"] if w["turn"] == turn) for turn in (0, 1)}
+    if not scores[1]:
+        # Skipped with a reason is also fine.
+        assert [s["turn"] for s in body["skipped"]] == [1]
+        return
+    median = {turn: values[len(values) // 2] for turn, values in scores.items()}
+    mean = {turn: sum(values) / len(values) for turn, values in scores.items()}
+    print(f"\nspoken: median {median[0]:.3f} mean {mean[0]:.3f}; unspoken: median {median[1]:.3f} mean {mean[1]:.3f} {scores[1]}")
+    # Real speech-to-text turns score a median of 0.74 to 0.97. Words that
+    # were never said can still find a few frames that sound alike, so single
+    # scores vary, but the turn as a whole scores low.
+    assert median[0] > 0.7
+    assert median[1] < 0.5
+    assert mean[1] < mean[0] - 0.25
+
+
+@pytest.mark.slow
+def test_odd_text_and_turns_never_give_a_500(mms_client):
+    turns = [
+        {"startMs": 0, "endMs": 400, "text": "the quick brown fox jumps over the lazy dog " * 4},
+        {"startMs": 1000, "endMs": 3000, "text": "3 ½ cafés — 日本 R&D 1990s!!"},
+        {"startMs": 2000, "endMs": 1000, "text": "backwards"},
+        {"startMs": 30000, "endMs": 40000, "text": "after the end"},
+        {"startMs": 24000, "endMs": 90000, "text": "challenges as a as a team"},
+        {"startMs": 0, "endMs": 0, "text": ""},
+    ]
+    response = post_align(mms_client, turns)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [(s["turn"], s["reason"]) for s in body["skipped"]] == [
+        (0, TOO_SHORT),
+        (2, align.ENDS_BEFORE_START),
+        (3, PAST_END),
+        (5, NO_TEXT),
+    ]
+    assert {w["turn"] for w in body["words"]} == {1, 4}
+    assert [w["score"] for w in body["words"] if w["text"] in ("—", "日本")] == [0.0, 0.0]
+    team = [w for w in body["words"] if w["turn"] == 4]
+    print(f"\nclamped turn: {[(w['text'], w['startMs'], w['score']) for w in team]}")
+    # The turn runs past the audio; its words are still found where they are
+    # spoken ("challenges" at 24.08 s in the reference) and end by 25.8 s.
+    assert abs(team[0]["startMs"] - 24_080) <= 150
+    assert team[-1]["endMs"] <= 25_800
