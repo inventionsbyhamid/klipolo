@@ -464,9 +464,14 @@ def test_meta_rejecting_the_relay_key_is_502_not_401(client, conn, meta):
     assert ledger(conn) == []
 
 
-def test_meta_unreachable_is_502_and_charges_nothing(client, conn, meta):
+@pytest.mark.parametrize(
+    "error",
+    [httpx.ConnectError("no route"), httpx.LocalProtocolError("invalid header")],
+    ids=["connect-error", "local-protocol-error"],
+)
+def test_meta_unreachable_is_502_and_charges_nothing(client, conn, meta, error):
     device = add_device(conn)
-    meta.post("/responses").mock(side_effect=httpx.ConnectError("no route"))
+    meta.post("/responses").mock(side_effect=error)
 
     response = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
 

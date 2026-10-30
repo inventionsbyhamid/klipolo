@@ -687,7 +687,7 @@ def _event_usage(event: Any) -> Any:
 
 async def _transport_error(exc: httpx.HTTPError, settings: Settings, device_id: str, call: Call) -> RelayError:
     logger.warning("Meta call to %s failed: %s", call.path, type(exc).__name__)
-    if isinstance(exc, httpx.ConnectError | httpx.ConnectTimeout | httpx.PoolTimeout):
+    if isinstance(exc, httpx.ConnectError | httpx.ConnectTimeout | httpx.PoolTimeout | httpx.LocalProtocolError):
         # Nothing reached Meta.
         return RelayError(502, "meta_unreachable", "Could not reach Meta. Try again.")
     if call.meter is not None:
