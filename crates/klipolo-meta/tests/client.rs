@@ -1204,6 +1204,13 @@ fn only_a_busy_moment_is_busy() {
     };
     assert!(limited(Some("busy")).is_busy());
     assert!(limited(None).is_busy());
+    // JSON with a reason but no code is a server's own rate limit: a stop.
+    assert!(!MetaError::RateLimited {
+        retry_after: Some(15),
+        code: None,
+        message: Some("Rate limit exceeded.".into()),
+    }
+    .is_busy());
     // A used-up allowance or Meta's own rate limit is a stop, not a moment.
     assert!(!limited(Some("align_quota")).is_busy());
     assert!(!limited(Some("rate_limit_exceeded")).is_busy());
@@ -1213,6 +1220,31 @@ fn only_a_busy_moment_is_busy() {
         message: String::new()
     }
     .is_busy());
+}
+
+/// A JSON 429 whose code is null still says why: it is that server's own limit, not Traefik's plain text, so it stays
+/// a stop.
+#[tokio::test]
+async fn a_json_429_with_a_null_code_is_not_busy() {
+    let error = transcribe_error(
+        ResponseTemplate::new(429)
+            .insert_header("retry-after", "15")
+            .set_body_json(json!({"error": {
+                "code": null,
+                "message": "Rate limit exceeded. Please retry after 15 seconds.",
+                "type": "rate_limit_error",
+            }})),
+    )
+    .await;
+    assert_eq!(
+        error,
+        MetaError::RateLimited {
+            retry_after: Some(15),
+            code: None,
+            message: Some("Rate limit exceeded. Please retry after 15 seconds.".into()),
+        }
+    );
+    assert!(!error.is_busy());
 }
 
 /// Meta's own 429 names its code inside `error`; a "code" that isn't one (words, or text holding a secret) is dropped.

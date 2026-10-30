@@ -142,14 +142,16 @@ impl MetaError {
     }
 
     /// A busy moment to wait out (`retry_after`) and send again, not a
-    /// used-up allowance: the relay's 429 `busy`, or a 429 with no error code
-    /// at all (Traefik's plain-text rate limit in front of the relay). The
-    /// relay's daily `align_quota` and Meta's own rate limit are stops.
+    /// used-up allowance: the relay's 429 `busy`, or a 429 with neither an
+    /// error code nor a message (Traefik's plain-text rate limit in front of
+    /// the relay). A JSON 429 that gives a reason (the relay's daily
+    /// `align_quota`, Meta's own rate limit, even with a null code) is a stop.
     pub fn is_busy(&self) -> bool {
         match self {
-            Self::RateLimited { code, .. } => {
-                code.is_none() || code.as_deref() == Some(RELAY_BUSY_CODE)
-            }
+            Self::RateLimited { code, message, .. } => match code.as_deref() {
+                Some(code) => code == RELAY_BUSY_CODE,
+                None => message.is_none(),
+            },
             _ => false,
         }
     }
