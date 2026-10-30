@@ -9,7 +9,8 @@
 use std::collections::HashMap;
 
 use klipolo_model::Project;
-use klipolo_model::query::{clip_starts, main_track_duration, piece_of};
+use klipolo_model::ops::Edge;
+use klipolo_model::query::{clip_at, clip_starts, main_track_duration, piece_of};
 use klipolo_model::time::{RangeUs, Us, merge_ranges, scaled, unscaled};
 use klipolo_model::timeline::Clip;
 
@@ -97,10 +98,37 @@ impl<'a> Map<'a> {
         merge_ranges(&out, main_track_duration(&work.timeline.main))
     }
 
+    /// Where the snapshot's moment `t` plays in `work`, if a clip plays it there and it is still there.
+    pub(super) fn time(&self, work: &Project, t: Us) -> Option<Us> {
+        let (i, start) = clip_at(&self.snapshot.timeline.main, t)?;
+        let source = source_at(&self.snapshot.timeline.main[i], start, t);
+        self.pieces(work)[i].iter().find_map(|&(j, piece_start)| {
+            let piece = &work.timeline.main[j];
+            (piece.source_in_us..piece.source_out_us)
+                .contains(&source)
+                .then(|| timeline_at(piece, piece_start, source))
+        })
+    }
+
     /// The working copy's pieces of snapshot clip `i`.
     pub(super) fn pieces_of<'w>(&self, work: &'w Project, i: usize) -> Vec<&'w Clip> {
         (self.pieces(work).swap_remove(i).into_iter())
             .map(|(j, _)| &work.timeline.main[j])
             .collect()
+    }
+
+    /// The piece of snapshot clip `i` in `work` that holds its `edge`: the one reaching furthest that way in its
+    /// source.
+    pub(super) fn edge_piece<'w>(
+        &self,
+        work: &'w Project,
+        i: usize,
+        edge: Edge,
+    ) -> Option<&'w Clip> {
+        let pieces = self.pieces_of(work, i).into_iter();
+        match edge {
+            Edge::Start => pieces.min_by_key(|c| c.source_in_us),
+            Edge::End => pieces.max_by_key(|c| c.source_out_us),
+        }
     }
 }

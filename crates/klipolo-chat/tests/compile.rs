@@ -10,17 +10,18 @@ use std::sync::Arc;
 
 use klipolo_chat::evidence::typed_times;
 use klipolo_chat::{
-    ANALYZE_FIRST, AnalysisState, Audience, FunctionCall, Inputs, Refs, Refusal, STILL_LISTENING,
-    ToolCall, View, compile,
+    ANALYZE_FIRST, AnalysisState, Audience, FunctionCall, Inputs, Job, Moment, Refs, Refusal,
+    STILL_LISTENING, SceneEntry, SceneLog, ToolCall, View, compile,
 };
-use klipolo_model::Project;
+use klipolo_model::captions::styles::BuiltinCaptionStyle;
 use klipolo_model::coded::ErrorParam;
-use klipolo_model::ops::{Op, Origin};
-use klipolo_model::project::{Asset, AssetKind};
+use klipolo_model::ops::{Edge, Op, Origin};
+use klipolo_model::project::{Asset, AssetKind, CaptionSettings, FormatKind, Settings};
 use klipolo_model::query::main_track_duration;
 use klipolo_model::speech::{Levels, Speech, Transcript, Word, WordKind, spoken, word_cut};
 use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::{Clip, ClipSource};
+use klipolo_model::{Document, Project, apply_ops};
 
 fn secs(s: f64) -> Us {
     (s * 1e6).round() as Us
@@ -379,6 +380,63 @@ fn keep_only_proposes_the_complement() {
 }
 
 #[test]
+fn additions_and_removals_split_in_one_answer() {
+    let (p, mut speech) = talk();
+    speech.levels.insert("talk".into(), levels());
+    let i = inputs(&p, speech, "make it square and remove pauses over 1 s");
+    let calls = [
+        call("setFormat", r#"{"format": "square", "keepOthers": true}"#),
+        call("removeSilences", r#"{"minPauseSec": 1}"#),
+    ];
+    let out = compile(&p, &i, &calls);
+    assert_eq!(out.refusals, vec![]);
+    let additions = out.additions.clone().expect("the format applies at once");
+    assert_eq!(
+        additions.ops,
+        vec![Op::SetSettings {
+            settings: Settings {
+                fps: 30,
+                formats: vec![FormatKind::Landscape, FormatKind::Square],
+                primary_format: FormatKind::Square,
+            }
+        }]
+    );
+    assert_eq!(additions.origin, Some(Origin::Chat));
+    assert_eq!(additions.label, "chat.setFormat");
+    let proposal = out.proposal.clone().expect("the pauses are proposed");
+    assert_eq!(
+        proposal.tx.ops,
+        vec![Op::DeleteRanges {
+            ranges: vec![span(15.15, 16.85)]
+        }]
+    );
+    assert_eq!(proposal.tx.origin, Some(Origin::Chat));
+    // The proposal is judged on the project as the additions leave it, which is what the app applies it to.
+    let with_additions = apply_ops(&p, &additions.ops).unwrap();
+    assert_eq!(
+        proposal.review.after,
+        apply_ops(&with_additions, &proposal.tx.ops).unwrap()
+    );
+    assert_eq!(
+        proposal.review.after.settings.primary_format,
+        FormatKind::Square
+    );
+    // The additions are one undo step and Apply another: one undo right after Apply brings the cut footage back.
+    let mut doc = Document::new(p.clone()).unwrap();
+    doc.apply(&additions).unwrap();
+    doc.apply(&proposal.tx).unwrap();
+    assert_eq!(doc.project(), &proposal.review.after);
+    doc.undo();
+    assert_eq!(doc.project(), &with_additions);
+    doc.undo();
+    assert_eq!(doc.project(), &p);
+    // Asked the other way round, it is the same edit: the additions always come first.
+    let reversed = compile(&p, &i, &[calls[1].clone(), calls[0].clone()]);
+    assert_eq!(reversed.additions, out.additions);
+    assert_eq!(reversed.proposal, out.proposal);
+}
+
+#[test]
 fn no_analysis_gives_a_friendly_refusal() {
     assert_eq!(STILL_LISTENING, "Klipolo is still listening to this clip");
     assert_eq!(ANALYZE_FIRST, "Analyze this clip first");
@@ -386,6 +444,7 @@ fn no_analysis_gives_a_friendly_refusal() {
     let calls = [
         call("removeFillers", "{}"),
         call("removeSilences", r#"{"minPauseSec": null}"#),
+        call("findMoments", r#"{"query": "the module", "ranges": []}"#),
     ];
     for (state, said) in [
         (Some(AnalysisState::Transcribing), STILL_LISTENING),
@@ -398,7 +457,7 @@ fn no_analysis_gives_a_friendly_refusal() {
             i.analysis.insert("talk".into(), state);
         }
         let out = compile(&p, &i, &calls);
-        let expected: Vec<Refusal> = (0..2)
+        let expected: Vec<Refusal> = (0..3)
             .map(|k| Refusal {
                 call_index: k,
                 reason: said.into(),
@@ -407,6 +466,7 @@ fn no_analysis_gives_a_friendly_refusal() {
             .collect();
         assert_eq!(out.refusals, expected, "{state:?}");
         assert_eq!(out.proposal, None);
+        assert!(out.moments.is_empty());
     }
     // Two files, one never analyzed and one still being heard: analyzing is what the person can do.
     let two = project(
@@ -424,6 +484,160 @@ fn no_analysis_gives_a_friendly_refusal() {
     let done = compile(&two, &inputs(&two, speech, "remove the ums"), &calls[..1]);
     assert_eq!(done.refusals, vec![]);
     assert!(done.proposal.is_some());
+}
+
+#[test]
+fn fix_caption_words_targets_sound_time() {
+    // The interview's sound starts 0.5 s into its file, and its clip plays the file from 2.0 s, after a 4.0 s intro.
+    let mut interview = file("interview", 20.0, true);
+    interview.audio_lead_us = Some(secs(0.5));
+    let p = project(
+        vec![file("intro", 4.0, false), interview],
+        vec![
+            clip("i", "intro", 0.0, 4.0),
+            clip("v", "interview", 2.0, 20.0),
+        ],
+    );
+    let word = |text: &str, a: f64, b: f64| Word {
+        text: text.into(),
+        start_us: secs(a),
+        end_us: secs(b),
+        confidence: 0.9,
+        kind: WordKind::Word,
+    };
+    // In the file's sound time. The first "Caden" (0.2 s, file 0.7 s) plays before the clip's in point: not shown.
+    let words = vec![
+        word("Caden", 0.2, 0.6),
+        word("Hi", 4.6, 4.9),
+        word("Caden,", 5.0, 5.4),
+        word("welcome.", 5.5, 6.0),
+        word("caden", 9.0, 9.3),
+        word("Cadence", 10.0, 10.5),
+    ];
+    let mut speech = Speech::default();
+    speech
+        .transcripts
+        .insert("interview".into(), transcript(words, 19.5));
+    let i = inputs(&p, speech, "it's Kaiden, not Caden");
+    let fix = |a: f64, b: f64, text: &str| Op::FixWords {
+        asset_id: "interview".into(),
+        start_us: secs(a),
+        end_us: secs(b),
+        text: Some(text.into()),
+    };
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "fixCaptionWords",
+            r#"{"find": "Caden", "replace": "Kaiden"}"#,
+        )],
+    );
+    assert_eq!(out.refusals, vec![]);
+    let additions = out.additions.expect("word fixes apply at once");
+    // Sound time as the transcript has it, not file time (0.5 s later) nor the timeline's. The comma stays;
+    // "Cadence" is another word.
+    assert_eq!(
+        additions.ops,
+        vec![fix(5.0, 5.4, "Kaiden,"), fix(9.0, 9.3, "Kaiden")]
+    );
+    assert_eq!(additions.label, "chat.fixCaptionWords");
+    // Several words read as one fix.
+    let both = compile(
+        &p,
+        &i,
+        &[call(
+            "fixCaptionWords",
+            r#"{"find": "hi caden", "replace": "Hey Kaiden"}"#,
+        )],
+    );
+    assert_eq!(
+        both.additions.expect("a fix").ops,
+        vec![fix(4.6, 5.4, "Hey Kaiden,")]
+    );
+    // No such word: said back to the model.
+    let none = compile(
+        &p,
+        &i,
+        &[call(
+            "fixCaptionWords",
+            r#"{"find": "Noelle", "replace": "Noel"}"#,
+        )],
+    );
+    assert_eq!(none.additions, None);
+    assert!(refused_to_model(&none, 0).starts_with("fixCaptionWords: "));
+}
+
+#[test]
+fn failed_call_is_reported_and_others_still_compile() {
+    let (mut p, speech) = talk();
+    // The file in two clips, cut at 15.0 s.
+    p.timeline.main = vec![
+        clip("t", "talk", 0.0, 15.0),
+        clip("t-2", "talk", 15.0, 30.0),
+    ];
+    let i = inputs(
+        &p,
+        speech,
+        "vertical only, split at 15, karaoke captions, cut the boring bit and the ums",
+    );
+    let calls = [
+        call(
+            "setFormat",
+            r#"{"format": "portrait", "keepOthers": false}"#,
+        ),
+        // Snaps to the cut between the clips, where there is nothing to split: the model refuses it.
+        call("splitAt", r#"{"atSec": 15.1}"#),
+        call("setCaptions", r#"{"on": true, "style": "karaoke"}"#),
+        // Invented: nothing is said or shown there.
+        cut(20.0, 24.0),
+        call("removeFillers", "{}"),
+    ];
+    let out = compile(&p, &i, &calls);
+    let refused: Vec<(usize, Audience)> = (out.refusals.iter())
+        .map(|r| (r.call_index, r.audience))
+        .collect();
+    assert_eq!(refused, vec![(1, Audience::Model), (3, Audience::Model)]);
+    assert!(
+        out.refusals[0].reason.starts_with("splitAt: "),
+        "{}",
+        out.refusals[0].reason
+    );
+    assert!(out.refusals[1].reason.starts_with("cutRange: "));
+    let additions = out
+        .additions
+        .expect("the format and the captions still apply");
+    assert_eq!(
+        additions.ops,
+        vec![
+            Op::SetSettings {
+                settings: Settings {
+                    fps: 30,
+                    formats: vec![FormatKind::Portrait],
+                    primary_format: FormatKind::Portrait,
+                }
+            },
+            Op::SetCaptions {
+                captions: CaptionSettings {
+                    enabled: true,
+                    style: Some(BuiltinCaptionStyle::Karaoke.id()),
+                    ..p.captions.clone()
+                }
+            },
+        ]
+    );
+    assert!(apply_ops(&p, &additions.ops).is_ok());
+    // One undo step, named for the first change and how many more.
+    assert_eq!(additions.label, "chat.andMore");
+    let params = additions.params.expect("the label's values");
+    assert_eq!(params["more"], ErrorParam::Number(1.0));
+    match &params["first"] {
+        ErrorParam::Coded(first) => assert_eq!(first.code, "chat.setFormat"),
+        other => panic!("{other:?}"),
+    }
+    // The fillers are still proposed.
+    let proposal = out.proposal.expect("the fillers are proposed");
+    assert_eq!(proposal.tx.label, "chat.removeFillers");
 }
 
 #[test]
@@ -511,6 +725,97 @@ fn typed_times_count_as_evidence() {
 }
 
 #[test]
+fn trims_stay_within_the_clip_or_its_neighbour_and_the_file() {
+    let p = three_clips();
+    let run =
+        |message: &str, c: ToolCall| compile(&p, &inputs(&p, Speech::default(), message), &[c]);
+    // Shorter, to a time the person said: proposed.
+    let inward = run("end c2 at 15", trim("c2", "end", 15.0));
+    assert_eq!(inward.additions, None);
+    let proposal = inward.proposal.expect("a shorter clip is proposed");
+    assert_eq!(
+        proposal.tx.ops,
+        vec![Op::TrimClip {
+            id: "b".into(),
+            edge: Edge::End,
+            source_us: secs(25.0)
+        }]
+    );
+    assert_eq!(proposal.ranges, vec![span(15.0, 20.0)]);
+    assert_eq!(proposal.tx.label, "chat.trimClip");
+    // Shorter, to an invented time: refused like a cut.
+    let invented = run("shorten c2", trim("c2", "end", 17.0));
+    assert!(
+        refused_to_model(&invented, 0).starts_with("trimClip: toSec 17.0 is not within 0.3 s of"),
+        "{:?}",
+        invented.refusals
+    );
+    // Longer, into the clip next to it, with footage the file has: applied at once.
+    let later = run("make c2 longer", trim("c2", "end", 22.0));
+    assert_eq!(later.refusals, vec![]);
+    assert_eq!(
+        later.additions.expect("a longer clip applies at once").ops,
+        vec![Op::TrimClip {
+            id: "b".into(),
+            edge: Edge::End,
+            source_us: secs(32.0)
+        }]
+    );
+    let earlier = run("start c2 earlier", trim("c2", "start", 8.0));
+    assert_eq!(
+        earlier.additions.expect("a longer clip").ops,
+        vec![Op::TrimClip {
+            id: "b".into(),
+            edge: Edge::Start,
+            source_us: secs(18.0)
+        }]
+    );
+    // The last clip may grow past the main track's end, as far as its file goes.
+    let last = run("longer", trim("c3", "end", 35.0));
+    assert_eq!(
+        last.additions.expect("a longer clip").ops,
+        vec![Op::TrimClip {
+            id: "c".into(),
+            edge: Edge::End,
+            source_us: secs(55.0)
+        }]
+    );
+    // Refused with the clip's range: a time on the wrong side of it, past the clip next to it, or past its file.
+    for (c, why) in [
+        (
+            trim("c2", "end", 5.0),
+            "trimClip: c2 plays from 10.0 to 20.0 s; 5.0 is outside it.",
+        ),
+        (
+            trim("c2", "start", 25.0),
+            "trimClip: c2 plays from 10.0 to 20.0 s; 25.0 is outside it.",
+        ),
+        (
+            trim("c2", "end", 45.0),
+            "trimClip: c2 plays from 10.0 to 20.0 s; 45.0 is outside it.",
+        ),
+        (
+            trim("c3", "end", 45.0),
+            "trimClip: c3 plays from 20.0 to 30.0 s, and its file has 10.0 s more after it; 45.0 is past that.",
+        ),
+        (
+            trim("c2", "end", 20.0),
+            "trimClip: c2 already ends at 20.0 s.",
+        ),
+    ] {
+        let out = run("trim 5 15 25 35 45", c);
+        assert_eq!(refused_to_model(&out, 0), why);
+        assert_eq!((&out.additions, &out.proposal), (&None, &None));
+    }
+    // Clip edges count as evidence: a cut of the middle clip, a little off.
+    let middle = run("remove the second clip", cut(10.1, 19.9));
+    assert_eq!(
+        middle.proposal.expect("a cut").ranges,
+        vec![span(10.0, 20.0)]
+    );
+}
+
+#[test]
 fn two_cuts_in_one_answer_remove_exactly_the_named_ranges() {
     let p = broll(60.0);
     let i = inputs(&p, Speech::default(), "cut 10 to 12 and 20 to 22");
@@ -565,4 +870,170 @@ fn overlapping_cuts_are_removed_once() {
         again.proposal.expect("the first cut").ranges,
         vec![span(10.0, 14.0)]
     );
+}
+
+#[test]
+fn an_outward_trim_before_a_cut_shifts_the_cut_by_content() {
+    // One 40 s file in two clips: c1 plays its 0 to 10 s, c2 its 20 to 30 s.
+    let p = project(
+        vec![file("long", 40.0, false)],
+        vec![clip("a", "long", 0.0, 10.0), clip("b", "long", 20.0, 30.0)],
+    );
+    let i = inputs(
+        &p,
+        Speech::default(),
+        "end the first clip at 12 and cut 15 to 17",
+    );
+    let out = compile(&p, &i, &[trim("c1", "end", 12.0), cut(15.0, 17.0)]);
+    assert_eq!(out.refusals, vec![]);
+    assert_eq!(
+        out.additions.expect("c1 grows at once").ops,
+        vec![Op::TrimClip {
+            id: "a".into(),
+            edge: Edge::End,
+            source_us: secs(12.0)
+        }]
+    );
+    // c1 is 2 s longer, so the footage the model named (25 to 27 s of the file, in c2) plays 2 s later.
+    let proposal = out.proposal.expect("the cut is proposed");
+    assert_eq!(
+        proposal.tx.ops,
+        vec![Op::DeleteRanges {
+            ranges: vec![span(17.0, 19.0)]
+        }]
+    );
+    assert_eq!(proposal.ranges, vec![span(17.0, 19.0)]);
+    let pieces: Vec<(Us, Us)> = (proposal.review.after.timeline.main[1..].iter())
+        .map(|c| (c.source_in_us, c.source_out_us))
+        .collect();
+    assert_eq!(
+        pieces,
+        vec![(secs(20.0), secs(25.0)), (secs(27.0), secs(30.0))]
+    );
+}
+
+#[test]
+fn split_snaps_to_evidence_but_is_never_refused() {
+    let p = broll(30.0);
+    let i = inputs(&p, Speech::default(), "split at 12");
+    let near = compile(&p, &i, &[call("splitAt", r#"{"atSec": 12.1}"#)]);
+    let additions = near.additions.expect("a split applies at once");
+    assert_eq!(additions.ops, vec![Op::Split { at_us: secs(12.0) }]);
+    assert_eq!(additions.label, "chat.splitAt");
+    let anywhere = compile(&p, &i, &[call("splitAt", r#"{"atSec": 17.3}"#)]);
+    assert_eq!(anywhere.refusals, vec![]);
+    assert_eq!(
+        anywhere.additions.expect("a split").ops,
+        vec![Op::Split { at_us: secs(17.3) }]
+    );
+}
+
+#[test]
+fn moments_snap_to_the_evidence_and_invented_ones_are_refused() {
+    let p = broll(60.0);
+    let mut i = inputs(&p, Speech::default(), "where does she laugh");
+    i.scenes.insert(
+        "broll".into(),
+        SceneLog {
+            items: vec![SceneEntry {
+                start_us: secs(3.0),
+                end_us: secs(8.0),
+                kind: "reaction".into(),
+                who: "woman".into(),
+                text: "laughs".into(),
+                on_screen_text: None,
+            }],
+        },
+    );
+    let find = |ranges: &str| {
+        compile(
+            &p,
+            &i,
+            &[call(
+                "findMoments",
+                &format!(r#"{{"query": "she laughs", "ranges": {ranges}}}"#),
+            )],
+        )
+    };
+    let found = find(r#"[{"startSec": 3.1, "endSec": 7.9, "label": "she laughs"}]"#);
+    assert_eq!(found.refusals, vec![]);
+    assert_eq!(
+        found.moments,
+        vec![Moment {
+            range: span(3.0, 8.0),
+            label: "she laughs".into()
+        }]
+    );
+    assert_eq!((found.additions, found.proposal), (None, None));
+    let invented = find(r#"[{"startSec": 40, "endSec": 45, "label": "she laughs"}]"#);
+    assert!(invented.moments.is_empty());
+    assert!(
+        refused_to_model(&invented, 0)
+            .starts_with("findMoments: ranges[0].startSec 40.0 is not within 0.3 s of"),
+        "{:?}",
+        invented.refusals
+    );
+    // None found: nothing to show, nothing refused.
+    let none = find("[]");
+    assert_eq!((none.moments.len(), none.refusals.len()), (0, 0));
+}
+
+#[test]
+fn undo_with_edits_refuses_the_edits() {
+    let p = broll(30.0);
+    let i = inputs(&p, Speech::default(), "undo that and make it square");
+    let out = compile(
+        &p,
+        &i,
+        &[
+            call("undo", "{}"),
+            call("setFormat", r#"{"format": "square", "keepOthers": true}"#),
+        ],
+    );
+    assert!(out.undo);
+    assert_eq!(out.additions, None);
+    assert!(refused_to_model(&out, 1).starts_with("setFormat: "));
+    let alone = compile(&p, &i, &[call("undo", "{}")]);
+    assert!(alone.undo);
+    assert_eq!(alone.refusals, vec![]);
+}
+
+#[test]
+fn questions_jobs_and_cannot_do_pass_through() {
+    let p = broll(30.0);
+    let out = compile(
+        &p,
+        &inputs(
+            &p,
+            Speech::default(),
+            "follow her, blur faces, add music, cut the bad part",
+        ),
+        &[
+            call("askUser", r#"{"question": "Which part should go?"}"#),
+            call("cannotDo", r#"{"reason": "Klipolo can't add music yet."}"#),
+            call("followSubject", r#"{"description": "woman astronaut"}"#),
+            call("blurObjects", r#"{"description": "face"}"#),
+        ],
+    );
+    assert_eq!(out.questions, vec!["Which part should go?".to_owned()]);
+    assert_eq!(
+        out.refusals,
+        vec![Refusal {
+            call_index: 1,
+            reason: "Klipolo can't add music yet.".into(),
+            audience: Audience::Person,
+        }]
+    );
+    assert_eq!(
+        out.jobs,
+        vec![
+            Job::Follow {
+                description: "woman astronaut".into()
+            },
+            Job::Blur {
+                description: "face".into()
+            },
+        ]
+    );
+    assert_eq!((out.additions, out.proposal, out.undo), (None, None, false));
 }

@@ -25,6 +25,7 @@
 //! `chat.andMore {first, more}` for a step of several calls. Splitting by concern: `additions`, `removals`, `trim`
 //! (both), `map`.
 
+mod additions;
 mod map;
 mod removals;
 mod trim;
@@ -33,9 +34,11 @@ use std::collections::{BTreeSet, HashMap};
 
 use klipolo_model::coded::{CodedError, ErrorParam};
 use klipolo_model::ops::{Op, Origin, Transaction};
+use klipolo_model::project::AssetKind;
 use klipolo_model::risk::Review;
 use klipolo_model::speech::{Speech, run_spans};
 use klipolo_model::time::{RangeUs, Us};
+use klipolo_model::timeline::ClipSource;
 use klipolo_model::{ModelError, Project, finish_parts};
 
 use crate::context::{Refs, SceneLog, View, secs};
@@ -262,11 +265,23 @@ struct Compiler<'a> {
 
 impl Compiler<'_> {
     fn run(&self, calls: &[ToolCall]) -> Compiled {
-        let mut out = Compiled::default();
-        // In call order: the additions compile now; removals wait for the project the additions make.
+        let mut out = Compiled {
+            undo: calls.iter().any(|c| matches!(c, ToolCall::Undo)),
+            ..Compiled::default()
+        };
+        // In call order: the additions compile now; removals and moments wait for the project the additions make.
         let mut adding = Phase::new(self.snapshot.clone());
         let mut waiting: Vec<(usize, Removal)> = Vec::new();
+        let mut moments: Vec<(usize, &[Moment])> = Vec::new();
         for (i, call) in calls.iter().enumerate() {
+            if out.undo && is_edit(call) {
+                let reason = format!(
+                    "{}: not done, because undo is in the same answer. Call undo on its own, then the other changes.",
+                    call.name()
+                );
+                refuse(&mut out, i, to_model(reason));
+                continue;
+            }
             if let Some(said) = self.missing_analysis(call) {
                 let said = Refused {
                     reason: said.to_owned(),
@@ -276,6 +291,35 @@ impl Compiler<'_> {
                 continue;
             }
             let addition = match call {
+                ToolCall::Undo => continue,
+                ToolCall::AskUser { question } => {
+                    out.questions.push(question.clone());
+                    continue;
+                }
+                ToolCall::CannotDo { reason } => {
+                    let said = Refused {
+                        reason: reason.clone(),
+                        audience: Audience::Person,
+                    };
+                    refuse(&mut out, i, said);
+                    continue;
+                }
+                ToolCall::FollowSubject { description } => {
+                    out.jobs.push(Job::Follow {
+                        description: description.clone(),
+                    });
+                    continue;
+                }
+                ToolCall::BlurObjects { description } => {
+                    out.jobs.push(Job::Blur {
+                        description: description.clone(),
+                    });
+                    continue;
+                }
+                ToolCall::FindMoments { moments: found, .. } => {
+                    moments.push((i, found));
+                    continue;
+                }
                 ToolCall::CutRange { .. }
                 | ToolCall::KeepOnly { .. }
                 | ToolCall::RemoveSilences { .. }
@@ -289,14 +333,22 @@ impl Compiler<'_> {
                             waiting.push((i, Removal::Shorter(shorter)));
                             continue;
                         }
-                        planned => planned.and_then(|_| {
-                            Err(to_model(
-                                "trimClip: a longer clip is not available yet.".to_owned(),
-                            ))
-                        }),
+                        planned => {
+                            planned.and_then(|longer| trim::lengthen(self, &adding.work, &longer))
+                        }
                     }
                 }
-                other => Err(to_model(format!("{}: not available yet.", other.name()))),
+                ToolCall::SplitAt { at_us } => additions::split_at(self, &adding.work, *at_us),
+                ToolCall::SetFormat {
+                    format,
+                    keep_others,
+                } => Ok(additions::set_format(&adding.work, *format, *keep_others)),
+                ToolCall::SetCaptions { on, style } => {
+                    Ok(additions::set_captions(&adding.work, *on, *style))
+                }
+                ToolCall::FixCaptionWords { find, replace } => {
+                    additions::fix_caption_words(self, &adding.work, find, replace)
+                }
             };
             let added = addition.and_then(|edit| {
                 (adding.add(edit)).map_err(|e| to_model(format!("{}: {e}", call.name())))
@@ -308,6 +360,12 @@ impl Compiler<'_> {
 
         // The project as the additions leave it: what the app applies them to, and what the proposal starts from.
         let with_additions = adding.done.clone();
+        for (i, found) in moments {
+            match self.moments(&with_additions, found) {
+                Ok(m) => out.moments.extend(m),
+                Err(r) => refuse(&mut out, i, r),
+            }
+        }
         // The removals in call order, on top.
         let mut removing = Phase::new(with_additions);
         for (i, removal) in waiting {
@@ -339,17 +397,27 @@ impl Compiler<'_> {
         out
     }
 
-    /// The person's sentence when `call` needs an analysis some voice file on the main track lacks: removing fillers
-    /// and pauses. Not started anywhere wins over still being made, since analyzing is something the person can do.
+    /// The person's sentence when `call` needs an analysis some clip on the main track lacks: the voice files' for
+    /// removing fillers and pauses, and the pictures' too for finding moments. Not started anywhere wins over still
+    /// being made, since analyzing is something the person can do.
     fn missing_analysis(&self, call: &ToolCall) -> Option<&'static str> {
-        if !matches!(
-            call,
-            ToolCall::RemoveFillers | ToolCall::RemoveSilences { .. }
-        ) {
-            return None;
-        }
+        let pictures = match call {
+            ToolCall::RemoveFillers | ToolCall::RemoveSilences { .. } => false,
+            ToolCall::FindMoments { .. } => true,
+            _ => return None,
+        };
         let p = self.snapshot;
-        let assets: BTreeSet<String> = run_spans(p).into_iter().map(|s| s.asset).collect();
+        let mut assets: BTreeSet<String> = run_spans(p).into_iter().map(|s| s.asset).collect();
+        if pictures {
+            assets.extend(p.timeline.main.iter().filter_map(|c| match &c.source {
+                ClipSource::Asset { id }
+                    if p.asset(id).is_some_and(|a| a.kind == AssetKind::Video) =>
+                {
+                    Some(id.clone())
+                }
+                _ => None,
+            }));
+        }
         let state = |id: &String| {
             (self.inputs.analysis.get(id).copied()).unwrap_or(AnalysisState::NotStarted)
         };
@@ -361,6 +429,28 @@ impl Compiler<'_> {
         } else {
             None
         }
+    }
+
+    /// `findMoments`' ranges, each standing on the evidence, where they play once the additions are applied.
+    fn moments(&self, with_additions: &Project, found: &[Moment]) -> Result<Vec<Moment>, Refused> {
+        let mut out = Vec::new();
+        for (k, m) in found.iter().enumerate() {
+            let range = self.checked(
+                "findMoments",
+                (
+                    &format!("ranges[{k}].startSec"),
+                    &format!("ranges[{k}].endSec"),
+                ),
+                m.range,
+            )?;
+            out.extend(
+                (self.map.range(with_additions, range).into_iter()).map(|range| Moment {
+                    range,
+                    label: m.label.clone(),
+                }),
+            );
+        }
+        Ok(out)
     }
 
     /// `r` as the evidence snaps it, or the reason it stands on nothing, naming the call's fields.
@@ -389,5 +479,16 @@ fn unfounded(tool: &str, field: &str, t: Us) -> String {
         "{tool}: {field} {} is not within 0.3 s of a word, a pause, a scene, a clip's start or end, the selection, the \
          playhead, the video's start or end, or a time the person said. Use a time from the context.",
         secs(t)
+    )
+}
+
+/// Whether `call` changes the edit (now or through a runner).
+fn is_edit(call: &ToolCall) -> bool {
+    !matches!(
+        call,
+        ToolCall::Undo
+            | ToolCall::AskUser { .. }
+            | ToolCall::CannotDo { .. }
+            | ToolCall::FindMoments { .. }
     )
 }

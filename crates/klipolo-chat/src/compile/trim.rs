@@ -159,6 +159,30 @@ pub(super) fn plan(c: &Compiler, clip_ref: &str, edge: Edge, to_us: Us) -> Resul
     }
 }
 
+/// A longer clip, in the additions' working copy: the piece holding that end moves.
+pub(super) fn lengthen(c: &Compiler, work: &Project, t: &Trim) -> Result<Edit, Refused> {
+    let Some(piece) = c.map.edge_piece(work, t.clip, t.edge) else {
+        return Err(to_model("trimClip: that clip is gone.".to_owned()));
+    };
+    let further = match t.edge {
+        Edge::End => t.source_us > piece.source_out_us,
+        Edge::Start => t.source_us < piece.source_in_us,
+    };
+    if !further {
+        return Err(to_model(
+            "trimClip: an earlier part of this answer already moves that end further.".to_owned(),
+        ));
+    }
+    Ok(Edit {
+        ops: vec![Op::TrimClip {
+            id: piece.id.clone(),
+            edge: t.edge,
+            source_us: t.source_us,
+        }],
+        label: t.label(),
+    })
+}
+
 /// A shorter clip, in the removals' working copy: `TrimClip` while the clip is one piece that still holds the new
 /// end, else its footage that goes, removed from wherever its pieces play it.
 pub(super) fn shorten(c: &Compiler, work: &Project, t: &Trim) -> Result<Edit, Refused> {

@@ -115,6 +115,11 @@ impl Evidence {
             .copied()
     }
 
+    /// `t` on its nearest edge, or as given when none is near: for a time that needs no evidence (a split).
+    pub(crate) fn time(&self, t: Us) -> Us {
+        self.snap(t).map_or(t, |(at, _)| at)
+    }
+
     /// `r` with both edges snapped, and each one on a word padded (`word_cut` over the words it holds).
     pub(crate) fn range(&self, r: RangeUs) -> Result<RangeUs, Unfounded> {
         let (start, from_source) = self.snap(r.start).ok_or(Unfounded::Start)?;
