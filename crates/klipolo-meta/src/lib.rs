@@ -6,6 +6,7 @@
 mod asr;
 mod client;
 mod error;
+mod files;
 
 pub use asr::{AsrResult, AsrTurn, TRANSCRIBE_MODEL};
 pub use client::{

@@ -105,8 +105,20 @@ impl MetaClient {
 
     /// Sends a call to Meta (or its relay mirror) with this client's secret.
     pub(crate) async fn send_meta(&self, request: RequestBuilder) -> Result<Response, MetaError> {
-        let request = request.bearer_auth(self.auth_secret().expose_secret());
-        send(request, &self.secrets()).await
+        let response = self.send_meta_unchecked(request).await?;
+        check(response, &self.secrets()).await
+    }
+
+    /// [`Self::send_meta`] that leaves the status to the caller.
+    pub(crate) async fn send_meta_unchecked(
+        &self,
+        request: RequestBuilder,
+    ) -> Result<Response, MetaError> {
+        request
+            .bearer_auth(self.auth_secret().expose_secret())
+            .send()
+            .await
+            .map_err(|e| network_error(&e, &self.secrets()))
     }
 
     fn auth_secret(&self) -> &SecretString {
@@ -135,12 +147,8 @@ impl MetaClient {
 /// The most of an error body read for its message.
 const MAX_ERROR_BODY: usize = 64 * 1024;
 
-/// Sends `request`; a status outside 2xx becomes the matching [`MetaError`].
-pub(crate) async fn send(request: RequestBuilder, secrets: &[&str]) -> Result<Response, MetaError> {
-    let mut response = request
-        .send()
-        .await
-        .map_err(|e| network_error(&e, secrets))?;
+/// A status outside 2xx becomes the matching [`MetaError`].
+pub(crate) async fn check(mut response: Response, secrets: &[&str]) -> Result<Response, MetaError> {
     let status = response.status();
     if status.is_success() {
         return Ok(response);

@@ -359,3 +359,152 @@ async fn unreadable_answer_is_a_decode_error() {
     let error = transcribe_error(ResponseTemplate::new(200).set_body_string("not json")).await;
     assert!(matches!(error, MetaError::Decode(_)), "{error:?}");
 }
+
+// Files.
+
+/// A file in the temp folder, removed when dropped.
+struct TempFile(std::path::PathBuf);
+
+impl TempFile {
+    fn new(name: &str, bytes: &[u8]) -> Self {
+        let path = std::env::temp_dir().join(format!("klipolo-meta-{}-{name}", std::process::id()));
+        std::fs::write(&path, bytes).unwrap();
+        Self(path)
+    }
+}
+
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+fn uploaded() -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_json(json!({
+        "id": "file-1812852566410237",
+        "bytes": 14,
+        "created_at": 1793357458,
+        "expires_at": 1793443858,
+        "filename": "upload.mp4",
+        "object": "file",
+        "purpose": "user_data",
+        "status": "uploaded",
+    }))
+}
+
+#[tokio::test]
+async fn upload_file_streams_the_file_and_returns_its_id() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/files"))
+        .and(header("authorization", format!("Bearer {KEY}").as_str()))
+        .respond_with(uploaded())
+        .expect(1)
+        .mount(&server)
+        .await;
+    let video = TempFile::new("My holiday.mp4", b"fake mp4 bytes");
+
+    let id = direct(&server)
+        .upload_file(&video.0, "video/mp4")
+        .await
+        .unwrap();
+
+    assert_eq!(id, "file-1812852566410237");
+    let request = only_request(&server).await;
+    assert_eq!(part(&request, "purpose").1, b"user_data");
+    assert_eq!(part(&request, "expires_after[anchor]").1, b"created_at");
+    assert_eq!(part(&request, "expires_after[seconds]").1, b"86400");
+    let (headers, bytes) = part(&request, "file");
+    // The person's file name stays on the Mac.
+    assert!(headers.contains("filename=\"upload.mp4\""), "{headers}");
+    assert!(
+        headers.to_lowercase().contains("content-type: video/mp4"),
+        "{headers}"
+    );
+    assert_eq!(bytes, b"fake mp4 bytes");
+}
+
+#[tokio::test]
+async fn upload_file_that_cannot_be_read_makes_no_call() {
+    let server = MockServer::start().await;
+    let missing = std::env::temp_dir().join("klipolo-meta-no-such-file.mp4");
+
+    let error = direct(&server)
+        .upload_file(&missing, "video/mp4")
+        .await
+        .unwrap_err();
+
+    assert!(matches!(error, MetaError::BadRequest { .. }), "{error:?}");
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn delete_file_sends_delete_and_treats_a_missing_file_as_deleted() {
+    let server = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path("/v1/files/file-1"))
+        .and(header("authorization", format!("Bearer {KEY}").as_str()))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"id": "file-1", "deleted": true})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path("/v1/files/file-gone"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path("/v1/files/file-busy"))
+        .respond_with(ResponseTemplate::new(503))
+        .mount(&server)
+        .await;
+
+    let client = direct(&server);
+    client.delete_file("file-1").await.unwrap();
+    client.delete_file("file-gone").await.unwrap();
+    assert_eq!(
+        client.delete_file("file-busy").await,
+        Err(MetaError::Overloaded)
+    );
+}
+
+#[tokio::test]
+async fn delete_file_refuses_ids_that_are_not_plain_ids() {
+    let server = MockServer::start().await;
+    let client = direct(&server);
+    for id in ["", "../responses", "file 1", "file-1?x=y"] {
+        let error = client.delete_file(id).await.unwrap_err();
+        assert!(
+            matches!(error, MetaError::BadRequest { .. }),
+            "{id}: {error:?}"
+        );
+    }
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn relay_mode_uploads_and_deletes_under_meta_v1() {
+    let server = MockServer::start().await;
+    let bearer = format!("Bearer {TOKEN}");
+    Mock::given(method("POST"))
+        .and(path("/meta/v1/files"))
+        .and(header("authorization", bearer.as_str()))
+        .respond_with(uploaded())
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path("/meta/v1/files/file-1812852566410237"))
+        .and(header("authorization", bearer.as_str()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"deleted": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let video = TempFile::new("relay.mp4", b"fake mp4 bytes");
+
+    let client = relay(&server);
+    let id = client.upload_file(&video.0, "video/mp4").await.unwrap();
+    client.delete_file(&id).await.unwrap();
+}
