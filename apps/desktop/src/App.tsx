@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { followAiStatus } from './ai/aiStatus';
 import { isCode } from './bridge/call';
 import { bridge } from './bridge/commands';
 import { Toaster } from './design/Toaster';
@@ -81,6 +82,7 @@ export function App() {
     if (started) return;
     started = true;
     void followSaves();
+    void followAiStatus();
     void openProject();
   }, []);
   useEngineSession();
