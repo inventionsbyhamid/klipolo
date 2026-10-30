@@ -72,7 +72,9 @@ pub fn native_wanted(setting: Option<&str>) -> bool {
 }
 
 /// Starts the engine if needed (`start`), sends its events to `sink`, and says how frames reach the screen: the native
-/// layer from `host` when `setting` allows it and it starts, else the socket.
+/// layer from `host` when `setting` allows it and it starts, else the socket. A page that attaches again (a reload)
+/// starts paused, as the engine is then: playback from the page before stops, so sound never plays while the new page
+/// shows Play.
 pub async fn attach<S, Fut>(
     state: &EngineState,
     start: S,
@@ -84,8 +86,12 @@ where
     S: FnOnce() -> Fut,
     Fut: Future<Output = Result<Engine, String>>,
 {
+    let again = state.slot.running().is_some();
     let engine = state.slot.get_or_start(start).await?;
     engine.set_event_sink(sink);
+    if again {
+        engine.pause().await;
+    }
     let mut info = engine.info();
     if native_wanted(setting) {
         match present_natively(&engine, host).await {
@@ -532,6 +538,60 @@ mod tests {
             let folder = dir.path().to_string_lossy();
             assert!(!error.contains(folder.as_ref()), "{error}");
         }
+    }
+
+    /// A page that loads again while the video plays (a reload) finds it paused, as it shows it: the playback the page
+    /// before started stops, and the new page hears so.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_reloaded_page_starts_paused() {
+        let projects = opened(one_clip());
+        let state = EngineState::new(None, None);
+        let socket = Some("socket");
+        attach(
+            &state,
+            || blank_engine(projects.feed()),
+            &Detached,
+            quiet(),
+            socket,
+        )
+        .await
+        .unwrap();
+        let engine = state.slot.running().unwrap();
+        engine.set_view(klipolo_engine::api::ViewSpec {
+            format: klipolo_model::project::FormatKind::Landscape,
+            width: 64,
+            height: 36,
+        });
+        play(&state, 2_000_000, None, 1).await.unwrap();
+
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let sink: EventSink = {
+            let seen = seen.clone();
+            Arc::new(move |event| seen.lock().unwrap().push(event))
+        };
+        attach(
+            &state,
+            || blank_engine(projects.feed()),
+            &Detached,
+            sink,
+            socket,
+        )
+        .await
+        .unwrap();
+        let stopped = |e: &EngineEvent| matches!(e, EngineEvent::State { playing: false, .. });
+        assert!(
+            seen.lock().unwrap().iter().any(stopped),
+            "the new page hears that playback stopped: {:?}",
+            seen.lock().unwrap()
+        );
+        assert!(
+            !seen
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|e| matches!(e, EngineEvent::State { playing: true, .. })),
+            "nothing plays on"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
