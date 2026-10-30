@@ -453,14 +453,20 @@ fn transcription(heard: AsrResult) -> Transcription {
 }
 
 /// A Meta client error in Klipolo's terms: its sentence for the person, its `Display` (already redacted) for logs.
-/// A 429 is `Busy` when the relay says `busy` (wait and try again); any other (the relay's daily `align_quota`, Meta's
-/// own rate limit) is `RateLimited`, a stop. A 401 is `Unauthorized`, a 403 `NotAllowed`.
+/// A 429 is `Busy` when the relay says `busy`, or when it carries neither a code nor a message (Traefik's plain-text
+/// limit in front of the relay): wait and try again. Any other (the relay's daily `align_quota`, Meta's own rate limit)
+/// is `RateLimited`, a stop. A 401 is `Unauthorized`, a 403 `NotAllowed`.
 pub fn provider_error(e: MetaError) -> ProviderError {
     let (kind, retry_after_s) = match &e {
         MetaError::Budget { .. } => (ProviderErrorKind::Budget, None),
         MetaError::RateLimited {
             retry_after, code, ..
         } if code.as_deref() == Some(RELAY_BUSY) => (ProviderErrorKind::Busy, *retry_after),
+        MetaError::RateLimited {
+            retry_after,
+            code: None,
+            message: None,
+        } => (ProviderErrorKind::Busy, *retry_after),
         MetaError::RateLimited { retry_after, .. } => {
             (ProviderErrorKind::RateLimited, *retry_after)
         }
@@ -534,6 +540,15 @@ mod tests {
                 },
                 Kind::RateLimited,
                 true,
+            ),
+            (
+                MetaError::RateLimited {
+                    retry_after: None,
+                    code: None,
+                    message: None,
+                },
+                Kind::Busy,
+                false,
             ),
             (MetaError::Unauthorized, Kind::Unauthorized, false),
             (
