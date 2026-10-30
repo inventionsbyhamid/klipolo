@@ -106,6 +106,9 @@ USAGE_TAIL_BYTES = 64 * 1024
 
 # Pause between attempts to write a charge, times the attempt number.
 CHARGE_RETRY_DELAY_S = 0.5
+# How long admission waits for the database when it retries a held charge:
+# it holds the admission lock meanwhile, so one short try only.
+HELD_CHARGE_BUSY_TIMEOUT_S = 0.25
 
 MAX_IN_FLIGHT_PER_DEVICE = 4
 MAX_IN_FLIGHT_TOTAL = 32
@@ -287,17 +290,19 @@ class Charge:
     at: str = field(default_factory=lambda: datetime.now(UTC).isoformat(timespec="seconds"))
 
 
-def record_charge(db_path: Path, charge: Charge) -> None:
+def record_charge(db_path: Path, charge: Charge, *, attempts: int = 3, busy_timeout_s: float | None = None) -> None:
     """Write the ledger row and add the cost to the device in one transaction,
     so the ledger (what the admin sees) and spent_usd (what the cap reads)
     never drift. Uses its own connection: a streamed response outlives the
     request's."""
     device_id, cost = charge.device_id, charge.cost
     row = (device_id, charge.at, charge.endpoint, charge.model, json.dumps(charge.usage, sort_keys=True), cost)
-    for attempt in range(3):
+    for attempt in range(attempts):
         try:
             conn = db.connect(db_path)
             try:
+                if busy_timeout_s is not None:
+                    conn.execute(f"PRAGMA busy_timeout = {int(busy_timeout_s * 1000)}")
                 with db.transaction(conn):
                     conn.execute(
                         "INSERT INTO ledger (device_id, at, endpoint, model, usage_json, cost_usd)"
@@ -311,15 +316,16 @@ def record_charge(db_path: Path, charge: Charge) -> None:
                 conn.close()
             return
         except sqlite3.OperationalError:
-            if attempt == 2:
+            if attempt == attempts - 1:
                 raise
             time.sleep(CHARGE_RETRY_DELAY_S * (attempt + 1))
 
 
 def _write_unwritten(db_path: Path, unwritten: list[Charge]) -> None:
-    # Oldest first; each leaves the list only once it is written.
+    # Oldest first; each leaves the list only once it is written. One quick
+    # try each, since admission waits on this.
     while unwritten:
-        record_charge(db_path, unwritten[0])
+        record_charge(db_path, unwritten[0], attempts=1, busy_timeout_s=HELD_CHARGE_BUSY_TIMEOUT_S)
         unwritten.pop(0)
 
 

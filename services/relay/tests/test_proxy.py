@@ -1450,6 +1450,33 @@ def test_charges_fail_closed_until_one_can_be_written(client, conn, meta, monkey
     assert_ledger_matches_spend(conn, device)
 
 
+def test_admission_tries_a_held_charge_once_and_quickly(client, conn, meta, settings, monkeypatch):
+    import sqlite3
+
+    # Slow enough that three full attempts with pauses would take seconds.
+    monkeypatch.setattr(db, "_BUSY_TIMEOUT_S", 2.0)
+    device = add_device(conn)
+    meta.post("/responses").respond(200, json=spark_body())
+    held = proxy.Charge(device.device_id, "responses", "muse-spark-1.3", dict(SPARK_USAGE), SPARK_COST)
+    client.app.state.in_flight.unwritten.append(held)
+    writer = sqlite3.connect(settings.db_path, isolation_level=None)
+    writer.execute("BEGIN IMMEDIATE")
+    try:
+        started = time.monotonic()
+        refused = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
+        elapsed = time.monotonic() - started
+    finally:
+        writer.execute("ROLLBACK")
+        writer.close()
+
+    assert refused.status_code == 503
+    assert refused.json()["error"] == "charging_unavailable"
+    assert elapsed < 2.0
+    # Once the database takes writes again, the held charge goes in first.
+    assert client.post("/meta/v1/responses", json=spark_request(), headers=device.headers).status_code == 200
+    assert [row["cost_usd"] for row in ledger(conn, device)] == [pytest.approx(SPARK_COST)] * 2
+
+
 # Secrets.
 
 
