@@ -1,3 +1,0 @@
-# Built on its own until it joins the workspace; the workspace keeps the lock file.
-Cargo.lock
-target/
