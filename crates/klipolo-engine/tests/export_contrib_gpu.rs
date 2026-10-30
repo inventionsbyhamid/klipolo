@@ -442,3 +442,95 @@ async fn a_canvas_of_only_layers_exports_ten_seconds() {
         "the frame at 5 s shows the waves, not black: {mean:?}"
     );
 }
+
+/// ProRes gets the 4:2:2 layout the GPU writes (P210) on every OS: prores_ks (Linux, Windows) lists a planar format
+/// first, and handing the encoder that one made every exported picture garbage. A flat grey and a flat orange layer,
+/// exported as Master (ProRes, the encoder Linux has), come back as those colours. The decode here converts with BT.601
+/// while the export is BT.709, so a saturated colour comes back up to about 13 levels off.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs a GPU (lavapipe in CI)"]
+async fn a_prores_export_keeps_its_colours() {
+    use klipolo_engine::api::ExportQuality;
+    use klipolo_engine::export::job::ExportJob;
+    use klipolo_engine::export::naming::plan_files;
+    use klipolo_engine::export::protocol::Lines;
+    use klipolo_engine::export::runner::Batch;
+    use klipolo_engine::export::shared::Control;
+    use klipolo_engine::export::worker::{Ended, export, fonts_before_frame_zero};
+    use klipolo_model::contrib::builtin;
+    use klipolo_model::params::ParamValue;
+    ffmpeg::init().unwrap();
+    for (hex, rgb, within) in [
+        ("#808080", [128.0, 128.0, 128.0], 4.0),
+        ("#C83C1E", [200.0, 60.0, 30.0], 20.0),
+    ] {
+        let mut p = Project::new("ProRes colours");
+        let flat = ItemContent::generator(
+            builtin::GENERATOR_GRADIENT.into(),
+            BTreeMap::from([
+                ("startColor".into(), ParamValue::Text(hex.into())),
+                ("endColor".into(), ParamValue::Text(hex.into())),
+            ]),
+        );
+        let mut track = Track::new(TrackKind::Overlay, "Flat");
+        track.items.push(Item {
+            id: "flat".into(),
+            start_us: 0,
+            duration_us: 1_000_000,
+            attach: None,
+            layout: Layout::new(
+                Anchor::TopLeft,
+                BoxN {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 1.0,
+                    h: 1.0,
+                },
+            ),
+            content: flat,
+            effects: Vec::new(),
+        });
+        p.timeline.tracks = vec![track];
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut files = plan_files(
+            &p,
+            &[FormatKind::Landscape],
+            ExportQuality::Master,
+            dir.path(),
+        );
+        (files[0].width, files[0].height) = (320, 180);
+        let batch = Batch {
+            project: p,
+            fps: 30,
+            quality: ExportQuality::Master,
+            files,
+            pcm_dir: None,
+            speech: Arc::default(),
+            text_language: "en".into(),
+            contribs: Default::default(),
+            caption_file: None,
+            allow_stand_ins: false,
+            activity_dir: None,
+            allow_missing_cursor: false,
+        };
+        let job = ExportJob::create(&batch, 30).unwrap();
+        fonts_before_frame_zero(&job);
+        let ended = export(
+            job.clone(),
+            &mut Lines::new(Vec::new()),
+            Arc::new(Control::default()),
+        )
+        .await;
+        assert!(matches!(ended, Ok(Ended::Done)), "{hex}: {ended:?}");
+        let after = ExportJob::open(&job.dir).unwrap();
+        let (frames, _, mean) = decoded(&after.dir.join(&after.outputs[0].file), 15);
+        assert_eq!(frames, 30, "{hex}: 1 s of frames");
+        for (c, (got, want)) in mean.iter().zip(rgb).enumerate() {
+            assert!(
+                (got - want).abs() <= within,
+                "{hex}: channel {c} came back as {got:.1}, not {want} (all: {mean:?})"
+            );
+        }
+    }
+}
