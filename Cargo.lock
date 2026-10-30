@@ -2368,6 +2368,7 @@ dependencies = [
  "klipolo-fonts",
  "klipolo-model",
  "klipolo-platform",
+ "libc",
  "serde",
  "serde_json",
  "tauri",

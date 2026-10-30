@@ -24,7 +24,8 @@ use klipolo_model::time::Us;
 use tauri::ipc::Channel;
 use tauri::{State, WebviewWindow};
 
-use crate::state::{EngineState, ProjectState};
+use crate::project::ProjectSessionState;
+use crate::state::EngineState;
 
 /// The environment setting that picks the presenter: `socket` keeps frames on the websocket.
 pub const PRESENTER_SETTING: &str = "KLIPOLO_PRESENTER";
@@ -199,12 +200,12 @@ fn not_ready() -> Said {
 pub async fn engine_attach(
     window: WebviewWindow,
     state: State<'_, EngineState>,
-    projects: State<'_, ProjectState>,
+    projects: State<'_, ProjectSessionState>,
     events: Channel<EngineEvent>,
 ) -> Result<EngineInfo, String> {
     let sink = event_sink(events);
     let setting = std::env::var(PRESENTER_SETTING).ok();
-    let feed = projects.feed();
+    let feed = projects.subscribe();
     let info = attach(
         &state,
         || start_engine(&state, feed),
@@ -327,7 +328,7 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
-    use crate::state::ProjectState;
+    use crate::project::opened;
     use klipolo_model::project::Project;
 
     /// A layer in no window: what a test's engine presents into on macOS.
@@ -365,13 +366,6 @@ mod tests {
             gpu_class: klipolo_engine::platform::gpu::GpuClass::Integrated,
         };
         Engine::start(options, feed, backend).await
-    }
-
-    /// The feed with `project` open.
-    fn opened(project: Project) -> ProjectState {
-        let projects = ProjectState::default();
-        projects.open(project);
-        projects
     }
 
     fn quiet() -> EventSink {
@@ -432,7 +426,7 @@ mod tests {
         let socket = Some("socket");
         let engine = attach(
             &state,
-            || blank_engine(projects.feed()),
+            || blank_engine(projects.subscribe()),
             &Detached,
             sink,
             socket,
@@ -519,27 +513,6 @@ mod tests {
         assert!(sent[1].contains(r#""type":"ready""#));
     }
 
-    /// A file that isn't a readable video is refused with a message that names it (and never its folder).
-    #[test]
-    fn a_file_that_cannot_open_is_named() {
-        let dir = tempfile::tempdir().unwrap();
-        let empty = dir.path().join("empty.mp4");
-        std::fs::write(&empty, b"").unwrap();
-        let garbage = dir.path().join("garbage.mov");
-        std::fs::write(&garbage, vec![7u8; 4096]).unwrap();
-        let missing = dir.path().join("missing.mp4");
-        for path in [&empty, &garbage, &missing] {
-            let error = crate::state::single_video_project(path).unwrap_err();
-            let name = path.file_name().unwrap().to_string_lossy();
-            assert!(
-                error.starts_with(&format!("{name} couldn't be opened.")),
-                "{error}"
-            );
-            let folder = dir.path().to_string_lossy();
-            assert!(!error.contains(folder.as_ref()), "{error}");
-        }
-    }
-
     /// A page that loads again while the video plays (a reload) finds it paused, as it shows it: the playback the page
     /// before started stops, and the new page hears so.
     #[tokio::test(flavor = "multi_thread")]
@@ -549,7 +522,7 @@ mod tests {
         let socket = Some("socket");
         attach(
             &state,
-            || blank_engine(projects.feed()),
+            || blank_engine(projects.subscribe()),
             &Detached,
             quiet(),
             socket,
@@ -571,7 +544,7 @@ mod tests {
         };
         attach(
             &state,
-            || blank_engine(projects.feed()),
+            || blank_engine(projects.subscribe()),
             &Detached,
             sink,
             socket,
@@ -601,7 +574,7 @@ mod tests {
 
         let info = attach(
             &state,
-            || test_engine(projects.feed()),
+            || test_engine(projects.subscribe()),
             &Detached,
             quiet(),
             None,
@@ -618,7 +591,7 @@ mod tests {
 
         let info = attach(
             &state,
-            || test_engine(projects.feed()),
+            || test_engine(projects.subscribe()),
             &Detached,
             quiet(),
             Some("socket"),
