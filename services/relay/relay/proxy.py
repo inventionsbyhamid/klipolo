@@ -228,15 +228,21 @@ class Meter:
     # says little about the cost, so an estimate gets a floor.
     media: bool = False
 
-    def price(self, usage: Any) -> tuple[dict[str, Any], float]:
+    def price(self, usage: Any, *, finished: bool = True) -> tuple[dict[str, Any], float]:
+        """The usage to record and its cost. `finished` is False when Meta's
+        answer was cut off, so `usage` (if any) may not be the final count:
+        the call then costs the higher of that usage and the estimate."""
+        seen = None
         if isinstance(usage, Mapping):
             usage = dict(usage)
             if self.model == SAM_MODEL:
                 usage[SAM_IMAGES_KEY] = self.images
             try:
-                return _numbers_only(usage), cost_usd(self.endpoint, self.model, usage)
+                seen = _numbers_only(usage), cost_usd(self.endpoint, self.model, usage)
             except ValueError:
                 logger.warning("Meta usage for %s could not be priced, charging an estimate", self.endpoint)
+        if seen is not None and finished:
+            return seen
         estimate = estimate_usage(
             self.endpoint,
             self.model,
@@ -246,7 +252,8 @@ class Meter:
             has_video=self.has_video,
             media=self.media,
         )
-        return estimate, cost_usd(self.endpoint, self.model, estimate)
+        estimated = estimate, cost_usd(self.endpoint, self.model, estimate)
+        return seen if seen is not None and seen[1] > estimated[1] else estimated
 
     def usage_from_body(self, body: bytes) -> Any:
         """The usage in a complete JSON response, or None."""
@@ -255,8 +262,10 @@ class Meter:
         return _find_value(body, "usage", _USAGE_KEY, lambda v: v)
 
 
-async def charge(settings: Settings, device_id: str, meter: Meter, usage_seen: Any) -> None:
-    usage, cost = meter.price(usage_seen)
+async def charge(
+    settings: Settings, device_id: str, meter: Meter, usage_seen: Any, *, finished: bool = True
+) -> None:
+    usage, cost = meter.price(usage_seen, finished=finished)
     try:
         await anyio.to_thread.run_sync(
             record_charge, settings.db_path, device_id, meter.endpoint, meter.model, usage, cost
@@ -445,9 +454,9 @@ async def _forward(request: Request, settings: Settings, device_id: str, call: C
     meter = call.meter
     if meter is not None and upstream.status_code < 300 and _is_event_stream(upstream):
 
-        async def finish(usage_seen: Any) -> None:
+        async def finish(usage_seen: Any, finished: bool) -> None:
             try:
-                await charge(settings, device_id, meter, usage_seen)
+                await charge(settings, device_id, meter, usage_seen, finished=finished)
             finally:
                 slot.release()
 
@@ -482,15 +491,21 @@ def _is_event_stream(upstream: httpx.Response) -> bool:
 
 class MeteredStream(Response):
     """Passes Meta's event stream to the client as it arrives and charges the
-    call once the stream ends, however it ends.
+    call from the stream's final usage once Meta has finished.
 
-    A client that hangs up is noticed at once, even while Meta is silent: the
-    upstream request is closed so Meta stops, and the call is charged from the
-    last usage seen or, when none came, from the request estimate. That
-    estimate is low for video sent by file_id or URL; see `estimate_usage`.
+    A client hanging up never makes a call cheaper than finishing it: Meta's
+    stream is still read to its end, the bytes dropped, and the real usage
+    charged. The device's in-flight slot stays taken until then, so a client
+    can't leave more than four such calls running. Uvicorn does not cancel a
+    request when its client goes away (sends are just dropped), so the reading
+    goes on in this request's task, bounded by the upstream read timeout.
+
+    Only when Meta's stream itself breaks off (an error, a timeout, a dropped
+    connection) is the call charged the higher of the usage seen and the
+    request estimate, which has a floor for media.
     """
 
-    def __init__(self, upstream: httpx.Response, finish: Callable[[Any], Awaitable[None]]) -> None:
+    def __init__(self, upstream: httpx.Response, finish: Callable[[Any, bool], Awaitable[None]]) -> None:
         self.status_code = upstream.status_code
         self.media_type = None
         self.background = None
@@ -500,36 +515,63 @@ class MeteredStream(Response):
 
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
         events = SSEUsage()
+        finished = False
         try:
-            async with anyio.create_task_group() as group:
-
-                async def stop_on_disconnect() -> None:
-                    while (await receive())["type"] != "http.disconnect":
-                        pass
-                    group.cancel_scope.cancel()
-
-                group.start_soon(stop_on_disconnect)
-                await self._pump(send, events)
-                group.cancel_scope.cancel()
+            finished = await self._relay(receive, send, events)
         finally:
-            # Shielded: this must run even while the request is cancelled.
+            # Shielded: this must run even if the request is cancelled.
             with anyio.CancelScope(shield=True):
                 await _close_quietly(self._upstream)
-                await self._finish(events.close())
+                await self._finish(events.close(), finished)
 
-    async def _pump(self, send: Any, events: "SSEUsage") -> None:
-        try:
-            await send({"type": "http.response.start", "status": self.status_code, "headers": self.raw_headers})
+    async def _relay(self, receive: Any, send: Any, events: "SSEUsage") -> bool:
+        """Read Meta's stream to its end, passing it on while the client is
+        there. True if the stream ended normally."""
+        client = _Client(send)
+        finished = True
+        async with anyio.create_task_group() as group:
+            group.start_soon(client.watch, receive)
+            await client.send({"type": "http.response.start", "status": self.status_code, "headers": self.raw_headers})
             try:
                 async for chunk in self._upstream.aiter_bytes():
                     events.feed(chunk)
-                    await send({"type": "http.response.body", "body": chunk, "more_body": True})
-            except httpx.HTTPError as exc:
-                logger.warning("Meta's stream broke off: %s", type(exc).__name__)
-            await send({"type": "http.response.body", "body": b"", "more_body": False})
-        except OSError:
-            # The client went away; the caller closes Meta's side and charges.
+                    await client.send({"type": "http.response.body", "body": chunk, "more_body": True})
+            except Exception as exc:
+                # httpx closes the response itself once the body is fully
+                # read, so a failure after that leaves the stream complete.
+                # Any other failure cut it off.
+                finished = self._upstream.is_closed
+                logger.warning(
+                    "Meta's stream %s: %s", "closed badly" if finished else "broke off", type(exc).__name__
+                )
+            await client.send({"type": "http.response.body", "body": b"", "more_body": False})
+            group.cancel_scope.cancel()
+        if client.gone:
+            logger.info("Client left mid-stream; Meta's stream was read to its end to charge it")
+        return finished
+
+
+class _Client:
+    """The client end of a stream. Once it has hung up, sends are dropped."""
+
+    def __init__(self, send: Any) -> None:
+        self._send = send
+        self.gone = False
+
+    async def watch(self, receive: Any) -> None:
+        while (await receive())["type"] != "http.disconnect":
             pass
+        self.gone = True
+
+    async def send(self, message: dict[str, Any]) -> None:
+        if self.gone:
+            return
+        try:
+            await self._send(message)
+        except Exception:
+            # Usually OSError: the connection is gone. Any failure to send
+            # counts as a hang-up, so only Meta's side can end the reading.
+            self.gone = True
 
 
 class SSEUsage:

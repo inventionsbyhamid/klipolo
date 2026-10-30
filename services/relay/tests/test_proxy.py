@@ -964,21 +964,28 @@ def test_key_never_appears_in_responses_or_logs(client, conn, meta, settings, ca
 
 class MetaStream(httpx.AsyncByteStream):
     """Meta's side of a streamed response. It yields its chunks, can wait on a
-    gate after the first, then ends, hangs or breaks, and records whether the
-    relay closed it."""
+    gate before chunk number `gate_at` (then pause `pause` seconds and run
+    `after_gate`), then ends, hangs or breaks. It records how many chunks the relay read and
+    whether the relay closed it."""
 
-    def __init__(self, chunks, *, then=None, gate=None, close_error=None):
+    def __init__(self, chunks, *, then=None, gate=None, gate_at=1, pause=0, after_gate=None, close_error=None):
         self.chunks = chunks
         self.then = then
         self.gate = gate
+        self.gate_at = gate_at
+        self.pause = pause
+        self.after_gate = after_gate
         self.close_error = close_error
         self.served = 0
         self.closed = False
 
     async def __aiter__(self):
         for chunk in self.chunks:
-            if self.served == 1 and self.gate is not None:
+            if self.served == self.gate_at and self.gate is not None:
                 await self.gate.wait()
+                await anyio.sleep(self.pause)
+                if self.after_gate is not None:
+                    self.after_gate()
             self.served += 1
             yield chunk
         if self.then == "hang":
@@ -1136,13 +1143,15 @@ async def app(settings):
 
 class AsgiCall:
     """One request driven straight through the ASGI app, so a test can watch
-    each chunk arrive and hang up whenever it likes."""
+    each chunk arrive and hang up whenever it likes. Once the client has hung
+    up, sends are dropped, as uvicorn does."""
 
     def __init__(self, app, path, body, headers):
         self.app = app
         self.path = path
         self.body = body
         self.headers = {**headers, "content-type": "application/json", "content-length": str(len(body))}
+        self.status = None
         self.chunks = []
         self.hang_up = anyio.Event()
         self.on_chunk = None
@@ -1159,7 +1168,11 @@ class AsgiCall:
             return {"type": "http.disconnect"}
 
         async def send(message):
-            if message["type"] == "http.response.body" and message.get("body"):
+            if self.hang_up.is_set():
+                return
+            if message["type"] == "http.response.start":
+                self.status = message["status"]
+            elif message["type"] == "http.response.body" and message.get("body"):
                 self.chunks.append(message["body"])
                 if self.on_chunk is not None:
                     await self.on_chunk(len(self.chunks))
@@ -1182,6 +1195,27 @@ class AsgiCall:
             await self.app(scope, receive, send)
 
 
+# How long Meta stays silent after a client hangs up: long enough for the
+# relay to notice the hang-up before Meta goes on.
+MOMENT = 0.05
+
+
+def hang_up_after(call, chunks):
+    async def on_chunk(count):
+        if count == chunks:
+            call.hang_up.set()
+
+    return on_chunk
+
+
+def streamed(body):
+    return json.dumps({**body, "stream": True}).encode()
+
+
+VIDEO_REQUEST = spark_request(input=[{"role": "user", "content": [{"type": "input_text", "text": "moments"}, VIDEO_BY_FILE]}])
+SAM_REQUEST = {"model": "sam-3.1", "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, VIDEO_BY_FILE]}]}
+
+
 @pytest.mark.anyio
 async def test_stream_passes_bytes_through_as_they_arrive(app, conn, meta):
     device = add_device(conn)
@@ -1189,7 +1223,7 @@ async def test_stream_passes_bytes_through_as_they_arrive(app, conn, meta):
     # Meta sends its second chunk only after the client has the first.
     upstream = MetaStream([sse(CREATED), sse(DELTA), sse(completed())], gate=first_chunk_seen)
     stream_from_meta(meta, upstream)
-    call = AsgiCall(app, "/meta/v1/responses", json.dumps(spark_request(stream=True)).encode(), device.headers)
+    call = AsgiCall(app, "/meta/v1/responses", streamed(spark_request()), device.headers)
 
     async def on_chunk(count):
         first_chunk_seen.set()
@@ -1202,78 +1236,164 @@ async def test_stream_passes_bytes_through_as_they_arrive(app, conn, meta):
 
 
 @pytest.mark.anyio
-async def test_client_disconnect_mid_stream_closes_upstream_and_records_usage_seen(app, conn, meta):
+async def test_client_disconnect_mid_stream_drains_upstream_and_charges_final_usage(app, conn, meta):
     device = add_device(conn)
-    partial = {"input_tokens": 10000, "input_tokens_details": {"cached_tokens": 0}, "output_tokens": 120}
+    partial = {"input_tokens": 10000, "output_tokens": 1}
     in_progress = {"type": "response.in_progress", "sequence_number": 1, "response": {"status": "in_progress", "usage": partial}}
-    # Meta is still generating when the client hangs up.
-    upstream = MetaStream([sse(CREATED), sse(in_progress), sse(DELTA)], then="hang")
+    late_delta = {"type": "response.output_text.delta", "sequence_number": 3, "delta": " there"}
+    call = AsgiCall(app, "/meta/v1/responses", streamed(spark_request()), device.headers)
+    slots_while_draining = []
+    # The client hangs up after three chunks, while Meta is silent; Meta then
+    # carries on and finishes.
+    upstream = MetaStream(
+        [sse(CREATED), sse(in_progress), sse(DELTA), sse(late_delta), sse(completed())],
+        gate=call.hang_up,
+        gate_at=3,
+        pause=MOMENT,
+        after_gate=lambda: slots_while_draining.append(app.state.in_flight.count(device.device_id)),
+    )
     stream_from_meta(meta, upstream)
-    call = AsgiCall(app, "/meta/v1/responses", json.dumps(spark_request(stream=True)).encode(), device.headers)
+    call.on_chunk = hang_up_after(call, 3)
 
-    async def on_chunk(count):
-        if count == 3:
-            call.hang_up.set()
-
-    call.on_chunk = on_chunk
     await call.run()
 
+    # Nothing reached the client after it left, but Meta's stream was read to
+    # its end, with the device's slot held all along.
+    assert b"".join(call.chunks) == sse(CREATED, in_progress, DELTA)
+    assert upstream.served == 5
     assert upstream.closed
-    assert len(call.chunks) == 3
+    assert slots_while_draining == [1]
     [row] = ledger(conn, device)
-    assert json.loads(row["usage_json"]) == partial
-    assert row["cost_usd"] == pytest.approx(10000 * 1.25e-6 + 120 * 4.25e-6)
+    assert json.loads(row["usage_json"]) == SPARK_USAGE
+    assert row["cost_usd"] == pytest.approx(SPARK_COST)
     assert_ledger_matches_spend(conn, device)
     assert app.state.in_flight.count() == 0
 
 
 @pytest.mark.anyio
-async def test_client_disconnect_before_any_usage_charges_the_estimate(app, conn, meta):
+async def test_abandoned_streams_hold_their_slots_until_drained(app, conn, meta):
     device = add_device(conn)
-    upstream = MetaStream([sse(CREATED), sse(DELTA)], then="hang")
+    meta_done = anyio.Event()
+    streams = []
+
+    def answer(request):
+        stream = MetaStream([sse(CREATED), sse(completed())], gate=meta_done)
+        streams.append(stream)
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, stream=stream)
+
+    meta.post("/responses").mock(side_effect=answer)
+    body = streamed(spark_request())
+    calls = [AsgiCall(app, "/meta/v1/responses", body, device.headers) for _ in range(4)]
+    for call in calls:
+        call.on_chunk = hang_up_after(call, 1)
+
+    async with anyio.create_task_group() as group:
+        for call in calls:
+            group.start_soon(call.run)
+        for call in calls:
+            await call.hang_up.wait()
+        # All four clients are gone but Meta has not finished, so a fifth call
+        # from the device finds no free slot.
+        fifth = AsgiCall(app, "/meta/v1/responses", body, device.headers)
+        await fifth.run()
+        meta_done.set()
+
+    assert fifth.status == 429
+    assert json.loads(b"".join(fifth.chunks))["error"] == "busy"
+    assert [stream.served for stream in streams] == [2, 2, 2, 2]
+    rows = ledger(conn, device)
+    assert [row["cost_usd"] for row in rows] == [pytest.approx(SPARK_COST)] * 4
+    assert app.state.in_flight.count() == 0
+
+
+@pytest.mark.anyio
+async def test_drain_that_fails_charges_the_estimate(app, conn, meta):
+    device = add_device(conn)
+    call = AsgiCall(app, "/meta/v1/responses", streamed(spark_request()), device.headers)
+    upstream = MetaStream(
+        [sse(CREATED), sse(DELTA), sse(DELTA)],
+        gate=call.hang_up,
+        gate_at=2,
+        pause=MOMENT,
+        then=httpx.ReadTimeout("Meta went quiet"),
+    )
     route = stream_from_meta(meta, upstream)
-    call = AsgiCall(app, "/meta/v1/responses", json.dumps(spark_request(stream=True)).encode(), device.headers)
+    call.on_chunk = hang_up_after(call, 2)
 
-    async def on_chunk(count):
-        if count == 2:
-            call.hang_up.set()
-
-    call.on_chunk = on_chunk
     await call.run()
 
+    assert upstream.served == 3
     assert upstream.closed
     [row] = ledger(conn, device)
     sent_bytes = len(route.calls.last.request.content)
     assert json.loads(row["usage_json"]) == {"input_tokens": math.ceil(sent_bytes / 4), "output_tokens": 0, "estimated": True}
     assert row["cost_usd"] == pytest.approx(math.ceil(sent_bytes / 4) * 1.25e-6)
-    assert_ledger_matches_spend(conn, device)
     assert app.state.in_flight.count() == 0
 
 
 @pytest.mark.anyio
-async def test_client_disconnect_while_meta_is_silent_closes_upstream_at_once(app, conn, meta):
+@pytest.mark.parametrize("body", [VIDEO_REQUEST, SAM_REQUEST], ids=["spark-video", "sam"])
+async def test_drain_that_fails_for_media_charges_at_least_the_floor(app, conn, meta, body):
     device = add_device(conn)
-    # Meta is still thinking: nothing comes after the first event.
-    upstream = MetaStream([sse(CREATED)], then="hang")
+    call = AsgiCall(app, "/meta/v1/responses", streamed(body), device.headers)
+    upstream = MetaStream(
+        [sse(CREATED), sse(DELTA), sse(DELTA)],
+        gate=call.hang_up,
+        gate_at=2,
+        pause=MOMENT,
+        then=httpx.RemoteProtocolError("peer closed connection"),
+    )
     stream_from_meta(meta, upstream)
-    call = AsgiCall(app, "/meta/v1/responses", json.dumps(spark_request(stream=True)).encode(), device.headers)
+    call.on_chunk = hang_up_after(call, 2)
 
-    async def on_chunk(count):
-        call.hang_up.set()
-
-    call.on_chunk = on_chunk
     await call.run()
 
-    assert upstream.closed
-    assert len(ledger(conn, device)) == 1
+    assert upstream.served == 3
+    [row] = ledger(conn, device)
+    usage = json.loads(row["usage_json"])
+    assert usage["estimated"] is True
+    assert usage["floor_usd"] == 0.10
+    assert row["cost_usd"] == pytest.approx(0.10)
+    assert_ledger_matches_spend(conn, device)
 
 
 @pytest.mark.anyio
-async def test_send_failure_counts_as_a_disconnect(app, conn, meta):
+@pytest.mark.parametrize(
+    ("seen", "cost"),
+    [({"input_tokens": 200_000, "output_tokens": 0}, 0.25), ({"input_tokens": 10, "output_tokens": 0}, 0.10)],
+    ids=["usage-seen-is-higher", "floor-is-higher"],
+)
+async def test_drain_failure_charges_the_higher_of_usage_seen_and_the_estimate(app, conn, meta, seen, cost):
+    device = add_device(conn)
+    in_progress = {"type": "response.in_progress", "response": {"status": "in_progress", "usage": seen}}
+    call = AsgiCall(app, "/meta/v1/responses", streamed(VIDEO_REQUEST), device.headers)
+    upstream = MetaStream(
+        [sse(CREATED), sse(in_progress), sse(DELTA)],
+        gate=call.hang_up,
+        gate_at=2,
+        pause=MOMENT,
+        then=httpx.ReadError("reset"),
+    )
+    stream_from_meta(meta, upstream)
+    call.on_chunk = hang_up_after(call, 2)
+
+    await call.run()
+
+    assert upstream.served == 3
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(cost)
+    if cost == 0.25:
+        assert json.loads(row["usage_json"]) == seen
+    else:
+        assert json.loads(row["usage_json"])["estimated"] is True
+
+
+@pytest.mark.anyio
+async def test_send_failure_counts_as_a_disconnect_and_the_stream_is_drained(app, conn, meta):
     device = add_device(conn)
     upstream = MetaStream([sse(CREATED), sse(DELTA), sse(completed())])
     stream_from_meta(meta, upstream)
-    call = AsgiCall(app, "/meta/v1/responses", json.dumps(spark_request(stream=True)).encode(), device.headers)
+    call = AsgiCall(app, "/meta/v1/responses", streamed(spark_request()), device.headers)
 
     async def on_chunk(count):
         if count == 2:
@@ -1282,25 +1402,26 @@ async def test_send_failure_counts_as_a_disconnect(app, conn, meta):
     call.on_chunk = on_chunk
     await call.run()
 
+    assert len(call.chunks) == 2
+    assert upstream.served == 3
     assert upstream.closed
     [row] = ledger(conn, device)
-    assert json.loads(row["usage_json"])["estimated"] is True
+    assert row["cost_usd"] == pytest.approx(SPARK_COST)
     assert app.state.in_flight.count() == 0
 
 
 @pytest.mark.anyio
-async def test_stream_is_charged_even_when_closing_meta_fails(app, conn, meta):
+@pytest.mark.parametrize("body", [spark_request(), VIDEO_REQUEST], ids=["text", "video"])
+async def test_stream_is_charged_even_when_closing_meta_fails(app, conn, meta, body):
     device = add_device(conn)
-    upstream = MetaStream([sse(CREATED)], then="hang", close_error=OSError("socket already gone"))
+    upstream = MetaStream([sse(CREATED), sse(completed())], close_error=OSError("socket already gone"))
     stream_from_meta(meta, upstream)
-    call = AsgiCall(app, "/meta/v1/responses", json.dumps(spark_request(stream=True)).encode(), device.headers)
+    call = AsgiCall(app, "/meta/v1/responses", streamed(body), device.headers)
 
-    async def on_chunk(count):
-        call.hang_up.set()
-
-    call.on_chunk = on_chunk
     await call.run()
 
     assert upstream.closed
-    assert len(ledger(conn, device)) == 1
+    # The stream finished, so the real usage stands, below the media floor.
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(SPARK_COST)
     assert app.state.in_flight.count() == 0
