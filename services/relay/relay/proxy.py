@@ -391,20 +391,25 @@ async def _proxy(
 ) -> Response:
     device_id = device["device_id"]
     slot = request.app.state.in_flight.acquire(device_id)
+    handed_off = False
     try:
         call = await prepare()
         if call.capped:
             # As late as possible, right before the call goes out.
             await run_in_threadpool(check_budget, conn, device_id, settings)
-        return await _forward(request, settings, device_id, call)
+        response = await _forward(request, settings, device_id, call, slot)
+        # A streamed response frees its slot when the stream ends.
+        handed_off = isinstance(response, MeteredStream)
+        return response
     except ClientDisconnect:
         # The client went away while sending its body; nobody reads this.
         return error_response(400, "client_disconnected", "The request was cut off.")
     finally:
-        slot.release()
+        if not handed_off:
+            slot.release()
 
 
-async def _forward(request: Request, settings: Settings, device_id: str, call: Call) -> Response:
+async def _forward(request: Request, settings: Settings, device_id: str, call: Call, slot: Slot) -> Response:
     client: httpx.AsyncClient = request.app.state.meta_client
     url = httpx.URL(f"{META_BASE_URL}/{call.path}")
     if request.url.query:
@@ -423,6 +428,17 @@ async def _forward(request: Request, settings: Settings, device_id: str, call: C
     except httpx.HTTPError as exc:
         raise await _transport_error(exc, settings, device_id, call) from None
 
+    meter = call.meter
+    if meter is not None and upstream.status_code < 300 and _is_event_stream(upstream):
+
+        async def finish(usage_seen: Any) -> None:
+            try:
+                await charge(settings, device_id, meter, usage_seen)
+            finally:
+                slot.release()
+
+        return MeteredStream(upstream, finish)
+
     try:
         if upstream.status_code >= 300:
             return await _meta_error(upstream, settings)
@@ -433,9 +449,165 @@ async def _forward(request: Request, settings: Settings, device_id: str, call: C
     finally:
         await upstream.aclose()
 
-    if call.meter is not None:
-        await charge(settings, device_id, call.meter, call.meter.usage_from_body(body))
+    if meter is not None:
+        await charge(settings, device_id, meter, meter.usage_from_body(body))
     return Response(body, status_code=upstream.status_code, headers=_response_headers(upstream))
+
+
+def _is_event_stream(upstream: httpx.Response) -> bool:
+    return upstream.headers.get("content-type", "").split(";")[0].strip().lower() == "text/event-stream"
+
+
+class MeteredStream(Response):
+    """Passes Meta's event stream to the client as it arrives and charges the
+    call once the stream ends, however it ends.
+
+    A client that hangs up is noticed at once, even while Meta is silent: the
+    upstream request is closed so Meta stops, and the call is charged from the
+    last usage seen or, when none came, from the request estimate. That
+    estimate is low for video sent by file_id or URL; see `estimate_usage`.
+    """
+
+    def __init__(self, upstream: httpx.Response, finish: Callable[[Any], Awaitable[None]]) -> None:
+        self.status_code = upstream.status_code
+        self.media_type = None
+        self.background = None
+        self.init_headers(_response_headers(upstream))
+        self._upstream = upstream
+        self._finish = finish
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        events = SSEUsage()
+        try:
+            async with anyio.create_task_group() as group:
+
+                async def stop_on_disconnect() -> None:
+                    while (await receive())["type"] != "http.disconnect":
+                        pass
+                    group.cancel_scope.cancel()
+
+                group.start_soon(stop_on_disconnect)
+                await self._pump(send, events)
+                group.cancel_scope.cancel()
+        finally:
+            # Shielded: this must run even while the request is cancelled.
+            with anyio.CancelScope(shield=True):
+                await self._upstream.aclose()
+                await self._finish(events.close())
+
+    async def _pump(self, send: Any, events: "SSEUsage") -> None:
+        try:
+            await send({"type": "http.response.start", "status": self.status_code, "headers": self.raw_headers})
+            try:
+                async for chunk in self._upstream.aiter_bytes():
+                    events.feed(chunk)
+                    await send({"type": "http.response.body", "body": chunk, "more_body": True})
+            except httpx.HTTPError as exc:
+                logger.warning("Meta's stream broke off: %s", type(exc).__name__)
+            await send({"type": "http.response.body", "body": b"", "more_body": False})
+        except OSError:
+            # The client went away; the caller closes Meta's side and charges.
+            pass
+
+
+class SSEUsage:
+    """Finds the latest `usage` in a Responses event stream as it passes
+    through, usually in the final `response.completed` event.
+
+    An event up to FULL_PARSE_BYTES is parsed whole. A larger one (a final
+    event that repeats a long output) keeps only its last USAGE_TAIL_BYTES,
+    where the usage is, so memory stays bounded.
+    """
+
+    def __init__(self) -> None:
+        self.usage: Any = None
+        self._line = bytearray()
+        # Set once a line grows too long to keep whole: is it a data line?
+        self._long_line_is_data: bool | None = None
+        self._data = bytearray()
+        self._data_lines = 0
+        self._data_cut = False
+
+    def feed(self, chunk: bytes) -> None:
+        try:
+            start = 0
+            while (end := chunk.find(b"\n", start)) >= 0:
+                self._add(chunk[start:end])
+                self._end_line()
+                start = end + 1
+            self._add(chunk[start:])
+        except Exception:
+            # Metering never breaks the stream; without usage the call is
+            # charged the estimate.
+            logger.warning("Could not read usage from Meta's stream", exc_info=True)
+
+    def close(self) -> Any:
+        """The latest usage seen, after reading an unterminated last event."""
+        try:
+            if self._line or self._long_line_is_data is not None:
+                self._end_line()
+            self._dispatch()
+        except Exception:
+            logger.warning("Could not read usage from Meta's stream", exc_info=True)
+        return self.usage
+
+    def _add(self, part: bytes) -> None:
+        self._line += part
+        if self._long_line_is_data is None and len(self._line) > FULL_PARSE_BYTES:
+            self._long_line_is_data = self._line.startswith(b"data:")
+        if self._long_line_is_data is not None and len(self._line) > 2 * USAGE_TAIL_BYTES:
+            del self._line[:-USAGE_TAIL_BYTES]
+
+    def _end_line(self) -> None:
+        line = bytes(self._line)
+        if line.endswith(b"\r"):
+            line = line[:-1]
+        long_line_is_data, self._long_line_is_data = self._long_line_is_data, None
+        self._line.clear()
+        if long_line_is_data is not None:
+            if long_line_is_data:
+                self._add_data(line, cut=True)
+        elif not line:
+            self._dispatch()
+        elif line.startswith(b"data:"):
+            value = line[5:]
+            self._add_data(value[1:] if value.startswith(b" ") else value)
+        # Other fields (event, id, retry) and comments carry no usage.
+
+    def _add_data(self, value: bytes, cut: bool = False) -> None:
+        if self._data_lines:
+            self._data += b"\n"
+        self._data += value
+        self._data_lines += 1
+        if cut or len(self._data) > FULL_PARSE_BYTES:
+            self._data_cut = True
+            del self._data[:-USAGE_TAIL_BYTES]
+
+    def _dispatch(self) -> None:
+        data, cut = bytes(self._data), self._data_cut
+        self._data.clear()
+        self._data_lines = 0
+        self._data_cut = False
+        if b'"usage"' not in data:
+            return
+        if cut:
+            usage = _find_in_tail(data, _USAGE_KEY)
+        else:
+            try:
+                usage = _event_usage(json.loads(data))
+            except ValueError:
+                return
+        if isinstance(usage, dict):
+            self.usage = usage
+
+
+def _event_usage(event: Any) -> Any:
+    if not isinstance(event, dict):
+        return None
+    response = event.get("response")
+    if isinstance(response, dict) and isinstance(response.get("usage"), dict):
+        return response["usage"]
+    return event.get("usage")
 
 
 async def _transport_error(exc: httpx.HTTPError, settings: Settings, device_id: str, call: Call) -> RelayError:

@@ -928,3 +928,329 @@ def test_key_never_appears_in_responses_or_logs(client, conn, meta, settings, ca
     assert key not in caplog.text
     for record in caplog.records:
         assert key not in record.getMessage()
+
+
+# Streaming.
+
+
+class MetaStream(httpx.AsyncByteStream):
+    """Meta's side of a streamed response. It yields its chunks, can wait on a
+    gate after the first, then ends, hangs or breaks, and records whether the
+    relay closed it."""
+
+    def __init__(self, chunks, *, then=None, gate=None):
+        self.chunks = chunks
+        self.then = then
+        self.gate = gate
+        self.served = 0
+        self.closed = False
+
+    async def __aiter__(self):
+        for chunk in self.chunks:
+            if self.served == 1 and self.gate is not None:
+                await self.gate.wait()
+            self.served += 1
+            yield chunk
+        if self.then == "hang":
+            await anyio.sleep_forever()
+        elif isinstance(self.then, BaseException):
+            raise self.then
+
+    async def aclose(self):
+        self.closed = True
+
+
+def sse(*events, crlf=False):
+    end = "\r\n" if crlf else "\n"
+    return "".join(f"event: {e['type']}{end}data: {json.dumps(e)}{end}{end}" for e in events).encode()
+
+
+CREATED = {"type": "response.created", "sequence_number": 0, "response": {"id": "resp_1", "status": "in_progress", "usage": None}}
+DELTA = {"type": "response.output_text.delta", "sequence_number": 1, "delta": "Hi"}
+
+
+def completed(usage=SPARK_USAGE):
+    return {"type": "response.completed", "sequence_number": 2, "response": spark_body(usage)}
+
+
+def stream_from_meta(meta, stream):
+    return meta.post("/responses").mock(
+        return_value=httpx.Response(200, headers={"content-type": "text/event-stream"}, stream=stream)
+    )
+
+
+def test_streamed_response_is_metered_from_final_event(client, conn, meta):
+    device = add_device(conn)
+    raw = sse(CREATED, DELTA, crlf=True) + sse(completed()) + b"data: [DONE]\n\n"
+    # Chunk edges fall inside lines and inside the final event's JSON.
+    chunks = [raw[i : i + 37] for i in range(0, len(raw), 37)]
+    stream_from_meta(meta, MetaStream(chunks))
+
+    response = client.post("/meta/v1/responses", json=spark_request(stream=True), headers=device.headers)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "text/event-stream"
+    assert response.content == raw
+    [row] = ledger(conn, device)
+    assert json.loads(row["usage_json"]) == SPARK_USAGE
+    assert row["cost_usd"] == pytest.approx(SPARK_COST)
+    assert_ledger_matches_spend(conn, device)
+    assert client.app.state.in_flight.count() == 0
+
+
+def test_event_data_split_over_several_lines_is_read(client, conn, meta):
+    device = add_device(conn)
+    body = json.dumps(completed(), indent=1).splitlines()
+    raw = sse(CREATED) + "".join(f"data: {line}\n" for line in body).encode() + b"\n"
+    stream_from_meta(meta, MetaStream([raw]))
+
+    client.post("/meta/v1/responses", json=spark_request(stream=True), headers=device.headers)
+
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(SPARK_COST)
+
+
+def test_last_event_without_a_closing_blank_line_is_still_read(client, conn, meta):
+    device = add_device(conn)
+    stream_from_meta(meta, MetaStream([sse(CREATED), f"data: {json.dumps(completed())}".encode()]))
+
+    client.post("/meta/v1/responses", json=spark_request(stream=True), headers=device.headers)
+
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(SPARK_COST)
+
+
+def test_streamed_sam_call_is_charged_from_frames(client, conn, meta):
+    device = add_device(conn)
+    done = {"type": "response.completed", "response": {"status": "completed", "usage": {"video_frames_processed": 160}}}
+    stream_from_meta(meta, MetaStream([sse(CREATED), b'data: {"type":"response.output_text.delta","delta":"<0f>"}\n\n', sse(done)]))
+    body = {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, {"type": "input_video", "file_id": "file-1"}]}]}
+
+    response = client.post("/meta/v1/responses", json=body, headers=device.headers)
+
+    assert response.status_code == 200
+    [row] = ledger(conn, device)
+    assert row["model"] == "sam-3.1"
+    assert row["cost_usd"] == pytest.approx(0.032)
+
+
+def test_stream_that_ends_without_usage_charges_the_estimate(client, conn, meta):
+    device = add_device(conn)
+    route = stream_from_meta(meta, MetaStream([sse(CREATED, DELTA)]))
+
+    response = client.post("/meta/v1/responses", json=spark_request(stream=True), headers=device.headers)
+
+    assert response.status_code == 200
+    [row] = ledger(conn, device)
+    sent_bytes = len(route.calls.last.request.content)
+    assert json.loads(row["usage_json"]) == {"input_tokens": math.ceil(sent_bytes / 4), "output_tokens": 0, "estimated": True}
+    assert row["cost_usd"] == pytest.approx(math.ceil(sent_bytes / 4) * 1.25e-6)
+
+
+def test_stream_broken_off_by_meta_still_charges(client, conn, meta):
+    device = add_device(conn)
+    upstream = MetaStream([sse(CREATED), sse(DELTA)], then=httpx.ReadError("connection reset"))
+    stream_from_meta(meta, upstream)
+
+    response = client.post("/meta/v1/responses", json=spark_request(stream=True), headers=device.headers)
+
+    assert response.content == sse(CREATED) + sse(DELTA)
+    assert upstream.closed
+    [row] = ledger(conn, device)
+    assert json.loads(row["usage_json"])["estimated"] is True
+    assert client.app.state.in_flight.count() == 0
+
+
+def test_huge_final_event_has_its_usage_found_in_its_tail(client, conn, meta, monkeypatch):
+    monkeypatch.setattr(proxy, "FULL_PARSE_BYTES", 2000)
+    monkeypatch.setattr(proxy, "USAGE_TAIL_BYTES", 500)
+    device = add_device(conn)
+    final = completed()
+    final["response"]["output"][0]["content"][0]["text"] = '"usage": {"input_tokens": 0} ' * 500
+    raw = sse(CREATED, final)
+    stream_from_meta(meta, MetaStream([raw[i : i + 300] for i in range(0, len(raw), 300)]))
+
+    response = client.post("/meta/v1/responses", json=spark_request(stream=True), headers=device.headers)
+
+    assert response.content == raw
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(SPARK_COST)
+
+
+def test_meta_error_on_a_streamed_call_passes_through_and_charges_nothing(client, conn, meta):
+    device = add_device(conn)
+    meta.post("/responses").respond(503, json={"error": {"message": "The backend is temporarily overloaded. Please retry."}})
+
+    response = client.post("/meta/v1/responses", json=spark_request(stream=True), headers=device.headers)
+
+    assert response.status_code == 503
+    assert response.json()["error"] == "meta_error"
+    assert ledger(conn) == []
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
+@pytest.fixture
+async def app(settings):
+    from relay.app import create_app
+
+    application = create_app(settings)
+    async with application.router.lifespan_context(application):
+        yield application
+
+
+class AsgiCall:
+    """One request driven straight through the ASGI app, so a test can watch
+    each chunk arrive and hang up whenever it likes."""
+
+    def __init__(self, app, path, body, headers):
+        self.app = app
+        self.path = path
+        self.body = body
+        self.headers = {**headers, "content-type": "application/json", "content-length": str(len(body))}
+        self.chunks = []
+        self.hang_up = anyio.Event()
+        self.on_chunk = None
+
+    async def run(self):
+        body_sent = False
+
+        async def receive():
+            nonlocal body_sent
+            if not body_sent:
+                body_sent = True
+                return {"type": "http.request", "body": self.body, "more_body": False}
+            await self.hang_up.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(message):
+            if message["type"] == "http.response.body" and message.get("body"):
+                self.chunks.append(message["body"])
+                if self.on_chunk is not None:
+                    await self.on_chunk(len(self.chunks))
+
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": self.path,
+            "raw_path": self.path.encode(),
+            "root_path": "",
+            "query_string": b"",
+            "headers": [(k.lower().encode(), v.encode()) for k, v in self.headers.items()],
+            "client": ("127.0.0.1", 50000),
+            "server": ("relay", 80),
+        }
+        with anyio.fail_after(5):
+            await self.app(scope, receive, send)
+
+
+@pytest.mark.anyio
+async def test_stream_passes_bytes_through_as_they_arrive(app, conn, meta):
+    device = add_device(conn)
+    first_chunk_seen = anyio.Event()
+    # Meta sends its second chunk only after the client has the first.
+    upstream = MetaStream([sse(CREATED), sse(DELTA), sse(completed())], gate=first_chunk_seen)
+    stream_from_meta(meta, upstream)
+    call = AsgiCall(app, "/meta/v1/responses", json.dumps(spark_request(stream=True)).encode(), device.headers)
+
+    async def on_chunk(count):
+        first_chunk_seen.set()
+
+    call.on_chunk = on_chunk
+    await call.run()
+
+    assert b"".join(call.chunks) == sse(CREATED, DELTA, completed())
+    assert ledger(conn, device)[0]["cost_usd"] == pytest.approx(SPARK_COST)
+
+
+@pytest.mark.anyio
+async def test_client_disconnect_mid_stream_closes_upstream_and_records_usage_seen(app, conn, meta):
+    device = add_device(conn)
+    partial = {"input_tokens": 10000, "input_tokens_details": {"cached_tokens": 0}, "output_tokens": 120}
+    in_progress = {"type": "response.in_progress", "sequence_number": 1, "response": {"status": "in_progress", "usage": partial}}
+    # Meta is still generating when the client hangs up.
+    upstream = MetaStream([sse(CREATED), sse(in_progress), sse(DELTA)], then="hang")
+    stream_from_meta(meta, upstream)
+    call = AsgiCall(app, "/meta/v1/responses", json.dumps(spark_request(stream=True)).encode(), device.headers)
+
+    async def on_chunk(count):
+        if count == 3:
+            call.hang_up.set()
+
+    call.on_chunk = on_chunk
+    await call.run()
+
+    assert upstream.closed
+    assert len(call.chunks) == 3
+    [row] = ledger(conn, device)
+    assert json.loads(row["usage_json"]) == partial
+    assert row["cost_usd"] == pytest.approx(10000 * 1.25e-6 + 120 * 4.25e-6)
+    assert_ledger_matches_spend(conn, device)
+    assert app.state.in_flight.count() == 0
+
+
+@pytest.mark.anyio
+async def test_client_disconnect_before_any_usage_charges_the_estimate(app, conn, meta):
+    device = add_device(conn)
+    upstream = MetaStream([sse(CREATED), sse(DELTA)], then="hang")
+    route = stream_from_meta(meta, upstream)
+    call = AsgiCall(app, "/meta/v1/responses", json.dumps(spark_request(stream=True)).encode(), device.headers)
+
+    async def on_chunk(count):
+        if count == 2:
+            call.hang_up.set()
+
+    call.on_chunk = on_chunk
+    await call.run()
+
+    assert upstream.closed
+    [row] = ledger(conn, device)
+    sent_bytes = len(route.calls.last.request.content)
+    assert json.loads(row["usage_json"]) == {"input_tokens": math.ceil(sent_bytes / 4), "output_tokens": 0, "estimated": True}
+    assert row["cost_usd"] == pytest.approx(math.ceil(sent_bytes / 4) * 1.25e-6)
+    assert_ledger_matches_spend(conn, device)
+    assert app.state.in_flight.count() == 0
+
+
+@pytest.mark.anyio
+async def test_client_disconnect_while_meta_is_silent_closes_upstream_at_once(app, conn, meta):
+    device = add_device(conn)
+    # Meta is still thinking: nothing comes after the first event.
+    upstream = MetaStream([sse(CREATED)], then="hang")
+    stream_from_meta(meta, upstream)
+    call = AsgiCall(app, "/meta/v1/responses", json.dumps(spark_request(stream=True)).encode(), device.headers)
+
+    async def on_chunk(count):
+        call.hang_up.set()
+
+    call.on_chunk = on_chunk
+    await call.run()
+
+    assert upstream.closed
+    assert len(ledger(conn, device)) == 1
+
+
+@pytest.mark.anyio
+async def test_send_failure_counts_as_a_disconnect(app, conn, meta):
+    device = add_device(conn)
+    upstream = MetaStream([sse(CREATED), sse(DELTA), sse(completed())])
+    stream_from_meta(meta, upstream)
+    call = AsgiCall(app, "/meta/v1/responses", json.dumps(spark_request(stream=True)).encode(), device.headers)
+
+    async def on_chunk(count):
+        if count == 2:
+            raise OSError("client went away")
+
+    call.on_chunk = on_chunk
+    await call.run()
+
+    assert upstream.closed
+    [row] = ledger(conn, device)
+    assert json.loads(row["usage_json"])["estimated"] is True
+    assert app.state.in_flight.count() == 0
