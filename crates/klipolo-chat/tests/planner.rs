@@ -460,8 +460,9 @@ fn every_model_error_is_one_plain_sentence_and_changes_nothing() {
         assert_eq!(e.kind, kind, "{error:?}");
         assert_plain(&e.message);
         assert!(e.message.ends_with('.'), "{}", e.message);
-        // A log detail is never shown.
+        // A log detail is never shown, but kept for logs.
         assert!(!e.message.contains("unsupported"), "{}", e.message);
+        assert_eq!(e.detail, error.to_string());
         sentences.push(e.message);
     }
     sentences.sort();

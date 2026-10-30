@@ -124,6 +124,8 @@ pub struct ChatError {
     pub message: String,
     /// What the model calls made before the failure cost, in US dollars.
     pub usage_usd: f64,
+    /// What went wrong, for logs only (`ModelError`'s text, already without secrets): never shown.
+    pub detail: String,
 }
 
 impl fmt::Display for ChatError {
@@ -136,6 +138,7 @@ impl std::error::Error for ChatError {}
 
 impl ChatError {
     fn from_model(e: ModelError, usage_usd: f64) -> Self {
+        let detail = e.to_string();
         let (kind, message) = match e {
             ModelError::Budget(said) => {
                 let said = sanitize::reply(said.trim());
@@ -156,6 +159,7 @@ impl ChatError {
             kind,
             message,
             usage_usd,
+            detail,
         }
     }
 }
@@ -176,6 +180,7 @@ pub async fn plan(
             kind: ChatErrorKind::TooLong,
             message: TOO_LONG.to_owned(),
             usage_usd: 0.0,
+            detail: format!("context of {} tokens", ctx.tokens),
         });
     }
     let owned;
