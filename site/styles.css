@@ -784,3 +784,80 @@ ol {
     transform: none;
   }
 }
+
+/* ---------- Coming soon tag ---------- */
+
+/* Dashed outline: planned, not shipped */
+.tag-soon {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border: 1.5px dashed currentColor;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.4;
+  white-space: nowrap;
+  vertical-align: 0.1em;
+}
+
+/* ---------- The problem ---------- */
+
+.problem {
+  background: var(--band);
+}
+
+.problem-grid {
+  display: grid;
+  gap: 2rem;
+}
+
+.pains li {
+  padding-block: 1rem;
+  border-top: 1px solid var(--line);
+  font-size: 1.1875rem;
+  line-height: 1.4;
+  max-width: 40ch;
+}
+
+.pains li:last-child {
+  border-bottom: 1px solid var(--line);
+}
+
+.answer {
+  display: grid;
+  gap: 1rem;
+}
+
+.answer-line {
+  font-stretch: 78%;
+  font-weight: 750;
+  font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.25rem);
+  line-height: 1.12;
+  max-width: 30ch;
+  text-wrap: balance;
+}
+
+.answer-note {
+  color: var(--ink-soft);
+  font-size: 0.9375rem;
+}
+
+.answer-note .tag-soon {
+  margin-right: 0.4rem;
+}
+
+@media (min-width: 900px) {
+  .problem-grid {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    column-gap: 4rem;
+    row-gap: 3rem;
+  }
+
+  .problem-grid h2 {
+    grid-row: span 2;
+  }
+
+  .pains li {
+    font-size: 1.3125rem;
+  }
+}
