@@ -126,3 +126,20 @@ def test_media_amount_counts_only_in_a_reservation():
     usage = {"input_tokens": 10, "output_tokens": 0, "media_usd": 0.75}
 
     assert cost_usd("responses", "muse-spark-1.3", usage) == pytest.approx(10 * 1.25e-6)
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "model", "usage"),
+    [
+        ("responses", "muse-spark-1.3", {"input_tokens": 10000}),
+        ("responses", "muse-spark-1.3", {"output_tokens": 500}),
+        ("responses", "muse-spark-1.3", {"total_tokens": 10500}),
+        ("responses", "muse-spark-1.2", {}),
+        ("asr/transcribe", "muse-voice-transcribe-1.0", {}),
+    ],
+    ids=["no-output", "no-input", "total-only", "empty", "no-duration"],
+)
+def test_usage_without_its_counters_raises(endpoint, model, usage):
+    # Missing counters would otherwise price as zero.
+    with pytest.raises(ValueError):
+        cost_usd(endpoint, model, usage)

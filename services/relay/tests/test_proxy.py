@@ -666,6 +666,38 @@ def test_success_with_garbled_usage_charges_the_reservation(client, conn, meta):
 DEEP = "[" * 100_000 + "]" * 100_000
 
 
+@pytest.mark.parametrize(
+    "usage",
+    [{"input_tokens": 10000}, {"output_tokens": 500}, {"total_tokens": 10500}, {}],
+    ids=["no-output", "no-input", "total-only", "empty"],
+)
+def test_usage_missing_a_counter_charges_the_reservation(client, conn, meta, usage):
+    device = add_device(conn)
+    route = meta.post("/responses").respond(200, json=spark_body(usage=usage))
+
+    response = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
+
+    assert response.status_code == 200
+    [row] = ledger(conn, device)
+    sent = route.calls.last.request.content
+    assert json.loads(row["usage_json"]) == reserved_usage(sent)
+    assert row["cost_usd"] == pytest.approx(reserved_cost(sent))
+
+
+def test_sam_video_usage_without_frames_charges_the_reservation(sam_client, conn, meta):
+    device = add_device(conn)
+    done = {"type": "response.completed", "response": {"status": "completed", "usage": {}}}
+    stream_from_meta(meta, MetaStream([sse(CREATED), sse(done)]))
+    body = {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, {"type": "input_video", "file_id": "file-1"}]}]}
+
+    response = sam_client.post("/meta/v1/responses", json=body, headers=device.headers)
+
+    assert response.status_code == 200
+    [row] = ledger(conn, device)
+    assert json.loads(row["usage_json"])["reserved"] is True
+    assert row["cost_usd"] == pytest.approx(0.75 + 50 * 0.20 / 1000)
+
+
 def test_usage_that_breaks_the_parser_charges_the_reservation(client, conn, meta):
     device = add_device(conn)
     body = '{"usage":{"input_tokens":1,"output_tokens":1},"output":' + DEEP + "}"

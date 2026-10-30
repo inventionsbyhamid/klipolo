@@ -50,8 +50,9 @@ SAM_IMAGES_KEY = "images_in_request"
 
 def cost_usd(endpoint: str, model: str | None, usage: Mapping[str, Any]) -> float:
     """Price one call. Raises ValueError for an unpriced endpoint or model, or
-    for usage that is not a mapping of non-negative numbers. A reservation
-    (`"reserved": true`) also adds its `media_usd`."""
+    for usage that is not a mapping of non-negative numbers or lacks the
+    counters the price needs (missing counters would price as zero). A
+    reservation (`"reserved": true`) also adds its `media_usd`."""
     if endpoint == "files":
         return 0.0
     if model not in MODELS_BY_ENDPOINT.get(endpoint, ()):
@@ -66,12 +67,12 @@ def cost_usd(endpoint: str, model: str | None, usage: Mapping[str, Any]) -> floa
 
 def _cost(model: str, usage: Mapping[str, Any]) -> float:
     if model in SPARK_MODELS:
-        input_tokens = _count(usage, "input_tokens")
+        input_tokens = _count(usage, "input_tokens", required=True)
         details = usage.get("input_tokens_details") or {}
         if not isinstance(details, Mapping):
             raise ValueError("input_tokens_details must be an object")
         cached = min(_count(details, "cached_tokens"), input_tokens)
-        output_tokens = _count(usage, "output_tokens")
+        output_tokens = _count(usage, "output_tokens", required=True)
         return (
             (input_tokens - cached) * SPARK_INPUT_USD
             + cached * SPARK_CACHED_INPUT_USD
@@ -83,7 +84,7 @@ def _cost(model: str, usage: Mapping[str, Any]) -> float:
             frames = max(frames, SAM_MIN_FRAMES)
         return frames * SAM_FRAME_USD + _count(usage, SAM_IMAGES_KEY) * SAM_IMAGE_USD
     # Voice transcription is billed by audio length.
-    return _count(usage, "audioDurationMs") / 3_600_000 * TRANSCRIBE_HOUR_USD
+    return _count(usage, "audioDurationMs", required=True) / 3_600_000 * TRANSCRIBE_HOUR_USD
 
 
 def reservation_usage(
@@ -120,9 +121,11 @@ def reservation_usage(
     return usage
 
 
-def _count(usage: Mapping[str, Any], key: str) -> float:
+def _count(usage: Mapping[str, Any], key: str, required: bool = False) -> float:
     value = usage.get(key)
     if value is None:
+        if required:
+            raise ValueError(f"usage has no {key}")
         return 0.0
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise ValueError(f"usage {key} must be a number")

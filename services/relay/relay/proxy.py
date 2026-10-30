@@ -327,6 +327,8 @@ class Meter:
             if self.model == SAM_MODEL:
                 usage[SAM_IMAGES_KEY] = self.images
             try:
+                if self.model == SAM_MODEL and self.has_video and usage.get("video_frames_processed") is None:
+                    raise ValueError("SAM video usage has no video_frames_processed")
                 seen = _numbers_only(usage), cost_usd(self.endpoint, self.model, usage)
             except ValueError:
                 logger.warning("Meta usage for %s could not be priced, charging the reservation", self.endpoint)
