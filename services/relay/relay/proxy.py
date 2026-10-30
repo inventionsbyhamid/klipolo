@@ -95,6 +95,9 @@ MAX_JSON_DEPTH = 64
 FULL_PARSE_BYTES = 8 * 1024 * 1024
 USAGE_TAIL_BYTES = 64 * 1024
 
+# Pause between attempts to write a charge, times the attempt number.
+CHARGE_RETRY_DELAY_S = 0.5
+
 MAX_IN_FLIGHT_PER_DEVICE = 4
 MAX_IN_FLIGHT_TOTAL = 32
 
@@ -142,6 +145,10 @@ class InFlight:
         self._reserved_total = 0.0
         # Admissions run one at a time, so two can't both claim the same room.
         self.admission = anyio.Lock()
+        # Charges that could not be written. While any is held, capped calls
+        # are refused: the caps can't be checked against spend that isn't
+        # recorded.
+        self.unwritten: list[Charge] = []
 
     def acquire(self, device_id: str) -> "Slot":
         if self._by_device.get(device_id, 0) >= self.per_device:
@@ -232,6 +239,14 @@ async def admit(conn: sqlite3.Connection, slot: Slot, settings: Settings, amount
     have reserved. With `amount` 0 this only checks that any room is left."""
     in_flight = slot.owner
     async with in_flight.admission:
+        if in_flight.unwritten:
+            try:
+                await anyio.to_thread.run_sync(_write_unwritten, settings.db_path, in_flight.unwritten)
+            except Exception:
+                logger.warning("Charges still can't be written; refusing capped calls")
+                raise RelayError(
+                    503, "charging_unavailable", "The relay can't record charges right now. Try again in a minute."
+                ) from None
         # Reservations are read before the spend, and a call frees its
         # reservation only after its charge is written. Whatever has left the
         # reservations by the time the spend is read is in that spend, so no
@@ -248,21 +263,23 @@ async def admit(conn: sqlite3.Connection, slot: Slot, settings: Settings, amount
         slot.reserve(amount)
 
 
-def record_charge(
-    db_path: Path, device_id: str, endpoint: str, model: str, usage: Mapping[str, Any], cost: float
-) -> None:
+@dataclass(frozen=True)
+class Charge:
+    device_id: str
+    endpoint: str
+    model: str
+    usage: dict[str, Any]
+    cost: float
+    at: str = field(default_factory=lambda: datetime.now(UTC).isoformat(timespec="seconds"))
+
+
+def record_charge(db_path: Path, charge: Charge) -> None:
     """Write the ledger row and add the cost to the device in one transaction,
     so the ledger (what the admin sees) and spent_usd (what the cap reads)
     never drift. Uses its own connection: a streamed response outlives the
     request's."""
-    row = (
-        device_id,
-        datetime.now(UTC).isoformat(timespec="seconds"),
-        endpoint,
-        model,
-        json.dumps(usage, sort_keys=True),
-        cost,
-    )
+    device_id, cost = charge.device_id, charge.cost
+    row = (device_id, charge.at, charge.endpoint, charge.model, json.dumps(charge.usage, sort_keys=True), cost)
     for attempt in range(3):
         try:
             conn = db.connect(db_path)
@@ -282,7 +299,14 @@ def record_charge(
         except sqlite3.OperationalError:
             if attempt == 2:
                 raise
-            time.sleep(0.5 * (attempt + 1))
+            time.sleep(CHARGE_RETRY_DELAY_S * (attempt + 1))
+
+
+def _write_unwritten(db_path: Path, unwritten: list[Charge]) -> None:
+    # Oldest first; each leaves the list only once it is written.
+    while unwritten:
+        record_charge(db_path, unwritten[0])
+        unwritten.pop(0)
 
 
 @dataclass
@@ -356,23 +380,25 @@ class Meter:
             return []
 
 
-async def charge(settings: Settings, device_id: str, meter: Meter, candidates: list[Any], *, final: bool) -> None:
+async def charge(settings: Settings, slot: Slot, meter: Meter, candidates: list[Any], *, final: bool) -> None:
     try:
         usage, cost = meter.price(candidates, final=final)
     except Exception:
         # Whatever goes wrong reading the usage, the call is still charged.
         logger.warning("Could not price Meta's usage for %s, charging the reservation", meter.endpoint, exc_info=True)
         usage, cost = meter.reservation()
+    entry = Charge(slot.device_id, meter.endpoint, meter.model, usage, cost)
     try:
-        await anyio.to_thread.run_sync(
-            record_charge, settings.db_path, device_id, meter.endpoint, meter.model, usage, cost
-        )
+        await anyio.to_thread.run_sync(record_charge, settings.db_path, entry)
     except Exception:
-        logger.exception("Could not record a charge of $%.6f for device %s", cost, device_id[:8])
+        # Fail closed: the charge is held, and capped calls are refused until
+        # it is written.
+        slot.owner.unwritten.append(entry)
+        logger.exception("Could not record a charge of $%.6f for device %s", cost, slot.device_id[:8])
         return
     logger.info(
         "Charged device %s $%.6f for %s %s%s",
-        device_id[:8],
+        slot.device_id[:8],
         cost,
         meter.endpoint,
         meter.model,
@@ -533,7 +559,7 @@ async def _proxy(
         if call.meter is not None:
             # The call's worst case, held until its charge is written.
             await admit(conn, slot, settings, call.meter.reservation()[1])
-        response = await _forward(request, settings, device_id, call, slot, params)
+        response = await _forward(request, settings, call, slot, params)
         # A streamed response frees its slot when the stream ends.
         handed_off = isinstance(response, MeteredStream)
         return response
@@ -546,7 +572,7 @@ async def _proxy(
 
 
 async def _forward(
-    request: Request, settings: Settings, device_id: str, call: Call, slot: Slot, params: dict[str, str]
+    request: Request, settings: Settings, call: Call, slot: Slot, params: dict[str, str]
 ) -> Response:
     client: httpx.AsyncClient = request.app.state.meta_client
     url = httpx.URL(f"{META_BASE_URL}/{call.path}", params=params)
@@ -562,14 +588,14 @@ async def _forward(
         # body stream, which passes through here unchanged.
         upstream = await client.send(upstream_request, stream=True)
     except httpx.HTTPError as exc:
-        raise await _transport_error(exc, settings, device_id, call) from None
+        raise await _transport_error(exc, settings, slot, call) from None
 
     meter = call.meter
     if meter is not None and upstream.status_code < 300 and _is_event_stream(upstream):
 
         async def finish(candidates: list[Any], final: bool) -> None:
             try:
-                await charge(settings, device_id, meter, candidates, final=final)
+                await charge(settings, slot, meter, candidates, final=final)
             finally:
                 slot.release()
 
@@ -581,12 +607,12 @@ async def _forward(
         try:
             body = await upstream.aread()
         except httpx.HTTPError as exc:
-            raise await _transport_error(exc, settings, device_id, call) from None
+            raise await _transport_error(exc, settings, slot, call) from None
     finally:
         await _close_quietly(upstream)
 
     if meter is not None:
-        await charge(settings, device_id, meter, meter.usage_from_body(body), final=True)
+        await charge(settings, slot, meter, meter.usage_from_body(body), final=True)
     return Response(body, status_code=upstream.status_code, headers=_response_headers(upstream))
 
 
@@ -814,14 +840,14 @@ def _event_usage(event: Any) -> Any:
     return event.get("usage")
 
 
-async def _transport_error(exc: httpx.HTTPError, settings: Settings, device_id: str, call: Call) -> RelayError:
+async def _transport_error(exc: httpx.HTTPError, settings: Settings, slot: Slot, call: Call) -> RelayError:
     logger.warning("Meta call to %s failed: %s", call.path, type(exc).__name__)
     if isinstance(exc, httpx.ConnectError | httpx.ConnectTimeout | httpx.PoolTimeout | httpx.LocalProtocolError):
         # Nothing reached Meta.
         return RelayError(502, "meta_unreachable", "Could not reach Meta. Try again.")
     if call.meter is not None:
         # The request may have reached Meta and been billed.
-        await charge(settings, device_id, call.meter, [], final=False)
+        await charge(settings, slot, call.meter, [], final=False)
     if isinstance(exc, httpx.TimeoutException):
         return RelayError(504, "meta_timeout", "Meta took too long to answer. Try again.")
     return RelayError(502, "meta_unreachable", "Could not reach Meta. Try again.")

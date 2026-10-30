@@ -1266,6 +1266,47 @@ def test_refused_calls_free_their_slot(client, conn, meta):
     assert client.app.state.in_flight.count() == 0
 
 
+# Charging.
+
+
+def test_charges_fail_closed_until_one_can_be_written(client, conn, meta, monkeypatch):
+    import sqlite3
+
+    monkeypatch.setattr(proxy, "CHARGE_RETRY_DELAY_S", 0)
+    real_record_charge = proxy.record_charge
+    broken = {"on": True}
+
+    def record_charge(*args, **kwargs):
+        if broken["on"]:
+            raise sqlite3.OperationalError("disk I/O error")
+        return real_record_charge(*args, **kwargs)
+
+    monkeypatch.setattr(proxy, "record_charge", record_charge)
+    device = add_device(conn)
+    route = meta.post("/responses").respond(200, json=spark_body())
+    meta.get("/files/file-1").respond(200, json={"id": "file-1"})
+
+    # Meta answered, so the answer goes back, but its charge is not written.
+    assert client.post("/meta/v1/responses", json=spark_request(), headers=device.headers).status_code == 200
+    assert ledger(conn) == []
+
+    refused = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
+    assert refused.status_code == 503
+    assert refused.json() == {
+        "error": "charging_unavailable",
+        "message": "The relay can't record charges right now. Try again in a minute.",
+    }
+    assert route.call_count == 1
+    # Free calls still work.
+    assert client.get("/meta/v1/files/file-1", headers=device.headers).status_code == 200
+
+    broken["on"] = False
+    assert client.post("/meta/v1/responses", json=spark_request(), headers=device.headers).status_code == 200
+    # The held charge is written first, then the new one.
+    assert [row["cost_usd"] for row in ledger(conn, device)] == [pytest.approx(SPARK_COST)] * 2
+    assert_ledger_matches_spend(conn, device)
+
+
 # Secrets.
 
 
