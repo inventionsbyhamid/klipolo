@@ -15,7 +15,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
-use klipolo_engine::media::small_copy::{self, EveryFrame, SmallCopy, SmallCopyError};
+use klipolo_engine::media::small_copy::{self, SmallCopy, SmallCopyError};
 use klipolo_engine::render::probe::{MediaInfo, MediaKind, probe_media};
 use klipolo_model::time::{RangeUs, Us, secs_to_us};
 
@@ -131,22 +131,10 @@ pub fn make_in_chunks(
             video_bps: VIDEO_BPS,
             audio_bps: AUDIO_BPS,
         };
+        // Every frame of the source, at its own rate, into this chunk's finder (told when the copy starts again).
         let mut finder = Finder::new();
-        let mut last = Us::MIN;
-        let mut see = |at: Us, pixels: &[u8]| {
-            if at < last {
-                // The copy is being made again (in software): its frames start again.
-                finder = Finder::new();
-            }
-            last = at;
-            finder.push(at, pixels);
-        };
-        let every = EveryFrame {
-            size: cuts::PICTURE,
-            see: &mut see,
-        };
         let info =
-            small_copy::write(src, &path, &spec, cancel, Some(every)).map_err(video_error)?;
+            small_copy::write(src, &path, &spec, cancel, Some(&mut finder)).map_err(video_error)?;
         found.push((range, finder.finish()));
         chunks.push(ProxyChunk {
             path,

@@ -14,6 +14,7 @@ use klipolo_analysis::providers::{
 };
 use klipolo_analysis::proxy::{self, ProxyChunk, ProxyInfo};
 use klipolo_analysis::scenes::{self, SceneItem, WordEdges};
+use klipolo_engine::media::small_copy::EveryFrame;
 use klipolo_meta::{MetaClient, SecretString};
 use klipolo_model::speech::{Word, WordKind};
 use klipolo_model::time::{RangeUs, Us};
@@ -140,6 +141,46 @@ fn a_flicker_that_returns_to_the_old_look_is_not_a_cut() {
     n = push_looks(&mut finder, n, &[bright, dark, bright, dark, bright, dark]);
     push_looks(&mut finder, n, &[dark; 60]);
     assert_eq!(finder.finish(), Vec::<Us>::new());
+}
+
+#[test]
+fn cuts_merge_keeps_each_chunks_cuts_and_overlaps_once() {
+    let ms = |ms: Us| ms * 1_000;
+    let merged = cuts::merge(vec![
+        (
+            RangeUs {
+                start: 0,
+                end: ms(60_000),
+            },
+            vec![ms(10_000), ms(55_000), ms(59_990)],
+        ),
+        (
+            RangeUs {
+                start: ms(40_000),
+                end: ms(100_000),
+            },
+            // 35 s is before this chunk; 55.02 s is the first chunk's 55 s found again; 100 s is its end, not in it.
+            vec![ms(35_000), ms(41_000), ms(55_020), ms(61_000), ms(100_000)],
+        ),
+    ]);
+    assert_eq!(
+        merged,
+        vec![ms(10_000), ms(41_000), ms(55_000), ms(59_990), ms(61_000)]
+    );
+}
+
+#[test]
+fn a_finder_told_to_start_again_forgets_what_it_saw() {
+    let (dark, bright) = (split(0), split(57_600));
+    let mut finder = Finder::new();
+    // A cut at frame 30, then the copy is made again from the start: only the second run's cut (frame 60) counts.
+    let n = push_looks(&mut finder, 0, &[dark; 30]);
+    push_looks(&mut finder, n, &[bright; 30]);
+    EveryFrame::again(&mut finder);
+    let n = push_looks(&mut finder, 0, &[dark; 60]);
+    push_looks(&mut finder, n, &[bright; 30]);
+    assert_eq!(finder.finish(), vec![frame_us(60)]);
+    assert_eq!(EveryFrame::size(&Finder::new()), cuts::PICTURE);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

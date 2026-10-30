@@ -65,13 +65,16 @@ pub struct SmallCopy {
     pub audio_bps: u32,
 }
 
-/// Every decoded frame of the source over the range, for a caller that measures frames one by one: its time on the
-/// source's file clock and its grey picture of `size` (as `luma_frames::each_frame` makes them), from the keyframe
-/// before the range to its end, at the source's own rate (before `SmallCopy::max_fps` thins them). Should `write` make
-/// the copy again (in software), the frames come again from the start: their times go back.
-pub struct EveryFrame<'a> {
-    pub size: (u32, u32),
-    pub see: &'a mut dyn FnMut(Us, &[u8]),
+/// A caller that sees every decoded frame of the source over the range, to measure frames one by one: from the
+/// keyframe before the range to its end, at the source's own rate (before `SmallCopy::max_fps` thins them), each as a
+/// grey picture (as `luma_frames::each_frame` makes them).
+pub trait EveryFrame {
+    /// The grey picture's size (width, height).
+    fn size(&self) -> (u32, u32);
+    /// The next frame: its time on the source's file clock and its grey picture, row by row.
+    fn see(&mut self, at: Us, pixels: &[u8]);
+    /// `write` is making the copy again from the start (in software): forget every frame seen so far.
+    fn again(&mut self);
 }
 
 /// What a copy holds.
@@ -124,7 +127,7 @@ pub fn write(
     out: &Path,
     spec: &SmallCopy,
     cancel: &AtomicBool,
-    mut every: Option<EveryFrame<'_>>,
+    mut every: Option<&mut dyn EveryFrame>,
 ) -> Result<SmallCopyInfo, SmallCopyError> {
     let _ = ffmpeg::init();
     if spec.range.end <= spec.range.start || spec.range.start < 0 {
@@ -137,12 +140,15 @@ pub fn write(
         spec,
         cancel,
         cfg!(target_os = "macos"),
-        every.as_mut(),
+        every.as_deref_mut(),
     );
     if matches!(written, Err(SmallCopyError::Failed(_))) && cfg!(target_os = "macos") {
         // The hardware decoder may refuse a stream part-way: once more in software.
         tracing::info!(error = ?written, "small copy: again with the software decoder");
-        written = write_to(src, &tmp, spec, cancel, false, every.as_mut());
+        if let Some(every) = every.as_deref_mut() {
+            every.again();
+        }
+        written = write_to(src, &tmp, spec, cancel, false, every);
     }
     let finished = written.and_then(|info| {
         std::fs::rename(&tmp, out).map_err(|e| SmallCopyError::Failed(format!("rename: {e}")))?;
@@ -192,7 +198,7 @@ fn write_to(
     spec: &SmallCopy,
     cancel: &AtomicBool,
     hardware_decode: bool,
-    every: Option<&mut EveryFrame<'_>>,
+    every: Option<&mut (dyn EveryFrame + '_)>,
 ) -> Result<SmallCopyInfo, SmallCopyError> {
     let probe = probe_media(src).map_err(|e| failed("probe", e))?;
     if probe.kind != MediaKind::Video {
@@ -321,10 +327,13 @@ impl Writer<'_> {
         src: &Path,
         cancel: &AtomicBool,
         hardware_decode: bool,
-        mut every: Option<&mut EveryFrame<'_>>,
+        mut every: Option<&mut (dyn EveryFrame + '_)>,
     ) -> Result<(), SmallCopyError> {
         let range = self.spec.range;
-        let mut grey = every.as_ref().map(|e| Grey::new(e.size.0, e.size.1));
+        let mut grey = every.as_ref().map(|e| {
+            let (width, height) = e.size();
+            Grey::new(width, height)
+        });
         let mut input = crate::media::open::input(src).map_err(|e| failed("open", e))?;
         let stream = input
             .streams()
@@ -416,10 +425,10 @@ impl Writer<'_> {
                 let at = ((pts - start) as f64 * seconds * 1e6).round() as Us;
                 let software = take_software(&mut frame);
                 if at < range.end
-                    && let (Some(every), Some(grey)) = (every.as_mut(), grey.as_mut())
+                    && let (Some(every), Some(grey)) = (every.as_deref_mut(), grey.as_mut())
                 {
                     grey.of(&software).map_err(SmallCopyError::Failed)?;
-                    (every.see)(at, grey.pixels());
+                    every.see(at, grey.pixels());
                 }
                 if at < range.start {
                     held = Some(software);

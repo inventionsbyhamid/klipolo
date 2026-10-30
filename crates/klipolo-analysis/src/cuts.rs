@@ -33,6 +33,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
 use klipolo_engine::media::luma_frames::{self, LumaError};
+use klipolo_engine::media::small_copy::EveryFrame;
 use klipolo_model::time::{RangeUs, Us};
 
 use crate::error::VideoError;
@@ -188,6 +189,21 @@ impl Finder {
             .find(|(t, _)| *t <= at)
             .or(self.recent.front())
             .map_or([0; BINS], |(_, h)| *h)
+    }
+}
+
+/// The small copy hands its source's frames straight to a `Finder` (`proxy::make`), and says when it starts again.
+impl EveryFrame for Finder {
+    fn size(&self) -> (u32, u32) {
+        PICTURE
+    }
+
+    fn see(&mut self, at: Us, pixels: &[u8]) {
+        self.push(at, pixels);
+    }
+
+    fn again(&mut self) {
+        *self = Finder::new();
     }
 }
 
