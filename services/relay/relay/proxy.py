@@ -296,8 +296,15 @@ class Meter:
     has_video: bool = False
     # Video, files or earlier context by reference, or SAM.
     media: bool = False
+    _reservation: tuple[dict[str, Any], float] | None = field(default=None, init=False, repr=False)
 
     def reservation(self) -> tuple[dict[str, Any], float]:
+        """Worked out once, at admission, so charging it can't fail later."""
+        if self._reservation is None:
+            self._reservation = self._reserve()
+        return self._reservation
+
+    def _reserve(self) -> tuple[dict[str, Any], float]:
         usage = reservation_usage(
             self.endpoint,
             self.model,
@@ -329,16 +336,25 @@ class Meter:
         return seen if seen is not None and seen[1] > reserved[1] else reserved
 
     def usage_from_body(self, body: bytes) -> Any:
-        """The usage in a complete JSON response, or None."""
-        if self.endpoint == "asr/transcribe":
-            return _find_value(body, "audioDurationMs", _DURATION_KEY, lambda v: {"audioDurationMs": v})
-        return _find_value(body, "usage", _USAGE_KEY, lambda v: v)
+        """The usage in a complete JSON response, or None, whatever the body."""
+        try:
+            if self.endpoint == "asr/transcribe":
+                return _find_value(body, "audioDurationMs", _DURATION_KEY, lambda v: {"audioDurationMs": v})
+            return _find_value(body, "usage", _USAGE_KEY, lambda v: v)
+        except Exception:
+            logger.warning("Could not read the usage in Meta's answer for %s", self.endpoint, exc_info=True)
+            return None
 
 
 async def charge(
     settings: Settings, device_id: str, meter: Meter, usage_seen: Any, *, finished: bool = True
 ) -> None:
-    usage, cost = meter.price(usage_seen, finished=finished)
+    try:
+        usage, cost = meter.price(usage_seen, finished=finished)
+    except Exception:
+        # Whatever goes wrong reading the usage, the call is still charged.
+        logger.warning("Could not price Meta's usage for %s, charging the reservation", meter.endpoint, exc_info=True)
+        usage, cost = meter.reservation()
     try:
         await anyio.to_thread.run_sync(
             record_charge, settings.db_path, device_id, meter.endpoint, meter.model, usage, cost

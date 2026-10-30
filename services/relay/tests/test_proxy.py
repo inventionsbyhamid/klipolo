@@ -663,6 +663,38 @@ def test_success_with_garbled_usage_charges_the_reservation(client, conn, meta):
     assert row["cost_usd"] == pytest.approx(reserved_cost(route.calls.last.request.content))
 
 
+DEEP = "[" * 100_000 + "]" * 100_000
+
+
+def test_usage_that_breaks_the_parser_charges_the_reservation(client, conn, meta):
+    device = add_device(conn)
+    body = '{"usage":{"input_tokens":1,"output_tokens":1},"output":' + DEEP + "}"
+    route = meta.post("/responses").respond(200, content=body.encode(), headers={"content-type": "application/json"})
+
+    response = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
+
+    assert response.status_code == 200
+    assert response.content == body.encode()
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(reserved_cost(route.calls.last.request.content))
+    assert client.app.state.in_flight.count() == 0
+
+
+def test_a_failure_while_pricing_usage_charges_the_reservation(client, conn, meta, monkeypatch):
+    def broken(*args, **kwargs):
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr(proxy, "_numbers_only", broken)
+    device = add_device(conn)
+    route = meta.post("/responses").respond(200, json=spark_body())
+
+    response = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
+
+    assert response.status_code == 200
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(reserved_cost(route.calls.last.request.content))
+
+
 def test_usage_after_a_huge_output_is_found_in_the_tail(client, conn, meta, monkeypatch):
     monkeypatch.setattr(proxy, "FULL_PARSE_BYTES", 1000)
     device = add_device(conn)
@@ -1354,6 +1386,18 @@ def test_huge_final_event_has_its_usage_found_in_its_tail(client, conn, meta, mo
     assert response.content == raw
     [row] = ledger(conn, device)
     assert row["cost_usd"] == pytest.approx(SPARK_COST)
+
+
+def test_stream_event_that_breaks_the_parser_charges_the_reservation(client, conn, meta):
+    device = add_device(conn)
+    final = '{"type":"response.completed","response":{"usage":{"input_tokens":1,"output_tokens":1},"output":' + DEEP + "}}"
+    route = stream_from_meta(meta, MetaStream([sse(CREATED), f"data: {final}\n\n".encode()]))
+
+    response = client.post("/meta/v1/responses", json=spark_request(stream=True), headers=device.headers)
+
+    assert response.status_code == 200
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(reserved_cost(route.calls.last.request.content))
 
 
 def test_meta_error_on_a_streamed_call_passes_through_and_charges_nothing(client, conn, meta):
