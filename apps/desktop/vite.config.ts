@@ -1,11 +1,12 @@
 import { fileURLToPath } from 'node:url';
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
 const shim = (file: string) => fileURLToPath(new URL(`./src/i18n/shim/${file}`, import.meta.url));
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     // English only: lingui's imports resolve to a small runtime shim, so files keep their import lines and
     // lingui can come back by deleting these four lines (the message ids are kept).
