@@ -397,7 +397,12 @@ impl Compiler<'_> {
                         Err(r) => (Err(r), Removal::Moved(call)),
                     }
                 }
-                _ => (self.addition(&adding.work, call), Removal::Moved(call)),
+                ToolCall::SplitAt { .. }
+                | ToolCall::SetFormat { .. }
+                | ToolCall::SetCaptions { .. }
+                | ToolCall::FixCaptionWords { .. } => {
+                    (self.addition(&adding.work, call), Removal::Moved(call))
+                }
             };
             let (edit, if_it_removes) = addition;
             let tried = edit.and_then(|edit| {
