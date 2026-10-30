@@ -21,14 +21,14 @@ be sampled at most 2 frames a second.
 Caps are kept with reservations. Before a billable call goes out it reserves
 the most it could cost: for Spark, one input token per request byte plus its
 whole max_output_tokens (set to 8192 when missing, at most 16384) at the
-output price, plus $0.75 unless the call is text only (any image, media or
-files by link or id, stored items or reasoning named by id, or any type the
-relay doesn't know all count as media); for transcription, the audio's data
-at 32,000 bytes a second, the lowest rate Meta takes. The call is refused
-with 402 unless the device and the relay have room for it on top of what is
-spent and what calls in flight have reserved, or with 413 if it could cost
-more than a device's whole cap. A device with no room left is refused before
-its body is read, and bodies have a deadline (408).
+output price, plus $0.75 unless the call is text only (any image or
+reasoning item, media or files by link or id, stored items by reference, or
+any type the relay doesn't know all count as media); for transcription, the
+audio's data at 32,000 bytes a second, the lowest rate Meta takes. The call
+is refused with 402 unless the device and the relay have room for it on top
+of what is spent and what calls in flight have reserved, or with 413 if it
+could cost more than a device's whole cap. A device with no room left is
+refused before its body is read, and bodies have a deadline (408).
 
 After Meta answers, the call is charged from Meta's own `usage`: the ledger
 row and the device's `spent_usd` are written in one transaction, and only then
@@ -355,7 +355,9 @@ class Meter:
     audio_seconds: float = 0.0
     images: int = 0
     has_video: bool = False
-    # Video, files or earlier context by reference, or SAM.
+    # Anything but a text-only call (any image or reasoning item, media or
+    # files by link or id, stored items by reference, a type the relay
+    # doesn't know), or SAM.
     media: bool = False
     _reservation: tuple[dict[str, Any], float] | None = field(default=None, init=False, repr=False)
 
