@@ -1374,3 +1374,132 @@ ol {
   color: var(--bay-soft);
   font-size: 0.875rem;
 }
+
+/* ---------- Privacy ---------- */
+
+.flow {
+  display: grid;
+  gap: 1rem;
+}
+
+.flow-box {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  padding: clamp(1.25rem, 1rem + 1.5vw, 2rem);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+}
+
+.flow-out {
+  border-style: dashed;
+  background: transparent;
+}
+
+.flow-box h3 {
+  font-size: 1.5rem;
+}
+
+.flow-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.flow-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 1.1875rem;
+}
+
+.flow-list li::before {
+  content: "";
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--ink);
+  transform: translateY(-0.1em);
+}
+
+
+.privacy-why {
+  margin-top: 1.5rem;
+  color: var(--ink-soft);
+}
+
+@media (min-width: 760px) {
+  .flow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+}
+
+/* ---------- FAQ ---------- */
+
+.faq {
+  border-top: 1px solid var(--line);
+}
+
+.faq-grid {
+  display: grid;
+  gap: 2rem;
+}
+
+@media (min-width: 900px) {
+  .faq-grid {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: 4rem;
+  }
+}
+
+.faq-list details {
+  border-top: 1px solid var(--line);
+}
+
+.faq-list details:last-child {
+  border-bottom: 1px solid var(--line);
+}
+
+.faq-list summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding-block: 1.1rem;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 650;
+  font-size: 1.1875rem;
+}
+
+.faq-list summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-list summary::after {
+  content: "";
+  flex: none;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-0.2rem) rotate(45deg);
+  transition: transform 0.2s ease;
+}
+
+.faq-list details[open] summary::after {
+  transform: translateY(0.15rem) rotate(-135deg);
+}
+
+.faq-list details p {
+  padding-bottom: 1.25rem;
+  color: var(--ink-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .faq-list summary::after {
+    transition: none;
+  }
+}
