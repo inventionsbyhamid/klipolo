@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { followAiStatus } from './ai/aiStatus';
 import { isCode } from './bridge/call';
 import { bridge } from './bridge/commands';
 import { Toaster } from './design/Toaster';
@@ -13,6 +14,7 @@ import { errorMessage } from './lib/errors';
 import { videoDurationUs } from './lib/timeline';
 import { PlayerBar } from './player/PlayerBar';
 import { Preview } from './preview/Preview';
+import { SettingsDialog } from './settings/SettingsDialog';
 import { usePlayback } from './state/playback';
 import { useProject } from './state/project';
 import { followSaves } from './state/saving';
@@ -81,6 +83,7 @@ export function App() {
     if (started) return;
     started = true;
     void followSaves();
+    void followAiStatus();
     void openProject();
   }, []);
   useEngineSession();
@@ -96,6 +99,7 @@ export function App() {
         <Chat />
       </div>
       <PlayerBar />
+      <SettingsDialog />
       <Toaster />
     </div>
   );

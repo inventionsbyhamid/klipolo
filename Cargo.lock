@@ -2376,22 +2376,27 @@ name = "klipolo-app"
 version = "0.1.0"
 dependencies = [
  "image",
+ "klipolo-analysis",
  "klipolo-engine",
  "klipolo-fonts",
+ "klipolo-meta",
  "klipolo-model",
  "klipolo-platform",
  "libc",
+ "security-framework",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
  "tempfile",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "ts-rs",
  "uuid",
+ "wiremock",
 ]
 
 [[package]]

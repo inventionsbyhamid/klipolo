@@ -1,0 +1,393 @@
+/* The Settings dialog and the top bar's AI chip. Values from tokens.css only. Generic
+   pieces the shared design primitives will carry (dialog, input, secondary button, spinner, progress) are scoped to
+   the dialog here, so they can't clash with those when they land. */
+
+/* ---------- Top bar chip ---------- */
+
+.ai-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 32px;
+  padding: 0 var(--space-5) 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--color-bay);
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.ai-chip:hover {
+  background: var(--color-bay-hover);
+  color: var(--color-ink);
+}
+
+.ai-chip b {
+  color: var(--color-ink);
+  font-weight: var(--weight-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-chip .ico {
+  width: 16px;
+  height: 16px;
+}
+
+.ai-chip.is-missing {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink);
+}
+
+/* ---------- Dialog ---------- */
+
+.settings-scrim {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--color-scrim);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+.settings-dialog {
+  display: grid;
+  gap: var(--space-8);
+  width: var(--dialog-w);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  padding: var(--space-8);
+  border-radius: var(--radius-xl);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-3);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .settings-dialog {
+    animation: settings-rise var(--dur-slow) var(--ease-out) both;
+  }
+}
+
+@keyframes settings-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.settings-dialog .dialog-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-5);
+}
+
+.settings-dialog .dialog-head > div {
+  flex: 1;
+}
+
+.settings-dialog .dialog-title {
+  word-spacing: 0.08em;
+  font-size: var(--text-2xl);
+  line-height: var(--lh-2xl);
+  font-weight: var(--weight-display);
+  font-stretch: var(--wdth-display);
+}
+
+.settings-dialog .dialog-sub {
+  margin-top: var(--space-3);
+  color: var(--color-ink-soft);
+  font-size: var(--text-md);
+}
+
+.settings-dialog .dialog-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+}
+
+.settings-dialog .dialog-foot .left {
+  margin-right: auto;
+  color: var(--color-ink-faint);
+  font-size: var(--text-sm);
+}
+
+.settings-dialog .btn-secondary {
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink);
+}
+
+.settings-dialog .btn-secondary:not(:disabled):hover {
+  box-shadow: inset 0 0 0 1px var(--color-ink);
+}
+
+.settings-dialog .btn-secondary:disabled {
+  box-shadow: none;
+}
+
+/* ---------- Ways to pay ---------- */
+
+.mode-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.mode {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-content: start;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+  text-align: left;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.mode:hover {
+  background: var(--color-bay-hover);
+}
+
+.mode[aria-checked='true'] {
+  box-shadow: inset 0 0 0 2px var(--color-paper);
+}
+
+.mode .radio {
+  grid-row: span 2;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--color-line-strong);
+}
+
+.mode[aria-checked='true'] > .radio {
+  box-shadow: inset 0 0 0 6px var(--color-paper);
+}
+
+.mode b {
+  font-weight: var(--weight-strong);
+}
+
+.mode span:not(.radio) {
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+/* ---------- Fields ---------- */
+
+.settings-dialog .field-v {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.settings-dialog .field-v label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.settings-dialog .hint {
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+.settings-dialog .input-row {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.settings-dialog .input {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink);
+  font: inherit;
+  font-size: var(--text-md);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  /* Text inputs have their own focus ring: the 2 px inset signal-ink ring below replaces the outline. */
+  outline: none;
+  /* The window doesn't select text; a field must, to paste a key and fix a typo. */
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.settings-dialog .input::placeholder {
+  color: var(--color-ink-faint);
+  letter-spacing: normal;
+}
+
+.settings-dialog .input:hover {
+  box-shadow: inset 0 0 0 1px var(--color-ink-soft);
+}
+
+.settings-dialog .input[readonly],
+.settings-dialog .input.is-static {
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+}
+
+/* After the read-only rule, so the saved code or key shows the ring too when focused. */
+.settings-dialog .input:focus {
+  box-shadow: inset 0 0 0 2px var(--color-paper);
+}
+
+.settings-dialog .input.is-static {
+  color: var(--color-ink-soft);
+  letter-spacing: normal;
+}
+
+/* The key field, with Show inside its right edge. */
+.secret-field {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.secret-field .input {
+  padding-right: 72px;
+}
+
+.secret-field .show-secret {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+}
+
+.status-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.status-ok .ico {
+  width: 16px;
+  height: 16px;
+}
+
+/* Errors are written, not colored: there is no error color. */
+.field-error,
+.field-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+.field-note {
+  color: var(--color-ink-soft);
+}
+
+.field-error .ico,
+.field-note .ico {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-top: 1px;
+}
+
+.settings-dialog .spinner {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--color-paper-wash);
+  border-top-color: var(--color-paper);
+  animation: settings-spin 0.9s linear infinite;
+}
+
+@keyframes settings-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* ---------- Credit ---------- */
+
+.budget {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+}
+
+.budget-num {
+  font-size: var(--text-3xl);
+  line-height: 1;
+  font-weight: var(--weight-display);
+  font-stretch: var(--wdth-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-num small {
+  margin-left: var(--space-3);
+  color: var(--color-ink-soft);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  font-stretch: 100%;
+}
+
+.settings-dialog .progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--color-bay-press);
+}
+
+.settings-dialog .progress i {
+  display: block;
+  width: var(--p);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-paper);
+  transition: width var(--dur-base) var(--ease-out);
+}
+
+.budget dl {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-2) var(--space-6);
+  margin: var(--space-2) 0 0;
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+}
+
+.budget dd {
+  margin: 0;
+  color: var(--color-ink);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-dialog .fine {
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
