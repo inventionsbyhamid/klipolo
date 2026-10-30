@@ -55,10 +55,32 @@ describe('a proposal waiting on the timeline', () => {
     expect(cuts[0]).toHaveStyle({ left: `${usToPx(2 * S, 40)}px`, width: `${usToPx(0.5 * S, 40)}px` });
     expect(cuts.map((c) => c.textContent)).toEqual(['um', 'pause']);
     expect(cuts[0]).toHaveClass('is-new');
-    expect(within(cuts[1]).getByText('pause')).toHaveAttribute('title', '0:12.0 to 0:13.5');
+    expect(within(cuts[1]).getByText('pause')).toHaveClass('tl-cut-tag');
     // The overview strip marks each cut too.
     expect(document.querySelectorAll('[data-overview-cut]').length).toBeGreaterThan(0);
     act(() => useProposal.getState().show(null));
     expect(document.querySelectorAll('[data-cut]')).toHaveLength(0);
+  });
+
+  it('tags never overlap: one that would run into the last shown is left off, however long its words', () => {
+    renderWithProviders(<Timeline />);
+    // At 40 px/s: a long reason at 2 s (about 160 px of tag), an "um" 2 s later (80 px on) that its tag would cover, and
+    // a "pause" far enough along to show.
+    const range = (s: number) => ({ start: s * S, end: (s + 0.3) * S });
+    act(() =>
+      useProposal.getState().show({
+        id: 'p2',
+        baseRevision: 3,
+        removals: { ...noRemovals(), ranges: [range(2), range(4), range(10)] },
+        tags: [
+          { startUs: 2 * S, endUs: 2.3 * S, label: 'a long pause while thinking' },
+          { startUs: 4 * S, endUs: 4.3 * S, label: 'um' },
+          { startUs: 10 * S, endUs: 10.3 * S, label: 'pause' },
+        ],
+      }),
+    );
+    const tags = [...document.querySelectorAll<HTMLElement>('[data-cut]')].map((c) => c.textContent);
+    expect(tags).toEqual(['a long pause while thinking', '', 'pause']);
+    act(() => useProposal.getState().show(null));
   });
 });

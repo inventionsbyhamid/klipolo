@@ -1282,7 +1282,11 @@
   line-height: 16px;
   font-weight: var(--weight-title);
   white-space: nowrap;
-  pointer-events: auto;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Clicks reach the overlay items and clips under it. */
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
