@@ -1,5 +1,6 @@
 # Klipolo's Linux check-and-test image: Ubuntu 24.04 with Tauri's WebKitGTK build dependencies (for the app crate's
-# tests), ALSA, Mesa lavapipe (Vulkan on the CPU, for the engine's GPU tests) and Rust 1.90 with clippy and rustfmt.
+# tests), ALSA, Mesa lavapipe (Vulkan on the CPU, for the engine's GPU tests), Rust 1.90 with clippy and rustfmt, and
+# Node 22 with pnpm (the page's typecheck and tests).
 # The repository is mounted at run time; the image holds no source and no secrets.
 #   docker build -f ci/linux.Dockerfile -t klipolo-ci ci
 #   docker run --rm --name klipolo-gate --cpus 16 --memory 24g -v "$PWD":/src -w /src klipolo-ci scripts/ci-linux.sh
@@ -29,3 +30,12 @@ ENV PATH=/home/ubuntu/.cargo/bin:$PATH \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
       | sh -s -- -y --profile minimal --default-toolchain 1.90.0 -c clippy -c rustfmt
 WORKDIR /src
+
+# Node 22 and pnpm (the version apps/desktop/package.json names), for the page's typecheck and tests. Last, so the layers
+# above stay cached.
+USER root
+RUN curl -fsSL https://nodejs.org/dist/v22.21.1/node-v22.21.1-linux-x64.tar.xz \
+      | tar -xJ -C /usr/local --strip-components=1 --exclude CHANGELOG.md --exclude README.md --exclude LICENSE \
+  && npm install -g pnpm@11.15.1 \
+  && npm cache clean --force
+USER ubuntu

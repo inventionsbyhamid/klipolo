@@ -22,4 +22,29 @@ describe('suppressContextMenu', () => {
     stop();
     expect(rightClick(document.querySelector('button')!)).toBe(false);
   });
+
+  it('keeps the menu only where text can be edited: not disabled, read-only, a checkbox or a slider', () => {
+    const stop = suppressContextMenu(document);
+    document.body.innerHTML = [
+      '<input id="text" type="text">',
+      '<input id="search" type="search">',
+      '<input id="disabled" disabled>',
+      '<input id="readonly" readonly>',
+      '<textarea id="locked" disabled></textarea>',
+      '<input id="check" type="checkbox">',
+      '<input id="range" type="range">',
+      '<div contenteditable="false"><i id="off">x</i></div>',
+    ].join('');
+    const at = (id: string) => rightClick(document.getElementById(id)!);
+    expect([at('text'), at('search')]).toEqual([false, false]);
+    expect([at('disabled'), at('readonly'), at('locked'), at('check'), at('range'), at('off')]).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+    ]);
+    stop();
+  });
 });

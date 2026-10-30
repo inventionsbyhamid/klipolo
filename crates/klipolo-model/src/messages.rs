@@ -84,7 +84,7 @@ pub const MESSAGES: Messages = &[
     // The project.
     ("model.project.missingId", "An item is missing its id."),
     ("model.project.duplicateId", "This project has a duplicate id ({id})."),
-    ("model.project.name", "The project name must be 1–200 characters."),
+    ("model.project.name", "The project name must be 1 to 200 characters."),
     ("model.project.tooManyMedia", "This project has too many media files."),
     ("model.project.tooManyClips", "This project has too many clips."),
     ("model.project.tooManyTracks", "This project has too many tracks."),
@@ -96,7 +96,7 @@ pub const MESSAGES: Messages = &[
     ("model.media.timing", "Media {name} has invalid timing."),
     ("model.media.rotation", "Media {name} has an invalid rotation."),
     ("model.media.size", "Media {name} has no picture size."),
-    ("model.lut.name", "LUT names must be 1–200 characters."),
+    ("model.lut.name", "LUT names must be 1 to 200 characters."),
     ("model.lut.noFile", "LUT {name} has no file."),
     ("model.lut.badFile", "LUT {name} has an invalid file."),
     // Recordings in format 4: sources with runs, markers, and per-clip mixes of the sources.

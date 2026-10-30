@@ -1,0 +1,95 @@
+[
+  {
+    "code": "fonts.missing",
+    "message": "{family} isn't on this computer.",
+    "params": [
+      "family"
+    ]
+  },
+  {
+    "code": "fonts.google.needsConsent",
+    "message": "Allow Google Fonts first.",
+    "params": []
+  },
+  {
+    "code": "fonts.google.off",
+    "message": "Google Fonts is off in Settings.",
+    "params": []
+  },
+  {
+    "code": "fonts.google.unknown",
+    "message": "Google Fonts has no family called {family}.",
+    "params": [
+      "family"
+    ]
+  },
+  {
+    "code": "fonts.google.saveFailed",
+    "message": "Klipolo couldn't save this setting. Check the disk, then try again.",
+    "params": []
+  },
+  {
+    "code": "fonts.download.offline",
+    "message": "Couldn't reach Google Fonts. Check your internet connection and try again.",
+    "params": []
+  },
+  {
+    "code": "fonts.download.diskFull",
+    "message": "Your disk is full. Free up space, then try again.",
+    "params": []
+  },
+  {
+    "code": "fonts.download.diskError",
+    "message": "Klipolo couldn't save the font on this Mac. Check the disk, then try again.",
+    "params": []
+  },
+  {
+    "code": "fonts.download.badFile",
+    "message": "Google sent a file that isn't that font. Try again later.",
+    "params": []
+  },
+  {
+    "code": "fonts.download.tooBig",
+    "message": "That font file is too big.",
+    "params": []
+  },
+  {
+    "code": "fonts.download.cancelled",
+    "message": "Download cancelled.",
+    "params": []
+  },
+  {
+    "code": "fonts.download.http",
+    "message": "Google Fonts couldn't send that font right now (error {status}). Try again later.",
+    "params": [
+      "status"
+    ]
+  },
+  {
+    "code": "fonts.download.first",
+    "message": "Download {family} first.",
+    "params": [
+      "family"
+    ]
+  },
+  {
+    "code": "fonts.download.versionGone",
+    "message": "Google no longer offers {family} {version}. Use its current version or replace it.",
+    "params": [
+      "family",
+      "version"
+    ]
+  },
+  {
+    "code": "fonts.remove.notOurs",
+    "message": "That isn't one of Klipolo's downloaded fonts.",
+    "params": []
+  },
+  {
+    "code": "fonts.remove.inUse",
+    "message": "An export that's running uses {family}. Remove it once the export is done.",
+    "params": [
+      "family"
+    ]
+  }
+]

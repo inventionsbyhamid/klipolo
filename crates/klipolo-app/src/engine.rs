@@ -9,21 +9,23 @@
 //! loopback websocket into the page's canvas.
 
 use std::future::Future;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
 
 use klipolo_engine::api::{
-    CodedError, EngineEvent, EngineInfo, PLAY_NO_PROJECT, PLAY_NO_VIDEO, PREVIEW_STOPPED,
-    Presenter, RATE_UNAVAILABLE, ViewRect, ViewSpec,
+    EngineEvent, EngineInfo, Presenter, RATE_UNAVAILABLE, ViewRect, ViewSpec, rate_supported,
 };
 use klipolo_engine::platform::NativeSurface;
 use klipolo_engine::render::GpuBackend;
 use klipolo_engine::session::{Engine, EngineOptions, EventSink, FeedRx};
+use klipolo_model::Op;
+use klipolo_model::coded::Said;
 use klipolo_model::time::Us;
 use tauri::ipc::Channel;
 use tauri::{State, WebviewWindow};
 
-use crate::state::{EngineState, ProjectState, Transport};
+use crate::project::ProjectSessionState;
+use crate::state::EngineState;
 
 /// The environment setting that picks the presenter: `socket` keeps frames on the websocket.
 pub const PRESENTER_SETTING: &str = "KLIPOLO_PRESENTER";
@@ -71,7 +73,9 @@ pub fn native_wanted(setting: Option<&str>) -> bool {
 }
 
 /// Starts the engine if needed (`start`), sends its events to `sink`, and says how frames reach the screen: the native
-/// layer from `host` when `setting` allows it and it starts, else the socket.
+/// layer from `host` when `setting` allows it and it starts, else the socket. A page that attaches again (a reload)
+/// starts paused, as the engine is then: playback from the page before stops, so sound never plays while the new page
+/// shows Play.
 pub async fn attach<S, Fut>(
     state: &EngineState,
     start: S,
@@ -83,15 +87,12 @@ where
     S: FnOnce() -> Fut,
     Fut: Future<Output = Result<Engine, String>>,
 {
+    let again = state.slot.running().is_some();
     let engine = state.slot.get_or_start(start).await?;
     engine.set_event_sink(sink);
-    // A (re)loaded page numbers its seeks from 1 again, and the engine's count starts over on every attach: so does the
-    // transport's, keeping its place.
-    state
-        .transport
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .seq = 0;
+    if again {
+        engine.pause().await;
+    }
     let mut info = engine.info();
     if native_wanted(setting) {
         match present_natively(&engine, host).await {
@@ -151,9 +152,9 @@ async fn start_engine(state: &EngineState, feed: FeedRx) -> Result<Engine, Strin
     Ok(engine)
 }
 
-/// What the UI hears: every engine event except the crash guard's (Klipolo has no agent-made effects). The transport
-/// follows playback's starts and stops; the log notes them, with the frames the native layer presented.
-fn event_sink(events: Channel<EngineEvent>, transport: Arc<Mutex<Transport>>) -> EventSink {
+/// What the UI hears: every engine event except the crash guard's (Klipolo has no agent-made effects). The log notes
+/// playback's starts and stops, with the frames the native layer presented.
+fn event_sink(events: Channel<EngineEvent>) -> EventSink {
     let presented = AtomicU64::new(0);
     Arc::new(move |event: EngineEvent| {
         if event.is_guard() {
@@ -166,10 +167,6 @@ fn event_sink(events: Channel<EngineEvent>, transport: Arc<Mutex<Transport>>) ->
                 reason,
                 ..
             } => {
-                transport
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .at_us = *at_us;
                 if *playing {
                     presented.store(0, Ordering::Relaxed);
                     tracing::info!(at_us, "playback started");
@@ -193,16 +190,9 @@ fn event_sink(events: Channel<EngineEvent>, transport: Arc<Mutex<Transport>>) ->
     })
 }
 
-/// An engine code in plain words.
-fn said(error: CodedError) -> String {
-    match error.code.as_str() {
-        PLAY_NO_PROJECT => "Open a video to play it.",
-        PLAY_NO_VIDEO => "Add a video to play it.",
-        RATE_UNAVAILABLE => "That playback speed isn't available.",
-        PREVIEW_STOPPED => "The preview has stopped.",
-        _ => "The preview couldn't do that.",
-    }
-    .to_string()
+/// The engine hasn't started yet (the page attaches it).
+fn not_ready() -> Said {
+    Said::code("engine.notReady")
 }
 
 /// Starts the engine if needed and says how frames reach the screen. Events arrive on `events` from now on.
@@ -210,12 +200,12 @@ fn said(error: CodedError) -> String {
 pub async fn engine_attach(
     window: WebviewWindow,
     state: State<'_, EngineState>,
-    projects: State<'_, ProjectState>,
+    projects: State<'_, ProjectSessionState>,
     events: Channel<EngineEvent>,
 ) -> Result<EngineInfo, String> {
-    let sink = event_sink(events, state.transport.clone());
+    let sink = event_sink(events);
     let setting = std::env::var(PRESENTER_SETTING).ok();
-    let feed = projects.feed();
+    let feed = projects.subscribe();
     let info = attach(
         &state,
         || start_engine(&state, feed),
@@ -272,58 +262,73 @@ pub fn set_visible(state: &EngineState, visible: bool) {
 /// Shows the frame at `at_us`. `seq` names the seek: frames carry it, and a seek older than the newest is ignored.
 #[tauri::command]
 pub fn engine_seek(state: State<'_, EngineState>, at_us: Us, seq: u32) {
-    seek(&state, at_us, seq);
-}
-
-/// `engine_seek`: moves the transport and the engine to `at_us`, unless `seq` is older than the newest seek.
-pub fn seek(state: &EngineState, at_us: Us, seq: u32) {
-    let mut transport = state
-        .transport
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
-    if (seq.wrapping_sub(transport.seq) as i32) < 0 {
-        return;
-    }
-    *transport = Transport { at_us, seq };
     if let Some(engine) = state.slot.running() {
         engine.seek(at_us, seq);
     }
 }
 
-/// Plays from where the transport is, at normal speed, with sound. Returns where it started (from the start again
-/// after the end).
+/// A dry run of `ops` on the open project `project_id` at `base_revision` (a drag, a slider): shown at once, never
+/// committed. One for another project or revision is ignored.
 #[tauri::command]
-pub async fn engine_play(state: State<'_, EngineState>) -> Result<Us, String> {
-    let engine = state
-        .slot
-        .running()
-        .ok_or_else(|| "The preview isn't ready yet.".to_string())?;
-    let Transport { at_us, seq } = state.transport();
-    engine.play(at_us, 1.0, seq).await.map_err(said)?;
-    // The engine said where it started (its `State` event, before the reply): the sink moved the transport there.
-    Ok(state.transport().at_us)
+pub fn engine_preview(
+    state: State<'_, EngineState>,
+    project_id: String,
+    base_revision: u64,
+    ops: Vec<Op>,
+) {
+    if let Some(engine) = state.slot.running() {
+        engine.preview(project_id, base_revision, ops);
+    }
+}
+
+/// The dry run is over: the preview shows the project as it is.
+#[tauri::command]
+pub fn engine_preview_clear(state: State<'_, EngineState>) {
+    if let Some(engine) = state.slot.running() {
+        engine.preview_clear();
+    }
+}
+
+/// Plays from `from_us` at `rate`: the J/K/L shuttle's -2, -1, 1 or 2 (1 when left out). Forward it starts over at the
+/// end; backward it ends at 0. Sound plays at 1x only. `seq` names the run (its frames carry it, as a seek's do).
+/// Errors are codes the UI words (`engine.play.noVideo`).
+#[tauri::command]
+pub async fn engine_play(
+    state: State<'_, EngineState>,
+    from_us: Us,
+    rate: Option<f64>,
+    seq: u32,
+) -> Result<(), Said> {
+    play(&state, from_us, rate, seq).await
+}
+
+/// `engine_play` on the running engine.
+pub async fn play(
+    state: &EngineState,
+    from_us: Us,
+    rate: Option<f64>,
+    seq: u32,
+) -> Result<(), Said> {
+    let rate = rate.unwrap_or(1.0);
+    if !rate_supported(rate) {
+        return Err(Said::code(RATE_UNAVAILABLE));
+    }
+    let engine = state.slot.running().ok_or_else(not_ready)?;
+    engine.play(from_us, rate, seq).await.map_err(Said::Coded)
 }
 
 /// Pauses and returns where playback stopped.
 #[tauri::command]
-pub async fn engine_pause(state: State<'_, EngineState>) -> Result<Us, String> {
-    let engine = state
-        .slot
-        .running()
-        .ok_or_else(|| "The preview isn't ready yet.".to_string())?;
-    let at_us = engine.pause().await;
-    state
-        .transport
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .at_us = at_us;
-    Ok(at_us)
+pub async fn engine_pause(state: State<'_, EngineState>) -> Result<Us, Said> {
+    Ok(state.slot.running().ok_or_else(not_ready)?.pause().await)
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use super::*;
-    use crate::state::ProjectState;
+    use crate::project::opened;
     use klipolo_model::project::Project;
 
     /// A layer in no window: what a test's engine presents into on macOS.
@@ -411,8 +416,7 @@ mod tests {
     /// paused where it stopped.
     #[tokio::test(flavor = "multi_thread")]
     async fn hiding_the_window_pauses_playback() {
-        let projects = ProjectState::default();
-        projects.open(one_clip());
+        let projects = opened(one_clip());
         let state = EngineState::new(None, None);
         let seen = Arc::new(Mutex::new(Vec::new()));
         let sink: EventSink = {
@@ -422,7 +426,7 @@ mod tests {
         let socket = Some("socket");
         let engine = attach(
             &state,
-            || blank_engine(projects.feed()),
+            || blank_engine(projects.subscribe()),
             &Detached,
             sink,
             socket,
@@ -463,10 +467,9 @@ mod tests {
         set_visible(&state, true);
     }
 
-    /// What the page hears: the crash guard's events never reach it, every other event does, and the transport
-    /// follows playback's starts and stops.
+    /// What the page hears: the crash guard's events never reach it, every other event does.
     #[test]
-    fn the_sink_drops_guard_events_and_moves_the_transport() {
+    fn the_sink_drops_guard_events() {
         use klipolo_engine::api::StateReason;
         use klipolo_model::contrib::ContribId;
         use tauri::ipc::InvokeResponseBody;
@@ -481,8 +484,7 @@ mod tests {
                 Ok(())
             })
         };
-        let transport = Arc::new(Mutex::new(Transport { at_us: 0, seq: 4 }));
-        let sink = event_sink(channel, transport.clone());
+        let sink = event_sink(channel);
 
         sink(EngineEvent::FirstDraw {
             contrib: ContribId::builtin("effect.blur"),
@@ -503,112 +505,76 @@ mod tests {
             reason: StateReason::Play,
             rate: 1.0,
         });
-        assert_eq!(
-            *transport.lock().unwrap(),
-            Transport {
-                at_us: 2_000_000,
-                seq: 4
-            }
-        );
-        sink(EngineEvent::State {
-            playing: false,
-            at_us: 7_500_000,
-            reason: StateReason::Ended,
-            rate: 1.0,
-        });
-        assert_eq!(
-            *transport.lock().unwrap(),
-            Transport {
-                at_us: 7_500_000,
-                seq: 4
-            },
-            "a stop moves the place and keeps the seek count"
-        );
         sink(EngineEvent::Ready { session: 2 });
 
         let sent = sent.lock().unwrap();
-        assert_eq!(sent.len(), 3, "{sent:?}");
+        assert_eq!(sent.len(), 2, "{sent:?}");
         assert!(sent[0].contains(r#""type":"state""#) && sent[0].contains(r#""playing":true"#));
-        assert!(sent[2].contains(r#""type":"ready""#));
+        assert!(sent[1].contains(r#""type":"ready""#));
     }
 
-    /// A file that isn't a readable video is refused with a message that names it (and never its folder).
-    #[test]
-    fn a_file_that_cannot_open_is_named() {
-        let dir = tempfile::tempdir().unwrap();
-        let empty = dir.path().join("empty.mp4");
-        std::fs::write(&empty, b"").unwrap();
-        let garbage = dir.path().join("garbage.mov");
-        std::fs::write(&garbage, vec![7u8; 4096]).unwrap();
-        let missing = dir.path().join("missing.mp4");
-        for path in [&empty, &garbage, &missing] {
-            let error = crate::state::single_video_project(path).unwrap_err();
-            let name = path.file_name().unwrap().to_string_lossy();
-            assert!(
-                error.starts_with(&format!("{name} couldn't be opened.")),
-                "{error}"
-            );
-            let folder = dir.path().to_string_lossy();
-            assert!(!error.contains(folder.as_ref()), "{error}");
-        }
-    }
-
-    /// A reloaded page attaches again and numbers its seeks from 1, as the engine expects (it starts its count over on
-    /// every attach): none of them may be dropped as older than the previous page's.
+    /// A page that loads again while the video plays (a reload) finds it paused, as it shows it: the playback the page
+    /// before started stops, and the new page hears so.
     #[tokio::test(flavor = "multi_thread")]
-    async fn a_reloaded_page_seeks_from_one_again() {
-        let projects = ProjectState::default();
-        projects.open(Project::new("Test"));
+    async fn a_reloaded_page_starts_paused() {
+        let projects = opened(one_clip());
         let state = EngineState::new(None, None);
         let socket = Some("socket");
         attach(
             &state,
-            || blank_engine(projects.feed()),
+            || blank_engine(projects.subscribe()),
             &Detached,
             quiet(),
             socket,
         )
         .await
         .unwrap();
-        seek(&state, 1_000_000, 9);
-        assert_eq!(
-            state.transport(),
-            Transport {
-                at_us: 1_000_000,
-                seq: 9
-            }
-        );
+        let engine = state.slot.running().unwrap();
+        engine.set_view(klipolo_engine::api::ViewSpec {
+            format: klipolo_model::project::FormatKind::Landscape,
+            width: 64,
+            height: 36,
+        });
+        play(&state, 2_000_000, None, 1).await.unwrap();
 
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let sink: EventSink = {
+            let seen = seen.clone();
+            Arc::new(move |event| seen.lock().unwrap().push(event))
+        };
         attach(
             &state,
-            || blank_engine(projects.feed()),
+            || blank_engine(projects.subscribe()),
             &Detached,
-            quiet(),
+            sink,
             socket,
         )
         .await
         .unwrap();
-        assert_eq!(state.transport().at_us, 1_000_000, "the place is kept");
-        seek(&state, 2_000_000, 1);
-        assert_eq!(
-            state.transport(),
-            Transport {
-                at_us: 2_000_000,
-                seq: 1
-            },
-            "the new page's first seek moves it"
+        let stopped = |e: &EngineEvent| matches!(e, EngineEvent::State { playing: false, .. });
+        assert!(
+            seen.lock().unwrap().iter().any(stopped),
+            "the new page hears that playback stopped: {:?}",
+            seen.lock().unwrap()
+        );
+        assert!(
+            !seen
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|e| matches!(e, EngineEvent::State { playing: true, .. })),
+            "nothing plays on"
         );
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn engine_info_reports_presenter() {
-        let projects = ProjectState::default();
-        projects.open(Project::new("Test"));
+        let projects = opened(Project::new("Test"));
         let state = EngineState::new(None, None);
 
         let info = attach(
             &state,
-            || test_engine(projects.feed()),
+            || test_engine(projects.subscribe()),
             &Detached,
             quiet(),
             None,
@@ -625,7 +591,7 @@ mod tests {
 
         let info = attach(
             &state,
-            || test_engine(projects.feed()),
+            || test_engine(projects.subscribe()),
             &Detached,
             quiet(),
             Some("socket"),

@@ -1,0 +1,47 @@
+[
+ {
+  "startUs": 60000,
+  "endUs": 10780000,
+  "speaker": "A"
+ },
+ {
+  "startUs": 14380000,
+  "endUs": 20860000,
+  "speaker": "B"
+ },
+ {
+  "startUs": 27180000,
+  "endUs": 49020000,
+  "speaker": "C"
+ },
+ {
+  "startUs": 49020000,
+  "endUs": 50940000,
+  "speaker": "C"
+ },
+ {
+  "startUs": 53180000,
+  "endUs": 59500000,
+  "speaker": "D"
+ },
+ {
+  "startUs": 63820000,
+  "endUs": 83180000,
+  "speaker": "A"
+ },
+ {
+  "startUs": 86860000,
+  "endUs": 92460000,
+  "speaker": "E"
+ },
+ {
+  "startUs": 99340000,
+  "endUs": 149260000,
+  "speaker": "C"
+ },
+ {
+  "startUs": 151500000,
+  "endUs": 154540000,
+  "speaker": "F"
+ }
+]

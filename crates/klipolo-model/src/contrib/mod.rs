@@ -156,7 +156,7 @@ pub struct ContribDef {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub resolution: Option<Resolution>,
-    /// 1–60: the pass renders again only when `floor(time × fps)` changes.
+    /// 1 to 60: the pass renders again only when `floor(time × fps)` changes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub fps: Option<u32>,

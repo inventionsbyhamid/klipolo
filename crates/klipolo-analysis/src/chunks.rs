@@ -93,12 +93,12 @@ pub fn plan_with_loud_cuts(pcm: &[i16], rate: u32, max_s: u32) -> Plan {
 }
 
 /// Sample index to µs (rounded down; `sample_at` turns it back into the same index).
-fn us(sample: usize, rate: u32) -> Us {
+pub(crate) fn us(sample: usize, rate: u32) -> Us {
     (sample as u128 * 1_000_000 / u128::from(rate)) as Us
 }
 
 /// µs to the nearest sample index.
-fn sample_at(t: Us, rate: u32) -> usize {
+pub(crate) fn sample_at(t: Us, rate: u32) -> usize {
     ((t.max(0) as u128 * u128::from(rate) + 500_000) / 1_000_000).min(usize::MAX as u128) as usize
 }
 

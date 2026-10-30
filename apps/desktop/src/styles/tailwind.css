@@ -1,0 +1,7 @@
+/* Tailwind for the components styled with utilities: its theme and utilities only, each in its cascade layer, and no preflight. The
+   app's own stylesheets (tokens.css, app.css) are unlayered, so they win over every utility and over any theme
+   variable that shares a token's name (--color-line, --color-scrim, --font-sans, --radius-*). */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "./theme-bridge.css";

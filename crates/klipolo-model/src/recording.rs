@@ -64,7 +64,7 @@ impl SourceRole {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct SourceMix {
-    /// 0–2 (200 %).
+    /// 0 to 2 (200 %).
     pub volume: f64,
     pub muted: bool,
     /// Audio effects, in order.

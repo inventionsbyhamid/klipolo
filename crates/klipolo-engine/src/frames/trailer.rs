@@ -1,5 +1,5 @@
 //! The 56-byte little-endian trailer after each frame's pixels. Pixels start at offset 0, so the webview
-//! uploads them without copying. Mirrored by `src/lib/frameTrailer.ts`.
+//! uploads them without copying. Mirrored by `apps/desktop/src/preview/frameTrailer.ts`.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 

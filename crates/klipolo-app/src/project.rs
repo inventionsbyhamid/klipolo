@@ -1,0 +1,222 @@
+//! The open project. An edit, undo or redo returns at once with what it changed, as a patch on the revision it was
+//! made on. The new revision is published once, as an `Arc` the engine and the saver share (no copy per edit); the
+//! saver writes it 2 s after the last change (`saver`), and the project is flushed to the disk before it closes or
+//! switches and on quit.
+//!
+//! **One apply path.** Hand edits (and later chat) commit through `with_open`, so every edit is one undo step, reaches
+//! the engine and is saved. `apply_transaction` applies a batch, refusing it when the project moved on from the base the
+//! caller built it on (never rebased). Every command fails with a code the UI words, or a plain sentence (`Said`).
+
+mod apply;
+mod create;
+mod disk;
+mod library;
+mod saver;
+mod session;
+#[cfg(test)]
+mod tests;
+
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
+
+#[cfg(test)]
+use apply::apply_and_commit;
+pub(crate) use apply::{ApplyError, apply_transaction, step, with_open};
+pub(crate) use create::{create_in, new_project, open_in, snapshot_now};
+pub(crate) use disk::{SaveError, save};
+use klipolo_engine::session::{FeedRx, ProjectFeed};
+use klipolo_model::coded::Said;
+use klipolo_model::contrib::AssetPath;
+use klipolo_model::history::{Change, Document, HistoryLimits, Snapshot, SnapshotPatch};
+use klipolo_model::project::{FormatKind, Project};
+use klipolo_model::{Transaction, apply_ops};
+use klipolo_platform::pressure::{self, Pressure};
+pub(crate) use library::{library_dir, read};
+pub(crate) use saver::{SaveStatus, Saver, Version};
+pub(crate) use session::ProjectSessionState;
+#[cfg(test)]
+pub(crate) use session::opened;
+use tauri::{AppHandle, Manager, State};
+use tokio::sync::watch;
+
+/// A project file's extension: `~/Movies/Klipolo/<name>.klipolo`.
+pub(crate) const PROJECT_EXTENSION: &str = "klipolo";
+/// How long closing, switching or quitting waits for the last save.
+const FLUSH_TIMEOUT: Duration = Duration::from_secs(5);
+
+pub(crate) struct OpenProject {
+    pub(crate) document: Document,
+    /// Where it is saved.
+    pub(crate) file: PathBuf,
+    /// Set when the file came from a newer Klipolo (`Project.requires`): edits are refused (`model.readOnly`), so saving
+    /// can't drop data this build doesn't understand.
+    pub(crate) read_only: bool,
+}
+
+/// A project from a newer Klipolo: the UI says so once on open (`Snapshot.readOnly`) and doesn't edit; edits that still
+/// arrive are refused.
+fn is_read_only(project: &Project) -> bool {
+    klipolo_model::contrib::read_only_notice(project).is_some()
+}
+
+/// What an edit of a read-only project is refused with.
+fn read_only_refusal() -> Said {
+    Said::code(klipolo_model::contrib::READ_ONLY_NOTICE)
+}
+
+/// Reads `file` into an open project; one from a newer Klipolo opens read-only.
+pub(crate) fn open_file(file: &Path) -> Result<OpenProject, Said> {
+    let project = read(file)?;
+    let read_only = is_read_only(&project);
+    let document = Document::new(project).map_err(|e| Said::Coded(e.coded()))?;
+    Ok(OpenProject {
+        document,
+        file: file.to_path_buf(),
+        read_only,
+    })
+}
+
+/// A command that panicked must not leave the project locked for the rest of the session.
+fn lock(state: &ProjectSessionState) -> MutexGuard<'_, Option<OpenProject>> {
+    state.open.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Replaces the open project (create, open, close) and publishes it to the engine under the same lock; returns the
+/// opening it made. The project being replaced is saved first: a save that fails keeps it open, with what went wrong.
+fn set_open(state: &ProjectSessionState, open: Option<OpenProject>) -> Result<u64, Said> {
+    let mut guard = lock(state);
+    if guard.is_some() {
+        state.flush().map_err(|e| Said::Text(e.to_string()))?;
+    }
+    if let Some(open) = &open {
+        state.remember_last(&open.file);
+    }
+    *guard = open;
+    state.publish(guard.as_ref(), true);
+    Ok(state.opens.load(Ordering::SeqCst))
+}
+
+/// The files of `project`'s assets the page may read: local files of a media type Klipolo imports, never a pack's file
+/// or anything else a project file names.
+fn served_files(project: &Project) -> Vec<PathBuf> {
+    project
+        .assets
+        .iter()
+        .filter_map(|asset| match AssetPath::parse(&asset.path) {
+            Some(AssetPath::File(path)) if crate::media::supported(Path::new(path)) => {
+                Some(PathBuf::from(path))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Lets the UI's asset protocol read `project`'s media files (`served_files`).
+pub(crate) fn allow_assets(app: &AppHandle, project: &Project) {
+    let scope = app.asset_protocol_scope();
+    for file in served_files(project) {
+        // A missing file just won't preview; the project still opens.
+        let _ = scope.allow_file(file);
+    }
+}
+
+/// A new project named `name` (the first format is its primary), saved in the library and opened.
+#[tauri::command(async)]
+pub fn project_create(
+    state: State<'_, ProjectSessionState>,
+    name: String,
+    formats: Vec<FormatKind>,
+) -> Result<Snapshot, Said> {
+    create_in(&state, &library_dir()?, new_project(&name, formats))
+}
+
+/// Opens the project file at `path` (the open one is saved and closed first).
+#[tauri::command(async)]
+pub fn project_open(
+    app: AppHandle,
+    state: State<'_, ProjectSessionState>,
+    path: String,
+) -> Result<Snapshot, Said> {
+    let snapshot = open_in(&state, Path::new(&path))?;
+    allow_assets(&app, &snapshot.project);
+    Ok(snapshot)
+}
+
+/// Closes the open project once its edits are saved.
+#[tauri::command(async)]
+pub fn project_close(state: State<'_, ProjectSessionState>) -> Result<(), Said> {
+    set_open(&state, None).map(|_| ())
+}
+
+/// A hand edit. `project_id` and `base_revision` are the UI copy's: a batch for another project, or for a revision the
+/// project moved on from, is refused with `project.moved` (the UI resyncs), never rebased. None for a caller with no
+/// copy (then the open project, as it is).
+#[tauri::command(async)]
+pub fn project_apply(
+    state: State<'_, ProjectSessionState>,
+    tx: Transaction,
+    base_revision: Option<u64>,
+    project_id: Option<String>,
+) -> Result<SnapshotPatch, Said> {
+    let id = match project_id {
+        Some(id) => id,
+        None => lock(&state)
+            .as_ref()
+            .map(|open| open.document.project().id.clone())
+            .ok_or_else(|| ApplyError::NoProject.said())?,
+    };
+    apply_transaction(&state, &id, &tx, base_revision).map_err(|e| e.said())
+}
+
+/// Undo, as the UI's copy saw the history: when the open project moved on from the copy's revision (a change the UI
+/// hasn't merged yet is on top), it is refused with `project.moved`, so Undo never takes back a change the person hasn't
+/// seen. None: the top step as it is.
+#[tauri::command(async)]
+pub fn project_undo(
+    state: State<'_, ProjectSessionState>,
+    base_revision: Option<u64>,
+    project_id: Option<String>,
+) -> Result<SnapshotPatch, Said> {
+    step_at(&state, false, base_revision, project_id.as_deref())
+}
+
+/// Redo, refused like [`project_undo`] when the open project moved on from the copy's revision.
+#[tauri::command(async)]
+pub fn project_redo(
+    state: State<'_, ProjectSessionState>,
+    base_revision: Option<u64>,
+    project_id: Option<String>,
+) -> Result<SnapshotPatch, Said> {
+    step_at(&state, true, base_revision, project_id.as_deref())
+}
+
+/// [`step`] on the open project when it is still `project_id` at `base` (each when given), checked under the lock it
+/// steps in; else `project.moved`.
+fn step_at(
+    state: &ProjectSessionState,
+    redo: bool,
+    base: Option<u64>,
+    project_id: Option<&str>,
+) -> Result<SnapshotPatch, Said> {
+    with_open(state, |open| {
+        let other = project_id.is_some_and(|id| id != open.document.project().id);
+        if other || base.is_some_and(|r| r != open.document.revision()) {
+            return Err(ApplyError::Moved.said());
+        }
+        step(open, redo)
+    })
+}
+
+/// The whole open project (the UI resynchronises with it when a patch doesn't follow its revision, and reads it when the
+/// page loads).
+#[tauri::command(async)]
+pub fn project_snapshot(
+    app: AppHandle,
+    state: State<'_, ProjectSessionState>,
+) -> Result<Snapshot, Said> {
+    let snapshot = snapshot_now(&state)?;
+    allow_assets(&app, &snapshot.project);
+    Ok(snapshot)
+}
