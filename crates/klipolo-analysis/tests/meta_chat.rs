@@ -231,6 +231,7 @@ fn assert_relay_takes(body: &Value) {
     assert_eq!(body["model"], CHAT_MODEL);
     assert_eq!(body["tool_choice"], "auto");
     assert_eq!(body["parallel_tool_calls"], true);
+    assert_eq!(body["store"], false, "Meta keeps no copy");
     assert_eq!(body["instructions"], system_prompt());
     let sent = body["tools"].as_array().unwrap();
     let names: Vec<&str> = sent.iter().map(|t| t["name"].as_str().unwrap()).collect();

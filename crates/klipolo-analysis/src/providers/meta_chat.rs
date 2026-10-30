@@ -3,11 +3,11 @@
 //! relay is the client's business; Meta's types stop here.
 //!
 //! The body is what the relay takes and counts as text only: `model`, `instructions` (the system text), strict
-//! function `tools`, `tool_choice: "auto"`, parallel calls, `max_output_tokens` within the relay's cap and `input`,
-//! with nothing stored at Meta (no `previous_response_id` or `conversation`) and no reasoning items: a refusal round
-//! sends the whole input again. Reasoning effort is Meta's default (the field is left out). The context is the first
-//! input item, as the person's message, so the instructions, the tools and the context stay one prefix Meta's cache
-//! reuses.
+//! function `tools`, `tool_choice: "auto"`, parallel calls, `max_output_tokens` within the relay's cap, `store: false`
+//! (Meta keeps no copy of the answer) and `input`. No call refers to stored state (no `previous_response_id` or
+//! `conversation`) and no reasoning item is sent back: a refusal round sends the whole input again. Reasoning effort is
+//! Meta's default (the field is left out). The context is the first input item, as the person's message, so the
+//! instructions, the tools and the context stay one prefix Meta's cache reuses.
 //!
 //! The relay takes 4 Meta calls at once from a device; the analysis holds 3 (`meta::RELAY_META_CALLS`) and chat the
 //! fourth: `MetaChat` keeps its own single slot, shared by its clones, and never takes one of `Meta::call`'s. A busy
@@ -125,6 +125,7 @@ pub fn wire_body(request: &ModelRequest) -> Value {
         "tool_choice": "auto",
         "parallel_tool_calls": true,
         "max_output_tokens": CHAT_MAX_OUTPUT_TOKENS,
+        "store": false,
         "input": input,
     })
 }
