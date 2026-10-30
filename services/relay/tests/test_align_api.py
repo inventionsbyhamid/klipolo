@@ -4,6 +4,7 @@ temp files and concurrency. No torch needed."""
 import io
 import json
 import os
+import struct
 import tempfile
 import threading
 import time
@@ -298,6 +299,30 @@ def test_float_wav_is_400(client, auth):
     assert_error(post(client, auth, audio=audio), 400, "invalid_request", "Send the audio as a WAV file")
 
 
+def with_chunk_sizes(audio, riff=None, data=None):
+    """A WAV header with its RIFF or data size rewritten."""
+    out = bytearray(audio)
+    if riff is not None:
+        out[4:8] = struct.pack("<I", riff)
+    if data is not None:
+        assert out[36:40] == b"data"
+        out[40:44] = struct.pack("<I", data)
+    return bytes(out)
+
+
+@pytest.mark.parametrize(
+    "audio",
+    [
+        make_wav()[:12] + b"JUNK" + struct.pack("<I", 0x7FFFFFF0) + b"\x00" * 8 + make_wav()[12:],
+        make_wav()[:16] + struct.pack("<I", 0xFFFFFF00) + make_wav()[20:],
+    ],
+    ids=["junk-past-riff", "fmt-past-riff"],
+)
+def test_wav_chunks_running_past_the_file_are_400(client, auth, fake, audio):
+    assert_error(post(client, auth, audio=audio), 400, "invalid_request", "Send the audio as a WAV file")
+    assert fake.calls == 0
+
+
 def test_audio_longer_than_ten_minutes_is_400(client, auth, fake):
     body = assert_error(post(client, auth, audio=make_wav(seconds=600.5)), 400, "invalid_request")
     assert body["message"] == "The audio is longer than 10 minutes."
@@ -335,8 +360,9 @@ def test_declared_length_over_the_limit_is_413_before_reading(client, auth):
         (json.dumps(["hi"]), "Turn 0 is not valid."),
         (json.dumps([{"startMs": 0, "endMs": 900, "text": "hi"}] * 301), "Send at most 300 turns."),
         ("[" + "1e400" + "]", "Turn 0 is not valid."),
+        ("[" * 100_000 + "]" * 100_000, "Send turns as a JSON list"),
     ],
-    ids=["not-json", "object", "missing-end", "string-start", "fraction", "text-number", "string-turn", "301", "inf"],
+    ids=["not-json", "object", "missing-end", "string-start", "fraction", "text-number", "string-turn", "301", "inf", "deep"],
 )
 def test_bad_turns_are_400(client, auth, fake, turns, phrase):
     assert_error(post(client, auth, turns=turns), 400, "invalid_request", phrase)

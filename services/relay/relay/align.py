@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import sqlite3
+import struct
 import tempfile
 import threading
 import time
@@ -440,7 +441,8 @@ def charge_seconds(conn: sqlite3.Connection, device_id: str, seconds: float) -> 
 def parse_turns(raw: bytes) -> list[Turn]:
     try:
         data = json.loads(raw)
-    except ValueError:
+    except (ValueError, RecursionError):
+        # RecursionError: lists nested thousands deep.
         raise RelayError(400, "invalid_request", _BAD_TURNS) from None
     if not isinstance(data, list):
         raise RelayError(400, "invalid_request", _BAD_TURNS)
@@ -478,7 +480,8 @@ def wav_samples(path: str) -> int:
                 raise RelayError(400, "invalid_request", "The audio is longer than 10 minutes.")
             # A header can claim more audio than the file holds.
             n_samples = len(audio.readframes(declared)) // 2
-    except (wave.Error, EOFError):
+    except (wave.Error, EOFError, RuntimeError, struct.error):
+        # RuntimeError: a chunk whose size runs past the end of the file.
         raise RelayError(400, "invalid_request", _NOT_WAV) from None
     if n_samples == 0:
         raise RelayError(400, "invalid_request", "The audio is empty.")
