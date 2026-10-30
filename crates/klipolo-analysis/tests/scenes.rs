@@ -542,6 +542,80 @@ async fn uploaded_file_deleted_when_cancelled() {
     server.verify().await;
 }
 
+/// The call is dropped while its upload's delete waits for an answer: the delete is sent again from a task of its own
+/// (a file already gone counts as deleted).
+#[tokio::test(flavor = "multi_thread")]
+async fn upload_deleted_when_cancelled_during_delete() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/files"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "file-slow-delete"})))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(spark_answer()))
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path("/v1/files/file-slow-delete"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"deleted": true}))
+                .set_delay(Duration::from_secs(3)),
+        )
+        .mount(&server)
+        .await;
+    let meta = direct(&server);
+    let video = clip_a();
+    let watched = tokio::time::timeout(Duration::from_millis(1_500), meta.watch(&video, 2.0)).await;
+    assert!(watched.is_err(), "the call should still be deleting");
+    assert_eq!(
+        requests(&server, "DELETE", "/files/file-slow-delete")
+            .await
+            .len(),
+        1
+    );
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while requests(&server, "DELETE", "/files/file-slow-delete")
+        .await
+        .len()
+        < 2
+    {
+        assert!(Instant::now() < deadline, "the delete was not sent again");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// The call is dropped while its file is still going up: no id has come back, so there is nothing it can delete (Meta
+/// expires an upload after a day), and nothing else is sent.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_call_dropped_during_its_upload_sends_nothing_more() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/files"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"id": "file-never-known"}))
+                .set_delay(Duration::from_secs(5)),
+        )
+        .mount(&server)
+        .await;
+    let meta = direct(&server);
+    let video = clip_a();
+    let watched = tokio::time::timeout(Duration::from_millis(1_000), meta.watch(&video, 2.0)).await;
+    assert!(watched.is_err(), "the call should still be uploading");
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let sent: Vec<String> = server
+        .received_requests()
+        .await
+        .unwrap_or_default()
+        .iter()
+        .map(|r| format!("{} {}", r.method, r.url.path()))
+        .collect();
+    assert_eq!(sent, ["POST /v1/files"]);
+}
+
 /// Two chunks watched at once through clones of one adapter, each answer 400 ms late: through the relay the second
 /// upload waits for the first answer; with a key both go at once.
 #[tokio::test(flavor = "multi_thread")]

@@ -246,7 +246,9 @@ async fn upload(client: &MetaClient, video: &Path) -> Result<String, MetaError> 
 }
 
 /// An uploaded file, deleted when the call is done (`delete`) or, should the call be dropped part-way, from a task of
-/// its own. A failed delete is let go: Meta expires uploads after a day.
+/// its own. It owns the id from the moment the upload returns it, with no await in between. A call dropped while its
+/// file is still going up never learns the id, so nothing can delete that file; neither can a failed delete be tried
+/// again: Meta expires uploads after a day.
 struct Upload {
     meta: Meta,
     id: Option<String>,
@@ -257,9 +259,12 @@ impl Upload {
         self.id.as_deref().unwrap_or_default()
     }
 
+    /// Deletes the file. The id is kept until the delete is answered: dropped before then (waiting for a slot, or for
+    /// the answer), the guard sends the delete again (a file already gone counts as deleted).
     async fn delete(mut self) {
-        if let Some(id) = self.id.take() {
+        if let Some(id) = self.id.clone() {
             let _ = self.meta.call(self.meta.client.delete_file(&id)).await;
+            self.id = None;
         }
     }
 }
