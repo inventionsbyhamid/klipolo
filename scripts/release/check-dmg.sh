@@ -15,7 +15,8 @@ tmp=${TMPDIR:-/tmp}
 mnt=$(mktemp -d "${tmp%/}/klipolo-dmg.XXXXXX")
 trap 'hdiutil detach -quiet -force "$mnt" 2> /dev/null || true; rmdir "$mnt" 2> /dev/null || true' EXIT
 hdiutil attach -nobrowse -readonly -noautoopen -mountpoint "$mnt" "$dmg" > /dev/null
-assessment=$(spctl -a -vv -t exec "$mnt/Klipolo.app" 2>&1 | redact)
+# spctl exits non-zero on a rejection: its answer is still printed, and the check below fails.
+assessment=$(spctl -a -vv -t exec "$mnt/Klipolo.app" 2>&1 | redact) || true
 echo "$assessment"
 grep -q ': accepted' <<< "$assessment" && grep -q 'source=Notarized Developer ID' <<< "$assessment" \
   || { echo "FAIL: Gatekeeper doesn't accept the app in the disk image" >&2; exit 1; }
