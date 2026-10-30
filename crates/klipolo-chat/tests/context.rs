@@ -1170,3 +1170,22 @@ fn a_selection_of_the_whole_video_still_fits() {
         "{start} {playhead} {end}"
     );
 }
+
+#[test]
+fn turns_with_the_same_start_give_the_same_lines_in_any_order() {
+    // A second turn starting with C's answer (27.18 s in the file), shorter and by another speaker: two orders that are
+    // both sorted by start.
+    let other = SpeakerTurn {
+        start_us: 27_180_000,
+        end_us: 30_000_000,
+        speaker: Some("Z".into()),
+    };
+    let with = |before: bool| {
+        let mut inputs = two_clips();
+        let turns = inputs.turns.get_mut("clip-a").unwrap();
+        let at = turns.iter().position(|t| t.start_us == 27_180_000).unwrap();
+        turns.insert(if before { at } else { at + 1 }, other.clone());
+        inputs.context(&view_at(0.0)).text
+    };
+    assert_eq!(with(true), with(false));
+}

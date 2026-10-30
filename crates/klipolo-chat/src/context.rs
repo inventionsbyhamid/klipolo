@@ -190,11 +190,15 @@ pub fn build_context(
     // otherwise.
     let turns: HashMap<&str, Cow<'_, [SpeakerTurn]>> = (turns.iter())
         .map(|(asset, list)| {
-            let list = if list.is_sorted_by_key(|t| t.start_us) {
+            // One total order, so turns that start together are found the same way whatever order they came in.
+            let order = |a: &SpeakerTurn, b: &SpeakerTurn| {
+                (a.start_us, a.end_us, &a.speaker).cmp(&(b.start_us, b.end_us, &b.speaker))
+            };
+            let list = if list.is_sorted_by(|a, b| order(a, b).is_le()) {
                 Cow::Borrowed(list.as_slice())
             } else {
                 let mut sorted = list.clone();
-                sorted.sort_by_key(|t| (t.start_us, t.end_us));
+                sorted.sort_by(order);
                 Cow::Owned(sorted)
             };
             (asset.as_str(), list)
