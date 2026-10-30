@@ -35,6 +35,124 @@
   </header>
 
   <main id="main">
+
+    <!-- Hero -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap">
+        <h1 id="hero-title" class="hero-title">The video editor you <del class="filler" aria-hidden="true">um,</del> just talk to.</h1>
+
+        <div class="hero-row">
+          <p class="lede hero-lede">Klipolo is a Mac app that edits video from a chat box. Drop in raw footage and say what you want. Every cut comes back as a proposal you approve.</p>
+
+          <div class="hero-cta">
+            <!--
+              DOWNLOAD LINKS
+              This is the only place the two download URLs live.
+              Until the first build ships they point to #coming-nov-4.
+              Swap each href for its .dmg URL, then remove that section.
+            -->
+            <div class="downloads" id="download">
+              <a class="btn btn-primary" href="#coming-nov-4" data-arch="apple-silicon">
+                <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 3v9m0 0-3.5-3.5M10 12l3.5-3.5M4 14.5V16h12v-1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Download for Apple Silicon
+              </a>
+              <a class="btn btn-secondary" href="#coming-nov-4" data-arch="intel">
+                <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 3v9m0 0-3.5-3.5M10 12l3.5-3.5M4 14.5V16h12v-1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Download for Intel
+              </a>
+            </div>
+            <p class="hero-note">Free while in beta. First build Nov 4, 2026. macOS 13 or later.</p>
+          </div>
+        </div>
+
+        <figure class="editor">
+          <div class="mock" role="img" aria-label="Illustration of the Klipolo editor. In the chat, someone asks to cut the ums and long pauses. Klipolo replies that it found 3 ums and 2 long pauses. The timeline shows those parts in red, ready to approve.">
+            <div class="mock-bar">
+              <i></i><i></i><i></i>
+              <span>interview.mov</span>
+            </div>
+
+            <div class="mock-body">
+              <div class="mock-preview">
+                <svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice">
+                  <rect width="320" height="180" fill="#2A3560"/>
+                  <rect x="196" y="22" width="80" height="64" rx="3" fill="#3B4A85"/>
+                  <path d="M236 22v64M196 54h80" stroke="#2A3560" stroke-width="4"/>
+                  <rect x="204" y="120" width="84" height="4" rx="2" fill="#1E2748"/>
+                  <rect x="212" y="98" width="8" height="22" rx="1" fill="#5E74C9"/>
+                  <rect x="222" y="102" width="7" height="18" rx="1" fill="#E9EDF7"/>
+                  <rect x="231" y="96" width="9" height="24" rx="1" fill="#7F92DA"/>
+                  <rect x="262" y="106" width="14" height="14" rx="3" fill="#E9EDF7"/>
+                  <rect x="0" y="146" width="320" height="34" fill="#1E2748"/>
+                  <path d="M62 180c0-36 20-56 50-56s50 20 50 56z" fill="#FFD02E"/>
+                  <rect x="104" y="106" width="16" height="22" rx="6" fill="#E3AE8A"/>
+                  <circle cx="112" cy="92" r="23" fill="#E3AE8A"/>
+                  <path d="M87 99c-4-24 8-38 25-38s30 13 26 37c-1 8-4 15-7 19V93c-10-6-29-7-39 1v21c-3-4-4-10-5-16z" fill="#2B1D1A"/>
+                  <path d="M102 92q3-3 6 0M116 92q3-3 6 0" fill="none" stroke="#2B1D1A" stroke-width="2" stroke-linecap="round"/>
+                  <path d="M104 101q8 8 16 0z" fill="#2B1D1A"/>
+                  <rect x="170" y="132" width="6" height="18" fill="#0D1222"/>
+                  <rect x="165" y="114" width="16" height="22" rx="8" fill="#0D1222"/>
+                  <rect x="158" y="148" width="30" height="5" rx="2" fill="#0D1222"/>
+                </svg>
+                <p class="mock-caption">and this is the part I <mark>love</mark></p>
+              </div>
+
+              <div class="mock-chat">
+                <p class="msg msg-you msg-earlier">add captions</p>
+                <p class="msg msg-app msg-earlier">Done. Captions are on, in the Highlight style.</p>
+                <p class="msg msg-you">cut the ums and long pauses</p>
+                <div class="msg msg-app msg-latest">
+                  <p>Found 3 ums and 2 long pauses. That's 18 seconds, marked in red.</p>
+                  <div class="msg-actions">
+                    <span class="pill pill-solid">Approve</span>
+                    <span class="pill">Keep all</span>
+                  </div>
+                </div>
+                <p class="mock-input">Say what you want</p>
+              </div>
+            </div>
+
+            <div class="mock-timeline">
+              <div class="tl-ruler">
+                <span style="--x: 0%">0:00</span>
+                <span style="--x: 20%">0:15</span>
+                <span style="--x: 40%">0:30</span>
+                <span style="--x: 60%">0:45</span>
+                <span style="--x: 80%">1:00</span>
+              </div>
+              <div class="tl-tracks">
+                <div class="tl-track tl-captions">
+                  <span class="tl-chip" style="--x: 0.5%; --w: 8%">so this is</span>
+                  <span class="tl-chip" style="--x: 13%; --w: 9.5%">the part</span>
+                  <span class="tl-chip" style="--x: 30%; --w: 10.5%">I love most</span>
+                  <span class="tl-chip" style="--x: 45%; --w: 12.5%">because it</span>
+                  <span class="tl-chip" style="--x: 67%; --w: 11.5%">just works</span>
+                  <span class="tl-chip" style="--x: 83.5%; --w: 14%">every time</span>
+                </div>
+                <div class="tl-track tl-video">
+                  <span class="tl-clip" style="--x: 0%; --w: 48.6%"></span>
+                  <span class="tl-clip" style="--x: 49%; --w: 51%"></span>
+                </div>
+                <div class="tl-track tl-audio">
+                  <svg viewBox="0 0 240 40" preserveAspectRatio="none"><g fill="currentColor"><rect x="0.4" y="13.6" width="1.2" height="12.9"/><rect x="2.4" y="14.0" width="1.2" height="12.0"/><rect x="4.4" y="8.4" width="1.2" height="23.2"/><rect x="6.4" y="13.6" width="1.2" height="12.8"/><rect x="8.4" y="8.1" width="1.2" height="23.8"/><rect x="10.4" y="10.1" width="1.2" height="19.8"/><rect x="12.4" y="13.9" width="1.2" height="12.2"/><rect x="14.4" y="10.3" width="1.2" height="19.4"/><rect x="16.4" y="15.2" width="1.2" height="9.6"/><rect x="18.4" y="13.4" width="1.2" height="13.1"/><rect x="20.4" y="16.1" width="1.2" height="7.7"/><rect x="22.4" y="16.4" width="1.2" height="7.1"/><rect x="24.4" y="15.4" width="1.2" height="9.2"/><rect x="26.4" y="13.7" width="1.2" height="12.5"/><rect x="28.4" y="16.0" width="1.2" height="8.0"/><rect x="30.4" y="15.1" width="1.2" height="9.9"/><rect x="32.4" y="12.1" width="1.2" height="15.8"/><rect x="34.4" y="9.3" width="1.2" height="21.3"/><rect x="36.4" y="11.6" width="1.2" height="16.8"/><rect x="38.4" y="13.0" width="1.2" height="14.1"/><rect x="40.4" y="9.5" width="1.2" height="21.0"/><rect x="42.4" y="15.7" width="1.2" height="8.5"/><rect x="44.4" y="11.4" width="1.2" height="17.1"/><rect x="46.4" y="14.7" width="1.2" height="10.6"/><rect x="48.4" y="15.3" width="1.2" height="9.3"/><rect x="50.4" y="15.2" width="1.2" height="9.7"/><rect x="52.4" y="13.3" width="1.2" height="13.4"/><rect x="54.4" y="8.1" width="1.2" height="23.8"/><rect x="56.4" y="19.2" width="1.2" height="1.5"/><rect x="58.4" y="18.9" width="1.2" height="2.2"/><rect x="60.4" y="18.9" width="1.2" height="2.3"/><rect x="62.4" y="19.1" width="1.2" height="1.7"/><rect x="64.4" y="19.0" width="1.2" height="2.1"/><rect x="66.4" y="19.2" width="1.2" height="1.5"/><rect x="68.4" y="19.2" width="1.2" height="1.5"/><rect x="70.4" y="15.3" width="1.2" height="9.4"/><rect x="72.4" y="14.3" width="1.2" height="11.3"/><rect x="74.4" y="15.9" width="1.2" height="8.2"/><rect x="76.4" y="16.4" width="1.2" height="7.3"/><rect x="78.4" y="15.3" width="1.2" height="9.4"/><rect x="80.4" y="15.0" width="1.2" height="10.1"/><rect x="82.4" y="14.8" width="1.2" height="10.4"/><rect x="84.4" y="10.9" width="1.2" height="18.1"/><rect x="86.4" y="10.5" width="1.2" height="19.0"/><rect x="88.4" y="13.5" width="1.2" height="13.1"/><rect x="90.4" y="10.7" width="1.2" height="18.5"/><rect x="92.4" y="11.3" width="1.2" height="17.3"/><rect x="94.4" y="9.2" width="1.2" height="21.6"/><rect x="96.4" y="10.8" width="1.2" height="18.4"/><rect x="98.4" y="14.0" width="1.2" height="12.0"/><rect x="100.4" y="9.6" width="1.2" height="20.8"/><rect x="102.4" y="14.9" width="1.2" height="10.1"/><rect x="104.4" y="12.4" width="1.2" height="15.3"/><rect x="106.4" y="8.8" width="1.2" height="22.4"/><rect x="108.4" y="13.5" width="1.2" height="13.1"/><rect x="110.4" y="9.8" width="1.2" height="20.5"/><rect x="112.4" y="14.2" width="1.2" height="11.6"/><rect x="114.4" y="8.1" width="1.2" height="23.7"/><rect x="116.4" y="8.3" width="1.2" height="23.5"/><rect x="118.4" y="11.2" width="1.2" height="17.5"/><rect x="120.4" y="11.0" width="1.2" height="18.0"/><rect x="122.4" y="15.3" width="1.2" height="9.4"/><rect x="124.4" y="15.0" width="1.2" height="10.0"/><rect x="126.4" y="16.0" width="1.2" height="8.1"/><rect x="128.4" y="16.0" width="1.2" height="7.9"/><rect x="130.4" y="15.8" width="1.2" height="8.4"/><rect x="132.4" y="13.4" width="1.2" height="13.2"/><rect x="134.4" y="11.1" width="1.2" height="17.7"/><rect x="136.4" y="12.5" width="1.2" height="15.1"/><rect x="138.4" y="9.9" width="1.2" height="20.2"/><rect x="140.4" y="19.2" width="1.2" height="1.5"/><rect x="142.4" y="18.8" width="1.2" height="2.4"/><rect x="144.4" y="18.9" width="1.2" height="2.3"/><rect x="146.4" y="18.5" width="1.2" height="3.0"/><rect x="148.4" y="18.7" width="1.2" height="2.6"/><rect x="150.4" y="19.2" width="1.2" height="1.6"/><rect x="152.4" y="19.1" width="1.2" height="1.8"/><rect x="154.4" y="18.8" width="1.2" height="2.3"/><rect x="156.4" y="19.2" width="1.2" height="1.5"/><rect x="158.4" y="11.8" width="1.2" height="16.3"/><rect x="160.4" y="13.8" width="1.2" height="12.5"/><rect x="162.4" y="14.0" width="1.2" height="12.1"/><rect x="164.4" y="14.4" width="1.2" height="11.1"/><rect x="166.4" y="8.4" width="1.2" height="23.2"/><rect x="168.4" y="14.4" width="1.2" height="11.3"/><rect x="170.4" y="14.2" width="1.2" height="11.7"/><rect x="172.4" y="14.3" width="1.2" height="11.5"/><rect x="174.4" y="13.5" width="1.2" height="13.0"/><rect x="176.4" y="16.9" width="1.2" height="6.2"/><rect x="178.4" y="16.3" width="1.2" height="7.3"/><rect x="180.4" y="16.0" width="1.2" height="8.0"/><rect x="182.4" y="14.2" width="1.2" height="11.5"/><rect x="184.4" y="12.9" width="1.2" height="14.2"/><rect x="186.4" y="10.7" width="1.2" height="18.5"/><rect x="188.4" y="13.3" width="1.2" height="13.5"/><rect x="190.4" y="11.2" width="1.2" height="17.7"/><rect x="192.4" y="11.1" width="1.2" height="17.9"/><rect x="194.4" y="5.4" width="1.2" height="29.2"/><rect x="196.4" y="5.0" width="1.2" height="30.0"/><rect x="198.4" y="13.5" width="1.2" height="13.0"/><rect x="200.4" y="13.7" width="1.2" height="12.5"/><rect x="202.4" y="13.8" width="1.2" height="12.4"/><rect x="204.4" y="14.2" width="1.2" height="11.6"/><rect x="206.4" y="12.8" width="1.2" height="14.3"/><rect x="208.4" y="12.2" width="1.2" height="15.7"/><rect x="210.4" y="14.0" width="1.2" height="12.0"/><rect x="212.4" y="15.6" width="1.2" height="8.9"/><rect x="214.4" y="12.2" width="1.2" height="15.5"/><rect x="216.4" y="12.5" width="1.2" height="15.1"/><rect x="218.4" y="11.1" width="1.2" height="17.9"/><rect x="220.4" y="8.9" width="1.2" height="22.2"/><rect x="222.4" y="11.7" width="1.2" height="16.5"/><rect x="224.4" y="13.8" width="1.2" height="12.4"/><rect x="226.4" y="14.4" width="1.2" height="11.2"/><rect x="228.4" y="15.0" width="1.2" height="10.0"/><rect x="230.4" y="17.0" width="1.2" height="6.0"/><rect x="232.4" y="14.4" width="1.2" height="11.2"/><rect x="234.4" y="13.7" width="1.2" height="12.6"/><rect x="236.4" y="11.6" width="1.2" height="16.7"/><rect x="238.4" y="10.1" width="1.2" height="19.8"/></g></svg>
+                </div>
+
+                <div class="tl-cuts">
+                  <span class="tl-cut" style="--x: 9%; --w: 3.5%; --i: 0"><b>um</b></span>
+                  <span class="tl-cut" style="--x: 23%; --w: 6%; --i: 1"><b>pause</b></span>
+                  <span class="tl-cut" style="--x: 41%; --w: 3%; --i: 2"><b>um</b></span>
+                  <span class="tl-cut" style="--x: 58%; --w: 8%; --i: 3"><b>pause</b></span>
+                  <span class="tl-cut" style="--x: 79%; --w: 3.5%; --i: 4"><b>um</b></span>
+                </div>
+                <span class="tl-playhead" style="--x: 34%"></span>
+              </div>
+            </div>
+          </div>
+          <figcaption>Illustration of the editor. Red marks the parts Klipolo proposes to cut.</figcaption>
+        </figure>
+      </div>
+    </section>
+
   </main>
 
   <footer class="site-footer">
