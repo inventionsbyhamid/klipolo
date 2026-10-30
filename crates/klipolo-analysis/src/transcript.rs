@@ -6,12 +6,12 @@
 //! - `hear`: each chunk's speaker turns from the `Transcriber`, as many requests at once as it takes
 //!   (`Transcriber::max_in_flight`). The first failure stops the step.
 //! - `align`: the turns' word times from the `Aligner`, in requests within its `AlignLimits`. Each request is the WAV
-//!   around its own turns, so a turn is never sent twice and no request carries audio its turns don't need. It never
-//!   fails: what it can't time stays untimed.
-//! - `finish`: one `Transcript`. Timed words scoring under `MIN_SCORE` (the transcriber's invented repeats) are
-//!   dropped. A turn without times, or whose words don't match its audio (median score under `MATCH_MEDIAN`), has its
-//!   text spread across the turn by character count and makes the result approximate. Fillers are tagged and a
-//!   `Pause` word fills every gap of `PAUSE_US` or more.
+//!   around its own turns, so a turn is never sent twice and no request carries audio its turns don't need. Words
+//!   scoring under `MIN_SCORE` (the transcriber's invented repeats) are dropped here, and a turn whose words don't
+//!   match its audio (median score under `MATCH_MEDIAN`) is left untimed. It never fails: what it can't time stays
+//!   untimed.
+//! - `finish`: one `Transcript`. A turn without times has its text spread across the turn by character count and
+//!   makes the result approximate. Fillers are tagged and a `Pause` word fills every gap of `PAUSE_US` or more.
 //!
 //! Times: the WAV, its chunks, the turns and every word are the clip's SOUND time (`audio`'s module notes). Each
 //! chunk's start is added to its turns and each align request's start to its words; the asset's audio lead never is
