@@ -205,7 +205,14 @@ export function TimelineView() {
             <div className="tl-content" style={{ width: HEADER_PX + laneWidth }}>
               <div ref={headRef} className="tl-head">
                 <div className="tl-gutter" style={{ width: HEADER_PX }} />
-                <Ruler width={laneWidth} pps={pps} fps={fps} viewport={viewport} onScrub={seekTo} />
+                <Ruler
+                  width={laneWidth}
+                  pps={pps}
+                  fps={fps}
+                  durationUs={durationUs}
+                  viewport={viewport}
+                  onScrub={seekTo}
+                />
                 {/* Where a dragged layer lands, or a dragged clip's position; drawn by the drag (`showTip`). */}
                 <div ref={tipRef} aria-hidden className="tl-tip" />
               </div>
