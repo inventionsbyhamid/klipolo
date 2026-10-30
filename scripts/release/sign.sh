@@ -26,22 +26,37 @@ if plutil -convert xml1 -o - "$entitlements" | grep -q 'get-task-allow'; then
 fi
 
 # Everything to sign before the bundle, deepest first (by the number of slashes), then by path for a stable order.
+# A folder find can't read, or a file that can't be read, fails the listing: it is never skipped and left unsigned.
 order() {
-  local f
+  local f files rc
+  files=$(mktemp)
+  if ! find "$app/Contents" -mindepth 1 \( -type f -o -type d \) -print0 > "$files"; then
+    rm -f "$files"
+    echo "refused: couldn't list every file in $app" >&2
+    return 1
+  fi
   while IFS= read -r -d '' f; do
     [ "$f" = "$main" ] && continue
     if [ -d "$f" ]; then
       case "$f" in *.app | *.framework | *.xpc | *.appex | *.bundle) ;; *) continue ;; esac
-    elif [ -L "$f" ] || ! is_macho "$f"; then
+    elif [ -L "$f" ]; then
+      continue
+    elif [ ! -r "$f" ]; then
+      echo "refused: can't read $f" >&2
+      exit 1
+    elif ! is_macho "$f"; then
       continue
     fi
     printf '%s\t%s\n' "$(printf '%s' "$f" | tr -cd / | wc -c | tr -d ' ')" "$f"
-  done < <(find "$app/Contents" -mindepth 1 \( -type f -o -type d \) -print0) \
-    | LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2,2 | cut -f2-
+  done < "$files" | LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2,2 | cut -f2-
+  rc=$?
+  rm -f "$files"
+  return "$rc"
 }
+nested=$(order) || exit 1
 
 if [ "$list" = 1 ]; then
-  order | sed "s|^$app/||"
+  [ -z "$nested" ] || sed "s|^$app/||" <<< "$nested"
   exit 0
 fi
 
@@ -51,9 +66,10 @@ sign() {
 }
 count=0
 while IFS= read -r f; do
+  [ -n "$f" ] || continue
   sign "$f"
   count=$((count + 1))
-done < <(order)
+done <<< "$nested"
 sign --entitlements "$entitlements" "$app"
 codesign --verify --deep --strict --verbose=2 "$app" 2>&1 | redact "$id"
 echo "signed $count nested files, then the app"
