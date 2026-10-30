@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use klipolo_engine::api::ExportQuality;
 use klipolo_engine::audio::loudness::{Estimate, estimate_until, measure};
-use klipolo_engine::audio::mix::{ATTACK_US, Mixdown, RATE, RELEASE_US, finish};
+use klipolo_engine::audio::mix::{ATTACK_US, Mixdown, RAMP, RATE, RELEASE_US, finish};
 use klipolo_engine::audio::pcm::{Pcm, PcmKey, PcmStore};
 use klipolo_engine::audio::plan::{
     AudioPlan, AudioSource, JOIN_US, audio_plan, ducking_speech, ducking_speech_after,
@@ -125,12 +125,22 @@ fn render(
     pcm: &dyn Fn(&AudioSource) -> Option<Arc<Pcm>>,
     seconds: f64,
 ) -> Vec<f32> {
+    render_from(plan, pcm, 0, seconds)
+}
+
+/// `render` from timeline frame `from` (a seek, for a new `Mixdown`).
+fn render_from(
+    plan: AudioPlan,
+    pcm: &dyn Fn(&AudioSource) -> Option<Arc<Pcm>>,
+    from: usize,
+    seconds: f64,
+) -> Vec<f32> {
     const BLOCK: usize = 1_024;
     let frames = (seconds * f64::from(RATE)) as usize;
     let mut mixdown = Mixdown::new(Arc::new(plan));
     let mut out = vec![0f32; 2 * frames];
     for (k, block) in out.chunks_mut(2 * BLOCK).enumerate() {
-        mixdown.render(pcm, (k * BLOCK) as u64, block);
+        mixdown.render(pcm, (from + k * BLOCK) as u64, block);
         finish(block, 1.0, 1.0);
     }
     out
@@ -144,6 +154,11 @@ fn render_tone(plan: AudioPlan) -> Vec<f32> {
         &|s: &AudioSource| s.path.ends_with("music").then(|| tone.clone()),
         HEARD_S,
     )
+}
+
+/// The gain in dB the envelope gives `depth` of the way down (straight in dB).
+fn at_depth(depth: f64) -> f64 {
+    DUCK_DB * depth.clamp(0.0, 1.0)
 }
 
 /// The left channel's RMS over `[from, to)` seconds, in dBFS.
@@ -214,6 +229,92 @@ fn attack_and_release_are_smooth() {
         assert!(
             (got - want).abs() < 0.25,
             "{what} ({s} s): {got:.2} dB, want {want:.2}"
+        );
+    }
+}
+
+/// Ranges closer than the attack and release together (as given directly; `speech_ranges` joins them) have ramps that
+/// overlap: at each frame the deeper pull wins. The music comes up only as far as where the first one's release and the
+/// second one's attack cross, never steps, and is all the way down again as the second starts.
+#[test]
+fn overlapping_ramps_merge_without_a_step() {
+    let close = Arc::from(vec![range(5.0, 6.0), range(6.3, 7.0)]);
+    let mix = render_tone(plan(&music_alone(Some(DUCK_DB)), close));
+    let ms: Vec<f64> = (4_800..7_500)
+        .map(|m| rms_db(&mix, f64::from(m) / 1e3, f64::from(m + 1) / 1e3))
+        .collect();
+    let steepest = ms
+        .windows(2)
+        .map(|w| (w[1] - w[0]).abs())
+        .fold(0.0, f64::max);
+    println!("steepest 1 ms step over overlapping ramps: {steepest:.3} dB");
+    assert!(steepest <= 1.0, "a {steepest:.2} dB step");
+    let level = |s: f64| rms_db(&mix, s, s + 0.001) - own_db();
+    // In the gap, 1 ms windows centred 0.5 ms in: the first range's release and the second's attack.
+    let release = |t: f64| 1.0 - (t - 6.0) / 0.4;
+    let attack = |t: f64| (t - (6.3 - 0.15)) / 0.15;
+    for s in [6.15, 6.2, 6.218, 6.25, 6.27] {
+        let t = s + 0.0005;
+        let want = at_depth(release(t).max(attack(t)));
+        let got = level(s);
+        println!(
+            "{s} s: {got:.3} dB (the deeper pull {want:.3}; release {:.3}, attack {:.3})",
+            at_depth(release(t)),
+            at_depth(attack(t))
+        );
+        assert!(
+            (got - want).abs() < 0.1,
+            "{s} s: {got:.3} dB, want {want:.3}"
+        );
+    }
+    let start = level(6.3);
+    assert!(
+        (start - DUCK_DB).abs() < 0.1,
+        "all the way down as the second starts: {start:.3}"
+    );
+}
+
+/// How far down the envelope is (0 to 1) at a second of the timeline.
+type Depth = fn(f64) -> f64;
+
+/// Seeking into a ramp (a new `Mixdown` starting inside an attack or a release, as playback does after a seek) plays
+/// what playing through plays there, once the 3 ms seat ramp is over, at the ramp's own level: the envelope is the
+/// timeline's, not the voice's or the block's.
+#[test]
+fn a_seek_into_a_ramp_plays_as_play_through_does() {
+    let tone = tone();
+    let pcm = |s: &AudioSource| s.path.ends_with("music").then(|| tone.clone());
+    let p = music_alone(Some(DUCK_DB));
+    let through = render(plan(&p, speech()), &pcm, 10.0);
+    // Where each seek lands, and how far down the envelope is at second `t` there.
+    let seeks: [(f64, &str, Depth); 2] = [
+        (4.9, "inside the attack", |t| (t - 4.85) / 0.15),
+        (9.2, "inside the release", |t| 1.0 - (t - 9.0) / 0.4),
+    ];
+    for (at, what, depth) in seeks {
+        let from = (at * f64::from(RATE)) as usize;
+        let seek = render_from(plan(&p, speech()), &pcm, from, 0.4);
+        let after_ramp = 2 * RAMP as usize;
+        let worst = seek[after_ramp..]
+            .iter()
+            .zip(&through[2 * from + after_ramp..])
+            .map(|(a, b)| (a - b).abs())
+            .fold(0f32, f32::max);
+        println!("seek {what} ({at} s): largest difference after the seat ramp {worst:e}");
+        assert!(worst < 1e-6, "{what}: differs by {worst}");
+        assert!(
+            seek[0].abs() < 1e-3,
+            "{what}: the seat ramp starts from silence"
+        );
+        // 5 ms in (past the seat ramp), 1 ms long.
+        let (got, want) = (
+            rms_db(&seek, 0.005, 0.006) - own_db(),
+            at_depth(depth(at + 0.0055)),
+        );
+        println!("seek {what}: {got:.3} dB 5 ms in, the ramp is at {want:.3}");
+        assert!(
+            (got - want).abs() < 0.1,
+            "{what}: {got:.3} dB, want {want:.3}"
         );
     }
 }
