@@ -13,7 +13,9 @@ astronaut speaks in this excerpt.
 - **License:** public domain. NASA media is generally not subject to copyright
   in the United States (NASA media usage guidelines). No NASA logo or
   endorsement is implied.
-- **Format:** WAV, 16 kHz, mono, 16-bit PCM, converted with ffmpeg.
+- **Format:** WAV, 16 kHz, mono, 16-bit PCM. The NASA video's audio was
+  converted to this format with ffmpeg, and this excerpt was then cut from it
+  with Python's `wave` module.
 
 `iss_answer.json` holds:
 
@@ -21,9 +23,11 @@ astronaut speaks in this excerpt.
   what Meta's speech-to-text returned for this audio, including its invented
   repeats ("for the for the", "as a as a"). Turn times are in ms from the
   start of the WAV. The second turn ends past the end of the audio on purpose.
-- `reference`: word times for the same text from an earlier run of the same
-  forced aligner (torchaudio MMS_FA 2.8.0) on the whole answer, shifted to this
-  excerpt. That run was checked against the audio itself: word starts after a
-  pause landed a median 19 ms after the rise in energy, 80% within 100 ms.
-  Words scoring below 0.05 are the invented repeats; their times are not
-  meaningful.
+- `reference`: word times from an earlier run of this same aligner
+  (torchaudio MMS_FA 2.8.0), not from a human or a different tool. That run
+  aligned the whole answer as one turn; its times are shifted to this excerpt.
+  So the test checks that the relay reproduces that run, not that the times
+  are right. The earlier run was checked against the audio itself: word
+  starts after a pause landed a median 19 ms after the rise in energy, 80%
+  within 100 ms. Words scoring below 0.05 are the invented repeats; their
+  times are not meaningful.
