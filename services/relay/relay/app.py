@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from relay import db, devices
+from relay import db, devices, proxy
 from relay.config import Settings, load_settings
 from relay.errors import install_error_handlers
 
@@ -17,7 +17,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Create the database and schema at boot so a bad volume fails fast.
         db.connect(settings.db_path).close()
-        yield
+        async with proxy.meta_client() as client:
+            app.state.meta_client = client
+            yield
 
     app = FastAPI(
         title="Klipolo relay",
@@ -27,8 +29,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.state.in_flight = proxy.InFlight()
     install_error_handlers(app)
     app.include_router(devices.router)
+    app.include_router(proxy.router)
 
     @app.get("/healthz")
     def healthz() -> dict[str, bool]:
