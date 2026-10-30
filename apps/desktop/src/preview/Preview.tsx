@@ -1,7 +1,12 @@
 import { useEffect, useRef, type RefObject } from 'react';
-import { engineSetView, engineView, type EngineInfo, type FormatKind } from '../bridge/engine';
+import type { EngineInfo } from '../bindings/EngineInfo';
+import type { FormatKind } from '../bindings/FormatKind';
+import { engine } from '../bridge/engine';
+import { useImportMedia } from '../features/media/useImportMedia';
 import { Icon } from '../layout/Icon';
-import { setFormat, useSession } from '../player/session';
+import { useEngine } from '../state/engine';
+import { useProject } from '../state/project';
+import { useUi } from '../state/ui';
 import { SocketCanvas } from './SocketCanvas';
 import { ASPECT, holeRect, previewPixels } from './viewSize';
 
@@ -36,7 +41,7 @@ function useViewSync(
       const key = `${format} ${px.width}x${px.height}`;
       if (key === sent) return;
       sent = key;
-      void engineSetView({ format, ...px }).catch(() => undefined);
+      void engine.setView({ format, ...px }).catch(() => undefined);
     };
     const observer = new ResizeObserver(() => {
       clearTimeout(timer);
@@ -70,7 +75,7 @@ function useNativeHole(frame: RefObject<HTMLDivElement | null>, on: boolean) {
       if (!forced && key === last) return;
       forced = false;
       last = key;
-      void engineView(rect && { ...rect, backdrop: NIGHT }).catch(() => undefined);
+      void engine.setRect(rect && { ...rect, backdrop: NIGHT }).catch(() => undefined);
     };
     const request = (force = false) => {
       forced ||= force;
@@ -87,29 +92,68 @@ function useNativeHole(frame: RefObject<HTMLDivElement | null>, on: boolean) {
       cancelAnimationFrame(raf);
       observer.disconnect();
       window.removeEventListener('resize', resized);
-      void engineView(null).catch(() => undefined);
+      void engine.setRect(null).catch(() => undefined);
     };
   }, [frame, on]);
 }
 
-/** The preview panel: the format pills and the engine's frames, fitted to the panel in the chosen format. */
-export function Preview() {
-  const info = useSession((s) => s.info);
-  const native = useSession((s) => s.presenter === 'native' && !!s.info);
-  const format = useSession((s) => s.format);
-  const hasProject = useSession((s) => !!s.project);
-  const status = useSession((s) => s.status);
-  const message = useSession((s) => s.message);
+/** The format the preview shows: the one picked, else the project's primary one. */
+export function useShownFormat(): FormatKind {
+  const picked = useUi((s) => s.previewFormat);
+  const primary = useProject((s) => s.snapshot?.project.settings.primaryFormat ?? 'landscape');
+  return picked ?? primary;
+}
+
+/**
+ * An empty project's drop zone: drop videos anywhere on the window, or choose them (the one red), or
+ * files are held over the window.
+ */
+function DropZone({ over }: { over: boolean }) {
+  const importMedia = useImportMedia();
+  return (
+    <div className={over ? 'drop is-over' : 'drop'}>
+      <div className="drop-art" aria-hidden>
+        <b>
+          <Icon name="plus" />
+        </b>
+      </div>
+      <h1 className="drop-title">Drop videos here</h1>
+      <p className="drop-text">MOV, MP4 or M4V. Add several at once and they line up in the order you drop them.</p>
+      <div className="drop-actions">
+        <button className="btn btn-primary btn-lg" onClick={() => void importMedia()}>
+          Choose files
+        </button>
+        <span>
+          or press <kbd>&#8984;</kbd> <kbd>O</kbd>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The preview panel: the format pills and the engine's frames, fitted to the panel in the chosen format; with no clip
+ * yet, the drop zone. `filesOver`: files from Finder are held over the window.
+ */
+export function Preview({ filesOver = false }: { filesOver?: boolean }) {
+  const info = useEngine((s) => s.info);
+  const native = useEngine((s) => s.presenter === 'native' && !!s.info);
+  const status = useEngine((s) => s.status);
+  const message = useEngine((s) => s.message);
+  const formats = useProject((s) => s.snapshot?.project.settings.formats);
+  const hasVideo = useProject((s) => (s.snapshot?.project.timeline.main.length ?? 0) > 0);
+  const format = useShownFormat();
+  const setFormat = useUi((s) => s.setPreviewFormat);
   const frame = useRef<HTMLDivElement>(null);
-  useViewSync(frame, info, format, hasProject);
-  useNativeHole(frame, native && hasProject);
+  useViewSync(frame, info, format, hasVideo);
+  useNativeHole(frame, native && hasVideo);
 
   const note = status === 'unavailable' ? (message ?? "The preview isn't available right now.") : null;
   return (
-    <main className={native && hasProject ? 'panel stage has-hole' : 'panel stage'} aria-label="Preview">
+    <main className={native && hasVideo ? 'panel stage has-hole' : 'panel stage'} aria-label="Preview">
       <div className="stage-head">
         <div className="seg" role="radiogroup" aria-label="Format">
-          {FORMATS.map(([kind, label]) => (
+          {FORMATS.filter(([kind]) => !formats || formats.includes(kind)).map(([kind, label]) => (
             <button key={kind} role="radio" aria-checked={format === kind} onClick={() => setFormat(kind)}>
               {label}
             </button>
@@ -125,8 +169,8 @@ export function Preview() {
         </button>
       </div>
       <div className="stage-body">
-        <div className="screen">
-          {hasProject ? (
+        {hasVideo ? (
+          <div className="screen">
             <div
               ref={frame}
               className={`frame frame-${format}${native ? '' : ' is-socket'}`}
@@ -135,13 +179,10 @@ export function Preview() {
               {info && !native && <SocketCanvas info={info} aspect={ASPECT[format]} />}
               {note && <div className="preview-note">{note}</div>}
             </div>
-          ) : (
-            <div className="screen-empty">
-              <h1>No video yet</h1>
-              <p>{note ?? 'Open Klipolo with a video to preview it here. Importing comes next.'}</p>
-            </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <DropZone over={filesOver} />
+        )}
       </div>
     </main>
   );

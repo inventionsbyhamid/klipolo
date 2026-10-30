@@ -1,10 +1,13 @@
-import { useSession } from '../player/session';
-import { formatTime } from '../player/time';
+import { useImportMedia } from '../features/media/useImportMedia';
+import { formatTime } from '../lib/time';
+import { useProject } from '../state/project';
 import { Icon } from './Icon';
 
-/** The library panel: the open video as its one clip. Tabs, filters and adding files are placeholders. */
+/** The library panel: the project's clips, in the order they came in, and Add files. The other tabs come later. */
 export function Library() {
-  const project = useSession((s) => s.project);
+  const assets = useProject((s) => s.snapshot?.project.assets);
+  const clips = assets?.filter((a) => a.kind === 'video');
+  const importMedia = useImportMedia();
   return (
     <aside className="panel library" aria-label="Library">
       <div className="panel-head">
@@ -16,7 +19,7 @@ export function Library() {
             Captions
           </button>
         </div>
-        <button className="icon-btn" aria-label="Add files" title="Add files (Command O)" disabled>
+        <button className="icon-btn" aria-label="Add files" title="Add files (Command O)" onClick={() => void importMedia()}>
           <Icon name="plus" />
         </button>
       </div>
@@ -31,18 +34,20 @@ export function Library() {
         ))}
       </div>
       <div className="lib-scroll">
-        {project ? (
-          <div className="row is-selected">
-            <div className="art-clip" aria-hidden>
-              <Icon name="film" />
+        {clips && clips.length > 0 ? (
+          clips.map((clip) => (
+            <div key={clip.id} className="row">
+              <div className="art-clip" aria-hidden>
+                <Icon name="film" />
+              </div>
+              <div className="row-text">
+                <span className="row-title" title={clip.name}>
+                  {clip.name}
+                </span>
+                <span className="row-meta">{formatTime(clip.durationUs)}</span>
+              </div>
             </div>
-            <div className="row-text">
-              <span className="row-title" title={project.name}>
-                {project.name}
-              </span>
-              <span className="row-meta">{formatTime(project.durationUs)}</span>
-            </div>
-          </div>
+          ))
         ) : (
           <div className="lib-empty">
             <p className="lib-empty-title">No clips yet</p>

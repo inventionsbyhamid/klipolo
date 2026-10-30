@@ -71,7 +71,6 @@ fn main() {
             project::project_undo,
             project::project_redo,
             project::project_snapshot,
-            project::project_summary,
             media::media_import,
         ])
         .build(tauri::generate_context!())

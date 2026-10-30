@@ -580,30 +580,77 @@ kbd {
   height: 100%;
 }
 
-/* No video open: the drop zone's frame, waiting for import. */
-.screen-empty {
-  position: absolute;
-  inset: 0;
+/* No clip yet: the drop zone. Files held over the window turn it paper. */
+.drop {
+  flex: 1;
   display: grid;
-  place-items: center;
-  align-content: center;
+  place-content: center;
+  justify-items: center;
   gap: var(--space-5);
+  padding: var(--space-9);
   border: 2px dashed var(--color-line-strong);
   border-radius: var(--radius-md);
-  background: var(--color-bay);
   text-align: center;
+  transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
 }
 
-.screen-empty h1 {
+.drop.is-over {
+  border-color: var(--color-paper);
+  background: var(--color-paper-wash);
+}
+
+.drop-art {
+  position: relative;
+  width: 120px;
+  height: 52px;
+  margin-bottom: var(--space-4);
+}
+
+.drop-art b {
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-left: -20px;
+  border-radius: 50%;
+  background: var(--color-paper);
+  color: var(--color-navy);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.5);
+}
+
+.drop-title {
+  margin: 0;
+  word-spacing: 0.08em;
   font-size: var(--text-3xl);
   line-height: var(--lh-3xl);
   font-weight: var(--weight-display);
   font-stretch: var(--wdth-display);
+  letter-spacing: var(--tracking-display);
 }
 
-.screen-empty p {
-  max-width: 44ch;
+.drop-text {
+  max-width: 38ch;
+  margin: 0;
   color: var(--color-ink-soft);
+  font-size: var(--text-md);
+}
+
+.drop-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  margin-top: var(--space-4);
+  color: var(--color-ink-faint);
+  font-size: var(--text-sm);
+}
+
+.btn-lg {
+  height: 48px;
+  padding: 0 var(--space-8);
+  font-size: var(--text-lg);
 }
 
 .preview-note {
@@ -733,6 +780,10 @@ kbd {
   font-weight: var(--weight-strong);
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.clip-block + .clip-block {
+  border-left: 1px solid var(--color-night);
 }
 
 .playhead {
@@ -1009,7 +1060,7 @@ kbd {
 
 /* Short windows (700 to 819 tall): keep empty states whole. */
 @media (max-height: 819px) {
-  .screen-empty h1 {
+  .drop-title {
     font-size: var(--text-2xl);
     line-height: var(--lh-2xl);
   }

@@ -207,23 +207,3 @@ pub fn project_snapshot(
     allow_assets(&app, &snapshot.project);
     Ok(snapshot)
 }
-
-/// The open project's name and length, for the player bar until the page holds the whole project.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectSummary {
-    pub name: String,
-    pub duration_us: klipolo_model::time::Us,
-}
-
-/// The open project's name and length, or null when none is open.
-#[tauri::command]
-pub fn project_summary(state: State<'_, ProjectSessionState>) -> Option<ProjectSummary> {
-    lock(&state).as_ref().map(|open| {
-        let project = open.document.project();
-        ProjectSummary {
-            name: project.name.clone(),
-            duration_us: klipolo_model::query::video_duration(&project.timeline),
-        }
-    })
-}

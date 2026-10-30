@@ -9,18 +9,7 @@ vi.mock('@tauri-apps/api/core', () => ({
   },
 }));
 
-import {
-  engineAttach,
-  enginePause,
-  enginePlay,
-  engineSeek,
-  engineSetView,
-  engineSetVisible,
-  engineView,
-  projectSummary,
-  type EngineEvent,
-  type EngineInfo,
-} from './engine';
+import { engine, type EngineEvent, type EngineInfo } from './engine';
 
 const info: EngineInfo = {
   port: 4321,
@@ -37,7 +26,7 @@ describe('engine bridge', () => {
   it('attaches with an event channel and hands each event to the callback', async () => {
     invoke.mockResolvedValue(info);
     const seen: EngineEvent[] = [];
-    await expect(engineAttach((e) => seen.push(e))).resolves.toEqual(info);
+    await expect(engine.attach((e) => seen.push(e))).resolves.toEqual(info);
     expect(invoke).toHaveBeenCalledTimes(1);
     const [cmd, args] = invoke.mock.calls[0];
     expect(cmd).toBe('engine_attach');
@@ -48,10 +37,10 @@ describe('engine bridge', () => {
 
   it('sends the view, the native rect and seeks with the names Rust expects', async () => {
     invoke.mockResolvedValue(undefined);
-    await engineSetView({ format: 'portrait', width: 540, height: 960 });
-    await engineView({ x: 1, y: 2, width: 3, height: 4, scale: 2, backdrop: null });
-    await engineView(null);
-    await engineSeek(1_500_000, 7);
+    await engine.setView({ format: 'portrait', width: 540, height: 960 });
+    await engine.setRect({ x: 1, y: 2, width: 3, height: 4, scale: 2, backdrop: null });
+    await engine.setRect(null);
+    await engine.seek(1_500_000, 7);
     expect(invoke.mock.calls).toEqual([
       ['engine_set_view', { view: { format: 'portrait', width: 540, height: 960 } }],
       ['engine_view', { rect: { x: 1, y: 2, width: 3, height: 4, scale: 2, backdrop: null } }],
@@ -62,8 +51,8 @@ describe('engine bridge', () => {
 
   it('plays from a time at a rate as a numbered run, and pauses to the time it stopped at', async () => {
     invoke.mockResolvedValueOnce(undefined).mockResolvedValueOnce(2_000_000);
-    await enginePlay(250_000, 1, 3);
-    await expect(enginePause()).resolves.toBe(2_000_000);
+    await engine.play(250_000, 1, 3);
+    await expect(engine.pause()).resolves.toBe(2_000_000);
     expect(invoke.mock.calls).toEqual([
       ['engine_play', { fromUs: 250_000, rate: 1, seq: 3 }],
       ['engine_pause', undefined],
@@ -72,17 +61,21 @@ describe('engine bridge', () => {
 
   it('tells the engine when the window is hidden and shown', async () => {
     invoke.mockResolvedValue(undefined);
-    await engineSetVisible(false);
-    await engineSetVisible(true);
+    await engine.setVisible(false);
+    await engine.setVisible(true);
     expect(invoke.mock.calls).toEqual([
       ['engine_set_visible', { visible: false }],
       ['engine_set_visible', { visible: true }],
     ]);
   });
 
-  it('reads the open project summary', async () => {
-    invoke.mockResolvedValue({ name: 'clip.mp4', durationUs: 10_000_000 });
-    await expect(projectSummary()).resolves.toEqual({ name: 'clip.mp4', durationUs: 10_000_000 });
-    expect(invoke).toHaveBeenCalledWith('project_summary', undefined);
+  it('dry-runs edits on a project revision and clears them', async () => {
+    invoke.mockResolvedValue(undefined);
+    await engine.preview('p', 4, [{ type: 'rename', name: 'X' }]);
+    await engine.previewClear();
+    expect(invoke.mock.calls).toEqual([
+      ['engine_preview', { projectId: 'p', baseRevision: 4, ops: [{ type: 'rename', name: 'X' }] }],
+      ['engine_preview_clear', undefined],
+    ]);
   });
 });

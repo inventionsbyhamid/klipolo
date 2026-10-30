@@ -1,37 +1,36 @@
-import { act } from 'react';
-import { createRoot } from 'react-dom/client';
-import { describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { userEvent } from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fixturePatch, fixtureSnapshot } from '../test/fixtures';
 
-const bridge = vi.hoisted(() => ({
-  engineSeek: vi.fn(() => Promise.resolve()),
-  engineAttach: vi.fn(() =>
-    Promise.resolve({ port: 1, token: 't', maxPreviewPixels: 1, adapter: 'a', presenter: 'socket', gpuClass: 'apple' }),
-  ),
-  projectSummary: vi.fn(() => Promise.resolve(null)),
-  enginePlay: vi.fn(),
-  enginePause: vi.fn(),
-  engineSetVisible: vi.fn(() => Promise.resolve()),
+vi.mock('../bridge/commands', () => ({
+  bridge: { apply: vi.fn(), undo: vi.fn(), redo: vi.fn(), snapshot: vi.fn() },
 }));
-vi.mock('../bridge/engine', () => bridge);
+const { bridge } = await import('../bridge/commands');
+const { useProject } = await import('../state/project');
+const { EXPORT_LATER, TopBar } = await import('./TopBar');
 
-import { startSession } from '../player/session';
-import { TopBar } from './TopBar';
-
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+beforeEach(() => {
+  useProject.setState({ snapshot: null, pending: 0 });
+});
 
 describe('TopBar', () => {
-  it('says why Export is off, with and without a video', async () => {
-    const host = document.createElement('div');
-    document.body.append(host);
-    const root = createRoot(host);
-    await act(async () => root.render(<TopBar />));
-    const exportButton = () => [...host.querySelectorAll('button')].find((b) => b.textContent === 'Export')!;
-    expect(exportButton().disabled).toBe(true);
+  it('says why Export is off, with and without a video', () => {
+    const { rerender } = render(<TopBar />);
+    const exportButton = () => screen.getByRole('button', { name: 'Export' });
+    expect(exportButton()).toBeDisabled();
     expect(exportButton().title).toBe('Add a video first');
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    rerender(<TopBar />);
+    expect(exportButton().title).toBe(EXPORT_LATER);
+  });
 
-    bridge.projectSummary.mockResolvedValueOnce({ name: 'clip.mp4', durationUs: 1_000_000 } as never);
-    await act(async () => startSession());
-    expect(exportButton().title).toBe('Export comes in the next build.');
-    root.unmount();
+  it('names the change Undo takes back, and undoes it', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    vi.mocked(bridge.undo).mockResolvedValue({ ...fixturePatch(fixtureSnapshot()), baseRevision: 3 });
+    render(<TopBar />);
+    expect(screen.getByRole('button', { name: 'Redo' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Undo add text' }));
+    expect(bridge.undo).toHaveBeenCalledTimes(1);
   });
 });
