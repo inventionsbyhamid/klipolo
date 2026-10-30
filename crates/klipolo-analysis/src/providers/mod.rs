@@ -1,10 +1,12 @@
 //! The speech services the analysis needs, behind interfaces it owns: a `Transcriber` hears speaker turns in a WAV, an
 //! `Aligner` times each turn's words. Their types and errors are Klipolo's own, so no vendor's type reaches the
-//! pipeline: each vendor lives in an adapter that implements the traits and maps its types and errors.
+//! pipeline: each vendor lives in an adapter that implements the traits and maps its types and errors (`meta` today).
 //! Tests use small fakes of the traits.
 //!
 //! Times are whole milliseconds from the start of the WAV sent, as the services count them; the pipeline turns them
 //! into the clip's sound time.
+
+pub mod meta;
 
 use std::future::Future;
 use std::pin::Pin;

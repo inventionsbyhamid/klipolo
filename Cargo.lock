@@ -1364,6 +1364,7 @@ name = "klipolo-analysis"
 version = "0.1.0"
 dependencies = [
  "klipolo-engine",
+ "klipolo-meta",
  "klipolo-model",
  "klipolo-platform",
  "klipolo-speech-wire",

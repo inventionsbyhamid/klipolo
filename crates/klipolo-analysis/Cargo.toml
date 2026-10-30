@@ -9,6 +9,8 @@ description = "Clip analysis: the 16 kHz mono WAV Meta's speech models take, its
 [dependencies]
 # Sound decode (`audio::decode::{probe, decode}`: 48 kHz f32, streamed); no FFmpeg calls of our own.
 klipolo-engine = { path = "../klipolo-engine" }
+# The Meta adapter (`providers::meta`) only: nothing else here sees a Meta type.
+klipolo-meta = { path = "../klipolo-meta" }
 # `Us`, `RangeUs`.
 klipolo-model = { path = "../klipolo-model" }
 # Atomic writes for the WAV and the cache's JSON (`durable::write_atomic`).
