@@ -1,0 +1,68 @@
+{
+  "id": "klipolo.builtin/generator.light-leak",
+  "kind": "generator",
+  "name": "Light leak",
+  "params": [
+    {
+      "key": "warmColor",
+      "label": "Warm colour",
+      "type": "color",
+      "default": "#FF5A1F",
+      "alpha": false
+    },
+    {
+      "key": "softColor",
+      "label": "Soft colour",
+      "type": "color",
+      "default": "#FFC75A",
+      "alpha": false
+    },
+    {
+      "key": "size",
+      "label": "Size",
+      "type": "float",
+      "min": 0.2,
+      "max": 1.2,
+      "default": 0.45,
+      "step": null,
+      "unit": "percent"
+    },
+    {
+      "key": "intensity",
+      "label": "Intensity",
+      "type": "float",
+      "min": 0.0,
+      "max": 2.0,
+      "default": 1.0,
+      "step": null,
+      "unit": null
+    },
+    {
+      "key": "speed",
+      "label": "Speed",
+      "type": "float",
+      "min": 0.0,
+      "max": 3.0,
+      "default": 0.5,
+      "step": null,
+      "unit": null
+    }
+  ],
+  "description": "Warm orange and gold light drifting in from the edges of the frame, as in an old film camera. Laid over the video with the screen blend.",
+  "tags": [
+    "light leak",
+    "film",
+    "warm",
+    "flare",
+    "glow",
+    "vintage",
+    "retro",
+    "overlay"
+  ],
+  "blend": "screen",
+  "provenance": {
+    "madeBy": "Klipolo",
+    "createdAtMs": 1793059200000,
+    "license": "original"
+  }
+}

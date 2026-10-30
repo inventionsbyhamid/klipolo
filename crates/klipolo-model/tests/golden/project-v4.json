@@ -1,0 +1,499 @@
+{
+  "version": 7,
+  "id": "project",
+  "name": "Fixture",
+  "settings": {
+    "fps": 30,
+    "formats": [
+      "landscape"
+    ],
+    "primaryFormat": "landscape"
+  },
+  "assets": [
+    {
+      "id": "screen",
+      "kind": "video",
+      "path": "/media/screen",
+      "name": "screen",
+      "durationUs": 60000000,
+      "width": 1920,
+      "height": 1080,
+      "fps": 30.0,
+      "hasAudio": true
+    },
+    {
+      "id": "camera",
+      "kind": "video",
+      "path": "/media/camera",
+      "name": "camera",
+      "durationUs": 60000000,
+      "width": 1280,
+      "height": 720,
+      "fps": 30.0,
+      "hasAudio": false
+    },
+    {
+      "id": "mic",
+      "kind": "audio",
+      "path": "/media/mic",
+      "name": "mic",
+      "durationUs": 60000000,
+      "width": 0,
+      "height": 0,
+      "fps": 0.0,
+      "hasAudio": true
+    },
+    {
+      "id": "music",
+      "kind": "audio",
+      "path": "/media/music",
+      "name": "music",
+      "durationUs": 120000000,
+      "width": 0,
+      "height": 0,
+      "fps": 0.0,
+      "hasAudio": true
+    },
+    {
+      "id": "logo",
+      "kind": "image",
+      "path": "/media/logo",
+      "name": "logo",
+      "durationUs": 0,
+      "width": 512,
+      "height": 512,
+      "fps": 0.0,
+      "hasAudio": false
+    },
+    {
+      "id": "broll",
+      "kind": "video",
+      "path": "/media/broll",
+      "name": "broll",
+      "durationUs": 10000000,
+      "width": 1920,
+      "height": 1080,
+      "fps": 30.0,
+      "hasAudio": true
+    },
+    {
+      "id": "interview",
+      "kind": "video",
+      "path": "/media/interview",
+      "name": "interview",
+      "durationUs": 600000000,
+      "width": 1920,
+      "height": 1080,
+      "fps": 30.0,
+      "hasAudio": true,
+      "audioLeadUs": 40000
+    },
+    {
+      "id": "zoom",
+      "kind": "audio",
+      "path": "/media/zoom",
+      "name": "zoom",
+      "durationUs": 700000000,
+      "width": 0,
+      "height": 0,
+      "fps": 0.0,
+      "hasAudio": true
+    }
+  ],
+  "recordings": [
+    {
+      "id": "rec",
+      "kind": "gameplay",
+      "sources": [
+        {
+          "id": "screen",
+          "role": "game",
+          "label": "capture.source.game",
+          "runs": [
+            {
+              "assetId": "screen",
+              "offsetUs": 0,
+              "durationUs": 60000000,
+              "driftPpm": 0.0
+            }
+          ],
+          "nudgeUs": 0,
+          "mix": {
+            "volume": 1.0,
+            "muted": false,
+            "effects": []
+          }
+        },
+        {
+          "id": "camera",
+          "role": "camera",
+          "label": "capture.source.camera",
+          "runs": [
+            {
+              "assetId": "camera",
+              "offsetUs": 200000,
+              "durationUs": 59800000,
+              "driftPpm": 0.0
+            }
+          ],
+          "nudgeUs": 0,
+          "mix": {
+            "volume": 1.0,
+            "muted": false,
+            "effects": []
+          }
+        },
+        {
+          "id": "mic",
+          "role": "mic",
+          "label": "capture.source.mic",
+          "runs": [
+            {
+              "assetId": "mic",
+              "offsetUs": 0,
+              "durationUs": 60000000,
+              "driftPpm": 0.0
+            }
+          ],
+          "nudgeUs": 0,
+          "mix": {
+            "volume": 1.0,
+            "muted": false,
+            "effects": []
+          }
+        }
+      ],
+      "primary": "screen",
+      "cursor": {
+        "path": "/media/rec.cursor",
+        "capture": {
+          "kind": "burnedFrom",
+          "atUs": 9000000
+        },
+        "clicks": "sampled"
+      },
+      "markers": [
+        {
+          "id": "m1",
+          "atUs": 12500000,
+          "kind": "hotkey",
+          "label": "Boss fight"
+        }
+      ],
+      "game": {
+        "appId": "com.example.racer",
+        "name": "Racer",
+        "profileId": "profile"
+      }
+    },
+    {
+      "id": "synced",
+      "kind": "camera",
+      "sources": [
+        {
+          "id": "cam",
+          "role": "camera",
+          "label": "interview.mov",
+          "runs": [
+            {
+              "assetId": "interview",
+              "offsetUs": 0,
+              "durationUs": 600000000,
+              "driftPpm": 0.0
+            }
+          ],
+          "nudgeUs": 0,
+          "mix": {
+            "volume": 1.0,
+            "muted": true,
+            "effects": [],
+            "fillsGaps": true
+          }
+        },
+        {
+          "id": "mic",
+          "role": "mic",
+          "label": "ZOOM0001.WAV",
+          "runs": [
+            {
+              "assetId": "zoom",
+              "offsetUs": 0,
+              "durationUs": 610000000,
+              "driftPpm": 50.0,
+              "fileInUs": 90000000
+            }
+          ],
+          "nudgeUs": 0,
+          "mix": {
+            "volume": 1.0,
+            "muted": false,
+            "effects": []
+          },
+          "synced": {
+            "by": "sound",
+            "level": "sure"
+          }
+        }
+      ],
+      "primary": "cam",
+      "markers": []
+    }
+  ],
+  "luts": [],
+  "timeline": {
+    "main": [
+      {
+        "id": "a",
+        "source": {
+          "type": "recording",
+          "id": "rec"
+        },
+        "sourceInUs": 0,
+        "sourceOutUs": 20000000,
+        "speed": 1.0,
+        "volume": 1.0,
+        "muted": false,
+        "fadeInUs": 0,
+        "fadeOutUs": 0,
+        "look": {
+          "preset": "klipolo.builtin/look.warm",
+          "strength": 1.0,
+          "lutId": null,
+          "lutStrength": 1.0
+        },
+        "camera": {
+          "mode": "bubble",
+          "modeOverrides": {
+            "portrait": "splitBottom"
+          },
+          "shape": "circle",
+          "border": true,
+          "mirror": true,
+          "bubble": {
+            "anchor": "bottomRight",
+            "rect": {
+              "x": 0.76,
+              "y": 0.6044,
+              "w": 0.2,
+              "h": 0.3556
+            },
+            "rotation": 0.0,
+            "opacity": 1.0,
+            "radius": 0.0,
+            "overrides": {}
+          }
+        },
+        "framing": {
+          "portrait": {
+            "mode": "fill",
+            "focusX": 0.5,
+            "focusY": 0.5,
+            "follow": {
+              "closer": 1.5
+            }
+          }
+        },
+        "effects": [
+          {
+            "id": "fx",
+            "effect": "klipolo.builtin/effect.blur",
+            "enabled": true,
+            "params": {
+              "radius": 20.0
+            }
+          }
+        ],
+        "sourceMix": {
+          "mic": {
+            "volume": 0.5,
+            "muted": false,
+            "effects": [],
+            "centreFrom": 0
+          }
+        },
+        "cursor": {
+          "asRecorded": false,
+          "hidden": false,
+          "look": "dot",
+          "size": 1.25,
+          "smoothing": "medium",
+          "hideWhenStillUs": 2000000,
+          "click": "rippleAndPress",
+          "clickColor": "#FFFFFF80",
+          "motionBlur": 0.5
+        }
+      },
+      {
+        "id": "b",
+        "source": {
+          "type": "asset",
+          "id": "broll"
+        },
+        "sourceInUs": 0,
+        "sourceOutUs": 10000000,
+        "speed": 1.0,
+        "volume": 1.0,
+        "muted": false,
+        "fadeInUs": 0,
+        "fadeOutUs": 0,
+        "look": {
+          "preset": null,
+          "strength": 1.0,
+          "lutId": null,
+          "lutStrength": 1.0
+        },
+        "camera": null,
+        "framing": {},
+        "effects": []
+      }
+    ],
+    "tracks": [
+      {
+        "id": "g-track",
+        "kind": "overlay",
+        "name": "Overlay 1",
+        "hidden": false,
+        "muted": false,
+        "locked": false,
+        "items": [
+          {
+            "id": "g",
+            "startUs": 0,
+            "durationUs": 2000000,
+            "attach": null,
+            "layout": {
+              "anchor": "topLeft",
+              "rect": {
+                "x": 0.05,
+                "y": 0.05,
+                "w": 0.4,
+                "h": 0.1
+              },
+              "rotation": 0.0,
+              "opacity": 1.0,
+              "radius": 0.0,
+              "overrides": {}
+            },
+            "content": {
+              "type": "generator",
+              "source": "klipolo.builtin/generator.gradient",
+              "params": {
+                "angle": 45.0
+              }
+            },
+            "effects": []
+          }
+        ]
+      },
+      {
+        "id": "adj-track",
+        "kind": "overlay",
+        "name": "Overlay 2",
+        "hidden": false,
+        "muted": false,
+        "locked": false,
+        "items": [
+          {
+            "id": "adj",
+            "startUs": 0,
+            "durationUs": 2000000,
+            "attach": null,
+            "layout": {
+              "anchor": "topLeft",
+              "rect": {
+                "x": 0.05,
+                "y": 0.05,
+                "w": 0.4,
+                "h": 0.1
+              },
+              "rotation": 0.0,
+              "opacity": 1.0,
+              "radius": 0.0,
+              "overrides": {}
+            },
+            "content": {
+              "type": "adjustment"
+            },
+            "effects": [
+              {
+                "id": "fx",
+                "effect": "klipolo.builtin/effect.pixelate",
+                "enabled": true,
+                "params": {}
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "smart-track",
+        "kind": "zoom",
+        "name": "Zoom",
+        "hidden": false,
+        "muted": false,
+        "locked": false,
+        "items": [
+          {
+            "id": "smart",
+            "startUs": 0,
+            "durationUs": 2000000,
+            "attach": null,
+            "layout": {
+              "anchor": "topLeft",
+              "rect": {
+                "x": 0.05,
+                "y": 0.05,
+                "w": 0.4,
+                "h": 0.1
+              },
+              "rotation": 0.0,
+              "opacity": 1.0,
+              "radius": 0.0,
+              "overrides": {}
+            },
+            "content": {
+              "type": "zoom",
+              "target": {
+                "type": "auto",
+                "using": [
+                  "clicks",
+                  "typing"
+                ]
+              },
+              "scale": 2.0
+            },
+            "effects": []
+          }
+        ]
+      }
+    ]
+  },
+  "captions": {
+    "enabled": false,
+    "place": {},
+    "adSafe": false
+  },
+  "background": {
+    "kind": "none",
+    "color": "#101114",
+    "colorEnd": null,
+    "assetId": null,
+    "padding": 0.0
+  },
+  "audio": {
+    "loudness": "youtube"
+  },
+  "cursor": {
+    "asRecorded": false,
+    "hidden": false,
+    "look": "recorded",
+    "size": 1.25,
+    "smoothing": "medium",
+    "click": "ripple",
+    "clickColor": "#FFFFFF80",
+    "motionBlur": 0.5
+  },
+  "requires": [
+    "effects@1"
+  ]
+}

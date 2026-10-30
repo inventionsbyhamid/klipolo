@@ -1,0 +1,72 @@
+{
+  "id": "klipolo.builtin/generator.aurora",
+  "kind": "generator",
+  "name": "Aurora",
+  "params": [
+    {
+      "key": "skyColor",
+      "label": "Sky colour",
+      "type": "color",
+      "default": "#050A1C",
+      "alpha": false
+    },
+    {
+      "key": "colorA",
+      "label": "First colour",
+      "type": "color",
+      "default": "#2EF2A6",
+      "alpha": false
+    },
+    {
+      "key": "colorB",
+      "label": "Second colour",
+      "type": "color",
+      "default": "#3AA0FF",
+      "alpha": false
+    },
+    {
+      "key": "colorC",
+      "label": "Third colour",
+      "type": "color",
+      "default": "#B45CFF",
+      "alpha": false
+    },
+    {
+      "key": "speed",
+      "label": "Speed",
+      "type": "float",
+      "min": 0.0,
+      "max": 3.0,
+      "default": 1.0,
+      "step": null,
+      "unit": null
+    },
+    {
+      "key": "brightness",
+      "label": "Brightness",
+      "type": "float",
+      "min": 0.0,
+      "max": 2.0,
+      "default": 1.0,
+      "step": null,
+      "unit": null
+    }
+  ],
+  "description": "Northern lights: soft green, blue and violet curtains drifting slowly over a dark night sky. A calm background for titles, quotes and music.",
+  "tags": [
+    "aurora",
+    "northern lights",
+    "background",
+    "sky",
+    "night",
+    "calm",
+    "gradient",
+    "loop"
+  ],
+  "resolution": "half",
+  "provenance": {
+    "madeBy": "Klipolo",
+    "createdAtMs": 1793059200000,
+    "license": "original"
+  }
+}

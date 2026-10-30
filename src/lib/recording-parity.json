@@ -1,0 +1,1433 @@
+{
+  "at": [
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "mic",
+      "us": -50001
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "mic",
+      "us": -50000
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "mic",
+      "us": -49999
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "mic",
+      "us": -1
+    },
+    {
+      "assetId": "m1",
+      "localUs": 0,
+      "source": "mic",
+      "us": 0
+    },
+    {
+      "assetId": "m1",
+      "localUs": 1,
+      "source": "mic",
+      "us": 1
+    },
+    {
+      "assetId": "m1",
+      "localUs": 39999,
+      "source": "mic",
+      "us": 39999
+    },
+    {
+      "assetId": "m1",
+      "localUs": 40000,
+      "source": "mic",
+      "us": 40000
+    },
+    {
+      "assetId": "m1",
+      "localUs": 40001,
+      "source": "mic",
+      "us": 40001
+    },
+    {
+      "assetId": "m1",
+      "localUs": 300000000,
+      "source": "mic",
+      "us": 300000000
+    },
+    {
+      "assetId": "m1",
+      "localUs": 600062500,
+      "source": "mic",
+      "us": 600062500
+    },
+    {
+      "assetId": "m1",
+      "localUs": 600062501,
+      "source": "mic",
+      "us": 600062501
+    },
+    {
+      "assetId": "m1",
+      "localUs": 600062502,
+      "source": "mic",
+      "us": 600062502
+    },
+    {
+      "assetId": "m1",
+      "localUs": 609969501,
+      "source": "mic",
+      "us": 609969501
+    },
+    {
+      "assetId": "m1",
+      "localUs": 609969502,
+      "source": "mic",
+      "us": 609969502
+    },
+    {
+      "assetId": "m1",
+      "localUs": 609969503,
+      "source": "mic",
+      "us": 609969503
+    },
+    {
+      "assetId": "m1",
+      "localUs": 612385677,
+      "source": "mic",
+      "us": 612385677
+    },
+    {
+      "assetId": "m1",
+      "localUs": 612385678,
+      "source": "mic",
+      "us": 612385678
+    },
+    {
+      "assetId": "m1",
+      "localUs": 612385679,
+      "source": "mic",
+      "us": 612385679
+    },
+    {
+      "assetId": "m1",
+      "localUs": 1234567891,
+      "source": "mic",
+      "us": 1234567891
+    },
+    {
+      "assetId": "m1",
+      "localUs": 1800400562,
+      "source": "mic",
+      "us": 1800400562
+    },
+    {
+      "assetId": "m1",
+      "localUs": 1800400563,
+      "source": "mic",
+      "us": 1800400563
+    },
+    {
+      "assetId": "m1",
+      "localUs": 1800400564,
+      "source": "mic",
+      "us": 1800400564
+    },
+    {
+      "assetId": "m1",
+      "localUs": 3000000000,
+      "source": "mic",
+      "us": 3000000000
+    },
+    {
+      "assetId": "m1",
+      "localUs": 3012146034,
+      "source": "mic",
+      "us": 3012146034
+    },
+    {
+      "assetId": "m1",
+      "localUs": 3012146035,
+      "source": "mic",
+      "us": 3012146035
+    },
+    {
+      "assetId": "m1",
+      "localUs": 3012146036,
+      "source": "mic",
+      "us": 3012146036
+    },
+    {
+      "assetId": "m1",
+      "localUs": 3599000000,
+      "source": "mic",
+      "us": 3599000000
+    },
+    {
+      "assetId": "m1",
+      "localUs": 3599999999,
+      "source": "mic",
+      "us": 3599999999
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "mic",
+      "us": 3600000000
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "mic",
+      "us": 3600000001
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": -50001
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": -50000
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": -49999
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": -1
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": 0
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": 1
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": 39999
+    },
+    {
+      "assetId": "g1",
+      "localUs": 0,
+      "source": "game-sound",
+      "us": 40000
+    },
+    {
+      "assetId": "g1",
+      "localUs": 1,
+      "source": "game-sound",
+      "us": 40001
+    },
+    {
+      "assetId": "g1",
+      "localUs": 299948752,
+      "source": "game-sound",
+      "us": 300000000
+    },
+    {
+      "assetId": "g1",
+      "localUs": 599999999,
+      "source": "game-sound",
+      "us": 600062500
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": 600062501
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": 600062502
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": 609969501
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": 609969502
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": 609969503
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": 612385677
+    },
+    {
+      "assetId": "g2",
+      "localUs": 0,
+      "source": "game-sound",
+      "us": 612385678
+    },
+    {
+      "assetId": "g2",
+      "localUs": 1,
+      "source": "game-sound",
+      "us": 612385679
+    },
+    {
+      "assetId": "g2",
+      "localUs": 622244431,
+      "source": "game-sound",
+      "us": 1234567891
+    },
+    {
+      "assetId": "g2",
+      "localUs": 1188133685,
+      "source": "game-sound",
+      "us": 1800400562
+    },
+    {
+      "assetId": "g2",
+      "localUs": 1188133686,
+      "source": "game-sound",
+      "us": 1800400563
+    },
+    {
+      "assetId": "g2",
+      "localUs": 1188133687,
+      "source": "game-sound",
+      "us": 1800400564
+    },
+    {
+      "assetId": "g2",
+      "localUs": 2387853083,
+      "source": "game-sound",
+      "us": 3000000000
+    },
+    {
+      "assetId": "g2",
+      "localUs": 2400000332,
+      "source": "game-sound",
+      "us": 3012146034
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": 3012146035
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": 3012146036
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": 3599000000
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": 3599999999
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": 3600000000
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "game-sound",
+      "us": 3600000001
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": -50001
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": -50000
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": -49999
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": -1
+    },
+    {
+      "assetId": "z1",
+      "localUs": 90000000,
+      "source": "zoom",
+      "us": 0
+    },
+    {
+      "assetId": "z1",
+      "localUs": 90000001,
+      "source": "zoom",
+      "us": 1
+    },
+    {
+      "assetId": "z1",
+      "localUs": 90040001,
+      "source": "zoom",
+      "us": 39999
+    },
+    {
+      "assetId": "z1",
+      "localUs": 90040002,
+      "source": "zoom",
+      "us": 40000
+    },
+    {
+      "assetId": "z1",
+      "localUs": 90040003,
+      "source": "zoom",
+      "us": 40001
+    },
+    {
+      "assetId": "z1",
+      "localUs": 390015000,
+      "source": "zoom",
+      "us": 300000000
+    },
+    {
+      "assetId": "z1",
+      "localUs": 690092503,
+      "source": "zoom",
+      "us": 600062500
+    },
+    {
+      "assetId": "z1",
+      "localUs": 690092504,
+      "source": "zoom",
+      "us": 600062501
+    },
+    {
+      "assetId": "z1",
+      "localUs": 690092505,
+      "source": "zoom",
+      "us": 600062502
+    },
+    {
+      "assetId": "z1",
+      "localUs": 699999999,
+      "source": "zoom",
+      "us": 609969501
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 609969502
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 609969503
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 612385677
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 612385678
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 612385679
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 1234567891
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 1800400562
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 1800400563
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 1800400564
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 3000000000
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 3012146034
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 3012146035
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 3012146036
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 3599000000
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 3599999999
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 3600000000
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "zoom",
+      "us": 3600000001
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "cam",
+      "us": -50001
+    },
+    {
+      "assetId": "c1",
+      "localUs": 0,
+      "source": "cam",
+      "us": -50000
+    },
+    {
+      "assetId": "c1",
+      "localUs": 1,
+      "source": "cam",
+      "us": -49999
+    },
+    {
+      "assetId": "c1",
+      "localUs": 49986,
+      "source": "cam",
+      "us": -1
+    },
+    {
+      "assetId": "c1",
+      "localUs": 49987,
+      "source": "cam",
+      "us": 0
+    },
+    {
+      "assetId": "c1",
+      "localUs": 49988,
+      "source": "cam",
+      "us": 1
+    },
+    {
+      "assetId": "c1",
+      "localUs": 89976,
+      "source": "cam",
+      "us": 39999
+    },
+    {
+      "assetId": "c1",
+      "localUs": 89977,
+      "source": "cam",
+      "us": 40000
+    },
+    {
+      "assetId": "c1",
+      "localUs": 89978,
+      "source": "cam",
+      "us": 40001
+    },
+    {
+      "assetId": "c1",
+      "localUs": 299974912,
+      "source": "cam",
+      "us": 300000000
+    },
+    {
+      "assetId": "c1",
+      "localUs": 599962322,
+      "source": "cam",
+      "us": 600062500
+    },
+    {
+      "assetId": "c1",
+      "localUs": 599962323,
+      "source": "cam",
+      "us": 600062501
+    },
+    {
+      "assetId": "c1",
+      "localUs": 599962324,
+      "source": "cam",
+      "us": 600062502
+    },
+    {
+      "assetId": "c1",
+      "localUs": 609866844,
+      "source": "cam",
+      "us": 609969501
+    },
+    {
+      "assetId": "c1",
+      "localUs": 609866845,
+      "source": "cam",
+      "us": 609969502
+    },
+    {
+      "assetId": "c1",
+      "localUs": 609866846,
+      "source": "cam",
+      "us": 609969503
+    },
+    {
+      "assetId": "c1",
+      "localUs": 612282415,
+      "source": "cam",
+      "us": 612385677
+    },
+    {
+      "assetId": "c1",
+      "localUs": 612282416,
+      "source": "cam",
+      "us": 612385678
+    },
+    {
+      "assetId": "c1",
+      "localUs": 612282417,
+      "source": "cam",
+      "us": 612385679
+    },
+    {
+      "assetId": "c1",
+      "localUs": 1234308928,
+      "source": "cam",
+      "us": 1234567891
+    },
+    {
+      "assetId": "c1",
+      "localUs": 1799999999,
+      "source": "cam",
+      "us": 1800400562
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "cam",
+      "us": 1800400563
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "cam",
+      "us": 1800400564
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "cam",
+      "us": 3000000000
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "cam",
+      "us": 3012146034
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "cam",
+      "us": 3012146035
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "cam",
+      "us": 3012146036
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "cam",
+      "us": 3599000000
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "cam",
+      "us": 3599999999
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "cam",
+      "us": 3600000000
+    },
+    {
+      "assetId": null,
+      "localUs": null,
+      "source": "cam",
+      "us": 3600000001
+    }
+  ],
+  "clips": [
+    {
+      "sourceInUs": 0,
+      "sourceOutUs": 300000000,
+      "speed": 1.0,
+      "startUs": 0
+    },
+    {
+      "sourceInUs": 590000000,
+      "sourceOutUs": 640000007,
+      "speed": 1.5,
+      "startUs": 300000000
+    },
+    {
+      "sourceInUs": 1799900000,
+      "sourceOutUs": 3000000000,
+      "speed": 0.75,
+      "startUs": 333333338
+    },
+    {
+      "sourceInUs": 3590000000,
+      "sourceOutUs": 3600000000,
+      "speed": 2.0,
+      "startUs": 1933466671
+    }
+  ],
+  "layers": [
+    {
+      "driftPpm": 100.0,
+      "fileUs": 0,
+      "offsetUs": 0,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": 100.0,
+      "fileUs": 1,
+      "offsetUs": 1,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": 100.0,
+      "fileUs": 1000099,
+      "offsetUs": 999999,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": 100.0,
+      "fileUs": 3582858250,
+      "offsetUs": 3582500000,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": 100.0,
+      "fileUs": 3600360000,
+      "offsetUs": 3600000000,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": 100.0,
+      "fileUs": 1234567,
+      "offsetUs": 0,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": 100.0,
+      "fileUs": 1234568,
+      "offsetUs": 1,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": 100.0,
+      "fileUs": 2234666,
+      "offsetUs": 999999,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": 100.0,
+      "fileUs": 3584092817,
+      "offsetUs": 3582500000,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": 100.0,
+      "fileUs": 3601594567,
+      "offsetUs": 3600000000,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": -37.5,
+      "fileUs": 0,
+      "offsetUs": 0,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": -37.5,
+      "fileUs": 1,
+      "offsetUs": 1,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": -37.5,
+      "fileUs": 999962,
+      "offsetUs": 999999,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": -37.5,
+      "fileUs": 3582365656,
+      "offsetUs": 3582500000,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": -37.5,
+      "fileUs": 3599865000,
+      "offsetUs": 3600000000,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": -37.5,
+      "fileUs": 1234567,
+      "offsetUs": 0,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": -37.5,
+      "fileUs": 1234568,
+      "offsetUs": 1,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": -37.5,
+      "fileUs": 2234529,
+      "offsetUs": 999999,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": -37.5,
+      "fileUs": 3583600223,
+      "offsetUs": 3582500000,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": -37.5,
+      "fileUs": 3601099567,
+      "offsetUs": 3600000000,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": -250.25,
+      "fileUs": 0,
+      "offsetUs": 0,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": -250.25,
+      "fileUs": 1,
+      "offsetUs": 1,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": -250.25,
+      "fileUs": 999749,
+      "offsetUs": 999999,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": -250.25,
+      "fileUs": 3581603479,
+      "offsetUs": 3582500000,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": -250.25,
+      "fileUs": 3599099100,
+      "offsetUs": 3600000000,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": -250.25,
+      "fileUs": 1234567,
+      "offsetUs": 0,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": -250.25,
+      "fileUs": 1234568,
+      "offsetUs": 1,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": -250.25,
+      "fileUs": 2234316,
+      "offsetUs": 999999,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": -250.25,
+      "fileUs": 3582838046,
+      "offsetUs": 3582500000,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": -250.25,
+      "fileUs": 3600333667,
+      "offsetUs": 3600000000,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": 0.0,
+      "fileUs": 0,
+      "offsetUs": 0,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": 0.0,
+      "fileUs": 1,
+      "offsetUs": 1,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": 0.0,
+      "fileUs": 999999,
+      "offsetUs": 999999,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": 0.0,
+      "fileUs": 3582500000,
+      "offsetUs": 3582500000,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": 0.0,
+      "fileUs": 3600000000,
+      "offsetUs": 3600000000,
+      "sourceInUs": 0
+    },
+    {
+      "driftPpm": 0.0,
+      "fileUs": 1234567,
+      "offsetUs": 0,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": 0.0,
+      "fileUs": 1234568,
+      "offsetUs": 1,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": 0.0,
+      "fileUs": 2234566,
+      "offsetUs": 999999,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": 0.0,
+      "fileUs": 3583734567,
+      "offsetUs": 3582500000,
+      "sourceInUs": 1234567
+    },
+    {
+      "driftPpm": 0.0,
+      "fileUs": 3601234567,
+      "offsetUs": 3600000000,
+      "sourceInUs": 1234567
+    }
+  ],
+  "soundSources": {
+    "assets": [
+      {
+        "durationUs": 600000000,
+        "fps": 30.0,
+        "hasAudio": true,
+        "height": 1080,
+        "id": "interview.mov",
+        "kind": "video",
+        "name": "interview.mov",
+        "path": "/media/interview.mov",
+        "width": 1920
+      },
+      {
+        "durationUs": 600000000,
+        "fps": 0.0,
+        "hasAudio": true,
+        "height": 0,
+        "id": "ZOOM0001.WAV",
+        "kind": "audio",
+        "name": "ZOOM0001.WAV",
+        "path": "/media/ZOOM0001.WAV",
+        "width": 0
+      },
+      {
+        "durationUs": 600000000,
+        "fps": 0.0,
+        "hasAudio": true,
+        "height": 0,
+        "id": "lav.wav",
+        "kind": "audio",
+        "name": "lav.wav",
+        "path": "/media/lav.wav",
+        "width": 0
+      },
+      {
+        "durationUs": 600000000,
+        "fps": 30.0,
+        "hasAudio": false,
+        "height": 1080,
+        "id": "screen.mp4",
+        "kind": "video",
+        "name": "screen.mp4",
+        "path": "/media/screen.mp4",
+        "width": 1920
+      },
+      {
+        "durationUs": 600000000,
+        "fps": 30.0,
+        "hasAudio": false,
+        "height": 1080,
+        "id": "camera.mp4",
+        "kind": "video",
+        "name": "camera.mp4",
+        "path": "/media/camera.mp4",
+        "width": 1920
+      },
+      {
+        "durationUs": 600000000,
+        "fps": 0.0,
+        "hasAudio": true,
+        "height": 0,
+        "id": "mic.caf",
+        "kind": "audio",
+        "name": "mic.caf",
+        "path": "/media/mic.caf",
+        "width": 0
+      }
+    ],
+    "found": [
+      {
+        "recording": "interview",
+        "sources": [
+          "cam",
+          "zoom",
+          "lav"
+        ]
+      },
+      {
+        "recording": "take",
+        "sources": [
+          "mic"
+        ]
+      }
+    ],
+    "recordings": [
+      {
+        "id": "interview",
+        "kind": "camera",
+        "markers": [],
+        "primary": "cam",
+        "sources": [
+          {
+            "id": "cam",
+            "label": "interview.mov",
+            "mix": {
+              "effects": [],
+              "muted": true,
+              "volume": 1.0
+            },
+            "nudgeUs": 0,
+            "role": "camera",
+            "runs": [
+              {
+                "assetId": "interview.mov",
+                "driftPpm": 0.0,
+                "durationUs": 600000000,
+                "offsetUs": 0
+              }
+            ]
+          },
+          {
+            "id": "zoom",
+            "label": "ZOOM0001.WAV",
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            },
+            "nudgeUs": 0,
+            "role": "mic",
+            "runs": [
+              {
+                "assetId": "ZOOM0001.WAV",
+                "driftPpm": 0.0,
+                "durationUs": 600000000,
+                "offsetUs": 0
+              }
+            ],
+            "synced": {
+              "by": "sound",
+              "level": "sure"
+            }
+          },
+          {
+            "id": "lav",
+            "label": "lav.wav",
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            },
+            "nudgeUs": 0,
+            "role": "mic",
+            "runs": [
+              {
+                "assetId": "lav.wav",
+                "driftPpm": 0.0,
+                "durationUs": 600000000,
+                "offsetUs": 0
+              }
+            ],
+            "synced": {
+              "by": "sound",
+              "level": "sure"
+            }
+          }
+        ]
+      },
+      {
+        "id": "take",
+        "kind": "screen",
+        "markers": [],
+        "primary": "screen",
+        "sources": [
+          {
+            "id": "screen",
+            "label": "screen.mp4",
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            },
+            "nudgeUs": 0,
+            "role": "screen",
+            "runs": [
+              {
+                "assetId": "screen.mp4",
+                "driftPpm": 0.0,
+                "durationUs": 600000000,
+                "offsetUs": 0
+              }
+            ]
+          },
+          {
+            "id": "camera",
+            "label": "camera.mp4",
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            },
+            "nudgeUs": 0,
+            "role": "camera",
+            "runs": [
+              {
+                "assetId": "camera.mp4",
+                "driftPpm": 0.0,
+                "durationUs": 600000000,
+                "offsetUs": 0
+              }
+            ]
+          },
+          {
+            "id": "mic",
+            "label": "mic.caf",
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            },
+            "nudgeUs": 0,
+            "role": "mic",
+            "runs": [
+              {
+                "assetId": "mic.caf",
+                "driftPpm": 0.0,
+                "durationUs": 600000000,
+                "offsetUs": 0
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "sources": [
+    {
+      "id": "mic",
+      "label": "capture.source.mic",
+      "mix": {
+        "effects": [],
+        "muted": false,
+        "volume": 1.0
+      },
+      "nudgeUs": 0,
+      "role": "mic",
+      "runs": [
+        {
+          "assetId": "m1",
+          "driftPpm": 0.0,
+          "durationUs": 3600000000,
+          "offsetUs": 0
+        }
+      ]
+    },
+    {
+      "id": "game-sound",
+      "label": "capture.source.game-sound",
+      "mix": {
+        "effects": [],
+        "muted": false,
+        "volume": 1.0
+      },
+      "nudgeUs": 40000,
+      "role": "gameAudio",
+      "runs": [
+        {
+          "assetId": "g1",
+          "driftPpm": -37.5,
+          "durationUs": 600000000,
+          "offsetUs": 0
+        },
+        {
+          "assetId": "g2",
+          "driftPpm": 100.0,
+          "durationUs": 2400000333,
+          "offsetUs": 612345678
+        }
+      ]
+    },
+    {
+      "id": "zoom",
+      "label": "capture.source.zoom",
+      "mix": {
+        "effects": [],
+        "muted": false,
+        "volume": 1.0
+      },
+      "nudgeUs": 0,
+      "role": "mic",
+      "runs": [
+        {
+          "assetId": "z1",
+          "driftPpm": 50.0,
+          "durationUs": 610000000,
+          "fileInUs": 90000000,
+          "offsetUs": 0
+        }
+      ]
+    },
+    {
+      "id": "cam",
+      "label": "capture.source.cam",
+      "mix": {
+        "effects": [],
+        "muted": false,
+        "volume": 1.0
+      },
+      "nudgeUs": -250000,
+      "role": "camera",
+      "runs": [
+        {
+          "assetId": "c1",
+          "driftPpm": -250.25,
+          "durationUs": 1800000000,
+          "offsetUs": 200000
+        }
+      ]
+    }
+  ],
+  "spans": [
+    {
+      "clip": 0,
+      "endUs": 300000000,
+      "run": 0,
+      "runInUs": 0,
+      "source": "mic",
+      "startUs": 0
+    },
+    {
+      "clip": 0,
+      "endUs": 300000000,
+      "run": 0,
+      "runInUs": 0,
+      "source": "game-sound",
+      "startUs": 40000
+    },
+    {
+      "clip": 0,
+      "endUs": 300000000,
+      "run": 0,
+      "runInUs": 90000000,
+      "source": "zoom",
+      "startUs": 0
+    },
+    {
+      "clip": 0,
+      "endUs": 300000000,
+      "run": 0,
+      "runInUs": 49987,
+      "source": "cam",
+      "startUs": 0
+    },
+    {
+      "clip": 1,
+      "endUs": 333333338,
+      "run": 0,
+      "runInUs": 590000000,
+      "source": "mic",
+      "startUs": 300000000
+    },
+    {
+      "clip": 1,
+      "endUs": 306708334,
+      "run": 0,
+      "runInUs": 589937877,
+      "source": "game-sound",
+      "startUs": 300000000
+    },
+    {
+      "clip": 1,
+      "endUs": 333333338,
+      "run": 1,
+      "runInUs": 0,
+      "source": "game-sound",
+      "startUs": 314923785
+    },
+    {
+      "clip": 1,
+      "endUs": 313313001,
+      "run": 0,
+      "runInUs": 680029500,
+      "source": "zoom",
+      "startUs": 300000000
+    },
+    {
+      "clip": 1,
+      "endUs": 333333338,
+      "run": 0,
+      "runInUs": 589902340,
+      "source": "cam",
+      "startUs": 300000000
+    },
+    {
+      "clip": 2,
+      "endUs": 1933466671,
+      "run": 0,
+      "runInUs": 1799900000,
+      "source": "mic",
+      "startUs": 333333338
+    },
+    {
+      "clip": 2,
+      "endUs": 1933466671,
+      "run": 1,
+      "runInUs": 1187633073,
+      "source": "game-sound",
+      "startUs": 333333338
+    },
+    {
+      "clip": 2,
+      "endUs": 334000755,
+      "run": 0,
+      "runInUs": 1799499563,
+      "source": "cam",
+      "startUs": 333333338
+    },
+    {
+      "clip": 3,
+      "endUs": 1938466671,
+      "run": 0,
+      "runInUs": 3590000000,
+      "source": "mic",
+      "startUs": 1933466671
+    }
+  ]
+}

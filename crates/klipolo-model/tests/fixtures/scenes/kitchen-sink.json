@@ -1,0 +1,136 @@
+{
+  "scene": 1,
+  "duration": 6,
+  "segments": { "in": 1, "out": 1 },
+  "params": [
+    {
+      "key": "data",
+      "label": "Data",
+      "type": "table",
+      "columns": ["value", "goal"],
+      "maxRows": 8,
+      "default": [{ "label": "Mon", "values": [3, 5] }, { "label": "Tue", "values": [6, 5] }]
+    },
+    { "key": "logo", "label": "Logo", "type": "asset", "kind": "image" },
+    { "key": "accent", "label": "Accent", "type": "color", "default": "#FF5A36" },
+    { "key": "dots", "label": "Dots", "type": "int", "min": 1, "max": 12, "default": 6 },
+    { "key": "show", "label": "Show logo", "type": "bool", "default": true },
+    { "key": "font", "label": "Font", "type": "font", "default": { "family": "Inter", "source": { "type": "bundled" } } }
+  ],
+  "nodes": [
+    { "id": "glass", "type": "backdrop", "box": [0.05, 0.05, 0.9, 0.9], "radius": 24, "blur": 12, "tint": "#10111480" },
+    {
+      "id": "wave",
+      "type": "rect",
+      "box": [0, 0.8, 1, 0.2],
+      "fill": { "generator": "klipolo.builtin/generator.gradient", "params": { "startColor": "$accent", "angle": 45 } }
+    },
+    {
+      "id": "bars",
+      "type": "repeat",
+      "rows": "$data",
+      "gap": [0.1, 0],
+      "box": [0.1, 0.4, 0.08, 0.3],
+      "children": [
+        { "type": "rect", "fill": "$accent", "scaleY": "$row.v0", "origin": "bottom", "radius": [4, 4, 0, 0] },
+        { "type": "text", "text": "$row.label", "box": [0, 1.05, 1, 0.2], "size": 20, "align": "center" }
+      ]
+    },
+    {
+      "id": "dots",
+      "type": "repeat",
+      "times": "$dots",
+      "gap": [0.05, 0],
+      "box": [0.1, 0.1, 0.03, 0.05],
+      "children": [{ "type": "ellipse", "fill": "#FFFFFF", "opacity": 0.6 }]
+    },
+    {
+      "id": "trend",
+      "type": "polyline",
+      "points": "$data",
+      "smooth": true,
+      "box": [0.1, 0.4, 0.8, 0.3],
+      "stroke": "#FFFFFF",
+      "strokeWidth": 3,
+      "trim": { "end": 1 },
+      "animate": { "trim.end": [{ "t": 0, "v": 0 }, { "t": 1, "v": 1, "ease": "power2.inOut" }] }
+    },
+    {
+      "id": "spot",
+      "type": "group",
+      "mask": { "node": "#hole", "mode": "alpha" },
+      "children": [
+        { "id": "hole", "type": "ellipse", "box": [0.4, 0.4, 0.2, 0.2], "fill": "#FFFFFF" },
+        { "type": "image", "asset": "$logo", "box": [0.4, 0.4, 0.2, 0.2], "visible": "$show" }
+      ]
+    },
+    {
+      "id": "orbit",
+      "type": "path",
+      "d": "M0 0 C100 0 200 100 300 100 A50 50 0 0 1 350 150 Z",
+      "box": [0.1, 0.1, 0.5, 0.5],
+      "stroke": "#FFFFFF"
+    },
+    {
+      "id": "comet",
+      "type": "star",
+      "sides": 5,
+      "innerRadius": 0.5,
+      "box": [0, 0, 0.04, 0.04],
+      "fill": "#FFE066",
+      "motionPath": { "path": "#orbit", "progress": 0, "autoRotate": true },
+      "animate": { "motionPath.progress": [{ "t": 0, "v": 0 }, { "t": 5, "v": 1, "ease": "sine.inOut" }] }
+    },
+    {
+      "id": "title",
+      "type": "text",
+      "box": [0.1, 0.05, 0.8, 0.12],
+      "font": "$font",
+      "size": 48,
+      "spans": [
+        { "text": "Weekly ", "fill": "#FFFFFF" },
+        {
+          "text": "growth",
+          "fill": "$accent",
+          "weight": 800,
+          "background": { "color": "#00000080", "padding": 6, "radius": 8 }
+        }
+      ],
+      "reveal": { "by": "chars", "at": 0, "dur": 1 },
+      "modifiers": { "rotate": { "type": "oscillate", "freq": 0.5, "amp": 10, "decay": 0.2 } }
+    },
+    {
+      "id": "cta",
+      "type": "text",
+      "text": "SUBSCRIBE",
+      "box": [0.6, 0.85, 0.3, 0.08],
+      "size": 32,
+      "holds": [{ "t": 3, "text": "SUBSCRIBED" }],
+      "scramble": { "chars": "ABC123", "seed": 3, "at": 0.5, "dur": 0.8 }
+    },
+    {
+      "id": "confetti",
+      "type": "emitter",
+      "box": [0.5, 0.9, 0, 0],
+      "burst": 40,
+      "rate": 20,
+      "at": 3,
+      "life": [1, 2],
+      "cone": { "angle": -90, "spread": 60 },
+      "speed": [300, 600],
+      "gravity": 900,
+      "drag": 0.5,
+      "spin": [-180, 180],
+      "sizeOverLife": [1, 0.5],
+      "opacityOverLife": [1, 0],
+      "seed": 9,
+      "child": { "type": "image", "emoji": "🎉", "box": [0, 0, 0.03, 0.03] }
+    }
+  ],
+  "timeline": [
+    { "from": "#bars", "at": 0.2, "dur": 0.6, "ease": "back.out", "scaleY": 0, "origin": "50% 100%" },
+    { "to": "#glass", "at": "<", "dur": 0.5, "blur": 4, "label": "settle" },
+    { "set": "#cta", "at": "settle+=1", "visible": 1 },
+    { "fromTo": "#cta", "start": { "opacity": 0, "y": "20px" }, "at": "out-0.5", "dur": 0.4, "opacity": 1, "y": "0px" }
+  ]
+}

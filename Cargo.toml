@@ -1,0 +1,29 @@
+[workspace]
+members = ["crates/*"]
+resolver = "2"
+
+[workspace.package]
+license = "AGPL-3.0-only"
+
+[profile.release]
+codegen-units = 1
+# Thin LTO: fat LTO over wgpu + FFmpeg bindings costs minutes and GBs of RAM for no measurable gain (Cap uses thin).
+lto = "thin"
+strip = true
+
+[profile.dev]
+# Line tables keep backtraces useful and cut target/ size by several GB.
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+# Dependencies (wgpu, ffmpeg, glyphon, image) at -O2 so the debug app previews at full speed; their debug info is off.
+opt-level = 2
+debug = false
+
+[profile.dev.package.klipolo-engine]
+opt-level = 1
+
+[profile.dev.package.klipolo-cursor]
+# A take's cursor file is read, and its smoothed paths built, once per load: unoptimised, a debug app reads an hour's
+# 250 Hz file in about 3 s. 1, as the engine has.
+opt-level = 1

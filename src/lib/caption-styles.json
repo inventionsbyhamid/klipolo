@@ -1,0 +1,769 @@
+[
+  {
+    "accent": "#00F0FF",
+    "active": {
+      "color": {
+        "color": "accent",
+        "fadeMs": 60
+      },
+      "dimUpcoming": null,
+      "glow": {
+        "alpha": 0.7,
+        "blurEm": 0.35,
+        "color": "accent"
+      },
+      "scale": 1.08
+    },
+    "autofitMin": 0.8,
+    "boxes": null,
+    "case": "upper",
+    "charEm": 0.42,
+    "enter": {
+      "motion": {
+        "from": 1.35,
+        "kind": "slam",
+        "ms": 110
+      },
+      "per": "page"
+    },
+    "exit": {
+      "kind": "cut"
+    },
+    "fallbacks": [
+      {
+        "family": "Oswald",
+        "italic": false,
+        "script": "Cyrl",
+        "weight": 700
+      }
+    ],
+    "fill": "#FFFFFF",
+    "font": {
+      "family": "Anton",
+      "italic": false,
+      "weight": 400
+    },
+    "id": "klipolo.builtin/caption.arcade",
+    "keyword": {
+      "color": "#39FF14",
+      "gain": "#39FF14",
+      "glow": null,
+      "loss": "#FF2BD6",
+      "scale": 1.2,
+      "words": "gaming"
+    },
+    "leadMs": 50,
+    "letterSpacingEm": 0.02,
+    "lineHeight": 1.0,
+    "name": "Arcade",
+    "outline": {
+      "color": "#0B0B12",
+      "widthEm": 0.09
+    },
+    "pages": {
+      "breakSilenceMs": 250,
+      "lingerMs": 250,
+      "maxChars": null,
+      "maxLineWidth": {
+        "landscape": 0.5,
+        "portrait": 0.66
+      },
+      "maxLines": 2,
+      "maxPageMs": 1500,
+      "maxWords": 3,
+      "minPageMs": 300,
+      "readingCps": null,
+      "reveal": "page"
+    },
+    "position": {
+      "landscape": {
+        "seam": null,
+        "y": 0.8
+      },
+      "portrait": {
+        "seam": true,
+        "y": 0.58
+      }
+    },
+    "punctuation": "questionAndExclamation",
+    "schema": 1,
+    "shadow": null,
+    "shake": {
+      "ampEm": 0.015,
+      "keywordPagesOnly": true,
+      "ms": 80
+    },
+    "size": {
+      "landscape": 92.0,
+      "portrait": 120.0
+    },
+    "swatches": [
+      "#00F0FF",
+      "#39FF14",
+      "#FF2BD6",
+      "#FFE500"
+    ],
+    "tiltDeg": 0.0,
+    "variants": []
+  },
+  {
+    "accent": "#F7C204",
+    "active": {
+      "color": null,
+      "dimUpcoming": null,
+      "glow": null,
+      "scale": null
+    },
+    "autofitMin": 0.75,
+    "boxes": null,
+    "case": "upper",
+    "charEm": 0.65,
+    "enter": {
+      "motion": {
+        "dyEm": 0.15,
+        "from": 0.75,
+        "kind": "pop",
+        "ms": 140,
+        "peak": 1.08
+      },
+      "per": "word"
+    },
+    "exit": {
+      "kind": "cut"
+    },
+    "fallbacks": [],
+    "fill": "#FFFFFF",
+    "font": {
+      "family": "Montserrat",
+      "italic": false,
+      "weight": 900
+    },
+    "id": "klipolo.builtin/caption.bold",
+    "keyword": {
+      "color": "accent",
+      "gain": "#39E508",
+      "glow": null,
+      "loss": "#FF3B30",
+      "scale": 1.12,
+      "words": "power"
+    },
+    "leadMs": 50,
+    "letterSpacingEm": -0.01,
+    "lineHeight": 1.05,
+    "name": "Bold",
+    "outline": {
+      "color": "#000000",
+      "widthEm": 0.1
+    },
+    "pages": {
+      "breakSilenceMs": 300,
+      "lingerMs": 300,
+      "maxChars": null,
+      "maxLineWidth": {
+        "landscape": 0.6,
+        "portrait": 0.7
+      },
+      "maxLines": 2,
+      "maxPageMs": 1800,
+      "maxWords": 3,
+      "minPageMs": 300,
+      "readingCps": null,
+      "reveal": "word"
+    },
+    "position": {
+      "landscape": {
+        "seam": null,
+        "y": 0.8
+      },
+      "portrait": {
+        "seam": null,
+        "y": 0.62
+      }
+    },
+    "punctuation": "questionAndExclamation",
+    "schema": 1,
+    "shadow": {
+      "alpha": 0.8,
+      "blurEm": 0.08,
+      "color": "#000000",
+      "dxEm": 0.0,
+      "dyEm": 0.05
+    },
+    "shake": null,
+    "size": {
+      "landscape": 80.0,
+      "portrait": 100.0
+    },
+    "swatches": [
+      "#F7C204",
+      "#39E508",
+      "#FF3B30",
+      "#2F80FF",
+      "#FFFFFF"
+    ],
+    "tiltDeg": 0.0,
+    "variants": []
+  },
+  {
+    "accent": "#FFFFFF",
+    "active": {
+      "color": null,
+      "dimUpcoming": null,
+      "glow": null,
+      "scale": null
+    },
+    "autofitMin": 0.85,
+    "boxes": {
+      "alpha": 1.0,
+      "color": "accent",
+      "glideMs": 0,
+      "growMs": 0,
+      "on": "line",
+      "padXEm": 0.2,
+      "padYEm": 0.08,
+      "radiusEm": 0.24,
+      "text": null
+    },
+    "case": "asSaid",
+    "charEm": 0.51,
+    "enter": {
+      "motion": {
+        "dyEm": 0.1,
+        "kind": "rise",
+        "ms": 120
+      },
+      "per": "page"
+    },
+    "exit": {
+      "kind": "fade",
+      "minGapMs": 0,
+      "ms": 80
+    },
+    "fallbacks": [],
+    "fill": "#FFFFFF",
+    "font": {
+      "family": "TikTok Sans",
+      "italic": false,
+      "weight": 600
+    },
+    "id": "klipolo.builtin/caption.boxed",
+    "keyword": null,
+    "leadMs": 50,
+    "letterSpacingEm": 0.0,
+    "lineHeight": 1.2,
+    "name": "Boxed",
+    "outline": null,
+    "pages": {
+      "breakSilenceMs": 500,
+      "lingerMs": 200,
+      "maxChars": {
+        "landscape": 42,
+        "portrait": 24
+      },
+      "maxLineWidth": {
+        "landscape": 0.6,
+        "portrait": 0.72
+      },
+      "maxLines": 2,
+      "maxPageMs": 3500,
+      "maxWords": 7,
+      "minPageMs": 1000,
+      "readingCps": null,
+      "reveal": "page"
+    },
+    "position": {
+      "landscape": {
+        "seam": null,
+        "y": 0.86
+      },
+      "portrait": {
+        "seam": null,
+        "y": 0.66
+      }
+    },
+    "punctuation": "dropFinalPeriod",
+    "schema": 1,
+    "shadow": null,
+    "shake": null,
+    "size": {
+      "landscape": 50.0,
+      "portrait": 62.0
+    },
+    "swatches": [
+      "#FFFFFF",
+      "#000000",
+      "#EA403F",
+      "#FF933D",
+      "#F2CD46",
+      "#78C25E",
+      "#77C8A6",
+      "#3496F0",
+      "#5756D4",
+      "#F7D7E9",
+      "#A3895B",
+      "#32523B",
+      "#2F688C",
+      "#92979E",
+      "#333333"
+    ],
+    "tiltDeg": 0.0,
+    "variants": [
+      {
+        "accent": "#000000",
+        "boxes": null,
+        "fill": null,
+        "key": "dark",
+        "name": "Dark",
+        "outline": null,
+        "shadow": null
+      },
+      {
+        "accent": "#000000",
+        "boxes": {
+          "alpha": 0.6,
+          "color": "accent",
+          "glideMs": 0,
+          "growMs": 0,
+          "on": "line",
+          "padXEm": 0.2,
+          "padYEm": 0.08,
+          "radiusEm": 0.24,
+          "text": null
+        },
+        "fill": null,
+        "key": "tint",
+        "name": "Tint",
+        "outline": null,
+        "shadow": null
+      }
+    ]
+  },
+  {
+    "accent": "#FFFFFF",
+    "active": {
+      "color": null,
+      "dimUpcoming": null,
+      "glow": null,
+      "scale": null
+    },
+    "autofitMin": 0.85,
+    "boxes": null,
+    "case": "asSaid",
+    "charEm": 0.51,
+    "enter": {
+      "motion": {
+        "kind": "fade",
+        "ms": 120
+      },
+      "per": "page"
+    },
+    "exit": {
+      "kind": "fade",
+      "minGapMs": 100,
+      "ms": 80
+    },
+    "fallbacks": [],
+    "fill": "accent",
+    "font": {
+      "family": "Inter",
+      "italic": false,
+      "weight": 600
+    },
+    "id": "klipolo.builtin/caption.clean",
+    "keyword": null,
+    "leadMs": 50,
+    "letterSpacingEm": -0.005,
+    "lineHeight": 1.22,
+    "name": "Clean",
+    "outline": null,
+    "pages": {
+      "breakSilenceMs": 500,
+      "lingerMs": 200,
+      "maxChars": {
+        "landscape": 42,
+        "portrait": 28
+      },
+      "maxLineWidth": {
+        "landscape": 0.8,
+        "portrait": 0.72
+      },
+      "maxLines": 2,
+      "maxPageMs": 7000,
+      "maxWords": null,
+      "minPageMs": 833,
+      "readingCps": 20.0,
+      "reveal": "page"
+    },
+    "position": {
+      "landscape": {
+        "seam": null,
+        "y": 0.88
+      },
+      "portrait": {
+        "seam": null,
+        "y": 0.68
+      }
+    },
+    "punctuation": "keep",
+    "schema": 1,
+    "shadow": {
+      "alpha": 0.75,
+      "blurEm": 0.14,
+      "color": "#000000",
+      "dxEm": 0.0,
+      "dyEm": 0.04
+    },
+    "shake": null,
+    "size": {
+      "landscape": 52.0,
+      "portrait": 60.0
+    },
+    "swatches": [
+      "#FFFFFF",
+      "#FFD60A",
+      "#F2CD46"
+    ],
+    "tiltDeg": 0.0,
+    "variants": [
+      {
+        "accent": null,
+        "boxes": {
+          "alpha": 0.55,
+          "color": "#000000",
+          "glideMs": 0,
+          "growMs": 0,
+          "on": "line",
+          "padXEm": 0.25,
+          "padYEm": 0.1,
+          "radiusEm": 0.12,
+          "text": "accent"
+        },
+        "fill": null,
+        "key": "plate",
+        "name": "Plate",
+        "outline": null,
+        "shadow": null
+      },
+      {
+        "accent": null,
+        "boxes": null,
+        "fill": null,
+        "key": "outlined",
+        "name": "Outlined",
+        "outline": {
+          "color": "#000000",
+          "widthEm": 0.04
+        },
+        "shadow": null
+      }
+    ]
+  },
+  {
+    "accent": "#FF2E5B",
+    "active": {
+      "color": null,
+      "dimUpcoming": null,
+      "glow": null,
+      "scale": 1.04
+    },
+    "autofitMin": 0.85,
+    "boxes": {
+      "alpha": 1.0,
+      "color": "accent",
+      "glideMs": 100,
+      "growMs": 150,
+      "on": "activeWord",
+      "padXEm": 0.16,
+      "padYEm": 0.08,
+      "radiusEm": 0.18,
+      "text": null
+    },
+    "case": "upper",
+    "charEm": 0.62,
+    "enter": {
+      "motion": {
+        "dyEm": 0.0,
+        "from": 0.9,
+        "kind": "pop",
+        "ms": 150,
+        "peak": 1.02
+      },
+      "per": "page"
+    },
+    "exit": {
+      "kind": "fade",
+      "minGapMs": 0,
+      "ms": 100
+    },
+    "fallbacks": [],
+    "fill": "#FFFFFF",
+    "font": {
+      "family": "TikTok Sans",
+      "italic": false,
+      "weight": 800
+    },
+    "id": "klipolo.builtin/caption.highlight",
+    "keyword": null,
+    "leadMs": 50,
+    "letterSpacingEm": 0.01,
+    "lineHeight": 1.18,
+    "name": "Highlight",
+    "outline": {
+      "color": "#000000",
+      "widthEm": 0.04
+    },
+    "pages": {
+      "breakSilenceMs": 350,
+      "lingerMs": 200,
+      "maxChars": null,
+      "maxLineWidth": {
+        "landscape": 0.7,
+        "portrait": 0.7
+      },
+      "maxLines": 2,
+      "maxPageMs": 2500,
+      "maxWords": 4,
+      "minPageMs": 600,
+      "readingCps": null,
+      "reveal": "page"
+    },
+    "position": {
+      "landscape": {
+        "seam": null,
+        "y": 0.82
+      },
+      "portrait": {
+        "seam": null,
+        "y": 0.62
+      }
+    },
+    "punctuation": "questionAndExclamation",
+    "schema": 1,
+    "shadow": {
+      "alpha": 0.45,
+      "blurEm": 0.18,
+      "color": "#000000",
+      "dxEm": 0.0,
+      "dyEm": 0.06
+    },
+    "shake": null,
+    "size": {
+      "landscape": 68.0,
+      "portrait": 88.0
+    },
+    "swatches": [
+      "#FF2E5B",
+      "#B8FF3C",
+      "#7C4DFF",
+      "#FFD60A",
+      "#2F80FF"
+    ],
+    "tiltDeg": 0.0,
+    "variants": []
+  },
+  {
+    "accent": "#FFD400",
+    "active": {
+      "color": {
+        "color": "accent",
+        "fadeMs": 80
+      },
+      "dimUpcoming": 0.55,
+      "glow": null,
+      "scale": null
+    },
+    "autofitMin": 0.85,
+    "boxes": null,
+    "case": "asSaid",
+    "charEm": 0.52,
+    "enter": {
+      "motion": {
+        "kind": "fade",
+        "ms": 100
+      },
+      "per": "page"
+    },
+    "exit": {
+      "kind": "fade",
+      "minGapMs": 300,
+      "ms": 60
+    },
+    "fallbacks": [],
+    "fill": "#FFFFFF",
+    "font": {
+      "family": "TikTok Sans",
+      "italic": false,
+      "weight": 800
+    },
+    "id": "klipolo.builtin/caption.karaoke",
+    "keyword": null,
+    "leadMs": 50,
+    "letterSpacingEm": 0.0,
+    "lineHeight": 1.12,
+    "name": "Karaoke",
+    "outline": {
+      "color": "#000000",
+      "widthEm": 0.07
+    },
+    "pages": {
+      "breakSilenceMs": 500,
+      "lingerMs": 200,
+      "maxChars": {
+        "landscape": 42,
+        "portrait": 42
+      },
+      "maxLineWidth": {
+        "landscape": 0.7,
+        "portrait": 0.7
+      },
+      "maxLines": 2,
+      "maxPageMs": 4000,
+      "maxWords": 8,
+      "minPageMs": 1000,
+      "readingCps": null,
+      "reveal": "page"
+    },
+    "position": {
+      "landscape": {
+        "seam": null,
+        "y": 0.85
+      },
+      "portrait": {
+        "seam": null,
+        "y": 0.64
+      }
+    },
+    "punctuation": "keep",
+    "schema": 1,
+    "shadow": {
+      "alpha": 0.6,
+      "blurEm": 0.1,
+      "color": "#000000",
+      "dxEm": 0.0,
+      "dyEm": 0.04
+    },
+    "shake": null,
+    "size": {
+      "landscape": 60.0,
+      "portrait": 78.0
+    },
+    "swatches": [
+      "#FFD400",
+      "#39E508",
+      "#2F80FF",
+      "#FF2E5B",
+      "#FFFFFF"
+    ],
+    "tiltDeg": 0.0,
+    "variants": []
+  },
+  {
+    "accent": "#FFE500",
+    "active": {
+      "color": null,
+      "dimUpcoming": null,
+      "glow": null,
+      "scale": 1.06
+    },
+    "autofitMin": 0.7,
+    "boxes": null,
+    "case": "upper",
+    "charEm": 0.38,
+    "enter": {
+      "motion": {
+        "dyEm": 0.0,
+        "from": 0.5,
+        "kind": "pop",
+        "ms": 180,
+        "peak": 1.15
+      },
+      "per": "page"
+    },
+    "exit": {
+      "kind": "cut"
+    },
+    "fallbacks": [
+      {
+        "family": "Rubik",
+        "italic": true,
+        "script": "Cyrl",
+        "weight": 900
+      }
+    ],
+    "fill": "#FFFFFF",
+    "font": {
+      "family": "Bangers",
+      "italic": false,
+      "weight": 400
+    },
+    "id": "klipolo.builtin/caption.loud",
+    "keyword": {
+      "color": "accent",
+      "gain": "#3DFF5C",
+      "glow": {
+        "alpha": 0.5,
+        "blurEm": 0.3,
+        "color": null
+      },
+      "loss": "#FF3030",
+      "scale": 1.15,
+      "words": "power"
+    },
+    "leadMs": 50,
+    "letterSpacingEm": 0.02,
+    "lineHeight": 1.0,
+    "name": "Loud",
+    "outline": {
+      "color": "#000000",
+      "widthEm": 0.14
+    },
+    "pages": {
+      "breakSilenceMs": 250,
+      "lingerMs": 250,
+      "maxChars": null,
+      "maxLineWidth": {
+        "landscape": 0.6,
+        "portrait": 0.75
+      },
+      "maxLines": 1,
+      "maxPageMs": 1200,
+      "maxWords": 2,
+      "minPageMs": 250,
+      "readingCps": null,
+      "reveal": "page"
+    },
+    "position": {
+      "landscape": {
+        "seam": null,
+        "y": 0.72
+      },
+      "portrait": {
+        "seam": null,
+        "y": 0.56
+      }
+    },
+    "punctuation": "questionAndExclamation",
+    "schema": 1,
+    "shadow": {
+      "alpha": 1.0,
+      "blurEm": 0.0,
+      "color": "#000000",
+      "dxEm": 0.03,
+      "dyEm": 0.08
+    },
+    "shake": null,
+    "size": {
+      "landscape": 100.0,
+      "portrait": 130.0
+    },
+    "swatches": [
+      "#FFE500",
+      "#3DFF5C",
+      "#FF3030",
+      "#2F80FF",
+      "#FFFFFF"
+    ],
+    "tiltDeg": 3.0,
+    "variants": []
+  }
+]

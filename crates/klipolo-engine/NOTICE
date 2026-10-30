@@ -1,0 +1,9 @@
+Klipolo engine
+
+Files under src/vendor/cap/ are derived from Cap (https://github.com/CapSoftware/Cap),
+commit d327051c175aa092c06ad9fc6684298b1b5fed6b, Copyright (c) 2023-present Cap Software, Inc.,
+and are used under the GNU Affero General Public License version 3 (AGPL-3.0), the licence
+Klipolo is distributed under (LICENSE at the repository root).
+Each file names its Cap source path and lists Klipolo's changes in its header.
+
+FFmpeg 9.0.2 is used under the LGPL version 2.1 or later and is dynamically linked.

@@ -1,0 +1,114 @@
+[package]
+name = "klipolo-engine"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+publish = false
+description = "Klipolo preview and export engine (wgpu compositor with vendored Cap modules)"
+
+[dependencies]
+klipolo-model = { path = "../klipolo-model" }
+# The cursor file and its bounded track, shared with the recorder and chat.
+klipolo-cursor = { path = "../klipolo-cursor" }
+# OS services (PS): clock, durable files, power, QoS, memory pressure, paths, processes, audio route.
+klipolo-platform = { path = "../klipolo-platform" }
+# Fonts: the bundled set, the one face resolver, the fallback chain and the per-run CJK rule (and its
+# `unicode-script`).
+klipolo-fonts = { path = "../klipolo-fonts" }
+# Vendored Cap code refers to the crate as `ffmpeg`. Only the libraries the engine uses (libavfilter for atempo), so the
+# app links and ships exactly these (no libavdevice).
+ffmpeg = { package = "ffmpeg-next", version = "=9.0.0", default-features = false, features = ["codec", "filter", "format", "software-resampling", "software-scaling"] }
+# Pinned with ffmpeg-next: the bindings tested against FFmpeg 9.0.2.
+ffmpeg-sys-next = { version = "=9.0.0", default-features = false }
+# Frame server: loopback websocket; `Bytes` frames go out without copying.
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws", "query"] }
+bytes = "1"
+getrandom = "0.3"
+futures = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "fs"] }
+tracing = "0.1"
+ts-rs = "12"
+num_cpus = "1"
+tempfile = "3"
+# Export job ids, and the CRC-32 that checks each finished segment.
+uuid = { version = "1", features = ["v4"] }
+crc32fast = "1"
+# Compositor: wgpu 25 as pinned by Cap @ d327051; image decodes background (and later image-layer) files.
+bytemuck = { version = "1.7", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+wgpu = { version = "25", features = ["wgpu-core"] }
+# Effect shaders: the naga wgpu 25 already builds, so a broken WGSL effect reports its line before reaching the GPU.
+# `wgsl-out`: agent WGSL is re-emitted after hardening, then parsed and validated again.
+naga = { version = "25", features = ["wgsl-in", "wgsl-out"] }
+# At the lockfile's versions: `contrib_key`, the SHA-256 of a contribution's definition and source, and
+# the render worker's frames on its reply lines (base64).
+sha2 = "0.10.9"
+base64 = "0.22.1"
+# Text layers: glyphon 0.9 as pinned by Cap @ d327051 (wgpu 25); LUTs upload as Rgba16Float via `half`.
+glyphon = "0.9"
+# Outlines stroked as glyphs of their own, and scene text's glyph outlines (`render::scene::text_atlas`):
+# the rasteriser cosmic-text already uses (in the lockfile).
+swash = "0.2.10"
+# A caption page's words and lines in fixed-capacity arrays (`render::captions::layout`).
+arrayvec = "0.7"
+# Scene paths: fills and strokes tessellated once per path and setting (`render::scene::paths`).
+lyon_tessellation = { version = "1.0.23", default-features = false, features = ["std"] }
+# SVG flattened into scene paths in the render worker only (`make::svg`): no text, no fonts, no svgz, no writer.
+usvg = { version = "0.48.1", default-features = false }
+# Scene text, at the lockfile's version (already built through cosmic-text): grapheme clusters and words
+# (`render::scene::text_units`); `swash` above strokes its glyphs' outlines for the text atlas.
+unicode-segmentation = "1.13.3"
+half = { version = "2", features = ["bytemuck"] }
+# Audio: Cap's cpal fork (macOS streams stop and release the device on drop), the mixer's ring and the PCM cache.
+cpal = { git = "https://github.com/CapSoftware/cpal", rev = "6013cb5f8bd3" }
+memmap2 = "0.9"
+ringbuf = "0.4"
+# EBU R128 loudness (per source while decoding, and of the mix for the project's loudness target).
+ebur128 = "0.1"
+# errno values in FFmpeg errors.
+libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cidre = { git = "https://github.com/CapSoftware/cidre", rev = "bf84b67079a8", default-features = false, features = ["macos_12_7", "cv", "cf", "cg", "av", "blocks", "async", "dispatch", "io_surface", "mtl", "vt", "core_audio"] }
+# IOSurface zero-copy import into wgpu (vendored iosurface_texture.rs).
+foreign-types = "0.5"
+metal = "0.31"
+objc2 = "0.6"
+# Native preview: the NSView under the webview (objc2-app-kit, as wry and tao use it), the drawable's presented
+# handler (block, as metal uses it) and a notification block (block2, as objc2 uses it). All already in the lockfile.
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSResponder", "NSView", "NSWindow", "NSGraphics", "NSColor"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry", "NSString", "NSProcessInfo"] }
+block = "0.1"
+block2 = "0.6"
+wgpu-core = "25"
+wgpu-hal = { version = "25", features = ["metal"] }
+
+[features]
+# The on-device trial harness's measured builds only (the app's `trial` feature turns it on), and the measurement
+# tests: test-only switches, such as the ProRes in-flight bound for the A/B, and measurement diagnostics (`frames_read`,
+# `reader_ns`; `scrub_drag`'s breakdown). A shipped build never contains it.
+trial = []
+# Test constructors that bypass the registry's own build (`Registry::builtin_with_test_shader`): the engine's tests turn
+# it on through the dev-dependency on itself below. A shipped build never contains it.
+test-support = []
+
+[dev-dependencies]
+klipolo-engine = { path = ".", features = ["test-support"] }
+tokio = { version = "1", features = ["test-util"] }
+# `camera::check_plan`: the Auto zoom tests check what the engine plans against the camera's rules.
+klipolo-cursor = { path = "../klipolo-cursor", features = ["test-util"] }
+# `fake::RecordingDurable`: a full disk injected into the thumbnail writes.
+klipolo-platform = { path = "../klipolo-platform", features = ["fake"] }
+# The version axum 0.8 builds (`cargo tree -i tokio-tungstenite`), so only one copy compiles.
+tokio-tungstenite = "0.29"
+# naga's Metal writer on Linux too, for `tests/guard_limits.rs`: the hardened text as wgpu compiles it on the Mac, on the
+# main process's 2 MiB stack. The same naga; no new crates.
+naga = { version = "25", features = ["msl-out"] }
+
+[[test]]
+# AppKit wants the main thread: the native preview's placement test runs without the test harness.
+name = "native_view"
+harness = false

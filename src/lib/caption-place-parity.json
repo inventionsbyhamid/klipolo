@@ -1,0 +1,86 @@
+[
+  {
+    "name": "bold",
+    "style": "klipolo.builtin/caption.bold",
+    "format": "portrait",
+    "place": null,
+    "adSafe": false,
+    "seam": null,
+    "blockH": 0.109375,
+    "centre": [
+      0.5,
+      0.62
+    ],
+    "width": 0.7
+  },
+  {
+    "name": "arcade at a seam",
+    "style": "klipolo.builtin/caption.arcade",
+    "format": "portrait",
+    "place": null,
+    "adSafe": false,
+    "seam": 0.5,
+    "blockH": 0.125,
+    "centre": [
+      0.5,
+      0.5
+    ],
+    "width": 0.66
+  },
+  {
+    "name": "ad-safe",
+    "style": "klipolo.builtin/caption.bold",
+    "format": "portrait",
+    "place": null,
+    "adSafe": true,
+    "seam": null,
+    "blockH": 0.109375,
+    "centre": [
+      0.4666666666666667,
+      0.5953125
+    ],
+    "width": 0.7
+  },
+  {
+    "name": "placed",
+    "style": "klipolo.builtin/caption.bold",
+    "format": "portrait",
+    "place": 0.3,
+    "adSafe": false,
+    "seam": null,
+    "blockH": 0.109375,
+    "centre": [
+      0.5,
+      0.3
+    ],
+    "width": 0.7
+  },
+  {
+    "name": "landscape",
+    "style": "klipolo.builtin/caption.clean",
+    "format": "landscape",
+    "place": null,
+    "adSafe": false,
+    "seam": null,
+    "blockH": 0.11748148148148148,
+    "centre": [
+      0.5,
+      0.88
+    ],
+    "width": 0.8
+  },
+  {
+    "name": "square",
+    "style": "klipolo.builtin/caption.bold",
+    "format": "square",
+    "place": null,
+    "adSafe": false,
+    "seam": null,
+    "blockH": 0.175,
+    "centre": [
+      0.5,
+      0.62
+    ],
+    "width": 0.7
+  }
+]
