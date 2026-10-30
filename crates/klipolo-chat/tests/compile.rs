@@ -256,8 +256,8 @@ fn cut_snaps_to_word_edges_with_padding() {
     assert_eq!(out.refusals, vec![]);
     let words = spoken(&p, &speech);
     let at = |text: &str| {
-        (words.shown(&p, &speech))
-            .position(|(_, t)| t == text)
+        (words.words.iter())
+            .position(|w| words.text(w, &p, &speech) == text)
             .unwrap()
     };
     let padded = word_cut(&words, at("today"), at("we"), 30);
