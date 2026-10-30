@@ -616,7 +616,7 @@ fn longer_projects_fall_back_to_sentence_starts_then_fewer_lines() {
     );
     assert!(lines.iter().all(|l| !l.contains("[pause")));
 
-    // Two hours (48 copies): every second (third ...) line of both, still from start to end.
+    // Two hours (48 copies): every second (third ...) line, still from start to end.
     let inputs = repeated(48);
     let ctx = inputs.context(&late_view());
     let text = ctx.text.clone();
@@ -631,10 +631,11 @@ fn longer_projects_fall_back_to_sentence_starts_then_fewer_lines() {
     };
     let every = heading("Transcript");
     assert!(
-        every.starts_with("## Transcript (sentence starts, every ") && every.ends_with(" line)"),
+        every.starts_with("## Transcript (sentence starts, every ")
+            && every.ends_with(" line plus those near the playhead and selection)"),
         "{every}"
     );
-    assert!(heading("Scenes").starts_with("## Scenes (kind and who only, every "));
+    assert!(heading("Scenes").starts_with("## Scenes (kind and who only"));
     let lines = timed_lines(&text, "Transcript");
     assert!(times_of(lines[0]).0 < 1.0);
     assert!(times_of(lines.last().unwrap()).0 > 48.0 * 155.0 - 600.0);
@@ -952,5 +953,75 @@ fn free_text_cannot_start_a_section() {
     assert!(
         scenes.contains("[19.0-20.0] title: A title card Text on screen: \"Say \\\"hi\\\" now\""),
         "{scenes}"
+    );
+}
+
+/// The `n` of a heading's `every nth line`, 1 when every line shows.
+fn every_of(text: &str, name: &str) -> usize {
+    let head = text
+        .lines()
+        .find(|l| l.starts_with(&format!("## {name}")))
+        .unwrap();
+    head.split("every ").nth(1).map_or(1, |rest| {
+        rest.trim_start_matches(|c: char| !c.is_ascii_digit())
+            .split(|c: char| !c.is_ascii_digit())
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap()
+    })
+}
+
+#[test]
+fn thinning_keeps_what_is_near_the_playhead_and_selection() {
+    // A copy's transcript lines, as an hour shows them all (sentence starts).
+    let hour = repeated(24).context(&late_view()).text;
+    let copy: Vec<&str> = timed_lines(&hour, "Transcript")
+        .into_iter()
+        .filter(|l| times_of(l).0 < 155.0)
+        .collect();
+    // Two hours: the playhead at 124.0 s into copy 26 (from 3876.0 s), a selection of 100.0 to 110.0 s into copy 41
+    // (from 6201.6 s).
+    let view = View {
+        playhead_us: secs(3876.0 + 124.0),
+        selection: Some(RangeUs {
+            start: secs(6201.6 + 100.0),
+            end: secs(6201.6 + 110.0),
+        }),
+    };
+    let ctx = repeated(48).context(&view);
+    assert!(ctx.fits(), "{} tokens", ctx.tokens);
+    assert!(every_of(&ctx.text, "Transcript") > 1);
+    let shown = timed_lines(&ctx.text, "Transcript");
+    // Every line reaching within 30 s of the playhead, and every line reaching into the selection, shows.
+    for (copy_start, from, to) in [(3876.0, 94.0, 154.0), (6201.6, 100.0, 110.0)] {
+        let near: Vec<&&str> = copy
+            .iter()
+            .filter(|l| {
+                let (a, b) = times_of(l);
+                a <= to - 0.5 && b >= from + 0.5
+            })
+            .collect();
+        assert!(!near.is_empty(), "{near:#?}");
+        for line in near {
+            let (a, b) = times_of(line);
+            let rest = &line[line.find(']').unwrap() + 1..];
+            let moved = format!("[{:.1}-{:.1}]{rest}", a + copy_start, b + copy_start);
+            assert!(
+                shown.contains(&moved.as_str()),
+                "{moved} near the playhead or selection"
+            );
+        }
+    }
+    // The larger section, the transcript, is thinned first and at least as much as the scenes.
+    assert!(every_of(&ctx.text, "Transcript") >= every_of(&ctx.text, "Scenes"));
+    // With no scene log, only the transcript is thinned.
+    let mut inputs = repeated(48);
+    inputs.scenes.clear();
+    let text = inputs.context(&view).text;
+    assert!(every_of(&text, "Transcript") > 1);
+    assert!(
+        text.contains("\n## Scenes\nNo scene log yet: c1-c48.\n"),
+        "{text}"
     );
 }
