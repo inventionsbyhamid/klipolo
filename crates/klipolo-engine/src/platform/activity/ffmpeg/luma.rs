@@ -65,11 +65,11 @@ unsafe extern "C" fn hardware_format(
 }
 
 /// The hardware device a decoder uses; released when dropped.
-pub(super) struct Hardware(*mut AVBufferRef);
+pub(crate) struct Hardware(*mut AVBufferRef);
 
 impl Hardware {
     /// Points `decoder` at the platform's hardware decoder when its codec has one and the device opens.
-    pub(super) fn attach(decoder: &mut ffmpeg::decoder::Video) -> Option<Hardware> {
+    pub(crate) fn attach(decoder: &mut ffmpeg::decoder::Video) -> Option<Hardware> {
         let (kind, _) = DEVICE?;
         let codec = decoder.codec()?;
         // SAFETY: the codec's static configuration table, read until its end (null); then a device created and handed
