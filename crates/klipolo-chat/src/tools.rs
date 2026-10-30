@@ -252,7 +252,8 @@ impl fmt::Display for ToolError {
 
 impl std::error::Error for ToolError {}
 
-/// The longest time the model stores, in seconds: a number of seconds past it reads as how it misses (`missed_by`).
+/// The longest time the model stores, in seconds: a number given past it, either way, is said as "a number past 86400"
+/// rather than printed (`given`).
 const LONGEST_SECS: f64 = (MAX_TIME_US / US_PER_SEC) as f64;
 
 /// Seconds as an error says them: at most three decimals ("12.123", "15", "-1").
