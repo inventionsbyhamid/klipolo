@@ -1297,7 +1297,11 @@ fn a_call_failing_part_way_leaves_the_working_copy_as_it_was() {
             ),
         ],
     );
-    assert!(refused_to_model(&out, 1).starts_with("fixCaptionWords: "));
+    // The model's own refusal of the second op (`model.fix.range`), so the call did fail part-way.
+    assert_eq!(
+        refused_to_model(&out, 1),
+        "fixCaptionWords: A word fix needs a start before its end."
+    );
     // The first "Caden" fix, applied before the second failed, is gone with the call; the next call met the copy as
     // it was.
     let additions = out.additions.expect("the others apply");
