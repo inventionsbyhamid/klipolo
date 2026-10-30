@@ -377,6 +377,12 @@ fn a_cut_past_a_piece_removes_it_and_more_footage_adds_pieces() {
         0,
         "the third piece kept its place in the song"
     );
+    // As one step: one undo takes back the footage and the music's new pieces together.
+    let mut doc = Document::new(short.clone()).unwrap();
+    doc.apply(&tx(ops)).unwrap();
+    assert_eq!(*doc.project(), long);
+    doc.undo().unwrap();
+    assert_eq!(*doc.project(), short);
 
     // A long song grows with the video up to the song's own length, then starts again.
     let p = with_music(&video(100.0), "song", MusicOpts::default());
