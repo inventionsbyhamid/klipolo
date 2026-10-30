@@ -1,0 +1,63 @@
+{
+  "scene": 1,
+  "duration": 5,
+  "params": [
+    { "key": "count", "label": "Count", "type": "int", "min": 0, "max": 40, "default": 20 },
+    { "key": "pace", "label": "Pace", "type": "float", "min": 0, "max": 30.5, "default": 10 },
+    { "key": "headline", "label": "Headline", "type": "text", "default": "Big news", "maxLen": 24 }
+  ],
+  "nodes": [
+    {
+      "id": "card",
+      "class": "panel",
+      "type": "group",
+      "box": [0.1, 0.1, 0.8, 0.3],
+      "perspective": 800,
+      "modifiers": { "rotateY": { "type": "oscillate", "freq": 0.5, "amp": 8, "decay": 0.5 } },
+      "children": [
+        {
+          "id": "headline",
+          "class": "words",
+          "type": "text",
+          "text": "$headline",
+          "case": "upper",
+          "split": "chars",
+          "stagger": { "each": 0.125, "from": "center" },
+          "size": 72,
+          "animate": {
+            "opacity": [{ "t": 0, "v": 0 }, { "t": 0.5, "v": 1 }],
+            "blur": [{ "t": 0, "v": 10 }, { "t": 0.5, "v": 0 }],
+            "x": [{ "t": 0, "v": -30, "unit": "px" }, { "t": 0.5, "v": 0, "unit": "px", "ease": "power2.out" }]
+          }
+        }
+      ]
+    },
+    {
+      "id": "dots",
+      "type": "repeat",
+      "times": 6,
+      "gap": ["40px", 0],
+      "box": [0.1, 0.6, 0.05, 0.05],
+      "children": [{ "type": "text", "text": "$i", "size": 24, "case": "lower" }]
+    },
+    {
+      "id": "spray",
+      "type": "emitter",
+      "box": [0.5, 0.5, 0, 0],
+      "burst": "$count",
+      "rate": "$pace",
+      "life": 1.5,
+      "child": { "type": "ellipse", "box": [0, 0, 0.01, 0.01], "fill": "#FFFFFF" }
+    }
+  ],
+  "timeline": [
+    {
+      "from": ["#card", ".panel", "#dots"],
+      "dur": 0.5,
+      "y": "20px",
+      "opacity": 0,
+      "stagger": { "amount": 0.3, "from": "edges" }
+    },
+    { "to": ["#dots", "group"], "at": "<0.2", "dur": 0.4, "scale": 1.05, "yoyo": true, "repeat": 1 }
+  ]
+}

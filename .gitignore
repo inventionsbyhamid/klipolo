@@ -14,3 +14,9 @@
 .env
 .env.*
 *.log
+
+# Build output
+target/
+.build/
+node_modules/
+dist/

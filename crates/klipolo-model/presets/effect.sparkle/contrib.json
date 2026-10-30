@@ -1,0 +1,76 @@
+{
+  "id": "klipolo.builtin/effect.sparkle",
+  "kind": "effect",
+  "name": "Sparkle",
+  "params": [
+    {
+      "key": "spacing",
+      "label": "Spacing",
+      "type": "float",
+      "min": 0.0,
+      "max": 160.0,
+      "default": 24.0,
+      "step": null,
+      "unit": "px"
+    },
+    {
+      "key": "size",
+      "label": "Glint size",
+      "type": "float",
+      "min": 2.0,
+      "max": 48.0,
+      "default": 16.0,
+      "step": null,
+      "unit": "px"
+    },
+    {
+      "key": "speed",
+      "label": "Twinkle speed",
+      "type": "float",
+      "min": 0.0,
+      "max": 4.0,
+      "default": 1.0,
+      "step": null,
+      "unit": null
+    },
+    {
+      "key": "amount",
+      "label": "Amount",
+      "type": "float",
+      "min": 0.0,
+      "max": 2.0,
+      "default": 1.0,
+      "step": null,
+      "unit": null
+    },
+    {
+      "key": "color",
+      "label": "Colour",
+      "type": "color",
+      "default": "#FFFFFF",
+      "alpha": false
+    }
+  ],
+  "description": "Twinkling four-point glints on the visible parts of a layer: text, a logo or a product shot.",
+  "tags": [
+    "sparkle",
+    "glitter",
+    "shine",
+    "twinkle",
+    "stars",
+    "magic",
+    "text",
+    "logo"
+  ],
+  "padding": {
+    "px": 0.0,
+    "param": "size",
+    "perUnit": 1.0,
+    "maxPx": 48.0
+  },
+  "provenance": {
+    "madeBy": "Klipolo",
+    "createdAtMs": 1793059200000,
+    "license": "original"
+  }
+}

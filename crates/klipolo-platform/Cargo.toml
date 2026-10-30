@@ -1,0 +1,61 @@
+[package]
+name = "klipolo-platform"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Klipolo's OS services (clock, durable files, followed folders, power, QoS, memory pressure, paths, processes, audio route, eyedropper, network path, install place) with macOS, Windows and Linux backends"
+
+[features]
+# The test doubles in `fake` (always on in this crate's own tests), for other crates' tests.
+fake = []
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+ts-rs = "12"
+tracing = "0.1"
+# `process::worker_command` builds the export worker's command (the caller's runtime spawns it).
+tokio = { version = "1", features = ["process"] }
+# Known folders: ~/Movies, FOLDERID_Videos, XDG_VIDEOS_DIR (the version tauri already builds).
+dirs = "7"
+# Physical cores for `caps` (hardware classes, model thread counts); the version klipolo-engine already builds.
+num_cpus = "1"
+# `process::lower_self` is the speech wire's `lower` (one implementation, which klipolo-asr shares).
+klipolo-speech-wire = { path = "../klipolo-speech-wire" }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Same rev and features as klipolo-engine, so both share one build: dispatch (memory pressure), core_audio (route); plus
+# nw (`NWPathMonitor`, the network path), which the engine gets through this crate.
+cidre = { git = "https://github.com/CapSoftware/cidre", rev = "bf84b67079a8", default-features = false, features = ["macos_12_7", "cv", "cf", "cg", "av", "blocks", "async", "dispatch", "io_surface", "mtl", "vt", "core_audio", "nw"] }
+objc2 = "0.6"
+# The Dock icon's menu (`dock`): the app's NSApplication delegate, NSMenu and NSMenuItem (the version wry, tao and the
+# engine already build); NSWorkspace's notification centre hears the wake from sleep (`power::on_wake`). The eyedropper
+# (`screen_color`): NSColorSampler and the colour it answers, in sRGB (`objc2-core-foundation` gives
+# NSColor its component getters).
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSMenu", "NSMenuItem", "NSResponder", "NSWorkspace", "objc2-core-foundation", "NSColor", "NSColorSampler", "NSColorSpace", "block2"] }
+# NSArray, NSDictionary and NSValue read IOPowerSources' battery (toll-free bridged); NSFileManager, NSURL and NSError
+# move a folder to the Trash; NSNotification, NSOperation and block2 observe the wake with a block.
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSDictionary", "NSEnumerator", "NSError", "NSFileManager", "NSGeometry", "NSNotification", "NSOperation", "NSProcessInfo", "NSString", "NSURL", "NSValue", "block2"] }
+# The wake observer's block and the eyedropper's (the version the lockfile already has).
+block2 = "0.6"
+# The fonts a font manager activated through CoreText (`fonts::activated_font_files`); the versions the lockfile
+# lockfile already has.
+objc2-core-text = { version = "0.3", default-features = false, features = ["std", "CTFontManager"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFURL"] }
+
+[target.'cfg(windows)'.dependencies]
+# QueryPerformanceCounter, GetFileType and GetDiskFreeSpaceExW, error codes; RtlGetVersion for the OS version;
+# OpenProcess (is a process alive) and IsWow64Process2 (the CPU's own architecture); GlobalMemoryStatusEx (this
+# computer's memory) and K32GetProcessMemoryInfo (a child's); NtQuerySystemInformation (the boot time, as the boot id)
+# and GetFileInformationByHandle (a file's identity).
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Performance", "Win32_System_ProcessStatus", "Win32_System_SystemInformation", "Win32_System_Threading", "Wdk_System_SystemInformation", "Wdk_System_SystemServices"] }
+# The Recycle Bin (`folder::move_to_trash`): `IFileOperation` is a COM interface, which windows-sys doesn't carry. The
+# version already in the lockfile.
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell"] }
+# `#[implement]` (the Recycle Bin's progress sink) names `windows_core` directly; the version `windows` uses.
+windows-core = "0.62"
+
+[dev-dependencies]
+tempfile = "3"

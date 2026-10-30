@@ -1,0 +1,38 @@
+[package]
+name = "klipolo-model"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Klipolo project model v2: types, operations, validation and undo"
+
+[dependencies]
+# Fixed-capacity arrays for a caption page's lines (`captions::lines`): breaking a page allocates nothing.
+arrayvec = "0.7"
+# `rc`: a project's word fixes and looks are shared lists (`Arc<Vec<…>>`, copied only when an op changes them), written
+# as plain arrays.
+serde = { version = "1.0.229", features = ["derive", "rc"] }
+# Exact float parsing, so saving and reopening a project changes nothing.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+uuid = { version = "1", features = ["v4"] }
+# `no-serde-warnings`: caption style files refuse unknown fields (`deny_unknown_fields`), which ts-rs has no use for
+# and would otherwise print a note about on every build.
+ts-rs = { version = "12", features = ["no-serde-warnings"] }
+# JSON schemas for chat tools, MCP and the registry's op list.
+schemars = "1.2"
+# SIMD substring search for the one-field read of projects saved before the cursor record (already in the tree through
+memchr = "2"
+
+[features]
+# Tests only, and only in debug builds (`debug_assertions`): after every op of a batch, `apply_ops` checks its settled
+# project against the whole-project normalise as it is and as it was before batches settled incrementally. Release builds never compile it.
+verify-normalize = []
+# Counts batch applications (`apply_part`, which `apply_ops` goes through) per thread, for the app's one-apply test
+# Tests only: never in a release build.
+count-applies = []
+
+[dev-dependencies]
+# The crate's own tests run with that check, so every op they apply proves the incremental normalise exact. The app
+# never enables it. Cargo unifies features within one invocation, so a `cargo test` that builds other crates together
+# with this one (CI's `-p klipolo-model -p klipolo-platform -p klipolo-engine`) runs those crates' debug tests with the check
+# too: slower, and more coverage, never a different result.
+klipolo-model = { path = ".", features = ["verify-normalize"] }

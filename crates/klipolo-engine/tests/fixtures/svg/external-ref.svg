@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 100 100">
+  <!-- Names a local file and a web address: neither may be opened. -->
+  <rect width="100" height="100" fill="#202020"/>
+  <image href="file:///etc/hosts" width="50" height="50"/>
+  <image xlink:href="http://example.com/tracker.png" x="50" width="50" height="50"/>
+</svg>

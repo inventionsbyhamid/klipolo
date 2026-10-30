@@ -1,0 +1,227 @@
+{
+  "label": "Effects",
+  "ops": [
+    {
+      "type": "addEffect",
+      "target": {
+        "type": "item",
+        "id": "adj"
+      },
+      "effect": {
+        "id": "",
+        "effect": "klipolo.builtin/effect.blur",
+        "enabled": true,
+        "params": {
+          "radius": 20.0
+        }
+      },
+      "index": 0
+    },
+    {
+      "type": "updateEffect",
+      "target": {
+        "type": "clip",
+        "id": "a"
+      },
+      "id": "fx",
+      "patch": {
+        "enabled": true,
+        "params": {
+          "radius": 8.0
+        },
+        "reset": [
+          "old"
+        ]
+      }
+    },
+    {
+      "type": "moveEffect",
+      "target": {
+        "type": "clip",
+        "id": "a"
+      },
+      "id": "fx",
+      "index": 0
+    },
+    {
+      "type": "removeEffect",
+      "target": {
+        "type": "item",
+        "id": "adj"
+      },
+      "id": "fx"
+    },
+    {
+      "type": "setTransition",
+      "clipId": "a",
+      "transition": {
+        "effect": "klipolo.builtin/transition.wipe",
+        "durationUs": 400000,
+        "params": {
+          "direction": "up"
+        }
+      }
+    },
+    {
+      "type": "fixWords",
+      "assetId": "mic",
+      "startUs": 1200000,
+      "endUs": 1600000,
+      "text": "Notion"
+    },
+    {
+      "type": "setWordLook",
+      "assetId": "mic",
+      "ranges": [
+        {
+          "start": 1200000,
+          "end": 1600000
+        },
+        {
+          "start": 2000000,
+          "end": 2400000
+        }
+      ],
+      "look": {
+        "color": "#32D74B",
+        "emphasis": true,
+        "size": 2,
+        "highlight": true,
+        "hidden": false,
+        "lineBreak": true
+      }
+    },
+    {
+      "type": "updateRecordingSource",
+      "recordingId": "rec",
+      "sourceId": "mic",
+      "patch": {
+        "label": "Voice",
+        "nudgeUs": -40000
+      }
+    },
+    {
+      "type": "setClipSourceMix",
+      "clipId": "a",
+      "sourceId": "mic",
+      "mix": {
+        "volume": 0.5,
+        "muted": false,
+        "effects": []
+      }
+    },
+    {
+      "type": "detachSource",
+      "clipId": "a",
+      "sourceId": "camera"
+    },
+    {
+      "type": "addMarker",
+      "recordingId": "rec",
+      "marker": {
+        "id": "m2",
+        "atUs": 30000000,
+        "kind": "manual"
+      }
+    },
+    {
+      "type": "removeMarker",
+      "recordingId": "rec",
+      "id": "m1"
+    },
+    {
+      "type": "setCursorStyle",
+      "target": {
+        "kind": "clips",
+        "ids": [
+          "a"
+        ]
+      },
+      "style": {
+        "asRecorded": false,
+        "hidden": false,
+        "look": "recorded",
+        "size": 1.25,
+        "smoothing": "light",
+        "click": "ripple",
+        "clickColor": "#FFFFFF80",
+        "motionBlur": 0.5
+      }
+    },
+    {
+      "type": "setCursorStyle",
+      "target": {
+        "kind": "project"
+      },
+      "style": {
+        "asRecorded": false,
+        "hidden": false,
+        "look": "recorded",
+        "size": 1.25,
+        "smoothing": "medium",
+        "click": "ripple",
+        "clickColor": "#FFFFFF80",
+        "motionBlur": 0.5
+      }
+    },
+    {
+      "type": "useRecording",
+      "clipId": "b",
+      "recordingId": "synced"
+    },
+    {
+      "type": "addRecordingSource",
+      "recordingId": "rec",
+      "source": {
+        "id": "lav",
+        "role": "mic",
+        "label": "LAV.WAV",
+        "runs": [
+          {
+            "assetId": "music",
+            "offsetUs": 0,
+            "durationUs": 50000000,
+            "driftPpm": -30.0,
+            "fileInUs": 5000000
+          }
+        ],
+        "nudgeUs": 0,
+        "mix": {
+          "volume": 1.0,
+          "muted": false,
+          "effects": []
+        },
+        "synced": {
+          "by": "hand",
+          "level": "check"
+        }
+      }
+    },
+    {
+      "type": "updateRecordingSource",
+      "recordingId": "synced",
+      "sourceId": "mic",
+      "patch": {
+        "nudgeUs": 0,
+        "runs": [
+          {
+            "assetId": "zoom",
+            "offsetUs": 0,
+            "durationUs": 609000000,
+            "driftPpm": 48.0,
+            "fileInUs": 90500000
+          }
+        ],
+        "synced": {
+          "by": "sound",
+          "level": "sure"
+        }
+      }
+    }
+  ],
+  "origin": {
+    "type": "plugin",
+    "id": "com.acme.neon",
+    "version": "1.2.0"
+  }
+}

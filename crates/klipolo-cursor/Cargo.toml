@@ -1,0 +1,25 @@
+[package]
+name = "klipolo-cursor"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Klipolo's cursor layer, pure: the cursor file (format 2), the bounded track, presses, shapes, smoothing, facts, their timeline mapping, the summary and the screen activity track"
+
+# Pure: no IO beyond `impl BufRead`, no threads, no OS. The engine, the recorder, chat and the app
+# share it, so they read a take's cursor the same way.
+[dependencies]
+crc32fast = "1"
+klipolo-model = { path = "../klipolo-model" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# `camera::check_plan`, the camera's legal-move checks as one function, and `SmoothedPath::build_capped` (the cap's
+# hand-back at a small cap), for tests only: this crate's own and its callers' (the engine's Auto zooms, chat's zoom
+# tools), through their dev-dependencies.
+test-util = []
+
+[dev-dependencies]
+# The crate itself with `test-util`, so its own integration tests can call `camera::check_plan`.
+klipolo-cursor = { path = ".", features = ["test-util"] }
+tempfile = "3"

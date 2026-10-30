@@ -1,0 +1,405 @@
+[
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "en",
+    "marks": [],
+    "segments": [
+      [
+        0,
+        15,
+        "jp"
+      ]
+    ],
+    "text": "今日は予算"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "en",
+    "marks": [],
+    "segments": [
+      [
+        0,
+        9,
+        "kr"
+      ],
+      [
+        10,
+        19,
+        "kr"
+      ]
+    ],
+    "text": "韓國語 한국어"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "en",
+    "marks": [],
+    "segments": [
+      [
+        0,
+        6,
+        "sc"
+      ]
+    ],
+    "text": "東京"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "ja",
+    "marks": [],
+    "segments": [
+      [
+        0,
+        6,
+        "jp"
+      ]
+    ],
+    "text": "東京"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "zh-Hant",
+    "marks": [],
+    "segments": [
+      [
+        0,
+        6,
+        "tc"
+      ]
+    ],
+    "text": "預算"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "ko",
+    "marks": [],
+    "segments": [
+      [
+        0,
+        6,
+        "kr"
+      ]
+    ],
+    "text": "预算"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "en",
+    "marks": [],
+    "segments": [
+      [
+        3,
+        9,
+        "sc"
+      ],
+      [
+        14,
+        23,
+        "jp"
+      ]
+    ],
+    "text": "Hi 東京 and タワー"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "en",
+    "marks": [],
+    "segments": [
+      [
+        0,
+        21,
+        "jp"
+      ]
+    ],
+    "text": "今日、東京へ。"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "en",
+    "marks": [],
+    "segments": [
+      [
+        0,
+        6,
+        "sc"
+      ],
+      [
+        10,
+        13,
+        "sc"
+      ]
+    ],
+    "text": "東京2024年"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "en",
+    "marks": [],
+    "segments": [
+      [
+        0,
+        6,
+        "jp"
+      ],
+      [
+        10,
+        13,
+        "jp"
+      ]
+    ],
+    "text": "今日😀は"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "zh-Hant",
+    "marks": [],
+    "segments": [
+      [
+        0,
+        9,
+        "tc"
+      ]
+    ],
+    "text": "ㄅㄆㄇ"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "ja",
+    "marks": [],
+    "segments": [
+      [
+        0,
+        12,
+        "jp"
+      ]
+    ],
+    "text": "「予算」"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "ja",
+    "marks": [],
+    "segments": [],
+    "text": "Plain text"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "en",
+    "marks": [
+      [
+        5,
+        8,
+        "sc"
+      ]
+    ],
+    "segments": [],
+    "text": "Hello！"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "en",
+    "marks": [],
+    "segments": [
+      [
+        0,
+        6,
+        "jp"
+      ],
+      [
+        15,
+        18,
+        "jp"
+      ]
+    ],
+    "text": "番組ＮＨＫの"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "ja",
+    "marks": [
+      [
+        0,
+        3,
+        "jp"
+      ],
+      [
+        8,
+        11,
+        "jp"
+      ]
+    ],
+    "segments": [],
+    "text": "「Hello」"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "zh-Hans",
+    "marks": [
+      [
+        13,
+        16,
+        "sc"
+      ]
+    ],
+    "segments": [],
+    "text": "Hello　world、ok"
+  },
+  {
+    "cover": {
+      "han": true,
+      "hangul": false,
+      "kana": true
+    },
+    "language": "en",
+    "marks": [],
+    "segments": [],
+    "text": "今日は"
+  },
+  {
+    "cover": {
+      "han": true,
+      "hangul": false,
+      "kana": true
+    },
+    "language": "ja",
+    "marks": [],
+    "segments": [],
+    "text": "今日、東京へ。"
+  },
+  {
+    "cover": {
+      "han": true,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "en",
+    "marks": [],
+    "segments": [
+      [
+        6,
+        9,
+        "jp"
+      ]
+    ],
+    "text": "今日は"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": true,
+      "kana": false
+    },
+    "language": "en",
+    "marks": [],
+    "segments": [
+      [
+        0,
+        9,
+        "kr"
+      ]
+    ],
+    "text": "韓國語 한국어"
+  },
+  {
+    "cover": {
+      "han": false,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "ko",
+    "marks": [
+      [
+        15,
+        18,
+        "kr"
+      ]
+    ],
+    "segments": [
+      [
+        0,
+        12,
+        "kr"
+      ]
+    ],
+    "text": "「東京」 Hi！"
+  },
+  {
+    "cover": {
+      "han": true,
+      "hangul": false,
+      "kana": false
+    },
+    "language": "en",
+    "marks": [],
+    "segments": [],
+    "text": "Hello！"
+  }
+]
