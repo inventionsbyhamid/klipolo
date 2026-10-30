@@ -327,6 +327,8 @@ impl Compiler<'_> {
         let mut adding = Phase::new(self.snapshot.clone());
         let mut waiting: Vec<(usize, Removal)> = Vec::new();
         let mut moments: Vec<(usize, &[Moment])> = Vec::new();
+        // Once a format change is proposed, the later ones in the answer follow it there, so they apply in call order.
+        let mut format_proposed = false;
         for (i, call) in calls.iter().enumerate() {
             if out.undo && is_edit(call) {
                 let reason = format!(
@@ -338,6 +340,10 @@ impl Compiler<'_> {
             }
             if let Some(said) = self.missing_analysis(call) {
                 refuse(&mut out, i, said);
+                continue;
+            }
+            if format_proposed && matches!(call, ToolCall::SetFormat { .. }) {
+                waiting.push((i, Removal::Moved(call)));
                 continue;
             }
             let addition = match call {
@@ -399,7 +405,10 @@ impl Compiler<'_> {
             });
             match tried {
                 // Judged by what it does, not by its tool: proposed with the removals.
-                Ok(tried) if tried.removes => waiting.push((i, if_it_removes)),
+                Ok(tried) if tried.removes => {
+                    format_proposed |= matches!(call, ToolCall::SetFormat { .. });
+                    waiting.push((i, if_it_removes));
+                }
                 Ok(tried) => adding.keep(tried),
                 Err(r) => refuse(&mut out, i, r),
             }

@@ -557,6 +557,51 @@ fn an_addition_that_takes_something_away_is_proposed() {
 }
 
 #[test]
+fn format_changes_stay_in_order_when_one_is_proposed() {
+    let mut p = broll(30.0);
+    p.captions.place.insert(FormatKind::Landscape, 0.8);
+    let i = inputs(&p, Speech::default(), "only vertical, then add square too");
+    let out = compile(
+        &p,
+        &i,
+        &[
+            call(
+                "setFormat",
+                r#"{"format": "portrait", "keepOthers": false}"#,
+            ),
+            call("setFormat", r#"{"format": "square", "keepOthers": true}"#),
+        ],
+    );
+    assert_eq!(out.refusals, vec![]);
+    // The first is proposed (it drops the hand-placed landscape captions), so the second waits with it, after it.
+    assert_eq!(out.additions, None);
+    let proposal = out.proposal.expect("both formats are proposed");
+    assert_eq!(
+        proposal.tx.ops,
+        vec![
+            Op::SetSettings {
+                settings: Settings {
+                    fps: 30,
+                    formats: vec![FormatKind::Portrait],
+                    primary_format: FormatKind::Portrait,
+                }
+            },
+            Op::SetSettings {
+                settings: Settings {
+                    fps: 30,
+                    formats: vec![FormatKind::Portrait, FormatKind::Square],
+                    primary_format: FormatKind::Square,
+                }
+            },
+        ]
+    );
+    assert_eq!(
+        proposal.review.after.settings.formats,
+        vec![FormatKind::Portrait, FormatKind::Square]
+    );
+}
+
+#[test]
 fn no_analysis_gives_a_friendly_refusal() {
     assert_eq!(STILL_LISTENING, "Klipolo is still listening to this clip");
     assert_eq!(ANALYZE_FIRST, "Analyze this clip first");
