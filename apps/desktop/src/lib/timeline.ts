@@ -81,10 +81,11 @@ function layersEndUs(tracks: Track[]): number {
 }
 
 /**
- * How long the video is: until the main track or its last layer with a picture of its own ends, whichever is later
- *, so a project of layers alone has a length. Sound layers, zooms and adjustment boxes never make
- * it longer; layers on a hidden or soloed-away track count (hiding is a view switch). Mirrors `klipolo_model::query::video_duration`. O(clips + layers)
- * once per main and tracks array (patches keep unchanged ones), then O(1).
+ * How long the video is: until the main track or its last layer with a picture of its own ends, whichever is later,
+ * so a project of layers alone has a length. Sound layers, zooms and adjustment boxes never make it
+ * longer; layers on a hidden or soloed-away track count (hiding is a view switch). Mirrors
+ * `klipolo_model::query::video_duration`. O(clips + layers) once per main and tracks array (patches keep unchanged
+ * ones), then O(1).
  */
 export function videoDurationUs(timeline: Pick<Timeline, 'main' | 'tracks'>): number {
   return Math.max(mainEndUs(timeline.main), layersEndUs(timeline.tracks));

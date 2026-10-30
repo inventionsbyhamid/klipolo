@@ -4,8 +4,8 @@
 //! switches and on quit.
 //!
 //! **One apply path.** Hand edits (and later chat) commit through `with_open`, so every edit is one undo step, reaches
-//! the engine and is saved. `apply_transaction` applies a batch, refusing it when the project moved on from the base the
-//! caller built it on (never rebased). Every command fails with a code the UI words, or a plain sentence (`Said`).
+//! the engine and is saved. `apply_transaction` applies a batch, refusing it when the project moved on from the base
+//! the caller built it on (never rebased). Every command fails with a code the UI words, or a plain sentence (`Said`).
 
 mod apply;
 mod create;
@@ -50,8 +50,8 @@ pub(crate) struct OpenProject {
     pub(crate) document: Document,
     /// Where it is saved.
     pub(crate) file: PathBuf,
-    /// Set when the file came from a newer Klipolo (`Project.requires`): edits are refused (`model.readOnly`), so saving
-    /// can't drop data this build doesn't understand.
+    /// Set when the file came from a newer Klipolo (`Project.requires`): edits are refused (`model.readOnly`), so
+    /// saving can't drop data this build doesn't understand.
     pub(crate) read_only: bool,
 }
 
@@ -171,8 +171,8 @@ pub fn project_apply(
 }
 
 /// Undo, as the UI's copy saw the history: when the open project moved on from the copy's revision (a change the UI
-/// hasn't merged yet is on top), it is refused with `project.moved`, so Undo never takes back a change the person hasn't
-/// seen. None: the top step as it is.
+/// hasn't merged yet is on top), it is refused with `project.moved`, so Undo never takes back a change the person
+/// hasn't seen. None: the top step as it is.
 #[tauri::command(async)]
 pub fn project_undo(
     state: State<'_, ProjectSessionState>,
@@ -209,8 +209,8 @@ fn step_at(
     })
 }
 
-/// The whole open project (the UI resynchronises with it when a patch doesn't follow its revision, and reads it when the
-/// page loads).
+/// The whole open project (the UI resynchronises with it when a patch doesn't follow its revision, and reads it when
+/// the page loads).
 #[tauri::command(async)]
 pub fn project_snapshot(
     app: AppHandle,

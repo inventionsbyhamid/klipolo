@@ -17,9 +17,9 @@ export function registerBurst(flush: (closing: boolean) => boolean): () => void 
 }
 
 /**
- * Closing's rounds at most. Today's deepest nesting takes two to three: a word colour's key settle presses into the word
- * list's queue while its words update, the queue's settle sends it, kept at close; a colour's key settle
- * pushed into its field's burst goes in the next round. Six leave room; a round with nothing pending ends it.
+ * Closing's rounds at most. Today's deepest nesting takes two to three: a word colour's key settle presses into the
+ * word list's queue while its words update, the queue's settle sends it, kept at close; a colour's key
+ * settle pushed into its field's burst goes in the next round. Six leave room; a round with nothing pending ends it.
  */
 const CLOSING_ROUNDS = 6;
 

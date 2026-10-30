@@ -206,9 +206,9 @@ fn newer_projects_refuse_edits() {
     );
 }
 
-/// Undo and redo go with the revision the UI's copy had at their turn: a change it hasn't merged yet (a chat edit) on top
-/// of the history, or another project, refuses them with `project.moved`, so Undo never takes back a change the person
-/// hasn't seen. Without a base they take the top step as it is.
+/// Undo and redo go with the revision the UI's copy had at their turn: a change it hasn't merged yet (a chat edit) on
+/// top of the history, or another project, refuses them with `project.moved`, so Undo never takes back a change the
+/// person hasn't seen. Without a base they take the top step as it is.
 #[test]
 fn undo_and_redo_refuse_a_history_the_copy_has_not_seen() {
     let dir = tempfile::tempdir().unwrap();
