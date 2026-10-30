@@ -12,12 +12,22 @@
     "tauri": "TAURI_APP_PATH=../../crates/klipolo-app TAURI_FRONTEND_PATH=. tauri"
   },
   "dependencies": {
+    "@tailwindcss/vite": "4.3.3",
     "@tauri-apps/api": "2.12.1",
+    "clsx": "2.1.1",
+    "lucide-react": "1.53.0",
+    "radix-ui": "1.7.0",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "tailwindcss": "4.3.3",
+    "zustand": "5.0.15"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.1",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.7",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
