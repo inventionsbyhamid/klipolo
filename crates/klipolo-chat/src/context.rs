@@ -15,7 +15,8 @@
 //!   the file, so a short item in a sped-up clip stays).
 //!
 //! Every time is TIMELINE seconds with one decimal, as the model reads and writes them. The same input always gives the
-//! same bytes, so the provider's prompt cache can reuse the prefix: the maps given are only looked up, never walked.
+//! same bytes, so the provider's prompt cache can reuse the prefix: the maps given are looked up, or walked into
+//! another map, never read in their own order.
 //!
 //! Budget: at most `MAX_CONTEXT_TOKENS` (`estimate_tokens`, `CHARS_PER_TOKEN` characters a token). A longer project is
 //! told more briefly, step by step until it fits: scene items keep only their kind and who (`## Scenes (kind and who
