@@ -36,7 +36,7 @@
         {
           "identifier": "main",
           "windows": ["main"],
-          "permissions": ["core:default", "core:window:allow-start-dragging"]
+          "permissions": ["core:window:allow-start-dragging", "core:window:allow-internal-toggle-maximize"]
         }
       ]
     }
