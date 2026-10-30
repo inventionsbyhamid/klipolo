@@ -745,7 +745,7 @@
   touch-action: none;
 }
 
-.tl-overview[data-fits="true"] {
+.tl-overview:not([data-fits="false"]) {
   visibility: hidden;
 }
 

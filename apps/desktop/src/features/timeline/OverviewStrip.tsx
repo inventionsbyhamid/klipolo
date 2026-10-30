@@ -1,5 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
-import { memo, useLayoutEffect, useRef, type CSSProperties, type PointerEvent, type RefObject } from 'react';
+import { memo, useEffect, useRef, type CSSProperties, type PointerEvent, type RefObject } from 'react';
 import type { Clip } from '../../bindings/Clip';
 import { useProposal } from '../../state/proposal';
 import { HEADER_PX } from './layout';
@@ -54,7 +54,9 @@ export const OverviewStrip = memo(function OverviewStrip({ main, durationUs, pps
   const outline = useRef<HTMLSpanElement>(null);
   const totalPx = (durationUs / 1e6) * pps;
 
-  useLayoutEffect(() => {
+  // After the commit, not in a layout effect: the scroller comes after the strip, so its ref isn't attached yet while
+  // the strip's layout effects run. Until placed, the strip stays hidden (no `data-fits`).
+  useEffect(() => {
     const scroller = scrollRef.current;
     const box = strip.current;
     const el = outline.current;
