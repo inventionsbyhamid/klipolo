@@ -16,7 +16,11 @@ main=$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable
 [ -f "$main" ] || { echo "refused: $app has no main executable at $main" >&2; exit 2; }
 entitlements=$repo/crates/klipolo-app/entitlements.plist
 plutil -lint -s "$entitlements"
-if grep -q 'get-task-allow' "$entitlements"; then echo "refused: $entitlements allows get-task-allow" >&2; exit 2; fi
+# The parsed plist, so a comment that names the key doesn't count.
+if plutil -convert xml1 -o - "$entitlements" | grep -q 'get-task-allow'; then
+  echo "refused: $entitlements allows get-task-allow" >&2
+  exit 2
+fi
 
 # Everything to sign before the bundle, deepest first (by the number of slashes), then by path for a stable order.
 order() {
