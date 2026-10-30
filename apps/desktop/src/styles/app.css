@@ -715,8 +715,8 @@
 
 /* ---------- Timeline ---------- */
 
-/* The ruler, then Overlays, Video (the spare height), Sounds and Music, each lane's icon in the 40 px
-   gutter. The lanes scroll sideways under the sticky gutter. */
+/* The timeline: the overview strip, the ruler, then Overlays, Video (the spare height), Sounds and Music, each lane's
+   icon in the 40 px gutter. The lanes scroll sideways under the sticky gutter; the overview strip scrolls them too. */
 .tl-panel {
   --lane-gap: 5px;
   position: relative;
@@ -732,6 +732,44 @@
     --lane-gap: 4px;
     padding-block: var(--space-4);
   }
+}
+
+.tl-overview {
+  position: relative;
+  flex: none;
+  height: 6px;
+  margin: 2px 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-bay-raised);
+  cursor: grab;
+  touch-action: none;
+}
+
+.tl-overview[data-fits="true"] {
+  visibility: hidden;
+}
+
+.ov-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--x);
+  width: var(--w);
+  border-radius: var(--radius-pill);
+  background: var(--color-clip-deep);
+}
+
+.ov-seg + .ov-seg {
+  border-left: 2px solid var(--color-bay);
+}
+
+.ov-view {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  min-width: 8px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1.5px var(--color-paper);
 }
 
 .tl-scroll {
@@ -892,7 +930,7 @@
   pointer-events: none;
 }
 
-/* Over the blocks, under the gutter: the playhead, the snap guide, drop ghosts. */
+/* Over the blocks, under the gutter: the time range, the playhead, the snap guide, drop ghosts. */
 .tl-marks {
   position: absolute;
   top: 0;
@@ -1141,6 +1179,58 @@
   line-height: 1;
   font-variant-numeric: tabular-nums;
   pointer-events: auto;
+}
+
+/* The time range you selected: paper, because it is yours. */
+.tl-range {
+  position: absolute;
+  bottom: 0;
+  background: var(--color-paper-wash);
+  border-inline: 2px solid var(--color-paper-edge);
+}
+
+.tl-range-len {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: var(--color-paper);
+  color: var(--color-navy);
+  font-size: var(--text-2xs);
+  line-height: 16px;
+  font-weight: var(--weight-strong);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tl-grip {
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 22px;
+  margin-top: -11px;
+  border-radius: 3px;
+  background: var(--color-paper);
+  box-shadow: 0 0 0 1.5px var(--color-navy);
+  cursor: ew-resize;
+  pointer-events: auto;
+}
+
+/* A 12 px pad around each grip. */
+.tl-grip::before {
+  content: "";
+  position: absolute;
+  inset: -6px -6px;
+}
+
+.tl-grip.is-start {
+  left: -4px;
+}
+
+.tl-grip.is-end {
+  right: -4px;
 }
 
 /* The playhead: a 2 px paper line through the lanes and a 12 x 14 paper head on the ruler. Never red. */

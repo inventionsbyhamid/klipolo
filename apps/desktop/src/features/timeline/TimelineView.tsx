@@ -6,6 +6,7 @@ import { useStableCallback } from '../../lib/useStableCallback';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { keyBurst } from '../../state/keyBurst';
+import { useRange } from '../../state/range';
 import { useSelection } from '../../state/selection';
 import { useUi } from '../../state/ui';
 import { BlockMenu } from './blocks/BlockMenu';
@@ -14,8 +15,10 @@ import { cancelDrag, useDragged } from './drag/controller';
 import { DropIndicator } from './DropIndicator';
 import { registerDropTarget, timelineTargetAt } from './dropTarget';
 import { useRovingFocus } from './keys/useRovingFocus';
+import { RangeSelection, rangeDragJustEnded, startRangeDrag } from './lanes/RangeSelection';
 import { BLOCK_HINT_ID, CLIP_INNER_PX, HEADER_PX, MAIN_LANE_MIN_PX, TAIL_US } from './layout';
 import { LiveRegion } from './LiveRegion';
+import { OverviewStrip } from './OverviewStrip';
 import { Playhead } from './Playhead';
 import { Ruler } from './ruler/Ruler';
 import { pxToUs, usToPx } from './scale';
@@ -57,9 +60,10 @@ function useClipPx(scrollRef: RefObject<HTMLElement | null>): number {
 
 /**
  * The project's lanes over time: the overview strip, the ruler, then Overlays, Video, Sounds and Music,
- * the gutter. Press a block to select it (the playhead jumps to its start unless it's already
+ * each with its icon in the gutter. Press a block to select it (the playhead jumps to its start unless it's already
  * inside, so S splits where the person was) and drag it to move it (`drag/controller`), or drag one of its edges to
- * trim it (`drag/trimFrame`); click empty space or the ruler to seek.
+ * trim it (`drag/trimFrame`); click empty space or the ruler to seek, drag across them to select a time range
+ * (`lanes/RangeSelection`), which Delete takes out of the video.
  *
  * Only the blocks in the viewport's window render, and they are `memo`'d on primitives with a stable `onPick`, so an
  * edit re-renders only the blocks it changed. The keyboard reaches every block (`keys/useRovingFocus`), and every
@@ -124,6 +128,14 @@ export function TimelineView() {
       registerDropTarget(null);
     };
   }, []);
+  // One selection at a time: a block picked clears the time range (making a range clears the block's).
+  useEffect(
+    () =>
+      useSelection.subscribe((s) => {
+        if (s.selectedId !== null && useRange.getState().range) useRange.getState().clear();
+      }),
+    [],
+  );
   // Unmounted mid-drag: the gesture under way ends (nothing stays shifted or dry-run), and a nudge settling commits.
   useEffect(
     () => () => {
@@ -144,9 +156,11 @@ export function TimelineView() {
   const seekTo = useStableCallback((px: number) =>
     seek(Math.min(snapToFrame(pxToUs(Math.max(0, px), pps), fps), durationUs)),
   );
-  // A click on empty lane: nothing selected, the playhead there.
+  // A click on empty lane: nothing selected, the playhead there (unless the press made a time range).
   const seekPx = (px: number) => {
+    if (rangeDragJustEnded()) return;
     select(null);
+    useRange.getState().clear();
     seekTo(px);
   };
   const view = {
@@ -168,6 +182,7 @@ export function TimelineView() {
       className="panel timeline"
     >
       <div className="tl-panel">
+        <OverviewStrip main={project.timeline.main} durationUs={durationUs} pps={pps} scrollRef={scrollRef} />
         <BlockMenu>
           <div
             ref={scrollRef}
@@ -176,6 +191,11 @@ export function TimelineView() {
             onKeyUp={roving.onKeyUp}
             onFocus={roving.onFocus}
             onBlur={roving.onBlur}
+            // A press on empty lane space starts a time range (blocks and their handles take their own presses).
+            onPointerDown={(e) => {
+              const lane = (e.target as Element).closest<HTMLElement>('.tl-lane');
+              if (lane && e.target === lane) startRangeDrag(e, lane);
+            }}
             className="tl-scroll overflow-auto"
           >
             {/* At least the view's width: while a window drag holds the lanes' window (`useViewport`), the lanes and
@@ -195,8 +215,9 @@ export function TimelineView() {
                 clipPx={clipPx}
                 onSeek={seekPx}
               />
-              {/* Over the blocks, under the gutter: the playhead, the snap guide and where a drop lands. */}
+              {/* Over the blocks, under the gutter: the time range and the playhead. */}
               <div className="tl-marks" style={{ left: HEADER_PX, width: laneWidth }}>
+                <RangeSelection pps={pps} />
                 <Playhead pps={pps} />
                 <SnapGuide ref={guideRef} />
                 <DropIndicator pps={pps} />

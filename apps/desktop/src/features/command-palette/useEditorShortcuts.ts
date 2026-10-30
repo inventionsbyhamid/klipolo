@@ -1,5 +1,9 @@
 import { useEffect, useEffectEvent } from 'react';
+import { videoDurationUs } from '../../lib/timeline';
 import { flushBursts } from '../../state/bursts';
+import { usePlayback } from '../../state/playback';
+import { useProject } from '../../state/project';
+import { useRange } from '../../state/range';
 import { useSelection } from '../../state/selection';
 import type { RunOptions } from './command';
 import { inPopup, keyOf, otherAlone, OWNS_KEYS, PAGE_LIST, primaryHeld, within } from './shortcutKeys';
@@ -21,11 +25,27 @@ const PRESSES =
 const OPTIONAL = new Set(['copy', 'cut', 'paste', 'duplicate', 'paste-effects']);
 
 /**
+ * I and O: the selected time range starts or ends at the playhead. With none yet, I selects from the
+ * playhead to the end, O from the start to the playhead.
+ */
+function markRange(edge: 'in' | 'out') {
+  const project = useProject.getState().snapshot?.project;
+  if (!project) return;
+  const durationUs = videoDurationUs(project.timeline);
+  const at = Math.min(usePlayback.getState().playheadUs, durationUs);
+  const range = useRange.getState().range;
+  useSelection.getState().select(null);
+  if (edge === 'in') useRange.getState().select(at, range && range.endUs > at ? range.endUs : durationUs);
+  else useRange.getState().select(range && range.startUs < at ? range.startUs : 0, at);
+}
+
+/**
  * Editor keyboard shortcuts, with ⌘ on a Mac and Ctrl on Windows and Linux; ⌃ alone on a Mac (the field's
  * own keys, such as ⌃K) and the Windows or Super key alone run none (`otherAlone`). ⌘K puts the cursor in the chat;
  * ⌘Z undo; ⇧⌘Z redo; ⌘O add files; ⌘E export; S split; Space play/pause; J / L play backward / forward (pressed
- * again while playing that way: double speed); K pause; with K held, J / L one frame; Delete or Backspace delete the
- * selected clip or layer; ← / → one frame (⇧ one second); ↑ / ↓ the previous or next edit; Home / End the start or end; ⌘= / ⌘− timeline zoom; ⇧Z
+ * again while playing that way: double speed); K pause; with K held, J / L one frame; Delete or Backspace delete (the
+ * selected time range, else the selected clip or layer); I / O the time range's start or end at the playhead; ← / →
+ * one frame (⇧ one second); ↑ / ↓ the previous or next edit; Home / End the start or end; ⌘= / ⌘− timeline zoom; ⇧Z
  * fit the timeline; 1 / 2 / 3 the format the preview shows; N snapping on or off; Escape clears the selection. With a
  * clip or layer selected: Q / W trim its start or end to the playhead; , and . move it a frame (⇧ ten) or a clip a
  * place; ⌘C ⌘X ⌘V ⌘D copy, cut, paste, duplicate; ⌥⌘V paste effects; ⌥↑ / ⌥↓ the track above or below.
@@ -96,6 +116,7 @@ export function useEditorShortcuts() {
       run(id);
     } else if (e.key === 'Escape') {
       useSelection.getState().select(null);
+      useRange.getState().clear();
     } else if (key === 'k' && !e.shiftKey) {
       run('pause');
     } else if ((key === 'j' || key === 'l') && !e.shiftKey) {
@@ -119,6 +140,8 @@ export function useEditorShortcuts() {
       run('zoom-fit');
     } else if (key === 'n' && !e.shiftKey) {
       run('snapping');
+    } else if ((key === 'i' || key === 'o') && !e.shiftKey) {
+      markRange(key === 'i' ? 'in' : 'out');
     } else if (['1', '2', '3'].includes(e.key) && !e.shiftKey) {
       run(`format-${e.key}`);
     } else if (e.key === ' ' && !within(e.target, PRESSES)) {

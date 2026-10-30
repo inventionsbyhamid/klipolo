@@ -5,11 +5,12 @@ import { historyAction } from '../../lib/history';
 import { labelText } from '../../lib/labels';
 import { findClip, findItem, videoDurationUs } from '../../lib/timeline';
 import { useProject } from '../../state/project';
+import { useRange } from '../../state/range';
 import { useSelection } from '../../state/selection';
 import { toast } from '../../state/toasts';
 import { useUi } from '../../state/ui';
 import { importFiles } from '../media/useImportMedia';
-import { deleteBlock } from '../timeline/keys/timelineActions';
+import { deleteBlock, deleteRange } from '../timeline/keys/timelineActions';
 import { useTimelineCommands } from '../timeline/useTimelineCommands';
 import { searchWords, type Command } from './command';
 import { useTransportCommands } from './useTransportCommands';
@@ -32,6 +33,7 @@ export function useCommands(): Command[] {
   const { t } = useLingui();
   const snapshot = useProject((s) => s.snapshot);
   const selectedId = useSelection((s) => s.selectedId);
+  const range = useRange((s) => s.range);
   const timeline = useTimelineCommands();
   const transport = useTransportCommands();
 
@@ -42,10 +44,10 @@ export function useCommands(): Command[] {
     const selectedItem = selectedId ? findItem(project, selectedId) : null;
     const selectedClip = selectedId && !selectedItem ? findClip(project, selectedId) : null;
     // A layer on a locked track can't be deleted: the action is unavailable rather than failing with a toast.
-    const deletable = Boolean((selectedItem && !selectedItem.track.locked) || selectedClip);
+    const deletable = range !== null || Boolean((selectedItem && !selectedItem.track.locked) || selectedClip);
     // A project of layers alone is a video too.
     const hasVideo = videoDurationUs(project.timeline) > 0;
-    const deleteLabel = selectedClip ? 'undo.delete.clip' : 'undo.delete.layer';
+    const deleteLabel = range ? 'undo.delete.range' : selectedClip ? 'undo.delete.clip' : 'undo.delete.layer';
     const formats = project.settings.formats;
 
     const head: Command[] = [
@@ -89,14 +91,17 @@ export function useCommands(): Command[] {
     ];
     const remove: Command = {
       id: 'delete',
-      action: selectedClip ? 'removeClip' : 'removeItem',
+      action: range ? 'deleteRanges' : selectedClip ? 'removeClip' : 'removeItem',
       group: 'edit',
       label: labelText(deleteLabel),
       shortcut: '⌫',
       keywords: searchWords(t({ id: 'command.delete.keywords', message: 'remove' })),
       enabled: deletable,
+      // The selected time range first (its footage goes, in one step), else the selected clip or layer.
       run: () => {
-        if (selectedId) deleteBlock(selectedId, deleteLabel);
+        const now = useRange.getState().range;
+        if (now) deleteRange(now);
+        else if (selectedId) deleteBlock(selectedId, deleteLabel);
       },
     };
     const view: Command[] = FORMAT_KEYS.map((format, i) => ({
@@ -120,7 +125,7 @@ export function useCommands(): Command[] {
       },
     ];
     return { head, remove, view, projectCommands };
-  }, [t, snapshot, selectedId]);
+  }, [t, snapshot, selectedId, range]);
 
   return useMemo(
     () => (own ? [...own.head, own.remove, ...transport, ...own.view, ...own.projectCommands, ...timeline] : []),

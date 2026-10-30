@@ -17,6 +17,7 @@ import { beginCommit } from '../../../state/commitQueue';
 import { keyBurst } from '../../../state/keyBurst';
 import { usePlayback } from '../../../state/playback';
 import { useProject } from '../../../state/project';
+import { useRange, type TimeRange } from '../../../state/range';
 import { useSelection } from '../../../state/selection';
 import { toast } from '../../../state/toasts';
 import { useTimelineFocus } from '../../../state/timelineFocus';
@@ -25,6 +26,7 @@ import { announce } from '../announce';
 import { dragging } from '../drag/controller';
 import { editPoints, nextEdit, previousEdit } from '../model/editPoints';
 import { clipIndexAt, mainIndex } from '../model/index';
+import { deleteRangeOps } from '../model/rangeOps';
 import { refitNote, trimRefit } from '../model/refit';
 import { deleteOps, trimToPlayheadOps } from './keyOps';
 import { focusIdOf, focusSelection, laneOrder, stepFrom, type LaneKey } from './laneOrder';
@@ -33,9 +35,9 @@ import { isMarker } from './markers';
 /*
  * What the timeline's commands do (`useTimelineCommands`; the clipboard's are in `clipboardActions`, nudges in
  * `nudge`, a layer's track and clip in `layerActions`, tracks in `trackActions`). Each reads the project when it runs
- * (after a nudge still settling has gone in: `keyBurst.after`), builds its ops with the pure builders in `keyOps` and
- * `clipboardOps`, commits them as one undo step through `useProject.apply` and says what it did in the timeline's live
- * region.
+ * (after a nudge still settling has gone in: `keyBurst.after`), builds its ops with the pure builders in `keyOps`,
+ * `clipboardOps` and `model/rangeOps`, commits them as one undo step through `useProject.apply` and says what it did
+ * in the timeline's live region.
  */
 
 /**
@@ -210,6 +212,30 @@ export function deleteBlock(id: string, undo: LabelId) {
     if (!project) return;
     const label = blockLabel(project, id);
     commit(undo, deleteOps(project, id), t({ id: 'timeline.key.deleted', message: `Deleted ${label}` }));
+  });
+}
+
+/**
+ * Delete with a time range selected: its footage goes in one `deleteRanges` step (the gap closes, attached layers
+ * follow), the range clears and the playhead waits where it began. A range past the clips says there is nothing to
+ * take out there.
+ */
+export function deleteRange(range: TimeRange) {
+  keyBurst.after(() => {
+    const project = editable();
+    if (!project) return;
+    const ops = deleteRangeOps(project, range);
+    if (ops.length === 0) {
+      toast.info(t({ id: 'timeline.range.nothing', message: 'There is no video in the selection to delete.' }));
+      return;
+    }
+    const length = formatPrecise(range.endUs - range.startUs);
+    commit('undo.delete.range', ops, t({ id: 'timeline.range.deleted', message: `Deleted ${length} of video` }), () => {
+      useRange.getState().clear();
+      const now = useProject.getState().snapshot?.project;
+      const end = now ? videoDurationUs(now.timeline) : 0;
+      usePlayback.getState().seek(Math.min(range.startUs, end));
+    });
   });
 }
 

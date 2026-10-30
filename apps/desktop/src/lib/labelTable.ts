@@ -25,6 +25,11 @@ export const TABLE = {
     message: 'Delete clip',
     comment: 'Command and undo history entry',
   }),
+  'undo.delete.range': msg({
+    id: 'undo.delete.range',
+    message: 'Delete selection',
+    comment: 'Command and undo history entry: the selected time range taken out of the video',
+  }),
   'undo.delete.layer': msg({
     id: 'undo.delete.layer',
     message: 'Delete layer',

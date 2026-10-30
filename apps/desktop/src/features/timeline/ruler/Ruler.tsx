@@ -1,4 +1,7 @@
 import { memo, type PointerEvent } from 'react';
+import { clockAnchor, clockUs } from '../../../state/playClock';
+import { usePlayback } from '../../../state/playback';
+import { startRangeDrag } from '../lanes/RangeSelection';
 import { Playhead } from '../Playhead';
 import { pxToUs, usToPx } from '../scale';
 import type { Viewport } from '../useViewport';
@@ -10,7 +13,14 @@ const LABEL_PX = 44;
 const LINE = 'var(--color-line-strong)';
 /** Minor ticks between two labelled ones. */
 const MINOR_PER_MAJOR = 5;
+/** A press this close to the playhead's head (px) grabs it: dragging it scrubs. */
+const HEAD_GRAB_PX = 7;
 
+/** Where the playhead is drawn: the running clock while playing, else the stored time. */
+function playheadNowUs(): number {
+  const { playing, playheadUs } = usePlayback.getState();
+  return playing && clockAnchor().running ? clockUs() : playheadUs;
+}
 
 interface RulerProps {
   width: number;
@@ -24,8 +34,9 @@ interface RulerProps {
 }
 
 /**
- * Time ruler: 24 px, labels at the major ticks, minor ticks between. Press or drag on it to move the
- * playhead (selection is kept). `memo`: an edit that keeps the lanes' width and window doesn't redraw its ticks
+ * Time ruler: 24 px, labels at the major ticks, minor ticks between. A press moves the playhead there;
+ * dragging from the playhead's head scrubs, and dragging anywhere else selects that time range
+ * (`lanes/RangeSelection`). `memo`: an edit that keeps the lanes' width and window doesn't redraw its ticks
  * (`onScrub` must be stable).
  */
 export const Ruler = memo(function Ruler({ width, pps, fps, viewport, onScrub }: RulerProps) {
@@ -48,11 +59,16 @@ export const Ruler = memo(function Ruler({ width, pps, fps, viewport, onScrub }:
       style={{ width }}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
-        e.currentTarget.setPointerCapture?.(e.pointerId);
+        const x = e.clientX - e.currentTarget.getBoundingClientRect().left;
+        const onHead = Math.abs(x - usToPx(playheadNowUs(), pps)) <= HEAD_GRAB_PX;
+        // The head: dragging it scrubs. Elsewhere a drag selects a time range.
+        e.currentTarget.dataset.scrubbing = String(onHead);
+        if (onHead) e.currentTarget.setPointerCapture?.(e.pointerId);
         scrub(e);
+        if (!onHead) startRangeDrag(e, e.currentTarget);
       }}
       onPointerMove={(e) => {
-        if (e.currentTarget.hasPointerCapture?.(e.pointerId)) scrub(e);
+        if (e.currentTarget.dataset.scrubbing === 'true' && e.currentTarget.hasPointerCapture?.(e.pointerId)) scrub(e);
       }}
     >
       {times.length > 0 && minorPx >= 4 && (
