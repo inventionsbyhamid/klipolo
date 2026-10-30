@@ -14,9 +14,9 @@ use std::time::Duration;
 
 use klipolo_engine::api::ExportQuality;
 use klipolo_engine::audio::loudness::{Estimate, estimate_until, measure};
-use klipolo_engine::audio::mix::{Mixdown, RATE, finish};
+use klipolo_engine::audio::mix::{ATTACK_US, Mixdown, RATE, RELEASE_US, finish};
 use klipolo_engine::audio::pcm::{Pcm, PcmKey, PcmStore};
-use klipolo_engine::audio::plan::{AudioPlan, AudioSource, audio_plan, speech_ranges};
+use klipolo_engine::audio::plan::{AudioPlan, AudioSource, JOIN_US, audio_plan, speech_ranges};
 use klipolo_engine::export::audio::{CEILING_DBTP, ExportAudio};
 use klipolo_engine::export::job::ExportJob;
 use klipolo_engine::export::naming::plan_files;
@@ -367,20 +367,23 @@ fn speech_is_the_words_with_short_gaps_joined() {
     let words = transcript(
         &[
             (1.0, 1.4, WordKind::Word),
-            // 200 ms later: under 300 ms, so the music stays down between them.
+            // 200 ms later: the music stays down between them.
             (1.6, 2.0, WordKind::Word),
-            // A pause word is a gap, not speech.
+            // A pause word is a gap, not speech: a second without words lets the music back up.
             (2.0, 3.0, WordKind::Pause),
             (3.0, 3.5, WordKind::Filler),
-            // 300 ms later: the music lifts between them.
-            (3.8, 4.2, WordKind::Word),
+            // 549 ms later: under the attack and release together (550 ms), so it stays down between sentences.
+            (4.049, 4.4, WordKind::Word),
+            // 550 ms later: the music lifts between them.
+            (4.95, 5.2, WordKind::Word),
         ],
         60.0,
         true,
     );
+    assert_eq!(JOIN_US, ATTACK_US + RELEASE_US);
     assert_eq!(
         &*speech_ranges(&p, &heard_in(&[("mic", words)], &[])),
-        [range(1.0, 2.0), range(3.0, 3.5), range(3.8, 4.2)]
+        [range(1.0, 2.0), range(3.0, 4.4), range(4.95, 5.2)]
     );
 }
 

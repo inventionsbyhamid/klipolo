@@ -12,8 +12,12 @@ use klipolo_model::speech::{LEVEL_WINDOW_US, Levels, Speech, WordKind, run_spans
 use klipolo_model::time::{RangeUs, Us, merge_ranges};
 use klipolo_model::timeline::ItemContent;
 
-/// Words closer together than this are one stretch of speech: the music stays down between them.
-pub const JOIN_US: Us = 300_000;
+use crate::audio::mix::{ATTACK_US, RELEASE_US};
+
+/// Stretches of speech closer together than this are one: the music stays down between them rather than starting back
+/// up and going down again (pumping between sentences). The attack and release together, so the ramps of two stretches
+/// never overlap.
+pub const JOIN_US: Us = ATTACK_US + RELEASE_US;
 
 /// The timeline ranges where someone speaks on the main track, sorted and at least `JOIN_US` apart: its transcripts'
 /// words (pause words are gaps), joined across gaps under `JOIN_US`. Where a file has no transcript, or past where its

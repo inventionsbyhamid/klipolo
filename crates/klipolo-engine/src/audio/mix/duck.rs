@@ -1,8 +1,11 @@
 //! Ducking's envelope (`AudioSource::duck`): how far down a ducking source is at each timeline frame. Each stretch of
 //! speech pulls it down from `ATTACK_US` before it starts, holds it there while it lasts, and lets it back up over
-//! `RELEASE_US` after it ends; where one stretch's release meets the next one's attack, the deeper of the two wins, so
-//! it never bobs up in between. The depth moves in a straight line in dB (music falls and rises evenly to the ear) and
-//! is worked out for every sample, so the gain never steps: 12 dB over 150 ms is under 0.1 dB a millisecond.
+//! `RELEASE_US` after it ends. `speech_ranges` joins stretches closer than the two together (`JOIN_US`), so between
+//! sentences the music stays down, and the ramps of the stretches it gives never overlap. Where ranges closer than that
+//! do meet (given directly), the deeper of the two ramps wins at each frame: the music comes up only as far as where
+//! the release and the next attack cross, then goes down again, without a step. The depth moves in a straight line in
+//! dB (music falls and rises evenly to the ear) and is worked out for every sample, so the gain never steps: 12 dB over
+//! 150 ms is under 0.1 dB a millisecond.
 
 use klipolo_model::time::Us;
 
