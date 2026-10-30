@@ -226,7 +226,7 @@
   font-size: var(--text-md);
   letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
-  outline: none;
+  /* No outline override: the app's focus-visible outline (2 px paper, 2 px offset) shows with the inset ring. */
   /* The window doesn't select text; a field must, to paste a key and fix a typo. */
   -webkit-user-select: text;
   user-select: text;
