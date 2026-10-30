@@ -1,5 +1,5 @@
 //! The registry's built-in tables (moved from `registry/mod.rs`, no behaviour change): look grades, motion presets,
-//! audio filter chains and the built-in shaders, and the one registry they build.
+//! audio filter chains, the built-in shaders and the motion graphic presets, and the one registry they build.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -192,7 +192,7 @@ pub(super) fn build_builtin() -> Registry {
         })
         .chain(std::iter::once((blur_id, blur.clone())))
         .collect();
-    Registry {
+    let registry = Registry {
         shaders,
         scenes: HashMap::new(),
         blur,
@@ -210,7 +210,21 @@ pub(super) fn build_builtin() -> Registry {
             .collect(),
         packs: HashMap::new(),
         catalog,
-    }
+    };
+    // The motion graphic presets (the title templates): built-ins read from their data folders (`presets`), checked
+    // and compiled once here, so every registry built from this one (the preview's, an export job's) draws them.
+    let scenes = super::presets::SCENE_BODIES.iter().map(|&(local, body)| {
+        let id = ContribId::builtin(local);
+        let def = registry
+            .catalog
+            .get(&id)
+            .expect("every scene preset is in the catalog")
+            .clone();
+        let scene = super::compile_scene(body.as_bytes(), &registry.catalog)
+            .unwrap_or_else(|problems| panic!("{local}: {problems:?}"));
+        (def, scene)
+    });
+    registry.with_scenes(scenes)
 }
 
 /// Blur as two passes, across then down, from `BLUR`.

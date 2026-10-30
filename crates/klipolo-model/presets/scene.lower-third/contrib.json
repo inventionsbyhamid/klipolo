@@ -1,0 +1,44 @@
+{
+  "id": "klipolo.builtin/scene.lower-third",
+  "kind": "scene",
+  "name": "Lower third",
+  "params": [
+    {
+      "key": "title",
+      "label": "Name",
+      "type": "text",
+      "default": "Your name",
+      "maxLen": 40
+    },
+    {
+      "key": "role",
+      "label": "Role",
+      "type": "text",
+      "default": "Your role",
+      "maxLen": 60
+    },
+    {
+      "key": "accent",
+      "label": "Accent",
+      "type": "color",
+      "default": "#FFD02E",
+      "alpha": false
+    }
+  ],
+  "description": "A name and a role at the bottom left on a dark plate, with an accent bar and line. It wipes in from the left and fills the frame. Leave the role empty to show the name alone.",
+  "tags": [
+    "lower third",
+    "name",
+    "role",
+    "speaker",
+    "interview",
+    "title",
+    "caption",
+    "intro"
+  ],
+  "provenance": {
+    "madeBy": "Klipolo",
+    "createdAtMs": 1793318400000,
+    "license": "original"
+  }
+}

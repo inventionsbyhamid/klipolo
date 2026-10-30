@@ -1,0 +1,271 @@
+{
+  "version": 1,
+  "id": "klipolo-pack",
+  "name": "Klipolo pack",
+  "license": "CC0-1.0",
+  "creator": "Klipolo",
+  "items": [
+    {
+      "id": "whoosh",
+      "name": "Whoosh",
+      "category": "sound",
+      "file": "sounds/whoosh.wav",
+      "duration_ms": 900,
+      "tags": [
+        "transition",
+        "topic change",
+        "fast",
+        "air",
+        "swipe"
+      ],
+      "sha256": "745b9642dd96d1d0d68063d187f15a56445033944e433a23157a10b682a80cbb",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "swoosh",
+      "name": "Swoosh",
+      "category": "sound",
+      "file": "sounds/swoosh.wav",
+      "duration_ms": 500,
+      "tags": [
+        "transition",
+        "quick",
+        "swipe",
+        "air",
+        "reveal"
+      ],
+      "sha256": "b47e4a9d843df29e6e9c06b69253e7b5a6a0172cadf13a4214a4551515ff020e",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "pop",
+      "name": "Pop",
+      "category": "sound",
+      "file": "sounds/pop.wav",
+      "duration_ms": 160,
+      "tags": [
+        "pop",
+        "appear",
+        "bubble",
+        "short",
+        "fun"
+      ],
+      "sha256": "f1ae5da8ab60df05230572cf25bbba6e4b8b91848b41069c73b4c016ac8f3ff8",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "click",
+      "name": "Click",
+      "category": "sound",
+      "file": "sounds/click.wav",
+      "duration_ms": 50,
+      "tags": [
+        "click",
+        "tap",
+        "button",
+        "short",
+        "ui"
+      ],
+      "sha256": "165ec01f76c8256235ba9f4573c03cf2c573dc282feb113a469f78aab57910b3",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "ding",
+      "name": "Ding",
+      "category": "sound",
+      "file": "sounds/ding.wav",
+      "duration_ms": 1600,
+      "tags": [
+        "bell",
+        "notification",
+        "correct",
+        "bright",
+        "alert"
+      ],
+      "sha256": "67a0fa3f3adda1172977fdc05f6259c9d96ddd1638a29ac98f0d55c2a762051b",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "chime",
+      "name": "Chime",
+      "category": "sound",
+      "file": "sounds/chime.wav",
+      "duration_ms": 2400,
+      "tags": [
+        "chime",
+        "bells",
+        "soft",
+        "magic",
+        "success"
+      ],
+      "sha256": "3213d4cc64242e96b00d14b38ab28c96730bebb8f8216263e3f4a03c640ff46b",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "rise",
+      "name": "Rise",
+      "category": "sound",
+      "file": "sounds/rise.wav",
+      "duration_ms": 1800,
+      "tags": [
+        "riser",
+        "build up",
+        "tension",
+        "transition",
+        "intro"
+      ],
+      "sha256": "920a41b69516813608572c02035f005d081182c7bcd772010e86edb50f2a6dc5",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "sparkle",
+      "name": "Sparkle",
+      "category": "sound",
+      "file": "sounds/sparkle.wav",
+      "duration_ms": 1400,
+      "tags": [
+        "sparkle",
+        "magic",
+        "shine",
+        "twinkle",
+        "reveal"
+      ],
+      "sha256": "f3a68fa53a36a48e7694f6c180cf84e575a5abc8341ff0c7435597ed3fe224f4",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "soft-ambient",
+      "name": "Soft ambient",
+      "category": "music",
+      "file": "music/soft-ambient.wav",
+      "duration_ms": 16000,
+      "tags": [
+        "calm",
+        "ambient",
+        "soft",
+        "background",
+        "chill",
+        "loop"
+      ],
+      "sha256": "006980cbc7fcd1fa37468356628908e71d281f4e8942ce8085c6e6555b0c2995",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "upbeat-loop",
+      "name": "Upbeat loop",
+      "category": "music",
+      "file": "music/upbeat-loop.wav",
+      "duration_ms": 16000,
+      "tags": [
+        "upbeat",
+        "happy",
+        "energetic",
+        "pop",
+        "background",
+        "loop"
+      ],
+      "sha256": "9dc2406ca6fa59daad63d2f22354417518fe00551c9b370cf287ad9e3652f57b",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "heart",
+      "name": "Heart",
+      "category": "sticker",
+      "file": "stickers/heart.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "heart",
+        "love",
+        "like",
+        "pink"
+      ],
+      "sha256": "86e02d2b5699678cb1e98d1675fb4f9e077387b51fdc2500850110403a6c76aa",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "star",
+      "name": "Star",
+      "category": "sticker",
+      "file": "stickers/star.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "star",
+        "favourite",
+        "best",
+        "gold"
+      ],
+      "sha256": "b60161f9ad0fa3110c1f02c8eda78e92d6f695ca99179344fcf14b9ed1f2997a",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "arrow",
+      "name": "Arrow",
+      "category": "sticker",
+      "file": "stickers/arrow.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "arrow",
+        "point",
+        "look",
+        "right",
+        "blue"
+      ],
+      "sha256": "c5aabe3530f79f4dba1f38289800d33c436e134b61b1aff676b0c6136298850f",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "circle",
+      "name": "Circle",
+      "category": "sticker",
+      "file": "stickers/circle.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "circle",
+        "ring",
+        "highlight",
+        "look here",
+        "orange"
+      ],
+      "sha256": "cce140e80e1f6360e8bdf32e90ac1d085c8ccc0e4c75cdf9e446ab314c0adbc0",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "check",
+      "name": "Check",
+      "category": "sticker",
+      "file": "stickers/check.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "check",
+        "tick",
+        "done",
+        "yes",
+        "green"
+      ],
+      "sha256": "83e1fb628fe2b6e9982944d548fc0a657c633677eb303ea9b5dc20dc062320ad",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "bubble",
+      "name": "Speech bubble",
+      "category": "sticker",
+      "file": "stickers/bubble.png",
+      "width": 1024,
+      "height": 1024,
+      "tags": [
+        "speech",
+        "talk",
+        "say",
+        "quote",
+        "white"
+      ],
+      "sha256": "c5df4c6ba721c096635451d122f0d7f5e6fbc4915c7ceb4aaa402ed9688594b4",
+      "license": "CC0-1.0"
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "scene": 1,
+  "duration": 4,
+  "segments": { "in": 1.2, "out": 0.6 },
+  "params": [
+    { "key": "title", "label": "Name", "type": "text", "default": "Your name", "maxLen": 40 },
+    { "key": "role", "label": "Role", "type": "text", "default": "Your role", "maxLen": 60 },
+    { "key": "accent", "label": "Accent", "type": "color", "default": "#FFD02E" }
+  ],
+  "nodes": [
+    {
+      "id": "card",
+      "type": "group",
+      "box": [0.05, 0.66, 0.56, "238px"],
+      "children": [
+        {
+          "id": "plate",
+          "type": "rect",
+          "box": [0, 0, 1, 1],
+          "fill": { "linear": [0, 0, 1, 0], "stops": [[0, "#070A14E6"], [0.6, "#070A14B3"], [1, "#070A1400"]] },
+          "radius": 10
+        },
+        {
+          "id": "tab",
+          "type": "rect",
+          "box": [0, 0, 0.008, 1],
+          "fill": "$accent",
+          "radius": 3,
+          "origin": "50% 100%",
+          "animate": { "scaleY": [{ "t": 0, "v": 0 }, { "t": 0.4, "v": 1, "ease": "power3.out" }] }
+        },
+        {
+          "id": "name",
+          "class": "line",
+          "type": "text",
+          "text": "$title",
+          "box": [0.04, 0.1, 0.92, 0.46],
+          "font": "Inter",
+          "size": 64,
+          "weight": 700,
+          "fill": "#FFFFFF",
+          "shadow": { "y": 2, "blur": 10, "color": "#00000066" },
+          "split": "words",
+          "stagger": { "each": 0.05 },
+          "fit": "shrink",
+          "animate": {
+            "x": [{ "t": 0.2, "v": -40, "unit": "px" }, { "t": 0.6, "v": 0, "ease": "power2.out", "unit": "px" }]
+          }
+        },
+        {
+          "id": "rule",
+          "type": "path",
+          "d": "M0 0 L300 0",
+          "box": [0.04, 0.6, 0.2, 0],
+          "stroke": "$accent",
+          "strokeWidth": 4,
+          "cap": "round",
+          "animate": { "trim.end": [{ "t": 0.3, "v": 0 }, { "t": 0.9, "v": 1, "ease": "power2.inOut" }] }
+        },
+        {
+          "id": "role",
+          "class": "line",
+          "type": "text",
+          "text": "$role",
+          "box": [0.04, 0.66, 0.92, 0.26],
+          "font": "Inter",
+          "size": 34,
+          "weight": 500,
+          "fill": "#D3D9E8",
+          "shadow": { "y": 1, "blur": 6, "color": "#00000059" },
+          "fit": "shrink"
+        }
+      ]
+    }
+  ],
+  "timeline": [
+    { "set": "#card", "clip": "inset(0 100% 0 0)" },
+    { "to": "#card", "at": 0.1, "dur": 0.55, "ease": "power3.out", "clip": "inset(0 0% 0 0)" },
+    { "from": ".line", "at": 0.34, "dur": 0.5, "ease": "power3.out", "y": "22px", "opacity": 0, "stagger": 0.1 },
+    { "to": "#card", "at": "out", "dur": 0.35, "ease": "power2.in", "y": "18px", "opacity": 0 }
+  ]
+}

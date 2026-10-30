@@ -1,8 +1,9 @@
 //! The shader presets' bodies and the classes they claim, and the motion graphic
-//! folder's `effect.wgsl` beside the definition the model's catalogue reads (`klipolo_model::presets`), so both read the
-//! same folder; the registry assembles them as built-ins under `klipolo.builtin/<local id>` (`build_builtin`). Every
-//! preset also passes the rules agents' shaders meet when given an agent's id (a test holds it), and claims a cost
-//! class that its measurement on the Intel Mac must meet. The claims follow the class each measures on that floor
+//! presets' scenes (the title templates). Each body is its data folder's `effect.wgsl` or `scene.json` beside the
+//! definition the model's catalogue reads (`klipolo_model::presets`), so both read the same folder; the registry
+//! assembles them as built-ins under `klipolo.builtin/<local id>` (`build_builtin`). Every shader preset also passes the
+//! rules agents' shaders meet when given an agent's id (a test holds it), and claims a cost class that its measurement
+//! on the Intel Mac must meet. The claims follow the class each measures on that floor GPU, an Intel Iris Plus:
 //! Normal, except Dust and bokeh (Heavy, at half size).
 
 use super::ShaderKind;
@@ -49,7 +50,27 @@ pub const SHADER_CLAIMED: [(&str, CostClass); 8] = [
     ("effect.drop-shadow", CostClass::Normal),
 ];
 
-/// The class each motion graphic preset claims.
+/// `(local id, scene.json)`.
+macro_rules! scene {
+    ($local:literal) => {
+        (
+            $local,
+            include_str!(concat!(
+                "../../../klipolo-model/presets/",
+                $local,
+                "/scene.json"
+            )),
+        )
+    };
+}
+
+/// The motion graphic presets' scenes (the title templates), in `klipolo_model::presets::SCENE_PRESETS`'s order:
+/// built-ins, compiled once into every registry (`build_builtin`), so the preview and an export both draw them. A
+/// layer showing one is placed with `Layout::full_frame()` (see `SCENE_PRESETS`).
+pub const SCENE_BODIES: [(&str, &str); 2] =
+    [scene!("scene.lower-third"), scene!("scene.title-card")];
+
+/// The class each motion graphic preset claims (none yet: a claim follows a measurement on the Intel Mac).
 pub const SCENE_CLAIMED: [(&str, CostClass); 0] = [];
 
 /// Every preset's claimed class: the shader presets', then the motion graphics'.

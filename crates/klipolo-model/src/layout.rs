@@ -32,6 +32,16 @@ pub struct BoxN {
     pub h: f64,
 }
 
+impl BoxN {
+    /// The whole canvas.
+    pub const FULL: BoxN = BoxN {
+        x: 0.0,
+        y: 0.0,
+        w: 1.0,
+        h: 1.0,
+    };
+}
+
 /// Placement of a visual item. `rect` is relative to the project's primary format.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -70,6 +80,22 @@ impl Layout {
             motion: None,
             blend: None,
         }
+    }
+
+    /// A layer that fills the frame in every format: the whole canvas as its rect and as its own rect in every format
+    /// there is, listed or not. A rect that only covers the primary's canvas is derived elsewhere by `resolve_rect`
+    /// (sizes follow the shorter side), which in 9:16 makes a 16:9 canvas the square at the top. Place every
+    /// motion graphic template with it (`klipolo_model::presets::SCENE_PRESETS`): their nodes are laid out in the frame.
+    pub fn full_frame() -> Self {
+        let mut layout = Self::new(Anchor::TopLeft, BoxN::FULL);
+        for format in [
+            FormatKind::Landscape,
+            FormatKind::Portrait,
+            FormatKind::Square,
+        ] {
+            layout.overrides.insert(format, BoxN::FULL);
+        }
+        layout
     }
 
     /// The blend mode, normal when unset.
