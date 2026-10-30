@@ -192,7 +192,10 @@ pub(super) fn catalog() -> Catalog {
         ));
     }
     // The shipped presets: their definitions are data, read as a library version's are.
-    for (local, json) in crate::presets::SHADER_PRESETS {
+    for (local, json) in crate::presets::SHADER_PRESETS
+        .into_iter()
+        .chain(crate::presets::SCENE_PRESETS)
+    {
         let preset: ContribDef = serde_json::from_str(json)
             .unwrap_or_else(|e| panic!("presets/{local}/contrib.json: {e}"));
         c = c.with(preset);

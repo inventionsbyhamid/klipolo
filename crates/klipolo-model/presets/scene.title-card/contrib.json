@@ -1,0 +1,44 @@
+{
+  "id": "klipolo.builtin/scene.title-card",
+  "kind": "scene",
+  "name": "Title card",
+  "params": [
+    {
+      "key": "title",
+      "label": "Title",
+      "type": "text",
+      "default": "Your title",
+      "maxLen": 60
+    },
+    {
+      "key": "subtitle",
+      "label": "Subtitle",
+      "type": "text",
+      "default": "A short line about it",
+      "maxLen": 80
+    },
+    {
+      "key": "accent",
+      "label": "Accent",
+      "type": "color",
+      "default": "#FFD02E",
+      "alpha": false
+    }
+  ],
+  "description": "A big centred title over a soft dark wash, with an accent mark and a subtitle under it. The words rise in one by one and everything fades out at the end. It fills the frame.",
+  "tags": [
+    "title",
+    "title card",
+    "intro",
+    "opening",
+    "heading",
+    "chapter",
+    "centred",
+    "text"
+  ],
+  "provenance": {
+    "madeBy": "Klipolo",
+    "createdAtMs": 1793318400000,
+    "license": "original"
+  }
+}
