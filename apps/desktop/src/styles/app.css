@@ -212,6 +212,21 @@
   padding: 0 var(--space-5);
 }
 
+.btn-ghost:not(:disabled):hover {
+  background: var(--color-bay-hover);
+  color: var(--color-ink);
+  transform: none;
+}
+
+.btn-secondary {
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink);
+}
+
+.btn-secondary:not(:disabled):hover {
+  box-shadow: inset 0 0 0 1px var(--color-ink);
+}
+
 .btn:disabled {
   background: #1e2642;
   color: var(--color-ink-disabled);
@@ -250,6 +265,24 @@
 
 .icon-btn:disabled {
   color: var(--color-ink-disabled);
+}
+
+/* A toggle that is on: a 4 px paper dot under its icon. */
+.icon-btn[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--color-paper);
+}
+
+.icon-btn-sm {
+  width: 28px;
+  height: 28px;
 }
 
 /* ---------- Pills and segmented ---------- */
@@ -834,6 +867,105 @@
   color: var(--color-ink-faint);
   font-size: var(--text-sm);
   pointer-events: none;
+}
+
+/* Menus, tooltips and popovers: the dialog surface, 10 px radius, 32 px rows on the hover fill. */
+.menu {
+  z-index: 50;
+  min-width: 208px;
+  padding: 6px;
+  border-radius: var(--radius-md);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-1);
+  animation: menu-in var(--dur-fast) var(--ease-out);
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.menu-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 32px;
+  padding: 0 var(--space-4);
+  border-radius: 8px;
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+  outline: none;
+  cursor: default;
+  user-select: none;
+}
+
+.menu-item[data-highlighted] {
+  background: var(--color-bay-hover);
+}
+
+.menu-item[data-disabled] {
+  color: var(--color-ink-disabled);
+}
+
+.menu-item.has-check {
+  padding-left: 28px;
+}
+
+.menu-item-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-key {
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+}
+
+.menu-check {
+  position: absolute;
+  left: 8px;
+  display: inline-flex;
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 6px;
+  background: var(--color-line);
+}
+
+.menu-label,
+.menu-note {
+  margin: 0;
+  padding: 6px 8px 4px;
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+}
+
+.tooltip {
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-1);
+  color: var(--color-ink);
+  font-size: var(--text-xs);
+}
+
+.popover {
+  z-index: 50;
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-1);
+  color: var(--color-ink);
 }
 
 /* ---------- Player bar ---------- */
