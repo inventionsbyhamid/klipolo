@@ -1,0 +1,5 @@
+*
+!requirements.lock
+!requirements-torch.lock
+!relay/
+relay/**/__pycache__

@@ -1,0 +1,444 @@
+{
+ "audio": "iss_answer_16k.wav",
+ "turns": [
+  {
+   "startMs": 340,
+   "endMs": 9700,
+   "text": "Thank you for the for the great question so when I face challenges sometimes I can manage to deal with those challenges just by myself"
+  },
+  {
+   "startMs": 10300,
+   "endMs": 25600,
+   "text": "when I've seen similar challenges throughout my training so that's why the training for astronaut is so important and also we help each other so that we can deal with challenges as a as a team"
+  }
+ ],
+ "reference": [
+  {
+   "text": "Thank",
+   "startMs": 570,
+   "endMs": 750,
+   "score": 0.861,
+   "turn": 0
+  },
+  {
+   "text": "you",
+   "startMs": 770,
+   "endMs": 830,
+   "score": 0.053,
+   "turn": 0
+  },
+  {
+   "text": "for",
+   "startMs": 850,
+   "endMs": 950,
+   "score": 0.468,
+   "turn": 0
+  },
+  {
+   "text": "the",
+   "startMs": 990,
+   "endMs": 1050,
+   "score": 0.305,
+   "turn": 0
+  },
+  {
+   "text": "for",
+   "startMs": 1070,
+   "endMs": 1130,
+   "score": 0.0,
+   "turn": 0
+  },
+  {
+   "text": "the",
+   "startMs": 1130,
+   "endMs": 1190,
+   "score": 0.0,
+   "turn": 0
+  },
+  {
+   "text": "great",
+   "startMs": 1190,
+   "endMs": 1330,
+   "score": 0.107,
+   "turn": 0
+  },
+  {
+   "text": "question",
+   "startMs": 1411,
+   "endMs": 1771,
+   "score": 0.17,
+   "turn": 0
+  },
+  {
+   "text": "so",
+   "startMs": 2511,
+   "endMs": 2591,
+   "score": 0.669,
+   "turn": 0
+  },
+  {
+   "text": "when",
+   "startMs": 2771,
+   "endMs": 2931,
+   "score": 0.705,
+   "turn": 0
+  },
+  {
+   "text": "I",
+   "startMs": 3091,
+   "endMs": 3111,
+   "score": 0.988,
+   "turn": 0
+  },
+  {
+   "text": "face",
+   "startMs": 3271,
+   "endMs": 3651,
+   "score": 0.982,
+   "turn": 0
+  },
+  {
+   "text": "challenges",
+   "startMs": 3972,
+   "endMs": 4732,
+   "score": 0.911,
+   "turn": 0
+  },
+  {
+   "text": "sometimes",
+   "startMs": 5352,
+   "endMs": 5892,
+   "score": 0.99,
+   "turn": 0
+  },
+  {
+   "text": "I",
+   "startMs": 6072,
+   "endMs": 6092,
+   "score": 0.999,
+   "turn": 0
+  },
+  {
+   "text": "can",
+   "startMs": 6132,
+   "endMs": 6292,
+   "score": 0.999,
+   "turn": 0
+  },
+  {
+   "text": "manage",
+   "startMs": 6352,
+   "endMs": 6713,
+   "score": 1.0,
+   "turn": 0
+  },
+  {
+   "text": "to",
+   "startMs": 6793,
+   "endMs": 6873,
+   "score": 0.995,
+   "turn": 0
+  },
+  {
+   "text": "deal",
+   "startMs": 6993,
+   "endMs": 7213,
+   "score": 0.931,
+   "turn": 0
+  },
+  {
+   "text": "with",
+   "startMs": 7313,
+   "endMs": 7533,
+   "score": 0.972,
+   "turn": 0
+  },
+  {
+   "text": "those",
+   "startMs": 7613,
+   "endMs": 7813,
+   "score": 0.917,
+   "turn": 0
+  },
+  {
+   "text": "challenges",
+   "startMs": 7833,
+   "endMs": 8453,
+   "score": 0.953,
+   "turn": 0
+  },
+  {
+   "text": "just",
+   "startMs": 8613,
+   "endMs": 8793,
+   "score": 0.982,
+   "turn": 0
+  },
+  {
+   "text": "by",
+   "startMs": 8853,
+   "endMs": 9014,
+   "score": 0.997,
+   "turn": 0
+  },
+  {
+   "text": "myself",
+   "startMs": 9074,
+   "endMs": 9574,
+   "score": 0.996,
+   "turn": 0
+  },
+  {
+   "text": "when",
+   "startMs": 10414,
+   "endMs": 10654,
+   "score": 0.219,
+   "turn": 1
+  },
+  {
+   "text": "I've",
+   "startMs": 11214,
+   "endMs": 11334,
+   "score": 0.698,
+   "turn": 1
+  },
+  {
+   "text": "seen",
+   "startMs": 11414,
+   "endMs": 11695,
+   "score": 0.925,
+   "turn": 1
+  },
+  {
+   "text": "similar",
+   "startMs": 12115,
+   "endMs": 12555,
+   "score": 0.993,
+   "turn": 1
+  },
+  {
+   "text": "challenges",
+   "startMs": 12895,
+   "endMs": 13495,
+   "score": 0.979,
+   "turn": 1
+  },
+  {
+   "text": "throughout",
+   "startMs": 13655,
+   "endMs": 14076,
+   "score": 0.906,
+   "turn": 1
+  },
+  {
+   "text": "my",
+   "startMs": 14856,
+   "endMs": 15016,
+   "score": 0.997,
+   "turn": 1
+  },
+  {
+   "text": "training",
+   "startMs": 15076,
+   "endMs": 15516,
+   "score": 0.99,
+   "turn": 1
+  },
+  {
+   "text": "so",
+   "startMs": 15616,
+   "endMs": 15676,
+   "score": 0.998,
+   "turn": 1
+  },
+  {
+   "text": "that's",
+   "startMs": 15776,
+   "endMs": 15976,
+   "score": 0.634,
+   "turn": 1
+  },
+  {
+   "text": "why",
+   "startMs": 16036,
+   "endMs": 16396,
+   "score": 0.98,
+   "turn": 1
+  },
+  {
+   "text": "the",
+   "startMs": 16477,
+   "endMs": 16557,
+   "score": 0.9,
+   "turn": 1
+  },
+  {
+   "text": "training",
+   "startMs": 16637,
+   "endMs": 17137,
+   "score": 0.982,
+   "turn": 1
+  },
+  {
+   "text": "for",
+   "startMs": 17337,
+   "endMs": 17477,
+   "score": 0.99,
+   "turn": 1
+  },
+  {
+   "text": "astronaut",
+   "startMs": 17577,
+   "endMs": 18057,
+   "score": 0.713,
+   "turn": 1
+  },
+  {
+   "text": "is",
+   "startMs": 18157,
+   "endMs": 18237,
+   "score": 0.985,
+   "turn": 1
+  },
+  {
+   "text": "so",
+   "startMs": 18337,
+   "endMs": 18437,
+   "score": 0.998,
+   "turn": 1
+  },
+  {
+   "text": "important",
+   "startMs": 18577,
+   "endMs": 19118,
+   "score": 0.995,
+   "turn": 1
+  },
+  {
+   "text": "and",
+   "startMs": 19678,
+   "endMs": 19798,
+   "score": 0.995,
+   "turn": 1
+  },
+  {
+   "text": "also",
+   "startMs": 19878,
+   "endMs": 20158,
+   "score": 0.981,
+   "turn": 1
+  },
+  {
+   "text": "we",
+   "startMs": 20418,
+   "endMs": 20498,
+   "score": 0.988,
+   "turn": 1
+  },
+  {
+   "text": "help",
+   "startMs": 20618,
+   "endMs": 20838,
+   "score": 0.997,
+   "turn": 1
+  },
+  {
+   "text": "each",
+   "startMs": 21018,
+   "endMs": 21178,
+   "score": 0.994,
+   "turn": 1
+  },
+  {
+   "text": "other",
+   "startMs": 21238,
+   "endMs": 21478,
+   "score": 0.895,
+   "turn": 1
+  },
+  {
+   "text": "so",
+   "startMs": 21979,
+   "endMs": 22059,
+   "score": 0.996,
+   "turn": 1
+  },
+  {
+   "text": "that",
+   "startMs": 22139,
+   "endMs": 22339,
+   "score": 0.935,
+   "turn": 1
+  },
+  {
+   "text": "we",
+   "startMs": 22879,
+   "endMs": 22979,
+   "score": 0.988,
+   "turn": 1
+  },
+  {
+   "text": "can",
+   "startMs": 23039,
+   "endMs": 23199,
+   "score": 0.987,
+   "turn": 1
+  },
+  {
+   "text": "deal",
+   "startMs": 23519,
+   "endMs": 23719,
+   "score": 0.998,
+   "turn": 1
+  },
+  {
+   "text": "with",
+   "startMs": 23779,
+   "endMs": 23959,
+   "score": 0.984,
+   "turn": 1
+  },
+  {
+   "text": "challenges",
+   "startMs": 24080,
+   "endMs": 24740,
+   "score": 0.947,
+   "turn": 1
+  },
+  {
+   "text": "as",
+   "startMs": 24880,
+   "endMs": 25000,
+   "score": 0.996,
+   "turn": 1
+  },
+  {
+   "text": "a",
+   "startMs": 25000,
+   "endMs": 25020,
+   "score": 0.0,
+   "turn": 1
+  },
+  {
+   "text": "as",
+   "startMs": 25060,
+   "endMs": 25100,
+   "score": 0.497,
+   "turn": 1
+  },
+  {
+   "text": "a",
+   "startMs": 25140,
+   "endMs": 25160,
+   "score": 0.0,
+   "turn": 1
+  },
+  {
+   "text": "team",
+   "startMs": 25160,
+   "endMs": 25480,
+   "score": 0.998,
+   "turn": 1
+  }
+ ]
+}
