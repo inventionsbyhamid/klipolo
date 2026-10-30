@@ -2376,8 +2376,10 @@ name = "klipolo-app"
 version = "0.1.0"
 dependencies = [
  "image",
+ "klipolo-analysis",
  "klipolo-engine",
  "klipolo-fonts",
+ "klipolo-meta",
  "klipolo-model",
  "klipolo-platform",
  "libc",
