@@ -454,7 +454,7 @@ fn transcription(heard: AsrResult) -> Transcription {
 
 /// A Meta client error in Klipolo's terms: its sentence for the person, its `Display` (already redacted) for logs.
 /// A 429 is `Busy` when the relay says `busy` (wait and try again); any other (the relay's daily `align_quota`, Meta's
-/// own rate limit) is `RateLimited`, a stop.
+/// own rate limit) is `RateLimited`, a stop. A 401 is `Unauthorized`, a 403 `NotAllowed`.
 pub fn provider_error(e: MetaError) -> ProviderError {
     let (kind, retry_after_s) = match &e {
         MetaError::Budget { .. } => (ProviderErrorKind::Budget, None),
@@ -464,9 +464,8 @@ pub fn provider_error(e: MetaError) -> ProviderError {
         MetaError::RateLimited { retry_after, .. } => {
             (ProviderErrorKind::RateLimited, *retry_after)
         }
-        MetaError::Unauthorized | MetaError::NotAllowed { .. } => {
-            (ProviderErrorKind::NotAllowed, None)
-        }
+        MetaError::Unauthorized => (ProviderErrorKind::Unauthorized, None),
+        MetaError::NotAllowed { .. } => (ProviderErrorKind::NotAllowed, None),
         MetaError::Overloaded { .. } | MetaError::Network(_) | MetaError::AlignUnavailable => {
             (ProviderErrorKind::Unavailable, None)
         }
@@ -536,7 +535,7 @@ mod tests {
                 Kind::RateLimited,
                 true,
             ),
-            (MetaError::Unauthorized, Kind::NotAllowed, false),
+            (MetaError::Unauthorized, Kind::Unauthorized, false),
             (
                 MetaError::NotAllowed { message: None },
                 Kind::NotAllowed,
