@@ -1,24 +1,10 @@
 import type { CSSProperties } from 'react';
 import { Timecode } from '../features/preview/Timecode';
 import { Icon } from '../layout/Icon';
-import { videoDurationUs } from '../lib/timeline';
 import { useEngine } from '../state/engine';
-import { clockUs } from '../state/playClock';
 import { usePlayback } from '../state/playback';
-import { useProject } from '../state/project';
+import { skip, useDurationUs } from '../state/transport';
 import { formatTime } from './time';
-
-/** The video's length in µs (0 with no project open). */
-export function useDurationUs(): number {
-  return useProject((s) => (s.snapshot ? videoDurationUs(s.snapshot.project.timeline) : 0));
-}
-
-/** Moves the playhead by `deltaUs` from where it is now (the clock's place while playing), within the video. */
-export function skip(deltaUs: number, durationUs: number) {
-  const { playing, playheadUs, seek } = usePlayback.getState();
-  const at = playing ? clockUs() : playheadUs;
-  seek(Math.min(Math.max(at + deltaUs, 0), durationUs));
-}
 
 /** The player bar: the transport centred on the window, with edit, zoom and volume placeholders on either side. */
 export function PlayerBar() {

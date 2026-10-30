@@ -11,12 +11,13 @@ import { TimelinePanel } from './layout/TimelinePanel';
 import { TopBar } from './layout/TopBar';
 import { errorMessage } from './lib/errors';
 import { videoDurationUs } from './lib/timeline';
-import { PlayerBar, skip } from './player/PlayerBar';
+import { PlayerBar } from './player/PlayerBar';
 import { Preview } from './preview/Preview';
 import { usePlayback } from './state/playback';
 import { useProject } from './state/project';
 import { followSaves } from './state/saving';
 import { toast } from './state/toasts';
+import { skip } from './state/transport';
 
 /** The name and formats a first launch's project gets: all three formats, 16:9 first. */
 const NEW_PROJECT = { name: 'Untitled project', formats: ['landscape', 'portrait', 'square'] as const };

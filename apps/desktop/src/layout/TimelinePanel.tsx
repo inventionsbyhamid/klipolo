@@ -6,13 +6,13 @@ import {
   type PointerEvent,
   type RefObject,
 } from 'react';
-import { formatTime } from '../player/time';
-import { useDurationUs } from '../player/PlayerBar';
 import { clipDurationUs, clipStarts, sourceLabel } from '../lib/timeline';
 import { stepFrames } from '../lib/time';
+import { formatTime } from '../player/time';
 import { clockAnchor, clockUs, onClock } from '../state/playClock';
 import { usePlayback } from '../state/playback';
 import { useProject } from '../state/project';
+import { useDurationUs } from '../state/transport';
 import { Icon } from './Icon';
 
 /** Seconds between labelled ticks: the first step that gives at most 8 labels. */
