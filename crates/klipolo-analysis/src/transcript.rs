@@ -51,6 +51,9 @@ pub const MIN_SCORE: f64 = 0.05;
 /// A turn whose kept words' median score is under this doesn't match its audio (text never spoken there scores about
 /// 0.37, real turns 0.74 to 0.97): its words are spread instead.
 pub const MATCH_MEDIAN: f64 = 0.5;
+/// A turn shorter than this (Voice Transcribe sometimes gives one no length) is made this long, so its words keep a
+/// time.
+pub const MIN_TURN_US: Us = 200_000;
 /// A last chunk shorter than this joins the one before.
 pub const MIN_CHUNK_US: Us = 500_000;
 /// A WAV (or chunk) whose loudest sample is under this holds nothing to transcribe: no request is made for it.
@@ -274,7 +277,9 @@ pub async fn hear(
     })
 }
 
-/// A chunk's turns in sound time.
+/// A chunk's turns in sound time. A turn shorter than `MIN_TURN_US` (one heard with no length) is given that much, so
+/// its words keep a time: never past the next turn's start or the chunk's end, and one at the chunk's very end reaches
+/// back instead.
 fn turns_in(said: Vec<SpeakerTurn>, chunk: RangeUs, index: usize) -> Vec<Turn> {
     let at = |ms: u64| {
         chunk
@@ -298,6 +303,25 @@ fn turns_in(said: Vec<SpeakerTurn>, chunk: RangeUs, index: usize) -> Vec<Turn> {
         })
         .collect();
     turns.sort_by_key(|t| t.start_us);
+    for i in 0..turns.len() {
+        let start = turns[i].start_us;
+        if turns[i].end_us - start >= MIN_TURN_US {
+            continue;
+        }
+        let next = turns[i + 1..]
+            .iter()
+            .map(|t| t.start_us)
+            .find(|&s| s > start);
+        let end = (start + MIN_TURN_US)
+            .min(chunk.end)
+            .min(next.unwrap_or(Us::MAX))
+            .max(turns[i].end_us);
+        if end > start {
+            turns[i].end_us = end;
+        } else {
+            turns[i].start_us = (end - MIN_TURN_US).max(chunk.start);
+        }
+    }
     turns
 }
 

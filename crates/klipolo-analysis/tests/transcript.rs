@@ -795,6 +795,41 @@ async fn a_refused_align_request_spreads_only_its_own_turns() {
     assert_eq!(out.approximate_reason.as_deref(), Some(refused));
 }
 
+/// A turn heard with no length keeps its words: it gets 0.2 s, never past the next turn's start or its chunk's end
+/// (one at the very end reaches back instead).
+#[tokio::test]
+async fn a_turn_with_no_length_keeps_its_words() {
+    let transcriber = FakeAsr::new(600, |_| {
+        Ok(heard(vec![
+            turn(1_000, 1_000, "question"),
+            turn(1_100, 3_000, "next words"),
+            turn(5_000, 5_000, "middle"),
+            turn(10_000, 10_000, "last"),
+        ]))
+    });
+    let unavailable = "Exact word timing is not available right now.";
+    let aligner =
+        FakeAligner::new(move |_| Err(error(ProviderErrorKind::Unavailable, unavailable)));
+    let clip = clip(&[tone(10.0)]);
+
+    let out = transcribe_asset(&transcriber, &aligner, &clip.path, &[])
+        .await
+        .unwrap();
+
+    let spans: Vec<(Us, Us)> = out.turns.iter().map(|t| (t.start_us, t.end_us)).collect();
+    assert_eq!(
+        spans,
+        [
+            (1_000_000, 1_100_000),
+            (1_100_000, 3_000_000),
+            (5_000_000, 5_200_000),
+            (9_800_000, 10_000_000)
+        ]
+    );
+    assert_eq!(texts(&out), ["question", "next", "words", "middle", "last"]);
+    assert_well_formed(&out);
+}
+
 /// Requests keep to the aligner's limits: audio, turns, JSON size, and how much the turns may overlap; turns are sent
 /// in the WAV's own time, each turn once, never more requests at once than allowed. A turn too big for any request is
 /// spread.
