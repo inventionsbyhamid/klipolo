@@ -4,4 +4,4 @@
  */
 export { deleteBlock, deleteRange, markRange } from './keys/timelineActions';
 export { useTimelineCommands } from './useTimelineCommands';
-export { useZoomTarget, zoomRange, zoomTo } from './zoomControl';
+export { useZoomTarget, zoomRange, zoomTo, zoomViewUs } from './zoomControl';

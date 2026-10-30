@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import type { ButtonHTMLAttributes, Ref } from 'react';
+import { isValidElement, type ButtonHTMLAttributes, type ReactElement, type Ref } from 'react';
 import { cn } from './cn';
 import { Tooltip } from './Tooltip';
 
@@ -7,7 +7,8 @@ interface IconButtonProps extends Omit<
   ButtonHTMLAttributes<HTMLButtonElement>,
   'aria-label' | 'aria-pressed'
 > {
-  icon: LucideIcon;
+  /** A lucide icon, drawn at 20 px with a 1.8 px stroke, or an element (the app's own icon set). */
+  icon: LucideIcon | ReactElement;
   label: string;
   /** Tooltip text when it should say more than the label, e.g. why an `aria-disabled` control is inert. */
   tooltip?: string;
@@ -38,7 +39,7 @@ export function IconButton({
         aria-pressed={active}
         className={cn('icon-btn', className)}
       >
-        <Icon size={20} strokeWidth={1.8} aria-hidden />
+        {isValidElement(Icon) ? Icon : <Icon size={20} strokeWidth={1.8} aria-hidden />}
       </button>
     </Tooltip>
   );

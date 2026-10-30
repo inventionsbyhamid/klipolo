@@ -93,6 +93,12 @@ export function zoomRange(): [number, number] | null {
   return zoomLimits(target.durationUs(), target.scroller.clientWidth - target.headerPx, target.fps());
 }
 
+/** How much of the video the lanes show at the zoom now (µs), or null while no timeline is on screen. */
+export function zoomViewUs(): number | null {
+  if (!target) return null;
+  return pxToUs(Math.max(0, target.scroller.clientWidth - target.headerPx), useUi.getState().pxPerSecond);
+}
+
 /** Zoom to `pps` (the player bar's slider), around the playhead when it is on screen, else the view's centre. */
 export function zoomTo(pps: number) {
   const now = useUi.getState().pxPerSecond;
