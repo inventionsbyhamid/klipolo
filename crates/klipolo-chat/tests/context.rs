@@ -7,6 +7,8 @@
 //!   more); `turns_clip_a.json`: the speaker turns of its `asr_clip_a.json`.
 //! - `scenes_clip_a.json`: a real Muse Spark 1.3 moments answer for the clip (the planner spike's), as `SceneEntry`s.
 //! - `project_two_clips.json`: the clip as `astronauts.mp4`, played as two pieces around the cut.
+//!
+//! `tests/fixtures/make_fixtures.py` makes all four again (its notes say from what).
 
 use std::collections::HashMap;
 use std::path::Path;
