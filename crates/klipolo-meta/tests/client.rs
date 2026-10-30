@@ -1096,3 +1096,123 @@ async fn device_status_without_a_relay_token_is_unauthorized() {
     );
     assert!(server.received_requests().await.unwrap().is_empty());
 }
+
+// Secrets never in error text.
+
+/// The variant's name. No wildcard arm: a new variant fails to compile here
+/// until `error_text_never_contains_key` covers it.
+fn variant(error: &MetaError) -> &'static str {
+    match error {
+        MetaError::Budget { .. } => "Budget",
+        MetaError::NotAllowed => "NotAllowed",
+        MetaError::Unauthorized => "Unauthorized",
+        MetaError::RateLimited { .. } => "RateLimited",
+        MetaError::Overloaded => "Overloaded",
+        MetaError::BadRequest { .. } => "BadRequest",
+        MetaError::Network(_) => "Network",
+        MetaError::AlignUnavailable => "AlignUnavailable",
+        MetaError::Decode(_) => "Decode",
+    }
+}
+
+const VARIANTS: usize = 9;
+
+/// A server that answers every request with `status` and a body quoting `echo`.
+async fn echoing(status: u16, echo: &str) -> MockServer {
+    let server = MockServer::start().await;
+    let response = if status == 200 {
+        // Fields of the wrong type: serde's message quotes the value.
+        ResponseTemplate::new(200).set_body_json(json!({"audioDurationMs": echo, "relay_ai": echo}))
+    } else {
+        ResponseTemplate::new(status)
+            .insert_header("retry-after", "3")
+            .set_body_json(json!({"error": {"message": echo}, "message": echo}))
+    };
+    Mock::given(wiremock::matchers::any())
+        .respond_with(response)
+        .mount(&server)
+        .await;
+    server
+}
+
+#[tokio::test]
+async fn error_text_never_contains_key() {
+    const CODE: &str = "ACCESS-CODE-9f8e7d";
+    let mut errors: Vec<(MetaError, Vec<&str>)> = Vec::new();
+    for status in [200, 400, 401, 402, 403, 404, 413, 422, 429, 500, 502, 503] {
+        // Key mode with a relay token for alignment: both are its secrets.
+        let server = echoing(status, &format!("key {KEY} token {TOKEN}")).await;
+        let keyed = direct(&server)
+            .with_relay_base(server.uri())
+            .with_align_token(secret(TOKEN));
+        errors.push((
+            keyed.transcribe(wav(), &[]).await.unwrap_err(),
+            vec![KEY, TOKEN],
+        ));
+        errors.push((
+            keyed.align(wav(), &align_turns()).await.unwrap_err(),
+            vec![KEY, TOKEN],
+        ));
+        if status != 200 {
+            let refused = keyed
+                .respond(json!({"model": "muse-spark-1.3"}))
+                .await
+                .unwrap_err();
+            errors.push((refused, vec![KEY, TOKEN]));
+        }
+
+        let server = echoing(status, &format!("token {TOKEN}")).await;
+        errors.push((
+            relay(&server).transcribe(wav(), &[]).await.unwrap_err(),
+            vec![TOKEN],
+        ));
+        errors.push((
+            relay(&server).device_status().await.unwrap_err(),
+            vec![TOKEN],
+        ));
+
+        let server = echoing(status, &format!("code {CODE}")).await;
+        let registered = MetaClient::register_device(&server.uri(), DEVICE_ID, Some(CODE)).await;
+        errors.push((registered.unwrap_err(), vec![CODE]));
+    }
+    let unreachable = MetaClient::direct(secret(KEY))
+        .with_meta_base(format!("{CLOSED}/v1"))
+        .with_ledger(None);
+    errors.push((
+        unreachable.transcribe(wav(), &[]).await.unwrap_err(),
+        vec![KEY],
+    ));
+    let server = MockServer::start().await;
+    let no_token = direct(&server).with_relay_base(server.uri());
+    errors.push((
+        no_token.align(wav(), &align_turns()).await.unwrap_err(),
+        vec![KEY],
+    ));
+
+    let mut seen = std::collections::BTreeSet::new();
+    for (error, secrets) in &errors {
+        seen.insert(variant(error));
+        for text in [
+            error.to_string(),
+            format!("{error:?}"),
+            error.user_message(),
+        ] {
+            for secret in secrets {
+                assert!(
+                    !text.contains(secret),
+                    "{} shows a secret: {text}",
+                    variant(error)
+                );
+            }
+        }
+    }
+    assert_eq!(seen.len(), VARIANTS, "variants covered: {seen:?}");
+    // The echoes did reach the errors, redacted.
+    assert!(errors
+        .iter()
+        .any(|(e, _)| e.to_string().contains("[redacted]")));
+    let client = direct(&server).with_align_token(secret(TOKEN));
+    for text in [format!("{client:?}"), format!("{:?}", relay(&server))] {
+        assert!(!text.contains(KEY) && !text.contains(TOKEN), "{text}");
+    }
+}
