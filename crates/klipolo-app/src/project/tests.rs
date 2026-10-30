@@ -373,21 +373,17 @@ fn a_full_disk_is_said_and_keeps_the_project_open() {
     assert_eq!(project_name(&state), "Kept", "still open");
     assert_eq!(
         reports.lock().unwrap().as_slice(),
-        [SaveStatus {
-            ok: false,
-            message: Some(error.to_string())
-        }]
+        [SaveStatus::failing(error.to_string())]
     );
 
     disk.0.store(0, std::sync::atomic::Ordering::SeqCst);
     set_open(&state, None).unwrap();
     assert_eq!(read(&file).unwrap().name, "Kept");
-    assert_eq!(
-        reports.lock().unwrap().last(),
-        Some(&SaveStatus {
-            ok: true,
-            message: None
-        })
+    // Told just after the write lands, so it may follow the close by a moment.
+    assert!(
+        eventually(|| reports.lock().unwrap().last() == Some(&SaveStatus::saved(1, 1))),
+        "the save that works again says what it wrote: {:?}",
+        reports.lock().unwrap()
     );
 }
 
@@ -517,5 +513,23 @@ fn only_a_projects_media_files_are_served_to_the_page() {
     assert_eq!(
         served_files(&project),
         ["/clips/talk.MOV", "/music/song.mp3", "/pictures/logo.png"].map(PathBuf::from)
+    );
+}
+
+/// Every save says which opening and revision it wrote, so the page shows "Saving…" until its own revision is on the
+/// disk: one save for edits that came while the last was waiting, the newest.
+#[test]
+fn every_save_says_what_it_wrote() {
+    let dir = tempfile::tempdir().unwrap();
+    let (state, reports) = session(&dir.path().join("p.klipolo"), "Start");
+    with_open(&state, |open| apply_and_commit(open, &rename("One"))).unwrap();
+    state.flush().unwrap();
+    with_open(&state, |open| apply_and_commit(open, &rename("Two"))).unwrap();
+    with_open(&state, |open| apply_and_commit(open, &rename("Three"))).unwrap();
+    state.flush().unwrap();
+    assert!(eventually(|| reports.lock().unwrap().len() == 2));
+    assert_eq!(
+        reports.lock().unwrap().as_slice(),
+        [SaveStatus::saved(1, 1), SaveStatus::saved(1, 3)]
     );
 }

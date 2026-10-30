@@ -59,7 +59,11 @@ fn on_open<T>(state: &ProjectSessionState, f: impl FnOnce(&mut OpenProject) -> T
     let open = guard.as_mut()?;
     let result = f(open);
     if let Some(project) = state.publish(Some(&*open), false) {
-        state.saver.submit(open.file.clone(), project);
+        let version = Version {
+            opening: state.opens.load(Ordering::SeqCst),
+            revision: open.document.revision(),
+        };
+        state.saver.submit(open.file.clone(), project, version);
     }
     Some(result)
 }

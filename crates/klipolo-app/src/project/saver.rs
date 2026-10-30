@@ -1,6 +1,7 @@
 //! Saves the open project in the background: 2 s after the last change (a burst of edits is one save), at once when
-//! asked (`flush`: closing, switching, quitting), and again after a failure (with a growing pause). The person hears
-//! when saves start failing and when they work again (`SaveStatus`, the `project-save` event), once each.
+//! asked (`flush`: closing, switching, quitting), and again after a failure (with a growing pause). The page hears each
+//! save that lands, with the revision it wrote (it says "Saving…" until its own is on the disk), and when saves start
+//! failing, once (`SaveStatus`, the `project-save` event).
 
 use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
@@ -20,21 +21,53 @@ const MAX_BACKOFF: Duration = Duration::from_secs(30);
 
 /// Where saves are written: the real disk, or a test's.
 pub(crate) type Disk = Arc<dyn Steps + Send + Sync>;
-/// Where save failures, and the save that works again after them, are told.
+/// Where saves that land, and saves that start failing, are told.
 pub(crate) type Report = Arc<dyn Fn(SaveStatus) + Send + Sync>;
 
-/// Saves keep failing (`ok: false`, with what went wrong and what to do), or work again after that (`ok: true`).
+/// Which project version a save holds: its opening (revisions restart at 0 on each) and revision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Version {
+    pub(crate) opening: u64,
+    pub(crate) revision: u64,
+}
+
+/// A save landed (`ok: true`, with the opening and revision it wrote), or saves started failing (`ok: false`, with what
+/// went wrong and what to do).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SaveStatus {
     pub(crate) ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) opening: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) revision: Option<u64>,
+}
+
+impl SaveStatus {
+    pub(crate) fn saved(opening: u64, revision: u64) -> Self {
+        Self {
+            ok: true,
+            message: None,
+            opening: Some(opening),
+            revision: Some(revision),
+        }
+    }
+
+    pub(crate) fn failing(message: String) -> Self {
+        Self {
+            ok: false,
+            message: Some(message),
+            opening: None,
+            revision: None,
+        }
+    }
 }
 
 struct Queue {
-    /// The newest project not saved yet, its file and its number.
-    pending: Option<(PathBuf, Arc<Project>, u64)>,
+    /// The newest project not saved yet, its file, which version it is, and its number.
+    pending: Option<(PathBuf, Arc<Project>, Version, u64)>,
     /// The number of the newest project handed in, and of the newest one written.
     submitted: u64,
     saved: u64,
@@ -122,11 +155,11 @@ impl Saver {
             .unwrap_or_else(PoisonError::into_inner) = Some(report);
     }
 
-    /// `project` is the newest to save, into `file`: written once the edits pause.
-    pub(crate) fn submit(&self, file: PathBuf, project: Arc<Project>) {
+    /// `project` (at `version`) is the newest to save, into `file`: written once the edits pause.
+    pub(crate) fn submit(&self, file: PathBuf, project: Arc<Project>, version: Version) {
         let mut queue = self.shared.lock();
         queue.submitted += 1;
-        queue.pending = Some((file, project, queue.submitted));
+        queue.pending = Some((file, project, version, queue.submitted));
         queue.last_change = Instant::now();
         self.shared.changed.notify_all();
     }
@@ -208,7 +241,7 @@ fn run(shared: &Shared) {
             }
             Some(_) => {}
         }
-        let Some((file, project, number)) = queue.pending.take() else {
+        let Some((file, project, version, number)) = queue.pending.take() else {
             continue;
         };
         queue.wanted = 0;
@@ -221,26 +254,21 @@ fn run(shared: &Shared) {
                 queue.saved = queue.saved.max(number);
                 queue.retry_at = None;
                 queue.backoff = FIRST_BACKOFF;
-                queue.failing.take().map(|_| SaveStatus {
-                    ok: true,
-                    message: None,
-                })
+                queue.failing = None;
+                Some(SaveStatus::saved(version.opening, version.revision))
             }
             Err(error) => {
                 tracing::warn!(detail = error.detail(), "the project couldn't be saved");
                 // A newer project waiting goes next; else this one is tried again after the back-off.
                 if queue.pending.is_none() {
-                    queue.pending = Some((file, project, number));
+                    queue.pending = Some((file, project, version, number));
                 }
                 queue.retry_at = Some(Instant::now() + queue.backoff);
                 queue.backoff = (queue.backoff * 2).min(MAX_BACKOFF);
                 let first = queue.failing.is_none();
                 let message = error.to_string();
                 queue.failing = Some(error);
-                first.then_some(SaveStatus {
-                    ok: false,
-                    message: Some(message),
-                })
+                first.then_some(SaveStatus::failing(message))
             }
         };
         shared.changed.notify_all();

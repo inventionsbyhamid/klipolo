@@ -34,7 +34,7 @@ use klipolo_model::project::{FormatKind, Project};
 use klipolo_model::{Transaction, apply_ops};
 use klipolo_platform::pressure::{self, Pressure};
 pub(crate) use library::{library_dir, read};
-pub(crate) use saver::{SaveStatus, Saver};
+pub(crate) use saver::{SaveStatus, Saver, Version};
 pub(crate) use session::ProjectSessionState;
 #[cfg(test)]
 pub(crate) use session::opened;

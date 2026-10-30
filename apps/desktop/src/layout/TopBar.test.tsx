@@ -13,7 +13,7 @@ const { EXPORT_LATER, TopBar } = await import('./TopBar');
 
 beforeEach(() => {
   useProject.setState({ snapshot: null, pending: 0 });
-  useSaving.setState({ failing: null });
+  useSaving.setState({ failing: null, saved: null });
 });
 
 describe('TopBar', () => {
@@ -36,10 +36,15 @@ describe('TopBar', () => {
     expect(bridge.undo).toHaveBeenCalledTimes(1);
   });
 
-  it('says the project is saved, or why it is not', () => {
-    useProject.setState({ snapshot: fixtureSnapshot() });
+  it('says the project is saved, saving, or why it is not', () => {
+    const snapshot = { ...fixtureSnapshot(), opening: 1 };
+    useProject.setState({ snapshot });
+    useSaving.setState({ saved: { opening: 1, revision: snapshot.history.revision } });
     const { rerender } = render(<TopBar />);
     expect(screen.getByText('Saved')).toBeInTheDocument();
+    useProject.setState({ snapshot: { ...snapshot, history: { ...snapshot.history, revision: 4 } } });
+    rerender(<TopBar />);
+    expect(screen.getByText('Saving…')).toBeInTheDocument();
     useSaving.setState({ failing: 'Your disk is full, so changes aren’t being saved. Free up some space.' });
     rerender(<TopBar />);
     expect(screen.getByText('Not saved').title).toMatch(/disk is full/);

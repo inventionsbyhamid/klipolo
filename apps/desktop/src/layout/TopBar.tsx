@@ -1,7 +1,7 @@
 import icon from '../styles/klipolo-icon.svg';
 import { historyAction } from '../lib/history';
 import { useProject } from '../state/project';
-import { useSaving } from '../state/saving';
+import { saveStateOf, useSaving } from '../state/saving';
 import { Icon } from './Icon';
 
 /** Why Export is off while a video is open (export lands in a later build). */
@@ -13,7 +13,9 @@ export function TopBar() {
   const open = useProject((s) => s.snapshot !== null);
   const hasVideo = useProject((s) => (s.snapshot?.project.timeline.main.length ?? 0) > 0);
   const history = useProject((s) => s.snapshot?.history);
-  const failing = useSaving((s) => s.failing);
+  const snapshot = useProject((s) => s.snapshot);
+  const saving = useSaving();
+  const state = saveStateOf(snapshot, saving);
   const undo = historyAction('undo', history?.undoLabel ?? null, history?.undoParams);
   const redo = historyAction('redo', history?.redoLabel ?? null, history?.redoParams);
   return (
@@ -24,8 +26,8 @@ export function TopBar() {
         <Icon name="chev-down" />
       </div>
       {open && (
-        <span className="save-state" title={failing ?? undefined}>
-          {failing ? 'Not saved' : 'Saved'}
+        <span className="save-state" title={saving.failing ?? undefined}>
+          {state === 'failing' ? 'Not saved' : state === 'saving' ? 'Saving…' : 'Saved'}
         </span>
       )}
       <span className="topbar-divider" aria-hidden />

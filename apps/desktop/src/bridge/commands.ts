@@ -8,10 +8,15 @@ import type { Transaction } from '../bindings/Transaction';
 import { applyBase } from './applyBase';
 import { call } from './call';
 
-/** Saves keep failing (`ok: false`, with what went wrong and what to do) or work again after that (`ok: true`). */
+/**
+ * A save landed (`ok: true`, with the opening and revision it wrote), or saves started failing (`ok: false`, with what
+ * went wrong and what to do).
+ */
 export interface SaveStatus {
   ok: boolean;
   message?: string;
+  opening?: number;
+  revision?: number;
 }
 
 /** The project commands (`crates/klipolo-app/src/project.rs`) and media import (`media.rs`). */
@@ -35,7 +40,7 @@ export const bridge = {
   snapshot: () => call<Snapshot>('project_snapshot'),
   /** Probes `paths` (a Finder drop), or the files the person picks (none given): the assets, and what was skipped. */
   importMedia: (paths?: string[]) => call<MediaImport>('media_import', { paths: paths ?? null }),
-  /** Edits are saved in the background; this hears when saving fails or recovers. */
+  /** Edits are saved in the background: this hears each save that lands, and when saving starts failing. */
   onSaveStatus: (handler: (status: SaveStatus) => void): Promise<UnlistenFn> =>
     listen<SaveStatus>('project-save', (event) => handler(event.payload)),
 };
