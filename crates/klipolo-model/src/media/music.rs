@@ -1,7 +1,9 @@
 //! Background music that fits the video. A song shorter than the video plays again and again, in pieces back to back
-//! (the last cut at the video's end); a longer one is cut there. It fades in at its start and out at its end, sits on
-//! an audio track of its own, stays free (cuts never chop it) and ducks under speech. The engine has no looping: the
-//! pieces are plain sound layers of the same file, and each seam gets the mixer's 3 ms edge ramps.
+//! (the last cut at the video's end); a longer one is cut there. A last piece under 4 s ([`TAIL_US`]) is left out, so
+//! the song doesn't start again for a moment: it ends after the piece before, up to 4 s before the video does. It
+//! fades in at its start and out at its end, sits on an audio track of its own, stays free (cuts never chop it) and
+//! ducks under speech. The engine has no looping: the pieces are plain sound layers of the same file, and each seam
+//! gets the mixer's 3 ms edge ramps.
 //!
 //! **What counts as music** ([`is_music`]): a sound layer with `duck` set. Music added here always sets it, to 0 dB
 //! when ducking is off (`ItemContent::Audio::duck` at 0 lowers nothing), so turning ducking off keeps a song music;
@@ -32,6 +34,9 @@ pub const MUSIC_DUCK_DB: f64 = -12.0;
 pub const MUSIC_FADE_IN_US: Us = 500_000;
 /// Ends at the video's end.
 pub const MUSIC_FADE_OUT_US: Us = 2_000_000;
+/// The shortest last piece that starts the song again: room for the whole fade-out at twice its length. A shorter one
+/// is left out when a piece plays before it, and the music ends that much before the video.
+pub const TAIL_US: Us = 2 * MUSIC_FADE_OUT_US;
 
 /// How music is added. [`Default`] is a background bed: 30 %, ducking 12 dB, from the start to the video's end.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -99,7 +104,8 @@ pub fn add_music_ops(p: &Project, asset: &Asset, opts: MusicOpts) -> Result<Vec<
             id
         }
     };
-    let pieces = pieces(start..end, asset.duration_us, 0);
+    let mut pieces = pieces(start..end, asset.duration_us, 0);
+    without_short_tail(&mut pieces, asset.duration_us);
     let last = pieces.len().saturating_sub(1);
     let content = ItemContent::Audio {
         asset_id: asset.id.clone(),
@@ -172,8 +178,18 @@ pub fn refit_music_ops(before: &Project, after: &Project) -> Vec<Op> {
         for run in runs(track) {
             let bed = &track.items[run.clone()];
             let (first, last) = (&bed[0], &bed[bed.len() - 1]);
+            let Some(file_len) = played(last)
+                .and_then(|(id, _)| after.asset(id))
+                .map(|file| file.duration_us)
+            else {
+                continue;
+            };
+            // It reached the old end: it ends there (or under 10 ms before it, a remainder too short for a layer, or
+            // past it), or it plays its file to the end and stops under `TAIL_US` before it (a short last piece left out).
+            let short = old_end.saturating_sub(last.end_us());
             let reached = first.start_us <= old_end
-                && last.end_us().saturating_add(MIN_DURATION_US) >= old_end;
+                && (short <= MIN_DURATION_US
+                    || (short < TAIL_US && last.duration_us >= room(last, file_len)));
             if !reached {
                 continue;
             }
@@ -182,9 +198,7 @@ pub fn refit_music_ops(before: &Project, after: &Project) -> Vec<Op> {
                 .items
                 .get(run.end)
                 .map_or(new_end, |next| next.start_us.min(new_end));
-            if let Some(file) = played(last).and_then(|(id, _)| after.asset(id)) {
-                refit(after, bed, &track.id, file.duration_us, end, &mut ops);
-            }
+            refit(after, bed, &track.id, file_len, end, &mut ops);
         }
     }
     ops
@@ -396,8 +410,8 @@ fn refit(p: &Project, bed: &[Item], track: &Id, file_len: Us, end: Us, ops: &mut
 }
 
 /// Where a run of music's pieces go to end at `end`: the first ones as they are, then either the one `end` falls in,
-/// cut there, or the last played on to its file's end and new pieces from the file's start after it. Empty when the
-/// run starts at `end` or past it.
+/// cut there, or the last played on to its file's end and new pieces from the file's start after it; a short last
+/// piece is left out as when music is added ([`without_short_tail`]). Empty when the run starts at `end` or past it.
 fn plan(bed: &[Item], file_len: Us, end: Us) -> Vec<Piece> {
     let stays = |i: usize, len: Us| Piece {
         start: bed[i].start_us,
@@ -430,7 +444,19 @@ fn plan(bed: &[Item], file_len: Us, end: Us) -> Vec<Piece> {
     plan.push(stays(k, len));
     let at = bed[k].start_us.saturating_add(len);
     plan.extend(pieces(at..end, file_len, 0));
+    without_short_tail(&mut plan, file_len);
     plan
+}
+
+/// Leaves out a last piece under [`TAIL_US`] that doesn't play its file to the end (the song starting again for a
+/// moment, or a piece cut short), when a piece plays before it: the music then ends after that one.
+fn without_short_tail(pieces: &mut Vec<Piece>, file_len: Us) {
+    let short = pieces
+        .last()
+        .is_some_and(|p| p.len < TAIL_US && p.len < file_len.saturating_sub(p.source_in));
+    if short && pieces.len() > 1 {
+        pieces.pop();
+    }
 }
 
 /// Sets `piece` to `len` with these fades (kept within half of it).

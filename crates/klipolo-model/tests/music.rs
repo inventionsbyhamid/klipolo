@@ -337,23 +337,19 @@ fn cut_in_the_middle_refits_music_in_the_same_step() {
 fn a_cut_past_a_piece_removes_it_and_more_footage_adds_pieces() {
     let p = with_music(&video(30.0), "loop", MusicOpts::default());
 
-    // Cutting 18 s to 30 s leaves 18 s: the third piece is cut short and the fourth goes.
-    let ops = with_music_refit(&p, vec![cut(18.0, 30.0)]).unwrap();
+    // Cutting 21 s to 30 s leaves 21 s: the third piece is cut short and the fourth goes.
+    let ops = with_music_refit(&p, vec![cut(21.0, 30.0)]).unwrap();
     let short = apply_ops(&p, &ops).unwrap();
     assert_eq!(
         spans(&music(&short)),
-        [(0.0, 8.0), (8.0, 16.0), (16.0, 18.0)]
+        [(0.0, 8.0), (8.0, 16.0), (16.0, 21.0)]
     );
     assert_one_bed(&short, "loop");
-    assert_eq!(
-        fade_out(music(&short)[2]),
-        1.0,
-        "2 s piece: fades over half of it"
-    );
+    assert_eq!(fade_out(music(&short)[2]), 2.0);
 
-    // 22 s more footage at the end: the short piece plays on to the song's end and new pieces follow to the new end.
+    // 19 s more footage at the end: the short piece plays on to the song's end and new pieces follow to the new end.
     let more = vec![Op::InsertClip {
-        clip: take(100.0, 122.0),
+        clip: take(100.0, 119.0),
         index: None,
     }];
     let ops = with_music_refit(&short, more).unwrap();
@@ -484,10 +480,14 @@ fn fades_never_exceed_half_the_length() {
         for song in ["loop", "song"] {
             let p = with_music(&video(len), song, MusicOpts::default());
             check(&p, &format!("{song} over {len} s"));
-            assert_eq!(
-                music(&p).last().unwrap().end_us(),
-                secs(len),
-                "{song} over {len} s"
+            // At the end, or under 4 s before it after playing the file to its end (the song doesn't start again
+            // for a moment).
+            let last = *music(&p).last().unwrap();
+            let early = secs(len) - last.end_us();
+            let whole = sound(last).source_in + last.duration_us == asset(&p, song).duration_us;
+            assert!(
+                early == 0 || (whole && early > 0 && early < secs(4.0)),
+                "{song} over {len} s ends {early} µs early"
             );
         }
     }
@@ -495,9 +495,9 @@ fn fades_never_exceed_half_the_length() {
     let p = with_music(&video(3.0), "song", MusicOpts::default());
     let m = music(&p);
     assert_eq!((fade_in(m[0]), fade_out(m[0])), (0.5, 1.5));
-    // 17 s of an 8 s loop: the last piece is 1 s and fades over its half.
-    let p = with_music(&video(17.0), "loop", MusicOpts::default());
-    assert_eq!(fade_out(music(&p)[2]), 0.5);
+    // 4.1 s of a 4.1 s video and a 120 s song: one piece, so nothing to end early on.
+    let p = with_music(&video(4.1), "song", MusicOpts::default());
+    assert_eq!(spans(&music(&p)), [(0.0, 4.1)]);
 
     // Cuts that leave a short last piece, or a very short video, keep them inside too, and growing back restores them.
     let p = with_music(&video(30.0), "loop", MusicOpts::default());
@@ -647,7 +647,7 @@ fn music_stops_at_the_next_layer_on_its_track() {
             tie: None,
             duck: None,
         },
-        ..still_item("tail", 35.0, 1.0)
+        ..still_item("tail", 37.0, 1.0)
     };
     apply(
         &mut p,
@@ -670,12 +670,12 @@ fn music_stops_at_the_next_layer_on_its_track() {
             (8.0, 16.0),
             (16.0, 24.0),
             (24.0, 32.0),
-            (32.0, 35.0)
+            (32.0, 37.0)
         ]
     );
     assert!(m.iter().all(|i| track_of(&long, &i.id).id == track));
-    assert_eq!(fade_out(m[4]), 1.5, "3 s piece: fades over half of it");
-    assert_eq!(item_by_id(&long, "tail").start_us, secs(35.0));
+    assert_eq!(fade_out(m[4]), 2.0, "fades out as it stops");
+    assert_eq!(item_by_id(&long, "tail").start_us, secs(37.0));
 }
 
 #[test]
@@ -760,4 +760,40 @@ fn attached_sounds_follow_the_cut_and_music_refits() {
     assert!(ops.iter().all(
         |op| !matches!(op, Op::UpdateItem { id, .. } | Op::RemoveItem { id } if id == "sting")
     ));
+}
+
+#[test]
+fn a_short_remainder_ends_the_music_after_the_last_whole_piece() {
+    // 17 s of an 8 s loop: two whole pieces and 1 s left. The song doesn't start again for a moment: it ends after the
+    // second piece, fading out over its last 2 s, 1 s before the video does.
+    let p = with_music(&video(17.0), "loop", MusicOpts::default());
+    let m = music(&p);
+    assert_eq!(spans(&m), [(0.0, 8.0), (8.0, 16.0)]);
+    assert_one_bed(&p, "loop");
+    assert_eq!((fade_in(m[0]), fade_out(m[1])), (0.5, 2.0));
+
+    // A cut that leaves the same remainder ends it the same way, and music ending that way still follows the video.
+    let p = with_music(&video(30.0), "loop", MusicOpts::default());
+    let short = apply_ops(&p, &with_music_refit(&p, vec![cut(10.0, 23.0)]).unwrap()).unwrap();
+    let m = music(&short);
+    assert_eq!(spans(&m), [(0.0, 8.0), (8.0, 16.0)]);
+    assert_eq!(fade_out(m[1]), 2.0);
+    let more = vec![Op::InsertClip {
+        clip: take(100.0, 113.0),
+        index: None,
+    }];
+    let long = apply_ops(&short, &with_music_refit(&short, more).unwrap()).unwrap();
+    let m = music(&long);
+    assert_eq!(
+        spans(&m),
+        [(0.0, 8.0), (8.0, 16.0), (16.0, 24.0), (24.0, 30.0)]
+    );
+    assert_one_bed(&long, "loop");
+    assert_eq!(fade_out(m[3]), 2.0);
+
+    // 4 s or more is kept: 20 s ends with a 4 s piece fading out at the end.
+    let p = with_music(&video(20.0), "loop", MusicOpts::default());
+    let m = music(&p);
+    assert_eq!(spans(&m), [(0.0, 8.0), (8.0, 16.0), (16.0, 20.0)]);
+    assert_eq!(fade_out(m[2]), 2.0);
 }
