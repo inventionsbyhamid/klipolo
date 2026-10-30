@@ -2,12 +2,13 @@
 //! a low bitrate and AAC mono in an MP4 whose index comes first (`+faststart`), so an upload stays small and a server
 //! can read it as it arrives.
 //!
-//! - **Picture:** the source decoded on the activity pass's hardware path (`platform::activity`: VideoToolbox on a Mac;
-//!   FFmpeg falls back to software by itself when the hardware won't take the stream, and the whole copy is made again
-//!   in software if decoding still fails), scaled the way the person sees
-//!   it (anamorphic pixels widened, a phone's quarter turn applied) to fit `SmallCopy::fit`, at most `max_fps` frames a
-//!   second (frames dropped evenly, never repeated), encoded by the platform's H.264 encoder (`platform::encode`:
-//!   VideoToolbox's hardware encoder, then its software one; Linux has none yet, so the copy is a Mac feature).
+//! - **Picture:** the source decoded on the activity pass's hardware path (`platform::activity`: VideoToolbox on a Mac)
+//!   when the codec has one, else in software on every core (FFmpeg's frame threads); should the hardware not start
+//!   (FFmpeg then falls back to software by itself, on one thread) or fail part-way, the copy is made again in
+//!   software. Each frame is scaled the way the person sees it (anamorphic pixels widened, a phone's quarter turn
+//!   applied) to fit `SmallCopy::fit`, at most `max_fps` frames a second (frames dropped evenly, never repeated), and
+//!   encoded by the platform's H.264 encoder (`platform::encode`: VideoToolbox's hardware encoder, then its software
+//!   one; Linux has none yet, so the copy is a Mac feature).
 //! - **Sound:** the engine's own decode (`audio::decode`, 48 kHz), mixed to mono and encoded as AAC (Apple's encoder
 //!   where there is one), interleaved with the picture as it goes.
 //! - **Every frame:** an `EveryFrame` caller sees each decoded frame of the source at its own rate, before the copy
@@ -347,21 +348,9 @@ impl Writer<'_> {
             stream_start(&stream),
         );
         let seconds = f64::from(tb);
-        let mut context =
-            ffmpeg::codec::Context::from_parameters(params).map_err(|e| failed("decoder", e))?;
-        if !hardware_decode {
-            context.set_threading(threading::Config::kind(threading::Type::Frame));
-        }
-        let mut decoder = context
-            .decoder()
-            .video()
-            .map_err(|e| failed("decoder", e))?;
-        decoder.set_packet_time_base(tb);
-        let hardware = if hardware_decode {
-            Hardware::attach(&mut decoder)
-        } else {
-            None
-        };
+        let (mut decoder, hardware) = open_decoder(&params, tb, hardware_decode)?;
+        // Whether a frame has come out yet: the first tells whether the hardware decoder started.
+        let mut decoded = false;
         set_discards(&mut input, Some(index), None);
         if range.start > 0 {
             // In AV_TIME_BASE (µs), as seeks are: the range's start on the container's clock.
@@ -418,6 +407,17 @@ impl Writer<'_> {
                         break;
                     }
                     Err(e) => return Err(failed("decode", e)),
+                }
+                if !decoded {
+                    decoded = true;
+                    // SAFETY: a plain field of a live frame.
+                    let on_gpu = unsafe { !(*frame.as_ptr()).hw_frames_ctx.is_null() };
+                    if hardware.is_some() && !on_gpu {
+                        // FFmpeg fell back to software by itself, on one thread: make the copy again on all cores.
+                        return Err(SmallCopyError::Failed(
+                            "the hardware decoder didn't start".into(),
+                        ));
+                    }
                 }
                 let Some(pts) = frame.timestamp().or_else(|| frame.pts()) else {
                     continue;
@@ -558,6 +558,36 @@ fn write_packet(
     packet.set_stream(0);
     packet.rescale_ts(from, to);
     packet.write_interleaved(output)
+}
+
+/// The source's decoder: the platform's hardware one when asked for and the codec has one there (`Hardware`), else
+/// software with FFmpeg's frame threads, on every core. Threads are set before the decoder opens, so the hardware try
+/// goes without them; should the hardware not start, the first frame says so and `write` makes the copy again here.
+fn open_decoder(
+    params: &ffmpeg::codec::Parameters,
+    tb: Rational,
+    hardware: bool,
+) -> Result<(ffmpeg::decoder::Video, Option<Hardware>), SmallCopyError> {
+    let open = |threads: bool| {
+        let mut context = ffmpeg::codec::Context::from_parameters(params.clone())
+            .map_err(|e| failed("decoder", e))?;
+        if threads {
+            context.set_threading(threading::Config::kind(threading::Type::Frame));
+        }
+        let mut decoder = context
+            .decoder()
+            .video()
+            .map_err(|e| failed("decoder", e))?;
+        decoder.set_packet_time_base(tb);
+        Ok::<_, SmallCopyError>(decoder)
+    };
+    if hardware {
+        let mut decoder = open(false)?;
+        if let Some(device) = Hardware::attach(&mut decoder) {
+            return Ok((decoder, Some(device)));
+        }
+    }
+    Ok((open(true)?, None))
 }
 
 /// The decoded frame as a software frame of our own: a hardware frame downloaded, else the decoder's frame itself (moved
