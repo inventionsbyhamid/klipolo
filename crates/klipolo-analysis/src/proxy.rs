@@ -1,6 +1,7 @@
-//! The scene log's small copy of a clip (its proxy): MP4s of H.264 at 360p and a low bitrate with AAC mono sound,
-//! each at most `CHUNK_US` long and overlapping the next by `OVERLAP_US`, cut at encode time so each upload stays
-//! small (about 26 MB for ten minutes). The engine writes them (`klipolo_engine::media::small_copy`):
+//! The scene log's small copy of a clip (its proxy): MP4s of H.264 at 360p, 4 frames a second and a low bitrate with
+//! AAC mono sound, each at most `CHUNK_US` long and overlapping the next by `OVERLAP_US`, cut at encode time so each
+//! upload stays small enough for a slow link: about 9 MB for ten minutes, which goes up within the relay's 60 s on
+//! about 1.2 Mb/s. The engine writes them (`klipolo_engine::media::small_copy`):
 //! VideoToolbox on a Mac; Linux has no H.264 encoder, so tests there use a ready file (`existing`).
 //!
 //! **Cuts** are found while the copy is made, from every frame of the source at its own rate (the engine's
@@ -30,10 +31,12 @@ pub const OVERLAP_US: Us = 20_000_000;
 /// The box a copy's picture fits in, (long side, short side): 640 × 360 landscape, 360 × 640 portrait, the size Spark's
 /// token count was measured at (131 tokens a frame).
 pub const FIT: (u32, u32) = (640, 360);
-/// Frames a second at most: enough for the cuts to be found to the frame.
-pub const MAX_FPS: f64 = 30.0;
-/// The picture's average bitrate: ten minutes is about 22 MB.
-pub const VIDEO_BPS: u32 = 300_000;
+/// Frames a second at most: Spark samples at most 2, so 4 keep every frame it looks at (the cuts come from the
+/// source's own frames, not these).
+pub const MAX_FPS: f64 = 4.0;
+/// The picture's average bitrate: ten minutes is about 6 MB (clip A's measured 6.0 MB), a clean 360p picture at 4
+/// frames a second.
+pub const VIDEO_BPS: u32 = 80_000;
 /// The sound's bitrate (AAC mono): Spark listens to it.
 pub const AUDIO_BPS: u32 = 48_000;
 

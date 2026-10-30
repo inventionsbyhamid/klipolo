@@ -223,18 +223,28 @@ fn makes_a_small_copy_on_this_mac_and_finds_the_same_cuts_in_it() {
     );
     let bytes = std::fs::read(&chunk.path).unwrap();
     assert_eq!(chunk.bytes, bytes.len() as u64);
-    eprintln!("clip A's copy at 640 x 360: {} bytes", bytes.len());
+    let per_ten_minutes = bytes.len() as f64 / 155.0 * 600.0;
+    eprintln!(
+        "clip A's copy at 640 x 360: {} bytes, {:.2} MB per 10 minutes",
+        bytes.len(),
+        per_ten_minutes / 1e6
+    );
     // H.264 and AAC, its index before its media (faststart).
     assert!(bytes.windows(4).any(|w| w == b"avc1") && bytes.windows(4).any(|w| w == b"mp4a"));
     assert!(box_at(&bytes, b"moov").unwrap() < box_at(&bytes, b"mdat").unwrap());
-    // About 300 kb/s of picture and 48 kb/s of sound.
+    // Its bitrates, and a ten-minute chunk small enough for a slow link: at most 10 MB.
+    let budget = 155 * (proxy::VIDEO_BPS + proxy::AUDIO_BPS) as usize / 8;
     assert!(
-        bytes.len() < 155 * (300_000 + 48_000) / 8 * 13 / 10,
-        "{}",
+        bytes.len() < budget * 13 / 10,
+        "{} over {budget}",
         bytes.len()
     );
+    assert!(per_ten_minutes < 10e6, "{per_ten_minutes}");
+    // 4 frames a second, whatever the source's rate (clip A's is 30), while its cuts come from every source frame.
     let info = probe_media(&chunk.path).unwrap();
-    assert!((info.duration - 155.0).abs() < 0.2, "{}", info.duration);
+    assert!((info.duration - 155.0).abs() < 0.3, "{}", info.duration);
+    assert!((info.fps - 4.0).abs() < 0.05, "{}", info.fps);
+    assert_eq!(copy.fps, 4.0);
     assert_eq!(info.audio.map(|a| a.channels), Some(1));
     assert_clip_a_cuts(&copy.cuts);
 
