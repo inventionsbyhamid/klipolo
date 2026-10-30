@@ -20,7 +20,7 @@ use klipolo_engine::audio::plan::{
     AudioPlan, AudioSource, JOIN_US, audio_plan, ducking_speech, ducking_speech_after,
     may_change_sound, speech_ranges,
 };
-use klipolo_engine::export::audio::{CEILING_DBTP, ExportAudio};
+use klipolo_engine::export::audio::{CEILING_DBTP, ExportAudio, JobSound};
 use klipolo_engine::export::job::ExportJob;
 use klipolo_engine::export::naming::plan_files;
 use klipolo_engine::export::runner::Batch;
@@ -678,6 +678,74 @@ fn the_export_job_freezes_the_speech_it_ducks_under() {
     assert!(job.is_current(&plain, &Speech::default()));
 }
 
+/// The export worker's sound set-up (`JobSound`, what `export::prepare` reads from the job under its lock) ducks under
+/// the speech frozen in the job, read back from its folder as a resumed worker reads it: the transcript is gone by
+/// then.
+#[test]
+fn the_export_workers_sound_ducks_under_the_jobs_speech() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = |name: &str| dir.path().join(name);
+    // The take's files (silent: the words say who speaks) and the tone as the music.
+    write_wav(&file("mic.wav"), 20, |_| 0.0);
+    write_wav(&file("broll.wav"), 10, |_| 0.0);
+    write_tone(&file("music.wav"), 30);
+    let mut p = with_music(Some(DUCK_DB));
+    for asset in &mut p.assets {
+        if ["mic", "broll", "music"].contains(&asset.id.as_str()) {
+            asset.path = file(&format!("{}.wav", asset.id)).display().to_string();
+        }
+    }
+    let words = transcript(&[(5.0, 9.0, WordKind::Word)], 60.0, true);
+    let batch = Batch {
+        files: plan_files(
+            &p,
+            &[FormatKind::Landscape],
+            ExportQuality::High,
+            dir.path(),
+        ),
+        project: p,
+        fps: 30,
+        quality: ExportQuality::High,
+        pcm_dir: Some(file("cache")),
+        speech: Arc::new(heard_in(&[("mic", words)], &[])),
+        text_language: "en".into(),
+        contribs: Default::default(),
+        caption_file: None,
+        allow_stand_ins: false,
+        activity_dir: None,
+        allow_missing_cursor: false,
+    };
+    let made = ExportJob::create(&batch, 30).unwrap();
+    let job = ExportJob::open(&made.dir).unwrap();
+    let (export, _) = JobSound::of(&job)
+        .prepare(&job.project, &Registry::builtin())
+        .unwrap();
+    let bed = export
+        .plan()
+        .sources
+        .iter()
+        .find(|s| s.path.ends_with("music.wav"))
+        .unwrap();
+    assert_eq!(
+        bed.duck.as_ref().map(|d| &*d.speech),
+        Some(&[range(5.0, 9.0)][..])
+    );
+    let mut stream = export.stream(CEILING_DBTP);
+    let mut heard = vec![0f32; 2 * 14 * RATE as usize];
+    for block in heard.chunks_mut(2 * 1_024) {
+        stream.next(block);
+    }
+    let (talking, between) = (rms_db(&heard, 6.0, 8.0), rms_db(&heard, 11.0, 13.0));
+    println!(
+        "export worker's sound: {:.3} dB under speech",
+        talking - between
+    );
+    assert!(
+        (talking - between - DUCK_DB).abs() < 0.5,
+        "{talking:.2} vs {between:.2} dB"
+    );
+}
+
 /// A preview that draws nothing and keeps every sound plan the engine gets ready to play (`prepare_audio`).
 struct Prepared {
     frames: BlankBackend,
@@ -767,6 +835,11 @@ async fn until(plans: &Mutex<Vec<Arc<AudioPlan>>>, ok: impl Fn(&[Arc<AudioPlan>]
 
 /// A 16-bit stereo WAV of the tone, `seconds` long.
 fn write_tone(path: &Path, seconds: usize) {
+    write_wav(path, seconds, tone_at);
+}
+
+/// A 16-bit stereo WAV of `f(frame)` on both sides, `seconds` long.
+fn write_wav(path: &Path, seconds: usize, f: impl Fn(usize) -> f32) {
     let frames = seconds * RATE as usize;
     let data = (frames * 4) as u32;
     let mut out = std::io::BufWriter::new(std::fs::File::create(path).unwrap());
@@ -787,7 +860,7 @@ fn write_tone(path: &Path, seconds: usize) {
         out.write_all(part).unwrap();
     }
     for n in 0..frames {
-        let x = ((tone_at(n) * 32767.0).round() as i16).to_le_bytes();
+        let x = ((f(n) * 32767.0).round() as i16).to_le_bytes();
         out.write_all(&x).unwrap();
         out.write_all(&x).unwrap();
     }

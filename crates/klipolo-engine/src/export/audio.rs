@@ -9,7 +9,7 @@ use std::sync::Arc;
 use klipolo_model::project::{Loudness, Project};
 use klipolo_model::time::RangeUs;
 
-use super::job::Levels;
+use super::job::{ExportJob, Levels};
 use super::protocol::ErrorCode;
 use super::shared::{WorkerError, is_disk_full};
 use crate::api::ExportQuality;
@@ -34,6 +34,44 @@ impl Levels {
             lufs,
             gain_db: level_db(lufs, loudness, quality),
         }
+    }
+}
+
+/// What an export job's sound is made with besides its project and registry: its quality, the preview's PCM cache, the
+/// measurement it keeps and where someone speaks, frozen with it (`ExportJob::speech_ranges`). Read from the job under
+/// its lock (`JobSound::of`), then prepared off it (`prepare`), as the worker does.
+#[derive(Clone, Debug)]
+pub struct JobSound {
+    pub quality: ExportQuality,
+    pub pcm_dir: Option<std::path::PathBuf>,
+    pub levels: Option<Levels>,
+    pub speech: Arc<[RangeUs]>,
+}
+
+impl JobSound {
+    pub fn of(job: &ExportJob) -> Self {
+        Self {
+            quality: job.quality,
+            pcm_dir: job.pcm_dir.clone(),
+            levels: job.levels.clone(),
+            speech: job.speech_ranges.as_slice().into(),
+        }
+    }
+
+    /// `ExportAudio::prepare` with these settings. Blocking.
+    pub fn prepare(
+        self,
+        project: &Project,
+        registry: &Registry,
+    ) -> Result<(ExportAudio, Levels), WorkerError> {
+        ExportAudio::prepare(
+            project,
+            registry,
+            self.quality,
+            self.pcm_dir.as_deref(),
+            self.levels,
+            self.speech,
+        )
     }
 }
 
