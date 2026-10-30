@@ -27,7 +27,8 @@ services:
     mem_limit: 6g
     memswap_limit: 6g
     # uvicorn waits for calls in flight on SIGTERM, including streams drained
-    # after a client left and alignments of up to 10 minutes of audio.
+    # after a client left. Two 10-minute alignments at once take longer than
+    # this, so restart only when idle (README.md).
     stop_grace_period: 330s
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5)"]
