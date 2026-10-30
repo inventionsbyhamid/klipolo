@@ -49,6 +49,8 @@ fn main() {
             engine::engine_set_view,
             engine::engine_set_visible,
             engine::engine_seek,
+            engine::engine_preview,
+            engine::engine_preview_clear,
             engine::engine_play,
             engine::engine_pause,
             state::project_summary,

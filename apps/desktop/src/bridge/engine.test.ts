@@ -60,12 +60,12 @@ describe('engine bridge', () => {
     ]);
   });
 
-  it('plays and pauses with no arguments and resolves the time in microseconds', async () => {
-    invoke.mockResolvedValueOnce(250_000).mockResolvedValueOnce(2_000_000);
-    await expect(enginePlay()).resolves.toBe(250_000);
+  it('plays from a time at a rate as a numbered run, and pauses to the time it stopped at', async () => {
+    invoke.mockResolvedValueOnce(undefined).mockResolvedValueOnce(2_000_000);
+    await enginePlay(250_000, 1, 3);
     await expect(enginePause()).resolves.toBe(2_000_000);
     expect(invoke.mock.calls).toEqual([
-      ['engine_play', undefined],
+      ['engine_play', { fromUs: 250_000, rate: 1, seq: 3 }],
       ['engine_pause', undefined],
     ]);
   });

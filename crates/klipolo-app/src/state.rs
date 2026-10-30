@@ -1,5 +1,4 @@
-//! What the app holds for the preview: the open project as the engine's feed sees it, the one engine, and where the
-//! transport is.
+//! What the app holds for the preview: the open project as the engine's feed sees it, and the one engine.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -129,14 +128,6 @@ pub fn single_video_project(path: &Path) -> Result<Project, String> {
     Ok(project)
 }
 
-/// Where the transport is: the last seek (its time and sequence), moved by playback's starts and stops. Play starts
-/// from here.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Transport {
-    pub at_us: Us,
-    pub seq: u32,
-}
-
 /// The preview engine: started by the first attach and kept for the app's lifetime (started again if it ended).
 pub struct EngineState {
     pub(crate) slot: EngineSlot,
@@ -144,7 +135,6 @@ pub struct EngineState {
     warm: Mutex<Option<Warmup>>,
     /// The app's cache folder (decoded sound, thumbnails); None when it couldn't be found.
     pub(crate) cache_dir: Option<PathBuf>,
-    pub(crate) transport: Arc<Mutex<Transport>>,
 }
 
 impl EngineState {
@@ -153,7 +143,6 @@ impl EngineState {
             slot: EngineSlot::new(),
             warm: Mutex::new(warm),
             cache_dir,
-            transport: Arc::default(),
         }
     }
 
@@ -163,12 +152,5 @@ impl EngineState {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take()
-    }
-
-    pub(crate) fn transport(&self) -> Transport {
-        *self
-            .transport
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
     }
 }

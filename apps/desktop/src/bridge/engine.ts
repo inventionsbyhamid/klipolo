@@ -99,9 +99,9 @@ export function engineSeek(atUs: number, seq: number): Promise<void> {
   return invoke<void>('engine_seek', { atUs, seq });
 }
 
-/** Plays from the transport's place with sound; resolves with where it started. */
-export function enginePlay(): Promise<number> {
-  return invoke<number>('engine_play');
+/** Plays from `fromUs` at `rate` (1: normal speed, with sound). `seq` names the run as a seek's does: frames carry it. */
+export function enginePlay(fromUs: number, rate: number, seq: number): Promise<void> {
+  return invoke<void>('engine_play', { fromUs, rate, seq });
 }
 
 /** Pauses; resolves with where playback stopped. */

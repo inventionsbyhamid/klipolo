@@ -166,7 +166,8 @@ export async function seek(atUs: number): Promise<void> {
 
 export async function play(): Promise<void> {
   try {
-    const from = await enginePlay();
+    const from = Math.round(playheadAt(Date.now()));
+    await enginePlay(from, 1, state.seq);
     set({ playing: true, anchorUs: from, anchorMs: Date.now(), message: null });
   } catch (error) {
     set({ message: String(error) });
