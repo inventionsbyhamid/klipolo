@@ -7,6 +7,11 @@ publish = false
 description = "Klipolo's desktop app: the Tauri shell around the preview and export engine"
 default-run = "klipolo-app"
 
+# The app's logic without Tauri types (credentials and the device id), so it tests on Linux.
+[lib]
+name = "klipolo_app"
+path = "src/lib.rs"
+
 [build-dependencies]
 tauri-build = { version = "=2.7.1", features = [] }
 
@@ -15,6 +20,8 @@ klipolo-engine = { path = "../klipolo-engine" }
 # The bundled fonts' folder, configured once for the engine at launch.
 klipolo-fonts = { path = "../klipolo-fonts" }
 klipolo-model = { path = "../klipolo-model" }
+# The Meta client: key checks, the relay's device registration and status.
+klipolo-meta = { path = "../klipolo-meta" }
 # The OS's logs folder for the app's log.
 klipolo-platform = { path = "../klipolo-platform" }
 # `protocol-asset`: the page reads imported media and the engine's thumbnails through `asset:` URLs.
@@ -23,6 +30,8 @@ tauri = { version = "=2.12.1", features = ["protocol-asset"] }
 tauri-plugin-dialog = "=2.8.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# The secret store's error.
+thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
@@ -30,9 +39,15 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 ts-rs = "12"
 uuid = { version = "1", features = ["v4"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# The Keychain (generic passwords) for the Meta key and the relay token; the version the lockfile already has.
+security-framework = "3.7"
+
 [dev-dependencies]
 # A portrait photo's EXIF orientation, and a full disk's errno, in the import and save tests.
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 libc = "0.2"
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "test-util"] }
+# Meta and the relay, mocked for the credentials tests.
+wiremock = "0.6"
