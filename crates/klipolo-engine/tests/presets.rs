@@ -6,7 +6,7 @@
 
 use klipolo_engine::make::budget::CostClass;
 use klipolo_engine::registry::pack::{check_definition, names_clean, setting_text_clean};
-use klipolo_engine::registry::presets::{SHADER_BODIES, SHADER_CLAIMED, claimed};
+use klipolo_engine::registry::presets::{SCENE_BODIES, SHADER_BODIES, SHADER_CLAIMED, claimed};
 use klipolo_engine::registry::{Registry, ShaderEffect, ShaderKind, guard};
 use klipolo_model::contrib::ContribId;
 
@@ -36,6 +36,12 @@ fn every_preset_folder_is_listed_and_the_list_matches_the_folders() {
         .collect();
     assert_eq!(SHADER_BODIES.map(|(id, _)| id), *model);
     assert_eq!(SHADER_CLAIMED.map(|(id, _)| id), *model);
+    // And its scenes the model's motion graphic presets, in its order.
+    let scenes: Vec<&str> = klipolo_model::presets::SCENE_PRESETS
+        .iter()
+        .map(|(id, _)| *id)
+        .collect();
+    assert_eq!(SCENE_BODIES.map(|(id, _)| id), *scenes);
     // Each claims the class it measures on the floor GPU, the Intel Iris Plus:
     // Normal (a generator's figure there includes compositing its own picture; the filters' glints and blurs read
     // Normal too), except Dust and bokeh (Heavy, at half size). `claimed()` starts with these.
