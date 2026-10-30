@@ -281,9 +281,13 @@ function KeySection({ status }: { status: AiStatus | null }) {
       <label htmlFor="settings-key">Meta API key</label>
       {saved ? (
         <div className="input-row">
-          <div id="settings-key" className="input is-static">
-            {saved.keyHint ? `Saved, ending in ${saved.keyHint}` : 'Saved'}
-          </div>
+          {/* Says that a key is saved, never the key: read-only, as the code's field is. */}
+          <input
+            id="settings-key"
+            className="input is-static"
+            value={saved.keyHint ? `Saved, ending in ${saved.keyHint}` : 'Saved'}
+            readOnly
+          />
           <button
             type="button"
             className="btn btn-secondary"

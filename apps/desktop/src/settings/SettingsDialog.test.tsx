@@ -49,10 +49,13 @@ describe('SettingsDialog', () => {
   it('shows a saved key only as its last four characters', async () => {
     openOn({ mode: 'key', keyHint: '6789' });
     expect(screen.getByRole('radio', { name: /My Meta API key/ })).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByText('Saved, ending in 6789')).toBeInTheDocument();
+    // A read-only field named by its label, as the code's is; it never holds the key.
+    const field = screen.getByLabelText('Meta API key');
+    expect(field).toHaveValue('Saved, ending in 6789');
+    expect(field).toHaveAttribute('readonly');
     expect(screen.getByText("Kept in your Mac's Keychain.")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain(KEY);
-    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByDisplayValue(KEY)).toBeNull();
     await act(async () => undefined);
   });
 
@@ -79,7 +82,7 @@ describe('SettingsDialog', () => {
     await userEvent.type(screen.getByLabelText('Meta API key'), KEY);
     vi.mocked(aiBridge.setKey).mockResolvedValue({ mode: 'key', keyHint: '6789' });
     await userEvent.click(screen.getByRole('button', { name: 'Save key' }));
-    expect(await screen.findByText('Saved, ending in 6789')).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('Saved, ending in 6789')).toHaveAttribute('readonly');
     expect(screen.queryByDisplayValue(KEY)).toBeNull();
     // The form went with the save; focus stays in the dialog, on the card in use (not Remove: a second Enter mustn't
     // take the key away again).
