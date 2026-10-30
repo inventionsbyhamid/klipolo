@@ -1,0 +1,73 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Klipolo",
+  "version": "0.1.0",
+  "identifier": "com.klipolo.app",
+  "build": {
+    "beforeDevCommand": {
+      "script": "pnpm dev",
+      "cwd": "../../apps/desktop"
+    },
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": {
+      "script": "pnpm build",
+      "cwd": "../../apps/desktop"
+    },
+    "frontendDist": "../../apps/desktop/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Klipolo",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1100,
+        "minHeight": 700,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "backgroundColor": "#070A14",
+        "backgroundThrottling": "disabled"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src ipc: http://ipc.localhost ws://127.0.0.1:*; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'",
+      "capabilities": [
+        {
+          "identifier": "main",
+          "windows": ["main"],
+          "permissions": ["core:window:allow-start-dragging", "core:window:allow-internal-toggle-maximize"]
+        }
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "category": "Video",
+    "shortDescription": "A video editor you talk to",
+    "copyright": "Copyright Hamid Siddiqui",
+    "license": "AGPL-3.0-only",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.png"
+    ],
+    "resources": {
+      "../../assets/fonts/": "fonts/"
+    },
+    "macOS": {
+      "minimumSystemVersion": "15.0",
+      "frameworks": [
+        "../../.build/ffmpeg-9.0/x86_64/prefix/lib/libavcodec.63.dylib",
+        "../../.build/ffmpeg-9.0/x86_64/prefix/lib/libavformat.63.dylib",
+        "../../.build/ffmpeg-9.0/x86_64/prefix/lib/libavutil.61.dylib",
+        "../../.build/ffmpeg-9.0/x86_64/prefix/lib/libswscale.10.dylib",
+        "../../.build/ffmpeg-9.0/x86_64/prefix/lib/libswresample.7.dylib",
+        "../../.build/ffmpeg-9.0/x86_64/prefix/lib/libavfilter.12.dylib"
+      ]
+    }
+  }
+}

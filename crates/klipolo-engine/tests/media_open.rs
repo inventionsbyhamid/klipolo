@@ -169,12 +169,15 @@ const DIRECT: [&str; 7] = [
 /// Names a `use ffmpeg::format::{…}` can bring in to open an input by.
 const IMPORTED: [&str; 4] = ["input", "open", "open_with", "input_with_dictionary"];
 
-/// Every crate's sources: `src` under each workspace folder holding one (`crates/*`, `tools/*`, the app's; 
-/// the vendored code is inside the engine's).
+/// Every crate's sources: `src` under each workspace crate (`crates/*`, the app's among them; the vendored code
+/// is inside the engine's), and under `tools/*` once there are tools.
 fn source_roots(root: &Path) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     for parent in ["crates", "tools"] {
-        for entry in std::fs::read_dir(root.join(parent)).unwrap().flatten() {
+        let Ok(entries) = std::fs::read_dir(root.join(parent)) else {
+            continue;
+        };
+        for entry in entries.flatten() {
             let src = entry.path().join("src");
             if src.is_dir() {
                 roots.push(src);
@@ -322,22 +325,20 @@ fn the_scan_finds_every_way_to_open_an_input() {
     }
     for compiled in [
         "crates/klipolo-engine/src/render/captions/testing.rs",
-
+        "crates/klipolo-app/src/test_support.rs",
     ] {
         assert!(!test_file(Path::new(compiled)), "{compiled}");
     }
 }
 
 #[test]
-// It scans the app crate's sources and `tools/`, which this workspace doesn't have yet.
-#[ignore = "the app crate is added later: re-enable against crates/klipolo-app/src"]
 fn every_media_open_goes_through_the_one_helper() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let roots = source_roots(&root);
     for crate_src in [
-        "crates/klipolo-speech/src",
-
-
+        "crates/klipolo-app/src",
+        "crates/klipolo-engine/src",
+        "crates/klipolo-model/src",
     ] {
         assert!(
             roots.contains(&root.join(crate_src)),
@@ -367,7 +368,8 @@ fn every_media_open_goes_through_the_one_helper() {
             direct.push(format!("{shown}:{n}: {code}"));
         }
     }
-    assert!(scanned > 500, "the sources were scanned: {scanned}");
+    // The workspace's crates hold about 840 source files (the engine alone about 540).
+    assert!(scanned > 750, "the sources were scanned: {scanned}");
     assert!(
         direct.is_empty(),
         "open media through klipolo_engine::media::open, never directly:\n{}",
@@ -378,8 +380,6 @@ fn every_media_open_goes_through_the_one_helper() {
 /// The scan's backstop: only the engine links FFmpeg's bindings outside tests, so any other crate reaches FFmpeg
 /// through the engine (and its one open), whatever its imports look like.
 #[test]
-// It scans the app crate's sources and `tools/`, which this workspace doesn't have yet.
-#[ignore = "the app crate is added later: re-enable against crates/klipolo-app/src"]
 fn only_the_engine_links_ffmpeg() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut linking = Vec::new();

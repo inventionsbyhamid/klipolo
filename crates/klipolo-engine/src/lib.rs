@@ -1,4 +1,4 @@
-//! Klipolo's preview and export engine. No Tauri dependency: the app's commands adapt it.
+//! Klipolo's preview and export engine. No Tauri dependency: the app crate (`crates/klipolo-app`) adapts it.
 
 pub mod api;
 pub mod audio;
