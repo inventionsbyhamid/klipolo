@@ -136,6 +136,11 @@ impl Transcriber for Meta {
         self.calls_at_once
     }
 
+    /// Voice Transcribe's list price for that much audio.
+    fn estimate_usd(&self, seconds: f64) -> f64 {
+        pricing::asr_usd((seconds.max(0.0) * 1000.0).round() as u64)
+    }
+
     fn transcribe<'a>(
         &'a self,
         wav: Vec<u8>,
@@ -500,6 +505,14 @@ mod tests {
         assert_eq!(Transcriber::max_in_flight(&direct), 4);
         assert_eq!(relay.limits().max_in_flight, 2);
         assert_eq!(direct.limits().max_in_flight, 2);
+    }
+
+    #[test]
+    fn hearing_is_estimated_at_voice_transcribes_price() {
+        let meta = Meta::new(MetaClient::direct("sk-key".to_owned().into()));
+        // $0.18 an hour: ten minutes is 3 cents.
+        assert!((Transcriber::estimate_usd(&meta, 600.0) - 0.03).abs() < 1e-12);
+        assert_eq!(Transcriber::estimate_usd(&meta, -1.0), 0.0);
     }
 
     #[test]

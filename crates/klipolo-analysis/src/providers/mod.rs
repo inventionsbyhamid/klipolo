@@ -115,6 +115,10 @@ pub trait Transcriber: Send + Sync {
     /// limit itself, across every caller.
     fn max_in_flight(&self) -> usize;
 
+    /// What hearing `seconds` of sound is expected to cost, in US dollars, before any call (the estimate shown before
+    /// analysis).
+    fn estimate_usd(&self, seconds: f64) -> f64;
+
     /// The turns heard in `wav` (mono 16-bit PCM at 16 kHz, at most `max_audio_s`). `keywords` (names, jargon) bias
     /// the spelling; empty for none.
     fn transcribe<'a>(
