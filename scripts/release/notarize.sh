@@ -43,12 +43,19 @@ submit "$work/app.zip"
 xcrun stapler staple "$app"
 xcrun stapler validate "$app"
 
-# 2. The disk image from the stapled app.
-mkdir "$work/image"
-ditto "$app" "$work/image/$name"
-ln -s /Applications "$work/image/Applications"
+# 2. The disk image from the stapled app, filled at a private mount point and then compressed. Never through
+# `hdiutil create -srcfolder`, which mounts at /Volumes/Klipolo: once a notarized Klipolo has been opened from there,
+# macOS refuses to write a new Klipolo.app at that path ("Operation not permitted").
+mkdir "$work/mnt"
+size_mb=$(($(du -sm "$app" | cut -f1) * 12 / 10 + 20))
+hdiutil create -size "${size_mb}m" -fs HFS+ -volname Klipolo -ov "$work/image.dmg" > /dev/null
+hdiutil attach -nobrowse -noautoopen -mountpoint "$work/mnt" "$work/image.dmg" > /dev/null
+trap 'hdiutil detach -quiet -force "$work/mnt" 2> /dev/null || true; rm -rf "$work"' EXIT
+ditto "$app" "$work/mnt/$name"
+ln -s /Applications "$work/mnt/Applications"
+hdiutil detach -quiet "$work/mnt"
 made=$work/$(basename "$dmg")
-hdiutil create -volname Klipolo -srcfolder "$work/image" -fs HFS+ -format UDZO -ov "$made" > /dev/null
+hdiutil convert "$work/image.dmg" -format UDZO -o "$made" > /dev/null
 
 # 3. The disk image signed, notarized and stapled, then put in place whole.
 codesign --force --timestamp --sign "$id" "$made" 2>&1 | redact "$id"
