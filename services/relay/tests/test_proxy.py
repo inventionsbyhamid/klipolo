@@ -392,6 +392,38 @@ def test_bad_json_is_400(client, conn, meta, content):
     assert not route.called
 
 
+def nested(levels):
+    """A Spark request whose JSON is `levels` deep, counting the outer object."""
+    return ('{"model":"muse-spark-1.3","input":' + "[" * (levels - 1) + "]" * (levels - 1) + "}").encode()
+
+
+@pytest.mark.parametrize(("levels", "status"), [(64, 200), (65, 400), (50_000, 400)])
+def test_json_nested_deeper_than_64_levels_is_400(client, conn, meta, levels, status):
+    device = add_device(conn)
+    route = meta.post("/responses").respond(200, json=spark_body())
+
+    response = client.post(
+        "/meta/v1/responses", content=nested(levels), headers={**device.headers, "content-type": "application/json"}
+    )
+
+    assert response.status_code == status
+    assert route.called is (status == 200)
+    if status == 400:
+        assert response.json()["error"] == "invalid_request"
+
+
+def test_transcribe_request_part_nested_too_deeply_is_400(client, conn, meta):
+    device = add_device(conn)
+    route = meta.post("/asr/transcribe")
+    spec = '{"model":"muse-voice-transcribe-1.0","keywords":' + "[" * 70 + "]" * 70 + "}"
+    files = {"request": (None, spec, "application/json"), "audio": ("a.wav", b"RIFF", "audio/wav")}
+
+    response = client.post("/meta/v1/asr/transcribe", files=files, headers=device.headers)
+
+    assert response.status_code == 400
+    assert not route.called
+
+
 def test_json_body_over_the_limit_is_413(client, conn, meta, monkeypatch):
     monkeypatch.setattr(proxy, "MAX_JSON_BYTES", 100)
     device = add_device(conn)

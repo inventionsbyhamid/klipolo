@@ -83,6 +83,8 @@ UPLOAD_OVERHEAD_BYTES = 64 * 1024
 MAX_AUDIO_BYTES = 32 * 1024 * 1024
 MAX_TRANSCRIBE_SPEC_BYTES = 64 * 1024
 MAX_ERROR_BYTES = 64 * 1024
+# Deeper request JSON is refused, so nothing the relay does with it recurses far.
+MAX_JSON_DEPTH = 64
 # Larger bodies are not parsed whole: `usage` follows the output, so it is
 # looked for in the last USAGE_TAIL_BYTES instead.
 FULL_PARSE_BYTES = 8 * 1024 * 1024
@@ -886,7 +888,20 @@ def _json_object(raw: bytes) -> dict[str, Any]:
         value = None
     if not isinstance(value, dict):
         raise RelayError(400, "invalid_request", "The request body must be a JSON object.")
+    if _depth(value) > MAX_JSON_DEPTH:
+        raise RelayError(400, "invalid_request", f"The request JSON is nested more than {MAX_JSON_DEPTH} levels deep.")
     return value
+
+
+def _depth(value: Any) -> int:
+    deepest = 0
+    stack = [(value, 1)]
+    while stack:
+        item, depth = stack.pop()
+        if isinstance(item, dict | list):
+            deepest = max(deepest, depth)
+            stack.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
+    return deepest
 
 
 def _unique_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
