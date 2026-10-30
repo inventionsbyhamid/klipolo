@@ -1169,7 +1169,7 @@ def _refers_to_media(payload: dict[str, Any]) -> bool:
         return True
     # Anywhere in the request: a stored file, a link, or a media part.
     for item in _objects(payload):
-        if "file_id" in item or (_type(item) in _MEDIA_TYPES and not _inline_image(item)):
+        if "file_id" in item or _type(item) in _MEDIA_TYPES:
             return True
         for key, value in item.items():
             if (key == "url" or key.endswith("_url")) and isinstance(value, str) and not value.startswith("data:"):
@@ -1185,12 +1185,6 @@ def _type(item: dict[str, Any]) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _inline_image(item: dict[str, Any]) -> bool:
-    # An image inside the request is paid for by its bytes in the estimate.
-    url = item.get("image_url")
-    return item.get("type") == "input_image" and isinstance(url, str) and url.startswith("data:")
-
-
 def _text_only(items: Any) -> bool:
     if items is None or isinstance(items, str):
         return True
@@ -1203,7 +1197,7 @@ def _text_only(items: Any) -> bool:
             content = item.get("content")
             parts = [] if isinstance(content, str) else content
             if not isinstance(parts, list) or not all(
-                isinstance(part, dict) and (_type(part) in _TEXT_PARTS or _inline_image(part)) for part in parts
+                isinstance(part, dict) and _type(part) in _TEXT_PARTS for part in parts
             ):
                 return False
         elif kind == "function_call_output":

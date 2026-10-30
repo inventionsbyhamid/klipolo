@@ -736,6 +736,7 @@ MEDIA_REQUESTS = {
     "url-in-a-tool": spark_request(
         tools=[{"type": "function", "name": "f", "parameters": {"type": "object"}, "logo_url": "https://example.com/l.png"}]
     ),
+    "inline-image": spark_request(input=[user({"type": "input_text", "text": "What is this?"}, INLINE_IMAGE)]),
     "list-typed-part": spark_request(input=[user({"type": ["input_text"], "text": "hi"})]),
     "list-typed-item": spark_request(input=[{"type": ["message"], "role": "user", "content": "hi"}]),
     "earlier-response": spark_request(previous_response_id="resp_0"),
@@ -754,7 +755,6 @@ TEXT_REQUESTS = {
             {"type": "function_call_output", "call_id": "c1", "output": "done"},
         ],
     ),
-    "inline-image": spark_request(input=[user({"type": "input_text", "text": "What is this?"}, INLINE_IMAGE)]),
     "nullable-tool-property": spark_request(
         tools=[
             {
