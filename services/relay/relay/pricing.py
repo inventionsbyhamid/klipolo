@@ -21,6 +21,12 @@ MODELS_BY_ENDPOINT: dict[str, frozenset[str]] = {
     "asr/transcribe": frozenset({TRANSCRIBE_MODEL}),
 }
 
+# Spark's output per call is capped so the most a call can cost is known up
+# front: the relay sets max_output_tokens when it is missing and refuses more
+# than the maximum.
+DEFAULT_MAX_OUTPUT_TOKENS = 8192
+MAX_OUTPUT_TOKENS = 16384
+
 SPARK_INPUT_USD = 1.25 / 1_000_000
 SPARK_CACHED_INPUT_USD = 0.15 / 1_000_000
 SPARK_OUTPUT_USD = 4.25 / 1_000_000

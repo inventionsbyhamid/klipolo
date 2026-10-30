@@ -55,7 +55,16 @@ from relay.config import Settings
 from relay.deps import AppSettings, Conn
 from relay.devices import Device, has_relay_ai
 from relay.errors import RelayError, error_response
-from relay.pricing import MODELS_BY_ENDPOINT, SAM_IMAGES_KEY, SAM_MODEL, cost_usd, estimate_usage
+from relay.pricing import (
+    DEFAULT_MAX_OUTPUT_TOKENS,
+    MAX_OUTPUT_TOKENS,
+    MODELS_BY_ENDPOINT,
+    SAM_IMAGES_KEY,
+    SAM_MODEL,
+    SPARK_MODELS,
+    cost_usd,
+    estimate_usage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -319,6 +328,8 @@ async def create_response(request: Request, device: RelayDevice, conn: Conn, set
         model = payload.get("model")
         _check_model("responses", model, settings)
         _check_response_options(payload)
+        if model in SPARK_MODELS:
+            payload["max_output_tokens"] = _max_output_tokens(payload.get("max_output_tokens"))
         body = _encode(payload)
         inputs = payload.get("input")
         has_video = bool(_count_parts(inputs, "input_video") or _count_parts(inputs, "input_file"))
@@ -865,6 +876,17 @@ def _objects(value: Any) -> Iterator[dict[str, Any]]:
             stack.extend(item.values())
         elif isinstance(item, list):
             stack.extend(item)
+
+
+def _max_output_tokens(value: Any) -> int:
+    """A bound on a Spark call's output, so its worst-case cost is known."""
+    if value is None:
+        return DEFAULT_MAX_OUTPUT_TOKENS
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= MAX_OUTPUT_TOKENS:
+        raise RelayError(
+            400, "invalid_request", f"max_output_tokens must be a whole number from 1 to {MAX_OUTPUT_TOKENS}."
+        )
+    return value
 
 
 def _count_parts(value: Any, part_type: str) -> int:

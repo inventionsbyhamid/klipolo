@@ -189,7 +189,7 @@ def test_spark_call_is_forwarded_with_the_relay_key_and_metered(client, conn, me
     assert response.headers["x-request-id"] == "req-1"
     sent = route.calls.last.request
     assert sent.headers["authorization"] == f"Bearer {settings.meta_api_key}"
-    assert json.loads(sent.content) == spark_request()
+    assert json.loads(sent.content) == {**spark_request(), "max_output_tokens": 8192}
     [row] = ledger(conn, device)
     assert row["endpoint"] == "responses"
     assert row["model"] == "muse-spark-1.3"
@@ -309,12 +309,41 @@ def test_options_the_relay_cannot_meter_are_400(client, conn, meta, extra, messa
 def test_function_tools_are_forwarded(client, conn, meta):
     device = add_device(conn)
     route = meta.post("/responses").respond(200, json=spark_body())
-    body = spark_request(tools=[{"type": "function", "name": "cut", "parameters": {}}], service_tier="auto")
+    body = spark_request(
+        tools=[{"type": "function", "name": "cut", "parameters": {}}], service_tier="auto", max_output_tokens=2000
+    )
 
     response = client.post("/meta/v1/responses", json=body, headers=device.headers)
 
     assert response.status_code == 200
     assert json.loads(route.calls.last.request.content) == body
+
+
+@pytest.mark.parametrize(("sent", "forwarded"), [(None, 8192), (1, 1), (16384, 16384)])
+def test_spark_output_is_bounded_by_max_output_tokens(client, conn, meta, sent, forwarded):
+    device = add_device(conn)
+    route = meta.post("/responses").respond(200, json=spark_body())
+    body = spark_request() if sent is None else spark_request(max_output_tokens=sent)
+
+    response = client.post("/meta/v1/responses", json=body, headers=device.headers)
+
+    assert response.status_code == 200
+    assert json.loads(route.calls.last.request.content)["max_output_tokens"] == forwarded
+
+
+@pytest.mark.parametrize("value", [16385, 0, -1, 1.5, "100", True])
+def test_max_output_tokens_over_16384_or_not_a_count_is_400(client, conn, meta, value):
+    device = add_device(conn)
+    route = meta.post("/responses")
+
+    response = client.post("/meta/v1/responses", json=spark_request(max_output_tokens=value), headers=device.headers)
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": "invalid_request",
+        "message": "max_output_tokens must be a whole number from 1 to 16384.",
+    }
+    assert not route.called
 
 
 @pytest.mark.parametrize(
