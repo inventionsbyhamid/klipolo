@@ -1,7 +1,9 @@
 # torch and the packages it needs, pinned, from https://download.pytorch.org/whl/cpu.
 # torchaudio 2.8 is the last release with forced_align. The Dockerfile
 # installs these with --no-deps, so every package must be listed here.
-# To refresh: build the image, run `pip freeze` in it, and update both lock files.
+# To refresh, resolve the unpinned requirements in a clean container: see
+# "Update the pinned packages" in README.md. pip freeze in the image only
+# gives these pins back.
 filelock==4.2.4
 fsspec==2026.9.0
 Jinja2==3.1.6

@@ -1,6 +1,8 @@
 # The relay's runtime packages, pinned, from PyPI. The Dockerfile installs
 # these with --no-deps after requirements-torch.lock, then runs pip check.
-# To refresh: build the image, run `pip freeze` in it, and update both lock files.
+# To refresh, resolve the unpinned requirements in a clean container: see
+# "Update the pinned packages" in README.md. pip freeze in the image only
+# gives these pins back.
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
