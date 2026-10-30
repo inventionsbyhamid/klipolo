@@ -19,8 +19,10 @@ use klipolo_analysis::cache::content_key;
 use klipolo_analysis::providers::Transcriber;
 use klipolo_analysis::providers::meta::Meta;
 use klipolo_analysis::transcript::{TranscriptOut, transcribe_asset};
+use klipolo_engine::render::probe::probe_media;
 use klipolo_meta::{MetaClient, SPEND_LEDGER_ENV, SecretString};
 use klipolo_model::speech::WordKind;
+use klipolo_model::time::secs_to_us;
 
 const KEY_ENV: &str = "MODEL_API_KEY";
 const TOKEN_ENV: &str = "KLIPOLO_RELAY_TOKEN";
@@ -130,17 +132,26 @@ fn run(args: &Args) -> Result<(), String> {
             .block_on(transcribe_asset(&meta, &meta, &wav, &args.keywords))
             .map_err(|e| format!("{} ({e})", e.user_message()))?
     } else {
-        TranscriptOut::no_speech(meta.model(), 0, 0.0)
+        // No sound stream: nothing to hear, over the whole clip.
+        let clip = probe_media(&args.video).map_err(|e| format!("Could not read the clip: {e}"))?;
+        TranscriptOut::no_speech(meta.model(), secs_to_us(clip.duration), 0.0)
     };
     out.transcript.key = key;
     let path = args.out.join("transcript.json");
     let json = serde_json::to_vec_pretty(&out).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| format!("Could not write {}: {e}", path.display()))?;
-    print_summary(&args.video, &out, sound.duration_us, credentials, &path);
+    let sound_us = sound.has_audio.then_some(sound.duration_us);
+    print_summary(&args.video, &out, sound_us, credentials, &path);
     Ok(())
 }
 
-fn print_summary(video: &Path, out: &TranscriptOut, sound_us: i64, credentials: &str, path: &Path) {
+fn print_summary(
+    video: &Path,
+    out: &TranscriptOut,
+    sound_us: Option<i64>,
+    credentials: &str,
+    path: &Path,
+) {
     let words = &out.transcript.words;
     let count = |kind: WordKind| words.iter().filter(|w| w.kind == kind).count();
     let fillers: BTreeSet<String> = words
@@ -160,7 +171,10 @@ fn print_summary(video: &Path, out: &TranscriptOut, sound_us: i64, credentials: 
         video.file_name().unwrap_or_default().to_string_lossy()
     );
     println!("  credentials: {credentials}");
-    println!("  sound: {:.1} s", sound_us as f64 / 1e6);
+    match sound_us {
+        Some(us) => println!("  sound: {:.1} s", us as f64 / 1e6),
+        None => println!("  sound: none (the clip has no sound stream)"),
+    }
     if let Some(reason) = &out.empty_reason {
         println!("  {reason}");
     } else {

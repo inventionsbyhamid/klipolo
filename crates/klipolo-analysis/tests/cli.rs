@@ -1,5 +1,9 @@
 //! The dev CLI `klipolo-analyze transcript <video>`, run as a process against a mock Meta and relay: it writes
-//! `transcript.json`, prints the cost, logs spend only when asked, and never prints the key or token.
+//! `transcript.json`, prints the cost, logs spend only when asked, and never prints the key or token. The test of a
+//! clip without sound needs `scripts/gen-engine-fixtures.sh` (the gate runs it with `--ignored`).
+
+#[path = "../../klipolo-engine/tests/support/fixture_set.rs"]
+mod fixture_set;
 
 use std::path::Path;
 use std::process::{Command, Output};
@@ -172,4 +176,45 @@ async fn cli_writes_the_transcript_prints_the_cost_and_logs_spend_only_when_aske
         "{rows}"
     );
     assert!(!rows.contains(KEY) && !rows.contains(TOKEN));
+}
+
+/// A clip with no sound makes no request and writes an empty transcript covering the whole clip.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs scripts/gen-engine-fixtures.sh"]
+async fn cli_writes_an_empty_transcript_for_a_clip_without_sound() {
+    let video = fixture_set::fixture_dir().join("camera-720p.mp4");
+    assert!(video.exists(), "run scripts/gen-engine-fixtures.sh");
+    let length_us = (klipolo_engine::render::probe::probe_media(&video)
+        .unwrap()
+        .duration
+        * 1e6)
+        .round() as i64;
+    let dir = tempfile::tempdir().unwrap();
+    let folder = dir.path().join("out");
+    let env = [
+        ("MODEL_API_KEY", KEY.to_owned()),
+        ("KLIPOLO_META_BASE", "http://127.0.0.1:9/v1".to_owned()),
+        ("KLIPOLO_RELAY_BASE", "http://127.0.0.1:9".to_owned()),
+    ];
+
+    let out = run(
+        &env,
+        &[
+            "transcript",
+            video.to_str().unwrap(),
+            "--out",
+            folder.to_str().unwrap(),
+        ],
+    )
+    .await;
+
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(text(&out).contains("No speech found."), "{}", text(&out));
+    let saved: Value =
+        serde_json::from_slice(&std::fs::read(folder.join("transcript.json")).unwrap()).unwrap();
+    assert!(length_us > 0);
+    assert_eq!(saved["transcript"]["coveredUs"], length_us);
+    assert_eq!(saved["transcript"]["complete"], true);
+    assert_eq!(saved["transcript"]["words"], json!([]));
+    assert_eq!(saved["emptyReason"], "No speech found.");
 }
