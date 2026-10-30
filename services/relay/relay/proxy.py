@@ -315,11 +315,15 @@ async def create_response(request: Request, device: RelayDevice, conn: Conn, set
     async def prepare() -> Call:
         payload = _json_object(await _read_body(request, MAX_JSON_BYTES, "The request is too large."))
         model = payload.get("model")
-        _check_model("responses", model)
+        _check_model("responses", model, settings)
         _check_response_options(payload)
         body = _encode(payload)
         inputs = payload.get("input")
         has_video = bool(_count_parts(inputs, "input_video") or _count_parts(inputs, "input_file"))
+        if model == SAM_MODEL and has_video and payload.get("stream") is not True:
+            # A long SAM video call can outlast the read timeout; streamed, the
+            # relay reads it to its final usage.
+            raise RelayError(400, "unsupported", "SAM video calls must stream through the relay.")
         meter = Meter(
             "responses",
             model,
@@ -381,7 +385,7 @@ async def transcribe(request: Request, device: RelayDevice, conn: Conn, settings
             raise RelayError(400, "invalid_request", "The request part is too large.")
         spec = _json_object(bytes(spec_part.data))
         model = spec.get("model")
-        _check_model("asr/transcribe", model)
+        _check_model("asr/transcribe", model, settings)
         if len(audio.data) > MAX_AUDIO_BYTES:
             raise RelayError(413, "too_large", too_large)
         # The form is rebuilt from what was checked, so Meta reads exactly the
@@ -802,8 +806,10 @@ def _encode(payload: dict[str, Any]) -> bytes:
         raise RelayError(400, "invalid_request", "The request body must be a JSON object.") from None
 
 
-def _check_model(endpoint: str, model: Any) -> None:
-    if not isinstance(model, str) or model not in MODELS_BY_ENDPOINT[endpoint]:
+def _check_model(endpoint: str, model: Any, settings: Settings) -> None:
+    # Both lists: the configured one, and the models the relay can price for
+    # this endpoint, which never include Muse Wonder or a contributor tier.
+    if not isinstance(model, str) or model not in settings.allowed_models or model not in MODELS_BY_ENDPOINT[endpoint]:
         raise RelayError(
             403,
             "model_not_allowed",

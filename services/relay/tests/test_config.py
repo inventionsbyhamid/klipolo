@@ -15,6 +15,7 @@ def test_defaults_match_the_documented_caps():
     assert settings.align_concurrency == 2
     assert settings.align_threads == 8
     assert settings.meta_api_key == ""
+    assert settings.allowed_models == {"muse-spark-1.3", "muse-spark-1.2", "muse-voice-transcribe-1.0"}
 
 
 def test_environment_overrides_defaults():
@@ -73,3 +74,9 @@ def test_bad_values_fail_with_the_variable_name(name, value):
 def test_non_finite_values_fail_with_the_variable_name(name, value):
     with pytest.raises(ValueError, match=name):
         load_settings({name: value})
+
+
+def test_allowed_models_are_read_from_a_comma_separated_list():
+    settings = load_settings({"ALLOWED_MODELS": " sam-3.1, muse-spark-1.3 ,,"})
+
+    assert settings.allowed_models == {"sam-3.1", "muse-spark-1.3"}

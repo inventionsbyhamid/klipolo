@@ -7,14 +7,17 @@ import math
 import secrets
 import time
 import uuid
-from dataclasses import dataclass
+from contextlib import contextmanager
+from dataclasses import dataclass, replace
 
 import anyio
 import httpx
 import pytest
 import respx
+from fastapi.testclient import TestClient
 
 from relay import db, proxy
+from relay.app import create_app
 from relay.devices import hash_token
 
 META = "https://api.meta.ai/v1"
@@ -53,6 +56,23 @@ def conn(settings):
 def meta():
     with respx.mock(base_url=META, assert_all_called=False) as router:
         yield router
+
+
+@contextmanager
+def relay_client(settings, **changes):
+    with TestClient(create_app(replace(settings, **changes))) as test_client:
+        yield test_client
+
+
+def with_sam(settings):
+    return replace(settings, allowed_models=settings.allowed_models | {"sam-3.1"})
+
+
+@pytest.fixture
+def sam_client(settings):
+    """A relay with SAM switched on, which it is not by default."""
+    with TestClient(create_app(with_sam(settings))) as test_client:
+        yield test_client
 
 
 def add_device(conn, *, code="testcode", active=True, spent=0.0):
@@ -144,12 +164,6 @@ def test_deactivating_a_code_stops_the_next_call(client, conn, meta):
 
 
 def test_missing_meta_key_is_503_not_configured(settings, conn, meta):
-    from dataclasses import replace
-
-    from fastapi.testclient import TestClient
-
-    from relay.app import create_app
-
     device = add_device(conn)
     route = meta.post("/responses")
 
@@ -203,6 +217,44 @@ def test_wonder_is_403(client, conn, meta):
     route = meta.post("/responses")
 
     response = client.post("/meta/v1/responses", json=spark_request("muse-wonder-1.0"), headers=device.headers)
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "model_not_allowed"
+    assert not route.called
+
+
+def test_sam_is_403_by_default(client, conn, meta):
+    device = add_device(conn)
+    route = meta.post("/responses")
+    body = {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, {"type": "input_video", "file_id": "file-1"}]}]}
+
+    response = client.post("/meta/v1/responses", json=body, headers=device.headers)
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "model_not_allowed"
+    assert not route.called
+
+
+def test_wonder_and_contributors_stay_refused_even_if_listed(settings, conn, meta):
+    device = add_device(conn)
+    meta.post("/responses").respond(200, json=spark_body())
+    listed = frozenset({"muse-wonder-1.0", "muse-spark-1.3-contributor", "muse-spark-1.3"})
+
+    with relay_client(settings, allowed_models=listed) as client:
+        statuses = {
+            model: client.post("/meta/v1/responses", json=spark_request(model), headers=device.headers).status_code
+            for model in sorted(listed)
+        }
+
+    assert statuses == {"muse-spark-1.3": 200, "muse-spark-1.3-contributor": 403, "muse-wonder-1.0": 403}
+
+
+def test_model_left_out_of_the_allowlist_is_403(settings, conn, meta):
+    device = add_device(conn)
+    route = meta.post("/responses")
+
+    with relay_client(settings, allowed_models=frozenset({"muse-voice-transcribe-1.0"})) as client:
+        response = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
 
     assert response.status_code == 403
     assert response.json()["error"] == "model_not_allowed"
@@ -456,11 +508,11 @@ VIDEO_BY_FILE = {"type": "input_video", "file_id": "file-1"}
     ],
     ids=["input-video", "input-file", "file-id", "sam", "earlier-context"],
 )
-def test_timeout_on_a_media_call_charges_at_least_the_floor(client, conn, meta, body):
+def test_timeout_on_a_media_call_charges_at_least_the_floor(sam_client, conn, meta, body):
     device = add_device(conn)
     meta.post("/responses").mock(side_effect=httpx.ReadTimeout("slow"))
 
-    response = client.post("/meta/v1/responses", json=body, headers=device.headers)
+    response = sam_client.post("/meta/v1/responses", json=body, headers=device.headers)
 
     assert response.status_code == 504
     [row] = ledger(conn, device)
@@ -515,29 +567,31 @@ def test_usage_after_a_huge_output_is_found_in_the_tail(client, conn, meta, monk
 # SAM.
 
 
-def test_sam_video_is_charged_from_frames_processed(client, conn, meta):
+@pytest.mark.parametrize("stream", [None, False])
+def test_sam_video_must_stream(sam_client, conn, meta, stream):
     device = add_device(conn)
-    meta.post("/responses").respond(200, json={"status": "completed", "usage": {"video_frames_processed": 160}})
+    route = meta.post("/responses")
     body = {
         "model": "sam-3.1",
         "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, {"type": "input_video", "file_id": "file-1"}]}],
     }
+    if stream is not None:
+        body["stream"] = stream
 
-    response = client.post("/meta/v1/responses", json=body, headers=device.headers)
+    response = sam_client.post("/meta/v1/responses", json=body, headers=device.headers)
 
-    assert response.status_code == 200
-    [row] = ledger(conn, device)
-    assert row["model"] == "sam-3.1"
-    assert row["cost_usd"] == pytest.approx(0.032)
+    assert response.status_code == 400
+    assert response.json() == {"error": "unsupported", "message": "SAM video calls must stream through the relay."}
+    assert not route.called
 
 
-def test_sam_images_are_charged_per_image_in_the_request(client, conn, meta):
+def test_sam_images_are_charged_per_image_in_the_request(sam_client, conn, meta):
     device = add_device(conn)
     meta.post("/responses").respond(200, json={"status": "completed", "usage": {}})
     image = {"type": "input_image", "image_url": "data:image/png;base64,AAAA"}
     body = {"model": "sam-3.1", "input": [{"role": "user", "content": [{"type": "input_text", "text": "face"}, image, image]}]}
 
-    response = client.post("/meta/v1/responses", json=body, headers=device.headers)
+    response = sam_client.post("/meta/v1/responses", json=body, headers=device.headers)
 
     assert response.status_code == 200
     [row] = ledger(conn, device)
@@ -1059,13 +1113,13 @@ def test_last_event_without_a_closing_blank_line_is_still_read(client, conn, met
     assert row["cost_usd"] == pytest.approx(SPARK_COST)
 
 
-def test_streamed_sam_call_is_charged_from_frames(client, conn, meta):
+def test_streamed_sam_call_is_charged_from_frames(sam_client, conn, meta):
     device = add_device(conn)
     done = {"type": "response.completed", "response": {"status": "completed", "usage": {"video_frames_processed": 160}}}
     stream_from_meta(meta, MetaStream([sse(CREATED), b'data: {"type":"response.output_text.delta","delta":"<0f>"}\n\n', sse(done)]))
     body = {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, {"type": "input_video", "file_id": "file-1"}]}]}
 
-    response = client.post("/meta/v1/responses", json=body, headers=device.headers)
+    response = sam_client.post("/meta/v1/responses", json=body, headers=device.headers)
 
     assert response.status_code == 200
     [row] = ledger(conn, device)
@@ -1134,9 +1188,14 @@ def anyio_backend():
 
 @pytest.fixture
 async def app(settings):
-    from relay.app import create_app
-
     application = create_app(settings)
+    async with application.router.lifespan_context(application):
+        yield application
+
+
+@pytest.fixture
+async def sam_app(settings):
+    application = create_app(with_sam(settings))
     async with application.router.lifespan_context(application):
         yield application
 
@@ -1333,7 +1392,8 @@ async def test_drain_that_fails_charges_the_estimate(app, conn, meta):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("body", [VIDEO_REQUEST, SAM_REQUEST], ids=["spark-video", "sam"])
-async def test_drain_that_fails_for_media_charges_at_least_the_floor(app, conn, meta, body):
+async def test_drain_that_fails_for_media_charges_at_least_the_floor(sam_app, conn, meta, body):
+    app = sam_app
     device = add_device(conn)
     call = AsgiCall(app, "/meta/v1/responses", streamed(body), device.headers)
     upstream = MetaStream(

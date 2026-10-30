@@ -1,6 +1,9 @@
 """Settings read from the environment.
 
 META_API_KEY is held for the proxy and is never logged or shown in repr.
+ALLOWED_MODELS is the comma-separated list of Meta models the proxy forwards;
+SAM is off unless listed. Models the relay never forwards (Muse Wonder, the
+*-contributor tiers) stay refused even when listed.
 """
 
 import math
@@ -8,6 +11,8 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+
+DEFAULT_ALLOWED_MODELS = "muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0"
 
 
 @dataclass(frozen=True)
@@ -19,6 +24,7 @@ class Settings:
     align_concurrency: int
     align_threads: int
     meta_api_key: str = field(default="", repr=False)
+    allowed_models: frozenset[str] = frozenset(DEFAULT_ALLOWED_MODELS.split(","))
 
 
 def _number(env: Mapping[str, str], name: str, default: str, kind: type, minimum: float) -> float:
@@ -46,4 +52,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         align_concurrency=_number(env, "ALIGN_CONCURRENCY", "2", int, 1),
         align_threads=_number(env, "ALIGN_THREADS", "8", int, 1),
         meta_api_key=env.get("META_API_KEY", ""),
+        allowed_models=frozenset(
+            name.strip() for name in env.get("ALLOWED_MODELS", DEFAULT_ALLOWED_MODELS).split(",") if name.strip()
+        ),
     )
