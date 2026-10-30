@@ -10,6 +10,10 @@ use super::{
     SpeakerTurn, TimedWord, Transcriber, Transcription,
 };
 
+/// The relay's error code for a device's requests-at-once limit (`Retry-After` 1 s for Meta calls, 30 s for
+/// alignment): a busy moment, not a used-up allowance.
+pub const RELAY_BUSY: &str = "busy";
+
 /// Voice Transcribe's longest request.
 pub const TRANSCRIBE_MAX_S: u32 = 600;
 
@@ -127,10 +131,14 @@ fn transcription(heard: AsrResult) -> Transcription {
 }
 
 /// A Meta client error in Klipolo's terms: its sentence for the person, its `Display` (already redacted) for logs.
-/// Any 429 is `RateLimited`: Meta's rate limit, the relay's busy answer and its daily alignment quota alike.
+/// A 429 is `Busy` when the relay says `busy` (wait and try again); any other (the relay's daily `align_quota`, Meta's
+/// own rate limit) is `RateLimited`, a stop.
 pub fn provider_error(e: MetaError) -> ProviderError {
     let (kind, retry_after_s) = match &e {
         MetaError::Budget { .. } => (ProviderErrorKind::Budget, None),
+        MetaError::RateLimited {
+            retry_after, code, ..
+        } if code.as_deref() == Some(RELAY_BUSY) => (ProviderErrorKind::Busy, *retry_after),
         MetaError::RateLimited { retry_after, .. } => {
             (ProviderErrorKind::RateLimited, *retry_after)
         }
@@ -174,6 +182,24 @@ mod tests {
                     retry_after: Some(50_400),
                     code: Some("align_quota".into()),
                     message: Some(quota.into()),
+                },
+                Kind::RateLimited,
+                true,
+            ),
+            (
+                MetaError::RateLimited {
+                    retry_after: Some(1),
+                    code: Some("busy".into()),
+                    message: Some("Too many requests at once from this device.".into()),
+                },
+                Kind::Busy,
+                false,
+            ),
+            (
+                MetaError::RateLimited {
+                    retry_after: Some(3),
+                    code: Some("rate_limit_exceeded".into()),
+                    message: None,
                 },
                 Kind::RateLimited,
                 true,

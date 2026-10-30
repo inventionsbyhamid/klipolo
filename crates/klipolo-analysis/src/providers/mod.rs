@@ -10,8 +10,14 @@ pub mod meta;
 
 use std::future::Future;
 use std::pin::Pin;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+
+/// Attempts per request while the service answers `Busy`, the first one included.
+pub const BUSY_ATTEMPTS: u32 = 3;
+/// The longest wait before a busy request is sent again.
+pub const BUSY_WAIT_MAX_S: u64 = 30;
 
 /// A boxed future that may move between threads, so the traits work as `dyn` objects.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -148,6 +154,9 @@ pub enum ProviderErrorKind {
     Budget,
     /// Too many requests, or a daily allowance used up: stop for now (`ProviderError::retry_after_s` says when).
     RateLimited,
+    /// Busy with this device's other requests for a moment: wait `ProviderError::retry_after_s` and send the request
+    /// again (`retry_busy`). Not a stop.
+    Busy,
     /// The key, token or code was refused.
     NotAllowed,
     /// The service is missing or not answering (none set up, down, unreachable).
@@ -191,5 +200,26 @@ impl ProviderError {
             self.kind,
             ProviderErrorKind::Budget | ProviderErrorKind::RateLimited
         )
+    }
+}
+
+/// `call`'s answer, asked again while it is `Busy`: after the wait the service gave (at least 1 s, at most
+/// `BUSY_WAIT_MAX_S`), `BUSY_ATTEMPTS` attempts in all, then its last error. Any other answer returns at once: a
+/// used-up allowance or credit is never asked again. `call` makes its request afresh each time.
+pub async fn retry_busy<T, F, Fut>(mut call: F) -> Result<T, ProviderError>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T, ProviderError>>,
+{
+    let mut attempt = 1;
+    loop {
+        match call().await {
+            Err(e) if e.kind == ProviderErrorKind::Busy && attempt < BUSY_ATTEMPTS => {
+                let wait = e.retry_after_s.unwrap_or(1).clamp(1, BUSY_WAIT_MAX_S);
+                tokio::time::sleep(Duration::from_secs(wait)).await;
+                attempt += 1;
+            }
+            answer => return answer,
+        }
     }
 }

@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use klipolo_analysis::AnalysisError;
 use klipolo_analysis::providers::meta::Meta;
@@ -17,7 +17,7 @@ use klipolo_analysis::transcript::{NO_SPEECH, ROUGH_WORDS, TranscriptOut, transc
 use klipolo_meta::{MetaClient, SecretString};
 use klipolo_model::speech::{PAUSE_US, Word, WordKind};
 use klipolo_model::time::Us;
-use serde_json::Value;
+use serde_json::{Value, json};
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -958,4 +958,147 @@ fn the_analysis_future_can_move_between_threads() {
     let aligner = FakeAligner::new(|_| Ok(Alignment::default()));
     let future = transcribe_asset(&transcriber, &aligner, Path::new("sound.wav"), &[]);
     sends(&future);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Busy answers, through the Meta adapter in relay mode (mock relay)
+
+const ASR_PATH: &str = "/meta/v1/asr/transcribe";
+const ALIGN_PATH: &str = "/v1/align";
+const BUSY: &str = "Too many requests at once from this device. Wait for one to finish.";
+
+fn relay_meta(server: &MockServer) -> Meta {
+    Meta::new(
+        MetaClient::relay(SecretString::from("relay-test-token"))
+            .with_relay_base(server.uri())
+            .with_meta_base("http://127.0.0.1:9")
+            .with_ledger(None),
+    )
+}
+
+/// One turn, "hello there friends", 0.5 to 4 s into each chunk.
+fn asr_answer() -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_json(json!({
+        "audioDurationMs": 5000,
+        "turns": [{"turnId": 0, "startMs": 500, "endMs": 4000,
+                   "transcript": "hello there friends", "speaker": "A"}]
+    }))
+}
+
+/// Its words, in a request WAV that starts 0.25 s before the turn.
+fn align_answer() -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_json(json!({
+        "words": [
+            {"text": "hello", "startMs": 250, "endMs": 1000, "score": 0.9, "turn": 0},
+            {"text": "there", "startMs": 1100, "endMs": 2000, "score": 0.9, "turn": 0},
+            {"text": "friends", "startMs": 2100, "endMs": 3700, "score": 0.9, "turn": 0}
+        ],
+        "skipped": []
+    }))
+}
+
+fn busy() -> ResponseTemplate {
+    ResponseTemplate::new(429)
+        .insert_header("retry-after", "1")
+        .set_body_json(json!({"error": "busy", "message": BUSY}))
+}
+
+async fn mount(server: &MockServer, at: &str, answer: ResponseTemplate, first_only: bool) {
+    let mock = Mock::given(method("POST"))
+        .and(path(at))
+        .respond_with(answer);
+    if first_only {
+        mock.up_to_n_times(1).with_priority(1).mount(server).await;
+    } else {
+        mock.mount(server).await;
+    }
+}
+
+async fn requests_to(server: &MockServer, at: &str) -> usize {
+    server
+        .received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .filter(|r| r.url.path() == at)
+        .count()
+}
+
+/// The relay's `busy` (its requests-at-once limit) is waited out for the second it asks, then the request goes again.
+#[tokio::test]
+async fn a_busy_answer_is_waited_out_and_tried_again() {
+    let server = MockServer::start().await;
+    mount(&server, ASR_PATH, busy(), true).await;
+    mount(&server, ASR_PATH, asr_answer(), false).await;
+    mount(&server, ALIGN_PATH, busy(), true).await;
+    mount(&server, ALIGN_PATH, align_answer(), false).await;
+    let meta = relay_meta(&server);
+    let clip = clip(&[tone(5.0)]);
+
+    let started = Instant::now();
+    let out = transcribe_asset(&meta, &meta, &clip.path, &[])
+        .await
+        .unwrap();
+
+    assert!(started.elapsed() >= Duration::from_secs(2));
+    assert_eq!(requests_to(&server, ASR_PATH).await, 2);
+    assert_eq!(requests_to(&server, ALIGN_PATH).await, 2);
+    assert!(!out.approximate, "{:?}", out.approximate_reason);
+    assert_eq!(texts(&out), ["hello", "there", "friends"]);
+}
+
+/// Still busy after three tries: the request fails as any failure does, with the relay's sentence; it isn't a stop.
+#[tokio::test]
+async fn a_request_still_busy_after_three_tries_fails() {
+    let server = MockServer::start().await;
+    mount(&server, ASR_PATH, busy(), false).await;
+    let meta = relay_meta(&server);
+    let clip = clip(&[tone(5.0)]);
+
+    let err = transcribe_asset(&meta, &meta, &clip.path, &[])
+        .await
+        .unwrap_err();
+
+    assert_eq!(requests_to(&server, ASR_PATH).await, 3);
+    assert_eq!(err.user_message(), BUSY);
+    assert!(!err.is_stop());
+    assert!(matches!(err, AnalysisError::Provider(ref e) if e.kind == ProviderErrorKind::Busy));
+}
+
+/// The daily alignment allowance and the credit are stops: one request each, never tried again.
+#[tokio::test]
+async fn a_used_up_allowance_or_credit_is_never_tried_again() {
+    let quota =
+        "This device has used today's 120 minutes of word timing. It resets at midnight UTC.";
+    let server = MockServer::start().await;
+    mount(&server, ASR_PATH, asr_answer(), false).await;
+    let used_up = ResponseTemplate::new(429)
+        .insert_header("retry-after", "50400")
+        .set_body_json(json!({"error": "align_quota", "message": quota}));
+    mount(&server, ALIGN_PATH, used_up, false).await;
+    let meta = relay_meta(&server);
+    let clip = clip(&[tone(5.0)]);
+
+    let out = transcribe_asset(&meta, &meta, &clip.path, &[])
+        .await
+        .unwrap();
+
+    assert_eq!(requests_to(&server, ALIGN_PATH).await, 1);
+    assert!(out.approximate && out.transcript.complete);
+    assert_eq!(out.approximate_reason.as_deref(), Some(quota));
+
+    let credit = "This device has used its Klipolo credit. Add your Meta API key in Settings.";
+    let server = MockServer::start().await;
+    let spent = ResponseTemplate::new(402)
+        .set_body_json(json!({"error": "budget_exhausted", "message": credit}));
+    mount(&server, ASR_PATH, spent, false).await;
+    let meta = relay_meta(&server);
+
+    let err = transcribe_asset(&meta, &meta, &clip.path, &[])
+        .await
+        .unwrap_err();
+
+    assert_eq!(requests_to(&server, ASR_PATH).await, 1);
+    assert!(err.is_stop());
+    assert_eq!(err.user_message(), credit);
 }

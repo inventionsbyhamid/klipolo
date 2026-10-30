@@ -17,9 +17,11 @@
 //! chunk's start is added to its turns and each align request's start to its words; the asset's audio lead never is
 //! (the captions add it themselves). Chunks meet at pauses with no overlap, so no word is heard twice at a seam.
 //!
-//! A budget or quota stop from the aligner (`ProviderError::is_stop`), or an aligner that is missing, refuses the
-//! token or isn't answering, ends aligning for the clip. Nothing is retried: the turns left keep spread words, and
-//! the aligner's own sentence is kept for the person (`TranscriptOut::approximate_reason`). Alignment can run again
+//! A `Busy` answer (a service's requests-at-once limit) is waited out and the request sent again, at most
+//! `BUSY_ATTEMPTS` times in all (`providers::retry_busy`); still busy, it fails like any other answer. Nothing else is
+//! retried. A budget or quota stop from the aligner (`ProviderError::is_stop`), or an aligner that is missing, refuses
+//! the token, isn't answering or stays busy, ends aligning for the clip: the turns left keep spread words, and the
+//! aligner's own sentence is kept for the person (`TranscriptOut::approximate_reason`). Alignment can run again
 //! later on the same turns (`Sound::load`, `align`, `finish`), and `finish` without a timing gives the turn-level
 //! transcript to show before alignment ends.
 
@@ -39,7 +41,7 @@ use crate::error::AnalysisError;
 use crate::fillers::is_filler;
 use crate::providers::{
     AlignLimits, AlignTurn, Aligner, Alignment, ProviderError, ProviderErrorKind, SpeakerTurn,
-    TimedWord, Transcriber,
+    TimedWord, Transcriber, retry_busy,
 };
 
 /// The language Voice Transcribe is biased to, and whose fillers are tagged.
@@ -249,8 +251,8 @@ pub async fn transcribe_asset(
 }
 
 /// The turns `transcriber` hears in `sound`'s chunks, `TRANSCRIBE_IN_FLIGHT` requests at once, in order and in sound
-/// time (each clamped to its chunk; blank ones left out). The first failed request ends the step with its error, and
-/// the requests still running are dropped.
+/// time (each clamped to its chunk; blank ones left out). A busy answer is waited out (`retry_busy`); the first request
+/// that fails otherwise ends the step with its error, and the requests still running are dropped.
 pub async fn hear(
     transcriber: &dyn Transcriber,
     sound: &Sound,
@@ -260,9 +262,8 @@ pub async fn hear(
         stream::iter(sound.chunks.iter().copied().enumerate())
             .map(|(i, range)| async move {
                 // Made only when its request starts, so at most `TRANSCRIBE_IN_FLIGHT` WAVs exist at once.
-                let said = transcriber
-                    .transcribe(sound.wav_of(range), keywords)
-                    .await?;
+                let said =
+                    retry_busy(|| transcriber.transcribe(sound.wav_of(range), keywords)).await?;
                 Ok::<_, AnalysisError>((i, turns_in(said.turns, range, i), said.cost_usd))
             })
             .buffer_unordered(TRANSCRIBE_IN_FLIGHT)
@@ -304,8 +305,8 @@ fn turns_in(said: Vec<SpeakerTurn>, chunk: RangeUs, index: usize) -> Vec<Turn> {
 
 /// Word times for `turns` from `aligner`, in requests within its limits, `max_in_flight` at once. A request the
 /// aligner refuses as sent (`ProviderErrorKind::Failed`) leaves only its own turns untimed. Any other failure (a
-/// budget or quota stop, a refused token, an aligner that is missing or not answering) also stops the requests not
-/// yet sent. Nothing is retried.
+/// budget or quota stop, a refused token, an aligner that is missing, not answering or still busy after
+/// `retry_busy`) also stops the requests not yet sent. Only a busy answer is tried again.
 pub async fn align(aligner: &dyn Aligner, sound: &Sound, turns: &[Turn]) -> Timing {
     let limits = aligner.limits();
     let batches = batches(turns, sound.duration_us, &limits);
@@ -384,7 +385,6 @@ async fn request(
     batch: &Batch,
     turns: &[Turn],
 ) -> Result<(Us, Alignment), ProviderError> {
-    let wav = sound.wav_of(batch.span);
     let offset = sound.slice_start(batch.span.start);
     let sent: Vec<AlignTurn> = batch
         .turns
@@ -395,7 +395,7 @@ async fn request(
             text: turns[i].text.clone(),
         })
         .collect();
-    let answer = aligner.align(wav, &sent).await?;
+    let answer = retry_busy(|| aligner.align(sound.wav_of(batch.span), &sent)).await?;
     Ok((offset, answer))
 }
 
