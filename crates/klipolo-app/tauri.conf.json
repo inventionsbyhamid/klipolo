@@ -44,8 +44,7 @@
             "core:window:allow-start-dragging",
             "core:window:allow-internal-toggle-maximize",
             "core:event:allow-listen",
-            "core:event:allow-unlisten",
-            "dialog:allow-open"
+            "core:event:allow-unlisten"
           ]
         }
       ]
