@@ -555,7 +555,8 @@ def refund_seconds(conn: sqlite3.Connection, device_id: str, reservation: Reserv
 def _quota_error(settings: Settings, used: float, needed: float | None = None) -> RelayError:
     minutes = settings.align_minutes_per_device_per_day
     left = minutes * 60 - used
-    if needed is None or left <= 0:
+    # Under a second left would read "0 seconds left": say it is used up.
+    if needed is None or left < 1:
         message = f"This device has used today's {minutes:.10g} minutes of word timing. It resets at midnight UTC."
     else:
         message = (

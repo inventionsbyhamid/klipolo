@@ -268,6 +268,16 @@ def test_a_request_larger_than_the_minutes_left_is_429(client, auth, fake):
     assert align_usage(settings) == (120 * 60 - 1, today())
 
 
+def test_less_than_a_second_left_is_reported_as_used_up(client, auth, fake):
+    settings = client.app.state.settings
+    set_align_usage(settings, 120 * 60 - 0.5, today())
+    # Not "0 seconds left": the device has used today's minutes.
+    body = assert_error(post(client, auth), 429, "align_quota")
+    assert body["message"] == "This device has used today's 120 minutes of word timing. It resets at midnight UTC."
+    assert fake.calls == 0
+    assert align_usage(settings) == (120 * 60 - 0.5, today())
+
+
 def test_a_request_that_just_fits_the_minutes_left_is_aligned(client, auth):
     settings = client.app.state.settings
     set_align_usage(settings, 120 * 60 - 1.5, today())
