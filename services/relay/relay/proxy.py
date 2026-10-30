@@ -14,7 +14,9 @@ Anything else is 404. Every call is gated per request: a known device token
 Billable calls and uploads are then refused with 402 once the device or the
 whole relay has reached its cap. After Meta answers, the call is charged from
 Meta's own `usage`: the ledger row and the device's `spent_usd` are written
-in one transaction. Failed calls (non-2xx) are not charged.
+in one transaction. Failed calls (non-2xx) are not charged. A call cut off
+after it reached Meta (a timeout, a dropped stream) is charged from the usage
+seen so far or, when none came, a conservative estimate of the request.
 
 Nothing from a proxied request is stored except the ledger row, and request
 or response headers and bodies are never logged.
