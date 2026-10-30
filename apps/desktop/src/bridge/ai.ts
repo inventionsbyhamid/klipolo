@@ -2,6 +2,9 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { AiStatus } from '../bindings/AiStatus';
 import { call } from './call';
 
+/** What `onStatus` gives back to stop listening (so features never import Tauri themselves). */
+export type { UnlistenFn };
+
 /**
  * Settings' commands (`crates/klipolo-app/src/commands/settings.rs`): how Klipolo pays for Meta's models. A failure is
  * an Error with one plain sentence. The key and the code go to Rust and are never kept on the page.

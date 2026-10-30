@@ -1,7 +1,6 @@
-import type { UnlistenFn } from '@tauri-apps/api/event';
 import { create } from 'zustand';
 import type { AiStatus } from '../bindings/AiStatus';
-import { aiBridge } from '../bridge/ai';
+import { aiBridge, type UnlistenFn } from '../bridge/ai';
 
 interface AiStore {
   /** How AI is paid for, as Rust last said; null until the first answer. */
