@@ -8,6 +8,9 @@
 //! `EveryFrame`, into a `cuts::Finder` per chunk), so they land on the source's frames whatever frame rate the copy
 //! keeps. A ready copy's are found by decoding it at its own rate (`existing`).
 //!
+//! **Background work:** the copy is made while someone edits, so its software decode keeps to half the cores
+//! (`small_copy::background_threads`); the caller runs it on a thread of low priority (the app: utility QoS).
+//!
 //! **Times:** a chunk's time 0 is its `range.start` on the clip's file clock (its picture's), so every time measured in
 //! a chunk (Spark's moments) plus `range.start` is the clip's own time. The cuts are in the clip's time already. The
 //! sound is placed by the clip's audio lead, as the preview plays it (`ProxyInfo::audio_lead_us`).
@@ -120,6 +123,9 @@ pub fn make_in_chunks(
     let mut found = Vec::new();
     // The copy's facts, from its first chunk (every chunk is made the same way).
     let mut first = None;
+    let threads = small_copy::background_threads(
+        std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get),
+    );
     for (k, range) in plan(duration_us, max_us, overlap_us)
         .into_iter()
         .enumerate()
@@ -131,6 +137,7 @@ pub fn make_in_chunks(
             max_fps: MAX_FPS,
             video_bps: VIDEO_BPS,
             audio_bps: AUDIO_BPS,
+            threads,
         };
         // Every frame of the source, at its own rate, into this chunk's finder (told when the copy starts again).
         let mut finder = Finder::new();
