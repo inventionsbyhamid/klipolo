@@ -33,8 +33,8 @@ pub struct FunctionCall {
 /// A parsed Responses API answer.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResponseOut {
-    /// All `output_text` parts of the `message` items, joined; none when the
-    /// model only called tools.
+    /// The `output_text` parts of each `message` item joined, with a newline
+    /// between items; none when the model only called tools.
     pub output_text: Option<String>,
     /// The `function_call` items, in order.
     pub function_calls: Vec<FunctionCall>,
@@ -102,7 +102,8 @@ impl ResponseOut {
             .and_then(Value::as_array)
             .map(Vec::as_slice)
             .unwrap_or_default();
-        let mut texts = Vec::new();
+        // One entry per message item that has text.
+        let mut texts: Vec<String> = Vec::new();
         let mut function_calls = Vec::new();
         for item in items {
             match item.get("type").and_then(Value::as_str) {
@@ -112,13 +113,13 @@ impl ResponseOut {
                         .and_then(Value::as_array)
                         .into_iter()
                         .flatten();
-                    texts.extend(
-                        parts
-                            .filter(|p| {
-                                p.get("type").and_then(Value::as_str) == Some("output_text")
-                            })
-                            .filter_map(|p| p.get("text").and_then(Value::as_str)),
-                    );
+                    let mut text_parts = parts
+                        .filter(|p| p.get("type").and_then(Value::as_str) == Some("output_text"))
+                        .filter_map(|p| p.get("text").and_then(Value::as_str))
+                        .peekable();
+                    if text_parts.peek().is_some() {
+                        texts.push(text_parts.collect());
+                    }
                 }
                 Some("function_call") => function_calls.push(function_call(item)?),
                 _ => {}
@@ -129,7 +130,7 @@ impl ResponseOut {
                 .and_then(Value::as_str)
                 .map(str::to_owned)
         } else {
-            Some(texts.concat())
+            Some(texts.join("\n"))
         };
         let usage = raw.get("usage").map(usage).unwrap_or_default();
         Ok(Self {

@@ -727,6 +727,20 @@ fn response_without_output_or_usage_parses_empty() {
 }
 
 #[test]
+fn output_text_joins_parts_and_puts_a_newline_between_messages() {
+    let text = |t: &str| json!({"type": "output_text", "text": t});
+    let raw = json!({"output": [
+        {"type": "message", "content": [text("Going vertical "), text("for TikTok.")]},
+        {"type": "function_call", "call_id": "call_1", "name": "setFormat", "arguments": "{}"},
+        {"type": "message", "content": [text("Captions are on.")]},
+    ]});
+    assert_eq!(
+        ResponseOut::parse(raw).unwrap().output_text.as_deref(),
+        Some("Going vertical for TikTok.\nCaptions are on.")
+    );
+}
+
+#[test]
 fn function_call_without_a_name_is_a_decode_error() {
     let raw =
         json!({"output": [{"type": "function_call", "call_id": "call_1", "arguments": "{}"}]});
