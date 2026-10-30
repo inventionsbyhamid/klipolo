@@ -941,7 +941,9 @@
   pointer-events: none;
 }
 
-/* Over the blocks, under the gutter: proposed cuts, the time range, the playhead, the snap guide, drop ghosts. */
+/* Over the blocks and everything in them (names, grips), under the gutter: proposed cuts, the time range, the playhead,
+   the snap guide, drop ghosts. Each block is a stacking context of its own (z-index 1), so its name never rises above
+   these, and the playhead and a cut's hatch cross the names. */
 .tl-marks {
   position: absolute;
   top: 0;
@@ -956,6 +958,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
+  z-index: 1;
   display: block;
   overflow: hidden;
   padding: 0;
@@ -1098,6 +1101,7 @@
    the right in teal) and music (violet body and edge, its waveform at 40 %, its name in a violet tag). */
 .tl-item {
   position: absolute;
+  z-index: 1;
   display: flex;
   align-items: center;
   padding: 0;
@@ -1108,6 +1112,16 @@
   line-height: var(--lh-2xs);
   text-align: left;
   white-space: nowrap;
+}
+
+.tl-item.is-selected {
+  z-index: 2;
+}
+
+/* A focused block rises over its neighbours, so the next one never covers its focus ring. */
+.tl-clip:focus-visible,
+.tl-item:focus-visible {
+  z-index: 3;
 }
 
 .tl-item[data-dragging="true"] {
