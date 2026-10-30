@@ -160,7 +160,7 @@ pub struct Background {
     pub color: String,
     pub color_end: Option<String>,
     pub asset_id: Option<Id>,
-    /// Inset of the main footage, as a fraction of the shorter canvas side (0–0.4).
+    /// Inset of the main footage, as a fraction of the shorter canvas side (0 to 0.4).
     pub padding: f64,
 }
 

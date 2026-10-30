@@ -206,7 +206,7 @@ pub enum FramingMode {
 #[ts(export)]
 pub struct Framing {
     pub mode: FramingMode,
-    /// 0–1: which part stays in view when Fill crops (0.5 = centre).
+    /// 0 to 1: which part stays in view when Fill crops (0.5 = centre).
     pub focus_x: f64,
     pub focus_y: f64,
     /// The Fill crop follows the cursor; none keeps the focus.
