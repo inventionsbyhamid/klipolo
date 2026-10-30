@@ -41,6 +41,8 @@ run "engine fixtures" scripts/gen-engine-fixtures.sh
 
 # Formatting, every crate and module (rustfmt walks every module whatever its cfg).
 run "cargo fmt --all --check" cargo fmt --all --check
+# The bundled pack (assets/library): what scripts/gen-library.py writes, the same bytes every run, CC0 and small.
+run "bundled pack" scripts/gen-library.test.sh
 run "cargo check --workspace --all-targets" cargo check --workspace --all-targets --locked
 run "clippy model, cursor, platform, engine, fonts, speech-wire, meta, analysis" \
   cargo clippy -p klipolo-model -p klipolo-cursor -p klipolo-platform -p klipolo-engine -p klipolo-fonts \
