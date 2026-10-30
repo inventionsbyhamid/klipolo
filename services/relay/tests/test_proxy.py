@@ -866,13 +866,41 @@ def test_client_credentials_and_hop_headers_are_not_forwarded(client, conn, meta
     assert "set-cookie" not in response.headers
 
 
-def test_query_string_passes_through(client, conn, meta):
+def test_session_id_passes_through_to_transcribe(client, conn, meta):
     device = add_device(conn)
-    route = meta.post("/responses").respond(200, json=spark_body())
+    route = meta.post("/asr/transcribe").respond(200, json={"audioDurationMs": 1000})
 
-    client.post("/meta/v1/responses?include=reasoning.encrypted_content&a=b%20c", json=spark_request(), headers=device.headers)
+    response = client.post(
+        "/meta/v1/asr/transcribe?sessionId=klipolo-a1_b.2", files=transcribe_files()[0], headers=device.headers
+    )
 
-    assert route.calls.last.request.url.query == b"include=reasoning.encrypted_content&a=b%20c"
+    assert response.status_code == 200
+    assert route.calls.last.request.url.query == b"sessionId=klipolo-a1_b.2"
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("POST", "/meta/v1/responses?include=reasoning.encrypted_content"),
+        ("POST", "/meta/v1/responses?sessionId=s1"),
+        ("POST", "/meta/v1/files?purpose=user_data"),
+        ("GET", "/meta/v1/files/file-1?x=1"),
+        ("DELETE", "/meta/v1/files/file-1?x=1"),
+        ("POST", "/meta/v1/asr/transcribe?other=1"),
+        ("POST", "/meta/v1/asr/transcribe?sessionId=a&sessionId=b"),
+        ("POST", "/meta/v1/asr/transcribe?sessionId=%C3%A9"),
+        ("POST", "/meta/v1/asr/transcribe?sessionId"),
+        ("POST", "/meta/v1/asr/transcribe?sessionId=" + "a" * 200),
+    ],
+)
+def test_other_query_parameters_are_400(client, conn, meta, method, path):
+    device = add_device(conn)
+
+    response = client.request(method, path, headers=device.headers)
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "invalid_request", "message": "This query parameter is not supported through the relay."}
+    assert not meta.calls
 
 
 # Concurrency.
@@ -1210,9 +1238,10 @@ class AsgiCall:
     each chunk arrive and hang up whenever it likes. Once the client has hung
     up, sends are dropped, as uvicorn does."""
 
-    def __init__(self, app, path, body, headers):
+    def __init__(self, app, path, body, headers, query_string=b""):
         self.app = app
         self.path = path
+        self.query_string = query_string
         self.body = body
         self.headers = {**headers, "content-type": "application/json", "content-length": str(len(body))}
         self.status = None
@@ -1250,7 +1279,7 @@ class AsgiCall:
             "path": self.path,
             "raw_path": self.path.encode(),
             "root_path": "",
-            "query_string": b"",
+            "query_string": self.query_string,
             "headers": [(k.lower().encode(), v.encode()) for k, v in self.headers.items()],
             "client": ("127.0.0.1", 50000),
             "server": ("relay", 80),
@@ -1516,3 +1545,15 @@ async def test_client_disconnect_during_a_non_streamed_call_still_charges_real_u
     assert json.loads(row["usage_json"]) == SPARK_USAGE
     assert row["cost_usd"] == pytest.approx(SPARK_COST)
     assert app.state.in_flight.count() == 0
+
+
+@pytest.mark.anyio
+async def test_raw_non_ascii_query_is_400(app, conn, meta):
+    device = add_device(conn)
+    call = AsgiCall(app, "/meta/v1/responses", json.dumps(spark_request()).encode(), device.headers, query_string="x=é".encode())
+
+    await call.run()
+
+    assert call.status == 400
+    assert json.loads(b"".join(call.chunks))["error"] == "invalid_request"
+    assert not meta.calls

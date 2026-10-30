@@ -35,6 +35,7 @@ import math
 import re
 import sqlite3
 import time
+import urllib.parse
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -86,6 +87,7 @@ _REQUEST_HEADERS = ("accept", "idempotency-key")
 _RESPONSE_HEADERS = ("content-type", "retry-after", "x-request-id")
 
 _FILE_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
+_QUERY_VALUE = re.compile(r"[A-Za-z0-9_.:-]{1,128}")
 _SAFE_FILENAME = re.compile(r"[\w. -]{1,100}")
 _SAFE_MEDIA_TYPE = re.compile(r"[\w.+-]+/[\w.+-]+")
 _USAGE_KEY = re.compile(r'"usage"\s*:\s*(?=\{)')
@@ -401,7 +403,7 @@ async def transcribe(request: Request, device: RelayDevice, conn: Conn, settings
         )
         return Call("POST", "asr/transcribe", meter, files=files)
 
-    return await _proxy(request, device, conn, settings, prepare)
+    return await _proxy(request, device, conn, settings, prepare, query_keys=frozenset({"sessionId"}))
 
 
 @router.api_route(
@@ -422,8 +424,10 @@ async def _proxy(
     conn: sqlite3.Connection,
     settings: Settings,
     prepare: Callable[[], Awaitable[Call]],
+    query_keys: frozenset[str] = frozenset(),
 ) -> Response:
     device_id = device["device_id"]
+    params = _query_params(request, query_keys)
     slot = request.app.state.in_flight.acquire(device_id)
     handed_off = False
     try:
@@ -431,7 +435,7 @@ async def _proxy(
         if call.capped:
             # As late as possible, right before the call goes out.
             await run_in_threadpool(check_budget, conn, device_id, settings)
-        response = await _forward(request, settings, device_id, call, slot)
+        response = await _forward(request, settings, device_id, call, slot, params)
         # A streamed response frees its slot when the stream ends.
         handed_off = isinstance(response, MeteredStream)
         return response
@@ -443,11 +447,11 @@ async def _proxy(
             slot.release()
 
 
-async def _forward(request: Request, settings: Settings, device_id: str, call: Call, slot: Slot) -> Response:
+async def _forward(
+    request: Request, settings: Settings, device_id: str, call: Call, slot: Slot, params: dict[str, str]
+) -> Response:
     client: httpx.AsyncClient = request.app.state.meta_client
-    url = httpx.URL(f"{META_BASE_URL}/{call.path}")
-    if request.url.query:
-        url = url.copy_with(query=request.url.query.encode("ascii"))
+    url = httpx.URL(f"{META_BASE_URL}/{call.path}", params=params)
     headers = {name: value for name in _REQUEST_HEADERS if (value := request.headers.get(name)) is not None}
     headers.update(call.headers)
     # Plain bytes from Meta, so usage can be read as they pass.
@@ -748,6 +752,25 @@ async def _read_at_most(response: httpx.Response, limit: int) -> bytes:
 
 
 # Request bodies.
+
+
+def _query_params(request: Request, allowed: frozenset[str]) -> dict[str, str]:
+    """The query, if it only has the endpoint's allowed keys, each once, with
+    plain values. Rebuilt from these values when forwarded."""
+    raw = request.scope.get("query_string", b"")
+    if not raw:
+        return {}
+    invalid = RelayError(400, "invalid_request", "This query parameter is not supported through the relay.")
+    try:
+        pairs = urllib.parse.parse_qsl(raw.decode("ascii"), keep_blank_values=True, strict_parsing=True)
+    except (UnicodeDecodeError, ValueError):
+        raise invalid from None
+    params: dict[str, str] = {}
+    for key, value in pairs:
+        if key not in allowed or key in params or not _QUERY_VALUE.fullmatch(value):
+            raise invalid
+        params[key] = value
+    return params
 
 
 def _declared_length(request: Request, limit: int, too_large: str) -> int | None:
