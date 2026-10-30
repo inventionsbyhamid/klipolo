@@ -1,0 +1,20 @@
+Klipolo
+Copyright 2026 Hamid Siddiqui
+
+Klipolo is free software. You can redistribute it and change it under the terms of the GNU Affero General Public
+License, version 3 only, as published by the Free Software Foundation. The licence text is in LICENSE.txt next to
+this file.
+
+Klipolo comes with no warranty, to the extent the law allows. See the licence for details.
+
+You can get the complete source code of this version of Klipolo from the same place you downloaded it.
+
+Parts of Klipolo's video engine are derived from Cap (https://github.com/CapSoftware/Cap), commit
+d327051c175aa092c06ad9fc6684298b1b5fed6b, Copyright (c) 2023-present Cap Software, Inc. They are used under the
+GNU Affero General Public License, version 3.
+
+Klipolo uses FFmpeg under the GNU Lesser General Public License, version 2.1 or later. See FFmpeg-LGPL.txt.
+
+Archivo, which the caption style samples fall back to, is under the SIL Open Font License 1.1 (Archivo-OFL.txt).
+The interface uses the Mac's system font. The video fonts in Klipolo.app/Contents/Resources/fonts each come with
+their own licence file in their folder.
