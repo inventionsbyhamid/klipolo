@@ -13,6 +13,12 @@
 //! Every time is TIMELINE seconds with one decimal, as the model reads and writes them. The same input always gives the
 //! same bytes, so the provider's prompt cache can reuse the prefix: the maps given are only looked up, never walked.
 //!
+//! Budget: at most `MAX_CONTEXT_TOKENS` (`estimate_tokens`, `CHARS_PER_TOKEN` characters a token). A longer project is
+//! told more briefly, step by step until it fits, each step named in its section's heading: scene items keep only
+//! their kind and who (`## Scenes (kind and who only)`); then transcript lines keep their first `START_WORDS` words,
+//! with their times (`## Transcript (sentence starts)`); then both sections show every second line, every third ...
+//! from start to end (`every 2nd line`). Project and Now are always whole.
+//!
 //! The speaker turns and scene items are neutral inputs keyed by asset id (what the analysis stored, in that file's
 //! time): no provider's type reaches this crate.
 
@@ -42,6 +48,8 @@ pub const MAX_LINE_WORDS: usize = 30;
 pub const SHOWN_PAUSE_US: Us = 1_000_000;
 /// What is left of a partly cut scene item shorter than this (and than the item) is left out.
 pub const MIN_SCENE_PIECE_US: Us = 100_000;
+/// A transcript line's words kept when lines are cut to their sentence starts.
+pub const START_WORDS: usize = 8;
 
 /// Where the person is: the playhead and the selection, in timeline time.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -148,31 +156,11 @@ pub fn build_context(
     let said = said(project, speech, turns, &spoken);
     let lines = lines(&said);
     let pieces = scene_pieces(project, &starts, scenes);
-
-    let mut text = String::new();
-    project_section(&mut text, project, &starts);
-    text.push('\n');
-    now_section(&mut text, project, view);
-    text.push('\n');
-    text.push_str("## Transcript\n");
-    for line in &lines {
-        write_line(&mut text, &said, line);
-    }
     let untranscribed = clips_where(project, |clip| {
         voice_runs(project, clip)
             .iter()
             .any(|run| !speech.transcripts.contains_key(&run.asset))
     });
-    if !untranscribed.is_empty() {
-        let _ = writeln!(text, "Not transcribed yet: {untranscribed}.");
-    } else if lines.is_empty() {
-        text.push_str("No speech.\n");
-    }
-    text.push('\n');
-    text.push_str("## Scenes\n");
-    for piece in &pieces {
-        write_scene(&mut text, piece);
-    }
     let unlogged = clips_where(project, |clip| match &clip.source {
         ClipSource::Asset { id } => {
             project
@@ -182,14 +170,129 @@ pub fn build_context(
         }
         ClipSource::Recording { .. } => false,
     });
-    if !unlogged.is_empty() {
-        let _ = writeln!(text, "No scene log yet: {unlogged}.");
-    } else if pieces.is_empty() {
-        text.push_str("No scene items.\n");
+
+    let mut text = String::new();
+    project_section(&mut text, project, &starts);
+    text.push('\n');
+    now_section(&mut text, project, view);
+    text.push('\n');
+    let body = |brief: Brief| {
+        let mut body = String::new();
+        transcript_section(&mut body, &said, &lines, &untranscribed, brief);
+        body.push('\n');
+        scenes_section(&mut body, &pieces, &unlogged, brief);
+        body
+    };
+    // What Transcript and Scenes may take, in characters, beside Project and Now.
+    let room = (MAX_CONTEXT_TOKENS * CHARS_PER_TOKEN).saturating_sub(text.chars().count());
+    let fits = |body: &str| body.chars().count() <= room;
+    let mut brief = Brief::WHOLE;
+    let mut told = body(brief);
+    for briefer in [Brief::SHORT_SCENES, Brief::SENTENCE_STARTS] {
+        if fits(&told) {
+            break;
+        }
+        brief = briefer;
+        told = body(brief);
     }
+    if !fits(&told) {
+        // Every n-th line: from the share that would fit, then one more at a time (headings and notes don't shrink).
+        let most = lines.len().max(pieces.len()).max(2);
+        let mut every = told.chars().count().div_ceil(room.max(1)).clamp(2, most);
+        loop {
+            told = body(Brief { every, ..brief });
+            if fits(&told) || every == most {
+                break;
+            }
+            every += 1;
+        }
+    }
+    text.push_str(&told);
     ChatContext {
         text,
         refs: Refs::of(project),
+    }
+}
+
+/// How briefly Transcript and Scenes are told (the module notes' Budget).
+#[derive(Clone, Copy)]
+struct Brief {
+    /// Scene items as their kind and who only.
+    short_scenes: bool,
+    /// Transcript lines as their first `START_WORDS` words.
+    sentence_starts: bool,
+    /// Every n-th line of both sections, from the first (1: all).
+    every: usize,
+}
+
+impl Brief {
+    const WHOLE: Brief = Brief {
+        short_scenes: false,
+        sentence_starts: false,
+        every: 1,
+    };
+    const SHORT_SCENES: Brief = Brief {
+        short_scenes: true,
+        ..Brief::WHOLE
+    };
+    const SENTENCE_STARTS: Brief = Brief {
+        sentence_starts: true,
+        ..Brief::SHORT_SCENES
+    };
+
+    /// "every 3rd line", when not every line shows.
+    fn every_note(self) -> Option<String> {
+        let n = self.every;
+        let suffix = match (n % 10, n % 100) {
+            (_, 11..=13) => "th",
+            (1, _) => "st",
+            (2, _) => "nd",
+            (3, _) => "rd",
+            _ => "th",
+        };
+        (n > 1).then(|| format!("every {n}{suffix} line"))
+    }
+}
+
+/// `## name`, with what was left out in brackets: `## Transcript (sentence starts, every 2nd line)`.
+fn heading(out: &mut String, name: &str, notes: [Option<String>; 2]) {
+    let notes: Vec<String> = notes.into_iter().flatten().collect();
+    if notes.is_empty() {
+        let _ = writeln!(out, "## {name}");
+    } else {
+        let _ = writeln!(out, "## {name} ({})", notes.join(", "));
+    }
+}
+
+fn transcript_section(
+    out: &mut String,
+    said: &[Said],
+    lines: &[Range<usize>],
+    untranscribed: &str,
+    brief: Brief,
+) {
+    let starts = brief.sentence_starts.then(|| "sentence starts".to_owned());
+    heading(out, "Transcript", [starts, brief.every_note()]);
+    for line in lines.iter().step_by(brief.every) {
+        write_line(out, said, line, brief.sentence_starts);
+    }
+    if !untranscribed.is_empty() {
+        let _ = writeln!(out, "Not transcribed yet: {untranscribed}.");
+    } else if lines.is_empty() {
+        out.push_str("No speech.\n");
+    }
+}
+
+fn scenes_section(out: &mut String, pieces: &[ScenePiece], unlogged: &str, brief: Brief) {
+    let short = brief.short_scenes.then(|| "kind and who only".to_owned());
+    heading(out, "Scenes", [short, brief.every_note()]);
+    for piece in pieces.iter().step_by(brief.every) {
+        write_scene(out, piece, brief.short_scenes);
+    }
+    if !unlogged.is_empty() {
+        let _ = writeln!(out, "No scene log yet: {unlogged}.");
+    } else if pieces.is_empty() {
+        out.push_str("No scene items.\n");
     }
 }
 
@@ -433,9 +536,9 @@ fn pause_mark(gap: Us) -> Option<String> {
     (gap >= SHOWN_PAUSE_US).then(|| format!("[pause {} s]", secs(gap)))
 }
 
-/// One transcript line: `[a-b] A: text`, pauses marked. A line with no text to show (only later pieces of fixes)
-/// writes nothing.
-fn write_line(out: &mut String, said: &[Said], line: &Range<usize>) {
+/// One transcript line: `[a-b] A: text`, pauses marked; with `sentence_starts`, its first `START_WORDS` words and
+/// `...` when more were said, no pauses. A line with no text to show (only later pieces of fixes) writes nothing.
+fn write_line(out: &mut String, said: &[Said], line: &Range<usize>, sentence_starts: bool) {
     let words = &said[line.clone()];
     if words.iter().all(|w| w.text.is_empty()) {
         return;
@@ -447,8 +550,10 @@ fn write_line(out: &mut String, said: &[Said], line: &Range<usize>) {
     }
     // The last character written, to join words of scripts written without spaces (`joins_unspaced`).
     let mut before: Option<char> = None;
+    let mut shown = 0;
     for (k, w) in words.iter().enumerate() {
         if k > 0
+            && !sentence_starts
             && let Some(mark) = pause_mark(w.start_us - words[k - 1].end_us)
         {
             if before.is_some() {
@@ -460,6 +565,11 @@ fn write_line(out: &mut String, said: &[Said], line: &Range<usize>) {
         if w.text.is_empty() {
             continue;
         }
+        if sentence_starts && shown == START_WORDS {
+            out.push_str(" ...");
+            break;
+        }
+        shown += 1;
         let text = if w
             .text
             .contains(|c: char| c.is_whitespace() || c.is_control())
@@ -479,7 +589,8 @@ fn write_line(out: &mut String, said: &[Said], line: &Range<usize>) {
         out.push_str(&text);
         before = text.chars().last();
     }
-    if let Some(next) = said.get(line.end)
+    if !sentence_starts
+        && let Some(next) = said.get(line.end)
         && let Some(mark) = pause_mark(next.start_us - last.end_us)
     {
         out.push(' ');
@@ -547,8 +658,8 @@ fn scene_pieces<'a>(
     out
 }
 
-/// One scene line: `[a-b] kind (who): text`, and the text on screen if any.
-fn write_scene(out: &mut String, piece: &ScenePiece) {
+/// One scene line: `[a-b] kind (who): text`, and the text on screen if any; with `short`, only `[a-b] kind (who)`.
+fn write_scene(out: &mut String, piece: &ScenePiece, short: bool) {
     let item = piece.item;
     let kind = one_line(&item.kind);
     let kind = if kind.is_empty() {
@@ -565,6 +676,10 @@ fn write_scene(out: &mut String, piece: &ScenePiece) {
     let who = one_line(&item.who);
     if !who.is_empty() {
         let _ = write!(out, " ({who})");
+    }
+    if short {
+        out.push('\n');
+        return;
     }
     let text = one_line(&item.text);
     if !text.is_empty() {

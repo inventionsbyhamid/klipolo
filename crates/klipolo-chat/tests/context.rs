@@ -12,7 +12,9 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use klipolo_chat::{ChatContext, SceneLog, SpeakerTurn, View, build_context, estimate_tokens};
+use klipolo_chat::{
+    ChatContext, MAX_CONTEXT_TOKENS, SceneLog, SpeakerTurn, View, build_context, estimate_tokens,
+};
 use klipolo_model::project::{Asset, AssetKind, CaptionSettings};
 use klipolo_model::speech::{Speech, Transcript, Word, WordKind};
 use klipolo_model::time::{RangeUs, Us};
@@ -506,4 +508,122 @@ fn clips_without_analysis_are_named() {
         "No scene log yet: c1, c2."
     );
     assert!(estimate_tokens(&none.text) > 0);
+}
+
+/// Clip A `copies` times over, each copy the whole file: about 2.6 minutes of speech and scenes a copy.
+fn repeated(copies: usize) -> Inputs {
+    let mut inputs = two_clips();
+    let piece = inputs.project.timeline.main[0].clone();
+    let whole = inputs.project.assets[0].duration_us;
+    inputs.project.timeline.main = (0..copies)
+        .map(|i| Clip {
+            id: format!("copy-{i}"),
+            source_in_us: 0,
+            source_out_us: whole,
+            ..piece.clone()
+        })
+        .collect();
+    inputs
+}
+
+/// Project and Now are whole however long the project: every clip, the playhead and the selection.
+fn assert_project_and_now_whole(text: &str, clips: usize) {
+    let project = section(text, "Project");
+    for i in 1..=clips {
+        assert!(project.contains(&format!("\nc{i} ")), "c{i} in {project}");
+    }
+    assert!(project.contains("Captions: on, style karaoke\n"));
+    assert_eq!(
+        section(text, "Now").trim_end(),
+        "Playhead: 1000.0 in c7\nSelection: 990.0-995.5"
+    );
+}
+
+fn late_view() -> View {
+    View {
+        playhead_us: secs(1000.0),
+        selection: Some(RangeUs {
+            start: secs(990.0),
+            end: secs(995.5),
+        }),
+    }
+}
+
+#[test]
+fn context_for_30_minutes_stays_under_12k_tokens() {
+    // 12 copies: 31 minutes.
+    let text = repeated(12).context(&late_view()).text;
+    let tokens = estimate_tokens(&text);
+    assert!(tokens <= MAX_CONTEXT_TOKENS, "{tokens} tokens");
+    assert_project_and_now_whole(&text, 12);
+    // Scene items are told more briefly first: kind and who. The transcript stays whole, to the last copy.
+    let scenes = timed_lines(&text, "Scenes");
+    assert_eq!(scenes.len(), 12 * 20, "every item of every copy");
+    assert!(text.contains("\n## Scenes (kind and who only)\n"), "{text}");
+    assert_eq!(scenes[2], "[12.8-13.5] scene_cut (student Kaiden)");
+    assert!(text.contains("\n## Transcript\n"));
+    let lines = timed_lines(&text, "Transcript");
+    let last = lines.last().unwrap();
+    assert!(
+        last.starts_with("[1856.")
+            && last.contains("F: Hi, my name is Noelle and my question is are there any"),
+        "{last}"
+    );
+}
+
+#[test]
+fn longer_projects_fall_back_to_sentence_starts_then_fewer_lines() {
+    // An hour (24 copies): the transcript's lines keep their first 8 words.
+    let text = repeated(24).context(&late_view()).text;
+    let tokens = estimate_tokens(&text);
+    assert!(tokens <= MAX_CONTEXT_TOKENS, "{tokens} tokens");
+    assert_project_and_now_whole(&text, 24);
+    assert!(
+        text.contains("\n## Transcript (sentence starts)\n"),
+        "{text}"
+    );
+    assert!(text.contains("\n## Scenes (kind and who only)\n"));
+    let lines = timed_lines(&text, "Transcript");
+    let answer = lines
+        .iter()
+        .find(|l| l.contains("C: Hi Caden,"))
+        .expect("the first answer");
+    assert!(
+        answer.starts_with("[27.2-")
+            && answer.ends_with("] C: Hi Caden, space is such unique environment that ..."),
+        "{answer}"
+    );
+    assert!(
+        lines
+            .iter()
+            .all(|l| words_of(l.trim_end_matches(" ...")) <= 8)
+    );
+    // A short turn has nothing left out.
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.ends_with("] C: Thank you for a great question."))
+    );
+    assert!(lines.iter().all(|l| !l.contains("[pause")));
+
+    // Two hours (48 copies): every second (third ...) line of both, still from start to end.
+    let text = repeated(48).context(&late_view()).text;
+    let tokens = estimate_tokens(&text);
+    assert!(tokens <= MAX_CONTEXT_TOKENS, "{tokens} tokens");
+    assert_project_and_now_whole(&text, 48);
+    let heading = |name: &str| {
+        text.lines()
+            .find(|l| l.starts_with(&format!("## {name} (")))
+            .unwrap_or_else(|| panic!("{name}'s heading"))
+            .to_owned()
+    };
+    let every = heading("Transcript");
+    assert!(
+        every.starts_with("## Transcript (sentence starts, every ") && every.ends_with(" line)"),
+        "{every}"
+    );
+    assert!(heading("Scenes").starts_with("## Scenes (kind and who only, every "));
+    let lines = timed_lines(&text, "Transcript");
+    assert!(times_of(lines[0]).0 < 1.0);
+    assert!(times_of(lines.last().unwrap()).0 > 48.0 * 155.0 - 600.0);
 }
