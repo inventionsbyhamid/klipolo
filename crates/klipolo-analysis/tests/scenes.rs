@@ -947,6 +947,31 @@ fn merges_overlapping_chunks_without_duplicates() {
 }
 
 #[test]
+fn a_repeat_lends_its_end_only_to_the_nearest_item_of_its_kind() {
+    let first = vec![
+        moment(SceneKind::Speech, 595.0, 596.0, "a short line"),
+        moment(SceneKind::Speech, 596.2, 600.0, "a long answer"),
+    ];
+    let second = vec![
+        // The long answer again (0.3 s from it, 1.5 s from the short line): it goes on to 610 s.
+        moment(SceneKind::Speech, 16.5, 30.0, "the long answer again"),
+        // Another kind at the same time lends no end to either.
+        moment(SceneKind::Action, 16.4, 40.0, "waves"),
+    ];
+    let items = scenes::merge(vec![
+        (range(0.0, 600.0), first),
+        (range(580.0, 700.0), second),
+    ]);
+    assert_eq!(
+        summary(&items),
+        vec![
+            (595.0, 596.0, SceneKind::Speech, "a short line".into()),
+            (596.2, 610.0, SceneKind::Speech, "a long answer".into()),
+        ]
+    );
+}
+
+#[test]
 fn snaps_to_cut_within_tolerance_and_not_beyond() {
     let cuts = [frame_us(404), frame_us(722)]; // 13.467 s and 24.067 s
     // In sound time; the sound starts 0.2 s after the picture, so each is 0.2 s later in file time.

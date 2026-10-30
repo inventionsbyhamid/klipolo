@@ -12,8 +12,8 @@
 //! - **Chunks:** at most 10 minutes, each overlapping the next by 20 s. Spark is unreliable in a chunk's last seconds,
 //!   so a chunk's items that start in its last 3 s are dropped unless it is the clip's last chunk; from there on the
 //!   next chunk's items are used. The next chunk's items before that point, and its copy of a moment the chunk before
-//!   logged (same kind, starting within 2 s), are dropped; such a copy lends its end to the item it repeats, which the
-//!   chunk's end may have cut off.
+//!   logged (same kind, starting within 2 s; the nearest such), are dropped; such a copy lends its end to the item it
+//!   repeats, which the chunk's end may have cut off. An item of another kind lends nothing.
 //! - **Calls:** as many chunks at once as the logger takes (one through the relay). The first failure ends the log
 //!   with that error (a used-up credit included); nothing is retried here beyond the adapter's busy retries.
 //! - **Cuts** come with the copy (`ProxyInfo::cuts`, found in every frame of the source); a copy without any leaves
@@ -135,10 +135,15 @@ pub fn merge(chunks: Vec<(RangeUs, Vec<SceneMoment>)>) -> Vec<SceneItem> {
         let mut kept = Vec::new();
         for moment in moments {
             let item = in_clip(moment, range);
-            let repeats = before.iter().copied().find(|&j| {
-                items[j].kind == item.kind
-                    && (items[j].start_us - item.start_us).abs() <= SAME_MOMENT_US
-            });
+            // The nearest item of its kind the chunk before kept, within `SAME_MOMENT_US`.
+            let repeats = before
+                .iter()
+                .copied()
+                .filter(|&j| {
+                    items[j].kind == item.kind
+                        && (items[j].start_us - item.start_us).abs() <= SAME_MOMENT_US
+                })
+                .min_by_key(|&j| (items[j].start_us - item.start_us).abs());
             if let Some(j) = repeats {
                 // The chunk before logged it; this view may go on past where that chunk ended.
                 items[j].end_us = items[j].end_us.max(item.end_us);
