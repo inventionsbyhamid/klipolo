@@ -2,6 +2,7 @@
 (marked slow: needs torch and the model, so it runs in the container)."""
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -417,9 +418,12 @@ def test_odd_text_and_turns_never_give_a_500(mms_client):
 # aligner's own scores.exp() crashed 1 run in 5 even after the model loaded.
 
 
-def run_python(code):
+def run_python(code, env=None):
     return subprocess.run(
-        [sys.executable, "-X", "faulthandler", "-c", code], cwd=Path(__file__).parents[1], capture_output=True
+        [sys.executable, "-X", "faulthandler", "-c", code],
+        cwd=Path(__file__).parents[1],
+        capture_output=True,
+        env=env,
     )
 
 
@@ -455,4 +459,23 @@ def test_a_freshly_loaded_model_aligns_a_long_turn_on_many_threads():
     )
     for _ in range(8):
         result = run_python(code)
+        assert result.returncode == 0, (result.returncode, result.stderr[-800:])
+
+
+@pytest.mark.slow
+def test_cold_math_survives_many_threads_when_mkl_is_held_to_avx():
+    # The image sets MKL_ENABLE_INSTRUCTIONS=AVX as a second guard: MKL then
+    # never picks AVX2 code, warm-up or not. Measured on that Xeon without the
+    # warm-up: 5 of 10 processes crashed unset, 0 of 40 with AVX.
+    pytest.importorskip("torch")
+    code = (
+        "import torch\n"
+        "torch.set_num_threads(8)\n"
+        "for _ in range(20):\n"
+        "    (torch.rand(600_000) * -15).exp()\n"
+        "    (torch.rand(29_999) * -15).exp()\n"
+    )
+    env = {**os.environ, "MKL_ENABLE_INSTRUCTIONS": "AVX"}
+    for _ in range(10):
+        result = run_python(code, env)
         assert result.returncode == 0, (result.returncode, result.stderr[-800:])

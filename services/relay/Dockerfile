@@ -30,8 +30,13 @@ RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin relay \
     && chown relay /data
 USER relay
 
+# MKL picks AVX2 code on a Xeon E5-2680 v2 (no AVX2) when its first
+# math calls race on several threads, and the process dies with SIGILL.
+# Holding MKL to AVX stops that; the aligner's one-thread warm-up stays as a
+# second guard.
 ENV RELAY_DB_PATH=/data/relay.db \
-    ALIGN_WARMUP=1
+    ALIGN_WARMUP=1 \
+    MKL_ENABLE_INSTRUCTIONS=AVX
 EXPOSE 8080
 # One worker: in-flight limits and the alignment queue live in the process.
 CMD ["uvicorn", "--factory", "relay.app:create_app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
