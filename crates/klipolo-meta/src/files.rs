@@ -7,6 +7,7 @@ use reqwest::{Body, StatusCode};
 use serde::Deserialize;
 
 use crate::client::check;
+use crate::error::redact;
 use crate::{MetaClient, MetaError};
 
 /// Meta deletes an upload after a day even if the app never gets to.
@@ -22,14 +23,9 @@ impl MetaClient {
     /// and returns its id. The file is streamed, never read whole. Meta sees
     /// a generic name (`upload.mp4`), not the person's file name.
     pub async fn upload_file(&self, path: &Path, mime: &str) -> Result<String, MetaError> {
-        let file = tokio::fs::File::open(path)
-            .await
-            .map_err(|e| unreadable(path, &e))?;
-        let len = file
-            .metadata()
-            .await
-            .map_err(|e| unreadable(path, &e))?
-            .len();
+        let unreadable = |_| self.unreadable(path);
+        let file = tokio::fs::File::open(path).await.map_err(unreadable)?;
+        let len = file.metadata().await.map_err(unreadable)?.len();
         let name = match path.extension().and_then(|e| e.to_str()) {
             Some(ext) => format!("upload.{ext}"),
             None => "upload".to_owned(),
@@ -74,12 +70,15 @@ impl MetaClient {
     }
 }
 
-fn unreadable(path: &Path, error: &std::io::Error) -> MetaError {
-    let name = path
-        .file_name()
-        .unwrap_or(path.as_os_str())
-        .to_string_lossy();
-    MetaError::BadRequest {
-        message: format!("Could not read {name}: {error}."),
+impl MetaClient {
+    /// The file's name only: no folders, and no OS error text, for people.
+    fn unreadable(&self, path: &Path) -> MetaError {
+        let name = path
+            .file_name()
+            .unwrap_or(path.as_os_str())
+            .to_string_lossy();
+        MetaError::LocalFile {
+            name: redact(&name, &self.secrets()),
+        }
     }
 }

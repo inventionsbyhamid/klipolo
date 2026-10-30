@@ -43,6 +43,10 @@ pub enum MetaError {
     /// The answer arrived but is not what the API documents.
     #[error("could not read the answer: {0}")]
     Decode(String),
+    /// A local file to upload could not be opened or read; `name` is its file
+    /// name, without folders.
+    #[error("could not read the local file {name}")]
+    LocalFile { name: String },
 }
 
 /// The most of a server's message kept in an error.
@@ -131,6 +135,7 @@ impl MetaError {
                     .into()
             }
             Self::Decode(_) => "Meta sent an answer Klipolo could not read. Try again.".into(),
+            Self::LocalFile { name } => format!("Klipolo could not read {name}."),
         }
     }
 }

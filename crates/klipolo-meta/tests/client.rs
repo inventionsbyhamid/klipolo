@@ -131,6 +131,9 @@ fn user_messages_are_plain_and_name_settings_where_needed() {
         MetaError::Network("connection refused".into()),
         MetaError::AlignUnavailable,
         MetaError::Decode("expected value at line 1".into()),
+        MetaError::LocalFile {
+            name: "clip.mp4".into(),
+        },
     ];
     for error in &errors {
         let text = error.user_message();
@@ -534,7 +537,18 @@ async fn upload_file_that_cannot_be_read_makes_no_call() {
         .await
         .unwrap_err();
 
-    assert!(matches!(error, MetaError::BadRequest { .. }), "{error:?}");
+    assert_eq!(
+        error,
+        MetaError::LocalFile {
+            name: "klipolo-meta-no-such-file.mp4".into()
+        }
+    );
+    // Not Meta's fault, and no raw OS text.
+    assert_eq!(
+        error.user_message(),
+        "Klipolo could not read klipolo-meta-no-such-file.mp4."
+    );
+    assert!(!error.to_string().contains("os error"), "{error}");
     assert!(server.received_requests().await.unwrap().is_empty());
 }
 
@@ -1241,10 +1255,11 @@ fn variant(error: &MetaError) -> &'static str {
         MetaError::Network(_) => "Network",
         MetaError::AlignUnavailable => "AlignUnavailable",
         MetaError::Decode(_) => "Decode",
+        MetaError::LocalFile { .. } => "LocalFile",
     }
 }
 
-const VARIANTS: usize = 9;
+const VARIANTS: usize = 10;
 
 /// A server that answers every request with `status` and a body quoting `echo`.
 async fn echoing(status: u16, echo: &str) -> MockServer {
@@ -1312,6 +1327,14 @@ async fn error_text_never_contains_key() {
         vec![KEY],
     ));
     let server = MockServer::start().await;
+    let missing = std::env::temp_dir().join(format!("klipolo-meta-{KEY}.mp4"));
+    errors.push((
+        direct(&server)
+            .upload_file(&missing, "video/mp4")
+            .await
+            .unwrap_err(),
+        vec![KEY],
+    ));
     let no_token = direct(&server).with_relay_base(server.uri());
     errors.push((
         no_token.align(wav(), &align_turns()).await.unwrap_err(),
