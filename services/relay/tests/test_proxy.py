@@ -742,6 +742,29 @@ def test_usage_after_a_huge_output_is_found_in_the_tail(client, conn, meta, monk
     assert row["cost_usd"] == pytest.approx(SPARK_COST)
 
 
+def test_every_usage_in_a_huge_body_is_priced_and_the_highest_charged(client, conn, meta, monkeypatch):
+    monkeypatch.setattr(proxy, "FULL_PARSE_BYTES", 1000)
+    device = add_device(conn)
+    body = {"output": "x" * 2000, "extra": {"usage": BIG_USAGE}, "usage": SPARK_USAGE}
+    meta.post("/responses").respond(200, json=body)
+
+    client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
+
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(BIG_COST)
+
+
+def test_huge_body_without_usage_charges_the_reservation(client, conn, meta, monkeypatch):
+    monkeypatch.setattr(proxy, "FULL_PARSE_BYTES", 1000)
+    device = add_device(conn)
+    route = meta.post("/responses").respond(200, json={"output": "x" * 2000})
+
+    client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
+
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(reserved_cost(route.calls.last.request.content))
+
+
 # SAM.
 
 
@@ -1388,6 +1411,66 @@ def test_stream_that_ends_without_usage_charges_the_reservation(client, conn, me
     sent = route.calls.last.request.content
     assert json.loads(row["usage_json"]) == reserved_usage(sent)
     assert row["cost_usd"] == pytest.approx(reserved_cost(sent))
+
+
+@pytest.mark.parametrize(("seen", "cost"), [(BIG_USAGE, BIG_COST), (SPARK_USAGE, None)], ids=["seen-is-higher", "reservation-is-higher"])
+def test_stream_without_a_final_event_charges_at_least_the_reservation(client, conn, meta, seen, cost):
+    device = add_device(conn)
+    in_progress = {"type": "response.in_progress", "response": {"status": "in_progress", "usage": seen}}
+    route = stream_from_meta(meta, MetaStream([sse(CREATED, in_progress, DELTA)]))
+
+    response = client.post("/meta/v1/responses", json=spark_request(stream=True), headers=device.headers)
+
+    assert response.status_code == 200
+    [row] = ledger(conn, device)
+    expected = cost if cost is not None else reserved_cost(route.calls.last.request.content)
+    assert row["cost_usd"] == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("final_type", ["response.completed", "response.incomplete", "response.failed"])
+def test_any_final_event_settles_the_charge(client, conn, meta, final_type):
+    device = add_device(conn)
+    final = {"type": final_type, "response": {"status": final_type.split(".")[1], "usage": SPARK_USAGE}}
+    stream_from_meta(meta, MetaStream([sse(CREATED, final)]))
+
+    client.post("/meta/v1/responses", json=spark_request(stream=True), headers=device.headers)
+
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(SPARK_COST)
+
+
+def test_huge_final_event_without_an_event_line_settles_the_charge(client, conn, meta, monkeypatch):
+    monkeypatch.setattr(proxy, "FULL_PARSE_BYTES", 2000)
+    monkeypatch.setattr(proxy, "USAGE_TAIL_BYTES", 500)
+    device = add_device(conn)
+    final = completed()
+    final["response"]["output"][0]["content"][0]["text"] = "x" * 3000
+    # Data lines only: the event's type is read from the start of its JSON.
+    raw = f"data: {json.dumps(CREATED)}\n\ndata: {json.dumps(final)}\n\n".encode()
+    stream_from_meta(meta, MetaStream([raw[i : i + 300] for i in range(0, len(raw), 300)]))
+
+    client.post("/meta/v1/responses", json=spark_request(stream=True), headers=device.headers)
+
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(SPARK_COST)
+
+
+def test_every_usage_in_a_huge_final_event_is_priced_and_the_highest_charged(client, conn, meta, monkeypatch):
+    monkeypatch.setattr(proxy, "FULL_PARSE_BYTES", 2000)
+    monkeypatch.setattr(proxy, "USAGE_TAIL_BYTES", 500)
+    device = add_device(conn)
+    final = completed()
+    final["response"]["output"][0]["content"][0]["text"] = "x" * 3000
+    # The response's own usage comes last, after a larger one.
+    del final["response"]["usage"]
+    final["response"]["extra"] = {"usage": BIG_USAGE}
+    final["response"]["usage"] = SPARK_USAGE
+    stream_from_meta(meta, MetaStream([sse(CREATED, final)]))
+
+    client.post("/meta/v1/responses", json=spark_request(stream=True), headers=device.headers)
+
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(BIG_COST)
 
 
 def test_stream_broken_off_by_meta_still_charges(client, conn, meta):

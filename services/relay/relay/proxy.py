@@ -317,42 +317,43 @@ class Meter:
         )
         return usage, cost_usd(self.endpoint, self.model, usage)
 
-    def price(self, usage: Any, *, finished: bool = True) -> tuple[dict[str, Any], float]:
-        """The usage to record and its cost. `finished` is False when Meta's
-        answer was cut off, so `usage` (if any) may not be the final count:
-        the call then costs the higher of that usage and the reservation."""
-        seen = None
-        if isinstance(usage, Mapping):
-            usage = dict(usage)
+    def price(self, candidates: list[Any], *, final: bool) -> tuple[dict[str, Any], float]:
+        """The usage to record and its cost. `candidates` are the usage objects
+        found in Meta's answer; when several turn up (a long answer searched
+        from its end) the highest priced wins. `final` says they come from
+        Meta's complete answer. If none can be priced, or the answer was cut
+        off before its final usage, the call costs at least its reservation."""
+        priced = []
+        for candidate in candidates:
+            if not isinstance(candidate, Mapping):
+                continue
+            usage = dict(candidate)
             if self.model == SAM_MODEL:
                 usage[SAM_IMAGES_KEY] = self.images
             try:
                 if self.model == SAM_MODEL and self.has_video and usage.get("video_frames_processed") is None:
                     raise ValueError("SAM video usage has no video_frames_processed")
-                seen = _numbers_only(usage), cost_usd(self.endpoint, self.model, usage)
+                priced.append((_numbers_only(usage), cost_usd(self.endpoint, self.model, usage)))
             except ValueError:
-                logger.warning("Meta usage for %s could not be priced, charging the reservation", self.endpoint)
-        if seen is not None and finished:
-            return seen
-        reserved = self.reservation()
-        return seen if seen is not None and seen[1] > reserved[1] else reserved
+                logger.warning("Meta usage for %s could not be priced", self.endpoint)
+        if final and priced:
+            return max(priced, key=lambda item: item[1])
+        return max([*priced, self.reservation()], key=lambda item: item[1])
 
-    def usage_from_body(self, body: bytes) -> Any:
-        """The usage in a complete JSON response, or None, whatever the body."""
+    def usage_from_body(self, body: bytes) -> list[Any]:
+        """The usage candidates in a complete JSON response, whatever the body."""
         try:
             if self.endpoint == "asr/transcribe":
                 return _find_value(body, "audioDurationMs", _DURATION_KEY, lambda v: {"audioDurationMs": v})
             return _find_value(body, "usage", _USAGE_KEY, lambda v: v)
         except Exception:
             logger.warning("Could not read the usage in Meta's answer for %s", self.endpoint, exc_info=True)
-            return None
+            return []
 
 
-async def charge(
-    settings: Settings, device_id: str, meter: Meter, usage_seen: Any, *, finished: bool = True
-) -> None:
+async def charge(settings: Settings, device_id: str, meter: Meter, candidates: list[Any], *, final: bool) -> None:
     try:
-        usage, cost = meter.price(usage_seen, finished=finished)
+        usage, cost = meter.price(candidates, final=final)
     except Exception:
         # Whatever goes wrong reading the usage, the call is still charged.
         logger.warning("Could not price Meta's usage for %s, charging the reservation", meter.endpoint, exc_info=True)
@@ -565,9 +566,9 @@ async def _forward(
     meter = call.meter
     if meter is not None and upstream.status_code < 300 and _is_event_stream(upstream):
 
-        async def finish(usage_seen: Any, finished: bool) -> None:
+        async def finish(candidates: list[Any], final: bool) -> None:
             try:
-                await charge(settings, device_id, meter, usage_seen, finished=finished)
+                await charge(settings, device_id, meter, candidates, final=final)
             finally:
                 slot.release()
 
@@ -584,7 +585,7 @@ async def _forward(
         await _close_quietly(upstream)
 
     if meter is not None:
-        await charge(settings, device_id, meter, meter.usage_from_body(body))
+        await charge(settings, device_id, meter, meter.usage_from_body(body), final=True)
     return Response(body, status_code=upstream.status_code, headers=_response_headers(upstream))
 
 
@@ -611,12 +612,12 @@ class MeteredStream(Response):
     request when its client goes away (sends are just dropped), so the reading
     goes on in this request's task, bounded by the upstream read timeout.
 
-    Only when Meta's stream itself breaks off (an error, a timeout, a dropped
-    connection) is the call charged the higher of the usage seen and the
-    request estimate, which has a floor for media.
+    Only when the stream ends without a final event (Meta's side broke off,
+    timed out or dropped the connection) is the call charged the higher of
+    the usage seen and its reservation.
     """
 
-    def __init__(self, upstream: httpx.Response, finish: Callable[[Any, bool], Awaitable[None]]) -> None:
+    def __init__(self, upstream: httpx.Response, finish: Callable[[list[Any], bool], Awaitable[None]]) -> None:
         self.status_code = upstream.status_code
         self.media_type = None
         self.background = None
@@ -626,20 +627,18 @@ class MeteredStream(Response):
 
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
         events = SSEUsage()
-        finished = False
         try:
-            finished = await self._relay(receive, send, events)
+            await self._relay(receive, send, events)
         finally:
             # Shielded: this must run even if the request is cancelled.
             with anyio.CancelScope(shield=True):
                 await _close_quietly(self._upstream)
-                await self._finish(events.close(), finished)
+                await self._finish(*events.close())
 
-    async def _relay(self, receive: Any, send: Any, events: "SSEUsage") -> bool:
+    async def _relay(self, receive: Any, send: Any, events: "SSEUsage") -> None:
         """Read Meta's stream to its end, passing it on while the client is
-        there. True if the stream ended normally."""
+        there."""
         client = _Client(send)
-        finished = True
         async with anyio.create_task_group() as group:
             group.start_soon(client.watch, receive)
             await client.send({"type": "http.response.start", "status": self.status_code, "headers": self.raw_headers})
@@ -648,18 +647,13 @@ class MeteredStream(Response):
                     events.feed(chunk)
                     await client.send({"type": "http.response.body", "body": chunk, "more_body": True})
             except Exception as exc:
-                # httpx closes the response itself once the body is fully
-                # read, so a failure after that leaves the stream complete.
-                # Any other failure cut it off.
-                finished = self._upstream.is_closed
-                logger.warning(
-                    "Meta's stream %s: %s", "closed badly" if finished else "broke off", type(exc).__name__
-                )
+                # Includes a failure while httpx closes a fully read stream.
+                # Whether the call is settled depends only on the final event.
+                logger.warning("Meta's stream ended with an error: %s", type(exc).__name__)
             await client.send({"type": "http.response.body", "body": b"", "more_body": False})
             group.cancel_scope.cancel()
         if client.gone:
             logger.info("Client left mid-stream; Meta's stream was read to its end to charge it")
-        return finished
 
 
 class _Client:
@@ -685,21 +679,32 @@ class _Client:
             self.gone = True
 
 
-class SSEUsage:
-    """Finds the latest `usage` in a Responses event stream as it passes
-    through, usually in the final `response.completed` event.
+_FINAL_EVENTS = frozenset({"response.completed", "response.incomplete", "response.failed"})
+_EVENT_TYPE = re.compile(rb'"type"\s*:\s*"([^"]{1,64})"')
+_HEAD_BYTES = 512
 
-    An event up to FULL_PARSE_BYTES is parsed whole. A larger one (a final
-    event that repeats a long output) keeps only its last USAGE_TAIL_BYTES,
-    where the usage is, so memory stays bounded.
+
+class SSEUsage:
+    """Reads the usage in a Responses event stream as it passes through.
+
+    The call is settled by its final event (`response.completed`,
+    `.incomplete` or `.failed`); until one arrives, the latest usage seen is
+    kept. An event up to FULL_PARSE_BYTES is parsed whole. A larger one (a
+    final event that repeats a long output) keeps only its first
+    _HEAD_BYTES, for its type, and its last USAGE_TAIL_BYTES, where the usage
+    is, so memory stays bounded.
     """
 
     def __init__(self) -> None:
-        self.usage: Any = None
+        self.final: list[Any] | None = None
+        self.seen: list[Any] = []
         self._line = bytearray()
         # Set once a line grows too long to keep whole: is it a data line?
         self._long_line_is_data: bool | None = None
+        self._long_line_head = b""
+        self._event = ""
         self._data = bytearray()
+        self._head = b""
         self._data_lines = 0
         self._data_cut = False
 
@@ -712,24 +717,26 @@ class SSEUsage:
                 start = end + 1
             self._add(chunk[start:])
         except Exception:
-            # Metering never breaks the stream; without usage the call is
-            # charged the estimate.
+            # Metering never breaks the stream; without a final usage the call
+            # costs at least its reservation.
             logger.warning("Could not read usage from Meta's stream", exc_info=True)
 
-    def close(self) -> Any:
-        """The latest usage seen, after reading an unterminated last event."""
+    def close(self) -> tuple[list[Any], bool]:
+        """The usage candidates and whether they come from a final event,
+        after reading an unterminated last event."""
         try:
             if self._line or self._long_line_is_data is not None:
                 self._end_line()
             self._dispatch()
         except Exception:
             logger.warning("Could not read usage from Meta's stream", exc_info=True)
-        return self.usage
+        return (self.final, True) if self.final is not None else (self.seen, False)
 
     def _add(self, part: bytes) -> None:
         self._line += part
         if self._long_line_is_data is None and len(self._line) > FULL_PARSE_BYTES:
             self._long_line_is_data = self._line.startswith(b"data:")
+            self._long_line_head = _data_value(bytes(self._line[: _HEAD_BYTES + 6]))
         if self._long_line_is_data is not None and len(self._line) > 2 * USAGE_TAIL_BYTES:
             del self._line[:-USAGE_TAIL_BYTES]
 
@@ -741,15 +748,19 @@ class SSEUsage:
         self._line.clear()
         if long_line_is_data is not None:
             if long_line_is_data:
-                self._add_data(line, cut=True)
+                self._add_data(line, head=self._long_line_head, cut=True)
         elif not line:
             self._dispatch()
         elif line.startswith(b"data:"):
-            value = line[5:]
-            self._add_data(value[1:] if value.startswith(b" ") else value)
-        # Other fields (event, id, retry) and comments carry no usage.
+            value = _data_value(line)
+            self._add_data(value, head=value)
+        elif line.startswith(b"event:"):
+            self._event = line[6:].strip().decode("latin-1")
+        # Other fields (id, retry) and comments carry no usage.
 
-    def _add_data(self, value: bytes, cut: bool = False) -> None:
+    def _add_data(self, value: bytes, *, head: bytes, cut: bool = False) -> None:
+        if len(self._head) < _HEAD_BYTES:
+            self._head = (self._head + (b"\n" if self._data_lines else b"") + head)[:_HEAD_BYTES]
         if self._data_lines:
             self._data += b"\n"
         self._data += value
@@ -759,21 +770,38 @@ class SSEUsage:
             del self._data[:-USAGE_TAIL_BYTES]
 
     def _dispatch(self) -> None:
-        data, cut = bytes(self._data), self._data_cut
+        data, head, cut, event = bytes(self._data), self._head, self._data_cut, self._event
         self._data.clear()
+        self._head = b""
         self._data_lines = 0
         self._data_cut = False
-        if b'"usage"' not in data:
+        self._event = ""
+        if not data:
             return
-        if cut:
-            usage = _find_in_tail(data, _USAGE_KEY)
-        else:
-            try:
-                usage = _event_usage(json.loads(data))
-            except ValueError:
-                return
-        if isinstance(usage, dict):
-            self.usage = usage
+        match = _EVENT_TYPE.search(head)
+        event_type = match.group(1).decode("latin-1") if match else ""
+        candidates: list[Any] = []
+        if b'"usage"' in data:
+            if cut:
+                candidates = [value for value in _find_in_tail(data, _USAGE_KEY) if isinstance(value, dict)]
+            else:
+                try:
+                    parsed = json.loads(data)
+                except Exception:
+                    parsed = None
+                if isinstance(parsed, dict) and isinstance(parsed.get("type"), str):
+                    event_type = parsed["type"]
+                usage = _event_usage(parsed)
+                candidates = [usage] if isinstance(usage, dict) else []
+        if event in _FINAL_EVENTS or event_type in _FINAL_EVENTS:
+            self.final = candidates
+        elif candidates:
+            self.seen = candidates
+
+
+def _data_value(line: bytes) -> bytes:
+    value = line[5:] if line.startswith(b"data:") else line
+    return value[1:] if value.startswith(b" ") else value
 
 
 def _event_usage(event: Any) -> Any:
@@ -792,7 +820,7 @@ async def _transport_error(exc: httpx.HTTPError, settings: Settings, device_id: 
         return RelayError(502, "meta_unreachable", "Could not reach Meta. Try again.")
     if call.meter is not None:
         # The request may have reached Meta and been billed.
-        await charge(settings, device_id, call.meter, None)
+        await charge(settings, device_id, call.meter, [], final=False)
     if isinstance(exc, httpx.TimeoutException):
         return RelayError(504, "meta_timeout", "Meta took too long to answer. Try again.")
     return RelayError(502, "meta_unreachable", "Could not reach Meta. Try again.")
@@ -1093,31 +1121,33 @@ def _form_parts(content_type: str, body: bytes) -> dict[str, _Part]:
 # Usage.
 
 
-def _find_value(body: bytes, key: str, pattern: re.Pattern[str], wrap: Callable[[Any], Any]) -> Any:
-    """`key` at the top of a JSON response, or None. A body too large to parse
-    whole is searched from its end, where Meta puts the usage."""
+def _find_value(body: bytes, key: str, pattern: re.Pattern[str], wrap: Callable[[Any], Any]) -> list[Any]:
+    """`key` at the top of a JSON response, as a list of candidates. A body
+    too large to parse whole is searched from its end, where Meta puts the
+    usage, and every match found there is a candidate."""
     if len(body) <= FULL_PARSE_BYTES:
         try:
             data = json.loads(body)
         except ValueError:
-            return None
-        return wrap(data[key]) if isinstance(data, dict) and key in data else None
-    value = _find_in_tail(body[-USAGE_TAIL_BYTES:], pattern)
-    return None if value is None else wrap(value)
+            return []
+        return [wrap(data[key])] if isinstance(data, dict) and key in data else []
+    return [wrap(value) for value in _find_in_tail(body[-USAGE_TAIL_BYTES:], pattern)]
 
 
-def _find_in_tail(tail: bytes, pattern: re.Pattern[str]) -> Any:
+def _find_in_tail(tail: bytes, pattern: re.Pattern[str]) -> list[Any]:
     # Inside a JSON string a quote is escaped, so `"usage":` with bare quotes
-    # can only be a key. The last one is the response's own.
+    # can only be a key. Any object can carry one, so all are kept and the
+    # caller charges the highest.
     text = tail.decode("utf-8", "replace")
     decoder = json.JSONDecoder()
-    for match in reversed(list(pattern.finditer(text))):
+    values = []
+    for match in pattern.finditer(text):
         try:
             value, _ = decoder.raw_decode(text, match.end())
         except ValueError:
             continue
-        return value
-    return None
+        values.append(value)
+    return values
 
 
 def _numbers_only(value: Mapping[str, Any], depth: int = 0) -> dict[str, Any]:
