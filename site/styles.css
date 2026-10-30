@@ -1317,3 +1317,60 @@ ol {
   color: var(--ink-soft);
   font-size: 0.9375rem;
 }
+
+/* ---------- Built on Meta's models ---------- */
+
+/* Same dark bay as the editor illustration, in both modes */
+.models {
+  background: var(--bay);
+  color: var(--bay-ink);
+  border-block: 1px solid var(--bay-edge);
+}
+
+.models .lede {
+  color: var(--bay-soft);
+}
+
+.models :focus-visible {
+  outline-color: var(--bay-ink);
+}
+
+.model-list {
+  display: grid;
+  gap: 2.5rem;
+  margin: 0;
+}
+
+@media (min-width: 860px) {
+  .model-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2.5rem;
+  }
+}
+
+.model {
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+  padding-top: 1.25rem;
+  border-top: 2px solid var(--bay-3);
+}
+
+.model dt {
+  font-stretch: var(--narrow);
+  font-weight: 800;
+  font-size: clamp(2rem, 1.5rem + 1.8vw, 3rem);
+  line-height: 1;
+}
+
+.model dd {
+  margin: 0;
+  color: var(--bay-soft);
+  max-width: 30ch;
+}
+
+.models-note {
+  margin-top: clamp(2.5rem, 1.5rem + 3vw, 3.5rem);
+  color: var(--bay-soft);
+  font-size: 0.875rem;
+}
