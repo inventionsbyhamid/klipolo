@@ -1,5 +1,139 @@
 # Klipolo relay
 
+The relay lets people with an access code use Meta's models in Klipolo without their own key, under hard spending caps. It also gives every device word timing for its transcripts. It runs at `https://api.klipolo.com`.
+
+## What it serves
+
+| Route | What it does |
+| --- | --- |
+| `GET /healthz` | `{"ok": true}` |
+| `POST /v1/devices` | Registers a device, with or without an access code. Returns a bearer token. |
+| `GET /v1/devices/me` | Whether relay AI is on, the budget and the spend. |
+| `POST /meta/v1/responses`, `POST /meta/v1/asr/transcribe`, `POST /meta/v1/files`, `GET` and `DELETE /meta/v1/files/{id}` | Forwarded to Meta for devices with an active code, and charged against the caps. |
+| `POST /v1/align` | Word timing for transcript turns: multipart `audio` (16 kHz mono 16-bit WAV, at most 10 minutes) and `turns` (JSON). Open to every registered device, 120 minutes a day. |
+
+Errors are always `{"error": "<code>", "message": "<sentence>"}`. Without a Meta key the proxied routes answer 503 `not_configured`.
+
+## Settings
+
+All settings come from the environment.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `META_API_KEY` | empty | The server's own Meta key. Never logged. |
+| `DEVICE_CAP_USD` | `2.00` | Most a device can spend, all time. |
+| `GLOBAL_CAP_USD` | `40.00` | Most the whole relay can spend, all time. |
+| `ALLOWED_MODELS` | `muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0` | Models the proxy forwards. Muse Wonder and the contributor tiers are refused even when listed. |
+| `ALIGN_MINUTES_PER_DEVICE_PER_DAY` | `120` | Word timing per device per UTC day. |
+| `ALIGN_CONCURRENCY` | `2` | Alignments running at once. More than 2 can run out of memory in 6 GB. |
+| `ALIGN_THREADS` | `3` | Threads per alignment. |
+| `ALIGN_WARMUP` | off (on in the image) | Load the alignment model at startup. |
+| `RELAY_DB_PATH` | `./data/relay.db` (`/data/relay.db` in the image) | The SQLite database. |
+
+Run one worker only: the limits on calls in flight and the alignment queue live in the process.
+
+## Run locally
+
+```sh
+cd services/relay
+uv venv && uv pip install -e '.[dev]'
+.venv/bin/uvicorn --factory relay.app:create_app --port 8080
+```
+
+Alignment needs torch 2.8 and the MMS model, which live in the container image. Without them `/v1/align` answers 503 `align_unavailable`.
+
+## Test
+
+The fast suite needs no torch and never calls Meta:
+
+```sh
+.venv/bin/pytest -q
+```
+
+The full suite, with the slow alignment tests, runs in the image. Run it in the source folder on the server:
+
+```sh
+docker run --rm --cpus 8 --memory 6g --user root -v "$PWD:/src:ro" -w /src klipolo-relay:<tag> sh -c '
+  pip install -q --root-user-action=ignore "pytest>=8" "httpx2>=2.16" "respx>=0.22" &&
+  python -m pytest -p no:cacheprovider -m "slow or not slow" -q tests'
+```
+
+## Deploy
+
+The relay is the Docker Compose service `klipolo-relay` in the Coolify project `klipolo`, built from `compose.yml`. The image is built on the server and never pulled; `RELAY_TAG` in Coolify picks the tag. Traefik routes `api.klipolo.com` to it with a Let's Encrypt certificate. It has no host ports, 8 CPUs, 6 GB and a data volume.
+
+1. Copy the committed source to the server:
+
+   ```sh
+   git archive HEAD services/relay | ssh <you>@<server> 'rm -rf <build folder> && mkdir -p <build folder> && tar -x --strip-components=2 -C <build folder>'
+   ```
+
+2. Build with capped CPU and memory. The classic builder applies the caps; BuildKit ignores them.
+
+   ```sh
+   TAG=$(git rev-parse --short=7 HEAD)
+   ssh <you>@<server> "cd <build folder> && DOCKER_BUILDKIT=0 nice -n 10 docker build --cpu-quota 800000 --cpu-period 100000 --memory 6g -t klipolo-relay:$TAG ."
+   ```
+
+3. Run the full suite in the new image (see Test).
+4. Pin the image, so the server's image cleanup keeps it even while the service is stopped:
+
+   ```sh
+   ssh <server> "docker create --name keep-klipolo-relay-$TAG --label purpose=pin-image --network none klipolo-relay:$TAG true"
+   ```
+
+   Keep the previous tag's pin until the new one has run for a day, then remove it with `docker rm keep-klipolo-relay-<old tag>` and `docker rmi klipolo-relay:<old tag>`.
+5. In Coolify, set `RELAY_TAG` to the new tag under the service's Environment Variables, then restart the service (see below).
+6. Check: `curl -s https://api.klipolo.com/healthz` gives `{"ok":true}`.
+
+To roll back, set `RELAY_TAG` to the previous pinned tag and restart.
+
+**Restarts and calls in flight.** On SIGTERM the relay finishes the calls in flight: streams it drains after a client left, and alignments of up to 10 minutes of audio. `compose.yml` gives it 330 s. Coolify's Restart and Stop buttons stop the container with their own 30 s limit, so restart when the relay is idle. A deploy through Coolify's API start call recreates the container and keeps the 330 s.
+
+Coolify writes the variables into the compose file when it starts the service. A changed value takes effect only after a restart.
+
+## Add the server's Meta key
+
+The relay deploys with an empty key, and the proxied routes answer 503 "Relay not configured." until the key is set. Word timing and registration work without it.
+
+1. Create a separate key for the server on dev.meta.ai. Don't reuse the development key.
+2. In Coolify, open project `klipolo`, environment `production`, service `klipolo-relay`, then Environment Variables.
+3. Set `META_API_KEY` to the key and save.
+4. Restart the service, while it is idle.
+5. In Klipolo, with an access code and no key of your own, run one analysis. It should answer instead of saying the relay is not configured.
+
+## Admin commands
+
+The admin CLI works on the live database, and changes take effect on the next request. Run it in the container:
+
+```sh
+C=$(docker ps --filter name=^klipolo-relay- --format '{{.Names}}')
+docker exec $C python -m relay.admin add-code <code> --note "who it is for"
+docker exec $C python -m relay.admin deactivate-code <code>
+docker exec $C python -m relay.admin list-codes
+docker exec $C python -m relay.admin spend
+```
+
+- `add-code` also reactivates a code that was turned off.
+- `deactivate-code` stops relay AI at once for every device that registered with the code.
+- `spend` shows the total, the spend per device and the last 20 charges.
+
+Codes are case-sensitive. Make them hard to guess: at least 12 random lowercase letters and digits.
+
+## Data
+
+The SQLite database is `/data/relay.db` in the service's volume, which ends in `_klipolo-relay-data`. It holds codes, devices (token hashes only) and one ledger row per charged call. Nothing from requests or audio is kept. To copy it while the relay runs:
+
+```sh
+docker exec $C python -c "import sqlite3; sqlite3.connect('/data/relay.db').backup(sqlite3.connect('/data/backup.db'))"
+docker cp $C:/data/backup.db relay-backup.db && docker exec $C rm /data/backup.db
+```
+
+## Limits to know
+
+- Traefik reads a request body for at most 60 s. The largest alignment upload (19 MB) needs about 3 Mbps, and the largest transcribe upload (32 MB) about 4.5 Mbps.
+- With 3 threads, an alignment takes roughly as long as its audio: up to about 10 minutes for 10 minutes of audio, when two run at once. Clients need long read timeouts, or should send a few minutes at a time.
+
 ## Update the pinned packages
 
 The image installs exact versions from two lock files, with `--no-deps`:
