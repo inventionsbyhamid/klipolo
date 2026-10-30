@@ -932,6 +932,21 @@ fn align_result_reads_and_writes_the_relays_json() {
     assert_eq!(serde_json::to_value(&result).unwrap(), wire);
 }
 
+#[tokio::test]
+async fn align_answer_without_words_is_a_decode_error() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"skipped": []})))
+        .mount(&server)
+        .await;
+
+    let error = relay(&server)
+        .align(wav(), &align_turns())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, MetaError::Decode(_)), "{error:?}");
+}
+
 #[test]
 fn align_turn_comes_from_an_asr_turn() {
     let turn = AsrTurn {

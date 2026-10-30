@@ -89,7 +89,7 @@ pub struct AlignResult {
 
 #[derive(Serialize, Deserialize)]
 struct AlignWire {
-    #[serde(default)]
+    // Required: an answer without it is broken, not "no words".
     words: Vec<AlignedWord>,
     #[serde(default)]
     skipped: Vec<Skipped>,
