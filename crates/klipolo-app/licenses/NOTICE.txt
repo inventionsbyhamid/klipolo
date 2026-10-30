@@ -1,5 +1,5 @@
 Klipolo
-Copyright Hamid Siddiqui
+Copyright 2026 Hamid Siddiqui
 
 Klipolo is free software. You can redistribute it and change it under the terms of the GNU Affero General Public
 License, version 3 only, as published by the Free Software Foundation. The licence text is in LICENSE.txt next to
