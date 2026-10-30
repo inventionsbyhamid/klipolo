@@ -124,7 +124,8 @@ fn run(args: &Args) -> Result<(), String> {
     let wav = temp.0.join("sound.wav");
     let sound = extract_wav_16k(&args.video, &wav).map_err(|e| e.to_string())?;
     let mut out = if sound.has_audio {
-        let runtime = tokio::runtime::Builder::new_multi_thread()
+        // One thread is plenty: the requests wait on the network together.
+        let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .map_err(|e| format!("Could not start: {e}"))?;
