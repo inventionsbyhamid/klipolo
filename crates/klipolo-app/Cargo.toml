@@ -12,7 +12,11 @@ tauri-build = { version = "=2.7.1", features = [] }
 
 [dependencies]
 klipolo-engine = { path = "../klipolo-engine" }
+# The bundled fonts' folder, configured once for the engine at launch.
+klipolo-fonts = { path = "../klipolo-fonts" }
 klipolo-model = { path = "../klipolo-model" }
+# The OS's logs folder for the app's log.
+klipolo-platform = { path = "../klipolo-platform" }
 tauri = { version = "=2.12.1", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

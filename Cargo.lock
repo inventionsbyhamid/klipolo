@@ -2302,7 +2302,9 @@ name = "klipolo-app"
 version = "0.1.0"
 dependencies = [
  "klipolo-engine",
+ "klipolo-fonts",
  "klipolo-model",
+ "klipolo-platform",
  "serde",
  "serde_json",
  "tauri",
