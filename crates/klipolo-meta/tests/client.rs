@@ -741,6 +741,20 @@ fn output_text_joins_parts_and_puts_a_newline_between_messages() {
 }
 
 #[test]
+fn response_status_is_exposed_so_callers_can_reject_cut_off_answers() {
+    let status = |raw: Value| ResponseOut::parse(raw).unwrap().status;
+    let fixture: Value = serde_json::from_str(&fixture("responses_function_calls.json")).unwrap();
+    assert_eq!(status(fixture).as_deref(), Some("completed"));
+    let cut_off = json!({
+        "status": "incomplete",
+        "incomplete_details": {"reason": "max_output_tokens"},
+        "output": [{"type": "message", "content": [{"type": "output_text", "text": "{\"moments\": ["}]}],
+    });
+    assert_eq!(status(cut_off).as_deref(), Some("incomplete"));
+    assert_eq!(status(json!({"output": []})), None);
+}
+
+#[test]
 fn function_call_without_a_name_is_a_decode_error() {
     let raw =
         json!({"output": [{"type": "function_call", "call_id": "call_1", "arguments": "{}"}]});

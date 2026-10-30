@@ -39,7 +39,10 @@ pub struct ResponseOut {
     /// The `function_call` items, in order.
     pub function_calls: Vec<FunctionCall>,
     pub usage: Usage,
-    /// The whole answer, for fields not parsed here (`status`, SAM's text...).
+    /// The answer's `status`: `completed`, or `incomplete` (cut off, e.g. at
+    /// `max_output_tokens`, so structured output may be partial) or `failed`.
+    pub status: Option<String>,
+    /// The whole answer, for fields not parsed here (`incomplete_details`, SAM's text...).
     pub raw: Value,
 }
 
@@ -133,10 +136,12 @@ impl ResponseOut {
             Some(texts.join("\n"))
         };
         let usage = raw.get("usage").map(usage).unwrap_or_default();
+        let status = raw.get("status").and_then(Value::as_str).map(str::to_owned);
         Ok(Self {
             output_text,
             function_calls,
             usage,
+            status,
             raw,
         })
     }
