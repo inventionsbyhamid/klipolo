@@ -8,6 +8,7 @@ mod client;
 mod error;
 mod files;
 mod ledger;
+mod models;
 mod relay;
 mod responses;
 
