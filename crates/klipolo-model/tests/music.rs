@@ -887,3 +887,26 @@ fn a_refit_leaves_hand_set_fades_on_pieces_it_does_not_move() {
     assert_eq!(fade_in(m[0]), 5.0);
     assert_eq!(fade_out(m[3]), 2.0);
 }
+
+#[test]
+fn music_past_the_first_footage_on_an_empty_video_is_left_alone() {
+    // Two songs on an empty video: one from the start, one placed from 60 s.
+    let mut empty = video(30.0);
+    empty.timeline.main.clear();
+    let p = with_music(&empty, "song", MusicOpts::default());
+    let later = MusicOpts {
+        start_us: secs(60.0),
+        ..MusicOpts::default()
+    };
+    let p = with_music(&p, "loop", later);
+    assert_eq!(spans(&music(&p)), [(0.0, 120.0), (60.0, 68.0)]);
+    // 45 s of footage: the first song fits it; the second, which starts after it, stays as it was placed.
+    let first = vec![Op::InsertClip {
+        clip: take(0.0, 45.0),
+        index: None,
+    }];
+    let after = apply_ops(&p, &with_music_refit(&p, first).unwrap()).unwrap();
+    let m = music(&after);
+    assert_eq!(spans(&m), [(0.0, 45.0), (60.0, 68.0)]);
+    assert_eq!((fade_in(m[1]), fade_out(m[1])), (0.5, 2.0));
+}
