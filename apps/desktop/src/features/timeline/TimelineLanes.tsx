@@ -10,6 +10,7 @@ import type { LineView } from './lanes/TrackLane';
 import { CLIP_INNER_PX, MUSIC_LANE_PX, SOUNDS_LANE_PX } from './layout';
 import { createZoomRest } from './media/zoomRest';
 import { ViewportContext, ZoomRestContext } from './media/ViewportContext';
+import { ProposalOverlay } from './ProposalOverlay';
 import type { Viewport } from './useViewport';
 
 interface TimelineLanesProps {
@@ -38,6 +39,8 @@ export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_IN
   // A new value only when the window steps (or on a zoom), so the blocks' media re-renders only then.
   const { fromUs, toUs, widthPx, scrollPx } = viewport;
   const drawWindow = useMemo(() => ({ fromUs, toUs, widthPx, scrollPx }), [fromUs, toUs, widthPx, scrollPx]);
+  // A waiting proposal's removed layers, outlined on their lanes: the lanes' own window and zoom.
+  const ghostWindow = { pps: view.pps, fromUs: view.fromUs, toUs: view.toUs };
   const sounds = audioLines(tracks);
   return (
     <ViewportContext value={drawWindow}>
@@ -52,6 +55,7 @@ export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_IN
           onSeek={onSeek}
         >
           <LayersLane tracks={tracks} assets={assets} recordings={recordings} {...view} />
+          <ProposalOverlay lane="layers" tracks={tracks} {...ghostWindow} />
         </LaneRow>
         <LaneRow
           lane="main"
@@ -74,6 +78,7 @@ export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_IN
           onSeek={onSeek}
         >
           <AudioLane role="sounds" tracks={tracks} assets={assets} recordings={recordings} {...view} />
+          <ProposalOverlay lane="sounds" tracks={tracks} {...ghostWindow} />
         </LaneRow>
         <LaneRow
           lane="music"
@@ -85,6 +90,7 @@ export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_IN
           onSeek={onSeek}
         >
           <AudioLane role="music" tracks={tracks} assets={assets} recordings={recordings} {...view} />
+          <ProposalOverlay lane="music" tracks={tracks} {...ghostWindow} />
         </LaneRow>
       </ZoomRestContext>
     </ViewportContext>

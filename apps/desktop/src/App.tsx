@@ -42,6 +42,8 @@ export function App() {
     started = true;
     void followSaves();
     keepPlayheadInVideo();
+    // Until chat proposes cuts: Control Shift P shows a sample proposal (development builds only).
+    if (import.meta.env.DEV) void import('./dev/sampleProposal').then((dev) => dev.listenForSampleProposal());
     void openProject();
   }, []);
   useEngineSession();

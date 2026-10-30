@@ -14,6 +14,7 @@ const { usePlayback } = await import('../../state/playback');
 const { Timeline } = await import('./Timeline');
 const { zoomTimeline } = await import('./zoomControl');
 const { itemSpans } = await import('./model/index');
+const { useProposal, noRemovals } = await import('../../state/proposal');
 
 const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
 beforeAll(() =>
@@ -196,5 +197,30 @@ describe('a 1-hour, 300-layer project', () => {
     expect(block('c41')).not.toBeNull();
     expect(block('c42')).toBeNull();
     expect(block('c0')).toBeNull();
+  });
+
+  it('a chat proposal removing half the hour and every title ghosts only the window, and redraws no block', () => {
+    renderWithProviders(<Timeline />);
+    const S = 1_000_000;
+    // Every other 2.4 s cut's footage (750 ranges) and all 300 titles.
+    const ranges = Array.from({ length: 750 }, (_, k) => ({ start: 4.8 * k * S, end: (4.8 * k + 2.4) * S }));
+    const items = [0, 1, 2].flatMap((t) => Array.from({ length: 100 }, (_, i) => `t${t}-${i}`));
+    const ghosts = (kind: string) => document.querySelectorAll(`[data-ghost="${kind}"]`).length;
+    renderCounts.clear();
+    act(() =>
+      useProposal.getState().show({ id: 'p', baseRevision: 3, removals: { ...noRemovals(), ranges, items }, tags: [] }),
+    );
+    // The overlay draws over the lanes: no block renders again.
+    expect(rendered()).toBe(0);
+    // The 0 to 60 s window: 13 of the 750 ranges (0, 4.8 … 57.6 s) and 5 of the 300 titles.
+    expect(ghosts('footage')).toBe(13);
+    expect(ghosts('layer')).toBe(5);
+    // Half an hour in (the window is 29:30 to 31:00): still only the window's.
+    scrollTo(1800 * 40);
+    expect(ghosts('footage')).toBeGreaterThan(10);
+    expect(ghosts('footage')).toBeLessThanOrEqual(25);
+    expect(ghosts('layer')).toBeLessThanOrEqual(10);
+    act(() => useProposal.getState().show(null));
+    expect(ghosts('footage') + ghosts('layer')).toBe(0);
   });
 });

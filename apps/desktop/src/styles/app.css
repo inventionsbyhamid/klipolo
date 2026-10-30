@@ -763,6 +763,16 @@
   border-left: 2px solid var(--color-bay);
 }
 
+.ov-tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: var(--x);
+  width: 2px;
+  border-radius: 1px;
+  background: var(--color-cut);
+}
+
 .ov-view {
   position: absolute;
   top: -3px;
@@ -930,7 +940,7 @@
   pointer-events: none;
 }
 
-/* Over the blocks, under the gutter: the time range, the playhead, the snap guide, drop ghosts. */
+/* Over the blocks, under the gutter: proposed cuts, the time range, the playhead, the snap guide, drop ghosts. */
 .tl-marks {
   position: absolute;
   top: 0;
@@ -1179,6 +1189,72 @@
   line-height: 1;
   font-variant-numeric: tabular-nums;
   pointer-events: auto;
+}
+
+/* A waiting proposal's removed layers, outlined in red on their lanes (dashed: only shortened). */
+.tl-ghost {
+  position: absolute;
+  border: 2px solid var(--color-cut);
+  border-radius: var(--radius-xs);
+  background: var(--color-cut-wash);
+}
+
+.tl-ghost.is-shortened {
+  border-style: dashed;
+}
+
+/* Proposed cuts: red hatching from the ruler's bottom through every lane, the one bold thing on the timeline. */
+.tl-cut {
+  position: absolute;
+  bottom: 0;
+  min-width: 4px;
+  border-inline: 2px solid var(--color-cut);
+  background:
+    repeating-linear-gradient(135deg, var(--color-cut-hatch) 0 2px, transparent 2px 7px),
+    var(--color-cut-wash);
+  transform-origin: left center;
+}
+
+.tl-cut.no-start {
+  border-left-width: 0;
+}
+
+.tl-cut.no-end {
+  border-right-width: 0;
+}
+
+.tl-cut-tag {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  z-index: 1;
+  transform: translateX(-50%);
+  padding: 0 5px;
+  border-radius: var(--radius-xs);
+  background: var(--color-cut);
+  color: var(--color-navy);
+  font-size: var(--text-2xs);
+  line-height: 16px;
+  font-weight: var(--weight-title);
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tl-cut.is-new {
+    animation: tl-draw var(--dur-slow) var(--ease-out) calc(var(--i, 0) * var(--stagger)) both;
+  }
+}
+
+@keyframes tl-draw {
+  from {
+    opacity: 0;
+    transform: scaleX(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* The time range you selected: paper, because it is yours. */

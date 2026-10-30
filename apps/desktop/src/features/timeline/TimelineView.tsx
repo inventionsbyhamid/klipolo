@@ -20,6 +20,7 @@ import { BLOCK_HINT_ID, CLIP_INNER_PX, HEADER_PX, MAIN_LANE_MIN_PX, TAIL_US } fr
 import { LiveRegion } from './LiveRegion';
 import { OverviewStrip } from './OverviewStrip';
 import { Playhead } from './Playhead';
+import { ProposalRanges } from './ProposalRanges';
 import { Ruler } from './ruler/Ruler';
 import { pxToUs, usToPx } from './scale';
 import { SnapGuide } from './SnapGuide';
@@ -71,6 +72,7 @@ function useClipPx(scrollRef: RefObject<HTMLElement | null>): number {
  *
  * Pinch (or Command + wheel) zooms around the pointer; the player bar and shortcuts zoom around the playhead
  * (`zoomControl`). Media dragged from the library or Finder shows where it would land (`dropTarget`, `DropIndicator`).
+ * A waiting chat proposal shows its cuts across the lanes (`ProposalRanges`).
  */
 export function TimelineView() {
   const { t } = useLingui();
@@ -215,8 +217,9 @@ export function TimelineView() {
                 clipPx={clipPx}
                 onSeek={seekPx}
               />
-              {/* Over the blocks, under the gutter: the time range and the playhead. */}
+              {/* Over the blocks, under the gutter: the cuts a proposal waits on, the time range, the playhead. */}
               <div className="tl-marks" style={{ left: HEADER_PX, width: laneWidth }}>
+                <ProposalRanges pps={pps} fromUs={viewport.fromUs} toUs={viewport.toUs} />
                 <RangeSelection pps={pps} />
                 <Playhead pps={pps} />
                 <SnapGuide ref={guideRef} />

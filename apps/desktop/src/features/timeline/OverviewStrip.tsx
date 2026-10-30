@@ -1,10 +1,11 @@
 import { useLingui } from '@lingui/react/macro';
 import { memo, useLayoutEffect, useRef, type CSSProperties, type PointerEvent, type RefObject } from 'react';
 import type { Clip } from '../../bindings/Clip';
+import { useProposal } from '../../state/proposal';
 import { HEADER_PX } from './layout';
 import { mainIndex } from './model/index';
 
-/** Segments closer than this share of the strip draw as one, so an hour of cuts is a few dozen elements. */
+/** Segments and ticks closer than this share of the strip draw as one, so an hour of cuts is a few dozen elements. */
 const MIN_SHARE = 0.004;
 
 /** `[from, to)` shares of the strip (0 to 1) of each run of clips, nearby ones merged. */
@@ -22,6 +23,16 @@ export function overviewSegments(main: Clip[], durationUs: number): [number, num
   return out;
 }
 
+/** Each proposed cut's place (a share of the strip), nearby ones counted once. */
+export function overviewTicks(starts: readonly number[], durationUs: number): number[] {
+  const out: number[] = [];
+  for (const us of starts) {
+    const at = us / durationUs;
+    if (out.length === 0 || at - out[out.length - 1] >= MIN_SHARE) out.push(at);
+  }
+  return out;
+}
+
 interface OverviewStripProps {
   main: Clip[];
   /** The video's length (µs) and the zoom: the strip is the whole video, its outline the lanes' view. */
@@ -32,12 +43,13 @@ interface OverviewStripProps {
 }
 
 /**
- * A 6 px pill of the whole project over the ruler: the clips in deep blue and the part the lanes show
- * outlined in paper. Drag the outline (or press elsewhere on the strip) to scroll the
+ * A 6 px pill of the whole project over the ruler: the clips in deep blue, a red tick at each proposed
+ * cut, and the part the lanes show outlined in paper. Drag the outline (or press elsewhere on the strip) to scroll the
  * lanes there. Hidden when the whole project fits. The outline moves with every scroll by its style, never a render.
  */
 export const OverviewStrip = memo(function OverviewStrip({ main, durationUs, pps, scrollRef }: OverviewStripProps) {
   const { t } = useLingui();
+  const proposal = useProposal((s) => s.proposal);
   const strip = useRef<HTMLDivElement>(null);
   const outline = useRef<HTMLSpanElement>(null);
   const totalPx = (durationUs / 1e6) * pps;
@@ -100,6 +112,7 @@ export const OverviewStrip = memo(function OverviewStrip({ main, durationUs, pps
     bar.addEventListener('pointercancel', end);
   };
 
+  const ticks = proposal ? overviewTicks(proposal.removals.ranges.map((r) => r.start), durationUs) : [];
   return (
     <div
       ref={strip}
@@ -115,6 +128,9 @@ export const OverviewStrip = memo(function OverviewStrip({ main, durationUs, pps
           className="ov-seg"
           style={{ '--x': `${from * 100}%`, '--w': `${(to - from) * 100}%` } as CSSProperties}
         />
+      ))}
+      {ticks.map((at) => (
+        <i key={at} data-overview-cut className="ov-tick" style={{ '--x': `${at * 100}%` } as CSSProperties} />
       ))}
       <span ref={outline} className="ov-view" />
     </div>
