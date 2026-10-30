@@ -200,3 +200,31 @@ fn names_stay_inside_the_folder() {
     }
     assert!(!root.path().join("escape.json").exists());
 }
+
+#[test]
+fn two_writers_in_one_process_never_lose_a_result_or_a_model() {
+    // The app runs one clip's transcript and scene steps at once: each stores its result and notes its model.
+    let root = tempfile::tempdir().unwrap();
+    let dir = Dir::new(root.path(), "k");
+    let jobs = [
+        ("transcript", "muse-voice-transcribe-1.0"),
+        ("scenes", "muse-spark-1.3"),
+    ];
+    std::thread::scope(|s| {
+        for (name, model) in jobs {
+            let dir = &dir;
+            s.spawn(move || {
+                for i in 0..1000 {
+                    dir.store(name, &i).unwrap();
+                    dir.set_model(name, model).unwrap();
+                    assert!(dir.meta().is_some(), "meta.json reads after {name} {i}");
+                }
+            });
+        }
+    });
+    let meta = dir.meta().unwrap();
+    for (name, model) in jobs {
+        assert_eq!(meta.models[name], model);
+        assert_eq!(dir.load::<i32>(name), Some(999));
+    }
+}

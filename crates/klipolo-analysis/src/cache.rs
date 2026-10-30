@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use klipolo_platform::durable::{self, Durability};
@@ -27,6 +28,15 @@ pub const SCHEMA: u32 = 1;
 
 /// How much of each end of a file the key reads.
 const END_BYTES: u64 = 4 * 1024 * 1024;
+
+/// Every write in this module, one at a time: a folder's `meta.json` is read, changed and replaced as one step, and
+/// two writes of one file never share its temporary file (`durable::temp_path` is per process, not per thread).
+static WRITES: Mutex<()> = Mutex::new(());
+
+fn writing() -> MutexGuard<'static, ()> {
+    // A writer that panicked left no half-written file (writes are atomic): carry on.
+    WRITES.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 /// `path`'s content key (see the module notes).
 pub fn content_key(path: &Path) -> io::Result<String> {
@@ -63,6 +73,10 @@ struct Schema {
 }
 
 /// One file's cache folder.
+///
+/// Within one process any number of threads may load and store at once: every write takes one process-wide lock, so a
+/// folder is written by one of them at a time (results, `meta.json` and its model ids are never lost to a race). Two
+/// processes writing one folder (two copies of the app) are not coordinated; the app runs one at a time.
 #[derive(Clone, Debug)]
 pub struct Dir {
     path: PathBuf,
@@ -95,6 +109,7 @@ impl Dir {
     /// another schema (whose files are dropped).
     pub fn store<T: Serialize>(&self, name: &str, value: &T) -> io::Result<()> {
         let file = self.file(name)?;
+        let _writing = writing();
         self.ready()?;
         write_json(&file, value)
     }
@@ -107,12 +122,13 @@ impl Dir {
     /// Notes in `meta.json` that `<name>.json` came from `model`.
     pub fn set_model(&self, name: &str, model: &str) -> io::Result<()> {
         self.file(name)?;
+        let _writing = writing();
         let mut meta = self.ready()?;
         meta.models.insert(name.to_owned(), model.to_owned());
         write_json(&self.meta_path(), &meta)
     }
 
-    /// The folder with a `meta.json` of this schema, made now if needed.
+    /// The folder with a `meta.json` of this schema, made now if needed. Called with the write lock held.
     fn ready(&self) -> io::Result<Meta> {
         std::fs::create_dir_all(&self.path)?;
         let meta_path = self.meta_path();
