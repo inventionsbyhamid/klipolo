@@ -11,6 +11,4 @@ export const media = {
   peaks: (path: string, level: number, from: number, count: number) =>
     invoke<ArrayBuffer | null>('media_peaks', { path, level, from, count }),
   thumbs: (path: string) => call<ThumbStrip | null>('media_thumbs', { path }),
-  /** How loud the file is on each channel (its loudest sample, 0 to 1); null until its sound cache is built. */
-  channelPeaks: (path: string) => call<number[] | null>('media_channel_peaks', { path }),
 };
