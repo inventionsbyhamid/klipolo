@@ -938,10 +938,11 @@ class MetaStream(httpx.AsyncByteStream):
     gate after the first, then ends, hangs or breaks, and records whether the
     relay closed it."""
 
-    def __init__(self, chunks, *, then=None, gate=None):
+    def __init__(self, chunks, *, then=None, gate=None, close_error=None):
         self.chunks = chunks
         self.then = then
         self.gate = gate
+        self.close_error = close_error
         self.served = 0
         self.closed = False
 
@@ -958,6 +959,8 @@ class MetaStream(httpx.AsyncByteStream):
 
     async def aclose(self):
         self.closed = True
+        if self.close_error is not None:
+            raise self.close_error
 
 
 def sse(*events, crlf=False):
@@ -1253,4 +1256,22 @@ async def test_send_failure_counts_as_a_disconnect(app, conn, meta):
     assert upstream.closed
     [row] = ledger(conn, device)
     assert json.loads(row["usage_json"])["estimated"] is True
+    assert app.state.in_flight.count() == 0
+
+
+@pytest.mark.anyio
+async def test_stream_is_charged_even_when_closing_meta_fails(app, conn, meta):
+    device = add_device(conn)
+    upstream = MetaStream([sse(CREATED)], then="hang", close_error=OSError("socket already gone"))
+    stream_from_meta(meta, upstream)
+    call = AsgiCall(app, "/meta/v1/responses", json.dumps(spark_request(stream=True)).encode(), device.headers)
+
+    async def on_chunk(count):
+        call.hang_up.set()
+
+    call.on_chunk = on_chunk
+    await call.run()
+
+    assert upstream.closed
+    assert len(ledger(conn, device)) == 1
     assert app.state.in_flight.count() == 0

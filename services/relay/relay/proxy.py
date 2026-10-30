@@ -447,11 +447,19 @@ async def _forward(request: Request, settings: Settings, device_id: str, call: C
         except httpx.HTTPError as exc:
             raise await _transport_error(exc, settings, device_id, call) from None
     finally:
-        await upstream.aclose()
+        await _close_quietly(upstream)
 
     if meter is not None:
         await charge(settings, device_id, meter, meter.usage_from_body(body))
     return Response(body, status_code=upstream.status_code, headers=_response_headers(upstream))
+
+
+async def _close_quietly(upstream: httpx.Response) -> None:
+    # A failed close must not stop the call from being charged.
+    try:
+        await upstream.aclose()
+    except Exception:
+        logger.warning("Could not close the Meta connection cleanly", exc_info=True)
 
 
 def _is_event_stream(upstream: httpx.Response) -> bool:
@@ -492,7 +500,7 @@ class MeteredStream(Response):
         finally:
             # Shielded: this must run even while the request is cancelled.
             with anyio.CancelScope(shield=True):
-                await self._upstream.aclose()
+                await _close_quietly(self._upstream)
                 await self._finish(events.close())
 
     async def _pump(self, send: Any, events: "SSEUsage") -> None:
