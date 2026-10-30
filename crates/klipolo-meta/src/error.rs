@@ -109,7 +109,8 @@ impl MetaError {
 }
 
 /// The message in an error body: Meta's `{"error": {"message": ..}}` or the
-/// relay's `{"error": code, "message": ..}`. Not JSON (an HTML page) gives none.
+/// relay's `{"error": code, "message": ..}`. Not JSON (an HTML page), blank
+/// text or a bare code gives none.
 fn body_message(body: &[u8], secrets: &[&str]) -> Option<String> {
     let value: Value = serde_json::from_slice(body).ok()?;
     let error = value.get("error");
@@ -122,7 +123,11 @@ fn body_message(body: &[u8], secrets: &[&str]) -> Option<String> {
         &text.split_whitespace().collect::<Vec<_>>().join(" "),
         secrets,
     );
-    if text.is_empty() {
+    // A bare code such as `charging_unavailable` is not words for a person.
+    let is_code = text
+        .bytes()
+        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+    if is_code {
         return None;
     }
     Some(match text.char_indices().nth(MAX_MESSAGE_CHARS) {
@@ -211,6 +216,22 @@ mod tests {
     fn non_json_bodies_have_no_message() {
         assert_eq!(body_message(b"<html>Bad gateway</html>", &[]), None);
         assert_eq!(body_message(br#"{"error": {"message": "  "}}"#, &[]), None);
+    }
+
+    #[test]
+    fn bare_error_codes_are_not_messages() {
+        assert_eq!(
+            body_message(br#"{"error": "charging_unavailable"}"#, &[]),
+            None
+        );
+        assert_eq!(
+            body_message(br#"{"error": {"message": "service_overloaded"}}"#, &[]),
+            None
+        );
+        assert_eq!(
+            body_message(br#"{"error": "Relay not configured."}"#, &[]).as_deref(),
+            Some("Relay not configured.")
+        );
     }
 
     #[test]
