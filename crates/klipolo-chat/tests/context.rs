@@ -635,7 +635,7 @@ fn longer_projects_fall_back_to_sentence_starts_then_fewer_lines() {
     let every = heading("Transcript");
     assert!(
         every.starts_with("## Transcript (sentence starts, every ")
-            && every.ends_with(" line plus those near the playhead and selection)"),
+            && every.ends_with(" line plus those near the playhead and the ends of the selection)"),
         "{every}"
     );
     assert!(heading("Scenes").starts_with("## Scenes (kind and who only"));
@@ -1135,4 +1135,38 @@ fn speaker_turns_in_any_order_give_the_same_lines() {
     let mut shuffled = two_clips();
     shuffled.turns.get_mut("clip-a").unwrap().reverse();
     assert_eq!(shuffled.context(&view_at(0.0)).text, sorted);
+}
+
+#[test]
+fn a_selection_of_the_whole_video_still_fits() {
+    // Select all, then "remove the ums": two hours, the selection from start to end.
+    let inputs = repeated(48);
+    let length = main_track_duration(&inputs.project.timeline.main);
+    let view = View {
+        playhead_us: secs(4000.0),
+        selection: Some(RangeUs {
+            start: 0,
+            end: length,
+        }),
+    };
+    let ctx = inputs.context(&view);
+    assert!(ctx.fits(), "{} tokens", ctx.tokens);
+    assert_eq!(
+        section(&ctx.text, "Now").lines().nth(1),
+        Some("Selection: 0.0-7441.9")
+    );
+    // Thinned, keeping what is near the playhead and the selection's ends.
+    assert!(every_of(&ctx.text, "Transcript") > 1);
+    let lines = timed_lines(&ctx.text, "Transcript");
+    let near = |at: f64| {
+        lines
+            .iter()
+            .filter(|l| (times_of(l).0 - at).abs() < 25.0)
+            .count()
+    };
+    let (start, playhead, end) = (near(0.0), near(4000.0), near(7441.9));
+    assert!(
+        start >= 2 && playhead >= 3 && end >= 2,
+        "{start} {playhead} {end}"
+    );
 }
