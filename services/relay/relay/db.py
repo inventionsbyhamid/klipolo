@@ -66,17 +66,17 @@ def connect(path: str | PathLike[str]) -> sqlite3.Connection:
 
 @contextmanager
 def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-    """Run a block as one write transaction; roll back if it raises."""
+    """Run a block as one write transaction; roll back if it or COMMIT raises."""
     conn.execute("BEGIN IMMEDIATE")
     try:
         yield conn
+        conn.execute("COMMIT")
     except BaseException:
         # Some errors (OR ROLLBACK, a full disk, I/O errors) make SQLite roll
         # back on its own; a second ROLLBACK would raise and hide the error.
         if conn.in_transaction:
             conn.execute("ROLLBACK")
         raise
-    conn.execute("COMMIT")
 
 
 def _enable_wal(conn: sqlite3.Connection) -> None:

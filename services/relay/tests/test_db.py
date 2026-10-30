@@ -109,6 +109,20 @@ def test_transaction_keeps_the_error_when_sqlite_already_rolled_back(conn):
     assert conn.execute("SELECT count(*) FROM codes").fetchone()[0] == 0
 
 
+def test_transaction_rolls_back_when_commit_fails(conn):
+    # A deferred foreign key fails at COMMIT, which leaves the transaction open.
+    with pytest.raises(sqlite3.IntegrityError):
+        with db.transaction(conn):
+            conn.execute("PRAGMA defer_foreign_keys = ON")
+            conn.execute(
+                "INSERT INTO ledger (device_id, at, endpoint, usage_json, cost_usd)"
+                " VALUES ('ghost', 'now', 'responses', '{}', 0.01)"
+            )
+
+    assert not conn.in_transaction
+    assert conn.execute("SELECT count(*) FROM ledger").fetchone()[0] == 0
+
+
 def test_concurrent_first_connects_all_succeed(tmp_path):
     failures = []
 
