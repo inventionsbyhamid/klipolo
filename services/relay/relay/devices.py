@@ -18,13 +18,10 @@ from pydantic import BaseModel, Field
 
 from relay import db
 from relay.config import Settings
-from relay.deps import get_db, get_settings
+from relay.deps import AppSettings, Conn
 from relay.errors import RelayError
 
 router = APIRouter()
-
-Conn = Annotated[sqlite3.Connection, Depends(get_db)]
-AppSettings = Annotated[Settings, Depends(get_settings)]
 
 
 class Registration(BaseModel):

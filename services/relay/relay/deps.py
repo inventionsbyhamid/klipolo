@@ -2,8 +2,9 @@
 
 import sqlite3
 from collections.abc import Iterator
+from typing import Annotated
 
-from fastapi import Request
+from fastapi import Depends, Request
 
 from relay import db
 from relay.config import Settings
@@ -20,3 +21,7 @@ def get_db(request: Request) -> Iterator[sqlite3.Connection]:
         yield conn
     finally:
         conn.close()
+
+
+Conn = Annotated[sqlite3.Connection, Depends(get_db)]
+AppSettings = Annotated[Settings, Depends(get_settings)]
