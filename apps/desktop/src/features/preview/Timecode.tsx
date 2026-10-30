@@ -20,7 +20,8 @@ export function Timecode({ durationUs, className }: { durationUs: number; classN
     let timer: ReturnType<typeof setInterval> | undefined;
     const write = () => {
       const { playing, playheadUs } = usePlayback.getState();
-      const us = playing && clockAnchor().running ? Math.min(clockUs(), durationUs) : playheadUs;
+      // Never past the end: an undo can make the video shorter than where the playhead was.
+      const us = Math.min(playing && clockAnchor().running ? clockUs() : playheadUs, durationUs);
       const text = formatTime(us);
       if (text !== shown) el.textContent = shown = text;
     };
