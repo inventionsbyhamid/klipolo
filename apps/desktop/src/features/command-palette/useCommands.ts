@@ -10,8 +10,7 @@ import { useSelection } from '../../state/selection';
 import { toast } from '../../state/toasts';
 import { useUi } from '../../state/ui';
 import { importFiles } from '../media/useImportMedia';
-import { deleteBlock, deleteRange } from '../timeline/keys/timelineActions';
-import { useTimelineCommands } from '../timeline/useTimelineCommands';
+import { deleteBlock, deleteRange, useTimelineCommands } from '../timeline/commands';
 import { searchWords, type Command } from './command';
 import { useTransportCommands } from './useTransportCommands';
 

@@ -9,8 +9,7 @@ import { keyBurst } from '../../state/keyBurst';
 import { usePlayback } from '../../state/playback';
 import { useSelection } from '../../state/selection';
 import { toast } from '../../state/toasts';
-import { commit, editable } from '../timeline/keys/timelineActions';
-import { dropOps, type DropTarget } from '../timeline/model/dropOps';
+import { commit, dropOps, editable, type DropTarget } from '../timeline/drops';
 
 /*
  * What adding media to the timeline does, from the library (a row dragged onto the timeline, a row's menu): it reads

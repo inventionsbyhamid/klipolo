@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { onFileDrag } from '../../bridge/drop';
-import { dropTargetAt, setDropIndicator } from '../timeline/dropTarget';
+import { dropTargetAt, setDropIndicator } from '../timeline/drops';
 import { importFiles } from './useImportMedia';
 
 /**

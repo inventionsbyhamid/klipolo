@@ -1,6 +1,6 @@
 import type { ContribId } from '../../bindings/ContribId';
 import type { ParamValue } from '../../bindings/ParamValue';
-import type { DropTarget } from '../timeline/model/dropOps';
+import type { DropTarget } from '../timeline/drops';
 
 /*
  * What a command is: the keys, the player bar, the timeline's menus and the rows run it, and each names the edit it

@@ -9,7 +9,7 @@ import { afterCommits, beginCommit, keepAtClose } from '../../state/commitQueue'
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { toast } from '../../state/toasts';
-import { dropAllOps, type DropTarget } from '../timeline/model/dropOps';
+import { dropAllOps, type DropTarget } from '../timeline/drops';
 
 const NAMES_SHOWN = 3;
 

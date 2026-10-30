@@ -5,7 +5,7 @@ import { clipAt, findItem, itemLabel, sourceLabel } from '../../../lib/timeline'
 import { keyBurst } from '../../../state/keyBurst';
 import { useProject } from '../../../state/project';
 import { toast } from '../../../state/toasts';
-import { itemOp, muteLabel } from '../../preview/toolbar/toolOps';
+import { itemOp, muteLabel } from '../../preview';
 import { attachOps, trackStepOps } from './keyOps';
 import { blockLabel, commit, editable } from './timelineActions';
 import { setTrackFlag } from './trackActions';

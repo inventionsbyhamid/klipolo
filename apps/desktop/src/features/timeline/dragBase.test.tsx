@@ -7,7 +7,7 @@ import { useProject } from '../../state/project';
 import { useUi } from '../../state/ui';
 import { fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
-import { commitLatest } from '../preview/toolbar/toolOps';
+import { commitLatest } from '../../state/commit';
 import { Timeline } from './Timeline';
 
 const frames = () => act(() => new Promise((r) => setTimeout(r, 40)));

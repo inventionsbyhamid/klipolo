@@ -11,7 +11,7 @@ import { searchWords, type Command } from '../command-palette/command';
 import { copy, cut, duplicate, paste, pasteEffects } from './keys/clipboardActions';
 import { trackStepOps } from './keys/keyOps';
 import { nudge } from './keys/nudge';
-import { muteLabel } from '../preview/toolbar/toolOps';
+import { muteLabel } from '../preview';
 import { stepTrack, toggleAttach, toggleSoundMute } from './keys/layerActions';
 import { split, trimToPlayhead } from './keys/timelineActions';
 import { clipIndexAt, mainIndex } from './model/index';

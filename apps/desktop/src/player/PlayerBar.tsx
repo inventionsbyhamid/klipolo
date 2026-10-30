@@ -2,7 +2,7 @@ import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react';
 import type { Command } from '../features/command-palette/command';
 import { useCommands } from '../features/command-palette/useCommands';
 import { Timecode } from '../features/preview/Timecode';
-import { useZoomTarget, zoomRange, zoomTo } from '../features/timeline/zoomControl';
+import { useZoomTarget, zoomRange, zoomTo } from '../features/timeline/commands';
 import { Icon } from '../layout/Icon';
 import { useEngine } from '../state/engine';
 import { usePlayback } from '../state/playback';
