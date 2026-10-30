@@ -111,8 +111,16 @@ fn user_messages_are_plain_and_name_settings_where_needed() {
         MetaError::Unauthorized,
         MetaError::RateLimited {
             retry_after: Some(7),
+            message: None,
         },
-        MetaError::RateLimited { retry_after: None },
+        MetaError::RateLimited {
+            retry_after: None,
+            message: None,
+        },
+        MetaError::RateLimited {
+            retry_after: Some(1),
+            message: Some("Too many requests at once \u{2014} wait".into()),
+        },
         MetaError::Overloaded { message: None },
         MetaError::Overloaded {
             message: Some("Relay not configured.".into()),
@@ -154,11 +162,31 @@ fn user_messages_are_plain_and_name_settings_where_needed() {
         .user_message(),
         "Relay not configured."
     );
-    assert!(MetaError::RateLimited {
-        retry_after: Some(7)
+}
+
+fn wait_message(retry_after: Option<u64>) -> String {
+    MetaError::RateLimited {
+        retry_after,
+        message: None,
     }
     .user_message()
-    .contains("7 seconds"));
+}
+
+#[test]
+fn rate_limit_waits_read_like_a_person_wrote_them() {
+    let start = "Too many requests right now. Try again";
+    assert_eq!(wait_message(None), format!("{start} in a moment."));
+    assert_eq!(wait_message(Some(0)), format!("{start} in a moment."));
+    assert_eq!(wait_message(Some(1)), format!("{start} in 1 second."));
+    assert_eq!(wait_message(Some(90)), format!("{start} in 90 seconds."));
+    assert_eq!(wait_message(Some(91)), format!("{start} in 2 minutes."));
+    assert_eq!(wait_message(Some(5400)), format!("{start} in 90 minutes."));
+    assert_eq!(wait_message(Some(5401)), format!("{start} later today."));
+    assert_eq!(wait_message(Some(86_400)), format!("{start} later today."));
+    assert_eq!(wait_message(Some(86_401)), format!("{start} later."));
+    for seconds in [None, Some(7), Some(50_400)] {
+        assert!(!wait_message(seconds).contains("Meta"), "{seconds:?}");
+    }
 }
 
 // Transcription.
@@ -392,12 +420,16 @@ async fn other_statuses_map_to_their_errors() {
     assert_eq!(
         transcribe_error(ResponseTemplate::new(429).insert_header("retry-after", "7")).await,
         MetaError::RateLimited {
-            retry_after: Some(7)
+            retry_after: Some(7),
+            message: None,
         }
     );
     assert_eq!(
         transcribe_error(ResponseTemplate::new(429)).await,
-        MetaError::RateLimited { retry_after: None }
+        MetaError::RateLimited {
+            retry_after: None,
+            message: None,
+        }
     );
     let meta_auth =
         json!({"error": "meta_auth", "message": "The relay could not use its Meta key."});
@@ -961,13 +993,16 @@ async fn relay_mode_aligns_with_its_own_token() {
 
 #[tokio::test]
 async fn align_quota_used_up_is_rate_limited() {
+    let quota =
+        "This device has used today's 120 minutes of word timing. It resets at midnight UTC.";
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v1/align"))
-        .respond_with(ResponseTemplate::new(429).set_body_json(json!({
-            "error": "align_quota",
-            "message": "This device has used today's word timing minutes.",
-        })))
+        .respond_with(
+            ResponseTemplate::new(429)
+                .insert_header("retry-after", "50400")
+                .set_body_json(json!({"error": "align_quota", "message": quota})),
+        )
         .mount(&server)
         .await;
 
@@ -975,7 +1010,33 @@ async fn align_quota_used_up_is_rate_limited() {
         .align(wav(), &align_turns())
         .await
         .unwrap_err();
-    assert_eq!(error, MetaError::RateLimited { retry_after: None });
+    assert_eq!(
+        error,
+        MetaError::RateLimited {
+            retry_after: Some(50_400),
+            message: Some(quota.into()),
+        }
+    );
+    assert_eq!(error.user_message(), quota);
+}
+
+#[tokio::test]
+async fn relay_busy_is_rate_limited_with_its_reason() {
+    let busy = "Too many requests at once from this device. Wait for one to finish.";
+    let error = transcribe_error(
+        ResponseTemplate::new(429)
+            .insert_header("retry-after", "1")
+            .set_body_json(json!({"error": "busy", "message": busy})),
+    )
+    .await;
+    assert_eq!(
+        error,
+        MetaError::RateLimited {
+            retry_after: Some(1),
+            message: Some(busy.into()),
+        }
+    );
+    assert_eq!(error.user_message(), busy);
 }
 
 #[test]
@@ -1276,7 +1337,14 @@ async fn error_text_never_contains_key() {
     }
     assert_eq!(seen.len(), VARIANTS, "variants covered: {seen:?}");
     // The echoes did reach every variant that keeps a server's message, redacted.
-    for name in ["Budget", "NotAllowed", "Overloaded", "BadRequest", "Decode"] {
+    for name in [
+        "Budget",
+        "NotAllowed",
+        "RateLimited",
+        "Overloaded",
+        "BadRequest",
+        "Decode",
+    ] {
         assert!(
             errors
                 .iter()

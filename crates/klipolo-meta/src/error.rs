@@ -19,9 +19,14 @@ pub enum MetaError {
     /// 401: the key or the device token was not accepted.
     #[error("not authorized (401)")]
     Unauthorized,
-    /// 429: too many requests; `retry_after` is the `Retry-After` header in seconds.
-    #[error("rate limited (429){}", retry_hint(*.retry_after))]
-    RateLimited { retry_after: Option<u64> },
+    /// 429: too many requests (Meta's rate limit, or the relay's `busy` or
+    /// daily `align_quota`). `retry_after` is the `Retry-After` header in
+    /// seconds (up to a day for the quota); `message` the server's reason.
+    #[error("rate limited (429){}{}", retry_hint(*.retry_after), detail(.message))]
+    RateLimited {
+        retry_after: Option<u64>,
+        message: Option<String>,
+    },
     /// 503 and other server errors: Meta or the relay cannot answer right
     /// now, with the server's reason when it gave one ("Relay not configured.").
     #[error("Meta or the relay is overloaded or unavailable (5xx){}", detail(.message))]
@@ -76,6 +81,7 @@ impl MetaError {
             },
             429 => Self::RateLimited {
                 retry_after: retry_after.and_then(parse_retry_after),
+                message: body_message(body, secrets),
             },
             500..=599 => Self::Overloaded {
                 message: body_message(body, secrets),
@@ -99,13 +105,16 @@ impl MetaError {
             Self::Unauthorized => {
                 "Your Meta API key or access code was not accepted. Check it in Settings.".into()
             }
-            Self::RateLimited { retry_after } => match retry_after {
-                Some(1) => "Meta has had too many requests. Try again in 1 second.".into(),
-                Some(n) if *n > 1 => {
-                    format!("Meta has had too many requests. Try again in {n} seconds.")
-                }
-                _ => "Meta has had too many requests. Try again in a moment.".into(),
-            },
+            Self::RateLimited {
+                retry_after,
+                message,
+            } => sentence(
+                message.as_deref().unwrap_or_default(),
+                &format!(
+                    "Too many requests right now. Try again {}.",
+                    wait(*retry_after)
+                ),
+            ),
             Self::Overloaded { message } => sentence(
                 message.as_deref().unwrap_or_default(),
                 "Meta is busy right now. Try again in a moment.",
@@ -123,6 +132,19 @@ impl MetaError {
             }
             Self::Decode(_) => "Meta sent an answer Klipolo could not read. Try again.".into(),
         }
+    }
+}
+
+/// When to try again, for a person: seconds up to 90, then minutes up to 90,
+/// then "later today" (the relay's daily quota resets within a day).
+fn wait(retry_after: Option<u64>) -> String {
+    match retry_after.unwrap_or(0) {
+        0 => "in a moment".into(),
+        1 => "in 1 second".into(),
+        s @ 2..=90 => format!("in {s} seconds"),
+        s @ 91..=5400 => format!("in {} minutes", s.div_ceil(60)),
+        86_401.. => "later".into(),
+        _ => "later today".into(),
     }
 }
 
@@ -262,16 +284,18 @@ mod tests {
 
     #[test]
     fn display_names_the_status() {
+        let limited = |retry_after, message: Option<&str>| MetaError::RateLimited {
+            retry_after,
+            message: message.map(str::to_owned),
+        };
         assert_eq!(
-            MetaError::RateLimited {
-                retry_after: Some(3)
-            }
-            .to_string(),
+            limited(Some(3), None).to_string(),
             "rate limited (429), retry after 3 s"
         );
+        assert_eq!(limited(None, None).to_string(), "rate limited (429)");
         assert_eq!(
-            MetaError::RateLimited { retry_after: None }.to_string(),
-            "rate limited (429)"
+            limited(Some(1), Some("Busy.")).to_string(),
+            "rate limited (429), retry after 1 s: Busy."
         );
     }
 }
