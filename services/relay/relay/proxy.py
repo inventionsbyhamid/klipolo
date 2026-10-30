@@ -11,6 +11,9 @@ then its video calls must stream):
     DELETE files/{id}
     POST   asr/transcribe   multipart `request` (JSON) and `audio` parts;
                             `sessionId` is the only query parameter allowed
+    POST   images/generations
+                            JSON, at most 64 KiB, known fields only; Muse
+                            Image, `n` at most 2, its tools always off
 
 Anything else is 404. Every call is gated per request: a known device token
 (401), relay AI for the device's code right now (403), a configured key (503).
@@ -24,16 +27,18 @@ whole max_output_tokens (set to 8192 when missing, at most 16384) at the
 output price, plus $0.75 unless the call is text only (any image or
 reasoning item, media or files by link or id, stored items by reference, or
 any type the relay doesn't know all count as media); for transcription, the
-audio's data at 32,000 bytes a second, the lowest rate Meta takes. The call
+audio's data at 32,000 bytes a second, the lowest rate Meta takes; for Muse
+Image, two images ($0.02), the most a call may ask for. The call
 is refused with 402 when the spend alone leaves the device or the relay no
 room for it (final), with 429 when only what calls in flight have reserved
 is in the way (retry later), or with 413 if it could cost more than a
 device's whole cap. A device with no room left is refused before its body is
 read, and bodies have a deadline (408).
 
-After Meta answers, the call is charged from Meta's own `usage`: the ledger
-row and the device's `spent_usd` are written in one transaction, and only then
-is the reservation freed. Failed calls (non-2xx) are not charged. A client
+After Meta answers, the call is charged from Meta's own `usage` (Muse Image:
+$0.01 for each image in its answer): the ledger row and the device's
+`spent_usd` are written in one transaction, and only then is the reservation
+freed. Failed calls (non-2xx) are not charged. A client
 hanging up never makes a call cheaper: a non-streamed call still waits for
 Meta's answer, and a streamed one is read to its final event. When the real
 usage can't be read (no usage, missing counters, a parse failure, a timeout
@@ -75,6 +80,8 @@ from relay.devices import Device, has_relay_ai
 from relay.errors import RelayError, error_response
 from relay.pricing import (
     DEFAULT_MAX_OUTPUT_TOKENS,
+    IMAGES_KEY,
+    MAX_IMAGES_PER_CALL,
     MAX_OUTPUT_TOKENS,
     MODELS_BY_ENDPOINT,
     SAM_IMAGES_KEY,
@@ -105,6 +112,8 @@ JSON_BODY_DEADLINE_S = 60.0
 UPLOAD_DEADLINE_S = 15 * 60.0
 MAX_AUDIO_BYTES = 32 * 1024 * 1024
 MAX_TRANSCRIBE_SPEC_BYTES = 64 * 1024
+# An image request is a prompt and a few options.
+MAX_IMAGE_JSON_BYTES = 64 * 1024
 MAX_ERROR_BYTES = 64 * 1024
 # Deeper request JSON is refused, so nothing the relay does with it recurses far.
 MAX_JSON_DEPTH = 64
@@ -437,6 +446,8 @@ class Meter:
     def usage_from_body(self, body: bytes) -> list[Any]:
         """The usage candidates in a complete JSON response, whatever the body."""
         try:
+            if self.endpoint == "images/generations":
+                return _images_in(body)
             if self.endpoint == "asr/transcribe":
                 return _find_value(body, "audioDurationMs", _DURATION_KEY, lambda v: {"audioDurationMs": v})
             return _find_value(body, "usage", _USAGE_KEY, lambda v: v)
@@ -584,6 +595,23 @@ async def transcribe(request: Request, device: RelayDevice, conn: Conn, settings
         return Call("POST", "asr/transcribe", meter, files=files)
 
     return await _proxy(request, device, conn, settings, prepare, query_keys=frozenset({"sessionId"}))
+
+
+@router.post("/meta/v1/images/generations")
+async def create_image(request: Request, device: RelayDevice, conn: Conn, settings: AppSettings) -> Response:
+    async def prepare() -> Call:
+        payload = _json_object(await _read_body(request, MAX_IMAGE_JSON_BYTES, "The request is too large."))
+        model = payload.get("model")
+        _check_model("images/generations", model, settings)
+        _check_fields(payload, _IMAGE_FIELDS)
+        payload["n"] = _image_count(payload.get("n", 1))
+        # Searching the web or running code is billed outside the image price.
+        payload["tool_enablement"] = dict(_IMAGE_TOOLS_OFF)
+        body = _encode(payload)
+        meter = Meter("images/generations", model, request_bytes=len(body))
+        return Call("POST", "images/generations", meter, content=body, headers={"content-type": "application/json"})
+
+    return await _proxy(request, device, conn, settings, prepare)
 
 
 @router.api_route(
@@ -1119,10 +1147,37 @@ _RESPONSE_FIELDS = frozenset(
 )
 
 
-def _check_fields(payload: dict[str, Any]) -> None:
-    unknown = sorted(set(payload) - _RESPONSE_FIELDS)
+def _check_fields(payload: dict[str, Any], known: frozenset[str] = _RESPONSE_FIELDS) -> None:
+    unknown = sorted(set(payload) - known)
     if unknown:
         raise RelayError(400, "unsupported", f"The relay does not accept these fields: {', '.join(unknown)}.")
+
+
+# The Images fields the relay forwards. Streaming, edits, and options it can't
+# price (moderation, background) stay out; tool_enablement is always replaced.
+_IMAGE_FIELDS = frozenset(
+    {
+        "model",
+        "prompt",
+        "n",
+        "size",
+        "response_format",
+        "output_format",
+        "reasoning_strength",
+        "temperature",
+        "user",
+        "tool_enablement",
+    }
+)
+_IMAGE_TOOLS_OFF = {"enable_image_search": False, "enable_web_search": False, "enable_shell": False}
+
+
+def _image_count(value: Any) -> int:
+    """`n`: a whole number from 1 to MAX_IMAGES_PER_CALL, so the reservation
+    covers the call."""
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= MAX_IMAGES_PER_CALL:
+        raise RelayError(400, "invalid_request", f"n must be 1 or {MAX_IMAGES_PER_CALL} through the relay.")
+    return value
 
 
 def _check_response_options(payload: dict[str, Any]) -> None:
@@ -1330,6 +1385,17 @@ def _form_parts(content_type: str, body: bytes) -> dict[str, _Part]:
 
 
 # Usage.
+
+
+def _images_in(body: bytes) -> list[Any]:
+    """Muse Image's answer as usage: the number of images in its `data`. Parsed
+    whole: the images are base64 inside it, a few MB already read."""
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return []
+    images = data.get("data") if isinstance(data, dict) else None
+    return [{IMAGES_KEY: len(images)}] if isinstance(images, list) else []
 
 
 def _find_value(body: bytes, key: str, pattern: re.Pattern[str], wrap: Callable[[Any], Any]) -> list[Any]:

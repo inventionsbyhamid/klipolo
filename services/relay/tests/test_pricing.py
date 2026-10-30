@@ -56,6 +56,19 @@ def test_asr_cost_from_duration():
     assert cost == pytest.approx(0.18 * 155 / 3600)
 
 
+def test_muse_image_costs_a_cent_per_image_returned():
+    assert cost_usd("images/generations", "muse-image-1.0", {"images": 1}) == pytest.approx(0.01)
+    assert cost_usd("images/generations", "muse-image-1.0", {"images": 2}) == pytest.approx(0.02)
+    assert cost_usd("images/generations", "muse-image-1.0", {"images": 0}) == 0.0
+
+
+def test_muse_image_reserves_two_images_whatever_it_asks_for():
+    usage = reservation_usage("images/generations", "muse-image-1.0", request_bytes=300, images=1)
+
+    assert usage == {"images": 2, "reserved": True}
+    assert cost_usd("images/generations", "muse-image-1.0", usage) == pytest.approx(0.02)
+
+
 def test_file_calls_are_free():
     assert cost_usd("files", None, {}) == 0.0
 
@@ -67,6 +80,8 @@ def test_file_calls_are_free():
         ("responses", "muse-spark-1.3-contributor"),
         ("responses", "muse-voice-transcribe-1.0"),
         ("asr/transcribe", "muse-spark-1.3"),
+        ("images/generations", "muse-spark-1.3"),
+        ("responses", "muse-image-1.0"),
         ("responses", None),
         ("chat/completions", "muse-spark-1.3"),
     ],
@@ -137,8 +152,9 @@ def test_media_amount_counts_only_in_a_reservation():
         ("responses", "muse-spark-1.3", {"total_tokens": 10500}),
         ("responses", "muse-spark-1.2", {}),
         ("asr/transcribe", "muse-voice-transcribe-1.0", {}),
+        ("images/generations", "muse-image-1.0", {"input_tokens": 40}),
     ],
-    ids=["no-output", "no-input", "total-only", "empty", "no-duration"],
+    ids=["no-output", "no-input", "total-only", "empty", "no-duration", "no-image-count"],
 )
 def test_usage_without_its_counters_raises(endpoint, model, usage):
     # Missing counters would otherwise price as zero.

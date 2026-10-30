@@ -1325,7 +1325,9 @@ def test_file_id_with_odd_characters_is_404(client, conn, meta):
         ("GET", "/meta/v1/files/file-1/content"),
         ("POST", "/meta/v1/chat/completions"),
         ("GET", "/meta/v1/models"),
-        ("POST", "/meta/v1/images/generations"),
+        ("GET", "/meta/v1/images/generations"),
+        ("POST", "/meta/v1/images/edits"),
+        ("POST", "/meta/v1/images/variations"),
         ("PUT", "/meta/v1/asr/transcribe"),
         ("POST", "/meta/v1/"),
         ("POST", "/meta/v2/responses"),
@@ -1646,6 +1648,252 @@ def test_admission_tries_a_held_charge_once_and_quickly(client, conn, meta, sett
     # Once the database takes writes again, the held charge goes in first.
     assert client.post("/meta/v1/responses", json=spark_request(), headers=device.headers).status_code == 200
     assert [row["cost_usd"] for row in ledger(conn, device)] == [pytest.approx(SPARK_COST)] * 2
+
+
+# Images (Muse Image).
+
+# Any base64: the relay counts images, it never reads them.
+IMAGE_B64 = "iVBORw0KGgo="
+TOOLS_OFF = {"enable_image_search": False, "enable_web_search": False, "enable_shell": False}
+IMAGE_INVALID_N = {"error": "invalid_request", "message": "n must be 1 or 2 through the relay."}
+
+
+def image_request(**extra):
+    return {
+        "model": "muse-image-1.0",
+        "prompt": "A single paper plane as a sticker illustration",
+        "n": 1,
+        "size": "1024x1024",
+        "response_format": "b64_json",
+        "output_format": "png",
+        **extra,
+    }
+
+
+def image_body(count=1):
+    return {
+        "created": 1793400000,
+        "data": [{"b64_json": IMAGE_B64, "revised_prompt": "A paper plane"}] * count,
+        "output_format": "png",
+        "usage": {"input_tokens": 40, "output_tokens": 4160, "total_tokens": 4200},
+    }
+
+
+def post_image(client, device, body):
+    return client.post("/meta/v1/images/generations", json=body, headers=device.headers)
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_image_generation_is_charged_per_image(client, conn, meta, settings, count):
+    device = add_device(conn)
+    route = meta.post("/images/generations").respond(200, json=image_body(count))
+
+    response = post_image(client, device, image_request(n=count))
+
+    assert response.status_code == 200
+    assert response.json() == image_body(count)
+    sent = route.calls.last.request
+    assert sent.headers["authorization"] == f"Bearer {settings.meta_api_key}"
+    assert json.loads(sent.content) == {**image_request(n=count), "tool_enablement": TOOLS_OFF}
+    [row] = ledger(conn, device)
+    assert (row["endpoint"], row["model"]) == ("images/generations", "muse-image-1.0")
+    assert json.loads(row["usage_json"]) == {"images": count}
+    assert row["cost_usd"] == pytest.approx(0.01 * count)
+    assert spent(conn, device) == pytest.approx(0.01 * count)
+    assert client.app.state.in_flight.reserved(device.device_id) == (0.0, 0.0)
+
+
+def test_an_image_answer_with_no_images_costs_nothing(client, conn, meta):
+    device = add_device(conn)
+    meta.post("/images/generations").respond(200, json={"created": 1, "data": []})
+
+    assert post_image(client, device, image_request()).status_code == 200
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == 0.0
+
+
+def test_an_image_answer_the_relay_cannot_count_is_charged_its_reservation(client, conn, meta):
+    device = add_device(conn)
+    meta.post("/images/generations").respond(200, text="not json")
+
+    assert post_image(client, device, image_request()).status_code == 200
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(0.02)
+    assert json.loads(row["usage_json"]) == {"images": 2, "reserved": True}
+
+
+@pytest.mark.parametrize(
+    "tools",
+    [
+        None,
+        {"enable_web_search": True},
+        {"enable_image_search": True, "enable_web_search": True, "enable_shell": True, "enable_more": True},
+        "all",
+    ],
+    ids=["left-out", "one-on", "all-on", "not-an-object"],
+)
+def test_image_tool_enablement_is_forced_off(client, conn, meta, tools):
+    device = add_device(conn)
+    route = meta.post("/images/generations").respond(200, json=image_body())
+    body = image_request() if tools is None else image_request(tool_enablement=tools)
+
+    response = post_image(client, device, body)
+
+    assert response.status_code == 200
+    assert json.loads(route.calls.last.request.content)["tool_enablement"] == TOOLS_OFF
+
+
+@pytest.mark.parametrize("n", [3, 10, 0, -1, "2", 1.5, True, None])
+def test_image_n_over_2_is_refused(client, conn, meta, n):
+    device = add_device(conn)
+    route = meta.post("/images/generations")
+
+    response = post_image(client, device, image_request(n=n))
+
+    assert response.status_code == 400
+    assert response.json() == IMAGE_INVALID_N
+    assert not route.called
+    assert ledger(conn) == []
+
+
+def test_an_image_request_without_n_asks_for_one(client, conn, meta):
+    device = add_device(conn)
+    route = meta.post("/images/generations").respond(200, json=image_body())
+    body = image_request()
+    del body["n"]
+
+    assert post_image(client, device, body).status_code == 200
+    assert json.loads(route.calls.last.request.content)["n"] == 1
+
+
+@pytest.mark.parametrize("field", ["stream", "background", "moderation", "quality", "image", "partial_images"])
+def test_image_fields_the_relay_does_not_know_are_400(client, conn, meta, field):
+    device = add_device(conn)
+    route = meta.post("/images/generations")
+
+    response = post_image(client, device, image_request(**{field: True}))
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "unsupported", "message": f"The relay does not accept these fields: {field}."}
+    assert not route.called
+
+
+def test_image_requests_take_the_documented_options(client, conn, meta):
+    device = add_device(conn)
+    route = meta.post("/images/generations").respond(200, json=image_body())
+    body = image_request(size="1024x1792", reasoning_strength="low", temperature=0.4, user="device-1")
+
+    assert post_image(client, device, body).status_code == 200
+    assert json.loads(route.calls.last.request.content) == {**body, "tool_enablement": TOOLS_OFF}
+
+
+@pytest.mark.parametrize("model", ["muse-spark-1.3", "muse-image-1.0-contributor", "gpt-image-1", None])
+def test_only_muse_image_draws_through_the_relay(client, conn, meta, model):
+    device = add_device(conn)
+    route = meta.post("/images/generations")
+
+    response = post_image(client, device, image_request(model=model))
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "model_not_allowed"
+    assert not route.called
+
+
+def test_muse_image_is_off_when_it_is_not_listed(settings, conn, meta):
+    device = add_device(conn)
+    route = meta.post("/images/generations")
+
+    with relay_client(settings, allowed_models=settings.allowed_models - {"muse-image-1.0"}) as client:
+        response = post_image(client, device, image_request())
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "model_not_allowed"
+    assert not route.called
+
+
+@pytest.mark.parametrize("token", [None, "nope"], ids=["no-token", "unknown-token"])
+def test_image_calls_need_a_device_token(client, meta, token):
+    route = meta.post("/images/generations")
+    headers = {} if token is None else {"Authorization": f"Bearer {token}"}
+
+    response = client.post("/meta/v1/images/generations", json=image_request(), headers=headers)
+
+    assert response.status_code == 401
+    assert not route.called
+
+
+def test_image_requests_are_capped_at_64_kib(client, conn, meta):
+    device = add_device(conn)
+    route = meta.post("/images/generations")
+
+    response = post_image(client, device, image_request(prompt="x" * (64 * 1024)))
+
+    assert response.status_code == 413
+    assert not route.called
+
+
+@pytest.mark.parametrize(
+    ("device_spent", "others_spent", "refusal"),
+    [
+        (2.00, 0.0, BUDGET),
+        (1.99, 0.0, NOT_ENOUGH_CREDIT),
+        (0.0, 39.99, GLOBAL_BUDGET),
+    ],
+    ids=["device-used-up", "device-short-of-two-images", "shared-credit-short"],
+)
+def test_image_calls_cannot_pass_the_device_or_global_cap(client, conn, meta, device_spent, others_spent, refusal):
+    # Two images ($0.02) are reserved whatever n is, so a call needs that much room.
+    device = add_device(conn, spent=device_spent)
+    if others_spent:
+        add_device(conn, spent=others_spent)
+    route = meta.post("/images/generations").respond(200, json=image_body())
+
+    response = post_image(client, device, image_request())
+
+    assert response.status_code == 402
+    assert response.json() == refusal
+    assert not route.called
+    assert spent(conn, device) == device_spent
+
+
+def test_an_image_call_fits_with_just_two_images_of_room(client, conn, meta, settings):
+    start = settings.device_cap_usd - 0.025
+    device = add_device(conn, spent=start)
+    meta.post("/images/generations").respond(200, json=image_body(2))
+
+    assert post_image(client, device, image_request(n=2)).status_code == 200
+    assert spent(conn, device) == pytest.approx(start + 0.02)
+    assert spent(conn, device) <= settings.device_cap_usd
+
+
+def test_image_calls_in_flight_hold_their_reservation_against_the_cap(client, conn, meta, settings):
+    # Room for one image call's reservation, not two.
+    start = settings.device_cap_usd - 0.03
+    device = add_device(conn, spent=start)
+    state = {"arrived": 0, "release": False}
+
+    async def held(request):
+        state["arrived"] += 1
+        with anyio.fail_after(5):
+            while not state["release"]:
+                await anyio.sleep(0.01)
+        return httpx.Response(200, json=image_body(2))
+
+    meta.post("/images/generations").mock(side_effect=held)
+
+    with concurrent.futures.ThreadPoolExecutor(1) as pool:
+        first = pool.submit(post_image, client, device, image_request(n=2))
+        wait_for(lambda: state["arrived"] == 1)
+        second = post_image(client, device, image_request())
+        state["release"] = True
+
+    assert first.result().status_code == 200
+    assert second.status_code == 429
+    assert second.json() == DEVICE_BUSY
+    assert spent(conn, device) == pytest.approx(start + 0.02)
+    assert spent(conn, device) <= settings.device_cap_usd
+    assert_ledger_matches_spend(conn, device)
+    assert client.app.state.in_flight.reserved(device.device_id) == (0.0, 0.0)
 
 
 # Secrets.
