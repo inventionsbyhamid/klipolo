@@ -463,6 +463,96 @@ mod tests {
         set_visible(&state, true);
     }
 
+    /// What the page hears: the crash guard's events never reach it, every other event does, and the transport
+    /// follows playback's starts and stops.
+    #[test]
+    fn the_sink_drops_guard_events_and_moves_the_transport() {
+        use klipolo_engine::api::StateReason;
+        use klipolo_model::contrib::ContribId;
+        use tauri::ipc::InvokeResponseBody;
+
+        let sent = Arc::new(Mutex::new(Vec::<String>::new()));
+        let channel = {
+            let sent = sent.clone();
+            Channel::new(move |body| {
+                if let InvokeResponseBody::Json(json) = body {
+                    sent.lock().unwrap().push(json);
+                }
+                Ok(())
+            })
+        };
+        let transport = Arc::new(Mutex::new(Transport { at_us: 0, seq: 4 }));
+        let sink = event_sink(channel, transport.clone());
+
+        sink(EngineEvent::FirstDraw {
+            contrib: ContribId::builtin("effect.blur"),
+            seq: 1,
+        });
+        sink(EngineEvent::DrewSafely {
+            contrib: ContribId::builtin("effect.blur"),
+            seq: 1,
+        });
+        assert!(
+            sent.lock().unwrap().is_empty(),
+            "guard events stay in the app"
+        );
+
+        sink(EngineEvent::State {
+            playing: true,
+            at_us: 2_000_000,
+            reason: StateReason::Play,
+            rate: 1.0,
+        });
+        assert_eq!(
+            *transport.lock().unwrap(),
+            Transport {
+                at_us: 2_000_000,
+                seq: 4
+            }
+        );
+        sink(EngineEvent::State {
+            playing: false,
+            at_us: 7_500_000,
+            reason: StateReason::Ended,
+            rate: 1.0,
+        });
+        assert_eq!(
+            *transport.lock().unwrap(),
+            Transport {
+                at_us: 7_500_000,
+                seq: 4
+            },
+            "a stop moves the place and keeps the seek count"
+        );
+        sink(EngineEvent::Ready { session: 2 });
+
+        let sent = sent.lock().unwrap();
+        assert_eq!(sent.len(), 3, "{sent:?}");
+        assert!(sent[0].contains(r#""type":"state""#) && sent[0].contains(r#""playing":true"#));
+        assert!(sent[2].contains(r#""type":"ready""#));
+    }
+
+    /// A file that isn't a readable video is refused with a message that names it (and never its folder).
+    #[test]
+    fn a_file_that_cannot_open_is_named() {
+        let dir = tempfile::tempdir().unwrap();
+        let empty = dir.path().join("empty.mp4");
+        std::fs::write(&empty, b"").unwrap();
+        let garbage = dir.path().join("garbage.mov");
+        std::fs::write(&garbage, vec![7u8; 4096]).unwrap();
+        let missing = dir.path().join("missing.mp4");
+        for path in [&empty, &garbage, &missing] {
+            let error = crate::state::single_video_project(path).unwrap_err();
+            let name = path.file_name().unwrap().to_string_lossy();
+            assert!(
+                error.starts_with(&format!("{name} couldn't be opened.")),
+                "{error}"
+            );
+            let folder = dir.path().to_string_lossy();
+            assert!(!error.contains(folder.as_ref()), "{error}");
+        }
+    }
+
     /// A reloaded page attaches again and numbers its seeks from 1, as the engine expects (it starts its count over on
     /// every attach): none of them may be dropped as older than the previous page's.
     #[tokio::test(flavor = "multi_thread")]
