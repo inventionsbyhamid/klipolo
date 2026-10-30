@@ -2384,6 +2384,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "klipolo-chat"
+version = "0.1.0"
+dependencies = [
+ "klipolo-model",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "klipolo-cursor"
 version = "0.1.0"
 dependencies = [

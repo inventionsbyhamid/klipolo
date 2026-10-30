@@ -1,0 +1,509 @@
+//! The project context the language model reads, on clip A (NASA's space station Q&A, 155 s): its transcript, speaker
+//! turns and Spark scene log from the analysis fixtures, in a project of two pieces with 13.0 to 24.0 s of the file cut.
+//!
+//! Fixtures (`tests/fixtures`), made from public domain NASA media's analysis answers:
+//! - `transcript_clip_a.json`: klipolo-analysis's `align_clip_a.json` words as its `transcript::assemble` writes them
+//!   (words scoring under 0.05 dropped, each ending by the next one's start, a pause word in every gap of 0.7 s or
+//!   more); `turns_clip_a.json`: the speaker turns of its `asr_clip_a.json`.
+//! - `scenes_clip_a.json`: a real Muse Spark 1.3 moments answer for the clip (the planner spike's), as `SceneEntry`s.
+//! - `project_two_clips.json`: the clip as `astronauts.mp4`, played as two pieces around the cut.
+
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::Arc;
+
+use klipolo_chat::{ChatContext, SceneLog, SpeakerTurn, View, build_context, estimate_tokens};
+use klipolo_model::project::{Asset, AssetKind, CaptionSettings};
+use klipolo_model::speech::{Speech, Transcript, Word, WordKind};
+use klipolo_model::time::{RangeUs, Us};
+use klipolo_model::timeline::{Clip, ClipSource};
+use klipolo_model::{Op, Project, apply_ops, load_project};
+
+fn fixture(name: &str) -> String {
+    std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures")
+            .join(name),
+    )
+    .unwrap_or_else(|e| panic!("{name}: {e}"))
+}
+
+fn secs(s: f64) -> Us {
+    (s * 1e6).round() as Us
+}
+
+/// What `build_context` reads besides the view.
+struct Inputs {
+    project: Project,
+    speech: Speech,
+    turns: HashMap<String, Vec<SpeakerTurn>>,
+    scenes: HashMap<String, SceneLog>,
+}
+
+impl Inputs {
+    fn context(&self, view: &View) -> ChatContext {
+        build_context(&self.project, &self.speech, &self.turns, &self.scenes, view)
+    }
+}
+
+/// Clip A's speech, turns and scene log, keyed by its asset id.
+fn clip_a_analysis() -> (
+    Speech,
+    HashMap<String, Vec<SpeakerTurn>>,
+    HashMap<String, SceneLog>,
+) {
+    let transcript: Transcript = serde_json::from_str(&fixture("transcript_clip_a.json")).unwrap();
+    let turns: Vec<SpeakerTurn> = serde_json::from_str(&fixture("turns_clip_a.json")).unwrap();
+    let scenes: SceneLog = serde_json::from_str(&fixture("scenes_clip_a.json")).unwrap();
+    let mut speech = Speech::default();
+    speech
+        .transcripts
+        .insert("clip-a".into(), Arc::new(transcript));
+    (
+        speech,
+        HashMap::from([("clip-a".to_owned(), turns)]),
+        HashMap::from([("clip-a".to_owned(), scenes)]),
+    )
+}
+
+/// The fixture project: c1 plays the file's 0.0 to 13.0 s, c2 its 24.0 s to the end (155.04 s), so the timeline is
+/// 144.04 s long and everything after the cut plays 11.0 s earlier than in the file.
+fn two_clips() -> Inputs {
+    let project =
+        load_project(&fixture("project_two_clips.json")).expect("the fixture project loads");
+    let (speech, turns, scenes) = clip_a_analysis();
+    Inputs {
+        project,
+        speech,
+        turns,
+        scenes,
+    }
+}
+
+fn view_at(playhead: f64) -> View {
+    View {
+        playhead_us: secs(playhead),
+        selection: None,
+    }
+}
+
+/// The body of section `name` (`## name`, with or without a note after it), up to the next section.
+fn section<'a>(text: &'a str, name: &str) -> &'a str {
+    let head = format!("## {name}");
+    let at = text
+        .lines()
+        .scan(0, |offset, line| {
+            let start = *offset;
+            *offset += line.len() + 1;
+            Some((start, line))
+        })
+        .find(|(_, line)| *line == head || line.starts_with(&format!("{head} (")))
+        .map(|(start, _)| start)
+        .unwrap_or_else(|| panic!("no section {name} in:\n{text}"));
+    let body = &text[at..];
+    let body = &body[body.find('\n').map_or(body.len(), |i| i + 1)..];
+    body.find("\n## ").map_or(body, |end| &body[..end])
+}
+
+/// The section's timed lines (`[a-b] ...`).
+fn timed_lines<'a>(text: &'a str, name: &str) -> Vec<&'a str> {
+    section(text, name)
+        .lines()
+        .filter(|l| l.starts_with('['))
+        .collect()
+}
+
+/// The one line of `lines` holding `needle`.
+fn line_with<'a>(lines: &[&'a str], needle: &str) -> &'a str {
+    let found: Vec<&str> = lines
+        .iter()
+        .copied()
+        .filter(|l| l.contains(needle))
+        .collect();
+    assert_eq!(found.len(), 1, "one line with {needle:?}, got {found:#?}");
+    found[0]
+}
+
+/// A transcript line's spoken words: without its `[a-b]`, its speaker and its pause marks.
+fn words_of(line: &str) -> usize {
+    let text = &line[line.find("] ").expect("a timed line") + 2..];
+    let text = text
+        .split_once(": ")
+        .filter(|(s, _)| !s.contains(' '))
+        .map_or(text, |(_, t)| t);
+    let mut n = 0;
+    let mut in_mark = false;
+    for token in text.split_whitespace() {
+        if token == "[pause" {
+            in_mark = true;
+        } else if in_mark {
+            in_mark = !token.ends_with(']');
+        } else {
+            n += 1;
+        }
+    }
+    n
+}
+
+/// A line's `[a-b]` in seconds.
+fn times_of(line: &str) -> (f64, f64) {
+    let inside = &line[1..line.find(']').unwrap()];
+    let (a, b) = inside.split_once('-').unwrap();
+    (a.parse().unwrap(), b.parse().unwrap())
+}
+
+#[test]
+fn transcript_lines_use_timeline_times_after_a_cut() {
+    let text = two_clips().context(&view_at(0.0)).text;
+    let lines = timed_lines(&text, "Transcript");
+    // Before the cut, file time is timeline time: "But" starts at 0.06 s.
+    let first = line_with(&lines, "A: But it's also super rewarding");
+    assert!(first.starts_with("[0.1-"), "{first}");
+    assert_eq!(lines[0], first, "the first line is the first word's");
+    // After it, 11.0 s earlier: "Hi Caden," starts at 27.18 s in the file, 16.18 s on the timeline.
+    let after = line_with(&lines, "C: Hi Caden, space is such unique environment");
+    assert!(after.starts_with("[16.2-"), "{after}");
+    // The last question, at 151.50 s in the file.
+    let last = line_with(&lines, "F: Hi, my name is Noelle");
+    assert!(last.starts_with("[140.5-"), "{last}");
+    // In timeline order, inside the timeline.
+    let times: Vec<(f64, f64)> = lines.iter().map(|l| times_of(l)).collect();
+    for pair in times.windows(2) {
+        assert!(pair[0].1 <= pair[1].0, "{pair:?} in order");
+    }
+    for (a, b) in &times {
+        assert!(
+            0.0 <= *a && a <= b && *b <= 144.0,
+            "{a}-{b} on the 144.0 s timeline"
+        );
+    }
+}
+
+#[test]
+fn cut_words_and_scenes_are_left_out() {
+    let text = two_clips().context(&view_at(0.0)).text;
+    // The first student's question (14.38 to 20.82 s in the file) is cut; the answer's "Hi Caden," stays.
+    assert!(!text.contains("name is Caden"), "{text}");
+    assert!(
+        !text.contains("stay entertained"),
+        "neither the words nor the scene item"
+    );
+    assert!(text.contains("Hi Caden,"));
+    // The gap across the cut: "safe." ends at 10.74 s, "Hi" starts at 16.18 s on the timeline.
+    let lines = timed_lines(&text, "Transcript");
+    let before_cut = line_with(&lines, "station stays safe.");
+    assert!(before_cut.ends_with("safe. [pause 5.4 s]"), "{before_cut}");
+    // Pause words are never text.
+    assert!(
+        !section(&text, "Transcript").contains("  "),
+        "no empty word between spaces"
+    );
+
+    let scenes = timed_lines(&text, "Scenes");
+    // Fully cut (13.5 to 23.0 s): gone.
+    assert!(
+        scenes
+            .iter()
+            .all(|l| !l.contains("Asks how do you stay entertained")),
+        "{scenes:#?}"
+    );
+    // Partly cut: what remains. 12.8 to 13.5 s keeps 12.8 to 13.0; 23.0 to 24.5 s keeps 24.0 to 24.5 (13.0 to 13.5).
+    line_with(
+        &scenes,
+        "[12.8-13.0] scene_cut (student Kaiden): Cut from underwater pool to boy in library",
+    );
+    line_with(
+        &scenes,
+        "[13.0-13.5] scene_cut (male astronaut): Cut from library to two astronauts",
+    );
+    // Uncut items after the cut move with it: the gesture at 40.5 to 45.0 s plays at 29.5 to 34.0 s.
+    line_with(
+        &scenes,
+        "[29.5-34.0] gesture (male astronaut): Raises arm overhead while describing floating",
+    );
+    // Before the cut, unchanged.
+    line_with(
+        &scenes,
+        "[0.0-12.8] b_roll (divers and astronauts): Overhead view of spacesuited astronauts",
+    );
+    assert_eq!(scenes.len(), 19, "20 items, one fully cut: {scenes:#?}");
+}
+
+#[test]
+fn clip_refs_are_stable_and_short() {
+    let inputs = two_clips();
+    let ctx = inputs.context(&view_at(0.0));
+    assert_eq!(ctx.refs.clip("c1"), Some("clip-a1"));
+    assert_eq!(ctx.refs.clip("c2"), Some("clip-a1-2"));
+    for wrong in ["c0", "c3", "C1", "c01", "c", "1", " c1", "c1 "] {
+        assert_eq!(ctx.refs.clip(wrong), None, "{wrong:?}");
+    }
+    assert_eq!(ctx.refs.ref_of("clip-a1-2").as_deref(), Some("c2"));
+    assert_eq!(ctx.refs.ref_of("nope"), None);
+
+    let project = section(&ctx.text, "Project");
+    assert!(
+        project.contains("\nc1 0.0-13.0 astronauts.mp4 (file 0.0-13.0 of 155.0)\n"),
+        "{project}"
+    );
+    assert!(
+        project.contains("\nc2 13.0-144.0 astronauts.mp4 (file 24.0-155.0 of 155.0)\n"),
+        "{project}"
+    );
+    assert!(project.contains("Name: Space station Q&A\n"), "{project}");
+    assert!(
+        project.contains("Formats: portrait 9:16 (primary), landscape 16:9\n"),
+        "{project}"
+    );
+    assert!(project.contains("Duration: 144.0 s\n"), "{project}");
+    assert!(
+        project.contains("Captions: on, style karaoke\n"),
+        "{project}"
+    );
+
+    // The same project gives the same refs and text; an edit that leaves the clips alone keeps the refs.
+    let again = inputs.context(&view_at(0.0));
+    assert_eq!(again, ctx);
+    let off = apply_ops(
+        &inputs.project,
+        &[Op::SetCaptions {
+            captions: CaptionSettings {
+                enabled: false,
+                ..inputs.project.captions.clone()
+            },
+        }],
+    )
+    .unwrap();
+    let edited = build_context(
+        &off,
+        &inputs.speech,
+        &inputs.turns,
+        &inputs.scenes,
+        &view_at(0.0),
+    );
+    assert_eq!(edited.refs, ctx.refs);
+    assert!(section(&edited.text, "Project").contains("Captions: off\n"));
+}
+
+#[test]
+fn selection_and_playhead_appear_in_now() {
+    let inputs = two_clips();
+    let selected = View {
+        playhead_us: secs(20.3),
+        selection: Some(RangeUs {
+            start: secs(15.0),
+            end: secs(18.2),
+        }),
+    };
+    let text = inputs.context(&selected).text;
+    assert_eq!(
+        section(&text, "Now").trim_end(),
+        "Playhead: 20.3 in c2\nSelection: 15.0-18.2"
+    );
+    assert_eq!(
+        section(&inputs.context(&view_at(5.0)).text, "Now").trim_end(),
+        "Playhead: 5.0 in c1\nSelection: none"
+    );
+    let end = View {
+        playhead_us: secs(144.04),
+        selection: None,
+    };
+    assert!(section(&inputs.context(&end).text, "Now").starts_with("Playhead: 144.0 (end)\n"));
+
+    // Sections in order: Project, Now, Transcript, Scenes.
+    let at = |name: &str| {
+        text.find(&format!("## {name}"))
+            .unwrap_or_else(|| panic!("{name}"))
+    };
+    assert_eq!(at("Project"), 0);
+    assert!(
+        at("Project") < at("Now")
+            && at("Now") < at("Transcript")
+            && at("Transcript") < at("Scenes")
+    );
+}
+
+#[test]
+fn same_input_gives_byte_identical_text() {
+    let a = two_clips();
+    // The same maps filled in another order, with an asset the project doesn't use.
+    let mut b = two_clips();
+    let unused = SceneLog::default();
+    b.scenes = HashMap::from([
+        ("unused".to_owned(), unused.clone()),
+        ("clip-a".to_owned(), a.scenes["clip-a"].clone()),
+    ]);
+    let mut scenes = HashMap::new();
+    scenes.insert("clip-a".to_owned(), a.scenes["clip-a"].clone());
+    scenes.insert("unused".to_owned(), unused);
+    let mut a = a;
+    a.scenes = scenes;
+    b.turns.insert("unused".into(), Vec::new());
+    let view = View {
+        playhead_us: secs(33.3),
+        selection: Some(RangeUs {
+            start: secs(1.0),
+            end: secs(2.0),
+        }),
+    };
+    let first = a.context(&view);
+    for _ in 0..3 {
+        assert_eq!(b.context(&view).text, first.text);
+    }
+}
+
+/// Words said one after another from 0.5 s, each 0.3 s long with 0.1 s between; `|1.5` makes the next gap 1.5 s.
+/// "um," and "uh" are fillers; a gap of 0.7 s or more holds a pause word, as the analysis writes them.
+fn said(script: &str) -> Vec<Word> {
+    let mut words: Vec<Word> = Vec::new();
+    let mut gap = 0.1;
+    let mut at = 0.4;
+    for token in script.split_whitespace() {
+        if let Some(g) = token.strip_prefix('|') {
+            gap = g.parse().unwrap();
+            continue;
+        }
+        let start = at + gap;
+        if gap >= 0.7 {
+            words.push(Word {
+                text: String::new(),
+                start_us: secs(at),
+                end_us: secs(start),
+                confidence: 1.0,
+                kind: WordKind::Pause,
+            });
+        }
+        let filler = matches!(token.to_lowercase().trim_end_matches(','), "um" | "uh");
+        words.push(Word {
+            text: token.into(),
+            start_us: secs(start),
+            end_us: secs(start + 0.3),
+            confidence: 0.9,
+            kind: if filler {
+                WordKind::Filler
+            } else {
+                WordKind::Word
+            },
+        });
+        at = start + 0.3;
+        gap = 0.1;
+    }
+    words
+}
+
+/// One file, "talk.mov", played whole: speaker A's long turn of three sentences, then B's short one.
+fn talk() -> Inputs {
+    let a = "Um, so today we look at the new station module and how it was built over many months. \
+             It took |1.5 uh a long time. \
+             Then we flew it up on a rocket and docked it to the station without any trouble at all.";
+    let b = "|2.0 Wow. That is great.";
+    let words = said(&format!("{a} {b}"));
+    let split = words.iter().position(|w| w.text == "Wow.").unwrap();
+    let turns = vec![
+        SpeakerTurn {
+            start_us: words[0].start_us,
+            end_us: words[split - 2].end_us,
+            speaker: Some("A".into()),
+        },
+        SpeakerTurn {
+            start_us: words[split].start_us,
+            end_us: words.last().unwrap().end_us,
+            speaker: Some("B".into()),
+        },
+    ];
+    let mut project = Project::new("Talk");
+    project.assets.push(Asset {
+        id: "talk".into(),
+        kind: AssetKind::Video,
+        path: "/media/talk.mov".into(),
+        name: "talk.mov".into(),
+        duration_us: secs(30.0),
+        width: 1920,
+        height: 1080,
+        fps: 30.0,
+        rotation: None,
+        has_audio: true,
+        audio_lead_us: None,
+    });
+    project.timeline.main.push(Clip::new(
+        ClipSource::Asset { id: "talk".into() },
+        0,
+        secs(30.0),
+    ));
+    let mut speech = Speech::default();
+    speech.transcripts.insert(
+        "talk".into(),
+        Arc::new(Transcript {
+            key: "talk".into(),
+            language: "en".into(),
+            model: "test".into(),
+            covered_us: secs(30.0),
+            complete: true,
+            words,
+        }),
+    );
+    Inputs {
+        project,
+        speech,
+        turns: HashMap::from([("talk".to_owned(), turns)]),
+        scenes: HashMap::new(),
+    }
+}
+
+#[test]
+fn long_turns_break_at_sentence_ends_and_fillers_keep_their_text() {
+    let text = talk().context(&view_at(0.0)).text;
+    let lines: Vec<&str> = timed_lines(&text, "Transcript");
+    assert_eq!(lines.len(), 4, "{lines:#?}");
+    // A's turn has 43 words: one line per sentence. Fillers read as said; the pause word inside is a mark.
+    assert!(lines[0].starts_with("[0.5-") && lines[0].ends_with("] A: Um, so today we look at the new station module and how it was built over many months."), "{}", lines[0]);
+    assert!(
+        lines[1].ends_with("] A: It took [pause 1.5 s] uh a long time."),
+        "{}",
+        lines[1]
+    );
+    // A pause between lines ends the line before it.
+    assert!(lines[2].ends_with("] A: Then we flew it up on a rocket and docked it to the station without any trouble at all. [pause 2.0 s]"), "{}", lines[2]);
+    // B's short turn of two sentences stays one line.
+    assert!(
+        lines[3].ends_with("] B: Wow. That is great."),
+        "{}",
+        lines[3]
+    );
+
+    // No line runs over 30 words, here or in clip A's long unpunctuated answers.
+    let clip_a = two_clips().context(&view_at(0.0)).text;
+    for line in lines
+        .iter()
+        .chain(timed_lines(&clip_a, "Transcript").iter())
+    {
+        assert!(words_of(line) <= 30, "{} words: {line}", words_of(line));
+    }
+    assert!(
+        timed_lines(&clip_a, "Transcript")
+            .iter()
+            .any(|l| words_of(l) >= 20),
+        "long turns aren't cut into scraps"
+    );
+}
+
+#[test]
+fn clips_without_analysis_are_named() {
+    let inputs = two_clips();
+    let none = build_context(
+        &inputs.project,
+        &Speech::default(),
+        &HashMap::new(),
+        &HashMap::new(),
+        &view_at(0.0),
+    );
+    assert_eq!(
+        section(&none.text, "Transcript").trim_end(),
+        "Not transcribed yet: c1, c2."
+    );
+    assert_eq!(
+        section(&none.text, "Scenes").trim_end(),
+        "No scene log yet: c1, c2."
+    );
+    assert!(estimate_tokens(&none.text) > 0);
+}
