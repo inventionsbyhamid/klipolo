@@ -6,8 +6,8 @@ use std::time::{Duration, Instant};
 
 use klipolo_analysis::providers::images::{ImageErrorKind, ImageMaker, ImageSize, MadeImage};
 use klipolo_analysis::providers::meta::Meta;
-use klipolo_analysis::providers::meta_images::{IMAGE_TIMEOUT, MADE_WITH, MetaImages};
-use klipolo_meta::{MetaClient, SecretString};
+use klipolo_analysis::providers::meta_images::{IMAGE_TIMEOUT, MADE_WITH, MetaImages, QUEUE_WAIT};
+use klipolo_meta::{MetaClient, MetaError, SecretString};
 use serde_json::{Value, json};
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -23,13 +23,34 @@ const PNG: &[u8] = b"\x89PNG\r\n\x1a\n not a whole picture";
 /// `PNG` in base64, as Meta sends it.
 const PNG_B64: &str = "iVBORw0KGgogbm90IGEgd2hvbGUgcGljdHVyZQ==";
 
-fn relay(server: &MockServer) -> MetaImages {
-    MetaImages::new(Meta::new(
+fn relay_meta(server: &MockServer) -> Meta {
+    Meta::new(
         MetaClient::relay(SecretString::from(TOKEN))
             .with_relay_base(server.uri())
             .with_meta_base(CLOSED)
             .with_ledger(None),
-    ))
+    )
+}
+
+fn relay(server: &MockServer) -> MetaImages {
+    MetaImages::new(relay_meta(server))
+}
+
+/// Takes every one of the device's relay slots (3) for `long`, as a clip's analysis can, and returns once they are
+/// held.
+async fn hold_every_slot(meta: &Meta, long: Duration) {
+    for _ in 0..3 {
+        let meta = meta.clone();
+        tokio::spawn(async move {
+            let _ = meta
+                .call(async {
+                    tokio::time::sleep(long).await;
+                    Ok::<(), MetaError>(())
+                })
+                .await;
+        });
+    }
+    tokio::time::sleep(Duration::from_millis(50)).await;
 }
 
 fn direct(server: &MockServer) -> MetaImages {
@@ -317,6 +338,61 @@ async fn a_slow_answer_times_out_with_one_sentence() {
         "Muse Image took too long to answer, so try again."
     );
     assert_eq!(IMAGE_TIMEOUT, Duration::from_secs(120));
+}
+
+/// The deadline starts once the request holds a slot: a picture queued behind three long calls waits its turn, then
+/// gets its whole time.
+#[tokio::test]
+async fn a_picture_queued_behind_busy_slots_gets_its_full_time() {
+    let server = answering(
+        RELAY_ROUTE,
+        ResponseTemplate::new(200)
+            .set_body_json(picture("A cup"))
+            .set_delay(Duration::from_millis(400)),
+    )
+    .await;
+    let meta = relay_meta(&server);
+    hold_every_slot(&meta, Duration::from_millis(800)).await;
+    let started = Instant::now();
+
+    let made = MetaImages::new(meta)
+        .with_timeout(Duration::from_millis(600))
+        .with_queue_wait(Duration::from_secs(5))
+        .make("A coffee cup", ImageSize::Square, 1)
+        .await;
+
+    assert_eq!(made.unwrap().len(), 1);
+    assert!(
+        started.elapsed() >= Duration::from_millis(1100),
+        "{:?}",
+        started.elapsed()
+    );
+}
+
+/// A request that can't get a slot in time is busy: nothing was sent, so nothing was spent.
+#[tokio::test]
+async fn a_picture_that_cannot_get_a_slot_in_time_is_busy_and_never_sent() {
+    let server = answering(
+        RELAY_ROUTE,
+        ResponseTemplate::new(200).set_body_json(picture("A cup")),
+    )
+    .await;
+    let meta = relay_meta(&server);
+    hold_every_slot(&meta, Duration::from_secs(5)).await;
+
+    let error = MetaImages::new(meta)
+        .with_queue_wait(Duration::from_millis(300))
+        .make("A coffee cup", ImageSize::Square, 1)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.kind, ImageErrorKind::Busy);
+    assert_eq!(
+        error.user_message(),
+        "Muse Image is busy right now, so try again in a moment."
+    );
+    assert!(server.received_requests().await.unwrap().is_empty());
+    assert_eq!(QUEUE_WAIT, Duration::from_secs(60));
 }
 
 #[tokio::test]
