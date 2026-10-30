@@ -1,0 +1,6 @@
+Klipolo pack: sound effects, music beds and stickers made from code by scripts/gen-library.py.
+No recordings, samples or outside media were used.
+
+To the extent possible under law, Klipolo has waived all copyright and related or neighbouring rights to these files.
+They are dedicated to the public domain under CC0 1.0 Universal:
+https://creativecommons.org/publicdomain/zero/1.0/

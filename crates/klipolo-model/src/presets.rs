@@ -1,8 +1,9 @@
 //! The shipped shader and motion graphic presets: data folders under `presets/<local id>/`, in
 //! exactly the shape a version in a person's library has (`contrib.json` beside `effect.wgsl` or `scene.json`), embedded
 //! at build time. Their ids are `klipolo.builtin/<local id>`. The model's built-in catalogue reads each `contrib.json`
-//! (`contrib::builtin`), and the engine reads the same folders' `effect.wgsl` (`klipolo_engine::registry::presets`), so
-//! both read the same bytes. `SHADER_PRESETS` are the shader effects, `SCENE_PRESETS` the motion graphics.
+//! (`contrib::builtin`), and the engine the same folders' `effect.wgsl` or `scene.json`
+//! (`klipolo_engine::registry::presets`), so both read the same bytes. `SHADER_PRESETS` are the shader effects;
+//! `SCENE_PRESETS` are the title templates.
 
 /// `(local id, contrib.json)`.
 macro_rules! preset {
@@ -27,8 +28,12 @@ pub const SHADER_PRESETS: [(&str, &str); 8] = [
     preset!("effect.drop-shadow"),
 ];
 
-/// The motion graphic presets' definitions.
-pub const SCENE_PRESETS: [(&str, &str); 0] = [];
+/// The motion graphic presets' definitions: the lower third (name, role and accent) and the centred title card (title,
+/// subtitle and accent). The engine's `SCENE_BODIES` lists the same, in this order, with each folder's `scene.json`.
+/// Their nodes are laid out in the frame, so a layer showing one must fill it in every format: place it with
+/// `Layout::full_frame()`, never a rect that only covers the primary's canvas.
+pub const SCENE_PRESETS: [(&str, &str); 2] =
+    [preset!("scene.lower-third"), preset!("scene.title-card")];
 
 #[cfg(test)]
 mod tests {

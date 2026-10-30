@@ -1,0 +1,67 @@
+{
+  "scene": 1,
+  "duration": 4,
+  "segments": { "in": 1.1, "out": 0.6 },
+  "params": [
+    { "key": "title", "label": "Title", "type": "text", "default": "Your title", "maxLen": 60 },
+    { "key": "subtitle", "label": "Subtitle", "type": "text", "default": "A short line about it", "maxLen": 80 },
+    { "key": "accent", "label": "Accent", "type": "color", "default": "#FFD02E" }
+  ],
+  "nodes": [
+    { "id": "scrim", "type": "rect", "box": [0, 0, 1, 1], "fill": "#070A14", "opacity": 0.5 },
+    {
+      "id": "card",
+      "type": "group",
+      "box": [0.06, 0.5, 0.88, "390px"],
+      "y": "-195px",
+      "children": [
+        {
+          "id": "title",
+          "type": "text",
+          "text": "$title",
+          "box": [0, 0, 1, 0.52],
+          "font": "Inter",
+          "size": 112,
+          "weight": 800,
+          "fill": "#FFFFFF",
+          "align": "center",
+          "shadow": { "y": 3, "blur": 14, "color": "#00000059" },
+          "split": "words",
+          "stagger": { "each": 0.07 },
+          "fit": "shrink",
+          "animate": {
+            "y": [{ "t": 0.15, "v": 36, "unit": "px" }, { "t": 0.75, "v": 0, "ease": "power3.out", "unit": "px" }],
+            "opacity": [{ "t": 0.15, "v": 0 }, { "t": 0.55, "v": 1, "ease": "power1.out" }]
+          }
+        },
+        {
+          "id": "mark",
+          "type": "rect",
+          "box": [0.5, 0.58, "270px", "10px"],
+          "x": "-135px",
+          "fill": "$accent",
+          "radius": 5,
+          "animate": { "scaleX": [{ "t": 0.45, "v": 0 }, { "t": 0.9, "v": 1, "ease": "power3.out" }] }
+        },
+        {
+          "id": "subtitle",
+          "type": "text",
+          "text": "$subtitle",
+          "box": [0.06, 0.68, 0.88, 0.3],
+          "font": "Inter",
+          "size": 44,
+          "weight": 500,
+          "fill": "#E9EDF7",
+          "align": "center",
+          "shadow": { "y": 2, "blur": 8, "color": "#00000059" },
+          "fit": "shrink"
+        }
+      ]
+    }
+  ],
+  "timeline": [
+    { "from": "#scrim", "at": 0, "dur": 0.4, "ease": "power1.out", "opacity": 0 },
+    { "from": "#subtitle", "at": 0.6, "dur": 0.5, "ease": "power3.out", "y": "20px", "opacity": 0 },
+    { "to": ["#card", "#scrim"], "at": "out", "dur": 0.45, "ease": "power2.in", "opacity": 0 }
+  ]
+}

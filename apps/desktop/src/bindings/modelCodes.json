@@ -844,6 +844,21 @@
     "params": []
   },
   {
+    "code": "model.audio.duck",
+    "message": "Ducking can lower a sound by 0 to 30 dB.",
+    "params": []
+  },
+  {
+    "code": "model.music.noSound",
+    "message": "That file has no sound to play as music.",
+    "params": []
+  },
+  {
+    "code": "model.music.noRoom",
+    "message": "Music has to start before the video ends, and end after it starts.",
+    "params": []
+  },
+  {
     "code": "model.layer.zoom",
     "message": "Zoom must be between 1× and 5×.",
     "params": []
