@@ -4,8 +4,9 @@
 //! The edge where white met the subject gets a 1 to 2 pixel feathered alpha, with the white taken out of its colour.
 //!
 //! A cut-out that would leave under 5% of the picture (a white subject, or one cut off by the frame, which lets the
-//! flood inside) or over 95% (no plain white around it) is refused: the caller keeps the opaque picture and shows the
-//! note.
+//! flood inside) or over 95% (no plain white around it) is refused, and so is one whose subject reaches the frame (it
+//! may have been cut by it, and the flood let into it, leaving holes): the caller keeps the opaque picture and shows
+//! the note.
 
 use std::collections::VecDeque;
 use std::fmt;
@@ -26,6 +27,8 @@ pub const MAX_KEPT: f64 = 0.95;
 /// What the person reads when the white stays because the cut-out would have erased most of the picture.
 pub const ERASES_MOST_NOTE: &str =
     "Kept the white background. The cut-out would have erased most of the picture.";
+/// What the person reads when the white stays because the subject reaches the frame, so the flood may have got inside.
+pub const TOUCHES_EDGE_NOTE: &str = "Kept the white background. The picture runs off the edge, so a cut-out could leave holes in it.";
 /// What the person reads when the background stays because there was no plain white around the picture.
 pub const NOTHING_TO_CUT_NOTE: &str =
     "Kept the background. There was no plain white around the picture to cut away.";
@@ -64,6 +67,8 @@ pub enum CutOutError {
     ErasesMost { kept_fraction: f64 },
     /// Over `MAX_KEPT` would be left: no plain white around the subject.
     NothingToCut { kept_fraction: f64 },
+    /// The subject reaches the frame, so it may have been cut by it and the flood let into its inside.
+    TouchesEdge { kept_fraction: f64 },
 }
 
 impl CutOutError {
@@ -74,6 +79,7 @@ impl CutOutError {
             Self::Unreadable(_) => None,
             Self::ErasesMost { .. } => Some(ERASES_MOST_NOTE),
             Self::NothingToCut { .. } => Some(NOTHING_TO_CUT_NOTE),
+            Self::TouchesEdge { .. } => Some(TOUCHES_EDGE_NOTE),
         }
     }
 }
@@ -92,6 +98,11 @@ impl fmt::Display for CutOutError {
             Self::NothingToCut { kept_fraction } => {
                 write!(f, "the cut-out would keep {:.1}%", kept_fraction * 100.0)
             }
+            Self::TouchesEdge { kept_fraction } => write!(
+                f,
+                "the subject reaches the frame ({:.1}% kept)",
+                kept_fraction * 100.0
+            ),
         }
     }
 }
@@ -112,6 +123,9 @@ pub fn cut_out_white(png: &[u8]) -> Result<KeyedPng, CutOutError> {
     }
     if kept_fraction > MAX_KEPT {
         return Err(CutOutError::NothingToCut { kept_fraction });
+    }
+    if subject_on_the_frame(&background, width as usize, height as usize) {
+        return Err(CutOutError::TouchesEdge { kept_fraction });
     }
     feather(&mut pixels, &background, width as usize, height as usize);
     Ok(KeyedPng {
@@ -183,6 +197,13 @@ fn flood_from_border(pixels: &RgbaImage) -> Vec<bool> {
         }
     }
     background
+}
+
+/// Whether any pixel on the picture's border is part of the subject.
+fn subject_on_the_frame(background: &[bool], width: usize, height: usize) -> bool {
+    let top_and_bottom = (0..width).flat_map(|x| [x, (height - 1) * width + x]);
+    let sides = (0..height).flat_map(|y| [y * width, y * width + width - 1]);
+    top_and_bottom.chain(sides).any(|i| !background[i])
 }
 
 /// Background pixels become transparent (and colourless); the subject's two outer rings get an alpha from how much of

@@ -7,7 +7,8 @@ use std::time::Instant;
 
 use image::{ImageFormat, Rgb, RgbImage, RgbaImage};
 use klipolo_app::media::sticker::{
-    CutOutError, ERASES_MOST_NOTE, MAX_KEPT, MIN_KEPT, NOTHING_TO_CUT_NOTE, cut_out_white,
+    CutOutError, ERASES_MOST_NOTE, MAX_KEPT, MIN_KEPT, NOTHING_TO_CUT_NOTE, TOUCHES_EDGE_NOTE,
+    cut_out_white,
 };
 
 /// The real Muse Image answer from the 2026-10-30 check (`README.md` beside it).
@@ -109,6 +110,31 @@ fn white_inside_a_one_pixel_outline_stays_opaque() {
     assert_eq!(out.get_pixel(49, 100)[3], 0);
 }
 
+/// A subject that reaches the frame may have been cut by it, letting the flood into its inside: the white stays, with
+/// a note, rather than a sticker with holes.
+#[test]
+fn a_subject_touching_the_frame_keeps_its_background() {
+    let cut_off = RgbImage::from_fn(200, 200, |x, y| {
+        if x <= 80 && (50..=150).contains(&y) {
+            Rgb([40, 90, 160])
+        } else {
+            WHITE
+        }
+    });
+
+    let error = cut_out_white(&png_of(&cut_off)).unwrap_err();
+
+    assert!(
+        matches!(error, CutOutError::TouchesEdge { kept_fraction } if (MIN_KEPT..=MAX_KEPT).contains(&kept_fraction)),
+        "{error:?}"
+    );
+    assert_eq!(error.note(), Some(TOUCHES_EDGE_NOTE));
+    assert_eq!(
+        TOUCHES_EDGE_NOTE,
+        "Kept the white background. The picture runs off the edge, so a cut-out could leave holes in it."
+    );
+}
+
 /// A subject cut off by the frame lets the flood into its white inside: the cut-out would leave only its outline, so
 /// the picture stays whole, with the note.
 #[test]
@@ -156,7 +182,7 @@ fn a_picture_with_no_white_around_it_falls_back_to_opaque() {
         "{error:?}"
     );
     assert_eq!(error.note(), Some(NOTHING_TO_CUT_NOTE));
-    for note in [ERASES_MOST_NOTE, NOTHING_TO_CUT_NOTE] {
+    for note in [ERASES_MOST_NOTE, NOTHING_TO_CUT_NOTE, TOUCHES_EDGE_NOTE] {
         assert!(!note.contains(['\u{2014}', '\u{2013}']), "{note}");
     }
 }
