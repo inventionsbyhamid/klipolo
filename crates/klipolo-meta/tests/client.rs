@@ -1,5 +1,6 @@
 //! The client against a local mock server. No test reaches Meta or the relay:
-//! every client here points both base URLs at a mock or at a closed port.
+//! every client here points both base URLs at a mock or at a closed port, and
+//! none writes to a spend ledger unless the test gives it its own.
 
 use std::path::Path;
 
@@ -24,6 +25,7 @@ fn direct(server: &MockServer) -> MetaClient {
     MetaClient::direct(secret(KEY))
         .with_meta_base(format!("{}/v1", server.uri()))
         .with_relay_base(CLOSED)
+        .with_ledger(None)
 }
 
 /// A relay device token, with the relay mocked at `{server}`.
@@ -31,6 +33,7 @@ fn relay(server: &MockServer) -> MetaClient {
     MetaClient::relay(secret(TOKEN))
         .with_relay_base(server.uri())
         .with_meta_base(CLOSED)
+        .with_ledger(None)
 }
 
 fn fixture(name: &str) -> String {
@@ -349,7 +352,9 @@ async fn other_statuses_map_to_their_errors() {
 
 #[tokio::test]
 async fn unreachable_server_is_a_network_error() {
-    let client = MetaClient::direct(secret(KEY)).with_meta_base(format!("{CLOSED}/v1"));
+    let client = MetaClient::direct(secret(KEY))
+        .with_meta_base(format!("{CLOSED}/v1"))
+        .with_ledger(None);
     let error = client.transcribe(wav(), &[]).await.unwrap_err();
     assert!(matches!(error, MetaError::Network(_)), "{error:?}");
 }
@@ -694,4 +699,101 @@ fn sam_usd_bills_at_least_50_frames_per_video() {
     assert_usd(pricing::sam_usd(frames(160)), 0.032);
     assert_usd(pricing::sam_usd(frames(10)), 0.01);
     assert_usd(pricing::sam_usd(frames(0)), 0.0);
+}
+
+// Spend ledger.
+
+#[tokio::test]
+async fn ledger_gets_one_row_per_successful_call_with_usage() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(json_body(&fixture("asr_diarization.json")))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(json_body(&fixture("responses_function_calls.json")))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(ResponseTemplate::new(503))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/files"))
+        .respond_with(uploaded())
+        .mount(&server)
+        .await;
+    let ledger = TempFile::new("ledger.csv", b"");
+    let video = TempFile::new("ledger.mp4", b"fake mp4 bytes");
+    let client = direct(&server).with_ledger(Some(ledger.0.clone()));
+
+    client.transcribe(wav(), &[]).await.unwrap();
+    client
+        .respond(json!({"model": "muse-spark-1.3"}))
+        .await
+        .unwrap();
+    client
+        .respond(json!({"model": "muse-spark-1.3"}))
+        .await
+        .unwrap_err();
+    client.upload_file(&video.0, "video/mp4").await.unwrap();
+
+    let text = std::fs::read_to_string(&ledger.0).unwrap();
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 3, "{text}");
+    assert_eq!(
+        lines[0],
+        "time_utc,model,purpose,input_tokens,output_tokens,frames_or_seconds,est_cost_usd"
+    );
+    let rows: Vec<Vec<&str>> = lines[1..].iter().map(|l| l.split(',').collect()).collect();
+    assert!(
+        rows[0][0].ends_with('Z') && rows[0][0].len() == 20,
+        "{}",
+        rows[0][0]
+    );
+    assert_eq!(
+        rows[0][1..],
+        [
+            "muse-voice-transcribe-1.0",
+            "asr/transcribe",
+            "",
+            "",
+            "155.0s",
+            "0.007752"
+        ]
+    );
+    assert_eq!(
+        rows[1][1..],
+        ["muse-spark-1.3", "responses", "1810", "820", "", "0.003793"]
+    );
+}
+
+#[tokio::test]
+async fn ledger_names_relay_calls() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/meta/v1/responses"))
+        .respond_with(json_body(&fixture("responses_function_calls.json")))
+        .mount(&server)
+        .await;
+    let ledger = TempFile::new("relay-ledger.csv", b"");
+
+    relay(&server)
+        .with_ledger(Some(ledger.0.clone()))
+        .respond(json!({"model": "muse-spark-1.3"}))
+        .await
+        .unwrap();
+
+    let text = std::fs::read_to_string(&ledger.0).unwrap();
+    assert!(
+        text.lines()
+            .nth(1)
+            .unwrap()
+            .contains(",responses via relay,"),
+        "{text}"
+    );
 }

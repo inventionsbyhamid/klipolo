@@ -2,6 +2,7 @@
 //! results or [`MetaError`]s.
 
 use std::error::Error as _;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use reqwest::header::RETRY_AFTER;
@@ -10,6 +11,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::de::DeserializeOwned;
 
 use crate::error::{redact, MetaError};
+use crate::ledger::{self, Row, SPEND_LEDGER_ENV};
 
 /// Meta's Model API, used with the person's own key.
 pub const DEFAULT_META_BASE: &str = "https://api.meta.ai/v1";
@@ -41,11 +43,13 @@ pub struct MetaClient {
     pub(crate) meta_base: String,
     pub(crate) relay_base: String,
     pub(crate) align_token: Option<SecretString>,
+    ledger: Option<PathBuf>,
 }
 
 impl MetaClient {
-    /// A client for `auth`, with the base URLs from the environment (or the
-    /// defaults). In relay mode the relay token also authorizes alignment.
+    /// A client for `auth`, with the base URLs and the spend ledger from the
+    /// environment (or the defaults). In relay mode the relay token also
+    /// authorizes alignment.
     pub fn new(auth: Auth) -> Self {
         let align_token = match &auth {
             Auth::Key(_) => None,
@@ -57,6 +61,9 @@ impl MetaClient {
             meta_base: meta_base(),
             relay_base: relay_base(),
             align_token,
+            ledger: std::env::var_os(SPEND_LEDGER_ENV)
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from),
         }
     }
 
@@ -86,6 +93,14 @@ impl MetaClient {
     /// The relay's base URL, e.g. `https://api.klipolo.com`.
     pub fn with_relay_base(mut self, base: impl Into<String>) -> Self {
         self.relay_base = trim_base(base.into());
+        self
+    }
+
+    /// The CSV file that gets one row per successful call with known usage
+    /// (development only); `None` writes nothing. Defaults to
+    /// `KLIPOLO_SPEND_LEDGER`.
+    pub fn with_ledger(mut self, path: Option<PathBuf>) -> Self {
+        self.ledger = path;
         self
     }
 
@@ -125,6 +140,24 @@ impl MetaClient {
         match &self.auth {
             Auth::Key(key) => key,
             Auth::Relay { token } => token,
+        }
+    }
+
+    /// Appends `row` to the spend ledger, if there is one.
+    pub(crate) fn record(&self, row: Row) {
+        if let Some(path) = &self.ledger {
+            let purpose = if self.is_relay() {
+                format!("{} via relay", row.purpose)
+            } else {
+                row.purpose.to_owned()
+            };
+            ledger::append(
+                path,
+                &Row {
+                    purpose: &purpose,
+                    ..row
+                },
+            );
         }
     }
 

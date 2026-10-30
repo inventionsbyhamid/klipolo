@@ -3,7 +3,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{MetaClient, MetaError};
+use crate::ledger::Row;
+use crate::{pricing, MetaClient, MetaError};
 
 /// What one call used, as Meta bills it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,7 +51,43 @@ impl MetaClient {
         let request = self.http.post(self.meta_url("responses")).json(&body);
         let response = self.send_meta(request).await?;
         let raw: Value = self.read_json(response).await?;
-        ResponseOut::parse(raw)
+        let out = ResponseOut::parse(raw)?;
+        self.record_response(&body, &out);
+        Ok(out)
+    }
+
+    /// A ledger row for a Spark or SAM answer that reports its usage.
+    fn record_response(&self, body: &Value, out: &ResponseOut) {
+        if !out.raw.get("usage").is_some_and(Value::is_object) {
+            return;
+        }
+        let model = (out.raw.get("model").or_else(|| body.get("model")))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let usage = out.usage;
+        let row = if model.starts_with("muse-spark-") {
+            Row {
+                model,
+                purpose: "responses",
+                input_tokens: Some(usage.input_tokens),
+                output_tokens: Some(usage.output_tokens),
+                frames_or_seconds: String::new(),
+                cost_usd: pricing::spark_usd(usage),
+            }
+        } else if model.starts_with("sam-") {
+            Row {
+                model,
+                purpose: "responses",
+                input_tokens: None,
+                output_tokens: None,
+                frames_or_seconds: format!("{} frames", usage.video_frames_processed),
+                cost_usd: pricing::sam_usd(usage),
+            }
+        } else {
+            // No list price here for other models.
+            return;
+        };
+        self.record(row);
     }
 }
 

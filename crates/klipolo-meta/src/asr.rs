@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::{MetaClient, MetaError};
+use crate::ledger::Row;
+use crate::{pricing, MetaClient, MetaError};
 
 /// Meta's speech to text model.
 pub const TRANSCRIBE_MODEL: &str = "muse-voice-transcribe-1.0";
@@ -59,7 +60,18 @@ impl MetaClient {
             .query(&[("sessionId", session.as_str())])
             .multipart(form);
         let response = self.send_meta(request).await?;
-        self.read_json(response).await
+        let result: AsrResult = self.read_json(response).await?;
+        if result.duration_ms > 0 {
+            self.record(Row {
+                model: TRANSCRIBE_MODEL,
+                purpose: "asr/transcribe",
+                input_tokens: None,
+                output_tokens: None,
+                frames_or_seconds: format!("{:.1}s", result.duration_ms as f64 / 1000.0),
+                cost_usd: pricing::asr_usd(result.duration_ms),
+            });
+        }
+        Ok(result)
     }
 }
 

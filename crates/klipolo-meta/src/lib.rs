@@ -7,6 +7,7 @@ mod asr;
 mod client;
 mod error;
 mod files;
+mod ledger;
 mod responses;
 
 pub mod pricing;
@@ -17,5 +18,6 @@ pub use client::{
     RELAY_BASE_ENV,
 };
 pub use error::MetaError;
+pub use ledger::SPEND_LEDGER_ENV;
 pub use responses::{FunctionCall, ResponseOut, Usage};
 pub use secrecy::{ExposeSecret, SecretString};
