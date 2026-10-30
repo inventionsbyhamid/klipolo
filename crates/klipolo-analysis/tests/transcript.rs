@@ -181,6 +181,17 @@ impl Transcriber for FakeAsr {
     }
 }
 
+/// The fake aligner's limits: ten-minute requests (about five preferred) of up to 300 turns, two at once.
+const FAKE_LIMITS: AlignLimits = AlignLimits {
+    max_audio_ms: 600_000,
+    preferred_audio_ms: 300_000,
+    max_turns: 300,
+    max_text_bytes: 128 * 1024,
+    pad_ms: 250,
+    overlap_per_turn_ms: 1_000,
+    max_in_flight: 2,
+};
+
 type AlignAnswer = Box<dyn Fn(&[AlignTurn]) -> Result<Alignment, ProviderError> + Send + Sync>;
 
 /// One align request as the fake aligner got it.
@@ -203,7 +214,7 @@ impl FakeAligner {
         answer: impl Fn(&[AlignTurn]) -> Result<Alignment, ProviderError> + Send + Sync + 'static,
     ) -> Self {
         Self {
-            limits: AlignLimits::default(),
+            limits: FAKE_LIMITS,
             answer: Box::new(answer),
             calls: Mutex::new(Vec::new()),
             delay_ms: 0,

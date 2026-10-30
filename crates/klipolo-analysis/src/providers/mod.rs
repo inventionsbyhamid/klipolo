@@ -80,7 +80,8 @@ pub struct Alignment {
     pub cost_usd: f64,
 }
 
-/// What one align request may hold, and how many may run at once.
+/// What one align request may hold, and how many may run at once: each aligner's own (`Aligner::limits`), with no
+/// default here.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AlignLimits {
     /// The longest WAV one request takes.
@@ -99,21 +100,6 @@ pub struct AlignLimits {
     pub overlap_per_turn_ms: u64,
     /// Requests at once.
     pub max_in_flight: usize,
-}
-
-impl Default for AlignLimits {
-    /// Ten minutes and 300 turns a request, two at a time, as Klipolo's relay takes them.
-    fn default() -> Self {
-        Self {
-            max_audio_ms: 600_000,
-            preferred_audio_ms: 300_000,
-            max_turns: 300,
-            max_text_bytes: 128 * 1024,
-            pad_ms: 250,
-            overlap_per_turn_ms: 1_000,
-            max_in_flight: 2,
-        }
-    }
 }
 
 /// Speech to speaker turns.
