@@ -88,6 +88,8 @@ pub struct Compiled {
     pub additions: Option<Transaction>,
     /// Shown for the person to apply (one undo step) or discard, against the project once `additions` are applied.
     pub proposal: Option<Proposal>,
+    /// The calls whose edits are in `proposal`, by call index, in call order. Every other call not refused is done.
+    pub proposed_calls: Vec<usize>,
     /// Timeline ranges to point the person at, on the project once `additions` are applied.
     pub moments: Vec<Moment>,
     pub jobs: Vec<Job>,
@@ -440,21 +442,26 @@ impl Compiler<'_> {
             let added = edit.and_then(|edit| {
                 (removing.add(edit)).map_err(|e| to_model(format!("{call_name}: {e}")))
             });
-            if let Err(r) = added {
-                refuse(&mut out, i, r);
+            match added {
+                Ok(()) => out.proposed_calls.push(i),
+                Err(r) => refuse(&mut out, i, r),
             }
         }
 
         out.additions = adding.transaction();
-        if let Some(tx) = removing.transaction() {
-            let review = tx.review_applied(&adding.done, removing.done);
-            let ranges = review.removals.ranges.clone();
-            out.proposal = Some(Proposal {
-                removed_us: ranges.iter().map(RangeUs::len).sum(),
-                ranges,
-                tx,
-                review,
-            });
+        match removing.transaction() {
+            Some(tx) => {
+                let review = tx.review_applied(&adding.done, removing.done);
+                let ranges = review.removals.ranges.clone();
+                out.proposal = Some(Proposal {
+                    removed_us: ranges.iter().map(RangeUs::len).sum(),
+                    ranges,
+                    tx,
+                    review,
+                });
+            }
+            // Removals whose edits held no ops propose nothing.
+            None => out.proposed_calls.clear(),
         }
         out.refusals.sort_by_key(|r| r.call_index);
         out

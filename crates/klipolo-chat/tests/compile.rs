@@ -464,6 +464,7 @@ fn additions_and_removals_split_in_one_answer() {
     );
     assert_eq!(additions.origin, Some(Origin::Chat));
     assert_eq!(additions.label, "chat.setFormat");
+    assert_eq!(out.proposed_calls, vec![1], "the pause removal is proposed");
     let proposal = out.proposal.clone().expect("the pauses are proposed");
     assert_eq!(
         proposal.tx.ops,
@@ -1455,4 +1456,29 @@ fn questions_jobs_and_cannot_do_pass_through() {
         ]
     );
     assert_eq!((out.additions, out.proposal, out.undo), (None, None, false));
+}
+
+#[test]
+fn proposed_calls_name_the_calls_in_the_proposal() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech, "square, no ums, and cut the rest");
+    let calls = [
+        call("setFormat", r#"{"format": "square", "keepOthers": true}"#),
+        call("removeFillers", "{}"),
+        cut(17.0, 21.0),
+        cut(7.9, 29.8),
+        call("askUser", r#"{"question": "Anything else?"}"#),
+    ];
+    let out = compile(&p, &i, &calls);
+    assert_eq!(out.proposed_calls, vec![1, 3]);
+    assert_eq!(
+        out.refusals
+            .iter()
+            .map(|r| r.call_index)
+            .collect::<Vec<_>>(),
+        vec![2]
+    );
+    // With nothing proposed, no call is.
+    let out = compile(&p, &i, &calls[..1]);
+    assert_eq!((out.proposal, out.proposed_calls), (None, vec![]));
 }
