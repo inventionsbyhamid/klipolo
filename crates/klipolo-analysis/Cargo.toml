@@ -9,7 +9,8 @@ description = "Clip analysis: the 16 kHz mono WAV Meta's speech models take, its
 [dependencies]
 # Several requests at once (`StreamExt::buffer_unordered`).
 futures = "0.3"
-# Sound decode (`audio::decode::{probe, decode}`: 48 kHz f32, streamed); no FFmpeg calls of our own.
+# Sound decode (`audio::decode::{probe, decode}`: 48 kHz f32, streamed) and every frame of a video as a small grey
+# picture (`media::luma_frames`, for the cut finder); no FFmpeg calls of our own.
 klipolo-engine = { path = "../klipolo-engine" }
 # The Meta adapter (`providers::meta`) only: nothing else here sees a Meta type.
 klipolo-meta = { path = "../klipolo-meta" }
