@@ -1425,3 +1425,29 @@ async def test_stream_is_charged_even_when_closing_meta_fails(app, conn, meta, b
     [row] = ledger(conn, device)
     assert row["cost_usd"] == pytest.approx(SPARK_COST)
     assert app.state.in_flight.count() == 0
+
+
+@pytest.mark.anyio
+async def test_client_disconnect_during_a_non_streamed_call_still_charges_real_usage(app, conn, meta):
+    device = add_device(conn)
+    call = AsgiCall(app, "/meta/v1/responses", json.dumps(spark_request()).encode(), device.headers)
+    answered = []
+
+    async def answer_after_the_client_left(request):
+        # The client gives up while Meta is still working.
+        call.hang_up.set()
+        await anyio.sleep(MOMENT)
+        answered.append(True)
+        return httpx.Response(200, json=spark_body())
+
+    meta.post("/responses").mock(side_effect=answer_after_the_client_left)
+
+    await call.run()
+
+    # The relay waited for Meta, charged the real usage, and sent nothing.
+    assert answered == [True]
+    assert call.status is None
+    [row] = ledger(conn, device)
+    assert json.loads(row["usage_json"]) == SPARK_USAGE
+    assert row["cost_usd"] == pytest.approx(SPARK_COST)
+    assert app.state.in_flight.count() == 0
