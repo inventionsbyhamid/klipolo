@@ -5,7 +5,9 @@
 //! - each is a scene an agent could have made: its definition's settings are the scene's own, and it checks;
 //! - the title card's settings bind: the project keeps them, the plan hands them over, and its nodes show them;
 //! - drawn (lavapipe in CI): the lower third's title area shows its name in the preview and in an exported file, and
-//!   the title card its title and accent. `PRESET_STILLS=<folder>` keeps a still of each.
+//!   the title card its title and accent; in 16:9, 9:16 and 1:1 both keep their shape (their heights are 1080p pixels,
+//!   not shares of the frame) and the lower third stays above 9:16's bottom 20 %. `PRESET_STILLS=<folder>` keeps a
+//!   still of each.
 
 mod support;
 
@@ -47,7 +49,8 @@ fn scene_json(local: &str) -> (String, Scene) {
     (text, scene)
 }
 
-/// A project of one full-frame layer `layer` showing preset `local` from 0 for `seconds`, with `params`.
+/// A project of one layer `layer` showing preset `local` from 0 for `seconds`, with `params`, filling the frame in every
+/// format (its own full rect in 9:16 and 1:1, as the app places a template: derived from 16:9 it would be a square).
 fn project(local: &str, seconds: f64, params: &[(&str, &str)]) -> Project {
     let mut p = Project::new("Presets");
     let values: BTreeMap<String, ParamValue> = params
@@ -55,32 +58,47 @@ fn project(local: &str, seconds: f64, params: &[(&str, &str)]) -> Project {
         .map(|(k, v)| (k.to_string(), ParamValue::Text(v.to_string())))
         .collect();
     let content = ItemContent::generator(ContribId::builtin(local), values);
-    p.timeline.tracks.push(overlay_track(
-        "titles",
-        vec![item("layer", 0.0, seconds, bx(0.0, 0.0, 1.0, 1.0), content)],
-    ));
+    let full = bx(0.0, 0.0, 1.0, 1.0);
+    let mut layer = item("layer", 0.0, seconds, full, content);
+    for format in [FormatKind::Portrait, FormatKind::Square] {
+        layer.layout.overrides.insert(format, full);
+    }
+    p.timeline.tracks.push(overlay_track("titles", vec![layer]));
     p
 }
 
-/// The box (x, y, w, h in fractions of the frame) of node `id` in `scene.json`, inside each group above it.
-fn node_box(json: &str, id: &str) -> [f64; 4] {
-    fn find(nodes: &[serde_json::Value], id: &str, outer: [f64; 4]) -> Option<[f64; 4]> {
+/// Node `id`'s box in `scene.json`, in the pixels of a full-frame layer of `size`: each box inside its parent's, a
+/// number a fraction of the parent's side and `"Npx"` 1080p pixels (the frame's shorter side is 1080 of them), then
+/// moved by the node's own `x` and `y` (pixels only here).
+fn node_px(json: &str, id: &str, size: (u32, u32)) -> Bounds {
+    /// A box value: a fraction of `side`, or `"Npx"`, `k` frame pixels each.
+    fn length(v: &serde_json::Value, side: f64, k: f64) -> f64 {
+        match v.as_str() {
+            Some(px) => px.strip_suffix("px").unwrap().parse::<f64>().unwrap() * k,
+            None => v.as_f64().unwrap() * side,
+        }
+    }
+    fn walk(nodes: &[serde_json::Value], id: &str, outer: [f64; 4], k: f64) -> Option<[f64; 4]> {
         for n in nodes {
-            let b: Vec<f64> = n["box"]
-                .as_array()
-                .map(|a| a.iter().map(|v| v.as_f64().unwrap()).collect())
-                .unwrap_or(vec![0.0, 0.0, 1.0, 1.0]);
-            let here = [
-                outer[0] + b[0] * outer[2],
-                outer[1] + b[1] * outer[3],
-                b[2] * outer[2],
-                b[3] * outer[3],
-            ];
+            let mut here = match n["box"].as_array() {
+                Some(b) => [
+                    outer[0] + length(&b[0], outer[2], k),
+                    outer[1] + length(&b[1], outer[3], k),
+                    length(&b[2], outer[2], k),
+                    length(&b[3], outer[3], k),
+                ],
+                None => outer,
+            };
+            for (axis, key) in [(0, "x"), (1, "y")] {
+                if let Some(v) = n.get(key).filter(|v| v.is_string()) {
+                    here[axis] += length(v, 0.0, k);
+                }
+            }
             if n["id"] == id {
                 return Some(here);
             }
             if let Some(children) = n["children"].as_array()
-                && let Some(found) = find(children, id, here)
+                && let Some(found) = walk(children, id, here, k)
             {
                 return Some(found);
             }
@@ -88,18 +106,15 @@ fn node_box(json: &str, id: &str) -> [f64; 4] {
         None
     }
     let v: serde_json::Value = serde_json::from_str(json).unwrap();
-    find(v["nodes"].as_array().unwrap(), id, [0.0, 0.0, 1.0, 1.0])
-        .unwrap_or_else(|| panic!("no node {id}"))
-}
-
-/// `b` in a frame of `SIZE`'s pixels.
-fn in_pixels(b: [f64; 4]) -> Bounds {
-    let (w, h) = (f64::from(SIZE.0), f64::from(SIZE.1));
+    let k = f64::from(size.0.min(size.1)) / 1080.0;
+    let frame = [0.0, 0.0, f64::from(size.0), f64::from(size.1)];
+    let [x, y, w, h] = walk(v["nodes"].as_array().unwrap(), id, frame, k)
+        .unwrap_or_else(|| panic!("no node {id}"));
     Bounds {
-        x0: b[0] * w,
-        y0: b[1] * h,
-        x1: (b[0] + b[2]) * w,
-        y1: (b[1] + b[3]) * h,
+        x0: x,
+        y0: y,
+        x1: x + w,
+        y1: y + h,
     }
 }
 
@@ -251,7 +266,7 @@ fn title_card_params_bind() {
 /// The white ink in the lower third's title area of a frame of `SIZE`.
 fn lower_third_title_ink(img: &image::RgbaImage) -> Option<Bounds> {
     let (json, _) = scene_json(LOWER_THIRD);
-    ink_bounds_in(img, in_pixels(node_box(&json, "name")))
+    ink_bounds_in(img, node_px(&json, "name", (img.width(), img.height())))
 }
 
 /// The lower third with its name set, 3 s long: in the preview's registry (the built-in one) its title area shows white
@@ -281,7 +296,7 @@ async fn lower_third_preset_renders_in_preview_and_export() {
         &[("title", "Ana Lee"), ("role", "Product designer")],
     );
     let (json, _) = scene_json(LOWER_THIRD);
-    let area = in_pixels(node_box(&json, "name"));
+    let area = node_px(&json, "name", SIZE);
 
     let mut h = Headless::new(preview).await.unwrap();
     let p = Arc::new(p);
@@ -374,8 +389,8 @@ async fn title_card_at_hold(
     still: &str,
 ) -> (Bounds, [u8; 3]) {
     let (json, _) = scene_json(TITLE_CARD);
-    let area = in_pixels(node_box(&json, "title"));
-    let mark = in_pixels(node_box(&json, "mark"));
+    let area = node_px(&json, "title", SIZE);
+    let mark = node_px(&json, "mark", SIZE);
     let p = Arc::new(project(
         TITLE_CARD,
         4.0,
@@ -427,8 +442,114 @@ async fn title_card_draws_its_settings() {
     let p = Arc::new(project(TITLE_CARD, 4.0, &[]));
     let (img, _) = scene_frame(&mut h, &p, 0.0, SIZE).await;
     assert!(
-        ink_bounds_in(&img, in_pixels(node_box(&json, "title"))).is_none(),
+        ink_bounds_in(&img, node_px(&json, "title", SIZE)).is_none(),
         "nothing before it starts"
+    );
+}
+
+/// Each format a video can be made in, its shorter side 1080 pixels: landscape, portrait (9:16) and square.
+const FORMATS: [(FormatKind, (u32, u32), &str); 3] = [
+    (FormatKind::Landscape, (1920, 1080), "16x9"),
+    (FormatKind::Portrait, (1080, 1920), "9x16"),
+    (FormatKind::Square, (1080, 1080), "1x1"),
+];
+
+/// The box holding `img`'s pixels that `keep` picks, if any.
+fn bounds_where(img: &image::RgbaImage, keep: impl Fn([u8; 3]) -> bool) -> Option<Bounds> {
+    let mut b: Option<Bounds> = None;
+    for (x, y, p) in img.enumerate_pixels() {
+        if !keep([p[0], p[1], p[2]]) {
+            continue;
+        }
+        let (x, y) = (f64::from(x), f64::from(y));
+        b = Some(match b {
+            None => Bounds {
+                x0: x,
+                y0: y,
+                x1: x + 1.0,
+                y1: y + 1.0,
+            },
+            Some(o) => Bounds {
+                x0: o.x0.min(x),
+                y0: o.y0.min(y),
+                x1: o.x1.max(x + 1.0),
+                y1: o.y1.max(y + 1.0),
+            },
+        });
+    }
+    b
+}
+
+/// The templates in every format, as full-frame layers. The lower third's name shows in its box, nothing of it reaches
+/// the frame's edge, and in 9:16 all of it stays above the bottom 20 % the platforms cover. The
+/// title card's title and accent mark stay centred, and the mark keeps its shape: the same aspect in every format.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs a GPU (lavapipe in CI)"]
+async fn templates_keep_their_shape_in_every_format() {
+    let mut h = Headless::new(Registry::builtin()).await.unwrap();
+    let (lower, _) = scene_json(LOWER_THIRD);
+    let (card, _) = scene_json(TITLE_CARD);
+    let named = Arc::new(project(
+        LOWER_THIRD,
+        3.0,
+        &[("title", "Ana Lee"), ("role", "Product designer")],
+    ));
+    let titled = Arc::new(project(
+        TITLE_CARD,
+        4.0,
+        &[
+            ("title", "Day 1 in Lisbon"),
+            ("subtitle", "Walking the old town"),
+        ],
+    ));
+    let mut aspects = Vec::new();
+    for (format, size, name) in FORMATS {
+        let (w, tall) = (f64::from(size.0), f64::from(size.1));
+        let (img, notes) = scene_frame_in(&mut h, &named, 1.5, size, format).await;
+        assert!(notes.is_empty(), "{name}: {notes:?}");
+        keep_still(&format!("lower-third-{name}"), &img);
+        let area = node_px(&lower, "name", size);
+        let ink = ink_bounds_in(&img, area).unwrap_or_else(|| panic!("{name}: no name"));
+        assert!(
+            ink.within(area) && ink.height() >= 0.3 * (area.y1 - area.y0),
+            "{name}: the name fills its line: {ink:?} in {area:?}"
+        );
+        let drawn = bounds_where(&img, |p| p.iter().any(|&c| c > 40)).unwrap();
+        assert!(
+            drawn.x0 > 0.0 && drawn.y0 > 0.0 && drawn.x1 < w && drawn.y1 < tall,
+            "{name}: inside the frame: {drawn:?}"
+        );
+        if format == FormatKind::Portrait {
+            assert!(
+                drawn.y1 <= 0.80 * tall,
+                "9:16: above the bottom 20 %, not down to {:.3} of the height",
+                drawn.y1 / tall
+            );
+        }
+
+        let (img, notes) = scene_frame_in(&mut h, &titled, 2.0, size, format).await;
+        assert!(notes.is_empty(), "{name}: {notes:?}");
+        keep_still(&format!("title-card-{name}"), &img);
+        let title = ink_bounds_in(&img, node_px(&card, "title", size))
+            .unwrap_or_else(|| panic!("{name}: no title"));
+        let mark = bounds_where(&img, |p| {
+            p.iter()
+                .zip([0xFF, 0xD0, 0x2E])
+                .all(|(&a, b)| a.abs_diff(b) <= 40)
+        })
+        .unwrap_or_else(|| panic!("{name}: no mark"));
+        for (what, b) in [("title", title), ("mark", mark)] {
+            assert!(
+                ((b.x0 + b.x1) / 2.0 - w / 2.0).abs() <= 4.0,
+                "{name}: the {what} is centred: {b:?}"
+            );
+        }
+        aspects.push((name, (mark.x1 - mark.x0) / mark.height()));
+    }
+    let wide = aspects[0].1;
+    assert!(
+        aspects.iter().all(|(_, a)| (a / wide - 1.0).abs() <= 0.2),
+        "the mark keeps its shape in every format: {aspects:?}"
     );
 }
 
