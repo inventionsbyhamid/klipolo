@@ -1,5 +1,7 @@
 # Relay image: the API plus the MMS forced aligner on CPU.
-FROM python:3.12-slim-bookworm
+# The base is pinned by its multi-platform index digest; README.md says how
+# to move it.
+FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
