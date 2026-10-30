@@ -102,7 +102,8 @@ fn skipped(path: &Path, reason: &str) -> SkippedFile {
     }
 }
 
-fn supported(path: &Path) -> bool {
+/// Whether `path` has one of the media extensions Klipolo imports (`MEDIA_EXTENSIONS`, any case).
+pub(crate) fn supported(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
         .is_some_and(|ext| MEDIA_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))

@@ -98,14 +98,27 @@ fn set_open(state: &ProjectSessionState, open: Option<OpenProject>) -> Result<u6
     Ok(state.opens.load(Ordering::SeqCst))
 }
 
-/// Lets the UI's asset protocol read `project`'s files.
+/// The files of `project`'s assets the page may read: local files of a media type Klipolo imports, never a pack's file
+/// or anything else a project file names.
+fn served_files(project: &Project) -> Vec<PathBuf> {
+    project
+        .assets
+        .iter()
+        .filter_map(|asset| match AssetPath::parse(&asset.path) {
+            Some(AssetPath::File(path)) if crate::media::supported(Path::new(path)) => {
+                Some(PathBuf::from(path))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Lets the UI's asset protocol read `project`'s media files (`served_files`).
 pub(crate) fn allow_assets(app: &AppHandle, project: &Project) {
     let scope = app.asset_protocol_scope();
-    for asset in &project.assets {
+    for file in served_files(project) {
         // A missing file just won't preview; the project still opens.
-        if let Some(AssetPath::File(path)) = AssetPath::parse(&asset.path) {
-            let _ = scope.allow_file(path);
-        }
+        let _ = scope.allow_file(file);
     }
 }
 

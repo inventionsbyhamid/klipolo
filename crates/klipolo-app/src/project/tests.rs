@@ -484,3 +484,38 @@ fn save_failures_read_as_plain_sentences() {
         "Klipolo can't write to that folder, so changes aren't being saved. Check its permissions."
     );
 }
+
+/// The page may read a project's media through the asset protocol, and nothing else its file names: not a pack's file,
+/// not a file of another type (a project edited by hand to point at `~/.ssh/id_rsa`).
+#[test]
+fn only_a_projects_media_files_are_served_to_the_page() {
+    use klipolo_model::project::{Asset, AssetKind};
+    let asset = |path: &str| Asset {
+        id: path.into(),
+        kind: AssetKind::Video,
+        path: path.into(),
+        name: "x".into(),
+        duration_us: 1_000_000,
+        width: 16,
+        height: 9,
+        fps: 30.0,
+        rotation: Some(0),
+        has_audio: false,
+        audio_lead_us: Some(0),
+    };
+    let mut project = Project::new("Served");
+    project.assets = [
+        "/clips/talk.MOV",
+        "/music/song.mp3",
+        "/pictures/logo.png",
+        "/home/me/.ssh/id_rsa",
+        "/home/me/notes.txt",
+        "pack://fx@1/glow.png",
+    ]
+    .map(asset)
+    .to_vec();
+    assert_eq!(
+        served_files(&project),
+        ["/clips/talk.MOV", "/music/song.mp3", "/pictures/logo.png"].map(PathBuf::from)
+    );
+}
