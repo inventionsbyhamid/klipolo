@@ -530,8 +530,7 @@ def reserve_seconds(
 def refund_seconds(conn: sqlite3.Connection, device_id: str, reservation: Reservation, seconds: float) -> None:
     """Give back reserved seconds that were not aligned: skipped or failed
     turns, a model that would not load, a client that hung up. A failed
-    write is logged; the device
-    is then charged too much, never too little."""
+    write is logged; the device is then charged too much, never too little."""
     try:
         with db.transaction(conn):
             conn.execute(
