@@ -9,8 +9,8 @@ cd "$(dirname "$0")/.."
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-python3 scripts/gen-library.py --out "$tmp/a" >/dev/null
-python3 scripts/gen-library.py --out "$tmp/b" >/dev/null
+python3 -I scripts/gen-library.py --out "$tmp/a" >/dev/null
+python3 -I scripts/gen-library.py --out "$tmp/b" >/dev/null
 
 python3 -I - "$tmp/a" "$tmp/b" assets/library <<'PY'
 import hashlib, json, pathlib, struct, sys, wave, zlib
