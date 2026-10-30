@@ -194,10 +194,11 @@ fn cut_words_and_scenes_are_left_out() {
         "neither the words nor the scene item"
     );
     assert!(text.contains("Hi Caden,"));
-    // The gap across the cut: "safe." ends at 10.74 s, "Hi" starts at 16.18 s on the timeline.
+    // The gap across the cut, as the times shown give it: "safe." ends at 10.74 s (10.7), "Hi" starts at 16.18 s
+    // (16.2) on the timeline.
     let lines = timed_lines(&text, "Transcript");
     let before_cut = line_with(&lines, "station stays safe.");
-    assert!(before_cut.ends_with("safe. [pause 5.4 s]"), "{before_cut}");
+    assert!(before_cut.ends_with("safe. [pause 5.5 s]"), "{before_cut}");
     // Pause words are never text.
     assert!(
         !section(&text, "Transcript").contains("  "),

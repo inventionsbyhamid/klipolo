@@ -54,7 +54,7 @@ pub const MAX_CONTEXT_TOKENS: usize = 12_000;
 pub const CHARS_PER_TOKEN: usize = 4;
 /// A transcript line's most words.
 pub const MAX_LINE_WORDS: usize = 30;
-/// A gap between spoken words this long or longer shows as `[pause 1.4 s]`.
+/// A gap between spoken words this long or longer (between the times as shown) reads `[pause 1.4 s]`.
 pub const SHOWN_PAUSE_US: Us = 1_000_000;
 /// What is left of a partly cut scene item playing less of its file than this (and than the item) is left out.
 pub const MIN_SCENE_PIECE_US: Us = 100_000;
@@ -454,8 +454,13 @@ fn short_ref(index: usize) -> String {
 
 /// Timeline seconds with one decimal, rounded to the nearest tenth ("12.4").
 fn secs(us: Us) -> String {
-    let tenths = us.max(0).saturating_add(50_000) / 100_000;
-    format!("{}.{}", tenths / 10, tenths % 10)
+    let t = tenths(us);
+    format!("{}.{}", t / 10, t % 10)
+}
+
+/// `us` in tenths of a second, rounded to the nearest (negative times count as 0).
+fn tenths(us: Us) -> Us {
+    us.max(0).saturating_add(50_000) / 100_000
 }
 
 /// `text` on one line: white space and control characters become single spaces, none at either end.
@@ -746,9 +751,11 @@ fn even_parts(out: &mut Vec<Range<usize>>, words: Range<usize>) {
     }
 }
 
-/// `[pause 1.4 s]` for a gap of `SHOWN_PAUSE_US` or more.
-fn pause_mark(gap: Us) -> Option<String> {
-    (gap >= SHOWN_PAUSE_US).then(|| format!("[pause {} s]", secs(gap)))
+/// `[pause 1.4 s]` between a word ending at `end` and the next starting at `start`, when the gap is `SHOWN_PAUSE_US`
+/// or more as the times shown give it (each rounded to a tenth), so a pause always matches the times around it.
+fn pause_mark(end: Us, start: Us) -> Option<String> {
+    let gap = tenths(start) - tenths(end);
+    (gap * 100_000 >= SHOWN_PAUSE_US).then(|| format!("[pause {}.{} s]", gap / 10, gap % 10))
 }
 
 /// One transcript line: `[a-b] A: text`, pauses marked; with `sentence_starts`, its first `START_WORDS` words and
@@ -775,7 +782,7 @@ fn write_line(out: &mut String, said: &[Said], line: &Range<usize>, sentence_sta
     for (k, w) in words.iter().enumerate() {
         if k > 0
             && !sentence_starts
-            && let Some(mark) = pause_mark(w.start_us - words[k - 1].end_us)
+            && let Some(mark) = pause_mark(words[k - 1].end_us, w.start_us)
         {
             if before.is_some() {
                 out.push(' ');
@@ -812,7 +819,7 @@ fn write_line(out: &mut String, said: &[Said], line: &Range<usize>, sentence_sta
     }
     if !sentence_starts
         && let Some(next) = said.get(line.end)
-        && let Some(mark) = pause_mark(next.start_us - last.end_us)
+        && let Some(mark) = pause_mark(last.end_us, next.start_us)
     {
         out.push(' ');
         out.push_str(&mark);
