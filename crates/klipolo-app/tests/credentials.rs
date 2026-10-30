@@ -400,6 +400,48 @@ async fn a_refused_token_registers_again_with_the_stored_code() {
 }
 
 #[tokio::test]
+async fn a_lost_token_is_got_back_with_the_saved_code() {
+    let relay = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/devices"))
+        .and(body_json(
+            json!({ "device_id": DEVICE, "access_code": CODE }),
+        ))
+        .respond_with(registered(NEW_TOKEN, 2.0, 0.3))
+        .expect(1)
+        .mount(&relay)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/devices/me"))
+        .and(header(
+            "authorization",
+            format!("Bearer {NEW_TOKEN}").as_str(),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(device(true, 2.0, 0.3)))
+        .expect(1)
+        .mount(&relay)
+        .await;
+    let store = Arc::new(MemoryStore::default());
+    // The code is saved but its token is gone (the Keychain item was removed by hand, say).
+    store.set(RELAY_CODE, &secret(CODE)).unwrap();
+    let credentials = Arc::new(Credentials::load(
+        store.clone(),
+        endpoints(CLOSED, &relay.uri()),
+        DEVICE.into(),
+    ));
+
+    // Two readers at once register once; the second reads the credit with the new token.
+    let (a, b) = tokio::join!(credentials.status(), credentials.status());
+    for status in [a, b] {
+        assert_eq!(
+            (status.mode, status.budget_usd, status.spent_usd),
+            (AiMode::Relay, Some(2.0), Some(0.3))
+        );
+    }
+    assert_eq!(stored(&store, RELAY_TOKEN).as_deref(), Some(NEW_TOKEN));
+}
+
+#[tokio::test]
 async fn a_busy_relay_saves_nothing_and_can_be_tried_again() {
     let relay = MockServer::start().await;
     // The proxy's own rate limit: plain text, no JSON.

@@ -283,10 +283,15 @@ impl Credentials {
                 Err(MetaError::Unauthorized) => self.register_again_unless_changed(token).await,
                 answer => answer,
             },
-            // The token went missing from the store: registering with the code is how to get one back.
+            // The token went missing from the store: registering with the code is how to get one back, unless another
+            // caller just did.
             None => {
                 let _turn = self.changes.lock().await;
-                self.register(Some(code)).await
+                let token = lock(&self.held).token.clone();
+                match token {
+                    Some(token) => self.device_status(&token).await,
+                    None => self.register(Some(code)).await,
+                }
             }
         };
         match info {
