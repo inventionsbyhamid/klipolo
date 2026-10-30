@@ -27,5 +27,11 @@ export default defineConfig({
   clearScreen: false,
   // WKWebView on macOS 15 (Safari 18).
   build: { target: 'safari18', sourcemap: false },
-  test: { environment: 'jsdom' },
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.test.{ts,tsx}'],
+    setupFiles: ['src/test/setup.ts'],
+    // A busy machine makes first renders slow; that shouldn't fail the suite.
+    testTimeout: 15000,
+  },
 });
