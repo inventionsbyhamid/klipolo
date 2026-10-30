@@ -329,6 +329,8 @@ fn the_scan_finds_every_way_to_open_an_input() {
 }
 
 #[test]
+// It scans the app crate's sources and `tools/`, which this workspace doesn't have yet.
+#[ignore = "the app crate is added later: re-enable against crates/klipolo-app/src"]
 fn every_media_open_goes_through_the_one_helper() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let roots = source_roots(&root);
@@ -376,6 +378,8 @@ fn every_media_open_goes_through_the_one_helper() {
 /// The scan's backstop: only the engine links FFmpeg's bindings outside tests, so any other crate reaches FFmpeg
 /// through the engine (and its one open), whatever its imports look like.
 #[test]
+// It scans the app crate's sources and `tools/`, which this workspace doesn't have yet.
+#[ignore = "the app crate is added later: re-enable against crates/klipolo-app/src"]
 fn only_the_engine_links_ffmpeg() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut linking = Vec::new();
