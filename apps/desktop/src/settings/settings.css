@@ -222,10 +222,14 @@
   background: var(--color-bay-raised);
   box-shadow: inset 0 0 0 1px var(--color-line-strong);
   color: var(--color-ink);
+  font: inherit;
   font-size: var(--text-md);
   letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
   outline: none;
+  /* The window doesn't select text; a field must, to paste a key and fix a typo. */
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .settings-dialog .input::placeholder {
