@@ -12,7 +12,27 @@ The relay lets people with an access code use Meta's models in Klipolo without t
 | `POST /meta/v1/responses`, `POST /meta/v1/asr/transcribe`, `POST /meta/v1/files`, `GET` and `DELETE /meta/v1/files/{id}` | Forwarded to Meta for devices with an active code, and charged against the caps. |
 | `POST /v1/align` | Word timing for transcript turns: multipart `audio` (16 kHz mono 16-bit WAV, at most 10 minutes) and `turns` (JSON). Open to every registered device, 120 minutes a day. |
 
-Errors are always `{"error": "<code>", "message": "<sentence>"}`. Without a Meta key the proxied routes answer 503 `not_configured`.
+Errors are always `{"error": "<code>", "message": "<sentence>"}`, except Traefik's rate limit (see Limits to know). Without a Meta key the proxied routes answer 503 `not_configured`.
+
+## The client contract
+
+What Klipolo, or any other client, must do to use the relay well:
+
+- **In flight per device:** at most 4 proxied calls and 2 alignments. More get 429 `busy`.
+- **429 is retryable, 402 is final.** On 429, wait for `Retry-After` and try again. A 402 `budget` stays until the device or the relay has credit again; the message says which, and the app should offer the user's own Meta key.
+  - 402 "This device has used its Klipolo credit." The device's spend reached its cap.
+  - 402 "This device does not have enough Klipolo credit left for this request." The device has some credit, but less than this call could cost. A smaller call may still fit.
+  - 402 "Klipolo's shared AI credit is used up for now." The relay's overall cap is reached.
+  - 429 "Other AI requests from this device are still running." Its other calls in flight hold the room until they finish. `Retry-After: 5`.
+  - 429 "Klipolo AI is busy." Calls in flight from other devices hold the shared room. `Retry-After: 5`.
+  - Other 429 `busy`: the device already has 4 proxied calls (or 2 alignments) in flight, or the relay has 32 proxied calls (or 8 alignments). `Retry-After` is 1 s for proxied calls and 30 s for alignment.
+  - 429 `align_quota`: the device has used its alignment minutes for the day. `Retry-After` points at midnight UTC.
+- **Video calls one at a time per device.** Each reserves about $0.79 until it is charged, so three at once don't fit in a $2 cap.
+- **Alignment read timeout of at least 15 minutes.** Two 10-minute alignments at once take about 10.5 minutes each, and a request can wait in the queue first.
+- **Uploads must finish within 60 s** (Traefik's body read). Keep video proxies small; see Limits to know.
+- **`max_output_tokens` at most 16384** (8192 when missing). More is 400.
+- **No `include` or `truncation`**, or any other field the relay doesn't list: 400. No `previous_response_id` or `conversation` either.
+- **Don't replay reasoning items.** Any reasoning item in `input` makes the call count as media, which reserves $0.75 more.
 
 ## Settings
 
@@ -60,7 +80,11 @@ docker run --rm --cpus 8 --memory 6g --user root -v "$PWD:/src:ro" -w /src klipo
 
 ## Deploy
 
-The relay is the Docker Compose service `klipolo-relay` in the Coolify project `klipolo`, built from `compose.yml`. The image is built on the server and never pulled; `RELAY_TAG` in Coolify picks the tag. Traefik routes `api.klipolo.com` to it with a Let's Encrypt certificate. It has no host ports, 8 CPUs, 6 GB and a data volume.
+The relay is the Docker Compose service `klipolo-relay` in the Coolify project `klipolo`, built from `compose.yml`. The image is built on the server and never pulled; `RELAY_TAG` in Coolify picks the tag. Traefik routes `api.klipolo.com` to it with a Let's Encrypt certificate. It has no host ports, 8 CPUs, 6 GB, a data volume and a 200 MB in-memory `/tmp`.
+
+**Never set a domain for this service in Coolify.** The routing comes from the Traefik labels in `compose.yml`. A Coolify domain adds a second router with Coolify's gzip middleware, which can hold back small streamed events, and it would skip the rate limits.
+
+When `compose.yml` changes, paste it into the service's compose in Coolify (or send it through the API) before the restart.
 
 1. Copy the committed source to the server:
 
@@ -88,7 +112,16 @@ The relay is the Docker Compose service `klipolo-relay` in the Coolify project `
 
 To roll back, set `RELAY_TAG` to the previous pinned tag and restart.
 
-**Restarts and calls in flight.** On SIGTERM the relay finishes the calls in flight: streams it drains after a client left, and alignments of up to 10 minutes of audio. `compose.yml` gives it 330 s. Coolify's Restart and Stop buttons stop the container with their own 30 s limit, so restart when the relay is idle. A deploy through Coolify's API start call recreates the container and keeps the 330 s.
+**Restart only when the relay is idle.** On SIGTERM the relay finishes the calls in flight, including streams it drains after a client left and alignments. `compose.yml` gives it 330 s, and only Coolify's API start call keeps that; the Restart and Stop buttons allow 30 s. Neither is enough for two 10-minute alignments at once, which take about 10.5 minutes. A call cut off mid-stream is billed by Meta but never recorded. Before a restart, check that nothing is running:
+
+```sh
+C=$(docker ps --filter name=^klipolo-relay- --format '{{.Names}}')
+docker stats --no-stream $C     # CPU near 0%: no alignment running
+docker logs --since 5m $C       # no recent requests or charges
+docker exec $C python -m relay.admin spend
+```
+
+Temp audio lives in the in-memory `/tmp`, so a crash or restart never leaves any behind.
 
 Coolify writes the variables into the compose file when it starts the service. A changed value takes effect only after a restart.
 
@@ -120,6 +153,10 @@ docker exec $C python -m relay.admin spend
 
 Codes are case-sensitive. Make them hard to guess: at least 12 random lowercase letters and digits.
 
+## Logs
+
+`docker logs` shows uvicorn's access lines and the relay's own INFO lines: charges, alignment timings, and the alignment model loading. They never hold request or response headers or bodies, or the key. Device ids appear as their first 8 characters.
+
 ## Data
 
 The SQLite database is `/data/relay.db` in the service's volume, which ends in `_klipolo-relay-data`. It holds codes, devices (token hashes only) and one ledger row per charged call. Nothing from requests or audio is kept. To copy it while the relay runs:
@@ -131,7 +168,8 @@ docker cp $C:/data/backup.db relay-backup.db && docker exec $C rm /data/backup.d
 
 ## Limits to know
 
-- Traefik reads a request body for at most 60 s. The largest alignment upload (19 MB) needs about 3 Mbps, and the largest transcribe upload (32 MB) about 4.5 Mbps.
+- Traefik reads a request body for at most 60 s. The largest alignment upload (19 MB) needs about 3 Mbps, and the largest transcribe upload (32 MB) about 4.5 Mbps. File uploads to `/meta/v1/files` have the same 60 s, about 75 MB at 10 Mbps, so keep video proxies small.
+- Traefik limits each client IP to 10 requests a second, with bursts of 30, and `POST /v1/devices` to 10 a minute, with bursts of 5. Over the limit it answers 429 with a plain-text body, not the JSON shape.
 - With 3 threads, an alignment takes roughly as long as its audio: up to about 10 minutes for 10 minutes of audio, when two run at once. Clients need long read timeouts, or should send a few minutes at a time.
 
 ## Update the pinned packages
