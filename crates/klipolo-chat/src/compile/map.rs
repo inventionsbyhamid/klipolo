@@ -27,7 +27,7 @@ fn timeline_at(c: &Clip, start: Us, source_us: Us) -> Us {
 }
 
 /// The source moment playing at timeline time `t` in `c` (which starts at `start`), within the clip.
-fn source_at(c: &Clip, start: Us, t: Us) -> Us {
+pub(super) fn source_at(c: &Clip, start: Us, t: Us) -> Us {
     let into = unscaled(t.saturating_sub(start).max(0), c.speed);
     c.source_in_us.saturating_add(into).min(c.source_out_us)
 }
@@ -44,6 +44,11 @@ impl<'a> Map<'a> {
         }
     }
 
+    /// The snapshot clip with id `id`.
+    pub(super) fn index_of(&self, id: &str) -> Option<usize> {
+        self.index.get(id).copied()
+    }
+
     /// Snapshot clip `i`, where it starts and ends on the snapshot's timeline.
     pub(super) fn clip(&self, i: usize) -> (&'a Clip, Us, Us) {
         let c = &self.snapshot.timeline.main[i];
@@ -57,7 +62,7 @@ impl<'a> Map<'a> {
         let mut start: Us = 0;
         for (j, c) in work.timeline.main.iter().enumerate() {
             let was = piece_of(&c.id, |id| self.index.contains_key(id), |_| false)
-                .and_then(|id| self.index.get(id).copied())
+                .and_then(|id| self.index_of(id))
                 .filter(|&i| self.snapshot.timeline.main[i].source == c.source);
             if let Some(i) = was {
                 out[i].push((j, start));
@@ -90,5 +95,12 @@ impl<'a> Map<'a> {
             }
         }
         merge_ranges(&out, main_track_duration(&work.timeline.main))
+    }
+
+    /// The working copy's pieces of snapshot clip `i`.
+    pub(super) fn pieces_of<'w>(&self, work: &'w Project, i: usize) -> Vec<&'w Clip> {
+        (self.pieces(work).swap_remove(i).into_iter())
+            .map(|(j, _)| &work.timeline.main[j])
+            .collect()
     }
 }

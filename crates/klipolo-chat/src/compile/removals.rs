@@ -14,7 +14,9 @@ use klipolo_model::Project;
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::ops::Op;
 use klipolo_model::query::main_track_duration;
-use klipolo_model::time::{RangeUs, kept_parts, merge_ranges};
+use klipolo_model::speech::silence::timeline_pauses;
+use klipolo_model::speech::{PAUSE_US, WordKind, spoken, word_cut};
+use klipolo_model::time::{RangeUs, Us, kept_parts, merge_ranges};
 
 use super::{Compiler, Edit, Refused, label, to_model, us};
 use crate::context::secs;
@@ -25,6 +27,10 @@ pub(super) fn compile(c: &Compiler, work: &Project, call: &ToolCall) -> Result<E
     match call {
         ToolCall::CutRange { range } => cut_range(c, work, *range),
         ToolCall::KeepOnly { ranges } => keep_only(c, work, ranges),
+        ToolCall::RemoveSilences { min_pause_us } => {
+            remove_silences(c, work, min_pause_us.unwrap_or(PAUSE_US))
+        }
+        ToolCall::RemoveFillers => remove_fillers(c, work),
         other => Err(to_model(format!("{}: not a removal.", other.name()))),
     }
 }
@@ -86,5 +92,48 @@ fn keep_only(c: &Compiler, work: &Project, ranges: &[RangeUs]) -> Result<Edit, R
     Ok(Edit {
         ops: delete(gone),
         label: label("keepOnly", vec![("parts", ErrorParam::from(ranges.len()))]),
+    })
+}
+
+fn remove_silences(c: &Compiler, work: &Project, min_pause_us: Us) -> Result<Edit, Refused> {
+    let pauses = timeline_pauses(work, &c.inputs.speech, min_pause_us, None);
+    if pauses.is_empty() {
+        return Err(to_model(format!(
+            "removeSilences: no pause is longer than {} s.",
+            secs(min_pause_us)
+        )));
+    }
+    let count = pauses.len();
+    Ok(Edit {
+        ops: delete(pauses),
+        label: label(
+            "removeSilences",
+            vec![
+                ("count", ErrorParam::from(count)),
+                ("minPauseDurationUs", us(min_pause_us)),
+            ],
+        ),
+    })
+}
+
+fn remove_fillers(c: &Compiler, work: &Project) -> Result<Edit, Refused> {
+    let words = spoken(work, &c.inputs.speech);
+    let fps = work.settings.fps;
+    let cuts: Vec<RangeUs> = (words.words.iter().enumerate())
+        .filter(|(_, w)| w.kind == WordKind::Filler)
+        .map(|(i, _)| word_cut(&words, i, i, fps))
+        .collect();
+    if cuts.is_empty() {
+        return Err(to_model(
+            "removeFillers: there are no filler words.".to_owned(),
+        ));
+    }
+    let count = cuts.len();
+    Ok(Edit {
+        ops: delete(merge_ranges(
+            &cuts,
+            main_track_duration(&work.timeline.main),
+        )),
+        label: label("removeFillers", vec![("count", ErrorParam::from(count))]),
     })
 }

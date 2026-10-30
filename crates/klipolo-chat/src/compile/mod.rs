@@ -27,13 +27,14 @@
 
 mod map;
 mod removals;
+mod trim;
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use klipolo_model::coded::{CodedError, ErrorParam};
 use klipolo_model::ops::{Op, Origin, Transaction};
 use klipolo_model::risk::Review;
-use klipolo_model::speech::Speech;
+use klipolo_model::speech::{Speech, run_spans};
 use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::{ModelError, Project, finish_parts};
 
@@ -41,6 +42,7 @@ use crate::context::{Refs, SceneLog, View, secs};
 use crate::evidence::{Evidence, Unfounded};
 use crate::tools::{Moment, ToolCall};
 use map::Map;
+use trim::Trim;
 
 /// What the person is told when a tool needs a clip's analysis and Klipolo is still making it.
 pub const STILL_LISTENING: &str = "Klipolo is still listening to this clip";
@@ -131,6 +133,7 @@ pub enum Audience {
 pub fn compile(project: &Project, inputs: &Inputs, calls: &[ToolCall]) -> Compiled {
     let c = Compiler {
         snapshot: project,
+        inputs,
         evidence: Evidence::new(project, inputs),
         map: Map::new(project),
     };
@@ -247,10 +250,12 @@ impl Phase {
 /// A call waiting for the removals' phase.
 enum Removal<'c> {
     Call(&'c ToolCall),
+    Shorter(Trim),
 }
 
 struct Compiler<'a> {
     snapshot: &'a Project,
+    inputs: &'a Inputs,
     evidence: Evidence,
     map: Map<'a>,
 }
@@ -262,10 +267,34 @@ impl Compiler<'_> {
         let mut adding = Phase::new(self.snapshot.clone());
         let mut waiting: Vec<(usize, Removal)> = Vec::new();
         for (i, call) in calls.iter().enumerate() {
+            if let Some(said) = self.missing_analysis(call) {
+                let said = Refused {
+                    reason: said.to_owned(),
+                    audience: Audience::Person,
+                };
+                refuse(&mut out, i, said);
+                continue;
+            }
             let addition = match call {
-                ToolCall::CutRange { .. } | ToolCall::KeepOnly { .. } => {
+                ToolCall::CutRange { .. }
+                | ToolCall::KeepOnly { .. }
+                | ToolCall::RemoveSilences { .. }
+                | ToolCall::RemoveFillers => {
                     waiting.push((i, Removal::Call(call)));
                     continue;
+                }
+                ToolCall::TrimClip { clip, edge, to_us } => {
+                    match trim::plan(self, clip, *edge, *to_us) {
+                        Ok(shorter) if shorter.removed.is_some() => {
+                            waiting.push((i, Removal::Shorter(shorter)));
+                            continue;
+                        }
+                        planned => planned.and_then(|_| {
+                            Err(to_model(
+                                "trimClip: a longer clip is not available yet.".to_owned(),
+                            ))
+                        }),
+                    }
                 }
                 other => Err(to_model(format!("{}: not available yet.", other.name()))),
             };
@@ -285,6 +314,7 @@ impl Compiler<'_> {
             let work = &removing.work;
             let (call_name, edit) = match removal {
                 Removal::Call(call) => (call.name(), removals::compile(self, work, call)),
+                Removal::Shorter(t) => ("trimClip", trim::shorten(self, work, &t)),
             };
             let added = edit.and_then(|edit| {
                 (removing.add(edit)).map_err(|e| to_model(format!("{call_name}: {e}")))
@@ -307,6 +337,30 @@ impl Compiler<'_> {
         }
         out.refusals.sort_by_key(|r| r.call_index);
         out
+    }
+
+    /// The person's sentence when `call` needs an analysis some voice file on the main track lacks: removing fillers
+    /// and pauses. Not started anywhere wins over still being made, since analyzing is something the person can do.
+    fn missing_analysis(&self, call: &ToolCall) -> Option<&'static str> {
+        if !matches!(
+            call,
+            ToolCall::RemoveFillers | ToolCall::RemoveSilences { .. }
+        ) {
+            return None;
+        }
+        let p = self.snapshot;
+        let assets: BTreeSet<String> = run_spans(p).into_iter().map(|s| s.asset).collect();
+        let state = |id: &String| {
+            (self.inputs.analysis.get(id).copied()).unwrap_or(AnalysisState::NotStarted)
+        };
+        let states: Vec<AnalysisState> = assets.iter().map(state).collect();
+        if states.contains(&AnalysisState::NotStarted) {
+            Some(ANALYZE_FIRST)
+        } else if states.contains(&AnalysisState::Transcribing) {
+            Some(STILL_LISTENING)
+        } else {
+            None
+        }
     }
 
     /// `r` as the evidence snaps it, or the reason it stands on nothing, naming the call's fields.

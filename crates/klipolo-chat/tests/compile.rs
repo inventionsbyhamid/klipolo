@@ -3,18 +3,22 @@
 //! - `talk()`: "talk.mov", 30 s, played whole. Its words run from 0.5 to 7.8 s ("Um, so today we look at the new
 //!   module. It took [pause 1.5 s] uh a long time."), then nothing is said.
 //! - `broll(length)`: a file with no sound, played whole.
+//! - `three_clips()`: one 60 s file in three clips, to test refs, trims and calls that follow one another.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use klipolo_chat::evidence::typed_times;
-use klipolo_chat::{AnalysisState, Audience, FunctionCall, Inputs, Refs, ToolCall, View, compile};
+use klipolo_chat::{
+    ANALYZE_FIRST, AnalysisState, Audience, FunctionCall, Inputs, Refs, Refusal, STILL_LISTENING,
+    ToolCall, View, compile,
+};
 use klipolo_model::Project;
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::ops::{Op, Origin};
 use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::query::main_track_duration;
-use klipolo_model::speech::{Speech, Transcript, Word, WordKind, spoken, word_cut};
+use klipolo_model::speech::{Levels, Speech, Transcript, Word, WordKind, spoken, word_cut};
 use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::{Clip, ClipSource};
 
@@ -43,6 +47,13 @@ fn cut(a: f64, b: f64) -> ToolCall {
     call(
         "cutRange",
         &format!(r#"{{"startSec": {a}, "endSec": {b}}}"#),
+    )
+}
+
+fn trim(clip: &str, edge: &str, to: f64) -> ToolCall {
+    call(
+        "trimClip",
+        &format!(r#"{{"clip": "{clip}", "edge": "{edge}", "toSec": {to}}}"#),
     )
 }
 
@@ -158,10 +169,38 @@ fn talk() -> (Project, Speech) {
     (p, speech)
 }
 
+/// Loudness for a 30 s file, one value per 100 ms: speech everywhere but quiet from 10.0 to 10.8 s and from 15.0 to
+/// 17.0 s.
+fn levels() -> Arc<Levels> {
+    let db: Vec<f32> = (0..300)
+        .map(|w| {
+            if (100..108).contains(&w) || (150..170).contains(&w) {
+                -70.0
+            } else {
+                -20.0
+            }
+        })
+        .collect();
+    Arc::new(Levels { db: db.into() })
+}
+
 fn broll(length: f64) -> Project {
     project(
         vec![file("broll", length, false)],
         vec![clip("b", "broll", 0.0, length)],
+    )
+}
+
+/// "long.mov" (60 s, no sound) in three clips: c1 plays its 0 to 10 s, c2 its 20 to 30 s and c3 its 40 to 50 s, at 0
+/// to 10, 10 to 20 and 20 to 30 s on the timeline.
+fn three_clips() -> Project {
+    project(
+        vec![file("long", 60.0, false)],
+        vec![
+            clip("a", "long", 0.0, 10.0),
+            clip("b", "long", 20.0, 30.0),
+            clip("c", "long", 40.0, 50.0),
+        ],
     )
 }
 
@@ -246,6 +285,70 @@ fn cut_snaps_to_word_edges_with_padding() {
 }
 
 #[test]
+fn remove_fillers_proposes_padded_ranges() {
+    let (p, speech) = talk();
+    let out = compile(
+        &p,
+        &inputs(&p, speech.clone(), "remove the ums"),
+        &[call("removeFillers", "{}")],
+    );
+    assert_eq!(out.refusals, vec![]);
+    let words = spoken(&p, &speech);
+    let expected: Vec<RangeUs> = (0..words.words.len())
+        .filter(|&i| words.words[i].kind == WordKind::Filler)
+        .map(|i| word_cut(&words, i, i, 30))
+        .collect();
+    assert_eq!(expected.len(), 2, "Um, and uh");
+    // Each range holds its filler and a little around it: "uh" is said from 6.3 to 6.6 s.
+    assert!(expected[1].start < secs(6.3) && expected[1].end > secs(6.6));
+    let proposal = out.proposal.expect("a proposal");
+    assert_eq!(
+        proposal.tx.ops,
+        vec![Op::DeleteRanges {
+            ranges: expected.clone()
+        }]
+    );
+    assert_eq!(proposal.ranges, expected);
+    assert_eq!(proposal.review.removals.ranges, expected);
+    assert_eq!(
+        proposal.removed_us,
+        expected.iter().map(RangeUs::len).sum::<Us>()
+    );
+    assert_eq!(proposal.tx.label, "chat.removeFillers");
+    assert_eq!(out.additions, None, "a removal never applies at once");
+}
+
+#[test]
+fn remove_silences_uses_levels_and_min_pause() {
+    let (p, mut speech) = talk();
+    speech.levels.insert("talk".into(), levels());
+    let i = inputs(&p, speech, "remove the pauses");
+    // Over 1.0 s: only the quiet from 15.0 to 17.0 s, a breath of 0.15 s kept at each end.
+    let long = compile(&p, &i, &[call("removeSilences", r#"{"minPauseSec": 1.0}"#)]);
+    assert_eq!(
+        long.proposal.expect("a proposal").ranges,
+        vec![span(15.15, 16.85)]
+    );
+    // No length given: pauses over 0.7 s, so the 0.8 s one goes too.
+    let any = compile(
+        &p,
+        &i,
+        &[call("removeSilences", r#"{"minPauseSec": null}"#)],
+    );
+    let proposal = any.proposal.expect("a proposal");
+    assert_eq!(
+        proposal.ranges,
+        vec![span(10.15, 10.65), span(15.15, 16.85)]
+    );
+    assert_eq!(proposal.removed_us, secs(2.2));
+    assert_eq!(proposal.tx.label, "chat.removeSilences");
+    // No pause that long: said back to the model.
+    let none = compile(&p, &i, &[call("removeSilences", r#"{"minPauseSec": 5}"#)]);
+    assert_eq!(none.proposal, None);
+    assert!(refused_to_model(&none, 0).starts_with("removeSilences: "));
+}
+
+#[test]
 fn keep_only_proposes_the_complement() {
     let p = broll(30.0);
     let i = inputs(
@@ -273,6 +376,79 @@ fn keep_only_proposes_the_complement() {
         main_track_duration(&proposal.review.after.timeline.main),
         secs(5.5)
     );
+}
+
+#[test]
+fn no_analysis_gives_a_friendly_refusal() {
+    assert_eq!(STILL_LISTENING, "Klipolo is still listening to this clip");
+    assert_eq!(ANALYZE_FIRST, "Analyze this clip first");
+    let (p, speech) = talk();
+    let calls = [
+        call("removeFillers", "{}"),
+        call("removeSilences", r#"{"minPauseSec": null}"#),
+    ];
+    for (state, said) in [
+        (Some(AnalysisState::Transcribing), STILL_LISTENING),
+        (Some(AnalysisState::NotStarted), ANALYZE_FIRST),
+        (None, ANALYZE_FIRST),
+    ] {
+        let mut i = inputs(&p, speech.clone(), "remove the ums and the pauses");
+        i.analysis.clear();
+        if let Some(state) = state {
+            i.analysis.insert("talk".into(), state);
+        }
+        let out = compile(&p, &i, &calls);
+        let expected: Vec<Refusal> = (0..2)
+            .map(|k| Refusal {
+                call_index: k,
+                reason: said.into(),
+                audience: Audience::Person,
+            })
+            .collect();
+        assert_eq!(out.refusals, expected, "{state:?}");
+        assert_eq!(out.proposal, None);
+    }
+    // Two files, one never analyzed and one still being heard: analyzing is what the person can do.
+    let two = project(
+        vec![file("talk", 30.0, true), file("more", 10.0, true)],
+        vec![clip("t", "talk", 0.0, 30.0), clip("m", "more", 0.0, 10.0)],
+    );
+    let mut i = inputs(&two, speech.clone(), "remove the ums");
+    i.analysis = HashMap::from([
+        ("talk".into(), AnalysisState::Transcribing),
+        ("more".into(), AnalysisState::NotStarted),
+    ]);
+    let out = compile(&two, &i, &calls[..1]);
+    assert_eq!(out.refusals[0].reason, ANALYZE_FIRST);
+    // Both done: the fillers are proposed.
+    let done = compile(&two, &inputs(&two, speech, "remove the ums"), &calls[..1]);
+    assert_eq!(done.refusals, vec![]);
+    assert!(done.proposal.is_some());
+}
+
+#[test]
+fn a_ref_that_no_longer_resolves_is_refused() {
+    let three = three_clips();
+    // The context named three clips; the project has lost the middle one since. Its c2 is not the old c3.
+    let i = inputs(&three, Speech::default(), "end the second clip at 25");
+    let mut now = three.clone();
+    now.timeline.main.remove(1);
+    let out = compile(
+        &now,
+        &i,
+        &[trim("c2", "end", 25.0), trim("c9", "end", 25.0)],
+    );
+    let reasons: Vec<(&str, Audience)> = (out.refusals.iter())
+        .map(|r| (r.reason.as_str(), r.audience))
+        .collect();
+    assert_eq!(
+        reasons,
+        vec![
+            ("trimClip: that clip is gone.", Audience::Model),
+            ("trimClip: there is no clip c9.", Audience::Model),
+        ]
+    );
+    assert_eq!((out.additions, out.proposal), (None, None));
 }
 
 #[test]
