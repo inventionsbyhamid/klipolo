@@ -152,4 +152,16 @@ describe('a time range on the timeline', () => {
     fireEvent.pointerUp(sounds, { clientX: 40 + 700, pointerId: 1 });
     expect(useRange.getState().range).toEqual({ startUs: 14 * S, endUs: 17 * S });
   });
+
+  it('a timeline that goes mid-drag leaves no gesture behind: a later move makes no range and throws nothing', () => {
+    const { unmount } = renderWithProviders(<Editor />);
+    const sounds = screen.getByRole('group', { name: 'Sound effects' }).querySelector<HTMLElement>('.tl-lane')!;
+    fireEvent.pointerDown(sounds, { button: 0, clientX: usToPx(5 * S, 40), pointerId: 1 });
+    unmount();
+    expect(() => {
+      fireEvent.pointerMove(window, { clientX: usToPx(9 * S, 40), pointerId: 1 });
+      fireEvent.pointerUp(window, { clientX: usToPx(9 * S, 40), pointerId: 1 });
+    }).not.toThrow();
+    expect(useRange.getState().range).toBeNull();
+  });
 });

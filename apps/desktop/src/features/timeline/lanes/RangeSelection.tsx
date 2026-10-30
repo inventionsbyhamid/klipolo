@@ -55,7 +55,7 @@ export function startRangeDrag(e: ReactPointerEvent<HTMLElement>, lane: HTMLElem
     if (!moving) {
       // Captured once it is a drag, never at the press: a press that doesn't move is a click, which seeks.
       moving = true;
-      el.setPointerCapture?.(pointerId);
+      capture(el, pointerId);
       useSelection.getState().select(null);
     }
     useRange.getState().select(fromUs, timeAt(ev.clientX, laneLeft));
@@ -86,6 +86,21 @@ function followPointer(move: (e: PointerEvent) => void, end: (e: PointerEvent) =
   };
 }
 
+/** Ends a range or grip drag under way: the timeline is going (unmounted mid-drag), and nothing follows the pointer. */
+export function cancelRangeDrag() {
+  stop();
+}
+
+/** Takes the pointer's events while `el` is still in the page: one gone (the timeline unmounted) can't hold them. */
+function capture(el: HTMLElement, pointerId: number) {
+  if (!el.isConnected) return;
+  try {
+    el.setPointerCapture?.(pointerId);
+  } catch {
+    // The pointer is no longer active (released elsewhere a moment ago): the window still hears it.
+  }
+}
+
 /** Drag one of the selection's grips: that edge follows the pointer, the other stays. */
 function gripDrag(e: ReactPointerEvent<HTMLElement>, edge: 'start' | 'end') {
   if (e.button !== 0) return;
@@ -94,7 +109,7 @@ function gripDrag(e: ReactPointerEvent<HTMLElement>, edge: 'start' | 'end') {
   const lane = e.currentTarget.parentElement?.parentElement;
   if (!range || !lane) return;
   const pointerId = e.pointerId;
-  e.currentTarget.setPointerCapture?.(pointerId);
+  capture(e.currentTarget, pointerId);
   const laneLeft = lane.getBoundingClientRect().left;
   const keep = edge === 'start' ? range.endUs : range.startUs;
   followPointer(

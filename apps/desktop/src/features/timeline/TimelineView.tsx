@@ -15,7 +15,7 @@ import { cancelDrag, useDragged } from './drag/controller';
 import { DropIndicator } from './DropIndicator';
 import { registerDropTarget, timelineTargetAt } from './dropTarget';
 import { useRovingFocus } from './keys/useRovingFocus';
-import { RangeSelection, rangeDragJustEnded, startRangeDrag } from './lanes/RangeSelection';
+import { cancelRangeDrag, RangeSelection, rangeDragJustEnded, startRangeDrag } from './lanes/RangeSelection';
 import { BLOCK_HINT_ID, CLIP_INNER_PX, HEADER_PX, MAIN_LANE_MIN_PX, TAIL_US } from './layout';
 import { LiveRegion } from './LiveRegion';
 import { OverviewStrip } from './OverviewStrip';
@@ -137,10 +137,12 @@ export function TimelineView() {
       }),
     [],
   );
-  // Unmounted mid-drag: the gesture under way ends (nothing stays shifted or dry-run), and a nudge settling commits.
+  // Unmounted mid-drag: the gesture under way ends (nothing stays shifted or dry-run, no range follows the pointer),
+  // and a nudge settling commits.
   useEffect(
     () => () => {
       cancelDrag();
+      cancelRangeDrag();
       keyBurst.flush();
     },
     [],
