@@ -1087,3 +1087,42 @@ fn the_view_and_speeds_read_plainly_at_the_edges() {
         "{project}"
     );
 }
+
+/// The fixture while its transcript is still being made: words heard up to `covered` seconds of the file.
+fn heard_up_to(covered: f64) -> Inputs {
+    let mut inputs = two_clips();
+    let whole = &inputs.speech.transcripts["clip-a"];
+    let partial = Transcript {
+        covered_us: secs(covered),
+        complete: false,
+        words: (whole.words.iter())
+            .filter(|w| w.end_us <= secs(covered))
+            .cloned()
+            .collect(),
+        ..(**whole).clone()
+    };
+    inputs
+        .speech
+        .transcripts
+        .insert("clip-a".into(), Arc::new(partial));
+    inputs
+}
+
+#[test]
+fn a_transcript_still_being_made_says_how_far_it_reaches() {
+    // Heard up to 40.0 s of the file: all of c1, and c2 (from 24.0 s of the file at 13.0 s) up to 29.0 s.
+    let text = heard_up_to(40.0).context(&view_at(0.0)).text;
+    let transcript = section(&text, "Transcript");
+    assert!(
+        transcript.ends_with("\nStill transcribing: c2 (up to 29.0).\n"),
+        "{transcript}"
+    );
+    assert!(transcript.contains("C: Hi Caden, space is such"));
+    // Heard up to 10.0 s: c1 up to 10.0 s, nothing yet of c2.
+    let text = heard_up_to(10.0).context(&view_at(0.0)).text;
+    let transcript = section(&text, "Transcript");
+    assert!(
+        transcript.ends_with("\nNot transcribed yet: c2.\nStill transcribing: c1 (up to 10.0).\n"),
+        "{transcript}"
+    );
+}

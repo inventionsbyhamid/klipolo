@@ -6,7 +6,9 @@
 //! - `Transcript`: what is said on the timeline (`speech::spoken`, so cut words are gone), one line per speaker turn,
 //!   or per sentence when a turn runs over `MAX_LINE_WORDS` words (a sentence that long is split evenly):
 //!   `[12.4-18.9] A: text`. Fillers keep their text ("um"); pause words are never text, but a gap of `SHOWN_PAUSE_US`
-//!   or more between words reads `[pause 1.4 s]` where it falls, a gap between lines at the end of the first.
+//!   or more between words reads `[pause 1.4 s]` where it falls, a gap between lines at the end of the first. Clips
+//!   with no words yet are named (`Not transcribed yet: c2.`), and so are clips heard part of the way
+//!   (`Still transcribing: c3 (up to 40.0).`).
 //! - `Scenes`: the scene log's items, `[40.5-45.0] gesture (male astronaut): raises an arm`, mapped from their file's
 //!   time through every clip of that file on the main track. An item cut out entirely is left out; a partly cut one
 //!   keeps what remains (a sliver of under `MIN_SCENE_PIECE_US` of the file, of a longer item, is dropped: measured in
@@ -42,7 +44,7 @@ use klipolo_model::ids::Id;
 use klipolo_model::project::{AssetKind, FormatKind};
 use klipolo_model::query::{clip_at, clip_starts, video_duration};
 use klipolo_model::speech::{
-    Speech, Spoken, Transcript, WordKind, joins_unspaced, spoken, voice_runs,
+    Speech, Spoken, Transcript, WordKind, joins_unspaced, run_spans, spoken,
 };
 use klipolo_model::time::{RangeUs, Us, scaled};
 use klipolo_model::timeline::{Clip, ClipSource};
@@ -181,11 +183,7 @@ pub fn build_context(
     let said = said(project, speech, turns, &spoken);
     let lines = lines(&said);
     let pieces = scene_pieces(project, &starts, scenes);
-    let untranscribed = clips_where(project, |clip| {
-        voice_runs(project, clip)
-            .iter()
-            .any(|run| !speech.transcripts.contains_key(&run.asset))
-    });
+    let (untranscribed, transcribing) = transcription(project, speech);
     let unlogged = clips_where(project, |clip| match &clip.source {
         ClipSource::Asset { id } => {
             project
@@ -197,13 +195,16 @@ pub fn build_context(
     });
 
     // What Transcript and Scenes say after their lines.
-    let transcript_tail = if !untranscribed.is_empty() {
-        format!("Not transcribed yet: {untranscribed}.\n")
-    } else if lines.is_empty() {
-        "No speech.\n".to_owned()
-    } else {
-        String::new()
-    };
+    let mut transcript_tail = String::new();
+    if !untranscribed.is_empty() {
+        let _ = writeln!(transcript_tail, "Not transcribed yet: {untranscribed}.");
+    }
+    if !transcribing.is_empty() {
+        let _ = writeln!(transcript_tail, "Still transcribing: {transcribing}.");
+    }
+    if transcript_tail.is_empty() && lines.is_empty() {
+        transcript_tail.push_str("No speech.\n");
+    }
     let scenes_tail = if !unlogged.is_empty() {
         format!("No scene log yet: {unlogged}.\n")
     } else if pieces.is_empty() {
@@ -476,6 +477,41 @@ fn one_line(text: &str) -> String {
         out.push_str(part);
     }
     out
+}
+
+/// Which main clips have no words yet (`ref_list`: a voice file with no transcript, or one still being made that
+/// hasn't reached the clip's part), and which are heard only part of the way, with how far on the timeline:
+/// `c2 (up to 29.0)`.
+fn transcription(project: &Project, speech: &Speech) -> (String, String) {
+    let main = &project.timeline.main;
+    let index: HashMap<&str, usize> = (main.iter().enumerate())
+        .map(|(i, c)| (c.id.as_str(), i))
+        .collect();
+    let mut missing = vec![false; main.len()];
+    let mut reached: Vec<Option<Us>> = vec![None; main.len()];
+    for span in run_spans(project) {
+        let Some(&i) = index.get(span.clip.as_str()) else {
+            continue;
+        };
+        match speech.transcripts.get(&span.asset) {
+            None => missing[i] = true,
+            Some(t) if !t.complete && t.covered_us < span.asset_out_us => {
+                if t.covered_us <= span.asset_in_us {
+                    missing[i] = true;
+                } else {
+                    let at = span.at(t.covered_us);
+                    reached[i] = Some(reached[i].map_or(at, |r| r.min(at)));
+                }
+            }
+            Some(_) => {}
+        }
+    }
+    let untranscribed: Vec<usize> = (0..main.len()).filter(|&i| missing[i]).collect();
+    let transcribing: Vec<String> = (0..main.len())
+        .filter(|&i| !missing[i])
+        .filter_map(|i| Some(format!("{} (up to {})", short_ref(i), secs(reached[i]?))))
+        .collect();
+    (ref_list(&untranscribed), transcribing.join(", "))
 }
 
 /// The refs of the main clips `pick` chooses (`ref_list`).
