@@ -31,7 +31,7 @@ pub const NOTHING_TO_CUT_NOTE: &str =
     "Kept the background. There was no plain white around the picture to cut away.";
 
 /// The outermost ring of the subject is at most this opaque: a 1 pixel feather even where the drawing has a hard
-/// edge. The second ring keeps only what its colour says.
+/// edge. The second ring keeps only what its colour says, and only where it carries on a soft edge.
 const FIRST_RING_ALPHA: f32 = 2.0 / 3.0;
 /// A pixel this transparent in the input counts as background.
 const SEE_THROUGH: u8 = 16;
@@ -186,7 +186,9 @@ fn flood_from_border(pixels: &RgbaImage) -> Vec<bool> {
 }
 
 /// Background pixels become transparent (and colourless); the subject's two outer rings get an alpha from how much of
-/// the white they hold, with that white taken out of their colour, so no light halo is left on a dark video.
+/// the white they hold, with that white taken out of their colour, so no light halo is left on a dark video. The second
+/// ring is feathered only where it carries on a soft edge (a ring-1 neighbour holds some white and it is no lighter
+/// than that neighbour): just inside a thin outline it is the subject itself, white or not, and stays as drawn.
 fn feather(pixels: &mut RgbaImage, background: &[bool], width: usize, height: usize) {
     // 1 and 2: the subject's outer rings, by side-by-side steps from the background; 0 anywhere else.
     let mut ring = vec![0u8; width * height];
@@ -225,8 +227,13 @@ fn feather(pixels: &mut RgbaImage, background: &[bool], width: usize, height: us
             continue;
         }
         let pixel = at(i);
-        let ink = darkest_nearby(&at, background, width, height, i);
-        let coverage = white_coverage(pixel, ink);
+        let coverage_at =
+            |j: usize| white_coverage(at(j), darkest_nearby(&at, background, width, height, j));
+        let soft_edge = |j: usize| ring[j] == 1 && coverage_at(j) < 1.0 && low(pixel) <= low(at(j));
+        if ring[i] == 2 && !sides(i).any(soft_edge) {
+            continue;
+        }
+        let coverage = coverage_at(i);
         let alpha = if ring[i] == 1 {
             coverage.min(FIRST_RING_ALPHA)
         } else {

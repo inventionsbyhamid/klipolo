@@ -92,6 +92,23 @@ fn white_inside_the_outline_is_kept() {
     assert_eq!(out.get_pixel(49, 100)[3], 0);
 }
 
+/// A 1 px outline: the white just inside it is part of the subject and stays opaque (the feather is for the white
+/// outside only).
+#[test]
+fn white_inside_a_one_pixel_outline_stays_opaque() {
+    let ring = framed(200, (50, 50), (149, 149), 1);
+
+    let out = rgba(&cut_out_white(&png_of(&ring)).unwrap().png);
+
+    for (x, y) in [(51, 100), (100, 51), (148, 100), (100, 148), (51, 51)] {
+        assert_eq!(out.get_pixel(x, y).0, [255, 255, 255, 255], "({x}, {y})");
+    }
+    // The outline itself keeps its 1 px feather.
+    let line = out.get_pixel(50, 100);
+    assert!(line[3] > 0 && line[3] < 255, "{line:?}");
+    assert_eq!(out.get_pixel(49, 100)[3], 0);
+}
+
 /// A subject cut off by the frame lets the flood into its white inside: the cut-out would leave only its outline, so
 /// the picture stays whole, with the note.
 #[test]
