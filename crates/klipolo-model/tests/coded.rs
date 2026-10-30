@@ -169,6 +169,7 @@ fn export_bindings_model_codes() {
         })
         .collect();
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/bindings");
+    std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("modelCodes.json"),
         serde_json::to_string_pretty(&list).unwrap() + "\n",

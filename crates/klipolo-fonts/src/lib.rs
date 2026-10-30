@@ -75,11 +75,9 @@ mod tests {
                 serde_json::json!({ "code": code, "message": message, "params": params })
             })
             .collect();
-        std::fs::write(
-            repo("src/bindings/fontsCodes.json"),
-            serde_json::to_string_pretty(&list).unwrap() + "\n",
-        )
-        .unwrap();
+        let path = repo("src/bindings/fontsCodes.json");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, serde_json::to_string_pretty(&list).unwrap() + "\n").unwrap();
     }
 
     /// `src/lib/font-fallbacks.json`: the one fallback chain, for every CSS stack the webview builds.
