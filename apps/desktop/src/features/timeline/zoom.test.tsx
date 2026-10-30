@@ -91,6 +91,20 @@ describe('zooming the timeline', () => {
     expect(useUi.getState().pxPerSecond).toBeCloseTo(80, 6);
   });
 
+  it('Command + wheel zooms around the pointer too, as a Mac mouse does it', async () => {
+    renderWithProviders(<Editor />);
+    // 400 px into the lanes at 40 px/s is 10 s; a step of ×2 keeps 10 s under the pointer.
+    fireEvent.wheel(scroller(), { metaKey: true, deltaY: -100 * Math.log(2), clientX: 40 + 400 });
+    await nextFrame();
+    expect(useUi.getState().pxPerSecond).toBeCloseTo(80, 6);
+    expect(scroller().scrollLeft).toBeCloseTo(10 * 80 - 400, 3);
+    // And out again, around the same time.
+    fireEvent.wheel(scroller(), { metaKey: true, deltaY: 100 * Math.log(2), clientX: 40 + 400 });
+    await nextFrame();
+    expect(useUi.getState().pxPerSecond).toBeCloseTo(40, 6);
+    expect(scroller().scrollLeft).toBeCloseTo(0, 3);
+  });
+
   it('a WebKit pinch zooms once even if ctrl+wheel comes with it, and keeps the playhead when it has no pointer', async () => {
     usePlayback.setState({ playheadUs: 12_000_000 });
     renderWithProviders(<Editor />);
