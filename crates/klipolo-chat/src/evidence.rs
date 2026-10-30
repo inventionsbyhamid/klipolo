@@ -127,7 +127,9 @@ impl Evidence {
         self.snap(t).map_or(t, |(at, _)| at)
     }
 
-    /// `r` with both edges snapped, and each one on a word padded (`word_cut` over the words it holds).
+    /// `r` with both edges snapped. An edge padded is one that snapped to a word's own edge on that side: the start of
+    /// the range's first word, the end of its last (`word_cut` over the words it holds). Any other edge stays exactly
+    /// where it snapped, so padding never carries it to a word further off (in another clip, across a pause).
     pub(crate) fn range(&self, r: RangeUs) -> Result<RangeUs, Unfounded> {
         let (start, from_source) = self.snap(r.start).ok_or(Unfounded::Start)?;
         let (end, to_source) = self.snap(r.end).ok_or(Unfounded::End)?;
@@ -135,16 +137,18 @@ impl Evidence {
             return Err(Unfounded::Empty(start));
         }
         let mut out = RangeUs { start, end };
-        if from_source == Source::Word || to_source == Source::Word {
-            let words = &self.spoken.words;
-            let first = words.partition_point(|w| w.start_us < start);
-            let past = words.partition_point(|w| w.end_us <= end);
-            if first < past {
+        let words = &self.spoken.words;
+        let first = words.partition_point(|w| w.start_us < start);
+        let past = words.partition_point(|w| w.end_us <= end);
+        if first < past {
+            let pad_start = from_source == Source::Word && words[first].start_us == start;
+            let pad_end = to_source == Source::Word && words[past - 1].end_us == end;
+            if pad_start || pad_end {
                 let padded = word_cut(&self.spoken, first, past - 1, self.fps);
-                if from_source == Source::Word {
+                if pad_start {
                     out.start = padded.start;
                 }
-                if to_source == Source::Word {
+                if pad_end {
                     out.end = padded.end;
                 }
             }

@@ -285,6 +285,67 @@ fn cut_snaps_to_word_edges_with_padding() {
     assert_eq!(params["endUs"], ErrorParam::Number(padded.end as f64));
 }
 
+/// Two files with speech: c1 plays talk.mov's first 10 s (words to 7.8 s), c2 all of more.mov (20 s), whose words
+/// "Then we flew it up on a rocket." run from 10.5 s on the timeline: "it" ends at 12.0 s and "up" starts at 12.1 s.
+fn two_talks() -> (Project, Speech) {
+    let (mut p, mut speech) = talk();
+    p.assets.push(file("more", 20.0, true));
+    p.timeline.main = vec![clip("t", "talk", 0.0, 10.0), clip("m", "more", 0.0, 20.0)];
+    speech.transcripts.insert(
+        "more".into(),
+        transcript(said("Then we flew it up on a rocket."), 20.0),
+    );
+    (p, speech)
+}
+
+#[test]
+fn padding_stays_on_the_word_an_edge_matched() {
+    let (p, speech) = two_talks();
+    let words = spoken(&p, &speech);
+    let at = |text: &str| {
+        (words.words.iter())
+            .position(|w| words.text(w, &p, &speech) == text)
+            .unwrap()
+    };
+    let i = inputs(&p, speech.clone(), "cut from the end of her answer");
+    // From the end of "time." in c1 (7.8 s) to the end of "it" in c2: the start stays on the word it matched, not
+    // before c2's first word; only the end, on its own word's end, is padded.
+    let across = compile(&p, &i, &[cut(7.8, 12.0)]);
+    let it_end = word_cut(&words, at("it"), at("it"), 30).end;
+    assert!(it_end > secs(12.0));
+    assert_eq!(
+        across.proposal.expect("a cut").ranges,
+        vec![RangeUs {
+            start: secs(7.8),
+            end: it_end
+        }]
+    );
+    // From the start of "It" in c1 to the start of "up" in c2: the start is padded, the end stays on "up".
+    let to_start = compile(&p, &i, &[cut(4.1, 12.1)]);
+    let it_start = word_cut(&words, at("It"), at("It"), 30).start;
+    assert!(it_start < secs(4.1));
+    assert_eq!(
+        to_start.proposal.expect("a cut").ranges,
+        vec![RangeUs {
+            start: it_start,
+            end: secs(12.1)
+        }]
+    );
+    // Keeping that span keeps all of it: nothing of it is cut for padding the other way.
+    let keep = compile(
+        &p,
+        &i,
+        &[call(
+            "keepOnly",
+            r#"{"ranges": [{"startSec": 7.8, "endSec": 12.1}]}"#,
+        )],
+    );
+    assert_eq!(
+        keep.proposal.expect("the rest goes").ranges,
+        vec![span(0.0, 7.8), span(12.1, 30.0)]
+    );
+}
+
 #[test]
 fn remove_fillers_proposes_padded_ranges() {
     let (p, speech) = talk();
