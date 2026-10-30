@@ -4,7 +4,7 @@ import type { Asset } from '../../bindings/Asset';
 import { fixturePatch, fixtureSnapshot } from '../../test/fixtures';
 
 vi.mock('../../bridge/commands', () => ({
-  bridge: { apply: vi.fn(), importMedia: vi.fn() },
+  bridge: { apply: vi.fn(), undo: vi.fn(), importMedia: vi.fn() },
   mediaUrl: (p: string) => p,
 }));
 const { bridge } = await import('../../bridge/commands');
@@ -22,6 +22,7 @@ beforeEach(() => {
   useToasts.setState({ toasts: [] });
   vi.mocked(bridge.apply).mockReset().mockResolvedValue(fixturePatch(fixtureSnapshot()));
   vi.mocked(bridge.importMedia).mockReset();
+  vi.mocked(bridge.undo).mockReset();
 });
 
 describe('importing media', () => {
@@ -41,6 +42,39 @@ describe('importing media', () => {
       { type: 'insertClip', index: null, clip: { source: { type: 'asset', id: 'n1' } } },
       { type: 'insertClip', index: null, clip: { source: { type: 'asset', id: 'n2' } } },
     ]);
+  });
+
+  it('says what came in, with an Undo that takes back the import and nothing made since', async () => {
+    const broll = fixtureSnapshot().project.assets[5];
+    vi.mocked(bridge.importMedia).mockResolvedValue({
+      assets: [
+        { ...broll, id: 'n1', path: '/n1.mp4', name: 'n1.mp4' },
+        { ...broll, id: 'n2', path: '/n2.mp4', name: 'n2.mp4' },
+      ],
+      skipped: [],
+    });
+    const imported = fixtureSnapshot();
+    imported.history = { ...imported.history, revision: 4, undoLabel: 'media.import' };
+    vi.mocked(bridge.apply).mockResolvedValue({ ...fixturePatch(imported), baseRevision: 3 });
+    await importFiles(['/n1.mp4', '/n2.mp4']);
+    await vi.waitFor(() => expect(useToasts.getState().toasts).toHaveLength(1));
+    const [added] = useToasts.getState().toasts;
+    expect([added.kind, added.text, added.done, added.actions?.map((a) => a.label)]).toEqual([
+      'info',
+      'Added 2 clips',
+      true,
+      ['Undo'],
+    ]);
+    vi.mocked(bridge.undo).mockResolvedValue({ ...fixturePatch(fixtureSnapshot()), baseRevision: 4 });
+    added.actions![0].run();
+    await vi.waitFor(() => expect(bridge.undo).toHaveBeenCalledTimes(1));
+    // Once something else is on top, its Undo takes nothing back.
+    useProject.setState({
+      snapshot: { ...imported, history: { ...imported.history, revision: 5, undoLabel: 'text.add' } },
+    });
+    added.actions![0].run();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(bridge.undo).toHaveBeenCalledTimes(1);
   });
 
   it('names the files it skipped with why: a note when something came in, an error when nothing did', async () => {

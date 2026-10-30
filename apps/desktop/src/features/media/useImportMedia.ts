@@ -56,6 +56,37 @@ function skippedMessage(skipped: SkippedFile[]): string {
 }
 
 /**
+ * "Added 2 clips" once the files are in, with an Undo that takes back this import only while it is still
+ * the last change (`undoIf`), never an edit made since.
+ */
+function sayAdded(count: number, clips: boolean) {
+  const revision = useProject.getState().snapshot?.history.revision;
+  const text = clips
+    ? t({
+        id: 'media.added.clips',
+        message: plural(count, { one: 'Added # clip', other: 'Added # clips' }),
+        comment: 'After videos were added to the project',
+      })
+    : t({
+        id: 'media.added.files',
+        message: plural(count, { one: 'Added # file', other: 'Added # files' }),
+        comment: 'After files (music, images) were added to the project',
+      });
+  toast.info(text, {
+    done: true,
+    actions: [
+      {
+        label: t({ id: 'media.added.undo', message: 'Undo' }),
+        run: () =>
+          void useProject
+            .getState()
+            .undoIf((history) => history.revision === revision && history.undoLabel === 'media.import'),
+      },
+    ],
+  });
+}
+
+/**
  * Imports files and places them, as one undo step labelled "Import media": `paths` (dropped from Finder), or what the
  * person picks in the file picker (null). They land as the Add button places them: videos at the end of the main
  * track in the order given, music on its own track, images at the playhead. Skipped files are named in one toast. The
@@ -98,7 +129,11 @@ export async function importFiles(paths: string[] | null): Promise<void> {
           if (ops.length === 0) return;
           // It holds the commit queue until it lands, so an edit made meanwhile builds on the files placed.
           const end = beginCommit();
-          void useProject.getState().apply(label, ops).finally(end);
+          void useProject
+            .getState()
+            .apply(label, ops)
+            .then((ok) => ok && sayAdded(assets.length, assets.every((a) => a.kind === 'video')))
+            .finally(end);
         } finally {
           hold?.release();
         }
