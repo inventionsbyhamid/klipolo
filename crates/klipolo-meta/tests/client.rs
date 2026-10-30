@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use klipolo_meta::{Auth, MetaClient, MetaError, SecretString};
+use klipolo_meta::{Auth, MetaClient, MetaError, ResponseOut, SecretString, Usage};
 use serde_json::{json, Value};
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
@@ -507,4 +507,130 @@ async fn relay_mode_uploads_and_deletes_under_meta_v1() {
     let client = relay(&server);
     let id = client.upload_file(&video.0, "video/mp4").await.unwrap();
     client.delete_file(&id).await.unwrap();
+}
+
+// Responses.
+
+#[tokio::test]
+async fn respond_extracts_function_calls_and_usage() {
+    let server = MockServer::start().await;
+    let body = json!({
+        "model": "muse-spark-1.3",
+        "instructions": "You are the edit planner inside Klipolo.",
+        "input": [{"type": "message", "role": "user", "content": [
+            {"type": "input_text", "text": "When we go vertical keep the camera on the woman astronaut"},
+        ]}],
+        "tools": [{"type": "function", "name": "setFormat", "strict": true, "parameters": {
+            "type": "object",
+            "properties": {"format": {"type": "string", "enum": ["16:9", "9:16", "1:1"]}},
+            "required": ["format"],
+            "additionalProperties": false,
+        }}],
+        "max_output_tokens": 4000,
+    });
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .and(header("authorization", format!("Bearer {KEY}").as_str()))
+        .and(wiremock::matchers::body_json(&body))
+        .respond_with(json_body(&fixture("responses_function_calls.json")))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let out = direct(&server).respond(body).await.unwrap();
+
+    assert_eq!(
+        out.output_text.as_deref(),
+        Some("Going vertical and keeping the focus on her.")
+    );
+    let calls: Vec<_> = out
+        .function_calls
+        .iter()
+        .map(|c| (c.name.as_str(), c.call_id.as_str(), c.arguments.as_str()))
+        .collect();
+    assert_eq!(
+        calls,
+        [
+            ("setFormat", "call_1", r#"{"format":"9:16"}"#),
+            (
+                "followSubject",
+                "call_2",
+                r#"{"description":"woman astronaut"}"#
+            ),
+        ]
+    );
+    assert_eq!(
+        out.usage,
+        Usage {
+            input_tokens: 1810,
+            cached_tokens: 1777,
+            output_tokens: 820,
+            reasoning_tokens: 703,
+            video_frames_processed: 0,
+        }
+    );
+    assert_eq!(out.raw["id"], "resp_5f0c2a9e41d7b3c8a6e90d12");
+}
+
+#[tokio::test]
+async fn respond_reads_structured_output_from_spike_fixture() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/meta/v1/responses"))
+        .and(header("authorization", format!("Bearer {TOKEN}").as_str()))
+        .respond_with(json_body(&fixture("responses_json_schema.json")))
+        .mount(&server)
+        .await;
+
+    let out = relay(&server)
+        .respond(json!({"model": "muse-spark-1.3", "input": "find it"}))
+        .await
+        .unwrap();
+
+    let found: Value = serde_json::from_str(out.output_text.as_deref().unwrap()).unwrap();
+    assert_eq!(
+        (found["found"].clone(), found["start_sec"].clone()),
+        (json!(true), json!(67.0))
+    );
+    assert!(out.function_calls.is_empty());
+    assert_eq!(
+        (out.usage.input_tokens, out.usage.cached_tokens),
+        (42_291, 0)
+    );
+    assert_eq!(
+        (out.usage.output_tokens, out.usage.reasoning_tokens),
+        (517, 454)
+    );
+}
+
+#[test]
+fn response_without_output_or_usage_parses_empty() {
+    let out =
+        ResponseOut::parse(json!({"id": "resp_1", "status": "completed", "output": []})).unwrap();
+    assert_eq!(out.output_text, None);
+    assert!(out.function_calls.is_empty());
+    assert_eq!(out.usage, Usage::default());
+}
+
+#[test]
+fn function_call_without_a_name_is_a_decode_error() {
+    let raw =
+        json!({"output": [{"type": "function_call", "call_id": "call_1", "arguments": "{}"}]});
+    assert!(matches!(ResponseOut::parse(raw), Err(MetaError::Decode(_))));
+    assert!(matches!(
+        ResponseOut::parse(json!([1, 2])),
+        Err(MetaError::Decode(_))
+    ));
+}
+
+#[test]
+fn sam_usage_counts_video_frames() {
+    let raw = json!({"output": [], "usage": {"video_frames_processed": 160}});
+    assert_eq!(
+        ResponseOut::parse(raw)
+            .unwrap()
+            .usage
+            .video_frames_processed,
+        160
+    );
 }

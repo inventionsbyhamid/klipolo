@@ -7,6 +7,7 @@ mod asr;
 mod client;
 mod error;
 mod files;
+mod responses;
 
 pub use asr::{AsrResult, AsrTurn, TRANSCRIBE_MODEL};
 pub use client::{
@@ -14,4 +15,5 @@ pub use client::{
     RELAY_BASE_ENV,
 };
 pub use error::MetaError;
+pub use responses::{FunctionCall, ResponseOut, Usage};
 pub use secrecy::{ExposeSecret, SecretString};

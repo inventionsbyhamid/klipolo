@@ -1,0 +1,89 @@
+{
+  "top_logprobs": 0,
+  "temperature": 1.0,
+  "top_p": 1.0,
+  "service_tier": "auto",
+  "model": "muse-spark-1.3",
+  "reasoning": {
+    "effort": "low"
+  },
+  "background": false,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "name": "find",
+      "schema": {
+        "properties": {
+          "end_sec": {
+            "type": "number"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "found": {
+            "type": "boolean"
+          },
+          "start_sec": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "found",
+          "start_sec",
+          "end_sec",
+          "evidence"
+        ],
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "strict": true
+    }
+  },
+  "tools": [],
+  "tool_choice": "auto",
+  "truncation": "disabled",
+  "id": "resp_6ae477133f8323942f1e4bcf",
+  "object": "response",
+  "status": "completed",
+  "created_at": 1793357587.0,
+  "completed_at": 1793357587.0,
+  "error": null,
+  "incomplete_details": null,
+  "output": [
+    {
+      "type": "reasoning",
+      "id": "rs_6ae477133f8323942f1e4bcf:rs_b886b942-a93e-4d4f-a171-2f6c016f5470",
+      "summary": [],
+      "status": "completed"
+    },
+    {
+      "type": "message",
+      "id": "msg_35cd1075-e8ce-4818-8e98-2b97946300a2",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "{\"end_sec\":85.0,\"evidence\":\"Female astronaut with floating hair drifts sideways to horizontal in ISS module, hooking her feet onto a handrail/structure on the left to stabilize while holding microphone and speaking\",\"found\":true,\"start_sec\":67.0}",
+          "annotations": [],
+          "logprobs": []
+        }
+      ],
+      "status": "completed"
+    }
+  ],
+  "instructions": null,
+  "usage": {
+    "input_tokens": 42291,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 517,
+    "output_tokens_details": {
+      "reasoning_tokens": 454
+    },
+    "total_tokens": 42808
+  },
+  "parallel_tool_calls": true,
+  "store": true,
+  "max_output_tokens": 16000
+}
