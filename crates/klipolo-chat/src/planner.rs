@@ -5,15 +5,16 @@
 //! message on one project revision, so a provider's prompt cache reuses them; then the conversation (`Turn`s, the last
 //! `KEPT_TURNS`), then the new message last.
 //!
-//! One refusal round, never more than two model calls a message. When a call of the first answer is refused back to
-//! the model (its arguments unreadable, or the compiler's `Audience::Model` refusal, such as a time that stands on
-//! nothing), the whole input is sent again with nothing stored at the provider: the first answer's text and calls,
-//! then one output per call (the reason for a refused one, `DONE_OUTPUT` or `PROPOSED_OUTPUT` for the others, and
+//! One refusal round, never more than two model calls a message. When a call of the first answer is refused back to the
+//! model (its arguments unreadable, or the compiler's `Audience::Model` refusal, such as a time that stands on
+//! nothing), the whole input is sent again with nothing stored at the provider: the first answer's text and calls, then
+//! one output per call (the reason for a refused one, `DONE_OUTPUT` or `PROPOSED_OUTPUT` for the others, and
 //! `TOLD_PERSON` for one refused for the person, whose reason is never sent back). The calls of the second answer
 //! replace the refused ones: the first answer's other calls and the second's (a repeat of what was done dropped) are
-//! compiled once, in that order, against the same snapshot and inputs, so the message still makes one additions transaction and
-//! one proposal. A call refused back to the model again stays undone, and the reply says so; so does a tool refused in
-//! the first answer that the second answer lets go (no call of it, and no question or `cannotDo` instead).
+//! compiled once, in that order, against the same snapshot and inputs, so the message still makes one additions
+//! transaction and one proposal. A call refused back to the model again stays undone, and the reply says so; so does a
+//! tool refused in the first answer that the second answer lets go (no call of it, and no question or `cannotDo`
+//! instead).
 //!
 //! The reply is the model's text, then the sentences of refusals meant for the person, then what couldn't be done; all
 //! of it without em or en dashes (`sanitize::reply`). When nothing came of the answer but what couldn't be done, the
