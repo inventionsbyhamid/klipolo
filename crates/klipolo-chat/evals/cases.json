@@ -1,0 +1,182 @@
+{
+  "source": "The planner's eval on clip A (NASA's space station Q&A, 155 s, public domain), played whole in project_clip_a.json (landscape only, clean captions on), with the transcript, speaker turns and Spark scene log of tests/fixtures; loudness is made from the transcript's words. The first 12 cases are the planner spike's requests (research t6), its expected calls in this tool set's names and words, its times read from this scene log and transcript; the last 6 cover the tools the spike did not have. Each case passes when one of its `expect` alternatives matches: its `calls` (the tools by name, in any order, each one's `args` as given: a number within 0.01, {min, max} a range, a string ignoring case, {contains} a part of it, {anyOf} one of several) match the model's first answer or the calls compiled after a refusal round, and its `outcome` flags hold for what the message compiled to (applied: additions; proposed: a proposal; asked: a question; undo; jobs: a follow or blur job). A call still refused back to the model fails the case.",
+  "project": "project_clip_a.json",
+  "asset": "clip-a",
+  "transcript": "../tests/fixtures/transcript_clip_a.json",
+  "turns": "../tests/fixtures/turns_clip_a.json",
+  "scenes": "../tests/fixtures/scenes_clip_a.json",
+  "cases": [
+    {
+      "id": "vertical",
+      "message": "Make this vertical for TikTok",
+      "expect": [
+        {
+          "calls": [{"name": "setFormat", "args": {"format": "portrait", "keepOthers": true}}],
+          "outcome": {"applied": true}
+        }
+      ]
+    },
+    {
+      "id": "cut-intro",
+      "message": "Cut out the underwater training footage at the start",
+      "expect": [
+        {
+          "calls": [{"name": "cutRange", "args": {"startSec": {"min": 0.0, "max": 0.6}, "endSec": {"min": 12.5, "max": 14.5}}}],
+          "outcome": {"proposed": true}
+        }
+      ]
+    },
+    {
+      "id": "cut-peyton",
+      "message": "Remove the part where Peyton asks her question",
+      "expect": [
+        {
+          "calls": [{"name": "cutRange", "args": {"startSec": {"min": 85.0, "max": 87.0}, "endSec": {"min": 92.3, "max": 97.1}}}],
+          "outcome": {"proposed": true}
+        }
+      ]
+    },
+    {
+      "id": "blur-it",
+      "message": "blur it",
+      "expect": [{"calls": [{"name": "askUser"}], "outcome": {"asked": true}}]
+    },
+    {
+      "id": "ums",
+      "message": "Get rid of the ums and uhs",
+      "expect": [{"calls": [{"name": "removeFillers"}]}]
+    },
+    {
+      "id": "word-captions",
+      "message": "Add those big bold word-by-word captions that light up as people talk",
+      "expect": [
+        {
+          "calls": [{"name": "setCaptions", "args": {"on": true, "style": {"anyOf": ["karaoke", "highlight"]}}}],
+          "outcome": {"applied": true}
+        }
+      ]
+    },
+    {
+      "id": "vertical-follow",
+      "message": "When we go vertical keep the camera on the woman astronaut",
+      "expect": [
+        {
+          "calls": [
+            {"name": "setFormat", "args": {"format": "portrait", "keepOthers": true}},
+            {"name": "followSubject", "args": {"description": {"contains": "astronaut"}}}
+          ],
+          "outcome": {"applied": true, "jobs": true}
+        }
+      ]
+    },
+    {
+      "id": "blur-faces",
+      "message": "Blur the kids' faces, we don't have consent from the school",
+      "expect": [
+        {
+          "calls": [{"name": "blurObjects", "args": {"description": {"contains": "face"}}}],
+          "outcome": {"jobs": true}
+        }
+      ]
+    },
+    {
+      "id": "better",
+      "message": "Make it better",
+      "expect": [{"calls": [{"name": "askUser"}], "outcome": {"asked": true}}]
+    },
+    {
+      "id": "boring",
+      "message": "Cut the boring part",
+      "expect": [{"calls": [{"name": "askUser"}], "outcome": {"asked": true}}]
+    },
+    {
+      "id": "square-pauses",
+      "message": "Square for Instagram, and remove any pause longer than 1 second",
+      "expect": [
+        {
+          "calls": [
+            {"name": "setFormat", "args": {"format": "square", "keepOthers": true}},
+            {"name": "removeSilences", "args": {"minPauseSec": 1.0}}
+          ],
+          "outcome": {"applied": true, "proposed": true}
+        }
+      ]
+    },
+    {
+      "id": "cut-challenges",
+      "message": "Delete everything the male astronaut says about dealing with challenges",
+      "expect": [
+        {
+          "calls": [{"name": "cutRange", "args": {"startSec": {"min": 95.0, "max": 100.0}, "endSec": {"min": 149.0, "max": 151.0}}}],
+          "outcome": {"proposed": true}
+        }
+      ]
+    },
+    {
+      "id": "keep-floating",
+      "message": "keep only the part where she floats sideways",
+      "expect": [
+        {
+          "calls": [{"name": "keepOnly", "args": {"ranges": [{"startSec": {"min": 63.0, "max": 68.0}, "endSec": {"min": 83.0, "max": 86.0}}]}}],
+          "outcome": {"proposed": true}
+        }
+      ]
+    },
+    {
+      "id": "cut-to-her-answer",
+      "message": "cut from 0:13 to the end of her answer",
+      "expect": [
+        {
+          "calls": [{"name": "cutRange", "args": {"startSec": {"min": 12.5, "max": 13.5}, "endSec": {"min": 83.0, "max": 86.0}}}],
+          "outcome": {"proposed": true}
+        },
+        {"calls": [{"name": "askUser"}], "outcome": {"asked": true}}
+      ]
+    },
+    {
+      "id": "karaoke-fix",
+      "message": "make captions karaoke and fix Caden to Kaiden",
+      "expect": [
+        {
+          "calls": [
+            {"name": "setCaptions", "args": {"on": true, "style": "karaoke"}},
+            {"name": "fixCaptionWords", "args": {"find": {"contains": "caden"}, "replace": {"contains": "kaiden"}}}
+          ],
+          "outcome": {"applied": true}
+        }
+      ]
+    },
+    {
+      "id": "pauses-square",
+      "message": "remove pauses over a second and make it square",
+      "expect": [
+        {
+          "calls": [
+            {"name": "removeSilences", "args": {"minPauseSec": 1.0}},
+            {"name": "setFormat", "args": {"format": "square", "keepOthers": true}}
+          ],
+          "outcome": {"applied": true, "proposed": true}
+        }
+      ]
+    },
+    {
+      "id": "blur-plate",
+      "message": "blur the license plate",
+      "expect": [
+        {
+          "calls": [{"name": "blurObjects", "args": {"description": {"contains": "plate"}}}],
+          "outcome": {"jobs": true}
+        },
+        {"calls": [{"name": "askUser"}], "outcome": {"asked": true}}
+      ]
+    },
+    {
+      "id": "undo",
+      "message": "undo that",
+      "history": [
+        {"user": "Turn the captions on", "reply": "Captions are on.", "note": "Applied setCaptions."}
+      ],
+      "expect": [{"calls": [{"name": "undo"}], "outcome": {"undo": true}}]
+    }
+  ]
+}
