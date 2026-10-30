@@ -1,0 +1,2528 @@
+[
+  {
+    "fitted": [
+      0,
+      0
+    ],
+    "max": [
+      0,
+      0
+    ],
+    "project": {
+      "assets": [
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "screen",
+          "kind": "video",
+          "name": "screen",
+          "path": "/media/screen",
+          "width": 1920
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": false,
+          "height": 720,
+          "id": "camera",
+          "kind": "video",
+          "name": "camera",
+          "path": "/media/camera",
+          "width": 1280
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "mic",
+          "kind": "audio",
+          "name": "mic",
+          "path": "/media/mic",
+          "width": 0
+        },
+        {
+          "durationUs": 120000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "music",
+          "kind": "audio",
+          "name": "music",
+          "path": "/media/music",
+          "width": 0
+        },
+        {
+          "durationUs": 0,
+          "fps": 0.0,
+          "hasAudio": false,
+          "height": 512,
+          "id": "logo",
+          "kind": "image",
+          "name": "logo",
+          "path": "/media/logo",
+          "width": 512
+        },
+        {
+          "durationUs": 10000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "broll",
+          "kind": "video",
+          "name": "broll",
+          "path": "/media/broll",
+          "width": 1920
+        }
+      ],
+      "audio": {
+        "loudness": "youtube"
+      },
+      "background": {
+        "assetId": null,
+        "color": "#101114",
+        "colorEnd": null,
+        "kind": "none",
+        "padding": 0.0
+      },
+      "captions": {
+        "adSafe": false,
+        "enabled": false,
+        "place": {}
+      },
+      "cursor": {
+        "asRecorded": false,
+        "click": "ripple",
+        "clickColor": "#FFFFFF80",
+        "hidden": false,
+        "look": "recorded",
+        "motionBlur": 0.5,
+        "size": 1.25,
+        "smoothing": "medium"
+      },
+      "id": "project",
+      "luts": [],
+      "name": "Fixture",
+      "recordings": [
+        {
+          "id": "rec",
+          "kind": "screen",
+          "markers": [],
+          "primary": "screen",
+          "sources": [
+            {
+              "id": "screen",
+              "label": "capture.source.screen",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "screen",
+              "runs": [
+                {
+                  "assetId": "screen",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "camera",
+              "label": "capture.source.camera",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "camera",
+              "runs": [
+                {
+                  "assetId": "camera",
+                  "driftPpm": 0.0,
+                  "durationUs": 59800000,
+                  "offsetUs": 200000
+                }
+              ]
+            },
+            {
+              "id": "mic",
+              "label": "capture.source.mic",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "mic",
+              "runs": [
+                {
+                  "assetId": "mic",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "requires": [],
+      "settings": {
+        "formats": [
+          "landscape"
+        ],
+        "fps": 30,
+        "primaryFormat": "landscape"
+      },
+      "timeline": {
+        "main": [
+          {
+            "camera": {
+              "border": true,
+              "bubble": {
+                "anchor": "bottomRight",
+                "opacity": 1.0,
+                "overrides": {},
+                "radius": 0.0,
+                "rect": {
+                  "h": 0.3556,
+                  "w": 0.2,
+                  "x": 0.76,
+                  "y": 0.6044
+                },
+                "rotation": 0.0
+              },
+              "mirror": true,
+              "mode": "bubble",
+              "modeOverrides": {
+                "portrait": "splitBottom"
+              },
+              "shape": "circle"
+            },
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "a",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "rec",
+              "type": "recording"
+            },
+            "sourceInUs": 0,
+            "sourceOutUs": 20000000,
+            "speed": 1.0,
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "b",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "broll",
+              "type": "asset"
+            },
+            "sourceInUs": 0,
+            "sourceOutUs": 10000000,
+            "speed": 1.0,
+            "volume": 1.0
+          }
+        ],
+        "tracks": []
+      },
+      "version": 7
+    },
+    "windows": []
+  },
+  {
+    "fitted": [
+      0,
+      0
+    ],
+    "max": [
+      4000001,
+      0
+    ],
+    "project": {
+      "assets": [
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "screen",
+          "kind": "video",
+          "name": "screen",
+          "path": "/media/screen",
+          "width": 1920
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": false,
+          "height": 720,
+          "id": "camera",
+          "kind": "video",
+          "name": "camera",
+          "path": "/media/camera",
+          "width": 1280
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "mic",
+          "kind": "audio",
+          "name": "mic",
+          "path": "/media/mic",
+          "width": 0
+        },
+        {
+          "durationUs": 120000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "music",
+          "kind": "audio",
+          "name": "music",
+          "path": "/media/music",
+          "width": 0
+        },
+        {
+          "durationUs": 0,
+          "fps": 0.0,
+          "hasAudio": false,
+          "height": 512,
+          "id": "logo",
+          "kind": "image",
+          "name": "logo",
+          "path": "/media/logo",
+          "width": 512
+        },
+        {
+          "durationUs": 10000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "broll",
+          "kind": "video",
+          "name": "broll",
+          "path": "/media/broll",
+          "width": 1920
+        }
+      ],
+      "audio": {
+        "loudness": "youtube"
+      },
+      "background": {
+        "assetId": null,
+        "color": "#101114",
+        "colorEnd": null,
+        "kind": "none",
+        "padding": 0.0
+      },
+      "captions": {
+        "adSafe": false,
+        "enabled": false,
+        "place": {}
+      },
+      "cursor": {
+        "asRecorded": false,
+        "click": "ripple",
+        "clickColor": "#FFFFFF80",
+        "hidden": false,
+        "look": "recorded",
+        "motionBlur": 0.5,
+        "size": 1.25,
+        "smoothing": "medium"
+      },
+      "id": "project",
+      "luts": [],
+      "name": "Fixture",
+      "recordings": [
+        {
+          "id": "rec",
+          "kind": "screen",
+          "markers": [],
+          "primary": "screen",
+          "sources": [
+            {
+              "id": "screen",
+              "label": "capture.source.screen",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "screen",
+              "runs": [
+                {
+                  "assetId": "screen",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "camera",
+              "label": "capture.source.camera",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "camera",
+              "runs": [
+                {
+                  "assetId": "camera",
+                  "driftPpm": 0.0,
+                  "durationUs": 59800000,
+                  "offsetUs": 200000
+                }
+              ]
+            },
+            {
+              "id": "mic",
+              "label": "capture.source.mic",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "mic",
+              "runs": [
+                {
+                  "assetId": "mic",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "requires": [],
+      "settings": {
+        "formats": [
+          "landscape"
+        ],
+        "fps": 30,
+        "primaryFormat": "landscape"
+      },
+      "timeline": {
+        "main": [
+          {
+            "camera": {
+              "border": true,
+              "bubble": {
+                "anchor": "bottomRight",
+                "opacity": 1.0,
+                "overrides": {},
+                "radius": 0.0,
+                "rect": {
+                  "h": 0.3556,
+                  "w": 0.2,
+                  "x": 0.76,
+                  "y": 0.6044
+                },
+                "rotation": 0.0
+              },
+              "mirror": true,
+              "mode": "bubble",
+              "modeOverrides": {
+                "portrait": "splitBottom"
+              },
+              "shape": "circle"
+            },
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "a",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "rec",
+              "type": "recording"
+            },
+            "sourceInUs": 0,
+            "sourceOutUs": 20000000,
+            "speed": 1.0,
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "b",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "broll",
+              "type": "asset"
+            },
+            "sourceInUs": 2000000,
+            "sourceOutUs": 10000000,
+            "speed": 1.0,
+            "volume": 1.0
+          }
+        ],
+        "tracks": []
+      },
+      "version": 7
+    },
+    "windows": []
+  },
+  {
+    "fitted": [
+      0,
+      2000000,
+      0
+    ],
+    "max": [
+      4000001,
+      4000000,
+      0
+    ],
+    "project": {
+      "assets": [
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "screen",
+          "kind": "video",
+          "name": "screen",
+          "path": "/media/screen",
+          "width": 1920
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": false,
+          "height": 720,
+          "id": "camera",
+          "kind": "video",
+          "name": "camera",
+          "path": "/media/camera",
+          "width": 1280
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "mic",
+          "kind": "audio",
+          "name": "mic",
+          "path": "/media/mic",
+          "width": 0
+        },
+        {
+          "durationUs": 120000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "music",
+          "kind": "audio",
+          "name": "music",
+          "path": "/media/music",
+          "width": 0
+        },
+        {
+          "durationUs": 0,
+          "fps": 0.0,
+          "hasAudio": false,
+          "height": 512,
+          "id": "logo",
+          "kind": "image",
+          "name": "logo",
+          "path": "/media/logo",
+          "width": 512
+        },
+        {
+          "durationUs": 10000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "broll",
+          "kind": "video",
+          "name": "broll",
+          "path": "/media/broll",
+          "width": 1920
+        }
+      ],
+      "audio": {
+        "loudness": "youtube"
+      },
+      "background": {
+        "assetId": null,
+        "color": "#101114",
+        "colorEnd": null,
+        "kind": "none",
+        "padding": 0.0
+      },
+      "captions": {
+        "adSafe": false,
+        "enabled": false,
+        "place": {}
+      },
+      "cursor": {
+        "asRecorded": false,
+        "click": "ripple",
+        "clickColor": "#FFFFFF80",
+        "hidden": false,
+        "look": "recorded",
+        "motionBlur": 0.5,
+        "size": 1.25,
+        "smoothing": "medium"
+      },
+      "id": "project",
+      "luts": [],
+      "name": "Fixture",
+      "recordings": [
+        {
+          "id": "rec",
+          "kind": "screen",
+          "markers": [],
+          "primary": "screen",
+          "sources": [
+            {
+              "id": "screen",
+              "label": "capture.source.screen",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "screen",
+              "runs": [
+                {
+                  "assetId": "screen",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "camera",
+              "label": "capture.source.camera",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "camera",
+              "runs": [
+                {
+                  "assetId": "camera",
+                  "driftPpm": 0.0,
+                  "durationUs": 59800000,
+                  "offsetUs": 200000
+                }
+              ]
+            },
+            {
+              "id": "mic",
+              "label": "capture.source.mic",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "mic",
+              "runs": [
+                {
+                  "assetId": "mic",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "requires": [
+        "transitions@1"
+      ],
+      "settings": {
+        "formats": [
+          "landscape"
+        ],
+        "fps": 30,
+        "primaryFormat": "landscape"
+      },
+      "timeline": {
+        "main": [
+          {
+            "camera": {
+              "border": true,
+              "bubble": {
+                "anchor": "bottomRight",
+                "opacity": 1.0,
+                "overrides": {},
+                "radius": 0.0,
+                "rect": {
+                  "h": 0.3556,
+                  "w": 0.2,
+                  "x": 0.76,
+                  "y": 0.6044
+                },
+                "rotation": 0.0
+              },
+              "mirror": true,
+              "mode": "bubble",
+              "modeOverrides": {
+                "portrait": "splitBottom"
+              },
+              "shape": "circle"
+            },
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "a",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "rec",
+              "type": "recording"
+            },
+            "sourceInUs": 0,
+            "sourceOutUs": 20000000,
+            "speed": 1.0,
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "b",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "broll",
+              "type": "asset"
+            },
+            "sourceInUs": 2000000,
+            "sourceOutUs": 8000000,
+            "speed": 1.0,
+            "transitionOut": {
+              "durationUs": 2000000,
+              "effect": "klipolo.builtin/transition.dissolve",
+              "params": {}
+            },
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "c",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "broll",
+              "type": "asset"
+            },
+            "sourceInUs": 5000000,
+            "sourceOutUs": 10000000,
+            "speed": 1.0,
+            "volume": 1.0
+          }
+        ],
+        "tracks": []
+      },
+      "version": 7
+    },
+    "windows": [
+      {
+        "clipIndex": 1,
+        "cutUs": 26000000,
+        "endUs": 27000000,
+        "startUs": 25000000
+      }
+    ]
+  },
+  {
+    "fitted": [
+      0,
+      0
+    ],
+    "max": [
+      5000000,
+      0
+    ],
+    "project": {
+      "assets": [
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "screen",
+          "kind": "video",
+          "name": "screen",
+          "path": "/media/screen",
+          "width": 1920
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": false,
+          "height": 720,
+          "id": "camera",
+          "kind": "video",
+          "name": "camera",
+          "path": "/media/camera",
+          "width": 1280
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "mic",
+          "kind": "audio",
+          "name": "mic",
+          "path": "/media/mic",
+          "width": 0
+        },
+        {
+          "durationUs": 120000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "music",
+          "kind": "audio",
+          "name": "music",
+          "path": "/media/music",
+          "width": 0
+        },
+        {
+          "durationUs": 0,
+          "fps": 0.0,
+          "hasAudio": false,
+          "height": 512,
+          "id": "logo",
+          "kind": "image",
+          "name": "logo",
+          "path": "/media/logo",
+          "width": 512
+        },
+        {
+          "durationUs": 10000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "broll",
+          "kind": "video",
+          "name": "broll",
+          "path": "/media/broll",
+          "width": 1920
+        }
+      ],
+      "audio": {
+        "loudness": "youtube"
+      },
+      "background": {
+        "assetId": null,
+        "color": "#101114",
+        "colorEnd": null,
+        "kind": "none",
+        "padding": 0.0
+      },
+      "captions": {
+        "adSafe": false,
+        "enabled": false,
+        "place": {}
+      },
+      "cursor": {
+        "asRecorded": false,
+        "click": "ripple",
+        "clickColor": "#FFFFFF80",
+        "hidden": false,
+        "look": "recorded",
+        "motionBlur": 0.5,
+        "size": 1.25,
+        "smoothing": "medium"
+      },
+      "id": "project",
+      "luts": [],
+      "name": "Fixture",
+      "recordings": [
+        {
+          "id": "rec",
+          "kind": "screen",
+          "markers": [],
+          "primary": "screen",
+          "sources": [
+            {
+              "id": "screen",
+              "label": "capture.source.screen",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "screen",
+              "runs": [
+                {
+                  "assetId": "screen",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "camera",
+              "label": "capture.source.camera",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "camera",
+              "runs": [
+                {
+                  "assetId": "camera",
+                  "driftPpm": 0.0,
+                  "durationUs": 59800000,
+                  "offsetUs": 200000
+                }
+              ]
+            },
+            {
+              "id": "mic",
+              "label": "capture.source.mic",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "mic",
+              "runs": [
+                {
+                  "assetId": "mic",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "requires": [],
+      "settings": {
+        "formats": [
+          "landscape"
+        ],
+        "fps": 30,
+        "primaryFormat": "landscape"
+      },
+      "timeline": {
+        "main": [
+          {
+            "camera": {
+              "border": true,
+              "bubble": {
+                "anchor": "bottomRight",
+                "opacity": 1.0,
+                "overrides": {},
+                "radius": 0.0,
+                "rect": {
+                  "h": 0.3556,
+                  "w": 0.2,
+                  "x": 0.76,
+                  "y": 0.6044
+                },
+                "rotation": 0.0
+              },
+              "mirror": true,
+              "mode": "bubble",
+              "modeOverrides": {
+                "portrait": "splitBottom"
+              },
+              "shape": "circle"
+            },
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "a",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "rec",
+              "type": "recording"
+            },
+            "sourceInUs": 0,
+            "sourceOutUs": 20000000,
+            "speed": 1.0,
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "b",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "broll",
+              "type": "asset"
+            },
+            "sourceInUs": 2000000,
+            "sourceOutUs": 10000000,
+            "speed": 0.5,
+            "volume": 1.0
+          }
+        ],
+        "tracks": []
+      },
+      "version": 7
+    },
+    "windows": []
+  },
+  {
+    "fitted": [
+      1000001,
+      2000001,
+      0
+    ],
+    "max": [
+      2000000,
+      2999999,
+      0
+    ],
+    "project": {
+      "assets": [
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "screen",
+          "kind": "video",
+          "name": "screen",
+          "path": "/media/screen",
+          "width": 1920
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": false,
+          "height": 720,
+          "id": "camera",
+          "kind": "video",
+          "name": "camera",
+          "path": "/media/camera",
+          "width": 1280
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "mic",
+          "kind": "audio",
+          "name": "mic",
+          "path": "/media/mic",
+          "width": 0
+        },
+        {
+          "durationUs": 120000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "music",
+          "kind": "audio",
+          "name": "music",
+          "path": "/media/music",
+          "width": 0
+        },
+        {
+          "durationUs": 0,
+          "fps": 0.0,
+          "hasAudio": false,
+          "height": 512,
+          "id": "logo",
+          "kind": "image",
+          "name": "logo",
+          "path": "/media/logo",
+          "width": 512
+        },
+        {
+          "durationUs": 10000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "broll",
+          "kind": "video",
+          "name": "broll",
+          "path": "/media/broll",
+          "width": 1920
+        }
+      ],
+      "audio": {
+        "loudness": "youtube"
+      },
+      "background": {
+        "assetId": null,
+        "color": "#101114",
+        "colorEnd": null,
+        "kind": "none",
+        "padding": 0.0
+      },
+      "captions": {
+        "adSafe": false,
+        "enabled": false,
+        "place": {}
+      },
+      "cursor": {
+        "asRecorded": false,
+        "click": "ripple",
+        "clickColor": "#FFFFFF80",
+        "hidden": false,
+        "look": "recorded",
+        "motionBlur": 0.5,
+        "size": 1.25,
+        "smoothing": "medium"
+      },
+      "id": "project",
+      "luts": [],
+      "name": "Fixture",
+      "recordings": [
+        {
+          "id": "rec",
+          "kind": "screen",
+          "markers": [],
+          "primary": "screen",
+          "sources": [
+            {
+              "id": "screen",
+              "label": "capture.source.screen",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "screen",
+              "runs": [
+                {
+                  "assetId": "screen",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "camera",
+              "label": "capture.source.camera",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "camera",
+              "runs": [
+                {
+                  "assetId": "camera",
+                  "driftPpm": 0.0,
+                  "durationUs": 59800000,
+                  "offsetUs": 200000
+                }
+              ]
+            },
+            {
+              "id": "mic",
+              "label": "capture.source.mic",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "mic",
+              "runs": [
+                {
+                  "assetId": "mic",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "requires": [
+        "transitions@1"
+      ],
+      "settings": {
+        "formats": [
+          "landscape"
+        ],
+        "fps": 30,
+        "primaryFormat": "landscape"
+      },
+      "timeline": {
+        "main": [
+          {
+            "camera": {
+              "border": true,
+              "bubble": {
+                "anchor": "bottomRight",
+                "opacity": 1.0,
+                "overrides": {},
+                "radius": 0.0,
+                "rect": {
+                  "h": 0.3556,
+                  "w": 0.2,
+                  "x": 0.76,
+                  "y": 0.6044
+                },
+                "rotation": 0.0
+              },
+              "mirror": true,
+              "mode": "bubble",
+              "modeOverrides": {
+                "portrait": "splitBottom"
+              },
+              "shape": "circle"
+            },
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "a",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "rec",
+              "type": "recording"
+            },
+            "sourceInUs": 0,
+            "sourceOutUs": 20000000,
+            "speed": 1.0,
+            "transitionOut": {
+              "durationUs": 1000001,
+              "effect": "klipolo.builtin/transition.dissolve",
+              "params": {}
+            },
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "b",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "broll",
+              "type": "asset"
+            },
+            "sourceInUs": 2000000,
+            "sourceOutUs": 4000000,
+            "speed": 1.0,
+            "transitionOut": {
+              "durationUs": 2000001,
+              "effect": "klipolo.builtin/transition.dissolve",
+              "params": {}
+            },
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "c",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "broll",
+              "type": "asset"
+            },
+            "sourceInUs": 5000000,
+            "sourceOutUs": 10000000,
+            "speed": 1.0,
+            "volume": 1.0
+          }
+        ],
+        "tracks": []
+      },
+      "version": 7
+    },
+    "windows": [
+      {
+        "clipIndex": 0,
+        "cutUs": 20000000,
+        "endUs": 20500001,
+        "startUs": 19500000
+      },
+      {
+        "clipIndex": 1,
+        "cutUs": 22000000,
+        "endUs": 23000001,
+        "startUs": 21000000
+      }
+    ]
+  },
+  {
+    "fitted": [
+      0,
+      0,
+      0
+    ],
+    "max": [
+      0,
+      0,
+      0
+    ],
+    "project": {
+      "assets": [
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "screen",
+          "kind": "video",
+          "name": "screen",
+          "path": "/media/screen",
+          "width": 1920
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": false,
+          "height": 720,
+          "id": "camera",
+          "kind": "video",
+          "name": "camera",
+          "path": "/media/camera",
+          "width": 1280
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "mic",
+          "kind": "audio",
+          "name": "mic",
+          "path": "/media/mic",
+          "width": 0
+        },
+        {
+          "durationUs": 120000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "music",
+          "kind": "audio",
+          "name": "music",
+          "path": "/media/music",
+          "width": 0
+        },
+        {
+          "durationUs": 0,
+          "fps": 0.0,
+          "hasAudio": false,
+          "height": 512,
+          "id": "logo",
+          "kind": "image",
+          "name": "logo",
+          "path": "/media/logo",
+          "width": 512
+        },
+        {
+          "durationUs": 10000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "broll",
+          "kind": "video",
+          "name": "broll",
+          "path": "/media/broll",
+          "width": 1920
+        }
+      ],
+      "audio": {
+        "loudness": "youtube"
+      },
+      "background": {
+        "assetId": null,
+        "color": "#101114",
+        "colorEnd": null,
+        "kind": "none",
+        "padding": 0.0
+      },
+      "captions": {
+        "adSafe": false,
+        "enabled": false,
+        "place": {}
+      },
+      "cursor": {
+        "asRecorded": false,
+        "click": "ripple",
+        "clickColor": "#FFFFFF80",
+        "hidden": false,
+        "look": "recorded",
+        "motionBlur": 0.5,
+        "size": 1.25,
+        "smoothing": "medium"
+      },
+      "id": "project",
+      "luts": [],
+      "name": "Fixture",
+      "recordings": [
+        {
+          "id": "rec",
+          "kind": "screen",
+          "markers": [],
+          "primary": "screen",
+          "sources": [
+            {
+              "id": "screen",
+              "label": "capture.source.screen",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "screen",
+              "runs": [
+                {
+                  "assetId": "screen",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "camera",
+              "label": "capture.source.camera",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "camera",
+              "runs": [
+                {
+                  "assetId": "camera",
+                  "driftPpm": 0.0,
+                  "durationUs": 59800000,
+                  "offsetUs": 200000
+                }
+              ]
+            },
+            {
+              "id": "mic",
+              "label": "capture.source.mic",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "mic",
+              "runs": [
+                {
+                  "assetId": "mic",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "requires": [
+        "transitions@1"
+      ],
+      "settings": {
+        "formats": [
+          "landscape"
+        ],
+        "fps": 30,
+        "primaryFormat": "landscape"
+      },
+      "timeline": {
+        "main": [
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "b",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "broll",
+              "type": "asset"
+            },
+            "sourceInUs": 2000000,
+            "sourceOutUs": 10000000,
+            "speed": 1.0,
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "c",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "broll",
+              "type": "asset"
+            },
+            "sourceInUs": 5000000,
+            "sourceOutUs": 10000000,
+            "speed": 1.0,
+            "volume": 1.0
+          },
+          {
+            "camera": {
+              "border": true,
+              "bubble": {
+                "anchor": "bottomRight",
+                "opacity": 1.0,
+                "overrides": {},
+                "radius": 0.0,
+                "rect": {
+                  "h": 0.3556,
+                  "w": 0.2,
+                  "x": 0.76,
+                  "y": 0.6044
+                },
+                "rotation": 0.0
+              },
+              "mirror": true,
+              "mode": "bubble",
+              "modeOverrides": {
+                "portrait": "splitBottom"
+              },
+              "shape": "circle"
+            },
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "a",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "rec",
+              "type": "recording"
+            },
+            "sourceInUs": 0,
+            "sourceOutUs": 20000000,
+            "speed": 1.0,
+            "transitionOut": {
+              "durationUs": 3000000,
+              "effect": "klipolo.builtin/transition.dissolve",
+              "params": {}
+            },
+            "volume": 1.0
+          }
+        ],
+        "tracks": []
+      },
+      "version": 7
+    },
+    "windows": []
+  },
+  {
+    "fitted": [
+      3000000,
+      0,
+      0
+    ],
+    "max": [
+      5000000,
+      0,
+      0
+    ],
+    "project": {
+      "assets": [
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "screen",
+          "kind": "video",
+          "name": "screen",
+          "path": "/media/screen",
+          "width": 1920
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": false,
+          "height": 720,
+          "id": "camera",
+          "kind": "video",
+          "name": "camera",
+          "path": "/media/camera",
+          "width": 1280
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "mic",
+          "kind": "audio",
+          "name": "mic",
+          "path": "/media/mic",
+          "width": 0
+        },
+        {
+          "durationUs": 120000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "music",
+          "kind": "audio",
+          "name": "music",
+          "path": "/media/music",
+          "width": 0
+        },
+        {
+          "durationUs": 0,
+          "fps": 0.0,
+          "hasAudio": false,
+          "height": 512,
+          "id": "logo",
+          "kind": "image",
+          "name": "logo",
+          "path": "/media/logo",
+          "width": 512
+        },
+        {
+          "durationUs": 10000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "broll",
+          "kind": "video",
+          "name": "broll",
+          "path": "/media/broll",
+          "width": 1920
+        }
+      ],
+      "audio": {
+        "loudness": "youtube"
+      },
+      "background": {
+        "assetId": null,
+        "color": "#101114",
+        "colorEnd": null,
+        "kind": "none",
+        "padding": 0.0
+      },
+      "captions": {
+        "adSafe": false,
+        "enabled": false,
+        "place": {}
+      },
+      "cursor": {
+        "asRecorded": false,
+        "click": "ripple",
+        "clickColor": "#FFFFFF80",
+        "hidden": false,
+        "look": "recorded",
+        "motionBlur": 0.5,
+        "size": 1.25,
+        "smoothing": "medium"
+      },
+      "id": "project",
+      "luts": [],
+      "name": "Fixture",
+      "recordings": [
+        {
+          "id": "rec",
+          "kind": "screen",
+          "markers": [],
+          "primary": "screen",
+          "sources": [
+            {
+              "id": "screen",
+              "label": "capture.source.screen",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "screen",
+              "runs": [
+                {
+                  "assetId": "screen",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "camera",
+              "label": "capture.source.camera",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "camera",
+              "runs": [
+                {
+                  "assetId": "camera",
+                  "driftPpm": 0.0,
+                  "durationUs": 59800000,
+                  "offsetUs": 200000
+                }
+              ]
+            },
+            {
+              "id": "mic",
+              "label": "capture.source.mic",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "mic",
+              "runs": [
+                {
+                  "assetId": "mic",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "requires": [
+        "transitions@1"
+      ],
+      "settings": {
+        "formats": [
+          "landscape"
+        ],
+        "fps": 30,
+        "primaryFormat": "landscape"
+      },
+      "timeline": {
+        "main": [
+          {
+            "camera": {
+              "border": true,
+              "bubble": {
+                "anchor": "bottomRight",
+                "opacity": 1.0,
+                "overrides": {},
+                "radius": 0.0,
+                "rect": {
+                  "h": 0.3556,
+                  "w": 0.2,
+                  "x": 0.76,
+                  "y": 0.6044
+                },
+                "rotation": 0.0
+              },
+              "mirror": true,
+              "mode": "bubble",
+              "modeOverrides": {
+                "portrait": "splitBottom"
+              },
+              "shape": "circle"
+            },
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "a",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "rec",
+              "type": "recording"
+            },
+            "sourceInUs": 0,
+            "sourceOutUs": 20000000,
+            "speed": 1.0,
+            "transitionOut": {
+              "durationUs": 3000000,
+              "effect": "klipolo.builtin/transition.dissolve",
+              "params": {}
+            },
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "c",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "broll",
+              "type": "asset"
+            },
+            "sourceInUs": 5000000,
+            "sourceOutUs": 10000000,
+            "speed": 1.0,
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "b",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "broll",
+              "type": "asset"
+            },
+            "sourceInUs": 2000000,
+            "sourceOutUs": 10000000,
+            "speed": 1.0,
+            "volume": 1.0
+          }
+        ],
+        "tracks": []
+      },
+      "version": 7
+    },
+    "windows": [
+      {
+        "clipIndex": 0,
+        "cutUs": 20000000,
+        "endUs": 21500000,
+        "startUs": 18500000
+      }
+    ]
+  },
+  {
+    "fitted": [
+      0,
+      0
+    ],
+    "max": [
+      0,
+      0
+    ],
+    "project": {
+      "assets": [
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "screen",
+          "kind": "video",
+          "name": "screen",
+          "path": "/media/screen",
+          "width": 1920
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": false,
+          "height": 720,
+          "id": "camera",
+          "kind": "video",
+          "name": "camera",
+          "path": "/media/camera",
+          "width": 1280
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "mic",
+          "kind": "audio",
+          "name": "mic",
+          "path": "/media/mic",
+          "width": 0
+        },
+        {
+          "durationUs": 120000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "music",
+          "kind": "audio",
+          "name": "music",
+          "path": "/media/music",
+          "width": 0
+        },
+        {
+          "durationUs": 0,
+          "fps": 0.0,
+          "hasAudio": false,
+          "height": 512,
+          "id": "logo",
+          "kind": "image",
+          "name": "logo",
+          "path": "/media/logo",
+          "width": 512
+        },
+        {
+          "durationUs": 10000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "broll",
+          "kind": "video",
+          "name": "broll",
+          "path": "/media/broll",
+          "width": 1920
+        }
+      ],
+      "audio": {
+        "loudness": "youtube"
+      },
+      "background": {
+        "assetId": null,
+        "color": "#101114",
+        "colorEnd": null,
+        "kind": "none",
+        "padding": 0.0
+      },
+      "captions": {
+        "adSafe": false,
+        "enabled": false,
+        "place": {}
+      },
+      "cursor": {
+        "asRecorded": false,
+        "click": "ripple",
+        "clickColor": "#FFFFFF80",
+        "hidden": false,
+        "look": "recorded",
+        "motionBlur": 0.5,
+        "size": 1.25,
+        "smoothing": "medium"
+      },
+      "id": "project",
+      "luts": [],
+      "name": "Fixture",
+      "recordings": [
+        {
+          "id": "rec",
+          "kind": "screen",
+          "markers": [],
+          "primary": "screen",
+          "sources": [
+            {
+              "id": "screen",
+              "label": "capture.source.screen",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "screen",
+              "runs": [
+                {
+                  "assetId": "screen",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "camera",
+              "label": "capture.source.camera",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "camera",
+              "runs": [
+                {
+                  "assetId": "camera",
+                  "driftPpm": 0.0,
+                  "durationUs": 59800000,
+                  "offsetUs": 200000
+                }
+              ]
+            },
+            {
+              "id": "mic",
+              "label": "capture.source.mic",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "mic",
+              "runs": [
+                {
+                  "assetId": "mic",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "requires": [
+        "transitions@1"
+      ],
+      "settings": {
+        "formats": [
+          "landscape"
+        ],
+        "fps": 30,
+        "primaryFormat": "landscape"
+      },
+      "timeline": {
+        "main": [
+          {
+            "camera": {
+              "border": true,
+              "bubble": {
+                "anchor": "bottomRight",
+                "opacity": 1.0,
+                "overrides": {},
+                "radius": 0.0,
+                "rect": {
+                  "h": 0.3556,
+                  "w": 0.2,
+                  "x": 0.76,
+                  "y": 0.6044
+                },
+                "rotation": 0.0
+              },
+              "mirror": true,
+              "mode": "bubble",
+              "modeOverrides": {
+                "portrait": "splitBottom"
+              },
+              "shape": "circle"
+            },
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "a",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "rec",
+              "type": "recording"
+            },
+            "sourceInUs": 0,
+            "sourceOutUs": 60000000,
+            "speed": 1.0,
+            "transitionOut": {
+              "durationUs": 1000000,
+              "effect": "klipolo.builtin/transition.dissolve",
+              "params": {}
+            },
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "b",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "broll",
+              "type": "asset"
+            },
+            "sourceInUs": 2000000,
+            "sourceOutUs": 10000000,
+            "speed": 1.0,
+            "volume": 1.0
+          }
+        ],
+        "tracks": []
+      },
+      "version": 7
+    },
+    "windows": [
+      {
+        "clipIndex": 0,
+        "cutUs": 60000000,
+        "endUs": 60500000,
+        "startUs": 59500000
+      }
+    ]
+  },
+  {
+    "fitted": [
+      2000001,
+      0,
+      0
+    ],
+    "max": [
+      2000001,
+      0,
+      0
+    ],
+    "project": {
+      "assets": [
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "screen",
+          "kind": "video",
+          "name": "screen",
+          "path": "/media/screen",
+          "width": 1920
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 30.0,
+          "hasAudio": false,
+          "height": 720,
+          "id": "camera",
+          "kind": "video",
+          "name": "camera",
+          "path": "/media/camera",
+          "width": 1280
+        },
+        {
+          "durationUs": 60000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "mic",
+          "kind": "audio",
+          "name": "mic",
+          "path": "/media/mic",
+          "width": 0
+        },
+        {
+          "durationUs": 120000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "music",
+          "kind": "audio",
+          "name": "music",
+          "path": "/media/music",
+          "width": 0
+        },
+        {
+          "durationUs": 0,
+          "fps": 0.0,
+          "hasAudio": false,
+          "height": 512,
+          "id": "logo",
+          "kind": "image",
+          "name": "logo",
+          "path": "/media/logo",
+          "width": 512
+        },
+        {
+          "durationUs": 10000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "broll",
+          "kind": "video",
+          "name": "broll",
+          "path": "/media/broll",
+          "width": 1920
+        }
+      ],
+      "audio": {
+        "loudness": "youtube"
+      },
+      "background": {
+        "assetId": null,
+        "color": "#101114",
+        "colorEnd": null,
+        "kind": "none",
+        "padding": 0.0
+      },
+      "captions": {
+        "adSafe": false,
+        "enabled": false,
+        "place": {}
+      },
+      "cursor": {
+        "asRecorded": false,
+        "click": "ripple",
+        "clickColor": "#FFFFFF80",
+        "hidden": false,
+        "look": "recorded",
+        "motionBlur": 0.5,
+        "size": 1.25,
+        "smoothing": "medium"
+      },
+      "id": "project",
+      "luts": [],
+      "name": "Fixture",
+      "recordings": [
+        {
+          "id": "rec",
+          "kind": "screen",
+          "markers": [],
+          "primary": "screen",
+          "sources": [
+            {
+              "id": "screen",
+              "label": "capture.source.screen",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "screen",
+              "runs": [
+                {
+                  "assetId": "screen",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "camera",
+              "label": "capture.source.camera",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "camera",
+              "runs": [
+                {
+                  "assetId": "camera",
+                  "driftPpm": 0.0,
+                  "durationUs": 59800000,
+                  "offsetUs": 200000
+                }
+              ]
+            },
+            {
+              "id": "mic",
+              "label": "capture.source.mic",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "mic",
+              "runs": [
+                {
+                  "assetId": "mic",
+                  "driftPpm": 0.0,
+                  "durationUs": 60000000,
+                  "offsetUs": 0
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "requires": [
+        "transitions@1"
+      ],
+      "settings": {
+        "formats": [
+          "landscape"
+        ],
+        "fps": 30,
+        "primaryFormat": "landscape"
+      },
+      "timeline": {
+        "main": [
+          {
+            "camera": {
+              "border": true,
+              "bubble": {
+                "anchor": "bottomRight",
+                "opacity": 1.0,
+                "overrides": {},
+                "radius": 0.0,
+                "rect": {
+                  "h": 0.3556,
+                  "w": 0.2,
+                  "x": 0.76,
+                  "y": 0.6044
+                },
+                "rotation": 0.0
+              },
+              "mirror": true,
+              "mode": "bubble",
+              "modeOverrides": {
+                "portrait": "splitBottom"
+              },
+              "shape": "circle"
+            },
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "a",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "rec",
+              "type": "recording"
+            },
+            "sourceInUs": 0,
+            "sourceOutUs": 20000000,
+            "speed": 1.0,
+            "transitionOut": {
+              "durationUs": 3000000,
+              "effect": "klipolo.builtin/transition.dissolve",
+              "params": {}
+            },
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "c",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "broll",
+              "type": "asset"
+            },
+            "sourceInUs": 1000000,
+            "sourceOutUs": 10000000,
+            "speed": 1.0,
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "b",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "broll",
+              "type": "asset"
+            },
+            "sourceInUs": 2000000,
+            "sourceOutUs": 10000000,
+            "speed": 1.0,
+            "volume": 1.0
+          }
+        ],
+        "tracks": []
+      },
+      "version": 7
+    },
+    "windows": [
+      {
+        "clipIndex": 0,
+        "cutUs": 20000000,
+        "endUs": 21500000,
+        "startUs": 18500000
+      }
+    ]
+  }
+]

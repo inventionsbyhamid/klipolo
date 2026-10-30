@@ -1,0 +1,78 @@
+{
+  "id": "klipolo.builtin/generator.dust",
+  "kind": "generator",
+  "name": "Dust and bokeh",
+  "params": [
+    {
+      "key": "background",
+      "label": "Background",
+      "type": "color",
+      "default": "#120D1FFF",
+      "alpha": true
+    },
+    {
+      "key": "color",
+      "label": "Speck colour",
+      "type": "color",
+      "default": "#FFD9A3",
+      "alpha": false
+    },
+    {
+      "key": "amount",
+      "label": "Amount",
+      "type": "float",
+      "min": 0.0,
+      "max": 1.0,
+      "default": 0.3,
+      "step": null,
+      "unit": "percent"
+    },
+    {
+      "key": "size",
+      "label": "Speck size",
+      "type": "float",
+      "min": 2.0,
+      "max": 40.0,
+      "default": 14.0,
+      "step": null,
+      "unit": "px"
+    },
+    {
+      "key": "blur",
+      "label": "Depth blur",
+      "type": "float",
+      "min": 0.0,
+      "max": 1.0,
+      "default": 0.6,
+      "step": null,
+      "unit": "percent"
+    },
+    {
+      "key": "speed",
+      "label": "Speed",
+      "type": "float",
+      "min": 0.0,
+      "max": 3.0,
+      "default": 1.0,
+      "step": null,
+      "unit": null
+    }
+  ],
+  "description": "Soft specks of light floating slowly upward, the nearest large and out of focus. A dreamy background; make its background colour clear to lay it over video.",
+  "tags": [
+    "dust",
+    "bokeh",
+    "particles",
+    "specks",
+    "background",
+    "dreamy",
+    "floating",
+    "light"
+  ],
+  "resolution": "half",
+  "provenance": {
+    "madeBy": "Klipolo",
+    "createdAtMs": 1793059200000,
+    "license": "original"
+  }
+}

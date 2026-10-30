@@ -14,3 +14,12 @@
 .env
 .env.*
 *.log
+
+# Build output
+target/
+.build/
+node_modules/
+dist/
+
+# Generated TypeScript bindings and code lists (cargo test writes them)
+src/bindings/

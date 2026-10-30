@@ -1,0 +1,2514 @@
+{
+  "$defs": {
+    "Align": {
+      "enum": [
+        "left",
+        "center",
+        "right"
+      ],
+      "type": "string"
+    },
+    "AspectRatio": {
+      "description": "How a path's `viewBox` fills its box, as SVG's `preserveAspectRatio`: whole and centred (`\"xMidYMid meet\"`, the\ndefault), or stretched to it (`\"none\"`).",
+      "enum": [
+        "xMidYMid meet",
+        "none"
+      ],
+      "type": "string"
+    },
+    "AssetKind": {
+      "enum": [
+        "video",
+        "audio",
+        "image"
+      ],
+      "type": "string"
+    },
+    "Blend": {
+      "description": "How a layer mixes with what is under it. Normal, multiply, screen and add are blend states; overlay reads the\nframe below, like an adjustment layer.",
+      "enum": [
+        "normal",
+        "multiply",
+        "screen",
+        "add",
+        "overlay"
+      ],
+      "type": "string"
+    },
+    "Cone": {
+      "description": "Where particles head: `angle` degrees (0 is right, −90 up), spread over `spread` degrees.",
+      "properties": {
+        "angle": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "spread": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ContribId": {
+      "description": "`<plugin>/<contribution>`.",
+      "type": "string"
+    },
+    "Count": {
+      "description": "The counter: the text shows a number going from `from` to `to`, starting `at` seconds for `dur` seconds.",
+      "properties": {
+        "at": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "decimals": {
+          "description": "Digits after the point, 0–6.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "dur": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "ease": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "from": {
+          "$ref": "#/$defs/Val"
+        },
+        "prefix": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "separator": {
+          "description": "Groups thousands (1,234).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "suffix": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "to": {
+          "$ref": "#/$defs/Val"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "type": "object"
+    },
+    "FillRule": {
+      "description": "Which parts of a path are inside, as SVG's `fill-rule`.",
+      "enum": [
+        "nonzero",
+        "evenodd"
+      ],
+      "type": "string"
+    },
+    "Fit": {
+      "description": "`shrink`: down to 50 %, then wrap within `wrap`, then clip to the box; `clip`: clip to the box.",
+      "enum": [
+        "shrink",
+        "clip"
+      ],
+      "type": "string"
+    },
+    "Flag": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "On or off, or `\"$key\"`, an on/off setting."
+    },
+    "FontRef": {
+      "properties": {
+        "family": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/FontSource"
+        }
+      },
+      "required": [
+        "family",
+        "source"
+      ],
+      "type": "object"
+    },
+    "FontSource": {
+      "oneOf": [
+        {
+          "description": "Ships with Klipolo (`assets/fonts`).",
+          "properties": {
+            "type": {
+              "const": "bundled",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Google Fonts, downloaded on the person's pick: `version` is the catalogue's (`v31`).",
+          "properties": {
+            "type": {
+              "const": "google",
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "version"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "On this computer only.",
+          "properties": {
+            "type": {
+              "const": "installed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "GeneratorFill": {
+      "description": "A generator contribution drawn inside the shape, with its settings (values or `\"$key\"` bindings).",
+      "properties": {
+        "generator": {
+          "$ref": "#/$defs/ContribId"
+        },
+        "params": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ParamValue"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "generator"
+      ],
+      "type": "object"
+    },
+    "Gradient": {
+      "description": "Exactly one of `linear` and `radial`, and 2–16 `stops` in order.",
+      "properties": {
+        "angle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Degrees the gradient turns about the box's centre."
+        },
+        "linear": {
+          "description": "From `[x0, y0]` to `[x1, y1]`: `[x0, y0, x1, y1]`, fractions of the node's box.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Slides every stop along the gradient (a shimmer animates it)."
+        },
+        "radial": {
+          "description": "Centre and radius: `[cx, cy, r]`, fractions of the node's box.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "stops": {
+          "description": "`[[offset 0–1, colour], …]`.",
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "format": "double",
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "stops"
+      ],
+      "type": "object"
+    },
+    "HoldKey": {
+      "description": "From `t` seconds the text is `text`.",
+      "properties": {
+        "t": {
+          "format": "double",
+          "type": "number"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "t",
+        "text"
+      ],
+      "type": "object"
+    },
+    "LineCap": {
+      "enum": [
+        "butt",
+        "round",
+        "square"
+      ],
+      "type": "string"
+    },
+    "LineJoin": {
+      "enum": [
+        "miter",
+        "round",
+        "bevel"
+      ],
+      "type": "string"
+    },
+    "MaskMode": {
+      "enum": [
+        "alpha",
+        "luma"
+      ],
+      "type": "string"
+    },
+    "MaskRef": {
+      "description": "A group shows only where another node (`\"#id\"`) is opaque (`alpha`) or bright (`luma`), or the reverse.",
+      "properties": {
+        "invert": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MaskMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "node": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "node"
+      ],
+      "type": "object"
+    },
+    "Modifier": {
+      "description": "Movement added to a property, deterministic and seeded: `{\"type\": \"wiggle\", \"freq\": 2, \"amp\": 5}`.",
+      "oneOf": [
+        {
+          "description": "Smooth noise, `freq` times a second, up to `amp`.",
+          "properties": {
+            "amp": {
+              "format": "double",
+              "type": "number"
+            },
+            "freq": {
+              "format": "double",
+              "type": "number"
+            },
+            "seed": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "wiggle",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "freq",
+            "amp"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A sine wave, fading by `decay` a second.",
+          "properties": {
+            "amp": {
+              "format": "double",
+              "type": "number"
+            },
+            "decay": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "freq": {
+              "format": "double",
+              "type": "number"
+            },
+            "phase": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "oscillate",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "freq",
+            "amp"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Keeps moving at `speed` a second.",
+          "properties": {
+            "speed": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": {
+              "const": "marquee",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "speed"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "MotionPath": {
+      "description": "Moves the node along a path as `progress` goes from 0 to 1, its origin on the path: SVG `d` fitted into the\nparent's box as a `path` node's is (its `viewBox`, else the path's own bounds, `xMidYMid meet` unless `none`), or\n`\"#id\"` of a `path` node, which then lends its `d`, `viewBox` and box.",
+      "properties": {
+        "autoRotate": {
+          "description": "Turns the node to face along the path.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "preserveAspectRatio": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AspectRatio"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "viewBox": {
+          "description": "`[x, y, width, height]` of the path's coordinates that fill the parent's box.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "Node": {
+      "description": "One drawn thing (or a group of them), inside its `box`: `[x, y, w, h]`, fractions of its parent's box (the\nlayer's at the top); the whole box when left out.",
+      "properties": {
+        "align": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Align"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "animate": {
+          "additionalProperties": {
+            "items": {
+              "$ref": "#/$defs/SceneKey"
+            },
+            "type": "array"
+          },
+          "description": "Keys per property name: `{\"opacity\": [{\"t\": 0, \"v\": 0}, {\"t\": 0.4, \"v\": 1, \"ease\": \"power2.out\"}]}`.",
+          "type": "object"
+        },
+        "asset": {
+          "description": "An image setting: `\"$logo\"`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "at": {
+          "description": "When it starts, in seconds.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "blend": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Blend"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "blur": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "1080p pixels."
+        },
+        "box": {
+          "items": {
+            "$ref": "#/$defs/Val"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "burst": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Particles at once, at `at`."
+        },
+        "cap": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LineCap"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "case": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextCase"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "child": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Node"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The shape every particle draws."
+        },
+        "children": {
+          "description": "A `group`'s or `repeat`'s nodes.",
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array"
+        },
+        "class": {
+          "description": "Space-separated names; tweens select them as `.name`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "clip": {
+          "description": "`inset(t r b l round r)` or `circle(r at x y)`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Cone"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "count": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Count"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Counts from one number to another (the value animator)."
+        },
+        "d": {
+          "description": "SVG path data, in the path's own units: its `viewBox` (else its own bounds) fills the node's box.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dash": {
+          "description": "Dash and gap lengths in 1080p pixels (a `path`'s in its stroke's units), 1 to 4 of them (an odd list repeats,\nas in SVG). Dashes are cut square; the line's caps are its ends'.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "dashOffset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "drag": {
+          "description": "How fast particles slow down, per second.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "emoji": {
+          "description": "Drawn by the system's emoji face.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fill": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Paint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fillRule": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FillRule"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`\"nonzero\"` (the default) or `\"evenodd\"`."
+        },
+        "fit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Fit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "font": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneFont"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gap": {
+          "description": "How far each instance moves from the one before: `[dx, dy]`.",
+          "items": {
+            "$ref": "#/$defs/Val"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "gravity": {
+          "description": "1080p pixels a second, a second (down is positive).",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "holds": {
+          "description": "Text that changes at given times (\"SUBSCRIBE\" → \"SUBSCRIBED\").",
+          "items": {
+            "$ref": "#/$defs/HoldKey"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "Unique in the scene; tweens select it as `#id`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "innerRadius": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A star's inner points, as a fraction of its outer radius."
+        },
+        "italic": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Flag"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "join": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LineJoin"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "letterSpacing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "life": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NumRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds."
+        },
+        "lineHeight": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A multiple of the size."
+        },
+        "mask": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MaskRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Groups: another node's alpha or luma."
+        },
+        "modifiers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Modifier"
+          },
+          "description": "Per property name: a wiggle, an oscillation or a marquee added to it.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "motionPath": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MotionPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "opacity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "0–1."
+        },
+        "opacityOverLife": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Origin"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What it scales and turns about, in its own box: `\"50% 0%\"`, `\"center\"`, `[0.5, 1]`."
+        },
+        "outline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Outline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "perspective": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "points": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Points"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A polyline's points: a `\"$table\"` setting or `[[x, y], …]` fractions of the box."
+        },
+        "preserveAspectRatio": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AspectRatio"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`\"xMidYMid meet\"` (the default: whole and centred) or `\"none\"` (stretched to the box)."
+        },
+        "radius": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Radius"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Particles a second, from `at` on."
+        },
+        "reveal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Reveal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Types the text on."
+        },
+        "rotate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Degrees, clockwise."
+        },
+        "rotateX": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Groups: a 3D tilt in degrees, seen through `perspective` (1080p pixels)."
+        },
+        "rotateY": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rows": {
+          "description": "One instance per row of a table setting: `\"$data\"`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scale": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scaleX": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scaleY": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scramble": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scramble"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "seed": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "shadow": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Shadow"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sides": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A polygon's sides or a star's points, 3–64."
+        },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "1080p pixels."
+        },
+        "sizeOverLife": {
+          "description": "Scale factors spread evenly over each particle's life, at most 8.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "smooth": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "spans": {
+          "description": "Parts with their own look, instead of `text`.",
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "speed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NumRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "1080p pixels a second."
+        },
+        "spin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NumRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Degrees a second."
+        },
+        "split": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Split"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Animates characters, words or lines one by one (with `stagger`)."
+        },
+        "src": {
+          "description": "The name of an SVG in the request's `svgs`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stagger": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StaggerArg"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stroke": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Paint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "strokeScale": {
+          "description": "False: a path's stroke and dashes are 1080p pixels, whatever the path's size.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "strokeWidth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "1080p pixels; a `path`'s are in its own units and scale with it, as in SVG, unless `strokeScale` is false."
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "times": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A fixed number of instances, 0–1,000."
+        },
+        "tint": {
+          "description": "A colour laid over what is under the layer (with `blur` blurring it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "trim": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Trim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Draws only part of the stroke (draw-on)."
+        },
+        "type": {
+          "$ref": "#/$defs/NodeType"
+        },
+        "viewBox": {
+          "description": "A path's `[x, y, width, height]` that fills its box; its gradients are fractions of it.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "visible": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Flag"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "weight": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "100–900; `font`'s own weight wins."
+        },
+        "wrap": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The width lines wrap at, a fraction of the box or `\"640px\"`."
+        },
+        "x": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Moves the node: a fraction of its parent's box, `\"50%\"`, or `\"22px\"`."
+        },
+        "y": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "NodeType": {
+      "oneOf": [
+        {
+          "enum": [
+            "ellipse",
+            "text",
+            "group"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "rect",
+          "description": "A rectangle, `radius` rounding its corners.",
+          "type": "string"
+        },
+        {
+          "const": "star",
+          "description": "`sides` points, `innerRadius` deep.",
+          "type": "string"
+        },
+        {
+          "const": "polygon",
+          "description": "A regular polygon of `sides` sides.",
+          "type": "string"
+        },
+        {
+          "const": "line",
+          "description": "From the box's top left to its bottom right.",
+          "type": "string"
+        },
+        {
+          "const": "path",
+          "description": "SVG path data (`d`).",
+          "type": "string"
+        },
+        {
+          "const": "polyline",
+          "description": "`points`, from a table setting or written out, optionally `smooth`.",
+          "type": "string"
+        },
+        {
+          "const": "image",
+          "description": "An image setting (`asset`) or an emoji.",
+          "type": "string"
+        },
+        {
+          "const": "svg",
+          "description": "Submissions only: an SVG the worker turns into `path` nodes before storing the scene.",
+          "type": "string"
+        },
+        {
+          "const": "repeat",
+          "description": "Its children `times` times, or once per row of a table setting (`rows`).",
+          "type": "string"
+        },
+        {
+          "const": "emitter",
+          "description": "Particles: a seeded burst or rate of its `child`.",
+          "type": "string"
+        },
+        {
+          "const": "backdrop",
+          "description": "Blurs or tints what is under the layer, inside its box.",
+          "type": "string"
+        }
+      ]
+    },
+    "NumRange": {
+      "anyOf": [
+        {
+          "format": "double",
+          "type": "number"
+        },
+        {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      ],
+      "description": "One number, or a `[min, max]` each particle picks from."
+    },
+    "Origin": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Val"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "`[x, y]` (fractions, `\"50%\"` or `\"22px\"`), or CSS words: `\"50% 0%\"`, `\"center\"`, `\"left top\"`."
+    },
+    "Outline": {
+      "description": "A line around each glyph, in 1080p pixels.",
+      "properties": {
+        "color": {
+          "type": "string"
+        },
+        "width": {
+          "$ref": "#/$defs/Val"
+        }
+      },
+      "required": [
+        "width",
+        "color"
+      ],
+      "type": "object"
+    },
+    "Paint": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/Gradient"
+        },
+        {
+          "$ref": "#/$defs/GeneratorFill"
+        }
+      ],
+      "description": "A colour (`#RGB`, `#RRGGBB`, `#RRGGBBAA`, `rgb()`, `rgba()`) or a `\"$key\"` colour setting; a gradient; or a\ngenerator drawn inside the shape."
+    },
+    "ParamSpec": {
+      "description": "One declared parameter. JSON: `{\"key\":\"radius\",\"label\":\"Radius\",\"type\":\"float\",\"min\":0,\"max\":64,\"default\":12,…}`,\nthe same shape the plugin manifest uses.",
+      "oneOf": [
+        {
+          "properties": {
+            "default": {
+              "format": "double",
+              "type": "number"
+            },
+            "max": {
+              "format": "double",
+              "type": "number"
+            },
+            "min": {
+              "format": "double",
+              "type": "number"
+            },
+            "step": {
+              "default": null,
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "float",
+              "type": "string"
+            },
+            "unit": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ParamUnit"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "type",
+            "min",
+            "max",
+            "default"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "default": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "max": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "min": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "int",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "min",
+            "max",
+            "default"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "default": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "bool",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "default"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "`#RRGGBB`, or `#RRGGBBAA` when `alpha`.",
+          "properties": {
+            "alpha": {
+              "default": false,
+              "type": "boolean"
+            },
+            "default": {
+              "type": "string"
+            },
+            "type": {
+              "const": "color",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "default"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "default": {
+              "$ref": "#/$defs/PointN"
+            },
+            "type": {
+              "const": "point",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "default"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Degrees from −360 to 360; shaders receive radians.",
+          "properties": {
+            "default": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": {
+              "const": "angle",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "default"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "default": {
+              "type": "string"
+            },
+            "options": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "choice",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "options",
+            "default"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "default": {
+              "type": "string"
+            },
+            "maxLen": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "default",
+            "maxLen"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "One of the project's assets, by id (no default).",
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/AssetKind"
+            },
+            "type": {
+              "const": "asset",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A `FontRef`, resolved through the one font resolver (bundled, then a downloaded Google family, then installed).",
+          "properties": {
+            "default": {
+              "$ref": "#/$defs/FontRef"
+            },
+            "type": {
+              "const": "font",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "default"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Rows of a label and `columns.len()` numbers (at most `MAX_TABLE_COLUMNS`), at most `max_rows` of them (and\n`MAX_TABLE_ROWS`): a chart's bars, a list's lines.",
+          "properties": {
+            "columns": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "default": {
+              "items": {
+                "$ref": "#/$defs/TableRow"
+              },
+              "type": "array"
+            },
+            "maxRows": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "table",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "columns",
+            "maxRows",
+            "default"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "key": {
+          "description": "The stored key; for shader contributions also the WGSL field name.",
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "visibleWhen": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VisibleWhen"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When the setting applies; always when absent. Purely presentational: the UI hides the setting otherwise,\nand its stored value stays (and stays valid) for when it applies again."
+        }
+      },
+      "required": [
+        "key",
+        "label"
+      ],
+      "type": "object"
+    },
+    "ParamUnit": {
+      "description": "How a number reads in the UI.",
+      "oneOf": [
+        {
+          "enum": [
+            "seconds"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "px",
+          "description": "Pixels at a 1080-pixel shorter side; shaders multiply by `kl.px`.",
+          "type": "string"
+        },
+        {
+          "const": "percent",
+          "description": "0–1, shown as 0–100 %.",
+          "type": "string"
+        }
+      ]
+    },
+    "ParamValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "format": "double",
+          "type": "number"
+        },
+        {
+          "description": "Colours (`#RRGGBB`, `#RRGGBBAA`), choices, texts and asset ids.",
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/PointN"
+        },
+        {
+          "$ref": "#/$defs/FontRef",
+          "description": "A font setting's face: a `FontRef` (`{\"family\": …, \"source\": {\"type\": …}}`), never read as a point. A\nbare family name is the tools' shorthand, resolved before it reaches the model."
+        },
+        {
+          "description": "A table setting's rows. Last, so strings, numbers and points read as before.",
+          "items": {
+            "$ref": "#/$defs/TableRow"
+          },
+          "type": "array"
+        }
+      ],
+      "description": "A stored parameter value; its [`ParamSpec`] says what it means."
+    },
+    "PointN": {
+      "description": "A point in 0–1 coordinates of the layer (or the canvas), from the top left.",
+      "properties": {
+        "x": {
+          "format": "double",
+          "type": "number"
+        },
+        "y": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "Points": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "type": "array"
+        }
+      ],
+      "description": "A polyline's points: `\"$key\"`, a table setting (one point a row), or `[[x, y], …]`."
+    },
+    "Radius": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Val"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/Val"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        }
+      ],
+      "description": "One radius for every corner, or `[top left, top right, bottom right, bottom left]`, in 1080p pixels."
+    },
+    "Reveal": {
+      "description": "The typewriter: the text appears by characters or words from `at` over `dur` seconds.",
+      "properties": {
+        "at": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RevealBy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dur": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "ease": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "RevealBy": {
+      "enum": [
+        "chars",
+        "words"
+      ],
+      "type": "string"
+    },
+    "SceneFont": {
+      "anyOf": [
+        {
+          "properties": {
+            "family": {
+              "type": "string"
+            },
+            "italic": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "source": {
+              "$ref": "#/$defs/FontSource"
+            },
+            "weight": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "family",
+            "source"
+          ],
+          "type": "object"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "A text node's font: a `FontRef`'s JSON (`{\"family\": \"Montserrat\", \"source\": {\"type\": \"google\", \"version\": \"v31\"}}`)\nwith an optional `weight` and `italic` beside it, which win over the node's own; or a bare family name, the\nshorthand, kept as written and resolved by the fonts' `resolve_family` when drawn; or `\"$key\"`, a font setting."
+    },
+    "SceneKey": {
+      "description": "One key of an animated property: at `t` seconds the value is `v`, eased in from the key before.",
+      "properties": {
+        "ease": {
+          "description": "GSAP's or CSS's name (`power3.out`, `cubic-bezier(…)`, `steps(4)`, `spring(…)`, `hold`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "t": {
+          "format": "double",
+          "type": "number"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Unit"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For `x` and `y`: `px` reads `v` as 1080p pixels."
+        },
+        "v": {
+          "$ref": "#/$defs/Val"
+        }
+      },
+      "required": [
+        "t",
+        "v"
+      ],
+      "type": "object"
+    },
+    "Scramble": {
+      "description": "Random characters (from `chars`) settling into the text from `at` over `dur` seconds.",
+      "properties": {
+        "at": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "chars": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dur": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "seed": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Segments": {
+      "description": "Scene times in `[0, in]` play from the layer's start and those in `[duration − out, duration]` up to its end.",
+      "properties": {
+        "in": {
+          "format": "double",
+          "type": "number"
+        },
+        "out": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "in",
+        "out"
+      ],
+      "type": "object"
+    },
+    "Selectors": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ],
+      "description": "`\"#id\"`, `\".class\"` or a node type (`\"text\"`), or a list of them."
+    },
+    "Shadow": {
+      "description": "A drop shadow: offset, blur and spread in 1080p pixels, and a colour.",
+      "properties": {
+        "blur": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "spread": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "x": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "y": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Span": {
+      "description": "Part of a text with its own look; a `background` makes a marker highlight or a pill.",
+      "properties": {
+        "background": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpanBackground"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fill": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Paint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "italic": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Flag"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "weight": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "SpanBackground": {
+      "properties": {
+        "color": {
+          "type": "string"
+        },
+        "padding": {
+          "description": "1080p pixels.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "radius": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "color"
+      ],
+      "type": "object"
+    },
+    "Split": {
+      "enum": [
+        "chars",
+        "words",
+        "lines"
+      ],
+      "type": "string"
+    },
+    "StaggerArg": {
+      "anyOf": [
+        {
+          "format": "double",
+          "type": "number"
+        },
+        {
+          "properties": {
+            "amount": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "each": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/StaggerFrom"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "seed": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      ],
+      "description": "Seconds between targets (or split units), or the whole spread: `0.05` or\n`{\"each\": 0.05, \"from\": \"center\"}` or `{\"amount\": 0.6, \"from\": \"random\", \"seed\": 7}`."
+    },
+    "StaggerFrom": {
+      "enum": [
+        "start",
+        "end",
+        "center",
+        "edges",
+        "random"
+      ],
+      "type": "string"
+    },
+    "TableRow": {
+      "description": "One row of a table setting: a label and one number per column.",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "values": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "label",
+        "values"
+      ],
+      "type": "object"
+    },
+    "TextCase": {
+      "enum": [
+        "upper",
+        "lower"
+      ],
+      "type": "string"
+    },
+    "Trim": {
+      "description": "Fractions of the stroke's length: it draws from `start` to `end`, both moved along by `offset`.",
+      "properties": {
+        "end": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "offset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "start": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Tween": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Val"
+      },
+      "description": "One GSAP-shaped tween: exactly one of `to`, `from`, `fromTo` (with `start`) or `set`, the nodes it animates, when\n(`at`), how long (`dur`) and how (`ease`), and the property values (everything else, `vars`).",
+      "properties": {
+        "at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Val"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds, `\"<\"` (the previous tween's start), `\">\"` (its end), `\"+=s\"` and `\"-=s\"` (from the timeline's end),\na label defined earlier, `\"out\"` (the exit segment) or `\"out+s\"`; the timeline's end when left out."
+        },
+        "dur": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "ease": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "from": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Selectors"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fromTo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Selectors"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label": {
+          "description": "Names this tween's start for later `at`s.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "repeat": {
+          "description": "Extra runs; −1 repeats until the scene ends.",
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "repeatDelay": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "set": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Selectors"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stagger": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StaggerArg"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "start": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Val"
+          },
+          "description": "`fromTo`'s start values; `vars` are its end values.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "to": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Selectors"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "yoyo": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Unit": {
+      "enum": [
+        "px",
+        "fraction"
+      ],
+      "type": "string"
+    },
+    "Val": {
+      "anyOf": [
+        {
+          "format": "double",
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "A number, or a string: a colour, a `\"$binding\"`, `\"50%\"`, `\"22px\"`, a clip, an origin or a text."
+    },
+    "VisibleWhen": {
+      "description": "A setting applies only while the choice setting `key` of the same contribution has one of the values `in`.\nJSON: `{\"key\":\"shape\",\"in\":[\"rounded\",\"frame\"]}`. `ContribDef::check_conditions` checks it when the definition\nloads.",
+      "properties": {
+        "in": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "in"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One motion graphic. JSON: `{\"scene\": 1, \"duration\": 4, \"params\": […], \"nodes\": […], \"timeline\": […]}`.",
+  "properties": {
+    "duration": {
+      "description": "Seconds, 0.1–600.",
+      "format": "double",
+      "type": "number"
+    },
+    "nodes": {
+      "description": "Drawn in order, later on top; at most 200 counting children.",
+      "items": {
+        "$ref": "#/$defs/Node"
+      },
+      "type": "array"
+    },
+    "params": {
+      "description": "At most 16: text, colour, number, choice, on/off, font, image and table settings.",
+      "items": {
+        "$ref": "#/$defs/ParamSpec"
+      },
+      "type": "array"
+    },
+    "scene": {
+      "description": "Always 1 (`scene@1`); a larger number was made for a newer Klipolo.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "segments": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Segments"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The entrance and exit: with them the hold between stretches to the layer's length."
+    },
+    "timeline": {
+      "description": "GSAP-shaped tweens, at most 256.",
+      "items": {
+        "$ref": "#/$defs/Tween"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "scene",
+    "duration",
+    "nodes"
+  ],
+  "title": "Scene",
+  "type": "object"
+}

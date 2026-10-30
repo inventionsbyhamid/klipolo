@@ -1,0 +1,978 @@
+{
+  "unspaced": [
+    [
+      11904,
+      12350
+    ],
+    [
+      12353,
+      12591
+    ],
+    [
+      12688,
+      12799
+    ],
+    [
+      13056,
+      19903
+    ],
+    [
+      19968,
+      40959
+    ],
+    [
+      63744,
+      64255
+    ],
+    [
+      65072,
+      65103
+    ],
+    [
+      65280,
+      65439
+    ],
+    [
+      131072,
+      262141
+    ]
+  ],
+  "pairs": [
+    {
+      "style": "clean",
+      "said": [
+        "今日",
+        "は"
+      ],
+      "shown": [
+        "今日",
+        "は"
+      ],
+      "joined": true
+    },
+    {
+      "style": "clean",
+      "said": [
+        "iPhone",
+        "の"
+      ],
+      "shown": [
+        "iPhone",
+        "の"
+      ],
+      "joined": false
+    },
+    {
+      "style": "clean",
+      "said": [
+        "iPhone、",
+        "カメラ"
+      ],
+      "shown": [
+        "iPhone、",
+        "カメラ"
+      ],
+      "joined": true
+    },
+    {
+      "style": "clean",
+      "said": [
+        "Mac。",
+        "明日"
+      ],
+      "shown": [
+        "Mac。",
+        "明日"
+      ],
+      "joined": true
+    },
+    {
+      "style": "clean",
+      "said": [
+        "天気.",
+        "今日"
+      ],
+      "shown": [
+        "天気.",
+        "今日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "clean",
+      "said": [
+        "今日",
+        "「OK"
+      ],
+      "shown": [
+        "今日",
+        "「OK"
+      ],
+      "joined": true
+    },
+    {
+      "style": "clean",
+      "said": [
+        "「OK",
+        "今日"
+      ],
+      "shown": [
+        "「OK",
+        "今日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "clean",
+      "said": [
+        "今天，",
+        "我们"
+      ],
+      "shown": [
+        "今天，",
+        "我们"
+      ],
+      "joined": true
+    },
+    {
+      "style": "clean",
+      "said": [
+        "「カメラ」",
+        "を"
+      ],
+      "shown": [
+        "「カメラ」",
+        "を"
+      ],
+      "joined": true
+    },
+    {
+      "style": "clean",
+      "said": [
+        "今日！",
+        "明日"
+      ],
+      "shown": [
+        "今日！",
+        "明日"
+      ],
+      "joined": true
+    },
+    {
+      "style": "clean",
+      "said": [
+        "今日?",
+        "明日"
+      ],
+      "shown": [
+        "今日?",
+        "明日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "clean",
+      "said": [
+        "OK!",
+        "今日"
+      ],
+      "shown": [
+        "OK!",
+        "今日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "clean",
+      "said": [
+        "今日",
+        "，iPhone"
+      ],
+      "shown": [
+        "今日",
+        "，iPhone"
+      ],
+      "joined": true
+    },
+    {
+      "style": "clean",
+      "said": [
+        "学校。",
+        "iPhone"
+      ],
+      "shown": [
+        "学校。",
+        "iPhone"
+      ],
+      "joined": false
+    },
+    {
+      "style": "clean",
+      "said": [
+        "今日",
+        "-5"
+      ],
+      "shown": [
+        "今日",
+        "-5"
+      ],
+      "joined": false
+    },
+    {
+      "style": "clean",
+      "said": [
+        "今日",
+        "．5"
+      ],
+      "shown": [
+        "今日",
+        "．5"
+      ],
+      "joined": true
+    },
+    {
+      "style": "clean",
+      "said": [
+        "今日",
+        "ＡＩ"
+      ],
+      "shown": [
+        "今日",
+        "ＡＩ"
+      ],
+      "joined": true
+    },
+    {
+      "style": "clean",
+      "said": [
+        "今日",
+        "ａｉ"
+      ],
+      "shown": [
+        "今日",
+        "ａｉ"
+      ],
+      "joined": true
+    },
+    {
+      "style": "clean",
+      "said": [
+        "今日",
+        "５"
+      ],
+      "shown": [
+        "今日",
+        "５"
+      ],
+      "joined": true
+    },
+    {
+      "style": "clean",
+      "said": [
+        "今日",
+        "ｶﾒﾗ"
+      ],
+      "shown": [
+        "今日",
+        "ｶﾒﾗ"
+      ],
+      "joined": true
+    },
+    {
+      "style": "clean",
+      "said": [
+        "今日",
+        "“OK”"
+      ],
+      "shown": [
+        "今日",
+        "“OK”"
+      ],
+      "joined": false
+    },
+    {
+      "style": "clean",
+      "said": [
+        "한국",
+        "今日"
+      ],
+      "shown": [
+        "한국",
+        "今日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "clean",
+      "said": [
+        "今日😀",
+        "明日"
+      ],
+      "shown": [
+        "今日😀",
+        "明日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "clean",
+      "said": [
+        "今日",
+        "😀明日"
+      ],
+      "shown": [
+        "今日",
+        "😀明日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "clean",
+      "said": [
+        "iphone，",
+        "拍"
+      ],
+      "shown": [
+        "iphone，",
+        "拍"
+      ],
+      "joined": true
+    },
+    {
+      "style": "clean",
+      "said": [
+        "the",
+        "cat"
+      ],
+      "shown": [
+        "the",
+        "cat"
+      ],
+      "joined": false
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "今日",
+        "は"
+      ],
+      "shown": [
+        "今日",
+        "は"
+      ],
+      "joined": true
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "iPhone",
+        "の"
+      ],
+      "shown": [
+        "iPhone",
+        "の"
+      ],
+      "joined": false
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "iPhone、",
+        "カメラ"
+      ],
+      "shown": [
+        "iPhone、",
+        "カメラ"
+      ],
+      "joined": true
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "Mac。",
+        "明日"
+      ],
+      "shown": [
+        "Mac。",
+        "明日"
+      ],
+      "joined": true
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "天気.",
+        "今日"
+      ],
+      "shown": [
+        "天気.",
+        "今日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "今日",
+        "「OK"
+      ],
+      "shown": [
+        "今日",
+        "「OK"
+      ],
+      "joined": true
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "「OK",
+        "今日"
+      ],
+      "shown": [
+        "「OK",
+        "今日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "今天，",
+        "我们"
+      ],
+      "shown": [
+        "今天，",
+        "我们"
+      ],
+      "joined": true
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "「カメラ」",
+        "を"
+      ],
+      "shown": [
+        "「カメラ」",
+        "を"
+      ],
+      "joined": true
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "今日！",
+        "明日"
+      ],
+      "shown": [
+        "今日！",
+        "明日"
+      ],
+      "joined": true
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "今日?",
+        "明日"
+      ],
+      "shown": [
+        "今日?",
+        "明日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "OK!",
+        "今日"
+      ],
+      "shown": [
+        "OK!",
+        "今日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "今日",
+        "，iPhone"
+      ],
+      "shown": [
+        "今日",
+        "，iPhone"
+      ],
+      "joined": true
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "学校。",
+        "iPhone"
+      ],
+      "shown": [
+        "学校。",
+        "iPhone"
+      ],
+      "joined": false
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "今日",
+        "-5"
+      ],
+      "shown": [
+        "今日",
+        "-5"
+      ],
+      "joined": false
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "今日",
+        "．5"
+      ],
+      "shown": [
+        "今日",
+        "．5"
+      ],
+      "joined": true
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "今日",
+        "ＡＩ"
+      ],
+      "shown": [
+        "今日",
+        "ＡＩ"
+      ],
+      "joined": true
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "今日",
+        "ａｉ"
+      ],
+      "shown": [
+        "今日",
+        "ａｉ"
+      ],
+      "joined": true
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "今日",
+        "５"
+      ],
+      "shown": [
+        "今日",
+        "５"
+      ],
+      "joined": true
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "今日",
+        "ｶﾒﾗ"
+      ],
+      "shown": [
+        "今日",
+        "ｶﾒﾗ"
+      ],
+      "joined": true
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "今日",
+        "“OK”"
+      ],
+      "shown": [
+        "今日",
+        "“OK”"
+      ],
+      "joined": false
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "한국",
+        "今日"
+      ],
+      "shown": [
+        "한국",
+        "今日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "今日😀",
+        "明日"
+      ],
+      "shown": [
+        "今日😀",
+        "明日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "今日",
+        "😀明日"
+      ],
+      "shown": [
+        "今日",
+        "😀明日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "iphone，",
+        "拍"
+      ],
+      "shown": [
+        "iphone，",
+        "拍"
+      ],
+      "joined": true
+    },
+    {
+      "style": "boxed",
+      "said": [
+        "the",
+        "cat"
+      ],
+      "shown": [
+        "the",
+        "cat"
+      ],
+      "joined": false
+    },
+    {
+      "style": "bold",
+      "said": [
+        "今日",
+        "は"
+      ],
+      "shown": [
+        "今日",
+        "は"
+      ],
+      "joined": true
+    },
+    {
+      "style": "bold",
+      "said": [
+        "iPhone",
+        "の"
+      ],
+      "shown": [
+        "IPHONE",
+        "の"
+      ],
+      "joined": false
+    },
+    {
+      "style": "bold",
+      "said": [
+        "iPhone、",
+        "カメラ"
+      ],
+      "shown": [
+        "IPHONE",
+        "カメラ"
+      ],
+      "joined": false
+    },
+    {
+      "style": "bold",
+      "said": [
+        "Mac。",
+        "明日"
+      ],
+      "shown": [
+        "MAC",
+        "明日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "bold",
+      "said": [
+        "天気.",
+        "今日"
+      ],
+      "shown": [
+        "天気",
+        "今日"
+      ],
+      "joined": true
+    },
+    {
+      "style": "bold",
+      "said": [
+        "今日",
+        "「OK"
+      ],
+      "shown": [
+        "今日",
+        "OK"
+      ],
+      "joined": false
+    },
+    {
+      "style": "bold",
+      "said": [
+        "「OK",
+        "今日"
+      ],
+      "shown": [
+        "OK",
+        "今日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "bold",
+      "said": [
+        "今天，",
+        "我们"
+      ],
+      "shown": [
+        "今天",
+        "我们"
+      ],
+      "joined": true
+    },
+    {
+      "style": "bold",
+      "said": [
+        "「カメラ」",
+        "を"
+      ],
+      "shown": [
+        "カメラ",
+        "を"
+      ],
+      "joined": true
+    },
+    {
+      "style": "bold",
+      "said": [
+        "今日！",
+        "明日"
+      ],
+      "shown": [
+        "今日！",
+        "明日"
+      ],
+      "joined": true
+    },
+    {
+      "style": "bold",
+      "said": [
+        "今日?",
+        "明日"
+      ],
+      "shown": [
+        "今日?",
+        "明日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "bold",
+      "said": [
+        "OK!",
+        "今日"
+      ],
+      "shown": [
+        "OK!",
+        "今日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "bold",
+      "said": [
+        "今日",
+        "，iPhone"
+      ],
+      "shown": [
+        "今日",
+        "IPHONE"
+      ],
+      "joined": false
+    },
+    {
+      "style": "bold",
+      "said": [
+        "学校。",
+        "iPhone"
+      ],
+      "shown": [
+        "学校",
+        "IPHONE"
+      ],
+      "joined": false
+    },
+    {
+      "style": "bold",
+      "said": [
+        "今日",
+        "-5"
+      ],
+      "shown": [
+        "今日",
+        "-5"
+      ],
+      "joined": false
+    },
+    {
+      "style": "bold",
+      "said": [
+        "今日",
+        "．5"
+      ],
+      "shown": [
+        "今日",
+        "5"
+      ],
+      "joined": false
+    },
+    {
+      "style": "bold",
+      "said": [
+        "今日",
+        "ＡＩ"
+      ],
+      "shown": [
+        "今日",
+        "ＡＩ"
+      ],
+      "joined": true
+    },
+    {
+      "style": "bold",
+      "said": [
+        "今日",
+        "ａｉ"
+      ],
+      "shown": [
+        "今日",
+        "ＡＩ"
+      ],
+      "joined": true
+    },
+    {
+      "style": "bold",
+      "said": [
+        "今日",
+        "５"
+      ],
+      "shown": [
+        "今日",
+        "５"
+      ],
+      "joined": true
+    },
+    {
+      "style": "bold",
+      "said": [
+        "今日",
+        "ｶﾒﾗ"
+      ],
+      "shown": [
+        "今日",
+        "ｶﾒﾗ"
+      ],
+      "joined": true
+    },
+    {
+      "style": "bold",
+      "said": [
+        "今日",
+        "“OK”"
+      ],
+      "shown": [
+        "今日",
+        "OK"
+      ],
+      "joined": false
+    },
+    {
+      "style": "bold",
+      "said": [
+        "한국",
+        "今日"
+      ],
+      "shown": [
+        "한국",
+        "今日"
+      ],
+      "joined": false
+    },
+    {
+      "style": "bold",
+      "said": [
+        "今日😀",
+        "明日"
+      ],
+      "shown": [
+        "今日",
+        "明日"
+      ],
+      "joined": true
+    },
+    {
+      "style": "bold",
+      "said": [
+        "今日",
+        "😀明日"
+      ],
+      "shown": [
+        "今日",
+        "明日"
+      ],
+      "joined": true
+    },
+    {
+      "style": "bold",
+      "said": [
+        "iphone，",
+        "拍"
+      ],
+      "shown": [
+        "IPHONE",
+        "拍"
+      ],
+      "joined": false
+    },
+    {
+      "style": "bold",
+      "said": [
+        "the",
+        "cat"
+      ],
+      "shown": [
+        "THE",
+        "CAT"
+      ],
+      "joined": false
+    }
+  ]
+}

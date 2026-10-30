@@ -1,0 +1,49 @@
+{
+  "scene": 1,
+  "duration": 3,
+  "params": [
+    { "key": "word", "label": "Word", "type": "text", "default": "LAUNCH", "maxLen": 24 },
+    { "key": "ink", "label": "Ink", "type": "color", "default": "#FFFFFF" }
+  ],
+  "nodes": [
+    {
+      "id": "word",
+      "class": "kinetic",
+      "type": "text",
+      "text": "$word",
+      "box": [0.1, 0.35, 0.8, 0.3],
+      "font": "Inter",
+      "size": 140,
+      "weight": 800,
+      "fill": "$ink",
+      "align": "center",
+      "split": "chars",
+      "fit": "shrink"
+    },
+    {
+      "id": "year",
+      "type": "text",
+      "text": "0",
+      "box": [0.1, 0.7, 0.8, 0.12],
+      "size": 48,
+      "fill": "#FFB000",
+      "align": "center",
+      "count": { "from": 0, "to": 2026, "at": 0.5, "dur": 1.5, "ease": "expo.out" }
+    },
+    {
+      "id": "spark",
+      "type": "star",
+      "box": [0.46, 0.1, 0.08, 0.14],
+      "sides": 5,
+      "innerRadius": 0.45,
+      "fill": { "linear": [0, 0, 1, 1], "stops": [[0, "#FFE066"], [1, "#FF7A00"]] },
+      "modifiers": { "rotate": { "type": "wiggle", "freq": 2, "amp": 8, "seed": 7 } }
+    }
+  ],
+  "timeline": [
+    { "to": "#word", "at": 0, "dur": 0.6, "ease": "back.out", "scale": 1.1, "stagger": { "each": 0.04, "from": "center" } },
+    { "from": ".kinetic", "at": "<", "dur": 0.5, "ease": "power2.out", "y": "40px", "stagger": 0.03, "label": "intro" },
+    { "to": "star", "at": "intro+=0.2", "dur": 0.8, "ease": "elastic.out", "rotate": 180, "repeat": 1, "yoyo": true },
+    { "to": "#word", "at": ">", "dur": 0.4, "ease": "power1.in", "blur": 6, "opacity": 0, "stagger": 0.05 }
+  ]
+}

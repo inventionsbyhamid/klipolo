@@ -1,0 +1,223 @@
+{
+  "fixes": [
+    {
+      "assetId": "mic",
+      "endUs": 16000000,
+      "startUs": 9000000,
+      "text": "ONE TWO"
+    },
+    {
+      "assetId": "mic",
+      "endUs": 40000000,
+      "startUs": 39600000,
+      "text": "4"
+    }
+  ],
+  "spans": [
+    {
+      "asset": "mic",
+      "assetInUs": 9500000,
+      "assetOutUs": 12500000,
+      "clip": "c1",
+      "end": 1,
+      "first": 0,
+      "offsetUs": 500000,
+      "rate": 1.0,
+      "sourceInUs": 10000000,
+      "speed": 1.0,
+      "startUs": 0
+    },
+    {
+      "asset": "mic",
+      "assetInUs": 12500000,
+      "assetOutUs": 19500000,
+      "clip": "c1-2",
+      "end": 2,
+      "first": 1,
+      "offsetUs": 500000,
+      "rate": 1.0,
+      "sourceInUs": 13000000,
+      "speed": 1.0,
+      "startUs": 3000000
+    },
+    {
+      "asset": "mic",
+      "assetInUs": 39500000,
+      "assetOutUs": 49500000,
+      "clip": "c2",
+      "end": 5,
+      "first": 3,
+      "offsetUs": 500000,
+      "rate": 1.0,
+      "sourceInUs": 40000000,
+      "speed": 2.0,
+      "startUs": 10000000
+    },
+    {
+      "asset": "mic",
+      "assetInUs": 39503950,
+      "assetOutUs": 49504950,
+      "clip": "c2-drift",
+      "end": 5,
+      "first": 3,
+      "offsetUs": 500000,
+      "rate": 1.0001,
+      "sourceInUs": 40000000,
+      "speed": 2.0,
+      "startUs": 30000000
+    },
+    {
+      "asset": "mic",
+      "assetInUs": 9500000,
+      "assetOutUs": 19500000,
+      "clip": "c1-copy",
+      "end": 2,
+      "first": 0,
+      "offsetUs": 500000,
+      "rate": 1.0,
+      "sourceInUs": 10000000,
+      "speed": 1.0,
+      "startUs": 40000000
+    },
+    {
+      "asset": "mic",
+      "assetInUs": 12500000,
+      "assetOutUs": 19500000,
+      "clip": "c1-2-copy",
+      "end": 2,
+      "first": 1,
+      "offsetUs": 500000,
+      "rate": 1.0,
+      "sourceInUs": 13000000,
+      "speed": 1.0,
+      "startUs": 55000000
+    }
+  ],
+  "transcripts": {
+    "mic": {
+      "complete": true,
+      "coveredUs": 300000000,
+      "key": "k",
+      "language": "en",
+      "model": "speech-whisper-small-q5_1",
+      "words": [
+        {
+          "confidence": 0.8999999761581421,
+          "endUs": 9600000,
+          "kind": "word",
+          "startUs": 9400000,
+          "text": "one"
+        },
+        {
+          "confidence": 0.8999999761581421,
+          "endUs": 15400000,
+          "kind": "word",
+          "startUs": 15000000,
+          "text": "two"
+        },
+        {
+          "confidence": 0.8999999761581421,
+          "endUs": 19800000,
+          "kind": "word",
+          "startUs": 19500000,
+          "text": "three"
+        },
+        {
+          "confidence": 0.8999999761581421,
+          "endUs": 40000000,
+          "kind": "word",
+          "startUs": 39600000,
+          "text": "four"
+        },
+        {
+          "confidence": 0.8999999761581421,
+          "endUs": 44300001,
+          "kind": "word",
+          "startUs": 44000001,
+          "text": "and"
+        },
+        {
+          "confidence": 0.8999999761581421,
+          "endUs": 49800000,
+          "kind": "word",
+          "startUs": 49400000,
+          "text": "five"
+        }
+      ]
+    }
+  },
+  "words": [
+    {
+      "endUs": 100000,
+      "fix": 0,
+      "kind": "word",
+      "span": 0,
+      "startUs": 0,
+      "text": "ONE TWO",
+      "word": 0
+    },
+    {
+      "endUs": 5900000,
+      "fix": 0,
+      "kind": "word",
+      "span": 1,
+      "startUs": 5500000,
+      "text": "",
+      "word": 1
+    },
+    {
+      "endUs": 10250000,
+      "fix": 1,
+      "kind": "word",
+      "span": 2,
+      "startUs": 10050000,
+      "text": "4",
+      "word": 3
+    },
+    {
+      "endUs": 12400001,
+      "fix": null,
+      "kind": "word",
+      "span": 2,
+      "startUs": 12250001,
+      "text": "and",
+      "word": 4
+    },
+    {
+      "endUs": 30248000,
+      "fix": 1,
+      "kind": "word",
+      "span": 3,
+      "startUs": 30048020,
+      "text": "4",
+      "word": 3
+    },
+    {
+      "endUs": 32397786,
+      "fix": null,
+      "kind": "word",
+      "span": 3,
+      "startUs": 32247801,
+      "text": "and",
+      "word": 4
+    },
+    {
+      "endUs": 45900000,
+      "fix": 0,
+      "kind": "word",
+      "span": 4,
+      "startUs": 40000000,
+      "text": "ONE TWO",
+      "word": 0
+    },
+    {
+      "endUs": 57900000,
+      "fix": 0,
+      "kind": "word",
+      "span": 5,
+      "startUs": 57500000,
+      "text": "ONE TWO",
+      "word": 1
+    }
+  ]
+}

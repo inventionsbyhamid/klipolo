@@ -1,0 +1,36 @@
+[package]
+name = "klipolo-fonts"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+publish = false
+description = "Klipolo's fonts: the bundled set, aliases, CSS face matching, the one resolver, the fallback chain, the font index and search, the Google catalogue and its download store"
+
+[features]
+# A local server stands in for Google's hosts in this crate's and the app's download tests. Nothing else turns it on.
+test-hosts = []
+
+[dependencies]
+klipolo-model = { path = "../klipolo-model" }
+klipolo-platform = { path = "../klipolo-platform" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ts-rs = "12"
+# fontdb 0.16's own version: one copy in the build.
+ttf-parser = "0.20"
+# The per-run CJK rule: the version cosmic-text resolves.
+unicode-script = "0.5"
+# Installed faces are read from a map, never whole (`sfnt::read_face`); fontdb's own version.
+memmap2 = "0.9"
+# Google's catalogue ships gzipped; the version already in the lockfile.
+flate2 = "1.1"
+# Says when the compiled-in catalogue can't be read; the workspace's version.
+tracing = "0.1"
+# Downloads: each file's SHA-256 in its manifest; the app's own HTTP client version and TLS (rustls with the
+# system's trusted certificates, the system's proxy). Blocking: a download runs on a blocking thread, a few MB a file.
+sha2 = "0.10"
+reqwest = { version = "0.12.28", default-features = false, features = ["blocking", "rustls-tls", "rustls-tls-native-roots", "system-proxy"] }
+
+[dev-dependencies]
+hex = "0.4"
+tempfile = "3"

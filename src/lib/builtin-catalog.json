@@ -1,0 +1,1026 @@
+[
+  {
+    "id": "klipolo.builtin/audio.telephone",
+    "kind": "audioEffect",
+    "name": "Telephone",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/audio.voice",
+    "kind": "audioEffect",
+    "name": "Voice",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/audio.warm",
+    "kind": "audioEffect",
+    "name": "Warm",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/caption.arcade",
+    "kind": "captionStyle",
+    "name": "Arcade",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/caption.bold",
+    "kind": "captionStyle",
+    "name": "Bold",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/caption.boxed",
+    "kind": "captionStyle",
+    "name": "Boxed",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/caption.clean",
+    "kind": "captionStyle",
+    "name": "Clean",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/caption.highlight",
+    "kind": "captionStyle",
+    "name": "Highlight",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/caption.karaoke",
+    "kind": "captionStyle",
+    "name": "Karaoke",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/caption.loud",
+    "kind": "captionStyle",
+    "name": "Loud",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/effect.blur",
+    "kind": "effect",
+    "name": "Blur",
+    "params": [
+      {
+        "key": "radius",
+        "label": "Radius",
+        "type": "float",
+        "min": 0.0,
+        "max": 64.0,
+        "default": 12.0,
+        "step": null,
+        "unit": "px"
+      }
+    ],
+    "downsample": {
+      "param": "radius",
+      "atLeastPx": 8.0
+    },
+    "protective": true
+  },
+  {
+    "id": "klipolo.builtin/effect.drop-shadow",
+    "kind": "effect",
+    "name": "Drop shadow",
+    "params": [
+      {
+        "key": "distance",
+        "label": "Distance",
+        "type": "float",
+        "min": 0.0,
+        "max": 64.0,
+        "default": 12.0,
+        "step": null,
+        "unit": "px"
+      },
+      {
+        "key": "angle",
+        "label": "Angle",
+        "type": "angle",
+        "default": 45.0
+      },
+      {
+        "key": "softness",
+        "label": "Softness",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.6,
+        "step": null,
+        "unit": "percent"
+      },
+      {
+        "key": "color",
+        "label": "Colour",
+        "type": "color",
+        "default": "#000000A6",
+        "alpha": true
+      }
+    ],
+    "description": "A soft shadow behind the shape of a layer, set off by a distance and an angle, to lift text, logos and cutouts off the video. The further the shadow, the softer it can be.",
+    "tags": [
+      "shadow",
+      "drop shadow",
+      "depth",
+      "text",
+      "logo",
+      "readability",
+      "cutout"
+    ],
+    "padding": {
+      "px": 0.0,
+      "param": "distance",
+      "perUnit": 1.5,
+      "maxPx": 96.0
+    },
+    "provenance": {
+      "madeBy": "Klipolo",
+      "createdAtMs": 1793059200000,
+      "license": "original"
+    }
+  },
+  {
+    "id": "klipolo.builtin/effect.glow",
+    "kind": "effect",
+    "name": "Glow",
+    "params": [
+      {
+        "key": "radius",
+        "label": "Radius",
+        "type": "float",
+        "min": 0.0,
+        "max": 64.0,
+        "default": 32.0,
+        "step": null,
+        "unit": "px"
+      },
+      {
+        "key": "color",
+        "label": "Colour",
+        "type": "color",
+        "default": "#FFE066",
+        "alpha": false
+      },
+      {
+        "key": "strength",
+        "label": "Strength",
+        "type": "float",
+        "min": 0.0,
+        "max": 2.0,
+        "default": 1.5,
+        "step": null,
+        "unit": null
+      }
+    ],
+    "description": "A soft coloured light around the shape of a layer: neon text, a glowing logo or a cutout that stands out.",
+    "tags": [
+      "glow",
+      "neon",
+      "outer glow",
+      "halo",
+      "light",
+      "text",
+      "logo"
+    ],
+    "padding": {
+      "px": 0.0,
+      "param": "radius",
+      "perUnit": 1.0,
+      "maxPx": 64.0
+    },
+    "provenance": {
+      "madeBy": "Klipolo",
+      "createdAtMs": 1793059200000,
+      "license": "original"
+    }
+  },
+  {
+    "id": "klipolo.builtin/effect.mask",
+    "kind": "effect",
+    "name": "Shape mask",
+    "params": [
+      {
+        "key": "shape",
+        "label": "Shape",
+        "type": "choice",
+        "options": [
+          "circle",
+          "rounded",
+          "square",
+          "frame"
+        ],
+        "default": "circle"
+      },
+      {
+        "key": "center",
+        "label": "Centre",
+        "visibleWhen": {
+          "key": "shape",
+          "in": [
+            "circle",
+            "rounded",
+            "square"
+          ]
+        },
+        "type": "point",
+        "default": {
+          "x": 0.5,
+          "y": 0.5
+        }
+      },
+      {
+        "key": "cornerRadius",
+        "label": "Corner radius",
+        "visibleWhen": {
+          "key": "shape",
+          "in": [
+            "rounded",
+            "frame"
+          ]
+        },
+        "type": "float",
+        "min": 0.0,
+        "max": 0.5,
+        "default": 0.2,
+        "step": null,
+        "unit": "percent"
+      },
+      {
+        "key": "feather",
+        "label": "Feather",
+        "type": "float",
+        "min": 0.0,
+        "max": 8.0,
+        "default": 1.0,
+        "step": null,
+        "unit": "px"
+      },
+      {
+        "key": "borderWidth",
+        "label": "Border width",
+        "type": "float",
+        "min": 0.0,
+        "max": 24.0,
+        "default": 0.0,
+        "step": null,
+        "unit": "px"
+      },
+      {
+        "key": "borderColor",
+        "label": "Border colour",
+        "type": "color",
+        "default": "#FFFFFF",
+        "alpha": true
+      }
+    ],
+    "protective": true
+  },
+  {
+    "id": "klipolo.builtin/effect.pixelate",
+    "kind": "effect",
+    "name": "Pixelate",
+    "params": [
+      {
+        "key": "size",
+        "label": "Cell size",
+        "type": "float",
+        "min": 2.0,
+        "max": 128.0,
+        "default": 24.0,
+        "step": null,
+        "unit": "px"
+      }
+    ],
+    "protective": true
+  },
+  {
+    "id": "klipolo.builtin/effect.sparkle",
+    "kind": "effect",
+    "name": "Sparkle",
+    "params": [
+      {
+        "key": "spacing",
+        "label": "Spacing",
+        "type": "float",
+        "min": 0.0,
+        "max": 160.0,
+        "default": 24.0,
+        "step": null,
+        "unit": "px"
+      },
+      {
+        "key": "size",
+        "label": "Glint size",
+        "type": "float",
+        "min": 2.0,
+        "max": 48.0,
+        "default": 16.0,
+        "step": null,
+        "unit": "px"
+      },
+      {
+        "key": "speed",
+        "label": "Twinkle speed",
+        "type": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 1.0,
+        "step": null,
+        "unit": null
+      },
+      {
+        "key": "amount",
+        "label": "Amount",
+        "type": "float",
+        "min": 0.0,
+        "max": 2.0,
+        "default": 1.0,
+        "step": null,
+        "unit": null
+      },
+      {
+        "key": "color",
+        "label": "Colour",
+        "type": "color",
+        "default": "#FFFFFF",
+        "alpha": false
+      }
+    ],
+    "description": "Twinkling four-point glints on the visible parts of a layer: text, a logo or a product shot.",
+    "tags": [
+      "sparkle",
+      "glitter",
+      "shine",
+      "twinkle",
+      "stars",
+      "magic",
+      "text",
+      "logo"
+    ],
+    "padding": {
+      "px": 0.0,
+      "param": "size",
+      "perUnit": 1.0,
+      "maxPx": 48.0
+    },
+    "provenance": {
+      "madeBy": "Klipolo",
+      "createdAtMs": 1793059200000,
+      "license": "original"
+    }
+  },
+  {
+    "id": "klipolo.builtin/effect.vignette",
+    "kind": "effect",
+    "name": "Vignette",
+    "params": [
+      {
+        "key": "amount",
+        "label": "Amount",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "step": null,
+        "unit": "percent"
+      },
+      {
+        "key": "softness",
+        "label": "Softness",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "step": null,
+        "unit": "percent"
+      }
+    ]
+  },
+  {
+    "id": "klipolo.builtin/generator.aurora",
+    "kind": "generator",
+    "name": "Aurora",
+    "params": [
+      {
+        "key": "skyColor",
+        "label": "Sky colour",
+        "type": "color",
+        "default": "#050A1C",
+        "alpha": false
+      },
+      {
+        "key": "colorA",
+        "label": "First colour",
+        "type": "color",
+        "default": "#2EF2A6",
+        "alpha": false
+      },
+      {
+        "key": "colorB",
+        "label": "Second colour",
+        "type": "color",
+        "default": "#3AA0FF",
+        "alpha": false
+      },
+      {
+        "key": "colorC",
+        "label": "Third colour",
+        "type": "color",
+        "default": "#B45CFF",
+        "alpha": false
+      },
+      {
+        "key": "speed",
+        "label": "Speed",
+        "type": "float",
+        "min": 0.0,
+        "max": 3.0,
+        "default": 1.0,
+        "step": null,
+        "unit": null
+      },
+      {
+        "key": "brightness",
+        "label": "Brightness",
+        "type": "float",
+        "min": 0.0,
+        "max": 2.0,
+        "default": 1.0,
+        "step": null,
+        "unit": null
+      }
+    ],
+    "description": "Northern lights: soft green, blue and violet curtains drifting slowly over a dark night sky. A calm background for titles, quotes and music.",
+    "tags": [
+      "aurora",
+      "northern lights",
+      "background",
+      "sky",
+      "night",
+      "calm",
+      "gradient",
+      "loop"
+    ],
+    "resolution": "half",
+    "provenance": {
+      "madeBy": "Klipolo",
+      "createdAtMs": 1793059200000,
+      "license": "original"
+    }
+  },
+  {
+    "id": "klipolo.builtin/generator.dust",
+    "kind": "generator",
+    "name": "Dust and bokeh",
+    "params": [
+      {
+        "key": "background",
+        "label": "Background",
+        "type": "color",
+        "default": "#120D1FFF",
+        "alpha": true
+      },
+      {
+        "key": "color",
+        "label": "Speck colour",
+        "type": "color",
+        "default": "#FFD9A3",
+        "alpha": false
+      },
+      {
+        "key": "amount",
+        "label": "Amount",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.3,
+        "step": null,
+        "unit": "percent"
+      },
+      {
+        "key": "size",
+        "label": "Speck size",
+        "type": "float",
+        "min": 2.0,
+        "max": 40.0,
+        "default": 14.0,
+        "step": null,
+        "unit": "px"
+      },
+      {
+        "key": "blur",
+        "label": "Depth blur",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.6,
+        "step": null,
+        "unit": "percent"
+      },
+      {
+        "key": "speed",
+        "label": "Speed",
+        "type": "float",
+        "min": 0.0,
+        "max": 3.0,
+        "default": 1.0,
+        "step": null,
+        "unit": null
+      }
+    ],
+    "description": "Soft specks of light floating slowly upward, the nearest large and out of focus. A dreamy background; make its background colour clear to lay it over video.",
+    "tags": [
+      "dust",
+      "bokeh",
+      "particles",
+      "specks",
+      "background",
+      "dreamy",
+      "floating",
+      "light"
+    ],
+    "resolution": "half",
+    "provenance": {
+      "madeBy": "Klipolo",
+      "createdAtMs": 1793059200000,
+      "license": "original"
+    }
+  },
+  {
+    "id": "klipolo.builtin/generator.gradient",
+    "kind": "generator",
+    "name": "Gradient",
+    "params": [
+      {
+        "key": "startColor",
+        "label": "Start colour",
+        "type": "color",
+        "default": "#1E64DC",
+        "alpha": true
+      },
+      {
+        "key": "endColor",
+        "label": "End colour",
+        "type": "color",
+        "default": "#101114",
+        "alpha": true
+      },
+      {
+        "key": "angle",
+        "label": "Angle",
+        "type": "angle",
+        "default": 90.0
+      }
+    ]
+  },
+  {
+    "id": "klipolo.builtin/generator.grain",
+    "kind": "generator",
+    "name": "Film grain",
+    "params": [
+      {
+        "key": "amount",
+        "label": "Amount",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.35,
+        "step": null,
+        "unit": "percent"
+      },
+      {
+        "key": "size",
+        "label": "Grain size",
+        "type": "float",
+        "min": 1.0,
+        "max": 6.0,
+        "default": 1.5,
+        "step": null,
+        "unit": "px"
+      },
+      {
+        "key": "chroma",
+        "label": "Colour noise",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.15,
+        "step": null,
+        "unit": "percent"
+      }
+    ],
+    "description": "Fine film grain that changes every frame, laid over the video with the overlay blend for a filmic, analogue look.",
+    "tags": [
+      "grain",
+      "film",
+      "noise",
+      "texture",
+      "analog",
+      "vintage",
+      "cinematic",
+      "overlay"
+    ],
+    "fps": 24,
+    "blend": "overlay",
+    "provenance": {
+      "madeBy": "Klipolo",
+      "createdAtMs": 1793059200000,
+      "license": "original"
+    }
+  },
+  {
+    "id": "klipolo.builtin/generator.light-leak",
+    "kind": "generator",
+    "name": "Light leak",
+    "params": [
+      {
+        "key": "warmColor",
+        "label": "Warm colour",
+        "type": "color",
+        "default": "#FF5A1F",
+        "alpha": false
+      },
+      {
+        "key": "softColor",
+        "label": "Soft colour",
+        "type": "color",
+        "default": "#FFC75A",
+        "alpha": false
+      },
+      {
+        "key": "size",
+        "label": "Size",
+        "type": "float",
+        "min": 0.2,
+        "max": 1.2,
+        "default": 0.45,
+        "step": null,
+        "unit": "percent"
+      },
+      {
+        "key": "intensity",
+        "label": "Intensity",
+        "type": "float",
+        "min": 0.0,
+        "max": 2.0,
+        "default": 1.0,
+        "step": null,
+        "unit": null
+      },
+      {
+        "key": "speed",
+        "label": "Speed",
+        "type": "float",
+        "min": 0.0,
+        "max": 3.0,
+        "default": 0.5,
+        "step": null,
+        "unit": null
+      }
+    ],
+    "description": "Warm orange and gold light drifting in from the edges of the frame, as in an old film camera. Laid over the video with the screen blend.",
+    "tags": [
+      "light leak",
+      "film",
+      "warm",
+      "flare",
+      "glow",
+      "vintage",
+      "retro",
+      "overlay"
+    ],
+    "blend": "screen",
+    "provenance": {
+      "madeBy": "Klipolo",
+      "createdAtMs": 1793059200000,
+      "license": "original"
+    }
+  },
+  {
+    "id": "klipolo.builtin/generator.waves",
+    "kind": "generator",
+    "name": "Waves",
+    "params": [
+      {
+        "key": "density",
+        "label": "Wave density",
+        "type": "float",
+        "min": 0.5,
+        "max": 8.0,
+        "default": 1.5,
+        "step": null,
+        "unit": null
+      },
+      {
+        "key": "speed",
+        "label": "Speed",
+        "type": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 1.0,
+        "step": null,
+        "unit": null
+      },
+      {
+        "key": "deepColor",
+        "label": "Deep colour",
+        "type": "color",
+        "default": "#0B2A4A",
+        "alpha": false
+      },
+      {
+        "key": "shallowColor",
+        "label": "Sky colour",
+        "type": "color",
+        "default": "#1F6E96",
+        "alpha": false
+      },
+      {
+        "key": "foam",
+        "label": "Foam",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.12,
+        "step": null,
+        "unit": "percent"
+      }
+    ],
+    "description": "Open water seen from a little above: swells rolling in under a bright sky in the distance, with a path of sun glitter. A calm ocean background.",
+    "tags": [
+      "water",
+      "waves",
+      "ocean",
+      "sea",
+      "background",
+      "calm",
+      "blue",
+      "loop"
+    ],
+    "resolution": "half",
+    "provenance": {
+      "madeBy": "Klipolo",
+      "createdAtMs": 1793059200000,
+      "license": "original"
+    }
+  },
+  {
+    "id": "klipolo.builtin/look.cinema",
+    "kind": "look",
+    "name": "Cinema",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/look.cool",
+    "kind": "look",
+    "name": "Cool",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/look.mono",
+    "kind": "look",
+    "name": "Mono",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/look.romcom",
+    "kind": "look",
+    "name": "Rom-com",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/look.vintage",
+    "kind": "look",
+    "name": "Vintage",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/look.vivid",
+    "kind": "look",
+    "name": "Vivid",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/look.warm",
+    "kind": "look",
+    "name": "Warm",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/motion.blur-in",
+    "kind": "motion",
+    "name": "Blur",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/motion.bounce",
+    "kind": "motion",
+    "name": "Bounce",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/motion.drop",
+    "kind": "motion",
+    "name": "Drop",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/motion.fade",
+    "kind": "motion",
+    "name": "Fade",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/motion.float",
+    "kind": "motion",
+    "name": "Float",
+    "params": [
+      {
+        "key": "strength",
+        "label": "Strength",
+        "type": "float",
+        "min": 0.0,
+        "max": 2.0,
+        "default": 1.0,
+        "step": 0.1,
+        "unit": null
+      }
+    ]
+  },
+  {
+    "id": "klipolo.builtin/motion.pop",
+    "kind": "motion",
+    "name": "Pop",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/motion.pulse",
+    "kind": "motion",
+    "name": "Pulse",
+    "params": [
+      {
+        "key": "strength",
+        "label": "Strength",
+        "type": "float",
+        "min": 0.0,
+        "max": 2.0,
+        "default": 1.0,
+        "step": 0.1,
+        "unit": null
+      }
+    ]
+  },
+  {
+    "id": "klipolo.builtin/motion.shake",
+    "kind": "motion",
+    "name": "Shake",
+    "params": [
+      {
+        "key": "strength",
+        "label": "Strength",
+        "type": "float",
+        "min": 0.0,
+        "max": 2.0,
+        "default": 1.0,
+        "step": 0.1,
+        "unit": null
+      }
+    ]
+  },
+  {
+    "id": "klipolo.builtin/motion.slide",
+    "kind": "motion",
+    "name": "Slide",
+    "params": [
+      {
+        "key": "from",
+        "label": "From",
+        "type": "choice",
+        "options": [
+          "top",
+          "bottom",
+          "left",
+          "right"
+        ],
+        "default": "bottom"
+      }
+    ]
+  },
+  {
+    "id": "klipolo.builtin/motion.spin",
+    "kind": "motion",
+    "name": "Spin",
+    "params": [
+      {
+        "key": "strength",
+        "label": "Strength",
+        "type": "float",
+        "min": 0.0,
+        "max": 2.0,
+        "default": 1.0,
+        "step": 0.1,
+        "unit": null
+      }
+    ]
+  },
+  {
+    "id": "klipolo.builtin/motion.typewriter",
+    "kind": "motion",
+    "name": "Typewriter",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/motion.wiggle",
+    "kind": "motion",
+    "name": "Wiggle",
+    "params": [
+      {
+        "key": "strength",
+        "label": "Strength",
+        "type": "float",
+        "min": 0.0,
+        "max": 2.0,
+        "default": 1.0,
+        "step": 0.1,
+        "unit": null
+      }
+    ]
+  },
+  {
+    "id": "klipolo.builtin/motion.zoom",
+    "kind": "motion",
+    "name": "Zoom",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/transition.dip",
+    "kind": "transition",
+    "name": "Dip to colour",
+    "params": [
+      {
+        "key": "color",
+        "label": "Colour",
+        "type": "color",
+        "default": "#000000",
+        "alpha": false
+      }
+    ]
+  },
+  {
+    "id": "klipolo.builtin/transition.dissolve",
+    "kind": "transition",
+    "name": "Dissolve",
+    "params": []
+  },
+  {
+    "id": "klipolo.builtin/transition.push",
+    "kind": "transition",
+    "name": "Push",
+    "params": [
+      {
+        "key": "direction",
+        "label": "Direction",
+        "type": "choice",
+        "options": [
+          "left",
+          "right",
+          "up",
+          "down"
+        ],
+        "default": "left"
+      }
+    ]
+  },
+  {
+    "id": "klipolo.builtin/transition.wipe",
+    "kind": "transition",
+    "name": "Wipe",
+    "params": [
+      {
+        "key": "direction",
+        "label": "Direction",
+        "type": "choice",
+        "options": [
+          "left",
+          "right",
+          "up",
+          "down"
+        ],
+        "default": "left"
+      },
+      {
+        "key": "softness",
+        "label": "Softness",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.1,
+        "step": null,
+        "unit": "percent"
+      }
+    ]
+  }
+]

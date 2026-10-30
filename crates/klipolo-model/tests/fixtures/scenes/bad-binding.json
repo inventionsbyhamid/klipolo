@@ -1,0 +1,9 @@
+{
+  "scene": 1,
+  "duration": 2,
+  "params": [{ "key": "accent", "label": "Accent", "type": "text", "default": "#FFB000", "maxLen": 9 }],
+  "nodes": [
+    { "type": "rect", "box": [0, 0, 1, 0.2], "fill": "$accent" },
+    { "type": "text", "box": [0, 0.3, 1, 0.2], "text": "$nope" }
+  ]
+}

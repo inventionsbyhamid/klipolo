@@ -1,0 +1,55 @@
+{
+  "id": "klipolo.builtin/effect.glow",
+  "kind": "effect",
+  "name": "Glow",
+  "params": [
+    {
+      "key": "radius",
+      "label": "Radius",
+      "type": "float",
+      "min": 0.0,
+      "max": 64.0,
+      "default": 32.0,
+      "step": null,
+      "unit": "px"
+    },
+    {
+      "key": "color",
+      "label": "Colour",
+      "type": "color",
+      "default": "#FFE066",
+      "alpha": false
+    },
+    {
+      "key": "strength",
+      "label": "Strength",
+      "type": "float",
+      "min": 0.0,
+      "max": 2.0,
+      "default": 1.5,
+      "step": null,
+      "unit": null
+    }
+  ],
+  "description": "A soft coloured light around the shape of a layer: neon text, a glowing logo or a cutout that stands out.",
+  "tags": [
+    "glow",
+    "neon",
+    "outer glow",
+    "halo",
+    "light",
+    "text",
+    "logo"
+  ],
+  "padding": {
+    "px": 0.0,
+    "param": "radius",
+    "perUnit": 1.0,
+    "maxPx": 64.0
+  },
+  "provenance": {
+    "madeBy": "Klipolo",
+    "createdAtMs": 1793059200000,
+    "license": "original"
+  }
+}
