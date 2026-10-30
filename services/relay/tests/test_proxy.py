@@ -1680,6 +1680,25 @@ def test_key_never_appears_in_responses_or_logs(client, conn, meta, settings, ca
         assert key not in record.getMessage()
 
 
+def test_a_charge_is_logged_at_info_without_the_key(client, conn, meta, settings, caplog):
+    # No caplog.set_level: the app itself must let the relay's INFO lines out.
+    device = add_device(conn)
+    meta.post("/responses").respond(200, json=spark_body())
+
+    response = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
+
+    assert response.status_code == 200
+    charges = [
+        record
+        for record in caplog.records
+        if record.name == "relay.proxy" and record.levelno == logging.INFO and "Charged device" in record.getMessage()
+    ]
+    assert len(charges) == 1
+    assert charges[0].getMessage() == f"Charged device {device.device_id[:8]} ${SPARK_COST:.6f} for responses muse-spark-1.3"
+    for secret in (settings.meta_api_key, device.token):
+        assert secret not in caplog.text
+
+
 # Streaming.
 
 

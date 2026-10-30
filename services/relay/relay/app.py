@@ -1,6 +1,7 @@
 """ASGI app factory. Run with: uvicorn --factory relay.app:create_app"""
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -10,9 +11,30 @@ from relay import align, db, devices, proxy
 from relay.config import Settings, load_settings
 from relay.errors import install_error_handlers
 
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+_LOG_HANDLER_NAME = "relay"
+
+
+def configure_logging() -> None:
+    """Let the relay's own INFO lines out: charges, alignment timings, the
+    model loading. Uvicorn sets up only its own loggers, so these were
+    dropped. Only the relay's loggers go to INFO; httpx's INFO lines would
+    log every Meta URL. The relay's messages never hold headers, bodies or
+    the key. A handler is added once, and only when nothing else (a test
+    runner, a log config) has set up the root logger."""
+    relay_logger = logging.getLogger("relay")
+    relay_logger.setLevel(logging.INFO)
+    if logging.getLogger().handlers or any(h.get_name() == _LOG_HANDLER_NAME for h in relay_logger.handlers):
+        return
+    handler = logging.StreamHandler()
+    handler.set_name(_LOG_HANDLER_NAME)
+    handler.setFormatter(logging.Formatter(LOG_FORMAT))
+    relay_logger.addHandler(handler)
+
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
+    configure_logging()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
