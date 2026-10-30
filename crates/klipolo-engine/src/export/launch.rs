@@ -53,7 +53,7 @@ pub enum Worker {
 }
 
 impl Worker {
-    /// The command-line flag the app's `main.rs` dispatches on.
+    /// The command-line flag `crates/klipolo-app/src/main.rs` dispatches on.
     pub fn flag(self) -> &'static str {
         match self {
             Self::Export => "--export-worker",
