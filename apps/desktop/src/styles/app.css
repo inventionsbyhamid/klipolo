@@ -811,11 +811,16 @@
   height: 100%;
 }
 
+/* The ruler and the playhead's head stay at the top of the lanes' scroller when the lanes scroll (three overlay rows in
+   a short window), over the lanes and the marks that pass under them. */
 .tl-head {
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 6;
   display: flex;
   flex: none;
   height: 24px;
+  background: var(--color-bay);
 }
 
 .tl-gutter {

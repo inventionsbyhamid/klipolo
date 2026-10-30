@@ -82,5 +82,7 @@ describe('the lanes in a 1100 x 700 window', () => {
     // The Video lane would need to go under its floor: the lanes' scroller scrolls instead of clipping.
     expect(lanes.video).toBeLessThan(videoMin);
     expect(appCss).toMatch(/\.tl-scroll \{[^}]*overflow-y: auto/s);
+    // The ruler (and the playhead's head on it) stays at the top while they scroll, over the lanes passing under it.
+    expect(appCss).toMatch(/\.tl-head \{[^}]*position: sticky;[^}]*top: 0;[^}]*background: var\(--color-bay\)/s);
   });
 });
