@@ -85,6 +85,29 @@ def test_reregister_keeps_spend_and_rotates_token(client, conn):
     assert conn.execute("SELECT count(*) FROM devices").fetchone()[0] == 1
 
 
+@pytest.mark.parametrize(("code", "stored_as"), [("retired", "inactive"), ("never-issued", None)])
+def test_reregister_with_inactive_or_unknown_code_is_403_and_keeps_the_device(
+    client, conn, code, stored_as
+):
+    add_code(conn, "testcode")
+    if stored_as == "inactive":
+        add_code(conn, code, active=False)
+    device_id = str(uuid.uuid4())
+    token = register(client, device_id, "testcode").json()["token"]
+    before = conn.execute("SELECT * FROM devices WHERE device_id = ?", (device_id,)).fetchone()
+
+    response = register(client, device_id, code)
+
+    assert response.status_code == 403
+    assert response.json() == INVALID_CODE
+    after = conn.execute("SELECT * FROM devices WHERE device_id = ?", (device_id,)).fetchone()
+    assert dict(after) == dict(before)
+    assert after["code"] == "testcode"
+    me = client.get("/v1/devices/me", headers=bearer(token))
+    assert me.status_code == 200
+    assert me.json()["relay_ai"] is True
+
+
 @pytest.mark.parametrize(
     "headers",
     [
