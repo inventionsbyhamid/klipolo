@@ -78,6 +78,17 @@ pub(crate) fn open_file(file: &Path) -> Result<OpenProject, Said> {
     })
 }
 
+/// Whether `path` is a file of the open project (one of its assets): the only files the timeline's media reads.
+pub(crate) fn uses_path(state: &ProjectSessionState, path: &str) -> bool {
+    lock(state).as_ref().is_some_and(|open| {
+        open.document
+            .project()
+            .assets
+            .iter()
+            .any(|asset| asset.path == path)
+    })
+}
+
 /// A command that panicked must not leave the project locked for the rest of the session.
 fn lock(state: &ProjectSessionState) -> MutexGuard<'_, Option<OpenProject>> {
     state.open.lock().unwrap_or_else(PoisonError::into_inner)

@@ -3,6 +3,7 @@
 mod engine;
 mod log;
 mod media;
+mod media_cache;
 mod project;
 mod state;
 
@@ -72,6 +73,9 @@ fn main() {
             project::project_redo,
             project::project_snapshot,
             media::media_import,
+            media_cache::media_peaks_info,
+            media_cache::media_peaks,
+            media_cache::media_thumbs,
         ])
         .build(tauri::generate_context!())
         .expect("Klipolo could not start");
