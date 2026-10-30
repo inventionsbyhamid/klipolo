@@ -434,6 +434,40 @@ fn levels_stand_in_until_the_words_arrive() {
     assert!(speech_ranges(&muted, &levels).is_empty());
 }
 
+/// Speech is on the timeline where the clip plays it: here the take is cut to start 2 s into its files, plays at 2×
+/// and comes after a 10 s clip, so file second `s` is heard at `10 + (s - 2) / 2`. Words and levels alike; a word cut
+/// by the in-point keeps only what plays.
+#[test]
+fn speech_follows_cuts_and_speed_changes() {
+    let mut p = project();
+    let mut take = p.timeline.main[0].clone();
+    take.source_in_us = secs(2.0);
+    take.speed = 2.0;
+    p.timeline.main = vec![p.timeline.main[1].clone(), take];
+    klipolo_model::validate(&p).unwrap();
+    let words = transcript(
+        &[
+            // Before the in-point: cut.
+            (1.0, 1.5, WordKind::Word),
+            // Across it (its middle plays): from the clip's start.
+            (1.8, 2.4, WordKind::Word),
+            (4.0, 5.0, WordKind::Word),
+            (8.0, 9.0, WordKind::Word),
+        ],
+        60.0,
+        true,
+    );
+    assert_eq!(
+        &*speech_ranges(&p, &heard_in(&[("mic", words)], &[])),
+        [range(10.0, 10.2), range(11.0, 11.5), range(13.0, 13.5)]
+    );
+    // Levels only: the file speaks from 0.85 to 4.15 s and 9.85 to 12.15 s; the take plays it from 2 s.
+    assert_eq!(
+        &*speech_ranges(&p, &heard_in(&[], &[("mic", mic_levels())])),
+        [range(10.0, 11.075), range(13.925, 15.075)]
+    );
+}
+
 /// A dry run (a drag the engine previews) uses the committed speech again when it can't move it, and works it out anew
 /// when it can, or when the committed project didn't duck.
 #[test]
