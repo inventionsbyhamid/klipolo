@@ -1,0 +1,13 @@
+[package]
+name = "klipolo-meta"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+license = "AGPL-3.0-only"
+description = "One HTTP client for Meta's Model API: direct with the person's own key, or through Klipolo's relay with an access-code token."
+publish = false
+
+[dependencies]
+reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls", "json", "multipart", "stream"] }
+secrecy = "0.10"
+thiserror = "2"
