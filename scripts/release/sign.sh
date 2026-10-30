@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Developer ID signing from the inside out, after a build signed ad hoc:
 #   scripts/release/sign.sh <Klipolo.app>
+#   scripts/release/sign.sh --list <Klipolo.app>   prints the nested files in signing order, signs nothing
 # Every Mach-O under Contents/ other than the main executable (the FFmpeg dylibs in Frameworks/, any helper), and any
 # nested bundle after what it holds, deepest first, each with `codesign --force --options runtime --timestamp`; then
 # the app itself with crates/klipolo-app/entitlements.plist; then `codesign --verify --deep --strict`. The identity
@@ -9,7 +10,9 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 repo=$(cd "$here/../.." && pwd -P)
 . "$here/lib.sh"
-[ $# -eq 1 ] || { echo "usage: $0 <Klipolo.app>" >&2; exit 2; }
+list=0
+if [ "${1:-}" = --list ]; then list=1; shift; fi
+[ $# -eq 1 ] || { echo "usage: $0 [--list] <Klipolo.app>" >&2; exit 2; }
 app=${1%/}
 [ -f "$app/Contents/Info.plist" ] || { echo "refused: not an app bundle: $app" >&2; exit 2; }
 main=$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")
@@ -36,6 +39,11 @@ order() {
   done < <(find "$app/Contents" -mindepth 1 \( -type f -o -type d \) -print0) \
     | LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2,2 | cut -f2-
 }
+
+if [ "$list" = 1 ]; then
+  order | sed "s|^$app/||"
+  exit 0
+fi
 
 id=$(developer_id)
 sign() {
