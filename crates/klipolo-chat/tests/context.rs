@@ -1194,3 +1194,38 @@ fn turns_with_the_same_start_give_the_same_lines_in_any_order() {
     };
     assert_eq!(with(true), with(false));
 }
+
+#[test]
+fn an_item_across_a_cut_reads_as_one_line() {
+    // 10.0 to 30.0 s of the file, across the cut (13.0 to 24.0 s): what remains plays from 10.0 s to 19.0 s on the
+    // timeline without a break, so it reads as one line, on purpose.
+    let wave = entry(10.0, 30.0, "wave", "male astronaut", "Waves across the cut");
+    let mut inputs = with_items(vec![wave]);
+    let text = inputs.context(&view_at(0.0)).text;
+    let scenes = timed_lines(&text, "Scenes");
+    let waves: Vec<&str> = scenes
+        .iter()
+        .copied()
+        .filter(|l| l.contains("Waves across the cut"))
+        .collect();
+    assert_eq!(
+        waves,
+        ["[10.0-19.0] wave (male astronaut): Waves across the cut"]
+    );
+    // With the pieces swapped, the file goes back between them: two lines.
+    inputs.project.timeline.main.reverse();
+    let text = inputs.context(&view_at(0.0)).text;
+    let scenes = timed_lines(&text, "Scenes");
+    let waves: Vec<&str> = scenes
+        .iter()
+        .copied()
+        .filter(|l| l.contains("Waves across the cut"))
+        .collect();
+    assert_eq!(
+        waves,
+        [
+            "[0.0-6.0] wave (male astronaut): Waves across the cut",
+            "[141.0-144.0] wave (male astronaut): Waves across the cut",
+        ]
+    );
+}
