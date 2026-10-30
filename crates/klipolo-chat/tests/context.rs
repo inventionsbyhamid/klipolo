@@ -16,6 +16,7 @@ use klipolo_chat::{
     ChatContext, MAX_CONTEXT_TOKENS, SceneEntry, SceneLog, SpeakerTurn, View, build_context,
     estimate_tokens,
 };
+use klipolo_model::ops::ClipPatch;
 use klipolo_model::project::{Asset, AssetKind, CaptionSettings};
 use klipolo_model::speech::{Speech, Transcript, Word, WordKind};
 use klipolo_model::time::{RangeUs, Us};
@@ -646,6 +647,46 @@ fn with_items(items: Vec<SceneEntry>) -> Inputs {
     let mut inputs = two_clips();
     inputs.scenes.get_mut("clip-a").unwrap().items.extend(items);
     inputs
+}
+
+#[test]
+fn scenes_and_words_follow_a_sped_up_clip() {
+    // A 150 ms laugh at 30.0 s in the file: at 2x it plays for 75 ms, but nothing of it is cut.
+    let mut inputs = with_items(vec![entry(
+        30.0,
+        30.15,
+        "laugh",
+        "female astronaut",
+        "Laughs",
+    )]);
+    let patch = ClipPatch {
+        speed: Some(2.0),
+        ..ClipPatch::default()
+    };
+    let faster = Op::UpdateClip {
+        id: "clip-a1-2".into(),
+        patch,
+    };
+    inputs.project = apply_ops(&inputs.project, &[faster]).unwrap();
+    let text = inputs.context(&view_at(0.0)).text;
+    // c2 starts at 13.0 s and plays the file from 24.0 s at 2x: 131.04 s of file in 65.52 s.
+    let project = section(&text, "Project");
+    assert!(
+        project.contains("\nc2 13.0-78.5 astronauts.mp4 (file 24.0-155.0 of 155.0, speed 2x)\n"),
+        "{project}"
+    );
+    let scenes = timed_lines(&text, "Scenes");
+    // 40.5 s: 13.0 + 16.5 / 2 = 21.25; 45.0 s: 13.0 + 21.0 / 2 = 23.5.
+    line_with(
+        &scenes,
+        "[21.3-23.5] gesture (male astronaut): Raises arm overhead",
+    );
+    // 30.0 s: 13.0 + 6.0 / 2 = 16.0; 30.15 s: 16.075.
+    line_with(&scenes, "[16.0-16.1] laugh (female astronaut): Laughs");
+    // "Hi Caden," at 27.18 s: 13.0 + 3.18 / 2 = 14.59.
+    let lines = timed_lines(&text, "Transcript");
+    let answer = line_with(&lines, "C: Hi Caden,");
+    assert!(answer.starts_with("[14.6-"), "{answer}");
 }
 
 #[test]

@@ -8,7 +8,8 @@
 //!   or more between words reads `[pause 1.4 s]` where it falls, a gap between lines at the end of the first.
 //! - `Scenes`: the scene log's items, `[40.5-45.0] gesture (male astronaut): raises an arm`, mapped from their file's
 //!   time through every clip of that file on the main track. An item cut out entirely is left out; a partly cut one
-//!   keeps what remains (a sliver under `MIN_SCENE_PIECE_US` of a longer item is dropped).
+//!   keeps what remains (a sliver of under `MIN_SCENE_PIECE_US` of the file, of a longer item, is dropped: measured in
+//!   the file, so a short item in a sped-up clip stays).
 //!
 //! Every time is TIMELINE seconds with one decimal, as the model reads and writes them. The same input always gives the
 //! same bytes, so the provider's prompt cache can reuse the prefix: the maps given are only looked up, never walked.
@@ -46,7 +47,7 @@ pub const CHARS_PER_TOKEN: usize = 4;
 pub const MAX_LINE_WORDS: usize = 30;
 /// A gap between spoken words this long or longer shows as `[pause 1.4 s]`.
 pub const SHOWN_PAUSE_US: Us = 1_000_000;
-/// What is left of a partly cut scene item shorter than this (and than the item) is left out.
+/// What is left of a partly cut scene item playing less of its file than this (and than the item) is left out.
 pub const MIN_SCENE_PIECE_US: Us = 100_000;
 /// A transcript line's words kept when lines are cut to their sentence starts.
 pub const START_WORDS: usize = 8;
@@ -603,6 +604,8 @@ fn write_line(out: &mut String, said: &[Said], line: &Range<usize>, sentence_sta
 struct ScenePiece<'a> {
     start_us: Us,
     end_us: Us,
+    /// How much of the file it plays (its length on the timeline is this over the clips' speed).
+    file_us: Us,
     item: &'a SceneEntry,
 }
 
@@ -638,6 +641,7 @@ fn scene_pieces<'a>(
                 && out[j].end_us == from_t
             {
                 out[j].end_us = to_t;
+                out[j].file_us += to - from;
                 latest.insert((id.as_str(), k), (j, to));
                 continue;
             }
@@ -645,13 +649,14 @@ fn scene_pieces<'a>(
             out.push(ScenePiece {
                 start_us: from_t,
                 end_us: to_t,
+                file_us: to - from,
                 item,
             });
         }
     }
     out.retain(|s| {
         let whole = s.item.end_us.saturating_sub(s.item.start_us).max(0);
-        s.end_us - s.start_us >= MIN_SCENE_PIECE_US.min(whole)
+        s.file_us >= MIN_SCENE_PIECE_US.min(whole)
     });
     // Stable: pieces that start and end together keep the clips' and the log's order.
     out.sort_by_key(|s| (s.start_us, s.end_us));
