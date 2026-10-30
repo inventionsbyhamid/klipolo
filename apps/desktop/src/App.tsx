@@ -15,6 +15,7 @@ import { PlayerBar, skip } from './player/PlayerBar';
 import { Preview } from './preview/Preview';
 import { usePlayback } from './state/playback';
 import { useProject } from './state/project';
+import { followSaves } from './state/saving';
 import { toast } from './state/toasts';
 
 /** The name and formats a first launch's project gets: all three formats, 16:9 first. */
@@ -78,6 +79,7 @@ export function App() {
     // Once per page load (React's strict mode runs effects twice in development).
     if (started) return;
     started = true;
+    void followSaves();
     void openProject();
   }, []);
   useEngineSession();

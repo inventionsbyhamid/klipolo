@@ -8,10 +8,12 @@ vi.mock('../bridge/commands', () => ({
 }));
 const { bridge } = await import('../bridge/commands');
 const { useProject } = await import('../state/project');
+const { useSaving } = await import('../state/saving');
 const { EXPORT_LATER, TopBar } = await import('./TopBar');
 
 beforeEach(() => {
   useProject.setState({ snapshot: null, pending: 0 });
+  useSaving.setState({ failing: null });
 });
 
 describe('TopBar', () => {
@@ -32,5 +34,14 @@ describe('TopBar', () => {
     expect(screen.getByRole('button', { name: 'Redo' })).toBeDisabled();
     await userEvent.click(screen.getByRole('button', { name: 'Undo add text' }));
     expect(bridge.undo).toHaveBeenCalledTimes(1);
+  });
+
+  it('says the project is saved, or why it is not', () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    const { rerender } = render(<TopBar />);
+    expect(screen.getByText('Saved')).toBeInTheDocument();
+    useSaving.setState({ failing: 'Your disk is full, so changes aren’t being saved. Free up some space.' });
+    rerender(<TopBar />);
+    expect(screen.getByText('Not saved').title).toMatch(/disk is full/);
   });
 });
