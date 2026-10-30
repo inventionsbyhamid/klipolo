@@ -219,7 +219,7 @@ fn run_scenes(
     };
     let estimate = scenes::estimate_usd(&meta, copy.duration_us);
     print_copy(video, credentials, &copy, words.len(), estimate);
-    // One thread is plenty: the calls wait on the network, the cut search runs on the blocking pool.
+    // One thread is plenty: the calls wait on the network (the copy and its cuts were made above).
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
