@@ -26,19 +26,29 @@ export function useNeedsKey(): boolean {
   return useAi((s) => needsKey(s.status));
 }
 
+/** Changes told so far (saves and `ai-status` events): a read asked for before the latest one is out of date. */
+let changes = 0;
+
+/** A status Rust told or a save answered: always the newest. */
 export function setAiStatus(status: AiStatus) {
+  changes += 1;
   useAi.setState({ status });
 }
 
-/** Asks Rust for the status again (with an access code, that asks the relay for the credit). */
+/**
+ * Asks Rust for the status again (with an access code, that asks the relay for the credit, which can take seconds).
+ * An answer is dropped when a save or an `ai-status` event came in while it was asked: it may describe credentials
+ * that were removed or replaced since. Gives the status kept.
+ */
 export async function refreshAiStatus(): Promise<AiStatus | null> {
+  const asked = changes;
   try {
     const status = await aiBridge.status();
-    setAiStatus(status);
-    return status;
+    if (changes === asked) useAi.setState({ status });
   } catch {
-    return useAi.getState().status;
+    // The status stays as it was.
   }
+  return useAi.getState().status;
 }
 
 /** Reads the status once and follows every change after it. */
