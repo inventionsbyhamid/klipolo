@@ -375,12 +375,7 @@ async fn the_wire_body_holds_only_what_the_relay_takes_through_a_refusal_round()
     assert!(proposal.ranges[0].start <= secs(1.0) && proposal.ranges[0].end >= secs(1.4));
     assert_eq!(out.reply, "I'll cut \u{201c}there\u{201d}.");
     // Each call priced from its usage, cached input at the cached price.
-    let cost = |input: f64, cached: f64, output: f64| {
-        (input - cached) * SPARK_INPUT_USD
-            + cached * SPARK_CACHED_INPUT_USD
-            + output * SPARK_OUTPUT_USD
-    };
-    let expected = cost(1800.0, 1700.0, 300.0) + cost(2000.0, 1800.0, 200.0);
+    let expected = spark_cost(1800.0, 1700.0, 300.0) + spark_cost(2000.0, 1800.0, 200.0);
     assert!(
         (out.usage_usd - expected).abs() < 1e-12,
         "{} vs {expected}",
@@ -484,6 +479,74 @@ fn neutral_request() -> ModelRequest {
         tools: json!([]),
         input: vec![Item::User { text: "hi".into() }],
     }
+}
+
+/// `spark` with another `status`, and these fields beside it.
+fn ended(status: &str, extra: Value, output: Vec<Value>) -> Value {
+    let mut body = spark(output, 1800, 1700, 4096);
+    body["status"] = json!(status);
+    for (k, v) in extra.as_object().unwrap() {
+        body[k] = v.clone();
+    }
+    body
+}
+
+fn spark_cost(input: f64, cached: f64, output: f64) -> f64 {
+    (input - cached) * SPARK_INPUT_USD + cached * SPARK_CACHED_INPUT_USD + output * SPARK_OUTPUT_USD
+}
+
+#[tokio::test]
+async fn a_cut_off_answer_is_an_error_that_still_counts() {
+    let server = MockServer::start().await;
+    // Cut off at the output cap: its call may be partial, so nothing of it is used, and no refusal round is asked.
+    answer_once(
+        &server,
+        ok(ended(
+            "incomplete",
+            json!({"incomplete_details": {"reason": "max_output_tokens"}}),
+            vec![
+                reasoning(),
+                function_call(
+                    "call_1",
+                    "cutRange",
+                    json!({"startSec": 12.3, "endSec": 19.7}),
+                ),
+            ],
+        )),
+    )
+    .await;
+    let (p, inputs, ctx) = talk();
+    let before = p.clone();
+    let e = plan(&chat(&server), &[], &ctx, "cut there", &inputs, &p)
+        .await
+        .unwrap_err();
+    assert_eq!(e.kind, ChatErrorKind::Other);
+    assert_eq!(e.detail, "failed: cut off: max_output_tokens");
+    assert!((e.usage_usd - spark_cost(1800.0, 1700.0, 4096.0)).abs() < 1e-12);
+    assert_eq!(p, before);
+    assert_eq!(bodies(&server).await.len(), 1);
+}
+
+#[tokio::test]
+async fn a_failed_answer_is_an_error_that_still_counts() {
+    let server = MockServer::start().await;
+    answer_once(
+        &server,
+        ok(ended(
+            "failed",
+            json!({"error": {"code": "server_error", "message": "Something broke."}}),
+            vec![],
+        )),
+    )
+    .await;
+    let e = chat(&server).respond(&neutral_request()).await.unwrap_err();
+    assert_eq!(
+        e,
+        ModelError::Other {
+            detail: "answer failed: server_error".into(),
+            usage_usd: spark_cost(1800.0, 1700.0, 4096.0),
+        }
+    );
 }
 
 #[tokio::test]

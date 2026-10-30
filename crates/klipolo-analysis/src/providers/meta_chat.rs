@@ -148,10 +148,30 @@ fn item(item: &Item) -> Value {
     }
 }
 
-/// Meta's answer in chat's terms, priced from its usage.
+/// Meta's answer in chat's terms, priced from its usage. An answer that came back `failed`, or `incomplete` (cut off,
+/// at its output cap or otherwise), is an error: its calls may be partial, so none of them is used. It is still billed,
+/// so the error carries its cost.
 fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
-    if out.status.as_deref() == Some("failed") {
-        return Err(ModelError::other("Meta's answer failed"));
+    let usage_usd = pricing::spark_usd(out.usage);
+    // A code from the answer, for logs: only lowercase letters, digits and underscores, never free text.
+    let code = |pointer: &str| {
+        (out.raw.pointer(pointer).and_then(Value::as_str))
+            .filter(|c| {
+                !c.is_empty()
+                    && c.len() <= 64
+                    && (c.bytes())
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+            })
+            .unwrap_or("no reason given")
+            .to_owned()
+    };
+    let detail = match out.status.as_deref() {
+        Some("failed") => Some(format!("answer failed: {}", code("/error/code"))),
+        Some("incomplete") => Some(format!("cut off: {}", code("/incomplete_details/reason"))),
+        _ => None,
+    };
+    if let Some(detail) = detail {
+        return Err(ModelError::Other { detail, usage_usd });
     }
     Ok(ModelResponse {
         text: out.output_text.unwrap_or_default(),
@@ -162,7 +182,7 @@ fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
                 arguments: c.arguments,
             })
             .collect(),
-        usage_usd: pricing::spark_usd(out.usage),
+        usage_usd,
     })
 }
 
