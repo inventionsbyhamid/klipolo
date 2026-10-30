@@ -4,6 +4,8 @@
 # Fails unless the licences and the fonts are in Resources, every Mach-O is built for <arch> only and for macOS 15.0
 # or older, every load path is @rpath/, @executable_path/, @loader_path/, /usr/lib/ or /System/Library/, and every
 # LC_RPATH is relative (@executable_path/ or @loader_path/), never a machine path such as the dev FFmpeg prefix's.
+# The app must also find its libraries: the main executable's LC_RPATHs include @executable_path/../Frameworks, and
+# every @rpath/<name> that any Mach-O in the bundle loads is a file at Contents/Frameworks/<name>.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 . "$here/lib.sh"
@@ -12,9 +14,12 @@ usage() { echo "usage: $0 <Klipolo.app> <x86_64|arm64>" >&2; exit 2; }
 app=${1%/} arch=$2
 case "$arch" in x86_64 | arm64) ;; aarch64) arch=arm64 ;; *) usage ;; esac
 [ -f "$app/Contents/Info.plist" ] || { echo "refused: not an app bundle: $app" >&2; exit 2; }
+main=$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")
+[ -f "$main" ] || { echo "refused: $app has no main executable at $main" >&2; exit 2; }
 home=$(cd ~ && pwd -P)
 rc=0
 fail() { echo "FAIL: $*"; rc=1; }
+is_macho "$main" || fail "the main executable ${main#"$app"/} isn't a Mach-O file"
 
 for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt NOTICE.txt; do
   [ -f "$app/Contents/Resources/licenses/$f" ] || fail "licenses/$f isn't in the app"
@@ -43,8 +48,17 @@ while IFS= read -r -d '' f; do
     echo "   LC_RPATH $r"
     case "$r" in @executable_path/* | @loader_path/*) ;; *) fail "$rel has a machine LC_RPATH: $r" ;; esac
   done
+  if [ "$f" = "$main" ] && ! grep -qx '@executable_path/../Frameworks' <<< "$rpaths"; then
+    fail "$rel has no @executable_path/../Frameworks LC_RPATH, so it can't find the libraries in Frameworks"
+  fi
+  own=$(otool -D "$f" | tail -n +2)
+  for dep in $(otool -L "$f" | tail -n +2 | awk '{print $1}' | grep '^@rpath/' || true); do
+    [ "$dep" = "$own" ] && continue
+    [ -f "$app/Contents/Frameworks/${dep#@rpath/}" ] || fail "$rel loads $dep, but Contents/Frameworks/${dep#@rpath/} isn't there"
+  done
 done < "$files"
 [ "$count" -gt 1 ] || fail "only $count Mach-O files in the app"
 [ $rc -eq 0 ] || { echo "RESULT: FAIL" >&2; exit 1; }
 home_paths=$(strings -a "$app/Contents/MacOS/"* | LC_ALL=C grep -c "$home/" || true)
-echo "bundle check: $count Mach-O files, $arch only, relative rpaths only ($home_paths strings still name the home folder)"
+echo "bundle check: $count Mach-O files, $arch only, relative rpaths only, every @rpath library in Frameworks" \
+  "($home_paths strings still name the home folder)"
