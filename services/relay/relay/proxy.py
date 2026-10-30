@@ -246,6 +246,11 @@ async def admit(conn: sqlite3.Connection, slot: Slot, settings: Settings, amount
     """Reserve `amount` for the call, or refuse with 402 when the device or the
     relay has no room for it on top of what is spent and what calls in flight
     have reserved. With `amount` 0 this only checks that any room is left."""
+    if amount > settings.device_cap_usd:
+        # No device could ever have room for it: say so, not "used its credit".
+        raise RelayError(
+            413, "too_large", "This request could cost more than a device's whole Klipolo credit. Make it smaller."
+        )
     in_flight = slot.owner
     async with in_flight.admission:
         if in_flight.unwritten:

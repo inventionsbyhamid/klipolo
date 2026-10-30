@@ -535,6 +535,25 @@ def test_a_media_call_needs_room_for_75_cents_more(client, conn, meta):
     assert client.post("/meta/v1/responses", json=spark_request(), headers=device.headers).status_code == 200
 
 
+def test_a_call_that_could_cost_more_than_the_device_cap_is_413(settings, conn, meta):
+    device = add_device(conn)
+    route = meta.post("/responses").respond(200, json=spark_body())
+    video = spark_request(input=[user({"type": "input_video", "file_id": "file-1"})])
+
+    with relay_client(settings, device_cap_usd=0.50) as client:
+        # A fresh device: "used its credit" would be wrong here.
+        too_big = client.post("/meta/v1/responses", json=video, headers=device.headers)
+        small = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
+
+    assert too_big.status_code == 413
+    assert too_big.json() == {
+        "error": "too_large",
+        "message": "This request could cost more than a device's whole Klipolo credit. Make it smaller.",
+    }
+    assert small.status_code == 200
+    assert route.call_count == 1
+
+
 def test_over_cap_device_is_refused_before_its_body_is_read(client, conn, meta, monkeypatch):
     monkeypatch.setattr(proxy, "MAX_JSON_BYTES", 100)
     device = add_device(conn, spent=2.00)
