@@ -12,7 +12,8 @@
 //! `TOLD_PERSON` for one refused for the person, whose reason is never sent back). The calls of the second answer
 //! replace the refused ones: the first answer's other calls and the second's (a repeat of what was done dropped) are
 //! compiled once, in that order, against the same snapshot and inputs, so the message still makes one additions transaction and
-//! one proposal. A call refused back to the model again stays undone, and the reply says so.
+//! one proposal. A call refused back to the model again stays undone, and the reply says so; so does a tool refused in
+//! the first answer that the second answer lets go (no call of it, and no question or `cannotDo` instead).
 //!
 //! The reply is the model's text, then the sentences of refusals meant for the person, then what couldn't be done; all
 //! of it without em or en dashes (`sanitize::reply`). When nothing came of the answer but what couldn't be done, the
@@ -210,7 +211,7 @@ pub async fn plan(
             &first.text,
             read.calls,
             compiled,
-            &[],
+            (&[], &[]),
             spent,
             vec![first.calls],
         ));
@@ -247,6 +248,16 @@ pub async fn plan(
         .map(|(call, _)| call.name.as_str())
         .collect();
     let again = Read::of(&second.calls);
+    // A tool refused in the first answer that the second neither calls nor asks or explains about: still not done.
+    let dealt_with = (again.calls.iter())
+        .any(|c| matches!(c, ToolCall::AskUser { .. } | ToolCall::CannotDo { .. }));
+    let mut dropped: Vec<String> = Vec::new();
+    for name in &refused {
+        let called = second.calls.iter().any(|c| c.name == *name);
+        if !dealt_with && !called && !dropped.iter().any(|d| d == name) {
+            dropped.push((*name).to_owned());
+        }
+    }
     for call in again.calls {
         let repeat = calls[..kept].contains(&call);
         let redone = done.contains(&call.name()) && !refused.contains(&call.name());
@@ -265,7 +276,7 @@ pub async fn plan(
         &second.text,
         calls,
         compiled,
-        &unfinished,
+        (&unfinished, &dropped),
         spent,
         vec![first.calls, second.calls],
     ))
@@ -381,13 +392,14 @@ impl Outcome {
     }
 }
 
-/// The message's result from the last answer's `text` and what `calls` compiled to; `unfinished` names the calls
-/// still refused back to the model.
+/// The message's result from the last answer's `text` and what `calls` compiled to. `unfinished` names the calls still
+/// refused back to the model after the last answer, whose text may claim them; `dropped` the tools refused in the first
+/// answer that the second let go, which its text was written knowing.
 fn finish(
     text: &str,
     calls: Vec<ToolCall>,
     compiled: Compiled,
-    unfinished: &[String],
+    (unfinished, dropped): (&[String], &[String]),
     usage_usd: f64,
     answers: Vec<Vec<FunctionCall>>,
 ) -> PlanOut {
@@ -410,8 +422,9 @@ fn finish(
             }
         }
     }
-    if !unfinished.is_empty() {
-        parts.push(could_not(unfinished));
+    let not_done: Vec<String> = unfinished.iter().chain(dropped).cloned().collect();
+    if !not_done.is_empty() {
+        parts.push(could_not(&not_done));
     }
     if parts.is_empty() {
         parts.extend(compiled.questions.iter().map(|q| full_stop(q.trim())));
@@ -429,7 +442,7 @@ fn finish(
     }
     let reply = sanitize::reply(&parts.join(" "));
     PlanOut {
-        note: note(&calls, &compiled),
+        note: note(&calls, &compiled, dropped),
         reply,
         compiled,
         usage_usd,
@@ -447,27 +460,27 @@ fn full_stop(text: &str) -> String {
     }
 }
 
-/// What a tool does, as the reply names it when it couldn't be done.
+/// What a tool does, as the reply says it couldn't.
 fn task(tool: &str) -> &'static str {
     match tool {
-        "cutRange" => "the cut",
-        "keepOnly" => "keeping only that part",
-        "removeSilences" => "removing the pauses",
-        "removeFillers" => "removing the filler words",
-        "trimClip" => "the trim",
-        "splitAt" => "the split",
-        "setFormat" => "the format change",
-        "setCaptions" => "the captions change",
-        "fixCaptionWords" => "the word fix",
-        "findMoments" => "finding those moments",
-        "followSubject" => "following the subject",
-        "blurObjects" => "the blur",
-        "undo" => "the undo",
-        _ => "part of this",
+        "cutRange" => "make the cut",
+        "keepOnly" => "keep only that part",
+        "removeSilences" => "remove the pauses",
+        "removeFillers" => "remove the filler words",
+        "trimClip" => "trim the clip",
+        "splitAt" => "split the clip",
+        "setFormat" => "change the format",
+        "setCaptions" => "change the captions",
+        "fixCaptionWords" => "fix the words",
+        "findMoments" => "find those moments",
+        "followSubject" => "follow the subject",
+        "blurObjects" => "add the blur",
+        "undo" => "undo the last change",
+        _ => "do part of this",
     }
 }
 
-/// "I couldn't do the cut, so I left it unchanged." for the tools named.
+/// "I couldn't make the cut, so I left that unchanged." for the tools named.
 fn could_not(tools: &[String]) -> String {
     let mut tasks: Vec<&str> = Vec::new();
     for t in tools {
@@ -478,25 +491,25 @@ fn could_not(tools: &[String]) -> String {
     }
     let list = match tasks.as_slice() {
         [one] => (*one).to_owned(),
-        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
-        [] => "part of this".to_owned(),
+        [rest @ .., last] => format!("{} or {last}", rest.join(", ")),
+        [] => "do part of this".to_owned(),
     };
-    let it = if tasks.len() > 1 { "those" } else { "it" };
-    format!("I couldn't do {list}, so I left {it} unchanged.")
+    let it = if tasks.len() > 1 { "those" } else { "that" };
+    format!("I couldn't {list}, so I left {it} unchanged.")
 }
 
-/// One line on what `calls` came to: "Applied setFormat. Proposed cutRange (10.0 s). Asked: Which part? Not done:
-/// trimClip."
-fn note(calls: &[ToolCall], compiled: &Compiled) -> String {
+/// One line on what `calls` came to, with the tools `dropped` in a refusal round: "Applied setFormat. Proposed cutRange
+/// (10.0 s). Asked: Which part? Not done: trimClip."
+fn note(calls: &[ToolCall], compiled: &Compiled, dropped: &[String]) -> String {
     let refused = |i: usize| compiled.refusals.iter().any(|r| r.call_index == i);
-    let mut applied: Vec<&'static str> = Vec::new();
-    let mut proposed: Vec<&'static str> = Vec::new();
-    let mut not_done: Vec<&'static str> = Vec::new();
-    let add = |list: &mut Vec<&'static str>, name: &'static str| {
+    let mut applied: Vec<&str> = Vec::new();
+    let mut proposed: Vec<&str> = Vec::new();
+    let mut not_done: Vec<&str> = Vec::new();
+    fn add<'a>(list: &mut Vec<&'a str>, name: &'a str) {
         if !list.contains(&name) {
             list.push(name);
         }
-    };
+    }
     for (i, call) in calls.iter().enumerate() {
         let name = call.name();
         if refused(i) {
@@ -511,6 +524,9 @@ fn note(calls: &[ToolCall], compiled: &Compiled) -> String {
         ) {
             add(&mut applied, name);
         }
+    }
+    for name in dropped {
+        add(&mut not_done, name);
     }
     let mut parts: Vec<String> = Vec::new();
     if !applied.is_empty() {

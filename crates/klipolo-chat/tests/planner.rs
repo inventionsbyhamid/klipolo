@@ -672,7 +672,11 @@ fn a_part_still_refused_is_named_beside_what_was_done() {
         "{}",
         out.reply
     );
-    assert!(out.reply.contains("I couldn't do the cut"), "{}", out.reply);
+    assert!(
+        out.reply.contains("I couldn't make the cut"),
+        "{}",
+        out.reply
+    );
     assert_plain(&out.reply);
 }
 
@@ -749,6 +753,64 @@ fn history_keeps_the_last_six_exchanges() {
         ("make it square", "Square now.")
     );
     assert!(t.note.contains("Applied setFormat"), "{}", t.note);
+}
+
+#[test]
+fn a_refused_call_the_second_answer_lets_go_is_named() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    // The cut is refused back, and the second answer says it is done without calling anything.
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![square_call("call_1"), cut_call("call_2", 12.3, 19.7)],
+            0.002,
+        ),
+        answer("", vec![], 0.002),
+    ]);
+    let out = send(&model, &[], "square, and cut the boring bit", &i, &p).unwrap();
+    assert!(out.compiled.additions.is_some());
+    assert!(
+        out.reply.contains("I couldn't make the cut"),
+        "{}",
+        out.reply
+    );
+    assert!(!out.reply.contains("Done"), "{}", out.reply);
+    assert!(out.note.contains("Not done: cutRange."), "{}", out.note);
+
+    // There are no pauses to remove: the model says so after the refusal, and its words stay.
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![fc("call_1", "removeSilences", r#"{"minPauseSec": 1}"#)],
+            0.002,
+        ),
+        answer("There are no long pauses here.", vec![], 0.002),
+    ]);
+    let out = send(&model, &[], "remove the long pauses", &i, &p).unwrap();
+    assert!(
+        out.reply.starts_with("There are no long pauses here."),
+        "{}",
+        out.reply
+    );
+    assert!(
+        out.reply.contains("I couldn't remove the pauses"),
+        "{}",
+        out.reply
+    );
+
+    // Asking or saying it can't: the model dealt with it, nothing more is said.
+    for (name, args) in [
+        ("askUser", r#"{"question": "Which part is boring?"}"#),
+        ("cannotDo", r#"{"reason": "Nothing there is boring."}"#),
+    ] {
+        let model = Fake::new(vec![
+            answer("", vec![cut_call("call_1", 12.3, 19.7)], 0.002),
+            answer("", vec![fc("call_2", name, args)], 0.002),
+        ]);
+        let out = send(&model, &[], "cut the boring bit", &i, &p).unwrap();
+        assert!(!out.reply.contains("couldn't"), "{name}: {}", out.reply);
+    }
 }
 
 #[test]
