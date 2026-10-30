@@ -8,6 +8,7 @@ use klipolo_model::media::music::{
     add_music_ops, is_music, refit_music_ops, with_music_refit, MusicOpts, MUSIC_FADE_IN_US,
     MUSIC_FADE_OUT_US,
 };
+use klipolo_model::ops::ClipPatch;
 use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::query::video_duration;
 use klipolo_model::time::Us;
@@ -76,6 +77,16 @@ fn cut(from: f64, to: f64) -> Op {
             start: secs(from),
             end: secs(to),
         }],
+    }
+}
+
+fn speed(clip: &str, speed: f64) -> Op {
+    Op::UpdateClip {
+        id: clip.into(),
+        patch: ClipPatch {
+            speed: Some(speed),
+            ..ClipPatch::default()
+        },
     }
 }
 
@@ -628,4 +639,43 @@ fn music_stops_at_the_next_layer_on_its_track() {
     assert!(m.iter().all(|i| track_of(&long, &i.id).id == track));
     assert_eq!(fade_out(m[4]), 1.5, "3 s piece: fades over half of it");
     assert_eq!(item_by_id(&long, "tail").start_us, secs(35.0));
+}
+
+#[test]
+fn speed_change_refits_music() {
+    for (song, fast, back) in [
+        ("song", vec![(0.0, 15.0)], vec![(0.0, 30.0)]),
+        (
+            "loop",
+            vec![(0.0, 8.0), (8.0, 15.0)],
+            vec![(0.0, 8.0), (8.0, 16.0), (16.0, 24.0), (24.0, 30.0)],
+        ),
+    ] {
+        let p = with_music(&video(30.0), song, MusicOpts::default());
+        // Twice as fast: the video is 15 s and the music ends there, fading out over its last 2 s.
+        let p = apply_ops(
+            &p,
+            &with_music_refit(&p, vec![speed("take-0", 2.0)]).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(video_duration(&p.timeline), secs(15.0));
+        let m = music(&p);
+        assert_eq!(spans(&m), fast, "{song} at 2x");
+        assert_one_bed(&p, song);
+        assert_eq!(fade_out(m[m.len() - 1]), 2.0, "{song} at 2x");
+        // Back to normal speed: 30 s again, the music fills it with its fades in place.
+        let p = apply_ops(
+            &p,
+            &with_music_refit(&p, vec![speed("take-0", 1.0)]).unwrap(),
+        )
+        .unwrap();
+        let m = music(&p);
+        assert_eq!(spans(&m), back, "{song} back at 1x");
+        assert_one_bed(&p, song);
+        assert_eq!(
+            (fade_in(m[0]), fade_out(m[m.len() - 1])),
+            (0.5, 2.0),
+            "{song} back at 1x"
+        );
+    }
 }
