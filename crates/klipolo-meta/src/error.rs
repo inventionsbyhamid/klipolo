@@ -31,7 +31,7 @@ pub enum MetaError {
         message: Option<String>,
     },
     /// 503 and other server errors: Meta or the relay cannot answer right
-    /// now, with the server's reason when it gave one ("Relay not configured.").
+    /// now, with the server's reason when it gave one.
     #[error("Meta or the relay is overloaded or unavailable (5xx){}", detail(.message.as_ref()))]
     Overloaded { message: Option<String> },
     /// Any other refused request (400, 404, 413, 422...), with the server's reason.
@@ -55,6 +55,17 @@ pub enum MetaError {
     /// its reason when it gave one.
     #[error("declined under Meta's content policy{}", detail(.message.as_ref()))]
     Refused { message: Option<String> },
+    /// 504 or 408: no answer in time (Meta's non-streaming limit, the
+    /// relay's wait for Meta, or a request body too slow to arrive), with the
+    /// server's reason when it gave one.
+    #[error("timed out ({status}){}", detail(.message.as_ref()))]
+    TimedOut {
+        status: u16,
+        message: Option<String>,
+    },
+    /// 503 `not_configured`: the relay has no Meta key of its own yet.
+    #[error("the relay has no Meta key (503 not_configured)")]
+    NotConfigured,
 }
 
 /// The most of a server's message kept in an error.
@@ -64,6 +75,8 @@ const MAX_MESSAGE_CHARS: usize = 300;
 const RELAY_BUSY_CODE: &str = "busy";
 /// Meta's code for a request it won't serve under its content policy.
 const CONTENT_POLICY_CODE: &str = "content_policy_violation";
+/// The relay's 503 code while it has no Meta key.
+const NOT_CONFIGURED_CODE: &str = "not_configured";
 
 /// ": message" for `Display`, or nothing when there is no message.
 fn detail(message: Option<&String>) -> String {
@@ -106,6 +119,13 @@ impl MetaError {
                 code: body_code(body, secrets),
                 message: body_message(body, secrets),
             },
+            408 | 504 => Self::TimedOut {
+                status,
+                message: body_message(body, secrets),
+            },
+            503 if body_code(body, secrets).as_deref() == Some(NOT_CONFIGURED_CODE) => {
+                Self::NotConfigured
+            }
             500..=599 => Self::Overloaded {
                 message: body_message(body, secrets),
             },
@@ -177,6 +197,11 @@ impl MetaError {
             Self::Refused { .. } => {
                 "Meta turned this down under its content policy. Try wording it differently.".into()
             }
+            Self::TimedOut { message, .. } => sentence(
+                message.as_deref().unwrap_or_default(),
+                "Meta took too long to answer. Try again.",
+            ),
+            Self::NotConfigured => "Klipolo's AI service isn't set up yet. Try again later or add your own Meta key in Settings.".into(),
         }
     }
 }

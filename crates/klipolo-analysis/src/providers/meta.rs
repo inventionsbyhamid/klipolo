@@ -203,6 +203,9 @@ pub fn provider_error(e: MetaError) -> ProviderError {
             (ProviderErrorKind::Failed, None)
         }
         MetaError::Refused { .. } => (ProviderErrorKind::Failed, None),
+        MetaError::TimedOut { .. } | MetaError::NotConfigured => {
+            (ProviderErrorKind::Unavailable, None)
+        }
     };
     ProviderError {
         kind,

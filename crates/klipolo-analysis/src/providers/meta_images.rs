@@ -32,6 +32,7 @@ const KEY_OUT_OF_CREDIT: &str =
 const REFUSED: &str = "Muse Image won't draw that, so try describing it another way.";
 const TIMEOUT: &str = "Muse Image took too long to answer, so try again.";
 const NOT_ALLOWED: &str = "Your Meta key or access code wasn't accepted, so check it in Settings.";
+const NOT_CONFIGURED: &str = "Klipolo's AI service isn't set up yet, so try again later or add your own Meta key in Settings.";
 const OFFLINE: &str =
     "Klipolo couldn't reach Muse Image, so check your internet connection and try again.";
 const NO_PICTURE: &str = "Muse Image didn't send a picture back, so try again.";
@@ -176,6 +177,8 @@ fn image_error(e: &MetaError, relay: bool) -> ImageError {
             (ImageErrorKind::Busy, BUSY)
         }
         MetaError::Refused { .. } => (ImageErrorKind::Refused, REFUSED),
+        MetaError::TimedOut { .. } => (ImageErrorKind::Timeout, TIMEOUT),
+        MetaError::NotConfigured => (ImageErrorKind::Other, NOT_CONFIGURED),
         MetaError::Unauthorized | MetaError::NotAllowed { .. } => {
             (ImageErrorKind::Other, NOT_ALLOWED)
         }

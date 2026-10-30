@@ -141,6 +141,15 @@ fn user_messages_are_plain_and_name_settings_where_needed() {
         MetaError::Refused {
             message: Some("The prompt \u{2014} as written \u{2014} breaks the policy".into()),
         },
+        MetaError::TimedOut {
+            status: 504,
+            message: None,
+        },
+        MetaError::TimedOut {
+            status: 408,
+            message: Some("Too slow \u{2014} try again".into()),
+        },
+        MetaError::NotConfigured,
     ];
     for error in &errors {
         let text = error.user_message();
@@ -351,6 +360,51 @@ async fn status_402_maps_to_budget_with_relay_message() {
     assert_eq!(error.user_message(), BUDGET_MESSAGE);
 }
 
+/// Meta's non-streaming time limit (504), the relay's wait for Meta (504) and a body that took too long to arrive
+/// (408) are timeouts, not a busy service.
+#[tokio::test]
+async fn statuses_408_and_504_are_timeouts() {
+    let meta_limit = json!({"error": {
+        "code": "gateway_timeout",
+        "message": "Request exceeded the non-streaming server time limit before a response was produced.",
+        "type": "server_error",
+    }});
+    let error = transcribe_error(ResponseTemplate::new(504).set_body_json(meta_limit)).await;
+    assert_eq!(
+        error,
+        MetaError::TimedOut {
+            status: 504,
+            message: Some(
+                "Request exceeded the non-streaming server time limit before a response was produced."
+                    .into()
+            ),
+        }
+    );
+    let relay_slow = json!({"error": "request_timeout", "message": "The request took too long to arrive. Try again."});
+    let error = transcribe_error(ResponseTemplate::new(408).set_body_json(relay_slow)).await;
+    assert_eq!(
+        error,
+        MetaError::TimedOut {
+            status: 408,
+            message: Some("The request took too long to arrive. Try again.".into()),
+        }
+    );
+    let bare = transcribe_error(ResponseTemplate::new(504)).await;
+    assert_eq!(
+        bare,
+        MetaError::TimedOut {
+            status: 504,
+            message: None
+        }
+    );
+    assert_eq!(
+        bare.user_message(),
+        "Meta took too long to answer. Try again."
+    );
+    assert_eq!(bare.to_string(), "timed out (504)");
+    assert!(!bare.is_busy());
+}
+
 #[tokio::test]
 async fn status_503_maps_to_overloaded() {
     let meta_overloaded = json!({"error": {
@@ -369,13 +423,11 @@ async fn status_503_maps_to_overloaded() {
 
     let relay_off = json!({"error": "not_configured", "message": "Relay not configured."});
     let error = transcribe_error(ResponseTemplate::new(503).set_body_json(relay_off)).await;
+    assert_eq!(error, MetaError::NotConfigured);
     assert_eq!(
-        error,
-        MetaError::Overloaded {
-            message: Some("Relay not configured.".into())
-        }
+        error.user_message(),
+        "Klipolo's AI service isn't set up yet. Try again later or add your own Meta key in Settings."
     );
-    assert_eq!(error.user_message(), "Relay not configured.");
 
     // A bare code is not shown; the plain fallback is.
     let bare = json!({"error": "charging_unavailable"});
@@ -1396,10 +1448,12 @@ fn variant(error: &MetaError) -> &'static str {
         MetaError::Decode(_) => "Decode",
         MetaError::LocalFile { .. } => "LocalFile",
         MetaError::Refused { .. } => "Refused",
+        MetaError::TimedOut { .. } => "TimedOut",
+        MetaError::NotConfigured => "NotConfigured",
     }
 }
 
-const VARIANTS: usize = 11;
+const VARIANTS: usize = 13;
 
 /// A server that answers every request with `status` and a body quoting `echo`.
 async fn echoing(status: u16, echo: &str) -> MockServer {
@@ -1423,7 +1477,9 @@ async fn echoing(status: u16, echo: &str) -> MockServer {
 async fn error_text_never_contains_key() {
     const CODE: &str = "ACCESS-CODE-9f8e7d";
     let mut errors: Vec<(MetaError, Vec<&str>)> = Vec::new();
-    for status in [200, 400, 401, 402, 403, 404, 413, 422, 429, 500, 502, 503] {
+    for status in [
+        200, 400, 401, 402, 403, 404, 408, 413, 422, 429, 500, 502, 503, 504,
+    ] {
         // Key mode with a relay token for alignment: both are its secrets.
         let server = echoing(status, &format!("key {KEY} token {TOKEN}")).await;
         let keyed = direct(&server)
@@ -1471,6 +1527,18 @@ async fn error_text_never_contains_key() {
     errors.push((
         keyed.transcribe(wav(), &[]).await.unwrap_err(),
         vec![KEY, TOKEN],
+    ));
+    // The relay without its Meta key.
+    let server = MockServer::start().await;
+    Mock::given(wiremock::matchers::any())
+        .respond_with(ResponseTemplate::new(503).set_body_json(json!({
+            "error": "not_configured", "message": format!("token {TOKEN}")
+        })))
+        .mount(&server)
+        .await;
+    errors.push((
+        relay(&server).transcribe(wav(), &[]).await.unwrap_err(),
+        vec![TOKEN],
     ));
     let unreachable = MetaClient::direct(secret(KEY))
         .with_meta_base(format!("{CLOSED}/v1"))
@@ -1521,6 +1589,7 @@ async fn error_text_never_contains_key() {
         "BadRequest",
         "Decode",
         "Refused",
+        "TimedOut",
     ] {
         assert!(
             errors

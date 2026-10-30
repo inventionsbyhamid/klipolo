@@ -247,6 +247,30 @@ async fn every_failure_is_one_plain_sentence() {
             "Muse Image won't draw that, so try describing it another way.",
         ),
         (
+            false,
+            ResponseTemplate::new(504).set_body_json(json!({"error": {"code": "gateway_timeout", "message": "Request exceeded the non-streaming server time limit before a response was produced.", "type": "server_error"}})),
+            ImageErrorKind::Timeout,
+            "Muse Image took too long to answer, so try again.",
+        ),
+        (
+            true,
+            ResponseTemplate::new(504).set_body_json(json!({"error": "meta_timeout", "message": "Meta took too long to answer. Try again."})),
+            ImageErrorKind::Timeout,
+            "Muse Image took too long to answer, so try again.",
+        ),
+        (
+            true,
+            ResponseTemplate::new(408).set_body_json(json!({"error": "request_timeout", "message": "The request took too long to arrive. Try again."})),
+            ImageErrorKind::Timeout,
+            "Muse Image took too long to answer, so try again.",
+        ),
+        (
+            true,
+            ResponseTemplate::new(503).set_body_json(json!({"error": "not_configured", "message": "Relay not configured."})),
+            ImageErrorKind::Other,
+            "Klipolo's AI service isn't set up yet, so try again later or add your own Meta key in Settings.",
+        ),
+        (
             true,
             ResponseTemplate::new(401),
             ImageErrorKind::Other,
