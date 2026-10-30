@@ -5,7 +5,7 @@ __pycache__/
 *.db
 *.db-wal
 *.db-shm
-data/
+/data/
 *.egg-info/
-build/
-dist/
+/build/
+/dist/
