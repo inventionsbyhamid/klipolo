@@ -52,6 +52,23 @@ services:
       - traefik.http.routers.klipolo-relay-https.tls=true
       - traefik.http.routers.klipolo-relay-https.tls.certresolver=letsencrypt
       - traefik.http.routers.klipolo-relay-https.service=klipolo-relay
+      - traefik.http.routers.klipolo-relay-https.middlewares=klipolo-relay-limit
+      # Rate limits per client IP: 10 requests a second with bursts of 30.
+      # Registering is open to anyone and is where access codes are tried,
+      # so it has its own router with a stricter limit: 10 a minute, bursts
+      # of 5. Its longer rule gives it the higher priority.
+      - traefik.http.middlewares.klipolo-relay-limit.ratelimit.average=10
+      - traefik.http.middlewares.klipolo-relay-limit.ratelimit.period=1s
+      - traefik.http.middlewares.klipolo-relay-limit.ratelimit.burst=30
+      - traefik.http.middlewares.klipolo-relay-register-limit.ratelimit.average=10
+      - traefik.http.middlewares.klipolo-relay-register-limit.ratelimit.period=1m
+      - traefik.http.middlewares.klipolo-relay-register-limit.ratelimit.burst=5
+      - traefik.http.routers.klipolo-relay-register.entrypoints=https
+      - traefik.http.routers.klipolo-relay-register.rule=Host(`api.klipolo.com`) && Method(`POST`) && Path(`/v1/devices`)
+      - traefik.http.routers.klipolo-relay-register.tls=true
+      - traefik.http.routers.klipolo-relay-register.tls.certresolver=letsencrypt
+      - traefik.http.routers.klipolo-relay-register.middlewares=klipolo-relay-register-limit
+      - traefik.http.routers.klipolo-relay-register.service=klipolo-relay
       - traefik.http.services.klipolo-relay.loadbalancer.server.port=8080
 
 volumes:
