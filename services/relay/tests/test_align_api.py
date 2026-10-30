@@ -8,6 +8,7 @@ import struct
 import tempfile
 import threading
 import time
+import uuid
 import wave
 from datetime import UTC, datetime, timedelta
 
@@ -568,7 +569,10 @@ def test_a_device_gets_at_most_two_alignments_at_once(tmp_path, temp_dir):
         threads = [run_in_thread(client, headers, results) for _ in range(2)]
         for _ in range(2):
             assert fake.entered.acquire(timeout=5)
-        assert_error(post(client, headers), 429, "busy")
+        busy = post(client, headers)
+        assert_error(busy, 429, "busy")
+        # An alignment takes a while: no point retrying within a second.
+        assert busy.headers["retry-after"] == "30"
         # Another device still gets in: it waits for a free worker.
         other = register(client, OTHER_DEVICE)
         thread = run_in_thread(client, other, results)
@@ -577,6 +581,28 @@ def test_a_device_gets_at_most_two_alignments_at_once(tmp_path, temp_dir):
         for t in [*threads, thread]:
             t.join(10)
         assert results == [200, 200, 200]
+
+
+def test_a_full_alignment_queue_is_429_with_retry_after(tmp_path, temp_dir):
+    with concurrent_app(tmp_path, 1) as client:
+        fake = FakeAligner()
+        fake.gate = threading.Event()
+        client.app.state.aligner = fake
+        results = []
+        # One worker: 4 requests may be in the relay at once.
+        devices = [register(client, str(uuid.uuid4())) for _ in range(5)]
+        threads = [run_in_thread(client, headers, results) for headers in devices[:4]]
+        assert fake.entered.acquire(timeout=5)
+        deadline = time.monotonic() + 5
+        while client.app.state.align_in_flight.count() < 4 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        busy = post(client, devices[4])
+        assert_error(busy, 429, "busy", "The relay is busy.")
+        assert busy.headers["retry-after"] == "30"
+        fake.gate.set()
+        for thread in threads:
+            thread.join(10)
+        assert results == [200] * 4
 
 
 # Model settings.

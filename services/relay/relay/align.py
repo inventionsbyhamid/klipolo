@@ -383,7 +383,7 @@ class Reservation:
 async def align_words(request: Request, device: Device, conn: Conn, settings: AppSettings) -> Any:
     check_quota(device, settings)
     device_id = device["device_id"]
-    slot = request.app.state.align_in_flight.acquire(device_id)
+    slot = _acquire_slot(request, device_id)
     path = None
     reservation = None
     result = Alignment()
@@ -431,6 +431,14 @@ async def align_words(request: Request, device: Device, conn: Conn, settings: Ap
             except FileNotFoundError:
                 pass
         slot.release()
+
+
+def _acquire_slot(request: Request, device_id: str) -> Any:
+    try:
+        return request.app.state.align_in_flight.acquire(device_id)
+    except RelayError as exc:
+        # An alignment takes tens of seconds; asking again in 1 s is no use.
+        raise RelayError(exc.status_code, exc.error, exc.message, headers={"Retry-After": "30"}) from None
 
 
 def check_coverage(planned: Sequence[PlannedTurn], n_samples: int) -> float:
