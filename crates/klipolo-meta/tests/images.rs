@@ -330,6 +330,39 @@ async fn each_answer_is_one_ledger_row_priced_per_image() {
     assert_eq!(pricing::image_usd(2), 0.02);
 }
 
+/// Meta bills every image it returns, so an answer whose picture can't be read still leaves its ledger row.
+#[tokio::test]
+async fn an_unreadable_answer_is_still_in_the_ledger() {
+    let server = MockServer::start().await;
+    serve(
+        &server,
+        "/v1/images/generations",
+        ResponseTemplate::new(200).set_body_json(json!({
+            "created": 1,
+            "data": [{"b64_json": STANDARD.encode(b"GIF89a not a png")}],
+        })),
+    )
+    .await;
+    let ledger = std::env::temp_dir().join(format!(
+        "klipolo-meta-images-unreadable-{}.csv",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&ledger);
+
+    let error = direct(&server)
+        .with_ledger(Some(ledger.clone()))
+        .generate_image("a cup", ImageSize::Square, 1)
+        .await
+        .unwrap_err();
+
+    let text = std::fs::read_to_string(&ledger).unwrap_or_default();
+    let _ = std::fs::remove_file(&ledger);
+    assert!(matches!(error, MetaError::Decode(_)), "{error:?}");
+    let rows: Vec<&str> = text.lines().collect();
+    assert_eq!(rows.len(), 2, "{text}");
+    assert!(rows[1].ends_with(",1 image,0.010000"), "{}", rows[1]);
+}
+
 #[test]
 fn debug_output_shows_the_size_not_the_bytes() {
     let image = GeneratedImage {

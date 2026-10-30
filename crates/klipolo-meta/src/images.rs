@@ -115,25 +115,22 @@ impl MetaClient {
             .json(&body);
         let response = self.send_meta(request).await?;
         let answer: ImagesWire = self.read_json(response).await?;
-        let images = answer
-            .data
-            .into_iter()
-            .map(image)
-            .collect::<Result<Vec<_>, _>>()?;
-        if !images.is_empty() {
+        // Meta bills each image it sends, whether or not it can be read here, so the row comes first.
+        let returned = answer.data.len();
+        if returned > 0 {
             self.record(Row {
                 model: IMAGE_MODEL,
                 purpose: "images/generations",
                 input_tokens: None,
                 output_tokens: None,
-                frames_or_seconds: match images.len() {
+                frames_or_seconds: match returned {
                     1 => "1 image".to_owned(),
                     n => format!("{n} images"),
                 },
-                cost_usd: pricing::image_usd(images.len()),
+                cost_usd: pricing::image_usd(returned),
             });
         }
-        Ok(images)
+        answer.data.into_iter().map(image).collect()
     }
 }
 
