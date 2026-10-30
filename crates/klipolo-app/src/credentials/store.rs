@@ -4,9 +4,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 
-#[cfg(target_os = "macos")]
-use klipolo_meta::ExposeSecret;
-use klipolo_meta::SecretString;
+use klipolo_meta::{ExposeSecret, SecretString};
 
 /// A store for small secrets, one per account name, all under one service.
 pub trait SecretStore: Send + Sync {
@@ -146,11 +144,22 @@ fn keychain_error(
     }
 }
 
+/// What a secret's last characters are, for "Saved, ending in 6789": at most 4, and none for a secret of 8 or fewer
+/// (showing half of a short secret would show too much).
+pub(crate) fn last_four(secret: &SecretString) -> Option<String> {
+    let chars: Vec<char> = secret.expose_secret().chars().collect();
+    (chars.len() > 8).then(|| chars[chars.len() - 4..].iter().collect())
+}
+
 #[cfg(test)]
 mod tests {
-    use klipolo_meta::ExposeSecret;
-
     use super::*;
+
+    #[test]
+    fn the_last_four_of_a_long_secret_only() {
+        assert_eq!(last_four(&"sk-abcdef-1234".into()).as_deref(), Some("1234"));
+        assert_eq!(last_four(&"12345678".into()), None);
+    }
 
     #[test]
     fn memory_store_keeps_replaces_and_deletes() {
