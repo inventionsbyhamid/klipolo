@@ -1,6 +1,7 @@
 """Error responses in one shape: {"error": "<code>", "message": "<plain sentence>"}."""
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -43,6 +44,17 @@ async def _http_error(request: Request, exc: StarletteHTTPException) -> JSONResp
     return error_response(exc.status_code, error, message, exc.headers)
 
 
+async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    fields: list[str] = []
+    for error in exc.errors():
+        name = next((part for part in error.get("loc", ())[1:] if isinstance(part, str)), None)
+        if name and name not in fields:
+            fields.append(name)
+    message = f"Check these fields: {', '.join(fields)}." if fields else "The request is not valid."
+    return error_response(422, "invalid_request", message)
+
+
 def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RelayError, _relay_error)
     app.add_exception_handler(StarletteHTTPException, _http_error)
+    app.add_exception_handler(RequestValidationError, _validation_error)
