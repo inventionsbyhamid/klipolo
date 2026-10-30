@@ -2,6 +2,9 @@ import icon from '../styles/klipolo-icon.svg';
 import { useSession } from '../player/session';
 import { Icon } from './Icon';
 
+/** Why Export is off while a video is open (export lands in a later build). */
+export const EXPORT_LATER = 'Export comes in the next build.';
+
 /** The top bar: the window's drag region, the project's name, and placeholders for undo, settings and export. */
 export function TopBar() {
   const name = useSession((s) => s.project?.name ?? 'Untitled project');
@@ -24,7 +27,7 @@ export function TopBar() {
         <button className="icon-btn" aria-label="Settings" title="Settings (Command ,)" disabled>
           <Icon name="settings" />
         </button>
-        <button className="btn btn-primary export-btn" disabled title={hasProject ? undefined : 'Add a video first'}>
+        <button className="btn btn-primary export-btn" disabled title={hasProject ? EXPORT_LATER : 'Add a video first'}>
           <Icon name="export" />
           Export
         </button>
