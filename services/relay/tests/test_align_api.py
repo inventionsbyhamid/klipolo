@@ -823,3 +823,34 @@ async def test_a_client_that_hangs_up_while_queued_never_reaches_the_model(tmp_p
         assert fake.calls == 1
         assert align_usage(settings, OTHER_DEVICE)[0] == 0
         assert app.state.align_in_flight.count() == 0
+
+
+@pytest.mark.anyio
+async def test_a_client_that_hangs_up_while_queued_frees_its_slot_and_minutes_at_once(tmp_path, temp_dir):
+    settings = load_settings({"RELAY_DB_PATH": str(tmp_path / "relay.db"), "ALIGN_CONCURRENCY": "1"})
+    first, second = add_device(settings), add_device(settings, OTHER_DEVICE)
+    async with started_app(settings) as app:
+        fake = FakeAligner()
+        fake.gate = threading.Event()
+        app.state.aligner = fake
+        running = HangingUpClient(app, first, make_wav(), TURNS)
+        queued = HangingUpClient(app, second, make_wav(seconds=6), THREE_TURNS)
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(running.run)
+            assert await anyio.to_thread.run_sync(fake.entered.acquire, True, 5)
+            tg.start_soon(queued.run)
+            await anyio.sleep(0.2)
+            assert app.state.align_in_flight.count(OTHER_DEVICE) == 1
+            assert align_usage(settings, OTHER_DEVICE)[0] > 0
+            queued.hang_up.set()
+            await anyio.sleep(0.2)
+            # The first alignment still holds the only worker; the queued one
+            # has already left the queue, given back its slot and its minutes.
+            try:
+                assert app.state.align_in_flight.count(OTHER_DEVICE) == 0
+                assert align_usage(settings, OTHER_DEVICE)[0] == 0
+                assert len(os.listdir(temp_dir)) == 1
+            finally:
+                fake.gate.set()
+        assert running.status == 200
+        assert fake.calls == 1

@@ -427,14 +427,17 @@ async def align_words(request: Request, device: Device, conn: Conn, settings: Ap
     path = None
     reservation = None
     result = Alignment()
+    # Set when the client hangs up: `gone` for the worker thread, `hung_up`
+    # for waits on the event loop.
     gone = threading.Event()
+    hung_up = asyncio.Event()
     watcher = None
     try:
         boundary = _boundary(request)
         fd, path = tempfile.mkstemp(prefix="align-", suffix=".wav")
         with os.fdopen(fd, "wb") as audio_file:
             turns_raw = await _read_form(request, boundary, audio_file)
-        watcher = asyncio.create_task(_watch_for_hang_up(request, gone))
+        watcher = asyncio.create_task(_watch_for_hang_up(request, gone, hung_up))
         # Parsing and planning are CPU work: off the event loop, so proxied
         # calls keep moving.
         turns = await run_in_threadpool(parse_turns, turns_raw)
@@ -444,23 +447,25 @@ async def align_words(request: Request, device: Device, conn: Conn, settings: Ap
         if planned:
             reservation = await run_in_threadpool(reserve_seconds, conn, device_id, seconds, settings)
             started = time.monotonic()
-            async with request.app.state.align_gate:
+            gate = request.app.state.align_gate
+            if await _wait_for_worker(gate, hung_up):
                 try:
-                    if not gone.is_set():
-                        result = await anyio.to_thread.run_sync(
-                            _align_file, request.app.state.aligner, path, planned, gone.is_set
-                        )
+                    result = await anyio.to_thread.run_sync(
+                        _align_file, request.app.state.aligner, path, planned, gone.is_set
+                    )
                 except AlignerUnavailable:
                     raise RelayError(
                         503, "align_unavailable", "Word timing is not available right now. Try again later."
                     ) from None
-            logger.info(
-                "aligned %.1f s of audio in %d turns for device %s in %.1f s",
-                result.seconds,
-                len(planned),
-                device_id[:8],
-                time.monotonic() - started,
-            )
+                finally:
+                    gate.release()
+                logger.info(
+                    "aligned %.1f s of audio in %d turns for device %s in %.1f s",
+                    result.seconds,
+                    len(planned),
+                    device_id[:8],
+                    time.monotonic() - started,
+                )
         if gone.is_set():
             # Nobody reads this; the unaligned turns are given back below.
             return error_response(400, "client_disconnected", "The request was cut off.")
@@ -627,13 +632,43 @@ def wav_samples(path: str) -> int:
     return n_samples
 
 
-async def _watch_for_hang_up(request: Request, gone: threading.Event) -> None:
+async def _watch_for_hang_up(request: Request, gone: threading.Event, hung_up: asyncio.Event) -> None:
     """With the body read, the next message is the client hanging up."""
     while True:
         message = await request.receive()
         if message["type"] == "http.disconnect":
             gone.set()
+            hung_up.set()
             return
+
+
+async def _wait_for_worker(gate: asyncio.Semaphore, hung_up: asyncio.Event) -> bool:
+    """Wait for a free alignment worker, or until the client hangs up, so a
+    request nobody waits for leaves the queue at once. True when a worker
+    was taken; the caller releases it."""
+    if hung_up.is_set():
+        return False
+    acquired = False
+
+    async def take(scope: anyio.CancelScope) -> None:
+        nonlocal acquired
+        await gate.acquire()
+        acquired = True
+        scope.cancel()
+
+    async def give_up(scope: anyio.CancelScope) -> None:
+        await hung_up.wait()
+        scope.cancel()
+
+    try:
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(take, tg.cancel_scope)
+            tg.start_soon(give_up, tg.cancel_scope)
+    except BaseException:
+        if acquired:
+            gate.release()
+        raise
+    return acquired
 
 
 def _align_file(
