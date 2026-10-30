@@ -67,6 +67,9 @@ FFmpeg is dynamically linked. Its libraries are the separate files in Klipolo.ap
 (libavcodec, libavformat, libavutil, libavfilter, libswscale, libswresample). You may replace them with your own
 modified build of these libraries, and Klipolo will use it. macOS checks the app's signature, so after replacing
 them, re-sign the app on your Mac: codesign --force --deep --sign - /Applications/Klipolo.app
+The re-signed app is no longer the notarized one, so macOS 15 won't open a downloaded copy until you remove the
+download mark: xattr -dr com.apple.quarantine /Applications/Klipolo.app
+Or open it once, then allow it in System Settings, Privacy & Security.
 
 The exact FFmpeg source used for this build is ffmpeg-$ffversion.tar.xz from https://ffmpeg.org/releases/
 (SHA-256 $ffsha). Klipolo's FFmpeg build script, scripts/build-ffmpeg.sh, is part of Klipolo's source code.
