@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from relay.pricing import cost_usd, estimate_usage
+from relay.pricing import cost_usd, reservation_usage
 
 
 def test_spark_cost_counts_cached_tokens_at_cached_price():
@@ -93,49 +93,36 @@ def test_malformed_usage_raises(usage):
         cost_usd("responses", "muse-spark-1.3", usage)
 
 
-def test_spark_estimate_is_request_bytes_over_four_at_the_input_price():
-    usage = estimate_usage("responses", "muse-spark-1.3", request_bytes=4001)
+def test_spark_reservation_is_request_bytes_over_four_plus_the_whole_output_limit():
+    usage = reservation_usage("responses", "muse-spark-1.3", request_bytes=4001, max_output_tokens=8192)
 
-    assert usage["estimated"] is True
-    assert usage["input_tokens"] == 1001
-    assert cost_usd("responses", "muse-spark-1.3", usage) == pytest.approx(1001 * 1.25e-6)
-
-
-def test_sam_estimate_charges_the_minimum_frames_for_a_video_and_each_image():
-    with_video = estimate_usage("responses", "sam-3.1", request_bytes=300, has_video=True, images=2)
-    images_only = estimate_usage("responses", "sam-3.1", request_bytes=300, images=2)
-
-    assert cost_usd("responses", "sam-3.1", with_video) == pytest.approx(50 * 0.20 / 1000 + 2 * 2.50 / 1000)
-    assert cost_usd("responses", "sam-3.1", images_only) == pytest.approx(2 * 2.50 / 1000)
+    assert usage == {"input_tokens": 1001, "output_tokens": 8192, "reserved": True}
+    assert cost_usd("responses", "muse-spark-1.3", usage) == pytest.approx(1001 * 1.25e-6 + 8192 * 4.25e-6)
 
 
-def test_transcribe_estimate_assumes_16_khz_16_bit_mono():
-    # 32,000 bytes per second is the lowest byte rate Meta accepts, so this is
-    # the longest the audio could be.
-    usage = estimate_usage("asr/transcribe", "muse-voice-transcribe-1.0", request_bytes=0, audio_bytes=32000 * 155)
+def test_spark_reservation_adds_75_cents_for_media():
+    usage = reservation_usage("responses", "muse-spark-1.3", request_bytes=400, max_output_tokens=100, media=True)
 
-    assert usage["audioDurationMs"] == 155000
+    assert usage["media_usd"] == 0.75
+    assert cost_usd("responses", "muse-spark-1.3", usage) == pytest.approx(100 * 1.25e-6 + 100 * 4.25e-6 + 0.75)
+
+
+def test_sam_reservation_is_media_plus_the_minimum_frames_and_each_image():
+    with_video = reservation_usage("responses", "sam-3.1", request_bytes=300, has_video=True, images=2)
+    images_only = reservation_usage("responses", "sam-3.1", request_bytes=300, images=2)
+
+    assert cost_usd("responses", "sam-3.1", with_video) == pytest.approx(0.75 + 50 * 0.20 / 1000 + 2 * 2.50 / 1000)
+    assert cost_usd("responses", "sam-3.1", images_only) == pytest.approx(0.75 + 2 * 2.50 / 1000)
+
+
+def test_transcribe_reservation_is_the_audio_length():
+    usage = reservation_usage("asr/transcribe", "muse-voice-transcribe-1.0", audio_seconds=155)
+
+    assert usage == {"audioDurationMs": 155000, "reserved": True}
     assert cost_usd("asr/transcribe", "muse-voice-transcribe-1.0", usage) == pytest.approx(0.18 * 155 / 3600)
 
 
-def test_media_estimate_is_at_least_the_floor():
-    small = estimate_usage("responses", "muse-spark-1.3", request_bytes=300, media=True)
-    large = estimate_usage("responses", "muse-spark-1.3", request_bytes=400_000, media=True)
-    sam = estimate_usage("responses", "sam-3.1", request_bytes=300, has_video=True, media=True)
+def test_media_amount_counts_only_in_a_reservation():
+    usage = {"input_tokens": 10, "output_tokens": 0, "media_usd": 0.75}
 
-    assert small["floor_usd"] == 0.10
-    assert cost_usd("responses", "muse-spark-1.3", small) == pytest.approx(0.10)
-    # Above the floor the byte estimate stands.
-    assert cost_usd("responses", "muse-spark-1.3", large) == pytest.approx(100_000 * 1.25e-6)
-    assert cost_usd("responses", "sam-3.1", sam) == pytest.approx(0.10)
-
-
-def test_text_estimate_has_no_floor():
-    usage = estimate_usage("responses", "muse-spark-1.3", request_bytes=300)
-
-    assert "floor_usd" not in usage
-    assert cost_usd("responses", "muse-spark-1.3", usage) == pytest.approx(75 * 1.25e-6)
-
-
-def test_floor_applies_only_to_estimates():
-    assert cost_usd("responses", "muse-spark-1.3", {"input_tokens": 10, "floor_usd": 0.10}) == pytest.approx(10 * 1.25e-6)
+    assert cost_usd("responses", "muse-spark-1.3", usage) == pytest.approx(10 * 1.25e-6)

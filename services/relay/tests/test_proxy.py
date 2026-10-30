@@ -1,12 +1,14 @@
 import concurrent.futures
 import email.parser
 import email.policy
+import io
 import json
 import logging
 import math
 import secrets
 import time
 import uuid
+import wave
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 
@@ -124,6 +126,18 @@ def spark_body(usage=SPARK_USAGE, model="muse-spark-1.3"):
 
 def spark_request(model="muse-spark-1.3", **extra):
     return {"model": model, "input": "Say hi.", **extra}
+
+
+def reserved_usage(sent, *, media=False, max_output_tokens=8192):
+    """The reservation for a Spark call whose forwarded body was `sent`."""
+    usage = {"input_tokens": math.ceil(len(sent) / 4), "output_tokens": max_output_tokens, "reserved": True}
+    if media:
+        usage["media_usd"] = 0.75
+    return usage
+
+
+def reserved_cost(sent, *, media=False, max_output_tokens=8192):
+    return math.ceil(len(sent) / 4) * 1.25e-6 + max_output_tokens * 4.25e-6 + (0.75 if media else 0)
 
 
 # The gate: token, relay AI, configuration.
@@ -509,7 +523,7 @@ def test_meta_unreachable_is_502_and_charges_nothing(client, conn, meta, error):
     assert ledger(conn) == []
 
 
-def test_meta_timeout_after_the_request_was_sent_charges_the_estimate(client, conn, meta):
+def test_meta_timeout_after_the_request_was_sent_charges_the_reservation(client, conn, meta):
     device = add_device(conn)
     route = meta.post("/responses").mock(side_effect=httpx.ReadTimeout("slow"))
 
@@ -518,13 +532,9 @@ def test_meta_timeout_after_the_request_was_sent_charges_the_estimate(client, co
     assert response.status_code == 504
     assert response.json() == {"error": "meta_timeout", "message": "Meta took too long to answer. Try again."}
     [row] = ledger(conn, device)
-    sent_bytes = len(route.calls.last.request.content)
-    assert json.loads(row["usage_json"]) == {
-        "input_tokens": math.ceil(sent_bytes / 4),
-        "output_tokens": 0,
-        "estimated": True,
-    }
-    assert row["cost_usd"] == pytest.approx(math.ceil(sent_bytes / 4) * 1.25e-6)
+    sent = route.calls.last.request.content
+    assert json.loads(row["usage_json"]) == reserved_usage(sent)
+    assert row["cost_usd"] == pytest.approx(reserved_cost(sent))
     assert_ledger_matches_spend(conn, device)
 
 
@@ -542,22 +552,25 @@ VIDEO_BY_FILE = {"type": "input_video", "file_id": "file-1"}
     ],
     ids=["input-video", "input-file", "file-id", "sam", "earlier-context"],
 )
-def test_timeout_on_a_media_call_charges_at_least_the_floor(sam_client, conn, meta, body):
+def test_timeout_on_a_media_call_charges_the_media_reservation(sam_client, conn, meta, body):
     device = add_device(conn)
-    meta.post("/responses").mock(side_effect=httpx.ReadTimeout("slow"))
+    route = meta.post("/responses").mock(side_effect=httpx.ReadTimeout("slow"))
 
     response = sam_client.post("/meta/v1/responses", json=body, headers=device.headers)
 
     assert response.status_code == 504
     [row] = ledger(conn, device)
     usage = json.loads(row["usage_json"])
-    assert usage["estimated"] is True
-    assert usage["floor_usd"] == 0.10
-    assert row["cost_usd"] == pytest.approx(0.10)
+    assert usage["reserved"] is True
+    assert usage["media_usd"] == 0.75
+    if body["model"] == "sam-3.1":
+        assert row["cost_usd"] == pytest.approx(0.75)
+    else:
+        assert row["cost_usd"] == pytest.approx(reserved_cost(route.calls.last.request.content, media=True))
     assert_ledger_matches_spend(conn, device)
 
 
-def test_success_without_usage_charges_the_estimate(client, conn, meta):
+def test_success_without_usage_charges_the_reservation(client, conn, meta):
     device = add_device(conn)
     body = spark_body()
     del body["usage"]
@@ -567,20 +580,20 @@ def test_success_without_usage_charges_the_estimate(client, conn, meta):
 
     assert response.status_code == 200
     [row] = ledger(conn, device)
-    assert json.loads(row["usage_json"])["estimated"] is True
-    assert row["cost_usd"] == pytest.approx(math.ceil(len(route.calls.last.request.content) / 4) * 1.25e-6)
+    sent = route.calls.last.request.content
+    assert json.loads(row["usage_json"]) == reserved_usage(sent)
+    assert row["cost_usd"] == pytest.approx(reserved_cost(sent))
 
 
-def test_success_with_garbled_usage_charges_the_estimate(client, conn, meta):
+def test_success_with_garbled_usage_charges_the_reservation(client, conn, meta):
     device = add_device(conn)
-    meta.post("/responses").respond(200, json=spark_body(usage={"input_tokens": "lots", "output_tokens": 1}))
+    route = meta.post("/responses").respond(200, json=spark_body(usage={"input_tokens": "lots", "output_tokens": 1}))
 
     response = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
 
     assert response.status_code == 200
     [row] = ledger(conn, device)
-    assert json.loads(row["usage_json"])["estimated"] is True
-    assert row["cost_usd"] > 0
+    assert row["cost_usd"] == pytest.approx(reserved_cost(route.calls.last.request.content))
 
 
 def test_usage_after_a_huge_output_is_found_in_the_tail(client, conn, meta, monkeypatch):
@@ -672,6 +685,34 @@ def test_transcribe_is_forwarded_and_metered_from_audio_duration(client, conn, m
     assert row["model"] == "muse-voice-transcribe-1.0"
     assert json.loads(row["usage_json"]) == {"audioDurationMs": 155000}
     assert row["cost_usd"] == pytest.approx(0.18 * 155 / 3600)
+
+
+def wav(seconds, rate=16000):
+    out = io.BytesIO()
+    with wave.open(out, "wb") as file:
+        file.setnchannels(1)
+        file.setsampwidth(2)
+        file.setframerate(rate)
+        file.writeframes(b"\0\0" * int(seconds * rate))
+    return out.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("audio", "seconds"),
+    [(wav(3), 3), (wav(2, rate=24000), 2), (b"RIFF" + b"\0" * 1000, 600), (b"not audio at all", 600)],
+    ids=["16-khz", "24-khz", "bad-header", "not-wav"],
+)
+def test_transcribe_without_a_duration_charges_the_reservation_from_the_wav_header(client, conn, meta, audio, seconds):
+    device = add_device(conn)
+    meta.post("/asr/transcribe").respond(200, json={"transcript": "Hi.", "turns": []})
+    files, _ = transcribe_files(audio=audio)
+
+    response = client.post("/meta/v1/asr/transcribe", files=files, headers=device.headers)
+
+    assert response.status_code == 200
+    [row] = ledger(conn, device)
+    assert json.loads(row["usage_json"]) == {"audioDurationMs": seconds * 1000, "reserved": True}
+    assert row["cost_usd"] == pytest.approx(0.18 * seconds / 3600)
 
 
 @pytest.mark.parametrize("model", ["muse-spark-1.3", "muse-voice-transcribe-1.0-contributor", None])
@@ -1189,7 +1230,7 @@ def test_streamed_sam_call_is_charged_from_frames(sam_client, conn, meta):
     assert row["cost_usd"] == pytest.approx(0.032)
 
 
-def test_stream_that_ends_without_usage_charges_the_estimate(client, conn, meta):
+def test_stream_that_ends_without_usage_charges_the_reservation(client, conn, meta):
     device = add_device(conn)
     route = stream_from_meta(meta, MetaStream([sse(CREATED, DELTA)]))
 
@@ -1197,9 +1238,9 @@ def test_stream_that_ends_without_usage_charges_the_estimate(client, conn, meta)
 
     assert response.status_code == 200
     [row] = ledger(conn, device)
-    sent_bytes = len(route.calls.last.request.content)
-    assert json.loads(row["usage_json"]) == {"input_tokens": math.ceil(sent_bytes / 4), "output_tokens": 0, "estimated": True}
-    assert row["cost_usd"] == pytest.approx(math.ceil(sent_bytes / 4) * 1.25e-6)
+    sent = route.calls.last.request.content
+    assert json.loads(row["usage_json"]) == reserved_usage(sent)
+    assert row["cost_usd"] == pytest.approx(reserved_cost(sent))
 
 
 def test_stream_broken_off_by_meta_still_charges(client, conn, meta):
@@ -1212,7 +1253,7 @@ def test_stream_broken_off_by_meta_still_charges(client, conn, meta):
     assert response.content == sse(CREATED) + sse(DELTA)
     assert upstream.closed
     [row] = ledger(conn, device)
-    assert json.loads(row["usage_json"])["estimated"] is True
+    assert json.loads(row["usage_json"])["reserved"] is True
     assert client.app.state.in_flight.count() == 0
 
 
@@ -1429,7 +1470,7 @@ async def test_abandoned_streams_hold_their_slots_until_drained(app, conn, meta)
 
 
 @pytest.mark.anyio
-async def test_drain_that_fails_charges_the_estimate(app, conn, meta):
+async def test_drain_that_fails_charges_the_reservation(app, conn, meta):
     device = add_device(conn)
     call = AsgiCall(app, "/meta/v1/responses", streamed(spark_request()), device.headers)
     upstream = MetaStream(
@@ -1447,15 +1488,15 @@ async def test_drain_that_fails_charges_the_estimate(app, conn, meta):
     assert upstream.served == 3
     assert upstream.closed
     [row] = ledger(conn, device)
-    sent_bytes = len(route.calls.last.request.content)
-    assert json.loads(row["usage_json"]) == {"input_tokens": math.ceil(sent_bytes / 4), "output_tokens": 0, "estimated": True}
-    assert row["cost_usd"] == pytest.approx(math.ceil(sent_bytes / 4) * 1.25e-6)
+    sent = route.calls.last.request.content
+    assert json.loads(row["usage_json"]) == reserved_usage(sent)
+    assert row["cost_usd"] == pytest.approx(reserved_cost(sent))
     assert app.state.in_flight.count() == 0
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("body", [VIDEO_REQUEST, SAM_REQUEST], ids=["spark-video", "sam"])
-async def test_drain_that_fails_for_media_charges_at_least_the_floor(sam_app, conn, meta, body):
+async def test_drain_that_fails_for_media_charges_the_media_reservation(sam_app, conn, meta, body):
     app = sam_app
     device = add_device(conn)
     call = AsgiCall(app, "/meta/v1/responses", streamed(body), device.headers)
@@ -1466,7 +1507,7 @@ async def test_drain_that_fails_for_media_charges_at_least_the_floor(sam_app, co
         pause=MOMENT,
         then=httpx.RemoteProtocolError("peer closed connection"),
     )
-    stream_from_meta(meta, upstream)
+    route = stream_from_meta(meta, upstream)
     call.on_chunk = hang_up_after(call, 2)
 
     await call.run()
@@ -1474,19 +1515,22 @@ async def test_drain_that_fails_for_media_charges_at_least_the_floor(sam_app, co
     assert upstream.served == 3
     [row] = ledger(conn, device)
     usage = json.loads(row["usage_json"])
-    assert usage["estimated"] is True
-    assert usage["floor_usd"] == 0.10
-    assert row["cost_usd"] == pytest.approx(0.10)
+    assert usage["reserved"] is True
+    assert usage["media_usd"] == 0.75
+    if body["model"] == "sam-3.1":
+        assert row["cost_usd"] == pytest.approx(0.75 + 50 * 0.20 / 1000)
+    else:
+        assert row["cost_usd"] == pytest.approx(reserved_cost(route.calls.last.request.content, media=True))
     assert_ledger_matches_spend(conn, device)
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     ("seen", "cost"),
-    [({"input_tokens": 200_000, "output_tokens": 0}, 0.25), ({"input_tokens": 10, "output_tokens": 0}, 0.10)],
-    ids=["usage-seen-is-higher", "floor-is-higher"],
+    [({"input_tokens": 1_000_000, "output_tokens": 0}, 1.25), ({"input_tokens": 10, "output_tokens": 0}, None)],
+    ids=["usage-seen-is-higher", "reservation-is-higher"],
 )
-async def test_drain_failure_charges_the_higher_of_usage_seen_and_the_estimate(app, conn, meta, seen, cost):
+async def test_drain_failure_charges_the_higher_of_usage_seen_and_the_reservation(app, conn, meta, seen, cost):
     device = add_device(conn)
     in_progress = {"type": "response.in_progress", "response": {"status": "in_progress", "usage": seen}}
     call = AsgiCall(app, "/meta/v1/responses", streamed(VIDEO_REQUEST), device.headers)
@@ -1497,18 +1541,20 @@ async def test_drain_failure_charges_the_higher_of_usage_seen_and_the_estimate(a
         pause=MOMENT,
         then=httpx.ReadError("reset"),
     )
-    stream_from_meta(meta, upstream)
+    route = stream_from_meta(meta, upstream)
     call.on_chunk = hang_up_after(call, 2)
 
     await call.run()
 
     assert upstream.served == 3
     [row] = ledger(conn, device)
-    assert row["cost_usd"] == pytest.approx(cost)
-    if cost == 0.25:
+    if cost is not None:
+        assert row["cost_usd"] == pytest.approx(cost)
         assert json.loads(row["usage_json"]) == seen
     else:
-        assert json.loads(row["usage_json"])["estimated"] is True
+        sent = route.calls.last.request.content
+        assert row["cost_usd"] == pytest.approx(reserved_cost(sent, media=True))
+        assert json.loads(row["usage_json"]) == reserved_usage(sent, media=True)
 
 
 @pytest.mark.anyio
@@ -1544,7 +1590,7 @@ async def test_stream_is_charged_even_when_closing_meta_fails(app, conn, meta, b
     await call.run()
 
     assert upstream.closed
-    # The stream finished, so the real usage stands, below the media floor.
+    # The stream finished, so the real usage stands, below the reservation.
     [row] = ledger(conn, device)
     assert row["cost_usd"] == pytest.approx(SPARK_COST)
     assert app.state.in_flight.count() == 0

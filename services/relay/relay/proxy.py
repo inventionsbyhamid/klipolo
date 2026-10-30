@@ -62,8 +62,9 @@ from relay.pricing import (
     SAM_IMAGES_KEY,
     SAM_MODEL,
     SPARK_MODELS,
+    UNREADABLE_AUDIO_SECONDS,
     cost_usd,
-    estimate_usage,
+    reservation_usage,
 )
 
 logger = logging.getLogger(__name__)
@@ -233,23 +234,38 @@ def record_charge(
 
 @dataclass
 class Meter:
-    """What a billable call needs to be priced, from its usage or, when the
-    usage is never seen, from an estimate of the request."""
+    """What a billable call needs to be priced: its usage once Meta answers,
+    and its reservation, the most it could cost, worked out from the request.
+    The reservation is held against the caps while the call runs, and charged
+    when the real usage can't be read."""
 
     endpoint: str
     model: str
-    request_bytes: int
-    audio_bytes: int = 0
+    request_bytes: int = 0
+    max_output_tokens: int = 0
+    audio_seconds: float = 0.0
     images: int = 0
     has_video: bool = False
-    # Video, files or earlier context by reference, or SAM: the request size
-    # says little about the cost, so an estimate gets a floor.
+    # Video, files or earlier context by reference, or SAM.
     media: bool = False
+
+    def reservation(self) -> tuple[dict[str, Any], float]:
+        usage = reservation_usage(
+            self.endpoint,
+            self.model,
+            request_bytes=self.request_bytes,
+            max_output_tokens=self.max_output_tokens,
+            media=self.media,
+            audio_seconds=self.audio_seconds,
+            images=self.images,
+            has_video=self.has_video,
+        )
+        return usage, cost_usd(self.endpoint, self.model, usage)
 
     def price(self, usage: Any, *, finished: bool = True) -> tuple[dict[str, Any], float]:
         """The usage to record and its cost. `finished` is False when Meta's
         answer was cut off, so `usage` (if any) may not be the final count:
-        the call then costs the higher of that usage and the estimate."""
+        the call then costs the higher of that usage and the reservation."""
         seen = None
         if isinstance(usage, Mapping):
             usage = dict(usage)
@@ -258,20 +274,11 @@ class Meter:
             try:
                 seen = _numbers_only(usage), cost_usd(self.endpoint, self.model, usage)
             except ValueError:
-                logger.warning("Meta usage for %s could not be priced, charging an estimate", self.endpoint)
+                logger.warning("Meta usage for %s could not be priced, charging the reservation", self.endpoint)
         if seen is not None and finished:
             return seen
-        estimate = estimate_usage(
-            self.endpoint,
-            self.model,
-            request_bytes=self.request_bytes,
-            audio_bytes=self.audio_bytes,
-            images=self.images,
-            has_video=self.has_video,
-            media=self.media,
-        )
-        estimated = estimate, cost_usd(self.endpoint, self.model, estimate)
-        return seen if seen is not None and seen[1] > estimated[1] else estimated
+        reserved = self.reservation()
+        return seen if seen is not None and seen[1] > reserved[1] else reserved
 
     def usage_from_body(self, body: bytes) -> Any:
         """The usage in a complete JSON response, or None."""
@@ -297,7 +304,7 @@ async def charge(
         cost,
         meter.endpoint,
         meter.model,
-        " (estimated)" if usage.get("estimated") else "",
+        " (reservation)" if usage.get("reserved") else "",
     )
 
 
@@ -341,6 +348,7 @@ async def create_response(request: Request, device: RelayDevice, conn: Conn, set
             "responses",
             model,
             request_bytes=len(body),
+            max_output_tokens=payload.get("max_output_tokens", 0) if model in SPARK_MODELS else 0,
             images=_count_parts(inputs, "input_image"),
             has_video=has_video,
             media=(
@@ -409,8 +417,12 @@ async def transcribe(request: Request, device: RelayDevice, conn: Conn, settings
             "request": (None, _encode(spec), "application/json"),
             "audio": (filename, bytes(audio.data), media_type),
         }
+        seconds = _wav_seconds(bytes(audio.data))
         meter = Meter(
-            "asr/transcribe", model, request_bytes=len(spec_part.data) + len(audio.data), audio_bytes=len(audio.data)
+            "asr/transcribe",
+            model,
+            request_bytes=len(spec_part.data) + len(audio.data),
+            audio_seconds=UNREADABLE_AUDIO_SECONDS if seconds is None else seconds,
         )
         return Call("POST", "asr/transcribe", meter, files=files)
 
@@ -876,6 +888,31 @@ def _objects(value: Any) -> Iterator[dict[str, Any]]:
             stack.extend(item.values())
         elif isinstance(item, list):
             stack.extend(item)
+
+
+# 24 kHz, 16-bit, mono: the highest byte rate Meta's transcription takes.
+_MAX_WAV_BYTE_RATE = 48_000
+
+
+def _wav_seconds(audio: bytes) -> float | None:
+    """The audio's length from its WAV header, or None if it can't be read.
+    The data actually sent is measured (a streamed WAV's declared size is often
+    a placeholder) and the byte rate is capped at the fastest format Meta
+    takes, so the length is never understated."""
+    if len(audio) < 12 or audio[:4] != b"RIFF" or audio[8:12] != b"WAVE":
+        return None
+    byte_rate = 0
+    position = 12
+    while position + 8 <= len(audio):
+        chunk = audio[position : position + 4]
+        size = int.from_bytes(audio[position + 4 : position + 8], "little")
+        start = position + 8
+        if chunk == b"fmt " and size >= 16 and start + 16 <= len(audio):
+            byte_rate = int.from_bytes(audio[start + 8 : start + 12], "little")
+        elif chunk == b"data":
+            return (len(audio) - start) / min(byte_rate, _MAX_WAV_BYTE_RATE) if byte_rate > 0 else None
+        position = start + size + (size & 1)
+    return None
 
 
 def _max_output_tokens(value: Any) -> int:

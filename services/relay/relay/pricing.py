@@ -1,9 +1,10 @@
 """Meta Model API list prices and the cost of one call from its usage.
 
-`cost_usd` prices the usage numbers Meta returns. When a call's usage is never
-seen (Meta's stream broke off, a timeout, a success without usage),
-`estimate_usage` builds a conservative stand-in from the request so the call
-is still charged.
+`cost_usd` prices the usage numbers Meta returns. `reservation_usage` is the
+most a call could cost, worked out from the request before it goes out. The
+relay holds that amount against the caps while the call runs, and charges it
+when the call's real usage can't be read (Meta's stream broke off, a timeout,
+a success without usable usage).
 """
 
 import math
@@ -35,23 +36,22 @@ SAM_IMAGE_USD = 2.50 / 1000
 # Meta bills at least 50 frames per SAM video request.
 SAM_MIN_FRAMES = 50
 TRANSCRIBE_HOUR_USD = 0.18
-# The least an estimated call with media costs. Video sent by reference makes a
-# tiny request, so its byte estimate says almost nothing about its cost.
-MEDIA_ESTIMATE_FLOOR_USD = 0.10
+# Added to a reservation when the input refers to media or earlier context:
+# the request is small, but the video or history behind it is not.
+MEDIA_RESERVE_USD = 0.75
+# Reserved for transcription audio whose WAV header can't be read: Meta takes
+# at most 10 minutes per request.
+UNREADABLE_AUDIO_SECONDS = 600
 
 # Meta's SAM usage names video frames but no image count is documented, so the
 # relay counts the images in the request and adds them under this key.
 SAM_IMAGES_KEY = "images_in_request"
 
-# 16 kHz, 16-bit, mono WAV: the lowest byte rate Meta's transcription accepts,
-# so dividing by it gives the longest the audio could be.
-_WAV_MIN_BYTES_PER_SECOND = 32_000
-
 
 def cost_usd(endpoint: str, model: str | None, usage: Mapping[str, Any]) -> float:
     """Price one call. Raises ValueError for an unpriced endpoint or model, or
-    for usage that is not a mapping of non-negative numbers. An estimate
-    (`"estimated": true`) costs at least its `floor_usd`."""
+    for usage that is not a mapping of non-negative numbers. A reservation
+    (`"reserved": true`) also adds its `media_usd`."""
     if endpoint == "files":
         return 0.0
     if model not in MODELS_BY_ENDPOINT.get(endpoint, ()):
@@ -59,8 +59,8 @@ def cost_usd(endpoint: str, model: str | None, usage: Mapping[str, Any]) -> floa
     if not isinstance(usage, Mapping):
         raise ValueError("usage must be an object")
     cost = _cost(model, usage)
-    if usage.get("estimated") is True:
-        cost = max(cost, _count(usage, "floor_usd"))
+    if usage.get("reserved") is True:
+        cost += _count(usage, "media_usd")
     return cost
 
 
@@ -86,37 +86,37 @@ def _cost(model: str, usage: Mapping[str, Any]) -> float:
     return _count(usage, "audioDurationMs") / 3_600_000 * TRANSCRIBE_HOUR_USD
 
 
-def estimate_usage(
+def reservation_usage(
     endpoint: str,
     model: str | None,
     *,
-    request_bytes: int,
-    audio_bytes: int = 0,
+    request_bytes: int = 0,
+    max_output_tokens: int = 0,
+    media: bool = False,
+    audio_seconds: float = 0.0,
     images: int = 0,
     has_video: bool = False,
-    media: bool = False,
 ) -> dict[str, Any]:
-    """A conservative usage stand-in for a call whose real usage was not seen.
+    """The most a call could cost, as usage that `cost_usd` prices.
 
-    Spark: input tokens are about request bytes / 4, priced as input. SAM:
-    the 50-frame video minimum plus each image in the request. Transcription:
-    the audio's longest possible length. Both byte and frame estimates are far
-    too low for video sent by file_id or URL (Meta counts about 131 tokens per
-    sampled frame), so a call with `media` costs at least
-    MEDIA_ESTIMATE_FLOOR_USD.
+    Spark: request bytes / 4 as input tokens, plus the whole output limit,
+    plus MEDIA_RESERVE_USD when the input refers to media or earlier context.
+    Transcription: the audio's length. SAM (always media): the 50-frame video
+    minimum and each image, plus MEDIA_RESERVE_USD.
     """
     if model in SPARK_MODELS:
-        usage: dict[str, Any] = {"input_tokens": math.ceil(request_bytes / 4), "output_tokens": 0}
+        usage: dict[str, Any] = {"input_tokens": math.ceil(request_bytes / 4), "output_tokens": max_output_tokens}
     elif model == SAM_MODEL:
         usage = {"video_frames_processed": SAM_MIN_FRAMES if has_video else 0, SAM_IMAGES_KEY: images}
+        media = True
     elif model == TRANSCRIBE_MODEL:
-        seconds = audio_bytes / _WAV_MIN_BYTES_PER_SECOND
-        usage = {"audioDurationMs": math.ceil(seconds * 1000)}
+        usage = {"audioDurationMs": math.ceil(audio_seconds * 1000)}
+        media = False
     else:
         usage = {}
-    usage["estimated"] = True
     if media:
-        usage["floor_usd"] = MEDIA_ESTIMATE_FLOOR_USD
+        usage["media_usd"] = MEDIA_RESERVE_USD
+    usage["reserved"] = True
     return usage
 
 
