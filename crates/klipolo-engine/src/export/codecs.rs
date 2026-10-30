@@ -49,23 +49,13 @@ pub(super) fn builder(info: VideoInfo, codec: VideoCodec) -> Option<H264EncoderB
     )
 }
 
-/// The 4:2:2 10-bit format ProRes takes first, else P010.
+/// ProRes's 4:2:2 10-bit input: always P210, the one 4:2:2 layout the GPU writes (`Yuv::from_pixel` knows NV12,
+/// P010 and P210 only). It is the first 4:2:2 10-bit format prores_videotoolbox lists, so a Mac is unchanged. prores_ks
+/// (Linux, Windows) lists planar yuv422p10le first: asking the encoder for its first 4:2:2 format made `pass.rs` fall
+/// back to P010 while the encoder read the frame as planar 4:2:2, and every picture came out as garbage. The encoder
+/// converts P210 to its own format with swscale.
 fn prores_input() -> Pixel {
-    encoder_name(VideoCodec::ProRes422Hq)
-        .and_then(ffmpeg::encoder::find_by_name)
-        .and_then(|c| c.video().ok())
-        .and_then(|v| v.formats())
-        .and_then(|mut formats| {
-            formats.find(|f| {
-                f.descriptor().is_some_and(|d| {
-                    d.log2_chroma_w() == 1
-                        && d.log2_chroma_h() == 0
-                        // SAFETY: the descriptor is a static FFmpeg table entry.
-                        && unsafe { (*d.as_ptr()).comp[0].depth } == 10
-                })
-            })
-        })
-        .unwrap_or(Pixel::P010LE)
+    Pixel::P210LE
 }
 
 /// The pixel format the GPU makes for `codec`: NV12 for H.264, P010 for HEVC Main 10, 10-bit 4:2:2 for ProRes.
