@@ -2,7 +2,10 @@
 # tests), ALSA, Mesa lavapipe (Vulkan on the CPU, for the engine's GPU tests) and Rust 1.90 with clippy and rustfmt.
 # The repository is mounted at run time; the image holds no source and no secrets.
 #   docker build -f ci/linux.Dockerfile -t klipolo-ci ci
-#   docker run --rm -v "$PWD":/src -w /src klipolo-ci scripts/ci-linux.sh
+#   docker run --rm --name klipolo-gate --cpus 16 --memory 24g -v "$PWD":/src -w /src klipolo-ci scripts/ci-linux.sh
+# The image runs as uid 1000, so the checkout must be owned by uid 1000. After an rsync, chown everything except
+# target/ and .build/ (the container makes those itself):
+#   chown 1000:1000 . && find . -mindepth 1 -maxdepth 1 ! -name target ! -name .build -exec chown -R 1000:1000 {} +
 # The distro `ffmpeg` CLI only makes test fixtures (dev only, never linked: the engine links the LGPL build that
 # scripts/build-ffmpeg-linux.sh makes, with nasm and patchelf).
 

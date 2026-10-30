@@ -2,7 +2,10 @@
 # The Linux gate: format, compile, lint and test the workspace's crates on Linux (with the engine's fixture tests), and
 # the engine's GPU tests on Mesa lavapipe. Run inside ci/linux.Dockerfile's image, from the repository root:
 #   docker build -f ci/linux.Dockerfile -t klipolo-ci ci
-#   docker run --rm -v "$PWD":/src -w /src klipolo-ci scripts/ci-linux.sh
+#   docker run --rm --name klipolo-gate --cpus 16 --memory 24g -v "$PWD":/src -w /src klipolo-ci scripts/ci-linux.sh
+# The image runs as uid 1000, so the checkout must be owned by uid 1000. After an rsync, chown everything except
+# target/ and .build/ (the container makes those itself):
+#   chown 1000:1000 . && find . -mindepth 1 -maxdepth 1 ! -name target ! -name .build -exec chown -R 1000:1000 {} +
 # Every step runs even when an earlier one fails; the summary lists each, and the exit code is non-zero if any failed.
 # Nothing here opens a capture device or needs a secret. Builds go to $CARGO_TARGET_DIR, else target/ci-linux (never
 # a Mac's target/debug).
