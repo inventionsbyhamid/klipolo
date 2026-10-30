@@ -91,7 +91,7 @@ fn synced(camera_sound: bool) -> Project {
 
 /// Each planned source as (file, gain).
 fn heard(p: &Project) -> Vec<(String, f64)> {
-    audio_plan(p, &Registry::builtin())
+    audio_plan(p, &Registry::builtin(), Arc::default())
         .sources
         .iter()
         .map(|s| (s.path.clone(), s.gain))
@@ -140,7 +140,11 @@ fn the_mixer_plays_the_synced_mic_where_the_camera_heard_it() {
     // The mic's file frame at recording time rec is (rec × (1 + 50 ppm) + 9 s) × 48 kHz.
     let file_frame = |rec: f64| (rec * (1.0 + PPM * 1e-6) + FILE_IN_S) * f64::from(RATE);
     let at = |frame: u64| frame as f64 / f64::from(RATE);
-    let plan = Arc::new(audio_plan(&synced(true), &Registry::builtin()));
+    let plan = Arc::new(audio_plan(
+        &synced(true),
+        &Registry::builtin(),
+        Arc::default(),
+    ));
     // Inside c1 (1×, its in-point 2 s at 0 on the timeline), rec(t) = t + 2 s: the mixer reads that very frame.
     let pcm = frame_numbers(80);
     let lookup = |_: &AudioSource| Some(pcm.clone());
@@ -256,7 +260,8 @@ fn the_camera_sound_plays_with_its_own_lead() {
         effects: Vec::new(),
     });
     p.timeline.tracks.push(layers);
-    let plan = |lead| audio_plan(&with_lead(&p, lead), &Registry::builtin()).sources;
+    let plan =
+        |lead| audio_plan(&with_lead(&p, lead), &Registry::builtin(), Arc::default()).sources;
     let none = plan(0);
     let shown: Vec<Us> = none
         .iter()
@@ -297,7 +302,7 @@ fn a_sound_that_starts_after_its_picture_is_silent_until_it_starts() {
     // An imported clip from the file's start, its sound 40 ms late: 40 ms of silence, then file frame 0 onwards.
     let mut p = with_lead(&synced(true), 40_000);
     p.timeline.main = vec![imported("c", 0.0, 2.0)];
-    let plan = Arc::new(audio_plan(&p, &Registry::builtin()));
+    let plan = Arc::new(audio_plan(&p, &Registry::builtin(), Arc::default()));
     assert_eq!(plan.sources[0].source_in_us, -40_000);
     let pcm = frame_numbers(2);
     let lookup = |_: &AudioSource| Some(pcm.clone());

@@ -50,6 +50,7 @@ fn auto_placement_avoids_overlap() {
             drift_ppm: 0.0,
             centre_from: None,
             tie: None,
+            duck: None,
         },
         ..still_item("m", 0.0, 30.0)
     };
@@ -277,6 +278,7 @@ fn update_item_patches_layout_and_text() {
         drift_ppm: 0.0,
         centre_from: None,
         tie: None,
+        duck: None,
     };
     assert!(apply_ops(
         &p,
@@ -549,6 +551,7 @@ fn split_music_keeps_its_fades_at_the_outer_ends() {
             drift_ppm: 0.0,
             centre_from: None,
             tie: None,
+            duck: None,
         },
         ..still_item("m", 0.0, 10.0)
     };

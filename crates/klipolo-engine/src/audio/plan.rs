@@ -4,18 +4,20 @@
 mod changes;
 mod fill;
 mod layers;
+mod speech;
 
 use std::sync::Arc;
 
 use klipolo_model::ContribId;
 use klipolo_model::project::{Asset, Loudness, Project};
 use klipolo_model::query::{RunInClip, clip_starts, run_in_clip, run_within, sound_sources};
-use klipolo_model::time::{Us, unscaled};
+use klipolo_model::time::{RangeUs, Us, unscaled};
 use klipolo_model::timeline::{ClipSource, EffectInstance};
 use klipolo_model::transitions::split;
 
 use crate::registry::Registry;
 pub use changes::may_change_sound;
+pub use speech::{JOIN_US, ducking_speech, ducking_speech_after, ducks, speech_ranges};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AudioPlan {
@@ -50,6 +52,18 @@ pub struct AudioSource {
     /// recording source played centred (`SourceMix::centre_from`), or a separated layer of one. None plays the file as
     /// recorded; a one-channel file plays centred either way.
     pub centre_from: Option<u8>,
+    /// Lowered under speech (a sound layer's `ItemContent::Audio::duck`, when anyone is known to speak); None plays at
+    /// `gain` throughout.
+    pub duck: Option<Duck>,
+}
+
+/// How a source ducks under speech: `db` lower (negative) inside `speech`, easing down before each range and back up
+/// after it (the mixer's envelope). `speech` is in timeline µs, sorted and apart (`speech_ranges`), and shared by every
+/// ducking source of a plan.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Duck {
+    pub db: f32,
+    pub speech: Arc<[RangeUs]>,
 }
 
 impl AudioSource {
@@ -125,7 +139,10 @@ fn audible<'a>(p: &'a Project, id: &str) -> Option<&'a Asset> {
 ///
 /// `registry` is the plan context's (`PlanContext::registry`): it maps each audio effect to its filter chain and pack
 /// paths to files.
-pub fn audio_plan(p: &Project, registry: &Registry) -> AudioPlan {
+///
+/// `speech` is where someone speaks on `p`'s timeline (`ducking_speech`, worked out once per revision or export job):
+/// a sound layer that ducks is lowered under it. Empty, nothing ducks.
+pub fn audio_plan(p: &Project, registry: &Registry, speech: Arc<[RangeUs]>) -> AudioPlan {
     let mut sources = Vec::new();
     let main = &p.timeline.main;
     for (i, (clip, start)) in main.iter().zip(clip_starts(main)).enumerate() {
@@ -176,6 +193,7 @@ pub fn audio_plan(p: &Project, registry: &Registry) -> AudioPlan {
                 },
                 filter,
                 centre_from: centre,
+                duck: None,
             });
             sources.len() - 1
         };
@@ -229,7 +247,7 @@ pub fn audio_plan(p: &Project, registry: &Registry) -> AudioPlan {
         }
         fill::cross(&mut sources[first..], &fills, (start, end), clip.speed);
     }
-    layers::layers(p, registry, &mut sources);
+    layers::layers(p, registry, &speech, &mut sources);
     AudioPlan {
         sources,
         loudness: p.audio.loudness,

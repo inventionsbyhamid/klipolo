@@ -50,6 +50,7 @@ fn song(id: &str, start: f64, len: f64) -> klipolo_model::timeline::Item {
             drift_ppm: 0.0,
             centre_from: None,
             tie: None,
+            duck: None,
         },
     )
 }

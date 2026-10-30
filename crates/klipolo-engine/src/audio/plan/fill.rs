@@ -189,6 +189,7 @@ mod tests {
             crossfade: Default::default(),
             filter: None,
             centre_from: None,
+            duck: None,
         };
         // The recorded sound stops at 1 s (rounded 15 µs early) and starts again at 3 s (15 µs late); the fill between.
         let mut clip = [

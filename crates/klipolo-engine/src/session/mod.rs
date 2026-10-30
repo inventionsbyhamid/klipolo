@@ -47,8 +47,9 @@ pub struct ProjectFeed {
     /// previous opening never match the new one).
     pub opened: u64,
     pub project: Arc<Project>,
-    /// What was said, for captions. A finished transcript sends the same revision again with a new `speech` (the engine
-    /// builds its pages again only when this isn't the same `Arc`).
+    /// What was said, for captions and for where a ducking sound layer goes down (its transcripts, else its levels). A
+    /// finished transcript sends the same revision again with a new `speech` (the engine builds its pages again, and
+    /// plans a ducking project's sound again, only when this isn't the same `Arc`).
     pub speech: Arc<Speech>,
     /// The language the project's video text is in (`klipolo_model::text_language::text_language`, worked out by the app):
     /// Chinese, Japanese and Korean draw in its faces. A switch of the interface language republishes the feed.

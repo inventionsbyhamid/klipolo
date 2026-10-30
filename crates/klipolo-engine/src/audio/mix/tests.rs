@@ -30,6 +30,7 @@ fn source(path: &str, start: i64, end: i64, source_in: i64) -> AudioSource {
         crossfade: Crossfade::default(),
         filter: None,
         centre_from: None,
+        duck: None,
     }
 }
 

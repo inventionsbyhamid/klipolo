@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use klipolo_model::time::Us;
 
-use super::audio::ExportAudio;
+use super::audio::JobSound;
 use super::check::{check_files, check_parts, media_files};
 use super::job::{ExportJob, ExportMode, PartStatus};
 use super::plumbing::alive;
@@ -183,11 +183,8 @@ pub(super) async fn prepare<W: std::io::Write>(
     // Set-up side by side: the sound (decode, and measure on the first run), the encoder probe and the GPU device.
     let audio = sound.then(|| {
         let (project, registry) = ((*project).clone(), ctx.registry.clone());
-        let (quality, pcm_dir, levels) =
-            handle.read(|j| (j.quality, j.pcm_dir.clone(), j.levels.clone()));
-        tokio::task::spawn_blocking(move || {
-            ExportAudio::prepare(&project, &registry, quality, pcm_dir.as_deref(), levels)
-        })
+        let job_sound = handle.read(JobSound::of);
+        tokio::task::spawn_blocking(move || job_sound.prepare(&project, &registry))
     });
     let qualities: Vec<_> = handle.read(|j| j.outputs.iter().map(|o| o.quality).collect());
     let caps = render.then(|| tokio::task::spawn_blocking(move || probe_caps_for(&qualities)));

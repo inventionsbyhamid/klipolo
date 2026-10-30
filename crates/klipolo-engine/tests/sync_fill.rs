@@ -97,7 +97,7 @@ type Heard = (String, f64, f64, f64, f64, f64, f64);
 
 fn heard(p: &Project) -> Vec<Heard> {
     let s = |us: Us| us as f64 / 1e6;
-    audio_plan(p, &Registry::builtin())
+    audio_plan(p, &Registry::builtin(), Arc::default())
         .sources
         .iter()
         .map(|a| {
@@ -157,7 +157,7 @@ fn a_gap_edge_crosses_without_a_dip() {
     // level keep it through the edge: their straight fades add up to 1. Two 3 ms edge ramps used to dip to silence.
     let mut p = gapped(500.0);
     p.recordings[0].sources[0].mix.volume = 1.0;
-    let plan = audio_plan(&p, &Registry::builtin());
+    let plan = audio_plan(&p, &Registry::builtin(), Arc::default());
     let level = Arc::new(Pcm::from_channels(vec![0.25; 48_000 * 30], 1));
     let pcm = |_: &AudioSource| Some(level.clone());
     // 9.95–10.05 s on the timeline: the camera at full (its 1 s fade in is long over), then the crossing.

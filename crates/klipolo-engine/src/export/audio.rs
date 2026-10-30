@@ -7,8 +7,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use klipolo_model::project::{Loudness, Project};
+use klipolo_model::time::RangeUs;
 
-use super::job::Levels;
+use super::job::{ExportJob, Levels};
 use super::protocol::ErrorCode;
 use super::shared::{WorkerError, is_disk_full};
 use crate::api::ExportQuality;
@@ -36,6 +37,44 @@ impl Levels {
     }
 }
 
+/// What an export job's sound is made with besides its project and registry: its quality, the preview's PCM cache, the
+/// measurement it keeps and where someone speaks, frozen with it (`ExportJob::speech_ranges`). Read from the job under
+/// its lock (`JobSound::of`), then prepared off it (`prepare`), as the worker does.
+#[derive(Clone, Debug)]
+pub struct JobSound {
+    pub quality: ExportQuality,
+    pub pcm_dir: Option<std::path::PathBuf>,
+    pub levels: Option<Levels>,
+    pub speech: Arc<[RangeUs]>,
+}
+
+impl JobSound {
+    pub fn of(job: &ExportJob) -> Self {
+        Self {
+            quality: job.quality,
+            pcm_dir: job.pcm_dir.clone(),
+            levels: job.levels.clone(),
+            speech: job.speech_ranges.as_slice().into(),
+        }
+    }
+
+    /// `ExportAudio::prepare` with these settings. Blocking.
+    pub fn prepare(
+        self,
+        project: &Project,
+        registry: &Registry,
+    ) -> Result<(ExportAudio, Levels), WorkerError> {
+        ExportAudio::prepare(
+            project,
+            registry,
+            self.quality,
+            self.pcm_dir.as_deref(),
+            self.levels,
+            self.speech,
+        )
+    }
+}
+
 /// The decoded, measured sound (cheap to clone; each pass streams its own `AudioStream` on its own thread).
 #[derive(Clone)]
 pub struct ExportAudio {
@@ -46,15 +85,17 @@ pub struct ExportAudio {
 
 impl ExportAudio {
     /// Decodes the project's sound and measures it (unless `levels` has the measurement already). Blocking (run it
-    /// off the async threads).
+    /// off the async threads). `speech` is where someone speaks, frozen with the job (`ExportJob::speech_ranges`): a
+    /// ducking sound layer goes down under it as it does in the preview.
     pub fn prepare(
         project: &Project,
         registry: &Registry,
         quality: ExportQuality,
         pcm_dir: Option<&Path>,
         levels: Option<Levels>,
+        speech: Arc<[RangeUs]>,
     ) -> Result<(Self, Levels), WorkerError> {
-        let plan = Arc::new(audio_plan(project, registry));
+        let plan = Arc::new(audio_plan(project, registry, speech));
         let dir = pcm_dir.map_or_else(
             || std::env::temp_dir().join("klipolo-pcm"),
             Path::to_path_buf,
@@ -95,6 +136,11 @@ impl ExportAudio {
             gain: 10f32.powf(levels.gain_db as f32 / 20.0),
         };
         Ok((audio, levels))
+    }
+
+    /// What it mixes: the same plan the preview plays for the same project and speech.
+    pub fn plan(&self) -> &Arc<AudioPlan> {
+        &self.plan
     }
 
     /// The mix from the start of the timeline, limited at `ceiling_dbtp`.

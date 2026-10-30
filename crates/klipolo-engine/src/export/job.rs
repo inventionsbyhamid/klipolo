@@ -5,7 +5,8 @@
 //!   worker while it runs), always atomically (`write_atomic`);
 //! - `project.json`, the project as saved when the export started (written once);
 //! - `captions.json`, the caption pages of every file's format, frozen with it (written once; part of the settings
-//!   hash, so a job resumes only with the pages it started with);
+//!   hash, so a job resumes only with the pages it started with). Where someone speaks, which a ducking sound layer
+//!   goes down under, is frozen in the manifest the same way (`speech_ranges`);
 //! - `contrib/`, the contributions it draws besides the built-ins and their verdicts (`export::contrib`);
 //! - `captions.srt` or `captions.vtt`, the caption file a landscape export saves beside its video, made from those pages
 //!   (`caption_file`; written once, part of the settings hash too);
@@ -19,6 +20,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use klipolo_model::captions::Captions;
 use klipolo_model::captions::sidecar::CaptionFile;
 use klipolo_model::project::{FormatKind, Project};
+use klipolo_model::time::RangeUs;
 use serde::{Deserialize, Serialize};
 
 use super::caption_file::{Frozen, job_captions};
@@ -27,6 +29,7 @@ use super::quality::AudioCodec;
 use super::runner::Batch;
 use super::shared::{is_disk_full, write_atomic};
 use crate::api::ExportQuality;
+use crate::audio::plan::ducking_speech;
 
 mod formats;
 
@@ -139,6 +142,11 @@ pub struct ExportJob {
     #[serde(default)]
     pub activity_without: Vec<String>,
     pub levels: Option<Levels>,
+    /// Where someone speaks on the timeline, which its ducking sound layers go down under (`ducking_speech` of the
+    /// batch's project and speech), frozen when the job is made: a resumed job's sound is the one it started with, and
+    /// the worker needs no transcripts. Part of the settings hash; empty (and left out) when nothing ducks.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub speech_ranges: Vec<RangeUs>,
     pub audio: AudioTrack,
     pub outputs: Vec<JobOutput>,
     /// The text language its CJK follows (`PlanContext::text_language`), frozen when the job is made.
@@ -220,6 +228,7 @@ impl ExportJob {
             json: captions_json,
             file: caption_file,
         } = frozen;
+        let speech_ranges = ducking_speech(&batch.project, &batch.speech).to_vec();
         let outputs_have_landscape = outputs.iter().any(|o| o.format == FormatKind::Landscape);
         let mut job = Self {
             version: JOB_VERSION,
@@ -227,6 +236,7 @@ impl ExportJob {
                 &batch.project,
                 &captions_json,
                 caption_file.as_ref(),
+                &speech_ranges,
                 fps,
                 batch.quality,
                 &outputs,
@@ -251,6 +261,7 @@ impl ExportJob {
             activity_asked: None,
             activity_without: Vec::new(),
             levels: None,
+            speech_ranges,
             audio: AudioTrack {
                 codec: audio_codec,
                 file: match audio_codec {

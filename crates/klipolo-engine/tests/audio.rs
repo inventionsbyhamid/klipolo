@@ -77,6 +77,7 @@ fn source(gain: f64, fade_in_us: i64, speed: f64, source_in_us: i64) -> AudioSou
         crossfade: Crossfade::default(),
         filter: None,
         centre_from: None,
+        duck: None,
     }
 }
 
@@ -104,7 +105,7 @@ fn audio_plan_follows_the_main_track() {
     let mut p = project();
     p.timeline.main[0].volume = 1.5;
     p.timeline.main[0].fade_out_us = secs(1.0);
-    let plan = audio_plan(&p, &Registry::builtin());
+    let plan = audio_plan(&p, &Registry::builtin(), Arc::default());
     let paths: Vec<&str> = plan.sources.iter().map(|s| s.path.as_str()).collect();
     assert_eq!(paths, ["/media/mic", "/media/broll"]);
     let mic = &plan.sources[0];
@@ -123,7 +124,12 @@ fn audio_plan_follows_the_main_track() {
         (secs(20.0), secs(30.0))
     );
     p.timeline.main[1].muted = true;
-    assert_eq!(audio_plan(&p, &Registry::builtin()).sources.len(), 1);
+    assert_eq!(
+        audio_plan(&p, &Registry::builtin(), Arc::default())
+            .sources
+            .len(),
+        1
+    );
 }
 
 fn set_dissolve(clip_id: &str, seconds: f64) -> klipolo_model::ops::Op {
@@ -143,7 +149,7 @@ fn a_transition_crossfades_the_two_clips_sound_over_its_window() {
     let mut p = project();
     p.timeline.main[1].source_in_us = secs(2.0);
     let p = klipolo_model::apply_ops(&p, &[set_dissolve("a", 1.0)]).unwrap();
-    let plan = audio_plan(&p, &Registry::builtin());
+    let plan = audio_plan(&p, &Registry::builtin(), Arc::default());
     let mic = plan
         .sources
         .iter()
@@ -252,6 +258,7 @@ fn audio_items_and_video_layers_join_the_mix() {
             drift_ppm: 0.0,
             centre_from: None,
             tie: None,
+            duck: None,
         },
         effects: Vec::new(),
     };
@@ -279,7 +286,7 @@ fn audio_items_and_video_layers_join_the_mix() {
         audio_track(false, vec![music]),
         overlay_track("o", vec![clip]),
     ];
-    let plan = audio_plan(&p, &Registry::builtin());
+    let plan = audio_plan(&p, &Registry::builtin(), Arc::default());
     let m = plan
         .sources
         .iter()
@@ -311,7 +318,9 @@ fn audio_items_and_video_layers_join_the_mix() {
     p.timeline.tracks[0].muted = true;
     p.timeline.tracks[1].hidden = true;
     assert_eq!(
-        audio_plan(&p, &Registry::builtin()).sources.len(),
+        audio_plan(&p, &Registry::builtin(), Arc::default())
+            .sources
+            .len(),
         2,
         "only the main track is left"
     );
@@ -341,20 +350,21 @@ fn a_muted_sound_layer_is_silent_beside_one_that_plays() {
             drift_ppm: 0.0,
             centre_from: None,
             tie: None,
+            duck: None,
         },
         effects: Vec::new(),
     };
     let mut p = project();
     p.timeline.tracks = vec![audio_track(false, vec![sound("a", 1.0), sound("b", 5.0)])];
     let layers = |p: &klipolo_model::project::Project| -> Vec<(i64, f64)> {
-        audio_plan(p, &Registry::builtin())
+        audio_plan(p, &Registry::builtin(), Arc::default())
             .sources
             .iter()
             .filter(|s| s.path == "/media/music")
             .map(|s| (s.start_us, s.gain))
             .collect()
     };
-    let before = audio_plan(&p, &Registry::builtin());
+    let before = audio_plan(&p, &Registry::builtin(), Arc::default());
     assert_eq!(layers(&p), [(secs(1.0), 0.8), (secs(5.0), 0.8)]);
     let mute = |p: &mut klipolo_model::project::Project, on: bool| {
         if let ItemContent::Audio { muted, .. } = &mut p.timeline.tracks[0].items[0].content {
@@ -365,7 +375,7 @@ fn a_muted_sound_layer_is_silent_beside_one_that_plays() {
     assert_eq!(layers(&p), [(secs(5.0), 0.8)], "only the muted sound goes");
     mute(&mut p, false);
     assert_eq!(
-        audio_plan(&p, &Registry::builtin()),
+        audio_plan(&p, &Registry::builtin(), Arc::default()),
         before,
         "unmuting restores the plan"
     );
@@ -822,6 +832,7 @@ fn solo_picks_the_sound_and_mute_still_wins() {
         drift_ppm: 0.0,
         centre_from: None,
         tie: None,
+        duck: None,
     };
     let game = ItemContent::Video {
         asset_id: "broll".into(),
@@ -839,7 +850,7 @@ fn solo_picks_the_sound_and_mute_still_wins() {
         overlay_track("o", vec![layer("game", game)]),
     ];
     let heard = |p: &klipolo_model::project::Project| {
-        let plan = audio_plan(p, &Registry::builtin());
+        let plan = audio_plan(p, &Registry::builtin(), Arc::default());
         // The main track's two sources (clip a's mic, clip b's own sound) start at 0 and 20 s; the layers at 1 s.
         assert_eq!(
             plan.sources
@@ -857,7 +868,7 @@ fn solo_picks_the_sound_and_mute_still_wins() {
         layers.sort();
         layers
     };
-    let before = audio_plan(&p, &Registry::builtin());
+    let before = audio_plan(&p, &Registry::builtin(), Arc::default());
     assert_eq!(heard(&p), ["/media/broll", "/media/mic", "/media/music"]);
 
     let mut soloed = p.clone();
@@ -881,7 +892,7 @@ fn solo_picks_the_sound_and_mute_still_wins() {
     soloed.timeline.tracks[2].solo = false;
     assert_eq!(soloed, p);
     assert_eq!(
-        audio_plan(&soloed, &Registry::builtin()),
+        audio_plan(&soloed, &Registry::builtin(), Arc::default()),
         before,
         "un-solo restores the plan exactly"
     );
@@ -1006,6 +1017,7 @@ fn the_preview_and_export_make_the_same_gain_decision() {
             drift_ppm: 0.0,
             centre_from: None,
             tie: None,
+            duck: None,
         },
         effects: Vec::new(),
     };
@@ -1034,10 +1046,17 @@ fn the_preview_and_export_make_the_same_gain_decision() {
     // Export: decodes every file, then measures the rendered mix exactly.
     let registry = Registry::builtin();
     let cache = dir.path().join("cache");
-    let (_, export) =
-        ExportAudio::prepare(&p, &registry, ExportQuality::High, Some(&cache), None).unwrap();
+    let (_, export) = ExportAudio::prepare(
+        &p,
+        &registry,
+        ExportQuality::High,
+        Some(&cache),
+        None,
+        Arc::default(),
+    )
+    .unwrap();
     // The preview: the same files' energies (written by export's decode), the effect's source rendered alone.
-    let plan = audio_plan(&p, &registry);
+    let plan = audio_plan(&p, &registry, Arc::default());
     assert!(
         plan.sources
             .iter()
@@ -1169,7 +1188,7 @@ fn dissolves_over_continuous_footage_keep_the_preview_within_half_a_db() {
             .map(|k| set_dissolve(&format!("c{k}"), 1.0))
             .collect();
         let p = klipolo_model::apply_ops(&p, &dissolves).unwrap();
-        let plan = audio_plan(&p, &Registry::builtin());
+        let plan = audio_plan(&p, &Registry::builtin(), Arc::default());
         let Estimate::Lufs(Some(estimate)) =
             estimate_until(&plan, &pcm, &energies, &effected, &AtomicBool::new(false))
         else {
@@ -1334,6 +1353,7 @@ fn ops_that_cant_change_the_sound_skip_the_replan() {
             drift_ppm: 0.0,
             centre_from: None,
             tie: None,
+            duck: None,
         },
         effects: Vec::new(),
     };
@@ -1506,12 +1526,16 @@ fn ops_that_cant_change_the_sound_skip_the_replan() {
         ),
     ];
     let registry = Registry::builtin();
-    let before = audio_plan(&p, &registry);
+    let before = audio_plan(&p, &registry, Arc::default());
     for (what, op) in &cant {
         assert!(!may_change_sound(&p, op), "{what}");
         let after = klipolo_model::apply_ops(&p, std::slice::from_ref(op))
             .unwrap_or_else(|e| panic!("{what}: {e:?}"));
-        assert_eq!(audio_plan(&after, &registry), before, "{what}");
+        assert_eq!(
+            audio_plan(&after, &registry, Arc::default()),
+            before,
+            "{what}"
+        );
     }
     let mut picture = item("img2", 20.0, 2.0, bx(0.1, 0.1, 0.2, 0.2), video);
     picture.id = "img2".into();
@@ -1667,9 +1691,16 @@ fn a_one_sided_mic_played_centred_is_measured_as_it_plays() {
         mic.path = file(wav).display().to_string();
         p.recordings[0].sources[1].mix.centre_from = centre_from;
         let cache = dir.path().join("cache");
-        let (_, export) =
-            ExportAudio::prepare(&p, &registry, ExportQuality::High, Some(&cache), None).unwrap();
-        let plan = audio_plan(&p, &registry);
+        let (_, export) = ExportAudio::prepare(
+            &p,
+            &registry,
+            ExportQuality::High,
+            Some(&cache),
+            None,
+            Arc::default(),
+        )
+        .unwrap();
+        let plan = audio_plan(&p, &registry, Arc::default());
         let store = PcmStore::new(cache);
         let pcm = |s: &AudioSource| store.build(&PcmKey::of(s)).ok();
         let key = PcmKey::of(&plan.sources[0]);

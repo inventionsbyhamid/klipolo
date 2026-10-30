@@ -65,6 +65,7 @@ pub fn imported() -> Project {
             drift_ppm: 0.0,
             centre_from: None,
             tie: None,
+            duck: None,
         },
         ..still_item("i9", 0.0, 90.0)
     }];

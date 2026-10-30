@@ -276,6 +276,7 @@ mod tests {
             drift_ppm: 0.0,
             centre_from: None,
             tie: None,
+            duck: None,
         };
         p.timeline.tracks = vec![
             track("kept", TrackKind::Overlay, video("here")),

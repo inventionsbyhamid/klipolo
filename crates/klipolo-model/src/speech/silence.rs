@@ -49,9 +49,12 @@ pub fn threshold(levels: &Levels) -> Option<f32> {
 /// Quiet runs of at least `min_pause_us` (and at least 0.4 s: a breath kept at each end and a window cut) in the
 /// source's own time, each shortened by `KEEP_US` at both ends. Sorted, never touching.
 pub fn pauses(levels: &Levels, min_pause_us: Us) -> Vec<RangeUs> {
-    let Some(th) = threshold(levels) else {
-        return Vec::new();
-    };
+    threshold(levels).map_or_else(Vec::new, |th| pauses_under(levels, th, min_pause_us))
+}
+
+/// `pauses` with the source's `threshold` already found (`th`), for a caller that also needs to know whether the source
+/// has speech at all.
+pub fn pauses_under(levels: &Levels, th: f32, min_pause_us: Us) -> Vec<RangeUs> {
     let min = min_pause_us.max(2 * KEEP_US + LEVEL_WINDOW_US);
     let mut out = Vec::new();
     let mut run: Option<usize> = None;

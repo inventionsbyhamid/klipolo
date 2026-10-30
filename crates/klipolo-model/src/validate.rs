@@ -44,6 +44,9 @@ pub const MAX_NUDGE_US: Us = 5_000_000;
 /// past recorders at 48.048 and 47.952 kHz (±1,000 ppm). The same cap clamps capture import's drift
 /// (`klipolo-capture`'s `import.rs`): widening it there is harmless, since a take's manifest caps drift at 1,000.
 pub const MAX_DRIFT_PPM: f64 = 1_500.0;
+/// The furthest a sound layer ducks under speech (`ItemContent::Audio::duck`): 30 dB down is all but silent under a
+/// voice.
+pub const DEEPEST_DUCK_DB: f64 = -30.0;
 /// The most channels a sound file plays as (the engine folds a file with more into two), so the channels a source
 /// can play centred from (`SourceMix::centre_from`).
 pub const PLAYED_CHANNELS: u8 = 2;
@@ -715,11 +718,18 @@ fn validate_content(p: &Project, content: &ItemContent, duration: Us) -> Result<
             effect,
             drift_ppm,
             centre_from,
+            duck,
             muted: _,
             tie: _,
         } => {
             if let Some(id) = effect {
                 check_contrib(id, ContribKind::AudioEffect)?;
+            }
+            if let Some(db) = duck {
+                check(
+                    in_range(*db, DEEPEST_DUCK_DB, 0.0),
+                    code!("model.audio.duck"),
+                )?;
             }
             check_centre(*centre_from)?;
             let asset = p
