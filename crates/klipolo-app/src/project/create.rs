@@ -25,7 +25,7 @@ pub(crate) fn new_project(name: &str, formats: Vec<FormatKind>) -> Project {
 }
 
 /// Saves `project` as a new file in `library` and opens it (the open one is saved and closed first, as `open_in` does):
-/// its snapshot, with the opening it made.
+/// its snapshot, with the opening it made. When the open one can't be saved, it stays open and the new file goes.
 pub(crate) fn create_in(
     state: &ProjectSessionState,
     library: &Path,
@@ -38,14 +38,18 @@ pub(crate) fn create_in(
         Said::code("project.createFailed")
     })?;
     let mut snapshot = document.snapshot();
-    let opening = set_open(
+    let opened = set_open(
         state,
         Some(OpenProject {
             document,
-            file,
+            file: file.clone(),
             read_only: false,
         }),
-    )?;
+    );
+    // The open project couldn't be saved, so it stays open: the new one's file goes again.
+    let opening = opened.inspect_err(|_| {
+        let _ = std::fs::remove_file(&file);
+    })?;
     snapshot.opening = Some(opening);
     Ok(snapshot)
 }

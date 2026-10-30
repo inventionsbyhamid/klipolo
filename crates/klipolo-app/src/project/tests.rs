@@ -533,3 +533,29 @@ fn every_save_says_what_it_wrote() {
         [SaveStatus::saved(1, 1), SaveStatus::saved(1, 3)]
     );
 }
+
+/// A new project can't open while the open one can't be saved (a full disk): the open one stays, and no file is left
+/// behind for the project that didn't open.
+#[test]
+fn a_new_project_leaves_no_file_when_the_open_one_cant_be_saved() {
+    let dir = tempfile::tempdir().unwrap();
+    let library = dir.path().join("library");
+    std::fs::create_dir_all(&library).unwrap();
+    let disk = Arc::new(WritesFailWith::default());
+    let (state, _) = session_on(
+        &dir.path().join("open.klipolo"),
+        "Open",
+        NEVER,
+        disk.clone(),
+    );
+    disk.0
+        .store(libc::ENOSPC, std::sync::atomic::Ordering::SeqCst);
+    with_open(&state, |open| apply_and_commit(open, &rename("Edited"))).unwrap();
+    assert!(create_in(&state, &library, new_project("New", vec![])).is_err());
+    assert_eq!(project_name(&state), "Edited", "the open project stays");
+    assert_eq!(
+        std::fs::read_dir(&library).unwrap().count(),
+        0,
+        "no file for the project that didn't open"
+    );
+}
