@@ -129,15 +129,16 @@ def spark_request(model="muse-spark-1.3", **extra):
 
 
 def reserved_usage(sent, *, media=False, max_output_tokens=8192):
-    """The reservation for a Spark call whose forwarded body was `sent`."""
-    usage = {"input_tokens": math.ceil(len(sent) / 4), "output_tokens": max_output_tokens, "reserved": True}
+    """The reservation for a Spark call whose forwarded body was `sent`: one
+    input token per byte, the whole output limit, and $0.75 for media."""
+    usage = {"input_tokens": len(sent), "output_tokens": max_output_tokens, "reserved": True}
     if media:
         usage["media_usd"] = 0.75
     return usage
 
 
 def reserved_cost(sent, *, media=False, max_output_tokens=8192):
-    return math.ceil(len(sent) / 4) * 1.25e-6 + max_output_tokens * 4.25e-6 + (0.75 if media else 0)
+    return len(sent) * 1.25e-6 + max_output_tokens * 4.25e-6 + (0.75 if media else 0)
 
 
 def forwarded(body):
@@ -475,8 +476,20 @@ def test_transcribe_request_part_nested_too_deeply_is_400(client, conn, meta):
     assert not route.called
 
 
-@pytest.mark.parametrize(("size", "status"), [(2 * 1024 * 1024 - 200, 200), (2 * 1024 * 1024, 413)])
-def test_json_bodies_are_capped_at_2_mib(client, conn, meta, size, status):
+TOO_COSTLY = "This request could cost more than a device's whole Klipolo credit. Make it smaller."
+
+
+@pytest.mark.parametrize(
+    ("size", "status", "message"),
+    [
+        (1024 * 1024, 200, None),
+        # At one token per byte, about 1.57 MB of text could cost more than $2.
+        (1_600_000, 413, TOO_COSTLY),
+        (2 * 1024 * 1024, 413, "The request is too large."),
+    ],
+    ids=["1-mib", "worst-case-over-the-cap", "over-2-mib"],
+)
+def test_json_bodies_are_capped_at_2_mib_and_by_their_worst_case(client, conn, meta, size, status, message):
     device = add_device(conn)
     route = meta.post("/responses").respond(200, json=spark_body())
 
@@ -484,6 +497,8 @@ def test_json_bodies_are_capped_at_2_mib(client, conn, meta, size, status):
 
     assert response.status_code == status
     assert route.called is (status == 200)
+    if message is not None:
+        assert response.json() == {"error": "too_large", "message": message}
 
 
 def test_json_body_over_the_limit_is_413(client, conn, meta, monkeypatch):

@@ -93,18 +93,19 @@ def test_malformed_usage_raises(usage):
         cost_usd("responses", "muse-spark-1.3", usage)
 
 
-def test_spark_reservation_is_request_bytes_over_four_plus_the_whole_output_limit():
+def test_spark_reservation_is_one_token_per_request_byte_plus_the_whole_output_limit():
+    # Adversarial text can come close to one token per byte.
     usage = reservation_usage("responses", "muse-spark-1.3", request_bytes=4001, max_output_tokens=8192)
 
-    assert usage == {"input_tokens": 1001, "output_tokens": 8192, "reserved": True}
-    assert cost_usd("responses", "muse-spark-1.3", usage) == pytest.approx(1001 * 1.25e-6 + 8192 * 4.25e-6)
+    assert usage == {"input_tokens": 4001, "output_tokens": 8192, "reserved": True}
+    assert cost_usd("responses", "muse-spark-1.3", usage) == pytest.approx(4001 * 1.25e-6 + 8192 * 4.25e-6)
 
 
 def test_spark_reservation_adds_75_cents_for_media():
     usage = reservation_usage("responses", "muse-spark-1.3", request_bytes=400, max_output_tokens=100, media=True)
 
     assert usage["media_usd"] == 0.75
-    assert cost_usd("responses", "muse-spark-1.3", usage) == pytest.approx(100 * 1.25e-6 + 100 * 4.25e-6 + 0.75)
+    assert cost_usd("responses", "muse-spark-1.3", usage) == pytest.approx(400 * 1.25e-6 + 100 * 4.25e-6 + 0.75)
 
 
 def test_sam_reservation_is_media_plus_the_minimum_frames_and_each_image():

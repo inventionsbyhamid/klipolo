@@ -36,8 +36,8 @@ SAM_IMAGE_USD = 2.50 / 1000
 # Meta bills at least 50 frames per SAM video request.
 SAM_MIN_FRAMES = 50
 TRANSCRIBE_HOUR_USD = 0.18
-# Added to a reservation when the input refers to media or earlier context:
-# the request is small, but the video or history behind it is not.
+# Added to the reservation of any call that isn't text only: the request is
+# small, but the media or stored items behind it are not.
 MEDIA_RESERVE_USD = 0.75
 # Reserved for transcription audio whose WAV header can't be read: Meta takes
 # at most 10 minutes per request.
@@ -100,13 +100,14 @@ def reservation_usage(
 ) -> dict[str, Any]:
     """The most a call could cost, as usage that `cost_usd` prices.
 
-    Spark: request bytes / 4 as input tokens, plus the whole output limit,
-    plus MEDIA_RESERVE_USD when the input refers to media or earlier context.
+    Spark: one input token per request byte (adversarial text can tokenize
+    close to that), plus the whole output limit, plus MEDIA_RESERVE_USD
+    unless the call is text only.
     Transcription: the audio's length. SAM (always media): the 50-frame video
     minimum and each image, plus MEDIA_RESERVE_USD.
     """
     if model in SPARK_MODELS:
-        usage: dict[str, Any] = {"input_tokens": math.ceil(request_bytes / 4), "output_tokens": max_output_tokens}
+        usage: dict[str, Any] = {"input_tokens": request_bytes, "output_tokens": max_output_tokens}
     elif model == SAM_MODEL:
         usage = {"video_frames_processed": SAM_MIN_FRAMES if has_video else 0, SAM_IMAGES_KEY: images}
         media = True
