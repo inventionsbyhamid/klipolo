@@ -54,7 +54,14 @@ async def _validation_error(request: Request, exc: RequestValidationError) -> JS
     return error_response(422, "invalid_request", message)
 
 
+async def _server_error(request: Request, exc: Exception) -> JSONResponse:
+    # Starlette re-raises the exception after this response, so the server
+    # still logs the traceback; the client only sees the plain message.
+    return error_response(500, "server_error", "Something went wrong. Try again.")
+
+
 def install_error_handlers(app: FastAPI) -> None:
+    app.add_exception_handler(Exception, _server_error)
     app.add_exception_handler(RelayError, _relay_error)
     app.add_exception_handler(StarletteHTTPException, _http_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
