@@ -15,11 +15,14 @@ then its video calls must stream):
 Anything else is 404. Every call is gated per request: a known device token
 (401), relay AI for the device's code right now (403), a configured key (503).
 
+Stored context (previous_response_id, conversation) is refused, and video may
+be sampled at most 2 frames a second.
+
 Caps are kept with reservations. Before a billable call goes out it reserves
-the most it could cost: for Spark, request bytes / 4 at the input price plus
-its whole max_output_tokens (set to 8192 when missing, at most 16384) at the
-output price, plus $0.75 unless the call is text only (media or files by link
-or id, stored items, earlier responses or conversations, or any type the
+the most it could cost: for Spark, one input token per request byte plus its
+whole max_output_tokens (set to 8192 when missing, at most 16384) at the
+output price, plus $0.75 unless the call is text only (any image, media or
+files by link or id, stored items or reasoning named by id, or any type the
 relay doesn't know all count as media); for transcription, the audio's data
 at 32,000 bytes a second, the lowest rate Meta takes. The call is refused
 with 402 unless the device and the relay have room for it on top of what is
