@@ -1,10 +1,11 @@
-"""Admin CLI for access codes.
+"""Admin CLI for access codes and relay spend.
 
 Run it next to the server, on the live database:
 
     python -m relay.admin add-code CODE [--note TEXT]
     python -m relay.admin deactivate-code CODE
     python -m relay.admin list-codes
+    python -m relay.admin spend
 
 The database path comes from RELAY_DB_PATH, like the server, unless --db is
 given. Changes apply from the next request without a restart: the server
@@ -23,6 +24,7 @@ from relay.config import Settings, load_settings
 # Registration accepts codes up to this length and trims them, so a longer or
 # padded code could never be used.
 MAX_CODE_LENGTH = 128
+LATEST_ROWS = 20
 
 
 class AdminError(Exception):
@@ -102,6 +104,61 @@ def list_codes(conn: sqlite3.Connection, args: argparse.Namespace, settings: Set
     )
 
 
+def spend(conn: sqlite3.Connection, args: argparse.Namespace, settings: Settings) -> None:
+    conn.execute("BEGIN")  # one snapshot, so the sections agree
+    total = conn.execute(
+        "SELECT count(*) AS requests, coalesce(sum(cost_usd), 0) AS spent FROM ledger"
+    ).fetchone()
+    devices = conn.execute(
+        """
+        SELECT ledger.device_id, devices.code, count(*) AS requests, sum(cost_usd) AS spent
+        FROM ledger JOIN devices ON devices.device_id = ledger.device_id
+        GROUP BY ledger.device_id
+        ORDER BY spent DESC, ledger.device_id
+        """
+    ).fetchall()
+    latest = conn.execute(
+        "SELECT at, device_id, endpoint, model, cost_usd FROM ledger ORDER BY id DESC LIMIT ?",
+        (LATEST_ROWS,),
+    ).fetchall()
+    conn.execute("COMMIT")
+
+    print(
+        f"Total: {_usd(total['spent'])} across {_plural(total['requests'], 'request')}. "
+        f"Caps: ${settings.device_cap_usd:.2f} per device, "
+        f"${settings.global_cap_usd:.2f} overall."
+    )
+    print()
+    if not latest:
+        print("No requests yet.")
+        return
+    print("Per device, highest spend first:")
+    _print_table(
+        ["DEVICE", "CODE", "REQUESTS", "SPENT"],
+        [
+            [_short(row["device_id"]), row["code"] or "-", str(row["requests"]), _usd(row["spent"])]
+            for row in devices
+        ],
+        right={2, 3},
+    )
+    print()
+    print(f"Latest requests, newest first (up to {LATEST_ROWS}):")
+    _print_table(
+        ["AT", "DEVICE", "ENDPOINT", "MODEL", "COST"],
+        [
+            [
+                row["at"],
+                _short(row["device_id"]),
+                row["endpoint"],
+                row["model"] or "-",
+                _usd(row["cost_usd"]),
+            ]
+            for row in latest
+        ],
+        right={4},
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
@@ -132,7 +189,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _parser() -> argparse.ArgumentParser:
     db_help = "database file (default: RELAY_DB_PATH, else ./data/relay.db)"
     parser = argparse.ArgumentParser(
-        prog="python -m relay.admin", description="Manage relay access codes."
+        prog="python -m relay.admin", description="Manage relay access codes and see spend."
     )
     parser.add_argument("--db", metavar="PATH", help=db_help)
     # Also accept --db after the command; SUPPRESS keeps an earlier value.
@@ -159,6 +216,13 @@ def _parser() -> argparse.ArgumentParser:
 
     listing = commands.add_parser("list-codes", parents=[db_option], help="list all codes")
     listing.set_defaults(command=list_codes)
+
+    report = commands.add_parser(
+        "spend",
+        parents=[db_option],
+        help=f"total and per device spend, and the last {LATEST_ROWS} requests",
+    )
+    report.set_defaults(command=spend)
     return parser
 
 
@@ -173,6 +237,14 @@ def _code(raw: str) -> str:
 
 def _plural(count: int, noun: str) -> str:
     return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+
+
+def _usd(amount: float) -> str:
+    return f"${amount:.4f}"
+
+
+def _short(device_id: str) -> str:
+    return device_id[:8]
 
 
 def _print_table(header: list[str], rows: list[list[str]], right: Collection[int] = ()) -> None:

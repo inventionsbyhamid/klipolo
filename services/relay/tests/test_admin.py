@@ -13,6 +13,13 @@ INVALID_CODE = {
 }
 
 
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    # The CLI reads its config from the environment; keep the shell's out.
+    for name in ("RELAY_DB_PATH", "DEVICE_CAP_USD", "GLOBAL_CAP_USD"):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def db_path(settings):
     # The server creates the database at boot; the CLI only opens it.
@@ -46,6 +53,28 @@ def register(client, access_code=None, device_id=None):
 
 def me(client, token):
     return client.get("/v1/devices/me", headers={"Authorization": f"Bearer {token}"}).json()
+
+
+def add_device(conn, code=None):
+    device_id = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO devices (device_id, token_hash, code, created_at) VALUES (?, ?, ?, 'now')",
+        (device_id, device_id, code),
+    )
+    return device_id
+
+
+def charge(conn, device_id, cost, at, endpoint="responses", model="muse-spark-1.3"):
+    conn.execute(
+        "INSERT INTO ledger (device_id, at, endpoint, model, usage_json, cost_usd)"
+        " VALUES (?, ?, ?, ?, '{}', ?)",
+        (device_id, at, endpoint, model, cost),
+    )
+
+
+def sections(out):
+    """Blocks of output separated by blank lines, each as a list of lines."""
+    return [block.splitlines() for block in out.strip().split("\n\n")]
 
 
 def table(out):
@@ -210,3 +239,63 @@ def test_runs_as_a_module(db_path, conn):
 
     assert (result.returncode, result.stdout, result.stderr) == (0, 'Added code "testcode".\n', "")
     assert conn.execute("SELECT active FROM codes WHERE code = 'testcode'").fetchone()[0] == 1
+
+
+def test_spend_sums_ledger(cli, conn):
+    cli("add-code", "testcode")
+    big = add_device(conn, "testcode")
+    small = add_device(conn)
+    charge(conn, big, 0.25, "2026-10-30T12:00:01+00:00")
+    charge(conn, small, 0.125, "2026-10-30T12:00:02+00:00", endpoint="align", model=None)
+    charge(conn, big, 0.5, "2026-10-30T12:00:03+00:00")
+
+    status, out, err = cli("spend")
+
+    assert (status, err) == (0, "")
+    total, per_device, latest = sections(out)
+    assert total == [
+        "Total: $0.8750 across 3 requests. Caps: $2.00 per device, $40.00 overall."
+    ]
+    assert per_device[0] == "Per device, highest spend first:"
+    assert table("\n".join(per_device[1:])) == [
+        ["DEVICE", "CODE", "REQUESTS", "SPENT"],
+        [big[:8], "testcode", "2", "$0.7500"],
+        [small[:8], "-", "1", "$0.1250"],
+    ]
+    assert latest[0] == "Latest requests, newest first (up to 20):"
+    assert table("\n".join(latest[1:])) == [
+        ["AT", "DEVICE", "ENDPOINT", "MODEL", "COST"],
+        ["2026-10-30T12:00:03+00:00", big[:8], "responses", "muse-spark-1.3", "$0.5000"],
+        ["2026-10-30T12:00:02+00:00", small[:8], "align", "-", "$0.1250"],
+        ["2026-10-30T12:00:01+00:00", big[:8], "responses", "muse-spark-1.3", "$0.2500"],
+    ]
+
+
+def test_spend_shows_only_the_last_20_ledger_rows(cli, conn):
+    device = add_device(conn)
+    for second in range(25):
+        charge(conn, device, 0.01, f"2026-10-30T12:00:{second:02d}+00:00")
+
+    total, _, latest = sections(cli("spend")[1])
+
+    assert total[0].startswith("Total: $0.2500 across 25 requests.")
+    assert [line.split()[0] for line in latest[2:]] == [
+        f"2026-10-30T12:00:{second:02d}+00:00" for second in range(24, 4, -1)
+    ]
+
+
+def test_spend_with_an_empty_ledger(cli):
+    assert cli("spend") == (
+        0,
+        "Total: $0.0000 across 0 requests. Caps: $2.00 per device, $40.00 overall.\n"
+        "\n"
+        "No requests yet.\n",
+        "",
+    )
+
+
+def test_spend_shows_the_caps_from_the_environment(cli, monkeypatch):
+    monkeypatch.setenv("DEVICE_CAP_USD", "0.50")
+    monkeypatch.setenv("GLOBAL_CAP_USD", "25")
+
+    assert "Caps: $0.50 per device, $25.00 overall." in cli("spend")[1]
