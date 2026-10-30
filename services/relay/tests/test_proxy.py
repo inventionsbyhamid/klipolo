@@ -140,6 +140,15 @@ def reserved_cost(sent, *, media=False, max_output_tokens=8192):
     return math.ceil(len(sent) / 4) * 1.25e-6 + max_output_tokens * 4.25e-6 + (0.75 if media else 0)
 
 
+def forwarded(body):
+    """The bytes the relay sends Meta for a Spark `body` without max_output_tokens."""
+    return json.dumps({**body, "max_output_tokens": 8192}, separators=(",", ":")).encode()
+
+
+# What a plain spark_request() reserves.
+SPARK_RESERVATION = reserved_cost(forwarded(spark_request()))
+
+
 # The gate: token, relay AI, configuration.
 
 
@@ -410,15 +419,40 @@ def test_device_over_cap_is_402(client, conn, meta):
     assert spent(conn, device) == 2.00
 
 
-def test_device_just_under_cap_is_forwarded(client, conn, meta):
-    device = add_device(conn, spent=1.99)
-    meta.post("/responses").respond(200, json=spark_body())
+@pytest.mark.parametrize(("room", "status"), [(0.001, 200), (-0.001, 402)], ids=["fits", "does-not-fit"])
+def test_admission_needs_room_for_the_reservation(client, conn, meta, room, status):
+    start = 2.00 - SPARK_RESERVATION - room
+    device = add_device(conn, spent=start)
+    route = meta.post("/responses").respond(200, json=spark_body())
 
     response = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
 
-    assert response.status_code == 200
-    assert spent(conn, device) == pytest.approx(1.99 + SPARK_COST)
+    assert response.status_code == status
+    assert route.called is (status == 200)
+    if status == 200:
+        assert spent(conn, device) == pytest.approx(start + SPARK_COST)
     assert_ledger_matches_spend(conn, device)
+
+
+def test_a_media_call_needs_room_for_75_cents_more(client, conn, meta):
+    device = add_device(conn, spent=1.30)
+    route = meta.post("/responses").respond(200, json=spark_body())
+    video = spark_request(input=[{"role": "user", "content": [{"type": "input_video", "file_id": "file-1"}]}])
+
+    assert client.post("/meta/v1/responses", json=video, headers=device.headers).status_code == 402
+    assert not route.called
+    assert client.post("/meta/v1/responses", json=spark_request(), headers=device.headers).status_code == 200
+
+
+def test_over_cap_device_is_refused_before_its_body_is_read(client, conn, meta, monkeypatch):
+    monkeypatch.setattr(proxy, "MAX_JSON_BYTES", 100)
+    device = add_device(conn, spent=2.00)
+
+    # Too large to read, but the budget answer comes first.
+    response = client.post("/meta/v1/responses", json=spark_request(input="x" * 500), headers=device.headers)
+
+    assert response.status_code == 402
+    assert response.json() == BUDGET
 
 
 def test_global_over_cap_is_402(client, conn, meta):
@@ -436,13 +470,14 @@ def test_global_over_cap_is_402(client, conn, meta):
     assert not route.called
 
 
-def test_global_cap_counts_the_whole_ledger(client, conn, meta):
-    add_device(conn, spent=39.99)
+def test_global_cap_counts_the_whole_ledger_and_the_reservation(client, conn, meta):
+    add_device(conn, spent=40.00 - SPARK_RESERVATION - 0.001)
     fresh = add_device(conn)
     meta.post("/responses").respond(200, json=spark_body())
 
     assert client.post("/meta/v1/responses", json=spark_request(), headers=fresh.headers).status_code == 200
-    # 39.99 + 0.0102 is past $40 now, so the next call from anyone is refused.
+    # The first call's $0.0102 leaves less room than a reservation, so the next
+    # call from anyone is refused.
     assert client.post("/meta/v1/responses", json=spark_request(), headers=fresh.headers).status_code == 402
 
 
@@ -976,40 +1011,56 @@ def test_other_query_parameters_are_400(client, conn, meta, method, path):
 # Concurrency.
 
 
-def test_racing_requests_overshoot_by_at_most_one(client, conn, meta, settings):
-    device = add_device(conn, spent=1.99)
-    arrived = 0
+BIG_USAGE = {"input_tokens": 100_000, "output_tokens": 500}
+BIG_COST = 100_000 * 1.25e-6 + 500 * 4.25e-6
 
-    async def meta_after_both_arrive(request):
-        nonlocal arrived
-        arrived += 1
-        with anyio.fail_after(5):
-            while arrived < 2:
-                await anyio.sleep(0.01)
-        return httpx.Response(200, json=spark_body())
 
-    meta.post("/responses").mock(side_effect=meta_after_both_arrive)
+@pytest.mark.parametrize(
+    ("usage", "cost"), [(SPARK_USAGE, SPARK_COST), (BIG_USAGE, BIG_COST)], ids=["within-reservation", "over-reservation"]
+)
+def test_racing_requests_stay_within_the_cap_and_their_reservations(client, conn, meta, settings, usage, cost):
+    # Room for two reservations: of four calls at once, two get in.
+    start = settings.device_cap_usd - 2.5 * SPARK_RESERVATION
+    device = add_device(conn, spent=start)
+    state = hold_meta_calls(meta, usage=usage)
 
-    def call():
-        return client.post("/meta/v1/responses", json=spark_request(), headers=device.headers).status_code
+    with concurrent.futures.ThreadPoolExecutor(4) as pool:
+        calls = [
+            pool.submit(client.post, "/meta/v1/responses", json=spark_request(), headers=device.headers)
+            for _ in range(4)
+        ]
+        wait_for(lambda: state["arrived"] == 2 and sum(call.done() for call in calls) == 2)
+        state["release"] = True
+        statuses = sorted(call.result().status_code for call in calls)
 
-    with concurrent.futures.ThreadPoolExecutor(2) as pool:
-        statuses = list(pool.map(lambda _: call(), range(2)))
-
-    # Both started under the cap, so both ran and both were charged in full.
-    assert statuses == [200, 200]
+    assert statuses == [200, 200, 402, 402]
     total = spent(conn, device)
-    assert total == pytest.approx(1.99 + 2 * SPARK_COST)
-    # Run one after the other, the second would have been refused: the race
-    # costs exactly one extra request.
-    assert total - (1.99 + SPARK_COST) == pytest.approx(SPARK_COST)
-    assert total - settings.device_cap_usd < 2 * SPARK_COST
+    assert total == pytest.approx(start + 2 * cost)
+    # Never past the cap, except by what Meta charged beyond a reservation.
+    shortfall = 2 * max(0.0, cost - SPARK_RESERVATION)
+    assert total <= settings.device_cap_usd + shortfall + 1e-9
     assert_ledger_matches_spend(conn, device)
-    third = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
-    assert third.status_code == 402
+    assert client.app.state.in_flight.reserved(device.device_id) == (0.0, 0.0)
 
 
-def hold_meta_calls(meta, path="/responses"):
+def test_reservations_in_flight_count_against_the_global_cap(client, conn, meta, settings):
+    add_device(conn, spent=settings.global_cap_usd - 1.5 * SPARK_RESERVATION)
+    first, second = add_device(conn), add_device(conn)
+    state = hold_meta_calls(meta)
+
+    with concurrent.futures.ThreadPoolExecutor(1) as pool:
+        held = pool.submit(client.post, "/meta/v1/responses", json=spark_request(), headers=first.headers)
+        wait_for(lambda: state["arrived"] == 1)
+        # The first call's reservation leaves no room for a second, from any device.
+        refused = client.post("/meta/v1/responses", json=spark_request(), headers=second.headers)
+        state["release"] = True
+
+    assert held.result().status_code == 200
+    assert refused.status_code == 402
+    assert client.app.state.in_flight.reserved(first.device_id) == (0.0, 0.0)
+
+
+def hold_meta_calls(meta, path="/responses", usage=SPARK_USAGE):
     """Make Meta calls wait until `state["release"]` is set."""
     state = {"arrived": 0, "release": False}
 
@@ -1018,7 +1069,7 @@ def hold_meta_calls(meta, path="/responses"):
         with anyio.fail_after(5):
             while not state["release"]:
                 await anyio.sleep(0.01)
-        return httpx.Response(200, json=spark_body())
+        return httpx.Response(200, json=spark_body(usage))
 
     meta.post(path).mock(side_effect=held)
     return state

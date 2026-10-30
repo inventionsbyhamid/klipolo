@@ -117,12 +117,13 @@ def meta_client() -> httpx.AsyncClient:
 
 
 class InFlight:
-    """Counts proxied calls in progress, per device and in total.
+    """The proxied calls in progress: how many, per device and in total, and
+    how much each has reserved against the caps.
 
-    Caps are checked before a call and charged after it, so each call in
-    flight can carry spend past a cap by its own cost. Bounding the calls in
-    flight bounds that overshoot. Counts live in this process and are only
-    touched from the event loop: run the server with a single worker.
+    A call reserves its worst-case cost at admission and keeps it until its
+    charge is written, so calls running at once can't together pass a cap.
+    This state lives in this process and is only touched from the event loop:
+    run the server with a single worker.
     """
 
     def __init__(self, per_device: int = MAX_IN_FLIGHT_PER_DEVICE, total: int = MAX_IN_FLIGHT_TOTAL) -> None:
@@ -130,6 +131,10 @@ class InFlight:
         self.total = total
         self._by_device: dict[str, int] = {}
         self._count = 0
+        self._reserved_by_device: dict[str, float] = {}
+        self._reserved_total = 0.0
+        # Admissions run one at a time, so two can't both claim the same room.
+        self.admission = anyio.Lock()
 
     def acquire(self, device_id: str) -> "Slot":
         if self._by_device.get(device_id, 0) >= self.per_device:
@@ -148,25 +153,45 @@ class InFlight:
     def count(self, device_id: str | None = None) -> int:
         return self._count if device_id is None else self._by_device.get(device_id, 0)
 
-    def _release(self, device_id: str) -> None:
+    def reserved(self, device_id: str) -> tuple[float, float]:
+        """What calls in flight have reserved: for this device, and in total."""
+        return self._reserved_by_device.get(device_id, 0.0), self._reserved_total
+
+    def _reserve(self, device_id: str, amount: float) -> None:
+        self._reserved_by_device[device_id] = self._reserved_by_device.get(device_id, 0.0) + amount
+        self._reserved_total += amount
+
+    def _release(self, device_id: str, reserved: float) -> None:
         left = self._by_device[device_id] - 1
         if left:
             self._by_device[device_id] = left
+            self._reserved_by_device[device_id] -= reserved
         else:
             del self._by_device[device_id]
+            self._reserved_by_device.pop(device_id, None)
         self._count -= 1
+        # Back to exactly zero when idle, so float sums never drift.
+        self._reserved_total = self._reserved_total - reserved if self._count else 0.0
 
 
 class Slot:
+    """One call's place in flight and its reservation, freed together once
+    the call is charged."""
+
     def __init__(self, owner: InFlight, device_id: str) -> None:
-        self._owner = owner
-        self._device_id = device_id
+        self.owner = owner
+        self.device_id = device_id
+        self.reserved = 0.0
         self._released = False
+
+    def reserve(self, amount: float) -> None:
+        self.owner._reserve(self.device_id, amount)
+        self.reserved += amount
 
     def release(self) -> None:
         if not self._released:
             self._released = True
-            self._owner._release(self._device_id)
+            self.owner._release(self.device_id, self.reserved)
 
 
 def relay_device(device: Device, conn: Conn, settings: AppSettings) -> sqlite3.Row:
@@ -186,13 +211,34 @@ def relay_device(device: Device, conn: Conn, settings: AppSettings) -> sqlite3.R
 RelayDevice = Annotated[sqlite3.Row, Depends(relay_device)]
 
 
-def check_budget(conn: sqlite3.Connection, device_id: str, settings: Settings) -> None:
-    """402 once the device or the whole relay has reached its cap. The global
-    cap is all-time: Meta's credits are granted once."""
+def _spend(conn: sqlite3.Connection, device_id: str) -> tuple[float, float]:
+    """The device's spend and the relay's all-time total. The global cap is
+    all-time: Meta's credits are granted once."""
     row = conn.execute("SELECT spent_usd FROM devices WHERE device_id = ?", (device_id,)).fetchone()
     total = conn.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM ledger").fetchone()[0]
-    if row is None or row["spent_usd"] >= settings.device_cap_usd or total >= settings.global_cap_usd:
-        raise RelayError(402, "budget", BUDGET_MESSAGE)
+    return (math.inf if row is None else row["spent_usd"]), total
+
+
+async def admit(conn: sqlite3.Connection, slot: Slot, settings: Settings, amount: float) -> None:
+    """Reserve `amount` for the call, or refuse with 402 when the device or the
+    relay has no room for it on top of what is spent and what calls in flight
+    have reserved. With `amount` 0 this only checks that any room is left."""
+    in_flight = slot.owner
+    async with in_flight.admission:
+        # Reservations are read before the spend, and a call frees its
+        # reservation only after its charge is written. Whatever has left the
+        # reservations by the time the spend is read is in that spend, so no
+        # call is ever missed from both.
+        device_reserved, total_reserved = in_flight.reserved(slot.device_id)
+        spent, total = await run_in_threadpool(_spend, conn, slot.device_id)
+        claims = (
+            (spent + device_reserved, settings.device_cap_usd),
+            (total + total_reserved, settings.global_cap_usd),
+        )
+        for used, cap in claims:
+            if used >= cap or used + amount > cap:
+                raise RelayError(402, "budget", BUDGET_MESSAGE)
+        slot.reserve(amount)
 
 
 def record_charge(
@@ -315,7 +361,6 @@ class Call:
     method: str
     path: str
     meter: Meter | None = None
-    capped: bool = True
     content: bytes | AsyncIterator[bytes] | None = None
     files: dict[str, tuple[str | None, bytes, str]] | None = None
     headers: dict[str, str] = field(default_factory=dict)
@@ -381,18 +426,21 @@ async def upload_file(request: Request, device: RelayDevice, conn: Conn, setting
     return await _proxy(request, device, conn, settings, prepare)
 
 
+# Reading or deleting a file costs nothing, so it works over the cap.
+
+
 @router.get("/meta/v1/files/{file_id}")
 async def read_file(
     file_id: str, request: Request, device: RelayDevice, conn: Conn, settings: AppSettings
 ) -> Response:
-    return await _proxy(request, device, conn, settings, _file_call("GET", file_id))
+    return await _proxy(request, device, conn, settings, _file_call("GET", file_id), capped=False)
 
 
 @router.delete("/meta/v1/files/{file_id}")
 async def delete_file(
     file_id: str, request: Request, device: RelayDevice, conn: Conn, settings: AppSettings
 ) -> Response:
-    return await _proxy(request, device, conn, settings, _file_call("DELETE", file_id))
+    return await _proxy(request, device, conn, settings, _file_call("DELETE", file_id), capped=False)
 
 
 @router.post("/meta/v1/asr/transcribe")
@@ -448,16 +496,21 @@ async def _proxy(
     settings: Settings,
     prepare: Callable[[], Awaitable[Call]],
     query_keys: frozenset[str] = frozenset(),
+    capped: bool = True,
 ) -> Response:
     device_id = device["device_id"]
     params = _query_params(request, query_keys)
     slot = request.app.state.in_flight.acquire(device_id)
     handed_off = False
     try:
+        if capped:
+            # Before the body is read: a device with no room left is refused
+            # without the relay reading its upload.
+            await admit(conn, slot, settings, 0.0)
         call = await prepare()
-        if call.capped:
-            # As late as possible, right before the call goes out.
-            await run_in_threadpool(check_budget, conn, device_id, settings)
+        if call.meter is not None:
+            # The call's worst case, held until its charge is written.
+            await admit(conn, slot, settings, call.meter.reservation()[1])
         response = await _forward(request, settings, device_id, call, slot, params)
         # A streamed response frees its slot when the stream ends.
         handed_off = isinstance(response, MeteredStream)
@@ -938,8 +991,7 @@ def _file_call(method: str, file_id: str) -> Callable[[], Awaitable[Call]]:
     async def prepare() -> Call:
         if not _FILE_ID.fullmatch(file_id):
             raise RelayError(404, "not_found", "Not found.")
-        # Reading or deleting a file costs nothing, so it works over the cap.
-        return Call(method, f"files/{file_id}", capped=False)
+        return Call(method, f"files/{file_id}")
 
     return prepare
 
