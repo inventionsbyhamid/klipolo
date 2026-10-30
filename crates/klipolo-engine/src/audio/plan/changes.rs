@@ -1,4 +1,6 @@
 //! Which edits can't change what `audio_plan` plans (`may_change_sound`), so a dry run skips planning the sound again.
+//! A project with a sound layer that ducks also hears where someone speaks (`speech_ranges`), which the transcript's
+//! word fixes can move.
 
 use klipolo_model::Op;
 use klipolo_model::ops::EffectTarget;
@@ -15,14 +17,15 @@ fn sounds(content: &ItemContent) -> bool {
 }
 
 /// Whether `op`, applied to `p`, may change what `audio_plan` plans. False only for ops that
-/// can't: the picture alone (settings, captions and their word fixes, background, LUTs, effect stacks of clips and
+/// can't: the picture alone (settings, captions and the words' looks, background, LUTs, effect stacks of clips and
 /// picture layers, a clip's look, camera or framing, a new empty track, a track's name or lock), and edits of layers
 /// without sound (titles, images, stickers, zooms, generators, adjustments), which the model places where they fit and
 /// never moves another layer for. A sounding layer's layout can't change it either, nor a video layer's effects; a
-/// sound layer's effects are audio effects, so they can. Everything else counts as a change, including an op
-/// on a layer `p` doesn't have (one an earlier op of the batch adds). The engine skips planning the sound again for a
-/// dry run whose ops all can't change it: a title drag while playing costs no replan. O(layers) for a layer op
-/// (finding the layer), O(1) otherwise.
+/// sound layer's effects are audio effects, so they can. A word fix counts when a sound layer ducks: fixing a pause
+/// into words makes it speech, which the music goes down under (`speech_ranges`). Everything else counts as a change,
+/// including an op on a layer `p` doesn't have (one an earlier op of the batch adds). The engine skips planning the
+/// sound again for a dry run whose ops all can't change it: a title drag while playing costs no replan. O(layers) for a
+/// layer op (finding the layer) or a word fix (finding a layer that ducks), O(1) otherwise.
 pub fn may_change_sound(p: &Project, op: &Op) -> bool {
     let layer_sounds = |id: &str| {
         find_item(p, id).is_none_or(|(t, i)| sounds(&p.timeline.tracks[t].items[i].content))
@@ -40,7 +43,6 @@ pub fn may_change_sound(p: &Project, op: &Op) -> bool {
         Op::Rename { .. }
         | Op::SetSettings { .. }
         | Op::SetCaptions { .. }
-        | Op::FixWords { .. }
         | Op::SetWordLook { .. }
         | Op::SetBackground { .. }
         | Op::AddLut { .. }
@@ -50,6 +52,8 @@ pub fn may_change_sound(p: &Project, op: &Op) -> bool {
         | Op::AddMarker { .. }
         | Op::RemoveMarker { .. }
         | Op::SetCursorStyle { .. } => false,
+        // A fix that turns a pause into words moves where someone speaks.
+        Op::FixWords { .. } => super::ducks(p),
         // A clip's effects are pictures; a sound layer's are audio effects (a video layer's are pictures).
         Op::AddEffect { target, .. }
         | Op::UpdateEffect { target, .. }

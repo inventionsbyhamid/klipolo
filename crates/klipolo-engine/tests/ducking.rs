@@ -18,7 +18,7 @@ use klipolo_engine::audio::mix::{ATTACK_US, Mixdown, RATE, RELEASE_US, finish};
 use klipolo_engine::audio::pcm::{Pcm, PcmKey, PcmStore};
 use klipolo_engine::audio::plan::{
     AudioPlan, AudioSource, JOIN_US, audio_plan, ducking_speech, ducking_speech_after,
-    speech_ranges,
+    may_change_sound, speech_ranges,
 };
 use klipolo_engine::export::audio::{CEILING_DBTP, ExportAudio};
 use klipolo_engine::export::job::ExportJob;
@@ -29,6 +29,7 @@ use klipolo_engine::session::blank::BlankBackend;
 use klipolo_engine::session::{
     Engine, EngineOptions, PreviewBackend, ProjectFeed, RenderRequest, Rendered,
 };
+use klipolo_model::Op;
 use klipolo_model::project::{FormatKind, Loudness, Project};
 use klipolo_model::speech::{Levels, Speech, Transcript, Word, WordKind};
 use klipolo_model::time::{RangeUs, Us};
@@ -460,6 +461,40 @@ fn a_dry_run_reuses_the_speech_it_cannot_move() {
     assert_eq!(&*on, [range(1.0, 2.0)]);
     // And nothing to work out once nothing ducks.
     assert!(ducking_speech_after(&plain, &said, &committed, &known).is_empty());
+}
+
+/// Fixing a pause into words makes it speech, so for a project that ducks a word fix changes the sound (a dry run
+/// plans it again); for one that doesn't, a word fix is the captions' alone.
+#[test]
+fn word_fixes_move_speech_when_something_ducks() {
+    let words = transcript(
+        &[
+            (1.0, 2.0, WordKind::Word),
+            (2.0, 3.0, WordKind::Pause),
+            (3.0, 4.0, WordKind::Word),
+        ],
+        60.0,
+        true,
+    );
+    let said = heard_in(&[("mic", words)], &[]);
+    let fix = Op::FixWords {
+        asset_id: "mic".into(),
+        start_us: secs(2.0),
+        end_us: secs(3.0),
+        text: Some("and so".into()),
+    };
+    let p = with_music(Some(DUCK_DB));
+    let fixed = klipolo_model::apply_ops(&p, std::slice::from_ref(&fix)).unwrap();
+    assert_eq!(
+        &*speech_ranges(&p, &said),
+        [range(1.0, 2.0), range(3.0, 4.0)]
+    );
+    assert_eq!(&*speech_ranges(&fixed, &said), [range(1.0, 4.0)]);
+    assert!(may_change_sound(&p, &fix), "a project that ducks");
+    assert!(
+        !may_change_sound(&with_music(None), &fix),
+        "one that doesn't"
+    );
 }
 
 /// An export job made with speech freezes the ranges a ducking layer goes down under, reads them back when resumed,
