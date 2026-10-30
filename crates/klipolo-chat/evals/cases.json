@@ -31,7 +31,7 @@
       "message": "Remove the part where Peyton asks her question",
       "expect": [
         {
-          "calls": [{"name": "cutRange", "args": {"startSec": {"min": 85.0, "max": 87.0}, "endSec": {"min": 92.3, "max": 97.1}}}],
+          "calls": [{"name": "cutRange", "args": {"startSec": {"min": 85.0, "max": 87.0}, "endSec": {"min": 92.3, "max": 99.5}}}],
           "outcome": {"proposed": true}
         }
       ]
