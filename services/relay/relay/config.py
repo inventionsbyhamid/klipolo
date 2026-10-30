@@ -19,6 +19,11 @@ class Settings:
     align_concurrency: int
     align_threads: int
     meta_api_key: str = field(default="", repr=False)
+    # Load the alignment model at startup instead of on the first request.
+    align_warmup: bool = False
+
+
+_FLAGS = {"1": True, "true": True, "yes": True, "on": True, "0": False, "false": False, "no": False, "off": False, "": False}
 
 
 def _number(env: Mapping[str, str], name: str, default: str, kind: type, minimum: float) -> float:
@@ -34,6 +39,14 @@ def _number(env: Mapping[str, str], name: str, default: str, kind: type, minimum
     return value
 
 
+def _flag(env: Mapping[str, str], name: str, default: str) -> bool:
+    raw = env.get(name, default)
+    try:
+        return _FLAGS[raw.strip().lower()]
+    except KeyError:
+        raise ValueError(f"{name} must be 1 or 0, got {raw!r}") from None
+
+
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     env = os.environ if env is None else env
     return Settings(
@@ -46,4 +59,5 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         align_concurrency=_number(env, "ALIGN_CONCURRENCY", "2", int, 1),
         align_threads=_number(env, "ALIGN_THREADS", "8", int, 1),
         meta_api_key=env.get("META_API_KEY", ""),
+        align_warmup=_flag(env, "ALIGN_WARMUP", "0"),
     )

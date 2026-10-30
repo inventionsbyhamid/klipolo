@@ -73,3 +73,20 @@ def test_bad_values_fail_with_the_variable_name(name, value):
 def test_non_finite_values_fail_with_the_variable_name(name, value):
     with pytest.raises(ValueError, match=name):
         load_settings({name: value})
+
+
+def test_align_warmup_is_off_unless_turned_on():
+    assert load_settings({}).align_warmup is False
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("1", True), ("true", True), ("Yes", True), ("on", True), ("0", False), ("false", False), ("no", False), ("off", False), ("", False)],
+)
+def test_align_warmup_reads_common_flag_values(value, expected):
+    assert load_settings({"ALIGN_WARMUP": value}).align_warmup is expected
+
+
+def test_bad_align_warmup_fails_with_the_variable_name():
+    with pytest.raises(ValueError, match="ALIGN_WARMUP"):
+        load_settings({"ALIGN_WARMUP": "maybe"})
