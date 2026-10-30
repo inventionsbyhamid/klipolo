@@ -23,6 +23,7 @@ use klipolo_engine::media::luma_frames::{self, LumaError};
 use klipolo_model::time::Us;
 
 use crate::error::VideoError;
+use crate::proxy::ProxyInfo;
 
 /// Samples a second: 4.
 pub const SAMPLE_US: Us = 250_000;
@@ -149,3 +150,24 @@ pub fn detect(video: &Path, cancel: &AtomicBool) -> Result<Vec<Us>, VideoError> 
     })?;
     Ok(finder.finish())
 }
+
+/// The hard cuts of every chunk of a clip's small copy, in the clip's file time, once each (a cut in an overlap is
+/// found by both chunks). Blocking; `cancel` stops it.
+pub fn of_proxy(proxy: &ProxyInfo, cancel: &AtomicBool) -> Result<Vec<Us>, VideoError> {
+    let mut all = Vec::new();
+    for chunk in &proxy.chunks {
+        let found = detect(&chunk.path, cancel)?;
+        all.extend(
+            found
+                .into_iter()
+                .map(|at| at + chunk.range.start)
+                .filter(|at| (chunk.range.start..chunk.range.end).contains(at)),
+        );
+    }
+    all.sort_unstable();
+    all.dedup_by(|later, earlier| *later - *earlier < SAME_CUT_US);
+    Ok(all)
+}
+
+/// Two cuts closer than this (under two frames at 30 fps) are one cut found twice.
+const SAME_CUT_US: Us = 50_000;
