@@ -17,10 +17,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use klipolo_model::project::Loudness;
 
-use super::mix::{Mixdown, RATE, fade_gain, to_frame};
+use super::mix::{Mixdown, RATE, duck_gain_at, fade_gain, to_frame};
 use super::pcm::energy::EnergyWriter;
 use super::pcm::{Effected, Energies, Pcm, WINDOW};
-use super::plan::{AudioPlan, AudioSource, Crossfade};
+use super::plan::{AudioPlan, AudioSource, Crossfade, Duck};
 use crate::api::ExportQuality;
 
 /// Frames measured per block.
@@ -166,12 +166,13 @@ pub enum Estimate {
 /// The integrated loudness of the plan's mix (unity master gain), estimated from each file's 100 ms energies summed
 /// as powers (see the module docs): each source adds, per 100 ms block of the timeline (counted from the earliest
 /// source, as the exact meter counts), its file's mean energy over the source frames it plays there, times its gain
-/// with its fades squared and the share of the block it covers. That assumes different sources don't correlate,
-/// which holds for different files and keeps an equal-power crossfade level; sources that play the same samples at
-/// The same moment (a dissolve over a split with nothing removed) add their cross term too (`add_same_sound`
-/// up to +3 dB in the middle of such a dissolve). A source with an audio effect adds its
-/// own windows through the effect the same way (`effected`: `PcmStore::effected`, rendered once and kept, or this
-/// time only when they can't be kept). Sources without `pcm` (files that can't be decoded) are silent, as in the mix.
+/// with its fades and ducking squared and the share of the block it covers. That assumes different sources don't
+/// correlate, which holds for different files and keeps an equal-power crossfade level; sources that play the same
+/// samples at the same moment (a dissolve over a split with nothing removed) add their cross term too
+/// (`add_same_sound`: up to +3 dB in the middle of such a dissolve). A source with an audio effect
+/// adds its own windows through the effect the same way (`effected`: `PcmStore::effected`, rendered once and kept, or
+/// this time only when they can't be kept). Sources without `pcm` (files that can't be decoded) are silent, as in the
+/// mix.
 ///
 /// Cost: O(Σ blocks each source spans + S log S) plus the gating, with one f64 per block of the timeline (576 KB for
 /// two hours) and one index per source without an effect (the cross terms' sort); an effected source's first estimate
@@ -357,8 +358,8 @@ fn add_source(
     }
 }
 
-/// A source's gain over time: its volume, then its fades (linear to silence, or a crossfade's equal power), as the
-/// mixer applies them (`Mixdown`), without its 3 ms edge ramps.
+/// A source's gain over time: its volume, then its fades (linear to silence, or a crossfade's equal power) and its
+/// ducking under speech, as the mixer applies them (`Mixdown`), without its 3 ms edge ramps.
 struct Fades {
     gain: f64,
     start: i64,
@@ -366,6 +367,7 @@ struct Fades {
     fade_in: i64,
     fade_out: i64,
     equal_power: (bool, bool),
+    duck: Option<Duck>,
 }
 
 impl Fades {
@@ -377,6 +379,7 @@ impl Fades {
             fade_in: to_frame(s.fade_in_us),
             fade_out: to_frame(s.fade_out_us),
             equal_power: (s.crossfade.fade_in, s.crossfade.fade_out),
+            duck: s.duck.clone(),
         }
     }
 
@@ -394,6 +397,9 @@ impl Fades {
                 self.equal_power.1,
             ));
         }
+        if let Some(duck) = &self.duck {
+            g *= f64::from(duck_gain_at(duck, f as i64));
+        }
         g
     }
 
@@ -409,9 +415,10 @@ impl Fades {
             / 4.0
     }
 
-    /// The mean of the squared gain over frames `[a, b)`: exact outside the fades, else the mean of four samples.
+    /// The mean of the squared gain over frames `[a, b)`: exact outside the fades of a source that doesn't duck, else
+    /// the mean of four samples.
     fn mean_square(&self, a: i64, b: i64) -> f64 {
-        if a >= self.start + self.fade_in && b <= self.end - self.fade_out {
+        if self.duck.is_none() && a >= self.start + self.fade_in && b <= self.end - self.fade_out {
             return self.gain * self.gain;
         }
         let step = (b - a) as f64 / 4.0;
@@ -422,8 +429,9 @@ impl Fades {
     }
 }
 
-/// Writes source `s` alone through its effect and speed, at unity gain and without fades (what the mixer plays of it
-/// before its volume and fades), into `writer` as 100 ms K-weighted windows from its start (`PcmStore::effected`).
+/// Writes source `s` alone through its effect and speed, at unity gain and without fades or ducking (what the mixer
+/// plays of it before its volume, fades and ducking), into `writer` as 100 ms K-weighted windows from its start
+/// (`PcmStore::effected`).
 /// False when cancelled. A block of 100 ms at a time: O(its span), 38 KB of buffer.
 pub(crate) fn write_effected(
     s: &AudioSource,
@@ -438,6 +446,7 @@ pub(crate) fn write_effected(
         fade_in_us: 0,
         fade_out_us: 0,
         crossfade: Crossfade::default(),
+        duck: None,
         ..s.clone()
     };
     let frames = to_frame(unity.end_us).max(0) as u64;

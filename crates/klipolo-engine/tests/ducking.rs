@@ -6,12 +6,17 @@
 mod support;
 
 use std::collections::HashMap;
+use std::io::Write;
+use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use klipolo_engine::api::ExportQuality;
+use klipolo_engine::audio::loudness::{Estimate, estimate_until, measure};
 use klipolo_engine::audio::mix::{Mixdown, RATE, finish};
-use klipolo_engine::audio::pcm::Pcm;
+use klipolo_engine::audio::pcm::{Pcm, PcmKey, PcmStore};
 use klipolo_engine::audio::plan::{AudioPlan, AudioSource, audio_plan, speech_ranges};
+use klipolo_engine::export::audio::{CEILING_DBTP, ExportAudio};
 use klipolo_engine::export::job::ExportJob;
 use klipolo_engine::export::naming::plan_files;
 use klipolo_engine::export::runner::Batch;
@@ -131,6 +136,78 @@ fn render_tone(plan: AudioPlan) -> Vec<f32> {
     )
 }
 
+/// The left channel's RMS over `[from, to)` seconds, in dBFS.
+fn rms_db(mix: &[f32], from: f64, to: f64) -> f64 {
+    let frame = |s: f64| (s * f64::from(RATE)).round() as usize;
+    let (a, b) = (frame(from), frame(to));
+    let power: f64 = mix[2 * a..2 * b]
+        .chunks_exact(2)
+        .map(|lr| f64::from(lr[0]).powi(2))
+        .sum::<f64>()
+        / (b - a) as f64;
+    10.0 * power.log10()
+}
+
+/// The bed's own level: the tone at 50 %.
+fn own_db() -> f64 {
+    20.0 * (0.5 * f64::from(AMPLITUDE) / 2f64.sqrt()).log10()
+}
+
+#[test]
+fn music_is_12db_lower_during_speech() {
+    let mix = render_tone(plan(&music_alone(Some(DUCK_DB)), speech()));
+    let between = rms_db(&mix, 11.0, 13.0);
+    assert!(
+        (between - own_db()).abs() < 0.05,
+        "between speech it plays at its own volume: {between:.2} vs {:.2} dB",
+        own_db()
+    );
+    for (from, to) in [(6.0, 8.0), (16.0, 19.0)] {
+        let talking = rms_db(&mix, from, to);
+        println!(
+            "{from}-{to} s: {:.3} dB under the bed between speech",
+            talking - between
+        );
+        assert!(
+            (talking - between - DUCK_DB).abs() < 0.5,
+            "{from}-{to} s: {talking:.2} dB while speaking, {between:.2} dB between"
+        );
+    }
+}
+
+#[test]
+fn attack_and_release_are_smooth() {
+    let mix = render_tone(plan(&music_alone(Some(DUCK_DB)), speech()));
+    // 1 ms windows from before the first attack to after its release: no step between two of them over 1 dB.
+    let ms: Vec<f64> = (4_500..9_800)
+        .map(|m| rms_db(&mix, f64::from(m) / 1e3, f64::from(m + 1) / 1e3))
+        .collect();
+    let (steepest, at) = ms
+        .windows(2)
+        .enumerate()
+        .map(|(k, w)| ((w[1] - w[0]).abs(), 4_500 + k))
+        .fold((0.0, 0), |a, b| if b.0 > a.0 { b } else { a });
+    println!("steepest 1 ms step: {steepest:.3} dB at {at} ms");
+    assert!(steepest <= 1.0, "a {steepest:.2} dB step at {at} ms");
+    // And it does duck: down from 150 ms before the words, all the way when they start, back up over 400 ms after.
+    let level = |s: f64| rms_db(&mix, s, s + 0.001) - own_db();
+    for (s, want, what) in [
+        (4.80, 0.0, "before the attack"),
+        (4.925, DUCK_DB / 2.0, "half way down"),
+        (5.0, DUCK_DB, "down as the words start"),
+        (8.99, DUCK_DB, "down as they end"),
+        (9.2, DUCK_DB / 2.0, "half way back up"),
+        (9.45, 0.0, "back up"),
+    ] {
+        let got = level(s);
+        println!("{what} ({s} s): {got:.3} dB");
+        assert!(
+            (got - want).abs() < 0.25,
+            "{what} ({s} s): {got:.2} dB, want {want:.2}"
+        );
+    }
+}
+
 #[test]
 fn no_speech_data_means_no_ducking() {
     // Neither a transcript nor levels for any file: nobody is known to speak.
@@ -143,6 +220,103 @@ fn no_speech_data_means_no_ducking() {
     let plain = plan(&music_alone(None), speech());
     assert!(plain.sources.iter().all(|s| s.duck.is_none()));
     assert_eq!(render_tone(ducked), render_tone(plain));
+}
+
+#[test]
+fn export_mix_matches_preview_mix() {
+    let dir = tempfile::tempdir().unwrap();
+    let wav = dir.path().join("music.wav");
+    write_tone(&wav, 30);
+    let mut p = music_alone(Some(DUCK_DB));
+    p.assets.iter_mut().find(|a| a.id == "music").unwrap().path = wav.display().to_string();
+    let registry = Registry::builtin();
+    let cache = dir.path().join("cache");
+    let (export, levels) = ExportAudio::prepare(
+        &p,
+        &registry,
+        ExportQuality::High,
+        Some(&cache),
+        None,
+        speech(),
+    )
+    .unwrap();
+    assert_eq!(levels.gain_db, 0.0, "loudness off: unity");
+    // The same plan on both paths.
+    let preview = audio_plan(&p, &registry, speech());
+    assert_eq!(**export.plan(), preview);
+    assert!(preview.sources.iter().any(|s| s.duck.is_some()));
+    // And the same sound: the preview's mixdown against export's stream (its limiter idle at these levels).
+    let store = PcmStore::new(cache);
+    let heard = render(
+        preview,
+        &|s: &AudioSource| store.build(&PcmKey::of(s)).ok(),
+        HEARD_S,
+    );
+    let mut stream = export.stream(CEILING_DBTP);
+    let mut exported = vec![0f32; heard.len()];
+    for block in exported.chunks_mut(2 * 1_024) {
+        stream.next(block);
+    }
+    let worst = heard
+        .iter()
+        .zip(&exported)
+        .map(|(a, b)| (a - b).abs())
+        .fold(0f32, f32::max);
+    println!("largest sample difference, export vs preview: {worst:e}");
+    assert!(worst < 1e-3, "export differs from the preview by {worst}");
+    let (talking, between) = (rms_db(&exported, 6.0, 8.0), rms_db(&exported, 11.0, 13.0));
+    assert!(
+        (talking - between - DUCK_DB).abs() < 0.5,
+        "export: {talking:.2} vs {between:.2} dB"
+    );
+}
+
+/// The preview levels from an estimate of the mix's loudness and export from its exact measure (`audio::loudness`):
+/// both hear the music go down under speech. 8 dB here, inside R128's relative gate (12 dB down is gated out of both).
+#[test]
+fn the_preview_levels_a_ducked_mix_as_export_measures_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let wav = dir.path().join("music.wav");
+    write_tone(&wav, 30);
+    let registry = Registry::builtin();
+    let store = PcmStore::new(dir.path().join("cache"));
+    // (the preview's estimate, the export's exact LUFS) of the bed ducking by `duck`.
+    let levels = |duck: Option<f64>| {
+        let mut p = music_alone(duck);
+        p.assets.iter_mut().find(|a| a.id == "music").unwrap().path = wav.display().to_string();
+        let plan = audio_plan(&p, &registry, speech());
+        let pcm = |s: &AudioSource| store.build(&PcmKey::of(s)).ok();
+        let key = PcmKey::of(&plan.sources[0]);
+        let energies = store.energies(&key, &store.build(&key).unwrap()).unwrap();
+        let effected = |s: &AudioSource, p: &Arc<Pcm>, c: &AtomicBool| store.effected(s, p, c);
+        let Estimate::Lufs(Some(estimate)) = estimate_until(
+            &plan,
+            &pcm,
+            &|_: &AudioSource| Some(&energies),
+            &effected,
+            &AtomicBool::new(false),
+        ) else {
+            panic!("no estimate");
+        };
+        (estimate, measure(&plan, &pcm).unwrap())
+    };
+    let (plain_estimate, plain) = levels(None);
+    let (estimate, exact) = levels(Some(-8.0));
+    println!(
+        "plain {plain:.3}/{plain_estimate:.3}, ducking 8 dB {exact:.3}/{estimate:.3} LUFS (export/preview)"
+    );
+    assert!(
+        (plain_estimate - plain).abs() < 0.1,
+        "{plain_estimate} vs {plain}"
+    );
+    assert!(
+        (estimate - exact).abs() < 0.1,
+        "preview {estimate} vs export {exact}"
+    );
+    assert!(
+        plain - exact > 1.0,
+        "ducking lowers the mix: {exact} vs {plain}"
+    );
 }
 
 /// The mic's transcript (the recording's voice, clip "a" plays its first 20 s at 0 s): `words` as (from, to, kind),
@@ -291,4 +465,32 @@ fn the_export_job_freezes_the_speech_it_ducks_under() {
     let job = ExportJob::create(&batch(plain.clone(), &said), 30).unwrap();
     assert!(job.speech_ranges.is_empty(), "nothing ducks");
     assert!(job.is_current(&plain, &Speech::default()));
+}
+
+/// A 16-bit stereo WAV of the tone, `seconds` long.
+fn write_tone(path: &Path, seconds: usize) {
+    let frames = seconds * RATE as usize;
+    let data = (frames * 4) as u32;
+    let mut out = std::io::BufWriter::new(std::fs::File::create(path).unwrap());
+    for part in [
+        &b"RIFF"[..],
+        &(36 + data).to_le_bytes(),
+        b"WAVEfmt ",
+        &16u32.to_le_bytes(),
+        &1u16.to_le_bytes(),
+        &2u16.to_le_bytes(),
+        &RATE.to_le_bytes(),
+        &(RATE * 4).to_le_bytes(),
+        &4u16.to_le_bytes(),
+        &16u16.to_le_bytes(),
+        b"data",
+        &data.to_le_bytes(),
+    ] {
+        out.write_all(part).unwrap();
+    }
+    for n in 0..frames {
+        let x = ((tone_at(n) * 32767.0).round() as i16).to_le_bytes();
+        out.write_all(&x).unwrap();
+        out.write_all(&x).unwrap();
+    }
 }

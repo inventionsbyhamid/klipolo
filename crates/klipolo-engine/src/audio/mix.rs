@@ -2,7 +2,8 @@
 //! render through a `Mixdown`, which keeps one voice per sounding source: a straight read of the PCM cache at 1×, a
 //! resampled read at a drifting recording device's rate (`AudioSource::rate`), or a live `Stretch` (speed change and
 //! effect) fed from it. Rendering consecutive blocks streams; a jump re-seats the
-//! voices (with pre-roll for the filters). Every clip edge, hard cut and re-seat is ramped (3 ms) so nothing clicks.
+//! voices (with pre-roll for the filters). Every clip edge, hard cut and re-seat is ramped (3 ms) so nothing clicks. A
+//! source that ducks under speech follows its envelope sample by sample (`duck`), in the preview and export alike.
 //!
 //! A block touches only the sources sounding in it: the sources are kept in order of start,
 //! and consecutive blocks sweep a cursor through that order, holding an active set of what has started and not yet
@@ -13,6 +14,7 @@
 //! runs from the start keeps every earlier source in the scan, O(S) at worst (a few µs for 3,000 sources, once per
 //! seek).
 
+mod duck;
 #[cfg(test)]
 mod tests;
 mod voice;
@@ -23,6 +25,9 @@ use std::sync::Arc;
 
 use super::pcm::Pcm;
 use super::plan::{AudioPlan, AudioSource};
+use duck::Envelope;
+pub(crate) use duck::gain_at as duck_gain_at;
+pub use duck::{ATTACK_US, RELEASE_US};
 pub use voice::read_position_after;
 use voice::{Reads, Voice, VoiceKey};
 
@@ -247,8 +252,8 @@ impl Mixdown {
         }
     }
 
-    /// Sums the plan into `out` (`out.len() / 2` stereo frames from timeline frame `start_frame`) with gains, fades
-    /// and ramps; no master gain or clipping (`finish`). Sources whose PCM isn't there (yet) are silent.
+    /// Sums the plan into `out` (`out.len() / 2` stereo frames from timeline frame `start_frame`) with gains, fades,
+    /// ramps and ducking; no master gain or clipping (`finish`). Sources whose PCM isn't there (yet) are silent.
     pub fn render(
         &mut self,
         pcm: &dyn Fn(&AudioSource) -> Option<Arc<Pcm>>,
@@ -324,6 +329,7 @@ impl Mixdown {
         let fade_out = to_frame(s.fade_out_us).max(ramp_out) as f32;
         let (g0, g1) = (voice.gain, s.gain as f32);
         voice.gain = g1;
+        let mut duck = s.duck.as_ref().map(|d| Envelope::new(d, from));
         let dst = &mut out[((from - s0) * 2) as usize..((to - s0) * 2) as usize];
         for (k, (o, x)) in dst
             .chunks_exact_mut(2)
@@ -340,6 +346,9 @@ impl Mixdown {
             }
             if let Some(seated) = voice.seated {
                 g *= ((f - seated) as f32 / RAMP as f32).min(1.0);
+            }
+            if let Some(envelope) = &mut duck {
+                g *= envelope.gain(f);
             }
             o[0] += x[0] * g;
             o[1] += x[1] * g;
