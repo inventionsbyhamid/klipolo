@@ -1896,6 +1896,27 @@ def test_image_calls_in_flight_hold_their_reservation_against_the_cap(client, co
     assert client.app.state.in_flight.reserved(device.device_id) == (0.0, 0.0)
 
 
+def test_metas_content_policy_refusal_keeps_its_code(client, conn, meta):
+    device = add_device(conn)
+    meta.post("/images/generations").respond(
+        400,
+        json={
+            "error": {
+                "message": "Rejected by the safety system.",
+                "type": "invalid_request_error",
+                "param": None,
+                "code": "content_policy_violation",
+            }
+        },
+    )
+
+    response = post_image(client, device, image_request())
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "content_policy_violation", "message": "Rejected by the safety system."}
+    assert ledger(conn) == []
+
+
 # Secrets.
 
 

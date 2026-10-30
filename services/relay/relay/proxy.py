@@ -959,7 +959,23 @@ async def _meta_error(upstream: httpx.Response, settings: Settings) -> Response:
         return error_response(502, "meta_error", "Meta sent an unexpected answer. Try again.")
     retry_after = upstream.headers.get("retry-after")
     headers = {"Retry-After": retry_after} if retry_after else None
-    return error_response(status, "meta_error", _meta_reason(body, settings.meta_api_key), headers)
+    return error_response(status, _meta_code(body), _meta_reason(body, settings.meta_api_key), headers)
+
+
+# Meta's error codes a client acts on, passed on as the relay's own code: a
+# prompt Meta won't serve is worded differently from a broken request. Any
+# other error is `meta_error`.
+_PASSED_META_CODES = frozenset({"content_policy_violation"})
+
+
+def _meta_code(body: bytes) -> str:
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return "meta_error"
+    error = data.get("error") if isinstance(data, dict) else None
+    code = error.get("code") if isinstance(error, dict) else None
+    return code if isinstance(code, str) and code in _PASSED_META_CODES else "meta_error"
 
 
 def _meta_reason(body: bytes, key: str) -> str:
