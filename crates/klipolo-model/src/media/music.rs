@@ -212,7 +212,8 @@ pub fn refit_music_ops(before: &Project, after: &Project) -> Vec<Op> {
 
 /// `ops` with the music's refit after them ([`refit_music_ops`] against their result), as one batch for one undo step.
 /// An edit that is refused is refused as before. A refit the batch would refuse (a bug) is left out so the edit still
-/// goes through, and isn't reported here: the app's history uses [`apply_with_music_refit`], which says so.
+/// goes through, and isn't reported here (nor does it panic): the app's history uses [`apply_with_music_refit`], whose
+/// [`Refitted::refused`] says so for the log.
 pub fn with_music_refit(before: &Project, ops: Vec<Op>) -> Result<Vec<Op>> {
     apply_with_music_refit(before, ops).map(|done| done.ops)
 }
@@ -224,19 +225,21 @@ pub struct Refitted {
     pub ops: Vec<Op>,
     /// What `apply_ops` makes of `ops` from the project before, for `Document::commit_tx`.
     pub project: Project,
-    /// Why the refit was left out: the batch refused it, which is a bug to log (and a panic in debug builds). None
-    /// when it went in or nothing needed one.
+    /// Why the refit was left out: the batch refused it, which is a bug for the app to log; the edit still goes in.
+    /// Only the model's own tests panic on it. None when it went in or nothing needed one.
     pub refused: Option<ModelError>,
 }
 
 /// [`with_music_refit`], with the project its ops make from `before` (so a caller can record it with
 /// `Document::commit_tx` instead of applying the ops again) and a refused refit told, not hidden. Applies once when
-/// nothing needs a refit, twice when something does.
+/// nothing needs a refit, twice when something does. The app runs this on every edit, so a refused refit never panics
+/// there, debug builds included: only the model's own tests (`verify-normalize`, debug) check that none is.
 pub fn apply_with_music_refit(before: &Project, ops: Vec<Op>) -> Result<Refitted> {
     let after = apply_ops(before, &ops)?;
     let refit = refit_music_ops(before, &after);
     let done = fold(before, ops, after, refit);
-    debug_assert!(
+    #[cfg(all(feature = "verify-normalize", debug_assertions))]
+    assert!(
         done.refused.is_none(),
         "the music's refit was refused: {:?}",
         done.refused
