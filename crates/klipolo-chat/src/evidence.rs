@@ -10,9 +10,10 @@
 //! - the selection's ends, the playhead, the video's start (0) and the main track's end;
 //! - a time the person typed (`typed_times`).
 //!
-//! The edge then snaps to the nearest of them (on a tie, the first in that list's reverse: what the person pointed at
-//! wins over what was heard or seen). An edge on a word is padded as `word_cut` pads a cut of the words the range
-//! holds, so a cut never clips a word it keeps or removes; no other edge is padded.
+//! The edge then snaps to the nearest of them. On a tie, `Source`'s order decides: the selection, then a typed time,
+//! the playhead, the video's start or end, a clip's edge, a word, a pause, a scene item (what the person pointed at
+//! before what was heard or seen). An edge on a word is padded as `word_cut` pads a cut of the words the range holds,
+//! so a cut never clips a word it keeps or removes; no other edge is padded.
 //!
 //! Times are the snapshot's timeline, as the context showed them; the compiler maps them into its working copy after.
 //! Building costs O(words + pauses + scene items + clips) once per message; a lookup is a binary search.
