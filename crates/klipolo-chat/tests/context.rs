@@ -1026,3 +1026,64 @@ fn thinning_keeps_what_is_near_the_playhead_and_selection() {
         "{text}"
     );
 }
+
+#[test]
+fn the_view_and_speeds_read_plainly_at_the_edges() {
+    let inputs = two_clips();
+    let now = |view: View| {
+        section(&inputs.context(&view).text, "Now")
+            .trim_end()
+            .to_owned()
+    };
+    // Past the end of the 144.04 s timeline: the selection is cut at the end, the playhead stops there.
+    let past = View {
+        playhead_us: secs(200.0),
+        selection: Some(RangeUs {
+            start: secs(140.0),
+            end: secs(200.0),
+        }),
+    };
+    assert_eq!(now(past), "Playhead: 144.0 (end)\nSelection: 140.0-144.0");
+    let beyond = View {
+        playhead_us: secs(10.0),
+        selection: Some(RangeUs {
+            start: secs(150.0),
+            end: secs(160.0),
+        }),
+    };
+    assert_eq!(now(beyond), "Playhead: 10.0 in c1\nSelection: none");
+    // No clips: nowhere to be.
+    let empty = Project::new("Empty");
+    let text = build_context(
+        &empty,
+        &Speech::default(),
+        &HashMap::new(),
+        &HashMap::new(),
+        &view_at(3.0),
+    )
+    .text;
+    assert_eq!(
+        section(&text, "Now").trim_end(),
+        "Playhead: 0.0 (no clips)\nSelection: none"
+    );
+    assert!(
+        section(&text, "Project").contains("\nClips: none\n"),
+        "{text}"
+    );
+    // A speed that isn't whole reads with two decimals; c1 at 1.5x plays its 13.0 s in 8.67 s.
+    let mut faster = two_clips();
+    let patch = ClipPatch {
+        speed: Some(1.5),
+        ..ClipPatch::default()
+    };
+    let op = Op::UpdateClip {
+        id: "clip-a1".into(),
+        patch,
+    };
+    faster.project = apply_ops(&faster.project, &[op]).unwrap();
+    let project = section(&faster.context(&view_at(0.0)).text, "Project").to_owned();
+    assert!(
+        project.contains("\nc1 0.0-8.7 astronauts.mp4 (file 0.0-13.0 of 155.0, speed 1.50x)\n"),
+        "{project}"
+    );
+}

@@ -528,10 +528,13 @@ fn format_name(format: FormatKind) -> &'static str {
     }
 }
 
-/// A clip speed as people write it: "2", "1.5", "0.25".
+/// A clip speed: whole ones as "2", others with two decimals ("1.50", "0.25").
 fn speed(speed: f64) -> String {
-    let fixed = format!("{speed:.2}");
-    fixed.trim_end_matches('0').trim_end_matches('.').to_owned()
+    if speed.fract() == 0.0 {
+        format!("{speed:.0}")
+    } else {
+        format!("{speed:.2}")
+    }
 }
 
 fn project_section(out: &mut String, p: &Project, starts: &[Us], brief: Brief) {
@@ -624,17 +627,23 @@ fn clip_line(out: &mut String, p: &Project, i: usize, start: Us, brief: Brief) {
     out.push('\n');
 }
 
+/// The playhead and the selection, both kept within the video.
 fn now_section(out: &mut String, p: &Project, view: &View) {
-    let at = view.playhead_us.max(0);
+    let length = video_duration(&p.timeline);
+    let at = view.playhead_us.clamp(0, length);
+    let _ = write!(out, "## Now\nPlayhead: {}", secs(at));
     match clip_at(&p.timeline.main, at) {
         Some((i, _)) => {
-            let _ = writeln!(out, "## Now\nPlayhead: {} in {}", secs(at), short_ref(i));
+            let _ = writeln!(out, " in {}", short_ref(i));
         }
-        None => {
-            let _ = writeln!(out, "## Now\nPlayhead: {} (end)", secs(at));
-        }
+        None if p.timeline.main.is_empty() => out.push_str(" (no clips)\n"),
+        None => out.push_str(" (end)\n"),
     }
-    match view.selection {
+    let selected = view.selection.map(|r| RangeUs {
+        start: r.start.max(0),
+        end: r.end.min(length),
+    });
+    match selected {
         Some(r) if !r.is_empty() => {
             let _ = writeln!(out, "Selection: {}-{}", secs(r.start), secs(r.end));
         }
