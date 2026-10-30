@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 const MIB: usize = 1024 * 1024;
+/// Two content keys (what `content_key` returns: 64 lowercase hex digits).
+const KEY: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const OTHER: &str = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
 
 /// `len` bytes that differ along the file (a small generator, no rand crate).
 fn bytes(len: usize, seed: u64) -> Vec<u8> {
@@ -97,17 +100,21 @@ fn words() -> Words {
 #[test]
 fn a_stored_file_loads_back_from_its_key_folder() {
     let root = tempfile::tempdir().unwrap();
-    let dir = Dir::new(root.path(), "abc123");
-    assert_eq!(dir.path(), root.path().join("abc123"));
+    let dir = Dir::new(root.path(), KEY).unwrap();
+    assert_eq!(dir.path(), root.path().join(KEY));
     assert_eq!(dir.load::<Words>("transcript"), None, "nothing stored yet");
     dir.store("transcript", &words()).unwrap();
     assert_eq!(dir.load::<Words>("transcript"), Some(words()));
     assert_eq!(
-        Dir::new(root.path(), "abc123").load::<Words>("transcript"),
+        Dir::new(root.path(), KEY)
+            .unwrap()
+            .load::<Words>("transcript"),
         Some(words())
     );
     assert_eq!(
-        Dir::new(root.path(), "other").load::<Words>("transcript"),
+        Dir::new(root.path(), OTHER)
+            .unwrap()
+            .load::<Words>("transcript"),
         None
     );
 
@@ -135,7 +142,7 @@ fn a_stored_file_loads_back_from_its_key_folder() {
 #[test]
 fn a_newer_schema_loads_nothing() {
     let root = tempfile::tempdir().unwrap();
-    let dir = Dir::new(root.path(), "k");
+    let dir = Dir::new(root.path(), KEY).unwrap();
     dir.store("transcript", &words()).unwrap();
     std::fs::write(
         dir.path().join("meta.json"),
@@ -153,7 +160,7 @@ fn a_newer_schema_loads_nothing() {
 #[test]
 fn a_damaged_or_different_file_loads_nothing() {
     let root = tempfile::tempdir().unwrap();
-    let dir = Dir::new(root.path(), "k");
+    let dir = Dir::new(root.path(), KEY).unwrap();
     dir.store("transcript", &words()).unwrap();
     std::fs::write(dir.path().join("transcript.json"), b"{\"words\": [").unwrap();
     assert_eq!(dir.load::<Words>("transcript"), None);
@@ -167,7 +174,7 @@ fn storing_over_an_older_or_damaged_folder_starts_it_again() {
     // files of another shape.
     for old_meta in [&br#"{"schema": 0}"#[..], b"{"] {
         let root = tempfile::tempdir().unwrap();
-        let dir = Dir::new(root.path(), "k");
+        let dir = Dir::new(root.path(), KEY).unwrap();
         std::fs::create_dir_all(dir.path()).unwrap();
         std::fs::write(dir.path().join("meta.json"), old_meta).unwrap();
         std::fs::write(dir.path().join("scenes.json"), b"{}").unwrap();
@@ -182,7 +189,7 @@ fn storing_over_an_older_or_damaged_folder_starts_it_again() {
 fn a_newer_schema_folder_is_never_overwritten() {
     // A newer app's results stay as they are: this version neither reads nor replaces them.
     let root = tempfile::tempdir().unwrap();
-    let dir = Dir::new(root.path(), "k");
+    let dir = Dir::new(root.path(), KEY).unwrap();
     std::fs::create_dir_all(dir.path()).unwrap();
     std::fs::write(dir.path().join("meta.json"), br#"{"schema": 2}"#).unwrap();
     std::fs::write(dir.path().join("scenes.json"), b"{}").unwrap();
@@ -201,7 +208,7 @@ fn a_newer_schema_folder_is_never_overwritten() {
 fn an_unreadable_meta_is_never_taken_for_a_damaged_one() {
     use std::os::unix::fs::PermissionsExt;
     let root = tempfile::tempdir().unwrap();
-    let dir = Dir::new(root.path(), "k");
+    let dir = Dir::new(root.path(), KEY).unwrap();
     dir.store("transcript", &words()).unwrap();
     let meta = dir.path().join("meta.json");
     std::fs::set_permissions(&meta, std::fs::Permissions::from_mode(0o000)).unwrap();
@@ -222,7 +229,7 @@ fn an_unreadable_meta_is_never_taken_for_a_damaged_one() {
 #[test]
 fn model_ids_are_kept_in_meta() {
     let root = tempfile::tempdir().unwrap();
-    let dir = Dir::new(root.path(), "k");
+    let dir = Dir::new(root.path(), KEY).unwrap();
     assert!(dir.meta().is_none());
     dir.store("transcript", &words()).unwrap();
     dir.set_model("transcript", "muse-voice-transcribe-1.0")
@@ -237,7 +244,7 @@ fn model_ids_are_kept_in_meta() {
 #[test]
 fn names_stay_inside_the_folder() {
     let root = tempfile::tempdir().unwrap();
-    let dir = Dir::new(root.path(), "k");
+    let dir = Dir::new(root.path(), KEY).unwrap();
     for name in ["meta", "../escape", "a/b", "", ".hidden"] {
         assert!(dir.store(name, &words()).is_err(), "{name:?}");
         assert_eq!(dir.load::<Words>(name), None, "{name:?}");
@@ -249,7 +256,7 @@ fn names_stay_inside_the_folder() {
 fn two_writers_in_one_process_never_lose_a_result_or_a_model() {
     // The app runs one clip's transcript and scene steps at once: each stores its result and notes its model.
     let root = tempfile::tempdir().unwrap();
-    let dir = Dir::new(root.path(), "k");
+    let dir = Dir::new(root.path(), KEY).unwrap();
     let jobs = [
         ("transcript", "muse-voice-transcribe-1.0"),
         ("scenes", "muse-spark-1.3"),
@@ -271,4 +278,33 @@ fn two_writers_in_one_process_never_lose_a_result_or_a_model() {
         assert_eq!(meta.models[name], model);
         assert_eq!(dir.load::<i32>(name), Some(999));
     }
+}
+
+#[test]
+fn only_a_content_key_names_a_folder() {
+    // Anything else could make the root itself, or a folder outside it, the key's folder.
+    let root = tempfile::tempdir().unwrap();
+    let upper = KEY.to_ascii_uppercase();
+    let short = &KEY[1..];
+    let long = format!("{KEY}0");
+    let not_hex = "g".repeat(64);
+    for key in [
+        "",
+        ".",
+        "..",
+        "../x",
+        upper.as_str(),
+        short,
+        long.as_str(),
+        not_hex.as_str(),
+    ] {
+        assert!(Dir::new(root.path(), key).is_err(), "{key:?}");
+    }
+    let file = root.path().join("clip.mov");
+    std::fs::write(&file, b"clip").unwrap();
+    let key = cache::content_key(&file).unwrap();
+    assert_eq!(
+        Dir::new(root.path(), &key).unwrap().path(),
+        root.path().join(&key)
+    );
 }

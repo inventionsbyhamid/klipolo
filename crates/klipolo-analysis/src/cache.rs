@@ -83,11 +83,20 @@ pub struct Dir {
 }
 
 impl Dir {
-    /// `<root>/<key>/` (nothing is read or made until a load or a store).
-    pub fn new(root: &Path, key: &str) -> Self {
-        Self {
-            path: root.join(key),
+    /// `<root>/<key>/` (nothing is read or made until a load or a store). `key` must be a `content_key` (64 lowercase
+    /// hex digits): anything else (an empty key would make `root` itself the folder) is refused.
+    pub fn new(root: &Path, key: &str) -> io::Result<Self> {
+        let content_key =
+            key.len() == 64 && key.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+        if !content_key {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Not an analysis cache key",
+            ));
         }
+        Ok(Self {
+            path: root.join(key),
+        })
     }
 
     pub fn path(&self) -> &Path {
