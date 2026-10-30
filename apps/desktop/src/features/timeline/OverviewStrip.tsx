@@ -82,7 +82,9 @@ export const OverviewStrip = memo(function OverviewStrip({ main, durationUs, pps
     };
   }, [scrollRef, durationUs, totalPx]);
 
-  if (durationUs <= 0) return null;
+  // Nothing yet: the empty pill, so the row keeps its place and the lanes don't move when a clip comes in.
+  if (durationUs <= 0)
+    return <div data-overview data-fits="false" className="tl-overview" style={{ marginLeft: HEADER_PX }} />;
 
   /** Scrolls the lanes so the outline's middle is at `clientX`, and follows the pointer while it is held. */
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {

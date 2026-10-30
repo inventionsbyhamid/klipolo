@@ -38,3 +38,15 @@ it('the overview strip outlines the part of the hour the lanes show, from the fi
   });
   expect(outline.style.left).toBe('50%');
 });
+
+it('an empty project keeps the strip as an empty pill, so the lanes stay where they will be', () => {
+  const snapshot = fixtureSnapshot();
+  snapshot.project.timeline.main = [];
+  snapshot.project.timeline.tracks = snapshot.project.timeline.tracks.map((t) => ({ ...t, items: [] }));
+  useProject.setState({ snapshot, pending: 0 });
+  renderWithProviders(<Timeline />);
+  const strip = document.querySelector<HTMLElement>('[data-overview]')!;
+  expect(strip).not.toBeNull();
+  expect(strip.dataset.fits).toBe('false');
+  expect(strip.querySelector('.ov-seg, .ov-view')).toBeNull();
+});
