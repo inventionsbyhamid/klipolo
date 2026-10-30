@@ -161,8 +161,10 @@ impl Evidence {
 /// invented: a message without a time gives none, and neither do counts, refs, speeds or shapes.
 /// - A number with a seconds or minutes word is that time ("12.5 s", "12.5s", "2 min", "1.5 minutes"). "m" is not
 ///   minutes: "5m" may as well be metres or a size. A number word needs its unit ("five seconds").
-/// - A bare number is seconds when only a joining word (`JOINING`: "to", "and", "then" ...) or the phrase's end comes
-///   next ("at 12", "12 to 15", "12-15", "at 12, then"); before any other word it is a count ("3 pauses", "2 clips").
+/// - A bare number is seconds when a time word comes right before it (`TIME_WORDS`: "at", "from", "after" ...: "at 12
+///   please", "after 45 because"), when it follows a time just read ("12-15 please", "12 and 15"), or when only a
+///   joining word (`JOINING`: "to", "and", "then" ...) or the phrase's end comes next ("12 to 15", "at 12, then").
+///   Otherwise, before another word, it is a count ("3 pauses", "3 pauses and 2 ums", "2 clips").
 /// - A clock is minutes and two-digit seconds ("1:05", "1:10.5"), or hours too ("1:02:05"). "1:5" and an aspect ratio
 ///   (`RATIOS`: "9:16", "16:9" ...) are none.
 /// - "first N" gives 0 and N, "last N" the duration less N and the duration, when N has a unit or is a clock ("the
@@ -172,6 +174,8 @@ impl Evidence {
 pub fn typed_times(message: &str, duration_us: Us) -> Vec<Us> {
     let tokens = tokens(message);
     let mut out = Vec::new();
+    // Which tokens were read as times, so a number right after one is a time too ("12-15", "12 and 15").
+    let mut read = vec![false; tokens.len()];
     for (k, token) in tokens.iter().enumerate() {
         let before = k.checked_sub(1).map(|j| &tokens[j]);
         let after = tokens.get(k + 1);
@@ -181,7 +185,9 @@ pub fn typed_times(message: &str, duration_us: Us) -> Vec<Us> {
             Kind::Number(_) | Kind::Clock(_) if touches_letters(token, before, after) => continue,
             Kind::Number(n) => match unit {
                 Some(unit) => n * unit,
-                None if side.is_some() || before_a_word(token, after) => continue,
+                None if side.is_some() => continue,
+                None if introduced(k, &tokens, &read) => *n,
+                None if before_a_word(token, after) => continue,
                 None => *n,
             },
             Kind::Clock(t) => *t,
@@ -199,6 +205,7 @@ pub fn typed_times(message: &str, duration_us: Us) -> Vec<Us> {
         if !amount.is_finite() || amount < 0.0 {
             continue;
         }
+        read[k] = true;
         let amount_us = secs_to_us(amount.min((MAX_TIME_US / US_PER_SEC) as f64));
         match side {
             Some(Side::First) => out.extend([0, amount_us]),
@@ -212,6 +219,13 @@ pub fn typed_times(message: &str, duration_us: Us) -> Vec<Us> {
     out.dedup();
     out
 }
+
+/// Words that bring in a time, so a bare number right after one is a time whatever follows it. Not "and" or "or":
+/// "3 pauses and 2 ums" are counts.
+const TIME_WORDS: [&str; 12] = [
+    "at", "from", "to", "until", "till", "through", "thru", "after", "before", "between", "around",
+    "since",
+];
 
 /// Words that join a time to the next, so a bare number before one is still a time.
 const JOINING: [&str; 8] = [
@@ -238,6 +252,18 @@ fn touches_letters(token: &Token, before: Option<&Token>, after: Option<&Token>)
     let glued_before = token.joined && before.is_some();
     let glued_after = after.is_some_and(|a| a.joined && a.unit().is_none());
     glued_before || glued_after
+}
+
+/// Whether the bare number at `k` is brought in as a time: by a time word right before it (with a space between), or by
+/// a time read right before it, directly ("12-15") or across "and" or "or" ("12 and 15").
+fn introduced(k: usize, tokens: &[Token], read: &[bool]) -> bool {
+    let word_is = |j: usize, words: &[&str]| matches!(&tokens[j].kind, Kind::Word(w) if words.contains(&w.as_str()));
+    let Some(j) = k.checked_sub(1) else {
+        return false;
+    };
+    (!tokens[k].joined && word_is(j, &TIME_WORDS))
+        || read[j]
+        || (word_is(j, &["and", "or"]) && j.checked_sub(1).is_some_and(|i| read[i]))
 }
 
 /// A bare number with a word after it, in the same phrase, that neither joins times nor is a unit: a count.

@@ -840,6 +840,13 @@ fn typed_times_count_as_evidence() {
         ("cut 12-15", vec![12.0, 15.0]),
         ("cut between 1:05 and 1:20", vec![65.0, 80.0]),
         ("split at 12, then add captions", vec![12.0]),
+        // After a time word, or right after another time, whatever word follows.
+        ("cut 12 to 15 please", vec![12.0, 15.0]),
+        ("cut at 12 please", vec![12.0]),
+        ("cut after 45 because it's boring", vec![45.0]),
+        ("split at 30 where she laughs", vec![30.0]),
+        ("cut 12-15 please", vec![12.0, 15.0]),
+        ("cut between 12 and 15 please", vec![12.0, 15.0]),
     ] {
         let want: Vec<Us> = times.into_iter().map(secs).collect();
         assert_eq!(typed_times(message, d), want, "{message}");
@@ -847,6 +854,7 @@ fn typed_times_count_as_evidence() {
     // Counts, refs, speeds, ordinals and aspect ratios are no time.
     for message in [
         "remove 3 pauses",
+        "remove 3 pauses and 2 ums",
         "cut 2 clips",
         "cut the last two sentences",
         "keep the first 3",
