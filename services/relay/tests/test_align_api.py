@@ -323,6 +323,32 @@ def test_wav_chunks_running_past_the_file_are_400(client, auth, fake, audio):
     assert fake.calls == 0
 
 
+def test_streaming_wav_without_sizes_is_judged_by_the_bytes_present(client, auth):
+    # Streaming writers leave the sizes at 0xFFFFFFFF.
+    audio = with_chunk_sizes(make_wav(seconds=2), riff=0xFFFFFFFF, data=0xFFFFFFFF)
+    assert post(client, auth, audio=audio).status_code == 200
+    assert align_usage(client.app.state.settings) == (pytest.approx(1.5), today())
+
+
+def test_a_header_claiming_more_audio_than_sent_counts_only_what_was_sent(client, auth):
+    audio = with_chunk_sizes(make_wav(seconds=0.4), data=0x7FFFFFFE)
+    turns = [{"startMs": 0, "endMs": 300_000, "text": "hello"}]
+    assert post(client, auth, audio=audio, turns=turns).status_code == 200
+    # The slice is clamped to the 0.4 s actually present.
+    assert align_usage(client.app.state.settings) == (pytest.approx(0.4), today())
+
+
+def test_streaming_wav_over_ten_minutes_is_400(client, auth, fake):
+    audio = with_chunk_sizes(make_wav(seconds=600.5), riff=0xFFFFFFFF, data=0xFFFFFFFF)
+    body = assert_error(post(client, auth, audio=audio), 400, "invalid_request")
+    assert body["message"] == "The audio is longer than 10 minutes."
+
+
+def test_streaming_wav_with_no_samples_is_empty(client, auth):
+    audio = with_chunk_sizes(make_wav(seconds=0), data=0xFFFFFFFF)
+    assert_error(post(client, auth, audio=audio), 400, "invalid_request", "The audio is empty.")
+
+
 def test_audio_longer_than_ten_minutes_is_400(client, auth, fake):
     body = assert_error(post(client, auth, audio=make_wav(seconds=600.5)), 400, "invalid_request")
     assert body["message"] == "The audio is longer than 10 minutes."

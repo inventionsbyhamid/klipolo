@@ -475,14 +475,16 @@ def wav_samples(path: str) -> int:
                 raise RelayError(400, "invalid_request", "The audio must be 16-bit PCM.")
             if audio.getframerate() != SAMPLE_RATE:
                 raise RelayError(400, "invalid_request", "The audio must be 16 kHz.")
-            declared = audio.getnframes()
-            if declared > MAX_AUDIO_SECONDS * SAMPLE_RATE:
-                raise RelayError(400, "invalid_request", "The audio is longer than 10 minutes.")
-            # A header can claim more audio than the file holds.
-            n_samples = len(audio.readframes(declared)) // 2
+            # Count the samples actually sent, not the header's size: a
+            # streaming writer leaves it at 0xFFFFFFFF, and a header can
+            # claim more than the file holds.
+            limit = MAX_AUDIO_SECONDS * SAMPLE_RATE
+            n_samples = len(audio.readframes(limit + 1)) // 2
     except (wave.Error, EOFError, RuntimeError, struct.error):
         # RuntimeError: a chunk whose size runs past the end of the file.
         raise RelayError(400, "invalid_request", _NOT_WAV) from None
+    if n_samples > limit:
+        raise RelayError(400, "invalid_request", "The audio is longer than 10 minutes.")
     if n_samples == 0:
         raise RelayError(400, "invalid_request", "The audio is empty.")
     return n_samples
