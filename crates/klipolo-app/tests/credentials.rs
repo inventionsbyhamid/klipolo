@@ -622,7 +622,7 @@ async fn a_saved_key_registers_on_the_next_use_when_the_relay_was_down() {
         endpoints(&format!("{}/v1", meta.uri()), &relay.uri()),
         DEVICE.into(),
     )
-    .with_registration_backoff(Duration::ZERO);
+    .with_register_backoff(Duration::ZERO);
 
     credentials.set_key(KEY).await.unwrap();
     // The relay is down at the first use: the feature still gets the key's adapter (approximate word timing), and

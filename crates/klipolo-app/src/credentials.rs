@@ -261,7 +261,7 @@ impl Credentials {
 
     /// How long [`Self::ready`] waits after a failed registration before trying again ([`REGISTER_BACKOFF`] by
     /// default).
-    pub fn with_registration_backoff(mut self, pause: Duration) -> Self {
+    pub fn with_register_backoff(mut self, pause: Duration) -> Self {
         self.register_backoff = pause;
         self
     }
