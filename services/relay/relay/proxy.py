@@ -5,7 +5,7 @@ own key, for an allowlist of endpoints and of models (ALLOWED_MODELS: Spark
 1.3 and 1.2 and Voice Transcribe by default; SAM 3.1 only when listed, and
 then its video calls must stream):
 
-    POST   responses        JSON, at most 8 MiB
+    POST   responses        JSON, at most 2 MiB, known fields only
     POST   files            multipart upload, streamed, at most 1 GiB
     GET    files/{id}
     DELETE files/{id}
@@ -18,11 +18,14 @@ Anything else is 404. Every call is gated per request: a known device token
 Caps are kept with reservations. Before a billable call goes out it reserves
 the most it could cost: for Spark, request bytes / 4 at the input price plus
 its whole max_output_tokens (set to 8192 when missing, at most 16384) at the
-output price, plus $0.75 when the input refers to media or earlier context;
-for transcription, the audio's length from its WAV header. The call is
-refused with 402 unless the device and the relay have room for it on top of
-what is spent and what calls in flight have reserved. A device with no room
-left is refused before its body is read, and bodies have a deadline (408).
+output price, plus $0.75 unless the call is text only (media or files by link
+or id, stored items, earlier responses or conversations, or any type the
+relay doesn't know all count as media); for transcription, the audio's data
+at 32,000 bytes a second, the lowest rate Meta takes. The call is refused
+with 402 unless the device and the relay have room for it on top of what is
+spent and what calls in flight have reserved, or with 413 if it could cost
+more than a device's whole cap. A device with no room left is refused before
+its body is read, and bodies have a deadline (408).
 
 After Meta answers, the call is charged from Meta's own `usage`: the ledger
 row and the device's `spent_usd` are written in one transaction, and only then
@@ -31,8 +34,10 @@ hanging up never makes a call cheaper: a non-streamed call still waits for
 Meta's answer, and a streamed one is read to its final event. When the real
 usage can't be read (no usage, missing counters, a parse failure, a timeout
 after the request reached Meta, a stream without a final event), the call is
-charged its reservation, or the usage seen if that is higher. If a charge
-can't be written, capped calls are refused (503) until it can be.
+charged its reservation, or the usage seen if that is higher. A streaming
+client that stops reading for 60 s is treated as gone the same way. If a
+charge can't be written, capped calls are refused (503) until a quick retry
+at admission writes it.
 
 Nothing from a proxied request is stored except the ledger row, and request
 or response headers and bodies are never logged.
