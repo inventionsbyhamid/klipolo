@@ -368,8 +368,8 @@ fn runs(track: &Track) -> Vec<Range<usize>> {
 }
 
 /// Fits one run of music, `bed` on track `track`, of a file `file_len` long, to end at `end` ([`plan`]): the run's
-/// pieces past the plan go, those it keeps change only where their length or fades do, and new ones follow on the
-/// track. The fade-in stays on the first piece and the fade-out moves to the last.
+/// pieces past the plan go, those it keeps change only where their length or the fade-out does, and new ones follow on
+/// the track. The fade-in stays on the first piece and the fade-out moves to the last.
 fn refit(p: &Project, bed: &[Item], track: &Id, file_len: Us, end: Us, ops: &mut Vec<Op>) {
     let (first, last) = (&bed[0], &bed[bed.len() - 1]);
     // New pieces are `{first piece}-n`, numbered on past every such id in the project: one look at its ids per run.
@@ -398,9 +398,11 @@ fn refit(p: &Project, bed: &[Item], track: &Id, file_len: Us, end: Us, ops: &mut
         match piece.from {
             Some(i) => {
                 let layer = &bed[i];
-                if piece.len != layer.duration_us
-                    || fades(layer) != fit(fade_in, fade_out, piece.len)
-                {
+                let resized = piece.len != layer.duration_us;
+                // A piece that keeps its length and neither takes nor gives up the fade-out keeps its fades as they
+                // are (a person's may be longer than half of it); a piece the refit moves is fitted within half.
+                let moved = resized || k == final_piece || piece.from == Some(bed.len() - 1);
+                if moved && (resized || fades(layer) != fit(fade_in, fade_out, piece.len)) {
                     update(layer, piece.len, fade_in, fade_out, ops);
                 }
             }

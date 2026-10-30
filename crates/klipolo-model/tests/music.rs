@@ -858,3 +858,32 @@ fn music_crossing_the_new_end_is_cut_there_with_its_fade_out() {
     assert_one_bed(&short, "loop");
     assert_eq!(fade_out(m[1]), 2.0);
 }
+
+#[test]
+fn a_refit_leaves_hand_set_fades_on_pieces_it_does_not_move() {
+    // A 5 s fade-in set by hand on the first 8 s piece: more than half of it, which a person may choose.
+    let mut p = with_music(&video(30.0), "loop", MusicOpts::default());
+    let first = music(&p)[0].clone();
+    let mut content = first.content.clone();
+    if let ItemContent::Audio { fade_in_us, .. } = &mut content {
+        *fade_in_us = secs(5.0);
+    }
+    apply(
+        &mut p,
+        Op::UpdateItem {
+            id: first.id.clone(),
+            patch: content_patch(content),
+        },
+    );
+    // A cut in the middle changes the last piece only: the first keeps its fade-in.
+    let ops = with_music_refit(&p, vec![cut(10.0, 12.0)]).unwrap();
+    assert_eq!(ops.len(), 2, "the cut, then the last piece: {ops:?}");
+    let after = apply_ops(&p, &ops).unwrap();
+    let m = music(&after);
+    assert_eq!(
+        spans(&m),
+        [(0.0, 8.0), (8.0, 16.0), (16.0, 24.0), (24.0, 28.0)]
+    );
+    assert_eq!(fade_in(m[0]), 5.0);
+    assert_eq!(fade_out(m[3]), 2.0);
+}
