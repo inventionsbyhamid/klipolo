@@ -137,6 +137,10 @@ fn user_messages_are_plain_and_name_settings_where_needed() {
         MetaError::LocalFile {
             name: "clip.mp4".into(),
         },
+        MetaError::Refused { message: None },
+        MetaError::Refused {
+            message: Some("The prompt \u{2014} as written \u{2014} breaks the policy".into()),
+        },
     ];
     for error in &errors {
         let text = error.user_message();
@@ -1391,10 +1395,11 @@ fn variant(error: &MetaError) -> &'static str {
         MetaError::AlignUnavailable => "AlignUnavailable",
         MetaError::Decode(_) => "Decode",
         MetaError::LocalFile { .. } => "LocalFile",
+        MetaError::Refused { .. } => "Refused",
     }
 }
 
-const VARIANTS: usize = 10;
+const VARIANTS: usize = 11;
 
 /// A server that answers every request with `status` and a body quoting `echo`.
 async fn echoing(status: u16, echo: &str) -> MockServer {
@@ -1454,6 +1459,19 @@ async fn error_text_never_contains_key() {
         let registered = MetaClient::register_device(&server.uri(), DEVICE_ID, Some(CODE)).await;
         errors.push((registered.unwrap_err(), vec![CODE]));
     }
+    // A content policy refusal keeps Meta's reason, redacted.
+    let server = MockServer::start().await;
+    Mock::given(wiremock::matchers::any())
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "error": {"code": "content_policy_violation", "message": format!("key {KEY} token {TOKEN}")}
+        })))
+        .mount(&server)
+        .await;
+    let keyed = direct(&server).with_align_token(secret(TOKEN));
+    errors.push((
+        keyed.transcribe(wav(), &[]).await.unwrap_err(),
+        vec![KEY, TOKEN],
+    ));
     let unreachable = MetaClient::direct(secret(KEY))
         .with_meta_base(format!("{CLOSED}/v1"))
         .with_ledger(None);
@@ -1502,6 +1520,7 @@ async fn error_text_never_contains_key() {
         "Overloaded",
         "BadRequest",
         "Decode",
+        "Refused",
     ] {
         assert!(
             errors

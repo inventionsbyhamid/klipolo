@@ -202,6 +202,7 @@ pub fn provider_error(e: MetaError) -> ProviderError {
         MetaError::BadRequest { .. } | MetaError::Decode(_) | MetaError::LocalFile { .. } => {
             (ProviderErrorKind::Failed, None)
         }
+        MetaError::Refused { .. } => (ProviderErrorKind::Failed, None),
     };
     ProviderError {
         kind,
