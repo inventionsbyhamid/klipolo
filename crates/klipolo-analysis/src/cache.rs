@@ -8,8 +8,8 @@
 //! Each key has a folder, `<root>/<key>/`, under a root the caller passes (the app: `Klipolo/analysis` in Application
 //! Support): one `<name>.json` per result (`transcript.json`, `scenes.json`) beside `meta.json`, which holds the
 //! folder's schema, when it was made and the model each result came from. Files are written atomically (a temporary
-//! file renamed into place). A folder of another schema loads nothing (a newer app's results are never misread), and
-//! storing into it starts it again.
+//! file renamed into place), one writer at a time per process. A folder of another schema loads nothing; storing into
+//! an older or damaged one starts it again, and a newer app's folder is never written over.
 
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -105,8 +105,8 @@ impl Dir {
         read_json(&file)
     }
 
-    /// Replaces `<name>.json` with `value`, starting the folder (its `meta.json`) first if it has none or is of
-    /// another schema (whose files are dropped).
+    /// Replaces `<name>.json` with `value`, starting the folder (its `meta.json`) first if it has none, or one of an
+    /// older schema or damaged (whose results are dropped). An error for a newer app's folder, which is left as it is.
     pub fn store<T: Serialize>(&self, name: &str, value: &T) -> io::Result<()> {
         let file = self.file(name)?;
         let _writing = writing();
@@ -128,20 +128,38 @@ impl Dir {
         write_json(&self.meta_path(), &meta)
     }
 
-    /// The folder with a `meta.json` of this schema, made now if needed. Called with the write lock held.
+    /// The folder with a `meta.json` of this schema, started now if needed. Called with the write lock held.
+    ///
+    /// A folder whose `meta.json` is missing, doesn't parse, or names an older schema is started again (its results are
+    /// of an unknown or older shape). One of a newer schema is a newer app's: refused, never touched. A `meta.json`
+    /// that can't be read (a permission or disk error) is an error, never taken for a damaged one.
     fn ready(&self) -> io::Result<Meta> {
         std::fs::create_dir_all(&self.path)?;
         let meta_path = self.meta_path();
-        if let Some(meta) = read_json::<Meta>(&meta_path).filter(|m| m.schema == SCHEMA) {
-            return Ok(meta);
-        }
-        // Another version's folder (or a damaged one): its results are of another shape.
-        if meta_path.exists() {
-            for entry in std::fs::read_dir(&self.path)? {
-                let path = entry?.path();
-                if path.extension().is_some_and(|e| e == "json") {
-                    std::fs::remove_file(path)?;
+        match std::fs::read(&meta_path) {
+            Ok(bytes) => match serde_json::from_slice::<Schema>(&bytes) {
+                Ok(Schema { schema }) if schema > SCHEMA => {
+                    return Err(io::Error::other(
+                        "This analysis was saved by a newer version of Klipolo",
+                    ));
                 }
+                Ok(Schema { schema: SCHEMA }) => {
+                    if let Ok(meta) = serde_json::from_slice::<Meta>(&bytes) {
+                        return Ok(meta);
+                    }
+                }
+                // An older schema, or damaged: start again below.
+                _ => {}
+            },
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+        // Results first, `meta.json` last (replaced, never deleted): a crash part-way leaves the old `meta.json`, so
+        // the next store starts the folder again instead of adopting what is left.
+        for entry in std::fs::read_dir(&self.path)? {
+            let path = entry?.path();
+            if path.extension().is_some_and(|e| e == "json") && path != meta_path {
+                std::fs::remove_file(path)?;
             }
         }
         let meta = Meta {

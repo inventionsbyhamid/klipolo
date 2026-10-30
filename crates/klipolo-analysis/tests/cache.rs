@@ -162,17 +162,61 @@ fn a_damaged_or_different_file_loads_nothing() {
 }
 
 #[test]
-fn storing_over_another_schema_starts_the_folder_again() {
-    // A folder another version wrote: its files are dropped, so ours never sit beside files of another shape.
+fn storing_over_an_older_or_damaged_folder_starts_it_again() {
+    // An older version's folder, or a meta.json that doesn't parse: its files are dropped, so ours never sit beside
+    // files of another shape.
+    for old_meta in [&br#"{"schema": 0}"#[..], b"{"] {
+        let root = tempfile::tempdir().unwrap();
+        let dir = Dir::new(root.path(), "k");
+        std::fs::create_dir_all(dir.path()).unwrap();
+        std::fs::write(dir.path().join("meta.json"), old_meta).unwrap();
+        std::fs::write(dir.path().join("scenes.json"), b"{}").unwrap();
+        dir.store("transcript", &words()).unwrap();
+        assert!(!dir.path().join("scenes.json").exists());
+        assert_eq!(dir.load::<Words>("transcript"), Some(words()));
+        assert_eq!(dir.meta().unwrap().schema, 1);
+    }
+}
+
+#[test]
+fn a_newer_schema_folder_is_never_overwritten() {
+    // A newer app's results stay as they are: this version neither reads nor replaces them.
     let root = tempfile::tempdir().unwrap();
     let dir = Dir::new(root.path(), "k");
     std::fs::create_dir_all(dir.path()).unwrap();
     std::fs::write(dir.path().join("meta.json"), br#"{"schema": 2}"#).unwrap();
     std::fs::write(dir.path().join("scenes.json"), b"{}").unwrap();
+    assert!(dir.store("transcript", &words()).is_err());
+    assert!(dir.set_model("scenes", "muse-spark-1.3").is_err());
+    assert!(dir.path().join("scenes.json").exists());
+    assert!(!dir.path().join("transcript.json").exists());
+    assert_eq!(
+        std::fs::read(dir.path().join("meta.json")).unwrap(),
+        br#"{"schema": 2}"#
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn an_unreadable_meta_is_never_taken_for_a_damaged_one() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let dir = Dir::new(root.path(), "k");
     dir.store("transcript", &words()).unwrap();
-    assert!(!dir.path().join("scenes.json").exists());
-    assert_eq!(dir.load::<Words>("transcript"), Some(words()));
-    assert_eq!(dir.meta().unwrap().schema, 1);
+    let meta = dir.path().join("meta.json");
+    std::fs::set_permissions(&meta, std::fs::Permissions::from_mode(0o000)).unwrap();
+    // Root reads it anyway: nothing to check then.
+    let unreadable = std::fs::read(&meta).is_err();
+    let stored = dir.store("scenes", &words());
+    std::fs::set_permissions(&meta, std::fs::Permissions::from_mode(0o644)).unwrap();
+    if unreadable {
+        assert!(stored.is_err(), "a read error is not a damaged file");
+        assert_eq!(
+            dir.load::<Words>("transcript"),
+            Some(words()),
+            "nothing was dropped"
+        );
+    }
 }
 
 #[test]
