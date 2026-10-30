@@ -1,0 +1,356 @@
+/* Klipolo landing page
+   One rule for color: red only ever means "this will be cut". */
+
+@font-face {
+  font-family: "Archivo";
+  src: url("assets/fonts/archivo-latin-var.woff2") format("woff2");
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------- Tokens ---------- */
+
+:root {
+  color-scheme: light dark;
+
+  /* Light: a cool light table, navy ink, grease pencil red */
+  --paper: #EDF1F5;
+  --surface: #FFFFFF;
+  --band: #E1E7EF;
+  --ink: #121A33;
+  --ink-soft: #4A5470;
+  --line: #C6CFDB;
+  --cut: #E1322B;
+  --cut-wash: rgb(225 50 43 / 0.16);
+  --hilite: #FFD02E;
+  --on-hilite: #121A33;
+
+  /* The editor illustration is always a dark edit bay */
+  --bay: #121A33;
+  --bay-2: #1B2441;
+  --bay-3: #26315A;
+  --bay-ink: #E9EDF7;
+  --bay-soft: #8F9AB8;
+  --bay-edge: transparent;
+  --clip: #5E74C9;
+  --clip-2: #7F92DA;
+
+  --font: "Archivo", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --narrow: 70%;
+
+  --radius-s: 6px;
+  --radius-m: 12px;
+  --radius-l: 20px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0D1222;
+    --surface: #151C31;
+    --band: #111830;
+    --ink: #E9EDF7;
+    --ink-soft: #A3ADC6;
+    --line: #2A3452;
+    --cut: #FF5148;
+    --cut-wash: rgb(255 81 72 / 0.2);
+
+    --bay: #080C18;
+    --bay-2: #121A30;
+    --bay-3: #1E2848;
+    --bay-edge: #2A3452;
+  }
+}
+
+/* ---------- Base ---------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: break-word;
+}
+
+@media (min-width: 720px) {
+  body {
+    font-size: 1.125rem;
+  }
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 1px;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-stretch: var(--narrow);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+
+h2 {
+  font-size: clamp(2.25rem, 1.4rem + 3.4vw, 3.75rem);
+}
+
+h3 {
+  font-size: 1.5rem;
+  font-stretch: 82%;
+  font-weight: 750;
+  line-height: 1.15;
+}
+
+p {
+  margin: 0;
+  max-width: 62ch;
+  text-wrap: pretty;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wrap {
+  width: min(100% - 2rem, 75rem);
+  margin-inline: auto;
+}
+
+@media (min-width: 720px) {
+  .wrap {
+    width: min(100% - 4rem, 75rem);
+  }
+}
+
+.section {
+  padding-block: clamp(4rem, 2rem + 8vw, 7.5rem);
+}
+
+.section-head {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: clamp(2rem, 1rem + 4vw, 3.5rem);
+}
+
+.lede {
+  font-size: 1.1875rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+@media (min-width: 720px) {
+  .lede {
+    font-size: 1.3125rem;
+  }
+}
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -4rem;
+  z-index: 10;
+  padding: 0.6rem 1rem;
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: var(--radius-s);
+}
+
+.skip-link:focus {
+  top: 1rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6em;
+  min-height: 3.25rem;
+  padding: 0.75em 1.35em;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-m);
+  font-weight: 650;
+  font-size: 1rem;
+  line-height: 1.2;
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.btn svg {
+  width: 1.1em;
+  height: 1.1em;
+  flex: none;
+}
+
+.btn-primary {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.btn-primary:hover {
+  background: var(--ink-soft);
+  border-color: var(--ink-soft);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--ink);
+}
+
+.btn-secondary:hover {
+  background: var(--surface);
+}
+
+.btn-small {
+  min-height: 2.5rem;
+  padding: 0.45em 1em;
+  font-size: 0.9375rem;
+  border-radius: 10px;
+}
+
+/* ---------- Header ---------- */
+
+.site-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding-block: 1.25rem;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+}
+
+.brand-name {
+  font-stretch: var(--narrow);
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: 0.005em;
+}
+
+.site-nav {
+  display: none;
+  gap: 1.75rem;
+  margin-left: auto;
+  font-size: 0.9375rem;
+}
+
+.site-nav a {
+  text-decoration: none;
+  color: var(--ink-soft);
+}
+
+.site-nav a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.site-header > .btn {
+  margin-left: auto;
+}
+
+@media (min-width: 820px) {
+  .site-nav {
+    display: flex;
+  }
+
+  .site-header > .btn {
+    margin-left: 0.5rem;
+  }
+}
+
+/* ---------- Footer ---------- */
+
+.site-footer {
+  border-top: 1px solid var(--line);
+  padding-block: 3rem 3.5rem;
+  color: var(--ink-soft);
+  font-size: 0.9375rem;
+}
+
+.footer-inner {
+  display: grid;
+  gap: 1rem;
+}
+
+.footer-inner .brand {
+  color: var(--ink);
+}
+
+.footer-inner .brand-name {
+  font-size: 1.3125rem;
+}
+
+.footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+}
+
+.footer-nav a {
+  color: var(--ink);
+}
+
+.footer-small {
+  font-size: 0.875rem;
+}
