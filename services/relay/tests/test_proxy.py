@@ -697,6 +697,70 @@ def test_timeout_on_a_media_call_charges_the_media_reservation(sam_client, conn,
     assert_ledger_matches_spend(conn, device)
 
 
+def user(*parts):
+    return {"role": "user", "content": list(parts)}
+
+
+URL_IMAGE = {"type": "input_image", "image_url": "https://example.com/frame.jpg"}
+INLINE_IMAGE = {"type": "input_image", "image_url": "data:image/png;base64,iVBORw0KGgo="}
+MEDIA_REQUESTS = {
+    "500-url-images": spark_request(input=[user(*[URL_IMAGE] * 500)]),
+    "200-item-references": spark_request(input=[{"type": "item_reference", "id": f"msg_{i}"} for i in range(200)]),
+    "file-in-instructions": spark_request(instructions=[user({"type": "input_file", "file_id": "file-1"})]),
+    "image-by-file-id": spark_request(input=[user({"type": "input_image", "file_id": "file-1"})]),
+    "inline-audio": spark_request(input=[user({"type": "input_audio", "input_audio": {"data": "AAAA", "format": "wav"}})]),
+    "file-as-an-item": spark_request(input=[{"type": "input_file", "file_url": "https://example.com/a.mp4"}]),
+    "tool-output-with-an-image": spark_request(
+        input=[{"type": "function_call_output", "call_id": "c1", "output": [URL_IMAGE]}]
+    ),
+    "unknown-part": spark_request(input=[user({"type": "input_sticker", "text": "hi"})]),
+    "unknown-item": spark_request(input=[{"type": "mcp_call", "id": "call_1", "name": "fetch"}]),
+    "url-in-a-tool": spark_request(
+        tools=[{"type": "function", "name": "f", "parameters": {"type": "object"}, "logo_url": "https://example.com/l.png"}]
+    ),
+    "earlier-response": spark_request(previous_response_id="resp_0"),
+    "conversation": spark_request(conversation="conv_1"),
+}
+TEXT_REQUESTS = {
+    "string-input": spark_request(),
+    "text-history": spark_request(
+        instructions="Be brief.",
+        input=[
+            user({"type": "input_text", "text": "Cut the intro."}),
+            {"role": "assistant", "content": [{"type": "output_text", "text": "Which part?"}]},
+            {"role": "user", "content": "The first 13 seconds."},
+            {"type": "reasoning", "id": "rs_1", "summary": [{"type": "summary_text", "text": "Plan."}]},
+            {"type": "function_call", "call_id": "c1", "name": "cut", "arguments": "{\"end\": 13}"},
+            {"type": "function_call_output", "call_id": "c1", "output": "done"},
+        ],
+    ),
+    "inline-image": spark_request(input=[user({"type": "input_text", "text": "What is this?"}, INLINE_IMAGE)]),
+    "schema-and-tools": spark_request(
+        tools=[{"type": "function", "name": "cut", "parameters": {"type": "object", "properties": {"end": {"type": "number"}}}}],
+        text={"format": {"type": "json_schema", "name": "m", "schema": {"type": "object", "properties": {"kind": {"type": "string"}}}}},
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    ("body", "media"),
+    [*((body, True) for body in MEDIA_REQUESTS.values()), *((body, False) for body in TEXT_REQUESTS.values())],
+    ids=[*MEDIA_REQUESTS, *TEXT_REQUESTS],
+)
+def test_only_text_only_requests_skip_the_media_reservation(client, conn, meta, body, media):
+    device = add_device(conn)
+    # No usage in the answer, so the reservation itself is charged.
+    route = meta.post("/responses").respond(200, json={"status": "completed"})
+
+    response = client.post("/meta/v1/responses", json=body, headers=device.headers)
+
+    assert response.status_code == 200
+    [row] = ledger(conn, device)
+    sent = route.calls.last.request.content
+    assert json.loads(row["usage_json"]) == reserved_usage(sent, media=media)
+    assert row["cost_usd"] == pytest.approx(reserved_cost(sent, media=media))
+
+
 def test_success_without_usage_charges_the_reservation(client, conn, meta):
     device = add_device(conn)
     body = spark_body()

@@ -454,13 +454,7 @@ async def create_response(request: Request, device: RelayDevice, conn: Conn, set
             max_output_tokens=payload.get("max_output_tokens", 0) if model in SPARK_MODELS else 0,
             images=_count_parts(inputs, "input_image"),
             has_video=has_video,
-            media=(
-                model == SAM_MODEL
-                or has_video
-                or _has_key(inputs, "file_id")
-                or payload.get("previous_response_id") is not None
-                or payload.get("conversation") is not None
-            ),
+            media=model == SAM_MODEL or _refers_to_media(payload),
         )
         return Call("POST", "responses", meter, content=body, headers={"content-type": "application/json"})
 
@@ -1136,8 +1130,56 @@ def _count_parts(value: Any, part_type: str) -> int:
     return sum(1 for item in _objects(value) if item.get("type") == part_type)
 
 
-def _has_key(value: Any, key: str) -> bool:
-    return any(key in item for item in _objects(value))
+# Item and part types whose cost is in the request's own bytes.
+_TEXT_ITEMS = frozenset({"input_text", "output_text", "function_call", "reasoning"})
+_TEXT_PARTS = frozenset({"input_text", "output_text"})
+_MEDIA_TYPES = frozenset({"item_reference", "input_image", "input_file", "input_video", "input_audio"})
+
+
+def _refers_to_media(payload: dict[str, Any]) -> bool:
+    """False only for a text-only call, whose cost the request's size bounds.
+    Anything else (media or files by link or id, references to stored items,
+    earlier responses or conversations, or a type the relay doesn't know)
+    gets the media amount in its reservation."""
+    if payload.get("previous_response_id") is not None or payload.get("conversation") is not None:
+        return True
+    # Anywhere in the request: a stored file, a link, or a media part.
+    for item in _objects(payload):
+        if "file_id" in item or (item.get("type") in _MEDIA_TYPES and not _inline_image(item)):
+            return True
+        for key, value in item.items():
+            if (key == "url" or key.endswith("_url")) and isinstance(value, str) and not value.startswith("data:"):
+                return True
+    # Items and their parts: only text-only types.
+    return not all(_text_only(payload.get(field)) for field in ("input", "instructions"))
+
+
+def _inline_image(item: dict[str, Any]) -> bool:
+    # An image inside the request is paid for by its bytes in the estimate.
+    url = item.get("image_url")
+    return item.get("type") == "input_image" and isinstance(url, str) and url.startswith("data:")
+
+
+def _text_only(items: Any) -> bool:
+    if items is None or isinstance(items, str):
+        return True
+    for item in items if isinstance(items, list) else [items]:
+        if not isinstance(item, dict):
+            return False
+        kind = item.get("type", "message" if "role" in item else None)
+        if kind == "message":
+            content = item.get("content")
+            parts = [] if isinstance(content, str) else content
+            if not isinstance(parts, list) or not all(
+                isinstance(part, dict) and (part.get("type") in _TEXT_PARTS or _inline_image(part)) for part in parts
+            ):
+                return False
+        elif kind == "function_call_output":
+            if not isinstance(item.get("output"), str):
+                return False
+        elif kind not in _TEXT_ITEMS:
+            return False
+    return True
 
 
 def _file_call(method: str, file_id: str) -> Callable[[], Awaitable[Call]]:
