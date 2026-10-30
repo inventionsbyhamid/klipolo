@@ -5,7 +5,8 @@
 //! -60 dBFS, so a file that is partly digital silence doesn't make every room tone count as sound). A window louder
 //! than the floor is sound; when the last minute has no window under it, the cut still goes in the quietest one and
 //! `Plan::loud_cuts` says so, for the log. The chunks cover the file end to end with no gap and no overlap: the
-//! transcript adds each chunk's start to its times.
+//! transcript adds each chunk's start to its times. Like the WAV they come from, chunk times are the clip's sound time
+//! (`audio`'s module notes): adding a chunk's start gives sound time, not file time.
 
 use klipolo_model::time::{RangeUs, Us};
 

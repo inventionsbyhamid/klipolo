@@ -5,6 +5,11 @@
 //! three (a windowed-sinc FIR, `Decimator`), rounded to 16 bits with clipping and no dither, and written behind a
 //! standard 44-byte header. Nothing holds more than one decoded block and the filter's 95 samples of history, so an
 //! hour-long clip takes no more memory than a short one. No FFmpeg calls of our own.
+//!
+//! Times: the engine's decode counts from the sound stream's first sample, so the WAV (and every time measured in it:
+//! its chunks, Voice Transcribe's and the aligner's word times) is in the clip's SOUND time. The clip's file time (its
+//! picture's) is sound time + `Asset::lead_us()`. A transcript's `Word` times stay in sound time: the model's captions
+//! and `speech::voice_runs` expect sound time and add the lead themselves.
 
 use std::fs::File;
 use std::io::{self, BufWriter, Seek, SeekFrom, Write};
@@ -28,11 +33,11 @@ pub const SILENCE_DBFS: f32 = -120.0;
 const RATE_48K: u32 = 48_000;
 const FACTOR: usize = (RATE_48K / RATE_16K) as usize;
 
-/// What `extract_wav_16k` wrote.
+/// What `extract_wav_16k` wrote. Its times are the clip's sound time (see the module notes).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioInfo {
-    /// The WAV's length (its samples at 16 kHz); 0 without sound.
+    /// The WAV's length (its samples at 16 kHz), from the sound's first sample; 0 without sound.
     pub duration_us: Us,
     /// False when the clip has no sound stream: then no WAV is written.
     pub has_audio: bool,
@@ -53,9 +58,12 @@ pub enum AudioError {
     NotWav,
 }
 
-/// Writes `src`'s sound to `out` as a mono 16-bit PCM WAV at 16 kHz. A clip with no sound stream writes nothing and
-/// reports `has_audio: false` (not an error). The WAV is written beside `out` under a temporary name and renamed into
-/// place once whole, so `out` is never half-written; a failure removes the temporary file.
+/// Writes `src`'s sound to `out` as a mono 16-bit PCM WAV at 16 kHz, its sample 0 the sound stream's first sample (sound
+/// time: file time minus `Asset::lead_us()`). A clip with no sound stream writes nothing and reports `has_audio: false`
+/// (not an error). The WAV is written beside `out` under a temporary name (`<name>.<pid>.tmp`) and renamed into place
+/// once whole, so `out` is never half-written; a failure removes the temporary file. Calls running at once must each
+/// have their own `out`: two writing one `out` from one process would share its temporary file. A process killed
+/// mid-write leaves the temporary file behind (extract into a temporary folder, or sweep `*.tmp`).
 pub fn extract_wav_16k(src: &Path, out: &Path) -> Result<AudioInfo, AudioError> {
     if !probe_media(src).map_err(AudioError::Decode)?.has_audio {
         return Ok(AudioInfo {
