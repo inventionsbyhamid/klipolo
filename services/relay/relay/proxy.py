@@ -1,29 +1,38 @@
 """Metered proxy to Meta's Model API.
 
 `/meta/v1/{path}` forwards to `https://api.meta.ai/v1/{path}` with the relay's
-own key, for an allowlist of endpoints and models:
+own key, for an allowlist of endpoints and of models (ALLOWED_MODELS: Spark
+1.3 and 1.2 and Voice Transcribe by default; SAM 3.1 only when listed, and
+then its video calls must stream):
 
-    POST   responses        JSON; Spark 1.3/1.2 or SAM 3.1
+    POST   responses        JSON, at most 8 MiB
     POST   files            multipart upload, streamed, at most 1 GiB
     GET    files/{id}
     DELETE files/{id}
-    POST   asr/transcribe   multipart `request` (JSON) and `audio` parts
+    POST   asr/transcribe   multipart `request` (JSON) and `audio` parts;
+                            `sessionId` is the only query parameter allowed
 
 Anything else is 404. Every call is gated per request: a known device token
 (401), relay AI for the device's code right now (403), a configured key (503).
-Billable calls and uploads are then refused with 402 once the device or the
-whole relay has reached its cap. After Meta answers, the call is charged from
-Meta's own `usage`: the ledger row and the device's `spent_usd` are written
-in one transaction. Failed calls (non-2xx) are not charged.
 
-A client hanging up never makes a call cheaper than finishing it. A
-non-streamed call still waits for Meta's answer and charges its usage. A
-streamed call is read to its end, the bytes dropped, and charged from its
-final event, with the device's in-flight slot held until then. Only when
-Meta's side fails after the request reached it (a timeout, a broken stream)
-is the call charged an estimate: the higher of any usage seen and the request
-estimate, which is at least $0.10 for calls with media (video, files or
-earlier context by reference, or SAM).
+Caps are kept with reservations. Before a billable call goes out it reserves
+the most it could cost: for Spark, request bytes / 4 at the input price plus
+its whole max_output_tokens (set to 8192 when missing, at most 16384) at the
+output price, plus $0.75 when the input refers to media or earlier context;
+for transcription, the audio's length from its WAV header. The call is
+refused with 402 unless the device and the relay have room for it on top of
+what is spent and what calls in flight have reserved. A device with no room
+left is refused before its body is read, and bodies have a deadline (408).
+
+After Meta answers, the call is charged from Meta's own `usage`: the ledger
+row and the device's `spent_usd` are written in one transaction, and only then
+is the reservation freed. Failed calls (non-2xx) are not charged. A client
+hanging up never makes a call cheaper: a non-streamed call still waits for
+Meta's answer, and a streamed one is read to its final event. When the real
+usage can't be read (no usage, missing counters, a parse failure, a timeout
+after the request reached Meta, a stream without a final event), the call is
+charged its reservation, or the usage seen if that is higher. If a charge
+can't be written, capped calls are refused (503) until it can be.
 
 Nothing from a proxied request is stored except the ledger row, and request
 or response headers and bodies are never logged.
