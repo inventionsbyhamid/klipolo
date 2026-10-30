@@ -1,10 +1,49 @@
-//! Klipolo's relay API: word alignment for every device.
+//! Klipolo's relay API: device registration and status, and word alignment
+//! for every device.
 
 use reqwest::multipart::Form;
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use crate::asr::wav_part;
+use crate::client::{http_client, read_json, send, trim_base};
 use crate::{AsrTurn, MetaClient, MetaError};
+
+/// A device as the relay sees it.
+#[derive(Clone, Debug)]
+pub struct DeviceInfo {
+    /// The new device token, from [`MetaClient::register_device`] only. Keep
+    /// it in the Keychain; `Debug` never shows it.
+    pub token: Option<SecretString>,
+    /// Whether Meta calls may go through the relay (an active access code).
+    pub relay_ai: bool,
+    /// The device's Klipolo credit, and how much of it is spent.
+    pub budget_usd: f64,
+    pub spent_usd: f64,
+}
+
+#[derive(Deserialize)]
+struct DeviceWire {
+    #[serde(default)]
+    token: Option<String>,
+    relay_ai: bool,
+    #[serde(default)]
+    budget_usd: f64,
+    #[serde(default)]
+    spent_usd: f64,
+}
+
+impl From<DeviceWire> for DeviceInfo {
+    fn from(wire: DeviceWire) -> Self {
+        Self {
+            token: wire.token.map(SecretString::from),
+            relay_ai: wire.relay_ai,
+            budget_usd: wire.budget_usd,
+            spent_usd: wire.spent_usd,
+        }
+    }
+}
 
 /// One turn's text and where it sits in the WAV sent with it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,6 +130,43 @@ impl From<AlignResult> for AlignWire {
 }
 
 impl MetaClient {
+    /// Registers this device with the relay at `base`, with the access code
+    /// if one was entered, and returns its new token. Registering again
+    /// rotates the token, keeps the spend, and replaces the stored code with
+    /// `code` (`None` clears it).
+    pub async fn register_device(
+        base: &str,
+        device_id: &str,
+        code: Option<&str>,
+    ) -> Result<DeviceInfo, MetaError> {
+        let code = code.map(str::trim).filter(|c| !c.is_empty());
+        let mut body = json!({ "device_id": device_id });
+        if let Some(code) = code {
+            body["access_code"] = json!(code);
+        }
+        let secrets: Vec<&str> = code.into_iter().collect();
+        let url = format!("{}/v1/devices", trim_base(base.to_owned()));
+        let response = send(http_client().post(url).json(&body), &secrets).await?;
+        let info = DeviceInfo::from(read_json::<DeviceWire>(response, &secrets).await?);
+        if info.token.is_none() {
+            return Err(MetaError::Decode("the relay sent no device token".into()));
+        }
+        Ok(info)
+    }
+
+    /// The device's relay access, credit and spend (`GET /v1/devices/me`),
+    /// with its relay token; without one it is [`MetaError::Unauthorized`].
+    pub async fn device_status(&self) -> Result<DeviceInfo, MetaError> {
+        let token = self.align_token.as_ref().ok_or(MetaError::Unauthorized)?;
+        let request = self.http.get(self.relay_url("/v1/devices/me"));
+        let response = self.send_relay(request, token).await?;
+        let wire: DeviceWire = self.read_json(response).await?;
+        Ok(DeviceInfo {
+            token: None,
+            ..wire.into()
+        })
+    }
+
     /// Word times for `turns` of one WAV (16 kHz mono 16-bit), from the
     /// relay's forced aligner. Runs on the relay in both modes, with the
     /// device's relay token; without one it is [`MetaError::AlignUnavailable`].

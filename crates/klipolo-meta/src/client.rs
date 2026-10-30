@@ -269,7 +269,7 @@ fn env_base(var: &str, default: &str) -> String {
     trim_base(base.unwrap_or_else(|| default.to_owned()))
 }
 
-fn trim_base(base: String) -> String {
+pub(crate) fn trim_base(base: String) -> String {
     base.trim().trim_end_matches('/').to_owned()
 }
 

@@ -5,8 +5,8 @@
 use std::path::Path;
 
 use klipolo_meta::{
-    pricing, AlignResult, AlignTurn, AlignedWord, AsrTurn, Auth, MetaClient, MetaError,
-    ResponseOut, SecretString, Usage,
+    pricing, AlignResult, AlignTurn, AlignedWord, AsrTurn, Auth, ExposeSecret, MetaClient,
+    MetaError, ResponseOut, SecretString, Usage,
 };
 use serde_json::{json, Value};
 use wiremock::matchers::{header, method, path};
@@ -948,4 +948,136 @@ fn align_turn_comes_from_an_asr_turn() {
             text: "Hello".into()
         }
     );
+}
+
+// Devices.
+
+const DEVICE_ID: &str = "6f1c3c2e-8d5b-4b8e-9a51-2f7d0c4e9b10";
+
+#[tokio::test]
+async fn register_device_sends_its_id_and_code_and_returns_the_token() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/devices"))
+        .and(wiremock::matchers::body_json(
+            json!({"device_id": DEVICE_ID, "access_code": "TEST-CODE-0001"}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "token": "fresh-device-token",
+            "relay_ai": true,
+            "budget_usd": 2.0,
+            "spent_usd": 0.25,
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let info = MetaClient::register_device(
+        &format!("{}/", server.uri()),
+        DEVICE_ID,
+        Some(" TEST-CODE-0001 "),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        info.token.as_ref().map(|t| t.expose_secret()),
+        Some("fresh-device-token")
+    );
+    assert!(info.relay_ai);
+    assert_eq!((info.budget_usd, info.spent_usd), (2.0, 0.25));
+    assert!(!format!("{info:?}").contains("fresh-device-token"));
+}
+
+#[tokio::test]
+async fn register_device_without_a_code_sends_none() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/devices"))
+        .and(wiremock::matchers::body_json(
+            json!({"device_id": DEVICE_ID}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "token": "fresh-device-token",
+            "relay_ai": false,
+            "budget_usd": 0.0,
+            "spent_usd": 0.0,
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let info = MetaClient::register_device(&server.uri(), DEVICE_ID, None)
+        .await
+        .unwrap();
+    assert!(!info.relay_ai);
+}
+
+#[tokio::test]
+async fn register_device_with_an_invalid_code_is_not_allowed() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(403).set_body_json(json!({
+            "error": "invalid_code",
+            "message": "This access code is not valid. Check the code or add your own Meta key in Settings.",
+        })))
+        .mount(&server)
+        .await;
+
+    let error = MetaClient::register_device(&server.uri(), DEVICE_ID, Some("WRONG"))
+        .await
+        .unwrap_err();
+    assert_eq!(error, MetaError::NotAllowed);
+}
+
+#[tokio::test]
+async fn register_device_answer_without_a_token_is_a_decode_error() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"relay_ai": true})))
+        .mount(&server)
+        .await;
+
+    let error = MetaClient::register_device(&server.uri(), DEVICE_ID, None)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, MetaError::Decode(_)), "{error:?}");
+}
+
+#[tokio::test]
+async fn device_status_reads_devices_me_with_the_device_token() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/devices/me"))
+        .and(header("authorization", format!("Bearer {TOKEN}").as_str()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "relay_ai": true,
+            "budget_usd": 2.0,
+            "spent_usd": 1.5,
+        })))
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    let keyed = direct(&server)
+        .with_relay_base(server.uri())
+        .with_align_token(secret(TOKEN));
+    for client in [keyed, relay(&server)] {
+        let info = client.device_status().await.unwrap();
+        assert!(info.token.is_none());
+        assert!(info.relay_ai);
+        assert_eq!((info.budget_usd, info.spent_usd), (2.0, 1.5));
+    }
+}
+
+#[tokio::test]
+async fn device_status_without_a_relay_token_is_unauthorized() {
+    let server = MockServer::start().await;
+    let client = direct(&server).with_relay_base(server.uri());
+
+    assert_eq!(
+        client.device_status().await.unwrap_err(),
+        MetaError::Unauthorized
+    );
+    assert!(server.received_requests().await.unwrap().is_empty());
 }
