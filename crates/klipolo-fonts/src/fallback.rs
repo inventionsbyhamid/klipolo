@@ -1,6 +1,6 @@
 //! The one fallback chain: the engine's cosmic-text `Fallback` and every CSS stack read it (exported
-//! to `src/lib/font-fallbacks.json`). Fallback families are registered at all nine weights in both styles (each the
-//! nearest real file), so cosmic-text's exact-weight lookups always find them.
+//! to `apps/desktop/src/lib/font-fallbacks.json`). Fallback families are registered at all nine weights in both styles
+//! (each the nearest real file), so cosmic-text's exact-weight lookups always find them.
 
 use klipolo_model::text_language::CjkScript;
 use klipolo_platform::caps::OsFamily;

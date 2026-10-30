@@ -60,8 +60,9 @@ mod tests {
             .join(path)
     }
 
-    /// `pnpm bindings` runs this (its name matches `export_bindings`): `src/bindings/fontsCodes.json`, this crate's
-    /// `fonts.*` codes, their English and their values, for the UI's catalogue (as klipolo-ai writes `aiCodes.json`).
+    /// `pnpm bindings` runs this (its name matches `export_bindings`): `apps/desktop/src/bindings/fontsCodes.json`,
+    /// this crate's `fonts.*` codes, their English and their values, for the UI's catalogue (as klipolo-ai writes
+    /// `aiCodes.json`).
     #[test]
     fn export_bindings_fonts_codes() {
         let list: Vec<serde_json::Value> = crate::english::ENGLISH
@@ -75,17 +76,17 @@ mod tests {
                 serde_json::json!({ "code": code, "message": message, "params": params })
             })
             .collect();
-        let path = repo("src/bindings/fontsCodes.json");
+        let path = repo("apps/desktop/src/bindings/fontsCodes.json");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, serde_json::to_string_pretty(&list).unwrap() + "\n").unwrap();
     }
 
-    /// `src/lib/font-fallbacks.json`: the one fallback chain, for every CSS stack the webview builds.
+    /// `apps/desktop/src/lib/font-fallbacks.json`: the one fallback chain, for every CSS stack the webview builds.
     #[test]
     fn export_bindings_font_fallbacks() {
         let chain = sorted_keys(serde_json::to_value(crate::fallback::chain()).unwrap());
         std::fs::write(
-            repo("src/lib/font-fallbacks.json"),
+            repo("apps/desktop/src/lib/font-fallbacks.json"),
             serde_json::to_string_pretty(&chain).unwrap() + "\n",
         )
         .unwrap();

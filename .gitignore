@@ -24,4 +24,4 @@ dist/
 crates/klipolo-app/gen/
 
 # Generated TypeScript bindings and code lists (cargo test writes them)
-src/bindings/
+apps/desktop/src/bindings/

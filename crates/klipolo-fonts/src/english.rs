@@ -1,6 +1,6 @@
 //! klipolo-fonts' codes and their English (`fonts.*`, `klipolo_ai::english`'s pattern). `msg!` refuses to compile a code
 //! that isn't here. The UI words every code in the person's language (its descriptors come from
-//! `src/bindings/fontsCodes.json`); logs read `english`. Other crates add theirs.
+//! `apps/desktop/src/bindings/fontsCodes.json`); logs read `english()`.
 //!
 //! Parameters: `family` is a font family's name, `version` a Google version (`v31`), `status` an HTTP status.
 

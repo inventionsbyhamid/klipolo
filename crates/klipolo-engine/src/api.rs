@@ -1,4 +1,4 @@
-//! Types the UI sees (ts-rs → src/bindings). Engine events travel over a Tauri Channel.
+//! Types the UI sees (ts-rs → apps/desktop/src/bindings). Engine events travel over a Tauri Channel.
 
 use klipolo_model::project::FormatKind;
 use klipolo_model::time::Us;

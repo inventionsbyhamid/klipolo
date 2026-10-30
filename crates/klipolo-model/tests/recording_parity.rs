@@ -1,8 +1,8 @@
-//! The timeline's run mapping in TypeScript (`src/lib/recording.ts`: `runAt`, `runInClip`) is pinned to the model's by
-//! `src/lib/recording-parity.json`, written here with `UPDATE_GOLDEN=1`. Rust is the truth: the lanes'
-//! waveforms and thumbnails land where the engine plays each run, drift and nudge included. Its `soundSources` part
-//! S10) pins which sources a recording clip can be heard from (`query::sound_sources`, the UI's `soundSources`): the
-//! lanes and the Sounds popover list them, a synced camera's own sound among them.
+//! The timeline's run mapping in TypeScript (`apps/desktop/src/lib/recording.ts`: `runAt`, `runInClip`) is pinned to
+//! the model's by `apps/desktop/src/lib/recording-parity.json`, written here with `UPDATE_GOLDEN=1`. Rust is the truth
+//! the lanes' waveforms and thumbnails land where the engine plays each run, drift and nudge included.
+//! Its `soundSources` part pins which sources a recording clip can be heard from (`query::sound_sources`, the
+//! UI's `soundSources`): the lanes and the Sounds popover list them, a synced camera's own sound among them.
 mod common;
 use std::path::PathBuf;
 
@@ -163,7 +163,8 @@ fn the_ui_maps_runs_as_the_model_does() {
         "soundSources": sound_sources_case(),
     }));
     assert_golden(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/lib/recording-parity.json"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/desktop/src/lib/recording-parity.json"),
         &golden,
     );
 }
