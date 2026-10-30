@@ -1,12 +1,5 @@
 [workspace]
-members = [
-    "crates/klipolo-model",
-    "crates/klipolo-speech-wire",
-    "crates/klipolo-platform",
-    "crates/klipolo-cursor",
-    "crates/klipolo-fonts",
-    "crates/klipolo-engine",
-]
+members = ["crates/*"]
 resolver = "2"
 
 [profile.release]
