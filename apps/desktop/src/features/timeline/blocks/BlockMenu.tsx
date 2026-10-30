@@ -80,8 +80,7 @@ export function BlockMenu({ children }: { children: ReactElement }) {
           // then plays, as `Menu`).
           e.preventDefault();
           setKeyboardMenu(false);
-          // An item opened Sync's picker, which has focus now (taking it back would close it): it hands the keyboard
-          // back to the block itself when it closes.
+          // After keyboard use, focus goes back to the block (or the one that took its place).
           if (!target?.keyboard) return;
           const back = blockElement(target.id) ?? blockElement(useTimelineFocus.getState().activeId ?? '');
           back?.focus({ preventScroll: true });

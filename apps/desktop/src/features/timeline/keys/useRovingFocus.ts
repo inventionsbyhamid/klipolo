@@ -12,7 +12,6 @@ import { usePlayback } from '../../../state/playback';
 import { useProject } from '../../../state/project';
 import { useSelection } from '../../../state/selection';
 import { useTimelineFocus } from '../../../state/timelineFocus';
-import { useUi } from '../../../state/ui';
 import { keyboardMenuOpen, openBlockMenu } from '../blocks/BlockMenu';
 import { pickBlock } from '../drag/blockPress';
 import { blockElement } from '../drag/registry';
@@ -47,7 +46,6 @@ const MOVES = new Set<string>(Object.values(LANE_KEYS));
 export function useRovingFocus(
   scrollRef: RefObject<HTMLElement | null>,
   project: Project,
-  expanded: boolean,
   selectedId: string | null,
   pps: number,
   scrollPx: number,
@@ -55,7 +53,7 @@ export function useRovingFocus(
   const activeId = useTimelineFocus((s) => s.activeId);
   // Every keyboard move renders (even one to the block already in the Tab order), so its focus moves.
   useTimelineFocus((s) => s.moves);
-  const lanes = laneOrder(project, expanded);
+  const lanes = laneOrder(project);
   const before = useRef(lanes);
   /** A block had focus and it hasn't left the timeline (a block taken out of the page doesn't count as leaving). */
   const hadFocus = useRef(false);
@@ -83,7 +81,7 @@ export function useRovingFocus(
         const id = focusIdOf(s.selectedId);
         const now = useProject.getState().snapshot?.project;
         if (s.selectedId === prev.selectedId || id === null || !now) return;
-        if (placeOf(laneOrder(now, useUi.getState().timelineExpanded), id))
+        if (placeOf(laneOrder(now), id))
           useTimelineFocus.getState().focus(id, false);
       }),
     [],
@@ -132,10 +130,10 @@ export function useRovingFocus(
     }
     if (focus.activeId !== null && !placeOf(lanes, focus.activeId)) {
       const gone = focus.activeId;
-      // Packed into compact view's "+N" (it's still in the project): focus goes to the marker standing for it, which
-      // names it, and the selection to the layer, so the two never point at different things. Enter there shows every
-      // track (and focus goes back to the layer); ⌫ deletes it. From a marker too: a copy made there, packed in turn.
-      const item = expanded ? undefined : findItem(project, gone)?.item;
+      // Packed into the Overlays lane's "+N" (it's still in the project): focus goes to the marker standing for it,
+      // which names it, and the selection to the layer, so the two never point at different things. Enter there picks
+      // it; ⌫ deletes it. From a marker too: a copy made there, packed in turn.
+      const item = findItem(project, gone)?.item;
       const onMarker = !!scroller && markerFocusedIn(scroller);
       const marker =
         item && scroller && hadFocus.current && (pageFocused() || onMarker)
@@ -179,7 +177,7 @@ export function useRovingFocus(
     if (held && isMarker(e.target) && MOVES.has(e.key) && !e.shiftKey) {
       // On the "+N" marker of a packed layer, the arrows go from where that layer is.
       e.preventDefault();
-      const lanes = laneOrder(now, expanded);
+      const lanes = laneOrder(now);
       const next = stepFromHidden(lanes, 'layers', held.id, held.startUs, e.key as LaneKey);
       if (next === null) return;
       if (scrollRef.current) reveal(scrollRef.current, lanes, next, pps);
@@ -191,7 +189,7 @@ export function useRovingFocus(
       e.preventDefault();
       const next = focusStep(now, id, e.key as LaneKey);
       if (next === null || next === id) return;
-      if (scrollRef.current) reveal(scrollRef.current, laneOrder(now, expanded), next, pps);
+      if (scrollRef.current) reveal(scrollRef.current, laneOrder(now), next, pps);
       moveFocusTo(now, next);
     } else if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -221,7 +219,7 @@ export function useRovingFocus(
     const now = useProject.getState().snapshot?.project;
     const selected = useSelection.getState().selectedId;
     const undrawn =
-      selected !== null && now !== undefined && !placeOf(laneOrder(now, expanded), focusIdOf(selected));
+      selected !== null && now !== undefined && !placeOf(laneOrder(now), focusIdOf(selected));
     if ((hidden.current || undrawn) && now) {
       hidden.current = null;
       useSelection.getState().select(focusSelection(now, id));

@@ -24,7 +24,7 @@ interface TooltipProps {
 
 /**
  * Passes the trigger's props on to its child; with a `note`, described by that alone, not also by the open tooltip.
- * Always there, so a control that starts or stops describing itself (at eight effects) stays the same element.
+ * Always there, so a control that starts or stops describing itself stays the same element.
  */
 function TriggerChild({ note, ...props }: ComponentProps<typeof Slot.Root> & { note?: string }) {
   return note ? <Slot.Root {...props} aria-describedby={note} /> : <Slot.Root {...props} />;

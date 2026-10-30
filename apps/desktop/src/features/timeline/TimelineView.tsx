@@ -77,7 +77,6 @@ function useClipPx(scrollRef: RefObject<HTMLElement | null>): number {
 export function TimelineView() {
   const { t } = useLingui();
   const project = useProject((s) => s.snapshot!.project);
-  const expanded = useUi((s) => s.timelineExpanded);
   const pps = useUi((s) => s.pxPerSecond);
   const seek = usePlayback((s) => s.seek);
   const selectedId = useSelection((s) => s.selectedId);
@@ -99,7 +98,7 @@ export function TimelineView() {
   const viewport = useViewport(scrollRef, pps, HEADER_PX, peekZoomScroll());
   useFollowPlayhead(scrollRef, pps, HEADER_PX);
   const clipPx = useClipPx(scrollRef);
-  const roving = useRovingFocus(scrollRef, project, expanded, selectedId, pps, viewport.scrollPx);
+  const roving = useRovingFocus(scrollRef, project, selectedId, pps, viewport.scrollPx);
   const { tabStopId } = roving;
   // Selected, focused (the tab stop) and dragged blocks stay mounted and never band: a drag keeps its element through
   // autoscroll, focus never drops to the page, and the keyboard reaches blocks off-window or in a band.

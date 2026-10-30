@@ -59,9 +59,9 @@ interface BlockMediaProps {
 
 /**
  * A block's pictures and sound, under its labels: one canvas over only its part inside the lanes' window, so an
- * hour-long clip never makes a huge canvas. A clip shows its filmstrip with a 12 px waveform under it (the voice over
- * a lighter system sound), a sound layer a full-height waveform, and a video layer its filmstrip where its row is tall
- * enough (every track showing).
+ * hour-long clip never makes a huge canvas. A clip shows its filmstrip over its top 62 % and its waveform along the
+ * bottom 38 % (the voice over a lighter system sound), a sound layer a full-height waveform, and a video layer its
+ * filmstrip where its row is tall enough.
  *
  * It redraws (`paintBlock`) when that part changes (a window step across the block, a zoom once it rests), on a theme
  * or pixel-density change, and on a media event for one of its files. Until then the canvas stays over the time it
