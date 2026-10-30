@@ -2,6 +2,10 @@
 //! elsewhere the committed fixture stands in for it), Spark's real answer read through the Meta adapter against a mock
 //! Meta and relay (the upload deleted on every path), and chunk answers merged and snapped to cuts and words.
 
+#[cfg(target_os = "macos")]
+#[path = "../../klipolo-engine/tests/support/fixture_set.rs"]
+mod fixture_set;
+
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -1266,4 +1270,61 @@ fn the_scene_log_future_can_move_between_threads() {
     };
     let future = scenes::log(&fake, &copy, &[]);
     sends(&future);
+}
+
+/// Sources without sound, tiny (64 × 64, which VideoToolbox's hardware encoder refuses and its software one takes) and
+/// turned (a phone's display matrix), from the engine's generated media.
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "needs scripts/gen-engine-fixtures.sh"]
+fn makes_small_copies_of_silent_tiny_and_turned_sources_on_this_mac() {
+    use klipolo_engine::render::probe::probe_media;
+    let media = fixture_set::fixture_dir();
+    assert!(
+        media.join(".complete").exists(),
+        "run scripts/gen-engine-fixtures.sh"
+    );
+    let cancel = AtomicBool::new(false);
+    let out = tempfile::tempdir().unwrap();
+
+    // No sound: a copy of the picture alone.
+    let silent = proxy::make(
+        &media.join("camera-720p.mp4"),
+        &out.path().join("silent"),
+        360,
+        &cancel,
+    )
+    .unwrap();
+    assert_eq!(
+        (silent.width, silent.height, silent.has_audio),
+        (640, 360, false)
+    );
+    let bytes = std::fs::read(&silent.chunks[0].path).unwrap();
+    assert!(!bytes.windows(4).any(|w| w == b"mp4a"));
+    // 4 frames a second: 16 frames over 4 s, which a container may count over 3.75 s.
+    let fps = probe_media(&silent.chunks[0].path).unwrap().fps;
+    assert!((3.95..4.3).contains(&fps), "{fps}");
+
+    // Tiny: never enlarged, encoded all the same, its sound placed by its lead.
+    let tiny = proxy::make(
+        &media.join("lead-40ms.mp4"),
+        &out.path().join("tiny"),
+        360,
+        &cancel,
+    )
+    .unwrap();
+    assert_eq!((tiny.width, tiny.height, tiny.has_audio), (64, 64, true));
+    assert_ne!(tiny.audio_lead_us, 0);
+
+    // Turned: stored landscape, shown portrait; the copy is portrait in its pixels, with no turn left to apply.
+    let turned = proxy::make(
+        &media.join("phone-portrait.mov"),
+        &out.path().join("turned"),
+        360,
+        &cancel,
+    )
+    .unwrap();
+    assert_eq!((turned.width, turned.height), (360, 640));
+    let info = probe_media(&turned.chunks[0].path).unwrap();
+    assert_eq!((info.width, info.height, info.rotation), (360, 640, 0));
 }
