@@ -117,4 +117,37 @@ describe('a time range on the timeline', () => {
     expect(exportButton()).toHaveAttribute('title', 'Add a video first');
     expect(screen.getByText('Clips line up here in the order you add them.')).toBeInTheDocument();
   });
+
+  it('a press released outside the lane leaves nothing behind: no range follows the pointer after it', () => {
+    useSelection.setState({ selectedId: 'title' });
+    renderWithProviders(<Editor />);
+    const sounds = screen.getByRole('group', { name: 'Sound effects' }).querySelector<HTMLElement>('.tl-lane')!;
+    fireEvent.pointerDown(sounds, { button: 0, clientX: usToPx(5 * S, 40), pointerId: 1 });
+    // Let go elsewhere (over the preview, say) with less than 3 px of travel: the lane never hears it.
+    fireEvent.pointerUp(document.body, { clientX: usToPx(5 * S, 40) + 1, pointerId: 1 });
+    // Hovering the lane afterwards moves nothing.
+    fireEvent.pointerMove(sounds, { clientX: usToPx(12 * S, 40), pointerId: 1 });
+    fireEvent.pointerMove(sounds, { clientX: usToPx(15 * S, 40), pointerId: 1 });
+    expect(useRange.getState().range).toBeNull();
+    expect(useSelection.getState().selectedId).toBe('title');
+  });
+
+  it('a range drawn at another zoom and scroll covers the time under the pointer', () => {
+    useUi.setState({ pxPerSecond: 100 });
+    renderWithProviders(<Editor />);
+    const scroller = screen.getByTestId('ruler').closest<HTMLElement>('.tl-scroll')!;
+    const sounds = screen.getByRole('group', { name: 'Sound effects' }).querySelector<HTMLElement>('.tl-lane')!;
+    // Scrolled 1000 px in: the lane's left edge is 10 s to the left of the view. jsdom lays nothing out, so the lane's
+    // box is placed where a browser would put it.
+    act(() => {
+      scroller.scrollLeft = 1000;
+      scroller.dispatchEvent(new Event('scroll'));
+    });
+    sounds.getBoundingClientRect = () => DOMRect.fromRect({ x: 40 - 1000, y: 0, width: 4000, height: 22 });
+    // From 400 px to 700 px into the view (after the 40 px gutter): 14 s to 17 s.
+    fireEvent.pointerDown(sounds, { button: 0, clientX: 40 + 400, pointerId: 1 });
+    fireEvent.pointerMove(sounds, { clientX: 40 + 700, pointerId: 1 });
+    fireEvent.pointerUp(sounds, { clientX: 40 + 700, pointerId: 1 });
+    expect(useRange.getState().range).toEqual({ startUs: 14 * S, endUs: 17 * S });
+  });
 });

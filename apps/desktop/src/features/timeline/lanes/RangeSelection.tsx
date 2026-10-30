@@ -53,6 +53,7 @@ export function startRangeDrag(e: ReactPointerEvent<HTMLElement>, lane: HTMLElem
     if (ev.pointerId !== pointerId) return;
     if (!moving && Math.abs(ev.clientX - fromX) < DRAG_PX) return;
     if (!moving) {
+      // Captured once it is a drag, never at the press: a press that doesn't move is a click, which seeks.
       moving = true;
       el.setPointerCapture?.(pointerId);
       useSelection.getState().select(null);
@@ -61,14 +62,28 @@ export function startRangeDrag(e: ReactPointerEvent<HTMLElement>, lane: HTMLElem
   };
   const end = (ev: PointerEvent) => {
     if (ev.pointerId !== pointerId) return;
-    el.removeEventListener('pointermove', move);
-    el.removeEventListener('pointerup', end);
-    el.removeEventListener('pointercancel', end);
+    stop();
     if (moving) dragged = true;
   };
-  el.addEventListener('pointermove', move);
-  el.addEventListener('pointerup', end);
-  el.addEventListener('pointercancel', end);
+  followPointer(move, end);
+}
+
+/**
+ * Hears the pointer's moves and its release or cancel on the window, wherever they happen (a release over another
+ * panel too), until `end` runs; returns the stop. As `drag/controller` does: a gesture never outlives its release.
+ */
+let stop: () => void = () => undefined;
+function followPointer(move: (e: PointerEvent) => void, end: (e: PointerEvent) => void) {
+  stop();
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
+  stop = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', end);
+    window.removeEventListener('pointercancel', end);
+    stop = () => undefined;
+  };
 }
 
 /** Drag one of the selection's grips: that edge follows the pointer, the other stays. */
@@ -78,19 +93,18 @@ function gripDrag(e: ReactPointerEvent<HTMLElement>, edge: 'start' | 'end') {
   const range = useRange.getState().range;
   const lane = e.currentTarget.parentElement?.parentElement;
   if (!range || !lane) return;
-  const el = e.currentTarget;
-  el.setPointerCapture?.(e.pointerId);
+  const pointerId = e.pointerId;
+  e.currentTarget.setPointerCapture?.(pointerId);
   const laneLeft = lane.getBoundingClientRect().left;
   const keep = edge === 'start' ? range.endUs : range.startUs;
-  const move = (ev: PointerEvent) => useRange.getState().select(keep, timeAt(ev.clientX, laneLeft));
-  const end = () => {
-    el.removeEventListener('pointermove', move);
-    el.removeEventListener('pointerup', end);
-    el.removeEventListener('pointercancel', end);
-  };
-  el.addEventListener('pointermove', move);
-  el.addEventListener('pointerup', end);
-  el.addEventListener('pointercancel', end);
+  followPointer(
+    (ev) => {
+      if (ev.pointerId === pointerId) useRange.getState().select(keep, timeAt(ev.clientX, laneLeft));
+    },
+    (ev) => {
+      if (ev.pointerId === pointerId) stop();
+    },
+  );
 }
 
 /**
