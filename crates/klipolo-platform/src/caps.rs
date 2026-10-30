@@ -40,7 +40,7 @@ pub struct PlatformCaps {
     /// This computer's memory in bytes (0 when the OS won't say): hardware classes and model budgets go by it.
     /// - macOS: `hw.memsize`, what is installed;
     /// - Linux: `/proc/meminfo`'s `MemTotal`; Windows: `GlobalMemoryStatusEx`'s `ullTotalPhys`. Both are the memory
-    ///   the OS can use, which leaves out what firmware and the kernel reserve, so a 16 GB PC reads about 15.6–15.8
+    ///   the OS can use, which leaves out what firmware and the kernel reserve, so a 16 GB PC reads about 15.6 to 15.8
     ///   GiB.
     ///
     /// So a class threshold sits between two tiers (12 GiB between 8 and 16 GB), never at one.
