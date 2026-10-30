@@ -187,14 +187,16 @@ async fn good_key_is_saved_and_the_device_registers_once_without_a_code() {
     assert!(!serde_json::to_string(&status).unwrap().contains(KEY));
     assert_eq!(credentials.status().await, status);
 
-    let adapter = credentials.ready().await.expect("an adapter");
+    let ready = credentials.ready().await;
+    assert_eq!(ready.problem, None);
+    let adapter = ready.meta.expect("an adapter");
     assert!(!adapter.client().is_relay());
     assert_eq!(stored(&store, RELAY_TOKEN).as_deref(), Some(TOKEN));
 
     // A new key, with the device's token kept: no second registration (one without a code clears a code on the
     // relay).
     credentials.set_key(KEY).await.unwrap();
-    assert!(credentials.ready().await.is_some());
+    assert!(credentials.ready().await.meta.is_some());
 }
 
 #[tokio::test]
@@ -329,7 +331,7 @@ async fn credit_is_read_without_registering_again() {
     );
     assert_eq!(status.notice, None);
     // The first AI use finds the device registered.
-    assert!(credentials.ready().await.is_some());
+    assert!(credentials.ready().await.meta.is_some());
     credentials.status().await;
 }
 
@@ -614,20 +616,96 @@ async fn a_saved_key_registers_on_the_next_use_when_the_relay_was_down() {
         .mount(&relay)
         .await;
     let store = Arc::new(MemoryStore::default());
+    // No pause between tries here; `parallel_first_uses_against_a_hanging_relay_cost_one_timeout` covers it.
     let credentials = Credentials::load(
         store.clone(),
         endpoints(&format!("{}/v1", meta.uri()), &relay.uri()),
         DEVICE.into(),
-    );
+    )
+    .with_registration_backoff(Duration::ZERO);
 
     credentials.set_key(KEY).await.unwrap();
-    // The relay is down at the first use: the feature still gets the key's adapter (approximate word timing).
-    let adapter = credentials.ready().await.expect("a key");
-    assert!(!adapter.client().is_relay());
+    // The relay is down at the first use: the feature still gets the key's adapter (approximate word timing), and
+    // the reason.
+    let ready = credentials.ready().await;
+    assert!(!ready.meta.expect("a key").client().is_relay());
+    assert_eq!(
+        ready.problem.as_deref(),
+        Some("Klipolo's server is busy right now. Try again in a moment.")
+    );
     assert_eq!(stored(&store, RELAY_TOKEN), None);
     // The next use registers.
-    credentials.ready().await.expect("a key");
+    let ready = credentials.ready().await;
+    assert!(ready.meta.is_some());
+    assert_eq!(ready.problem, None);
     assert_eq!(stored(&store, RELAY_TOKEN).as_deref(), Some(TOKEN));
+}
+
+#[tokio::test]
+async fn parallel_first_uses_against_a_hanging_relay_cost_one_timeout() {
+    let relay = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/devices"))
+        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(10)))
+        .expect(1)
+        .mount(&relay)
+        .await;
+    let store = Arc::new(MemoryStore::default());
+    store.set(META_API_KEY, &secret(KEY)).unwrap();
+    let limit = Duration::from_millis(400);
+    let credentials = Credentials::load(store, endpoints(CLOSED, &relay.uri()), DEVICE.into())
+        .with_register_timeout(limit);
+
+    // Five features start at once: one registers and waits out the limit; the others see that it failed.
+    let started = std::time::Instant::now();
+    let all = tokio::join!(
+        credentials.ready(),
+        credentials.ready(),
+        credentials.ready(),
+        credentials.ready(),
+        credentials.ready()
+    );
+    let took = started.elapsed();
+    assert!(
+        took < limit * 2,
+        "five callers took {took:?}, more than one limit of {limit:?}"
+    );
+    let offline =
+        "Couldn't reach Klipolo for word timing, so captions use approximate timing for now.";
+    for ready in [all.0, all.1, all.2, all.3, all.4] {
+        assert!(ready.meta.is_some(), "the key still works");
+        assert_eq!(ready.problem.as_deref(), Some(offline));
+    }
+
+    // Within the pause, the next use doesn't try at all.
+    let started = std::time::Instant::now();
+    let ready = credentials.ready().await;
+    assert!(started.elapsed() < Duration::from_millis(100));
+    assert_eq!(ready.problem.as_deref(), Some(offline));
+}
+
+#[tokio::test]
+async fn a_code_whose_device_cannot_register_says_why_instead_of_asking_for_a_key() {
+    let relay = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/devices"))
+        .and(body_json(
+            json!({ "device_id": DEVICE, "access_code": CODE }),
+        ))
+        .respond_with(ResponseTemplate::new(403).set_body_json(json!({
+            "error": "invalid_code", "message": INVALID_CODE
+        })))
+        .expect(1)
+        .mount(&relay)
+        .await;
+    let store = Arc::new(MemoryStore::default());
+    // A code whose token is gone (the code was turned off since).
+    store.set(RELAY_CODE, &secret(CODE)).unwrap();
+    let credentials = Credentials::load(store, endpoints(CLOSED, &relay.uri()), DEVICE.into());
+
+    let ready = credentials.ready().await;
+    assert!(ready.meta.is_none(), "a code without a token can't pay");
+    assert_eq!(ready.problem.as_deref(), Some(INVALID_CODE));
 }
 
 #[tokio::test]
@@ -652,7 +730,10 @@ async fn clearing_keeps_the_device_and_drops_the_key_and_code() {
     // The device keeps its token, so a key added later times words without registering again.
     assert_eq!(stored(&store, RELAY_TOKEN).as_deref(), Some(TOKEN));
     assert!(credentials.meta().is_none());
-    assert!(credentials.ready().await.is_none());
+    // Nothing to pay with: no adapter and no problem, so the AI surfaces ask for a key or code.
+    let ready = credentials.ready().await;
+    assert!(ready.meta.is_none());
+    assert_eq!(ready.problem, None);
 }
 
 /// The real Keychain, under a test service of its own (never the app's). Run on the Mac by hand:

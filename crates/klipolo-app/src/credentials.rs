@@ -20,6 +20,7 @@ mod store;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, Instant};
 
 pub use device::{DEVICE_FILE, device_id};
 use klipolo_analysis::providers::meta::Meta;
@@ -46,6 +47,10 @@ const KEY_EMPTY: &str = "Paste your Meta API key first.";
 const CODE_EMPTY: &str = "Enter your access code first.";
 const CODE_OFFLINE: &str =
     "Couldn't reach Klipolo to check the code. Check your internet connection and try again.";
+const WORD_TIMING_OFFLINE: &str =
+    "Couldn't reach Klipolo for word timing, so captions use approximate timing for now.";
+const DEVICE_OFFLINE: &str =
+    "Couldn't reach Klipolo to set up this Mac. Check your internet connection and try again.";
 const CREDIT_OFFLINE: &str =
     "Couldn't reach Klipolo to check your credit. Check your internet connection.";
 const CODE_INACTIVE: &str =
@@ -117,6 +122,23 @@ pub struct AiStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub notice: Option<String>,
+}
+
+/// How long a device registration may take (it is a tiny POST).
+pub const REGISTER_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long [`Credentials::ready`] waits after a failed registration before it tries again.
+pub const REGISTER_BACKOFF: Duration = Duration::from_secs(60);
+
+/// What an AI feature gets from [`Credentials::ready`].
+#[derive(Clone, Debug)]
+pub struct Ready {
+    /// The shared adapter. None without a key or code, or with a code whose device isn't registered (no token, so
+    /// nothing can pay).
+    pub meta: Option<Meta>,
+    /// Why the device isn't registered with the relay, as a sentence for the person. With a key, the feature runs and
+    /// words are timed approximately meanwhile; with a code, nothing runs until it registers. None when registered,
+    /// and with nothing to pay with (then the surface asks for a key or code).
+    pub problem: Option<String>,
 }
 
 /// Why a Settings change didn't happen, as one plain sentence for the person. Never holds a secret.
@@ -206,6 +228,10 @@ pub struct Credentials {
     changes: tokio::sync::Mutex<()>,
     /// Bumped by every change to `held`, so an answer that took a network call can tell it is out of date.
     generation: AtomicU64,
+    register_timeout: Duration,
+    register_backoff: Duration,
+    /// When [`Self::ready`]'s last registration failed, and the sentence it gave.
+    failed: Mutex<Option<(Instant, String)>>,
 }
 
 impl Credentials {
@@ -221,7 +247,23 @@ impl Credentials {
             meta: Mutex::new(meta),
             changes: tokio::sync::Mutex::new(()),
             generation: AtomicU64::new(0),
+            register_timeout: REGISTER_TIMEOUT,
+            register_backoff: REGISTER_BACKOFF,
+            failed: Mutex::new(None),
         }
+    }
+
+    /// How long a registration may take ([`REGISTER_TIMEOUT`] by default).
+    pub fn with_register_timeout(mut self, limit: Duration) -> Self {
+        self.register_timeout = limit;
+        self
+    }
+
+    /// How long [`Self::ready`] waits after a failed registration before trying again ([`REGISTER_BACKOFF`] by
+    /// default).
+    pub fn with_registration_backoff(mut self, pause: Duration) -> Self {
+        self.register_backoff = pause;
+        self
     }
 
     /// This device's id with the relay.
@@ -235,23 +277,57 @@ impl Credentials {
     }
 
     /// The adapter for an AI feature about to run. The first time, the device registers with the relay (with the
-    /// saved code, if any) so word timing works in key mode too. If that fails, the feature still runs, with
-    /// approximate word timing, and the next use tries again.
-    pub async fn ready(&self) -> Option<Meta> {
+    /// saved code, if any), so word timing works in key mode too.
+    ///
+    /// If registering fails, `problem` says why. With a key the feature still runs (`meta` is the key's adapter, words
+    /// are timed approximately). With a code there is no token to pay with, so `meta` is None: show `problem`, not the
+    /// ask for a key or code. After a failure, calls within [`REGISTER_BACKOFF`] don't try again (callers waiting
+    /// for the attempt included); they give the same sentence at once.
+    pub async fn ready(&self) -> Ready {
         let unregistered = {
             let held = lock(&self.held);
             held.token.is_none() && (held.key.is_some() || held.code.is_some())
         };
-        if unregistered {
+        let problem = if !unregistered {
+            None
+        } else if let Some(problem) = self.recent_failure() {
+            Some(problem)
+        } else {
             let _turn = self.changes.lock().await;
             let held = lock(&self.held).clone();
-            if held.token.is_none()
-                && let Err(error) = self.register(held.code.as_ref()).await
-            {
-                tracing::warn!(%error, "device registration");
+            if let Some(problem) = self.recent_failure() {
+                Some(problem)
+            } else if held.token.is_some() || (held.key.is_none() && held.code.is_none()) {
+                // Another caller registered, or Remove landed, while this one waited.
+                None
+            } else {
+                match self.register(held.code.as_ref()).await {
+                    Ok(_) => None,
+                    Err(error) => {
+                        let offline = if held.key.is_some() {
+                            WORD_TIMING_OFFLINE
+                        } else {
+                            DEVICE_OFFLINE
+                        };
+                        let problem = relay_error(&error, offline).message;
+                        *lock(&self.failed) = Some((Instant::now(), problem.clone()));
+                        Some(problem)
+                    }
+                }
             }
+        };
+        Ready {
+            meta: self.meta(),
+            problem,
         }
-        self.meta()
+    }
+
+    /// The sentence of a registration that failed less than the back-off ago.
+    fn recent_failure(&self) -> Option<String> {
+        lock(&self.failed)
+            .as_ref()
+            .filter(|(at, _)| at.elapsed() < self.register_backoff)
+            .map(|(_, problem)| problem.clone())
     }
 
     /// After the relay refused the device's token (401): registers again with the saved code, so the relay keeps it,
@@ -381,14 +457,19 @@ impl Credentials {
         Ok(AiStatus::default())
     }
 
-    /// Registers the device with `code` (or none) and saves the new token. The caller holds `changes`.
+    /// Registers the device with `code` (or none) and saves the new token. The caller holds `changes`. Gives up after
+    /// the registration limit, as a network error.
     async fn register(&self, code: Option<&SecretString>) -> Result<DeviceInfo, MetaError> {
-        let info = MetaClient::register_device(
+        let registering = MetaClient::register_device(
             &self.endpoints.relay_base,
             &self.device_id,
             code.map(|c| c.expose_secret()),
-        )
-        .await?;
+        );
+        let info = tokio::time::timeout(self.register_timeout, registering)
+            .await
+            .map_err(|_| {
+                MetaError::Network("the relay didn't answer the registration in time".into())
+            })??;
         let token = info
             .token
             .clone()
@@ -398,6 +479,7 @@ impl Credentials {
             tracing::warn!(%error, "secret store");
         }
         self.change(|held| held.token = Some(token.clone()));
+        *lock(&self.failed) = None;
         Ok(info)
     }
 
