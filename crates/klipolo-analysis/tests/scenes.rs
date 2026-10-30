@@ -70,7 +70,7 @@ fn split(bright: u32) -> Histogram {
 }
 
 #[test]
-fn the_cut_finder_dates_a_hard_cut_to_its_frame_and_lets_a_fade_or_a_flicker_pass() {
+fn the_cut_finder_dates_a_hard_cut_to_its_frame_and_lets_a_fade_or_a_small_change_pass() {
     let mut finder = Finder::new();
     let at = |n: i64| frame_us(n);
     let mut n = 0;
@@ -108,6 +108,38 @@ fn the_cut_finder_dates_a_hard_cut_to_its_frame_and_lets_a_fade_or_a_flicker_pas
     let grey = vec![200u8; 57_600];
     let h = cuts::histogram(&grey);
     assert_eq!((h[50], h.iter().sum::<u32>()), (57_600, 57_600));
+}
+
+/// Frames at 30 fps from `from` (a frame number) for as long as `looks` lasts, each its own look.
+fn push_looks(finder: &mut Finder, from: i64, looks: &[Histogram]) -> i64 {
+    for (k, look) in looks.iter().enumerate() {
+        finder.push_histogram(frame_us(from + k as i64), *look);
+    }
+    from + looks.len() as i64
+}
+
+#[test]
+fn a_flash_across_a_sample_boundary_is_not_a_cut() {
+    let (dark, white) = (split(0), split(57_600));
+    let mut finder = Finder::new();
+    // Dark, then 3 white frames (59 to 61: 1.967 s to 2.033 s) across the 2.0 s sample, then dark again; then a hard
+    // cut at frame 90 (3.0 s) that stays.
+    let mut n = push_looks(&mut finder, 0, &[dark; 59]);
+    n = push_looks(&mut finder, n, &[white; 3]);
+    n = push_looks(&mut finder, n, &[dark; 28]);
+    push_looks(&mut finder, n, &[white; 30]);
+    assert_eq!(finder.finish(), vec![frame_us(90)]);
+}
+
+#[test]
+fn a_flicker_that_returns_to_the_old_look_is_not_a_cut() {
+    let (dark, bright) = (split(0), split(57_600));
+    let mut finder = Finder::new();
+    // Dark, then 6 frames flickering bright and dark (1.0 s to 1.167 s) across the 1.0 s sample, then dark for 2 s.
+    let mut n = push_looks(&mut finder, 0, &[dark; 30]);
+    n = push_looks(&mut finder, n, &[bright, dark, bright, dark, bright, dark]);
+    push_looks(&mut finder, n, &[dark; 60]);
+    assert_eq!(finder.finish(), Vec::<Us>::new());
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

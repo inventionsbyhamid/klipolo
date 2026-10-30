@@ -63,7 +63,8 @@ pub struct ProxyInfo {
     pub has_audio: bool,
     /// In order, each overlapping the next.
     pub chunks: Vec<ProxyChunk>,
-    /// The clip's hard cuts (file time, each the first frame of a new shot), found in every frame of the source.
+    /// The clip's hard cuts (file time, each the first frame of a new shot), found in every frame of the source. A
+    /// lower bound (see `SceneLog::cuts`).
     pub cuts: Vec<Us>,
 }
 

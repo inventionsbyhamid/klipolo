@@ -72,7 +72,9 @@ pub struct SceneLog {
     pub fps: f64,
     /// In time order.
     pub items: Vec<SceneItem>,
-    /// The clip's hard cuts (file time, each the first frame of a new shot), in order.
+    /// The clip's hard cuts (file time, each the first frame of a new shot), in order. A lower bound: every one is a
+    /// cut, but a cut between shots that look alike (a jump cut) or a shot under a quarter second is not found
+    /// (`cuts`).
     pub cuts: Vec<Us>,
     /// What the calls cost, in US dollars.
     pub cost_usd: f64,
