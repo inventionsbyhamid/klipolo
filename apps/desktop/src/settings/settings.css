@@ -1,6 +1,47 @@
 /* The Settings dialog and the top bar's AI chip. Values from tokens.css only. Generic
-   primitives will carry (dialog, input, secondary button, spinner, progress) are scoped to the dialog here, so they
-   can't clash with those when they land. */
+   pieces the shared design primitives will carry (dialog, input, secondary button, spinner, progress) are scoped to
+   the dialog here, so they can't clash with those when they land. */
+
+/* ---------- Top bar chip ---------- */
+
+.ai-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 32px;
+  padding: 0 var(--space-5) 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--color-bay);
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.ai-chip:hover {
+  background: var(--color-bay-hover);
+  color: var(--color-ink);
+}
+
+.ai-chip b {
+  color: var(--color-ink);
+  font-weight: var(--weight-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-chip .ico {
+  width: 16px;
+  height: 16px;
+}
+
+.ai-chip.is-missing {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink);
+}
 
 /* ---------- Dialog ---------- */
 

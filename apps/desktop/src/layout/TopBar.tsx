@@ -1,6 +1,7 @@
 import icon from '../styles/klipolo-icon.svg';
 import { openSettings } from '../ai/aiStatus';
 import { historyAction } from '../lib/history';
+import { AiChip } from '../settings/AiChip';
 import { useProject } from '../state/project';
 import { saveStateOf, useSaving } from '../state/saving';
 import { Icon } from './Icon';
@@ -51,6 +52,7 @@ export function TopBar() {
         <Icon name="redo" />
       </button>
       <div className="topbar-right" data-tauri-drag-region>
+        <AiChip />
         <button className="icon-btn" aria-label="Settings" title="Settings (Command ,)" onClick={openSettings}>
           <Icon name="settings" />
         </button>
