@@ -975,10 +975,23 @@ def wav(seconds, rate=16000):
     return out.getvalue()
 
 
+def with_byte_rate(audio, rate):
+    # The canonical header keeps the byte rate at bytes 28 to 31.
+    return audio[:28] + rate.to_bytes(4, "little") + audio[32:]
+
+
 @pytest.mark.parametrize(
     ("audio", "seconds"),
-    [(wav(3), 3), (wav(2, rate=24000), 2), (b"RIFF" + b"\0" * 1000, 600), (b"not audio at all", 600)],
-    ids=["16-khz", "24-khz", "bad-header", "not-wav"],
+    [
+        (wav(3), 3),
+        # Reserved at 32,000 bytes a second, the lowest rate Meta takes.
+        (wav(2, rate=24000), 3),
+        (with_byte_rate(wav(3), 0xFFFFFFFF), 3),
+        (with_byte_rate(wav(3), 0), 3),
+        (b"RIFF" + b"\0" * 1000, 600),
+        (b"not audio at all", 600),
+    ],
+    ids=["16-khz", "24-khz", "huge-byte-rate", "zero-byte-rate", "bad-header", "not-wav"],
 )
 def test_transcribe_without_a_duration_charges_the_reservation_from_the_wav_header(client, conn, meta, audio, seconds):
     device = add_device(conn)

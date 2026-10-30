@@ -1090,27 +1090,25 @@ def _objects(value: Any) -> Iterator[dict[str, Any]]:
             stack.extend(item)
 
 
-# 24 kHz, 16-bit, mono: the highest byte rate Meta's transcription takes.
-_MAX_WAV_BYTE_RATE = 48_000
+# 16 kHz, 16-bit, mono: the lowest byte rate Meta's transcription takes, so
+# the longest the audio could play for.
+_MIN_WAV_BYTE_RATE = 32_000
 
 
 def _wav_seconds(audio: bytes) -> float | None:
-    """The audio's length from its WAV header, or None if it can't be read.
+    """The longest the WAV audio could be, or None if no data chunk is found.
     The data actually sent is measured (a streamed WAV's declared size is often
-    a placeholder) and the byte rate is capped at the fastest format Meta
-    takes, so the length is never understated."""
+    a placeholder) and divided by the lowest byte rate Meta accepts; the
+    header's own byte rate is never trusted."""
     if len(audio) < 12 or audio[:4] != b"RIFF" or audio[8:12] != b"WAVE":
         return None
-    byte_rate = 0
     position = 12
     while position + 8 <= len(audio):
         chunk = audio[position : position + 4]
         size = int.from_bytes(audio[position + 4 : position + 8], "little")
         start = position + 8
-        if chunk == b"fmt " and size >= 16 and start + 16 <= len(audio):
-            byte_rate = int.from_bytes(audio[start + 8 : start + 12], "little")
-        elif chunk == b"data":
-            return (len(audio) - start) / min(byte_rate, _MAX_WAV_BYTE_RATE) if byte_rate > 0 else None
+        if chunk == b"data":
+            return (len(audio) - start) / _MIN_WAV_BYTE_RATE
         position = start + size + (size & 1)
     return None
 
