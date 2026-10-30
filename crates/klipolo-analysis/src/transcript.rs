@@ -78,7 +78,8 @@ pub struct Turn {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranscriptOut {
-    /// `key` is left empty: the caller sets the source file's content key.
+    /// `key` is left empty: the caller sets the source file's content key. `complete`: every chunk was heard (a
+    /// failed transcription request gives an error, never a part-heard transcript); word timing doesn't change it.
     pub transcript: Transcript,
     pub turns: Vec<Turn>,
     /// Some turns' words are spread across the turn rather than timed.
@@ -518,6 +519,10 @@ fn us_ms(t: Us) -> u64 {
 /// The transcript of `turns` (in order, sound time): each turn's timed words from `timing` where it has them, its text
 /// spread across it where not (all of them without a timing: the turn-level transcript). Sets each turn's `aligned`.
 /// `cost_usd` is the transcription's; the alignment's is added.
+///
+/// `turns` are the whole file's, as `hear` gives them only once every chunk has its answer, so the transcript is
+/// `complete` (the engine and the export skip a transcript that isn't), however its words are timed: approximate
+/// timing is `TranscriptOut::approximate` and each turn's `aligned`.
 pub fn finish(
     model: &str,
     duration_us: Us,
@@ -547,7 +552,7 @@ pub fn finish(
             language: LANGUAGE.into(),
             model: model.into(),
             covered_us: duration_us,
-            complete: !approximate,
+            complete: true,
             words,
         },
         turns,

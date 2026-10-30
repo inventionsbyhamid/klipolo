@@ -563,8 +563,9 @@ async fn alignment_failure_spreads_words_evenly_and_marks_approximate() {
     assert_eq!(got, expected);
     assert!(spoken(&out).iter().all(|w| w.confidence == 0.0));
     assert_well_formed(&out);
+    // The whole file was heard, so the transcript is complete: only its word timing is approximate.
     assert!(out.approximate);
-    assert!(!out.transcript.complete);
+    assert!(out.transcript.complete);
     assert_eq!(out.approximate_reason.as_deref(), Some(unavailable));
     assert!(out.turns.iter().all(|t| !t.aligned));
     assert_eq!(out.empty_reason, None);
@@ -696,7 +697,7 @@ async fn a_skipped_or_unmatched_turn_alone_is_spread() {
 
     let aligned: Vec<bool> = out.turns.iter().map(|t| t.aligned).collect();
     assert_eq!(aligned, [true, false, false, false]);
-    assert!(out.approximate && !out.transcript.complete);
+    assert!(out.approximate && out.transcript.complete);
     assert_eq!(out.approximate_reason.as_deref(), Some(ROUGH_WORDS));
     let words = spoken(&out);
     assert_eq!(words.len(), 3 + 4 + 5 + 2);
@@ -739,6 +740,7 @@ async fn a_daily_limit_stops_aligning_and_keeps_its_sentence() {
     assert!((1..=2).contains(&sent), "{sent} requests");
     assert_eq!(out.approximate_reason.as_deref(), Some(quota));
     assert!(out.approximate && out.turns.iter().all(|t| !t.aligned));
+    assert!(out.transcript.complete);
     assert_eq!(spoken(&out).len(), 18);
     assert_well_formed(&out);
 }
@@ -770,6 +772,7 @@ async fn a_refused_align_request_spreads_only_its_own_turns() {
 
     let aligned: Vec<bool> = out.turns.iter().map(|t| t.aligned).collect();
     assert_eq!(aligned, [true, false, true]);
+    assert!(out.approximate && out.transcript.complete);
     assert_eq!(aligner.calls().len(), 3);
     assert_eq!(out.approximate_reason.as_deref(), Some(refused));
 }
@@ -904,7 +907,8 @@ async fn silent_chunks_make_no_request() {
     assert_well_formed(&out);
 }
 
-/// A transcription request refused for credit stops the whole step with the service's sentence; nothing is aligned.
+/// A transcription request refused for credit stops the whole step with the service's sentence; nothing is aligned,
+/// and no part-heard transcript is made (so none is ever taken for a finished one).
 #[tokio::test]
 async fn a_failed_transcription_stops_with_its_sentence() {
     let used = "This device used its Klipolo credit. Add your Meta API key in Settings.";
