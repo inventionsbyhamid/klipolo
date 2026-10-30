@@ -737,6 +737,8 @@ MEDIA_REQUESTS = {
         tools=[{"type": "function", "name": "f", "parameters": {"type": "object"}, "logo_url": "https://example.com/l.png"}]
     ),
     "inline-image": spark_request(input=[user({"type": "input_text", "text": "What is this?"}, INLINE_IMAGE)]),
+    "reasoning-by-id": spark_request(input=[{"type": "reasoning", "id": "rs_1"}]),
+    "reasoning-with-empty-summary": spark_request(input=[{"type": "reasoning", "id": "rs_1", "summary": []}]),
     "list-typed-part": spark_request(input=[user({"type": ["input_text"], "text": "hi"})]),
     "list-typed-item": spark_request(input=[{"type": ["message"], "role": "user", "content": "hi"}]),
     "earlier-response": spark_request(previous_response_id="resp_0"),
@@ -754,6 +756,9 @@ TEXT_REQUESTS = {
             {"type": "function_call", "call_id": "c1", "name": "cut", "arguments": "{\"end\": 13}"},
             {"type": "function_call_output", "call_id": "c1", "output": "done"},
         ],
+    ),
+    "reasoning-carried-inline": spark_request(
+        input=[{"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "gAAAAABo"}]
     ),
     "nullable-tool-property": spark_request(
         tools=[

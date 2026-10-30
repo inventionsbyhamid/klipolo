@@ -1155,7 +1155,7 @@ def _count_parts(value: Any, part_type: str) -> int:
 
 
 # Item and part types whose cost is in the request's own bytes.
-_TEXT_ITEMS = frozenset({"input_text", "output_text", "function_call", "reasoning"})
+_TEXT_ITEMS = frozenset({"input_text", "output_text", "function_call"})
 _TEXT_PARTS = frozenset({"input_text", "output_text"})
 _MEDIA_TYPES = frozenset({"item_reference", "input_image", "input_file", "input_video", "input_audio"})
 
@@ -1202,6 +1202,11 @@ def _text_only(items: Any) -> bool:
                 return False
         elif kind == "function_call_output":
             if not isinstance(item.get("output"), str):
+                return False
+        elif kind == "reasoning":
+            # Reasoning named by its id alone is stored context the request
+            # can't bound; carried inline, its bytes are in the request.
+            if not (item.get("encrypted_content") or item.get("summary") or item.get("content")):
                 return False
         elif kind not in _TEXT_ITEMS:
             return False
