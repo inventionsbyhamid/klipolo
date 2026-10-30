@@ -434,11 +434,11 @@ impl Quoted<'_> {
         i.is_multiple_of(every) || self.near[i]
     }
 
-    /// The lines' bytes shown at `every`.
+    /// The characters of the lines shown at `every` (as the budget counts them).
     fn kept(&self, every: usize) -> usize {
         (self.lines.iter().enumerate())
             .filter(|&(i, _)| self.shows(i, every))
-            .map(|(_, l)| l.len())
+            .map(|(_, l)| l.chars().count())
             .sum()
     }
 
