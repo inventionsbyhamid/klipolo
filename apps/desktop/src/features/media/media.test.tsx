@@ -210,6 +210,23 @@ describe('where a drop lands on the timeline', () => {
     expect(at(3, 160, null)).toMatchObject({ lane: 'sound' });
   });
 
+  it('a picture dropped on the Overlays lane while its tracks are all locked goes on a new track, never a locked one', async () => {
+    const snapshot = fixtureSnapshot();
+    for (const track of snapshot.project.timeline.tracks) track.locked = true;
+    useProject.setState({ snapshot, pending: 0 });
+    useUi.setState({ pxPerSecond: 10, snapping: false });
+    // Over the Overlays lane at 3 s: the lane takes a picture, and names no track.
+    const target = timelineTargetAt(lanes(), 20, x(3), 30, 'image');
+    expect(target).toEqual({ lane: 'picture', trackId: null, atUs: 3_000_000 });
+    const logo: Asset = { ...snapshot.project.assets.find((a) => a.kind === 'image')!, id: 'n', path: '/n.png' };
+    vi.mocked(bridge.importMedia).mockResolvedValue({ assets: [logo], skipped: [] });
+    await importFiles(['/n.png'], target);
+    await vi.waitFor(() => expect(bridge.apply).toHaveBeenCalledTimes(1));
+    const ops = vi.mocked(bridge.apply).mock.calls[0][0].ops;
+    // Placed by the model on a track that takes it (a new one here), never on the locked overlay track.
+    expect(ops).toMatchObject([{ type: 'addAssets' }, { type: 'addItem', track: { type: 'auto' } }]);
+  });
+
   it('follows the playhead as it plays, with the hour’s edges built once per revision', () => {
     // The 1-hour project (1,500 cuts, 300 titles) at 10 px/s, scrolled to 10:00 and dragged over the Overlays lane for
     // 600 frames while it plays: each frame the pointer is on the playhead's frame, and the drop holds to it.
