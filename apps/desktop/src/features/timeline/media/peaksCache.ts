@@ -58,13 +58,16 @@ export function once<V>(inFlight: Map<string, Promise<V>>, key: string, load: ()
 /** Decoded peak ranges in the webview: at most 64 (WebContent ≤ 350 MB), about 2 MB of stereo. */
 const ranges = createLru<Int16Array>(64);
 const loading = new Map<string, Promise<Int16Array>>();
-const rangeKey = (path: string, level: number, chunk: number) => `${path}|${level}|${chunk}`;
+/** A range of `path`'s peaks as of media version `version` of it: a rebuilt sound cache is read again, as infos are. */
+const rangeKey = (path: string, version: number, level: number, chunk: number) =>
+  `${path}|${version}|${level}|${chunk}`;
 
 export const peaksCache = {
-  get: (path: string, level: number, chunk: number) => ranges.get(rangeKey(path, level, chunk)),
+  get: (path: string, version: number, level: number, chunk: number) =>
+    ranges.get(rangeKey(path, version, level, chunk)),
   /** Range `chunk` of `level` (`CHUNK_BUCKETS` buckets of i16 [min, max] per channel). Rejects where there are none. */
-  load(path: string, level: number, chunk: number): Promise<Int16Array> {
-    const key = rangeKey(path, level, chunk);
+  load(path: string, version: number, level: number, chunk: number): Promise<Int16Array> {
+    const key = rangeKey(path, version, level, chunk);
     const hit = ranges.get(key);
     if (hit) return Promise.resolve(hit);
     return once(loading, key, async () => {
@@ -159,9 +162,9 @@ async function filePeaks(
   const first = Math.floor(from / CHUNK_BUCKETS);
   const loads: Promise<Int16Array>[] = [];
   for (let chunk = first; chunk <= Math.floor((to - 1) / CHUNK_BUCKETS); chunk++)
-    loads.push(peaksCache.load(path, level, chunk));
+    loads.push(peaksCache.load(path, version, level, chunk));
   const peaks = gather(await Promise.all(loads), first, from, to, info.channels * 2);
-  return { peaks, channels: info.channels, from, rate, key: `${path}@${level}:${from}-${to}` };
+  return { peaks, channels: info.channels, from, rate, key: `${path}#${version}@${level}:${from}-${to}` };
 }
 
 /**
