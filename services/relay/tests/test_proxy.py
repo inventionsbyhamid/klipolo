@@ -736,6 +736,8 @@ MEDIA_REQUESTS = {
     "url-in-a-tool": spark_request(
         tools=[{"type": "function", "name": "f", "parameters": {"type": "object"}, "logo_url": "https://example.com/l.png"}]
     ),
+    "list-typed-part": spark_request(input=[user({"type": ["input_text"], "text": "hi"})]),
+    "list-typed-item": spark_request(input=[{"type": ["message"], "role": "user", "content": "hi"}]),
     "earlier-response": spark_request(previous_response_id="resp_0"),
     "conversation": spark_request(conversation="conv_1"),
 }
@@ -753,6 +755,31 @@ TEXT_REQUESTS = {
         ],
     ),
     "inline-image": spark_request(input=[user({"type": "input_text", "text": "What is this?"}, INLINE_IMAGE)]),
+    "nullable-tool-property": spark_request(
+        tools=[
+            {
+                "type": "function",
+                "name": "follow",
+                "strict": True,
+                "parameters": {
+                    "type": "object",
+                    "properties": {"who": {"type": ["string", "null"]}},
+                    "required": ["who"],
+                    "additionalProperties": False,
+                },
+            }
+        ]
+    ),
+    "nullable-schema-property": spark_request(
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "moment",
+                "strict": True,
+                "schema": {"type": "object", "properties": {"who": {"type": ["string", "null"]}}, "required": ["who"]},
+            }
+        }
+    ),
     "schema-and-tools": spark_request(
         tools=[{"type": "function", "name": "cut", "parameters": {"type": "object", "properties": {"end": {"type": "number"}}}}],
         text={"format": {"type": "json_schema", "name": "m", "schema": {"type": "object", "properties": {"kind": {"type": "string"}}}}},

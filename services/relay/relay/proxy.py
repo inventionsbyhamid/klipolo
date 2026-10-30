@@ -1169,13 +1169,20 @@ def _refers_to_media(payload: dict[str, Any]) -> bool:
         return True
     # Anywhere in the request: a stored file, a link, or a media part.
     for item in _objects(payload):
-        if "file_id" in item or (item.get("type") in _MEDIA_TYPES and not _inline_image(item)):
+        if "file_id" in item or (_type(item) in _MEDIA_TYPES and not _inline_image(item)):
             return True
         for key, value in item.items():
             if (key == "url" or key.endswith("_url")) and isinstance(value, str) and not value.startswith("data:"):
                 return True
     # Items and their parts: only text-only types.
     return not all(_text_only(payload.get(field)) for field in ("input", "instructions"))
+
+
+def _type(item: dict[str, Any]) -> str | None:
+    """The object's type when it is a string. JSON Schema allows a list such
+    as ["string", "null"], which is never an item or part type."""
+    value = item.get("type")
+    return value if isinstance(value, str) else None
 
 
 def _inline_image(item: dict[str, Any]) -> bool:
@@ -1190,12 +1197,13 @@ def _text_only(items: Any) -> bool:
     for item in items if isinstance(items, list) else [items]:
         if not isinstance(item, dict):
             return False
-        kind = item.get("type", "message" if "role" in item else None)
+        # A type that isn't a string is no item the relay knows.
+        kind = _type(item) if "type" in item else ("message" if "role" in item else None)
         if kind == "message":
             content = item.get("content")
             parts = [] if isinstance(content, str) else content
             if not isinstance(parts, list) or not all(
-                isinstance(part, dict) and (part.get("type") in _TEXT_PARTS or _inline_image(part)) for part in parts
+                isinstance(part, dict) and (_type(part) in _TEXT_PARTS or _inline_image(part)) for part in parts
             ):
                 return False
         elif kind == "function_call_output":
