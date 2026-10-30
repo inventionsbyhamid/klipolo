@@ -40,7 +40,7 @@ is_macho() {
   esac
 }
 
-# A release version: X.Y.Z, with an optional pre-release part.
+# A release version: X.Y.Z, digits and dots only, as CFBundleShortVersionString and CFBundleVersion require.
 is_version() {
-  [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+  [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 }
