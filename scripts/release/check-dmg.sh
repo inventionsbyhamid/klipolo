@@ -10,9 +10,11 @@ here=$(cd "$(dirname "$0")" && pwd -P)
 [ $# -eq 1 ] || { echo "usage: $0 <Klipolo.dmg>" >&2; exit 2; }
 dmg=$1
 [ -f "$dmg" ] || { echo "refused: no disk image at $dmg" >&2; exit 2; }
-mnt=$(mktemp -d)
+# The mount point goes away on every exit, also when the attach itself fails; a stuck volume is detached by force.
+tmp=${TMPDIR:-/tmp}
+mnt=$(mktemp -d "${tmp%/}/klipolo-dmg.XXXXXX")
+trap 'hdiutil detach -quiet -force "$mnt" 2> /dev/null || true; rmdir "$mnt" 2> /dev/null || true' EXIT
 hdiutil attach -nobrowse -readonly -noautoopen -mountpoint "$mnt" "$dmg" > /dev/null
-trap 'hdiutil detach -quiet "$mnt" 2> /dev/null || true; rmdir "$mnt" 2> /dev/null || true' EXIT
 assessment=$(spctl -a -vv -t exec "$mnt/Klipolo.app" 2>&1 | redact)
 echo "$assessment"
 grep -q ': accepted' <<< "$assessment" && grep -q 'source=Notarized Developer ID' <<< "$assessment" \
