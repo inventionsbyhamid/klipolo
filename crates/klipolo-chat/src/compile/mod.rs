@@ -137,7 +137,13 @@ pub fn compile(project: &Project, inputs: &Inputs, calls: &[ToolCall]) -> Compil
     let c = Compiler {
         snapshot: project,
         inputs,
-        evidence: Evidence::new(project, inputs),
+        evidence: Evidence::new(
+            project,
+            &inputs.speech,
+            &inputs.scenes,
+            &inputs.view,
+            &inputs.message,
+        ),
         map: Map::new(project),
     };
     c.run(calls)

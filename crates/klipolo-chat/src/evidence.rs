@@ -18,14 +18,15 @@
 //! Times are the snapshot's timeline, as the context showed them; the compiler maps them into its working copy after.
 //! Building costs O(words + pauses + scene items + clips) once per message; a lookup is a binary search.
 
+use std::collections::HashMap;
+
 use klipolo_model::Project;
 use klipolo_model::query::{clip_starts, main_track_duration};
 use klipolo_model::speech::silence::timeline_pauses;
-use klipolo_model::speech::{PAUSE_US, Spoken, spoken, word_cut};
+use klipolo_model::speech::{PAUSE_US, Speech, Spoken, spoken, word_cut};
 use klipolo_model::time::{MAX_TIME_US, RangeUs, US_PER_SEC, Us, secs_to_us};
 
-use crate::compile::Inputs;
-use crate::context::{scene_spans, within_video};
+use crate::context::{SceneLog, View, scene_spans, within_video};
 
 /// How far a model's time may lie from what it was shown.
 pub const TOLERANCE_US: Us = 300_000;
@@ -61,8 +62,15 @@ pub(crate) struct Evidence {
 }
 
 impl Evidence {
-    pub(crate) fn new(p: &Project, inputs: &Inputs) -> Self {
-        let speech = &inputs.speech;
+    /// The edges in `p` (its words, pauses, clips and length) with its `speech` and `scenes` (by asset id), the
+    /// person's `view` and the `message` they typed.
+    pub(crate) fn new(
+        p: &Project,
+        speech: &Speech,
+        scenes: &HashMap<String, SceneLog>,
+        view: &View,
+        message: &str,
+    ) -> Self {
         let spoken = spoken(p, speech);
         let mut edges: Vec<(Us, Source)> = Vec::with_capacity(spoken.words.len() * 2);
         let mut both = |r: RangeUs, source: Source| {
@@ -81,10 +89,10 @@ impl Evidence {
         for r in timeline_pauses(p, speech, PAUSE_US, None) {
             both(r, Source::Pause);
         }
-        for r in scene_spans(p, &inputs.scenes) {
+        for r in scene_spans(p, scenes) {
             both(r, Source::Scene);
         }
-        let (playhead, selection) = within_video(p, &inputs.view);
+        let (playhead, selection) = within_video(p, view);
         if let Some(r) = selection {
             both(r, Source::Selection);
         }
@@ -95,9 +103,7 @@ impl Evidence {
         edges.push((playhead, Source::Playhead));
         edges.push((0, Source::Bound));
         edges.push((duration, Source::Bound));
-        edges.extend(
-            (typed_times(&inputs.message, duration).into_iter()).map(|t| (t, Source::Typed)),
-        );
+        edges.extend((typed_times(message, duration).into_iter()).map(|t| (t, Source::Typed)));
         edges.sort_unstable();
         edges.dedup();
         Self {
