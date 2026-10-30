@@ -296,6 +296,7 @@ describe('the timeline from the keyboard', () => {
       ops: [{ type: 'removeItem', id: 'title' }],
     });
     // Enter on the marker selects the layer it stands for (Klipolo shows no track rows); focus stays on the marker.
+    act(() => useSelection.getState().select(null));
     await userEvent.keyboard('{Enter}');
     await frames();
     expect(document.activeElement).toBe(marker);
@@ -443,11 +444,15 @@ describe('the timeline from the keyboard', () => {
     const added = tx.ops[0].type === 'addItem' ? tx.ops[0].item.id : '';
     expect(useSelection.getState().selectedId).toBe(added);
     expect((document.activeElement as HTMLElement).dataset.moreFrom).toBeDefined();
-    // The marker stands for the copy now: Enter selects the copy, not the original, and focus stays on the marker.
+    // The marker stands for the copy now: Enter picks the copy, not the original (the playhead goes into the copy, at
+    // 11 s), and focus stays on the marker.
+    act(() => usePlayback.setState({ playheadUs: 0 }));
     await userEvent.keyboard('{Enter}');
     await frames();
     expect((document.activeElement as HTMLElement).dataset.moreFrom).toBeDefined();
     expect(useSelection.getState().selectedId).toBe(added);
+    expect(usePlayback.getState().playheadUs).toBeGreaterThanOrEqual(11_000_000);
+    expect(usePlayback.getState().playheadUs).toBeLessThan(14_000_000);
   });
 
   it('←/→ on the "+N" marker of a packed layer go from where it is, and the selection follows', async () => {
