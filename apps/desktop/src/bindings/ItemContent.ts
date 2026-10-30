@@ -46,6 +46,10 @@ tie?: Tie,
  * Ducking: played this many dB lower (-30 to 0, `validate::DEEPEST_DUCK_DB`) while someone speaks, as music is
  * under a voice, easing down just before the words and back up after them (the engine's mix). None plays it at
  * its volume throughout. Left out of the JSON while None.
+ *
+ * It also says what the layer is (`media::music::is_music`): None is a sound effect; `Some(0.0)` is music with
+ * ducking off; below 0 is music ducking that deep. Music fits the video's end as it changes, so turning ducking
+ * off writes `Some(0.0)`, never None.
  */
 duck?: number, } | { "type": "zoom", target: ZoomTarget, scale: number, } | { "type": "generator", source: ContribId, params: { [key in string]: ParamValue }, 
 /**

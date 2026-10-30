@@ -4,7 +4,7 @@ use crate::captions::looks::{self, Look};
 use crate::contrib::ContribId;
 use crate::cursor_style::CursorStyle;
 use crate::error::{invalid, not_found, Result};
-use crate::layout::{resolve_rect, Layout};
+use crate::layout::{resolve_rect, BoxN, Layout};
 use crate::messages::code;
 use crate::ops::{CursorTarget, TrackPatch};
 use crate::project::{
@@ -25,9 +25,11 @@ pub(super) fn rename(p: &mut Project, name: &str) -> Result<()> {
 }
 
 /// Replace the settings. When the primary format changes, every layout is re-expressed in the new
-/// primary's coordinates and the old primary keeps its exact rect as an override (if still listed).
-/// Overrides and caption places for formats that are no longer listed are dropped; the caption style never changes
-/// with the formats.
+/// primary's coordinates and the old primary keeps its exact rect as an override (if still listed, or if it fills the
+/// frame).
+/// Overrides and caption places for formats that are no longer listed are dropped, except an override that fills the
+/// frame: it is kept, so a layer placed with `Layout::full_frame` (a template) fills a format added later too. The
+/// caption style never changes with the formats.
 pub(super) fn set_settings(p: &mut Project, settings: &Settings) -> Result<()> {
     let (old, new) = (p.settings.primary_format, settings.primary_format);
     let formats = settings.formats.as_slice();
@@ -49,13 +51,13 @@ fn rebase_layout(layout: &mut Layout, old: FormatKind, new: FormatKind, formats:
         let old_rect = layout.rect;
         layout.rect = resolve_rect(layout, old, new);
         layout.overrides.remove(&new);
-        if formats.contains(&old) {
+        if formats.contains(&old) || old_rect == BoxN::FULL {
             layout.overrides.insert(old, old_rect);
         }
     }
     layout
         .overrides
-        .retain(|format, _| formats.contains(format));
+        .retain(|format, rect| formats.contains(format) || *rect == BoxN::FULL);
 }
 
 pub(super) fn set_captions(p: &mut Project, captions: &CaptionSettings) -> Result<()> {
