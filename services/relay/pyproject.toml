@@ -15,6 +15,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Word alignment. Install the CPU builds from https://download.pytorch.org/whl/cpu;
+# 2.8 is the last release with torchaudio's forced_align.
+align = [
+    "torch==2.8.0",
+    "torchaudio==2.8.0",
+]
 dev = [
     "pytest>=8",
     "httpx2>=2.16",
@@ -26,3 +32,7 @@ packages = ["relay"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Slow tests need torch and the MMS model, so they run in the container:
+# pytest -m slow (or -m "slow or not slow" for everything).
+addopts = ["-m", "not slow"]
+markers = ["slow: needs torch and the MMS alignment model"]
