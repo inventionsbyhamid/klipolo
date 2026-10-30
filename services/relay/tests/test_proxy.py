@@ -1703,6 +1703,18 @@ def test_image_generation_is_charged_per_image(client, conn, meta, settings, cou
     assert client.app.state.in_flight.reserved(device.device_id) == (0.0, 0.0)
 
 
+def test_an_image_answer_with_more_images_than_asked_is_charged_for_n(client, conn, meta, settings):
+    # Never more than the reservation: n images at most, however many come back.
+    device = add_device(conn)
+    meta.post("/images/generations").respond(200, json=image_body(3))
+
+    assert post_image(client, device, image_request(n=2)).status_code == 200
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(0.02)
+    assert json.loads(row["usage_json"]) == {"images": 2, "images_returned": 3}
+    assert spent(conn, device) == pytest.approx(0.02)
+
+
 def test_an_image_answer_with_no_images_costs_nothing(client, conn, meta):
     device = add_device(conn)
     meta.post("/images/generations").respond(200, json={"created": 1, "data": []})

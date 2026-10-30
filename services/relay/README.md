@@ -33,7 +33,7 @@ What Klipolo, or any other client, must do to use the relay well:
 - **`max_output_tokens` at most 16384** (8192 when missing). More is 400.
 - **No `include` or `truncation`**, or any other field the relay doesn't list: 400. No `previous_response_id` or `conversation` either.
 - **Don't replay reasoning items.** Any reasoning item in `input` makes the call count as media, which reserves $0.75 more.
-- **Muse Image (`images/generations`): `muse-image-1.0` only, `n` at most 2.** More is 400. Its tools (image search, web search, shell) are always turned off. Each image returned costs $0.01, and a call reserves $0.02 until it is charged. No streaming, edits or `moderation`.
+- **Muse Image (`images/generations`): `muse-image-1.0` only, `n` at most 2.** More is 400. Its tools (image search, web search, shell) are always turned off. Each image returned costs $0.01, up to the `n` asked for, and a call reserves $0.02 until it is charged. No streaming, edits or `moderation`.
 - **A prompt Meta won't serve** comes back 400 with the code `content_policy_violation` and Meta's reason. Every other Meta error is `meta_error`.
 
 ## Settings

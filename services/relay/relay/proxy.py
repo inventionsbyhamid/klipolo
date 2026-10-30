@@ -36,7 +36,7 @@ device's whole cap. A device with no room left is refused before its body is
 read, and bodies have a deadline (408).
 
 After Meta answers, the call is charged from Meta's own `usage` (Muse Image:
-$0.01 for each image in its answer): the ledger row and the device's
+$0.01 for each image in its answer, at most the `n` asked for): the ledger row and the device's
 `spent_usd` are written in one transaction, and only then is the reservation
 freed. Failed calls (non-2xx) are not charged. A client
 hanging up never makes a call cheaper: a non-streamed call still waits for
@@ -447,7 +447,7 @@ class Meter:
         """The usage candidates in a complete JSON response, whatever the body."""
         try:
             if self.endpoint == "images/generations":
-                return _images_in(body)
+                return _images_in(body, self.images)
             if self.endpoint == "asr/transcribe":
                 return _find_value(body, "audioDurationMs", _DURATION_KEY, lambda v: {"audioDurationMs": v})
             return _find_value(body, "usage", _USAGE_KEY, lambda v: v)
@@ -608,7 +608,7 @@ async def create_image(request: Request, device: RelayDevice, conn: Conn, settin
         # Searching the web or running code is billed outside the image price.
         payload["tool_enablement"] = dict(_IMAGE_TOOLS_OFF)
         body = _encode(payload)
-        meter = Meter("images/generations", model, request_bytes=len(body))
+        meter = Meter("images/generations", model, request_bytes=len(body), images=payload["n"])
         return Call("POST", "images/generations", meter, content=body, headers={"content-type": "application/json"})
 
     return await _proxy(request, device, conn, settings, prepare)
@@ -1403,15 +1403,21 @@ def _form_parts(content_type: str, body: bytes) -> dict[str, _Part]:
 # Usage.
 
 
-def _images_in(body: bytes) -> list[Any]:
-    """Muse Image's answer as usage: the number of images in its `data`. Parsed
-    whole: the images are base64 inside it, a few MB already read."""
+def _images_in(body: bytes, asked: int) -> list[Any]:
+    """Muse Image's answer as usage: the images in its `data`, at most the
+    `asked` for, so a call never costs more than it reserved. Parsed whole: the
+    images are base64 inside it, a few MB already read."""
     try:
         data = json.loads(body)
     except ValueError:
         return []
     images = data.get("data") if isinstance(data, dict) else None
-    return [{IMAGES_KEY: len(images)}] if isinstance(images, list) else []
+    if not isinstance(images, list):
+        return []
+    usage = {IMAGES_KEY: min(len(images), asked)}
+    if len(images) > asked:
+        usage["images_returned"] = len(images)
+    return [usage]
 
 
 def _find_value(body: bytes, key: str, pattern: re.Pattern[str], wrap: Callable[[Any], Any]) -> list[Any]:
