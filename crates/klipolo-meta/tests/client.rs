@@ -449,6 +449,35 @@ async fn other_statuses_map_to_their_errors() {
 }
 
 #[tokio::test]
+async fn redirects_are_not_followed() {
+    let server = MockServer::start().await;
+    Mock::given(path("/v1/responses"))
+        .respond_with(
+            ResponseTemplate::new(302)
+                .insert_header("location", format!("{}/v1/elsewhere", server.uri())),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(path("/v1/elsewhere"))
+        .respond_with(json_body(&fixture("responses_function_calls.json")))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let error = direct(&server)
+        .respond(json!({"model": "muse-spark-1.3"}))
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        MetaError::BadRequest {
+            message: "The server answered with status 302.".into()
+        }
+    );
+}
+
+#[tokio::test]
 async fn unreachable_server_is_a_network_error() {
     let client = MetaClient::direct(secret(KEY))
         .with_meta_base(format!("{CLOSED}/v1"))

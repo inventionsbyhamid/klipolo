@@ -309,6 +309,8 @@ pub(crate) fn http_client() -> reqwest::Client {
         .user_agent(concat!("klipolo-meta/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(SHORT_TIMEOUT)
         .timeout(LONG_TIMEOUT)
+        // Neither Meta nor the relay redirects; a redirect is refused, not followed.
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("static HTTP client settings are valid")
 }
