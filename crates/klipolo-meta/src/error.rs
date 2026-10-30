@@ -4,6 +4,7 @@
 //! redacted before it is stored, so `Display`, `Debug` and `user_message` are
 //! all safe to log or show.
 
+use serde_json::Value;
 use thiserror::Error;
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
@@ -37,6 +38,9 @@ pub enum MetaError {
     Decode(String),
 }
 
+/// The most of a server's message kept in an error.
+const MAX_MESSAGE_CHARS: usize = 300;
+
 fn retry_hint(retry_after: Option<u64>) -> String {
     retry_after
         .map(|s| format!(", retry after {s} s"))
@@ -44,6 +48,31 @@ fn retry_hint(retry_after: Option<u64>) -> String {
 }
 
 impl MetaError {
+    /// The error for a refused call: its status, `Retry-After` header and body.
+    /// The body's message is kept (redacted) for 402 and plain refusals.
+    pub(crate) fn from_status(
+        status: u16,
+        retry_after: Option<&str>,
+        body: &[u8],
+        secrets: &[&str],
+    ) -> Self {
+        match status {
+            401 => Self::Unauthorized,
+            402 => Self::Budget {
+                message: body_message(body, secrets).unwrap_or_default(),
+            },
+            403 => Self::NotAllowed,
+            429 => Self::RateLimited {
+                retry_after: retry_after.and_then(parse_retry_after),
+            },
+            500..=599 => Self::Overloaded,
+            _ => Self::BadRequest {
+                message: body_message(body, secrets)
+                    .unwrap_or_else(|| format!("The server answered with status {status}.")),
+            },
+        }
+    }
+
     /// A short plain sentence for the person using the app. Never contains
     /// the key or a token, and no em or en dashes.
     pub fn user_message(&self) -> String {
@@ -77,6 +106,49 @@ impl MetaError {
             Self::Decode(_) => "Meta sent an answer Klipolo could not read. Try again.".into(),
         }
     }
+}
+
+/// The message in an error body: Meta's `{"error": {"message": ..}}` or the
+/// relay's `{"error": code, "message": ..}`. Not JSON (an HTML page) gives none.
+fn body_message(body: &[u8], secrets: &[&str]) -> Option<String> {
+    let value: Value = serde_json::from_slice(body).ok()?;
+    let error = value.get("error");
+    let text = error
+        .and_then(|e| e.get("message"))
+        .or_else(|| value.get("message"))
+        .or(error)
+        .and_then(Value::as_str)?;
+    let text = redact(
+        &text.split_whitespace().collect::<Vec<_>>().join(" "),
+        secrets,
+    );
+    if text.is_empty() {
+        return None;
+    }
+    Some(match text.char_indices().nth(MAX_MESSAGE_CHARS) {
+        Some((cut, _)) => format!("{}...", &text[..cut]),
+        None => text,
+    })
+}
+
+/// `text` with every secret replaced. Run before any truncation, so no part
+/// of a secret survives.
+pub(crate) fn redact(text: &str, secrets: &[&str]) -> String {
+    secrets
+        .iter()
+        .filter(|s| !s.is_empty())
+        .fold(text.to_owned(), |text, secret| {
+            text.replace(secret, "[redacted]")
+        })
+}
+
+/// Seconds from a `Retry-After` header. An HTTP date gives none.
+fn parse_retry_after(value: &str) -> Option<u64> {
+    let value = value.trim();
+    value.parse::<u64>().ok().or_else(|| {
+        let seconds = value.parse::<f64>().ok()?;
+        (seconds.is_finite() && seconds >= 0.0).then(|| seconds.ceil() as u64)
+    })
 }
 
 /// `text` as plain copy ending in a full stop, or `fallback` when it is blank.
@@ -116,6 +188,37 @@ mod tests {
         assert_eq!(sentence("Invalid audio", "x"), "Invalid audio.");
         assert_eq!(sentence("Done!", "x"), "Done!");
         assert_eq!(sentence("  ", "Fallback."), "Fallback.");
+    }
+
+    #[test]
+    fn messages_are_redacted_before_they_are_cut() {
+        let secret = "sk-secret-123";
+        let body = format!(r#"{{"error": {{"message": "bad key {secret}"}}}}"#);
+        assert_eq!(
+            body_message(body.as_bytes(), &[secret]).as_deref(),
+            Some("bad key [redacted]")
+        );
+        let long = format!(
+            r#"{{"message": "{}{secret}"}}"#,
+            "x".repeat(MAX_MESSAGE_CHARS - 3)
+        );
+        let message = body_message(long.as_bytes(), &[secret]).unwrap();
+        assert!(!message.contains("sk-"), "{message}");
+        assert!(message.ends_with("..."));
+    }
+
+    #[test]
+    fn non_json_bodies_have_no_message() {
+        assert_eq!(body_message(b"<html>Bad gateway</html>", &[]), None);
+        assert_eq!(body_message(br#"{"error": {"message": "  "}}"#, &[]), None);
+    }
+
+    #[test]
+    fn retry_after_reads_seconds_only() {
+        assert_eq!(parse_retry_after(" 7 "), Some(7));
+        assert_eq!(parse_retry_after("1.5"), Some(2));
+        assert_eq!(parse_retry_after("Wed, 21 Oct 2026 07:28:00 GMT"), None);
+        assert_eq!(parse_retry_after("-3"), None);
     }
 
     #[test]
