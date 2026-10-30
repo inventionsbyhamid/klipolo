@@ -37,7 +37,7 @@ pub trait NativeHost {
 }
 
 /// The window's webview hosts the native layer (macOS); elsewhere there is none.
-struct WindowHost<'a>(&'a WebviewWindow);
+struct WindowHost<'a>(#[cfg_attr(not(target_os = "macos"), allow(dead_code))] &'a WebviewWindow);
 
 impl NativeHost for WindowHost<'_> {
     #[cfg(target_os = "macos")]
