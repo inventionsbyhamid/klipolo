@@ -23,5 +23,3 @@ dist/
 # Tauri's generated schemas (tauri-build writes them on every build)
 crates/klipolo-app/gen/
 
-# Generated TypeScript bindings and code lists (cargo test writes them)
-src/bindings/

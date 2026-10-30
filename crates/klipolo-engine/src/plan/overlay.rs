@@ -255,8 +255,8 @@ pub fn overlay_layers(
 }
 
 /// When `item` is first drawn whole: once its enter preset has run (every preset starts hidden or off-canvas),
-/// otherwise at its start. The editor puts the playhead here to show an item (a new title, a picked layer), so a
-/// paused preview never sits on a frame the enter hides. Mirrored by `shownFromUs` in `src/lib/timeline.ts` and
+/// otherwise at its start. The editor puts the playhead here to show an item (a new title, a picked layer), so a paused
+/// preview never sits on a frame the enter hides. Mirrored by `shownFromUs` in `apps/desktop/src/lib/timeline.ts` and
 /// pinned by `tests/parity.rs`.
 pub fn shown_from_us(item: &Item) -> Us {
     item.layout
@@ -268,10 +268,10 @@ pub fn shown_from_us(item: &Item) -> Us {
         })
 }
 
-/// How much bigger a text layer's font is drawn in `format` than its size says. Text scales with its box: `size`
-/// is its font in the primary format's box, and a format whose box is taller in pixels (its own placement, or a
-/// derived one the canvas squeezes) draws it bigger by the same ratio. 1 in the primary format and wherever the
-/// box is derived unsqueezed. Mirrored by `textScale` in `src/lib/layout.ts` and pinned by `tests/parity.rs`.
+/// How much bigger a text layer's font is drawn in `format` than its size says. Text scales with its box: `size` is its
+/// font in the primary format's box, and a format whose box is taller in pixels (its own placement, or a derived one
+/// the canvas squeezes) draws it bigger by the same ratio. 1 in the primary format and wherever the box is derived
+/// unsqueezed. Mirrored by `textScale` in `apps/desktop/src/lib/layout.ts` and pinned by `tests/parity.rs`.
 pub fn text_scale(layout: &Layout, primary: FormatKind, format: FormatKind) -> f64 {
     let (pw, ph) = canvas(primary);
     let (fw, fh) = canvas(format);
@@ -284,7 +284,7 @@ pub fn text_scale(layout: &Layout, primary: FormatKind, format: FormatKind) -> f
 }
 
 /// The asset's shape, centred in its layout box (like the DOM stage's object-contain).
-/// Mirrored by `containRect` in `src/lib/layout.ts` (gizmo boxes) and pinned by `tests/parity.rs`.
+/// Mirrored by `containRect` in `apps/desktop/src/lib/layout.ts` (gizmo boxes) and pinned by `tests/parity.rs`.
 pub fn contain(rect: BoxN, asset: &Asset, format: FormatKind) -> BoxN {
     let target = area_aspect(rect, format);
     fit_rect(rect, aspect_of(asset.width, asset.height, target), format)

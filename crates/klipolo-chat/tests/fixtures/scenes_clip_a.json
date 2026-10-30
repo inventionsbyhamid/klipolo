@@ -1,0 +1,164 @@
+{
+ "items": [
+  {
+   "startUs": 0,
+   "endUs": 12800000,
+   "kind": "b_roll",
+   "who": "divers and astronauts",
+   "text": "Overhead view of spacesuited astronauts training underwater with scuba divers around station mockup",
+   "onScreenText": null
+  },
+  {
+   "startUs": 500000,
+   "endUs": 12500000,
+   "kind": "answer",
+   "who": "female astronaut",
+   "text": "Voiceover about troubleshooting with ground team to keep station safe",
+   "onScreenText": null
+  },
+  {
+   "startUs": 12800000,
+   "endUs": 13500000,
+   "kind": "scene_cut",
+   "who": "student Kaiden",
+   "text": "Cut from underwater pool to boy in library",
+   "onScreenText": null
+  },
+  {
+   "startUs": 13500000,
+   "endUs": 23000000,
+   "kind": "question",
+   "who": "student Kaiden",
+   "text": "Asks how do you stay entertained on long-term and short-term trips",
+   "onScreenText": null
+  },
+  {
+   "startUs": 23000000,
+   "endUs": 24500000,
+   "kind": "scene_cut",
+   "who": "male astronaut",
+   "text": "Cut from library to two astronauts floating inside space station",
+   "onScreenText": null
+  },
+  {
+   "startUs": 24500000,
+   "endUs": 51500000,
+   "kind": "answer",
+   "who": "male astronaut",
+   "text": "Says living in space and floating in microgravity never gets tiring",
+   "onScreenText": null
+  },
+  {
+   "startUs": 40500000,
+   "endUs": 45000000,
+   "kind": "gesture",
+   "who": "male astronaut",
+   "text": "Raises arm overhead while describing floating",
+   "onScreenText": null
+  },
+  {
+   "startUs": 49000000,
+   "endUs": 51500000,
+   "kind": "gesture",
+   "who": "female astronaut",
+   "text": "Extends arm out to side while listening",
+   "onScreenText": null
+  },
+  {
+   "startUs": 51500000,
+   "endUs": 52500000,
+   "kind": "scene_cut",
+   "who": "student Will",
+   "text": "Cut from space station back to library for next student",
+   "onScreenText": null
+  },
+  {
+   "startUs": 52500000,
+   "endUs": 62500000,
+   "kind": "question",
+   "who": "student Will",
+   "text": "Asks what skills developed in space surprised you",
+   "onScreenText": null
+  },
+  {
+   "startUs": 62500000,
+   "endUs": 63500000,
+   "kind": "scene_cut",
+   "who": "female astronaut",
+   "text": "Cut from library to astronauts in station module",
+   "onScreenText": null
+  },
+  {
+   "startUs": 63500000,
+   "endUs": 85500000,
+   "kind": "answer",
+   "who": "female astronaut",
+   "text": "Says feet learn to hold on and do tasks you never think about on Earth",
+   "onScreenText": null
+  },
+  {
+   "startUs": 67000000,
+   "endUs": 85000000,
+   "kind": "demonstration",
+   "who": "female astronaut",
+   "text": "Pushes off and floats sideways to demonstrate using feet in weightlessness",
+   "onScreenText": null
+  },
+  {
+   "startUs": 71000000,
+   "endUs": 73000000,
+   "kind": "laugh",
+   "who": "male astronaut",
+   "text": "Smiles while watching crewmate float and demonstrate",
+   "onScreenText": null
+  },
+  {
+   "startUs": 85500000,
+   "endUs": 86500000,
+   "kind": "scene_cut",
+   "who": "student Peyton",
+   "text": "Cut from station to girl in pink shirt in library",
+   "onScreenText": null
+  },
+  {
+   "startUs": 86500000,
+   "endUs": 95500000,
+   "kind": "question",
+   "who": "student Peyton",
+   "text": "Asks how do you deal with challenges during missions",
+   "onScreenText": null
+  },
+  {
+   "startUs": 95500000,
+   "endUs": 97000000,
+   "kind": "scene_cut",
+   "who": "male astronaut",
+   "text": "Cut from library back to two astronauts in station",
+   "onScreenText": null
+  },
+  {
+   "startUs": 98000000,
+   "endUs": 149500000,
+   "kind": "answer",
+   "who": "male astronaut",
+   "text": "Says train for challenges and rely on team and ground specialists for help",
+   "onScreenText": null
+  },
+  {
+   "startUs": 149500000,
+   "endUs": 150500000,
+   "kind": "scene_cut",
+   "who": "student Noelle",
+   "text": "Cut from station to girl in pink hoodie in library",
+   "onScreenText": null
+  },
+  {
+   "startUs": 150500000,
+   "endUs": 154500000,
+   "kind": "question",
+   "who": "student Noelle",
+   "text": "Asks are there any natural disasters on the other planets",
+   "onScreenText": null
+  }
+ ]
+}

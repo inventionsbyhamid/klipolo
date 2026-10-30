@@ -159,7 +159,7 @@ pub struct CursorStyle {
     /// `#RRGGBBAA` in the JSON.
     #[ts(type = "string")]
     pub click_color: Rgba,
-    /// 0–1 of a 180° shutter's smear.
+    /// 0 to 1 of a 180° shutter's smear.
     pub motion_blur: f64,
 }
 

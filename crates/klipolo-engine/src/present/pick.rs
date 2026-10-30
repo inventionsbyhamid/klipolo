@@ -1,5 +1,5 @@
 //! Which frame to present next: frames are shown at their due time, never just because they arrived.
-//! Pure, so it is tested without a display. `src/lib/framePick.ts` is the socket path's twin.
+//! Pure, so it is tested without a display. `apps/desktop/src/preview/framePick.ts` is the socket path's twin.
 
 /// The host clock in ns (`klipolo_platform::clock`): on macOS the clock `MTLDrawable.presentedTime` and
 /// `presentDrawable:atTime:` use (CLOCK_UPTIME_RAW).

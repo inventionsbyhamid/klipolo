@@ -1,0 +1,70 @@
+{
+  "sessionId": "klipolo-spike-diarization-1793357252",
+  "transcript": "But it's also also super rewarding because it's just the two of you there working with the ground team to figure out how to fix problems and figure out how to troubleshoot and get through the tasks and make sure that the station stays safe. Hi, my name is Caden and my my question is how do you stay entertained on long term and short term trips? Hi Caden, space is such unique environment that it's a lot of fun for me to just be here and live here and just like Nicole said, floating in microgravity like this I will never get tired of so that's my favorite thing to do in space. Thank you for a great question. Hi my name is Will and my question is what skills or abilities abilities have you developed in space that surprised you? Hey Will, so I think one of the things that surprises me most is that your feet actually learn how to how to hold on to things and so we kind of learn early on how to hold on to a handrail like this and just kind of float and do whatever you need to with your feet it's something that you don't really think about when you're on the earth Hi my name is Peyton and my question is how do you deal with challenges during missions? Thank you for the for the great question so when I face challenges sometimes I can manage to deal with those challenges just by myself when I've seen similar challenges throughout my training so that's why the training for astronaut is so important and also we help each other so that we can deal with challenges as a as a team and most importantly we can get a great support from the ground and there are are so many specialists on the ground who has who have a lot of experiences and and knowledge and those people can find a way to deal with any challenges we've seen on board the ISS. So we are in a good hands thank you for the great question. Hi, my name is Noelle and my question is are there any",
+  "audioDurationMs": 155040,
+  "turns": [
+    {
+      "turnId": 0,
+      "startMs": 60,
+      "endMs": 10780,
+      "transcript": "But it's also also super rewarding because it's just the two of you there working with the ground team to figure out how to fix problems and figure out how to troubleshoot and get through the tasks and make sure that the station stays safe.",
+      "speaker": "A"
+    },
+    {
+      "turnId": 1,
+      "startMs": 14380,
+      "endMs": 20860,
+      "transcript": "Hi, my name is Caden and my my question is how do you stay entertained on long term and short term trips?",
+      "speaker": "B"
+    },
+    {
+      "turnId": 2,
+      "startMs": 27180,
+      "endMs": 49020,
+      "transcript": "Hi Caden, space is such unique environment that it's a lot of fun for me to just be here and live here and just like Nicole said, floating in microgravity like this I will never get tired of so that's my favorite thing to do in space.",
+      "speaker": "C"
+    },
+    {
+      "turnId": 3,
+      "startMs": 49020,
+      "endMs": 50940,
+      "transcript": "Thank you for a great question.",
+      "speaker": "C"
+    },
+    {
+      "turnId": 4,
+      "startMs": 53180,
+      "endMs": 59500,
+      "transcript": "Hi my name is Will and my question is what skills or abilities abilities have you developed in space that surprised you?",
+      "speaker": "D"
+    },
+    {
+      "turnId": 5,
+      "startMs": 63820,
+      "endMs": 83180,
+      "transcript": "Hey Will, so I think one of the things that surprises me most is that your feet actually learn how to how to hold on to things and so we kind of learn early on how to hold on to a handrail like this and just kind of float and do whatever you need to with your feet it's something that you don't really think about when you're on the earth",
+      "speaker": "A"
+    },
+    {
+      "turnId": 6,
+      "startMs": 86860,
+      "endMs": 92460,
+      "transcript": "Hi my name is Peyton and my question is how do you deal with challenges during missions?",
+      "speaker": "E"
+    },
+    {
+      "turnId": 7,
+      "startMs": 99340,
+      "endMs": 149260,
+      "transcript": "Thank you for the for the great question so when I face challenges sometimes I can manage to deal with those challenges just by myself when I've seen similar challenges throughout my training so that's why the training for astronaut is so important and also we help each other so that we can deal with challenges as a as a team and most importantly we can get a great support from the ground and there are are so many specialists on the ground who has who have a lot of experiences and and knowledge and those people can find a way to deal with any challenges we've seen on board the ISS. So we are in a good hands thank you for the great question.",
+      "speaker": "C"
+    },
+    {
+      "turnId": 8,
+      "startMs": 151500,
+      "endMs": 154540,
+      "transcript": "Hi, my name is Noelle and my question is are there any",
+      "speaker": "F"
+    }
+  ]
+}

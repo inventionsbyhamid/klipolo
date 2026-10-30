@@ -12,7 +12,7 @@
 //! and `speech::voice_runs` expect sound time and add the lead themselves.
 
 use std::fs::File;
-use std::io::{self, BufWriter, Seek, SeekFrom, Write};
+use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::ops::Range;
 use std::path::Path;
 
@@ -377,6 +377,61 @@ pub fn read_pcm(wav: &[u8]) -> Result<MonoPcm, AudioError> {
     })
 }
 
+/// `read_pcm` of the WAV file at `path` (the same rules and answers), read in 64 KiB pieces straight into the samples:
+/// the file's bytes are never held beside them, so a 25-minute clip takes 48 MB, not 96.
+pub fn read_pcm_file(path: &Path) -> Result<MonoPcm, AudioError> {
+    let mut file = File::open(path)?;
+    let len = file.metadata()?.len();
+    let mut head = [0u8; 12];
+    if file.read_exact(&mut head).is_err() || &head[0..4] != b"RIFF" || &head[8..12] != b"WAVE" {
+        return Err(AudioError::NotWav);
+    }
+    let mut format = None;
+    let mut at: u64 = 12;
+    loop {
+        let mut chunk = [0u8; 8];
+        file.read_exact(&mut chunk)
+            .map_err(|_| AudioError::NotWav)?;
+        let size = u64::from(u32::from_le_bytes([chunk[4], chunk[5], chunk[6], chunk[7]]));
+        let body = at + 8;
+        if &chunk[0..4] == b"fmt " {
+            // As `layout` reads it: the first 16 bytes of the body.
+            let mut fmt = [0u8; 16];
+            file.read_exact(&mut fmt).map_err(|_| AudioError::NotWav)?;
+            let u16_at = |i: usize| u16::from_le_bytes([fmt[i], fmt[i + 1]]);
+            let rate = u32::from_le_bytes([fmt[4], fmt[5], fmt[6], fmt[7]]);
+            let (tag, channels, bits) = (u16_at(0), u16_at(2), u16_at(14));
+            if tag != 1 || bits != 16 || channels == 0 || rate == 0 {
+                return Err(AudioError::NotWav);
+            }
+            format = Some((rate, channels));
+        } else if &chunk[0..4] == b"data" {
+            let (rate, channels) = format.ok_or(AudioError::NotWav)?;
+            if channels != 1 {
+                return Err(AudioError::NotMono);
+            }
+            // A streamed file may state more than it holds (or 0xFFFFFFFF): only what is there counts.
+            let mut left = (size.min(len.saturating_sub(body)) / 2 * 2) as usize;
+            let mut samples = Vec::with_capacity(left / 2);
+            let mut piece = vec![0u8; 64 * 1024];
+            while left > 0 {
+                let n = left.min(piece.len());
+                file.read_exact(&mut piece[..n])?;
+                samples.extend(
+                    piece[..n]
+                        .chunks_exact(2)
+                        .map(|b| i16::from_le_bytes([b[0], b[1]])),
+                );
+                left -= n;
+            }
+            return Ok(MonoPcm { rate, samples });
+        }
+        // Chunks are padded to an even length.
+        at = body + size + (size & 1);
+        file.seek(SeekFrom::Start(at))?;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -510,5 +565,57 @@ mod tests {
             "stereo"
         );
         assert!(matches!(read_pcm(b"RIFF"), Err(AudioError::NotWav)));
+    }
+
+    /// The file is read in pieces straight into the samples: the same answer as `read_pcm` of its bytes, for every
+    /// shape `read_pcm` takes or refuses.
+    #[test]
+    fn reading_a_file_matches_reading_its_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let samples: Vec<i16> = (0..100_003)
+            .map(|i| (i * 7919 % 65_536 - 32_768) as i16)
+            .collect();
+        let body: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
+        let plain = [
+            wav_header(16_000, 1, body.len() as u32).to_vec(),
+            body.clone(),
+        ]
+        .concat();
+        let mut listed = plain.clone();
+        listed.splice(
+            36..36,
+            [b'L', b'I', b'S', b'T', 3, 0, 0, 0, b'a', b'b', b'c', 0],
+        );
+        // A streamed file's sizes: 0xFFFFFFFF, and a last odd byte that is no whole sample.
+        let mut streamed = plain.clone();
+        streamed[40..44].copy_from_slice(&u32::MAX.to_le_bytes());
+        streamed.push(9);
+        let mut short = plain.clone();
+        short.truncate(44 + 1_000);
+        let cases: [(&str, Vec<u8>); 7] = [
+            ("plain", plain),
+            ("listed", listed),
+            ("streamed", streamed),
+            ("short", short),
+            (
+                "stereo",
+                [wav_header(16_000, 2, 4).to_vec(), vec![1, 0, 2, 0]].concat(),
+            ),
+            ("no data", wav_header(16_000, 1, 0)[..36].to_vec()),
+            ("not a wav", b"RIFX0000WAVE".to_vec()),
+        ];
+        for (name, bytes) in cases {
+            let path = dir.path().join(format!("{name}.wav"));
+            std::fs::write(&path, &bytes).unwrap();
+            let from_file = read_pcm_file(&path).map_err(|e| e.to_string());
+            let from_bytes = read_pcm(&bytes).map_err(|e| e.to_string());
+            assert_eq!(from_file, from_bytes, "{name}");
+        }
+        let all = read_pcm_file(&dir.path().join("plain.wav")).unwrap();
+        assert_eq!(all.samples, samples);
+        assert!(matches!(
+            read_pcm_file(&dir.path().join("missing.wav")),
+            Err(AudioError::Io(_))
+        ));
     }
 }

@@ -19,11 +19,16 @@ services:
       META_API_KEY: ${META_API_KEY:-}
     volumes:
       - klipolo-relay-data:/data
+    # Alignment audio waits in /tmp: up to 8 requests of 19 MB. In memory
+    # (counted in the 6 GB), so none of it outlives a crash or a restart.
+    tmpfs:
+      - /tmp:size=200m,mode=1777
     cpus: 8
     mem_limit: 6g
     memswap_limit: 6g
     # uvicorn waits for calls in flight on SIGTERM, including streams drained
-    # after a client left and alignments of up to 10 minutes of audio.
+    # after a client left. Two 10-minute alignments at once take longer than
+    # this, so restart only when idle (README.md).
     stop_grace_period: 330s
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5)"]
@@ -52,6 +57,23 @@ services:
       - traefik.http.routers.klipolo-relay-https.tls=true
       - traefik.http.routers.klipolo-relay-https.tls.certresolver=letsencrypt
       - traefik.http.routers.klipolo-relay-https.service=klipolo-relay
+      - traefik.http.routers.klipolo-relay-https.middlewares=klipolo-relay-limit
+      # Rate limits per client IP: 10 requests a second with bursts of 30.
+      # Registering is open to anyone and is where access codes are tried,
+      # so it has its own router with a stricter limit: 10 a minute, bursts
+      # of 5. Its longer rule gives it the higher priority.
+      - traefik.http.middlewares.klipolo-relay-limit.ratelimit.average=10
+      - traefik.http.middlewares.klipolo-relay-limit.ratelimit.period=1s
+      - traefik.http.middlewares.klipolo-relay-limit.ratelimit.burst=30
+      - traefik.http.middlewares.klipolo-relay-register-limit.ratelimit.average=10
+      - traefik.http.middlewares.klipolo-relay-register-limit.ratelimit.period=1m
+      - traefik.http.middlewares.klipolo-relay-register-limit.ratelimit.burst=5
+      - traefik.http.routers.klipolo-relay-register.entrypoints=https
+      - traefik.http.routers.klipolo-relay-register.rule=Host(`api.klipolo.com`) && Method(`POST`) && Path(`/v1/devices`)
+      - traefik.http.routers.klipolo-relay-register.tls=true
+      - traefik.http.routers.klipolo-relay-register.tls.certresolver=letsencrypt
+      - traefik.http.routers.klipolo-relay-register.middlewares=klipolo-relay-register-limit
+      - traefik.http.routers.klipolo-relay-register.service=klipolo-relay
       - traefik.http.services.klipolo-relay.loadbalancer.server.port=8080
 
 volumes:

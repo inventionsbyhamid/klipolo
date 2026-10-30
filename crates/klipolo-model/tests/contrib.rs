@@ -592,7 +592,8 @@ fn builtin_catalog_json_is_current() {
         7
     );
     assert_golden(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/lib/builtin-catalog.json"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/desktop/src/lib/builtin-catalog.json"),
         &defs,
     );
 }

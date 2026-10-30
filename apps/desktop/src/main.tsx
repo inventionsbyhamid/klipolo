@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { suppressContextMenu } from './layout/contextMenu';
+import './styles/tailwind.css';
 import './styles/tokens.css';
 import './styles/app.css';
 
