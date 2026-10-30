@@ -15,6 +15,7 @@ import {
   enginePlay,
   engineSeek,
   engineSetView,
+  engineSetVisible,
   engineView,
   projectSummary,
   type EngineEvent,
@@ -66,6 +67,16 @@ describe('engine bridge', () => {
     expect(invoke.mock.calls).toEqual([
       ['engine_play', undefined],
       ['engine_pause', undefined],
+    ]);
+  });
+
+  it('tells the engine when the window is hidden and shown', async () => {
+    invoke.mockResolvedValue(undefined);
+    await engineSetVisible(false);
+    await engineSetVisible(true);
+    expect(invoke.mock.calls).toEqual([
+      ['engine_set_visible', { visible: false }],
+      ['engine_set_visible', { visible: true }],
     ]);
   });
 

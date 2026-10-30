@@ -47,6 +47,7 @@ fn main() {
             engine::engine_attach,
             engine::engine_view,
             engine::engine_set_view,
+            engine::engine_set_visible,
             engine::engine_seek,
             engine::engine_play,
             engine::engine_pause,

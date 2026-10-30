@@ -254,6 +254,21 @@ pub fn engine_set_view(state: State<'_, EngineState>, view: ViewSpec) {
     }
 }
 
+/// The window was hidden or minimised (`false`): the engine pauses with silence and lets its decoders go, until it
+/// is shown again (`true`).
+#[tauri::command]
+pub fn engine_set_visible(state: State<'_, EngineState>, visible: bool) {
+    set_visible(&state, visible);
+}
+
+/// `engine_set_visible`, for the running engine (nothing before the first attach).
+pub fn set_visible(state: &EngineState, visible: bool) {
+    if let Some(engine) = state.slot.running() {
+        tracing::info!(visible, "the window's visibility changed");
+        engine.set_visible(visible);
+    }
+}
+
 /// Shows the frame at `at_us`. `seq` names the seek: frames carry it, and a seek older than the newest is ignored.
 #[tauri::command]
 pub fn engine_seek(state: State<'_, EngineState>, at_us: Us, seq: u32) {
@@ -364,6 +379,88 @@ mod tests {
         };
         let backend = klipolo_engine::session::blank::BlankBackend::new();
         Engine::start(options, feed, backend).await
+    }
+
+    /// A project with one 10 s video on the main track (the blank backend never opens the file).
+    fn one_clip() -> Project {
+        use klipolo_model::project::{Asset, AssetKind};
+        use klipolo_model::timeline::{Clip, ClipSource};
+        let mut project = Project::new("Test");
+        project.assets = vec![Asset {
+            id: "v".into(),
+            kind: AssetKind::Video,
+            path: "/media/v.mp4".into(),
+            name: "v.mp4".into(),
+            duration_us: 10_000_000,
+            width: 1920,
+            height: 1080,
+            fps: 30.0,
+            rotation: Some(0),
+            has_audio: false,
+            audio_lead_us: Some(0),
+        }];
+        project.timeline.main = vec![Clip::new(
+            ClipSource::Asset { id: "v".into() },
+            0,
+            10_000_000,
+        )];
+        project
+    }
+
+    /// Hidden or minimised, the window pauses playback (the engine lets its decoders go), and shown again it stays
+    /// paused where it stopped.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn hiding_the_window_pauses_playback() {
+        let projects = ProjectState::default();
+        projects.open(one_clip());
+        let state = EngineState::new(None, None);
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let sink: EventSink = {
+            let seen = seen.clone();
+            Arc::new(move |event| seen.lock().unwrap().push(event))
+        };
+        let socket = Some("socket");
+        let engine = attach(
+            &state,
+            || blank_engine(projects.feed()),
+            &Detached,
+            sink,
+            socket,
+        );
+        engine.await.unwrap();
+        state
+            .slot
+            .running()
+            .unwrap()
+            .set_view(klipolo_engine::api::ViewSpec {
+                format: klipolo_model::project::FormatKind::Landscape,
+                width: 64,
+                height: 36,
+            });
+        state.slot.running().unwrap().play(0, 1.0, 0).await.unwrap();
+
+        set_visible(&state, false);
+        let hidden = |e: &EngineEvent| {
+            matches!(
+                e,
+                EngineEvent::State {
+                    playing: false,
+                    reason: klipolo_engine::api::StateReason::Hidden,
+                    ..
+                }
+            )
+        };
+        for _ in 0..200 {
+            if seen.lock().unwrap().iter().any(hidden) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(
+            seen.lock().unwrap().iter().any(hidden),
+            "playback stopped because the window was hidden"
+        );
+        set_visible(&state, true);
     }
 
     /// A reloaded page attaches again and numbers its seeks from 1, as the engine expects (it starts its count over on
