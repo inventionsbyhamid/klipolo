@@ -7,8 +7,7 @@ import { captureBase } from '../../state/project';
 import { clearPreview, dropPendingPreview, previewOps } from '../../state/livePreview';
 import { queueCommit } from '../../state/commit';
 
-/** A burst of quick changes commits as one undo step this long after the last one. */
-
+/** One change of a burst: quick changes commit as one undo step `SETTLE_MS` (`state/bursts`) after the last one. */
 export interface BurstChange {
   /** Its undo label: a message id, with the values it shows. */
   label: Label;
