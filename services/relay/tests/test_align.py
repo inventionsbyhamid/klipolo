@@ -2,7 +2,6 @@
 (marked slow: needs torch and the model, so it runs in the container)."""
 
 import json
-import os
 import time
 import wave
 from pathlib import Path
@@ -10,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from relay import align
+from relay.config import load_settings
 from relay.align import (
     FAILED,
     NO_TEXT,
@@ -249,7 +249,7 @@ def test_a_wrong_number_of_spans_skips_the_turn():
 @pytest.fixture(scope="module")
 def mms():
     pytest.importorskip("torchaudio")
-    aligner = align.MmsAligner(threads=int(os.environ.get("ALIGN_THREADS", "8")))
+    aligner = align.MmsAligner(threads=load_settings().align_threads)
     started = time.monotonic()
     aligner.load()
     print(f"\nmodel loaded in {time.monotonic() - started:.1f} s")

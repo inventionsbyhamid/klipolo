@@ -583,8 +583,8 @@ def test_a_device_gets_at_most_two_alignments_at_once(tmp_path, temp_dir):
 
 
 def test_the_model_gets_the_thread_setting(tmp_path):
-    settings = load_settings({"RELAY_DB_PATH": str(tmp_path / "relay.db"), "ALIGN_THREADS": "3"})
-    assert create_app(settings).state.aligner.threads == 3
+    settings = load_settings({"RELAY_DB_PATH": str(tmp_path / "relay.db"), "ALIGN_THREADS": "5"})
+    assert create_app(settings).state.aligner.threads == 5
 
 
 @pytest.mark.parametrize(("flag", "loads"), [("1", 1), ("0", 0)])

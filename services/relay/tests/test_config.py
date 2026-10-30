@@ -13,7 +13,7 @@ def test_defaults_match_the_documented_caps():
     assert settings.global_cap_usd == 40.00
     assert settings.align_minutes_per_device_per_day == 120
     assert settings.align_concurrency == 2
-    assert settings.align_threads == 8
+    assert settings.align_threads == 3
     assert settings.meta_api_key == ""
 
 

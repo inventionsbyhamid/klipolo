@@ -57,7 +57,8 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
             env, "ALIGN_MINUTES_PER_DEVICE_PER_DAY", "120", float, 0
         ),
         align_concurrency=_number(env, "ALIGN_CONCURRENCY", "2", int, 1),
-        align_threads=_number(env, "ALIGN_THREADS", "8", int, 1),
+        # 2 alignments x 3 threads leaves CPU for the proxy's event loop.
+        align_threads=_number(env, "ALIGN_THREADS", "3", int, 1),
         meta_api_key=env.get("META_API_KEY", ""),
         align_warmup=_flag(env, "ALIGN_WARMUP", "0"),
     )
