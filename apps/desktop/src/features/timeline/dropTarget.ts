@@ -154,8 +154,10 @@ export function timelineTargetAt(
     const lane = row.dataset.lane;
     if (lane === 'main') return { lane: 'main', index: nearestCut(project.timeline.main, pointerUs) };
     if (lane === 'layers') return picture();
-    // Music and sound effects are both sound layers; what makes a song music (ducking) is set as it is added.
-    if (lane === 'sounds' || lane === 'music') return sound(lane);
+    // Music and sound effects are both sound layers; what makes a song music (ducking) is set as it is added. No drop
+    // sets it yet (music drops come with the library), so a sound held over the Music lane lands among the sound
+    // effects and shows there.
+    if (lane === 'sounds' || lane === 'music') return sound('sounds');
   }
   return null;
 }

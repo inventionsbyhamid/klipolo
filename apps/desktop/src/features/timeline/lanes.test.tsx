@@ -19,7 +19,7 @@ const { useSelection } = await import('../../state/selection');
 const { useUi } = await import('../../state/ui');
 const { Timeline } = await import('./Timeline');
 const { audioRole } = await import('./lanes/audioRole');
-const { setDropIndicator } = await import('./dropTarget');
+const { dropTargetAt, setDropIndicator } = await import('./dropTarget');
 
 const S = 1_000_000;
 type AudioContent = Extract<ItemContent, { type: 'audio' }>;
@@ -65,16 +65,29 @@ describe('the four lanes', () => {
     expect(sounds.querySelector('.tl-lane')).not.toHaveClass('is-empty');
   });
 
-  it('a file held over the Music lane marks the Music lane alone, with a dashed edge', () => {
+  it('a sound held over the Music lane shows on the Sounds lane, where it lands; each lane marks only its own', () => {
     useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
     renderWithProviders(<Timeline />);
-    const lane = (name: string) => screen.getByRole('group', { name }).querySelector('.tl-lane')!;
-    act(() => setDropIndicator({ lane: 'sound', trackId: null, atUs: 0, row: 'music' }));
-    expect(lane('Music')).toHaveClass('is-drop');
-    expect(lane('Sound effects')).not.toHaveClass('is-drop');
-    act(() => setDropIndicator({ lane: 'sound', trackId: null, atUs: 0, row: 'sounds' }));
+    const lane = (name: string) => screen.getByRole('group', { name }).querySelector<HTMLElement>('.tl-lane')!;
+    // The lanes where a browser would put them, under a 20 px ruler (jsdom lays nothing out).
+    const scroller = screen.getByTestId('ruler').closest<HTMLElement>('.tl-scroll')!;
+    const box = (el: Element, top: number, height: number) =>
+      (el.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: top, width: 1240, height }));
+    box(scroller, 0, 200);
+    const rows = [
+      ['layers', 20, 24],
+      ['main', 49, 64],
+      ['sounds', 118, 22],
+      ['music', 145, 34],
+    ] as const;
+    for (const [name, top, height] of rows) box(document.querySelector(`[data-lane="${name}"]`)!, top, height);
+    act(() => setDropIndicator(dropTargetAt(40 + 120, 160, 'audio')));
     expect(lane('Sound effects')).toHaveClass('is-drop');
     expect(lane('Music')).not.toHaveClass('is-drop');
+    // A picture over the Overlays lane marks that lane alone.
+    act(() => setDropIndicator(dropTargetAt(40 + 120, 30, 'image')));
+    expect(lane('Text and images')).toHaveClass('is-drop');
+    expect(lane('Sound effects')).not.toHaveClass('is-drop');
     act(() => setDropIndicator(null));
   });
 });
