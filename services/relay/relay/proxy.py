@@ -1180,8 +1180,8 @@ _MEDIA_TYPES = frozenset({"item_reference", "input_image", "input_file", "input_
 
 def _refers_to_media(payload: dict[str, Any]) -> bool:
     """False only for a text-only call, whose cost the request's size bounds.
-    Anything else (any image, media or files by link or id, references to
-    stored items or reasoning, or a type the relay doesn't know) gets the
+    Anything else (any image or reasoning item, media or files by link or id,
+    references to stored items, or a type the relay doesn't know) gets the
     media amount in its reservation."""
     # Anywhere in the request: a stored file, a link, or a media part.
     for item in _objects(payload):
@@ -1219,11 +1219,8 @@ def _text_only(items: Any) -> bool:
         elif kind == "function_call_output":
             if not isinstance(item.get("output"), str):
                 return False
-        elif kind == "reasoning":
-            # Reasoning named by its id alone is stored context the request
-            # can't bound; carried inline, its bytes are in the request.
-            if not (item.get("encrypted_content") or item.get("summary") or item.get("content")):
-                return False
+        # Anything else, reasoning included: Meta can fill a reasoning item in
+        # from its id, so the request's bytes don't bound it.
         elif kind not in _TEXT_ITEMS:
             return False
     return True

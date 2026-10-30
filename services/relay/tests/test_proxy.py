@@ -738,6 +738,15 @@ def user(*parts):
 
 URL_IMAGE = {"type": "input_image", "image_url": "https://example.com/frame.jpg"}
 INLINE_IMAGE = {"type": "input_image", "image_url": "data:image/png;base64,iVBORw0KGgo="}
+TEXT_HISTORY = [
+    user({"type": "input_text", "text": "Cut the intro."}),
+    {"role": "assistant", "content": [{"type": "output_text", "text": "Which part?"}]},
+    {"role": "user", "content": "The first 13 seconds."},
+    {"type": "function_call", "call_id": "c1", "name": "cut", "arguments": "{\"end\": 13}"},
+    {"type": "function_call_output", "call_id": "c1", "output": "done"},
+]
+# Meta can fill a reasoning item in from its id, whatever else it carries.
+SUMMARIZED_REASONING = {"type": "reasoning", "id": "rs_1", "summary": [{"type": "summary_text", "text": "Plan."}]}
 MEDIA_REQUESTS = {
     "500-url-images": spark_request(input=[user(*[URL_IMAGE] * 500)]),
     "200-item-references": spark_request(input=[{"type": "item_reference", "id": f"msg_{i}"} for i in range(200)]),
@@ -756,25 +765,29 @@ MEDIA_REQUESTS = {
     "inline-image": spark_request(input=[user({"type": "input_text", "text": "What is this?"}, INLINE_IMAGE)]),
     "reasoning-by-id": spark_request(input=[{"type": "reasoning", "id": "rs_1"}]),
     "reasoning-with-empty-summary": spark_request(input=[{"type": "reasoning", "id": "rs_1", "summary": []}]),
+    "reasoning-in-text-history": spark_request(
+        instructions="Be brief.", input=[*TEXT_HISTORY[:3], SUMMARIZED_REASONING, *TEXT_HISTORY[3:]]
+    ),
+    "reasoning-with-a-summary": spark_request(
+        input=[{"type": "reasoning", "id": "rs_1", "summary": [{"type": "summary_text", "text": "x"}]}]
+    ),
+    "reasoning-with-a-string-summary": spark_request(input=[{"type": "reasoning", "id": "rs_1", "summary": "x"}]),
+    "reasoning-with-encrypted-content": spark_request(
+        input=[{"type": "reasoning", "id": "rs_1", "encrypted_content": "x"}]
+    ),
+    "reasoning-carried-inline": spark_request(
+        input=[{"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "gAAAAABo"}]
+    ),
+    "reasoning-without-an-id": spark_request(
+        input=[{"type": "reasoning", "summary": [{"type": "summary_text", "text": "x"}]}]
+    ),
+    "reasoning-in-instructions": spark_request(instructions=[SUMMARIZED_REASONING]),
     "list-typed-part": spark_request(input=[user({"type": ["input_text"], "text": "hi"})]),
     "list-typed-item": spark_request(input=[{"type": ["message"], "role": "user", "content": "hi"}]),
 }
 TEXT_REQUESTS = {
     "string-input": spark_request(),
-    "text-history": spark_request(
-        instructions="Be brief.",
-        input=[
-            user({"type": "input_text", "text": "Cut the intro."}),
-            {"role": "assistant", "content": [{"type": "output_text", "text": "Which part?"}]},
-            {"role": "user", "content": "The first 13 seconds."},
-            {"type": "reasoning", "id": "rs_1", "summary": [{"type": "summary_text", "text": "Plan."}]},
-            {"type": "function_call", "call_id": "c1", "name": "cut", "arguments": "{\"end\": 13}"},
-            {"type": "function_call_output", "call_id": "c1", "output": "done"},
-        ],
-    ),
-    "reasoning-carried-inline": spark_request(
-        input=[{"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "gAAAAABo"}]
-    ),
+    "text-history": spark_request(instructions="Be brief.", input=TEXT_HISTORY),
     "nullable-tool-property": spark_request(
         tools=[
             {
