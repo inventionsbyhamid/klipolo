@@ -192,6 +192,9 @@ pub const MESSAGES: Messages = &[
     ("model.audio.outside", "An audio layer is outside its source media."),
     ("model.audio.fades", "Audio fades can't be longer than the layer."),
     ("model.audio.duck", "Ducking can lower a sound by 0 to 30 dB."),
+    // media/music.rs: music the chat or the library adds (`add_music_ops`).
+    ("model.music.noSound", "That file has no sound to play as music."),
+    ("model.music.noRoom", "Music has to start before the video ends, and end after it starts."),
     ("model.layer.zoom", "Zoom must be between 1× and 5×."),
     ("model.layer.zoomArea", "The zoom area is invalid."),
     // params.rs: `label` is the setting's label (English). Also sent, outside the sentence: `contribution` and `key`,
