@@ -472,16 +472,15 @@ def test_transcribe_request_part_nested_too_deeply_is_400(client, conn, meta):
     assert not route.called
 
 
-def test_json_body_over_8_mib_is_413(client, conn, meta):
+@pytest.mark.parametrize(("size", "status"), [(2 * 1024 * 1024 - 200, 200), (2 * 1024 * 1024, 413)])
+def test_json_bodies_are_capped_at_2_mib(client, conn, meta, size, status):
     device = add_device(conn)
-    route = meta.post("/responses")
+    route = meta.post("/responses").respond(200, json=spark_body())
 
-    response = client.post(
-        "/meta/v1/responses", json=spark_request(input="x" * (8 * 1024 * 1024)), headers=device.headers
-    )
+    response = client.post("/meta/v1/responses", json=spark_request(input="x" * size), headers=device.headers)
 
-    assert response.status_code == 413
-    assert not route.called
+    assert response.status_code == status
+    assert route.called is (status == 200)
 
 
 def test_json_body_over_the_limit_is_413(client, conn, meta, monkeypatch):

@@ -86,7 +86,7 @@ UPSTREAM_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=300.0, pool=10.
 
 # Media goes up through the Files API and is referred to by file_id, so a
 # Responses body is text: prompts, tools and earlier turns.
-MAX_JSON_BYTES = 8 * 1024 * 1024
+MAX_JSON_BYTES = 2 * 1024 * 1024
 MAX_UPLOAD_BYTES = 1024**3
 # Multipart framing and the small form fields around an upload.
 UPLOAD_OVERHEAD_BYTES = 64 * 1024
