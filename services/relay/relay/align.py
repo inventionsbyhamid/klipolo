@@ -20,6 +20,7 @@ do not fit); slices that were not aligned are given back afterwards. The
 audio sits in a temp file only while the request runs; nothing is stored.
 """
 
+import asyncio
 import json
 import logging
 import math
@@ -266,12 +267,18 @@ def _word(turn: PlannedTurn, i: int, start_ms: int, end_ms: int, score: float) -
 
 
 def align_turns(
-    aligner: Aligner, read_pcm: Callable[[int, int], bytes], planned: Sequence[PlannedTurn]
+    aligner: Aligner,
+    read_pcm: Callable[[int, int], bytes],
+    planned: Sequence[PlannedTurn],
+    stop: Callable[[], bool] = lambda: False,
 ) -> Alignment:
     """Align each planned turn to its slice. A turn the model fails on is
-    skipped with a reason; the others still come back."""
+    skipped with a reason; the others still come back. `stop` is checked
+    before each turn, so work ends early once nobody waits for it."""
     result = Alignment()
     for turn in planned:
+        if stop():
+            break
         try:
             spans = aligner.align(read_pcm(turn.start, turn.end), turn.tokens)
             if len(spans) != len(turn.tokens):
@@ -387,11 +394,14 @@ async def align_words(request: Request, device: Device, conn: Conn, settings: Ap
     path = None
     reservation = None
     result = Alignment()
+    gone = threading.Event()
+    watcher = None
     try:
         boundary = _boundary(request)
         fd, path = tempfile.mkstemp(prefix="align-", suffix=".wav")
         with os.fdopen(fd, "wb") as audio_file:
             turns_raw = await _read_form(request, boundary, audio_file)
+        watcher = asyncio.create_task(_watch_for_hang_up(request, gone))
         turns = parse_turns(turns_raw)
         n_samples = await run_in_threadpool(wav_samples, path)
         planned, skipped = plan(turns, n_samples)
@@ -401,7 +411,10 @@ async def align_words(request: Request, device: Device, conn: Conn, settings: Ap
             started = time.monotonic()
             async with request.app.state.align_gate:
                 try:
-                    result = await anyio.to_thread.run_sync(_align_file, request.app.state.aligner, path, planned)
+                    if not gone.is_set():
+                        result = await anyio.to_thread.run_sync(
+                            _align_file, request.app.state.aligner, path, planned, gone.is_set
+                        )
                 except AlignerUnavailable:
                     raise RelayError(
                         503, "align_unavailable", "Word timing is not available right now. Try again later."
@@ -413,6 +426,9 @@ async def align_words(request: Request, device: Device, conn: Conn, settings: Ap
                 device_id[:8],
                 time.monotonic() - started,
             )
+        if gone.is_set():
+            # Nobody reads this; the unaligned turns are given back below.
+            return error_response(400, "client_disconnected", "The request was cut off.")
         return {
             "words": result.words,
             "skipped": [s.as_json() for s in sorted(skipped + result.skipped, key=lambda s: s.turn)],
@@ -420,6 +436,8 @@ async def align_words(request: Request, device: Device, conn: Conn, settings: Ap
     except ClientDisconnect:
         return error_response(400, "client_disconnected", "The request was cut off.")
     finally:
+        if watcher is not None:
+            watcher.cancel()
         if reservation is not None and reservation.seconds - result.seconds > 1e-6:
             with anyio.CancelScope(shield=True):
                 await run_in_threadpool(
@@ -481,7 +499,8 @@ def reserve_seconds(
 
 def refund_seconds(conn: sqlite3.Connection, device_id: str, reservation: Reservation, seconds: float) -> None:
     """Give back reserved seconds that were not aligned: skipped or failed
-    turns, a model that would not load. A failed write is logged; the device
+    turns, a model that would not load, a client that hung up. A failed
+    write is logged; the device
     is then charged too much, never too little."""
     try:
         with db.transaction(conn):
@@ -574,7 +593,18 @@ def wav_samples(path: str) -> int:
     return n_samples
 
 
-def _align_file(aligner: Aligner, path: str, planned: Sequence[PlannedTurn]) -> Alignment:
+async def _watch_for_hang_up(request: Request, gone: threading.Event) -> None:
+    """With the body read, the next message is the client hanging up."""
+    while True:
+        message = await request.receive()
+        if message["type"] == "http.disconnect":
+            gone.set()
+            return
+
+
+def _align_file(
+    aligner: Aligner, path: str, planned: Sequence[PlannedTurn], stop: Callable[[], bool]
+) -> Alignment:
     """The CPU work, in a worker thread."""
     try:
         aligner.load()
@@ -587,7 +617,7 @@ def _align_file(aligner: Aligner, path: str, planned: Sequence[PlannedTurn]) -> 
             audio.setpos(start)
             return audio.readframes(end - start)
 
-        return align_turns(aligner, read_pcm, planned)
+        return align_turns(aligner, read_pcm, planned, stop)
 
 
 def _today() -> str:

@@ -10,8 +10,10 @@ import threading
 import time
 import uuid
 import wave
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
+import anyio
 import pytest
 from fastapi.testclient import TestClient
 
@@ -19,6 +21,7 @@ from relay import db
 from relay.align import FAILED, NO_TEXT, emission_frames
 from relay.app import create_app
 from relay.config import load_settings
+from relay.devices import hash_token
 
 DEVICE = "0f8fad5b-d9cb-469f-a165-70867728950e"
 OTHER_DEVICE = "7c9e6679-7425-40de-944b-e07fc1f90ae7"
@@ -635,3 +638,141 @@ def test_a_failed_warmup_does_not_stop_the_server(tmp_path):
     app.state.aligner = fake
     with TestClient(app) as client:
         assert client.get("/healthz").status_code == 200
+
+
+# Clients that hang up.
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
+def multipart_body(audio, turns):
+    boundary = uuid.uuid4().hex
+    body = (
+        f'--{boundary}\r\nContent-Disposition: form-data; name="turns"\r\n\r\n{json.dumps(turns)}\r\n'
+        f'--{boundary}\r\nContent-Disposition: form-data; name="audio"; filename="a.wav"\r\n'
+        "Content-Type: audio/wav\r\n\r\n"
+    ).encode() + audio + f"\r\n--{boundary}--\r\n".encode()
+    return body, f"multipart/form-data; boundary={boundary}"
+
+
+class HangingUpClient:
+    """One request straight through the ASGI app; hangs up when told."""
+
+    def __init__(self, app, token, audio, turns):
+        self.app = app
+        self.body, self.content_type = multipart_body(audio, turns)
+        self.token = token
+        self.hang_up = anyio.Event()
+        self.status = None
+
+    async def run(self):
+        body_sent = False
+
+        async def receive():
+            nonlocal body_sent
+            if not body_sent:
+                body_sent = True
+                return {"type": "http.request", "body": self.body, "more_body": False}
+            await self.hang_up.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(message):
+            if message["type"] == "http.response.start" and not self.hang_up.is_set():
+                self.status = message["status"]
+
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/v1/align",
+            "raw_path": b"/v1/align",
+            "root_path": "",
+            "query_string": b"",
+            "headers": [
+                (b"authorization", f"Bearer {self.token}".encode()),
+                (b"content-type", self.content_type.encode()),
+                (b"content-length", str(len(self.body)).encode()),
+            ],
+            "client": ("127.0.0.1", 50000),
+            "server": ("relay", 80),
+        }
+        with anyio.fail_after(10):
+            await self.app(scope, receive, send)
+
+
+@asynccontextmanager
+async def started_app(settings):
+    app = create_app(settings)
+    async with app.router.lifespan_context(app):
+        yield app
+
+
+def add_device(settings, device_id=DEVICE):
+    token = uuid.uuid4().hex
+    conn = db.connect(settings.db_path)
+    try:
+        conn.execute(
+            "INSERT INTO devices (device_id, token_hash, created_at) VALUES (?, ?, ?)",
+            (device_id, hash_token(token), datetime.now(UTC).isoformat()),
+        )
+    finally:
+        conn.close()
+    return token
+
+
+THREE_TURNS = [
+    {"startMs": 250, "endMs": 1000, "text": "one"},
+    {"startMs": 2000, "endMs": 3000, "text": "two"},
+    {"startMs": 4000, "endMs": 5000, "text": "three"},
+]
+
+
+@pytest.mark.anyio
+async def test_a_client_that_hangs_up_stops_the_work_between_turns(settings, temp_dir):
+    token = add_device(settings)
+    async with started_app(settings) as app:
+        fake = FakeAligner()
+        fake.gate = threading.Event()
+        app.state.aligner = fake
+        call = HangingUpClient(app, token, make_wav(seconds=6), THREE_TURNS)
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(call.run)
+            assert await anyio.to_thread.run_sync(fake.entered.acquire, True, 5)
+            call.hang_up.set()
+            await anyio.sleep(0.1)
+            fake.gate.set()
+        # Only the first turn ran; the slot is free and the other two turns'
+        # reserved seconds are given back.
+        assert fake.calls == 1
+        assert app.state.align_in_flight.count() == 0
+        assert align_usage(settings) == (pytest.approx(1.25), today())
+        assert os.listdir(temp_dir) == []
+
+
+@pytest.mark.anyio
+async def test_a_client_that_hangs_up_while_queued_never_reaches_the_model(tmp_path, temp_dir):
+    settings = load_settings({"RELAY_DB_PATH": str(tmp_path / "relay.db"), "ALIGN_CONCURRENCY": "1"})
+    first, second = add_device(settings), add_device(settings, OTHER_DEVICE)
+    async with started_app(settings) as app:
+        fake = FakeAligner()
+        fake.gate = threading.Event()
+        app.state.aligner = fake
+        running = HangingUpClient(app, first, make_wav(), TURNS)
+        queued = HangingUpClient(app, second, make_wav(seconds=6), THREE_TURNS)
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(running.run)
+            assert await anyio.to_thread.run_sync(fake.entered.acquire, True, 5)
+            tg.start_soon(queued.run)
+            await anyio.sleep(0.2)
+            queued.hang_up.set()
+            await anyio.sleep(0.1)
+            fake.gate.set()
+        assert running.status == 200
+        assert fake.calls == 1
+        assert align_usage(settings, OTHER_DEVICE)[0] == 0
+        assert app.state.align_in_flight.count() == 0

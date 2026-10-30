@@ -233,6 +233,14 @@ def test_a_turn_the_model_cannot_align_is_skipped_and_not_counted():
     assert result.seconds == pytest.approx(1.5)
 
 
+def test_align_turns_stops_between_turns_when_asked():
+    planned, _ = plan([Turn(1000, 2000, "one"), Turn(3000, 4000, "two")], seconds(10))
+    fake = FakeAligner()
+    result = align_turns(fake, lambda s, e: bytes(2 * (e - s)), planned, stop=lambda: len(fake.calls) == 1)
+    assert [w["text"] for w in result.words] == ["one"]
+    assert result.seconds == pytest.approx(1.5)
+
+
 def test_a_wrong_number_of_spans_skips_the_turn():
     class Short(FakeAligner):
         def align(self, pcm, tokens):
