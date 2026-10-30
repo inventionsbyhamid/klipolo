@@ -14,6 +14,9 @@ klipolo-model = { path = "../klipolo-model" }
 # Atomic writes for the WAV and the cache's JSON (`durable::write_atomic`).
 klipolo-platform = { path = "../klipolo-platform" }
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The content key, at the lockfile's version (the engine builds it).
+sha2 = "0.10.9"
 thiserror = "2"
 
 [dev-dependencies]
