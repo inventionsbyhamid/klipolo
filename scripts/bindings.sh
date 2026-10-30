@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# `pnpm bindings` (in apps/desktop): writes the page's generated files again from the crates' `export_bindings` tests.
-# They are committed, so `pnpm build` works from a clean checkout (the release build); the Linux gate runs this and fails
-# when the result differs from the commit.
+# `pnpm bindings` (in apps/desktop): writes the page's generated files again from the crates' `export_bindings`
+# tests. They are committed, so `pnpm build` works from a clean checkout (the release build); the Linux gate runs this
+# and fails when the result differs from the commit (scripts/check-bindings.sh).
 #   apps/desktop/src/bindings: the TypeScript types (ts-rs, TS_RS_EXPORT_DIR in .cargo/config.toml) and the code lists
 #     (modelCodes.json, fontsCodes.json) the page words Rust's codes from. Emptied first, so a type that went goes too.
 #   apps/desktop/src/lib: caption-styles.json and font-fallbacks.json. The parity files there are checked by their own
