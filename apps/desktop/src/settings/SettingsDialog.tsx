@@ -41,24 +41,55 @@ function Settings() {
   const status = useAi((s) => s.status);
   const [choice, setChoice] = useState<PayChoice>(() => initialChoice(status));
   const dialog = useRef<HTMLDivElement>(null);
+  // A card picked with the pointer (or Space) puts the cursor in its field; the arrow keys stay on the cards.
+  const toField = useRef(false);
+  const pick = (next: PayChoice) => {
+    toField.current = true;
+    setChoice(next);
+  };
   useEffect(() => {
+    const root = dialog.current;
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const first = dialog.current?.querySelector<HTMLElement>(
-      'input:not([readonly]), [role="radio"][aria-checked="true"]',
-    );
-    first?.focus();
+    // The empty field, so a code or key can be typed at once; with one saved, the card in use.
+    first(root, ['.field-v input:not([readonly])', CHECKED_CARD])?.focus();
     // The credit may have moved since the status was last read.
     void refreshAiStatus();
-    return () => trigger?.focus();
+    // The dialog is modal: no key reaches the editor behind it, and focus that leaves it comes back.
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        closeSettings();
+      } else if (root && !root.contains(e.target as Node)) {
+        e.preventDefault();
+        e.stopPropagation();
+        focusField(root);
+      }
+    };
+    const onFocus = (e: FocusEvent) => {
+      if (root && !root.contains(e.target as Node)) focusField(root);
+    };
+    window.addEventListener('keydown', onKey, true);
+    document.addEventListener('focusin', onFocus);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('focusin', onFocus);
+      trigger?.focus();
+    };
   }, []);
+  // Saving replaces the form with the saved row, Remove does the reverse, and picking the other way to pay swaps the
+  // field: the focused element can go with them (WebKit doesn't focus a clicked button), so focus moves to the field.
+  const mode = status?.mode;
+  useEffect(() => {
+    const root = dialog.current;
+    if (root && (toField.current || !root.contains(document.activeElement))) focusField(root);
+    toField.current = false;
+  }, [mode, choice]);
 
+  // Keys typed in the dialog stay in it (the editor's shortcuts listen on the window).
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      closeSettings();
-    } else if (e.key === 'Tab') {
-      trapFocus(e, dialog.current);
-    }
+    e.stopPropagation();
+    if (e.key === 'Tab') trapFocus(e, dialog.current);
   };
 
   return (
@@ -84,7 +115,7 @@ function Settings() {
             <AiIcon name="x" />
           </button>
         </div>
-        <PayChoices choice={choice} onChoose={setChoice} />
+        <PayChoices choice={choice} onPick={pick} onArrow={setChoice} />
         {choice === 'code' ? <CodeSection status={status} /> : <KeySection status={status} />}
         <div className="dialog-foot">
           <span className="left">Audio and low-resolution video go to Meta's model API.</span>
@@ -103,17 +134,31 @@ const CHOICES: { value: PayChoice; title: string; text: string }[] = [
 ];
 
 /** The two radio cards; the arrow keys move between them, as a radio group does. */
-function PayChoices({ choice, onChoose }: { choice: PayChoice; onChoose: (choice: PayChoice) => void }) {
+function PayChoices({
+  choice,
+  onPick,
+  onArrow,
+}: {
+  choice: PayChoice;
+  onPick: (choice: PayChoice) => void;
+  onArrow: (choice: PayChoice) => void;
+}) {
   const group = useRef<HTMLDivElement>(null);
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
     e.preventDefault();
     const next = choice === 'code' ? 'key' : 'code';
-    onChoose(next);
+    onArrow(next);
     group.current?.querySelector<HTMLElement>(`[data-choice="${next}"]`)?.focus();
   };
   return (
-    <div className="mode-cards" role="radiogroup" aria-label="How to use Meta's models" ref={group} onKeyDown={onKeyDown}>
+    <div
+      className="mode-cards"
+      role="radiogroup"
+      aria-label="How to use Meta's models"
+      ref={group}
+      onKeyDown={onKeyDown}
+    >
       {CHOICES.map(({ value, title, text }) => (
         <button
           key={value}
@@ -123,7 +168,7 @@ function PayChoices({ choice, onChoose }: { choice: PayChoice; onChoose: (choice
           data-choice={value}
           aria-checked={choice === value}
           tabIndex={choice === value ? 0 : -1}
-          onClick={() => onChoose(value)}
+          onClick={() => onPick(value)}
         >
           <span className="radio" />
           <b>{title}</b>
@@ -140,21 +185,21 @@ const FINE_PRINT =
 function CodeSection({ status }: { status: AiStatus | null }) {
   const saved = status?.mode === 'relay' ? status : null;
   const [code, setCode] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<'save' | 'remove' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    setBusy(true);
+    setBusy('save');
     const failed = await saveCode(code);
-    setBusy(false);
+    setBusy(null);
     setError(failed);
     if (!failed) setCode('');
   };
   const remove = async () => {
-    setBusy(true);
+    setBusy('remove');
     setError(await removePayment());
-    setBusy(false);
+    setBusy(null);
   };
 
   const budget = saved ? budgetView(saved) : null;
@@ -165,7 +210,12 @@ function CodeSection({ status }: { status: AiStatus | null }) {
         {saved ? (
           <div className="input-row">
             <input id="settings-code" className="input" value={saved.code ?? ''} readOnly />
-            <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void remove()}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={busy === 'remove'}
+              onClick={() => void remove()}
+            >
               Remove
             </button>
           </div>
@@ -183,7 +233,7 @@ function CodeSection({ status }: { status: AiStatus | null }) {
               aria-invalid={error ? true : undefined}
               aria-describedby={error ? 'settings-code-error' : undefined}
             />
-            <SubmitButton busy={busy} disabled={!code.trim()} label="Use code" />
+            <SubmitButton busy={busy === 'save'} disabled={!code.trim()} label="Use code" />
           </form>
         )}
         {saved?.active && (
@@ -208,22 +258,22 @@ function KeySection({ status }: { status: AiStatus | null }) {
   const saved = status?.mode === 'key' ? status : null;
   const [key, setKey] = useState('');
   const [shown, setShown] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<'save' | 'remove' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    setBusy(true);
+    setBusy('save');
     const failed = await saveKey(key);
-    setBusy(false);
+    setBusy(null);
     setError(failed);
     // A saved key leaves the page at once; a refused one stays so it can be fixed.
     if (!failed) setKey('');
   };
   const remove = async () => {
-    setBusy(true);
+    setBusy('remove');
     setError(await removePayment());
-    setBusy(false);
+    setBusy(null);
   };
 
   return (
@@ -234,7 +284,12 @@ function KeySection({ status }: { status: AiStatus | null }) {
           <div id="settings-key" className="input is-static">
             {saved.keyHint ? `Saved, ending in ${saved.keyHint}` : 'Saved'}
           </div>
-          <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void remove()}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={busy === 'remove'}
+            onClick={() => void remove()}
+          >
             Remove
           </button>
         </div>
@@ -262,7 +317,7 @@ function KeySection({ status }: { status: AiStatus | null }) {
               {shown ? 'Hide' : 'Show'}
             </button>
           </span>
-          <SubmitButton busy={busy} disabled={!key.trim()} label="Save key" />
+          <SubmitButton busy={busy === 'save'} disabled={!key.trim()} label="Save key" />
         </form>
       )}
       {error ? (
@@ -338,6 +393,25 @@ function Note({ text }: { text: string }) {
       {text}
     </p>
   );
+}
+
+const CHECKED_CARD = '[role="radio"][aria-checked="true"]';
+
+/**
+ * The field of the way to pay shown: its input, else (one is saved) the card in use, never Remove, so a second Enter
+ * after saving can't take the code or key away again.
+ */
+function focusField(root: HTMLElement) {
+  first(root, ['.field-v input:not([readonly])', CHECKED_CARD])?.focus();
+}
+
+/** The first element matching one of `selectors`, tried in that order (not in the page's order). */
+function first(root: HTMLElement | null, selectors: string[]): HTMLElement | undefined {
+  for (const selector of selectors) {
+    const element = root?.querySelector<HTMLElement>(selector);
+    if (element) return element;
+  }
+  return undefined;
 }
 
 /** Keeps Tab and Shift Tab inside the dialog. */

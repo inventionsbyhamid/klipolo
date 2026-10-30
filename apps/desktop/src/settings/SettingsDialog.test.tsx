@@ -81,6 +81,9 @@ describe('SettingsDialog', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save key' }));
     expect(await screen.findByText('Saved, ending in 6789')).toBeInTheDocument();
     expect(screen.queryByDisplayValue(KEY)).toBeNull();
+    // The form went with the save; focus stays in the dialog, on the card in use (not Remove: a second Enter mustn't
+    // take the key away again).
+    expect(screen.getByRole('radio', { name: /My Meta API key/ })).toHaveFocus();
   });
 
   it("shows the code's credit, never more spent than the budget", async () => {
@@ -121,6 +124,46 @@ describe('SettingsDialog', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Remove' }));
     expect(aiBridge.clear).toHaveBeenCalledTimes(1);
     expect(await screen.findByLabelText('Access code')).not.toHaveAttribute('readonly');
+    expect(screen.getByLabelText('Access code')).toHaveFocus();
+  });
+
+  it("keeps the editor's shortcuts from acting behind it", async () => {
+    openOn({ mode: 'none' });
+    const editor = vi.fn();
+    window.addEventListener('keydown', editor);
+    try {
+      // On one of the dialog's own buttons.
+      fireEvent.keyDown(screen.getByRole('radio', { name: /Access code/ }), { key: 'l' });
+      // With focus lost to the page (WebKit doesn't focus a clicked button, so a field that goes away takes focus
+      // with it): the key is kept from the editor and focus comes back into the dialog.
+      (document.activeElement as HTMLElement | null)?.blur();
+      fireEvent.keyDown(document.body, { key: 'k' });
+      expect(editor).not.toHaveBeenCalled();
+      expect(screen.getByRole('dialog')).toContainElement(document.activeElement as HTMLElement);
+    } finally {
+      window.removeEventListener('keydown', editor);
+    }
+  });
+
+  it('opens with the cursor in the empty field, or on the way to pay in use', async () => {
+    const { unmount } = openOn({ mode: 'none' });
+    expect(screen.getByLabelText('Access code')).toHaveFocus();
+    unmount();
+    openOn({ mode: 'key', keyHint: '6789' });
+    expect(screen.getByRole('radio', { name: /My Meta API key/ })).toHaveFocus();
+    await act(async () => undefined);
+  });
+
+  it('puts the cursor in the field of the way to pay that was clicked', async () => {
+    openOn({ mode: 'none' });
+    // WebKit doesn't focus a clicked button: focus stays where it was (here the other card).
+    screen.getByRole('radio', { name: /Access code/ }).focus();
+    fireEvent.click(screen.getByRole('radio', { name: /My Meta API key/ }));
+    expect(screen.getByLabelText('Meta API key')).toHaveFocus();
+    // Or the field that went away with the swap took it.
+    (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.click(screen.getByRole('radio', { name: /Access code/ }));
+    expect(screen.getByLabelText('Access code')).toHaveFocus();
   });
 
   it('moves between the two ways to pay with the arrow keys', async () => {
