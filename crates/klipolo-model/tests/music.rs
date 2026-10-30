@@ -300,6 +300,11 @@ fn cut_in_the_middle_refits_music_in_the_same_step() {
         let ops = with_music_refit(doc.project(), vec![cut(10.0, 12.0)]).unwrap();
         assert_eq!(ops[0], cut(10.0, 12.0), "the edit itself goes first");
         assert!(ops.len() > 1, "{song}: no refit in {ops:?}");
+        assert_eq!(
+            ops.len(),
+            2,
+            "{song}: the cut, then one change to the last piece: {ops:?}"
+        );
         let done = apply_with_music_refit(doc.project(), vec![cut(10.0, 12.0)]).unwrap();
         assert_eq!(done.ops, ops);
         assert_eq!(done.refused, None);

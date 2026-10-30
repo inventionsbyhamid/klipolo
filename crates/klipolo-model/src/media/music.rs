@@ -268,21 +268,22 @@ fn empty_audio_track(p: &Project) -> Option<&Track> {
         .find(|t| t.kind == TrackKind::Audio && t.items.is_empty() && !t.locked && !t.muted)
 }
 
-/// One piece of music: where it starts on the timeline, how long it plays and from where in the file.
+/// One piece of music: where it starts on the timeline, how long it plays and from where in the file, and, in a refit,
+/// which of the run's layers it is (None: a new one).
 struct Piece {
     start: Us,
     len: Us,
     source_in: Us,
+    from: Option<usize>,
 }
 
 impl Piece {
-    /// `template` as this piece, `id`, with these fades (each kept within half the piece).
+    /// `template` (a free music layer) as this piece, `id`, with these fades (each kept within half the piece).
     fn item(&self, template: &Item, id: Id, fade_in: Us, fade_out: Us) -> Item {
         let mut item = template.clone();
         item.id = id;
         item.start_us = self.start;
         item.duration_us = self.len;
-        item.attach = None;
         set_sound(
             &mut item.content,
             Some(self.source_in),
@@ -314,6 +315,7 @@ fn pieces(span: Range<Us>, file_len: Us, source_in: Us) -> Vec<Piece> {
             start: at,
             len,
             source_in: from,
+            from: None,
         });
         at = at.saturating_add(len);
         from = 0;
@@ -348,53 +350,86 @@ fn runs(track: &Track) -> Vec<Range<usize>> {
     out
 }
 
-/// Fits one run of music, `bed` on track `track`, of a file `file_len` long, to end at `end`.
+/// Fits one run of music, `bed` on track `track`, of a file `file_len` long, to end at `end` ([`plan`]): the run's
+/// pieces past the plan go, those it keeps change only where their length or fades do, and new ones follow on the
+/// track. The fade-in stays on the first piece and the fade-out moves to the last.
 fn refit(bed: &[Item], track: &Id, file_len: Us, end: Us, ids: &mut NewIds, ops: &mut Vec<Op>) {
     let (first, last) = (&bed[0], &bed[bed.len() - 1]);
     let want_in = meant(fades(first).0, first.duration_us, MUSIC_FADE_IN_US);
     let want_out = meant(fades(last).1, last.duration_us, MUSIC_FADE_OUT_US);
-    // The fade-in belongs to the first piece; others keep theirs (none, as added).
-    let fade_in = |k: usize| if k == 0 { want_in } else { fades(&bed[k]).0 };
-    if end < last.end_us() {
-        // Shorter: the pieces from the new end on go, and the one it falls in is cut there.
-        let keep = bed
+    let plan = plan(bed, file_len, end);
+    let kept = plan.iter().filter(|piece| piece.from.is_some()).count();
+    ops.extend(
+        bed[kept..]
             .iter()
-            .rposition(|i| i.start_us.saturating_add(MIN_DURATION_US) <= end);
-        let gone = keep.map_or(0, |k| k + 1);
-        ops.extend(
-            bed[gone..]
-                .iter()
-                .map(|i| Op::RemoveItem { id: i.id.clone() }),
-        );
-        if let Some(k) = keep {
-            let piece = &bed[k];
-            let room = played(piece).map_or(0, |(_, from)| file_len.saturating_sub(from));
-            let len = end.saturating_sub(piece.start_us).min(room);
-            update(piece, len, fade_in(k), want_out, ops);
+            .map(|i| Op::RemoveItem { id: i.id.clone() }),
+    );
+    let final_piece = plan.len().saturating_sub(1);
+    for (k, piece) in plan.iter().enumerate() {
+        let own = piece.from.map_or((0, 0), |i| fades(&bed[i]));
+        let fade_in = if k == 0 { want_in } else { own.0 };
+        // The old last piece's fade-out goes with it to the new last one; others keep theirs (none, as added).
+        let fade_out = if k == final_piece {
+            want_out
+        } else if piece.from == Some(bed.len() - 1) {
+            0
+        } else {
+            own.1
+        };
+        match piece.from {
+            Some(i) => {
+                let layer = &bed[i];
+                if piece.len != layer.duration_us
+                    || fades(layer) != fit(fade_in, fade_out, piece.len)
+                {
+                    update(layer, piece.len, fade_in, fade_out, ops);
+                }
+            }
+            None => ops.push(Op::AddItem {
+                track: TrackTarget::Track { id: track.clone() },
+                item: piece.item(last, ids.next(&first.id), fade_in, fade_out),
+                attach: false,
+            }),
         }
-        return;
     }
-    // Longer: the last piece plays on to the file's end, then new pieces from the file's start fill up to the new end.
-    let k = bed.len() - 1;
-    let room = played(last).map_or(0, |(_, from)| file_len.saturating_sub(from));
-    let len = end
-        .saturating_sub(last.start_us)
-        .min(room)
-        .max(last.duration_us);
-    let more = pieces(last.start_us.saturating_add(len)..end, file_len, 0);
-    let out = if more.is_empty() { want_out } else { 0 };
-    if len != last.duration_us || fades(last) != fit(fade_in(k), out, len) {
-        update(last, len, fade_in(k), out, ops);
-    }
-    let n = more.len();
-    for (m, piece) in more.into_iter().enumerate() {
-        let fade_out = if m + 1 == n { want_out } else { 0 };
-        ops.push(Op::AddItem {
-            track: TrackTarget::Track { id: track.clone() },
-            item: piece.item(last, ids.next(&first.id), 0, fade_out),
-            attach: false,
-        });
-    }
+}
+
+/// Where a run of music's pieces go to end at `end`: the first ones as they are, then either the one `end` falls in,
+/// cut there, or the last played on to its file's end and new pieces from the file's start after it. Empty when the
+/// run starts at `end` or past it.
+fn plan(bed: &[Item], file_len: Us, end: Us) -> Vec<Piece> {
+    let stays = |i: usize, len: Us| Piece {
+        start: bed[i].start_us,
+        len,
+        source_in: source_in(&bed[i]),
+        from: Some(i),
+    };
+    let last = &bed[bed.len() - 1];
+    let (k, len) = if end < last.end_us() {
+        // Shorter: the pieces from the new end on go, and the one it falls in is cut there.
+        let Some(k) = bed
+            .iter()
+            .rposition(|i| i.start_us.saturating_add(MIN_DURATION_US) <= end)
+        else {
+            return Vec::new();
+        };
+        let len = end
+            .saturating_sub(bed[k].start_us)
+            .min(room(&bed[k], file_len));
+        (k, len)
+    } else {
+        // Longer: the last piece plays on to the file's end.
+        let len = end
+            .saturating_sub(last.start_us)
+            .min(room(last, file_len))
+            .max(last.duration_us);
+        (bed.len() - 1, len)
+    };
+    let mut plan: Vec<Piece> = (0..k).map(|i| stays(i, bed[i].duration_us)).collect();
+    plan.push(stays(k, len));
+    let at = bed[k].start_us.saturating_add(len);
+    plan.extend(pieces(at..end, file_len, 0));
+    plan
 }
 
 /// Sets `piece` to `len` with these fades (kept within half of it).
@@ -446,6 +481,15 @@ fn fades(item: &Item) -> (Us, Us) {
 
 fn played(item: &Item) -> Option<(&Id, Us)> {
     item.content.played()
+}
+
+fn source_in(item: &Item) -> Us {
+    played(item).map_or(0, |(_, from)| from)
+}
+
+/// How long `item` can play on from its start: to the end of its file, `file_len` long.
+fn room(item: &Item, file_len: Us) -> Us {
+    file_len.saturating_sub(source_in(item))
 }
 
 /// The fade a piece was meant to have: its own, unless it is as long as half the piece allows, when it was likely cut
