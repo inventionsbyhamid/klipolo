@@ -12,18 +12,20 @@ pub enum MetaError {
     /// 402: the relay's credit for this device (or Meta's for the key) is used up.
     #[error("out of credit (402): {message}")]
     Budget { message: String },
-    /// 403: the key or the device may not make this call.
-    #[error("not allowed (403)")]
-    NotAllowed,
+    /// 403: the key or the device may not make this call, with the server's
+    /// reason when it gave one (e.g. "This access code is not valid...").
+    #[error("not allowed (403){}", detail(.message))]
+    NotAllowed { message: Option<String> },
     /// 401: the key or the device token was not accepted.
     #[error("not authorized (401)")]
     Unauthorized,
     /// 429: too many requests; `retry_after` is the `Retry-After` header in seconds.
     #[error("rate limited (429){}", retry_hint(*.retry_after))]
     RateLimited { retry_after: Option<u64> },
-    /// 503 and other server errors: Meta or the relay cannot answer right now.
-    #[error("Meta or the relay is overloaded or unavailable (5xx)")]
-    Overloaded,
+    /// 503 and other server errors: Meta or the relay cannot answer right
+    /// now, with the server's reason when it gave one ("Relay not configured.").
+    #[error("Meta or the relay is overloaded or unavailable (5xx){}", detail(.message))]
+    Overloaded { message: Option<String> },
     /// Any other refused request (400, 404, 413, 422...), with the server's reason.
     #[error("bad request: {message}")]
     BadRequest { message: String },
@@ -41,6 +43,13 @@ pub enum MetaError {
 /// The most of a server's message kept in an error.
 const MAX_MESSAGE_CHARS: usize = 300;
 
+fn detail(message: &Option<String>) -> String {
+    message
+        .as_ref()
+        .map(|m| format!(": {m}"))
+        .unwrap_or_default()
+}
+
 fn retry_hint(retry_after: Option<u64>) -> String {
     retry_after
         .map(|s| format!(", retry after {s} s"))
@@ -49,7 +58,8 @@ fn retry_hint(retry_after: Option<u64>) -> String {
 
 impl MetaError {
     /// The error for a refused call: its status, `Retry-After` header and body.
-    /// The body's message is kept (redacted) for 402 and plain refusals.
+    /// The body's message is kept (redacted) for 402, 403, 5xx and plain
+    /// refusals.
     pub(crate) fn from_status(
         status: u16,
         retry_after: Option<&str>,
@@ -61,11 +71,15 @@ impl MetaError {
             402 => Self::Budget {
                 message: body_message(body, secrets).unwrap_or_default(),
             },
-            403 => Self::NotAllowed,
+            403 => Self::NotAllowed {
+                message: body_message(body, secrets),
+            },
             429 => Self::RateLimited {
                 retry_after: retry_after.and_then(parse_retry_after),
             },
-            500..=599 => Self::Overloaded,
+            500..=599 => Self::Overloaded {
+                message: body_message(body, secrets),
+            },
             _ => Self::BadRequest {
                 message: body_message(body, secrets)
                     .unwrap_or_else(|| format!("The server answered with status {status}.")),
@@ -78,9 +92,10 @@ impl MetaError {
     pub fn user_message(&self) -> String {
         match self {
             Self::Budget { message } => sentence(message, "Your Meta credit has run out."),
-            Self::NotAllowed => {
-                "Your Meta API key or access code does not allow this. Check it in Settings.".into()
-            }
+            Self::NotAllowed { message } => sentence(
+                message.as_deref().unwrap_or_default(),
+                "Your Meta API key or access code does not allow this. Check it in Settings.",
+            ),
             Self::Unauthorized => {
                 "Your Meta API key or access code was not accepted. Check it in Settings.".into()
             }
@@ -91,7 +106,10 @@ impl MetaError {
                 }
                 _ => "Meta has had too many requests. Try again in a moment.".into(),
             },
-            Self::Overloaded => "Meta is busy right now. Try again in a moment.".into(),
+            Self::Overloaded { message } => sentence(
+                message.as_deref().unwrap_or_default(),
+                "Meta is busy right now. Try again in a moment.",
+            ),
             Self::BadRequest { message } => match sentence(message, "") {
                 reason if reason.is_empty() => "Meta could not process this request.".into(),
                 reason => format!("Meta could not process this request. {reason}"),

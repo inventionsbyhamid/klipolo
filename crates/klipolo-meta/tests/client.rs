@@ -104,13 +104,19 @@ fn user_messages_are_plain_and_name_settings_where_needed() {
         MetaError::Budget {
             message: "This device has used its Klipolo credit \u{2014} add a key.".into(),
         },
-        MetaError::NotAllowed,
+        MetaError::NotAllowed { message: None },
+        MetaError::NotAllowed {
+            message: Some("Klipolo AI is off for this device \u{2014} add a code".into()),
+        },
         MetaError::Unauthorized,
         MetaError::RateLimited {
             retry_after: Some(7),
         },
         MetaError::RateLimited { retry_after: None },
-        MetaError::Overloaded,
+        MetaError::Overloaded { message: None },
+        MetaError::Overloaded {
+            message: Some("Relay not configured.".into()),
+        },
         MetaError::BadRequest {
             message: "Invalid audio \u{2013} expected WAV".into(),
         },
@@ -127,6 +133,27 @@ fn user_messages_are_plain_and_name_settings_where_needed() {
         );
     }
     assert!(MetaError::Unauthorized.user_message().contains("Settings"));
+    assert!(MetaError::NotAllowed { message: None }
+        .user_message()
+        .contains("Settings"));
+    assert_eq!(
+        MetaError::NotAllowed {
+            message: Some("Klipolo AI is off for this device \u{2014} add a code".into())
+        }
+        .user_message(),
+        "Klipolo AI is off for this device, add a code."
+    );
+    assert_eq!(
+        MetaError::Overloaded { message: None }.user_message(),
+        "Meta is busy right now. Try again in a moment."
+    );
+    assert_eq!(
+        MetaError::Overloaded {
+            message: Some("Relay not configured.".into())
+        }
+        .user_message(),
+        "Relay not configured."
+    );
     assert!(MetaError::RateLimited {
         retry_after: Some(7)
     }
@@ -294,11 +321,36 @@ async fn status_503_maps_to_overloaded() {
         "type": "server_error",
     }});
     let error = transcribe_error(ResponseTemplate::new(503).set_body_json(meta_overloaded)).await;
-    assert_eq!(error, MetaError::Overloaded);
+    assert_eq!(
+        error,
+        MetaError::Overloaded {
+            message: Some("The backend is temporarily overloaded. Please retry.".into())
+        }
+    );
 
     let relay_off = json!({"error": "not_configured", "message": "Relay not configured."});
     let error = transcribe_error(ResponseTemplate::new(503).set_body_json(relay_off)).await;
-    assert_eq!(error, MetaError::Overloaded);
+    assert_eq!(
+        error,
+        MetaError::Overloaded {
+            message: Some("Relay not configured.".into())
+        }
+    );
+    assert_eq!(error.user_message(), "Relay not configured.");
+
+    // A bare code is not shown; the plain fallback is.
+    let bare = json!({"error": "charging_unavailable"});
+    let error = transcribe_error(ResponseTemplate::new(503).set_body_json(bare)).await;
+    assert_eq!(error, MetaError::Overloaded { message: None });
+    let explained = json!({
+        "error": "charging_unavailable",
+        "message": "Klipolo cannot record what this costs right now. Try again later.",
+    });
+    let error = transcribe_error(ResponseTemplate::new(503).set_body_json(explained)).await;
+    assert_eq!(
+        error.user_message(),
+        "Klipolo cannot record what this costs right now. Try again later."
+    );
 }
 
 #[tokio::test]
@@ -329,7 +381,13 @@ async fn other_statuses_map_to_their_errors() {
         json!({"error": "no_relay_ai", "message": "Klipolo AI is off for this device."});
     assert_eq!(
         transcribe_error(ResponseTemplate::new(403).set_body_json(no_relay_ai)).await,
-        MetaError::NotAllowed
+        MetaError::NotAllowed {
+            message: Some("Klipolo AI is off for this device.".into())
+        }
+    );
+    assert_eq!(
+        transcribe_error(ResponseTemplate::new(403)).await,
+        MetaError::NotAllowed { message: None }
     );
     assert_eq!(
         transcribe_error(ResponseTemplate::new(429).insert_header("retry-after", "7")).await,
@@ -345,11 +403,13 @@ async fn other_statuses_map_to_their_errors() {
         json!({"error": "meta_auth", "message": "The relay could not use its Meta key."});
     assert_eq!(
         transcribe_error(ResponseTemplate::new(502).set_body_json(meta_auth)).await,
-        MetaError::Overloaded
+        MetaError::Overloaded {
+            message: Some("The relay could not use its Meta key.".into())
+        }
     );
     assert_eq!(
         transcribe_error(ResponseTemplate::new(500)).await,
-        MetaError::Overloaded
+        MetaError::Overloaded { message: None }
     );
 }
 
@@ -474,7 +534,7 @@ async fn delete_file_sends_delete_and_treats_a_missing_file_as_deleted() {
     client.delete_file("file-gone").await.unwrap();
     assert_eq!(
         client.delete_file("file-busy").await,
-        Err(MetaError::Overloaded)
+        Err(MetaError::Overloaded { message: None })
     );
 }
 
@@ -1042,7 +1102,15 @@ async fn register_device_with_an_invalid_code_is_not_allowed() {
     let error = MetaClient::register_device(&server.uri(), DEVICE_ID, Some("WRONG"))
         .await
         .unwrap_err();
-    assert_eq!(error, MetaError::NotAllowed);
+    let reason =
+        "This access code is not valid. Check the code or add your own Meta key in Settings.";
+    assert_eq!(
+        error,
+        MetaError::NotAllowed {
+            message: Some(reason.into())
+        }
+    );
+    assert_eq!(error.user_message(), reason);
 }
 
 #[tokio::test]
@@ -1104,10 +1172,10 @@ async fn device_status_without_a_relay_token_is_unauthorized() {
 fn variant(error: &MetaError) -> &'static str {
     match error {
         MetaError::Budget { .. } => "Budget",
-        MetaError::NotAllowed => "NotAllowed",
+        MetaError::NotAllowed { .. } => "NotAllowed",
         MetaError::Unauthorized => "Unauthorized",
         MetaError::RateLimited { .. } => "RateLimited",
-        MetaError::Overloaded => "Overloaded",
+        MetaError::Overloaded { .. } => "Overloaded",
         MetaError::BadRequest { .. } => "BadRequest",
         MetaError::Network(_) => "Network",
         MetaError::AlignUnavailable => "AlignUnavailable",
@@ -1207,10 +1275,15 @@ async fn error_text_never_contains_key() {
         }
     }
     assert_eq!(seen.len(), VARIANTS, "variants covered: {seen:?}");
-    // The echoes did reach the errors, redacted.
-    assert!(errors
-        .iter()
-        .any(|(e, _)| e.to_string().contains("[redacted]")));
+    // The echoes did reach every variant that keeps a server's message, redacted.
+    for name in ["Budget", "NotAllowed", "Overloaded", "BadRequest", "Decode"] {
+        assert!(
+            errors
+                .iter()
+                .any(|(e, _)| variant(e) == name && format!("{e:?}").contains("[redacted]")),
+            "no redacted {name}"
+        );
+    }
     let client = direct(&server).with_align_token(secret(TOKEN));
     for text in [format!("{client:?}"), format!("{:?}", relay(&server))] {
         assert!(!text.contains(KEY) && !text.contains(TOKEN), "{text}");
