@@ -1,7 +1,9 @@
 //! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
 //! context was built from, out as edits.
 //! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer) are one
-//!   `Transaction` the app applies at once: one undo step.
+//!   `Transaction` the app applies at once: one undo step. An addition is judged by what its part does, not by its
+//!   tool: one that takes something away (the model's own `removals`, as a format dropped with what was placed in it)
+//!   is compiled again with the removals and proposed.
 //! - Removals (`cutRange`, `keepOnly`, `removeSilences`, `removeFillers`, a trim that makes a clip shorter) are one
 //!   `Proposal`: a `Transaction` for the project as the additions leave it, judged by the model's own review (what it
 //!   takes away, on the timeline), applied as one undo step when the person says so.
@@ -35,7 +37,7 @@ use std::collections::{BTreeSet, HashMap};
 use klipolo_model::coded::{CodedError, ErrorParam};
 use klipolo_model::ops::{Op, Origin, Transaction};
 use klipolo_model::project::AssetKind;
-use klipolo_model::risk::Review;
+use klipolo_model::risk::{Review, removals};
 use klipolo_model::speech::{Speech, run_spans};
 use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::ClipSource;
@@ -213,20 +215,43 @@ impl Phase {
         }
     }
 
-    /// Adds `edit` if its ops apply and the batch still ends valid; else the working copy stays as it was. An edit
-    /// with no ops (a format the video already has) adds nothing.
-    fn add(&mut self, edit: Edit) -> Result<(), ModelError> {
+    /// `edit` tried on a copy of the working copy: its ops applied as one part, and the batch still ending valid. The
+    /// phase stays as it was until `keep`.
+    fn try_edit(&self, edit: Edit) -> Result<Tried, ModelError> {
         if edit.ops.is_empty() {
-            return Ok(());
+            return Ok(Tried {
+                edit,
+                after: None,
+                removes: false,
+            });
         }
         let mut work = self.work.clone();
         klipolo_model::apply_part(&mut work, &edit.ops)?;
         let mut done = work.clone();
         finish_parts(&mut done)?;
+        let removes = !removals(&self.done, &done).is_empty();
+        Ok(Tried {
+            edit,
+            after: Some((work, done)),
+            removes,
+        })
+    }
+
+    /// Makes a tried edit part of the batch. An edit with no ops (a format the video already has) adds nothing.
+    fn keep(&mut self, tried: Tried) {
+        let Some((work, done)) = tried.after else {
+            return;
+        };
         self.work = work;
         self.done = done;
-        self.ops.extend(edit.ops);
-        self.labels.push(edit.label);
+        self.ops.extend(tried.edit.ops);
+        self.labels.push(tried.edit.label);
+    }
+
+    /// `try_edit`, then `keep`.
+    fn add(&mut self, edit: Edit) -> Result<(), ModelError> {
+        let tried = self.try_edit(edit)?;
+        self.keep(tried);
         Ok(())
     }
 
@@ -256,10 +281,25 @@ impl Phase {
     }
 }
 
+/// An edit tried on a phase's working copy (`Phase::try_edit`).
+struct Tried {
+    edit: Edit,
+    /// The working copy with it, and the batch as it would end there; None for an edit with no ops.
+    after: Option<(Project, Project)>,
+    /// It takes away something the batch had before it (the model's own `removals`).
+    removes: bool,
+}
+
 /// A call waiting for the removals' phase.
 enum Removal<'c> {
+    /// A removal tool.
     Call(&'c ToolCall),
+    /// A trim that makes a clip shorter.
     Shorter(Trim),
+    /// An addition tool whose edit takes something away (a format dropped with what was placed in it).
+    Moved(&'c ToolCall),
+    /// A trim that makes a clip longer and takes something away.
+    Longer(Trim),
 }
 
 struct Compiler<'a> {
@@ -339,28 +379,24 @@ impl Compiler<'_> {
                             waiting.push((i, Removal::Shorter(shorter)));
                             continue;
                         }
-                        planned => {
-                            planned.and_then(|longer| trim::lengthen(self, &adding.work, &longer))
-                        }
+                        Ok(longer) => (
+                            trim::lengthen(self, &adding.work, &longer),
+                            Removal::Longer(longer),
+                        ),
+                        Err(r) => (Err(r), Removal::Moved(call)),
                     }
                 }
-                ToolCall::SplitAt { at_us } => additions::split_at(self, &adding.work, *at_us),
-                ToolCall::SetFormat {
-                    format,
-                    keep_others,
-                } => Ok(additions::set_format(&adding.work, *format, *keep_others)),
-                ToolCall::SetCaptions { on, style } => {
-                    Ok(additions::set_captions(&adding.work, *on, *style))
-                }
-                ToolCall::FixCaptionWords { find, replace } => {
-                    additions::fix_caption_words(self, &adding.work, find, replace)
-                }
+                _ => (self.addition(&adding.work, call), Removal::Moved(call)),
             };
-            let added = addition.and_then(|edit| {
-                (adding.add(edit)).map_err(|e| to_model(format!("{}: {e}", call.name())))
+            let (edit, if_it_removes) = addition;
+            let tried = edit.and_then(|edit| {
+                (adding.try_edit(edit)).map_err(|e| to_model(format!("{}: {e}", call.name())))
             });
-            if let Err(r) = added {
-                refuse(&mut out, i, r);
+            match tried {
+                // Judged by what it does, not by its tool: proposed with the removals.
+                Ok(tried) if tried.removes => waiting.push((i, if_it_removes)),
+                Ok(tried) => adding.keep(tried),
+                Err(r) => refuse(&mut out, i, r),
             }
         }
 
@@ -379,6 +415,8 @@ impl Compiler<'_> {
             let (call_name, edit) = match removal {
                 Removal::Call(call) => (call.name(), removals::compile(self, work, call)),
                 Removal::Shorter(t) => ("trimClip", trim::shorten(self, work, &t)),
+                Removal::Moved(call) => (call.name(), self.addition(work, call)),
+                Removal::Longer(t) => ("trimClip", trim::lengthen(self, work, &t)),
             };
             let added = edit.and_then(|edit| {
                 (removing.add(edit)).map_err(|e| to_model(format!("{call_name}: {e}")))
@@ -401,6 +439,22 @@ impl Compiler<'_> {
         }
         out.refusals.sort_by_key(|r| r.call_index);
         out
+    }
+
+    /// An addition tool's edit on `work` (a trim is planned apart, `trim::plan`).
+    fn addition(&self, work: &Project, call: &ToolCall) -> Result<Edit, Refused> {
+        match call {
+            ToolCall::SplitAt { at_us } => additions::split_at(self, work, *at_us),
+            ToolCall::SetFormat {
+                format,
+                keep_others,
+            } => Ok(additions::set_format(work, *format, *keep_others)),
+            ToolCall::SetCaptions { on, style } => Ok(additions::set_captions(work, *on, *style)),
+            ToolCall::FixCaptionWords { find, replace } => {
+                additions::fix_caption_words(self, work, find, replace)
+            }
+            other => Err(to_model(format!("{}: not an addition.", other.name()))),
+        }
     }
 
     /// The person's sentence when `call` needs an analysis some clip on the main track lacks: the voice files' for

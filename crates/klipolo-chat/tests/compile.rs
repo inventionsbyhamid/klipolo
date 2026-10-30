@@ -498,6 +498,65 @@ fn additions_and_removals_split_in_one_answer() {
 }
 
 #[test]
+fn an_addition_that_takes_something_away_is_proposed() {
+    let mut p = broll(30.0);
+    // The captions were placed by hand in landscape: dropping landscape loses that placement.
+    p.captions.place.insert(FormatKind::Landscape, 0.8);
+    let i = inputs(
+        &p,
+        Speech::default(),
+        "only vertical, with karaoke captions",
+    );
+    let only_portrait = call(
+        "setFormat",
+        r#"{"format": "portrait", "keepOthers": false}"#,
+    );
+    let karaoke = call("setCaptions", r#"{"on": true, "style": "karaoke"}"#);
+    let out = compile(&p, &i, &[only_portrait.clone(), karaoke]);
+    assert_eq!(out.refusals, vec![]);
+    // The captions apply at once; the format waits for the person, judged by the model's own review.
+    let additions = out.additions.expect("the captions apply at once");
+    assert!(matches!(additions.ops.as_slice(), [Op::SetCaptions { .. }]));
+    let proposal = out.proposal.expect("the format is proposed");
+    assert_eq!(
+        proposal.tx.ops,
+        vec![Op::SetSettings {
+            settings: Settings {
+                fps: 30,
+                formats: vec![FormatKind::Portrait],
+                primary_format: FormatKind::Portrait,
+            }
+        }]
+    );
+    assert_eq!(proposal.tx.label, "chat.setFormat");
+    assert_eq!(
+        proposal.review.removals.formats,
+        vec![FormatKind::Landscape]
+    );
+    assert_eq!((proposal.removed_us, proposal.ranges.len()), (0, 0));
+    // Keeping the other formats loses nothing: applied at once.
+    let kept = compile(
+        &p,
+        &i,
+        &[call(
+            "setFormat",
+            r#"{"format": "portrait", "keepOthers": true}"#,
+        )],
+    );
+    assert!(kept.additions.is_some());
+    assert_eq!(kept.proposal, None);
+    // Without anything placed by hand, dropping a format loses nothing either.
+    let plain = broll(30.0);
+    let bare = compile(
+        &plain,
+        &inputs(&plain, Speech::default(), "only vertical"),
+        &[only_portrait],
+    );
+    assert!(bare.additions.is_some());
+    assert_eq!(bare.proposal, None);
+}
+
+#[test]
 fn no_analysis_gives_a_friendly_refusal() {
     assert_eq!(STILL_LISTENING, "Klipolo is still listening to this clip");
     assert_eq!(ANALYZE_FIRST, "Analyze this clip first");
