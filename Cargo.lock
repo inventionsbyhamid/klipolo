@@ -2350,14 +2350,19 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 name = "klipolo-analysis"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "klipolo-engine",
+ "klipolo-meta",
  "klipolo-model",
  "klipolo-platform",
+ "klipolo-speech-wire",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
  "thiserror 2.0.21",
+ "tokio",
+ "wiremock",
 ]
 
 [[package]]
