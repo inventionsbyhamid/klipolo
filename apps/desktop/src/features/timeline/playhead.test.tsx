@@ -1,5 +1,5 @@
 import { act, fireEvent, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 
@@ -9,6 +9,8 @@ const { useProject } = await import('../../state/project');
 const { usePlayback } = await import('../../state/playback');
 const { useUi } = await import('../../state/ui');
 const { Timeline } = await import('./Timeline');
+
+afterEach(() => vi.useRealTimers());
 
 beforeEach(() => {
   useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
@@ -46,5 +48,25 @@ describe('the playhead as a slider', () => {
     expect(slider).toHaveAttribute('aria-valuetext', '30 seconds');
     fireEvent.keyDown(slider, { key: 'Home' });
     expect(usePlayback.getState().playheadUs).toBe(0);
+  });
+
+  it('while playing, says where it is about 10 times a second however often frames move it', () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
+    renderWithProviders(<Timeline />);
+    const slider = screen.getByRole('slider', { name: 'Playhead' });
+    act(() => usePlayback.setState({ playing: true, seq: usePlayback.getState().seq + 1 }));
+    const writes = vi.spyOn(slider, 'setAttribute');
+    // One second of 60 frames, each moving the playhead (the socket presenter's path).
+    for (let frame = 1; frame <= 60; frame++) {
+      act(() => usePlayback.setState({ playheadUs: Math.round((frame * 1e6) / 60) }));
+      act(() => vi.advanceTimersByTime(1000 / 60));
+    }
+    const values = writes.mock.calls.filter(([name]) => name === 'aria-valuenow').length;
+    expect(values).toBeGreaterThanOrEqual(9);
+    expect(values).toBeLessThanOrEqual(11);
+    // Paused, a seek is said at once.
+    act(() => usePlayback.setState({ playing: false, seq: usePlayback.getState().seq + 1 }));
+    act(() => usePlayback.setState({ playheadUs: 5_000_000 }));
+    expect(slider).toHaveAttribute('aria-valuenow', '5000000');
   });
 });

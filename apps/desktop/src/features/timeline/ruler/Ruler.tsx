@@ -1,6 +1,6 @@
 import { memo, useLayoutEffect, useRef, type KeyboardEvent, type PointerEvent, type RefObject } from 'react';
 import { stepFrames } from '../../../lib/time';
-import { clockAnchor, clockUs, onClock } from '../../../state/playClock';
+import { clockAnchor, clockUs } from '../../../state/playClock';
 import { usePlayback } from '../../../state/playback';
 import { startRangeDrag } from '../lanes/RangeSelection';
 import { Playhead } from '../Playhead';
@@ -37,8 +37,9 @@ export function spokenTime(us: number): string {
 }
 
 /**
- * Keeps the slider's value and its words on the playhead outside React: on every seek, play and pause, and at most
- * 10 times a second while playing (never a render per frame).
+ * Keeps the slider's value and its words on the playhead outside React: at once on a seek while paused and on play,
+ * pause and each new run, and while playing only from a 100 ms timer, so at most 10 times a second however often frames
+ * move the playhead (never a render per frame).
  */
 function useSliderValue(ref: RefObject<HTMLDivElement | null>, durationUs: number) {
   useLayoutEffect(() => {
@@ -52,17 +53,18 @@ function useSliderValue(ref: RefObject<HTMLDivElement | null>, durationUs: numbe
     let timer: ReturnType<typeof setInterval> | undefined;
     const follow = () => {
       say();
-      clearInterval(timer);
-      timer = usePlayback.getState().playing ? setInterval(say, SPOKEN_MS) : undefined;
+      if (!usePlayback.getState().playing) {
+        clearInterval(timer);
+        timer = undefined;
+      } else if (timer === undefined) timer = setInterval(say, SPOKEN_MS);
     };
     follow();
-    const offClock = onClock(follow);
     const offStore = usePlayback.subscribe((s, prev) => {
-      if (s.playing !== prev.playing || s.playheadUs !== prev.playheadUs) follow();
+      if (s.playing !== prev.playing || s.seq !== prev.seq) follow();
+      else if (!s.playing && s.playheadUs !== prev.playheadUs) say();
     });
     return () => {
       clearInterval(timer);
-      offClock();
       offStore();
     };
   }, [ref, durationUs]);
