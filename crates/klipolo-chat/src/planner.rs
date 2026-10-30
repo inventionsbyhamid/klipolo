@@ -262,7 +262,8 @@ pub async fn plan(
     ))
 }
 
-/// The first request's input: the context, the conversation, the new message.
+/// The first request's input: the context, the conversation, the new message. An exchange with neither a reply nor a
+/// note sends only what the person wrote.
 fn opening(history: &[Turn], ctx: &ChatContext, user: &str) -> Vec<Item> {
     let kept = &history[history.len().saturating_sub(KEPT_TURNS)..];
     let mut input = Vec::with_capacity(2 + 2 * kept.len());
@@ -274,6 +275,7 @@ fn opening(history: &[Turn], ctx: &ChatContext, user: &str) -> Vec<Item> {
             text: turn.user.clone(),
         });
         let text = match (turn.reply.trim(), turn.note.trim()) {
+            ("", "") => continue,
             (reply, "") => reply.to_owned(),
             ("", note) => format!("({note})"),
             (reply, note) => format!("{reply}\n({note})"),

@@ -750,3 +750,29 @@ fn history_keeps_the_last_six_exchanges() {
     );
     assert!(t.note.contains("Applied setFormat"), "{}", t.note);
 }
+
+#[test]
+fn an_empty_exchange_sends_no_empty_reply() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let history = vec![Turn {
+        user: "hello?".into(),
+        reply: " ".into(),
+        note: String::new(),
+    }];
+    let model = Fake::new(vec![answer("OK.", vec![], 0.001)]);
+    send(&model, &history, "and now?", &i, &p).unwrap();
+    let input = &model.seen()[0].input;
+    assert_eq!(input.len(), 3, "{input:?}");
+    assert_eq!(
+        input[1],
+        Item::User {
+            text: "hello?".into()
+        }
+    );
+    assert!(
+        !input
+            .iter()
+            .any(|item| matches!(item, Item::Assistant { .. }))
+    );
+}
