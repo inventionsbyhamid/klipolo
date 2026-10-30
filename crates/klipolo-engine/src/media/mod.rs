@@ -4,7 +4,8 @@
 //! when a file's waveform or filmstrip is ready (`events`); and editing copies of sources that scrub slowly (`proxy`,
 //! (`proxy`), which also refill the filmstrip from a full decode. Every cache is named by `key::stem`. Also a
 //! recording's cursor data, which Auto zooms follow (`cursor`), and where its screen changed (`activity`, after the
-//! after the thumbnails).
+//! after the thumbnails). For clip analysis: every frame of a file as a small grey picture
+//! (`luma_frames`).
 
 pub mod activity;
 pub mod cursor;
@@ -12,6 +13,7 @@ pub mod events;
 pub mod frozen;
 pub mod key;
 pub mod keyframes;
+pub mod luma_frames;
 pub mod open;
 pub mod proxy;
 pub mod scan;
