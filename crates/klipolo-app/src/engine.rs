@@ -132,10 +132,10 @@ fn allowed_origins() -> Vec<String> {
 /// cache folder.
 async fn start_engine(state: &EngineState, feed: FeedRx) -> Result<Engine, String> {
     let mut backend = GpuBackend::for_preview(state.take_warm_up()).await?;
-    if let Some(cache) = &state.cache_dir {
+    if let Some(caches) = state.caches() {
         backend = backend
-            .with_audio_cache(cache.join("audio"))
-            .with_media_cache(cache.join("media"))
+            .with_audio_cache(caches.audio)
+            .with_media_cache(caches.media)
             // Exports land later; until then no export job's files need keeping.
             .with_cache_tidy(None);
     }

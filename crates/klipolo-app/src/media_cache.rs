@@ -1,8 +1,8 @@
 //! What the timeline draws on its blocks: a file's waveform peaks (binary, by range and level) and its thumbnail
-//! strip, from the engine's caches in the app's cache folder (`audio/` and `media/thumbs/`). Only files of the open
-//! project are served. These are read-only queries for the page, never edits.
+//! strip, from the engine's caches in the app's cache folder (`state::CacheDirs`, the folders the engine writes). Only
+//! files of the open project are served. These are read-only queries for the page, never edits.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use klipolo_engine::audio::pcm::peaks::{self, PeaksInfo};
 use klipolo_engine::audio::pcm::peaks_file;
@@ -10,7 +10,7 @@ use klipolo_engine::media::thumbs::{self, ThumbStrip};
 use tauri::State;
 
 use crate::project::{ProjectSessionState, uses_path};
-use crate::state::EngineState;
+use crate::state::{CacheDirs, EngineState};
 
 const NOT_IN_PROJECT: &str = "That file isn't part of this project.";
 const NOT_READY: &str = "The waveform isn't ready yet.";
@@ -23,7 +23,7 @@ pub fn media_peaks_info(
     path: String,
 ) -> Result<Option<PeaksInfo>, String> {
     known(&project, &path)?;
-    Ok(peaks_path(engine.cache_dir.as_deref(), &path).and_then(|p| peaks::info(&p)))
+    Ok(peaks_path(engine.caches().as_ref(), &path).and_then(|p| peaks::info(&p)))
 }
 
 /// Raw little-endian i16 `[min, max]` per channel per bucket of `level`, from bucket `from` (at most 16,384).
@@ -37,7 +37,7 @@ pub fn media_peaks(
     count: u32,
 ) -> Result<tauri::ipc::Response, String> {
     known(&project, &path)?;
-    let file = peaks_path(engine.cache_dir.as_deref(), &path).ok_or(NOT_READY)?;
+    let file = peaks_path(engine.caches().as_ref(), &path).ok_or(NOT_READY)?;
     let bytes = peaks::read(&file, level, from, count).map_err(|e| e.to_string())?;
     Ok(tauri::ipc::Response::new(bytes))
 }
@@ -51,19 +51,13 @@ pub fn media_thumbs(
 ) -> Result<Option<ThumbStrip>, String> {
     known(&project, &path)?;
     Ok(engine
-        .cache_dir
-        .as_deref()
-        .and_then(|cache| thumbs::strip(&thumbs_root(cache), &path)))
+        .caches()
+        .and_then(|caches| thumbs::strip(&caches.thumbs(), &path)))
 }
 
-/// Where the engine keeps thumbnails (`with_media_cache`): the cache's `media/thumbs`.
-fn thumbs_root(cache: &Path) -> PathBuf {
-    cache.join("media").join("thumbs")
-}
-
-/// The finished peaks file of `path` in the sound cache (`with_audio_cache`: the cache's `audio`), when there is one.
-fn peaks_path(cache: Option<&Path>, path: &str) -> Option<PathBuf> {
-    peaks_file(&cache?.join("audio"), path)
+/// The finished peaks file of `path` in the sound cache, when there is one.
+fn peaks_path(caches: Option<&CacheDirs>, path: &str) -> Option<PathBuf> {
+    peaks_file(&caches?.audio, path)
 }
 
 fn known(project: &ProjectSessionState, path: &str) -> Result<(), String> {
@@ -112,17 +106,44 @@ mod tests {
         assert_eq!(known(&state, "/etc/passwd"), Err(NOT_IN_PROJECT.into()));
     }
 
+    /// A peaks file and a thumbnail chunk written the way the engine writes them, in the folders the app gives the
+    /// engine, are what these commands read.
     #[test]
-    fn media_is_read_from_the_engines_caches() {
-        // Where `start_engine`'s `with_audio_cache` and `with_media_cache` put them.
-        assert_eq!(
-            thumbs_root(Path::new("/cache")),
-            Path::new("/cache/media/thumbs")
-        );
-        assert_eq!(
-            peaks_path(None, "/media/a.mp4"),
-            None,
-            "no cache folder: no waveform"
-        );
+    fn media_is_read_from_the_folders_the_engine_writes() {
+        use klipolo_engine::audio::pcm::peaks::Peaks;
+        use klipolo_engine::media::key::{CacheKind, stem};
+        use klipolo_engine::media::sprite::Sprite;
+        use klipolo_engine::media::thumbs::Fill;
+
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("a.mp4");
+        std::fs::write(&file, b"not really a video").unwrap();
+        let path = file.to_str().unwrap();
+        let caches = CacheDirs::in_folder(&dir.path().join("cache"));
+        assert_eq!(peaks_path(None, path), None, "no cache folder: no waveform");
+        assert_eq!(peaks_path(Some(&caches), path), None, "not decoded yet");
+
+        // The sound cache's peaks (`PcmStore` names them `<stem>.peaks` in its folder).
+        std::fs::create_dir_all(&caches.audio).unwrap();
+        let named = caches
+            .audio
+            .join(format!("{}.peaks", stem(path, &CacheKind::Pcm).unwrap()));
+        let mut peaks = Peaks::create(&named, 1).unwrap();
+        peaks.push(0, &[0.5; 512]).unwrap();
+        peaks.finish(512).unwrap();
+        let found = peaks_path(Some(&caches), path).expect("the engine's peaks are found");
+        assert_eq!(peaks::info(&found).unwrap().channels, 1);
+
+        // A thumbnail chunk, written as a scan writes it under the media cache.
+        let thumbs_stem = stem(path, &CacheKind::Thumbs).unwrap();
+        thumbs::write_chunk(
+            &klipolo_platform::durable::Os,
+            &caches.thumbs(),
+            &thumbs_stem,
+            &Sprite::new(0, (16, 10)),
+            Fill::Keys,
+        )
+        .unwrap();
+        assert!(thumbs::strip(&caches.thumbs(), path).is_some());
     }
 }
