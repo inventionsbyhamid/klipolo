@@ -226,10 +226,10 @@ impl fmt::Display for ToolError {
             Problem::Empty => write!(f, "{tool}: {field} must not be empty."),
             Problem::OutOfRange { min, max, got } => write!(
                 f,
-                "{tool}: {field} must be between {} and {} seconds, not {}.",
+                "{tool}: {field} must be between {} and {} seconds{}.",
                 said_secs(*min),
                 said_secs(*max),
-                missed_by(*got, *min, *max)
+                given(*got)
             ),
             Problem::NotAfter {
                 start_field,
@@ -261,15 +261,16 @@ fn said_secs(secs: f64) -> String {
     format!("{}", (secs * 1000.0).round() / 1000.0 + 0.0)
 }
 
-/// A number given outside `min..=max`: as itself, or past the longest time (either way) as the bound it misses, "more
-/// than 86400", so a model's `1e300` never comes back as hundreds of digits.
-fn missed_by(got: f64, min: f64, max: f64) -> String {
+/// What was given, after the rule it breaks: ", not 15", or past the longest time either way "; got a number past
+/// 86400", so a model's `1e300` never comes back as hundreds of digits.
+fn given(got: f64) -> String {
+    let longest = said_secs(LONGEST_SECS);
     if got > LONGEST_SECS {
-        format!("more than {}", said_secs(max))
+        format!("; got a number past {longest}")
     } else if got < -LONGEST_SECS {
-        format!("less than {}", said_secs(min))
+        format!("; got a number below -{longest}")
     } else {
-        said_secs(got)
+        format!(", not {}", said_secs(got))
     }
 }
 

@@ -520,30 +520,30 @@ fn bad_arguments_name_the_tool_and_the_field() {
             Some("startSec"),
             "cutRange: startSec must be between 0 and 86400 seconds, not -1.",
         ),
-        // A number past the longest time reads as how it misses, never as hundreds of digits.
+        // A number past the longest time reads as that, never as hundreds of digits.
         (
             "cutRange",
             r#"{"startSec": 1e9, "endSec": 2e9}"#,
             Some("startSec"),
-            "cutRange: startSec must be between 0 and 86400 seconds, not more than 86400.",
+            "cutRange: startSec must be between 0 and 86400 seconds; got a number past 86400.",
         ),
         (
             "cutRange",
             r#"{"startSec": 1, "endSec": 1e300}"#,
             Some("endSec"),
-            "cutRange: endSec must be between 0 and 86400 seconds, not more than 86400.",
+            "cutRange: endSec must be between 0 and 86400 seconds; got a number past 86400.",
         ),
         (
             "cutRange",
             r#"{"startSec": -1e300, "endSec": 2}"#,
             Some("startSec"),
-            "cutRange: startSec must be between 0 and 86400 seconds, not less than 0.",
+            "cutRange: startSec must be between 0 and 86400 seconds; got a number below -86400.",
         ),
         (
             "removeSilences",
             r#"{"minPauseSec": 1e9}"#,
             Some("minPauseSec"),
-            "removeSilences: minPauseSec must be between 0.3 and 10 seconds, not more than 10.",
+            "removeSilences: minPauseSec must be between 0.3 and 10 seconds; got a number past 86400.",
         ),
         // Seconds read with at most three decimals.
         (
