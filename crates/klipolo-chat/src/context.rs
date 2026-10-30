@@ -34,6 +34,7 @@
 //! The speaker turns and scene items are neutral inputs keyed by asset id (what the analysis stored, in that file's
 //! time): no provider's type reaches this crate.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::ops::Range;
@@ -97,8 +98,8 @@ pub struct SceneLog {
     pub items: Vec<SceneEntry>,
 }
 
-/// One speaker's turn in a file, in its sound time (its transcript's). A file's turns are sorted by start; a word
-/// belongs to the last turn starting at or before its middle.
+/// One speaker's turn in a file, in its sound time (its transcript's). A word belongs to the last turn starting at or
+/// before its middle; a file's turns may come in any order.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpeakerTurn {
@@ -180,7 +181,21 @@ pub fn build_context(
 ) -> ChatContext {
     let starts = clip_starts(&project.timeline.main);
     let spoken = spoken(project, speech);
-    let said = said(project, speech, turns, &spoken);
+    // Each file's speaker turns by start, as a word finds its turn by binary search; sorted here when they come
+    // otherwise.
+    let turns: HashMap<&str, Cow<'_, [SpeakerTurn]>> = (turns.iter())
+        .map(|(asset, list)| {
+            let list = if list.is_sorted_by_key(|t| t.start_us) {
+                Cow::Borrowed(list.as_slice())
+            } else {
+                let mut sorted = list.clone();
+                sorted.sort_by_key(|t| (t.start_us, t.end_us));
+                Cow::Owned(sorted)
+            };
+            (asset.as_str(), list)
+        })
+        .collect();
+    let said = said(project, speech, &turns, &spoken);
     let lines = lines(&said);
     let pieces = scene_pieces(project, &starts, scenes);
     let (untranscribed, transcribing) = transcription(project, speech);
@@ -710,7 +725,7 @@ struct SpanFile<'a> {
 fn said<'a>(
     p: &'a Project,
     speech: &'a Speech,
-    turns: &'a HashMap<String, Vec<SpeakerTurn>>,
+    turns: &'a HashMap<&'a str, Cow<'a, [SpeakerTurn]>>,
     spoken: &'a Spoken,
 ) -> Vec<Said<'a>> {
     let mut out: Vec<Said<'a>> = Vec::with_capacity(spoken.words.len());
@@ -730,7 +745,7 @@ fn said<'a>(
             _ => *file.insert(SpanFile {
                 span: w.span,
                 transcript: speech.transcripts.get(asset).map(|t| &**t),
-                turns: turns.get(asset).map(Vec::as_slice),
+                turns: turns.get(asset).map(|t| &**t),
             }),
         };
         let turn = (transcript.and_then(|t| t.words.get(w.word as usize)))
@@ -849,7 +864,7 @@ fn write_line(out: &mut String, said: &[Said], line: &Range<usize>, sentence_sta
         {
             one_line(w.text).into()
         } else {
-            std::borrow::Cow::Borrowed(w.text)
+            Cow::Borrowed(w.text)
         };
         let Some(start) = text.chars().next() else {
             continue;

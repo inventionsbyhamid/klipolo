@@ -1126,3 +1126,11 @@ fn a_transcript_still_being_made_says_how_far_it_reaches() {
         "{transcript}"
     );
 }
+
+#[test]
+fn speaker_turns_in_any_order_give_the_same_lines() {
+    let sorted = two_clips().context(&view_at(0.0)).text;
+    let mut shuffled = two_clips();
+    shuffled.turns.get_mut("clip-a").unwrap().reverse();
+    assert_eq!(shuffled.context(&view_at(0.0)).text, sorted);
+}
