@@ -19,6 +19,10 @@ services:
       META_API_KEY: ${META_API_KEY:-}
     volumes:
       - klipolo-relay-data:/data
+    # Alignment audio waits in /tmp: up to 8 requests of 19 MB. In memory
+    # (counted in the 6 GB), so none of it outlives a crash or a restart.
+    tmpfs:
+      - /tmp:size=200m,mode=1777
     cpus: 8
     mem_limit: 6g
     memswap_limit: 6g
