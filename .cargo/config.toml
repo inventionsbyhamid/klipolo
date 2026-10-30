@@ -3,3 +3,12 @@
 TS_RS_EXPORT_DIR = { value = "src/bindings", relative = true }
 # Export i64/u64 as `number` (all model integers stay below 2^53).
 TS_RS_LARGE_INT = "number"
+# The LGPL FFmpeg 9.0.2 for macOS (scripts/build-ffmpeg.sh; other checkouts link a shared build with
+# scripts/link-ffmpeg.sh), never Homebrew's GPL FFmpeg. These are defaults for an Intel Mac: a value already in the
+# environment wins, so set FFMPEG_DIR, PKG_CONFIG_LIBDIR and KLIPOLO_FFMPEG_PREFIX together to build against another
+# prefix (.build/ffmpeg-9.0/arm64/prefix for aarch64-apple-darwin; scripts/ci-linux.sh sets the Linux one).
+# PKG_CONFIG_PATH is always forced empty, so a shell's Homebrew pkg-config directories never reach the build.
+FFMPEG_DIR = { value = ".build/ffmpeg-9.0/x86_64/prefix", relative = true }
+PKG_CONFIG_LIBDIR = { value = ".build/ffmpeg-9.0/x86_64/prefix/lib/pkgconfig", relative = true }
+PKG_CONFIG_PATH = { value = "", force = true }
+KLIPOLO_FFMPEG_PREFIX = { value = ".build/ffmpeg-9.0/x86_64/prefix", relative = true }
