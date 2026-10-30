@@ -911,7 +911,7 @@ fn snaps_to_cut_within_tolerance_and_not_beyond() {
             SceneKind::Speech,
             13.0,
             13.2,
-            "a cut wins over a nearer word",
+            "speech takes a word over a nearer cut",
         ),
         item(SceneKind::Speech, 29.5, 31.9, "words 0.7 s away"),
         item(SceneKind::Speech, 39.1, 41.8, "words 1.1 s away: too far"),
@@ -919,19 +919,84 @@ fn snaps_to_cut_within_tolerance_and_not_beyond() {
             SceneKind::Action,
             50.2,
             50.3,
-            "the start moves past the end",
+            "its words would put the start past the end",
         ),
+        item(SceneKind::Topic, 13.0, 13.0, "a topic takes the cut"),
     ];
     scenes::snap(&mut items, &cuts, &edges);
     let edges_of = |i: &SceneItem| (i.start_us, i.end_us);
     assert_eq!(edges_of(&items[0]), (frame_us(404), frame_us(722)));
     assert_eq!(edges_of(&items[1]), (frame_us(404), frame_us(722)));
     assert_eq!(edges_of(&items[2]), (11_900_000, 25_600_000));
-    assert_eq!(edges_of(&items[3]), (frame_us(404), frame_us(404)));
+    assert_eq!(edges_of(&items[3]), (13_100_000, 13_200_000));
     assert_eq!(edges_of(&items[4]), (30_200_000, 31_200_000));
     assert_eq!(edges_of(&items[5]), (39_100_000, 41_800_000));
-    // Start to the next word's start (50.5), end to the last word's end (50.0): the end never lands before the start.
-    assert_eq!(edges_of(&items[6]), (50_500_000, 50_500_000));
+    // Its start's word (50.5) is past every end it could take (50.0, or 50.3 as written): it stays as written.
+    assert_eq!(edges_of(&items[6]), (50_200_000, 50_300_000));
+    // A topic tries the cut before the word starting 13.1 s.
+    assert_eq!(edges_of(&items[7]), (frame_us(404), frame_us(404)));
+}
+
+#[test]
+fn speech_edges_prefer_words_and_never_collapse_to_one_cut() {
+    let (a, b) = (frame_us(404), frame_us(722)); // 13.467 s and 24.067 s
+    let words = [word("so", 13.3, 13.5), word("then", 13.6, 13.8)];
+    let edges = scenes::word_edges(&words, 0);
+    let mut items = vec![
+        item(
+            SceneKind::Speech,
+            13.4,
+            13.9,
+            "words, though the cut is nearer",
+        ),
+        item(
+            SceneKind::Speech,
+            23.6,
+            24.5,
+            "no words: the start takes the cut",
+        ),
+        item(
+            SceneKind::Reaction,
+            23.9,
+            24.2,
+            "no words: the start takes the cut",
+        ),
+        item(
+            SceneKind::Action,
+            23.0,
+            23.5,
+            "written before the cut it would take",
+        ),
+        item(
+            SceneKind::Topic,
+            13.0,
+            13.2,
+            "the cut, then the next word end",
+        ),
+        item(SceneKind::Shot, 12.9, 12.9, "an instant may sit on its cut"),
+    ];
+    let written: Vec<(Us, Us)> = items.iter().map(|i| (i.start_us, i.end_us)).collect();
+    scenes::snap(&mut items, &[a, b], &edges);
+    assert_eq!(
+        items
+            .iter()
+            .map(|i| (i.start_us, i.end_us))
+            .collect::<Vec<_>>(),
+        vec![
+            (13_300_000, 13_800_000),
+            (b, 24_500_000),
+            (b, 24_200_000),
+            (23_000_000, b),
+            (a, 13_500_000),
+            (a, a),
+        ]
+    );
+    // Nothing that had a span lost it to one cut.
+    for (item, (start, end)) in items.iter().zip(written) {
+        if end > start {
+            assert!(item.end_us > item.start_us, "{item:?}");
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1024,7 +1089,8 @@ async fn the_scene_log_snaps_a_fakes_moments_to_the_clips_cuts_and_words() {
             .map(|i| (i.start_us, i.end_us, i.kind))
             .collect::<Vec<_>>(),
         vec![
-            (a, a, SceneKind::Shot),
+            // Both edges are near the first cut: the end keeps its own time.
+            (a, 13_500_000, SceneKind::Shot),
             (a, b, SceneKind::Speech),
             (40_200_000, 44_900_000, SceneKind::Action),
         ]

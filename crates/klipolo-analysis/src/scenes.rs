@@ -4,8 +4,8 @@
 //!
 //! A `SceneLogger` (Muse Spark through the Meta adapter) watches each chunk of the clip's small copy (`proxy`) with its
 //! sound. Its moments come back timed to about half a second, so each item's start and end are snapped to the clip's own
-//! evidence: the nearest hard cut within 1.5 s (`cuts`, to the frame), else the nearest word edge within 1 s (the
-//! transcript's words, to tens of milliseconds).
+//! evidence: a hard cut within 1.5 s (`cuts`, to the frame) or a word edge within 1 s (the transcript's words, to tens
+//! of milliseconds). Speech, reactions and actions try the words first, the rest the cuts first (`snap`).
 //!
 //! - **Frame rate:** Spark samples 2 frames a second for a clip up to 5 minutes, 1 above (half the cost; cuts are still
 //!   found to the frame here).
@@ -179,18 +179,42 @@ fn in_clip(moment: SceneMoment, range: RangeUs) -> SceneItem {
     }
 }
 
-/// Moves each item's start and end to the nearest cut within `CUT_SNAP_US`, else to the nearest word start (for a
-/// start) or word end (for an end) within `WORD_SNAP_US`; an end never lands before its start.
+/// Moves each item's edges to the clip's evidence. Each edge has up to three candidates, in this order:
+/// - speech, reactions and actions (heard or done by someone): the nearest word edge within `WORD_SNAP_US` (a word's
+///   start for the item's start, its end for the end), then the nearest cut within `CUT_SNAP_US`;
+/// - shots, text, topics and the rest (seen): the cut first, then the word edge;
+/// - last, the edge as written.
+///
+/// The start takes its first candidate that leaves the end one, then the end its first that keeps the item in order.
+/// An item written with a span keeps one: its end never lands on or before its start, so never on the cut the start
+/// took; it falls back to its next candidate (the edges as written always fit). An item written as an instant may sit
+/// on one cut.
 pub fn snap(items: &mut [SceneItem], cuts: &[Us], edges: &WordEdges) {
     for item in items {
-        let start = nearest(cuts, item.start_us, CUT_SNAP_US)
-            .or_else(|| nearest(&edges.starts, item.start_us, WORD_SNAP_US))
-            .unwrap_or(item.start_us);
-        let end = nearest(cuts, item.end_us, CUT_SNAP_US)
-            .or_else(|| nearest(&edges.ends, item.end_us, WORD_SNAP_US))
-            .unwrap_or(item.end_us);
+        let words_first = matches!(
+            item.kind,
+            SceneKind::Speech | SceneKind::Reaction | SceneKind::Action
+        );
+        let candidates = |at: Us, words: &[Us]| {
+            let word = nearest(words, at, WORD_SNAP_US);
+            let cut = nearest(cuts, at, CUT_SNAP_US);
+            let (first, second) = if words_first {
+                (word, cut)
+            } else {
+                (cut, word)
+            };
+            [first, second, Some(at)].into_iter().flatten()
+        };
+        let span = item.end_us > item.start_us;
+        let snapped = candidates(item.start_us, &edges.starts).find_map(|start| {
+            candidates(item.end_us, &edges.ends)
+                .find(|&end| if span { end > start } else { end >= start })
+                .map(|end| (start, end))
+        });
+        // The edges as written always fit (`merge` keeps every end at or after its start).
+        let (start, end) = snapped.unwrap_or((item.start_us, item.end_us.max(item.start_us)));
         item.start_us = start;
-        item.end_us = end.max(start);
+        item.end_us = end;
     }
 }
 
