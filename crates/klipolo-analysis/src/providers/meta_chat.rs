@@ -188,11 +188,28 @@ fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
     })
 }
 
-/// A Meta client error in chat's terms. A 402 keeps the relay's or Meta's sentence (which credit, what to do); a
-/// request refused as sent or an unreadable answer keeps its (redacted) text for logs only.
+/// The codes of a 429 that means the key's credit or quota is used up, not a busy moment: out of credit, never asked
+/// again.
+pub const QUOTA_CODES: [&str; 3] = [
+    "insufficient_quota",
+    "quota_exceeded",
+    "billing_hard_limit_reached",
+];
+
+/// A Meta client error in chat's terms. A 402, or a 429 whose code says the quota is used up (`QUOTA_CODES`, a direct
+/// key's), keeps the relay's or Meta's sentence (which credit, what to do); a request refused as sent or an unreadable
+/// answer keeps its (redacted) text for logs only.
 pub fn model_error(e: MetaError) -> ModelError {
     match e {
         MetaError::Budget { .. } => ModelError::Budget(e.user_message()),
+        MetaError::RateLimited {
+            code: Some(code),
+            message,
+            ..
+        } if QUOTA_CODES.contains(&code.as_str()) => {
+            let message = message.unwrap_or_default();
+            ModelError::Budget(MetaError::Budget { message }.user_message())
+        }
         MetaError::RateLimited { .. } => ModelError::Busy,
         MetaError::Overloaded { .. } => ModelError::Unavailable,
         MetaError::Network(_) => ModelError::Network,

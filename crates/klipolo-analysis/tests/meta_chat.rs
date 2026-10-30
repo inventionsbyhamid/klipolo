@@ -597,6 +597,28 @@ async fn a_rate_limit_that_is_not_busy_is_not_asked_again() {
 }
 
 #[tokio::test]
+async fn a_used_up_quota_is_out_of_credit_not_busy() {
+    // A direct key's quota: Meta's error object with its code, and its own sentence or none.
+    let cases = [
+        (
+            json!({"error": {"code": "insufficient_quota", "message": "You exceeded your current quota."}}),
+            "You exceeded your current quota.",
+        ),
+        (
+            json!({"error": {"code": "quota_exceeded"}}),
+            "Your Meta credit has run out.",
+        ),
+    ];
+    for (body, said) in cases {
+        let server = MockServer::start().await;
+        answer_once(&server, ResponseTemplate::new(429).set_body_json(body)).await;
+        let e = chat(&server).respond(&neutral_request()).await.unwrap_err();
+        assert_eq!(e, ModelError::Budget(said.into()));
+        assert_eq!(bodies(&server).await.len(), 1, "never asked again");
+    }
+}
+
+#[tokio::test]
 async fn server_and_network_failures_map_to_neutral_errors() {
     let cases = [
         (
