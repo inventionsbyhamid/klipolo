@@ -17,7 +17,7 @@ import { usePlayback } from './state/playback';
 import { useProject } from './state/project';
 import { followSaves } from './state/saving';
 import { toast } from './state/toasts';
-import { skip } from './state/transport';
+import { keepPlayheadInVideo, skip } from './state/transport';
 
 /** The name and formats a first launch's project gets: all three formats, 16:9 first. */
 const NEW_PROJECT = { name: 'Untitled project', formats: ['landscape', 'portrait', 'square'] as const };
@@ -81,6 +81,7 @@ export function App() {
     if (started) return;
     started = true;
     void followSaves();
+    keepPlayheadInVideo();
     void openProject();
   }, []);
   useEngineSession();
