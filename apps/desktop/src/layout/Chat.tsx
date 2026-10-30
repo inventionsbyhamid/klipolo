@@ -1,7 +1,17 @@
+import { useEffect, useRef } from 'react';
+import { useUi } from '../state/ui';
 import { Icon } from './Icon';
 
-/** The chat panel, as a placeholder: the empty state and a composer that waits for chat to land. */
+/**
+ * The chat panel, as a placeholder: the empty state and a composer that waits for chat to land. Command K puts the
+ * cursor in the composer (`useUi.focusChat`).
+ */
 export function Chat() {
+  const composer = useRef<HTMLTextAreaElement>(null);
+  const chatFocus = useUi((s) => s.chatFocus);
+  useEffect(() => {
+    if (chatFocus > 0) composer.current?.focus();
+  }, [chatFocus]);
   return (
     <aside className="panel chat" aria-label="Chat">
       <div className="chat-head">
@@ -21,7 +31,7 @@ export function Chat() {
       </div>
       <div className="composer">
         <div className="input-wrap">
-          <textarea rows={1} placeholder="Say what you want" disabled aria-label="Message" />
+          <textarea ref={composer} rows={1} placeholder="Say what you want" disabled aria-label="Message" />
           <button className="send" disabled aria-label="Send">
             <Icon name="send" />
           </button>

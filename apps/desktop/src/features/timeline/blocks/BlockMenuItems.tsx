@@ -1,0 +1,80 @@
+import { t } from '@lingui/core/macro';
+import { useLingui } from '@lingui/react/macro';
+import { Fragment } from 'react';
+import { ContextMenuItem, ContextMenuSeparator } from '../../../design/ContextMenu';
+import { findClip, findItem, itemLabel, sourceLabel } from '../../../lib/timeline';
+import { useProject } from '../../../state/project';
+import { useSelection } from '../../../state/selection';
+import type { Command } from '../../command-palette/command';
+import { useCommands } from '../../command-palette/useCommands';
+
+/** The menu's name for screen readers: "Actions for screen.mp4". */
+export function blockMenuLabel(id: string): string | undefined {
+  const project = useProject.getState().snapshot?.project;
+  if (!project) return undefined;
+  const found = findItem(project, id);
+  const clip = found ? null : findClip(project, id);
+  const label = found ? itemLabel(project, found.item) : clip ? sourceLabel(project, clip.source) : null;
+  if (label === null) return undefined;
+  return t({
+    id: 'timeline.menu.name',
+    message: `Actions for ${label}`,
+    comment: 'A timeline block’s right-click menu, for screen readers; {label} is a clip’s or layer’s name',
+  });
+}
+
+/**
+ * What block `blockId`'s menu lists, in groups. Each item runs the same command as its shortcut, so the menu,
+ * the keys and the player bar always agree; the block was selected when the menu opened, and is again before an item
+ * runs. Mounted only while the menu is open, so only an open menu follows the selection and the playhead.
+ */
+export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip' | 'layer' }) {
+  const { t } = useLingui();
+  const commands = useCommands();
+  const project = useProject((s) => s.snapshot?.project);
+  const byId = new Map(commands.map((c) => [c.id, c]));
+  const found = project ? findItem(project, blockId) : null;
+
+  const split = { id: 'split', label: t({ id: 'timeline.menu.split', message: 'Split at playhead' }) };
+  const groups: { id: string; label?: string }[][] =
+    kind === 'clip'
+      ? [[split], [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }, { id: 'paste-effects' }], [{ id: 'delete' }]]
+      : [
+          [split, { id: 'attach' }, ...(found?.item.content.type === 'audio' ? [{ id: 'sound-mute' }] : [])],
+          [
+            { id: 'copy' },
+            { id: 'cut' },
+            { id: 'duplicate' },
+            // Sound and zoom layers have no effects.
+            ...(found?.track.kind === 'overlay' ? [{ id: 'paste-effects' }] : []),
+          ],
+          [{ id: 'delete' }],
+        ];
+
+  const item = ({ id, label }: { id: string; label?: string }, command: Command) => (
+    <ContextMenuItem
+      key={id}
+      shortcut={typeof command.shortcut === 'string' ? command.shortcut : undefined}
+      disabled={!command.enabled}
+      onSelect={() => {
+        useSelection.getState().select(blockId);
+        // On this block alone: Split at playhead on a clip splits that clip, or says why it can't.
+        command.run({ block: blockId });
+      }}
+    >
+      {label ?? command.label}
+      {!command.enabled && command.reason && (
+        <span className="menu-note">{command.reason}</span>
+      )}
+    </ContextMenuItem>
+  );
+  return groups
+    .map((group) => group.flatMap((entry) => (byId.has(entry.id) ? [item(entry, byId.get(entry.id)!)] : [])))
+    .filter((group) => group.length > 0)
+    .map((group, i) => (
+      <Fragment key={i}>
+        {i > 0 && <ContextMenuSeparator />}
+        {group}
+      </Fragment>
+    ));
+}
