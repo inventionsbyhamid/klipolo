@@ -797,3 +797,21 @@ fn a_short_remainder_ends_the_music_after_the_last_whole_piece() {
     assert_eq!(spans(&m), [(0.0, 8.0), (8.0, 16.0), (16.0, 20.0)]);
     assert_eq!(fade_out(m[2]), 2.0);
 }
+
+#[test]
+fn music_crossing_the_new_end_is_cut_there_with_its_fade_out() {
+    // Music told to end at 20 s doesn't reach the 30 s end, but a cut to 15 s ends the video inside it: it is cut there
+    // and fades out there, instead of stopping dead past the end.
+    let opts = MusicOpts {
+        end_us: Some(secs(20.0)),
+        ..MusicOpts::default()
+    };
+    let p = with_music(&video(30.0), "loop", opts);
+    assert_eq!(spans(&music(&p)), [(0.0, 8.0), (8.0, 16.0), (16.0, 20.0)]);
+    let short = apply_ops(&p, &with_music_refit(&p, vec![cut(10.0, 25.0)]).unwrap()).unwrap();
+    assert_eq!(video_duration(&short.timeline), secs(15.0));
+    let m = music(&short);
+    assert_eq!(spans(&m), [(0.0, 8.0), (8.0, 15.0)]);
+    assert_one_bed(&short, "loop");
+    assert_eq!(fade_out(m[1]), 2.0);
+}

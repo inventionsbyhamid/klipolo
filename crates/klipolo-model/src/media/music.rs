@@ -157,8 +157,9 @@ pub fn add_music_ops(p: &Project, asset: &Asset, opts: MusicOpts) -> Result<Vec<
 
 /// The ops that fit the music of `after` to its video's end, when an edit from `before` moved it: every run of free
 /// music pieces (one file, back to back, on an unlocked track) that reached `before`'s end is cut at the new end or
-/// played on to it, its fade-out ending there; a run that starts at or past the new end goes. Music that stopped
-/// earlier, or is attached, or on a locked track, is left as it is. Empty when the end didn't move, and when the video
+/// played on to it, its fade-out ending there; a run that starts at or past the new end goes. When the video gets
+/// shorter, a run it now ends inside is cut there the same way. Other music, music that is attached, and music on a
+/// locked track, is left as it is. Empty when the end didn't move, and when the video
 /// is now empty (every clip deleted): the music waits as it is for the footage that comes next, and fits that.
 pub fn refit_music_ops(before: &Project, after: &Project) -> Vec<Op> {
     let (old_end, new_end) = (
@@ -190,7 +191,10 @@ pub fn refit_music_ops(before: &Project, after: &Project) -> Vec<Op> {
             let reached = first.start_us <= old_end
                 && (short <= MIN_DURATION_US
                     || (short < TAIL_US && last.duration_us >= room(last, file_len)));
-            if !reached {
+            // Or the video got shorter and now ends inside it: it is cut there, fading out, instead of stopping dead
+            // past the end.
+            let crosses = new_end < old_end && first.start_us < new_end && new_end < last.end_us();
+            if !reached && !crosses {
                 continue;
             }
             // Up to the new end, or the next layer on the track when one stands before it.
