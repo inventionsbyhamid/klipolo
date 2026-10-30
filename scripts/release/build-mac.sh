@@ -13,8 +13,8 @@
 #    remapped, so the binary names no home folder. Apple's notary variables are unset: notarization is notarize.sh's.
 # 4. The bundle is checked before anything is signed: its version and minimum macOS here, then check-bundle.sh (the
 #    licences and fonts, every Mach-O built for this arch only, load paths and rpaths).
-# 5. sign.sh, notarize.sh (the app, then the disk image), then the disk image is mounted read-only and checked:
-#    spctl must say `accepted` with `source=Notarized Developer ID`.
+# 5. sign.sh, notarize.sh (the app, then the disk image), then check-dmg.sh mounts the disk image read-only and
+#    checks it: spctl must say `accepted` with `source=Notarized Developer ID`.
 # CARGO_BUILD_JOBS defaults to 4 here (the Mac is also someone's daily machine); run it under `nice -n 10`.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
@@ -112,18 +112,5 @@ plist=$app/Contents/Info.plist
 "$here/sign.sh" "$app"
 out=$repo/dist/Klipolo-$version-$arch.dmg
 "$here/notarize.sh" "$app" "$out"
-id=$(developer_id)
-mnt=$(mktemp -d)
-hdiutil attach -nobrowse -readonly -noautoopen -mountpoint "$mnt" "$out" > /dev/null
-trap 'hdiutil detach -quiet "$mnt" 2> /dev/null || true; rmdir "$mnt" 2> /dev/null || true' EXIT
-assessment=$(spctl -a -vv -t exec "$mnt/Klipolo.app" 2>&1 | redact "$id")
-echo "$assessment"
-grep -q ': accepted' <<< "$assessment" && grep -q 'source=Notarized Developer ID' <<< "$assessment" \
-  || { echo "FAIL: Gatekeeper doesn't accept the app in the disk image" >&2; exit 1; }
-codesign --verify --deep --strict --verbose=2 "$mnt/Klipolo.app" 2>&1 | redact "$id"
-xcrun stapler validate "$mnt/Klipolo.app"
-hdiutil detach -quiet "$mnt"
-xcrun stapler validate "$out"
-echo "$out"
-echo "size $(stat -f %z "$out") bytes, sha256 $(shasum -a 256 "$out" | cut -d' ' -f1)"
+"$here/check-dmg.sh" "$out"
 echo "commit $(git rev-parse --short HEAD), $(($(date +%s) - started)) s in all"

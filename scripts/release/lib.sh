@@ -23,9 +23,13 @@ developer_id() {
   esac
 }
 
-# A tool's output with the identity taken out (`... | redact "$id"`).
+# A tool's output with the identity taken out (`... | redact "$id"`, or `... | redact` for its name only).
 redact() {
-  sed -e "s/$1/[Developer ID]/g" -e 's/Developer ID Application: [^"]*/Developer ID Application: [redacted]/g'
+  if [ -n "${1:-}" ]; then
+    sed -e "s/$1/[Developer ID]/g" -e 's/Developer ID Application: [^"]*/Developer ID Application: [redacted]/g'
+  else
+    sed -e 's/Developer ID Application: [^"]*/Developer ID Application: [redacted]/g'
+  fi
 }
 
 # A Mach-O file, by its magic (32 or 64 bit, either byte order, or universal).
