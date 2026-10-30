@@ -8,6 +8,7 @@ mod client;
 mod error;
 mod files;
 mod ledger;
+mod relay;
 mod responses;
 
 pub mod pricing;
@@ -19,5 +20,6 @@ pub use client::{
 };
 pub use error::MetaError;
 pub use ledger::SPEND_LEDGER_ENV;
+pub use relay::{AlignResult, AlignTurn, AlignedWord};
 pub use responses::{FunctionCall, ResponseOut, Usage};
 pub use secrecy::{ExposeSecret, SecretString};

@@ -124,6 +124,20 @@ impl MetaClient {
         check(response, &self.secrets()).await
     }
 
+    /// The URL of the relay's own endpoint `path` (e.g. `/v1/align`).
+    pub(crate) fn relay_url(&self, path: &str) -> String {
+        format!("{}{path}", self.relay_base)
+    }
+
+    /// Sends a call to the relay's own API with the device token.
+    pub(crate) async fn send_relay(
+        &self,
+        request: RequestBuilder,
+        token: &SecretString,
+    ) -> Result<Response, MetaError> {
+        send(request.bearer_auth(token.expose_secret()), &self.secrets()).await
+    }
+
     /// [`Self::send_meta`] that leaves the status to the caller.
     pub(crate) async fn send_meta_unchecked(
         &self,
@@ -179,6 +193,15 @@ impl MetaClient {
 
 /// The most of an error body read for its message.
 const MAX_ERROR_BODY: usize = 64 * 1024;
+
+/// Sends `request`; a status outside 2xx becomes the matching [`MetaError`].
+pub(crate) async fn send(request: RequestBuilder, secrets: &[&str]) -> Result<Response, MetaError> {
+    let response = request
+        .send()
+        .await
+        .map_err(|e| network_error(&e, secrets))?;
+    check(response, secrets).await
+}
 
 /// A status outside 2xx becomes the matching [`MetaError`].
 pub(crate) async fn check(mut response: Response, secrets: &[&str]) -> Result<Response, MetaError> {

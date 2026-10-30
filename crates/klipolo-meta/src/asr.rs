@@ -45,13 +45,9 @@ impl MetaClient {
         wav: Vec<u8>,
         keywords: &[String],
     ) -> Result<AsrResult, MetaError> {
-        let audio = Part::bytes(wav)
-            .file_name("audio.wav")
-            .mime_str("audio/wav")
-            .expect("static media type");
         let form = Form::new()
             .part("request", json_part(&transcribe_request(keywords)))
-            .part("audio", audio);
+            .part("audio", wav_part(wav));
         // Speaker labels are scoped to the session, so each call gets its own.
         let session = format!("klipolo-{}", Uuid::new_v4());
         let request = self
@@ -86,6 +82,14 @@ fn transcribe_request(keywords: &[String]) -> Value {
         request["keywords"] = json!(keywords);
     }
     request
+}
+
+/// A WAV as the multipart part `audio` both Meta and the relay read.
+pub(crate) fn wav_part(wav: Vec<u8>) -> Part {
+    Part::bytes(wav)
+        .file_name("audio.wav")
+        .mime_str("audio/wav")
+        .expect("static media type")
 }
 
 fn json_part(value: &Value) -> Part {

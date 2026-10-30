@@ -4,7 +4,10 @@
 
 use std::path::Path;
 
-use klipolo_meta::{pricing, Auth, MetaClient, MetaError, ResponseOut, SecretString, Usage};
+use klipolo_meta::{
+    pricing, AlignResult, AlignTurn, AlignedWord, AsrTurn, Auth, MetaClient, MetaError,
+    ResponseOut, SecretString, Usage,
+};
 use serde_json::{json, Value};
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
@@ -795,5 +798,154 @@ async fn ledger_names_relay_calls() {
             .unwrap()
             .contains(",responses via relay,"),
         "{text}"
+    );
+}
+
+// Word alignment.
+
+fn aligned() -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_json(json!({
+        "words": [
+            {"text": "But", "startMs": 80, "endMs": 260, "score": 0.93, "turn": 0},
+            {"text": "also", "startMs": 700, "endMs": 720, "score": 0.0, "turn": 0},
+        ],
+        "skipped": [{"turn": 1, "reason": "The turn has no words to align."}],
+    }))
+}
+
+fn align_turns() -> Vec<AlignTurn> {
+    vec![
+        AlignTurn {
+            start_ms: 60,
+            end_ms: 10_780,
+            text: "But it's also also super rewarding".into(),
+        },
+        AlignTurn {
+            start_ms: 14_380,
+            end_ms: 20_860,
+            text: String::new(),
+        },
+    ]
+}
+
+#[tokio::test]
+async fn align_without_a_relay_token_is_unavailable() {
+    let server = MockServer::start().await;
+    let client = direct(&server).with_relay_base(server.uri());
+
+    let error = client.align(wav(), &align_turns()).await.unwrap_err();
+
+    assert_eq!(error, MetaError::AlignUnavailable);
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn align_posts_audio_and_turns_to_the_relay_with_the_device_token() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .and(header("authorization", format!("Bearer {TOKEN}").as_str()))
+        .respond_with(aligned())
+        .expect(1)
+        .mount(&server)
+        .await;
+    // Key mode: Meta calls use the key, alignment the device's relay token.
+    let client = direct(&server)
+        .with_relay_base(server.uri())
+        .with_align_token(secret(TOKEN));
+
+    let result = client.align(wav(), &align_turns()).await.unwrap();
+
+    assert_eq!(
+        result.words[0],
+        AlignedWord {
+            text: "But".into(),
+            start_ms: 80,
+            end_ms: 260,
+            score: 0.93,
+            turn: 0
+        }
+    );
+    assert_eq!(result.words.len(), 2);
+    assert_eq!(
+        result.skipped,
+        [(1, "The turn has no words to align.".to_owned())]
+    );
+    let request = only_request(&server).await;
+    let (_, turns) = part(&request, "turns");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&turns).unwrap(),
+        json!([
+            {"startMs": 60, "endMs": 10780, "text": "But it's also also super rewarding"},
+            {"startMs": 14380, "endMs": 20860, "text": ""},
+        ])
+    );
+    let (headers, audio) = part(&request, "audio");
+    assert!(headers.contains("filename=\"audio.wav\""), "{headers}");
+    assert_eq!(audio, wav());
+}
+
+#[tokio::test]
+async fn relay_mode_aligns_with_its_own_token() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .and(header("authorization", format!("Bearer {TOKEN}").as_str()))
+        .respond_with(aligned())
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    relay(&server).align(wav(), &align_turns()).await.unwrap();
+}
+
+#[tokio::test]
+async fn align_quota_used_up_is_rate_limited() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(ResponseTemplate::new(429).set_body_json(json!({
+            "error": "align_quota",
+            "message": "This device has used today's word timing minutes.",
+        })))
+        .mount(&server)
+        .await;
+
+    let error = relay(&server)
+        .align(wav(), &align_turns())
+        .await
+        .unwrap_err();
+    assert_eq!(error, MetaError::RateLimited { retry_after: None });
+}
+
+#[test]
+fn align_result_reads_and_writes_the_relays_json() {
+    let wire = json!({
+        "words": [{"text": "Hi", "startMs": 14400, "endMs": 14610, "score": 0.81, "turn": 1}],
+        "skipped": [{"turn": 0, "reason": "The turn is past the end of the audio."}],
+    });
+    let result: AlignResult = serde_json::from_value(wire.clone()).unwrap();
+    assert_eq!(
+        result.skipped,
+        [(0, "The turn is past the end of the audio.".to_owned())]
+    );
+    assert_eq!(serde_json::to_value(&result).unwrap(), wire);
+}
+
+#[test]
+fn align_turn_comes_from_an_asr_turn() {
+    let turn = AsrTurn {
+        start_ms: 5,
+        end_ms: 9,
+        text: "Hello".into(),
+        speaker: Some("A".into()),
+    };
+    assert_eq!(
+        AlignTurn::from(&turn),
+        AlignTurn {
+            start_ms: 5,
+            end_ms: 9,
+            text: "Hello".into()
+        }
     );
 }
