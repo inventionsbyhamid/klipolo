@@ -45,11 +45,14 @@ run "cargo check --workspace --all-targets" cargo check --workspace --all-target
 run "clippy model, cursor, platform, engine, fonts, speech-wire" \
   cargo clippy -p klipolo-model -p klipolo-cursor -p klipolo-platform -p klipolo-engine -p klipolo-fonts \
   -p klipolo-speech-wire --all-targets --locked -- -D warnings
+# The app crate: its non-GUI code (the engine commands, on the blank backend here; no window opens).
+run "clippy app" cargo clippy -p klipolo-app --all-targets --locked -- -D warnings
 # What only trial builds compile (the slow-disk hook `render::pool::slow_stats`, the decoders' measurement counters),
 # linted too so it can't rot.
 run "clippy engine (trial)" cargo clippy -p klipolo-engine --all-targets --features trial --locked -- -D warnings
 run "test model, cursor, platform, fonts, speech-wire" cargo test \
   -p klipolo-model -p klipolo-cursor -p klipolo-platform -p klipolo-fonts -p klipolo-speech-wire --locked --no-fail-fast
+run "test app" cargo test -p klipolo-app --locked --no-fail-fast
 # The fonts crate's download tests against a local server (`test-hosts`); nothing here reaches Google.
 run "test fonts (local download server)" cargo test -p klipolo-fonts --features test-hosts --locked
 # Export tests that need an H.264 encoder skip themselves: the LGPL FFmpeg has none on Linux.
