@@ -436,6 +436,7 @@ async def create_response(request: Request, device: RelayDevice, conn: Conn, set
         payload = _json_object(await _read_body(request, MAX_JSON_BYTES, "The request is too large."))
         model = payload.get("model")
         _check_model("responses", model, settings)
+        _check_fields(payload)
         _check_response_options(payload)
         if model in SPARK_MODELS:
             payload["max_output_tokens"] = _max_output_tokens(payload.get("max_output_tokens"))
@@ -1031,6 +1032,41 @@ def _check_model(endpoint: str, model: Any, settings: Settings) -> None:
             "model_not_allowed",
             "This model is not available through the Klipolo relay. Add your own Meta key in Settings to use it.",
         )
+
+
+# The Responses fields the relay forwards. A field it doesn't know could carry
+# media or cost (prompt templates, hosted features) its reservation can't see.
+_RESPONSE_FIELDS = frozenset(
+    {
+        "model",
+        "input",
+        "instructions",
+        "tools",
+        "tool_choice",
+        "parallel_tool_calls",
+        "text",
+        "reasoning",
+        "max_output_tokens",
+        "temperature",
+        "top_p",
+        "stream",
+        "store",
+        "metadata",
+        "user",
+        "safety_identifier",
+        "previous_response_id",
+        "conversation",
+        # Checked below, so they get their own reason.
+        "background",
+        "service_tier",
+    }
+)
+
+
+def _check_fields(payload: dict[str, Any]) -> None:
+    unknown = sorted(set(payload) - _RESPONSE_FIELDS)
+    if unknown:
+        raise RelayError(400, "unsupported", f"The relay does not accept these fields: {', '.join(unknown)}.")
 
 
 def _check_response_options(payload: dict[str, Any]) -> None:

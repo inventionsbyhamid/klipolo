@@ -329,6 +329,54 @@ def test_options_the_relay_cannot_meter_are_400(client, conn, meta, extra, messa
     assert not route.called
 
 
+@pytest.mark.parametrize(
+    ("extra", "named"),
+    [
+        ({"prompt": {"id": "pmpt_1", "variables": {"clip": {"type": "input_file", "file_id": "file-1"}}}}, "prompt"),
+        ({"truncation": "auto"}, "truncation"),
+        ({"include": ["reasoning.encrypted_content"], "prompt_cache_key": "k"}, "include, prompt_cache_key"),
+    ],
+    ids=["prompt", "truncation", "two-fields"],
+)
+def test_fields_the_relay_does_not_know_are_400(client, conn, meta, extra, named):
+    device = add_device(conn)
+    route = meta.post("/responses")
+
+    response = client.post("/meta/v1/responses", json=spark_request(**extra), headers=device.headers)
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "unsupported", "message": f"The relay does not accept these fields: {named}."}
+    assert not route.called
+
+
+def test_every_known_field_is_forwarded(client, conn, meta):
+    device = add_device(conn)
+    route = meta.post("/responses").respond(200, json=spark_body())
+    body = spark_request(
+        instructions="Be brief.",
+        tools=[{"type": "function", "name": "cut", "parameters": {"type": "object", "properties": {}}}],
+        tool_choice="auto",
+        parallel_tool_calls=True,
+        text={"format": {"type": "json_schema", "name": "cut", "schema": {"type": "object"}, "strict": True}},
+        reasoning={"effort": "low"},
+        max_output_tokens=4000,
+        temperature=1.0,
+        top_p=1.0,
+        stream=False,
+        store=False,
+        metadata={"clip": "a"},
+        user="device-1",
+        safety_identifier="device-1",
+        background=False,
+        service_tier="auto",
+    )
+
+    response = client.post("/meta/v1/responses", json=body, headers=device.headers)
+
+    assert response.status_code == 200
+    assert json.loads(route.calls.last.request.content) == body
+
+
 def test_function_tools_are_forwarded(client, conn, meta):
     device = add_device(conn)
     route = meta.post("/responses").respond(200, json=spark_body())
