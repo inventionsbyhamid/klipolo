@@ -16,7 +16,10 @@ use klipolo_engine::api::ExportQuality;
 use klipolo_engine::audio::loudness::{Estimate, estimate_until, measure};
 use klipolo_engine::audio::mix::{ATTACK_US, Mixdown, RATE, RELEASE_US, finish};
 use klipolo_engine::audio::pcm::{Pcm, PcmKey, PcmStore};
-use klipolo_engine::audio::plan::{AudioPlan, AudioSource, JOIN_US, audio_plan, speech_ranges};
+use klipolo_engine::audio::plan::{
+    AudioPlan, AudioSource, JOIN_US, audio_plan, ducking_speech, ducking_speech_after,
+    speech_ranges,
+};
 use klipolo_engine::export::audio::{CEILING_DBTP, ExportAudio};
 use klipolo_engine::export::job::ExportJob;
 use klipolo_engine::export::naming::plan_files;
@@ -428,6 +431,35 @@ fn levels_stand_in_until_the_words_arrive() {
     let mut muted = p.clone();
     muted.timeline.main[0].muted = true;
     assert!(speech_ranges(&muted, &levels).is_empty());
+}
+
+/// A dry run (a drag the engine previews) uses the committed speech again when it can't move it, and works it out anew
+/// when it can, or when the committed project didn't duck.
+#[test]
+fn a_dry_run_reuses_the_speech_it_cannot_move() {
+    let words = transcript(&[(1.0, 2.0, WordKind::Word)], 60.0, true);
+    let said = heard_in(&[("mic", words)], &[]);
+    let committed = with_music(Some(DUCK_DB));
+    let known = ducking_speech(&committed, &said);
+    assert_eq!(&*known, [range(1.0, 2.0)]);
+    // Moving the music: the same ranges, not walked again.
+    let mut moved = committed.clone();
+    moved.timeline.tracks[0].items[0].start_us = secs(1.0);
+    let again = ducking_speech_after(&moved, &said, &committed, &known);
+    assert!(Arc::ptr_eq(&again, &known));
+    // Cutting the first second of the take: the words move with it.
+    let mut cut = committed.clone();
+    cut.timeline.main[0].source_in_us = secs(1.0);
+    let anew = ducking_speech_after(&cut, &said, &committed, &known);
+    assert_eq!(&*anew, [range(0.0, 1.0)]);
+    // Turning ducking on in the dry run of a project that didn't duck: worked out, not the committed (empty) ones.
+    let plain = with_music(None);
+    let none = ducking_speech(&plain, &said);
+    assert!(none.is_empty());
+    let on = ducking_speech_after(&committed, &said, &plain, &none);
+    assert_eq!(&*on, [range(1.0, 2.0)]);
+    // And nothing to work out once nothing ducks.
+    assert!(ducking_speech_after(&plain, &said, &committed, &known).is_empty());
 }
 
 /// An export job made with speech freezes the ranges a ducking layer goes down under, reads them back when resumed,

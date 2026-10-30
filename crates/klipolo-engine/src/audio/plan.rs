@@ -17,7 +17,7 @@ use klipolo_model::transitions::split;
 
 use crate::registry::Registry;
 pub use changes::may_change_sound;
-pub use speech::{JOIN_US, ducking_speech, ducks, speech_ranges};
+pub use speech::{JOIN_US, ducking_speech, ducking_speech_after, ducks, speech_ranges};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AudioPlan {

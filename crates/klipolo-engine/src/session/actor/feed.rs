@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use klipolo_model::apply_ops;
 use klipolo_model::captions::{captions, previewed};
+use klipolo_model::time::RangeUs;
 use tokio::task::JoinHandle;
 
 use super::{Actor, Current};
@@ -53,17 +54,14 @@ pub(super) async fn redrawn(signal: &Option<Arc<tokio::sync::Notify>>) {
     }
 }
 
-/// The sound of feed `f`, the same revision as `c`: `c`'s, unless new speech moves where one of its sound layers ducks;
-/// then planned again (and still `c`'s when that changed nothing, so nothing that holds it starts over).
-fn same_sound(c: &Current, f: &ProjectFeed) -> Arc<AudioPlan> {
+/// The sound of feed `f`, the same revision as `c`: `c`'s, unless new speech moves where one of its sound layers ducks
+/// (`speech`, the feed's ranges); then planned again (and still `c`'s when that changed nothing, so nothing that holds
+/// it starts over).
+fn same_sound(c: &Current, f: &ProjectFeed, speech: &Arc<[RangeUs]>) -> Arc<AudioPlan> {
     if Arc::ptr_eq(&c.speech, &f.speech) || !ducks(&f.project) {
         return c.sound.clone();
     }
-    let sound = audio_plan(
-        &f.project,
-        &f.registry,
-        ducking_speech(&f.project, &f.speech),
-    );
+    let sound = audio_plan(&f.project, &f.registry, speech.clone());
     if sound == *c.sound {
         c.sound.clone()
     } else {
@@ -144,11 +142,16 @@ impl<B: PreviewBackend> Actor<B> {
                 Some(c) => c.captions.clone(),
                 None => Arc::new(captions(&f.project, &f.speech)),
             };
+            // Where someone speaks, for the layers that duck: once per revision and speech.
+            let speech_ranges = match same.filter(|c| Arc::ptr_eq(&c.speech, &f.speech)) {
+                Some(c) => c.speech_ranges.clone(),
+                None => ducking_speech(&f.project, &f.speech),
+            };
             let (ctx, sound) = match same {
                 // Its committed context: a dry run's is planned again from it by `refresh`.
                 Some(c) if Arc::ptr_eq(&c.ctx.project, &f.project) => {
                     kept = true;
-                    (c.ctx.clone(), same_sound(c, &f))
+                    (c.ctx.clone(), same_sound(c, &f, &speech_ranges))
                 }
                 _ => {
                     // An edit keeps the zoom springs that didn't change; while playing, the takes and follow paths
@@ -161,10 +164,9 @@ impl<B: PreviewBackend> Actor<B> {
                     build = zoom;
                     // Planned once for the revision: the cache, the loudness and playback all take this one.
                     let sound = match same {
-                        Some(c) => same_sound(c, &f),
+                        Some(c) => same_sound(c, &f, &speech_ranges),
                         None => {
-                            let speech = ducking_speech(&f.project, &f.speech);
-                            Arc::new(audio_plan(&f.project, &ctx.registry, speech))
+                            Arc::new(audio_plan(&f.project, &ctx.registry, speech_ranges.clone()))
                         }
                     };
                     (ctx, sound)
@@ -189,6 +191,7 @@ impl<B: PreviewBackend> Actor<B> {
                 speech: f.speech,
                 captions,
                 sound,
+                speech_ranges,
                 quiet: true,
             }
         });

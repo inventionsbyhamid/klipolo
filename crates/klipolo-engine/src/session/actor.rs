@@ -9,13 +9,13 @@ use std::time::Instant;
 use klipolo_model::captions::Captions;
 use klipolo_model::project::Project;
 use klipolo_model::speech::Speech;
-use klipolo_model::time::Us;
+use klipolo_model::time::{RangeUs, Us};
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::{mpsc, watch};
 
 use super::{Cmd, EventSink, FeedRx, PreviewBackend, Transient};
 use crate::api::{EngineEvent, Presenter, StateReason, ViewSpec};
-use crate::audio::plan::{AudioPlan, audio_plan, ducking_speech};
+use crate::audio::plan::{AudioPlan, audio_plan, ducking_speech_after};
 use crate::frames::server::{FrameServer, FrameSink};
 use crate::media::cursor::CursorTracks;
 use crate::plan::{MediaMap, PlanContext};
@@ -78,6 +78,9 @@ struct Current {
     captions: Arc<Captions>,
     /// The committed project's sound, planned once per revision.
     sound: Arc<AudioPlan>,
+    /// Where someone speaks on the committed project, which its ducking sound layers go down under
+    /// (`audio::plan::ducking_speech`): once per revision and speech; a dry run that can't move it uses it again.
+    speech_ranges: Arc<[RangeUs]>,
     /// The committed project, or its dry run with the UI's preview ops.
     ctx: PlanContext,
     /// Whether `ctx` sounds like the committed project: no dry run, or one whose ops can't change the sound
@@ -92,8 +95,10 @@ impl Current {
         if self.quiet {
             self.sound.clone()
         } else {
-            let speech = ducking_speech(&self.ctx.project, &self.speech);
-            Arc::new(audio_plan(&self.ctx.project, &self.ctx.registry, speech))
+            let p = &self.ctx.project;
+            let speech =
+                ducking_speech_after(p, &self.speech, &self.committed, &self.speech_ranges);
+            Arc::new(audio_plan(p, &self.ctx.registry, speech))
         }
     }
 }

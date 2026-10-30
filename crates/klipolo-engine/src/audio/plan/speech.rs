@@ -100,6 +100,32 @@ pub fn ducking_speech(p: &Project, speech: &Speech) -> Arc<[RangeUs]> {
     }
 }
 
+/// `ducking_speech` for `p`, a dry run of `committed`, whose own is `known`: that again when what speech ranges come
+/// from (the main track, the recordings, the files and the word fixes) is as it was, so dragging a title or the music
+/// walks no words. O(clips + recordings + files + fixes) to compare, against O(words) to walk.
+pub fn ducking_speech_after(
+    p: &Project,
+    speech: &Speech,
+    committed: &Project,
+    known: &Arc<[RangeUs]>,
+) -> Arc<[RangeUs]> {
+    if !ducks(p) {
+        Arc::default()
+    } else if ducks(committed) && speaks_alike(p, committed) {
+        known.clone()
+    } else {
+        speech_ranges(p, speech)
+    }
+}
+
+/// Whether everything `speech_ranges` reads of the project is the same in both.
+fn speaks_alike(a: &Project, b: &Project) -> bool {
+    a.timeline.main == b.timeline.main
+        && a.recordings == b.recordings
+        && a.assets == b.assets
+        && a.word_fixes == b.word_fixes
+}
+
 /// Whether any sound layer ducks (by more than 0 dB).
 pub fn ducks(p: &Project) -> bool {
     p.timeline
