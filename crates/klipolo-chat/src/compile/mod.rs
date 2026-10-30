@@ -45,6 +45,7 @@ use klipolo_model::{ModelError, Project, finish_parts};
 
 use crate::context::{Refs, SceneLog, View, secs};
 use crate::evidence::{Evidence, Unfounded};
+use crate::sanitize;
 use crate::tools::{Moment, ToolCall};
 use map::Map;
 use trim::Trim;
@@ -90,7 +91,7 @@ pub struct Compiled {
     /// Timeline ranges to point the person at, on the project once `additions` are applied.
     pub moments: Vec<Moment>,
     pub jobs: Vec<Job>,
-    /// `askUser`'s questions.
+    /// `askUser`'s questions, without dashes (`sanitize::reply`).
     pub questions: Vec<String>,
     /// The calls that compiled to nothing, by call index.
     pub refusals: Vec<Refusal>,
@@ -130,7 +131,8 @@ pub struct Refusal {
 pub enum Audience {
     /// Sent back to the model as the call's result, for it to try again or explain.
     Model,
-    /// Shown to the person as it is, never retried: `cannotDo`, and a clip that isn't analyzed yet.
+    /// Shown to the person as it is, never retried: `cannotDo` (without dashes, `sanitize::reply`), and a clip that
+    /// isn't analyzed yet.
     Person,
 }
 
@@ -339,12 +341,12 @@ impl Compiler<'_> {
             let addition = match call {
                 ToolCall::Undo => continue,
                 ToolCall::AskUser { question } => {
-                    out.questions.push(question.clone());
+                    out.questions.push(sanitize::reply(question));
                     continue;
                 }
                 ToolCall::CannotDo { reason } => {
                     let said = Refused {
-                        reason: reason.clone(),
+                        reason: sanitize::reply(reason),
                         audience: Audience::Person,
                     };
                     refuse(&mut out, i, said);

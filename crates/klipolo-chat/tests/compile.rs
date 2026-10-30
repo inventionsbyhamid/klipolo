@@ -1165,18 +1165,28 @@ fn questions_jobs_and_cannot_do_pass_through() {
             "follow her, blur faces, add music, cut the bad part",
         ),
         &[
-            call("askUser", r#"{"question": "Which part should go?"}"#),
-            call("cannotDo", r#"{"reason": "Klipolo can't add music yet."}"#),
+            // Dashes the model wrote never reach the person.
+            call(
+                "askUser",
+                r#"{"question": "Which part should go \u2014 the intro?"}"#,
+            ),
+            call(
+                "cannotDo",
+                r#"{"reason": "Klipolo can't add music yet \u2014 sorry."}"#,
+            ),
             call("followSubject", r#"{"description": "woman astronaut"}"#),
             call("blurObjects", r#"{"description": "face"}"#),
         ],
     );
-    assert_eq!(out.questions, vec!["Which part should go?".to_owned()]);
+    assert_eq!(
+        out.questions,
+        vec!["Which part should go, the intro?".to_owned()]
+    );
     assert_eq!(
         out.refusals,
         vec![Refusal {
             call_index: 1,
-            reason: "Klipolo can't add music yet.".into(),
+            reason: "Klipolo can't add music yet, sorry.".into(),
             audience: Audience::Person,
         }]
     );
