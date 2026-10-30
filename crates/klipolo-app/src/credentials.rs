@@ -40,7 +40,7 @@ pub const RELAY_TOKEN: &str = "relay-token";
 /// The access code the person entered, sent again whenever the device registers again.
 pub const RELAY_CODE: &str = "relay-code";
 
-const KEY_REFUSED: &str = "That key didn't work. Check it on dev.meta.ai.";
+pub(crate) const KEY_REFUSED: &str = "That key didn't work. Check it on dev.meta.ai.";
 const KEY_OFFLINE: &str =
     "Couldn't reach Meta to check the key. Check your internet connection and try again.";
 const KEY_EMPTY: &str = "Paste your Meta API key first.";
@@ -53,7 +53,7 @@ const DEVICE_OFFLINE: &str =
     "Couldn't reach Klipolo to set up this Mac. Check your internet connection and try again.";
 const CREDIT_OFFLINE: &str =
     "Couldn't reach Klipolo to check your credit. Check your internet connection.";
-const CODE_INACTIVE: &str =
+pub(crate) const CODE_INACTIVE: &str =
     "This access code is no longer active. Enter another code or add your own Meta key.";
 const RELAY_BUSY: &str = "Klipolo's server is busy right now. Try again in a moment.";
 const RELAY_UNREADABLE: &str = "Klipolo's server sent an answer the app couldn't read. Try again.";
