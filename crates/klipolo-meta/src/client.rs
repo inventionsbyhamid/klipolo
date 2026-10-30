@@ -44,7 +44,15 @@ pub struct MetaClient {
     pub(crate) relay_base: String,
     pub(crate) align_token: Option<SecretString>,
     ledger: Option<PathBuf>,
+    pub(crate) short_timeout: Duration,
 }
+
+/// The limit for small JSON calls (devices, deletes) and for reading the body
+/// of a refused call. Uploads, transcription, responses and alignment keep
+/// [`LONG_TIMEOUT`].
+pub(crate) const SHORT_TIMEOUT: Duration = Duration::from_secs(30);
+/// A 10 minute chunk of video or audio can take minutes to analyse.
+const LONG_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 impl MetaClient {
     /// A client for `auth`, with the base URLs and the spend ledger from the
@@ -64,6 +72,7 @@ impl MetaClient {
             ledger: std::env::var_os(SPEND_LEDGER_ENV)
                 .filter(|v| !v.is_empty())
                 .map(PathBuf::from),
+            short_timeout: SHORT_TIMEOUT,
         }
     }
 
@@ -104,6 +113,13 @@ impl MetaClient {
         self
     }
 
+    /// The limit for small JSON calls (device status, deletes) and for
+    /// reading the body of a refused call; 30 s by default.
+    pub fn with_short_timeout(mut self, timeout: Duration) -> Self {
+        self.short_timeout = timeout;
+        self
+    }
+
     /// True when Meta calls go through the relay.
     pub fn is_relay(&self) -> bool {
         matches!(self.auth, Auth::Relay { .. })
@@ -121,7 +137,7 @@ impl MetaClient {
     /// Sends a call to Meta (or its relay mirror) with this client's secret.
     pub(crate) async fn send_meta(&self, request: RequestBuilder) -> Result<Response, MetaError> {
         let response = self.send_meta_unchecked(request).await?;
-        check(response, &self.secrets()).await
+        check(response, &self.secrets(), self.short_timeout).await
     }
 
     /// The URL of the relay's own endpoint `path` (e.g. `/v1/align`).
@@ -135,7 +151,8 @@ impl MetaClient {
         request: RequestBuilder,
         token: &SecretString,
     ) -> Result<Response, MetaError> {
-        send(request.bearer_auth(token.expose_secret()), &self.secrets()).await
+        let request = request.bearer_auth(token.expose_secret());
+        send(request, &self.secrets(), self.short_timeout).await
     }
 
     /// [`Self::send_meta`] that leaves the status to the caller.
@@ -195,16 +212,25 @@ impl MetaClient {
 const MAX_ERROR_BODY: usize = 64 * 1024;
 
 /// Sends `request`; a status outside 2xx becomes the matching [`MetaError`].
-pub(crate) async fn send(request: RequestBuilder, secrets: &[&str]) -> Result<Response, MetaError> {
+pub(crate) async fn send(
+    request: RequestBuilder,
+    secrets: &[&str],
+    body_deadline: Duration,
+) -> Result<Response, MetaError> {
     let response = request
         .send()
         .await
         .map_err(|e| network_error(&e, secrets))?;
-    check(response, secrets).await
+    check(response, secrets, body_deadline).await
 }
 
-/// A status outside 2xx becomes the matching [`MetaError`].
-pub(crate) async fn check(mut response: Response, secrets: &[&str]) -> Result<Response, MetaError> {
+/// A status outside 2xx becomes the matching [`MetaError`]. The error's body
+/// is read for its message for at most `body_deadline`.
+pub(crate) async fn check(
+    mut response: Response,
+    secrets: &[&str],
+    body_deadline: Duration,
+) -> Result<Response, MetaError> {
     let status = response.status();
     if status.is_success() {
         return Ok(response);
@@ -215,12 +241,17 @@ pub(crate) async fn check(mut response: Response, secrets: &[&str]) -> Result<Re
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
     let mut body = Vec::new();
-    while let Ok(Some(chunk)) = response.chunk().await {
-        body.extend_from_slice(&chunk);
-        if body.len() >= MAX_ERROR_BODY {
-            break;
+    let read = async {
+        while let Ok(Some(chunk)) = response.chunk().await {
+            body.extend_from_slice(&chunk);
+            if body.len() >= MAX_ERROR_BODY {
+                break;
+            }
         }
-    }
+    };
+    // A body cut off by the deadline usually gives no message; the status
+    // still decides the error.
+    let _ = tokio::time::timeout(body_deadline, read).await;
     Err(MetaError::from_status(
         status.as_u16(),
         retry_after.as_deref(),
@@ -276,9 +307,8 @@ pub(crate) fn trim_base(base: String) -> String {
 pub(crate) fn http_client() -> reqwest::Client {
     reqwest::Client::builder()
         .user_agent(concat!("klipolo-meta/", env!("CARGO_PKG_VERSION")))
-        .connect_timeout(Duration::from_secs(30))
-        // A 10 minute chunk of video or audio can take minutes to analyse.
-        .timeout(Duration::from_secs(15 * 60))
+        .connect_timeout(SHORT_TIMEOUT)
+        .timeout(LONG_TIMEOUT)
         .build()
         .expect("static HTTP client settings are valid")
 }

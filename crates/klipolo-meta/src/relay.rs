@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::asr::wav_part;
-use crate::client::{http_client, read_json, send, trim_base};
+use crate::client::{http_client, read_json, send, trim_base, SHORT_TIMEOUT};
 use crate::{AsrTurn, MetaClient, MetaError};
 
 /// A device as the relay sees it.
@@ -146,7 +146,8 @@ impl MetaClient {
         }
         let secrets: Vec<&str> = code.into_iter().collect();
         let url = format!("{}/v1/devices", trim_base(base.to_owned()));
-        let response = send(http_client().post(url).json(&body), &secrets).await?;
+        let request = http_client().post(url).json(&body).timeout(SHORT_TIMEOUT);
+        let response = send(request, &secrets, SHORT_TIMEOUT).await?;
         let info = DeviceInfo::from(read_json::<DeviceWire>(response, &secrets).await?);
         if info.token.is_none() {
             return Err(MetaError::Decode("the relay sent no device token".into()));
@@ -158,7 +159,10 @@ impl MetaClient {
     /// with its relay token; without one it is [`MetaError::Unauthorized`].
     pub async fn device_status(&self) -> Result<DeviceInfo, MetaError> {
         let token = self.align_token.as_ref().ok_or(MetaError::Unauthorized)?;
-        let request = self.http.get(self.relay_url("/v1/devices/me"));
+        let request = self
+            .http
+            .get(self.relay_url("/v1/devices/me"))
+            .timeout(self.short_timeout);
         let response = self.send_relay(request, token).await?;
         let wire: DeviceWire = self.read_json(response).await?;
         Ok(DeviceInfo {

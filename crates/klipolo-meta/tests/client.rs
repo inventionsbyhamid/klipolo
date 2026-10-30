@@ -1380,3 +1380,115 @@ async fn error_text_never_contains_key() {
         assert!(!text.contains(KEY) && !text.contains(TOKEN), "{text}");
     }
 }
+
+// Timeouts.
+
+const SHORT: std::time::Duration = std::time::Duration::from_millis(300);
+
+#[tokio::test]
+async fn small_calls_give_up_after_the_short_timeout() {
+    let server = MockServer::start().await;
+    let slow = ResponseTemplate::new(200)
+        .set_body_json(
+            json!({"relay_ai": true, "budget_usd": 2.0, "spent_usd": 0.0, "deleted": true}),
+        )
+        .set_delay(std::time::Duration::from_secs(5));
+    Mock::given(wiremock::matchers::any())
+        .respond_with(slow)
+        .mount(&server)
+        .await;
+    let client = relay(&server).with_short_timeout(SHORT);
+
+    let started = std::time::Instant::now();
+    let status = client.device_status().await.unwrap_err();
+    let delete = client.delete_file("file-1").await.unwrap_err();
+
+    assert!(matches!(status, MetaError::Network(_)), "{status:?}");
+    assert!(matches!(delete, MetaError::Network(_)), "{delete:?}");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(3),
+        "{:?}",
+        started.elapsed()
+    );
+}
+
+#[tokio::test]
+async fn long_calls_outlast_the_short_timeout() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(json_body(&fixture("asr_diarization.json")).set_delay(SHORT * 3))
+        .mount(&server)
+        .await;
+
+    let result = direct(&server)
+        .with_short_timeout(SHORT)
+        .transcribe(wav(), &[])
+        .await
+        .unwrap();
+    assert_eq!(result.turns.len(), 9);
+}
+
+/// A server that reads one request, sends `head` (status, headers and the
+/// start of a body) and then stalls.
+fn stalling_server(head: &'static str) -> String {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    std::thread::spawn(move || {
+        let Ok((mut stream, _)) = listener.accept() else {
+            return;
+        };
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+            .unwrap();
+        let mut request = Vec::new();
+        let mut buffer = [0u8; 4096];
+        loop {
+            let Ok(n) = stream.read(&mut buffer) else {
+                return;
+            };
+            request.extend_from_slice(&buffer[..n]);
+            let text = String::from_utf8_lossy(&request).to_lowercase();
+            if let Some(end) = text.find("\r\n\r\n") {
+                let length = text
+                    .lines()
+                    .find_map(|l| l.strip_prefix("content-length:"))
+                    .map_or(0, |v| v.trim().parse::<usize>().unwrap());
+                if request.len() >= end + 4 + length {
+                    break;
+                }
+            }
+            if n == 0 {
+                return;
+            }
+        }
+        let _ = stream.write_all(head.as_bytes());
+        std::thread::sleep(std::time::Duration::from_secs(5));
+    });
+    format!("http://{address}")
+}
+
+#[tokio::test]
+async fn a_stalled_error_body_is_read_for_the_short_timeout_only() {
+    let base = stalling_server(
+        "HTTP/1.1 503 Service Unavailable\r\ncontent-type: application/json\r\ncontent-length: 1000\r\n\r\n{\"error\":",
+    );
+    let client = MetaClient::direct(secret(KEY))
+        .with_meta_base(format!("{base}/v1"))
+        .with_relay_base(CLOSED)
+        .with_ledger(None)
+        .with_short_timeout(SHORT);
+
+    let started = std::time::Instant::now();
+    let error = client
+        .respond(json!({"model": "muse-spark-1.3"}))
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, MetaError::Overloaded { message: None });
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(3),
+        "{:?}",
+        started.elapsed()
+    );
+}

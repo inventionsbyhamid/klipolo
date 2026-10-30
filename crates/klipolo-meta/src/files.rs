@@ -60,12 +60,15 @@ impl MetaClient {
                 message: "This file id is not valid.".into(),
             });
         }
-        let request = self.http.delete(self.meta_url(&format!("files/{id}")));
+        let request = self
+            .http
+            .delete(self.meta_url(&format!("files/{id}")))
+            .timeout(self.short_timeout);
         let response = self.send_meta_unchecked(request).await?;
         if response.status() == StatusCode::NOT_FOUND {
             return Ok(());
         }
-        check(response, &self.secrets()).await?;
+        check(response, &self.secrets(), self.short_timeout).await?;
         Ok(())
     }
 }
