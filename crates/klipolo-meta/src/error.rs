@@ -10,11 +10,11 @@ use thiserror::Error;
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum MetaError {
     /// 402: the relay's credit for this device (or Meta's for the key) is used up.
-    #[error("out of credit (402): {message}")]
+    #[error("out of credit (402){}", detail(Some(.message)))]
     Budget { message: String },
     /// 403: the key or the device may not make this call, with the server's
     /// reason when it gave one (e.g. "This access code is not valid...").
-    #[error("not allowed (403){}", detail(.message))]
+    #[error("not allowed (403){}", detail(.message.as_ref()))]
     NotAllowed { message: Option<String> },
     /// 401: the key or the device token was not accepted.
     #[error("not authorized (401)")]
@@ -22,17 +22,17 @@ pub enum MetaError {
     /// 429: too many requests (Meta's rate limit, or the relay's `busy` or
     /// daily `align_quota`). `retry_after` is the `Retry-After` header in
     /// seconds (up to a day for the quota); `message` the server's reason.
-    #[error("rate limited (429){}{}", retry_hint(*.retry_after), detail(.message))]
+    #[error("rate limited (429){}{}", retry_hint(*.retry_after), detail(.message.as_ref()))]
     RateLimited {
         retry_after: Option<u64>,
         message: Option<String>,
     },
     /// 503 and other server errors: Meta or the relay cannot answer right
     /// now, with the server's reason when it gave one ("Relay not configured.").
-    #[error("Meta or the relay is overloaded or unavailable (5xx){}", detail(.message))]
+    #[error("Meta or the relay is overloaded or unavailable (5xx){}", detail(.message.as_ref()))]
     Overloaded { message: Option<String> },
     /// Any other refused request (400, 404, 413, 422...), with the server's reason.
-    #[error("bad request: {message}")]
+    #[error("bad request{}", detail(Some(.message)))]
     BadRequest { message: String },
     /// The request never got an answer (connection, timeout, cut off body).
     #[error("network error: {0}")]
@@ -52,11 +52,12 @@ pub enum MetaError {
 /// The most of a server's message kept in an error.
 const MAX_MESSAGE_CHARS: usize = 300;
 
-fn detail(message: &Option<String>) -> String {
-    message
-        .as_ref()
-        .map(|m| format!(": {m}"))
-        .unwrap_or_default()
+/// ": message" for `Display`, or nothing when there is no message.
+fn detail(message: Option<&String>) -> String {
+    match message {
+        Some(m) if !m.is_empty() => format!(": {m}"),
+        _ => String::new(),
+    }
 }
 
 fn retry_hint(retry_after: Option<u64>) -> String {
@@ -285,6 +286,33 @@ mod tests {
         assert_eq!(parse_retry_after("1.5"), Some(2));
         assert_eq!(parse_retry_after("Wed, 21 Oct 2026 07:28:00 GMT"), None);
         assert_eq!(parse_retry_after("-3"), None);
+    }
+
+    #[test]
+    fn display_has_no_trailing_colon_without_a_message() {
+        let empty = String::new;
+        assert_eq!(
+            MetaError::Budget { message: empty() }.to_string(),
+            "out of credit (402)"
+        );
+        assert_eq!(
+            MetaError::BadRequest { message: empty() }.to_string(),
+            "bad request"
+        );
+        assert_eq!(
+            MetaError::NotAllowed {
+                message: Some(empty())
+            }
+            .to_string(),
+            "not allowed (403)"
+        );
+        assert_eq!(
+            MetaError::Budget {
+                message: "Credit used.".into()
+            }
+            .to_string(),
+            "out of credit (402): Credit used."
+        );
     }
 
     #[test]
