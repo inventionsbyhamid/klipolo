@@ -1366,6 +1366,7 @@ dependencies = [
  "klipolo-engine",
  "klipolo-model",
  "klipolo-platform",
+ "klipolo-speech-wire",
  "serde",
  "serde_json",
  "sha2",

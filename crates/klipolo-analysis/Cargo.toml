@@ -13,6 +13,8 @@ klipolo-engine = { path = "../klipolo-engine" }
 klipolo-model = { path = "../klipolo-model" }
 # Atomic writes for the WAV and the cache's JSON (`durable::write_atomic`).
 klipolo-platform = { path = "../klipolo-platform" }
+# One list of filler sounds per language (`timing::fillers`).
+klipolo-speech-wire = { path = "../klipolo-speech-wire" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # The content key, at the lockfile's version (the engine builds it).
