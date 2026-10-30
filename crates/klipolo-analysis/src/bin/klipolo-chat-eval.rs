@@ -287,7 +287,7 @@ fn run(args: &Args) -> Result<bool, String> {
 }
 
 fn failed(e: &ChatError) -> String {
-    format!("{:?}: {}", e.kind, e.message)
+    format!("{:?}: {} ({})", e.kind, e.message, e.detail)
 }
 
 /// Each answer's calls as the model wrote them: `name(args) | name(args)`, answers apart with `then`.
