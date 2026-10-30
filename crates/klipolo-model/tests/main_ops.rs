@@ -572,6 +572,7 @@ fn corrupt_projects() -> Vec<Project> {
         drift_ppm: 0.0,
         centre_from: None,
         tie: None,
+        duck: None,
     };
     audio.attach = Some(Attach {
         clip_id: "a".into(),

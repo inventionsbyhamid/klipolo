@@ -154,6 +154,7 @@ fn rejects_bad_items() {
         drift_ppm: 0.0,
         centre_from: None,
         tie: None,
+        duck: None,
     };
     assert_invalid(&with_track(vec![audio_on_overlay]), "belong");
     let mut faded = text_item("t", 1.0, 2.0);
@@ -183,6 +184,7 @@ fn busy() -> Project {
         drift_ppm: 0.0,
         centre_from: None,
         tie: None,
+        duck: None,
     };
     let mut audio = Track::new(TrackKind::Audio, "Audio 1");
     audio.items.push(music);

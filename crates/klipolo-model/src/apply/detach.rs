@@ -272,6 +272,7 @@ fn sound_layers(
                     drift_ppm,
                     centre_from: mix.centre_from,
                     tie: None,
+                    duck: None,
                 },
                 effects: mix.effects.clone(),
             };

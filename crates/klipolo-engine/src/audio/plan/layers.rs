@@ -29,6 +29,7 @@ pub(super) fn layers(p: &Project, registry: &Registry, sources: &mut Vec<AudioSo
                     drift_ppm,
                     centre_from: _,
                     tie: _,
+                    duck: _,
                 } => (
                     asset_id,
                     *source_in_us,

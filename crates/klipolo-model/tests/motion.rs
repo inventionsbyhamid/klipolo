@@ -319,6 +319,7 @@ fn validation_refuses_what_the_spec_rules_out() {
         drift_ppm: 0.0,
         centre_from: None,
         tie: None,
+        duck: None,
     };
     music.layout.blend = Some(Blend::Multiply);
     let mut track = overlay_track("A", vec![music]);

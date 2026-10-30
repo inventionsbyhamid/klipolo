@@ -513,6 +513,12 @@ pub enum ItemContent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         tie: Option<Tie>,
+        /// Ducking: played this many dB lower (-30 to 0, `validate::DEEPEST_DUCK_DB`) while someone speaks, as music is
+        /// under a voice, easing down just before the words and back up after them (the engine's mix). None plays it at
+        /// its volume throughout. Left out of the JSON while None.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        duck: Option<f64>,
     },
     Zoom {
         target: ZoomTarget,

@@ -252,6 +252,7 @@ fn audio_items_and_video_layers_join_the_mix() {
             drift_ppm: 0.0,
             centre_from: None,
             tie: None,
+            duck: None,
         },
         effects: Vec::new(),
     };
@@ -341,6 +342,7 @@ fn a_muted_sound_layer_is_silent_beside_one_that_plays() {
             drift_ppm: 0.0,
             centre_from: None,
             tie: None,
+            duck: None,
         },
         effects: Vec::new(),
     };
@@ -822,6 +824,7 @@ fn solo_picks_the_sound_and_mute_still_wins() {
         drift_ppm: 0.0,
         centre_from: None,
         tie: None,
+        duck: None,
     };
     let game = ItemContent::Video {
         asset_id: "broll".into(),
@@ -1006,6 +1009,7 @@ fn the_preview_and_export_make_the_same_gain_decision() {
             drift_ppm: 0.0,
             centre_from: None,
             tie: None,
+            duck: None,
         },
         effects: Vec::new(),
     };
@@ -1334,6 +1338,7 @@ fn ops_that_cant_change_the_sound_skip_the_replan() {
             drift_ppm: 0.0,
             centre_from: None,
             tie: None,
+            duck: None,
         },
         effects: Vec::new(),
     };

@@ -107,6 +107,7 @@ fn a_canvas_exports_ten_seconds_of_frames_showing_its_layers() {
             drift_ppm: 0.0,
             centre_from: None,
             tie: None,
+            duck: None,
         },
     ));
     p.timeline.tracks.push(music);

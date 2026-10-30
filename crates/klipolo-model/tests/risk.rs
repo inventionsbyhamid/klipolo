@@ -391,6 +391,7 @@ fn something_added_elsewhere_doesnt_make_up_for_what_goes() {
             drift_ppm: 0.0,
             centre_from: None,
             tie: None,
+            duck: None,
         },
         ..still_item(id, start, len)
     };
