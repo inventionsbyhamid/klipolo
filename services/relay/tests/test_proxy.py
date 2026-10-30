@@ -335,8 +335,11 @@ def test_options_the_relay_cannot_meter_are_400(client, conn, meta, extra, messa
         ({"prompt": {"id": "pmpt_1", "variables": {"clip": {"type": "input_file", "file_id": "file-1"}}}}, "prompt"),
         ({"truncation": "auto"}, "truncation"),
         ({"include": ["reasoning.encrypted_content"], "prompt_cache_key": "k"}, "include, prompt_cache_key"),
+        # Stored context the relay can't bound; Klipolo uses neither.
+        ({"previous_response_id": "resp_0"}, "previous_response_id"),
+        ({"conversation": "conv_1"}, "conversation"),
     ],
-    ids=["prompt", "truncation", "two-fields"],
+    ids=["prompt", "truncation", "two-fields", "previous-response", "conversation"],
 )
 def test_fields_the_relay_does_not_know_are_400(client, conn, meta, extra, named):
     device = add_device(conn)
@@ -693,9 +696,8 @@ VIDEO_BY_FILE = {"type": "input_video", "file_id": "file-1"}
         spark_request(input=[{"role": "user", "content": [{"type": "input_file", "file_url": "https://x/a.mp4"}]}]),
         spark_request(input=[{"role": "user", "content": [{"type": "input_image", "file_id": "file-2"}]}]),
         {"model": "sam-3.1", "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}]}]},
-        spark_request(previous_response_id="resp_0"),
     ],
-    ids=["input-video", "input-file", "file-id", "sam", "earlier-context"],
+    ids=["input-video", "input-file", "file-id", "sam"],
 )
 def test_timeout_on_a_media_call_charges_the_media_reservation(sam_client, conn, meta, body):
     device = add_device(conn)
@@ -741,8 +743,6 @@ MEDIA_REQUESTS = {
     "reasoning-with-empty-summary": spark_request(input=[{"type": "reasoning", "id": "rs_1", "summary": []}]),
     "list-typed-part": spark_request(input=[user({"type": ["input_text"], "text": "hi"})]),
     "list-typed-item": spark_request(input=[{"type": ["message"], "role": "user", "content": "hi"}]),
-    "earlier-response": spark_request(previous_response_id="resp_0"),
-    "conversation": spark_request(conversation="conv_1"),
 }
 TEXT_REQUESTS = {
     "string-input": spark_request(),

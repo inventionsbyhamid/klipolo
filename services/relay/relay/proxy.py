@@ -1055,7 +1055,8 @@ def _check_model(endpoint: str, model: Any, settings: Settings) -> None:
 
 
 # The Responses fields the relay forwards. A field it doesn't know could carry
-# media or cost (prompt templates, hosted features) its reservation can't see.
+# media or cost (prompt templates, hosted features) its reservation can't see,
+# and stored context (previous_response_id, conversation) can't be bounded.
 _RESPONSE_FIELDS = frozenset(
     {
         "model",
@@ -1074,8 +1075,6 @@ _RESPONSE_FIELDS = frozenset(
         "metadata",
         "user",
         "safety_identifier",
-        "previous_response_id",
-        "conversation",
         # Checked below, so they get their own reason.
         "background",
         "service_tier",
@@ -1162,11 +1161,9 @@ _MEDIA_TYPES = frozenset({"item_reference", "input_image", "input_file", "input_
 
 def _refers_to_media(payload: dict[str, Any]) -> bool:
     """False only for a text-only call, whose cost the request's size bounds.
-    Anything else (media or files by link or id, references to stored items,
-    earlier responses or conversations, or a type the relay doesn't know)
-    gets the media amount in its reservation."""
-    if payload.get("previous_response_id") is not None or payload.get("conversation") is not None:
-        return True
+    Anything else (any image, media or files by link or id, references to
+    stored items or reasoning, or a type the relay doesn't know) gets the
+    media amount in its reservation."""
     # Anywhere in the request: a stored file, a link, or a media part.
     for item in _objects(payload):
         if "file_id" in item or _type(item) in _MEDIA_TYPES:
