@@ -41,7 +41,13 @@ centreFrom?: number,
  * `DetachSource` separates it, or when Sync lines it up; a nudge or a sync again of that source moves it.
  * Splits and edge trims keep it; slipping its file time by hand drops it. Left out of the JSON while None.
  */
-tie?: Tie, } | { "type": "zoom", target: ZoomTarget, scale: number, } | { "type": "generator", source: ContribId, params: { [key in string]: ParamValue }, 
+tie?: Tie, 
+/**
+ * Ducking: played this many dB lower (-30 to 0, `validate::DEEPEST_DUCK_DB`) while someone speaks, as music is
+ * under a voice, easing down just before the words and back up after them (the engine's mix). None plays it at
+ * its volume throughout. Left out of the JSON while None.
+ */
+duck?: number, } | { "type": "zoom", target: ZoomTarget, scale: number, } | { "type": "generator", source: ContribId, params: { [key in string]: ParamValue }, 
 /**
  * Draws the settled pose, not moving (Remove motion on a motion graphic).
  */

@@ -844,6 +844,11 @@
     "params": []
   },
   {
+    "code": "model.audio.duck",
+    "message": "Ducking can lower a sound by 0 to 30 dB.",
+    "params": []
+  },
+  {
     "code": "model.layer.zoom",
     "message": "Zoom must be between 1× and 5×.",
     "params": []
