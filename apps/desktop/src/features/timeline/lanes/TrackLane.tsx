@@ -4,7 +4,7 @@ import type { Track } from '../../../bindings/Track';
 import { itemLabel, itemTitle, sourceLabel, type Sources } from '../../../lib/timeline';
 import { ItemBlock, type ItemLook } from '../blocks/ItemBlock';
 import type { PressBlock, PressTrim } from '../drag/useBlockDrag';
-import { LAYER_MIN_PX } from '../layout';
+import { LAYER_MIN_PX, SOUND_MIN_PX } from '../layout';
 import { itemFiles } from '../media/blockFiles';
 import { itemSpans } from '../model/index';
 import { mergeTiny, runBands, visibleRange, withKept } from '../model/visible';
@@ -58,7 +58,8 @@ export function linePieces(
   const spans = itemSpans(items);
   const [first, end] = visibleRange(spans, o.fromUs, o.toUs);
   const idAt = (i: number) => items[i].id;
-  const pieces = mergeTiny(spans, first, end, o.pps, LAYER_MIN_PX, (i) => o.keep.has(idAt(i)));
+  const minPx = look === 'sound' || look === 'music' ? SOUND_MIN_PX : LAYER_MIN_PX;
+  const pieces = mergeTiny(spans, first, end, o.pps, minPx, (i) => o.keep.has(idAt(i)));
   for (const piece of runBands(withKept(pieces, items.length, first, end, o.keep, idAt))) {
     if (piece.kind === 'bands') {
       const left = usToPx(piece.startUs, o.pps);
@@ -70,7 +71,7 @@ export function linePieces(
           width={usToPx(piece.endUs - piece.startUs, o.pps)}
           top={box.top}
           height={box.height}
-          className="bg-fg-subtle/40"
+          look={look ?? 'overlay'}
           mask={bandMask(parts)}
         />,
       );

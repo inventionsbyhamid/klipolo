@@ -18,7 +18,7 @@ import {
   type PressBlock,
   type PressTrim,
 } from '../drag/useBlockDrag';
-import { BLOCK_HINT_ID, LAYER_MIN_PX } from '../layout';
+import { BLOCK_HINT_ID, LAYER_MIN_PX, SOUND_MIN_PX } from '../layout';
 import { BlockMedia } from '../media/BlockMedia';
 import type { BlockFiles } from '../media/blockFiles';
 import { usToPx } from '../scale';
@@ -108,11 +108,12 @@ export const ItemBlock = memo(function ItemBlock({
   const { t } = useLingui();
   const left = usToPx(startUs, pps);
   // Never narrower than its padding and edge draw it anyway, so `data-width` is what's on screen.
-  const width = Math.max(usToPx(durationUs, pps), LAYER_MIN_PX);
+  const minPx = look === 'overlay' ? LAYER_MIN_PX : SOUND_MIN_PX;
+  const width = Math.max(usToPx(durationUs, pps), minPx);
   // Narrower than that (only a kept, selected layer is), its box covers the start of the next layer in its row. As a
   // tiny clip does, it keeps its contents in its own stacking context and draws no label, icons or trim handles, so
   // nothing of it draws over, or takes clicks from, that layer (it comes later in the lane and draws on top).
-  const tiny = usToPx(durationUs, pps) < LAYER_MIN_PX;
+  const tiny = usToPx(durationUs, pps) < minPx;
   const ref = useCallback((el: HTMLButtonElement | null) => registerBlock(id, el), [id]);
   // Muted by its own switch: an icon before its name (which gives way first as the block narrows), its sound faded.
   const soundMuted = content.type === 'audio' && !!content.muted;

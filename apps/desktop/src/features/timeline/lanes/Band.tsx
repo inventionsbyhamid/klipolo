@@ -6,22 +6,25 @@ interface BandProps {
   width: number;
   top?: number;
   height?: number;
-  className: string;
+  look: BandLook;
   /** Several bands drawn as one: the CSS mask that paints only their parts (`bandMask`), leaving the gaps empty. */
   mask?: string;
 }
+
+/** The lane a band is on, which gives it its colour (`.tl-band.is-*` in app.css). */
+export type BandLook = 'video' | 'overlay' | 'sound' | 'music';
 
 /**
  * Blocks too narrow to draw one by one (an hour zoomed out), drawn as one strip, or a row's run of such strips as one
  * element masked to their parts. Lanes draw bands before their blocks, so a block (a kept tiny one drawn wider than
  * its time) is always on top; clicks go through to the lane, which seeks, and never reach or deselect a block.
  */
-export const Band = memo(function Band({ left, width, top, height, className, mask }: BandProps) {
+export const Band = memo(function Band({ left, width, top, height, look, mask }: BandProps) {
   return (
     <span
       data-band
       aria-hidden
-      className={cn('pointer-events-none absolute', mask === undefined && 'rounded-sm', className)}
+      className={cn('tl-band', `is-${look}`, mask === undefined && 'is-round')}
       style={{ left, width: Math.max(1, width), top, height, maskImage: mask, WebkitMaskImage: mask }}
     />
   );

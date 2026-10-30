@@ -1063,6 +1063,36 @@
   opacity: 0.6;
 }
 
+/* Blocks too narrow to draw one by one (zoomed out), merged into bands in their lane's colour. */
+.tl-band {
+  position: absolute;
+  pointer-events: none;
+}
+
+.tl-band.is-round {
+  border-radius: var(--radius-xs);
+}
+
+.tl-band.is-video {
+  top: 0;
+  bottom: 0;
+  background: var(--color-clip-deep);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-clip-2) 55%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--color-clip-2) 55%, transparent);
+}
+
+.tl-band.is-overlay {
+  background: color-mix(in srgb, var(--color-lane-overlay) 30%, transparent);
+}
+
+.tl-band.is-sound {
+  background: var(--color-lane-sfx);
+}
+
+.tl-band.is-music {
+  background: color-mix(in srgb, var(--color-lane-music) 40%, transparent);
+}
+
 /* Layers: overlays (paper at 16 % with a 2 px paper edge; solid paper when selected), sound effects (teal, named to
    the right in teal) and music (violet body and edge, its waveform at 40 %, its name in a violet tag). */
 .tl-item {

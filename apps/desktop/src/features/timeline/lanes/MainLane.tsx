@@ -69,7 +69,7 @@ export const MainLane = memo(function MainLane({
           key={`band:${piece.first}`}
           left={usToPx(piece.startUs, pps)}
           width={usToPx(piece.endUs - piece.startUs, pps)}
-          className="inset-y-0 bg-clip-deep"
+          look="video"
         />,
       );
       continue;

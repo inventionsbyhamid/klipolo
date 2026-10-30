@@ -23,11 +23,12 @@ export const LAYERS_PAD_PX = 4;
 export const SOUNDS_LANE_PX = 22;
 export const MUSIC_LANE_PX = 34;
 /**
- * The narrowest each block draws: a clip's edges and padding; a layer's edge and padding, rounded up. Blocks narrower
- * than that merge into a band: drawn one by one they would only overlap, and an hour at mid zoom would mount every
- * clip.
+ * The narrowest each block draws: a clip's edges and padding; an overlay's edge, icon and padding; a sound effect's or
+ * music's 6 px (an effect is a teal block at least 6 px wide). Blocks narrower than that merge into a band
+ * in their lane's colour: drawn one by one they would only overlap, and an hour at mid zoom would mount every clip.
  */
 export const CLIP_MIN_PX = 16;
 export const LAYER_MIN_PX = 12;
+export const SOUND_MIN_PX = 6;
 /** Room after the video to drop and drag into. */
 export const TAIL_US = 10_000_000;
