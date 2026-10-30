@@ -1,0 +1,24 @@
+[package]
+name = "klipolo-app"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+publish = false
+description = "Klipolo's desktop app: the Tauri shell around the preview and export engine"
+default-run = "klipolo-app"
+
+[build-dependencies]
+tauri-build = { version = "=2.7.1", features = [] }
+
+[dependencies]
+klipolo-engine = { path = "../klipolo-engine" }
+klipolo-model = { path = "../klipolo-model" }
+tauri = { version = "=2.12.1", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "test-util"] }
