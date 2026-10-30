@@ -24,8 +24,8 @@ serde_json = "1"
 # The content key, at the lockfile's version (the engine builds it).
 sha2 = "0.10.9"
 thiserror = "2"
-# Reading the WAV off the async threads (`spawn_blocking`).
-tokio = { version = "1", features = ["rt"] }
+# Reading the WAV off the async threads (`spawn_blocking`); the dev CLI's runtime.
+tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
 
 [dev-dependencies]
 tempfile = "3"
