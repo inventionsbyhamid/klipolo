@@ -1004,7 +1004,8 @@ fn write_scene(out: &mut String, piece: &ScenePiece, short: bool) {
         .map(one_line)
         .filter(|t| !t.is_empty())
     {
-        let _ = write!(out, " Text on screen: \"{}\"", shown.replace('"', "\\\""));
+        let escaped = shown.replace('\\', "\\\\").replace('"', "\\\"");
+        let _ = write!(out, " Text on screen: \"{escaped}\"");
     }
     out.push('\n');
 }
