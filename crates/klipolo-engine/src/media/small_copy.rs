@@ -2,13 +2,13 @@
 //! a low bitrate and AAC mono in an MP4 whose index comes first (`+faststart`), so an upload stays small and a server
 //! can read it as it arrives.
 //!
-//! - **Picture:** the source decoded on the activity pass's hardware path (`platform::activity`: VideoToolbox on a Mac)
-//!   when the codec has one, else in software on every core (FFmpeg's frame threads); should the hardware not start
-//!   (FFmpeg then falls back to software by itself, on one thread) or fail part-way, the copy is made again in
-//!   software. Each frame is scaled the way the person sees it (anamorphic pixels widened, a phone's quarter turn
-//!   applied) to fit `SmallCopy::fit`, at most `max_fps` frames a second (frames dropped evenly, never repeated), and
-//!   encoded by the platform's H.264 encoder (`platform::encode`: VideoToolbox's hardware encoder, then its software
-//!   one; Linux has none yet, so the copy is a Mac feature).
+//! - **Picture:** the source decoded on the activity pass's hardware path (`platform::activity`: VideoToolbox) on Apple
+//!   silicon when the codec has one, else in software on every core (FFmpeg's frame threads; on an Intel Mac that is
+//!   the faster way, `HARDWARE_FIRST`). Should the hardware not start (FFmpeg then falls back to software by itself, on
+//!   one thread) or fail part-way, the copy is made again in software. Each frame is scaled the way the person sees it
+//!   (anamorphic pixels widened, a phone's quarter turn applied) to fit `SmallCopy::fit`, at most `max_fps` frames a
+//!   second (frames dropped evenly, never repeated), and encoded by the platform's H.264 encoder (`platform::encode`:
+//!   VideoToolbox's hardware encoder, then its software one; Linux has none yet, so the copy is a Mac feature).
 //! - **Sound:** the engine's own decode (`audio::decode`, 48 kHz), mixed to mono and encoded as AAC (Apple's encoder
 //!   where there is one), interleaved with the picture as it goes.
 //! - **Every frame:** an `EveryFrame` caller sees each decoded frame of the source at its own rate, before the copy
@@ -49,6 +49,11 @@ use crate::vendor::cap::media_info::{AudioInfo, VideoInfo};
 const BLOCK: usize = 4_096;
 /// Seconds between keyframes.
 const GOP_SECONDS: f64 = 2.0;
+
+/// Whether the source is decoded on the hardware path first: on Apple silicon only. VideoToolbox decodes one frame at a
+/// time and every frame is downloaded for the `EveryFrame` caller; on an Intel Mac, software on every core made a
+/// 10-minute 1080p H.264 copy in 68 s against 148 s through VideoToolbox (release build), and 4K HEVC about as fast.
+const HARDWARE_FIRST: bool = cfg!(all(target_os = "macos", target_arch = "aarch64"));
 
 /// What to copy and how small.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -140,10 +145,10 @@ pub fn write(
         &tmp,
         spec,
         cancel,
-        cfg!(target_os = "macos"),
+        HARDWARE_FIRST,
         every.as_deref_mut(),
     );
-    if matches!(written, Err(SmallCopyError::Failed(_))) && cfg!(target_os = "macos") {
+    if matches!(written, Err(SmallCopyError::Failed(_))) && HARDWARE_FIRST {
         // The hardware decoder may refuse a stream part-way: once more in software.
         tracing::info!(error = ?written, "small copy: again with the software decoder");
         if let Some(every) = every.as_deref_mut() {
