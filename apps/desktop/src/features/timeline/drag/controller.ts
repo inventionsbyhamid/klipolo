@@ -11,7 +11,7 @@ import { keyBurst } from '../../../state/keyBurst';
 import { usePlayback } from '../../../state/playback';
 import { useProject } from '../../../state/project';
 import { toast } from '../../../state/toasts';
-import { clearPreview, dropPendingPreview, previewOps } from '../../preview/livePreview';
+import { clearPreview, dropPendingPreview, previewOps } from '../../../state/livePreview';
 import { announce } from '../announce';
 import { HEADER_PX } from '../layout';
 import { attachedTo, sameOps } from '../model/moveOps';

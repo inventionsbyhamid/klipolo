@@ -1,11 +1,10 @@
 import type { Op } from '../bindings/Op';
-import { clearPreview, dropPendingPreview, previewOps } from '../features/preview/livePreview';
 import { labelParts, type Label } from '../lib/labels';
 import { queueCommit } from './commit';
-import { SETTLE_MS } from '../features/preview/useBurst';
-import { registerBurst } from './bursts';
+import { registerBurst, SETTLE_MS } from './bursts';
 import { afterCommits, beginCommit, onSettling, type KeptHold } from './commitQueue';
 import type { Built } from './editBase';
+import { clearPreview, dropPendingPreview, previewOps } from './livePreview';
 import { captureBase, useProject } from './project';
 
 /** A keyboard edit settling into one undo step. */

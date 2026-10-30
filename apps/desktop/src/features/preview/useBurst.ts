@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { Op } from '../../bindings/Op';
 import type { Label } from '../../lib/labels';
-import { registerBurst } from '../../state/bursts';
+import { registerBurst, SETTLE_MS } from '../../state/bursts';
 import type { Built } from '../../state/editBase';
 import { captureBase } from '../../state/project';
-import { clearPreview, dropPendingPreview, previewOps } from './livePreview';
+import { clearPreview, dropPendingPreview, previewOps } from '../../state/livePreview';
 import { queueCommit } from '../../state/commit';
 
 /** A burst of quick changes commits as one undo step this long after the last one. */
-export const SETTLE_MS = 400;
 
 export interface BurstChange {
   /** Its undo label: a message id, with the values it shows. */

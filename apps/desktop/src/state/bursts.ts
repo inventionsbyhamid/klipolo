@@ -4,6 +4,9 @@
  */
 const flushes = new Set<(closing: boolean) => boolean>();
 
+/** How long a burst waits after its last change before it commits (ms): presses within it are one undo step. */
+export const SETTLE_MS = 400;
+
 /**
  * `flush` commits its pending change and says whether there was one; `closing`, the project is closing (or the app
  * quitting). A burst's commit is kept at close (`useBurst`): it goes in its turn, and the close waits for it. Returns

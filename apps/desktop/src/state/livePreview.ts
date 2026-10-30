@@ -1,7 +1,7 @@
-import type { Op } from '../../bindings/Op';
-import { engine } from '../../bridge/engine';
-import { deepEqual } from '../../lib/equal';
-import { useProject } from '../../state/project';
+import type { Op } from '../bindings/Op';
+import { engine } from '../bridge/engine';
+import { deepEqual } from '../lib/equal';
+import { useProject } from './project';
 
 /** Ops, or a builder for them: a drag passes a builder so the ops are made once per frame, not per pointer event. */
 export type PreviewOps = Op[] | (() => Op[]);
