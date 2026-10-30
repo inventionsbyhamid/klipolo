@@ -28,6 +28,7 @@ pub(crate) use create::{create_in, new_project, open_in, snapshot_now};
 pub(crate) use disk::{SaveError, save};
 use klipolo_engine::session::{FeedRx, ProjectFeed};
 use klipolo_model::coded::Said;
+use klipolo_model::contrib::AssetPath;
 use klipolo_model::history::{Change, Document, HistoryLimits, Snapshot, SnapshotPatch};
 use klipolo_model::project::{FormatKind, Project};
 use klipolo_model::{Transaction, apply_ops};
@@ -37,7 +38,7 @@ pub(crate) use saver::{SaveStatus, Saver};
 pub(crate) use session::ProjectSessionState;
 #[cfg(test)]
 pub(crate) use session::opened;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 use tokio::sync::watch;
 
 /// A project file's extension: `~/Movies/Klipolo/<name>.klipolo`.
@@ -97,6 +98,17 @@ fn set_open(state: &ProjectSessionState, open: Option<OpenProject>) -> Result<u6
     Ok(state.opens.load(Ordering::SeqCst))
 }
 
+/// Lets the UI's asset protocol read `project`'s files.
+pub(crate) fn allow_assets(app: &AppHandle, project: &Project) {
+    let scope = app.asset_protocol_scope();
+    for asset in &project.assets {
+        // A missing file just won't preview; the project still opens.
+        if let Some(AssetPath::File(path)) = AssetPath::parse(&asset.path) {
+            let _ = scope.allow_file(path);
+        }
+    }
+}
+
 /// A new project named `name` (the first format is its primary), saved in the library and opened.
 #[tauri::command(async)]
 pub fn project_create(
@@ -109,8 +121,14 @@ pub fn project_create(
 
 /// Opens the project file at `path` (the open one is saved and closed first).
 #[tauri::command(async)]
-pub fn project_open(state: State<'_, ProjectSessionState>, path: String) -> Result<Snapshot, Said> {
-    open_in(&state, Path::new(&path))
+pub fn project_open(
+    app: AppHandle,
+    state: State<'_, ProjectSessionState>,
+    path: String,
+) -> Result<Snapshot, Said> {
+    let snapshot = open_in(&state, Path::new(&path))?;
+    allow_assets(&app, &snapshot.project);
+    Ok(snapshot)
 }
 
 /// Closes the open project once its edits are saved.
@@ -181,8 +199,13 @@ fn step_at(
 /// The whole open project (the UI resynchronises with it when a patch doesn't follow its revision, and reads it when the
 /// page loads).
 #[tauri::command(async)]
-pub fn project_snapshot(state: State<'_, ProjectSessionState>) -> Result<Snapshot, Said> {
-    snapshot_now(&state)
+pub fn project_snapshot(
+    app: AppHandle,
+    state: State<'_, ProjectSessionState>,
+) -> Result<Snapshot, Said> {
+    let snapshot = snapshot_now(&state)?;
+    allow_assets(&app, &snapshot.project);
+    Ok(snapshot)
 }
 
 /// The open project's name and length, for the player bar until the page holds the whole project.

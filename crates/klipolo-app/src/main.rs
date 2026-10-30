@@ -2,6 +2,7 @@
 
 mod engine;
 mod log;
+mod media;
 mod project;
 mod state;
 
@@ -34,6 +35,7 @@ fn main() {
     // the backend.
     let warm = Warmup::start(RenderMode::Interactive);
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
             let cache = app.path().app_cache_dir().ok();
             app.manage(EngineState::new(Some(warm), cache));
@@ -45,7 +47,9 @@ fn main() {
             // The project open when the app last quit opens again; the page reads it with `project_snapshot`.
             if let Ok(data) = app.path().app_data_dir() {
                 projects.remember_last_in(data.join("last-project"));
-                projects.open_last();
+                if let Some(snapshot) = projects.open_last() {
+                    project::allow_assets(app.handle(), &snapshot.project);
+                }
             }
             app.manage(projects);
             Ok(())
@@ -68,6 +72,7 @@ fn main() {
             project::project_redo,
             project::project_snapshot,
             project::project_summary,
+            media::media_import,
         ])
         .build(tauri::generate_context!())
         .expect("Klipolo could not start");

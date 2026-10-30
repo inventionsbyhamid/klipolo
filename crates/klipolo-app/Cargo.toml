@@ -17,15 +17,22 @@ klipolo-fonts = { path = "../klipolo-fonts" }
 klipolo-model = { path = "../klipolo-model" }
 # The OS's logs folder for the app's log.
 klipolo-platform = { path = "../klipolo-platform" }
-tauri = { version = "=2.12.1", features = [] }
+# `protocol-asset`: the page reads imported media and the engine's thumbnails through `asset:` URLs.
+tauri = { version = "=2.12.1", features = ["protocol-asset"] }
+# The file picker behind Add files.
+tauri-plugin-dialog = "=2.8.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+# The import's types for the page (`cargo test` writes them to apps/desktop/src/bindings).
+ts-rs = "12"
+uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
-# A full disk's errno, in the save tests.
+# A portrait photo's EXIF orientation, and a full disk's errno, in the import and save tests.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 libc = "0.2"
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "test-util"] }

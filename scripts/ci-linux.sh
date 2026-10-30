@@ -66,6 +66,8 @@ run "test engine fixtures (no GPU)" cargo test -p klipolo-engine --locked --no-f
   ffmpeg_and_the_stored_index_start_the_picture_at_the_same_place
 # The 16 kHz WAV for speech from the fixtures (a clip with sound, a stereo one, one with none).
 run "test analysis fixtures" cargo test -p klipolo-analysis --locked --test audio -- --ignored
+# Import on the fixtures: unreadable files named with why, a portrait phone video's rotation and an NTSC rate kept.
+run "test app fixtures" cargo test -p klipolo-app --locked -- --ignored
 # What the engine's probe reads for sync (the sound lead, creation time and audio format), on the fixtures.
 run "test engine sync inputs (fixtures)" cargo test -p klipolo-engine --locked --test sync_inputs -- --ignored
 # KLIPOLO_REQUIRE_GPU: a GPU test that finds no adapter fails here instead of skipping (`test_support::adapter_or_skip`).

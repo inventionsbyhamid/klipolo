@@ -31,12 +31,22 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src ipc: http://ipc.localhost ws://127.0.0.1:*; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'",
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost blob: data:; media-src 'self' blob:; connect-src ipc: http://ipc.localhost ws://127.0.0.1:*; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPCACHE/media/**"]
+      },
       "capabilities": [
         {
           "identifier": "main",
           "windows": ["main"],
-          "permissions": ["core:window:allow-start-dragging", "core:window:allow-internal-toggle-maximize"]
+          "permissions": [
+            "core:window:allow-start-dragging",
+            "core:window:allow-internal-toggle-maximize",
+            "core:event:allow-listen",
+            "core:event:allow-unlisten",
+            "dialog:allow-open"
+          ]
         }
       ]
     }
