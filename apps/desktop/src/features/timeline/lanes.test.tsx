@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Item } from '../../bindings/Item';
+import type { ItemContent } from '../../bindings/ItemContent';
 import type { Project } from '../../bindings/Project';
 import { fixtureProject, fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
@@ -20,13 +21,14 @@ const { Timeline } = await import('./Timeline');
 const { audioRole } = await import('./lanes/audioRole');
 
 const S = 1_000_000;
+type AudioContent = Extract<ItemContent, { type: 'audio' }>;
 
 /** The fixture with its song turned into music (ducking set) and a sound effect at 31 s on the same track. */
 function withMusicAndSound(): Project {
   const project = fixtureProject();
   const audio = project.timeline.tracks.find((t) => t.kind === 'audio')!;
   const [song] = audio.items;
-  const music = { ...song, content: { ...song.content, duck: -12 } } as unknown as Item;
+  const music: Item = { ...song, content: { ...(song.content as AudioContent), duck: -12 } };
   const whoosh: Item = { ...song, id: 'whoosh', startUs: 31 * S, durationUs: S };
   audio.items = [music, whoosh];
   return project;

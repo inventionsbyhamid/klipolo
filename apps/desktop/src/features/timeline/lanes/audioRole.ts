@@ -9,8 +9,7 @@ export type AudioRole = 'music' | 'sounds';
  * always added with a duck, so turning ducking off keeps a song music; a sound effect has none.
  */
 export function isMusic(item: Item): boolean {
-  const content = item.content as { type: string; duck?: number | null };
-  return content.type === 'audio' && typeof content.duck === 'number';
+  return item.content.type === 'audio' && typeof item.content.duck === 'number';
 }
 
 /** The lane a sound layer draws in. */
