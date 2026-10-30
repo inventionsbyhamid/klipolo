@@ -130,6 +130,8 @@ struct FakeAsr {
     calls: Mutex<Vec<usize>>,
     delay_ms: u64,
     in_flight: InFlight,
+    /// What it says it takes at once.
+    at_once: usize,
 }
 
 impl FakeAsr {
@@ -143,6 +145,7 @@ impl FakeAsr {
             calls: Mutex::new(Vec::new()),
             delay_ms: 0,
             in_flight: InFlight::default(),
+            at_once: 4,
         }
     }
 
@@ -158,6 +161,10 @@ impl Transcriber for FakeAsr {
 
     fn max_audio_s(&self) -> u32 {
         self.max_s
+    }
+
+    fn max_in_flight(&self) -> usize {
+        self.at_once
     }
 
     fn transcribe<'a>(
@@ -926,10 +933,12 @@ async fn a_failed_transcription_stops_with_its_sentence() {
     assert!(aligner.calls().is_empty());
 }
 
+/// As many requests at once as each service says it takes: the transcriber's `max_in_flight`, the aligner's limits.
 #[tokio::test]
-async fn transcribes_at_most_four_chunks_at_once() {
+async fn runs_as_many_requests_at_once_as_each_service_takes() {
     let mut transcriber = FakeAsr::new(3, |_| Ok(heard(vec![turn(100, 1_500, "some words")])));
     transcriber.delay_ms = 30;
+    transcriber.at_once = 5;
     let mut aligner = FakeAligner::new(|turns| Ok(timed_evenly(turns, 0.9)));
     aligner.limits.preferred_audio_ms = 1_000;
     aligner.delay_ms = 30;
@@ -943,7 +952,7 @@ async fn transcribes_at_most_four_chunks_at_once() {
 
     let chunks = transcriber.calls().len();
     assert_eq!(chunks, 16);
-    assert_eq!(transcriber.in_flight.most(), 4);
+    assert_eq!(transcriber.in_flight.most(), 5);
     assert_eq!(aligner.calls().len(), chunks);
     assert_eq!(aligner.in_flight.most(), 2);
     assert_eq!(out.turns.len(), chunks);
@@ -961,7 +970,7 @@ fn the_analysis_future_can_move_between_threads() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Busy answers, through the Meta adapter in relay mode (mock relay)
+// Busy answers and the device's slots, through the Meta adapter in relay mode (mock relay)
 
 const ASR_PATH: &str = "/meta/v1/asr/transcribe";
 const ALIGN_PATH: &str = "/v1/align";
@@ -1101,4 +1110,128 @@ async fn a_used_up_allowance_or_credit_is_never_tried_again() {
     assert_eq!(requests_to(&server, ASR_PATH).await, 1);
     assert!(err.is_stop());
     assert_eq!(err.user_message(), credit);
+}
+
+/// The Meta adapter asked for short requests, and for more at once than one device may send: chunks of at most 3 s,
+/// one turn an align request, 8 of each at once. Only the adapter's own slots keep them within the relay's.
+struct Eager(Meta);
+
+impl Transcriber for Eager {
+    fn model(&self) -> &str {
+        self.0.model()
+    }
+
+    fn max_audio_s(&self) -> u32 {
+        3
+    }
+
+    fn max_in_flight(&self) -> usize {
+        8
+    }
+
+    fn transcribe<'a>(
+        &'a self,
+        wav: Vec<u8>,
+        keywords: &'a [String],
+    ) -> BoxFuture<'a, Result<Transcription, ProviderError>> {
+        self.0.transcribe(wav, keywords)
+    }
+}
+
+impl Aligner for Eager {
+    fn limits(&self) -> AlignLimits {
+        AlignLimits {
+            preferred_audio_ms: 1_000,
+            max_in_flight: 8,
+            ..self.0.limits()
+        }
+    }
+
+    fn align<'a>(
+        &'a self,
+        wav: Vec<u8>,
+        turns: &'a [AlignTurn],
+    ) -> BoxFuture<'a, Result<Alignment, ProviderError>> {
+        self.0.align(wav, turns)
+    }
+}
+
+/// Answers every request with `answer` after `DELAY`, keeping when each arrived.
+struct Clocked {
+    answer: ResponseTemplate,
+    arrivals: std::sync::Arc<Mutex<Vec<Instant>>>,
+}
+
+const DELAY: Duration = Duration::from_millis(250);
+
+impl wiremock::Respond for Clocked {
+    fn respond(&self, _: &wiremock::Request) -> ResponseTemplate {
+        self.arrivals.lock().unwrap().push(Instant::now());
+        self.answer.clone().set_delay(DELAY)
+    }
+}
+
+/// The most requests answered at once. A slot is only free again once its answer has come (`DELAY` after its request
+/// arrived), so requests arriving within `DELAY` of each other were in flight together.
+fn most_at_once(arrivals: &[Instant]) -> usize {
+    let window = DELAY - Duration::from_millis(20);
+    arrivals
+        .iter()
+        .map(|a| {
+            arrivals
+                .iter()
+                .filter(|b| **b >= *a && **b < *a + window)
+                .count()
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+/// Two clips analysed at once through one adapter (the second through a clone) never send this device more than 3
+/// Meta calls (the relay takes 4; one is left for chat) or 2 align requests at once.
+#[tokio::test(flavor = "multi_thread")]
+async fn two_clips_through_one_adapter_stay_within_the_devices_slots() {
+    let server = MockServer::start().await;
+    let (asr, align) = (
+        std::sync::Arc::new(Mutex::new(Vec::new())),
+        std::sync::Arc::new(Mutex::new(Vec::new())),
+    );
+    let asr_turn = ResponseTemplate::new(200).set_body_json(json!({
+        "audioDurationMs": 1800,
+        "turns": [{"turnId": 0, "startMs": 100, "endMs": 1500, "transcript": "some words", "speaker": "A"}]
+    }));
+    let words = ResponseTemplate::new(200).set_body_json(json!({
+        "words": [
+            {"text": "some", "startMs": 250, "endMs": 800, "score": 0.9, "turn": 0},
+            {"text": "words", "startMs": 900, "endMs": 1600, "score": 0.9, "turn": 0}
+        ],
+        "skipped": []
+    }));
+    for (at, answer, arrivals) in [(ASR_PATH, asr_turn, &asr), (ALIGN_PATH, words, &align)] {
+        Mock::given(method("POST"))
+            .and(path(at))
+            .respond_with(Clocked {
+                answer,
+                arrivals: arrivals.clone(),
+            })
+            .mount(&server)
+            .await;
+    }
+    let meta = relay_meta(&server);
+    let (one, two) = (Eager(meta.clone()), Eager(meta));
+    // 1.5 s of sound, then 0.3 s of quiet, 8 times: 8 chunks each.
+    let parts: Vec<Vec<i16>> = (0..8).flat_map(|_| [tone(1.5), silence(0.3)]).collect();
+    let (clip_one, clip_two) = (clip(&parts), clip(&parts));
+
+    let (a, b) = tokio::join!(
+        transcribe_asset(&one, &one, &clip_one.path, &[]),
+        transcribe_asset(&two, &two, &clip_two.path, &[]),
+    );
+
+    let (a, b) = (a.unwrap(), b.unwrap());
+    assert!(!a.approximate && !b.approximate);
+    let (asr, align) = (asr.lock().unwrap().clone(), align.lock().unwrap().clone());
+    assert_eq!((asr.len(), align.len()), (16, 16));
+    assert_eq!(most_at_once(&asr), 3, "Meta calls at once");
+    assert_eq!(most_at_once(&align), 2, "align requests at once");
 }

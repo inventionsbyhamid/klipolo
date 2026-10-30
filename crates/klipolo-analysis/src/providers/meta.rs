@@ -2,8 +2,16 @@
 //! `Aligner`, both through one `klipolo_meta::MetaClient`. Whether that client calls Meta with the person's key or
 //! goes through the relay with a device token is the client's business, never the caller's. Meta's types and errors
 //! stop here.
+//!
+//! The relay counts one device's requests at once (4 Meta calls, 2 alignments) and answers more with 429 `busy`. So
+//! the adapter keeps one device's slots, shared by its clones: make one `Meta` per app and hand clones to every clip
+//! and feature, and every request waits for a slot before it is sent.
+
+use std::future::Future;
+use std::sync::Arc;
 
 use klipolo_meta::{AsrResult, MetaClient, MetaError, TRANSCRIBE_MODEL, pricing};
+use tokio::sync::Semaphore;
 
 use super::{
     AlignLimits, AlignTurn, Aligner, Alignment, BoxFuture, ProviderError, ProviderErrorKind,
@@ -13,6 +21,14 @@ use super::{
 /// The relay's error code for a device's requests-at-once limit (`Retry-After` 1 s for Meta calls, 30 s for
 /// alignment): a busy moment, not a used-up allowance.
 pub const RELAY_BUSY: &str = "busy";
+
+/// Meta calls at once through the relay: it takes 4 from one device, and one is left for chat, which must never wait
+/// behind analysis.
+pub const RELAY_META_CALLS: usize = 3;
+/// Meta calls at once with the person's own key.
+pub const DIRECT_META_CALLS: usize = 4;
+/// Align requests at once, in both modes (alignment always runs on the relay, 2 at once per device).
+pub const ALIGN_CALLS: usize = 2;
 
 /// Voice Transcribe's longest request.
 pub const TRANSCRIBE_MAX_S: u32 = 600;
@@ -28,18 +44,51 @@ pub const RELAY_ALIGN_LIMITS: AlignLimits = AlignLimits {
     max_text_bytes: 128 * 1024,
     pad_ms: 250,
     overlap_per_turn_ms: 1_000,
-    max_in_flight: 2,
+    max_in_flight: ALIGN_CALLS,
 };
 
-/// Meta's speech services through one client.
+/// Meta's speech services through one client, within one device's slots. Its clones share the client and the slots.
 #[derive(Clone, Debug)]
 pub struct Meta {
     client: MetaClient,
+    /// Meta calls at once: `RELAY_META_CALLS` through the relay, `DIRECT_META_CALLS` with a key.
+    calls: Arc<Semaphore>,
+    calls_at_once: usize,
+    /// Align requests at once: `ALIGN_CALLS`.
+    aligns: Arc<Semaphore>,
 }
 
 impl Meta {
+    /// One device's adapter. Make one per app and share it (clones share its slots); two made from the same device's
+    /// client would each fill the device's slots.
     pub fn new(client: MetaClient) -> Self {
-        Self { client }
+        let calls_at_once = if client.is_relay() {
+            RELAY_META_CALLS
+        } else {
+            DIRECT_META_CALLS
+        };
+        Self {
+            client,
+            calls: Arc::new(Semaphore::new(calls_at_once)),
+            calls_at_once,
+            aligns: Arc::new(Semaphore::new(ALIGN_CALLS)),
+        }
+    }
+
+    /// The client, for Meta calls this adapter doesn't make itself (a scene log's upload and response, say): send them
+    /// through `call`, so they take this device's slots too.
+    pub fn client(&self) -> &MetaClient {
+        &self.client
+    }
+
+    /// One Meta call in this device's slots, its error in Klipolo's terms. The call starts once a slot is free and
+    /// holds it until it is answered.
+    pub async fn call<T>(
+        &self,
+        call: impl Future<Output = Result<T, MetaError>>,
+    ) -> Result<T, ProviderError> {
+        let _slot = self.calls.acquire().await;
+        call.await.map_err(provider_error)
     }
 }
 
@@ -52,17 +101,17 @@ impl Transcriber for Meta {
         TRANSCRIBE_MAX_S
     }
 
+    fn max_in_flight(&self) -> usize {
+        self.calls_at_once
+    }
+
     fn transcribe<'a>(
         &'a self,
         wav: Vec<u8>,
         keywords: &'a [String],
     ) -> BoxFuture<'a, Result<Transcription, ProviderError>> {
         Box::pin(async move {
-            let heard = self
-                .client
-                .transcribe(wav, keywords)
-                .await
-                .map_err(provider_error)?;
+            let heard = self.call(self.client.transcribe(wav, keywords)).await?;
             Ok(transcription(heard))
         })
     }
@@ -88,11 +137,13 @@ impl Aligner for Meta {
                     text: t.text.clone(),
                 })
                 .collect();
-            let aligned = self
-                .client
-                .align(wav, &turns)
-                .await
-                .map_err(provider_error)?;
+            let aligned = {
+                let _slot = self.aligns.acquire().await;
+                self.client
+                    .align(wav, &turns)
+                    .await
+                    .map_err(provider_error)?
+            };
             Ok(Alignment {
                 words: aligned
                     .words
@@ -164,6 +215,16 @@ pub fn provider_error(e: MetaError) -> ProviderError {
 mod tests {
     use super::*;
     use crate::providers::ProviderErrorKind as Kind;
+
+    #[test]
+    fn the_relay_leaves_one_of_a_devices_four_meta_calls_for_chat() {
+        let relay = Meta::new(MetaClient::relay("relay-token".to_owned().into()));
+        let direct = Meta::new(MetaClient::direct("sk-key".to_owned().into()));
+        assert_eq!(relay.max_in_flight(), 3);
+        assert_eq!(direct.max_in_flight(), 4);
+        assert_eq!(relay.limits().max_in_flight, 2);
+        assert_eq!(direct.limits().max_in_flight, 2);
+    }
 
     #[test]
     fn meta_errors_keep_their_sentence_and_say_when_to_stop() {

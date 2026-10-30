@@ -3,8 +3,8 @@
 //!   (`chunks::plan_with_loud_cuts`), planned one second under the transcriber's limit so a last chunk under
 //!   `MIN_CHUNK_US` can join the one before. Each request's WAV is made from the samples when it is sent. A chunk with
 //!   nothing louder than `SILENT_PEAK_DBFS` makes no request; a silent clip makes none at all.
-//! - `hear`: each chunk's speaker turns from the `Transcriber`, `TRANSCRIBE_IN_FLIGHT` requests at once. The first
-//!   failure stops the step.
+//! - `hear`: each chunk's speaker turns from the `Transcriber`, as many requests at once as it takes
+//!   (`Transcriber::max_in_flight`). The first failure stops the step.
 //! - `align`: the turns' word times from the `Aligner`, in requests within its `AlignLimits`. Each request is the WAV
 //!   around its own turns, so a turn is never sent twice and no request carries audio its turns don't need. It never
 //!   fails: what it can't time stays untimed.
@@ -46,8 +46,6 @@ use crate::providers::{
 
 /// The language Voice Transcribe is biased to, and whose fillers are tagged.
 pub const LANGUAGE: &str = "en";
-/// Transcription requests at once.
-pub const TRANSCRIBE_IN_FLIGHT: usize = 4;
 /// Aligned words scoring under this aren't in the audio (often a repeat the transcriber invented): dropped.
 pub const MIN_SCORE: f64 = 0.05;
 /// A turn whose kept words' median score is under this doesn't match its audio (text never spoken there scores about
@@ -250,7 +248,7 @@ pub async fn transcribe_asset(
     ))
 }
 
-/// The turns `transcriber` hears in `sound`'s chunks, `TRANSCRIBE_IN_FLIGHT` requests at once, in order and in sound
+/// The turns `transcriber` hears in `sound`'s chunks, `max_in_flight` requests at once, in order and in sound
 /// time (each clamped to its chunk; blank ones left out). A busy answer is waited out (`retry_busy`); the first request
 /// that fails otherwise ends the step with its error, and the requests still running are dropped.
 pub async fn hear(
@@ -261,12 +259,12 @@ pub async fn hear(
     let mut heard: Vec<(usize, Vec<Turn>, f64)> =
         stream::iter(sound.chunks.iter().copied().enumerate())
             .map(|(i, range)| async move {
-                // Made only when its request starts, so at most `TRANSCRIBE_IN_FLIGHT` WAVs exist at once.
+                // Made only when its request starts, so at most `max_in_flight` WAVs exist at once.
                 let said =
                     retry_busy(|| transcriber.transcribe(sound.wav_of(range), keywords)).await?;
                 Ok::<_, AnalysisError>((i, turns_in(said.turns, range, i), said.cost_usd))
             })
-            .buffer_unordered(TRANSCRIBE_IN_FLIGHT)
+            .buffer_unordered(transcriber.max_in_flight().max(1))
             .try_collect()
             .await?;
     heard.sort_by_key(|(i, ..)| *i);

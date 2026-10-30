@@ -124,6 +124,10 @@ pub trait Transcriber: Send + Sync {
     /// The longest WAV one call takes, in seconds.
     fn max_audio_s(&self) -> u32;
 
+    /// Calls at once for one clip. A provider that limits a whole device (several clips, other features) keeps that
+    /// limit itself, across every caller.
+    fn max_in_flight(&self) -> usize;
+
     /// The turns heard in `wav` (mono 16-bit PCM at 16 kHz, at most `max_audio_s`). `keywords` (names, jargon) bias
     /// the spelling; empty for none.
     fn transcribe<'a>(
