@@ -13,7 +13,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use klipolo_chat::{
-    ChatContext, MAX_CONTEXT_TOKENS, SceneLog, SpeakerTurn, View, build_context, estimate_tokens,
+    ChatContext, MAX_CONTEXT_TOKENS, SceneEntry, SceneLog, SpeakerTurn, View, build_context,
+    estimate_tokens,
 };
 use klipolo_model::project::{Asset, AssetKind, CaptionSettings};
 use klipolo_model::speech::{Speech, Transcript, Word, WordKind};
@@ -626,4 +627,119 @@ fn longer_projects_fall_back_to_sentence_starts_then_fewer_lines() {
     let lines = timed_lines(&text, "Transcript");
     assert!(times_of(lines[0]).0 < 1.0);
     assert!(times_of(lines.last().unwrap()).0 > 48.0 * 155.0 - 600.0);
+}
+
+/// A scene item from `start` to `end` seconds of the file.
+fn entry(start: f64, end: f64, kind: &str, who: &str, text: &str) -> SceneEntry {
+    SceneEntry {
+        start_us: secs(start),
+        end_us: secs(end),
+        kind: kind.into(),
+        who: who.into(),
+        text: text.into(),
+        on_screen_text: None,
+    }
+}
+
+/// The fixture with `items` added to clip A's scene log.
+fn with_items(items: Vec<SceneEntry>) -> Inputs {
+    let mut inputs = two_clips();
+    inputs.scenes.get_mut("clip-a").unwrap().items.extend(items);
+    inputs
+}
+
+#[test]
+fn a_split_clip_keeps_one_line_per_scene_item() {
+    let whole = two_clips().context(&view_at(0.0)).text;
+    let mut split = two_clips();
+    split.project = apply_ops(&split.project, &[Op::Split { at_us: secs(20.0) }]).unwrap();
+    assert_eq!(split.project.timeline.main.len(), 3);
+    let text = split.context(&view_at(0.0)).text;
+    let scenes = timed_lines(&text, "Scenes");
+    // The answer at 24.5 to 51.5 s in the file plays on both sides of the split (file 31.0 s): one line.
+    let answers = scenes
+        .iter()
+        .filter(|l| l.contains("answer (male astronaut)"))
+        .count();
+    assert_eq!(answers, 2, "this one and the later one: {scenes:#?}");
+    line_with(
+        &scenes,
+        "[13.5-40.5] answer (male astronaut): Says living in space",
+    );
+    // Nothing but the clip list changes.
+    assert_eq!(section(&text, "Scenes"), section(&whole, "Scenes"));
+    assert_eq!(section(&text, "Transcript"), section(&whole, "Transcript"));
+    assert!(
+        section(&text, "Project")
+            .contains("\nc2 13.0-20.0 astronauts.mp4 (file 24.0-31.0 of 155.0)\n")
+    );
+}
+
+#[test]
+fn a_copied_clip_repeats_its_words_and_scenes_at_each_use() {
+    let mut inputs = two_clips();
+    let mut copy = inputs.project.timeline.main[0].clone();
+    copy.id = "clip-a1-copy".into();
+    // c3: the file's 0.0 to 13.0 s again, from 144.04 s.
+    inputs.project.timeline.main.push(copy);
+    let ctx = inputs.context(&view_at(150.0));
+    assert_eq!(ctx.refs.clip("c3"), Some("clip-a1-copy"));
+    let text = &ctx.text;
+    let lines = timed_lines(text, "Transcript");
+    let said: Vec<&str> = lines
+        .iter()
+        .copied()
+        .filter(|l| l.contains("A: But it's also super rewarding"))
+        .collect();
+    assert_eq!(said.len(), 2, "{lines:#?}");
+    assert!(
+        said[0].starts_with("[0.1-") && said[1].starts_with("[144.1-"),
+        "{said:#?}"
+    );
+    let scenes = timed_lines(text, "Scenes");
+    line_with(&scenes, "[0.0-12.8] b_roll (divers and astronauts)");
+    line_with(&scenes, "[144.0-156.8] b_roll (divers and astronauts)");
+    line_with(&scenes, "[12.8-13.0] scene_cut (student Kaiden)");
+    line_with(&scenes, "[156.8-157.0] scene_cut (student Kaiden)");
+    assert_eq!(
+        section(text, "Now").lines().next(),
+        Some("Playhead: 150.0 in c3")
+    );
+}
+
+#[test]
+fn a_sliver_of_a_cut_scene_item_is_dropped() {
+    let inputs = with_items(vec![
+        // The cut at 13.0 s leaves 50 ms of this 1.05 s item: dropped.
+        entry(12.95, 14.0, "wave", "student Kaiden", "Waves goodbye"),
+        // Only 50 ms long, and whole: kept.
+        entry(5.0, 5.05, "blink", "female astronaut", "Blinks"),
+        // The cut leaves 200 ms from 24.0 s: kept, at 13.0 s on the timeline.
+        entry(23.85, 24.2, "turn", "male astronaut", "Turns to the camera"),
+    ]);
+    let text = inputs.context(&view_at(0.0)).text;
+    let scenes = timed_lines(&text, "Scenes");
+    assert!(
+        scenes.iter().all(|l| !l.contains("Waves goodbye")),
+        "{scenes:#?}"
+    );
+    line_with(&scenes, "[5.0-5.1] blink (female astronaut): Blinks");
+    line_with(
+        &scenes,
+        "[13.0-13.2] turn (male astronaut): Turns to the camera",
+    );
+}
+
+#[test]
+fn a_moment_item_inside_a_clip_is_kept() {
+    let inputs = with_items(vec![
+        // A moment with no length at 40.0 s in the file: in c2, at 29.0 s on the timeline.
+        entry(40.0, 40.0, "laugh", "male astronaut", "Laughs"),
+        // One inside the cut: gone.
+        entry(18.0, 18.0, "laugh", "student Kaiden", "Giggles"),
+    ]);
+    let text = inputs.context(&view_at(0.0)).text;
+    let scenes = timed_lines(&text, "Scenes");
+    line_with(&scenes, "[29.0-29.0] laugh (male astronaut): Laughs");
+    assert!(scenes.iter().all(|l| !l.contains("Giggles")), "{scenes:#?}");
 }
