@@ -25,10 +25,11 @@ output price, plus $0.75 unless the call is text only (any image or
 reasoning item, media or files by link or id, stored items by reference, or
 any type the relay doesn't know all count as media); for transcription, the
 audio's data at 32,000 bytes a second, the lowest rate Meta takes. The call
-is refused with 402 unless the device and the relay have room for it on top
-of what is spent and what calls in flight have reserved, or with 413 if it
-could cost more than a device's whole cap. A device with no room left is
-refused before its body is read, and bodies have a deadline (408).
+is refused with 402 when the spend alone leaves the device or the relay no
+room for it (final), with 429 when only what calls in flight have reserved
+is in the way (retry later), or with 413 if it could cost more than a
+device's whole cap. A device with no room left is refused before its body is
+read, and bodies have a deadline (408).
 
 After Meta answers, the call is charged from Meta's own `usage`: the ledger
 row and the device's `spent_usd` are written in one transaction, and only then
@@ -137,7 +138,16 @@ _SAFE_MEDIA_TYPE = re.compile(r"[\w.+-]+/[\w.+-]+")
 _USAGE_KEY = re.compile(r'"usage"\s*:\s*(?=\{)')
 _DURATION_KEY = re.compile(r'"audioDurationMs"\s*:\s*')
 
+# Refusals at admission. 402 is final for this request; 429 clears when the
+# calls in flight finish.
 BUDGET_MESSAGE = "This device has used its Klipolo credit. Add your own Meta key in Settings."
+NOT_ENOUGH_CREDIT_MESSAGE = (
+    "This device does not have enough Klipolo credit left for this request. Add your own Meta key in Settings."
+)
+GLOBAL_BUDGET_MESSAGE = "Klipolo's shared AI credit is used up for now. Add your own Meta key in Settings."
+DEVICE_BUSY_MESSAGE = "Other AI requests from this device are still running. Try again when they finish."
+GLOBAL_BUSY_MESSAGE = "Klipolo AI is busy. Try again in a moment."
+BUSY_RETRY_AFTER_S = 5
 
 
 def meta_client() -> httpx.AsyncClient:
@@ -260,9 +270,10 @@ def _spend(conn: sqlite3.Connection, device_id: str) -> tuple[float, float]:
 
 
 async def admit(conn: sqlite3.Connection, slot: Slot, settings: Settings, amount: float) -> None:
-    """Reserve `amount` for the call, or refuse with 402 when the device or the
-    relay has no room for it on top of what is spent and what calls in flight
-    have reserved. With `amount` 0 this only checks that any room is left."""
+    """Reserve `amount` for the call, or refuse it when the device or the relay
+    has no room for it on top of what is spent and what calls in flight have
+    reserved: 402 when the spend alone leaves no room, 429 when the calls in
+    flight do. With `amount` 0 this only checks that any room is left."""
     if amount > settings.device_cap_usd:
         # No device could ever have room for it: say so, not "used its credit".
         raise RelayError(
@@ -284,14 +295,32 @@ async def admit(conn: sqlite3.Connection, slot: Slot, settings: Settings, amount
         # call is ever missed from both.
         device_reserved, total_reserved = in_flight.reserved(slot.device_id)
         spent, total = await run_in_threadpool(_spend, conn, slot.device_id)
-        claims = (
-            (spent + device_reserved, settings.device_cap_usd),
-            (total + total_reserved, settings.global_cap_usd),
-        )
-        for used, cap in claims:
-            if used >= cap or used + amount > cap:
-                raise RelayError(402, "budget", BUDGET_MESSAGE)
+        _check_room(spent, device_reserved, total, total_reserved, amount, settings)
         slot.reserve(amount)
+
+
+def _no_room(used: float, cap: float, amount: float) -> bool:
+    return used >= cap or used + amount > cap
+
+
+def _check_room(
+    spent: float, device_reserved: float, total: float, total_reserved: float, amount: float, settings: Settings
+) -> None:
+    """Refuse a call the caps have no room for, saying why. The spend alone
+    decides the final answers (402); what is left is only held by calls in
+    flight, which free it when they finish (429)."""
+    device_cap, global_cap = settings.device_cap_usd, settings.global_cap_usd
+    if _no_room(total, global_cap, amount):
+        raise RelayError(402, "budget", GLOBAL_BUDGET_MESSAGE)
+    if spent >= device_cap:
+        raise RelayError(402, "budget", BUDGET_MESSAGE)
+    if spent + amount > device_cap:
+        raise RelayError(402, "budget", NOT_ENOUGH_CREDIT_MESSAGE)
+    retry = {"Retry-After": str(BUSY_RETRY_AFTER_S)}
+    if _no_room(spent + device_reserved, device_cap, amount):
+        raise RelayError(429, "busy", DEVICE_BUSY_MESSAGE, headers=retry)
+    if _no_room(total + total_reserved, global_cap, amount):
+        raise RelayError(429, "busy", GLOBAL_BUSY_MESSAGE, headers=retry)
 
 
 @dataclass(frozen=True)

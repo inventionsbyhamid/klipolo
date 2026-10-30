@@ -34,6 +34,19 @@ BUDGET = {
     "error": "budget",
     "message": "This device has used its Klipolo credit. Add your own Meta key in Settings.",
 }
+NOT_ENOUGH_CREDIT = {
+    "error": "budget",
+    "message": "This device does not have enough Klipolo credit left for this request. Add your own Meta key in Settings.",
+}
+GLOBAL_BUDGET = {
+    "error": "budget",
+    "message": "Klipolo's shared AI credit is used up for now. Add your own Meta key in Settings.",
+}
+DEVICE_BUSY = {
+    "error": "busy",
+    "message": "Other AI requests from this device are still running. Try again when they finish.",
+}
+GLOBAL_BUSY = {"error": "busy", "message": "Klipolo AI is busy. Try again in a moment."}
 
 
 @dataclass
@@ -547,9 +560,24 @@ def test_a_media_call_needs_room_for_75_cents_more(client, conn, meta):
     route = meta.post("/responses").respond(200, json=spark_body())
     video = spark_request(input=[{"role": "user", "content": [{"type": "input_video", "file_id": "file-1"}]}])
 
-    assert client.post("/meta/v1/responses", json=video, headers=device.headers).status_code == 402
+    refused = client.post("/meta/v1/responses", json=video, headers=device.headers)
+
+    assert refused.status_code == 402
+    assert refused.json() == NOT_ENOUGH_CREDIT
     assert not route.called
     assert client.post("/meta/v1/responses", json=spark_request(), headers=device.headers).status_code == 200
+
+
+def test_a_device_with_too_little_credit_left_for_the_call_is_told_so(client, conn, meta):
+    # Room left, but less than this call could cost: not "used its credit".
+    device = add_device(conn, spent=2.00 - SPARK_RESERVATION / 2)
+    route = meta.post("/responses")
+
+    response = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
+
+    assert response.status_code == 402
+    assert response.json() == NOT_ENOUGH_CREDIT
+    assert not route.called
 
 
 def test_a_call_that_could_cost_more_than_the_device_cap_is_413(settings, conn, meta):
@@ -593,7 +621,7 @@ def test_global_over_cap_is_402(client, conn, meta):
     for device in (fresh, other_code):
         response = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
         assert response.status_code == 402
-        assert response.json() == BUDGET
+        assert response.json() == GLOBAL_BUDGET
     assert not route.called
 
 
@@ -605,7 +633,21 @@ def test_global_cap_counts_the_whole_ledger_and_the_reservation(client, conn, me
     assert client.post("/meta/v1/responses", json=spark_request(), headers=fresh.headers).status_code == 200
     # The first call's $0.0102 leaves less room than a reservation, so the next
     # call from anyone is refused.
-    assert client.post("/meta/v1/responses", json=spark_request(), headers=fresh.headers).status_code == 402
+    refused = client.post("/meta/v1/responses", json=spark_request(), headers=fresh.headers)
+    assert refused.status_code == 402
+    assert refused.json() == GLOBAL_BUDGET
+
+
+def test_the_shared_credit_is_named_before_the_device_credit(client, conn, meta):
+    # Both are used up: the shared credit is what stops everyone.
+    for _ in range(20):
+        add_device(conn, spent=2.00)
+    device = add_device(conn, spent=2.00)
+
+    response = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
+
+    assert response.status_code == 402
+    assert response.json() == GLOBAL_BUDGET
 
 
 # Meta errors.
@@ -1384,10 +1426,15 @@ def test_racing_requests_stay_within_the_cap_and_their_reservations(client, conn
             for _ in range(4)
         ]
         wait_for(lambda: state["arrived"] == 2 and sum(call.done() for call in calls) == 2)
+        refused = [call.result() for call in calls if call.done()]
         state["release"] = True
         statuses = sorted(call.result().status_code for call in calls)
 
-    assert statuses == [200, 200, 402, 402]
+    # The device's spend has room for each: only the calls in flight hold it.
+    assert statuses == [200, 200, 429, 429]
+    for response in refused:
+        assert response.json() == DEVICE_BUSY
+        assert response.headers["retry-after"] == "5"
     total = spent(conn, device)
     assert total == pytest.approx(start + 2 * cost)
     # Never past the cap, except by what Meta charged beyond a reservation.
@@ -1410,8 +1457,34 @@ def test_reservations_in_flight_count_against_the_global_cap(client, conn, meta,
         state["release"] = True
 
     assert held.result().status_code == 200
-    assert refused.status_code == 402
+    assert refused.status_code == 429
+    assert refused.json() == GLOBAL_BUSY
+    assert refused.headers["retry-after"] == "5"
     assert client.app.state.in_flight.reserved(first.device_id) == (0.0, 0.0)
+
+
+def test_a_fresh_devices_third_video_call_at_once_is_busy_not_out_of_credit(client, conn, meta):
+    # Two video reservations ($0.79 each) leave less than a third's room in
+    # $2, but the device has spent nothing.
+    device = add_device(conn)
+    state = hold_meta_calls(meta)
+    video = spark_request(input=[user({"type": "input_video", "file_id": "file-1"})])
+
+    with concurrent.futures.ThreadPoolExecutor(2) as pool:
+        held = [
+            pool.submit(client.post, "/meta/v1/responses", json=video, headers=device.headers) for _ in range(2)
+        ]
+        wait_for(lambda: state["arrived"] == 2)
+        third = client.post("/meta/v1/responses", json=video, headers=device.headers)
+        state["release"] = True
+        statuses = [future.result().status_code for future in held]
+
+    assert statuses == [200, 200]
+    assert third.status_code == 429
+    assert third.json() == DEVICE_BUSY
+    assert third.headers["retry-after"] == "5"
+    # Once they finish, the device has room again.
+    assert client.post("/meta/v1/responses", json=video, headers=device.headers).status_code == 200
 
 
 def hold_meta_calls(meta, path="/responses", usage=SPARK_USAGE):
