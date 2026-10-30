@@ -1,6 +1,7 @@
 """POST /v1/align with a fake model: auth, daily minutes, upload limits,
 temp files and concurrency. No torch needed."""
 
+import asyncio
 import io
 import json
 import os
@@ -447,6 +448,33 @@ def test_turns_of_128_kb_are_accepted(client, auth, fake):
     assert response.status_code == 200
     # Far more letters than 1.5 s of audio can hold.
     assert response.json()["skipped"] == [{"turn": 0, "reason": TOO_SHORT}]
+
+
+def test_turns_are_parsed_and_planned_off_the_event_loop(client, auth, monkeypatch):
+    # Parsing and planning large turns takes a while; on the event loop it
+    # would hold up every other request, proxied calls included.
+    from relay import align
+
+    seen = []
+
+    def on_event_loop():
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return False
+        return True
+
+    def spy(name, real):
+        def wrapper(*args):
+            seen.append((name, on_event_loop()))
+            return real(*args)
+
+        return wrapper
+
+    monkeypatch.setattr(align, "parse_turns", spy("parse_turns", align.parse_turns))
+    monkeypatch.setattr(align, "plan", spy("plan", align.plan))
+    assert post(client, auth).status_code == 200
+    assert seen == [("parse_turns", False), ("plan", False)]
 
 
 def test_declared_length_over_the_limit_is_413_before_reading(client, auth):

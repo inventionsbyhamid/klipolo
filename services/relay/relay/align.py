@@ -435,9 +435,11 @@ async def align_words(request: Request, device: Device, conn: Conn, settings: Ap
         with os.fdopen(fd, "wb") as audio_file:
             turns_raw = await _read_form(request, boundary, audio_file)
         watcher = asyncio.create_task(_watch_for_hang_up(request, gone))
-        turns = parse_turns(turns_raw)
+        # Parsing and planning are CPU work: off the event loop, so proxied
+        # calls keep moving.
+        turns = await run_in_threadpool(parse_turns, turns_raw)
         n_samples = await run_in_threadpool(wav_samples, path)
-        planned, skipped = plan(turns, n_samples)
+        planned, skipped = await run_in_threadpool(plan, turns, n_samples)
         seconds = check_coverage(planned, n_samples)
         if planned:
             reservation = await run_in_threadpool(reserve_seconds, conn, device_id, seconds, settings)
