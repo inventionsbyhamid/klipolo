@@ -5,7 +5,8 @@
 # or older, every load path is @rpath/, @executable_path/, @loader_path/, /usr/lib/ or /System/Library/, and every
 # LC_RPATH is relative (@executable_path/ or @loader_path/), never a machine path such as the dev FFmpeg prefix's.
 # The app must also find its libraries: the main executable's LC_RPATHs include @executable_path/../Frameworks, and
-# every @rpath/<name> that any Mach-O in the bundle loads is a file at Contents/Frameworks/<name>.
+# every @rpath/<name> that any Mach-O in the bundle loads is a file at Contents/Frameworks/<name>. And no file under
+# Contents names the builder's home folder or user name.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 . "$here/lib.sh"
@@ -58,7 +59,22 @@ while IFS= read -r -d '' f; do
   done
 done < "$files"
 [ "$count" -gt 1 ] || fail "only $count Mach-O files in the app"
+
+# No file under Contents (binaries, the page, resources) names the builder's home folder or user name. A user name
+# shorter than 4 characters would match ordinary text, so then only the home folder is looked for.
+user=$(id -un)
+patterns=(-e "$home")
+[ "${#user}" -lt 4 ] || patterns+=(-e "$user")
+set +e
+named=$(LC_ALL=C grep -rlF "${patterns[@]}" "$app/Contents")
+status=$?
+set -e
+case $status in
+  0) fail "these files name the builder's home folder or user name: $(tr '\n' ' ' <<< "$named")" ;;
+  1) ;;
+  *) fail "couldn't read every file under Contents to look for the home folder" ;;
+esac
+
 [ $rc -eq 0 ] || { echo "RESULT: FAIL" >&2; exit 1; }
-home_paths=$(strings -a "$app/Contents/MacOS/"* | LC_ALL=C grep -c "$home/" || true)
-echo "bundle check: $count Mach-O files, $arch only, relative rpaths only, every @rpath library in Frameworks" \
-  "($home_paths strings still name the home folder)"
+echo "bundle check: $count Mach-O files, $arch only, relative rpaths only, every @rpath library in Frameworks," \
+  "no file names the home folder or the user name"
