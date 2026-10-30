@@ -13,7 +13,9 @@ use klipolo_analysis::providers::{
     AlignLimits, AlignTurn, Aligner, Alignment, BoxFuture, ProviderError, ProviderErrorKind,
     SpeakerTurn, TimedWord, Transcriber, Transcription,
 };
-use klipolo_analysis::transcript::{NO_SPEECH, ROUGH_WORDS, TranscriptOut, transcribe_asset};
+use klipolo_analysis::transcript::{
+    NO_SPEECH, ROUGH_WORDS, Sound, TranscriptOut, align, finish, hear, transcribe_asset,
+};
 use klipolo_meta::{MetaClient, SecretString};
 use klipolo_model::speech::{PAUSE_US, Word, WordKind};
 use klipolo_model::time::Us;
@@ -1042,6 +1044,123 @@ async fn runs_as_many_requests_at_once_as_each_service_takes() {
     assert_eq!(aligner.in_flight.most(), 2);
     assert_eq!(out.turns.len(), chunks);
     assert!(out.turns.windows(2).all(|t| t[0].end_us <= t[1].start_us));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The steps, one by one
+
+/// Turn-level captions before alignment: `finish` without a timing keeps every word, each spread across its turn.
+#[tokio::test]
+async fn finish_without_a_timing_keeps_every_word() {
+    let transcriber = FakeAsr::new(600, |_| {
+        Ok(heard(vec![
+            turn(1_000, 3_000, "one two three"),
+            turn(5_000, 6_000, "Um, four."),
+        ]))
+    });
+    let clip = clip(&[tone(8.0)]);
+
+    let sound = Sound::load(&clip.path, transcriber.max_audio_s())
+        .await
+        .unwrap();
+    let said = hear(&transcriber, &sound, &[]).await.unwrap();
+    let rough = finish(
+        transcriber.model(),
+        sound.duration_us,
+        said.turns,
+        None,
+        said.cost_usd,
+    );
+
+    assert_eq!(texts(&rough), ["one", "two", "three", "Um,", "four."]);
+    assert_eq!(spoken(&rough)[3].kind, WordKind::Filler);
+    assert!(rough.approximate && rough.transcript.complete);
+    assert_eq!(rough.approximate_reason.as_deref(), Some(ROUGH_WORDS));
+    assert!(rough.turns.iter().all(|t| !t.aligned));
+    assert!((rough.cost_usd - 0.001).abs() < 1e-12);
+    assert_eq!(rough.transcript.covered_us, 8_000_000);
+    assert_well_formed(&rough);
+}
+
+/// Alignment that failed runs again later on the cached turns (`Sound::load`, `align`, `finish`), with no new
+/// transcription.
+#[tokio::test]
+async fn alignment_runs_again_on_the_cached_turns() {
+    let transcriber = FakeAsr::new(600, |_| {
+        Ok(heard(vec![
+            turn(1_000, 3_000, "one two three"),
+            turn(5_000, 7_000, "four five"),
+        ]))
+    });
+    let down = FakeAligner::new(|_| {
+        Err(error(
+            ProviderErrorKind::Unavailable,
+            "Word timing is not available right now.",
+        ))
+    });
+    let clip = clip(&[tone(8.0)]);
+    let first = transcribe_asset(&transcriber, &down, &clip.path, &[])
+        .await
+        .unwrap();
+    assert!(first.approximate);
+    // As the cache keeps it.
+    let cached: TranscriptOut =
+        serde_json::from_str(&serde_json::to_string(&first).unwrap()).unwrap();
+
+    let up = FakeAligner::new(|turns| Ok(timed_evenly(turns, 0.9)));
+    let sound = Sound::load(&clip.path, transcriber.max_audio_s())
+        .await
+        .unwrap();
+    let timing = align(&up, &sound, &cached.turns).await;
+    let again = finish(
+        &cached.transcript.model,
+        sound.duration_us,
+        cached.turns,
+        Some(timing),
+        cached.cost_usd,
+    );
+
+    assert!(!again.approximate && again.approximate_reason.is_none());
+    assert!(again.turns.iter().all(|t| t.aligned));
+    assert!(spoken(&again).iter().all(|w| w.confidence == 0.9));
+    assert_eq!(texts(&again), texts(&first));
+    assert_eq!(again.cost_usd, first.cost_usd);
+    assert_eq!(transcriber.calls().len(), 1);
+    assert_eq!(up.calls().len(), 1);
+    assert_well_formed(&again);
+}
+
+/// A stop (a used-up allowance) is the sentence the person reads, even after an earlier request was refused as sent.
+#[tokio::test]
+async fn a_stop_reason_wins_over_a_refused_request() {
+    let quota =
+        "This device has used today's 120 minutes of word timing. It resets at midnight UTC.";
+    let transcriber = FakeAsr::new(600, |_| {
+        Ok(heard(vec![
+            turn(500, 6_000, "refused turn"),
+            turn(8_500, 14_000, "later turn"),
+        ]))
+    });
+    let mut aligner = FakeAligner::new(move |turns| {
+        Err(if turns[0].text == "refused turn" {
+            error(
+                ProviderErrorKind::Failed,
+                "Meta could not process this request.",
+            )
+        } else {
+            error(ProviderErrorKind::RateLimited, quota)
+        })
+    });
+    aligner.limits.preferred_audio_ms = 7_000;
+    aligner.delay_ms = 20;
+    let clip = clip(&[tone(15.0)]);
+
+    let out = transcribe_asset(&transcriber, &aligner, &clip.path, &[])
+        .await
+        .unwrap();
+
+    assert_eq!(aligner.calls().len(), 2);
+    assert_eq!(out.approximate_reason.as_deref(), Some(quota));
 }
 
 /// The app runs analysis on its runtime's threads: the future must be `Send`.
