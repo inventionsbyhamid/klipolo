@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# The app bundle's check before anything is signed (build-mac.sh runs it; it works on a signed app too):
+#   scripts/release/check-bundle.sh <Klipolo.app> <x86_64|arm64>
+# Fails unless the licences and the fonts are in Resources, every Mach-O is built for <arch> only and for macOS 15.0
+# or older, every load path is @rpath/, @executable_path/, @loader_path/, /usr/lib/ or /System/Library/, and every
+# LC_RPATH is relative (@executable_path/ or @loader_path/), never a machine path such as the dev FFmpeg prefix's.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+. "$here/lib.sh"
+usage() { echo "usage: $0 <Klipolo.app> <x86_64|arm64>" >&2; exit 2; }
+[ $# -eq 2 ] || usage
+app=${1%/} arch=$2
+case "$arch" in x86_64 | arm64) ;; aarch64) arch=arm64 ;; *) usage ;; esac
+[ -f "$app/Contents/Info.plist" ] || { echo "refused: not an app bundle: $app" >&2; exit 2; }
+home=$(cd ~ && pwd -P)
+rc=0
+fail() { echo "FAIL: $*"; rc=1; }
+
+for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt NOTICE.txt; do
+  [ -f "$app/Contents/Resources/licenses/$f" ] || fail "licenses/$f isn't in the app"
+done
+[ -d "$app/Contents/Resources/fonts" ] || fail "the fonts aren't in the app"
+
+files=$(mktemp)
+trap 'rm -f "$files"' EXIT
+find "$app/Contents" -type f -print0 > "$files"
+count=0
+while IFS= read -r -d '' f; do
+  is_macho "$f" || continue
+  count=$((count + 1))
+  rel=${f#"$app"/}
+  archs=$(lipo -archs "$f")
+  minos=$(otool -l "$f" | awk '/LC_BUILD_VERSION/ {b = 1} b && $1 == "minos" {print $2; exit}')
+  echo "-- $rel [$archs, macOS $minos]"
+  [ "$archs" = "$arch" ] || fail "$rel is built for $archs, not $arch"
+  awk -v v="$minos" 'BEGIN { split(v, p, "."); exit !(p[1] < 15 || (p[1] == 15 && p[2] + 0 == 0)) }' \
+    || fail "$rel needs macOS $minos, newer than 15.0"
+  bad=$(otool -L "$f" | tail -n +2 | awk '{print $1}' \
+    | grep -vE '^(@rpath/|@executable_path/|@loader_path/|/usr/lib/|/System/Library/)' || true)
+  [ -z "$bad" ] || fail "$rel loads from outside the app and the system: $bad"
+  rpaths=$(otool -l "$f" | awk '$1 == "cmd" {r = ($2 == "LC_RPATH")} r && $1 == "path" {print $2}')
+  for r in $rpaths; do
+    echo "   LC_RPATH $r"
+    case "$r" in @executable_path/* | @loader_path/*) ;; *) fail "$rel has a machine LC_RPATH: $r" ;; esac
+  done
+done < "$files"
+[ "$count" -gt 1 ] || fail "only $count Mach-O files in the app"
+[ $rc -eq 0 ] || { echo "RESULT: FAIL" >&2; exit 1; }
+home_paths=$(strings -a "$app/Contents/MacOS/"* | LC_ALL=C grep -c "$home/" || true)
+echo "bundle check: $count Mach-O files, $arch only, relative rpaths only ($home_paths strings still name the home folder)"

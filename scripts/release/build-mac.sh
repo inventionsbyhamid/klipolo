@@ -11,9 +11,8 @@
 #    the hardened runtime. FFMPEG_DIR, PKG_CONFIG_LIBDIR and KLIPOLO_FFMPEG_PREFIX point at this arch's prefix, and
 #    --config lists its dylibs (by install name) as the bundle's frameworks and adds the licences. Source paths are
 #    remapped, so the binary names no home folder. Apple's notary variables are unset: notarization is notarize.sh's.
-# 4. The bundle is checked before anything is signed: every Mach-O built for this arch only, minimum macOS 15.0, load
-#    paths only @rpath/, @executable_path/, @loader_path/, /usr/lib/ and /System/, and every LC_RPATH relative
-#    (@executable_path/../Frameworks), never a machine path such as the dev prefix's.
+# 4. The bundle is checked before anything is signed: its version and minimum macOS here, then check-bundle.sh (the
+#    licences and fonts, every Mach-O built for this arch only, load paths and rpaths).
 # 5. sign.sh, notarize.sh (the app, then the disk image), then the disk image is mounted read-only and checked:
 #    spctl must say `accepted` with `source=Notarized Developer ID`.
 # CARGO_BUILD_JOBS defaults to 4 here (the Mac is also someone's daily machine); run it under `nice -n 10`.
@@ -107,34 +106,7 @@ app=$repo/target/$triple/release/bundle/macos/Klipolo.app
 plist=$app/Contents/Info.plist
 [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$version" ] || { echo "FAIL: the app isn't $version" >&2; exit 1; }
 [ "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$plist")" = 15.0 ] || { echo "FAIL: LSMinimumSystemVersion isn't 15.0" >&2; exit 1; }
-for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt NOTICE.txt; do
-  [ -f "$app/Contents/Resources/licenses/$f" ] || { echo "FAIL: licenses/$f isn't in the app" >&2; exit 1; }
-done
-[ -d "$app/Contents/Resources/fonts" ] || { echo "FAIL: the fonts aren't in the app" >&2; exit 1; }
-rc=0 count=0
-while IFS= read -r -d '' f; do
-  is_macho "$f" || continue
-  count=$((count + 1))
-  rel=${f#"$app"/}
-  archs=$(lipo -archs "$f")
-  minos=$(otool -l "$f" | awk '/LC_BUILD_VERSION/ {b = 1} b && $1 == "minos" {print $2; exit}')
-  echo "-- $rel [$archs, macOS $minos]"
-  [ "$archs" = "$ffarch" ] || { echo "FAIL: $rel is built for $archs, not $ffarch"; rc=1; }
-  awk -v v="$minos" 'BEGIN { split(v, p, "."); exit !(p[1] < 15 || (p[1] == 15 && p[2] + 0 == 0)) }' \
-    || { echo "FAIL: $rel needs macOS $minos, newer than 15.0"; rc=1; }
-  bad=$(otool -L "$f" | tail -n +2 | awk '{print $1}' \
-    | grep -vE '^(@rpath/|@executable_path/|@loader_path/|/usr/lib/|/System/Library/)' || true)
-  [ -z "$bad" ] || { echo "FAIL: $rel loads from outside the app and the system: $bad"; rc=1; }
-  rpaths=$(otool -l "$f" | awk '$1 == "cmd" {r = ($2 == "LC_RPATH")} r && $1 == "path" {print $2}')
-  for r in $rpaths; do
-    echo "   LC_RPATH $r"
-    case "$r" in @executable_path/* | @loader_path/*) ;; *) echo "FAIL: $rel has a machine LC_RPATH: $r"; rc=1 ;; esac
-  done
-done < <(find "$app/Contents" -type f -print0)
-[ "$count" -gt 1 ] || { echo "FAIL: only $count Mach-O files in the app" >&2; rc=1; }
-[ $rc -eq 0 ] || { echo "the bundle check failed: nothing was signed" >&2; exit 1; }
-home_paths=$(strings -a "$app/Contents/MacOS/"* | LC_ALL=C grep -c "$home/" || true)
-echo "bundle check: $count Mach-O files, $ffarch only, relative rpaths only ($home_paths strings still name the home folder)"
+"$here/check-bundle.sh" "$app" "$ffarch" || { echo "the bundle check failed: nothing was signed" >&2; exit 1; }
 
 # 5. Signed, notarized, stapled, then checked as a user's Mac would.
 "$here/sign.sh" "$app"
