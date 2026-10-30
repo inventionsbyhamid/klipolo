@@ -37,6 +37,9 @@ fn store() -> Arc<dyn SecretStore> {
 /// No Keychain here: secrets last as long as the app runs.
 #[cfg(not(target_os = "macos"))]
 fn store() -> Arc<dyn SecretStore> {
+    tracing::warn!(
+        "no Keychain on this system: a Meta key or access code is kept in memory only, until the app quits"
+    );
     Arc::new(klipolo_app::credentials::MemoryStore::default())
 }
 
