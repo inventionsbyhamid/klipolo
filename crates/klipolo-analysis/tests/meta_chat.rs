@@ -565,7 +565,7 @@ async fn server_and_network_failures_map_to_neutral_errors() {
     )
     .await;
     let e = chat(&server).respond(&neutral_request()).await.unwrap_err();
-    let ModelError::Other(detail) = e else {
+    let ModelError::Other { detail, .. } = e else {
         panic!("{e:?}");
     };
     assert!(detail.contains("include"), "{detail}");

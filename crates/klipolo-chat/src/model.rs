@@ -69,7 +69,7 @@ pub struct ModelResponse {
 }
 
 /// Why the model gave no answer, in terms that decide what the person is told.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ModelError {
     /// The credit for these calls is used up: the provider's own sentence for the person (which credit, what to do).
     Budget(String),
@@ -81,8 +81,27 @@ pub enum ModelError {
     Network,
     /// The key, token or access code was refused.
     Refused,
-    /// Anything else (a request refused as sent, an answer that can't be read): a detail for logs, never shown.
-    Other(String),
+    /// Anything else: a request refused as sent, an answer that can't be read, or one that came back failed or cut
+    /// off (at its output cap), which is billed (`usage_usd`). `detail` is for logs, never shown.
+    Other { detail: String, usage_usd: f64 },
+}
+
+impl ModelError {
+    /// `Other` for a call that cost nothing.
+    pub fn other(detail: impl Into<String>) -> Self {
+        ModelError::Other {
+            detail: detail.into(),
+            usage_usd: 0.0,
+        }
+    }
+
+    /// What the failed call still cost, in US dollars: an answer that came back failed or cut off is billed.
+    pub fn usage_usd(&self) -> f64 {
+        match self {
+            ModelError::Other { usage_usd, .. } => *usage_usd,
+            _ => 0.0,
+        }
+    }
 }
 
 impl fmt::Display for ModelError {
@@ -93,7 +112,7 @@ impl fmt::Display for ModelError {
             ModelError::Unavailable => f.write_str("unavailable"),
             ModelError::Network => f.write_str("no answer"),
             ModelError::Refused => f.write_str("not allowed"),
-            ModelError::Other(detail) => write!(f, "failed: {detail}"),
+            ModelError::Other { detail, .. } => write!(f, "failed: {detail}"),
         }
     }
 }

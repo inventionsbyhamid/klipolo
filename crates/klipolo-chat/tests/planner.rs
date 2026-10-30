@@ -161,7 +161,7 @@ impl LanguageModel for Fake {
     ) -> BoxFuture<'a, Result<ModelResponse, ModelError>> {
         self.seen.lock().unwrap().push(request.clone());
         let answer = (self.answers.lock().unwrap().pop_front())
-            .unwrap_or_else(|| Err(ModelError::Other("the script ran out".into())));
+            .unwrap_or_else(|| Err(ModelError::other("the script ran out")));
         Box::pin(async move { answer })
     }
 }
@@ -439,6 +439,36 @@ fn meta_402_returns_budget_error_and_no_changes() {
 }
 
 #[test]
+fn an_answer_cut_off_or_failed_changes_nothing_and_still_counts() {
+    let (p, speech) = talk();
+    let before = p.clone();
+    let i = inputs(&p, speech);
+    let cut_off = || ModelError::Other {
+        detail: "cut off: max_output_tokens".into(),
+        usage_usd: 0.01,
+    };
+    let model = Fake::new(vec![Err(cut_off())]);
+    let e = send(&model, &[], "make it square", &i, &p).unwrap_err();
+    assert_eq!(e.kind, ChatErrorKind::Other);
+    assert_plain(&e.message);
+    assert_eq!(e.detail, "failed: cut off: max_output_tokens");
+    assert_eq!(e.usage_usd, 0.01);
+
+    // Cut off in the refusal round: both calls count, and nothing of the first answer is applied.
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![square_call("call_1"), cut_call("call_2", 12.3, 19.7)],
+            0.004,
+        ),
+        Err(cut_off()),
+    ]);
+    let e = send(&model, &[], "square, and cut the boring bit", &i, &p).unwrap_err();
+    assert!((e.usage_usd - 0.014).abs() < 1e-12, "{}", e.usage_usd);
+    assert_eq!(p, before);
+}
+
+#[test]
 fn every_model_error_is_one_plain_sentence_and_changes_nothing() {
     let (p, speech) = talk();
     let before = p.clone();
@@ -449,7 +479,7 @@ fn every_model_error_is_one_plain_sentence_and_changes_nothing() {
         (ModelError::Network, ChatErrorKind::Network),
         (ModelError::Refused, ChatErrorKind::Refused),
         (
-            ModelError::Other("400: unsupported field".into()),
+            ModelError::other("400: unsupported field"),
             ChatErrorKind::Other,
         ),
     ];

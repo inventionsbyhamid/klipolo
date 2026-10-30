@@ -86,7 +86,7 @@ impl LanguageModel for MetaChat {
         Box::pin(async move {
             let body = wire_body(request);
             let _slot = (self.slot.acquire().await)
-                .map_err(|_| ModelError::Other("chat's slot is closed".into()))?;
+                .map_err(|_| ModelError::other("chat's slot is closed"))?;
             let mut retries = 0;
             loop {
                 match self.client.respond(body.clone()).await {
@@ -151,7 +151,7 @@ fn item(item: &Item) -> Value {
 /// Meta's answer in chat's terms, priced from its usage.
 fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
     if out.status.as_deref() == Some("failed") {
-        return Err(ModelError::Other("Meta's answer failed".into()));
+        return Err(ModelError::other("Meta's answer failed"));
     }
     Ok(ModelResponse {
         text: out.output_text.unwrap_or_default(),
@@ -178,6 +178,6 @@ pub fn model_error(e: MetaError) -> ModelError {
         MetaError::BadRequest { .. }
         | MetaError::Decode(_)
         | MetaError::AlignUnavailable
-        | MetaError::LocalFile { .. } => ModelError::Other(e.to_string()),
+        | MetaError::LocalFile { .. } => ModelError::other(e.to_string()),
     }
 }

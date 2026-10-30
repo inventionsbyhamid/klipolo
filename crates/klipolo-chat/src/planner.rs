@@ -153,7 +153,7 @@ impl ChatError {
             ModelError::Unavailable => (ChatErrorKind::Unavailable, UNAVAILABLE.to_owned()),
             ModelError::Network => (ChatErrorKind::Network, NO_CONNECTION.to_owned()),
             ModelError::Refused => (ChatErrorKind::Refused, NOT_ACCEPTED.to_owned()),
-            ModelError::Other(_) => (ChatErrorKind::Other, FAILED.to_owned()),
+            ModelError::Other { .. } => (ChatErrorKind::Other, FAILED.to_owned()),
         };
         Self {
             kind,
@@ -286,13 +286,16 @@ fn opening(history: &[Turn], ctx: &ChatContext, user: &str) -> Vec<Item> {
     input
 }
 
-/// One model call; its error as the person's sentence, with what was spent before it.
+/// One model call; its error as the person's sentence, with what was spent before it and on it.
 async fn ask(
     model: &dyn LanguageModel,
     request: &ModelRequest,
     spent: f64,
 ) -> Result<ModelResponse, ChatError> {
-    (model.respond(request).await).map_err(|e| ChatError::from_model(e, spent))
+    (model.respond(request).await).map_err(|e| {
+        let usage_usd = spent + e.usage_usd();
+        ChatError::from_model(e, usage_usd)
+    })
 }
 
 /// One answer's calls, read.
