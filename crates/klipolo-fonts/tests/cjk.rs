@@ -124,9 +124,9 @@ fn sorted(v: serde_json::Value) -> serde_json::Value {
     }
 }
 
-/// `src/lib/fonts/cjk-segments-parity.json`: the TS mirror must give these answers. Rust is the truth; the
-/// file is written here with `UPDATE_GOLDEN=1` and checked otherwise (the parity fixtures' pattern). Byte ranges are
-/// UTF-8 offsets: the TS mirror converts them to string indices in its test.
+/// `apps/desktop/src/lib/fonts/cjk-segments-parity.json`: the TS mirror must give these answers. Rust is the
+/// truth; the file is written here with `UPDATE_GOLDEN=1` and checked otherwise (the parity fixtures' pattern). Byte
+/// ranges are UTF-8 offsets: the TS mirror converts them to string indices in its test.
 ///
 /// The rows: CJK punctuation standing alone gets no segment, and a text whose own face covers CJK
 /// a picked Hiragino covers Han and kana) leaves only what it lacks to the fallbacks. Each row also carries its `marks`
@@ -194,7 +194,7 @@ fn export_the_parity_fixture_for_the_webview() {
     let json =
         serde_json::to_string_pretty(&sorted(serde_json::Value::Array(rows))).unwrap() + "\n";
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../src/lib/fonts/cjk-segments-parity.json");
+        .join("../../apps/desktop/src/lib/fonts/cjk-segments-parity.json");
     if std::env::var_os("UPDATE_GOLDEN").is_some() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, &json).unwrap();

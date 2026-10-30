@@ -140,8 +140,8 @@ fn a_newer_style_file_needs_a_newer_klipolo() {
     assert_eq!(bold.id.as_str(), DEFAULT_STYLE);
 }
 
-/// `pnpm bindings` runs this (its name matches `export_bindings`): `src/lib/caption-styles.json`, every built-in style
-/// for the UI's tiles, keys sorted.
+/// `pnpm bindings` runs this (its name matches `export_bindings`): `apps/desktop/src/lib/caption-styles.json`, every
+/// built-in style for the UI's tiles, keys sorted.
 #[test]
 fn export_bindings_caption_styles() {
     let defs: Vec<serde_json::Value> = CaptionStyles::builtin()
@@ -149,7 +149,8 @@ fn export_bindings_caption_styles() {
         .map(|d| common::sorted_keys(serde_json::to_value(&**d).unwrap()))
         .collect();
     std::fs::write(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/lib/caption-styles.json"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/desktop/src/lib/caption-styles.json"),
         serde_json::to_string_pretty(&defs).unwrap() + "\n",
     )
     .unwrap();

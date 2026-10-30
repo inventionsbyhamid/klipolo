@@ -1,0 +1,1156 @@
+[
+  {
+    "code": "model.olderVersion",
+    "message": "This project was made with an older test version of Klipolo and can't be opened.",
+    "params": []
+  },
+  {
+    "code": "model.newerVersion",
+    "message": "This project was made with a newer version of Klipolo. Update Klipolo to open it.",
+    "params": []
+  },
+  {
+    "code": "model.unreadable",
+    "message": "The project file couldn't be read.",
+    "params": []
+  },
+  {
+    "code": "model.readOnly",
+    "message": "This project is read-only because it was made with a newer version of Klipolo.",
+    "params": []
+  },
+  {
+    "code": "project.cantOpen",
+    "message": "Klipolo can't open this project's file. Check that it's still there and that Klipolo may open it.",
+    "params": []
+  },
+  {
+    "code": "project.damaged",
+    "message": "This project's file is damaged, so it can't be opened.",
+    "params": []
+  },
+  {
+    "code": "project.notRead",
+    "message": "Klipolo couldn't read this project just now. Go back to Home to try again.",
+    "params": []
+  },
+  {
+    "code": "model.notFound.clip",
+    "message": "That clip no longer exists.",
+    "params": []
+  },
+  {
+    "code": "model.notFound.layer",
+    "message": "That layer no longer exists.",
+    "params": []
+  },
+  {
+    "code": "model.notFound.track",
+    "message": "That track no longer exists.",
+    "params": []
+  },
+  {
+    "code": "model.notFound.media",
+    "message": "That media file no longer exists.",
+    "params": []
+  },
+  {
+    "code": "model.notFound.lut",
+    "message": "That LUT no longer exists.",
+    "params": []
+  },
+  {
+    "code": "model.notFound.effect",
+    "message": "That effect no longer exists.",
+    "params": []
+  },
+  {
+    "code": "model.notFound.recording",
+    "message": "That recording no longer exists.",
+    "params": []
+  },
+  {
+    "code": "name.recording",
+    "message": "Recording {number}",
+    "params": [
+      "number"
+    ]
+  },
+  {
+    "code": "model.layer.placement",
+    "message": "A layer is placed outside the allowed area.",
+    "params": []
+  },
+  {
+    "code": "model.layer.rotation",
+    "message": "A layer has an invalid rotation.",
+    "params": []
+  },
+  {
+    "code": "model.layer.opacity",
+    "message": "A layer opacity must be between 0 and 1.",
+    "params": []
+  },
+  {
+    "code": "model.layer.radius",
+    "message": "A layer has an invalid corner radius.",
+    "params": []
+  },
+  {
+    "code": "model.camera.placement",
+    "message": "The camera is placed outside the allowed area.",
+    "params": []
+  },
+  {
+    "code": "model.camera.rotation",
+    "message": "The camera has an invalid rotation.",
+    "params": []
+  },
+  {
+    "code": "model.camera.opacity",
+    "message": "The camera opacity must be between 0 and 1.",
+    "params": []
+  },
+  {
+    "code": "model.camera.radius",
+    "message": "The camera has an invalid corner radius.",
+    "params": []
+  },
+  {
+    "code": "model.captions.styleBadId",
+    "message": "The captions name an invalid style ({id}).",
+    "params": [
+      "id"
+    ]
+  },
+  {
+    "code": "model.captions.styleWrongKind",
+    "message": "{name} isn't a caption style.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "model.captions.styleNeedsNewer",
+    "message": "This caption style needs a newer version of Klipolo.",
+    "params": []
+  },
+  {
+    "code": "model.captions.styleUnreadable",
+    "message": "This caption style file can't be used: {reason}",
+    "params": [
+      "reason"
+    ]
+  },
+  {
+    "code": "model.captions.look",
+    "message": "That caption look isn't part of this style.",
+    "params": []
+  },
+  {
+    "code": "model.captions.color",
+    "message": "A caption colour must be a colour like #FFD400.",
+    "params": []
+  },
+  {
+    "code": "model.captions.font",
+    "message": "That font can't be used for captions.",
+    "params": []
+  },
+  {
+    "code": "model.captions.place",
+    "message": "Captions must sit between 5 % and 95 % of the video's height.",
+    "params": []
+  },
+  {
+    "code": "model.captions.language",
+    "message": "The captions' language must be a language tag, like ja or zh-Hans.",
+    "params": []
+  },
+  {
+    "code": "model.effect.badId",
+    "message": "An effect has an invalid id ({id}).",
+    "params": [
+      "id"
+    ]
+  },
+  {
+    "code": "model.effect.wrongKind",
+    "message": "{name} isn't an effect.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "model.look.badId",
+    "message": "A look has an invalid id ({id}).",
+    "params": [
+      "id"
+    ]
+  },
+  {
+    "code": "model.look.wrongKind",
+    "message": "{name} isn't a look.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "model.transition.badId",
+    "message": "A transition has an invalid id ({id}).",
+    "params": [
+      "id"
+    ]
+  },
+  {
+    "code": "model.transition.wrongKind",
+    "message": "{name} isn't a transition.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "model.motion.wrongKind",
+    "message": "{name} isn't an animation.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "model.audio.effectBadId",
+    "message": "An audio effect has an invalid id ({id}).",
+    "params": [
+      "id"
+    ]
+  },
+  {
+    "code": "model.audio.effectWrongKind",
+    "message": "{name} isn't an audio effect.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "model.layer.generatorBadId",
+    "message": "A generator layer has an invalid id ({id}).",
+    "params": [
+      "id"
+    ]
+  },
+  {
+    "code": "model.layer.generatorWrongKind",
+    "message": "{name} isn't a generator.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "model.layer.generatorTime",
+    "message": "A generator layer's place in its animation is invalid.",
+    "params": []
+  },
+  {
+    "code": "model.contrib.padding",
+    "message": "An effect's padding must be 0 or more pixels.",
+    "params": []
+  },
+  {
+    "code": "model.effect.tooManySettings",
+    "message": "An effect has too many settings.",
+    "params": []
+  },
+  {
+    "code": "model.effect.settingName",
+    "message": "An effect has a setting without a valid name.",
+    "params": []
+  },
+  {
+    "code": "model.effect.badSetting",
+    "message": "An effect has an invalid setting.",
+    "params": []
+  },
+  {
+    "code": "model.transition.tooManySettings",
+    "message": "A transition has too many settings.",
+    "params": []
+  },
+  {
+    "code": "model.transition.settingName",
+    "message": "A transition has a setting without a valid name.",
+    "params": []
+  },
+  {
+    "code": "model.transition.badSetting",
+    "message": "A transition has an invalid setting.",
+    "params": []
+  },
+  {
+    "code": "model.layer.generatorTooManySettings",
+    "message": "A generator layer has too many settings.",
+    "params": []
+  },
+  {
+    "code": "model.layer.generatorSettingName",
+    "message": "A generator layer has a setting without a valid name.",
+    "params": []
+  },
+  {
+    "code": "model.layer.generatorBadSetting",
+    "message": "A generator layer has an invalid setting.",
+    "params": []
+  },
+  {
+    "code": "model.effect.tooMany",
+    "message": "A clip or layer can have up to eight effects.",
+    "params": []
+  },
+  {
+    "code": "model.effect.duplicateId",
+    "message": "Each effect on a clip or layer needs its own id.",
+    "params": []
+  },
+  {
+    "code": "model.project.missingId",
+    "message": "An item is missing its id.",
+    "params": []
+  },
+  {
+    "code": "model.project.duplicateId",
+    "message": "This project has a duplicate id ({id}).",
+    "params": [
+      "id"
+    ]
+  },
+  {
+    "code": "model.project.name",
+    "message": "The project name must be 1 to 200 characters.",
+    "params": []
+  },
+  {
+    "code": "model.project.tooManyMedia",
+    "message": "This project has too many media files.",
+    "params": []
+  },
+  {
+    "code": "model.project.tooManyClips",
+    "message": "This project has too many clips.",
+    "params": []
+  },
+  {
+    "code": "model.project.tooManyTracks",
+    "message": "This project has too many tracks.",
+    "params": []
+  },
+  {
+    "code": "model.project.tooManyLayers",
+    "message": "This project has too many layers.",
+    "params": []
+  },
+  {
+    "code": "model.project.tooManyLuts",
+    "message": "A project can hold up to four custom LUTs.",
+    "params": []
+  },
+  {
+    "code": "model.project.requirements",
+    "message": "This project lists invalid requirements.",
+    "params": []
+  },
+  {
+    "code": "model.media.noPath",
+    "message": "Media {name} has no file path.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "model.media.badPath",
+    "message": "Media {name} has an invalid file path.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "model.media.timing",
+    "message": "Media {name} has invalid timing.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "model.media.rotation",
+    "message": "Media {name} has an invalid rotation.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "model.media.size",
+    "message": "Media {name} has no picture size.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "model.lut.name",
+    "message": "LUT names must be 1 to 200 characters.",
+    "params": []
+  },
+  {
+    "code": "model.lut.noFile",
+    "message": "LUT {name} has no file.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "model.lut.badFile",
+    "message": "LUT {name} has an invalid file.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "model.recording.noSources",
+    "message": "A recording needs at least one source.",
+    "params": []
+  },
+  {
+    "code": "model.recording.noPrimary",
+    "message": "A recording needs a screen or camera as its main footage.",
+    "params": []
+  },
+  {
+    "code": "model.recording.missingVideo",
+    "message": "A recording references a missing video file.",
+    "params": []
+  },
+  {
+    "code": "model.recording.missingAudio",
+    "message": "A recording references a missing audio file.",
+    "params": []
+  },
+  {
+    "code": "model.recording.duplicateRole",
+    "message": "A recording can have only one {role} source.",
+    "params": [
+      "role"
+    ]
+  },
+  {
+    "code": "model.role.screen",
+    "message": "screen",
+    "params": []
+  },
+  {
+    "code": "model.role.game",
+    "message": "game",
+    "params": []
+  },
+  {
+    "code": "model.role.camera",
+    "message": "camera",
+    "params": []
+  },
+  {
+    "code": "model.role.mic",
+    "message": "mic",
+    "params": []
+  },
+  {
+    "code": "model.role.systemAudio",
+    "message": "computer sound",
+    "params": []
+  },
+  {
+    "code": "model.role.gameAudio",
+    "message": "game sound",
+    "params": []
+  },
+  {
+    "code": "model.role.voiceChat",
+    "message": "voice chat",
+    "params": []
+  },
+  {
+    "code": "model.role.otherApp",
+    "message": "app sound",
+    "params": []
+  },
+  {
+    "code": "model.recording.noRuns",
+    "message": "Each recorded source needs its footage.",
+    "params": []
+  },
+  {
+    "code": "model.recording.runsOverlap",
+    "message": "A source's recorded parts overlap.",
+    "params": []
+  },
+  {
+    "code": "model.recording.drift",
+    "message": "A source's clock correction is out of range.",
+    "params": []
+  },
+  {
+    "code": "model.recording.runInFile",
+    "message": "That stretch is past the end of its file.",
+    "params": []
+  },
+  {
+    "code": "model.recording.notThisFile",
+    "message": "That clip's file isn't part of this recording.",
+    "params": []
+  },
+  {
+    "code": "model.recording.retimeFiles",
+    "message": "Syncing again keeps the same files.",
+    "params": []
+  },
+  {
+    "code": "model.recording.retimePicture",
+    "message": "Sync lines up sound only: the pictures keep their timing.",
+    "params": []
+  },
+  {
+    "code": "model.recording.nudge",
+    "message": "Sources can be shifted by at most 5 seconds.",
+    "params": []
+  },
+  {
+    "code": "model.recording.label",
+    "message": "Source names can be up to 200 characters.",
+    "params": []
+  },
+  {
+    "code": "model.marker.id",
+    "message": "Each marker needs an id.",
+    "params": []
+  },
+  {
+    "code": "model.marker.outside",
+    "message": "A marker must be inside its recording.",
+    "params": []
+  },
+  {
+    "code": "model.marker.order",
+    "message": "A recording's markers must be in time order.",
+    "params": []
+  },
+  {
+    "code": "model.marker.label",
+    "message": "Marker labels can be up to 200 characters.",
+    "params": []
+  },
+  {
+    "code": "model.marker.missing",
+    "message": "That marker isn't in the recording.",
+    "params": []
+  },
+  {
+    "code": "model.clip.sourceMix",
+    "message": "Only a recording's own sound sources can be mixed per clip.",
+    "params": []
+  },
+  {
+    "code": "model.source.volume",
+    "message": "Source volume must be between 0 and 200 %.",
+    "params": []
+  },
+  {
+    "code": "model.source.centreFrom",
+    "message": "A sound can play centred from its first or second channel only.",
+    "params": []
+  },
+  {
+    "code": "model.source.fillsGapsPicture",
+    "message": "Only a video's own sound can fill gaps.",
+    "params": []
+  },
+  {
+    "code": "model.source.missing",
+    "message": "That source isn't in the recording.",
+    "params": []
+  },
+  {
+    "code": "model.source.primaryDetach",
+    "message": "The main footage can't be separated from its clip.",
+    "params": []
+  },
+  {
+    "code": "model.source.detachSpeed",
+    "message": "Set the clip back to normal speed before separating its sound.",
+    "params": []
+  },
+  {
+    "code": "model.source.syncSeparated",
+    "message": "After that sync change, a separated sound would have nothing left to play.",
+    "params": []
+  },
+  {
+    "code": "model.source.followLocked",
+    "message": "The layer at {atUs} is on a locked track, so it can't follow that sync change.",
+    "params": [
+      "atUs"
+    ]
+  },
+  {
+    "code": "model.source.speedSeparated",
+    "message": "The clip at {atUs} has its sound on its own track, and separated sound can't change speed yet.",
+    "params": [
+      "atUs"
+    ]
+  },
+  {
+    "code": "model.source.alreadySeparate",
+    "message": "This source is already in its own layer here.",
+    "params": []
+  },
+  {
+    "code": "model.source.noFootage",
+    "message": "This source recorded nothing during this clip.",
+    "params": []
+  },
+  {
+    "code": "model.settings.fps",
+    "message": "fps must be 24, 25, 30, 50 or 60.",
+    "params": []
+  },
+  {
+    "code": "model.settings.formatCount",
+    "message": "Pick between one and three formats.",
+    "params": []
+  },
+  {
+    "code": "model.settings.duplicateFormat",
+    "message": "Each format can only be added once.",
+    "params": []
+  },
+  {
+    "code": "model.settings.primary",
+    "message": "The primary format must be one of the project's formats.",
+    "params": []
+  },
+  {
+    "code": "model.look.strength",
+    "message": "Look strength must be between 0 and 1.",
+    "params": []
+  },
+  {
+    "code": "model.look.missingLut",
+    "message": "A clip uses a LUT that isn't in the project.",
+    "params": []
+  },
+  {
+    "code": "model.clip.missingMedia",
+    "message": "A clip's media is missing from the project.",
+    "params": []
+  },
+  {
+    "code": "model.clip.outsideSource",
+    "message": "A clip is outside its source media.",
+    "params": []
+  },
+  {
+    "code": "model.clip.speed",
+    "message": "Clip speed must be between 0.25× and 4×.",
+    "params": []
+  },
+  {
+    "code": "model.clip.volume",
+    "message": "Clip volume must be between 0 and 200 %.",
+    "params": []
+  },
+  {
+    "code": "model.clip.tooShort",
+    "message": "A clip is too short.",
+    "params": []
+  },
+  {
+    "code": "model.clip.fades",
+    "message": "Clip fades can't be longer than the clip.",
+    "params": []
+  },
+  {
+    "code": "model.clip.focus",
+    "message": "A clip's framing focus must be between 0 and 1.",
+    "params": []
+  },
+  {
+    "code": "model.camera.noCamera",
+    "message": "Only recordings with a camera can have camera settings.",
+    "params": []
+  },
+  {
+    "code": "model.transition.noNextClip",
+    "message": "A transition needs a clip after this one.",
+    "params": []
+  },
+  {
+    "code": "model.transition.length",
+    "message": "A transition's length is out of range.",
+    "params": []
+  },
+  {
+    "code": "model.transition.tooLong",
+    "message": "A transition is longer than the footage around its cut.",
+    "params": []
+  },
+  {
+    "code": "model.transition.fades",
+    "message": "A cut with a transition can't also fade.",
+    "params": []
+  },
+  {
+    "code": "model.background.color",
+    "message": "The background colour must be a hex colour like #1A2B3C.",
+    "params": []
+  },
+  {
+    "code": "model.background.padding",
+    "message": "Background padding must be between 0 and 40 %.",
+    "params": []
+  },
+  {
+    "code": "model.background.missingImage",
+    "message": "The background image is missing.",
+    "params": []
+  },
+  {
+    "code": "model.text.font",
+    "message": "Text needs a font.",
+    "params": []
+  },
+  {
+    "code": "model.text.fontSource",
+    "message": "That font can't be used.",
+    "params": []
+  },
+  {
+    "code": "model.text.size",
+    "message": "Text size must be between 4 and 400.",
+    "params": []
+  },
+  {
+    "code": "model.text.weight",
+    "message": "Text weight must be between 100 and 900.",
+    "params": []
+  },
+  {
+    "code": "model.text.color",
+    "message": "Text colours must be hex colours like #FFFFFF.",
+    "params": []
+  },
+  {
+    "code": "model.text.outline",
+    "message": "The text outline is invalid.",
+    "params": []
+  },
+  {
+    "code": "model.track.name",
+    "message": "Track names must be 100 characters or fewer.",
+    "params": []
+  },
+  {
+    "code": "model.track.zoomSolo",
+    "message": "Zoom tracks can't be soloed.",
+    "params": []
+  },
+  {
+    "code": "model.layer.beforeStart",
+    "message": "A layer starts before the beginning of the video.",
+    "params": []
+  },
+  {
+    "code": "model.layer.tooShort",
+    "message": "A layer is too short.",
+    "params": []
+  },
+  {
+    "code": "model.layer.time",
+    "message": "A layer has an invalid time.",
+    "params": []
+  },
+  {
+    "code": "model.layer.wrongTrackKind",
+    "message": "A layer doesn't belong on this kind of track.",
+    "params": []
+  },
+  {
+    "code": "model.track.overlap",
+    "message": "Layers overlap on track {track}.",
+    "params": [
+      "track"
+    ]
+  },
+  {
+    "code": "model.layer.attachedMissing",
+    "message": "A layer is attached to missing media.",
+    "params": []
+  },
+  {
+    "code": "model.layer.noEffects",
+    "message": "Zoom layers can't have effects.",
+    "params": []
+  },
+  {
+    "code": "model.layer.videoMissing",
+    "message": "A video layer's file is missing.",
+    "params": []
+  },
+  {
+    "code": "model.layer.speed",
+    "message": "Layer speed must be between 0.25× and 4×.",
+    "params": []
+  },
+  {
+    "code": "model.layer.volume",
+    "message": "Layer volume must be between 0 and 200 %.",
+    "params": []
+  },
+  {
+    "code": "model.layer.videoOutside",
+    "message": "A video layer is outside its source media.",
+    "params": []
+  },
+  {
+    "code": "model.layer.imageMissing",
+    "message": "An image layer's file is missing.",
+    "params": []
+  },
+  {
+    "code": "model.text.empty",
+    "message": "A text layer has no text.",
+    "params": []
+  },
+  {
+    "code": "model.text.tooLong",
+    "message": "A text layer is longer than 2,000 characters.",
+    "params": []
+  },
+  {
+    "code": "model.audio.missing",
+    "message": "An audio layer's file is missing.",
+    "params": []
+  },
+  {
+    "code": "model.audio.outside",
+    "message": "An audio layer is outside its source media.",
+    "params": []
+  },
+  {
+    "code": "model.audio.fades",
+    "message": "Audio fades can't be longer than the layer.",
+    "params": []
+  },
+  {
+    "code": "model.layer.zoom",
+    "message": "Zoom must be between 1× and 5×.",
+    "params": []
+  },
+  {
+    "code": "model.layer.zoomArea",
+    "message": "The zoom area is invalid.",
+    "params": []
+  },
+  {
+    "code": "model.param.range",
+    "message": "{label} must be between {min} and {max}.",
+    "params": [
+      "label",
+      "min",
+      "max"
+    ]
+  },
+  {
+    "code": "model.param.invalid",
+    "message": "{label} has an invalid value.",
+    "params": [
+      "label"
+    ]
+  },
+  {
+    "code": "model.param.table",
+    "message": "{label} has rows that don't fit its table: too many rows, the wrong number of values, or a label over 40 characters.",
+    "params": [
+      "label"
+    ]
+  },
+  {
+    "code": "model.project.patchMismatch",
+    "message": "This change doesn't fit the project it was made for.",
+    "params": []
+  },
+  {
+    "code": "model.track.locked",
+    "message": "That track is locked.",
+    "params": []
+  },
+  {
+    "code": "model.project.timeOutside",
+    "message": "That time is outside the video.",
+    "params": []
+  },
+  {
+    "code": "model.project.badLength",
+    "message": "That length isn't valid.",
+    "params": []
+  },
+  {
+    "code": "model.effect.alreadyThere",
+    "message": "That effect is already on this layer.",
+    "params": []
+  },
+  {
+    "code": "model.layer.wrongTrack",
+    "message": "That layer can't go on this track.",
+    "params": []
+  },
+  {
+    "code": "model.layer.minLength",
+    "message": "A layer can't be shorter than 10 ms.",
+    "params": []
+  },
+  {
+    "code": "model.camera.none",
+    "message": "This clip has no camera to separate.",
+    "params": []
+  },
+  {
+    "code": "model.layer.kindChange",
+    "message": "A layer can't change into a different kind of layer.",
+    "params": []
+  },
+  {
+    "code": "model.layer.notUnderPlayhead",
+    "message": "The playhead isn't over this layer.",
+    "params": []
+  },
+  {
+    "code": "model.layer.splitEdge",
+    "message": "That's too close to the edge of the layer to split.",
+    "params": []
+  },
+  {
+    "code": "model.layer.attachOutside",
+    "message": "Only layers inside the video can be attached.",
+    "params": []
+  },
+  {
+    "code": "model.camera.alreadySeparate",
+    "message": "This clip's camera is already in its own layer.",
+    "params": []
+  },
+  {
+    "code": "model.camera.noFootage",
+    "message": "This clip has no camera footage to separate.",
+    "params": []
+  },
+  {
+    "code": "model.clip.noneToSplit",
+    "message": "There's no clip at that time to split.",
+    "params": []
+  },
+  {
+    "code": "model.clip.splitEdge",
+    "message": "That's too close to the edge of a clip to split.",
+    "params": []
+  },
+  {
+    "code": "model.clip.nothingToRemove",
+    "message": "Nothing to remove in that range.",
+    "params": []
+  },
+  {
+    "code": "model.clip.minLength",
+    "message": "A clip can't be trimmed shorter than 10 ms.",
+    "params": []
+  },
+  {
+    "code": "model.transition.noRoom",
+    "message": "There isn't enough extra footage at this cut for a transition.",
+    "params": []
+  },
+  {
+    "code": "model.transition.tooShort",
+    "message": "A transition can't be shorter than 0.1 s.",
+    "params": []
+  },
+  {
+    "code": "model.transition.max",
+    "message": "This transition can be up to {maxDurationUs} long here.",
+    "params": [
+      "maxDurationUs"
+    ]
+  },
+  {
+    "code": "model.media.inUse",
+    "message": "This media is still used in the video. Remove it from the timeline first.",
+    "params": []
+  },
+  {
+    "code": "model.media.inRecording",
+    "message": "This media is part of a recording and can't be removed on its own.",
+    "params": []
+  },
+  {
+    "code": "model.media.isBackground",
+    "message": "This media is the project background. Choose another background first.",
+    "params": []
+  },
+  {
+    "code": "model.fix.range",
+    "message": "A word fix needs a start before its end.",
+    "params": []
+  },
+  {
+    "code": "model.fix.text",
+    "message": "A word fix is one line of 1 to 200 characters.",
+    "params": []
+  },
+  {
+    "code": "model.fix.blank",
+    "message": "A word fix needs text you can see.",
+    "params": []
+  },
+  {
+    "code": "model.fix.overlap",
+    "message": "Two word fixes cover the same words.",
+    "params": []
+  },
+  {
+    "code": "model.project.tooManyFixes",
+    "message": "This project has too many word fixes.",
+    "params": []
+  },
+  {
+    "code": "model.wordLook.color",
+    "message": "A caption word's colour must be a hex colour like #FFD400.",
+    "params": []
+  },
+  {
+    "code": "model.wordLook.size",
+    "message": "A caption word's size step goes from −2 to 3.",
+    "params": []
+  },
+  {
+    "code": "model.wordLook.asset",
+    "message": "The file these caption words come from isn't in the project.",
+    "params": []
+  },
+  {
+    "code": "model.wordLook.range",
+    "message": "A caption word's look needs valid times, with its start before its end.",
+    "params": []
+  },
+  {
+    "code": "model.wordLook.tooMany",
+    "message": "This project has too many styled caption words.",
+    "params": []
+  },
+  {
+    "code": "model.wordLook.overlap",
+    "message": "Two caption word looks cover the same words.",
+    "params": []
+  },
+  {
+    "code": "model.motion.tooManyKeys",
+    "message": "A layer can move through at most 64 keys per property.",
+    "params": []
+  },
+  {
+    "code": "model.motion.badValue",
+    "message": "A layer's motion has a value outside what it allows (scale 0 to 20, opacity 0 to 1).",
+    "params": []
+  },
+  {
+    "code": "model.motion.unsorted",
+    "message": "A layer's motion keys are out of order.",
+    "params": []
+  },
+  {
+    "code": "model.motion.outside",
+    "message": "A layer's motion has a key outside the layer.",
+    "params": []
+  },
+  {
+    "code": "model.motion.cameraKeysOnly",
+    "message": "The camera moves with keys; it has no enter, exit or loop animations.",
+    "params": []
+  },
+  {
+    "code": "model.motion.badPreset",
+    "message": "A layer has an animation with an invalid id.",
+    "params": []
+  },
+  {
+    "code": "model.motion.badEase",
+    "message": "A layer's motion has an ease Klipolo can't use. A curve's y values stay from -2 to 3, steps go from 1 to 64, and a spring needs stiffness 1 to 1000, damping 0 to 100, mass 0.1 to 10 and enough damping to settle.",
+    "params": []
+  },
+  {
+    "code": "model.motion.tooManySettings",
+    "message": "An animation has too many settings.",
+    "params": []
+  },
+  {
+    "code": "model.motion.settingName",
+    "message": "An animation has a setting without a valid name.",
+    "params": []
+  },
+  {
+    "code": "model.motion.badSetting",
+    "message": "An animation has an invalid setting.",
+    "params": []
+  },
+  {
+    "code": "model.motion.presetTooLong",
+    "message": "An animation can last at most as long as its layer.",
+    "params": []
+  },
+  {
+    "code": "model.motion.typewriterText",
+    "message": "Only text can type itself in.",
+    "params": []
+  },
+  {
+    "code": "model.motion.notVisual",
+    "message": "Only layers that show a picture can move or blend.",
+    "params": []
+  },
+  {
+    "code": "model.motion.blendNeedsPicture",
+    "message": "An adjustment layer has no picture of its own to blend.",
+    "params": []
+  },
+  {
+    "code": "model.motion.cameraBlend",
+    "message": "The camera always blends normally.",
+    "params": []
+  },
+  {
+    "code": "model.cursor.size",
+    "message": "The cursor size must be between 0.5× and 4×.",
+    "params": []
+  },
+  {
+    "code": "model.cursor.hide",
+    "message": "The cursor can hide after it's been still for 0.5 to 10 seconds.",
+    "params": []
+  },
+  {
+    "code": "model.cursor.blur",
+    "message": "Cursor motion blur must be between 0 and 1.",
+    "params": []
+  },
+  {
+    "code": "model.cursor.closer",
+    "message": "Following the cursor can zoom in from 1× to 2×.",
+    "params": []
+  },
+  {
+    "code": "model.cursor.projectNeedsStyle",
+    "message": "The project always has a cursor style; it can be changed but not cleared.",
+    "params": []
+  }
+]

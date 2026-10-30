@@ -1,0 +1,15 @@
+[package]
+name = "klipolo-chat"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+publish = false
+description = "Chat with a project: what the language model reads about it, the tools it calls and how they become edits"
+
+[dependencies]
+# The project, its speech on the timeline (`speech::spoken`) and the time helpers.
+klipolo-model = { path = "../klipolo-model" }
+# The neutral inputs (scene items, speaker turns) read from what the analysis stored.
+serde = { version = "1", features = ["derive"] }
+# The tool schemas (`tools::tools`) and the arguments the model writes.
+serde_json = "1"

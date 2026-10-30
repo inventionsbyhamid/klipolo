@@ -1795,7 +1795,7 @@
       "description": "A stored parameter value; its [`ParamSpec`] says what it means."
     },
     "PointN": {
-      "description": "A point in 0–1 coordinates of the layer (or the canvas), from the top left.",
+      "description": "A point in 0 to 1 coordinates of the layer (or the canvas), from the top left.",
       "properties": {
         "x": {
           "format": "double",

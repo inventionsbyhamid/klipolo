@@ -675,11 +675,11 @@ fn word_cut_never_takes_more_than_half_a_gap() {
     );
 }
 
-/// The fixture the Script view's TS mapping (`src/lib/speech.ts`) is checked against, like `layout-parity.json`: a fix
-/// split in two pieces by a split (only the first reads it), a fix the drifting copy plays again (another use: it reads
-/// in c2 and in the copy), two more copies of the split fix (c1 unsplit, and c1's second piece alone: each covers words
-/// The use before already covered, so each reads it again), and a word whose start lands half-way
-/// between two microseconds.
+/// The fixture the Script view's TS mapping (`apps/desktop/src/lib/speech.ts`) is checked against, like
+/// `layout-parity.json`: a fix split in two pieces by a split (only the first reads it), a fix the drifting copy plays
+/// again (another use: it reads in c2 and in the copy), two more copies of the split fix (c1 unsplit, and c1's second
+/// piece alone: each covers words the use before already covered, so each reads it again), and a word
+/// whose start lands half-way between two microseconds.
 #[test]
 fn speech_parity_json_is_current() {
     let (p, mut speech) = recorded();
@@ -767,7 +767,7 @@ fn speech_parity_json_is_current() {
         })).collect::<Vec<_>>(),
     });
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../src/lib/speech-parity.json");
+        .join("../../apps/desktop/src/lib/speech-parity.json");
     // Sorted keys: the same file whether or not klipolo-ai's `preserve_order` builds alongside.
     let text = serde_json::to_string_pretty(&sorted_keys(fixture)).unwrap() + "\n";
     if std::env::var_os("KLIPOLO_UPDATE_PARITY").is_some() {

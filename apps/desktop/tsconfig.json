@@ -12,7 +12,13 @@
     "resolveJsonModule": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "types": ["vite/client", "node"]
+    "types": ["vite/client", "node"],
+    "paths": {
+      "@lingui/core/macro": ["./src/i18n/shim/coreMacro.ts"],
+      "@lingui/react/macro": ["./src/i18n/shim/reactMacro.tsx"],
+      "@lingui/core": ["./src/i18n/shim/core.ts"],
+      "@lingui/react": ["./src/i18n/shim/react.tsx"]
+    }
   },
   "include": ["src", "vite.config.ts"]
 }

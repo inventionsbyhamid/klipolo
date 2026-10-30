@@ -1,0 +1,2606 @@
+{
+ "key": "clip-a",
+ "language": "en",
+ "model": "muse-voice-transcribe-1.0",
+ "coveredUs": 155040000,
+ "complete": true,
+ "words": [
+  {
+   "text": "But",
+   "startUs": 60000,
+   "endUs": 184000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "it's",
+   "startUs": 224000,
+   "endUs": 402000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "also",
+   "startUs": 442000,
+   "endUs": 621000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "super",
+   "startUs": 880000,
+   "endUs": 1113000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "rewarding",
+   "startUs": 1153000,
+   "endUs": 1606000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "because",
+   "startUs": 1646000,
+   "endUs": 1988000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "it's",
+   "startUs": 2028000,
+   "endUs": 2207000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "just",
+   "startUs": 2247000,
+   "endUs": 2426000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "the",
+   "startUs": 2466000,
+   "endUs": 2590000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "two",
+   "startUs": 2630000,
+   "endUs": 2754000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "of",
+   "startUs": 2794000,
+   "endUs": 2864000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "you",
+   "startUs": 2904000,
+   "endUs": 3028000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "there",
+   "startUs": 3068000,
+   "endUs": 3301000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "working",
+   "startUs": 3341000,
+   "endUs": 3684000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "with",
+   "startUs": 3724000,
+   "endUs": 3903000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "the",
+   "startUs": 3943000,
+   "endUs": 4067000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "ground",
+   "startUs": 4107000,
+   "endUs": 4395000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "team",
+   "startUs": 4435000,
+   "endUs": 4614000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "to",
+   "startUs": 4654000,
+   "endUs": 4723000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "figure",
+   "startUs": 4763000,
+   "endUs": 5051000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "out",
+   "startUs": 5091000,
+   "endUs": 5215000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "how",
+   "startUs": 5255000,
+   "endUs": 5380000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "to",
+   "startUs": 5420000,
+   "endUs": 5489000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "fix",
+   "startUs": 5529000,
+   "endUs": 5653000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "problems",
+   "startUs": 5693000,
+   "endUs": 6091000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 6131000,
+   "endUs": 6255000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "figure",
+   "startUs": 6295000,
+   "endUs": 6583000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "out",
+   "startUs": 6623000,
+   "endUs": 6747000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "how",
+   "startUs": 6787000,
+   "endUs": 6911000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "to",
+   "startUs": 6951000,
+   "endUs": 7020000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "troubleshoot",
+   "startUs": 7060000,
+   "endUs": 7677000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 7717000,
+   "endUs": 7841000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "get",
+   "startUs": 7881000,
+   "endUs": 8005000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "through",
+   "startUs": 8045000,
+   "endUs": 8388000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "the",
+   "startUs": 8428000,
+   "endUs": 8552000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "tasks",
+   "startUs": 8592000,
+   "endUs": 8825000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 8865000,
+   "endUs": 8989000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "make",
+   "startUs": 9029000,
+   "endUs": 9208000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "sure",
+   "startUs": 9248000,
+   "endUs": 9427000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "that",
+   "startUs": 9467000,
+   "endUs": 9646000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "the",
+   "startUs": 9686000,
+   "endUs": 9810000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "station",
+   "startUs": 9850000,
+   "endUs": 10193000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "stays",
+   "startUs": 10233000,
+   "endUs": 10466000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "safe.",
+   "startUs": 10506000,
+   "endUs": 10740000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "",
+   "startUs": 10740000,
+   "endUs": 14380000,
+   "confidence": 1.0,
+   "kind": "pause"
+  },
+  {
+   "text": "Hi,",
+   "startUs": 14380000,
+   "endUs": 14571000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "my",
+   "startUs": 14611000,
+   "endUs": 14725000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "name",
+   "startUs": 14765000,
+   "endUs": 15034000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "is",
+   "startUs": 15074000,
+   "endUs": 15188000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "Caden",
+   "startUs": 15228000,
+   "endUs": 15574000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 15614000,
+   "endUs": 15805000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "my",
+   "startUs": 16000000,
+   "endUs": 16114000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "question",
+   "startUs": 16154000,
+   "endUs": 16731000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "is",
+   "startUs": 16771000,
+   "endUs": 16885000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "how",
+   "startUs": 16925000,
+   "endUs": 17117000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "do",
+   "startUs": 17157000,
+   "endUs": 17271000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "you",
+   "startUs": 17311000,
+   "endUs": 17502000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "stay",
+   "startUs": 17542000,
+   "endUs": 17811000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "entertained",
+   "startUs": 17851000,
+   "endUs": 18660000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "on",
+   "startUs": 18700000,
+   "endUs": 18814000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "long",
+   "startUs": 18854000,
+   "endUs": 19122000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "term",
+   "startUs": 19162000,
+   "endUs": 19431000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 19471000,
+   "endUs": 19662000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "short",
+   "startUs": 19702000,
+   "endUs": 20048000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "term",
+   "startUs": 20088000,
+   "endUs": 20357000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "trips?",
+   "startUs": 20397000,
+   "endUs": 20820000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "",
+   "startUs": 20820000,
+   "endUs": 27180000,
+   "confidence": 1.0,
+   "kind": "pause"
+  },
+  {
+   "text": "Hi",
+   "startUs": 27180000,
+   "endUs": 27372000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "Caden,",
+   "startUs": 27412000,
+   "endUs": 28069000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "space",
+   "startUs": 28109000,
+   "endUs": 28650000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "is",
+   "startUs": 28690000,
+   "endUs": 28882000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "such",
+   "startUs": 28922000,
+   "endUs": 29347000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "unique",
+   "startUs": 29387000,
+   "endUs": 30044000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "environment",
+   "startUs": 30084000,
+   "endUs": 31322000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "that",
+   "startUs": 31362000,
+   "endUs": 31786000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "it's",
+   "startUs": 31826000,
+   "endUs": 32251000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "a",
+   "startUs": 32291000,
+   "endUs": 32367000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "lot",
+   "startUs": 32407000,
+   "endUs": 32716000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "of",
+   "startUs": 32756000,
+   "endUs": 32948000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "fun",
+   "startUs": 32988000,
+   "endUs": 33297000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "for",
+   "startUs": 33337000,
+   "endUs": 33645000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "me",
+   "startUs": 33685000,
+   "endUs": 33877000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "to",
+   "startUs": 33917000,
+   "endUs": 34110000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "just",
+   "startUs": 34150000,
+   "endUs": 34574000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "be",
+   "startUs": 34614000,
+   "endUs": 34807000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "here",
+   "startUs": 34847000,
+   "endUs": 35271000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 35311000,
+   "endUs": 35620000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "live",
+   "startUs": 35660000,
+   "endUs": 36085000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "here",
+   "startUs": 36125000,
+   "endUs": 36549000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 36589000,
+   "endUs": 36898000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "just",
+   "startUs": 36938000,
+   "endUs": 37362000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "like",
+   "startUs": 37402000,
+   "endUs": 37827000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "Nicole",
+   "startUs": 37867000,
+   "endUs": 38524000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "said,",
+   "startUs": 38564000,
+   "endUs": 39105000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "floating",
+   "startUs": 39145000,
+   "endUs": 40034000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "in",
+   "startUs": 40074000,
+   "endUs": 40267000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "microgravity",
+   "startUs": 40307000,
+   "endUs": 41661000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "like",
+   "startUs": 41701000,
+   "endUs": 42125000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "this",
+   "startUs": 42165000,
+   "endUs": 42590000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "I",
+   "startUs": 42630000,
+   "endUs": 42706000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "will",
+   "startUs": 42746000,
+   "endUs": 43171000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "never",
+   "startUs": 43211000,
+   "endUs": 43752000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "get",
+   "startUs": 43792000,
+   "endUs": 44100000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "tired",
+   "startUs": 44140000,
+   "endUs": 44681000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "of",
+   "startUs": 44721000,
+   "endUs": 44914000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "so",
+   "startUs": 44954000,
+   "endUs": 45146000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "that's",
+   "startUs": 45186000,
+   "endUs": 45843000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "my",
+   "startUs": 45883000,
+   "endUs": 46075000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "favorite",
+   "startUs": 46115000,
+   "endUs": 47005000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "thing",
+   "startUs": 47045000,
+   "endUs": 47585000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "to",
+   "startUs": 47625000,
+   "endUs": 47818000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "do",
+   "startUs": 47858000,
+   "endUs": 48050000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "in",
+   "startUs": 48090000,
+   "endUs": 48282000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "space.",
+   "startUs": 48322000,
+   "endUs": 48980000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "Thank",
+   "startUs": 49020000,
+   "endUs": 49349000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "you",
+   "startUs": 49389000,
+   "endUs": 49570000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "for",
+   "startUs": 49610000,
+   "endUs": 49792000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "a",
+   "startUs": 49832000,
+   "endUs": 49866000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "great",
+   "startUs": 49906000,
+   "endUs": 50235000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "question.",
+   "startUs": 50275000,
+   "endUs": 50900000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "",
+   "startUs": 50900000,
+   "endUs": 53180000,
+   "confidence": 1.0,
+   "kind": "pause"
+  },
+  {
+   "text": "Hi",
+   "startUs": 53180000,
+   "endUs": 53267000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "my",
+   "startUs": 53307000,
+   "endUs": 53395000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "name",
+   "startUs": 53435000,
+   "endUs": 53650000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "is",
+   "startUs": 53690000,
+   "endUs": 53778000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "Will",
+   "startUs": 53818000,
+   "endUs": 54033000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 54073000,
+   "endUs": 54225000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "my",
+   "startUs": 54265000,
+   "endUs": 54352000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "question",
+   "startUs": 54392000,
+   "endUs": 54863000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "is",
+   "startUs": 54903000,
+   "endUs": 54991000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "what",
+   "startUs": 55031000,
+   "endUs": 55246000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "skills",
+   "startUs": 55286000,
+   "endUs": 55629000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "or",
+   "startUs": 55669000,
+   "endUs": 55757000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "abilities",
+   "startUs": 55797000,
+   "endUs": 56331000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "have",
+   "startUs": 56946000,
+   "endUs": 57161000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "you",
+   "startUs": 57201000,
+   "endUs": 57353000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "developed",
+   "startUs": 57393000,
+   "endUs": 57927000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "in",
+   "startUs": 57967000,
+   "endUs": 58055000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "space",
+   "startUs": 58095000,
+   "endUs": 58374000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "that",
+   "startUs": 58414000,
+   "endUs": 58630000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "surprised",
+   "startUs": 58670000,
+   "endUs": 59204000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "you?",
+   "startUs": 59244000,
+   "endUs": 59460000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "",
+   "startUs": 59460000,
+   "endUs": 63820000,
+   "confidence": 1.0,
+   "kind": "pause"
+  },
+  {
+   "text": "Hey",
+   "startUs": 63820000,
+   "endUs": 63996000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "Will,",
+   "startUs": 64036000,
+   "endUs": 64357000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "so",
+   "startUs": 64397000,
+   "endUs": 64502000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "I",
+   "startUs": 64542000,
+   "endUs": 64574000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "think",
+   "startUs": 64614000,
+   "endUs": 64935000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "one",
+   "startUs": 64975000,
+   "endUs": 65152000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "of",
+   "startUs": 65192000,
+   "endUs": 65297000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "the",
+   "startUs": 65337000,
+   "endUs": 65513000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "things",
+   "startUs": 65553000,
+   "endUs": 65947000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "that",
+   "startUs": 65987000,
+   "endUs": 66236000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "surprises",
+   "startUs": 66276000,
+   "endUs": 66886000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "me",
+   "startUs": 66926000,
+   "endUs": 67030000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "most",
+   "startUs": 67070000,
+   "endUs": 67319000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "is",
+   "startUs": 67359000,
+   "endUs": 67464000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "that",
+   "startUs": 67504000,
+   "endUs": 67753000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "your",
+   "startUs": 67793000,
+   "endUs": 68042000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "feet",
+   "startUs": 68082000,
+   "endUs": 68331000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "actually",
+   "startUs": 68371000,
+   "endUs": 68908000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "learn",
+   "startUs": 68948000,
+   "endUs": 69270000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "how",
+   "startUs": 69310000,
+   "endUs": 69486000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "to",
+   "startUs": 69526000,
+   "endUs": 69631000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "how",
+   "startUs": 69671000,
+   "endUs": 69848000,
+   "confidence": 0.05,
+   "kind": "word"
+  },
+  {
+   "text": "to",
+   "startUs": 69888000,
+   "endUs": 69992000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "hold",
+   "startUs": 70032000,
+   "endUs": 70281000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "on",
+   "startUs": 70321000,
+   "endUs": 70425000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "to",
+   "startUs": 70465000,
+   "endUs": 70570000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "things",
+   "startUs": 70610000,
+   "endUs": 71003000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 71043000,
+   "endUs": 71220000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "so",
+   "startUs": 71260000,
+   "endUs": 71365000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "we",
+   "startUs": 71405000,
+   "endUs": 71509000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "kind",
+   "startUs": 71549000,
+   "endUs": 71798000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "of",
+   "startUs": 71838000,
+   "endUs": 71942000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "learn",
+   "startUs": 71982000,
+   "endUs": 72304000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "early",
+   "startUs": 72344000,
+   "endUs": 72665000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "on",
+   "startUs": 72705000,
+   "endUs": 72809000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "how",
+   "startUs": 72849000,
+   "endUs": 73026000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "to",
+   "startUs": 73066000,
+   "endUs": 73171000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "hold",
+   "startUs": 73211000,
+   "endUs": 73460000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "on",
+   "startUs": 73500000,
+   "endUs": 73604000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "to",
+   "startUs": 73644000,
+   "endUs": 73748000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "a",
+   "startUs": 73788000,
+   "endUs": 73821000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "handrail",
+   "startUs": 73861000,
+   "endUs": 74399000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "like",
+   "startUs": 74439000,
+   "endUs": 74688000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "this",
+   "startUs": 74728000,
+   "endUs": 74977000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 75017000,
+   "endUs": 75193000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "just",
+   "startUs": 75233000,
+   "endUs": 75482000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "kind",
+   "startUs": 75522000,
+   "endUs": 75771000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "of",
+   "startUs": 75811000,
+   "endUs": 75916000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "float",
+   "startUs": 75956000,
+   "endUs": 76277000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 76317000,
+   "endUs": 76494000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "do",
+   "startUs": 76534000,
+   "endUs": 76638000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "whatever",
+   "startUs": 76678000,
+   "endUs": 77216000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "you",
+   "startUs": 77256000,
+   "endUs": 77433000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "need",
+   "startUs": 77473000,
+   "endUs": 77722000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "to",
+   "startUs": 77762000,
+   "endUs": 77866000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "with",
+   "startUs": 77906000,
+   "endUs": 78155000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "your",
+   "startUs": 78195000,
+   "endUs": 78444000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "feet",
+   "startUs": 78484000,
+   "endUs": 78733000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "it's",
+   "startUs": 78773000,
+   "endUs": 79022000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "something",
+   "startUs": 79062000,
+   "endUs": 79672000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "that",
+   "startUs": 79712000,
+   "endUs": 79961000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "you",
+   "startUs": 80001000,
+   "endUs": 80178000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "don't",
+   "startUs": 80218000,
+   "endUs": 80539000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "really",
+   "startUs": 80579000,
+   "endUs": 80972000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "think",
+   "startUs": 81012000,
+   "endUs": 81334000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "about",
+   "startUs": 81374000,
+   "endUs": 81695000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "when",
+   "startUs": 81735000,
+   "endUs": 81984000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "you're",
+   "startUs": 82024000,
+   "endUs": 82417000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "on",
+   "startUs": 82457000,
+   "endUs": 82562000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "the",
+   "startUs": 82602000,
+   "endUs": 82778000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "earth",
+   "startUs": 82818000,
+   "endUs": 83140000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "",
+   "startUs": 83140000,
+   "endUs": 86860000,
+   "confidence": 1.0,
+   "kind": "pause"
+  },
+  {
+   "text": "Hi",
+   "startUs": 86860000,
+   "endUs": 86975000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "my",
+   "startUs": 87015000,
+   "endUs": 87131000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "name",
+   "startUs": 87171000,
+   "endUs": 87442000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "is",
+   "startUs": 87482000,
+   "endUs": 87597000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "Peyton",
+   "startUs": 87637000,
+   "endUs": 88064000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 88104000,
+   "endUs": 88297000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "my",
+   "startUs": 88337000,
+   "endUs": 88453000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "question",
+   "startUs": 88493000,
+   "endUs": 89075000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "is",
+   "startUs": 89115000,
+   "endUs": 89231000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "how",
+   "startUs": 89271000,
+   "endUs": 89464000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "do",
+   "startUs": 89504000,
+   "endUs": 89620000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "you",
+   "startUs": 89660000,
+   "endUs": 89853000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "deal",
+   "startUs": 89893000,
+   "endUs": 90164000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "with",
+   "startUs": 90204000,
+   "endUs": 90475000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "challenges",
+   "startUs": 90515000,
+   "endUs": 91253000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "during",
+   "startUs": 91293000,
+   "endUs": 91720000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "missions?",
+   "startUs": 91760000,
+   "endUs": 92420000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "",
+   "startUs": 92420000,
+   "endUs": 99340000,
+   "confidence": 1.0,
+   "kind": "pause"
+  },
+  {
+   "text": "Thank",
+   "startUs": 99340000,
+   "endUs": 99776000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "you",
+   "startUs": 99816000,
+   "endUs": 100062000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "for",
+   "startUs": 100102000,
+   "endUs": 100347000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "the",
+   "startUs": 100387000,
+   "endUs": 100633000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "for",
+   "startUs": 100673000,
+   "endUs": 100919000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "the",
+   "startUs": 100959000,
+   "endUs": 101205000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "great",
+   "startUs": 101245000,
+   "endUs": 101681000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "question",
+   "startUs": 101721000,
+   "endUs": 102443000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "so",
+   "startUs": 102483000,
+   "endUs": 102634000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "when",
+   "startUs": 102674000,
+   "endUs": 103015000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "I",
+   "startUs": 103055000,
+   "endUs": 103110000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "face",
+   "startUs": 103150000,
+   "endUs": 103491000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "challenges",
+   "startUs": 103531000,
+   "endUs": 104444000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "sometimes",
+   "startUs": 104484000,
+   "endUs": 105301000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "I",
+   "startUs": 105341000,
+   "endUs": 105397000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "can",
+   "startUs": 105437000,
+   "endUs": 105682000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "manage",
+   "startUs": 105722000,
+   "endUs": 106254000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "to",
+   "startUs": 106294000,
+   "endUs": 106445000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "deal",
+   "startUs": 106485000,
+   "endUs": 106826000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "with",
+   "startUs": 106866000,
+   "endUs": 107207000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "those",
+   "startUs": 107247000,
+   "endUs": 107683000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "challenges",
+   "startUs": 107723000,
+   "endUs": 108636000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "just",
+   "startUs": 108676000,
+   "endUs": 109017000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "by",
+   "startUs": 109057000,
+   "endUs": 109207000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "myself",
+   "startUs": 109247000,
+   "endUs": 109779000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "when",
+   "startUs": 109819000,
+   "endUs": 110160000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "I've",
+   "startUs": 110200000,
+   "endUs": 110541000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "seen",
+   "startUs": 110581000,
+   "endUs": 110922000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "similar",
+   "startUs": 110962000,
+   "endUs": 111589000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "challenges",
+   "startUs": 111629000,
+   "endUs": 112542000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "throughout",
+   "startUs": 112582000,
+   "endUs": 113494000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "my",
+   "startUs": 113534000,
+   "endUs": 113685000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "training",
+   "startUs": 113725000,
+   "endUs": 114447000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "so",
+   "startUs": 114487000,
+   "endUs": 114638000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "that's",
+   "startUs": 114678000,
+   "endUs": 115209000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "why",
+   "startUs": 115249000,
+   "endUs": 115495000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "the",
+   "startUs": 115535000,
+   "endUs": 115781000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "training",
+   "startUs": 115821000,
+   "endUs": 116543000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "for",
+   "startUs": 116583000,
+   "endUs": 116829000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "astronaut",
+   "startUs": 116869000,
+   "endUs": 117686000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "is",
+   "startUs": 117726000,
+   "endUs": 117877000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "so",
+   "startUs": 117917000,
+   "endUs": 118067000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "important",
+   "startUs": 118107000,
+   "endUs": 118925000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 118965000,
+   "endUs": 119210000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "also",
+   "startUs": 119250000,
+   "endUs": 119591000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "we",
+   "startUs": 119631000,
+   "endUs": 119782000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "help",
+   "startUs": 119822000,
+   "endUs": 120163000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "each",
+   "startUs": 120203000,
+   "endUs": 120544000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "other",
+   "startUs": 120584000,
+   "endUs": 121020000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "so",
+   "startUs": 121060000,
+   "endUs": 121211000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "that",
+   "startUs": 121251000,
+   "endUs": 121592000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "we",
+   "startUs": 121632000,
+   "endUs": 121783000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "can",
+   "startUs": 121823000,
+   "endUs": 122068000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "deal",
+   "startUs": 122108000,
+   "endUs": 122449000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "with",
+   "startUs": 122489000,
+   "endUs": 122830000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "challenges",
+   "startUs": 122870000,
+   "endUs": 123783000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "as",
+   "startUs": 123823000,
+   "endUs": 123974000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "a",
+   "startUs": 124014000,
+   "endUs": 124069000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "as",
+   "startUs": 124109000,
+   "endUs": 124260000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "a",
+   "startUs": 124300000,
+   "endUs": 124355000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "team",
+   "startUs": 124395000,
+   "endUs": 124736000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 124776000,
+   "endUs": 125022000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "most",
+   "startUs": 125062000,
+   "endUs": 125403000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "importantly",
+   "startUs": 125443000,
+   "endUs": 126451000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "we",
+   "startUs": 126491000,
+   "endUs": 126641000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "can",
+   "startUs": 126681000,
+   "endUs": 126927000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "get",
+   "startUs": 126967000,
+   "endUs": 127213000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "a",
+   "startUs": 127253000,
+   "endUs": 127308000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "great",
+   "startUs": 127348000,
+   "endUs": 127784000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "support",
+   "startUs": 127824000,
+   "endUs": 128451000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "from",
+   "startUs": 128491000,
+   "endUs": 128832000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "the",
+   "startUs": 128872000,
+   "endUs": 129118000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "ground",
+   "startUs": 129158000,
+   "endUs": 129690000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 129730000,
+   "endUs": 129976000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "there",
+   "startUs": 130016000,
+   "endUs": 130452000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "are",
+   "startUs": 130492000,
+   "endUs": 130738000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "are",
+   "startUs": 130778000,
+   "endUs": 131023000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "so",
+   "startUs": 131063000,
+   "endUs": 131214000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "many",
+   "startUs": 131254000,
+   "endUs": 131595000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "specialists",
+   "startUs": 131635000,
+   "endUs": 132643000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "on",
+   "startUs": 132683000,
+   "endUs": 132834000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "the",
+   "startUs": 132874000,
+   "endUs": 133119000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "ground",
+   "startUs": 133159000,
+   "endUs": 133691000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "who",
+   "startUs": 133731000,
+   "endUs": 133977000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "has",
+   "startUs": 134017000,
+   "endUs": 134263000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "who",
+   "startUs": 134303000,
+   "endUs": 134548000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "have",
+   "startUs": 134588000,
+   "endUs": 134929000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "a",
+   "startUs": 134969000,
+   "endUs": 135025000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "lot",
+   "startUs": 135065000,
+   "endUs": 135310000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "of",
+   "startUs": 135350000,
+   "endUs": 135501000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "experiences",
+   "startUs": 135541000,
+   "endUs": 136549000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 136589000,
+   "endUs": 136835000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 136875000,
+   "endUs": 137121000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "knowledge",
+   "startUs": 137161000,
+   "endUs": 137978000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 138018000,
+   "endUs": 138264000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "those",
+   "startUs": 138304000,
+   "endUs": 138740000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "people",
+   "startUs": 138780000,
+   "endUs": 139312000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "can",
+   "startUs": 139352000,
+   "endUs": 139598000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "find",
+   "startUs": 139638000,
+   "endUs": 139979000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "a",
+   "startUs": 140019000,
+   "endUs": 140074000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "way",
+   "startUs": 140114000,
+   "endUs": 140360000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "to",
+   "startUs": 140400000,
+   "endUs": 140550000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "deal",
+   "startUs": 140590000,
+   "endUs": 140931000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "with",
+   "startUs": 140971000,
+   "endUs": 141312000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "any",
+   "startUs": 141352000,
+   "endUs": 141598000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "challenges",
+   "startUs": 141638000,
+   "endUs": 142551000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "we've",
+   "startUs": 142591000,
+   "endUs": 143027000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "seen",
+   "startUs": 143067000,
+   "endUs": 143408000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "on",
+   "startUs": 143448000,
+   "endUs": 143599000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "board",
+   "startUs": 143639000,
+   "endUs": 144075000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "the",
+   "startUs": 144115000,
+   "endUs": 144361000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "ISS.",
+   "startUs": 144401000,
+   "endUs": 144742000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "So",
+   "startUs": 144782000,
+   "endUs": 144932000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "we",
+   "startUs": 144972000,
+   "endUs": 145123000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "are",
+   "startUs": 145163000,
+   "endUs": 145409000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "in",
+   "startUs": 145449000,
+   "endUs": 145599000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "a",
+   "startUs": 145639000,
+   "endUs": 145695000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "good",
+   "startUs": 145735000,
+   "endUs": 146076000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "hands",
+   "startUs": 146116000,
+   "endUs": 146552000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "thank",
+   "startUs": 146592000,
+   "endUs": 147028000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "you",
+   "startUs": 147068000,
+   "endUs": 147314000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "for",
+   "startUs": 147354000,
+   "endUs": 147600000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "the",
+   "startUs": 147640000,
+   "endUs": 147886000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "great",
+   "startUs": 147926000,
+   "endUs": 148362000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "question.",
+   "startUs": 148402000,
+   "endUs": 149220000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "",
+   "startUs": 149220000,
+   "endUs": 151500000,
+   "confidence": 1.0,
+   "kind": "pause"
+  },
+  {
+   "text": "Hi,",
+   "startUs": 151500000,
+   "endUs": 151672000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "my",
+   "startUs": 151712000,
+   "endUs": 151813000,
+   "confidence": 0.732,
+   "kind": "word"
+  },
+  {
+   "text": "name",
+   "startUs": 151853000,
+   "endUs": 152096000,
+   "confidence": 0.958,
+   "kind": "word"
+  },
+  {
+   "text": "is",
+   "startUs": 152136000,
+   "endUs": 152237000,
+   "confidence": 0.861,
+   "kind": "word"
+  },
+  {
+   "text": "Noelle",
+   "startUs": 152277000,
+   "endUs": 152661000,
+   "confidence": 0.764,
+   "kind": "word"
+  },
+  {
+   "text": "and",
+   "startUs": 152701000,
+   "endUs": 152873000,
+   "confidence": 0.99,
+   "kind": "word"
+  },
+  {
+   "text": "my",
+   "startUs": 152913000,
+   "endUs": 153015000,
+   "confidence": 0.893,
+   "kind": "word"
+  },
+  {
+   "text": "question",
+   "startUs": 153055000,
+   "endUs": 153580000,
+   "confidence": 0.797,
+   "kind": "word"
+  },
+  {
+   "text": "is",
+   "startUs": 153620000,
+   "endUs": 153722000,
+   "confidence": 0.7,
+   "kind": "word"
+  },
+  {
+   "text": "are",
+   "startUs": 153762000,
+   "endUs": 153934000,
+   "confidence": 0.926,
+   "kind": "word"
+  },
+  {
+   "text": "there",
+   "startUs": 153974000,
+   "endUs": 154287000,
+   "confidence": 0.829,
+   "kind": "word"
+  },
+  {
+   "text": "any",
+   "startUs": 154327000,
+   "endUs": 154500000,
+   "confidence": 0.732,
+   "kind": "word"
+  }
+ ]
+}

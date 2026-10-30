@@ -151,7 +151,7 @@ pub fn bubble_radius(shape: CameraShape) -> f64 {
 }
 
 /// Where a recording's camera goes in `format`, or None when it's hidden there.
-/// Mirrored by `cameraRect` in `src/lib/layout.ts` and pinned by `tests/parity.rs`.
+/// Mirrored by `cameraRect` in `apps/desktop/src/lib/layout.ts` and pinned by `tests/parity.rs`.
 pub fn camera_rect_for(
     camera: &CameraLayout,
     padding: f64,

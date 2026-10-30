@@ -168,7 +168,7 @@ fn export_bindings_model_codes() {
             json!({ "code": code, "message": message, "params": params })
         })
         .collect();
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/bindings");
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/desktop/src/bindings");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("modelCodes.json"),

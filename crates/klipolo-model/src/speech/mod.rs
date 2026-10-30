@@ -58,7 +58,7 @@ pub struct Word {
     /// In the source file's sound time.
     pub start_us: Us,
     pub end_us: Us,
-    /// 0–1, the model's.
+    /// 0 to 1, the model's.
     pub confidence: f32,
     pub kind: WordKind,
 }
