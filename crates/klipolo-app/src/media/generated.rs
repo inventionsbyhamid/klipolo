@@ -25,7 +25,7 @@ const NAME_WORDS: usize = 6;
 /// The longest name taken from a prompt, before " sticker" or " title card".
 const NAME_CHARS: usize = 48;
 /// The biggest picture accepted: Muse Image's are 1600 px on their long side.
-const MAX_SIDE: u32 = 8192;
+const MAX_SIDE: u32 = 4096;
 
 /// The words Muse Image gets for a sticker of `prompt`: one subject, a bold dark outline the cut-out stops at, and
 /// plain white around it for the cut-out to take away.

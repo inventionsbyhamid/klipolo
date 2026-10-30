@@ -222,6 +222,20 @@ fn an_unreadable_picture_is_an_error() {
     assert_eq!(error.note(), None);
 }
 
+/// Muse Image's pictures are 1600 px; one over 4096 px a side isn't read at all, so a cut-out never holds more than a
+/// few tens of MB.
+#[test]
+fn a_picture_over_4096_pixels_a_side_is_not_read() {
+    let wide = RgbImage::from_pixel(4097, 2, Rgb([40, 90, 160]));
+    let error = cut_out_white(&png_of(&wide)).unwrap_err();
+    assert!(matches!(error, CutOutError::Unreadable(_)), "{error:?}");
+    let largest = RgbImage::from_fn(4096, 8, |x, _| if x < 2048 { WHITE } else { BLACK });
+    assert!(!matches!(
+        cut_out_white(&png_of(&largest)),
+        Err(CutOutError::Unreadable(_))
+    ));
+}
+
 /// A 1600x1600 sticker keys out well under a second in a release build (the flood is a queue, never recursion).
 #[test]
 fn cut_out_of_a_full_size_sticker_is_quick() {

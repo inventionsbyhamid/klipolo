@@ -305,6 +305,23 @@ async fn a_picture_that_cannot_be_read_says_so_and_adds_nothing() {
 }
 
 #[tokio::test]
+async fn a_picture_over_4096_pixels_a_side_is_not_saved() {
+    let dir = tempfile::tempdir().unwrap();
+    let huge = png_of(&RgbImage::from_pixel(4097, 4, Rgb([20, 30, 90])));
+    let maker = Fake::drawing(huge);
+
+    let error = make_title_card(&maker, &project(&dir), "Day 1", FormatKind::Landscape)
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error.user_message(),
+        "Muse Image sent a picture Klipolo couldn't read, so try again."
+    );
+    assert_eq!(files(&made_folder(&dir)), Vec::<String>::new());
+}
+
+#[tokio::test]
 async fn an_empty_prompt_asks_for_words_without_a_request() {
     let dir = tempfile::tempdir().unwrap();
     let maker = Fake::answering(vec![]);

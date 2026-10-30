@@ -38,8 +38,9 @@ pub const NOTHING_TO_CUT_NOTE: &str =
 const FIRST_RING_ALPHA: f32 = 2.0 / 3.0;
 /// A pixel this transparent in the input counts as background.
 const SEE_THROUGH: u8 = 16;
-/// The biggest picture read: Muse Image's are 1600 px on their long side.
-const MAX_SIDE: u32 = 8192;
+/// The biggest picture read: Muse Image's are 1600 px on their long side. At 4096 px a side a cut-out holds at most
+/// about 150 MB at once (the pixels, the background mask and, at worst, the flood's queue); at 1600 px, about 25 MB.
+const MAX_SIDE: u32 = 4096;
 
 /// The cut-out: an RGBA PNG, and the share of the picture's pixels it kept (0 to 1).
 #[derive(Clone, PartialEq)]
@@ -143,7 +144,7 @@ fn decode(png: &[u8]) -> Result<RgbaImage, CutOutError> {
     let image = reader
         .decode()
         .map_err(|e| CutOutError::Unreadable(e.to_string()))?;
-    let pixels = image.to_rgba8();
+    let pixels = image.into_rgba8();
     if pixels.width() == 0 || pixels.height() == 0 {
         return Err(CutOutError::Unreadable("the picture is empty".into()));
     }
@@ -166,11 +167,12 @@ fn flood_from_border(pixels: &RgbaImage) -> Vec<bool> {
     let raw = pixels.as_raw();
     let white = |i: usize| near_white([raw[4 * i], raw[4 * i + 1], raw[4 * i + 2], raw[4 * i + 3]]);
     let mut background = vec![false; width * height];
-    let mut queue = VecDeque::new();
-    let visit = |i: usize, background: &mut Vec<bool>, queue: &mut VecDeque<usize>| {
+    // Pixel indices fit in 32 bits (at most 4096 x 4096), half the queue's memory of `usize`.
+    let mut queue: VecDeque<u32> = VecDeque::new();
+    let visit = |i: usize, background: &mut Vec<bool>, queue: &mut VecDeque<u32>| {
         if !background[i] && white(i) {
             background[i] = true;
-            queue.push_back(i);
+            queue.push_back(i as u32);
         }
     };
     for x in 0..width {
@@ -182,6 +184,7 @@ fn flood_from_border(pixels: &RgbaImage) -> Vec<bool> {
         visit(y * width + width - 1, &mut background, &mut queue);
     }
     while let Some(i) = queue.pop_front() {
+        let i = i as usize;
         let (x, y) = (i % width, i / width);
         if x > 0 {
             visit(i - 1, &mut background, &mut queue);
@@ -234,19 +237,12 @@ fn feather(pixels: &mut RgbaImage, background: &[bool], width: usize, height: us
             ring[i] = 2;
         }
     }
-    let original = pixels.clone();
-    let raw = original.as_raw();
+    // The rings' new values come from the untouched picture, so they are worked out first (a few pixels per row) and
+    // written after: no second copy of the whole picture.
+    let raw = pixels.as_raw();
     let at = |i: usize| [raw[4 * i], raw[4 * i + 1], raw[4 * i + 2], raw[4 * i + 3]];
-    let out: &mut [u8] = pixels;
-    for i in 0..width * height {
-        let px = &mut out[4 * i..4 * i + 4];
-        if background[i] {
-            px.copy_from_slice(&[0, 0, 0, 0]);
-            continue;
-        }
-        if ring[i] == 0 {
-            continue;
-        }
+    let mut edges: Vec<(usize, [u8; 4])> = Vec::new();
+    for i in (0..width * height).filter(|&i| ring[i] != 0) {
         let pixel = at(i);
         let coverage_at =
             |j: usize| white_coverage(at(j), darkest_nearby(&at, background, width, height, j));
@@ -260,14 +256,25 @@ fn feather(pixels: &mut RgbaImage, background: &[bool], width: usize, height: us
         } else {
             coverage
         };
+        let mut feathered = pixel;
         if coverage > 0.0 && coverage < 1.0 {
             // The pixel is `coverage` of the subject's colour over white: take the white out.
-            for (out, &mixed) in px[..3].iter_mut().zip(&pixel[..3]) {
+            for (out, &mixed) in feathered[..3].iter_mut().zip(&pixel[..3]) {
                 let unmixed = (f32::from(mixed) - (1.0 - coverage) * 255.0) / coverage;
                 *out = unmixed.round().clamp(0.0, 255.0) as u8;
             }
         }
-        px[3] = (alpha * f32::from(pixel[3])).round().clamp(0.0, 255.0) as u8;
+        feathered[3] = (alpha * f32::from(pixel[3])).round().clamp(0.0, 255.0) as u8;
+        edges.push((i, feathered));
+    }
+    let out: &mut [u8] = pixels;
+    for (px, &cut) in out.chunks_exact_mut(4).zip(background) {
+        if cut {
+            px.copy_from_slice(&[0, 0, 0, 0]);
+        }
+    }
+    for (i, feathered) in edges {
+        out[4 * i..4 * i + 4].copy_from_slice(&feathered);
     }
 }
 
