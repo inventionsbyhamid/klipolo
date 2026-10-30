@@ -1,4 +1,3 @@
-import type { UnlistenFn } from '@tauri-apps/api/event';
 import { create } from 'zustand';
 import type { Snapshot } from '../bindings/Snapshot';
 import { bridge } from '../bridge/commands';
@@ -45,28 +44,40 @@ function versionOf(snapshot: Snapshot): SavedVersion | null {
 
 /**
  * Follows the background saver (`project-save`): each save that lands says which version it wrote, so the top bar
- * says "Saving…" until the page's own version is on the disk. When saves start failing, a notice that stays says why
- * and what to do; when they work again, it goes and a note says so. A project just opened or made is saved as it is.
+ * says "Saving…" until the page's own version is on the disk. A late report of an earlier opening (another project
+ * opened since) says nothing about this one. When saves start failing, a notice that stays says why and what to do;
+ * when they work again, it goes and a note says so. A project just opened or made is saved as it is. Resolves with
+ * the function that stops following (the store subscription and the listener both).
  */
-export function followSaves(): Promise<UnlistenFn> {
-  useProject.subscribe((s, prev) => {
+export async function followSaves(): Promise<() => void> {
+  const offStore = useProject.subscribe((s, prev) => {
     const now = s.snapshot;
     if (!now || (now.opening === prev.snapshot?.opening && now.project.id === prev.snapshot?.project.id)) return;
     useSaving.setState({ saved: versionOf(now) });
   });
-  return bridge.onSaveStatus((status) => {
-    if (!status.ok) {
-      const failing = status.message ?? "Changes aren't being saved.";
-      useSaving.setState({ failing });
-      toast.error(failing, { key: NOTICE, persistent: true });
-      return;
-    }
-    if (useSaving.getState().failing) {
-      useToasts.getState().dismissKey(NOTICE);
-      toast.info('Your changes are saved again.', { done: true });
-    }
-    const { opening, revision } = status;
-    const saved = opening != null && revision != null ? { opening, revision } : useSaving.getState().saved;
-    useSaving.setState({ failing: null, saved });
-  });
+  try {
+    const offSaves = await bridge.onSaveStatus((status) => {
+      if (!status.ok) {
+        const failing = status.message ?? "Changes aren't being saved.";
+        useSaving.setState({ failing });
+        toast.error(failing, { key: NOTICE, persistent: true });
+        return;
+      }
+      if (useSaving.getState().failing) {
+        useToasts.getState().dismissKey(NOTICE);
+        toast.info('Your changes are saved again.', { done: true });
+      }
+      const { opening, revision } = status;
+      const current = useProject.getState().snapshot?.opening;
+      const ours = opening != null && revision != null && (current == null || opening === current);
+      useSaving.setState({ failing: null, saved: ours ? { opening, revision } : useSaving.getState().saved });
+    });
+    return () => {
+      offStore();
+      offSaves();
+    };
+  } catch (error) {
+    offStore();
+    throw error;
+  }
 }
