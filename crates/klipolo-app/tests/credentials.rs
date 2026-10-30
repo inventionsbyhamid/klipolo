@@ -2,10 +2,11 @@
 //! the Keychain). Nothing here reaches Meta or Klipolo's relay: every base URL is a local mock or a closed port.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use klipolo_app::credentials::{
     AiMode, AiStatus, Credentials, Endpoints, META_API_KEY, MemoryStore, RELAY_CODE, RELAY_TOKEN,
-    SecretStore, ai_client, device_id,
+    SecretStore, StoreError, ai_client, device_id,
 };
 use klipolo_meta::{ExposeSecret, SecretString};
 use serde_json::{Value, json};
@@ -439,6 +440,113 @@ async fn a_lost_token_is_got_back_with_the_saved_code() {
         );
     }
     assert_eq!(stored(&store, RELAY_TOKEN).as_deref(), Some(NEW_TOKEN));
+}
+
+/// The relay's credit answer, held back for `delay`.
+fn slow_credit(delay: Duration) -> ResponseTemplate {
+    ResponseTemplate::new(200)
+        .set_body_json(device(true, 2.0, 0.5))
+        .set_delay(delay)
+}
+
+#[tokio::test]
+async fn a_slow_credit_answer_never_brings_back_a_removed_code() {
+    let relay = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/devices/me"))
+        .respond_with(slow_credit(Duration::from_millis(600)))
+        .expect(1)
+        .mount(&relay)
+        .await;
+    let store = Arc::new(MemoryStore::default());
+    store.set(RELAY_TOKEN, &secret(TOKEN)).unwrap();
+    store.set(RELAY_CODE, &secret(CODE)).unwrap();
+    let credentials = Credentials::load(store, endpoints(CLOSED, &relay.uri()), DEVICE.into());
+
+    // Remove lands while Settings waits for the credit.
+    let (status, cleared) = tokio::join!(credentials.status(), async {
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        credentials.clear().await.unwrap()
+    });
+    assert_eq!(cleared, AiStatus::default());
+    assert_eq!(
+        status,
+        AiStatus::default(),
+        "the answer is the credentials now, not the relay's view from before Remove"
+    );
+}
+
+#[tokio::test]
+async fn a_slow_credit_answer_gives_way_to_a_key_saved_meanwhile() {
+    let meta = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "data": [] })))
+        .mount(&meta)
+        .await;
+    let relay = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/devices/me"))
+        .respond_with(slow_credit(Duration::from_millis(600)))
+        .mount(&relay)
+        .await;
+    let store = Arc::new(MemoryStore::default());
+    store.set(RELAY_TOKEN, &secret(TOKEN)).unwrap();
+    store.set(RELAY_CODE, &secret(CODE)).unwrap();
+    let credentials = Credentials::load(
+        store,
+        endpoints(&format!("{}/v1", meta.uri()), &relay.uri()),
+        DEVICE.into(),
+    );
+
+    let (status, saved) = tokio::join!(credentials.status(), async {
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        credentials.set_key(KEY).await.unwrap()
+    });
+    assert_eq!(saved.mode, AiMode::Key);
+    assert_eq!(status, saved);
+}
+
+/// The memory store with deletes that take a while, so another call can start while Remove is still saving.
+struct SlowDeletes(MemoryStore);
+
+impl SecretStore for SlowDeletes {
+    fn get(&self, account: &str) -> Result<Option<SecretString>, StoreError> {
+        self.0.get(account)
+    }
+
+    fn set(&self, account: &str, secret: &SecretString) -> Result<(), StoreError> {
+        self.0.set(account, secret)
+    }
+
+    fn delete(&self, account: &str) -> Result<(), StoreError> {
+        std::thread::sleep(Duration::from_millis(150));
+        self.0.delete(account)
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_lost_token_is_not_got_back_for_a_code_just_removed() {
+    let relay = MockServer::start().await;
+    no_requests(&relay).await;
+    // A code without its token, and Remove under way.
+    let store = MemoryStore::default();
+    store.set(RELAY_CODE, &secret(CODE)).unwrap();
+    let credentials = Arc::new(Credentials::load(
+        Arc::new(SlowDeletes(store)),
+        endpoints(CLOSED, &relay.uri()),
+        DEVICE.into(),
+    ));
+    let clearing = tokio::spawn({
+        let credentials = credentials.clone();
+        async move { credentials.clear().await }
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // Settings opens before Remove has finished: it must not register the removed code again.
+    let status = credentials.status().await;
+    clearing.await.unwrap().unwrap();
+    assert_eq!(status, AiStatus::default());
 }
 
 #[tokio::test]

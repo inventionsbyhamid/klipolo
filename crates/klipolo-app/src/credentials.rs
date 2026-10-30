@@ -18,6 +18,7 @@
 mod device;
 mod store;
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 pub use device::{DEVICE_FILE, device_id};
@@ -203,6 +204,8 @@ pub struct Credentials {
     meta: Mutex<Option<Meta>>,
     /// One change at a time: two registrations at once would each rotate the token.
     changes: tokio::sync::Mutex<()>,
+    /// Bumped by every change to `held`, so an answer that took a network call can tell it is out of date.
+    generation: AtomicU64,
 }
 
 impl Credentials {
@@ -217,6 +220,7 @@ impl Credentials {
             held: Mutex::new(held),
             meta: Mutex::new(meta),
             changes: tokio::sync::Mutex::new(()),
+            generation: AtomicU64::new(0),
         }
     }
 
@@ -269,14 +273,12 @@ impl Credentials {
     }
 
     /// What Settings shows. With an access code this asks the relay for the credit and spend (re-registering only if
-    /// the relay refused the token); a key or nothing needs no network call.
+    /// the relay refused the token); a key or nothing needs no network call. If the credentials changed while the relay
+    /// was asked (Remove, a key or another code saved), the answer is built from the credentials as they are now.
     pub async fn status(&self) -> AiStatus {
-        let held = lock(&self.held).clone();
-        if let Some(key) = &held.key {
-            return key_status(key);
-        }
-        let Some(code) = &held.code else {
-            return AiStatus::default();
+        let (held, asked) = self.snapshot();
+        let Some(code) = relay_code(&held) else {
+            return local_status(&held);
         };
         let info = match &held.token {
             Some(token) => match self.device_status(token).await {
@@ -284,16 +286,30 @@ impl Credentials {
                 answer => answer,
             },
             // The token went missing from the store: registering with the code is how to get one back, unless another
-            // caller just did.
+            // caller just did, or the code was removed meanwhile (read under the lock, never from the copy above).
             None => {
                 let _turn = self.changes.lock().await;
-                let token = lock(&self.held).token.clone();
-                match token {
-                    Some(token) => self.device_status(&token).await,
-                    None => self.register(Some(code)).await,
+                let now = lock(&self.held).clone();
+                match (relay_code(&now), &now.token) {
+                    (None, _) => return local_status(&now),
+                    (Some(_), Some(token)) => self.device_status(token).await,
+                    (Some(code), None) => self.register(Some(code)).await,
                 }
             }
         };
+        let (now, current) = self.snapshot();
+        if current != asked {
+            match relay_code(&now) {
+                // Remove or a key landed while the relay answered: that answer is about credentials no longer in use.
+                None => return local_status(&now),
+                // Another code: the answer was about the old one.
+                Some(now_code) if now_code.expose_secret() != code.expose_secret() => {
+                    return relay_base_status(now_code);
+                }
+                // The same code (only its token changed): the device's credit is still the answer.
+                Some(_) => {}
+            }
+        }
         match info {
             Ok(info) => relay_status(code, &info),
             Err(error) => AiStatus {
@@ -409,16 +425,36 @@ impl Credentials {
             .await
     }
 
-    /// Applies `edit` to the held secrets and rebuilds the adapter from them.
+    /// Applies `edit` to the held secrets, rebuilds the adapter from them and moves the generation on.
     fn change(&self, edit: impl FnOnce(&mut Held)) {
         let mut held = lock(&self.held);
         edit(&mut held);
         *lock(&self.meta) = client_for(&held, &self.endpoints).map(Meta::new);
+        self.generation.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// The held secrets and their generation, read together.
+    fn snapshot(&self) -> (Held, u64) {
+        let held = lock(&self.held);
+        (held.clone(), self.generation.load(Ordering::SeqCst))
     }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// The access code in use: one is saved and no key wins over it.
+fn relay_code(held: &Held) -> Option<&SecretString> {
+    held.code.as_ref().filter(|_| held.key.is_none())
+}
+
+/// The status that needs no relay: the key's, or none.
+fn local_status(held: &Held) -> AiStatus {
+    match &held.key {
+        Some(key) => key_status(key),
+        None => AiStatus::default(),
+    }
 }
 
 fn key_status(key: &SecretString) -> AiStatus {
