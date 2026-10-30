@@ -910,3 +910,35 @@ fn music_past_the_first_footage_on_an_empty_video_is_left_alone() {
     assert_eq!(spans(&m), [(0.0, 45.0), (60.0, 68.0)]);
     assert_eq!((fade_in(m[1]), fade_out(m[1])), (0.5, 2.0));
 }
+
+#[test]
+fn new_pieces_get_fresh_ids_when_the_numbers_run_out() {
+    // An id `{first piece}-18446744073709551615` (the largest number there is) in the project: new pieces can't be
+    // numbered past it, so they get fresh ids instead.
+    let mut p = with_music(&video(16.0), "loop", MusicOpts::default());
+    let base = music(&p)[0].id.clone();
+    let last = format!("{base}-{}", u64::MAX);
+    apply(
+        &mut p,
+        Op::AddTrack {
+            id: Some(last.clone()),
+            kind: TrackKind::Audio,
+            index: None,
+        },
+    );
+    let more = vec![Op::InsertClip {
+        clip: take(100.0, 114.0),
+        index: None,
+    }];
+    let done = apply_with_music_refit(&p, more).unwrap();
+    assert_eq!(done.refused, None);
+    let m = music(&done.project);
+    assert_eq!(
+        spans(&m),
+        [(0.0, 8.0), (8.0, 16.0), (16.0, 24.0), (24.0, 30.0)]
+    );
+    for piece in &m[2..] {
+        assert!(!piece.id.starts_with(&format!("{base}-")), "{}", piece.id);
+    }
+    assert_ne!(m[2].id, m[3].id);
+}

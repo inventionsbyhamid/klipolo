@@ -16,7 +16,7 @@
 
 use std::ops::Range;
 
-use crate::apply::apply_ops;
+use crate::apply::{apply_ops, fresh_id, id_taken};
 use crate::error::{invalid, ModelError, Result};
 use crate::ids::{new_id, Id};
 use crate::layout::{Anchor, BoxN, Layout};
@@ -374,8 +374,9 @@ fn runs(track: &Track) -> Vec<Range<usize>> {
 /// the track. The fade-in stays on the first piece and the fade-out moves to the last.
 fn refit(p: &Project, bed: &[Item], track: &Id, file_len: Us, end: Us, ops: &mut Vec<Op>) {
     let (first, last) = (&bed[0], &bed[bed.len() - 1]);
-    // New pieces are `{first piece}-n`, numbered on past every such id in the project: one look at its ids per run.
-    let mut next = None;
+    // New pieces are `{first piece}-n`, numbered on past every such id in the project: one look at its ids per run. Past
+    // the largest number, a fresh id.
+    let mut next: Option<Option<u64>> = None;
     let want_in = meant(fades(first).0, first.duration_us, MUSIC_FADE_IN_US);
     let want_out = meant(fades(last).1, last.duration_us, MUSIC_FADE_OUT_US);
     let plan = plan(bed, file_len, end);
@@ -410,8 +411,13 @@ fn refit(p: &Project, bed: &[Item], track: &Id, file_len: Us, end: Us, ops: &mut
             }
             None => {
                 let n = next.get_or_insert_with(|| next_suffix(p, &first.id));
-                let id = format!("{}-{n}", first.id);
-                *n = n.saturating_add(1);
+                let id = match *n {
+                    Some(at) => {
+                        *n = at.checked_add(1);
+                        format!("{}-{at}", first.id)
+                    }
+                    None => fresh_id(new_id(), |id| id_taken(p, id)),
+                };
                 ops.push(Op::AddItem {
                     track: TrackTarget::Track { id: track.clone() },
                     item: piece.item(last, id, fade_in, fade_out),
@@ -544,8 +550,8 @@ fn meant(fade: Us, len: Us, default: Us) -> Us {
 
 /// The first n from 2 past every `{base}-n` id in `p` (whatever it names: a layer, a track, a clip, a file), so
 /// `{base}-n`, `{base}-(n+1)`... are free. O(ids) once, where finding the smallest free n one id at a time would look
-/// through the project for each.
-fn next_suffix(p: &Project, base: &str) -> u64 {
+/// through the project for each. None when `{base}-18446744073709551615` (`u64::MAX`) is taken: no n is past it.
+fn next_suffix(p: &Project, base: &str) -> Option<u64> {
     let timeline = &p.timeline;
     std::iter::once(&p.id)
         .chain(p.assets.iter().map(|a| &a.id))
@@ -565,7 +571,7 @@ fn next_suffix(p: &Project, base: &str) -> u64 {
                 .ok()
         })
         .fold(1, u64::max)
-        .saturating_add(1)
+        .checked_add(1)
 }
 
 #[cfg(test)]
@@ -595,7 +601,7 @@ mod tests {
     #[test]
     fn new_pieces_are_numbered_past_every_id_in_use() {
         let mut p = Project::new("Ids");
-        assert_eq!(next_suffix(&p, "bed"), 2, "none yet");
+        assert_eq!(next_suffix(&p, "bed"), Some(2), "none yet");
         let mut track = Track::new(TrackKind::Audio, "Audio 1");
         track.id = "bed-10".into();
         p.timeline.tracks.push(track);
@@ -604,6 +610,11 @@ mod tests {
             t.id = id.into();
             p.timeline.tracks.push(t);
         }
-        assert_eq!(next_suffix(&p, "bed"), 11);
+        assert_eq!(next_suffix(&p, "bed"), Some(11));
+        // The largest number but one leaves one; the largest leaves none.
+        p.timeline.tracks[0].id = format!("bed-{}", u64::MAX - 1);
+        assert_eq!(next_suffix(&p, "bed"), Some(u64::MAX));
+        p.timeline.tracks[0].id = format!("bed-{}", u64::MAX);
+        assert_eq!(next_suffix(&p, "bed"), None);
     }
 }
