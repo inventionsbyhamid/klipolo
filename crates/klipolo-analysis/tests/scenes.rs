@@ -509,7 +509,7 @@ async fn scene_requests_keep_to_the_relays_contract() {
     }
     assert_eq!(body["model"], "muse-spark-1.3");
     assert_eq!(body["reasoning"], json!({"effort": "low"}));
-    assert_eq!(body["max_output_tokens"], 8192);
+    assert_eq!(body["max_output_tokens"], 16384);
     let format = &body["text"]["format"];
     assert_eq!(
         (format["type"].as_str(), format["strict"].as_bool()),

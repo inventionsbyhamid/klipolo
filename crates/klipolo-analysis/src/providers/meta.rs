@@ -8,7 +8,7 @@
 //! to every clip and feature, and every request waits for a slot before it is sent.
 //!
 //! **Scene log:** each chunk of the clip's small copy is uploaded (Files API), watched by Spark through `input_video`
-//! by its file id (strict `json_schema` output, reasoning effort low, at most 8192 output tokens), and its upload is
+//! by its file id (strict `json_schema` output, reasoning effort low, at most 16384 output tokens), and its upload is
 //! deleted on every path: answered, failed, or dropped part-way (a delete is sent from a task of its own then; Meta
 //! also expires uploads after a day). A video call holds the device's video slot from its upload to its answer.
 
@@ -49,8 +49,9 @@ pub const TRANSCRIBE_MAX_S: u32 = 600;
 
 /// The model that watches clips for the scene log.
 pub const SCENE_MODEL: &str = "muse-spark-1.3";
-/// A scene log call's output tokens at most, reasoning included (the relay takes up to 16384).
-pub const SCENE_MAX_OUTPUT_TOKENS: u64 = 8192;
+/// A scene log call's output tokens at most, reasoning included: the relay's cap. Only the tokens used are billed, and a
+/// busy ten minutes (about 80 moments and the reasoning) needs room.
+pub const SCENE_MAX_OUTPUT_TOKENS: u64 = 16_384;
 /// About what the scene log's prompt and schema add to a call's input tokens.
 pub const SCENE_PROMPT_TOKENS: u64 = 450;
 /// Output tokens a scene log call is expected to use: a base (reasoning) and some for each second watched (its
