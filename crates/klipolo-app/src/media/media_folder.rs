@@ -1,11 +1,13 @@
 //! Where pictures Klipolo makes for a project are kept: next to the project file, in `<stem> Media/<maker>/` (for
 //! `~/Movies/Klipolo/Trip.klipolo`, Muse Image's go in `~/Movies/Klipolo/Trip Media/Muse Image/`), one file each, named
 //! `<short slug>-<n>.png`. A file is never overwritten and never left half-written: it is written to a hidden
-//! `.partial` file, pushed to the disk, then linked into place under the first free name.
+//! `.partial` file, pushed to the disk, then linked into place under the first free name. A partial a crash left
+//! behind is swept away by a later save once it is an hour old.
 
 use std::fs::{self, File};
 use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use klipolo_platform::durable::{self, Durability};
 use klipolo_platform::paths::safe_file_name;
@@ -16,6 +18,10 @@ const SLUG_WORDS: usize = 4;
 const SLUG_CHARS: usize = 32;
 /// The most names tried for one file (`<slug>-1.png` to `<slug>-9999.png`).
 const MAX_NUMBER: u32 = 9999;
+/// A partial this old is left over from a crash: no save takes this long.
+const STALE_PARTIAL: Duration = Duration::from_secs(60 * 60);
+/// How a partial's name ends.
+const PARTIAL_SUFFIX: &str = ".png.partial";
 
 /// The folder for pictures `made_with` makes for the project saved in `project_file`.
 pub fn made_folder(project_file: &Path, made_with: &str) -> PathBuf {
@@ -53,7 +59,8 @@ pub fn slug(text: &str, fallback: &str) -> String {
 pub fn save_new_png(folder: &Path, slug: &str, png: &[u8]) -> io::Result<PathBuf> {
     fs::create_dir_all(folder)?;
     let folder = folder.canonicalize()?;
-    let partial = folder.join(format!(".{slug}-{}.png.partial", uuid::Uuid::new_v4()));
+    sweep_stale_partials(&folder);
+    let partial = folder.join(format!(".{slug}-{}{PARTIAL_SUFFIX}", uuid::Uuid::new_v4()));
     let placed = write_partial(&partial, png).and_then(|()| place(&partial, &folder, slug));
     // Linked into place, or failed: either way the partial goes.
     let _ = fs::remove_file(&partial);
@@ -63,6 +70,32 @@ pub fn save_new_png(folder: &Path, slug: &str, png: &[u8]) -> io::Result<PathBuf
         tracing::warn!(%error, "a picture's folder couldn't be synced");
     }
     Ok(file)
+}
+
+/// Removes the hidden partials in `folder` older than `STALE_PARTIAL`: what a crash left between writing a picture and
+/// placing it. Anything else stays, and a partial that can't be read or removed is left for next time.
+fn sweep_stale_partials(folder: &Path) {
+    let Ok(entries) = fs::read_dir(folder) else {
+        return;
+    };
+    let now = SystemTime::now();
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if !(name.starts_with('.') && name.ends_with(PARTIAL_SUFFIX)) {
+            continue;
+        }
+        let stale = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .is_ok_and(|modified| {
+                now.duration_since(modified)
+                    .is_ok_and(|age| age > STALE_PARTIAL)
+            });
+        if stale {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
 }
 
 fn write_partial(partial: &Path, png: &[u8]) -> io::Result<()> {
@@ -125,6 +158,32 @@ mod tests {
         let partial = folder.join(format!(".cup-{}.png.partial", uuid::Uuid::new_v4()));
         fs::write(&partial, bytes).unwrap();
         partial
+    }
+
+    fn aged(path: &Path, age: std::time::Duration) {
+        let file = File::options().write(true).open(path).unwrap();
+        file.set_modified(std::time::SystemTime::now() - age)
+            .unwrap();
+    }
+
+    /// A crash between writing a partial and placing it leaves the partial behind; the next save takes away any older
+    /// than an hour, and nothing else.
+    #[test]
+    fn a_save_sweeps_partials_left_over_an_hour_ago() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = partial_with(dir.path(), b"left by a crash");
+        aged(&old, std::time::Duration::from_secs(2 * 3600));
+        let fresh = partial_with(dir.path(), b"another save, still going");
+        let hidden = dir.path().join(".DS_Store");
+        fs::write(&hidden, b"Finder's").unwrap();
+        aged(&hidden, std::time::Duration::from_secs(2 * 3600));
+
+        let saved = save_new_png(dir.path(), "cup", b"picture").unwrap();
+
+        assert!(!old.exists(), "the old partial is still there");
+        assert!(fresh.exists());
+        assert!(hidden.exists());
+        assert_eq!(fs::read(saved).unwrap(), b"picture");
     }
 
     #[test]
