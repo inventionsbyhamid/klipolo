@@ -34,7 +34,13 @@ interface LaneRowProps {
  * lane to seek. While a file is dragged over it, it shows a dashed paper edge.
  */
 export function LaneRow({ lane, icon, name, empty, height, grow = false, width, onSeek, children }: LaneRowProps) {
-  const dropOver = useDropIndicator((s) => s.target !== null && s.target.lane === DROPS[lane]);
+  // The lane the file is held over, only: both audio lanes take a sound, so a sound's target names its lane (`row`).
+  const dropOver = useDropIndicator(
+    (s) =>
+      s.target !== null &&
+      s.target.lane === DROPS[lane] &&
+      (s.target.lane !== 'sound' || (s.target.row ?? 'sounds') === lane),
+  );
   return (
     <div
       role="group"

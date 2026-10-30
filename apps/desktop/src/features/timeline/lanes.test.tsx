@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Item } from '../../bindings/Item';
 import type { ItemContent } from '../../bindings/ItemContent';
@@ -19,6 +19,7 @@ const { useSelection } = await import('../../state/selection');
 const { useUi } = await import('../../state/ui');
 const { Timeline } = await import('./Timeline');
 const { audioRole } = await import('./lanes/audioRole');
+const { setDropIndicator } = await import('./dropTarget');
 
 const S = 1_000_000;
 type AudioContent = Extract<ItemContent, { type: 'audio' }>;
@@ -62,5 +63,18 @@ describe('the four lanes', () => {
     expect(sounds.querySelector('[data-block-id="whoosh"]')).toHaveAttribute('data-look', 'sound');
     // A lane with something on it is no faint strip.
     expect(sounds.querySelector('.tl-lane')).not.toHaveClass('is-empty');
+  });
+
+  it('a file held over the Music lane marks the Music lane alone, with a dashed edge', () => {
+    useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
+    renderWithProviders(<Timeline />);
+    const lane = (name: string) => screen.getByRole('group', { name }).querySelector('.tl-lane')!;
+    act(() => setDropIndicator({ lane: 'sound', trackId: null, atUs: 0, row: 'music' }));
+    expect(lane('Music')).toHaveClass('is-drop');
+    expect(lane('Sound effects')).not.toHaveClass('is-drop');
+    act(() => setDropIndicator({ lane: 'sound', trackId: null, atUs: 0, row: 'sounds' }));
+    expect(lane('Sound effects')).toHaveClass('is-drop');
+    expect(lane('Music')).not.toHaveClass('is-drop');
+    act(() => setDropIndicator(null));
   });
 });

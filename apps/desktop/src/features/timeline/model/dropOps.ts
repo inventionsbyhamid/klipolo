@@ -13,13 +13,14 @@ import { itemSpans, mainIndex } from './index';
 
 /**
  * Where media is put on the timeline: at cut `index` of the main track (0 before the first clip, `main.length` after
- * the last), or at `atUs` as a picture layer or a sound, on track `trackId` (null: wherever it fits, as compact mode's
- * Layers and Audio lanes place them), or on a new track of its own (`newTrack`: the new-track zone).
+ * the last), or at `atUs` as a picture layer or a sound, on track `trackId` (null: wherever it fits, as the timeline's
+ * lanes place them), or on a new track of its own (`newTrack`).
  */
 export type DropTarget =
   | { lane: 'main'; index: number }
   | { lane: 'picture'; trackId: string | null; atUs: number; newTrack?: boolean }
-  | { lane: 'sound'; trackId: string | null; atUs: number; newTrack?: boolean };
+  /** `row`: the timeline lane it was held over (Sounds or Music), so only that lane shows where it lands. */
+  | { lane: 'sound'; trackId: string | null; atUs: number; newTrack?: boolean; row?: 'sounds' | 'music' };
 
 /** The cut of `main` nearest `atUs`: its index in the main track (`main.length` is the end). */
 export function nearestCut(main: Clip[], atUs: number): number {

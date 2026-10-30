@@ -11,14 +11,10 @@ const UNKNOWN_PX = 48;
 /** A ghost's inset from its row's top and bottom. */
 const INSET_PX = 4;
 
-const escapeId = (id: string) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id);
-
-/** The row a target is in, among the lanes in `lanes` (the timeline's scrolled content). */
+/** The lane a target is on, among the lanes in `lanes` (the timeline's scrolled content): the one under the pointer. */
 function rowOf(lanes: Element, target: DropTarget): HTMLElement | null {
-  if (target.lane === 'main') return lanes.querySelector('[data-lane="main"]');
-  if (target.newTrack) return lanes.querySelector('[data-new-track]');
-  if (target.trackId !== null) return lanes.querySelector(`[data-track-id="${escapeId(target.trackId)}"]`);
-  return lanes.querySelector(target.lane === 'sound' ? '[data-lane="sounds"]' : '[data-lane="layers"]');
+  const lane = target.lane === 'main' ? 'main' : target.lane === 'sound' ? (target.row ?? 'sounds') : 'layers';
+  return lanes.querySelector(`[data-lane="${lane}"]`);
 }
 
 /**

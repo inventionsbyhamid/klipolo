@@ -76,7 +76,8 @@ function sameTarget(a: DropTarget | null, b: DropTarget | null): boolean {
   if (a === null || b === null) return a === b;
   if (a.lane === 'main' || b.lane === 'main')
     return a.lane === 'main' && b.lane === 'main' && a.index === b.index;
-  return a.lane === b.lane && a.trackId === b.trackId && a.atUs === b.atUs && !a.newTrack === !b.newTrack;
+  const row = (t: DropTarget) => (t.lane === 'sound' ? t.row : undefined);
+  return a.lane === b.lane && a.trackId === b.trackId && a.atUs === b.atUs && row(a) === row(b);
 }
 
 /** Shows where a drop would land (null hides it). The same target again changes nothing, so nothing re-renders. */
@@ -140,30 +141,21 @@ export function timelineTargetAt(
     if (toPlayhead <= reach && (!hit || toPlayhead < Math.abs(hit.deltaUs))) return playheadUs;
     return hit ? hit.atUs : at;
   };
-  const picture = (trackId: string | null, newTrack?: boolean): DropTarget | null =>
-    kind === 'audio' ? null : { lane: 'picture', trackId, atUs: atUs(), ...(newTrack ? { newTrack } : {}) };
-  const sound = (trackId: string | null, newTrack?: boolean): DropTarget | null =>
-    kind === 'video' || kind === 'image'
-      ? null
-      : { lane: 'sound', trackId, atUs: atUs(), ...(newTrack ? { newTrack } : {}) };
+  const picture = (): DropTarget | null =>
+    kind === 'audio' ? null : { lane: 'picture', trackId: null, atUs: atUs() };
+  const sound = (row: 'sounds' | 'music'): DropTarget | null =>
+    kind === 'video' || kind === 'image' ? null : { lane: 'sound', trackId: null, atUs: atUs(), row };
   const within = (el: Element) => {
     const r = el.getBoundingClientRect();
     return clientY >= r.top && clientY < r.bottom;
   };
-  const zone = scroller.querySelector<HTMLElement>('[data-new-track]');
-  if (zone && within(zone))
-    return zone.dataset.newTrack === 'audio' ? sound(null, true) : picture(null, true);
   for (const row of scroller.querySelectorAll<HTMLElement>('[data-lane]')) {
     if (!within(row)) continue;
     const lane = row.dataset.lane;
     if (lane === 'main') return { lane: 'main', index: nearestCut(project.timeline.main, pointerUs) };
-    if (lane === 'layers') return picture(null);
+    if (lane === 'layers') return picture();
     // Music and sound effects are both sound layers; what makes a song music (ducking) is set as it is added.
-    if (lane === 'sounds' || lane === 'music') return sound(null);
-    const track = project.timeline.tracks.find((t) => t.id === row.dataset.trackId);
-    // A zoom track takes no media; a hidden one would hide it, a locked one takes nothing.
-    if (!track || track.locked || track.hidden || track.kind === 'zoom') return null;
-    return track.kind === 'audio' ? sound(track.id) : picture(track.id);
+    if (lane === 'sounds' || lane === 'music') return sound(lane);
   }
   return null;
 }
