@@ -1,0 +1,20 @@
+[package]
+name = "klipolo-analysis"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+publish = false
+description = "Clip analysis: the 16 kHz mono WAV Meta's speech models take, its chunks at silences, and the per-file cache"
+
+[dependencies]
+# Sound decode (`audio::decode::{probe, decode}`: 48 kHz f32, streamed); no FFmpeg calls of our own.
+klipolo-engine = { path = "../klipolo-engine" }
+# `Us`, `RangeUs`.
+klipolo-model = { path = "../klipolo-model" }
+# Atomic writes for the WAV and the cache's JSON (`durable::write_atomic`).
+klipolo-platform = { path = "../klipolo-platform" }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"
