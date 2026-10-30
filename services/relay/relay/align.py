@@ -293,6 +293,27 @@ def align_turns(
     return result
 
 
+# Math functions MKL implements for torch on CPU (ATen's vml).
+_MKL_MATH = (
+    "exp", "expm1", "log", "log1p", "log10", "log2", "sqrt", "rsqrt", "tanh", "erf", "erfc", "erfinv",
+    "sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "lgamma", "trunc",
+)  # fmt: skip
+
+
+def warm_up_math(torch: Any) -> None:
+    """Run each MKL math function once, on one element, so on one thread.
+
+    MKL picks its CPU code the first time a function runs. On CPUs without
+    AVX2, such as a 2013 Xeon E5-2680 v2, first calls that race from
+    several threads can execute an AVX2 instruction and kill the process with
+    SIGILL. Measured there: torch.exp on 8 threads crashed 8 of 10 fresh
+    processes; after this warm-up, none.
+    """
+    values = torch.full((1,), 0.5)
+    for name in _MKL_MATH:
+        getattr(torch, name)(values)
+
+
 class MmsAligner:
     """torchaudio's MMS_FA model, loaded once. Safe to call from several
     threads at a time: the model only runs inference."""
@@ -316,11 +337,20 @@ class MmsAligner:
             # torchaudio is pinned to 2.8 for forced_align; its notice that
             # 2.9 removes it would otherwise land in the log on first use.
             warnings.filterwarnings("ignore", message=r".*forced_align has been deprecated", category=UserWarning)
-            torch.set_num_threads(self.threads)
+            # Everything that runs for the first time runs on one thread: see
+            # warm_up_math.
+            torch.set_num_threads(1)
+            warm_up_math(torch)
             bundle = torchaudio.pipelines.MMS_FA
             model = bundle.get_model(with_star=False)
             model.eval()
-            self._loaded = (torch, model, bundle.get_tokenizer(), bundle.get_aligner())
+            tokenizer, aligner = bundle.get_tokenizer(), bundle.get_aligner()
+            # One tiny alignment, so every kernel on the path is first used here.
+            with torch.inference_mode():
+                emission, _ = model(torch.randn(1, SAMPLE_RATE) * 0.01)
+                aligner(emission[0], tokenizer(["a"]))
+            torch.set_num_threads(self.threads)
+            self._loaded = (torch, model, tokenizer, aligner)
             logger.info("alignment model loaded, %d threads", self.threads)
 
     def align(self, pcm: bytes, tokens: list[str]) -> list[Span]:

@@ -2,6 +2,8 @@
 (marked slow: needs torch and the model, so it runs in the container)."""
 
 import json
+import subprocess
+import sys
 import time
 import wave
 from pathlib import Path
@@ -406,3 +408,51 @@ def test_odd_text_and_turns_never_give_a_500(mms_client):
     # spoken ("challenges" at 24.08 s in the reference) and end by 25.8 s.
     assert abs(team[0]["startMs"] - 24_080) <= 150
     assert team[-1]["endMs"] <= 25_800
+
+
+# MKL picks its CPU code the first time each math function runs. On a CPU
+# without AVX2 (a 2013 Xeon E5-2680 v2), first calls racing from several
+# threads die with SIGILL and take the server down. Measured cold: 8 of 10
+# processes running torch.exp on 8 threads crashed; after the alignment
+# aligner's own scores.exp() crashed 1 run in 5 even after the model loaded.
+
+
+def run_python(code):
+    return subprocess.run(
+        [sys.executable, "-X", "faulthandler", "-c", code], cwd=Path(__file__).parents[1], capture_output=True
+    )
+
+
+@pytest.mark.slow
+def test_warmed_up_math_survives_many_threads():
+    pytest.importorskip("torch")
+    code = (
+        "import torch\n"
+        "from relay.align import warm_up_math\n"
+        "torch.set_num_threads(8)\n"
+        "warm_up_math(torch)\n"
+        "for _ in range(20):\n"
+        "    (torch.rand(600_000) * -15).exp()\n"
+        "    (torch.rand(29_999) * -15).exp()\n"
+    )
+    for _ in range(10):
+        result = run_python(code)
+        assert result.returncode == 0, (result.returncode, result.stderr[-800:])
+
+
+@pytest.mark.slow
+def test_a_freshly_loaded_model_aligns_a_long_turn_on_many_threads():
+    pytest.importorskip("torchaudio")
+    code = (
+        "import torch\n"
+        "from relay.align import MmsAligner\n"
+        "aligner = MmsAligner(threads=8)\n"
+        "aligner.load()\n"
+        "_, _, tokenizer, align = aligner._loaded\n"
+        "emission = torch.randn(29_999, 28).log_softmax(-1)\n"
+        "with torch.inference_mode():\n"
+        "    align(emission, tokenizer(['abcdefghij'] * 1799))\n"
+    )
+    for _ in range(8):
+        result = run_python(code)
+        assert result.returncode == 0, (result.returncode, result.stderr[-800:])
