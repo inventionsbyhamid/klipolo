@@ -291,10 +291,10 @@ impl Backend for Counted {
 
 #[test]
 fn both_forms_stop_at_the_guard_in_a_test_run() {
-    // SAFETY: libtest may run this file's tests on parallel threads, but they reach the environment only through std's
-    // `set_var` and `var_os`, which hold std's environment lock, and no C code reads it meanwhile. It sets the value
-    // every test command has set already.
-    unsafe { std::env::set_var("KLIPOLO_TEST", "1") };
+    assert!(
+        std::env::var_os("KLIPOLO_TEST").is_some(),
+        "every test command sets KLIPOLO_TEST"
+    );
     let backend = Counted {
         inner: FakeBackend::new(sine()),
         calls: AtomicU64::new(0),
