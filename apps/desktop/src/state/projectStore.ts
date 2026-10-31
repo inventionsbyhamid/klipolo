@@ -10,13 +10,16 @@ import type { Built } from './editBase';
 export interface ProjectStore {
   snapshot: Snapshot | null;
   pending: number;
+  /** A create, open or close is under way, from the press until it lands or fails: another waits for it. */
+  switching: boolean;
+  /** A new project, opened: every edit made in the open one goes in first (`commitsDone`), and it is saved and closed. */
   create: (name: string, formats: FormatKind[]) => Promise<boolean>;
-  /** The project file at `path` (the open one is saved and closed first). */
+  /** The project file at `path`: every edit made in the open one goes in first, and it is saved and closed. */
   open: (path: string) => Promise<boolean>;
   /** Every edit made goes in first (`commitsDone`), then the project closes once it's saved. */
   close: () => Promise<void>;
   /**
-   * A project Rust already opened, as Rust has it now (the page loading on the project open at launch). Another project
+   * A project Rust already opened, as Rust has it now (the page loading again with a project open). Another project
    * opens as any does; the open one takes it as a change from elsewhere, keeping the playhead, selection and preview
    * format, and keeping its own copy when that is newer.
    */
