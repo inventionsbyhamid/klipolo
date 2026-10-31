@@ -224,6 +224,21 @@ describe('another app in chat', () => {
     await waitFor(() => expect(fake.applied).toEqual(['mine']));
   });
 
+  it('chats_proposal_on_a_change_still_coming_from_an_app_waits', async () => {
+    // Rust made it on revision 4: an app's change the page hasn't merged yet.
+    const fake = chat({ reply: (r) => reply(r.id, 'Here is the cut.', { proposal: { ...teaser(), id: 'mine', baseRevision: 4 } }) });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'keep the best part{Enter}');
+    await waitFor(() => expect(useProposal.getState().proposal?.id).toBe('mine'));
+    // The app's change lands: the proposal was made on it, so it still waits, as it does in Rust.
+    const undo = vertical();
+    await tell(external('Example Client', { applied: { change: changed(4, undo), undo }, revision: 4 }));
+    await waitFor(() => expect(useProject.getState().snapshot!.history.revision).toBe(4));
+    expect(useProposal.getState().proposal?.id).toBe('mine');
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeInTheDocument();
+    expect(fake.discarded).toEqual([]);
+  });
+
   it('an_older_proposal_from_one_app_leaves_another_apps_alone', async () => {
     const fake = chat();
     renderWithProviders(<ChatPanel />);

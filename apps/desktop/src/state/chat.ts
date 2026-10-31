@@ -147,9 +147,12 @@ export const useChat = create<ChatStore>((set, get) => {
           return failed(outcome.message, outcome.kind);
         }
         const revision = useProject.getState().snapshot?.history.revision;
+        // Made on the project as it is, or on a change still on its way here (another app's): it waits, and the drop on
+        // a revision change checks it again once that lands. Made on one the project has left: dropped.
+        const waits = revision !== undefined && outcome.proposal !== null && outcome.proposal.baseRevision >= revision;
         const proposal = outcome.proposal && {
           proposal: outcome.proposal,
-          state: outcome.proposal.baseRevision === revision ? ('open' as const) : ('dropped' as const),
+          state: waits ? ('open' as const) : ('dropped' as const),
         };
         // One open proposal per project: a newer one replaces the one waiting, which Rust forgets.
         if (proposal?.state === 'open') {
