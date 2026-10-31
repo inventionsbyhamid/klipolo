@@ -2,7 +2,7 @@ import { t } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react/macro';
 import { Fragment } from 'react';
 import { ContextMenuItem, ContextMenuSeparator } from '../../../design/ContextMenu';
-import { findClip, findItem, itemLabel, sourceLabel } from '../../../lib/timeline';
+import { findClip, findItem, hasOwnSound, itemLabel, sourceLabel } from '../../../lib/timeline';
 import { useProject } from '../../../state/project';
 import { useSelection } from '../../../state/selection';
 import type { Command } from '../../command-palette/command';
@@ -39,7 +39,17 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const at = found ? -1 : main.findIndex((clip) => clip.id === blockId);
   const transitionAfter = at >= 0 && at + 1 < main.length && !main[at].transitionOut;
 
+  // A sound layer, or a video layer whose file has sound, has Mute.
+  const mutes = !!project && !!found && hasOwnSound(project, found.item);
+
   const split = { id: 'split', label: t({ id: 'timeline.menu.split', message: 'Split at playhead' }) };
+  // The layer order (⌥↑ / ⌥↓): a picture layer is brought forward or sent back, over or under the others; a sound or
+  // zoom layer moves to the track above or below.
+  const picture = found?.track.kind === 'overlay';
+  const order = [
+    { id: 'track-up', label: picture ? t({ id: 'timeline.menu.forward', message: 'Bring forward' }) : undefined },
+    { id: 'track-down', label: picture ? t({ id: 'timeline.menu.back', message: 'Send back' }) : undefined },
+  ];
   const addTransition = {
     id: 'add-transition',
     label: t({
@@ -56,7 +66,8 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
           [{ id: 'delete' }],
         ]
       : [
-          [split, { id: 'attach' }, ...(found?.item.content.type === 'audio' ? [{ id: 'sound-mute' }] : [])],
+          [split, { id: 'attach' }, ...(mutes ? [{ id: 'sound-mute' }] : [])],
+          order,
           [
             { id: 'copy' },
             { id: 'cut' },

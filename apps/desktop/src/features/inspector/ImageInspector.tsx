@@ -13,11 +13,25 @@ const MAX_RADIUS = 0.5;
 const percent = (v: number) => `${Math.round(v * 100)}%`;
 
 /**
- * A picture's fields: Size (its box's width, a share of the frame's, keeping its shape about its
- * centre), Opacity, Corner radius, Position, Animation and Timing. A drag of a slider is dry-run in the preview and
- * commits one change on release.
+ * A picture's fields: Size, Opacity and Corner radius (`PictureFields`), Effects, Position, Animation
  */
 export function ImageInspector({ item, format, primary }: { item: Item; format: FormatKind; primary: FormatKind }) {
+  return (
+    <>
+      <PictureFields item={item} format={format} primary={primary} />
+      <PositionField item={item} format={format} primary={primary} />
+      <AnimationField item={item} typewriter={false} />
+      <TimingField item={item} />
+    </>
+  );
+}
+
+/**
+ * The fields of a layer that shows a picture (an image or a video): Size (its box's width, a share of the frame's,
+ * keeping its shape about its centre), Opacity and Corner radius. A drag of a slider is dry-run in the preview and
+ * commits one change on release.
+ */
+export function PictureFields({ item, format, primary }: { item: Item; format: FormatKind; primary: FormatKind }) {
   const { t } = useLingui();
   const rect = resolveRect(item.layout, primary, format);
   const size = t({ id: 'image.size', message: 'Size' });
@@ -28,7 +42,11 @@ export function ImageInspector({ item, format, primary }: { item: Item; format: 
       <Field label={size}>
         <ToolSlider
           label={size}
-          commitLabel="gizmo.resize.undo"
+          // Named as a resize on the canvas names it: "Resize video", "Resize image".
+          commitLabel={{
+            id: 'gizmo.resize.undo',
+            params: { layer: item.content.type === 'video' ? 'video' : 'image' },
+          }}
           value={Math.round(rect.w * 100) / 100}
           min={0.05}
           max={1}
@@ -67,9 +85,6 @@ export function ImageInspector({ item, format, primary }: { item: Item; format: 
           ops={(radius) => layoutOps(item, { radius })}
         />
       </Field>
-      <PositionField item={item} format={format} primary={primary} />
-      <AnimationField item={item} typewriter={false} />
-      <TimingField item={item} />
     </>
   );
 }
