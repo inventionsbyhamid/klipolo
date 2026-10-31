@@ -60,13 +60,24 @@ fn main() {
             app.manage(credentials.clone());
             // The clips' analysis, cached in app support, its levels from the sound cache the preview shares.
             let sounds = app.state::<EngineState>().sounds.clone();
-            let analysis =
-                commands::analysis::load(app.handle(), support.as_deref(), credentials, sounds);
-            // Another project opening (or this one closing) stops analysis, once the switch is sure.
-            let stopping = analysis.clone();
+            let analysis = commands::analysis::load(
+                app.handle(),
+                support.as_deref(),
+                credentials.clone(),
+                sounds,
+            );
+            // Chat over the open project, what analysis found and the same credentials.
+            let chat = commands::chat::load(app.handle(), credentials, analysis.clone());
+            // Another project opening (or this one closing) stops analysis and starts chat over, once the switch is
+            // sure.
+            let (stopping, forgetting) = (analysis.clone(), chat.clone());
             app.state::<ProjectSessionState>()
-                .on_switch(Arc::new(move || stopping.project_changed()));
+                .on_switch(Arc::new(move || {
+                    stopping.project_changed();
+                    forgetting.project_changed();
+                }));
             app.manage(analysis);
+            app.manage(chat);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -96,6 +107,11 @@ fn main() {
             commands::analysis::analysis_cancel,
             commands::analysis::analysis_states,
             commands::analysis::analysis_forget,
+            commands::chat::chat_send,
+            commands::chat::chat_apply_proposal,
+            commands::chat::chat_discard_proposal,
+            commands::chat::chat_undo_last,
+            commands::chat::chat_reset,
             media_cache::media_peaks_info,
             media_cache::media_peaks,
             media_cache::media_thumbs,
