@@ -13,9 +13,9 @@ vi.mock('../../bridge/analysis', () => ({
 }));
 const { analysisBridge } = await import('../../bridge/analysis');
 const { refreshAiStatus } = await import('../../ai/aiStatus');
-const { analyze, applyEvent, followAnalysis, notNow, offerFor, retry, stateOf, useAnalysis } = await import(
-  '../../state/analysis'
-);
+const { analyze, applyEvent, clearAnalysisOnProjectSwitch, followAnalysis, notNow, offerFor, retry, stateOf, useAnalysis } =
+  await import('../../state/analysis');
+const { useProject } = await import('../../state/project');
 const { about, howLong, offerText, offerTitle, progressTitle, spokenProgress, stepDots } = await import('./analysis');
 
 const bridge = vi.mocked(analysisBridge);
@@ -144,6 +144,23 @@ describe('the store', () => {
     bridge.estimate.mockResolvedValueOnce(estimate());
     await offerFor(['a', 'b']);
     expect(useAnalysis.getState().error).toBeNull();
+  });
+
+  it('forgets the last project’s clips when another opens', () => {
+    const stop = clearAnalysisOnProjectSwitch();
+    const snapshot = (id: string, opening: number) => ({ project: { id }, opening }) as never;
+    useProject.setState({ snapshot: snapshot('one', 1) });
+    useAnalysis.setState({
+      states: { a: { state: 'running', step: 'words', pct: 30 } },
+      estimate: estimate(),
+      error: 'Meta is busy right now. Try again in a moment.',
+      dismissed: ['b'],
+    });
+    useProject.setState({ snapshot: snapshot('one', 1) });
+    expect(useAnalysis.getState().states.a).toBeDefined();
+    useProject.setState({ snapshot: snapshot('two', 2) });
+    expect(useAnalysis.getState()).toMatchObject({ states: {}, estimate: null, error: null, dismissed: [] });
+    stop();
   });
 
   it('asks nothing when every clip is analysed', async () => {

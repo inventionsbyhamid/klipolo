@@ -15,7 +15,7 @@ import { errorMessage } from './lib/errors';
 import { PlayerBar } from './player/PlayerBar';
 import { Preview } from './preview/Preview';
 import { SettingsDialog } from './settings/SettingsDialog';
-import { followAnalysis } from './state/analysis';
+import { clearAnalysisOnProjectSwitch, followAnalysis } from './state/analysis';
 import { useProject } from './state/project';
 import { clearProposalOnProjectSwitch } from './state/proposal';
 import { clearRangeOnProjectSwitch } from './state/range';
@@ -48,6 +48,7 @@ export function App() {
     void followSaves();
     void followAiStatus();
     void followAnalysis();
+    clearAnalysisOnProjectSwitch();
     keepPlayheadInVideo();
     clearRangeOnProjectSwitch();
     clearProposalOnProjectSwitch();

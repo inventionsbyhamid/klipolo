@@ -3,6 +3,7 @@ import type { AssetState } from '../bindings/AssetState';
 import type { Estimate } from '../bindings/Estimate';
 import { refreshAiStatus } from '../ai/aiStatus';
 import { analysisBridge, type AnalysisEvent, type UnlistenFn } from '../bridge/analysis';
+import { useProject } from './project';
 
 interface AnalysisStore {
   /** Each clip's analysis as Rust last told it, by asset id; a clip missing here is not analysed. */
@@ -72,6 +73,19 @@ export async function followAnalysis(): Promise<UnlistenFn> {
     // Nothing known yet: every clip counts as not analysed.
   }
   return unlisten;
+}
+
+/**
+ * Another project opened (or this one opened again): the store forgets the last one's clips, offer and sentences, as
+ * Rust does (`project_changed`), so no progress or rough-captions note carries over. Gives the stop function.
+ */
+export function clearAnalysisOnProjectSwitch(): () => void {
+  return useProject.subscribe((s, prev) => {
+    if (s.snapshot?.project.id !== prev.snapshot?.project.id || s.snapshot?.opening !== prev.snapshot?.opening) {
+      asked += 1;
+      useAnalysis.setState({ states: {}, estimate: null, error: null, dismissed: [], busy: false });
+    }
+  });
 }
 
 /** Offers asked for, so an older estimate never replaces a newer one. */
