@@ -1,23 +1,27 @@
-//! What the chat crate tells other apps that edit through its tools: one section of the context by its heading, and
-//! the transcript's lines whole however long the project.
+//! What the chat crate tells other apps that edit through its tools: one section of the context by its heading, the
+//! transcript's lines whole however long the project, a key that says whether a context's times and clip refs still
+//! hold, and which tool calls name the timeline.
 //!
 //! The project is clip A (the fixtures `tests/context.rs` describes) as two pieces around a cut, or many copies of it;
 //! the 30-minute talk is made here, so its context has to tell the transcript briefly.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::sync::Arc;
 
 use klipolo_chat::context::QUOTED_NOTE;
+use klipolo_chat::tools::{PictureSize, Position, TextPreset};
 use klipolo_chat::{
-    ChatContext, FullTranscript, Library, LibraryItem, MediaKind, SceneLog, SpeakerTurn, View,
-    build_context, full_transcript,
+    ChatContext, FullTranscript, Library, LibraryItem, MediaKind, Moment, SceneLog, SpeakerTurn,
+    ToolCall, View, build_context, full_transcript, timeline_key, tools,
 };
-use klipolo_model::project::{Asset, AssetKind};
+use klipolo_model::captions::styles::BuiltinCaptionStyle;
+use klipolo_model::ops::Edge;
+use klipolo_model::project::{Asset, AssetKind, FormatKind, Settings};
 use klipolo_model::speech::{Speech, Transcript, Word, WordKind};
 use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::{Clip, ClipSource};
-use klipolo_model::{Project, load_project};
+use klipolo_model::{Op, Project, apply_ops, load_project};
 
 fn fixture(name: &str) -> String {
     std::fs::read_to_string(
@@ -385,4 +389,270 @@ fn full_transcript_keeps_every_line_of_a_30_minute_project() {
         assert!(line.text.starts_with(start), "{brief} / {}", line.text);
     }
     assert!(transcript.len() * 2 < as_context(&full).len());
+}
+
+#[test]
+fn timeline_key_ignores_format_captions_and_word_fixes_but_not_a_cut_or_split() {
+    let inputs = two_clips();
+    let p = &inputs.project;
+    let key = timeline_key(p);
+    assert_eq!(
+        timeline_key(&p.clone()),
+        key,
+        "the same project, the same key"
+    );
+    let after = |op: Op| {
+        let next = apply_ops(p, &[op]).expect("the op applies");
+        assert_ne!(next, *p, "the op changed the project");
+        timeline_key(&next)
+    };
+    // What leaves every clip where it was: the format, captions, a word read differently.
+    let landscape = Settings {
+        formats: vec![FormatKind::Landscape],
+        primary_format: FormatKind::Landscape,
+        ..p.settings.clone()
+    };
+    assert_eq!(
+        after(Op::SetSettings {
+            settings: landscape
+        }),
+        key
+    );
+    let mut captions = p.captions.clone();
+    captions.enabled = false;
+    assert_eq!(after(Op::SetCaptions { captions }), key);
+    let first = &inputs.speech.transcripts["clip-a"].words[0];
+    assert_eq!(
+        after(Op::FixWords {
+            asset_id: "clip-a".into(),
+            start_us: first.start_us,
+            end_us: first.end_us,
+            text: Some("And".into()),
+        }),
+        key
+    );
+    // What moves or renames the clips: a cut, a split.
+    let cut = after(Op::DeleteRanges {
+        ranges: vec![RangeUs {
+            start: secs(1.0),
+            end: secs(2.0),
+        }],
+    });
+    assert_ne!(cut, key);
+    let split = after(Op::Split { at_us: secs(5.0) });
+    assert_ne!(split, key);
+    assert_ne!(split, cut);
+    // A cut in the last clip moves no clip's start, only its end.
+    let late = after(Op::DeleteRanges {
+        ranges: vec![RangeUs {
+            start: secs(100.0),
+            end: secs(101.0),
+        }],
+    });
+    assert_ne!(late, key);
+}
+
+/// One call of every tool, with and without times where a time is optional, and whether it names the timeline.
+fn every_call() -> Vec<(ToolCall, bool)> {
+    let span = RangeUs {
+        start: secs(1.0),
+        end: secs(2.0),
+    };
+    vec![
+        (ToolCall::CutRange { range: span }, true),
+        (ToolCall::KeepOnly { ranges: vec![span] }, true),
+        (ToolCall::RemoveSilences { min_pause_us: None }, false),
+        (
+            ToolCall::RemoveSilences {
+                min_pause_us: Some(secs(1.0)),
+            },
+            false,
+        ),
+        (ToolCall::RemoveFillers, false),
+        (
+            ToolCall::TrimClip {
+                clip: "c2".into(),
+                edge: Edge::Start,
+                to_us: secs(20.0),
+            },
+            true,
+        ),
+        (ToolCall::SplitAt { at_us: secs(5.0) }, true),
+        (
+            ToolCall::SetFormat {
+                format: FormatKind::Square,
+                keep_others: true,
+            },
+            false,
+        ),
+        (
+            ToolCall::SetCaptions {
+                on: true,
+                style: Some(BuiltinCaptionStyle::Karaoke),
+            },
+            false,
+        ),
+        (
+            ToolCall::FixCaptionWords {
+                find: "Caden".into(),
+                replace: "Kaiden".into(),
+            },
+            false,
+        ),
+        (
+            ToolCall::FindMoments {
+                query: "a question".into(),
+                moments: vec![Moment {
+                    range: span,
+                    label: "the first".into(),
+                }],
+            },
+            true,
+        ),
+        (
+            ToolCall::FindMoments {
+                query: "nothing".into(),
+                moments: Vec::new(),
+            },
+            true,
+        ),
+        (
+            ToolCall::FollowSubject {
+                description: "woman astronaut".into(),
+            },
+            false,
+        ),
+        (
+            ToolCall::BlurObjects {
+                description: "face".into(),
+            },
+            false,
+        ),
+        (
+            ToolCall::AddMusic {
+                file: "lofi.mp3".into(),
+                volume: None,
+                duck: None,
+                at_us: None,
+            },
+            false,
+        ),
+        (
+            ToolCall::AddMusic {
+                file: "lofi.mp3".into(),
+                volume: None,
+                duck: None,
+                at_us: Some(secs(3.0)),
+            },
+            true,
+        ),
+        (
+            ToolCall::AddSound {
+                name: "whoosh".into(),
+                at_us: vec![secs(3.0)],
+            },
+            true,
+        ),
+        (
+            ToolCall::AddText {
+                text: "Hello".into(),
+                preset: TextPreset::Title,
+                at_us: None,
+                duration_us: None,
+            },
+            false,
+        ),
+        (
+            ToolCall::AddText {
+                text: "Hello".into(),
+                preset: TextPreset::Title,
+                at_us: Some(secs(3.0)),
+                duration_us: Some(secs(2.0)),
+            },
+            true,
+        ),
+        (
+            ToolCall::AddImage {
+                file: "logo.png".into(),
+                size: Some(PictureSize::Small),
+                position: Some(Position::TopRight),
+                at_us: None,
+                duration_us: None,
+            },
+            false,
+        ),
+        (
+            ToolCall::AddImage {
+                file: "logo.png".into(),
+                size: None,
+                position: None,
+                at_us: Some(secs(3.0)),
+                duration_us: None,
+            },
+            true,
+        ),
+        (
+            ToolCall::MakeSticker {
+                prompt: "a rocket".into(),
+                position: None,
+                at_us: None,
+                duration_us: None,
+            },
+            false,
+        ),
+        (
+            ToolCall::MakeSticker {
+                prompt: "a rocket".into(),
+                position: None,
+                at_us: Some(secs(3.0)),
+                duration_us: None,
+            },
+            true,
+        ),
+        (
+            ToolCall::MakeTitleCard {
+                title: "Space".into(),
+                prompt: "stars".into(),
+                at_us: None,
+                duration_us: None,
+            },
+            false,
+        ),
+        (
+            ToolCall::MakeTitleCard {
+                title: "Space".into(),
+                prompt: "stars".into(),
+                at_us: Some(secs(0.0)),
+                duration_us: None,
+            },
+            true,
+        ),
+        (ToolCall::Undo, false),
+        (
+            ToolCall::AskUser {
+                question: "Which part?".into(),
+            },
+            false,
+        ),
+        (
+            ToolCall::CannotDo {
+                reason: "No tool fits.".into(),
+            },
+            false,
+        ),
+    ]
+}
+
+#[test]
+fn names_timeline_for_every_tool_with_times_or_refs() {
+    let calls = every_call();
+    // Every tool the model is offered is here.
+    let listed: BTreeSet<String> = (tools().as_array().unwrap().iter())
+        .map(|t| t["name"].as_str().unwrap().to_owned())
+        .collect();
+    let covered: BTreeSet<String> = calls.iter().map(|(c, _)| c.name().to_owned()).collect();
+    assert_eq!(covered, listed);
+    for (call, names) in &calls {
+        assert_eq!(call.names_timeline(), *names, "{call:?}");
+    }
 }

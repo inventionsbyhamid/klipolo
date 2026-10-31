@@ -45,8 +45,9 @@
 //! The speaker turns and scene items are neutral inputs keyed by asset id (what the analysis stored, in that file's
 //! time): no provider's type reaches this crate.
 //!
-//! For other apps that edit through the same tools: `ChatContext::section` gives one section by its heading, and
-//! `full_transcript` every Transcript line at full detail however long the project (for them to read in pages).
+//! For other apps that edit through the same tools: `ChatContext::section` gives one section by its heading,
+//! `full_transcript` every Transcript line at full detail however long the project (for them to read in pages), and
+//! `timeline_key` says whether the times and clip refs of a context read earlier still hold.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -435,6 +436,29 @@ pub fn full_transcript(
         })
         .collect();
     FullTranscript { lines, notes }
+}
+
+/// A key for where the main track's clips are: each clip's id with its timeline start and end. Equal keys mean the
+/// times and clip refs a context gave still name the same footage; a format, captions or a word fix leave it as it
+/// was, a cut, a split, a trim or a speed change don't. The same on every run and build (FNV-1a). O(clips).
+pub fn timeline_key(project: &Project) -> u64 {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    let mut hash = OFFSET;
+    let mut eat = |bytes: &[u8]| {
+        for &b in bytes {
+            hash = (hash ^ u64::from(b)).wrapping_mul(PRIME);
+        }
+    };
+    let main = &project.timeline.main;
+    for (clip, start) in main.iter().zip(clip_starts(main)) {
+        // The id's length first, so no two lists of ids read as the same bytes.
+        eat(&(clip.id.len() as u64).to_le_bytes());
+        eat(clip.id.as_bytes());
+        eat(&start.to_le_bytes());
+        eat(&start.saturating_add(clip.duration_us()).to_le_bytes());
+    }
+    hash
 }
 
 /// Each file's speaker turns by start, as a word finds its turn by binary search; sorted here when they come otherwise.
