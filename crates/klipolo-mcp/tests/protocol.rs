@@ -226,7 +226,7 @@ fn tools_list_is_chat_tools_minus_conversation_tools_plus_reads() {
                         }
                     }
                 }
-                if name == "makeTitleCard" {
+                if matches!(name, "makeTitleCard" | "makeSticker") {
                     ours["description"] = json!("");
                     chats["description"] = json!("");
                 }
@@ -260,6 +260,21 @@ fn tools_list_is_chat_tools_minus_conversation_tools_plus_reads() {
     assert_eq!(
         chat_tool("addText")["parameters"]["properties"]["text"]["description"],
         "The words, as the person wrote them."
+    );
+    // An app's sticker waits in Klipolo's chat for the person's Use; chat's own is placed once drawn.
+    assert_eq!(
+        tool("makeSticker")["description"],
+        "Have Muse Image draw a new sticker when no picture in Library fits. Once drawn, it waits in Klipolo's chat \
+         panel for the person to place it with Use."
+    );
+    assert_eq!(
+        tool("makeSticker")["description"],
+        json!(klipolo_mcp::words::STICKER_TOOL)
+    );
+    assert_eq!(
+        chat_tool("makeSticker")["description"],
+        "Have Muse Image draw a new sticker when no picture in Library fits. It is placed once drawn.",
+        "chat's own stays"
     );
     let transcript = listed
         .iter()

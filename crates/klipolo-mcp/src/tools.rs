@@ -3,8 +3,9 @@
 //! MCP lists a tool: `{name, description, inputSchema, annotations}`, the schema strict as chat's (closed, every
 //! property required, a value that may be left unsaid nullable). The list never changes while an app is connected.
 //!
-//! Only the words about words on screen are an app's own (`apps_words`): chat's model puts the person's words there, an
-//! app its own (`klipolo_chat::compile_for_app`), so `addText`'s text and `makeTitleCard` say so.
+//! Only a few words are an app's own (`apps_words`). Chat's model puts the person's words on screen, an app its own
+//! (`klipolo_chat::compile_for_app`), so `addText`'s text and `makeTitleCard` say so. Chat places a sticker once drawn,
+//! while an app's waits in Klipolo's chat for the person's Use, so `makeSticker` says that.
 
 use std::sync::LazyLock;
 
@@ -66,7 +67,8 @@ fn build() -> Value {
     Value::Array(edits.chain(reads).collect())
 }
 
-/// Chat's tool `name` (its `description` and `schema`) as an app reads it: the words it puts on screen are its own.
+/// Chat's tool `name` (its `description` and `schema`) as an app reads it: the words it puts on screen are its own,
+/// and the sticker it starts waits for the person's Use.
 fn apps_words(name: &str, description: &Value, schema: &Value) -> (Value, Value) {
     let (mut description, mut schema) = (description.clone(), schema.clone());
     let mut field = |field: &str, said: &str| {
@@ -80,6 +82,7 @@ fn apps_words(name: &str, description: &Value, schema: &Value) -> (Value, Value)
             field("title", words::TITLE_FIELD);
             description = json!(words::TITLE_CARD_TOOL);
         }
+        "makeSticker" => description = json!(words::STICKER_TOOL),
         _ => {}
     }
     (description, schema)
