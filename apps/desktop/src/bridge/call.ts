@@ -96,22 +96,28 @@ export function saidOf(error: unknown): Said {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** What Tauri says when the app has no command by that name (a page newer than the app it runs in). */
+const NO_COMMAND = /^Command \S+ not found$/;
+
 /**
  * Invoke a Tauri command, turning Rust's errors into Errors with a plain message. A coded error (`{ code, params }`) is
- * worded here; the rest are already sentences. The error keeps what Rust sent as its `cause` (`isCode`, `saidOf`).
+ * worded here; the rest are already sentences, except Tauri's own for a command the app doesn't have. The error keeps
+ * what Rust (or Tauri) sent as its `cause` (`isCode`, `saidOf`).
  */
 export async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
     return await invoke<T>(command, args);
   } catch (error) {
     const message =
-      typeof error === 'string'
-        ? error
-        : isCoded(error)
-          ? codedMessage(error)
-          : error instanceof Error
-            ? error.message
-            : '';
+      typeof error === 'string' && NO_COMMAND.test(error)
+        ? t({ id: 'error.noCommand', message: "Klipolo can't do that in this version. Restart Klipolo and try again." })
+        : typeof error === 'string'
+          ? error
+          : isCoded(error)
+            ? codedMessage(error)
+            : error instanceof Error
+              ? error.message
+              : '';
     throw new Error(message || t({ id: 'error.unknown', message: 'Something went wrong. Try again.' }), {
       cause: error,
     });
