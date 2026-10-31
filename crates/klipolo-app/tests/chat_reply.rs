@@ -85,17 +85,25 @@ fn serializes_as_the_page_reads_it() {
 fn a_request_reads_as_the_page_sends_it() {
     // A typed message has no ranges to keep; "Keep only these" sends its moments'.
     let typed: ChatRequest = serde_json::from_value(serde_json::json!({
-        "id": "r1", "text": "cut the ums", "selection": null, "item": null, "playheadUs": 0, "format": "portrait"
+        "id": "r1", "text": "cut the ums", "selection": null, "item": null, "playheadUs": 0, "format": "portrait",
+        "baseRevision": 3
     }))
     .unwrap();
     assert!(typed.keep_only.is_empty());
+    assert_eq!(typed.base_revision, 3);
     let keep: ChatRequest = serde_json::from_value(serde_json::json!({
         "id": "r2", "text": "Keep only these", "selection": { "start": 1, "end": 2 }, "item": null,
-        "playheadUs": 5, "format": null, "keepOnly": [{ "start": 10, "end": 20 }]
+        "playheadUs": 5, "format": null, "keepOnly": [{ "start": 10, "end": 20 }], "baseRevision": 7
     }))
     .unwrap();
     assert_eq!(keep.keep_only, vec![range(10, 20)]);
     assert_eq!(keep.selection, Some(range(1, 2)));
+    assert_eq!(keep.base_revision, 7);
+    // Every request says the revision its times are on: one without it isn't a request.
+    let unanchored = serde_json::from_value::<ChatRequest>(serde_json::json!({
+        "id": "r3", "text": "cut the ums", "selection": null, "item": null, "playheadUs": 0, "format": null
+    }));
+    assert!(unanchored.is_err());
 }
 
 #[test]

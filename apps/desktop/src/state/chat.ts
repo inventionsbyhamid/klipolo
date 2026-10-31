@@ -24,9 +24,13 @@ export function chatAllowed(status: AiStatus | null): boolean {
   return status.mode === 'key' || (status.mode === 'relay' && status.active !== false);
 }
 
-/** What "this" and "here" mean as a message goes: the time range or the overlay selected, the playhead, the format. */
+/**
+ * What "this" and "here" mean as a message goes: the time range or the overlay selected, the playhead, the format,
+ * and the revision those times are on (Rust refuses times on a project that moved on since).
+ */
 function requestFor(id: string, text: string, keepOnly: { start: number; end: number }[]): ChatRequest {
-  const project = useProject.getState().snapshot?.project;
+  const snapshot = useProject.getState().snapshot;
+  const project = snapshot?.project;
   const range = useRange.getState().range;
   const selected = useSelection.getState().selectedId;
   const item = project && selected && findItem(project, selected) ? selected : null;
@@ -38,6 +42,7 @@ function requestFor(id: string, text: string, keepOnly: { start: number; end: nu
     playheadUs: usePlayback.getState().playheadUs,
     format: useUi.getState().previewFormat ?? project?.settings.primaryFormat ?? null,
     keepOnly,
+    baseRevision: snapshot?.history.revision ?? 0,
   };
 }
 
