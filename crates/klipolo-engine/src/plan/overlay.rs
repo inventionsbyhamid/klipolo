@@ -9,7 +9,7 @@ use klipolo_model::time::{Us, unscaled};
 use klipolo_model::timeline::{Item, ItemContent, PieceTime, piece_time, seed_id};
 
 use super::effects::{self, Clock};
-use super::framing::{FULL, area_aspect, aspect_of, canvas, fit_rect};
+use super::framing::{FULL, area_aspect, aspect_of, canvas, cover_rect, fit_rect, is_whole_frame};
 use super::generator;
 use super::layers::MissingContrib;
 use super::motion::{self, Moved};
@@ -74,7 +74,7 @@ pub fn overlay_layers(
                 let Some(asset) = p.asset(asset_id).filter(|a| a.kind == AssetKind::Image) else {
                     continue;
                 };
-                let mv = moved(contain(rect, asset, format));
+                let mv = moved(picture_rect(rect, asset, format));
                 blur_in(registry, &item.id, &mv, clock, &mut fx);
                 out.push(Layer::Image(ImageLayer {
                     id: s.str(&item.id),
@@ -288,4 +288,16 @@ pub fn text_scale(layout: &Layout, primary: FormatKind, format: FormatKind) -> f
 pub fn contain(rect: BoxN, asset: &Asset, format: FormatKind) -> BoxN {
     let target = area_aspect(rect, format);
     fit_rect(rect, aspect_of(asset.width, asset.height, target), format)
+}
+
+/// Where a picture layer of `asset` draws in its layout box `rect` in `format`: contained in its box (`contain`), except
+/// a box that is the whole frame (a title card's background, `Layout::full_frame`), which the picture covers, its
+/// shape kept and what reaches past the frame cut off (`cover_rect`), so it fills every format with no footage round
+/// it. Mirrored by `pictureRect` in `apps/desktop/src/lib/layout.ts` (gizmo boxes) and pinned by `tests/parity.rs`.
+pub fn picture_rect(rect: BoxN, asset: &Asset, format: FormatKind) -> BoxN {
+    if !is_whole_frame(rect) {
+        return contain(rect, asset, format);
+    }
+    let target = area_aspect(rect, format);
+    cover_rect(rect, aspect_of(asset.width, asset.height, target), format)
 }

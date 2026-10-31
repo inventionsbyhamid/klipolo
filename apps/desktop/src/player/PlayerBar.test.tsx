@@ -55,6 +55,15 @@ describe('the player bar', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Select something first');
   });
 
+  it('shows no control that looks live and does nothing: no volume or loop until they work', () => {
+    const { container } = renderWithProviders(<Editor />);
+    const bar = container.querySelector('footer.playerbar')!;
+    // Every slider in the bar is one the person can move.
+    for (const slider of bar.querySelectorAll('.slider')) expect(slider).toHaveAttribute('role', 'slider');
+    expect(bar.querySelector('.vol')).toBeNull();
+    expect(within(bar as HTMLElement).queryByRole('button', { name: 'Loop the selection' })).toBeNull();
+  });
+
   it('the zoom slider says its value and steps 1 or 10 with the arrows', async () => {
     renderWithProviders(<Editor />);
     const slider = screen.getByRole('slider', { name: 'Timeline zoom' });

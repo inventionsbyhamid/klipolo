@@ -101,15 +101,17 @@ impl ProjectSessionState {
         });
     }
 
-    /// The open project's assets with these ids, in the order given (ids it doesn't have are left out).
-    pub(crate) fn assets(&self, ids: &[String]) -> Vec<klipolo_model::project::Asset> {
+    /// The open project's assets with these ids that analysis is for (`analysed::analysed_assets`: the files a
+    /// main-track clip plays), in the order given. Ids it doesn't have, and music, sounds and pictures on layers or
+    /// never placed, are left out: they would be paid for and never used.
+    pub(crate) fn analysed_assets(&self, ids: &[String]) -> Vec<klipolo_model::project::Asset> {
         let open = self.open.lock().unwrap_or_else(PoisonError::into_inner);
         let Some(open) = open.as_ref() else {
             return Vec::new();
         };
-        let assets = &open.document.project().assets;
+        let analysed = klipolo_model::analysed::analysed_assets(open.document.project());
         ids.iter()
-            .filter_map(|id| assets.iter().find(|a| &a.id == id).cloned())
+            .filter_map(|id| analysed.iter().find(|a| &a.id == id).map(|a| (*a).clone()))
             .collect()
     }
 
@@ -245,4 +247,94 @@ pub(crate) fn opened(project: Project) -> ProjectSessionState {
     )
     .unwrap();
     state
+}
+
+#[cfg(test)]
+mod tests {
+    use klipolo_model::layout::Layout;
+    use klipolo_model::project::{Asset, AssetKind};
+    use klipolo_model::timeline::{Clip, ClipSource, Item, ItemContent, Track, TrackKind};
+
+    use super::*;
+
+    fn file(id: &str, kind: AssetKind) -> Asset {
+        let video = kind == AssetKind::Video;
+        Asset {
+            id: id.into(),
+            kind,
+            path: format!("/media/{id}"),
+            name: id.into(),
+            duration_us: 16_000_000,
+            width: if video { 1920 } else { 0 },
+            height: if video { 1080 } else { 0 },
+            fps: if video { 30.0 } else { 0.0 },
+            rotation: None,
+            has_audio: true,
+            audio_lead_us: None,
+            made_with: None,
+        }
+    }
+
+    fn sound(id: &str, asset: &str, duck: Option<f64>) -> Item {
+        Item {
+            id: id.into(),
+            start_us: 0,
+            duration_us: 4_000_000,
+            attach: None,
+            layout: Layout::full_frame(),
+            content: ItemContent::Audio {
+                asset_id: asset.into(),
+                source_in_us: 0,
+                volume: 0.3,
+                muted: false,
+                fade_in_us: 0,
+                fade_out_us: 0,
+                effect: None,
+                drift_ppm: 0.0,
+                centre_from: None,
+                tie: None,
+                duck,
+            },
+            effects: Vec::new(),
+        }
+    }
+
+    /// Analysis is asked only for what a main-track clip plays: a video under the pack's music and a placed whoosh is
+    /// the video alone, and a song imported and never placed isn't asked for either.
+    #[test]
+    fn only_main_track_files_go_to_analysis() {
+        let mut p = Project::new("Media");
+        p.assets = vec![
+            file("talk", AssetKind::Video),
+            file("klipolo-pack-soft-ambient", AssetKind::Audio),
+            file("klipolo-pack-whoosh", AssetKind::Audio),
+            file("my-song", AssetKind::Audio),
+        ];
+        p.timeline.main = vec![Clip::new(
+            ClipSource::Asset { id: "talk".into() },
+            0,
+            10_000_000,
+        )];
+        let mut audio = Track::new(TrackKind::Audio, "Audio 1");
+        audio.items = vec![sound("bed", "klipolo-pack-soft-ambient", Some(-12.0))];
+        let mut sounds = Track::new(TrackKind::Audio, "Audio 2");
+        sounds.items = vec![sound("whoosh", "klipolo-pack-whoosh", None)];
+        p.timeline.tracks = vec![audio, sounds];
+        let state = opened(p);
+        let asked: Vec<String> = [
+            "talk",
+            "klipolo-pack-soft-ambient",
+            "klipolo-pack-whoosh",
+            "my-song",
+            "gone",
+        ]
+        .map(String::from)
+        .to_vec();
+        let ids: Vec<String> = state
+            .analysed_assets(&asked)
+            .into_iter()
+            .map(|a| a.id)
+            .collect();
+        assert_eq!(ids, ["talk"]);
+    }
 }

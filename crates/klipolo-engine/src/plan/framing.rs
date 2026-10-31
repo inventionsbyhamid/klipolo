@@ -42,6 +42,33 @@ pub fn split_panes(area: BoxN) -> (BoxN, BoxN) {
     )
 }
 
+/// The smallest rectangle of `aspect` centred over `area` that covers it (Fill): it reaches past `area` on two sides,
+/// where whatever draws it is cut off at the frame's edge.
+pub fn cover_rect(area: BoxN, aspect: f64, format: FormatKind) -> BoxN {
+    let (cw, ch) = canvas(format);
+    let (aw, ah) = (area.w * cw, area.h * ch);
+    let (w, h) = if aspect > aw / ah {
+        (ah * aspect, ah)
+    } else {
+        (aw, aw / aspect)
+    };
+    BoxN {
+        x: (area.x * cw + (aw - w) / 2.0) / cw,
+        y: (area.y * ch + (ah - h) / 2.0) / ch,
+        w: w / cw,
+        h: h / ch,
+    }
+}
+
+/// Whether `rect` is the whole frame (`FULL`, as `Layout::full_frame` places a layer in every format).
+pub fn is_whole_frame(rect: BoxN) -> bool {
+    const EPS: f64 = 1e-9;
+    rect.x.abs() < EPS
+        && rect.y.abs() < EPS
+        && (rect.w - 1.0).abs() < EPS
+        && (rect.h - 1.0).abs() < EPS
+}
+
 /// Width ÷ height of a picture; an unknown size takes `fallback` (no letterbox, no crop).
 pub fn aspect_of(width: u32, height: u32, fallback: f64) -> f64 {
     if width == 0 || height == 0 {

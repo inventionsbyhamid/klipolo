@@ -144,7 +144,8 @@ pub struct ImageLayer {
     pub id: Arc<str>,
     pub asset_id: Arc<str>,
     pub path: Arc<str>,
-    /// The image contained in its layout box (keeps its shape).
+    /// The image in its layout box, keeping its shape: contained, or covering the frame when its box is the whole frame
+    /// (`overlay::picture_rect`), reaching past the frame's edges.
     pub dest: BoxN,
     pub rotation: f64,
     pub opacity: f64,

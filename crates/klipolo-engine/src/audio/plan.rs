@@ -55,6 +55,21 @@ pub struct AudioSource {
     /// Lowered under speech (a sound layer's `ItemContent::Audio::duck`, when anyone is known to speak); None plays at
     /// `gain` throughout.
     pub duck: Option<Duck>,
+    /// Where it plays on from the piece before it, or into the one after it, across a loop's seam (`plan::layers`):
+    /// the mixer ramps neither edge there.
+    pub seam: Seam,
+}
+
+/// A loop's seam at a source's edges: a piece of music that plays its file to the end, followed on its track by the
+/// next piece of the same file from its start, with no fade between (a song laid back to back under a longer video).
+/// The file loops cleanly there, so the mixer's 3 ms edge ramps, which would dip the music to silence at every seam,
+/// are left out on both sides.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Seam {
+    /// It starts the file again where the piece before it played the file to its end.
+    pub start: bool,
+    /// It plays the file to its end where the piece after it starts the file again.
+    pub end: bool,
 }
 
 /// How a source ducks under speech: `db` lower (negative) inside `speech`, easing down before each range and back up
@@ -194,6 +209,7 @@ pub fn audio_plan(p: &Project, registry: &Registry, speech: Arc<[RangeUs]>) -> A
                 filter,
                 centre_from: centre,
                 duck: None,
+                seam: Seam::default(),
             });
             sources.len() - 1
         };

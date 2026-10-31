@@ -42,15 +42,36 @@ is_macho() {
 
 # The files under <path>... that name the home folder <home> (anywhere) or the user <user> (only as a whole path part,
 # /<user>/, so an account named test or build doesn't match "testing" or "builder"):
-#   naming_files <home> <user> <path>...
-# A user name shorter than 4 characters isn't looked for: /lib/ and /src/ are in every binary. Prints the files found
-# and returns grep's status: 0 some found, 1 none, 2 a file couldn't be read (the files found are printed all the same).
+#   naming_files <home> <user> [--allow <text>] <path>...
+# A user name shorter than 4 characters isn't looked for: /lib/ and /src/ are in every binary. With --allow, the user
+# name inside <text> doesn't count (NOTICE.txt's source code address may be github.com/<user>/klipolo when the code's
+# account is the builder's); anywhere else in the same file it still does. Prints the files found and returns grep's
+# status: 0 some found, 1 none, 2 a file couldn't be read (the files found are printed all the same).
 naming_files() {
-  local home=$1 user=$2
+  local home=$1 user=$2 allow=""
   shift 2
+  if [ "${1:-}" = --allow ]; then allow=$2; shift 2; fi
   local patterns=(-e "$home")
   [ "${#user}" -lt 4 ] || patterns+=(-e "/$user/")
-  LC_ALL=C grep -rlF "${patterns[@]}" "$@"
+  if [ -z "$allow" ] || [ "${#user}" -lt 4 ]; then
+    LC_ALL=C grep -rlF "${patterns[@]}" "$@"
+    return
+  fi
+  local candidates rc out="" f
+  candidates=$(LC_ALL=C grep -rlF "${patterns[@]}" "$@") && rc=0 || rc=$?
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    # The home folder anywhere counts; the user name counts once the allowed text is taken out.
+    if LC_ALL=C grep -qF -e "$home" "$f" \
+      || perl -0777 -ne 'BEGIN { ($a, $u) = splice(@ARGV, 0, 2) } s/\Q$a\E//g; $n++ if index($_, $u) >= 0;
+          END { exit($n ? 0 : 1) }' "$allow" "/$user/" "$f"; then
+      out+="$f"$'\n'
+    fi
+  done <<< "$candidates"
+  [ -z "$out" ] || printf '%s' "$out"
+  [ "$rc" -eq 2 ] && return 2
+  [ -n "$out" ] && return 0
+  return 1
 }
 
 # The checkout <repo>'s source files vendored from Cap's MIT crates, as paths from <repo>, one a line, sorted: each .rs

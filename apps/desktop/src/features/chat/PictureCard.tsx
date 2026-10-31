@@ -5,14 +5,14 @@ import { SpriteIcon } from '../../design/SpriteIcon';
 import { Icon } from '../../layout/Icon';
 import { useChat } from '../../state/chat';
 import type { PicturePart } from '../../state/chatMessages';
-import { pictureTitle } from '../../state/chatPictures';
+import { PICTURE_USD, pictureTitle } from '../../state/chatPictures';
 import { UndoChip } from './UndoChip';
 
 /**
  * A picture a reply asked for, as a card: the art on a checkerboard (a sticker's cut-out
  * shows), its name, its size and where it goes, and Use (primary) and Try again.
- * - While it is drawn, it says so with a spinner. Try again keeps the picture drawn before, and Use, while it draws
- *   another ("Drawing a new one.").
+ * - While it is drawn, it says so with a spinner, and what the drawing costs ("Costs about $0.01."). Try again keeps
+ *   the picture drawn before, and Use, while it draws another ("Drawing a new one.").
  * - A drawing that failed says why (an alert), with a still placeholder when there is no picture yet, and Try again.
  * - Use places it as one undo step, and the actions become its Undo chip. Once it can't be placed any more, it says
  *   why, with nothing to press.
@@ -29,6 +29,7 @@ export function PictureCard({ messageId, part }: { messageId: string; part: Pict
   /** The keyboard is in the card (or was, when the control that had it went away). */
   const inside = useRef(false);
   const drawing = state === 'drawing' || again === true;
+  const price = `$${PICTURE_USD.toFixed(2)}`;
 
   useLayoutEffect(() => {
     if (!inside.current) return;
@@ -103,9 +104,18 @@ export function PictureCard({ messageId, part }: { messageId: string; part: Pict
         {drawing && (
           <p className="gen-meta gen-drawing">
             {drawn && <span className="spinner" aria-hidden />}
-            {drawn
-              ? t({ id: 'chatPanel.picture.drawingAgain', message: 'Drawing a new one.' })
-              : t({ id: 'chatPanel.picture.drawing', message: 'Drawing it now.' })}
+            <span>
+              {drawn
+                ? t({ id: 'chatPanel.picture.drawingAgain', message: 'Drawing a new one.' })
+                : t({ id: 'chatPanel.picture.drawing', message: 'Drawing it now.' })}
+            </span>{' '}
+            <span>
+              {t({
+                id: 'chatPanel.picture.price',
+                message: `Costs about ${price}.`,
+                comment: 'While a picture is drawn: what drawing it costs, e.g. “$0.01”',
+              })}
+            </span>
           </p>
         )}
         {reason && (

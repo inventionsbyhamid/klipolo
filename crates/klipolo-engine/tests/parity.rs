@@ -1,5 +1,5 @@
-//! Pins TS `resolveRect`/`cameraRect`/`containRect`/`textScale` (apps/desktop/src/lib/layout.ts) to Rust: gizmos
-//! hit-test with the TS functions, the engine draws with these. Also `shownFromUs`
+//! Pins TS `resolveRect`/`cameraRect`/`containRect`/`pictureRect`/`textScale` (apps/desktop/src/lib/layout.ts) to
+//! Rust: gizmos hit-test with the TS functions, the engine draws with these. Also `shownFromUs`
 //! (apps/desktop/src/lib/timeline.ts): where the editor puts the playhead to show a layer, past a title's intro
 //! animation. And `fullFrame` and `titleLayout` (`lib/layout.ts`) and the 9:16 safe area (`lib/safeAreas`). Regenerate with
 //! `KLIPOLO_UPDATE_PARITY=1 cargo test -p klipolo-engine --test parity`.
@@ -8,7 +8,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use klipolo_engine::plan::framing::camera_rect_for;
-use klipolo_engine::plan::overlay::{contain, shown_from_us, text_scale};
+use klipolo_engine::plan::overlay::{contain, picture_rect, shown_from_us, text_scale};
 use klipolo_model::contrib::builtin;
 use klipolo_model::layout::{Anchor, BoxN, Layout, resolve_rect};
 use klipolo_model::motion::{Motion, MotionUse};
@@ -82,6 +82,8 @@ fn build() -> Value {
     }
     // Image and video layers: the picture's shape inside its box (wide, square, tall, unknown size).
     let mut contains = Vec::new();
+    // Picture layers: contained the same, except in a box that is the whole frame, which they cover.
+    let mut pictures = Vec::new();
     let boxes = [
         BoxN {
             x: 0.1,
@@ -114,6 +116,33 @@ fn build() -> Value {
             };
             for format in FORMATS {
                 contains.push(json!({ "rect": rect, "width": width, "height": height, "format": format, "box": contain(rect, &asset, format) }));
+            }
+        }
+    }
+    let full = BoxN {
+        x: 0.0,
+        y: 0.0,
+        w: 1.0,
+        h: 1.0,
+    };
+    for rect in [boxes[0], full] {
+        for (width, height) in [(1920, 1080), (1152, 2016), (1080, 1080), (0, 0)] {
+            let asset = Asset {
+                id: "a".into(),
+                kind: AssetKind::Image,
+                path: String::new(),
+                name: String::new(),
+                duration_us: 0,
+                width,
+                height,
+                fps: 0.0,
+                has_audio: false,
+                audio_lead_us: None,
+                made_with: None,
+                rotation: None,
+            };
+            for format in FORMATS {
+                pictures.push(json!({ "rect": rect, "width": width, "height": height, "format": format, "box": picture_rect(rect, &asset, format) }));
             }
         }
     }
@@ -235,6 +264,7 @@ fn build() -> Value {
         "rects": rects,
         "cameras": cameras,
         "contains": contains,
+        "pictures": pictures,
         "texts": texts,
         "shown": shown,
         "fullFrame": full_frame,

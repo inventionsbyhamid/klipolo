@@ -22,6 +22,8 @@ const APP_CODES: Record<string, string> = {
   'engine.audioDamaged':
     "The sound of {file} can't be read after {atUs}, so it's silent from there. The file may be damaged.",
   'engine.waitingForDisk': "Waiting for the disk with {name}. Check that it's connected and awake.",
+  // The preview's notice for a file it needs that isn't there (moved, renamed, its disk gone), once per file.
+  'copies.failed.missing': "{name} isn't where it was. Put it back, then open the project again.",
   'exports.noFormat': 'Pick at least one format.',
   'exports.noProject': 'No project is open.',
   'exports.noVideosFolder': "Klipolo couldn't find your Movies folder.",
@@ -37,10 +39,11 @@ const APP_CODES: Record<string, string> = {
   'exports.refused.notRunning': "That export isn't running.",
   'exports.refused.otherProject': 'The running export is of {project}, not this project.',
   'exports.revealGone': "That video isn't there any more.",
-  'exports.diskFull': 'The disk is full.',
+  'exports.diskFull': 'The disk is full. Free up space, then try again.',
   'exports.encoderBusy':
     'The video encoder is busy. Another app may be using it, like a screen recorder or a video call.',
-  'exports.decodeFailed': "A clip couldn't be read.",
+  'exports.decodeFailed':
+    "A clip couldn't be read. Try again. If it happens again, check that every clip plays in the preview.",
   'exports.gpuFailed': 'The graphics processor stopped responding.',
   'exports.stopped': 'The export stopped unexpectedly.',
   'exports.frame.fontMissing': "A font used at {atUs} isn't on this Mac. Pick another font, then export.",
@@ -53,7 +56,7 @@ const APP_CODES: Record<string, string> = {
   'exports.frame.other': '{reason} (at {atUs})',
   'project.none': 'No project is open.',
   'project.moved': 'The video changed. Try again.',
-  'project.createFailed': "Couldn't create the project.",
+  'project.createFailed': "Klipolo couldn't create the project. Check the disk, then try again.",
   'project.noVideosFolder': "Klipolo couldn't find your Movies folder.",
   'project.libraryFailed': "Klipolo couldn't make its projects folder. Check the disk, then try again.",
   'project.revealGone': "This project's file isn't there any more.",

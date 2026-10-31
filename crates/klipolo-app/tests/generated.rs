@@ -383,8 +383,8 @@ fn a_title_card_asks_for_a_background_with_no_lettering() {
 #[tokio::test]
 async fn a_title_card_stays_opaque_in_the_formats_shape() {
     let shapes = [
-        (FormatKind::Landscape, ImageSize::Landscape, (175, 100)),
-        (FormatKind::Portrait, ImageSize::Portrait, (100, 175)),
+        (FormatKind::Landscape, ImageSize::Landscape, (160, 90)),
+        (FormatKind::Portrait, ImageSize::Portrait, (90, 160)),
         (FormatKind::Square, ImageSize::Square, (120, 120)),
     ];
     for (format, size, (w, h)) in shapes {
@@ -415,6 +415,120 @@ async fn a_title_card_stays_opaque_in_the_formats_shape() {
         assert_eq!(made.made_with, "Muse Image");
         assert_eq!(made.note, None);
     }
+}
+
+/// Muse Image draws near the frame's shape but not on it (its portrait is 4:7, 1152 x 2016): the background is cut to
+/// the frame's shape about its middle, so it fills a 9:16 frame with no strip of footage above or below it.
+#[tokio::test]
+async fn a_title_card_drawn_off_the_frames_shape_is_cut_to_it_about_its_middle() {
+    for (format, (w, h), (cw, ch)) in [
+        // 4:7, 9:16 is 110 of its 112 across: a pixel off each side.
+        (FormatKind::Portrait, (112, 196), (110, 196)),
+        // 7:4 is a little tall for 16:9: 98 of its 100 down.
+        (FormatKind::Landscape, (175, 100), (175, 98)),
+        (FormatKind::Square, (130, 120), (120, 120)),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        // Blue, with red edges where the cut goes: none of the red is kept.
+        let mut card = RgbImage::from_pixel(w, h, Rgb([20, 30, 90]));
+        for (x, y, p) in card.enumerate_pixels_mut() {
+            if x < (w - cw) / 2
+                || x >= w - (w - cw).div_ceil(2)
+                || y < (h - ch) / 2
+                || y >= h - (h - ch).div_ceil(2)
+            {
+                *p = Rgb([250, 0, 0]);
+            }
+        }
+        let maker = Fake::drawing(png_of(&card));
+
+        let made = make_title_card(&maker, &project(&dir), "Day 1 in Lisbon", format)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            (made.asset.width, made.asset.height),
+            (cw, ch),
+            "{format:?}"
+        );
+        let saved = image::open(&made.asset.path).unwrap().into_rgb8();
+        assert_eq!(saved.dimensions(), (cw, ch), "{format:?}");
+        assert!(
+            saved.pixels().all(|p| *p == Rgb([20, 30, 90])),
+            "{format:?}: cut about the middle, none of the edges kept"
+        );
+    }
+}
+
+/// Placed under its title, the background fills the frame in every format and fades out over the template's last
+/// 0.45 s with its scrim (`power2.in`), rather than brightening and then cutting off when the card goes.
+#[test]
+fn a_title_card_background_fills_the_frame_and_fades_out_with_its_scrim() {
+    use klipolo_app::chat::background_ops;
+    use klipolo_model::Op;
+    use klipolo_model::layout::Layout;
+    use klipolo_model::motion::Ease;
+    use klipolo_model::timeline::{Item, ItemContent, Track, TrackKind};
+
+    let mut p = klipolo_model::Project::new("Trip");
+    let mut words = Track::new(TrackKind::Overlay, "Overlay 1");
+    words.items = vec![Item {
+        id: "title".into(),
+        start_us: 2_000_000,
+        duration_us: 4_000_000,
+        attach: None,
+        layout: Layout::full_frame(),
+        content: ItemContent::Text {
+            text: "Day 1 in Lisbon".into(),
+            style: Default::default(),
+        },
+        effects: Vec::new(),
+    }];
+    p.timeline.tracks = vec![words];
+    let asset = klipolo_model::project::Asset {
+        id: "card".into(),
+        kind: AssetKind::Image,
+        path: "/media/card.png".into(),
+        name: "Day 1 in Lisbon title card background".into(),
+        duration_us: 5_000_000,
+        width: 1134,
+        height: 2016,
+        fps: 0.0,
+        rotation: None,
+        has_audio: false,
+        audio_lead_us: None,
+        made_with: Some("Muse Image".into()),
+    };
+    let ops = background_ops(&p, &asset, "title").unwrap();
+    let Some(Op::AddItem { item, .. }) = ops.iter().find(|op| matches!(op, Op::AddItem { .. }))
+    else {
+        panic!("no layer added: {ops:?}");
+    };
+    assert_eq!((item.start_us, item.duration_us), (2_000_000, 4_000_000));
+    let motion = item.layout.motion.as_ref().expect("it fades out");
+    let exit = motion.exit.as_ref().expect("an exit");
+    assert_eq!(
+        (exit.preset.to_string(), exit.duration_us, exit.ease),
+        (
+            "klipolo.builtin/motion.fade".to_owned(),
+            450_000,
+            Some(Ease::Power2In)
+        )
+    );
+    assert_eq!(
+        (motion.enter.as_ref(), motion.looping.as_ref()),
+        (None, None)
+    );
+    let still = Layout {
+        motion: None,
+        ..item.layout.clone()
+    };
+    assert_eq!(
+        still,
+        Layout::full_frame(),
+        "the whole frame in every format"
+    );
+    klipolo_model::apply_ops(&p, &ops).expect("the project takes it");
 }
 
 #[test]

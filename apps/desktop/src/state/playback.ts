@@ -46,6 +46,8 @@ export function setFrameRateSource(source: () => number) {
 
 let pendingSeek: number | null = null;
 let seekScheduled = false;
+/** A frame `showFrameAt` asked for may still be waiting or on its way: no seek to the playhead has replaced it yet. */
+let shownOut = false;
 const nextFrame = (cb: () => void) =>
   typeof requestAnimationFrame === 'function' ? requestAnimationFrame(cb) : setTimeout(cb, 16);
 
@@ -62,6 +64,29 @@ export function sendSeek(us: number) {
   });
 }
 
+/**
+ * Shows the frame at `us` in the preview without moving the playhead or the timecode (a trim shows the edge it drags),
+ * or the playhead's frame again (null). Each is a seek of its own, sent as the playhead's are: the newest once per
+ * animation frame, under a new sequence, so the engine stops reading toward a still an older one asked for.
+ */
+export function showFrameAt(us: number | null) {
+  shownOut = us !== null;
+  usePlayback.setState((s) => ({ seq: s.seq + 1 }));
+  sendSeek(us ?? usePlayback.getState().playheadUs);
+}
+
+/**
+ * Playback starts from the playhead: a frame shown without moving it that still waits is dropped. True: one may be on
+ * its way, so the run takes a new sequence, which makes that seek older than the run and the engine ignores it rather
+ * than playing from it.
+ */
+function dropShown(): boolean {
+  if (!shownOut) return false;
+  shownOut = false;
+  pendingSeek = null;
+  return true;
+}
+
 export const usePlayback = create<PlaybackStore>((set, get) => ({
   playheadUs: 0,
   playing: false,
@@ -71,6 +96,7 @@ export const usePlayback = create<PlaybackStore>((set, get) => ({
     const playheadUs = Math.max(0, Math.round(us));
     // While playing, the clock waits there for the first frame from the new spot.
     holdClock(playheadUs);
+    shownOut = false;
     set((s) => ({ playheadUs, seq: s.seq + 1 }));
     sendSeek(playheadUs);
   },
@@ -78,7 +104,8 @@ export const usePlayback = create<PlaybackStore>((set, get) => ({
     if (get().playing) return;
     // The clock starts with the first playback frame (the sound may take a moment to open).
     holdClock(get().playheadUs);
-    set({ playing: true, rate });
+    const fresh = dropShown();
+    set((s) => ({ playing: true, rate, seq: fresh ? s.seq + 1 : s.seq }));
     engine.play(get().playheadUs, rate, get().seq).catch((error: unknown) => {
       set({ playing: false, rate: 1 });
       toast.error(errorMessage(error));
@@ -115,7 +142,8 @@ export const usePlayback = create<PlaybackStore>((set, get) => ({
     if (!playing && direction < 0 && from <= 0) return;
     holdClock(from);
     // A new run while playing: frames of the previous one still on their way carry the old sequence and are dropped.
-    set((s) => ({ playing: true, rate: next, playheadUs: from, seq: playing ? s.seq + 1 : s.seq }));
+    const fresh = dropShown() || playing;
+    set((s) => ({ playing: true, rate: next, playheadUs: from, seq: fresh ? s.seq + 1 : s.seq }));
     engine.play(from, next, get().seq).catch((error: unknown) => {
       set({ playing: false, rate: 1 });
       toast.error(errorMessage(error));
@@ -123,6 +151,7 @@ export const usePlayback = create<PlaybackStore>((set, get) => ({
   },
   reset: () => {
     pendingSeek = null;
+    shownOut = false;
     holdClock(0);
     set((s) => ({ playheadUs: 0, playing: false, rate: 1, seq: s.seq + 1 }));
   },

@@ -247,8 +247,14 @@ describe('the store', () => {
       { id: 'a', kind: 'video' },
       { id: 'b', kind: 'audio' },
       { id: 'logo', kind: 'image' },
+      // Music on a layer, and a song never placed: no clip on the main track plays them.
+      { id: 'bed', kind: 'audio' },
+      { id: 'song', kind: 'audio' },
     ];
-    useProject.setState({ snapshot: { project: { id: 'one', assets }, opening: 1 } as never });
+    const main = ['a', 'b', 'logo'].map((id) => ({ id: `clip-${id}`, source: { type: 'asset', id } }));
+    const timeline = { main, tracks: [] };
+    const project = { id: 'one', assets, recordings: [], timeline };
+    useProject.setState({ snapshot: { project, opening: 1 } as never });
     useAnalysis.setState({ dismissed: ['a', 'b'] });
     await offerAgain();
     expect(useAnalysis.getState().dismissed).toEqual([]);

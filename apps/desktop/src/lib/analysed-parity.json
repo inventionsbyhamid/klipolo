@@ -1,0 +1,877 @@
+{
+  "cases": [
+    {
+      "analysed": [
+        "screen",
+        "camera",
+        "mic",
+        "broll"
+      ],
+      "name": "a recording and b-roll, with music and sounds on layers",
+      "project": {
+        "assets": [
+          {
+            "durationUs": 60000000,
+            "fps": 30.0,
+            "hasAudio": true,
+            "height": 1080,
+            "id": "screen",
+            "kind": "video",
+            "name": "screen",
+            "path": "/media/screen",
+            "width": 1920
+          },
+          {
+            "durationUs": 60000000,
+            "fps": 30.0,
+            "hasAudio": false,
+            "height": 720,
+            "id": "camera",
+            "kind": "video",
+            "name": "camera",
+            "path": "/media/camera",
+            "width": 1280
+          },
+          {
+            "durationUs": 60000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "mic",
+            "kind": "audio",
+            "name": "mic",
+            "path": "/media/mic",
+            "width": 0
+          },
+          {
+            "durationUs": 120000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "music",
+            "kind": "audio",
+            "name": "music",
+            "path": "/media/music",
+            "width": 0
+          },
+          {
+            "durationUs": 0,
+            "fps": 0.0,
+            "hasAudio": false,
+            "height": 512,
+            "id": "logo",
+            "kind": "image",
+            "name": "logo",
+            "path": "/media/logo",
+            "width": 512
+          },
+          {
+            "durationUs": 10000000,
+            "fps": 30.0,
+            "hasAudio": true,
+            "height": 1080,
+            "id": "broll",
+            "kind": "video",
+            "name": "broll",
+            "path": "/media/broll",
+            "width": 1920
+          },
+          {
+            "durationUs": 16000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "klipolo-pack-soft-ambient",
+            "kind": "audio",
+            "name": "klipolo-pack-soft-ambient",
+            "path": "/media/klipolo-pack-soft-ambient",
+            "width": 0
+          },
+          {
+            "durationUs": 16000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "klipolo-pack-whoosh",
+            "kind": "audio",
+            "name": "klipolo-pack-whoosh",
+            "path": "/media/klipolo-pack-whoosh",
+            "width": 0
+          },
+          {
+            "durationUs": 16000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "my-song",
+            "kind": "audio",
+            "name": "my-song",
+            "path": "/media/my-song",
+            "width": 0
+          }
+        ],
+        "recordings": [
+          {
+            "id": "rec",
+            "kind": "screen",
+            "markers": [],
+            "primary": "screen",
+            "sources": [
+              {
+                "id": "screen",
+                "label": "capture.source.screen",
+                "mix": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "screen",
+                "runs": [
+                  {
+                    "assetId": "screen",
+                    "driftPpm": 0.0,
+                    "durationUs": 60000000,
+                    "offsetUs": 0
+                  }
+                ]
+              },
+              {
+                "id": "camera",
+                "label": "capture.source.camera",
+                "mix": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "camera",
+                "runs": [
+                  {
+                    "assetId": "camera",
+                    "driftPpm": 0.0,
+                    "durationUs": 59800000,
+                    "offsetUs": 200000
+                  }
+                ]
+              },
+              {
+                "id": "mic",
+                "label": "capture.source.mic",
+                "mix": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "mic",
+                "runs": [
+                  {
+                    "assetId": "mic",
+                    "driftPpm": 0.0,
+                    "durationUs": 60000000,
+                    "offsetUs": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "timeline": {
+          "main": [
+            {
+              "camera": {
+                "border": true,
+                "bubble": {
+                  "anchor": "bottomRight",
+                  "opacity": 1.0,
+                  "overrides": {},
+                  "radius": 0.0,
+                  "rect": {
+                    "h": 0.3556,
+                    "w": 0.2,
+                    "x": 0.76,
+                    "y": 0.6044
+                  },
+                  "rotation": 0.0
+                },
+                "mirror": true,
+                "mode": "bubble",
+                "modeOverrides": {
+                  "portrait": "splitBottom"
+                },
+                "shape": "circle"
+              },
+              "effects": [],
+              "fadeInUs": 0,
+              "fadeOutUs": 0,
+              "framing": {},
+              "id": "a",
+              "look": {
+                "lutId": null,
+                "lutStrength": 1.0,
+                "preset": null,
+                "strength": 1.0
+              },
+              "muted": false,
+              "source": {
+                "id": "rec",
+                "type": "recording"
+              },
+              "sourceInUs": 0,
+              "sourceOutUs": 20000000,
+              "speed": 1.0,
+              "volume": 1.0
+            },
+            {
+              "camera": null,
+              "effects": [],
+              "fadeInUs": 0,
+              "fadeOutUs": 0,
+              "framing": {},
+              "id": "b",
+              "look": {
+                "lutId": null,
+                "lutStrength": 1.0,
+                "preset": null,
+                "strength": 1.0
+              },
+              "muted": false,
+              "source": {
+                "id": "broll",
+                "type": "asset"
+              },
+              "sourceInUs": 0,
+              "sourceOutUs": 10000000,
+              "speed": 1.0,
+              "volume": 1.0
+            }
+          ],
+          "tracks": [
+            {
+              "hidden": false,
+              "id": "audio",
+              "items": [
+                {
+                  "attach": null,
+                  "content": {
+                    "assetId": "klipolo-pack-soft-ambient",
+                    "duck": -12.0,
+                    "effect": null,
+                    "fadeInUs": 0,
+                    "fadeOutUs": 0,
+                    "sourceInUs": 0,
+                    "type": "audio",
+                    "volume": 0.3
+                  },
+                  "durationUs": 4000000,
+                  "effects": [],
+                  "id": "bed",
+                  "layout": {
+                    "anchor": "topLeft",
+                    "opacity": 1.0,
+                    "overrides": {},
+                    "radius": 0.0,
+                    "rect": {
+                      "h": 1.0,
+                      "w": 1.0,
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "rotation": 0.0
+                  },
+                  "startUs": 0
+                }
+              ],
+              "kind": "audio",
+              "locked": false,
+              "muted": false,
+              "name": "Audio 1"
+            },
+            {
+              "hidden": false,
+              "id": "sounds",
+              "items": [
+                {
+                  "attach": null,
+                  "content": {
+                    "assetId": "klipolo-pack-whoosh",
+                    "effect": null,
+                    "fadeInUs": 0,
+                    "fadeOutUs": 0,
+                    "sourceInUs": 0,
+                    "type": "audio",
+                    "volume": 0.3
+                  },
+                  "durationUs": 4000000,
+                  "effects": [],
+                  "id": "whoosh",
+                  "layout": {
+                    "anchor": "topLeft",
+                    "opacity": 1.0,
+                    "overrides": {},
+                    "radius": 0.0,
+                    "rect": {
+                      "h": 1.0,
+                      "w": 1.0,
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "rotation": 0.0
+                  },
+                  "startUs": 0
+                }
+              ],
+              "kind": "audio",
+              "locked": false,
+              "muted": false,
+              "name": "Audio 2"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "analysed": [
+        "broll"
+      ],
+      "name": "b-roll alone",
+      "project": {
+        "assets": [
+          {
+            "durationUs": 60000000,
+            "fps": 30.0,
+            "hasAudio": true,
+            "height": 1080,
+            "id": "screen",
+            "kind": "video",
+            "name": "screen",
+            "path": "/media/screen",
+            "width": 1920
+          },
+          {
+            "durationUs": 60000000,
+            "fps": 30.0,
+            "hasAudio": false,
+            "height": 720,
+            "id": "camera",
+            "kind": "video",
+            "name": "camera",
+            "path": "/media/camera",
+            "width": 1280
+          },
+          {
+            "durationUs": 60000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "mic",
+            "kind": "audio",
+            "name": "mic",
+            "path": "/media/mic",
+            "width": 0
+          },
+          {
+            "durationUs": 120000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "music",
+            "kind": "audio",
+            "name": "music",
+            "path": "/media/music",
+            "width": 0
+          },
+          {
+            "durationUs": 0,
+            "fps": 0.0,
+            "hasAudio": false,
+            "height": 512,
+            "id": "logo",
+            "kind": "image",
+            "name": "logo",
+            "path": "/media/logo",
+            "width": 512
+          },
+          {
+            "durationUs": 10000000,
+            "fps": 30.0,
+            "hasAudio": true,
+            "height": 1080,
+            "id": "broll",
+            "kind": "video",
+            "name": "broll",
+            "path": "/media/broll",
+            "width": 1920
+          },
+          {
+            "durationUs": 16000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "klipolo-pack-soft-ambient",
+            "kind": "audio",
+            "name": "klipolo-pack-soft-ambient",
+            "path": "/media/klipolo-pack-soft-ambient",
+            "width": 0
+          },
+          {
+            "durationUs": 16000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "klipolo-pack-whoosh",
+            "kind": "audio",
+            "name": "klipolo-pack-whoosh",
+            "path": "/media/klipolo-pack-whoosh",
+            "width": 0
+          },
+          {
+            "durationUs": 16000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "my-song",
+            "kind": "audio",
+            "name": "my-song",
+            "path": "/media/my-song",
+            "width": 0
+          }
+        ],
+        "recordings": [
+          {
+            "id": "rec",
+            "kind": "screen",
+            "markers": [],
+            "primary": "screen",
+            "sources": [
+              {
+                "id": "screen",
+                "label": "capture.source.screen",
+                "mix": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "screen",
+                "runs": [
+                  {
+                    "assetId": "screen",
+                    "driftPpm": 0.0,
+                    "durationUs": 60000000,
+                    "offsetUs": 0
+                  }
+                ]
+              },
+              {
+                "id": "camera",
+                "label": "capture.source.camera",
+                "mix": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "camera",
+                "runs": [
+                  {
+                    "assetId": "camera",
+                    "driftPpm": 0.0,
+                    "durationUs": 59800000,
+                    "offsetUs": 200000
+                  }
+                ]
+              },
+              {
+                "id": "mic",
+                "label": "capture.source.mic",
+                "mix": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "mic",
+                "runs": [
+                  {
+                    "assetId": "mic",
+                    "driftPpm": 0.0,
+                    "durationUs": 60000000,
+                    "offsetUs": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "timeline": {
+          "main": [
+            {
+              "camera": null,
+              "effects": [],
+              "fadeInUs": 0,
+              "fadeOutUs": 0,
+              "framing": {},
+              "id": "b",
+              "look": {
+                "lutId": null,
+                "lutStrength": 1.0,
+                "preset": null,
+                "strength": 1.0
+              },
+              "muted": false,
+              "source": {
+                "id": "broll",
+                "type": "asset"
+              },
+              "sourceInUs": 0,
+              "sourceOutUs": 10000000,
+              "speed": 1.0,
+              "volume": 1.0
+            }
+          ],
+          "tracks": [
+            {
+              "hidden": false,
+              "id": "audio",
+              "items": [
+                {
+                  "attach": null,
+                  "content": {
+                    "assetId": "klipolo-pack-soft-ambient",
+                    "duck": -12.0,
+                    "effect": null,
+                    "fadeInUs": 0,
+                    "fadeOutUs": 0,
+                    "sourceInUs": 0,
+                    "type": "audio",
+                    "volume": 0.3
+                  },
+                  "durationUs": 4000000,
+                  "effects": [],
+                  "id": "bed",
+                  "layout": {
+                    "anchor": "topLeft",
+                    "opacity": 1.0,
+                    "overrides": {},
+                    "radius": 0.0,
+                    "rect": {
+                      "h": 1.0,
+                      "w": 1.0,
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "rotation": 0.0
+                  },
+                  "startUs": 0
+                }
+              ],
+              "kind": "audio",
+              "locked": false,
+              "muted": false,
+              "name": "Audio 1"
+            },
+            {
+              "hidden": false,
+              "id": "sounds",
+              "items": [
+                {
+                  "attach": null,
+                  "content": {
+                    "assetId": "klipolo-pack-whoosh",
+                    "effect": null,
+                    "fadeInUs": 0,
+                    "fadeOutUs": 0,
+                    "sourceInUs": 0,
+                    "type": "audio",
+                    "volume": 0.3
+                  },
+                  "durationUs": 4000000,
+                  "effects": [],
+                  "id": "whoosh",
+                  "layout": {
+                    "anchor": "topLeft",
+                    "opacity": 1.0,
+                    "overrides": {},
+                    "radius": 0.0,
+                    "rect": {
+                      "h": 1.0,
+                      "w": 1.0,
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "rotation": 0.0
+                  },
+                  "startUs": 0
+                }
+              ],
+              "kind": "audio",
+              "locked": false,
+              "muted": false,
+              "name": "Audio 2"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "analysed": [],
+      "name": "nothing on the main track",
+      "project": {
+        "assets": [
+          {
+            "durationUs": 60000000,
+            "fps": 30.0,
+            "hasAudio": true,
+            "height": 1080,
+            "id": "screen",
+            "kind": "video",
+            "name": "screen",
+            "path": "/media/screen",
+            "width": 1920
+          },
+          {
+            "durationUs": 60000000,
+            "fps": 30.0,
+            "hasAudio": false,
+            "height": 720,
+            "id": "camera",
+            "kind": "video",
+            "name": "camera",
+            "path": "/media/camera",
+            "width": 1280
+          },
+          {
+            "durationUs": 60000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "mic",
+            "kind": "audio",
+            "name": "mic",
+            "path": "/media/mic",
+            "width": 0
+          },
+          {
+            "durationUs": 120000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "music",
+            "kind": "audio",
+            "name": "music",
+            "path": "/media/music",
+            "width": 0
+          },
+          {
+            "durationUs": 0,
+            "fps": 0.0,
+            "hasAudio": false,
+            "height": 512,
+            "id": "logo",
+            "kind": "image",
+            "name": "logo",
+            "path": "/media/logo",
+            "width": 512
+          },
+          {
+            "durationUs": 10000000,
+            "fps": 30.0,
+            "hasAudio": true,
+            "height": 1080,
+            "id": "broll",
+            "kind": "video",
+            "name": "broll",
+            "path": "/media/broll",
+            "width": 1920
+          },
+          {
+            "durationUs": 16000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "klipolo-pack-soft-ambient",
+            "kind": "audio",
+            "name": "klipolo-pack-soft-ambient",
+            "path": "/media/klipolo-pack-soft-ambient",
+            "width": 0
+          },
+          {
+            "durationUs": 16000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "klipolo-pack-whoosh",
+            "kind": "audio",
+            "name": "klipolo-pack-whoosh",
+            "path": "/media/klipolo-pack-whoosh",
+            "width": 0
+          },
+          {
+            "durationUs": 16000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "my-song",
+            "kind": "audio",
+            "name": "my-song",
+            "path": "/media/my-song",
+            "width": 0
+          }
+        ],
+        "recordings": [
+          {
+            "id": "rec",
+            "kind": "screen",
+            "markers": [],
+            "primary": "screen",
+            "sources": [
+              {
+                "id": "screen",
+                "label": "capture.source.screen",
+                "mix": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "screen",
+                "runs": [
+                  {
+                    "assetId": "screen",
+                    "driftPpm": 0.0,
+                    "durationUs": 60000000,
+                    "offsetUs": 0
+                  }
+                ]
+              },
+              {
+                "id": "camera",
+                "label": "capture.source.camera",
+                "mix": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "camera",
+                "runs": [
+                  {
+                    "assetId": "camera",
+                    "driftPpm": 0.0,
+                    "durationUs": 59800000,
+                    "offsetUs": 200000
+                  }
+                ]
+              },
+              {
+                "id": "mic",
+                "label": "capture.source.mic",
+                "mix": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "mic",
+                "runs": [
+                  {
+                    "assetId": "mic",
+                    "driftPpm": 0.0,
+                    "durationUs": 60000000,
+                    "offsetUs": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "timeline": {
+          "main": [],
+          "tracks": [
+            {
+              "hidden": false,
+              "id": "audio",
+              "items": [
+                {
+                  "attach": null,
+                  "content": {
+                    "assetId": "klipolo-pack-soft-ambient",
+                    "duck": -12.0,
+                    "effect": null,
+                    "fadeInUs": 0,
+                    "fadeOutUs": 0,
+                    "sourceInUs": 0,
+                    "type": "audio",
+                    "volume": 0.3
+                  },
+                  "durationUs": 4000000,
+                  "effects": [],
+                  "id": "bed",
+                  "layout": {
+                    "anchor": "topLeft",
+                    "opacity": 1.0,
+                    "overrides": {},
+                    "radius": 0.0,
+                    "rect": {
+                      "h": 1.0,
+                      "w": 1.0,
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "rotation": 0.0
+                  },
+                  "startUs": 0
+                }
+              ],
+              "kind": "audio",
+              "locked": false,
+              "muted": false,
+              "name": "Audio 1"
+            },
+            {
+              "hidden": false,
+              "id": "sounds",
+              "items": [
+                {
+                  "attach": null,
+                  "content": {
+                    "assetId": "klipolo-pack-whoosh",
+                    "effect": null,
+                    "fadeInUs": 0,
+                    "fadeOutUs": 0,
+                    "sourceInUs": 0,
+                    "type": "audio",
+                    "volume": 0.3
+                  },
+                  "durationUs": 4000000,
+                  "effects": [],
+                  "id": "whoosh",
+                  "layout": {
+                    "anchor": "topLeft",
+                    "opacity": 1.0,
+                    "overrides": {},
+                    "radius": 0.0,
+                    "rect": {
+                      "h": 1.0,
+                      "w": 1.0,
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "rotation": 0.0
+                  },
+                  "startUs": 0
+                }
+              ],
+              "kind": "audio",
+              "locked": false,
+              "muted": false,
+              "name": "Audio 2"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

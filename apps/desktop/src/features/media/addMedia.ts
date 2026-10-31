@@ -45,6 +45,7 @@ export const mediaRefusal = {
     }),
   noTarget: () => t({ id: 'media.add.noTarget', message: 'Choose where to add the file.' }),
   tooShort: () => t({ id: 'media.add.tooShort', message: 'This file is too short to add.' }),
+  tooShortMany: () => t({ id: 'media.add.tooShortMany', message: 'These files are too short to add.' }),
 };
 
 /**

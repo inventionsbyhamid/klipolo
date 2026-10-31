@@ -190,13 +190,8 @@ fn main() {
         // The Record dialog's previews stop when the window goes behind, hides or minimises, and none outlives Klipolo.
         recorder::follow_window(app, &event);
         // Every edit is on the disk before the app goes.
-        if let RunEvent::Exit = event
-            && let Err(error) = app.state::<ProjectSessionState>().flush()
-        {
-            tracing::warn!(
-                detail = error.detail(),
-                "the last edits couldn't be saved at quit"
-            );
+        if let RunEvent::Exit = event {
+            commands::export::on_exit(app);
         }
     });
 }

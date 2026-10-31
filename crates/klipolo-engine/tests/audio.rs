@@ -78,6 +78,7 @@ fn source(gain: f64, fade_in_us: i64, speed: f64, source_in_us: i64) -> AudioSou
         filter: None,
         centre_from: None,
         duck: None,
+        seam: Default::default(),
     }
 }
 

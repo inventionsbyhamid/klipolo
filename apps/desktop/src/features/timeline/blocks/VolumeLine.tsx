@@ -4,7 +4,7 @@ import type { ItemContent } from '../../../bindings/ItemContent';
 import type { RangeUs } from '../../../bindings/RangeUs';
 import { commitLatest } from '../../../state/commit';
 import type { Op } from '../../../bindings/Op';
-import { contentNow } from '../../../state/latest';
+import { runContentOps } from '../../../state/latest';
 import { registerFollower } from '../drag/registry';
 import { useSpeech } from '../media/speech';
 import { usToPx } from '../scale';
@@ -113,7 +113,7 @@ const TAG_MIN_PX = 240;
 /**
  * The Music lane's volume line: violet, 2 px, at the music's level, dipping where it ducks under speech
  * (its tag is `DuckTag`, beside the block). Drag the line up or down to change the volume; Option drag to change how
- * deep it ducks. Each drag is one undo step, committed on release.
+ * deep it ducks. Each drag is one undo step, committed on release, on every piece of a song laid in pieces.
  */
 export const VolumeLine = memo(function VolumeLine({
   id,
@@ -172,10 +172,9 @@ export const VolumeLine = memo(function VolumeLine({
     if (!p || e.pointerId !== p.pointerId) return;
     const next = dragged(e.clientY);
     press.current = null;
-    // Built at its turn on the music as the project has it then: a fade changed meanwhile stays.
-    const set = (patch: Partial<AudioContent>): Op[] => [
-      { type: 'updateItem', id, patch: { content: { ...contentNow(id, content), ...patch } } },
-    ];
+    // Built at its turn on the music as the project has it then (a fade changed meanwhile stays), on every piece of
+    // the song: it plays at one level and ducks as one.
+    const set = (patch: Partial<AudioContent>): Op[] => runContentOps(id, content, patch);
     // A change that didn't go in (refused, or the music gone) leaves the line where the project has it.
     const back = (ok: boolean) => {
       if (!ok) line.current?.setAttribute('points', shown);

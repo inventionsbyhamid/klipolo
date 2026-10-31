@@ -2,10 +2,12 @@ import { useLingui } from '@lingui/react/macro';
 import type { Item } from '../../bindings/Item';
 import type { ItemContent } from '../../bindings/ItemContent';
 import { Segmented } from '../../design/Segmented';
+import { musicRunOf } from '../../lib/musicRuns';
+import { useProject } from '../../state/project';
 import { useSpeech } from '../timeline/media/speech';
 import { TimingField } from './common';
 import { Field } from './fields';
-import { commitLatest, contentOps } from '../../state/latest';
+import { commitLatest, contentOps, runContentOps } from '../../state/latest';
 import { ToolSlider } from './ToolSlider';
 
 export type AudioContent = Extract<ItemContent, { type: 'audio' }>;
@@ -15,7 +17,7 @@ const DUCK_DB = -12;
 const DEEPEST_DB = -30;
 /** The shallowest ducking the depth slider sets: at 0 dB ducking is off, which the switch says (the slider would go). */
 const SHALLOWEST_DB = 1;
-/** How deep each music layer ducked when its ducking was turned off, so turning it back on comes back there. */
+/** How deep each song (by its first piece) ducked when its ducking went off, so turning it back on comes back there. */
 const lastDepth = new Map<string, number>();
 /** Fade lengths offered (µs), each kept to half the layer so the two always fit. */
 const FADES = [0, 500_000, 1_000_000, 2_000_000];
@@ -37,16 +39,24 @@ export function fadeChoices(durationUs: number, currentUs: number): number[] {
  * under speech (on or off, and how deep, 1 to 30 dB). Turning ducking off keeps the layer music (0 dB, never none), and
  * turning it back on goes back to the depth it had. Each change sets
  * the whole content, built at its turn from the layer as the project has it then, so a quick second change keeps the
- * first.
+ * first. A song laid in pieces back to back (`musicRunOf`) is one: its volume and ducking go on every piece, its fade
+ * in on the first and its fade out on the last.
  */
 export function AudioInspector({ item, content }: { item: Item; content: AudioContent }) {
   const { t } = useLingui();
   const music = typeof content.duck === 'number';
   const heard = useSpeech((s) => s.ranges.length > 0);
-  const set = (label: 'clip.fades.undo' | 'music.duck.undo', patch: Partial<AudioContent>) =>
-    void commitLatest(label, () => contentOps(item, content, patch));
-  const fadeOptions = (currentUs: number) =>
-    fadeChoices(item.durationUs, currentUs).map((us) => ({
+  const tracks = useProject((s) => s.snapshot?.project.timeline.tracks);
+  const run = (tracks && musicRunOf(tracks, item.id)) ?? [item];
+  const [first, last] = [run[0], run[run.length - 1]];
+  const ofFirst = first.content.type === 'audio' ? first.content : content;
+  const ofLast = last.content.type === 'audio' ? last.content : content;
+  const setDuck = (duck: number) =>
+    void commitLatest('music.duck.undo', () => runContentOps(item.id, content, { duck }));
+  const setFade = (piece: Item, of: AudioContent, patch: Partial<AudioContent>) =>
+    void commitLatest('clip.fades.undo', () => contentOps(piece, of, patch));
+  const fadeOptions = (durationUs: number, currentUs: number) =>
+    fadeChoices(durationUs, currentUs).map((us) => ({
       value: String(us),
       label:
         us === 0
@@ -68,7 +78,7 @@ export function AudioInspector({ item, content }: { item: Item; content: AudioCo
           step={0.01}
           format={percent}
           preview={false}
-          ops={(v) => contentOps(item, content, { volume: v })}
+          ops={(v) => runContentOps(item.id, content, { volume: v })}
         />
       </Field>
       {music && (
@@ -83,8 +93,8 @@ export function AudioInspector({ item, content }: { item: Item; content: AudioCo
               ]}
               fill
               onChange={(on) => {
-                if (on === 'off' && ducking) lastDepth.set(item.id, content.duck!);
-                set('music.duck.undo', { duck: on === 'on' ? (lastDepth.get(item.id) ?? DUCK_DB) : 0 });
+                if (on === 'off' && ducking) lastDepth.set(first.id, content.duck!);
+                setDuck(on === 'on' ? (lastDepth.get(first.id) ?? DUCK_DB) : 0);
               }}
             />
           </Field>
@@ -99,7 +109,7 @@ export function AudioInspector({ item, content }: { item: Item; content: AudioCo
                 step={1}
                 format={(db) => `${Math.round(db)} dB`}
                 preview={false}
-                ops={(db) => contentOps(item, content, { duck: -db })}
+                ops={(db) => runContentOps(item.id, content, { duck: -db })}
               />
             </Field>
           )}
@@ -116,19 +126,19 @@ export function AudioInspector({ item, content }: { item: Item; content: AudioCo
       <Field label={t({ id: 'clip.fades.in', message: 'Fade in' })} stack>
         <Segmented
           label={t({ id: 'clip.fades.in', message: 'Fade in' })}
-          value={String(content.fadeInUs)}
-          options={fadeOptions(content.fadeInUs)}
+          value={String(ofFirst.fadeInUs)}
+          options={fadeOptions(first.durationUs, ofFirst.fadeInUs)}
           fill
-          onChange={(v) => set('clip.fades.undo', { fadeInUs: Number(v) })}
+          onChange={(v) => setFade(first, ofFirst, { fadeInUs: Number(v) })}
         />
       </Field>
       <Field label={t({ id: 'clip.fades.out', message: 'Fade out' })} stack>
         <Segmented
           label={t({ id: 'clip.fades.out', message: 'Fade out' })}
-          value={String(content.fadeOutUs)}
-          options={fadeOptions(content.fadeOutUs)}
+          value={String(ofLast.fadeOutUs)}
+          options={fadeOptions(last.durationUs, ofLast.fadeOutUs)}
           fill
-          onChange={(v) => set('clip.fades.undo', { fadeOutUs: Number(v) })}
+          onChange={(v) => setFade(last, ofLast, { fadeOutUs: Number(v) })}
         />
       </Field>
       <TimingField item={item} />

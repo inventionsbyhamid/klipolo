@@ -2,10 +2,10 @@
 # The app bundle's check before it is signed with the Developer ID (build-mac.sh runs it on the build, which is signed
 # ad hoc; it works on a Developer ID signed app too):
 #   scripts/release/check-bundle.sh <Klipolo.app> <x86_64|arm64> [<page build folder>]
-# Fails unless the licences (the third-party notices and Cap's MIT licence too, none of them empty) and the fonts are
-# in Resources, every Mach-O is built for <arch> only and for macOS 15.0 or older, every load path is @rpath/,
-# @executable_path/, @loader_path/, /usr/lib/ or /System/Library/, and every LC_RPATH is relative (@executable_path/ or
-# @loader_path/), never a machine path such as the dev FFmpeg prefix's.
+# Fails unless the licences (the third-party notices and Cap's MIT licence too, none of them empty), the fonts and the
+# bundled pack (its library/manifest.json) are in Resources, every Mach-O is built for <arch> only and for macOS 15.0 or
+# older, every load path is @rpath/, @executable_path/, @loader_path/, /usr/lib/ or /System/Library/, and every LC_RPATH
+# is relative (@executable_path/ or @loader_path/), never a machine path such as the dev FFmpeg prefix's.
 # The recorder's needs: Info.plist gives the screen, microphone and camera usage strings, and the app's signature grants
 # the camera and microphone entitlements (an unsigned app fails). Cap-MIT.txt has the checkout's copy's licence text,
 # and its first line names exactly the checkout's files vendored from Cap's MIT crates (lib.sh's cap_mit_check).
@@ -48,6 +48,10 @@ if [ -s "$notices" ] && [ "$(head -n 1 "$notices")" != "Klipolo: third-party not
   fail "licenses/THIRD-PARTY-NOTICES.txt doesn't start 'Klipolo: third-party notices' (scripts/release/third-party.sh)"
 fi
 [ -d "$app/Contents/Resources/fonts" ] || fail "the fonts aren't in the app"
+# The bundled pack (music, sounds and pictures, assets/library): without its manifest the library shows no pack and
+# chat can't add its music.
+[ -f "$app/Contents/Resources/library/manifest.json" ] \
+  || fail "the bundled pack isn't in the app: no Resources/library/manifest.json"
 # NOTICE.txt gives the public address of the source code and the commit built (the AGPL's source offer for this
 # version). build-mac.sh fills its {{SOURCE_URL}} and {{SOURCE_COMMIT}} placeholders from KLIPOLO_SOURCE_URL and the
 # checkout; a bundle that still has either can't ship.
@@ -150,7 +154,10 @@ grep -qxF '@executable_path/../Frameworks' <<< "$main_rpaths" \
 searched=("$app/Contents")
 if [ -f "$page/index.html" ]; then searched+=("$page"); else fail "no page build at $page to search (pnpm build)"; fi
 set +e
-named=$(naming_files "$home" "$(id -un)" "${searched[@]}")
+# The source code address NOTICE.txt gives (read above) may name the code's account, the builder's user name too.
+allow=()
+[ -z "${source_url:-}" ] || allow=(--allow "$source_url")
+named=$(naming_files "$home" "$(id -un)" "${allow[@]+"${allow[@]}"}" "${searched[@]}")
 status=$?
 set -e
 # grep says 2 when it couldn't read a file, also when it found others: both are failures, and both are told.

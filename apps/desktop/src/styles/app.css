@@ -417,6 +417,11 @@
   height: 16px;
 }
 
+/* The project's name as a field while it is renamed (the project menu's Rename). */
+.project-rename {
+  width: 320px;
+}
+
 /* "Saved", or "Not saved" while saves keep failing (its title says why). */
 .save-state {
   display: inline-flex;
@@ -722,6 +727,8 @@
   inset: 0;
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: var(--space-4);
   padding: var(--space-6);
   background: var(--color-bay);
   color: var(--color-ink-soft);
@@ -1252,7 +1259,8 @@
   line-height: 15px;
 }
 
-.tl-item.is-music.is-selected {
+.tl-item.is-music.is-selected,
+.tl-item.is-music.is-in-run {
   box-shadow: inset 0 0 0 2px var(--color-paper);
 }
 

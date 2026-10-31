@@ -202,7 +202,7 @@ pub(super) const ADD_MUSIC: Tool = Tool {
             ),
             (
                 "atSec",
-                nullable_number("Start. Null for the playhead; 0.0 for background music."),
+                nullable_number("Start. Null for 0.0, as background music."),
             ),
         ]
     },

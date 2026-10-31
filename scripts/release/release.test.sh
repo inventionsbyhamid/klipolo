@@ -2,10 +2,11 @@
 # The release checks' own tests, on a small app bundle made here (macOS with the Command Line Tools' clang; nothing is
 # signed, nothing reaches the network, and it takes seconds):
 #   scripts/release/release.test.sh
-# The bundle is an executable that loads one dylib through @rpath, with the licences, a fonts folder, the app's own
-# Info.plist keys and, through a stand-in for codesign, the app's own entitlements: check-bundle.sh must pass it. Then
-# each broken copy must fail with its own message. check-bundle.sh runs from a copy of this folder in a checkout-shaped
-# tree, so the test owns the page's build output and the source files it also searches.
+# The bundle is an executable that loads one dylib through @rpath, with the licences, a fonts folder, the bundled pack's
+# manifest, the app's own Info.plist keys and, through a stand-in for codesign, the app's own entitlements:
+# check-bundle.sh must pass it. Then each broken copy must fail with its own message. check-bundle.sh runs from a copy
+# of this folder in a checkout-shaped tree, so the test owns the page's build output and the source files it also
+# searches.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 app_crate=$(cd "$here/../../crates/klipolo-app" && pwd -P)
@@ -65,7 +66,7 @@ PATH=$fakes:$PATH
 # A bundle that passes, at <dir>/Klipolo.app, signed (see the fake codesign) with the app's entitlements.
 make_app() {
   local c=$1/Klipolo.app/Contents
-  mkdir -p "$c/MacOS" "$c/Frameworks" "$c/Resources/licenses" "$c/Resources/fonts"
+  mkdir -p "$c/MacOS" "$c/Frameworks" "$c/Resources/licenses" "$c/Resources/fonts" "$c/Resources/library"
   # The app's own Info.plist keys (the permission strings), and the two the build adds that the checks read.
   cp "$app_crate/Info.plist" "$c/Info.plist"
   /usr/libexec/PlistBuddy -c 'Add :CFBundleExecutable string klipolo-app' \
@@ -81,6 +82,7 @@ make_app() {
   printf 'Klipolo\nSource code: https://github.com/owner/klipolo (commit %s)\n' "$commit" \
     > "$c/Resources/licenses/NOTICE.txt"
   echo 'OFL' > "$c/Resources/fonts/OFL.txt"
+  echo '{"items": []}' > "$c/Resources/library/manifest.json"
 }
 
 passed=0 failed=0
@@ -123,6 +125,10 @@ expect "empty third-party notices fail" fail "licenses/THIRD-PARTY-NOTICES.txt i
 app=$(case_app stub-third-party)
 printf 'x' > "$app/Contents/Resources/licenses/THIRD-PARTY-NOTICES.txt"
 expect "1-byte third-party notices fail" fail "doesn't start 'Klipolo: third-party notices'" "$check" "$app" "$arch"
+
+app=$(case_app no-pack)
+rm -r "$app/Contents/Resources/library"
+expect "no bundled pack fails" fail "the bundled pack isn't in the app" "$check" "$app" "$arch"
 
 app=$(case_app no-archivo)
 rm "$app/Contents/Resources/licenses/Archivo-OFL.txt"
@@ -253,6 +259,12 @@ app=$(case_app no-dylib)
 rm "$app/Contents/Frameworks/libfoo.1.dylib"
 expect "a missing @rpath library fails" fail "Contents/Frameworks/libfoo.1.dylib isn't there" "$check" "$app" "$arch"
 
+# The source code address may name the builder's own account (github.com/<user>/klipolo): NOTICE.txt passes.
+app=$(case_app source-names-the-user)
+printf 'Klipolo\nSource code: https://github.com/%s/klipolo (commit %s)\n' "$(id -un)" "$commit" \
+  > "$app/Contents/Resources/licenses/NOTICE.txt"
+expect "a source address naming the builder's account passes" pass "$check" "$app" "$arch"
+
 app=$(case_app home-in-resources)
 echo "built in $HOME/klipolo" > "$app/Contents/Resources/fonts/note.txt"
 expect "a resource naming the home folder fails" fail "Resources/fonts/note.txt" "$check" "$app" "$arch"
@@ -302,6 +314,22 @@ expect "a long user name inside longer words isn't found" pass found klipolobuil
 expect "a user named test isn't found in words" pass found test "$names/plain" ""
 expect "a user named test is found as a path part" pass found test "$names/path" "$names/path/b.txt"
 expect "a user name under 4 characters isn't looked for" pass found lib "$names/path" ""
+# The source code address NOTICE.txt gives may name the account that owns the code (github.com/<user>/...) when it is
+# also the builder's user name: that address is allowed, the user name anywhere else still counts.
+mkdir -p "$names/notice" "$names/notice-and-path"
+echo 'Source code: https://github.com/klipolobuilder/klipolo (commit abc)' > "$names/notice/NOTICE.txt"
+printf 'Source code: https://github.com/klipolobuilder/klipolo (commit abc)\nbuilt in /Volumes/klipolobuilder/klipolo\n' \
+  > "$names/notice-and-path/NOTICE.txt"
+found_allowing() {  # found_allowing <user> <allowed text> <dir> <expected output>
+  local out rc
+  out=$(. "$repo/scripts/release/lib.sh" && naming_files /no/such/home "$1" --allow "$2" "$3") && rc=0 || rc=$?
+  [ "$out" = "$4" ] && [ "$rc" -eq "$([ -n "$4" ] && echo 0 || echo 1)" ]
+}
+expect "a user name only in the allowed source address isn't found" pass \
+  found_allowing klipolobuilder https://github.com/klipolobuilder/klipolo "$names/notice" ""
+expect "a user name outside the allowed source address is still found" pass \
+  found_allowing klipolobuilder https://github.com/klipolobuilder/klipolo "$names/notice-and-path" \
+  "$names/notice-and-path/NOTICE.txt"
 
 # The source code address build-mac.sh puts in NOTICE.txt: https:// with plain URL characters only.
 url_ok() { (. "$repo/scripts/release/lib.sh" && is_source_url "$1"); }

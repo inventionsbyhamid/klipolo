@@ -110,9 +110,10 @@ function BarButton({
 }
 
 /**
- * The player bar: Split and Delete on the left, the transport centred on the window, the timeline's zoom and Fit and
- * The volume on the right. Split, Delete, the zoom and Fit run the same commands as their keys; every
- * control says what it does and its key in a tooltip.
+ * The player bar: Split and Delete on the left, the transport centred on the window, the timeline's zoom and Fit on the
+ * right. Split, Delete, the zoom and Fit run the same commands as their keys; every control says what it
+ * does and its key in a tooltip. Loop and the volume come when they work: none of its controls looks live
+ * and does nothing.
  */
 export function PlayerBar() {
   const duration = useDurationUs();
@@ -184,7 +185,6 @@ export function PlayerBar() {
           disabled={!ready}
           onClick={() => skip(5_000_000, duration)}
         />
-        <IconButton icon={<Icon name="loop" />} label="Loop the selection" disabled />
         <span className="time time-total">{formatTime(duration)}</span>
       </div>
       <div className="pb-right">
@@ -217,12 +217,6 @@ export function PlayerBar() {
             Fit
           </button>
         </Tooltip>
-        <div className="zoom vol" aria-hidden>
-          <Icon name="volume" />
-          <div className="slider" style={{ '--v': '80%' } as CSSProperties}>
-            <i />
-          </div>
-        </div>
       </div>
     </footer>
   );
