@@ -30,5 +30,6 @@ pub(super) fn live_wanted(what: Option<&WhatToRecord>) -> Option<Wanted> {
         what: target.clone(),
         key: card_key(what),
         args: Some(vec!["--record-worker".into(), "--live-view".into(), target]),
+        asking: false,
     })
 }

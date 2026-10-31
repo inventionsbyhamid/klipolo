@@ -53,7 +53,8 @@ fn previews_start_only_what_is_granted() {
         ask: Some(PrivacyPage::Mic),
         ..everything()
     };
-    p.set(refused_mic).unwrap();
+    let refused = p.set(refused_mic).unwrap_err();
+    assert_eq!(refused.code, "capture.permission.mic");
     assert_eq!(p.told(p.worker(METER)), [Command::Stop], "mic-1's meter");
     assert_eq!(p.launched(METER).len(), 1);
 }
@@ -105,7 +106,8 @@ fn ask_camera_starts_the_camera_preview_once() {
         p.heard(),
         [(PreviewId::Camera, failed("capture.permission.camera"))]
     );
-    p.set(allow_camera).unwrap();
+    let refused = p.set(allow_camera).unwrap_err();
+    assert_eq!(refused.code, "capture.permission.camera");
     assert_eq!(p.launched(CAMERA).len(), 1);
 }
 
@@ -486,4 +488,93 @@ fn a_failed_preview_waits_for_the_dialog_to_open_again() {
     p.advance_ms(500);
     p.set(camera("camera-1")).unwrap();
     assert_eq!(p.launched(CAMERA).len(), 3);
+}
+
+#[test]
+fn an_allow_press_for_a_refused_device_says_so() {
+    let p = previewing(Permissions {
+        camera: Permission::Denied,
+        mic: Permission::Denied,
+        ..all_allowed()
+    });
+    let allow_camera = Previews {
+        live: Some(screen()),
+        camera: Some("camera-1".into()),
+        ask: Some(PrivacyPage::Camera),
+        ..nothing()
+    };
+    let refused = p.set(allow_camera).unwrap_err();
+    assert_eq!(refused.code, "capture.permission.camera");
+    assert!(p.launched(CAMERA).is_empty());
+    assert_eq!(p.launched(LIVE).len(), 1, "the others are set all the same");
+    let allow_mic = Previews {
+        mic: Some("mic-1".into()),
+        ask: Some(PrivacyPage::Mic),
+        ..nothing()
+    };
+    let refused = p.set(allow_mic).unwrap_err();
+    assert_eq!(refused.code, "capture.permission.mic");
+    assert!(p.launched(METER).is_empty());
+    // Without a press, nothing is said: the row shows its own state.
+    let quiet = Previews {
+        camera: Some("camera-1".into()),
+        mic: Some("mic-1".into()),
+        ..nothing()
+    };
+    p.set(quiet).unwrap();
+}
+
+#[test]
+fn an_answer_given_while_klipolo_is_behind_is_still_heard() {
+    let asked = Permissions {
+        camera: Permission::NotAsked,
+        ..all_allowed()
+    };
+    let p = previewing(asked);
+    p.set(Previews {
+        ask: Some(PrivacyPage::Camera),
+        ..everything()
+    })
+    .unwrap();
+    let camera = p.worker(CAMERA);
+    let others = [THUMBS, LIVE, METER].map(|flag| p.worker(flag));
+    // macOS's question takes the focus: everything stops but the camera's preview, which waits for the answer.
+    p.state.window_in_front(false);
+    for worker in others {
+        assert_eq!(p.told(worker), [Command::Stop], "worker {worker}");
+    }
+    p.advance_ms(300);
+    assert!(p.told(camera).is_empty(), "still asking");
+    // "Don't Allow": the page hears it, and the row can offer the privacy settings.
+    p.allow(|a| a.camera = Permission::Denied);
+    p.says(camera, failed("capture.permission.camera"));
+    p.launch.exit_to(camera, Some(1));
+    assert_eq!(
+        p.heard(),
+        [(PreviewId::Camera, failed("capture.permission.camera"))]
+    );
+
+    // "Allow" while Klipolo is still behind: the preview stops at once and shows nothing, then starts by itself once
+    // Klipolo is in front and the page asks.
+    let p = previewing(asked);
+    let camera_only = Previews {
+        camera: Some("camera-1".into()),
+        ..nothing()
+    };
+    p.set(Previews {
+        ask: Some(PrivacyPage::Camera),
+        ..camera_only.clone()
+    })
+    .unwrap();
+    let camera = p.worker(CAMERA);
+    p.state.window_in_front(false);
+    p.says(camera, frame());
+    p.allow(|a| a.camera = Permission::Granted);
+    p.advance_ms(100);
+    assert_eq!(p.told(camera), [Command::Stop]);
+    assert!(p.frames().is_empty());
+    p.state.window_in_front(true);
+    p.advance_ms(500);
+    p.set(camera_only).unwrap();
+    assert_eq!(p.launched(CAMERA).len(), 2);
 }

@@ -33,7 +33,8 @@ pub(super) fn camera_wanted(
     asked: bool,
 ) -> Option<Wanted> {
     let camera = camera?;
-    let args = may_open(permission, asked).map(|_| {
+    let may = may_open(permission, asked);
+    let args = may.map(|_| {
         ["--record-worker", "--check-camera", camera]
             .map(String::from)
             .to_vec()
@@ -48,6 +49,7 @@ pub(super) fn camera_wanted(
         what: camera.clone(),
         key: camera.clone(),
         args,
+        asking: may == Some(true),
     })
 }
 

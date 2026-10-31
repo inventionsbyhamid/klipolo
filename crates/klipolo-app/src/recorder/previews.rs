@@ -19,15 +19,19 @@
 //!   said no to macOS's question, or took the permission back), neither starts again until the dialog reads its setup
 //!   again (it reopens), so macOS's question is never raised again and again.
 //! - The camera and the mic start by themselves only while allowed; otherwise only in the call the person's "Allow
-//!   camera" or "Allow microphone" press makes (`Previews.ask`), when macOS asks; never once refused. One started that
-//!   way is kept while macOS asks.
+//!   camera" or "Allow microphone" press makes (`Previews.ask`), when macOS asks; never once refused, and a press for a
+//!   refused one says so (`capture.permission.camera`, `.mic`). One started by the press is kept while macOS asks,
+//!   through Klipolo going behind too, as macOS's question takes the focus: until the answer it holds no device and
+//!   sends the page nothing but why it ended, so a "Don't Allow" is heard; one allowed while Klipolo is still behind
+//!   stops at once, and starts by itself once Klipolo is in front and the page asks.
 //! - Nothing restarts by itself after it ended, but a launch held back by its pace (below). A preview that failed (not
 //!   for a permission, which the next permission read decides) or ended by itself isn't launched again for the same
 //!   display, app, camera or mic until the dialog reads its setup again, so the page's asks don't relaunch it again and
 //!   again.
 //!
 //! **Stopping:** every preview stops when Klipolo's main window goes behind another app or is hidden or minimised
-//! (nothing starts again until it is in front and the page asks), when the page loads again (reloaded, or after its
+//! (but one waiting for macOS's answer, above; nothing starts again until it is in front and the page asks), when the
+//! page loads again (reloaded, or after its
 //! process ended: none runs for a page that can't show it), and on `recorder_previews_off`. When a take arms, every
 //! preview worker is killed at once, before the take's worker is launched (previews write nothing, and none captures
 //! beside the take on this Mac's one encoder engine), and none starts while the take is the recorder's: its worker
@@ -118,6 +122,8 @@ pub(super) struct Wanted {
     pub(super) what: String,
     pub(super) key: String,
     pub(super) args: Option<Vec<String>>,
+    /// It starts on the person's Allow press, and macOS asks.
+    pub(super) asking: bool,
 }
 
 /// A running preview.
@@ -129,6 +135,8 @@ struct Open {
     key: String,
     /// It said why it ended (`Failed`), so its end needn't.
     said_failed: bool,
+    /// It started on the person's Allow press, and macOS asks: kept through Klipolo going behind until the answer.
+    asking: bool,
 }
 
 /// A launch waiting its turn (`Kind::pace_ms`).
@@ -136,6 +144,7 @@ struct Turn {
     what: String,
     key: String,
     args: Vec<String>,
+    asking: bool,
 }
 
 /// One preview: its running worker, when its last one was launched, a launch waiting its turn, and what it showed when
@@ -191,10 +200,21 @@ impl Running {
         })
     }
 
-    /// A launch waits its turn, or a closing worker its end.
+    /// A launch waits its turn, a closing worker its end, or a preview kept while Klipolo is behind macOS's answer.
     fn ticks(&self) -> bool {
         let waiting = [&self.thumbs, &self.live, &self.camera, &self.mic];
-        waiting.iter().any(|s| s.waiting.is_some()) || self.closing.iter().any(|c| !c.killed)
+        waiting.iter().any(|s| s.waiting.is_some())
+            || self.closing.iter().any(|c| !c.killed)
+            || self.asking_behind()
+    }
+
+    /// Klipolo is behind, and a preview started by an Allow press waits for macOS's answer.
+    fn asking_behind(&self) -> bool {
+        let kept = [&self.camera, &self.mic];
+        self.behind
+            && kept
+                .iter()
+                .any(|s| s.open.as_ref().is_some_and(|o| o.asking))
     }
 
     /// No launch waits its turn any more.
@@ -285,6 +305,18 @@ impl PreviewWorkers {
         let live = live_wanted(want.live.as_ref().filter(|_| screen));
         self.show(&mut run, Kind::Live, live, now);
         let asked = |page| want.ask == Some(page);
+        // The press for a device refused already: nothing opens, and the page is told, so the row can offer the
+        // privacy settings instead.
+        let refused = |page, device: &Option<String>, permission| {
+            asked(page) && device.is_some() && permission == Permission::Denied
+        };
+        let press_refused = if refused(PrivacyPage::Camera, &want.camera, allowed.camera) {
+            Some("capture.permission.camera")
+        } else if refused(PrivacyPage::Mic, &want.mic, allowed.mic) {
+            Some("capture.permission.mic")
+        } else {
+            None
+        };
         let camera = camera_wanted(
             want.camera.as_ref(),
             allowed.camera,
@@ -294,6 +326,13 @@ impl PreviewWorkers {
         let mic = meter_wanted(want.mic.as_ref(), allowed.mic, asked(PrivacyPage::Mic));
         self.show(&mut run, Kind::Mic, mic, now);
         self.start_ticker(&mut run);
+        if let Some(code) = press_refused {
+            tracing::info!(
+                code,
+                "recorder: an Allow press for a device that is refused"
+            );
+            return Err(CodedError::new(code));
+        }
         if (want.thumbs || want.live.is_some()) && !screen {
             tracing::info!(
                 permission = ?allowed.screen,
@@ -330,7 +369,24 @@ impl PreviewWorkers {
         let now = self.now_ms();
         let mut run = self.lock();
         run.behind = !front;
-        if !front && self.stop_all(&mut run, now) {
+        if front {
+            return;
+        }
+        // A preview started by an Allow press waits for macOS's answer, whose question took the focus: it stays.
+        let mut stopped = false;
+        for kind in Kind::ALL {
+            let asking = run.open(kind).as_ref().is_some_and(|o| o.asking);
+            if !asking {
+                stopped |= close(&mut run, kind, now);
+            }
+        }
+        run.drop_turns();
+        if !run.asking_behind() {
+            run.out = None;
+            run.in_flight = [0; 3];
+        }
+        self.start_ticker(&mut run);
+        if stopped {
             tracing::info!("recorder: Klipolo went behind, so the previews stop");
         }
     }
@@ -343,8 +399,13 @@ impl PreviewWorkers {
     /// The ticker: a closed preview that hasn't ended is killed, and a launch that waited its turn goes. False once
     /// neither is left (the ticker then ends).
     pub(super) fn tick(self: &Arc<Self>) -> bool {
+        // Read without a prompt, and before the lock (they ask the OS), only while a preview waits for macOS's answer.
+        let allowed = self.lock().asking_behind().then(|| (self.permissions)());
         let now = self.now_ms();
         let mut run = self.lock();
+        if let Some(allowed) = allowed {
+            allowed_behind(&mut run, &allowed, now);
+        }
         enforce_close(&mut run.closing, now);
         if run.behind || self.recorder.active() {
             run.drop_turns();
@@ -390,6 +451,7 @@ impl PreviewWorkers {
             what,
             key,
             args: Some(args),
+            asking,
         }) = wanted
         else {
             return;
@@ -401,7 +463,13 @@ impl PreviewWorkers {
             );
             return;
         }
-        self.launch_in_turn(run, kind, Turn { what, key, args }, now);
+        let turn = Turn {
+            what,
+            key,
+            args,
+            asking,
+        };
+        self.launch_in_turn(run, kind, turn, now);
     }
 
     /// `turn`'s worker is launched now if its kind's last launch was at least its pace ago; else it waits its turn on
@@ -413,20 +481,19 @@ impl PreviewWorkers {
             return;
         }
         slot.launched_ms = Some(now);
-        self.launch(run, kind, &turn.args, turn.what, turn.key);
+        self.launch(run, kind, turn);
     }
 
-    /// Launches `kind`'s worker with `args`; its events are read on a thread of its own. One that can't be launched
+    /// Launches `kind`'s worker with `turn`'s arguments; its events are read on a thread of its own. One that can't be launched
     /// says so to the page.
-    fn launch(
-        self: &Arc<Self>,
-        run: &mut Running,
-        kind: Kind,
-        args: &[String],
-        what: String,
-        key: String,
-    ) {
-        let io = match self.launch.spawn(args) {
+    fn launch(self: &Arc<Self>, run: &mut Running, kind: Kind, turn: Turn) {
+        let Turn {
+            what,
+            key,
+            args,
+            asking,
+        } = turn;
+        let io = match self.launch.spawn(&args) {
             Ok(io) => io,
             Err(error) => {
                 tracing::warn!(%error, ?kind, "recorder: a preview didn't start");
@@ -455,6 +522,7 @@ impl PreviewWorkers {
             what,
             key,
             said_failed: false,
+            asking,
         });
         self.read_in_background(generation, io.stdout, io.wait);
     }
@@ -549,6 +617,10 @@ impl PreviewWorkers {
                 return;
             };
             let key = (run.open(kind).as_ref()).map_or_else(String::new, |o| o.key.clone());
+            // Behind, only a preview waiting for macOS's answer runs: the page hears nothing from it but why it ended.
+            if run.behind && !matches!(ev, Event::Failed { .. }) {
+                return;
+            }
             match (kind, ev) {
                 (
                     Kind::Thumbs,
@@ -584,7 +656,7 @@ impl PreviewWorkers {
             return;
         };
         let mut run = self.lock();
-        if run.kind_of(generation).is_none() {
+        if run.kind_of(generation).is_none() || run.behind {
             return;
         }
         // The page hasn't drawn the last ones yet: this one is dropped, and a later one goes once it has.
@@ -666,6 +738,21 @@ fn failed(run: &mut Running, kind: Kind, error: CodedError) {
     }
 }
 
+/// While Klipolo is behind, a preview kept for macOS's answer whose device now reads allowed stops: it would show the
+/// device unseen. It starts by itself once Klipolo is in front and the page asks. One refused ends by itself, saying so.
+fn allowed_behind(run: &mut Running, allowed: &Permissions, now: u64) {
+    for (kind, permission) in [(Kind::Camera, allowed.camera), (Kind::Mic, allowed.mic)] {
+        let asking = run.open(kind).as_ref().is_some_and(|o| o.asking);
+        if run.behind && asking && permission == Permission::Granted {
+            tracing::info!(
+                ?kind,
+                "recorder: allowed while Klipolo is behind, so the preview stops until it is in front"
+            );
+            close(run, kind, now);
+        }
+    }
+}
+
 /// Every preview worker, open or closing, is killed at once, and nothing is sent to the page any more. True when one
 /// was.
 fn kill_all(run: &mut Running) -> bool {
@@ -700,7 +787,8 @@ fn close(run: &mut Running, kind: Kind, now: u64) -> bool {
 /// arguments only when it may start now (`check::may_open`).
 fn meter_wanted(mic: Option<&String>, permission: Permission, asked: bool) -> Option<Wanted> {
     let mic = mic?;
-    let args = may_open(permission, asked).map(|ask| {
+    let may = may_open(permission, asked);
+    let args = may.map(|ask| {
         let mut args: Vec<String> = ["--record-worker", "--meter", mic].map(String::from).into();
         if ask {
             args.push("--ask".into());
@@ -717,6 +805,7 @@ fn meter_wanted(mic: Option<&String>, permission: Permission, asked: bool) -> Op
         what: mic.clone(),
         key: mic.clone(),
         args,
+        asking: may == Some(true),
     })
 }
 
@@ -731,6 +820,7 @@ fn thumbs_wanted(targets: &[(String, Target)], wanted: bool) -> Option<Wanted> {
         what: what.clone(),
         key: String::new(),
         args: Some(args.to_vec()),
+        asking: false,
     })
 }
 
