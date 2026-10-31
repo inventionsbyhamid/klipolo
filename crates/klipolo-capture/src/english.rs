@@ -69,8 +69,8 @@ pub const ENGLISH: Messages = &[
     ("capture.source.appSound", "App sound"),
     // Health while recording.
     ("capture.health.micZeros", "Your microphone is sending no sound. It may be muted or blocked."),
-    ("capture.health.micQuiet", "We can barely hear anything from {device}."),
-    ("capture.health.micNotHeard", "Haven't heard you yet. Is {device} the microphone you meant?"),
+    ("capture.health.micQuiet", "Klipolo can barely hear anything from {device}."),
+    ("capture.health.micNotHeard", "Klipolo hasn't heard you yet. Is {device} the microphone you meant?"),
     ("capture.health.diskLow", "About {minutes} min of space left."),
     ("capture.health.slowDrive", "This drive can't keep up."),
     ("capture.health.dropping", "Some frames are being dropped. Try the Light quality."),
@@ -109,12 +109,12 @@ pub const ENGLISH: Messages = &[
     // Milder notes from the recorder: a dropped block of sound, a sound source that stayed silent.
     ("capture.note.soundBlock", "A moment of sound was dropped."),
     ("capture.note.silentSound", "{source} was silent the whole recording."),
-    ("capture.note.micFlapping", "{source} keeps disconnecting, so we'll wait until it settles before using it again."),
+    ("capture.note.micFlapping", "{source} keeps disconnecting, so Klipolo waits until it settles before using it again."),
     // The camera's encoder gave up mid-take: the app keeps recording the screen without it.
     ("capture.note.cameraDropped", "The camera stopped recording. The screen kept recording."),
     // The worker stopped while it saved, and the app finished the take from its files: said with the landed take.
     ("capture.note.savedFromFiles", "The recorder stopped while saving, so Klipolo finished the recording from its files."),
-    ("capture.note.micDropping", "{source} keeps disconnecting. We record it again each time it's back."),
+    ("capture.note.micDropping", "{source} keeps disconnecting. Klipolo records it again each time it's back."),
     ("capture.note.levels", "{source}'s sound level couldn't be measured, so it plays as it was recorded."),
     ("capture.note.encoderFallback", "{source} was recorded with another video encoder, as the usual one didn't start."),
     // A source that couldn't start, named, with why: the countdown's and the chat's note.
@@ -147,7 +147,7 @@ pub const ENGLISH: Messages = &[
     // After Reopen Klipolo, while macOS still says no: why, and how to fix it, beside Open privacy
     // settings. Klipolo never resets or changes the setting itself.
     ("capture.permission.screenStillRefused", "macOS still isn't letting Klipolo record the screen. This can happen when an older copy of Klipolo is in the list."),
-    ("capture.permission.screenRemoveOld", "Open Screen & System Audio Recording, select Klipolo, remove it with −, then press Allow again."),
+    ("capture.permission.screenRemoveOld", "Open Screen & System Audio Recording, select Klipolo, remove it with the minus button, then press Allow again."),
     ("capture.permission.allowScreen", "Allow screen recording"),
     ("capture.permission.reopen", "Reopen Klipolo"),
     ("capture.permission.openSettings", "Open privacy settings"),

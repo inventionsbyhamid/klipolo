@@ -41,14 +41,14 @@
   },
   {
     "code": "capture.health.micQuiet",
-    "message": "We can barely hear anything from {device}.",
+    "message": "Klipolo can barely hear anything from {device}.",
     "params": [
       "device"
     ]
   },
   {
     "code": "capture.health.micNotHeard",
-    "message": "Haven't heard you yet. Is {device} the microphone you meant?",
+    "message": "Klipolo hasn't heard you yet. Is {device} the microphone you meant?",
     "params": [
       "device"
     ]
@@ -228,7 +228,7 @@
   },
   {
     "code": "capture.note.micFlapping",
-    "message": "{source} keeps disconnecting, so we'll wait until it settles before using it again.",
+    "message": "{source} keeps disconnecting, so Klipolo waits until it settles before using it again.",
     "params": [
       "source"
     ]
@@ -245,7 +245,7 @@
   },
   {
     "code": "capture.note.micDropping",
-    "message": "{source} keeps disconnecting. We record it again each time it's back.",
+    "message": "{source} keeps disconnecting. Klipolo records it again each time it's back.",
     "params": [
       "source"
     ]
@@ -403,7 +403,7 @@
   },
   {
     "code": "capture.permission.screenRemoveOld",
-    "message": "Open Screen & System Audio Recording, select Klipolo, remove it with −, then press Allow again.",
+    "message": "Open Screen & System Audio Recording, select Klipolo, remove it with the minus button, then press Allow again.",
     "params": []
   },
   {

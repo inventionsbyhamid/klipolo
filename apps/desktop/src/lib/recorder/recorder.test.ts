@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkerState } from '../../bindings/WorkerState';
+import captureCodes from '../../bindings/captureCodes.json';
 import { codedMessage } from '../../bridge/call';
 import { app, device, display, recorderSetup } from '../../test/recorderBridge';
 import { armOptions, defaultPicks, NO_PICKS, type Picks, whatToRecord } from './choices';
@@ -121,6 +122,19 @@ describe('words', () => {
     for (const code of Object.keys(RECORDER_WORDS)) expect(said(code)).not.toMatch(/Light|Home|[\u2013\u2014]/);
     // The rest are the recorder's own.
     expect(said('capture.error.encoder')).toBe('The video encoder stopped.');
+  });
+});
+
+describe('voice', () => {
+  it('what_a_take_says_while_and_after_it_records_never_says_we', () => {
+    const codes = captureCodes
+      .map((entry) => entry.code)
+      .filter((code) => code.startsWith('capture.health.') || code.startsWith('capture.note.'));
+    expect(codes.length).toBeGreaterThan(20);
+    for (const code of codes) expect(codedMessage({ code, params: {} })).not.toMatch(/\b(we|our)\b/i);
+    expect(codedMessage({ code: 'capture.note.micFlapping', params: { source: 'USB Mic' } })).toBe(
+      'USB Mic keeps disconnecting, so Klipolo waits until it settles before using it again.',
+    );
   });
 });
 

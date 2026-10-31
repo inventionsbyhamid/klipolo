@@ -36,6 +36,29 @@ fn every_code_has_english_and_no_ui_namespace() {
     }
 }
 
+/// What the recorder says while a take records (the HUD's health) and after it (its notes) is in Klipolo's voice, never
+/// "we"; and no message has a long dash or a minus sign.
+#[test]
+fn the_recorders_words_are_klipolos_and_plain() {
+    const WE: [&str; 5] = ["we", "we'll", "we're", "we've", "our"];
+    for (code, message) in klipolo_capture::english::ENGLISH {
+        if code.starts_with("capture.health.") || code.starts_with("capture.note.") {
+            let lower = message.to_lowercase();
+            let words = lower.split(|c: char| !(c.is_alphanumeric() || c == '\''));
+            for word in words {
+                assert!(!WE.contains(&word), "{code} says \"{word}\": {message}");
+            }
+        }
+        let dash = message
+            .chars()
+            .find(|c| matches!(c, '\u{2012}'..='\u{2015}' | '\u{2212}'));
+        assert_eq!(
+            dash, None,
+            "{code} has a long dash or a minus sign: {message}"
+        );
+    }
+}
+
 #[test]
 fn the_space_left_reads_in_hours_and_minutes() {
     use klipolo_capture::english::{english, hours_minutes};
