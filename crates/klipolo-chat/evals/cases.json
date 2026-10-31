@@ -1,5 +1,5 @@
 {
-  "source": "The planner's eval on clip A (NASA's space station Q&A, 155 s, public domain), played whole in project_clip_a.json (landscape only, clean captions on), with the transcript, speaker turns and Spark scene log of tests/fixtures; loudness is made from the transcript's words. The first 12 cases are the planner spike's requests (research t6), its expected calls in this tool set's names and words, its times read from this scene log and transcript; the last 6 cover the tools the spike did not have. Each case passes when one of its `expect` alternatives matches: its `calls` (the tools by name, in any order, each one's `args` as given: a number within 0.01, {min, max} a range, a string ignoring case, {contains} a part of it, {anyOf} one of several) match the model's first answer or the calls compiled after a refusal round, and its `outcome` flags hold for what the message compiled to (applied: additions; proposed: a proposal; asked: a question; undo; jobs: a follow or blur job). A call still refused back to the model fails the case. The last 4 cases are the media tools' smoke step: the library is the person's own `library` files (not in the project yet, as if just imported) and Klipolo's pack as its manifest lists it; a {minItems} rule wants a list of at least that many items, and the jobs flag counts a sticker job too.",
+  "source": "The planner's eval on clip A (NASA's space station Q&A, 155 s, public domain), played whole in project_clip_a.json (landscape only, clean captions on), with the transcript, speaker turns and Spark scene log of tests/fixtures; loudness is made from the transcript's words. The first 12 cases are the planner spike's requests (research t6), its expected calls in this tool set's names and words, its times read from this scene log and transcript; the last 6 cover the tools the spike did not have. Each case passes when one of its `expect` alternatives matches: its `calls` (the tools by name, in any order, each one's `args` as given: a number within 0.01, {min, max} a range, a string ignoring case, {contains} a part of it, {anyOf} one of several) match the model's first answer or the calls compiled after a refusal round, and its `outcome` flags hold for what the message compiled to (applied: additions; proposed: a proposal; asked: a question; undo; jobs: a follow or blur job). A call still refused back to the model fails the case. The last 4 cases are the media tools' smoke step: the library is the person's own `library` files (not in the project yet, as if just imported) and Klipolo's pack as its manifest lists it; a {minItems} rule wants a list of at least that many items, and the jobs flag counts a sticker job too. The music and title cases put the playhead at 40.0, so only a start of 0.0 meets \"background music\" and \"at the start\".",
   "project": "project_clip_a.json",
   "asset": "clip-a",
   "transcript": "../tests/fixtures/transcript_clip_a.json",
@@ -185,9 +185,10 @@
     {
       "id": "lofi-bed",
       "message": "add lofi as background music, quieter when I talk",
+      "playhead": 40.0,
       "expect": [
         {
-          "calls": [{"name": "addMusic", "args": {"file": {"contains": "lofi"}, "duck": {"anyOf": [true, null]}, "atSec": {"anyOf": [null, {"min": 0.0, "max": 0.3}]}}}],
+          "calls": [{"name": "addMusic", "args": {"file": {"contains": "lofi"}, "duck": {"anyOf": [true, null]}, "atSec": {"min": 0.0, "max": 0.3}}}],
           "outcome": {"applied": true}
         }
       ]
@@ -195,13 +196,14 @@
     {
       "id": "lisbon-title",
       "message": "put a title 'Day 1 in Lisbon' for 3 seconds at the start",
+      "playhead": 40.0,
       "note": "addText with the title preset, or the title card template; addText's call alone is checked until its presets place words",
       "expect": [
         {
-          "calls": [{"name": "addText", "args": {"text": "Day 1 in Lisbon", "preset": "title", "atSec": {"anyOf": [null, {"min": 0.0, "max": 0.3}]}, "durationSec": 3.0}}]
+          "calls": [{"name": "addText", "args": {"text": "Day 1 in Lisbon", "preset": "title", "atSec": {"min": 0.0, "max": 0.3}, "durationSec": 3.0}}]
         },
         {
-          "calls": [{"name": "makeTitleCard", "args": {"title": "Day 1 in Lisbon", "atSec": {"anyOf": [null, {"min": 0.0, "max": 0.3}]}, "durationSec": 3.0}}],
+          "calls": [{"name": "makeTitleCard", "args": {"title": "Day 1 in Lisbon", "atSec": {"min": 0.0, "max": 0.3}, "durationSec": 3.0}}],
           "outcome": {"applied": true, "jobs": true}
         }
       ]

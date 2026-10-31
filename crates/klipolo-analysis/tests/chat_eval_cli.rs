@@ -223,6 +223,19 @@ async fn ideal_answers_pass_every_case() {
     let out = run(&env, &[]).await;
     let (stdout, stderr) = text(&out);
     assert!(stdout.contains("22/22 passed"), "{stdout}{stderr}");
+    // A case that allows more than one answer says which passed: the title card template for the Lisbon title, the
+    // first alternative for the others.
+    let lisbon = &stdout[stdout.find("PASS lisbon-title").expect("the Lisbon case")..];
+    assert!(
+        lisbon.contains("\n     passed on alternative #1 of 2\n"),
+        "{stdout}"
+    );
+    let sticker = &stdout[stdout.find("PASS plane-sticker").expect("the sticker case")..];
+    assert!(
+        sticker.contains("\n     passed on alternative #0 of 2\n"),
+        "{stdout}"
+    );
+    assert_eq!(stdout.matches("     passed on alternative ").count(), 4);
     assert_eq!(out.status.code(), Some(0));
     // One call each: clip A's missing filler words are told to the person, with no refusal round.
     assert!(stdout.contains("22 model calls"), "{stdout}");

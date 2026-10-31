@@ -386,8 +386,13 @@ fn run(args: &Args) -> Result<bool, String> {
                 Err(_) => "no answer".to_owned(),
             }
         );
-        if let Err(why) = verdict {
-            println!("     why: {why}");
+        match verdict {
+            Err(why) => println!("     why: {why}"),
+            // Which way it passed, when the case allows more than one.
+            Ok(k) if case.expect.len() > 1 => {
+                println!("     passed on alternative #{k} of {}", case.expect.len());
+            }
+            Ok(_) => {}
         }
         if let Ok(out) = &planned {
             println!("     reply: {}", out.reply);
@@ -427,8 +432,8 @@ fn shown_answers(out: &PlanOut) -> String {
     answers.join(" then ")
 }
 
-/// Ok when one of the case's alternatives matches `out`, else why not.
-fn judge(case: &Case, out: &PlanOut) -> Result<(), String> {
+/// The first of the case's alternatives that `out` matches, by index, else why none does.
+fn judge(case: &Case, out: &PlanOut) -> Result<usize, String> {
     let refused: Vec<&str> = (out.compiled.refusals.iter())
         .filter(|r| r.audience == Audience::Model)
         .map(|r| r.reason.as_str())
@@ -457,7 +462,7 @@ fn judge(case: &Case, out: &PlanOut) -> Result<(), String> {
             continue;
         }
         match outcome_fails(&expect.outcome, out) {
-            None => return Ok(()),
+            None => return Ok(k),
             Some(flag) => why.push(format!("#{k}: {flag}")),
         }
     }
