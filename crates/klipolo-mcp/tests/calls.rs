@@ -19,7 +19,8 @@ use klipolo_mcp::rpc::Mcp;
 use klipolo_mcp::words::{
     DECIDED, DONE, KLIPOLO_CHAT, MOVED, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS, NOTHING_TO_UNDO,
     OVER_SHARE, OWN_CHANGED, OWN_MOVED, OWN_WAITING, PROPOSED_NO_FOOTAGE, PUSHES_OUT, READ_FIRST,
-    REDO_WAITS, STALE, TITLE_CARD_WORDS, UNCHANGED, UNDO_DROPPED, UNDONE, WAITING_OTHER, fill,
+    REDO_WAITS, STALE, TEXT_SOON, TITLE_CARD_WORDS, UNCHANGED, UNDO_DROPPED, UNDONE, WAITING_OTHER,
+    fill,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -194,7 +195,15 @@ fn invented_cut_comes_back_as_a_tool_error_with_the_reason() {
         ),
         "{result}"
     );
-    assert!(text(&result).ends_with("Use a time from the context."));
+    // Said for an app: its own words are no time, and it reads times from the reads it has.
+    assert!(
+        text(&result).ends_with(
+            "a clip's start or end, the person's selection or playhead in Klipolo, or the video's start or end. Use a \
+             time from getContext or getTranscript."
+        ),
+        "{result}"
+    );
+    assert!(!text(&result).contains("a time the person said"));
     assert_eq!(host.revision(), before);
     assert!(host.state().slot.is_none());
     let counts = host.state().counts;
@@ -407,7 +416,10 @@ fn still_listening_refusal_names_the_clip() {
             AnalysisState::Transcribing,
             "Klipolo is still listening to this clip (c1).",
         ),
-        (AnalysisState::NotStarted, "Analyze this clip first (c1)."),
+        (
+            AnalysisState::NotStarted,
+            "Klipolo hasn't analyzed this clip yet (c1). Ask the person to analyze it in Klipolo, then try again.",
+        ),
     ] {
         host.state().analysis.insert("clip-a".into(), state);
         assert_refused(&agent.call("removeFillers", json!({})), said);
@@ -546,6 +558,9 @@ fn agent_words_are_exact() {
         OVER_CAP,
         READ_ONLY,
         TITLE_CARD_WORDS,
+        NOT_ANALYZED,
+        TEXT_SOON,
+        TIMES_FROM,
     ] {
         assert!(!said.contains(['\u{2013}', '\u{2014}']), "{said}");
     }
@@ -1182,4 +1197,26 @@ fn a_title_card_needs_the_persons_own_words() {
         (counts.applies, counts.estimates, counts.paid_asked),
         (0, 0, 0)
     );
+}
+
+#[test]
+fn chat_worded_refusals_are_said_for_apps() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    let music = |file: &str| json!({"file": file, "volume": null, "duck": null, "atSec": null});
+    // Library has no music: an app asks its own person, never through askUser, which it isn't offered.
+    for (file, ends) in [
+        ("the song", "Ask them which music."),
+        ("jazz", "Use a name from it, or ask the person."),
+    ] {
+        let result = agent.call("addMusic", music(file));
+        assert_eq!(result["isError"], true, "{result}");
+        assert!(text(&result).ends_with(ends), "{result}");
+        assert!(!text(&result).contains("askUser"), "{result}");
+    }
+    // Words on screen aren't built yet, from chat or from an app.
+    let words = json!({"text": "Hello", "preset": "title", "atSec": null, "durationSec": null});
+    assert_refused(&agent.call("addText", words), TEXT_SOON);
+    assert_eq!(host.state().counts.applies, 0);
 }

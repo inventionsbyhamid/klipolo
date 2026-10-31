@@ -70,6 +70,14 @@ pub const OWN_WAITING: &str = "Your proposal is waiting for the person in Klipol
 /// The app's own proposal went while its call ran (the person decided on it), so its removals aren't proposed again.
 pub const DECIDED: &str = "Your earlier proposal was decided in Klipolo while this call ran, so it was not proposed \
 again. Call getProposal to see what the person did.";
+/// A clip Klipolo hasn't analyzed, which the call needs: only the person can start that, in Klipolo.
+pub const NOT_ANALYZED: &str = "Klipolo hasn't analyzed this clip yet ({clip}). Ask the person to analyze it in \
+Klipolo, then try again.";
+/// `addText` until its presets are built.
+pub const TEXT_SOON: &str = "Putting words on screen is coming soon in Klipolo.";
+/// What a time must stand on, after "a word, a pause, a scene, a clip's start or end": an app's own words never count.
+pub const TIMES_FROM: &str = ", the person's selection or playhead in Klipolo, or the video's start or end. Use a \
+time from getContext or getTranscript.";
 /// `makeTitleCard` from an app: a title card's words are the person's own, typed in Klipolo's chat, never an app's.
 pub const TITLE_CARD_WORDS: &str = "makeTitleCard: a title card needs the person's own words, typed in Klipolo's chat. \
 Ask the person to make it there.";

@@ -26,8 +26,10 @@
 
 use std::time::Instant;
 
+use klipolo_chat::compile::TEXT_COMING_SOON;
 use klipolo_chat::{
-    Audience, Compiled, FunctionCall, Job, Moment, Refusal, ToolCall, compile, timeline_key,
+    ANALYZE_FIRST, Audience, Compiled, FunctionCall, Job, Moment, Refusal, ToolCall, compile,
+    timeline_key,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -415,19 +417,43 @@ fn reasons<'a>(refusals: impl IntoIterator<Item = &'a Refusal>) -> String {
 
 /// How chat refuses a title card whose words the person didn't type: an app's words never are.
 const CHAT_TITLE_WORDS: &str = "makeTitleCard: the title must be the person's own words";
+/// How chat ends a refusal of a time that stands on nothing: what counts for chat's model.
+const CHAT_TIMES_FROM: &str = ", the selection, the playhead, the video's start or end, or a time the person said. Use \
+a time from the context.";
+/// How chat points its model at the person: a tool apps aren't offered.
+const CHAT_ASK: &str = " with askUser";
 
-/// A refusal's reason, as a sentence an app can act on. One for the person names the clip it is about: "Klipolo is
-/// still listening to this clip (c2)." A title card, which needs the person's own words, is for Klipolo's chat.
+/// A refusal's reason, as a sentence an app can act on. Chat words some for its own model and the person in its panel;
+/// an app reads them in its own terms:
+/// - a title card, which needs the person's own words, is for Klipolo's chat (`TITLE_CARD_WORDS`);
+/// - a clip not analyzed yet is the person's to analyze (`NOT_ANALYZED`), and words on screen are coming
+///   (`TEXT_SOON`);
+/// - a time must stand on the reads an app has, never its own words (`TIMES_FROM`);
+/// - it asks its own person, not through `askUser`.
+///
+/// One for the person names the clip it is about: "Klipolo is still listening to this clip (c2)."
 fn reason(r: &Refusal) -> String {
     if r.reason.starts_with(CHAT_TITLE_WORDS) {
         return words::TITLE_CARD_WORDS.to_owned();
     }
-    match (r.audience, &r.clip) {
-        (Audience::Person, Some(clip)) => format!("{} ({clip}).", r.reason.trim_end_matches('.')),
-        (Audience::Person, None) if !r.reason.ends_with(['.', '?', '!']) => {
-            format!("{}.", r.reason)
+    if r.audience == Audience::Person {
+        if r.reason == ANALYZE_FIRST {
+            return match &r.clip {
+                Some(clip) => fill(words::NOT_ANALYZED, &[("clip", clip)]),
+                None => words::NOT_ANALYZED.replace(" ({clip})", ""),
+            };
         }
-        _ => r.reason.clone(),
+        if r.reason == TEXT_COMING_SOON {
+            return words::TEXT_SOON.to_owned();
+        }
+    }
+    let said = (r.reason)
+        .replace(CHAT_TIMES_FROM, words::TIMES_FROM)
+        .replace(CHAT_ASK, "");
+    match (r.audience, &r.clip) {
+        (Audience::Person, Some(clip)) => format!("{} ({clip}).", said.trim_end_matches('.')),
+        (Audience::Person, None) if !said.ends_with(['.', '?', '!']) => format!("{said}."),
+        _ => said,
     }
 }
 
