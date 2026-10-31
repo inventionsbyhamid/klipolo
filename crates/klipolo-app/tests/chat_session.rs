@@ -1531,3 +1531,69 @@ async fn the_projects_own_pictures_are_in_the_library_the_model_reads() {
     assert!(reply(&out)["applied"].is_object(), "{:#}", reply(&out));
     assert_eq!(pictures_on(&s.chat.project.project()).len(), 1);
 }
+
+/// The project, refusing the next commit as it is (a full disk, say) when told to.
+struct Refusing {
+    project: Arc<MemoryProjects>,
+    refuse_next: std::sync::atomic::AtomicBool,
+}
+
+impl Projects for Refusing {
+    fn now(&self) -> Option<klipolo_app::chat::ProjectNow> {
+        self.project.now()
+    }
+
+    fn commit(
+        &self,
+        at: &klipolo_app::chat::At,
+        tx: &Transaction,
+        next: Option<Project>,
+    ) -> Result<klipolo_app::chat::Committed, CommitError> {
+        if self.refuse_next.swap(false, Ordering::SeqCst) {
+            return Err(CommitError::Refused(klipolo_model::coded::Said::Text(
+                "Your disk is full.".into(),
+            )));
+        }
+        self.project.commit(at, tx, next)
+    }
+
+    fn undo(
+        &self,
+        at: &klipolo_app::chat::At,
+    ) -> Result<klipolo_app::chat::Committed, CommitError> {
+        self.project.undo(at)
+    }
+}
+
+#[tokio::test]
+async fn an_apply_that_fails_for_another_reason_keeps_the_proposal_for_retry() {
+    let model = Script::new(vec![answer("", vec![fillers()])]);
+    let project =
+        Arc::new(MemoryProjects::open(talk(), PathBuf::from("/tmp/talk.klipolo")).unwrap());
+    let refusing = Arc::new(Refusing {
+        project: project.clone(),
+        refuse_next: std::sync::atomic::AtomicBool::new(false),
+    });
+    let session = ChatSession::new(refusing.clone(), Found::done(), Paying::key(model));
+    let id = proposal_id(&session.send(request("cut the ums")).await.unwrap());
+
+    refusing.refuse_next.store(true, Ordering::SeqCst);
+    let failed = session.apply(&id).unwrap_err();
+    assert!(matches!(failed, CommitError::Refused(_)), "{failed:?}");
+    assert_eq!(project.revision(), 0, "nothing changed");
+    assert!(
+        !session.turns()[0].note.contains("dropped"),
+        "{}",
+        session.turns()[0].note
+    );
+
+    // Retry: the proposal is still open, and applies as one undo step.
+    session.apply(&id).unwrap();
+    assert_eq!(project.undo_steps(), 1);
+    assert!(!plays(&project.project(), 0.6));
+    assert!(
+        session.turns()[0]
+            .note
+            .ends_with("The person applied the proposal.")
+    );
+}

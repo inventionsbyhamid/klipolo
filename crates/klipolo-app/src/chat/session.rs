@@ -259,7 +259,8 @@ impl ChatSession {
     }
 
     /// Applies proposal `id` as one undo step. Refused with `project.moved` (and dropped) when the project moved on from
-    /// the revision it was made for, or when it is gone (replaced, discarded, dropped, another project).
+    /// the revision it was made for, or when it is gone (replaced, discarded, dropped, another project). Refused for any
+    /// other reason (a read-only project, a disk that refused it), it stays open for Retry.
     pub fn apply(&self, id: &str) -> Result<ChatApplied, CommitError> {
         let stored = {
             let mut talk = lock(&self.talk);
@@ -269,9 +270,7 @@ impl ChatSession {
         let Some(stored) = stored else {
             return Err(CommitError::Moved);
         };
-        let committed = self
-            .projects
-            .commit(&stored.at, &stored.tx, Some(stored.after));
+        let committed = (self.projects).commit(&stored.at, &stored.tx, Some(stored.after.clone()));
         let mut talk = lock(&self.talk);
         match committed {
             Ok(c) => {
@@ -282,8 +281,15 @@ impl ChatSession {
                     undo: undo_label(&stored.tx),
                 })
             }
-            Err(e) => {
+            Err(CommitError::Moved) => {
                 talk.noted(id, DROPPED_NOTE);
+                Err(CommitError::Moved)
+            }
+            // Still open, unless a newer proposal came meanwhile.
+            Err(e) => {
+                if talk.open.is_none() {
+                    talk.open = Some(stored);
+                }
                 Err(e)
             }
         }
