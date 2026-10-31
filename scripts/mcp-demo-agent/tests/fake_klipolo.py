@@ -25,7 +25,17 @@ from mcp.server.stdio import stdio_server
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 TOOLS = json.loads((FIXTURES / "tools_list.json").read_text())["tools"]
 INSTRUCTIONS = json.loads((FIXTURES / "initialize.json").read_text())["instructions"]
-LISTED = ("cutRange", "keepOnly", "setFormat", "setCaptions", "addText", "getSummary", "getContext", "getProposal")
+LISTED = (
+    "cutRange",
+    "keepOnly",
+    "setFormat",
+    "setCaptions",
+    "addText",
+    "makeTitleCard",
+    "getSummary",
+    "getContext",
+    "getProposal",
+)
 
 # What the bridge answers while Klipolo isn't listening (`words::OFF`).
 OFF = (
@@ -68,6 +78,12 @@ def answer(name: str, arguments: dict, mode: str) -> types.CallToolResult:
                 "until the person clicks Apply in Klipolo's chat panel. Call getProposal to see what they decided."
             ),
             structuredContent={"outcome": "proposed", "revision": 5, "proposalId": "p1", "removedSec": 152.6},
+            isError=False,
+        )
+    if name in ("makeSticker", "makeTitleCard"):
+        return types.CallToolResult(
+            content=text(f"Started in Klipolo ({name}). What it makes appears in the edit once it is ready."),
+            structuredContent={"outcome": "started"},
             isError=False,
         )
     if name == "cutRange":

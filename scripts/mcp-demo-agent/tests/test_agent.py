@@ -24,7 +24,17 @@ KLIPOLO_TOOLS = {t["name"]: t for t in json.loads((FIXTURES / "tools_list.json")
 INSTRUCTIONS = json.loads((FIXTURES / "initialize.json").read_text())["instructions"]
 KEY = "test-meta-key-not-real-0123456789"
 DEMO = "In Klipolo, make a 30 second vertical teaser of the best moment, with karaoke captions."
-LISTED = ["cutRange", "keepOnly", "setFormat", "setCaptions", "addText", "getSummary", "getContext", "getProposal"]
+LISTED = [
+    "cutRange",
+    "keepOnly",
+    "setFormat",
+    "setCaptions",
+    "addText",
+    "makeTitleCard",
+    "getSummary",
+    "getContext",
+    "getProposal",
+]
 FINAL = (
     "Your video is vertical now, with karaoke captions. I proposed keeping 61.2 to 91.0 s, the best moment, as a 30 "
     "second teaser. Nothing is cut until you click Apply in Klipolo."
@@ -340,6 +350,23 @@ def test_after_proposing_the_run_answers_getproposal_itself(tmp_path):
         assert body["input"][-1] == {"type": "function_call_output", "call_id": call_id, "output": waits}
 
 
+def test_pictures_klipolo_draws_are_said_to_be_outside_the_cost(tmp_path):
+    title = {"title": "Launch day", "prompt": "a rocket at dawn", "atSec": 2.5, "durationSec": None}
+    meta = Meta(
+        response(call("makeTitleCard", title, "call_1"), call("makeTitleCard", title, "call_2")),
+        response(message("Your title cards are on their way.")),
+    )
+    command, log = klipolo(tmp_path)
+    code, out, err = run(meta, command)
+    assert (code, err) == (0, "")
+    line = '→ makeTitleCard {"title": "Launch day", "prompt": "a rocket at dawn", "atSec": 2.5, "durationSec": null}\n'
+    assert out == (
+        (line + "← started, a picture billed in Klipolo (about $0.01)\n") * 2
+        + "\nYour title cards are on their way.\n\nCost: $0.003\n"
+        + "Not in this total: 2 pictures billed in Klipolo, about $0.01 each.\n"
+    )
+
+
 def test_klipolo_not_running_ends_the_run_with_the_bridges_own_sentence(tmp_path):
     meta = Meta(response(call("getContext", {}, "call_1"), usage=(6000, 0, 40)))
     command, log = klipolo(tmp_path, mode="off")
@@ -440,7 +467,8 @@ def test_the_run_stops_before_the_next_model_call_once_it_reaches_the_spend_limi
         "\n"
         "Cost: $0.109\n"
     )
-    assert [entry["call"] for entry in calls_made(log)] == ["getContext", "setFormat"], "Klipolo's calls cost no Meta"
+    made = [entry["call"] for entry in calls_made(log)]
+    assert made == ["getContext", "setFormat"], "the calls already asked for are still made"
 
 
 def test_an_answer_cut_off_is_an_error_and_still_costs(tmp_path):

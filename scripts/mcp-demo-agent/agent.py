@@ -3,7 +3,9 @@
 
 It starts Klipolo's stdio bridge (`klipolo-app --mcp`), lists Klipolo's tools and offers each to Muse Spark as a strict
 function tool on Meta's Responses API, then makes the calls Muse Spark asks for and sends each result back, for at most
-8 model turns. It prints each call on one line, then Muse Spark's reply, then what the run cost.
+8 model turns. It prints each call on one line, then Muse Spark's reply, then what Muse Spark's tokens cost. Pictures
+(makeSticker, makeTitleCard) are paid by Klipolo, about $0.01 each, and aren't in that total: it says how many it
+started.
 
 Run it on the Mac with Klipolo open on an analyzed project and "Let other apps edit with Klipolo" on in Settings:
 
@@ -14,9 +16,9 @@ Run it on the Mac with Klipolo open on an analyzed project and "Let other apps e
 
 The Meta key comes from MODEL_API_KEY in the environment only. It goes to Meta and nowhere else: not to Klipolo, not to
 the screen, not into an error. Options: --klipolo <path to klipolo-app> (the installed app's by default),
---model <a Muse Spark model> (muse-spark-1.3 by default) and --max-usd <dollars> (0.10 by default: once the run has
-cost that much, it asks Muse Spark no more). KLIPOLO_META_BASE overrides Meta's base URL, as it does for Klipolo
-(tests, staging).
+--model <a Muse Spark model> (muse-spark-1.3 by default) and --max-usd <dollars> (0.10 by default: once Muse Spark's
+tokens have cost that much, it asks Muse Spark no more). KLIPOLO_META_BASE overrides Meta's base URL, as it does for
+Klipolo (tests, staging).
 
 Cuts are only proposed: they wait for the person's Apply in Klipolo. Run it again afterwards ("I clicked Apply. Is the
 teaser ready?") and it reads what became of the proposal with getProposal.
@@ -73,6 +75,9 @@ CONNECT_TIMEOUT_S = 30.0
 SPARK_INPUT_USD = 1.25 / 1_000_000
 SPARK_CACHED_INPUT_USD = 0.15 / 1_000_000
 SPARK_OUTPUT_USD = 4.25 / 1_000_000
+# Pictures Klipolo draws with Muse Image for these tools: billed in Klipolo, not in this total (`pricing::IMAGE_USD`).
+PICTURES = ("makeSticker", "makeTitleCard")
+PICTURE_USD = 0.01
 # The most of Meta's own message kept in an error (`error::MAX_MESSAGE_CHARS`).
 MAX_MESSAGE_CHARS = 300
 # The most of a call's arguments printed on its line.
@@ -583,9 +588,12 @@ async def run_call(
         console.say(f"← {STOPPED_ANSWERING}")
         return Called(STOPPED_ANSWERING, stop=True)
     text = "\n".join(part.text for part in result.content if getattr(part, "type", None) == "text")
-    console.say(f"← {outcome(result, text)}")
     structured = result.structuredContent if isinstance(result.structuredContent, dict) else {}
     kind = structured.get("outcome") if isinstance(structured.get("outcome"), str) else None
+    if kind == "started" and call.name in PICTURES:
+        console.say(f"← started, a picture billed in Klipolo (about ${PICTURE_USD:.2f})")
+    else:
+        console.say(f"← {outcome(result, text)}")
     return Called(text, stop=bool(result.isError) and text.startswith(KLIPOLO_OFF), outcome=kind)
 
 
@@ -620,9 +628,9 @@ async def run(
     call_timeout: float = CALL_TIMEOUT_S,
 ) -> int:
     """One request, start to end: Klipolo started with `command`, Muse Spark asked at most `max_turns` times, and not
-    again once the run has cost `max_usd` (the calls it already asked for are made: Klipolo's calls cost no Meta). The
-    bridge gets `hello_timeout` seconds for its hello and tool list, and `call_timeout` for each call. The exit status;
-    the cost is printed last, whatever happened."""
+    again once its tokens have cost `max_usd` (the calls it already asked for are still made). The bridge gets
+    `hello_timeout` seconds for its hello and tool list, and `call_timeout` for each call. The exit status; the cost
+    of Muse Spark's tokens is printed last, whatever happened, then the pictures Klipolo bills itself, if any."""
     console = Console(out, err)
     tally = Tally()
     params = StdioServerParameters(command=command[0], args=list(command[1:]), env=klipolo_env())
@@ -657,6 +665,9 @@ async def run(
         if console.printed:
             console.say()
         console.say(f"Cost: ${tally.cost:.3f}")
+        if tally.pictures:
+            pictures = "1 picture" if tally.pictures == 1 else f"{tally.pictures} pictures"
+            console.say(f"Not in this total: {pictures} billed in Klipolo, about ${PICTURE_USD:.2f} each.")
     return 1 if code is None else code
 
 
@@ -664,9 +675,12 @@ async def run(
 class Tally:
     """What a run has come to so far."""
 
+    # Muse Spark's tokens, in US dollars.
     cost: float = 0.0
     # The bridge answered the hello and listed its tools.
     said_hello: bool = False
+    # Pictures started in Klipolo, which bills them itself.
+    pictures: int = 0
 
 
 def _leaves(error: BaseException) -> list[BaseException]:
@@ -740,6 +754,8 @@ async def converse(
             for call in answer.calls:
                 called = await run_call(session, call, schemas, console, proposed=proposed)
                 proposed = proposed or called.outcome == "proposed"
+                if called.outcome == "started" and call.name in PICTURES:
+                    tally.pictures += 1
                 inputs.append({"type": "function_call_output", "call_id": call.call_id, "output": called.output})
                 if called.stop:
                     return 1
@@ -774,7 +790,10 @@ def main(
         "--max-usd",
         type=float,
         default=MAX_USD,
-        help="stop asking Muse Spark once the run has cost this many US dollars (default: %(default).2f)",
+        help=(
+            "stop asking Muse Spark once its tokens have cost this many US dollars (default: %(default).2f); pictures "
+            "Klipolo draws are billed in Klipolo and not counted"
+        ),
     )
     args = parser.parse_args(argv)
 
