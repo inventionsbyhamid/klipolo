@@ -93,7 +93,7 @@ describe('the analysis banner', () => {
     expect(useAi.getState().settingsOpen).toBe(true);
   });
 
-  it('says why Analyze could not start, with Retry', async () => {
+  it('says why Analyze could not start, and Retry asks for the estimate again before anything starts', async () => {
     bridge.estimate.mockResolvedValue(offer());
     bridge.start.mockRejectedValueOnce(new Error("Klipolo's server is busy right now. Try again in a moment."));
     showProject(CLIPS);
@@ -102,7 +102,26 @@ describe('the analysis banner', () => {
 
     expect(await screen.findByText("Klipolo's server is busy right now. Try again in a moment.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    expect(bridge.start).toHaveBeenCalledTimes(2);
+    expect(await screen.findByRole('button', { name: 'Analyze' })).toBeInTheDocument();
+    expect(bridge.estimate).toHaveBeenCalledTimes(2);
+    expect(bridge.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows why nothing can pay yet with no price, and Retry estimates again without starting', async () => {
+    const problem = "Klipolo's server is busy right now. Try again in a moment.";
+    bridge.estimate.mockResolvedValueOnce(offer({ usd: 0, problem }));
+    bridge.estimate.mockResolvedValueOnce(offer());
+    showProject(CLIPS);
+    renderWithProviders(<AnalysisBanner />);
+
+    expect(await screen.findByText(problem)).toBeInTheDocument();
+    expect(screen.queryByText(/Analyze 2 clips/)).toBeNull();
+    expect(screen.queryByText(/\$/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Analyze' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('Analyze 2 clips for about $0.04')).toBeInTheDocument();
+    expect(bridge.estimate).toHaveBeenCalledTimes(2);
+    expect(bridge.start).not.toHaveBeenCalled();
   });
 
   it('lists each clip with its step while they run, and Cancel stops them', async () => {

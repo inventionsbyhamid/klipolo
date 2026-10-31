@@ -136,13 +136,12 @@ describe('the store', () => {
     expect(useAnalysis.getState().estimate?.clips).toEqual(['a']);
   });
 
-  it('shows why nothing can pay yet, as the sentence to retry, and drops it when the next estimate has none', async () => {
+  it('keeps why nothing can pay yet in the estimate, and starts each offer without the last sentence', async () => {
     const problem = "Klipolo's server is busy right now. Try again in a moment.";
+    useAnalysis.setState({ error: 'Meta is busy right now. Try again in a moment.' });
     bridge.estimate.mockResolvedValueOnce(estimate({ usd: 0, problem }));
     await offerFor(['a', 'b']);
-    expect(useAnalysis.getState().error).toBe(problem);
-    bridge.estimate.mockResolvedValueOnce(estimate());
-    await offerFor(['a', 'b']);
+    expect(useAnalysis.getState().estimate?.problem).toBe(problem);
     expect(useAnalysis.getState().error).toBeNull();
   });
 

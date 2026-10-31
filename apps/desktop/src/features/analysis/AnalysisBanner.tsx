@@ -195,6 +195,31 @@ export function AnalysisBanner() {
   }
   const videos = clips.some((c) => c.kind === 'video' && estimate.clips.includes(c.id));
   const refused = !!estimate.refusal;
+  // Retry asks for the estimate again (the price may have changed), never starts a run unseen.
+  const pending = clips.filter((c) => stateOf(states, c.id).state === 'none').map((c) => c.id);
+  const again = () => void offerFor(pending);
+  if (estimate.problem) {
+    // Nothing can pay yet: why, and no price.
+    return (
+      <section className="analysis-banner" aria-label="Analysis">
+        <span className="analysis-ico">
+          <BannerIcon name="wave" />
+        </span>
+        <div>
+          <p className="analysis-title">{estimate.problem}</p>
+        </div>
+        <div className="analysis-actions">
+          <button type="button" className="btn btn-ghost" onClick={notNow}>
+            Not now
+          </button>
+          <button type="button" className="btn btn-secondary" disabled={busy} onClick={again}>
+            <BannerIcon name="retry" />
+            Retry
+          </button>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="analysis-banner" aria-label="Analysis">
       <span className="analysis-ico">
@@ -209,7 +234,7 @@ export function AnalysisBanner() {
           Not now
         </button>
         {error ? (
-          <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void analyze()}>
+          <button type="button" className="btn btn-secondary" disabled={busy} onClick={again}>
             <BannerIcon name="retry" />
             Retry
           </button>
