@@ -5,6 +5,7 @@ import type { ArmedTake } from '../bindings/ArmedTake';
 import type { ArmOptions } from '../bindings/ArmOptions';
 import type { CaptureEvent } from '../bindings/CaptureEvent';
 import type { Previews } from '../bindings/Previews';
+import type { RecorderSetup } from '../bindings/RecorderSetup';
 import type { Snapshot } from '../bindings/Snapshot';
 import type { WorkerState } from '../bindings/WorkerState';
 import { tauriRecorder } from '../bridge/recorder';
@@ -700,6 +701,26 @@ describe('the take', () => {
     expect(useToasts.getState().toasts.map((t) => t.text)).toEqual([
       'The recorder kept stopping, so the recording was saved.',
     ]);
+  });
+
+  it('a_setup_read_while_the_last_take_went_is_read_again', async () => {
+    const take = await pressed();
+    fake.emit(take, state('recording'));
+    fake.emit(take, state('stopping'));
+    fake.emit(take, { ev: 'finished', session: take });
+    expect(rec().lastTake).toBe('adding');
+    // Opened again while the take lands; the app reads the setup with the take still there.
+    const read = deferred<RecorderSetup>();
+    fake.script.setup = () => read.promise;
+    const opening = rec().openRecorder();
+    // Its worker goes before that read answers.
+    fake.emit(take, state('idle'));
+    expect(rec().lastTake).toBeNull();
+    fake.script.setup = () => recorderSetup();
+    read.resolve(recorderSetup({ busy: true, ownTake: true }));
+    await opening;
+    await vi.waitFor(() => expect(rec().setup?.ownTake).toBe(false));
+    expect(fake.calls.filter((call) => call === 'setup')).toHaveLength(3);
   });
 
   it('imported_take_loads_the_project_and_selects_its_clip', async () => {

@@ -263,6 +263,29 @@ describe('the dialog and its choices', () => {
     expect(fake.calls).toEqual(['setup']);
   });
 
+  it('reopening_while_the_last_take_lands_reads_the_setup_again_once_it_has_gone', async () => {
+    await pressRecord();
+    emit('take-1', state('recording'));
+    emit('take-1', state('stopping'));
+    emit('take-1', { ev: 'finished', session: 'take-1' });
+    expect(rec().open).toBe(false);
+    // Shift Command R before the take's worker has gone: the app still has the take.
+    fake.script.setup = () => recorderSetup({ busy: true, ownTake: true });
+    await act(() => rec().openRecorder());
+    const dialog = screen.getByRole('dialog', { name: 'Record' });
+    const adding = "Klipolo is adding your last recording. Record turns on when it's done.";
+    expect(dialog).toHaveTextContent(adding);
+    expect(dialog).not.toHaveTextContent('A recording is already running');
+    expect(recordButton()).toHaveAttribute('aria-disabled', 'true');
+    expect(recordButton()).toHaveAccessibleDescription(adding);
+    // It has landed and its worker has gone: the setup is read again, and Record is on.
+    fake.script.setup = () => recorderSetup();
+    emit('take-1', state('idle'));
+    await vi.waitFor(() => expect(recordButton()).not.toHaveAttribute('aria-disabled'));
+    expect(dialog).not.toHaveTextContent(adding);
+    expect(fake.calls.filter((call) => call === 'setup')).toHaveLength(3);
+  });
+
   it('the_setup_notes_are_said_in_klipolo_s_words_and_a_blocking_one_keeps_record_off', async () => {
     const dialog = await openOn(
       recorderSetup({

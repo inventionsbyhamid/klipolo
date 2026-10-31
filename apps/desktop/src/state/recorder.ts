@@ -66,7 +66,15 @@ export interface RecorderState {
    * sentence: kept until the window is back as the take ends, then said once as a toast.
    */
   note: string | null;
+  /**
+   * A take let go whose worker hasn't gone yet, so the app still has it: `adding` when it was saved and is landing,
+   * `stopping` when it was cancelled or failed. Record waits for it; null once it has gone.
+   */
+  lastTake: LastTake | null;
 }
+
+/** What a take let go is doing until its worker has gone (`RecorderState.lastTake`). */
+export type LastTake = 'adding' | 'stopping';
 
 export interface RecorderStore extends RecorderState {
   /**
@@ -111,7 +119,7 @@ const CLOSED = {
   screenRefused: false,
 } satisfies Partial<RecorderState>;
 
-const INITIAL: RecorderState = { ...CLOSED, ...NO_TAKE, askedScreen: false, note: null };
+const INITIAL: RecorderState = { ...CLOSED, ...NO_TAKE, askedScreen: false, note: null, lastTake: null };
 
 /** Each opening's setup is its own: one read for an earlier opening is never shown in a later one. */
 let opening = 0;
@@ -140,7 +148,25 @@ function readSetup(): Promise<RecorderSetup> {
  * press), and the take from Record to its end (`recorderTake.ts`).
  */
 export const useRecorder = create<RecorderStore>((set, get) => {
-  takePart = takeSlice(set, get);
+  takePart = takeSlice(set, get, () => void lastTakeWent());
+
+  /**
+   * The last take's worker has gone: a setup read while the app still had it (Record off, "Klipolo is adding your last
+   * recording.") is read again, so Record turns on. The person's choices stay.
+   */
+  async function lastTakeWent() {
+    const mine = opening;
+    // A setup on its way may have been read before the take went.
+    await reading?.catch(() => undefined);
+    const s = get();
+    if (mine !== opening || !s.open || s.take !== null || !s.setup?.ownTake) return;
+    try {
+      const setup = await readSetup();
+      if (mine === opening && get().take === null) set({ setup });
+    } catch {
+      // What shows stays; closing and opening the dialog reads it again.
+    }
+  }
 
   /** One press to the app; a refusal is said in the dialog. True when it went. */
   async function press(run: () => Promise<void>): Promise<boolean> {

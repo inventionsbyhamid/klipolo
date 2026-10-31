@@ -106,9 +106,10 @@ function said(error: CodedError): string {
 /**
  * The take's part of the recorder store: Record arms the take, then sends its Start; the take's events move the
  * dialog through the countdown, the start gate, the recording and the save; Cancel lets it go. Only the dialog's take
- * is heard, by its id, so a late event from an earlier take never reaches a newer one.
+ * is heard, by its id, so a late event from an earlier take never reaches a newer one. `went` hears that a take let
+ * go has gone (its worker's `state: idle`), so the app is free for the next.
  */
-export function takeSlice(set: Set, get: Get): TakeSlice {
+export function takeSlice(set: Set, get: Get, went: () => void): TakeSlice {
   /** The press still arming or starting. */
   let press: Press | null = null;
   /** The take Start was sent to: Cancel ends it in its countdown, else Disarm lets it go before it ever started. */
@@ -142,6 +143,7 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
     let gone!: () => void;
     const ended = new Promise<void>((resolve) => (gone = resolve));
     leaving = { id, gone, ended };
+    set({ lastTake: landing === id ? 'adding' : 'stopping' });
   }
 
   function gone(id: string) {
@@ -150,6 +152,8 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
     if (leaving?.id !== id) return;
     leaving.gone();
     leaving = null;
+    set({ lastTake: null });
+    went();
   }
 
   /** The last take's worker has gone, or `LEAVE_WAIT_MS` passed (then the app says if it is still busy). */

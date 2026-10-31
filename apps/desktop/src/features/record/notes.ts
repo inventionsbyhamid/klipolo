@@ -3,6 +3,7 @@ import type { RecorderSetup } from '../../bindings/RecorderSetup';
 import { codedMessage } from '../../bridge/call';
 import type { Picks } from '../../lib/recorder/choices';
 import { screenStep } from '../../lib/recorder/permission';
+import type { LastTake } from '../../state/recorder';
 
 const coded = (code: string, params: CodedError['params'] = {}): CodedError => ({ code, params });
 
@@ -43,6 +44,12 @@ export function busySentence(setup: RecorderSetup): string {
   const place = codedMessage(coded(`capture.place.${setup.caps.indicator}`));
   return codedMessage(coded('capture.busy', { place }));
 }
+
+/** Why Record waits for the dialog's last take, which the app still has for a moment (`RecorderState.lastTake`). */
+const LAST_TAKE: Record<LastTake, string> = {
+  adding: "Klipolo is adding your last recording. Record turns on when it's done.",
+  stopping: "Klipolo is stopping your last recording. Record turns on when it's done.",
+};
 
 /** What the dialog says before Record, in the setup's order, for the devices chosen. */
 export function notesBefore(setup: RecorderSetup, picks: Picks): CodedError[] {
@@ -85,10 +92,17 @@ export type NotReady =
   | { why: 'choose'; text: string };
 
 /**
- * Record's reason to wait, first first: a take already runs, the setup's own block, Screen Recording not allowed yet,
- * then nothing chosen to record. The store arms nothing in these cases either; this says why.
+ * Record's reason to wait, first first: a take already runs (or the dialog's last take, `lastTake`, is still the
+ * app's), the setup's own block, Screen Recording not allowed yet, then nothing chosen to record. The store arms
+ * nothing in these cases either; this says why.
  */
-export function notReady(setup: RecorderSetup, picks: Picks, screenRefused: boolean): NotReady | null {
+export function notReady(
+  setup: RecorderSetup,
+  picks: Picks,
+  screenRefused: boolean,
+  lastTake: LastTake | null = null,
+): NotReady | null {
+  if (setup.ownTake && lastTake !== null) return { why: 'busy', text: LAST_TAKE[lastTake] };
   if (setup.busy || setup.ownTake) return { why: 'busy', text: busySentence(setup) };
   const block = setup.notes.find((n) => BLOCKING.includes(n.code));
   if (block) return { why: 'note', text: codedMessage(block) };

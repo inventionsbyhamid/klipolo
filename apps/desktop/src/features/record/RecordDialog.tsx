@@ -473,7 +473,8 @@ function ToggleRow({
 function Notes({ setup }: { setup: RecorderSetup }) {
   const picks = useRecorder((s) => s.picks);
   const screenRefused = useRecorder((s) => s.screenRefused);
-  const waiting = notReady(setup, picks, screenRefused);
+  const lastTake = useRecorder((s) => s.lastTake);
+  const waiting = notReady(setup, picks, screenRefused, lastTake);
   const lines = [
     ...(waiting?.why === 'busy' ? [waiting.text] : []),
     ...notesBefore(setup, picks).map((n) => codedMessage(n)),
@@ -534,8 +535,9 @@ function RecordPress({ variant, children }: { variant: 'primary' | 'secondary'; 
   const setup = useRecorder((s) => s.setup);
   const picks = useRecorder((s) => s.picks);
   const screenRefused = useRecorder((s) => s.screenRefused);
+  const lastTake = useRecorder((s) => s.lastTake);
   if (setup === null) return null;
-  const waiting = notReady(setup, picks, screenRefused);
+  const waiting = notReady(setup, picks, screenRefused, lastTake);
   const press = () => {
     // While the Screen Recording step shows, a press goes to its button: macOS's own prompt is never the only
     // explanation.
