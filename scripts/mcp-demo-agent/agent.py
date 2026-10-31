@@ -13,15 +13,16 @@ Run it on the Mac with Klipolo open on an analyzed project and "Let other apps e
     .venv/bin/python agent.py "In Klipolo, make a 30 second vertical teaser of the best moment, with karaoke captions."
 
 The Meta key comes from MODEL_API_KEY in the environment only. It goes to Meta and nowhere else: not to Klipolo, not to
-the screen, not into an error. Options: --klipolo <path to klipolo-app> (the installed app's by default) and
---model <a Muse Spark model> (muse-spark-1.3 by default). KLIPOLO_META_BASE overrides Meta's base URL, as it does for
-Klipolo (tests, staging).
+the screen, not into an error. Options: --klipolo <path to klipolo-app> (the installed app's by default),
+--model <a Muse Spark model> (muse-spark-1.3 by default) and --max-usd <dollars> (0.10 by default: once the run has
+cost that much, it asks Muse Spark no more). KLIPOLO_META_BASE overrides Meta's base URL, as it does for Klipolo
+(tests, staging).
 
 Cuts are only proposed: they wait for the person's Apply in Klipolo. Run it again afterwards ("I clicked Apply. Is the
 teaser ready?") and it reads what became of the proposal with getProposal.
 
-Exit status: 0 with a reply, 1 when the run stopped (Klipolo not running, a Meta error, the turn limit), 2 for a
-missing key or a wrong option.
+Exit status: 0 with a reply, 1 when the run stopped (Klipolo not running, a Meta error, the turn or spend limit), 2 for
+a missing key or a wrong option. Every run that started Klipolo prints its cost last, however it ended.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ import argparse
 import asyncio
 import copy
 import json
+import math
 import os
 import re
 import sys
@@ -54,6 +56,8 @@ META_BASE_ENV = "KLIPOLO_META_BASE"
 # Klipolo's support folder, when it isn't the usual one: the bridge reads it to find Klipolo.
 SUPPORT_DIR_ENV = "KLIPOLO_SUPPORT_DIR"
 MAX_TURNS = 8
+# The most a run may cost before the agent stops asking Muse Spark (--max-usd), in US dollars.
+MAX_USD = 0.10
 # As Klipolo's chat asks (`meta_chat::CHAT_MAX_OUTPUT_TOKENS`, `CHAT_ANSWER_TIMEOUT`; `client::SHORT_TIMEOUT`).
 MAX_OUTPUT_TOKENS = 8192
 ANSWER_TIMEOUT_S = 90.0
@@ -561,9 +565,11 @@ async def run(
     transport: httpx.AsyncBaseTransport | None = None,
     meta_base: str = DEFAULT_META_BASE,
     max_turns: int = MAX_TURNS,
+    max_usd: float = MAX_USD,
 ) -> int:
-    """One request, start to end: Klipolo started with `command`, Muse Spark asked at most `max_turns` times. The exit
-    status; the cost is printed last, whatever happened."""
+    """One request, start to end: Klipolo started with `command`, Muse Spark asked at most `max_turns` times, and not
+    again once the run has cost `max_usd` (the calls it already asked for are made: Klipolo's calls cost no Meta). The
+    exit status; the cost is printed last, whatever happened."""
     console = Console(out, err)
     cost = 0.0
     params = StdioServerParameters(command=command[0], args=list(command[1:]), env=klipolo_env())
@@ -584,6 +590,11 @@ async def run(
                 headers = {"User-Agent": f"klipolo-mcp-demo-agent/{VERSION}"}
                 async with httpx.AsyncClient(transport=transport, timeout=timeout, headers=headers) as http:
                     for turn in range(1, max_turns + 1):
+                        if cost >= max_usd:
+                            console.fail(
+                                f"Stopped at the ${max_usd:.2f} limit. Run again with --max-usd to allow more."
+                            )
+                            return 1
                         try:
                             answer = await respond(http, meta_base, key, request_body(model, instructions, tools, inputs))
                         except MetaError as e:
@@ -639,6 +650,12 @@ def main(
     parser.add_argument("request", nargs="+", help="what to do, in plain words")
     parser.add_argument("--klipolo", default=DEFAULT_KLIPOLO, help="the path to klipolo-app (default: %(default)s)")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="the Muse Spark model (default: %(default)s)")
+    parser.add_argument(
+        "--max-usd",
+        type=float,
+        default=MAX_USD,
+        help="stop asking Muse Spark once the run has cost this many US dollars (default: %(default).2f)",
+    )
     args = parser.parse_args(argv)
 
     key = (environ.get(KEY_ENV) or "").strip()
@@ -647,6 +664,9 @@ def main(
         return 2
     if not args.model.startswith("muse-spark-"):
         print(f"--model takes a Muse Spark model, such as {DEFAULT_MODEL}.", file=err)
+        return 2
+    if not (math.isfinite(args.max_usd) and args.max_usd > 0):
+        print(f"--max-usd takes an amount above 0 in US dollars, such as {MAX_USD:.2f}.", file=err)
         return 2
     if not (os.path.isfile(args.klipolo) and os.access(args.klipolo, os.X_OK)):
         print(f"Klipolo isn't installed at {args.klipolo}. Pass --klipolo with the path to klipolo-app.", file=err)
@@ -662,6 +682,7 @@ def main(
                 err=err,
                 transport=transport,
                 meta_base=meta_base(environ),
+                max_usd=args.max_usd,
             )
         )
     except KeyboardInterrupt:

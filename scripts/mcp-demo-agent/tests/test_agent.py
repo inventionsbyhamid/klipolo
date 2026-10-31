@@ -330,6 +330,29 @@ def test_the_run_stops_after_8_model_turns(tmp_path):
     assert out.endswith("\n\nCost: $0.010\n")
 
 
+def test_the_run_stops_before_the_next_model_call_once_it_reaches_the_spend_limit(tmp_path):
+    # Turn 1 costs $0.0081; turn 2 ($0.1004) takes the run to $0.1086, past the default $0.10.
+    meta = Meta(
+        response(call("getContext", {}, "call_1"), usage=(6000, 0, 150)),
+        response(call("setFormat", {"format": "portrait", "keepOthers": True}, "call_2"), usage=(80000, 0, 100)),
+        response(message("Never asked for.")),
+    )
+    command, log = klipolo(tmp_path)
+    code, out, err = run(meta, command)
+    assert code == 1
+    assert len(meta.requests) == 2, "no third request"
+    assert err == "Stopped at the $0.10 limit. Run again with --max-usd to allow more.\n"
+    assert out == (
+        "→ getContext {}\n"
+        "← read, 7 lines\n"
+        '→ setFormat {"format": "portrait", "keepOthers": true}\n'
+        "← applied\n"
+        "\n"
+        "Cost: $0.109\n"
+    )
+    assert [entry["call"] for entry in calls_made(log)] == ["getContext", "setFormat"], "Klipolo's calls cost no Meta"
+
+
 def test_an_answer_cut_off_is_an_error_and_still_costs(tmp_path):
     meta = Meta(
         response(
@@ -443,6 +466,24 @@ def test_only_muse_spark_runs_the_agent(tmp_path):
     assert (code, out) == (2, "")
     assert err == "--model takes a Muse Spark model, such as muse-spark-1.3.\n"
     assert not log.exists()
+
+
+def test_max_usd_sets_the_spend_limit(tmp_path):
+    assert agent.MAX_USD == 0.10
+    exe, _ = installed(tmp_path)
+    # The demo's first two turns cost $0.0298, past $0.02: the reply's turn is never asked for.
+    meta = demo_meta()
+    code, out, err = main(["--klipolo", str(exe), "--max-usd", "0.02", DEMO], meta, environ={"MODEL_API_KEY": KEY})
+    assert code == 1
+    assert len(meta.requests) == 2
+    assert err == "Stopped at the $0.02 limit. Run again with --max-usd to allow more.\n"
+    assert out.endswith("← proposed, waits for Apply (152.6 s would go)\n\nCost: $0.030\n")
+    for amount in ("0", "-1", "nan", "inf"):
+        meta = Meta()
+        code, out, err = main(["--klipolo", str(exe), "--max-usd", amount, DEMO], meta, environ={"MODEL_API_KEY": KEY})
+        assert (code, out) == (2, ""), amount
+        assert err == "--max-usd takes an amount above 0 in US dollars, such as 0.10.\n", amount
+        assert meta.requests == []
 
 
 def test_an_unexpected_failure_is_one_line_without_the_key(tmp_path):
