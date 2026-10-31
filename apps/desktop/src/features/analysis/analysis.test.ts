@@ -75,7 +75,7 @@ describe('the offer', () => {
       progressTitle(2, 0),
       progressTitle(0, 1),
     ].join(' ');
-    expect(all).not.toMatch(/[–—]/);
+    expect(all).not.toMatch(/[\u2013\u2014]/);
   });
 });
 

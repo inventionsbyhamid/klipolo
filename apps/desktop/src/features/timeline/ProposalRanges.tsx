@@ -53,6 +53,7 @@ interface ProposalRangesProps {
 export const ProposalRanges = memo(function ProposalRanges({ pps, fromUs, toUs }: ProposalRangesProps) {
   const proposal = useProposal((s) => s.proposal);
   const arrivedAt = useProposal((s) => s.arrivedAt);
+  const hovered = useProposal((s) => s.hovered);
   if (!proposal) return null;
   const ghosts = mainGhosts(proposal);
   const tags = rangeTags(proposal);
@@ -78,6 +79,7 @@ export const ProposalRanges = memo(function ProposalRanges({ pps, fromUs, toUs }
         className={cn(
           'tl-cut',
           fresh && 'is-new',
+          i === hovered && 'is-hovered',
           from > ghosts.starts[i] && 'no-start',
           to < ghosts.ends[i] && 'no-end',
         )}

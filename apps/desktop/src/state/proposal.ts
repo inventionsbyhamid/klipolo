@@ -25,6 +25,9 @@ interface ProposalStore {
   /** When it arrived (`performance.now()`): its ranges draw in only then, not again on a scroll. */
   arrivedAt: number;
   show: (proposal: Proposal | null) => void;
+  /** The range the person points at in the proposal card's list (its index in `removals.ranges`), lit on the timeline. */
+  hovered: number | null;
+  hover: (index: number | null) => void;
 }
 
 /**
@@ -34,7 +37,9 @@ interface ProposalStore {
 export const useProposal = create<ProposalStore>((set) => ({
   proposal: null,
   arrivedAt: 0,
-  show: (proposal) => set({ proposal, arrivedAt: proposal ? performance.now() : 0 }),
+  show: (proposal) => set({ proposal, arrivedAt: proposal ? performance.now() : 0, hovered: null }),
+  hovered: null,
+  hover: (hovered) => set({ hovered }),
 }));
 
 /** Nothing taken away (a start for a proposal's `removals`). */

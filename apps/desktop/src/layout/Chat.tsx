@@ -1,52 +1,9 @@
-import { useEffect, useRef } from 'react';
-import { NeedsKey } from '../ai/NeedsKey';
-import { useNeedsKey } from '../ai/aiStatus';
-import { useUi } from '../state/ui';
-import { Icon } from './Icon';
+import { ChatPanel } from '../features/chat/ChatPanel';
 
 /**
- * The chat panel, as a placeholder: the empty state and a composer that waits for chat to land. Command K puts the
- * cursor in the composer (`useUi.focusChat`).
+ * The chat panel in the window's right column: messages, the composer, the selection and undo chips, and
+ * the proposal card. Command K opens it and puts the cursor in the composer (`useUi.focusChat`).
  */
 export function Chat() {
-  const needsKey = useNeedsKey();
-  const composer = useRef<HTMLTextAreaElement>(null);
-  const chatFocus = useUi((s) => s.chatFocus);
-  useEffect(() => {
-    if (chatFocus > 0) composer.current?.focus();
-  }, [chatFocus]);
-  return (
-    <aside className="panel chat" aria-label="Chat">
-      <div className="chat-head">
-        <h2>Chat</h2>
-        <button className="icon-btn" aria-label="New chat" title="New chat" disabled>
-          <Icon name="new-chat" />
-        </button>
-        <button className="icon-btn" aria-label="Collapse chat" title="Collapse chat" disabled>
-          <Icon name="collapse" />
-        </button>
-      </div>
-      <div className="log">
-        <div className="chat-empty">
-          <h3>Ask for an edit</h3>
-          <p>Type it like a message. Klipolo asks before it cuts anything.</p>
-          <NeedsKey />
-        </div>
-      </div>
-      <div className="composer">
-        <div className="input-wrap">
-          <textarea
-            ref={composer}
-            rows={1}
-            placeholder={needsKey ? 'Add a key or code to chat' : 'Say what you want'}
-            disabled
-            aria-label="Message"
-          />
-          <button className="send" disabled aria-label="Send">
-            <Icon name="send" />
-          </button>
-        </div>
-      </div>
-    </aside>
-  );
+  return <ChatPanel />;
 }

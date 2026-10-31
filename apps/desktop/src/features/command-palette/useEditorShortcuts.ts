@@ -25,6 +25,7 @@ const OPTIONAL = new Set(['copy', 'cut', 'paste', 'duplicate', 'paste-effects'])
 /**
  * Editor keyboard shortcuts, with ⌘ on a Mac and Ctrl on Windows and Linux; ⌃ alone on a Mac (the field's
  * own keys, such as ⌃K) and the Windows or Super key alone run none (`otherAlone`). ⌘K puts the cursor in the chat;
+ * ⌘↩ applies the proposal chat has open;
  * ⌘Z undo; ⇧⌘Z redo; ⌘O add files; ⌘E export; S split; Space play/pause; J / L play backward / forward (pressed
  * again while playing that way: double speed); K pause; with K held, J / L one frame; Delete or Backspace delete (the
  * selected time range, else the selected clip or layer); I / O the time range's start or end at the playhead; ← / →
@@ -33,7 +34,7 @@ const OPTIONAL = new Set(['copy', 'cut', 'paste', 'duplicate', 'paste-effects'])
  * clip or layer selected: Q / W trim its start or end to the playhead; , and . move it a frame (⇧ ten) or a clip a
  * place; ⌘C ⌘X ⌘V ⌘D copy, cut, paste, duplicate; ⌥⌘V paste effects; ⌥↑ / ⌥↓ the track above or below.
  * (On a focused timeline block the arrows, Home, End, Enter and Space move between blocks: `useRovingFocus`.)
- * Everything but ⌘K is ignored while typing in a field; everything while a menu, list or dialog is open, and when a
+ * Everything but ⌘K and ⌘↩ is ignored while typing in a field; everything while a menu, list or dialog is open, and when a
  * focused control already handled the key.
  */
 export function useEditorShortcuts() {
@@ -61,6 +62,12 @@ export function useEditorShortcuts() {
       if (e.defaultPrevented || inPopup(e.target)) return;
       e.preventDefault();
       run('focus-chat');
+      return;
+    }
+    // So does ⌘↩, which applies the proposal chat has open: never while Settings or a menu has the keyboard.
+    if (mod && e.key === 'Enter' && !e.shiftKey && !e.altKey) {
+      if (e.defaultPrevented || inPopup(e.target)) return;
+      if (run('apply-proposal')) e.preventDefault();
       return;
     }
     const fromList = mod && FROM_PAGE_LIST.has(key) && within(e.target, PAGE_LIST);

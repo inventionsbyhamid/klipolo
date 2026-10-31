@@ -61,4 +61,19 @@ export const CAPTION_LABELS = {
     message: 'Fix “{from}” to “{to}”',
     comment: 'Undo history entry; {from} is what the captions said, {to} the person’s fix',
   }),
+  'captions.fixAll.undo': msg({
+    id: 'captions.fixAll.undo',
+    message: 'Fix “{from}” to “{to}” in {count} places',
+    comment: 'Undo history entry: every place the captions show {from} fixed to {to}',
+  }),
+  'captions.hide.undo': msg({
+    id: 'captions.hide.undo',
+    message: 'Hide caption words',
+    comment: 'Undo history entry',
+  }),
+  'captions.show.undo': msg({
+    id: 'captions.show.undo',
+    message: 'Show caption words',
+    comment: 'Undo history entry: hidden caption words shown again',
+  }),
 } satisfies Record<string, MessageDescriptor>;

@@ -58,6 +58,9 @@ fn main() {
                 projects.remember_last_in(data.join("last-project"));
                 projects.open_last();
             }
+            // The Captions panel's pages, one build kept; new speech on the feed is told to the page.
+            app.manage(klipolo_app::captions::CaptionsCache::default());
+            commands::captions::follow_speech(app.handle(), &projects);
             app.manage(projects);
             // How Klipolo pays for Meta's models (the Keychain), and this Mac's id with the relay (app support).
             let support = app.path().data_dir().ok().map(|dir| dir.join("Klipolo"));
@@ -118,6 +121,9 @@ fn main() {
             commands::media::library_pack,
             commands::fonts::fonts_bundled,
             commands::fonts::fonts_face,
+            commands::captions::captions_pages,
+            commands::captions::captions_find,
+            commands::captions::dev_fixture_speech,
             commands::export::export_plan,
             commands::export::export_start,
             commands::export::export_cancel,
