@@ -170,10 +170,20 @@
   white-space: nowrap;
 }
 
+/* In the stage head after the format pills: it gives way to them and to the icons, its text ending in an ellipsis
+   (the stage status's own ellipsis can't reach text inside a flex box). */
 .analysis-rough {
   display: inline-flex;
   align-items: center;
   gap: var(--space-3);
+  min-width: 0;
+}
+
+.analysis-rough-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .analysis-rough .spinner {

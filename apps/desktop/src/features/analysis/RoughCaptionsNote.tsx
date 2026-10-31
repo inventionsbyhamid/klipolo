@@ -18,10 +18,16 @@ export function RoughCaptionsNote() {
     return (
       <span className="stage-status analysis-rough">
         <span className="spinner" aria-hidden />
-        Rough captions until words are timed
+        <span className="analysis-rough-text">Rough captions until words are timed</span>
       </span>
     );
   }
-  if (note === 'rough') return <span className="stage-status analysis-rough">Some captions are timed roughly</span>;
+  if (note === 'rough') {
+    return (
+      <span className="stage-status analysis-rough">
+        <span className="analysis-rough-text">Some captions are timed roughly</span>
+      </span>
+    );
+  }
   return null;
 }
