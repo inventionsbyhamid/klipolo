@@ -18,7 +18,13 @@ pub struct ProjectSessionState {
     last: Mutex<Option<PathBuf>>,
     /// What was said in the clips (analysis), sent with every publish.
     speech: Mutex<Arc<Speech>>,
+    /// Told when the open project is about to change (another opens, a new one, or it closes), once the change is sure:
+    /// the old project is saved and the new one read. Analysis stops and forgets the old project's clips here.
+    on_switch: Mutex<Option<SwitchHook>>,
 }
+
+/// What `ProjectSessionState::on_switch` calls.
+pub(crate) type SwitchHook = Arc<dyn Fn() + Send + Sync>;
 
 impl Default for ProjectSessionState {
     fn default() -> Self {
@@ -35,14 +41,34 @@ impl ProjectSessionState {
             saver,
             last: Mutex::default(),
             speech: Mutex::default(),
+            on_switch: Mutex::default(),
+        }
+    }
+
+    /// `hook` is called whenever the open project changes, after the old one is saved and before the new one is
+    /// published (`set_open`); never for a create or open that failed.
+    pub(crate) fn on_switch(&self, hook: SwitchHook) {
+        *self
+            .on_switch
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(hook);
+    }
+
+    /// The open project is changing: tells the hook.
+    pub(super) fn switching(&self) {
+        let hook = self
+            .on_switch
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        if let Some(hook) = hook {
+            hook();
         }
     }
 
     /// New speech for the engine: a new `Arc<Speech>` on the revision it has (it builds its captions again), and with
     /// every publish after, this project's or the next one's. Held while the feed is sent, so a publish never sends
     /// older speech after newer.
-    // Only the sample words of a debug build set it until analysis does.
-    #[cfg_attr(not(debug_assertions), allow(dead_code))]
     pub(crate) fn set_speech(&self, speech: Arc<Speech>) {
         let mut held = self.speech.lock().unwrap_or_else(PoisonError::into_inner);
         *held = speech.clone();
@@ -53,6 +79,18 @@ impl ProjectSessionState {
             }
             _ => false,
         });
+    }
+
+    /// The open project's assets with these ids, in the order given (ids it doesn't have are left out).
+    pub(crate) fn assets(&self, ids: &[String]) -> Vec<klipolo_model::project::Asset> {
+        let open = self.open.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some(open) = open.as_ref() else {
+            return Vec::new();
+        };
+        let assets = &open.document.project().assets;
+        ids.iter()
+            .filter_map(|id| assets.iter().find(|a| &a.id == id).cloned())
+            .collect()
     }
 
     /// The engine's side of the feed.

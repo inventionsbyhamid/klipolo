@@ -39,11 +39,18 @@ fn content_key_is_stable_and_changes_with_content() {
     );
     assert_eq!(cache::content_key(&path).unwrap(), key, "stable");
 
-    // SHA-256 of the size (8 bytes, little-endian), the first 4 MiB and the last 4 MiB.
+    // SHA-256 of the key's version, the size (8 bytes, little-endian), the first 4 MiB, the last 4 MiB, and 16 samples
+    // of 64 KiB spread evenly over the rest (the first at its start, the last ending at its end).
     let mut hash = Sha256::new();
+    hash.update(b"klipolo-content-key-2");
     hash.update((data.len() as u64).to_le_bytes());
     hash.update(&data[..4 * MIB]);
     hash.update(&data[data.len() - 4 * MIB..]);
+    let (from, len) = (4 * MIB, data.len() - 8 * MIB);
+    let sample = |i: usize| from + (len - 64 * 1024) * i / 15;
+    for i in 0..16 {
+        hash.update(&data[sample(i)..sample(i) + 64 * 1024]);
+    }
     let expected: String = hash.finalize().iter().map(|b| format!("{b:02x}")).collect();
     assert_eq!(key, expected);
 
@@ -68,9 +75,17 @@ fn content_key_is_stable_and_changes_with_content() {
     data.push(0);
     assert_ne!(key_after(&data), key, "a longer file");
     data.pop();
-    // By design the middle isn't read (a long clip keys in two reads): a change there keeps the key.
-    data[5 * MIB] ^= 1;
-    assert_eq!(key_after(&data), key, "the middle is not part of the key");
+    // The middle is sampled: a change inside a sample (an edit of uncompressed sound, same size and ends) is another
+    // key; one between samples isn't seen (the key reads about 9 MiB, however long the file).
+    let inside = sample(8) + 100;
+    data[inside] ^= 1;
+    assert_ne!(key_after(&data), key, "a change inside a middle sample");
+    data[inside] ^= 1;
+    let between = sample(8) + 64 * 1024 + 10;
+    assert!(between < sample(9));
+    data[between] ^= 1;
+    assert_eq!(key_after(&data), key, "a change between samples");
+    data[between] ^= 1;
 
     // A file smaller than 4 MiB is read whole, and an empty one has a key too.
     let small = dir.path().join("small.wav");

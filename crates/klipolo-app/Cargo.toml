@@ -7,7 +7,7 @@ publish = false
 description = "Klipolo's desktop app: the Tauri shell around the preview and export engine"
 default-run = "klipolo-app"
 
-# The app's logic without Tauri types (credentials and the device id), so it tests on Linux.
+# The app's logic without Tauri types (credentials, the device id, analysis), so it tests on Linux.
 [lib]
 name = "klipolo_app"
 path = "src/lib.rs"
@@ -25,9 +25,10 @@ klipolo-model = { path = "../klipolo-model" }
 klipolo-analysis = { path = "../klipolo-analysis" }
 # The Meta client: key checks, the relay's device registration and status.
 klipolo-meta = { path = "../klipolo-meta" }
-# A chat reply's text made fit to show (`sanitize::reply`).
+# The neutral scene items and speaker turns chat reads (the app turns the analysis results into them), and a chat
+# reply's text made fit to show (`sanitize::reply`).
 klipolo-chat = { path = "../klipolo-chat" }
-# The OS's logs folder for the app's log.
+# The OS's logs folder for the app's log; the analysis thread's QoS.
 klipolo-platform = { path = "../klipolo-platform" }
 # `protocol-asset`: the page reads imported media and the engine's thumbnails through `asset:` URLs.
 tauri = { version = "=2.12.1", features = ["protocol-asset"] }
