@@ -49,7 +49,9 @@ impl std::fmt::Display for SaveError {
             DiskReason::ReadOnly | DiskReason::Denied | DiskReason::Locked => {
                 "Klipolo can't write to that folder, so changes aren't being saved. Check its permissions."
             }
-            DiskReason::Other => "Klipolo couldn't save your changes. The disk reported an error.",
+            DiskReason::Other => {
+                "The disk reported an error, so changes aren't being saved. Check that it's connected. Klipolo keeps trying."
+            }
         })
     }
 }
