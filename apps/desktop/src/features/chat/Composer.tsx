@@ -69,7 +69,9 @@ export function Composer() {
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.nativeEvent.isComposing) {
+            // WKWebView ends a composition with an Enter whose `isComposing` is already false: its key code 229
+            // still says the input method had it.
+            if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
               e.preventDefault();
               send();
             }

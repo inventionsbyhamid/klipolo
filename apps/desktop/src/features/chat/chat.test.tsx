@@ -512,6 +512,16 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     expect(fake.requests[1].baseRevision).toBe(5);
   });
 
+  it('Enter while an input method composes a word confirms the word and sends nothing', () => {
+    const fake = chat();
+    renderWithProviders(<ChatPanel />);
+    fireEvent.change(message(), { target: { value: 'にほん' } });
+    fireEvent.keyDown(message(), { key: 'Enter', keyCode: 229 });
+    fireEvent.keyDown(message(), { key: 'Enter', isComposing: true });
+    expect(fake.requests).toHaveLength(0);
+    expect(message()).toHaveValue('にほん');
+  });
+
   it('an empty chat says when the clips aren’t analysed yet, and while they are', () => {
     useAnalysis.setState({ states: {} });
     renderWithProviders(<ChatPanel />);
