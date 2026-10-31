@@ -43,10 +43,10 @@ function DropZone({ over }: { over: boolean }) {
 }
 
 /**
- * The preview panel: the format pills, Add title, the safe area switch, and the engine's frames fitted to
- * the panel in the chosen format with the layers there selectable and editable (`Stage`), under the analysis banner;
- * the inspector docks at the right under the banner while a layer it has fields for is selected, and the frame moves
- * left for it. With no clip yet, the drop zone.
+ * The preview panel: the format pills, Add title, the safe area switch (full screen comes when it works),
+ * and the engine's frames fitted to the panel in the chosen format with the layers there selectable and editable
+ * (`Stage`), under the analysis banner; the inspector docks at the right under the banner while a layer it has fields
+ * for is selected, and the frame moves left for it. With no clip yet, the drop zone.
  * `filesOver`: files from Finder are held over the window.
  */
 export function Preview({ filesOver = false }: { filesOver?: boolean }) {
@@ -76,9 +76,6 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
           onClick={() => setSafeArea(safeArea === 'off' ? 'all' : 'off')}
         >
           <Icon name="safe" />
-        </button>
-        <button className="icon-btn" aria-label="Full screen preview" title="Full screen (F)" disabled>
-          <Icon name="full" />
         </button>
       </div>
       <div className={docked ? 'stage-body has-inspector' : 'stage-body'}>
