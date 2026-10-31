@@ -972,34 +972,6 @@ async fn the_models_undo_takes_back_the_top_step() {
     assert_eq!(chat.project.project().name, "Talk");
 }
 
-#[test]
-fn chat_edits_are_the_persons_with_the_chat_origin() {
-    // What chat commits is a `Transaction` from chat: the compiler marks it, and the history keeps its label.
-    let project = MemoryProjects::open(talk(), PathBuf::from("/tmp/t.klipolo")).unwrap();
-    let now = project.now().unwrap();
-    let tx = Transaction {
-        label: "chat.setFormat".into(),
-        ops: vec![Op::SetSettings {
-            settings: klipolo_model::project::Settings {
-                formats: vec![FormatKind::Landscape, FormatKind::Square],
-                primary_format: FormatKind::Square,
-                ..project.project().settings.clone()
-            },
-        }],
-        origin: Some(Origin::Chat),
-        ..Default::default()
-    };
-    let done = project.commit(&now.at, &tx, None).unwrap();
-    assert_eq!(
-        done.patch.history.undo_label.as_deref(),
-        Some("chat.setFormat")
-    );
-    assert_eq!(
-        project.commit(&now.at, &tx, None).unwrap_err(),
-        CommitError::Moved
-    );
-}
-
 #[tokio::test]
 async fn a_new_proposal_replaces_the_open_one() {
     let chat = chat(vec![
@@ -1597,6 +1569,8 @@ async fn the_projects_own_pictures_are_in_the_library_the_model_reads() {
 struct Refusing {
     project: Arc<MemoryProjects>,
     refuse_next: std::sync::atomic::AtomicBool,
+    /// Every transaction committed, in order.
+    committed: Mutex<Vec<Transaction>>,
 }
 
 impl Projects for Refusing {
@@ -1615,7 +1589,9 @@ impl Projects for Refusing {
                 "Your disk is full.".into(),
             )));
         }
-        self.project.commit(at, tx, next)
+        let done = self.project.commit(at, tx, next)?;
+        self.committed.lock().unwrap().push(tx.clone());
+        Ok(done)
     }
 
     fn undo(
@@ -1634,6 +1610,7 @@ async fn an_apply_that_fails_for_another_reason_keeps_the_proposal_for_retry() {
     let refusing = Arc::new(Refusing {
         project: project.clone(),
         refuse_next: std::sync::atomic::AtomicBool::new(false),
+        committed: Mutex::new(Vec::new()),
     });
     let session = ChatSession::new(refusing.clone(), Found::done(), Paying::key(model));
     let id = proposal_id(&session.send(request("cut the ums")).await.unwrap());
@@ -1820,4 +1797,103 @@ async fn a_proposal_a_later_message_moved_past_is_dropped_with_a_note() {
         ),
         "{note}"
     );
+}
+
+#[tokio::test]
+async fn what_chat_commits_is_the_compilers_from_chat() {
+    let mut calls = vertical_karaoke();
+    calls.push(fillers());
+    let model = Script::new(vec![answer("", calls)]);
+    let project =
+        Arc::new(MemoryProjects::open(talk(), PathBuf::from("/tmp/talk.klipolo")).unwrap());
+    let watched = Arc::new(Refusing {
+        project: project.clone(),
+        refuse_next: std::sync::atomic::AtomicBool::new(false),
+        committed: Mutex::new(Vec::new()),
+    });
+    let session = ChatSession::new(watched.clone(), Found::done(), Paying::key(model));
+    let out = session
+        .send(request("vertical, karaoke, and cut the ums"))
+        .await
+        .unwrap();
+    session.apply(&proposal_id(&out)).unwrap();
+    let committed = watched.committed.lock().unwrap().clone();
+    let made: Vec<(&str, Option<&Origin>)> = (committed.iter())
+        .map(|tx| (tx.label.as_str(), tx.origin.as_ref()))
+        .collect();
+    assert_eq!(
+        made,
+        [
+            ("chat.andMore", Some(&Origin::Chat)),
+            ("chat.removeFillers", Some(&Origin::Chat))
+        ]
+    );
+    assert_eq!(project.undo_steps(), 2);
+}
+
+#[tokio::test]
+async fn an_apply_racing_a_message_lands_and_the_message_does_not() {
+    let model = Script::new(vec![
+        answer("", vec![fillers()]),
+        answer("Done.", vertical_karaoke()),
+    ]);
+    let chat = chat_with(model.clone(), Found::done(), Paying::key(model.clone()));
+    let id = proposal_id(&chat.session.send(request("cut the ums")).await.unwrap());
+    // The first message's arrival was told already: that word is taken, so the next one is the second message's.
+    model.arrived.notified().await;
+    let gate = model.hold();
+    let sent = tokio::spawn({
+        let session = chat.session.clone();
+        async move { session.send(request("vertical")).await.unwrap() }
+    });
+    model.arrived.notified().await;
+    // Apply while the message is out: the cut lands first.
+    chat.session.apply(&id).unwrap();
+    gate.notify_one();
+    let r = reply(&sent.await.unwrap());
+    assert_eq!(r["text"], MOVED, "made on the revision before the cut");
+    assert!(r["applied"].is_null());
+    assert_eq!(chat.project.undo_steps(), 1, "only the cut");
+    assert!(!plays(&chat.project.project(), 0.6));
+    assert_eq!(
+        chat.project.project().settings.primary_format,
+        FormatKind::Landscape
+    );
+}
+
+#[tokio::test]
+async fn a_title_background_moves_with_its_attached_title() {
+    let mut p = titled();
+    // The title is attached to the footage under it, as layers placed by chat are.
+    let title = p.timeline.tracks.pop().unwrap().items.pop().unwrap();
+    let s = studio(p, Painter::new(vec![drawn()]));
+    s.chat
+        .project
+        .hand_edit(&Transaction {
+            label: "Title".into(),
+            ops: vec![Op::AddItem {
+                track: klipolo_model::ops::TrackTarget::Auto,
+                attach: true,
+                item: title,
+            }],
+            ..Default::default()
+        })
+        .unwrap();
+    let attached = (s.chat.project.project().timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .find(|i| i.id == "title")
+        .and_then(|i| i.attach.clone());
+    assert!(attached.is_some(), "the title is attached");
+    let card = s.chat.session.ask_picture(PictureAsk::TitleBackground {
+        prompt: "a calm sea".into(),
+        title_id: "title".into(),
+    });
+    s.chat.session.draw_picture(&card.id).await.unwrap();
+    s.chat.session.place_picture(&card.id).unwrap();
+    let p = s.chat.project.project();
+    let background = (p.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .find(|i| i.id != "title")
+        .expect("the background");
+    assert_eq!(background.attach, attached, "attached where the title is");
 }
