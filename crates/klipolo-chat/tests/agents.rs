@@ -201,6 +201,7 @@ fn section_returns_one_heading_block() {
                 rotation: None,
                 has_audio: true,
                 audio_lead_us: None,
+                made_with: None,
             },
             pack: false,
         }],
@@ -326,6 +327,7 @@ fn talk_30_minutes() -> Inputs {
         rotation: None,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
     });
     project.timeline.main.push(Clip::new(
         ClipSource::Asset { id: "talk".into() },
