@@ -5,7 +5,11 @@
 //! someone speaks for the Music lane's ducking dips.
 
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
+use image::codecs::png::{CompressionType, FilterType, PngEncoder};
+use image::{ExtendedColorType, ImageEncoder};
+use klipolo_engine::render::image_load::decode_rgba;
 use klipolo_model::coded::Said;
 use klipolo_model::history::SnapshotPatch;
 use klipolo_model::media::music::{MusicOpts, add_music_ops};
@@ -19,6 +23,7 @@ use serde::Deserialize;
 use tauri::State;
 use ts_rs::TS;
 
+use crate::media::is_picture;
 use crate::pack::{Pack, PackItem};
 use crate::project::{ProjectSessionState, asset_kind, build_and_apply, servable};
 
@@ -64,7 +69,7 @@ pub enum TemplateWord {
 
 const NOT_IN_PROJECT: &str = "That file isn't part of this project.";
 const NOT_IN_PACK: &str = "That item isn't in Klipolo's pack.";
-/// The largest picture the library shows from its own file.
+/// The largest picture file the library decodes for its tile.
 const MAX_PICTURE_BYTES: u64 = 40 * 1024 * 1024;
 
 /// `source` as an asset of `project`, or why not.
@@ -250,8 +255,13 @@ pub fn library_pack(state: State<'_, ProjectSessionState>) -> Vec<PackItem> {
     state.pack().items()
 }
 
-/// A picture's bytes for the library: a pack sticker by its id, or a picture the open project uses (its path), never
-/// any other file.
+/// The longest side of a picture the library shows: its tiles are 64 px wide, so this is room for a 2x screen and more.
+const PICTURE_SIDE: u32 = 512;
+const PICTURE_UNREADABLE: &str = "That picture couldn't be read.";
+
+/// A picture for the library, as a PNG at most `PICTURE_SIDE` px on its long side: a pack sticker by its id, or a
+/// picture the open project uses (its path), never any other file. Only a decoded picture goes back, never a file's
+/// bytes, so a path that leads elsewhere gives nothing away.
 #[tauri::command(async)]
 pub fn media_picture(
     state: State<'_, ProjectSessionState>,
@@ -267,21 +277,48 @@ pub fn media_picture(
                 .ok_or(NOT_IN_PACK)?
                 .to_path_buf()
         }
-        (None, Some(path)) => {
-            if asset_kind(&state, &path) != Some(AssetKind::Image) || !servable(&path) {
-                return Err(NOT_IN_PROJECT.into());
-            }
-            path.into()
-        }
+        (None, Some(path)) => picture_file(&state, &path)?,
         (None, None) => return Err(NOT_IN_PROJECT.into()),
     };
-    let size = std::fs::metadata(&file).map_err(|e| e.to_string())?.len();
+    thumbnail(&file).map(tauri::ipc::Response::new)
+}
+
+/// The file behind `path`, a picture the open project uses, with every link followed: refused unless what it leads to
+/// is a regular file Klipolo imports as a picture (a `logo.png` linked to `~/.ssh/id_rsa` is not).
+pub(crate) fn picture_file(state: &ProjectSessionState, path: &str) -> Result<PathBuf, String> {
+    if asset_kind(state, path) != Some(AssetKind::Image) {
+        return Err(NOT_IN_PROJECT.into());
+    }
+    let real = std::fs::canonicalize(path).map_err(|_| "That picture isn't there anymore.")?;
+    let regular = std::fs::metadata(&real).is_ok_and(|meta| meta.is_file());
+    if !regular || !servable(&real.to_string_lossy()) || !is_picture(&real) {
+        return Err(NOT_IN_PROJECT.into());
+    }
+    Ok(real)
+}
+
+/// `file` decoded and scaled to at most `PICTURE_SIDE` px on its long side, as a PNG.
+pub(crate) fn thumbnail(file: &Path) -> Result<Vec<u8>, String> {
+    let size = std::fs::metadata(file)
+        .map_err(|_| PICTURE_UNREADABLE.to_string())?
+        .len();
     if size > MAX_PICTURE_BYTES {
         return Err("That picture is too large to show here.".into());
     }
-    std::fs::read(&file)
-        .map(tauri::ipc::Response::new)
-        .map_err(|e| e.to_string())
+    let picture = decode_rgba(file, PICTURE_SIDE).map_err(|error| {
+        tracing::info!(%error, "a picture couldn't be shown in the library");
+        PICTURE_UNREADABLE.to_string()
+    })?;
+    let mut png = Vec::new();
+    PngEncoder::new_with_quality(&mut png, CompressionType::Fast, FilterType::Adaptive)
+        .write_image(
+            picture.as_raw(),
+            picture.width(),
+            picture.height(),
+            ExtendedColorType::Rgba8,
+        )
+        .map_err(|_| PICTURE_UNREADABLE.to_string())?;
+    Ok(png)
 }
 
 /// Where someone speaks on the open project's timeline, as the mix ducks music under it: the Music lane draws its dips
@@ -289,4 +326,66 @@ pub fn media_picture(
 #[tauri::command(async)]
 pub fn media_speech_ranges(state: State<'_, ProjectSessionState>) -> Vec<RangeUs> {
     state.ducking_speech()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::project::create_in;
+
+    /// A session with a project open that uses each of `pictures` as a picture.
+    fn open_with(dir: &Path, pictures: &[&Path]) -> ProjectSessionState {
+        let state = ProjectSessionState::default();
+        let mut project = Project::new("Pictures");
+        project.assets = pictures
+            .iter()
+            .enumerate()
+            .map(|(n, path)| Asset {
+                id: format!("p{n}"),
+                kind: AssetKind::Image,
+                path: path.to_string_lossy().into_owned(),
+                name: format!("p{n}.png"),
+                duration_us: 0,
+                width: 10,
+                height: 10,
+                fps: 0.0,
+                rotation: None,
+                has_audio: false,
+                audio_lead_us: None,
+                made_with: None,
+            })
+            .collect();
+        create_in(&state, dir, project).unwrap();
+        state
+    }
+
+    /// A picture the project uses through a link is read from what the link leads to, and only when that is a
+    /// picture: a `logo.png` linked to a key file gives nothing back. What goes back is the picture at 512 px at most.
+    #[test]
+    fn a_linked_picture_is_followed_and_must_lead_to_a_picture() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real.png");
+        image::RgbaImage::from_pixel(2000, 1000, image::Rgba([255, 0, 0, 255]))
+            .save(&real)
+            .unwrap();
+        let secret = dir.path().join("id_rsa");
+        std::fs::write(&secret, b"-----BEGIN KEY-----").unwrap();
+        let (linked, sneaky) = (dir.path().join("linked.png"), dir.path().join("logo.png"));
+        std::os::unix::fs::symlink(&real, &linked).unwrap();
+        std::os::unix::fs::symlink(&secret, &sneaky).unwrap();
+        let state = open_with(dir.path(), &[&linked, &sneaky]);
+        let file = picture_file(&state, &linked.to_string_lossy()).unwrap();
+        assert_eq!(file, std::fs::canonicalize(&real).unwrap());
+        assert_eq!(
+            picture_file(&state, &sneaky.to_string_lossy()).unwrap_err(),
+            NOT_IN_PROJECT
+        );
+        // The file behind the link isn't one the project uses by that name.
+        assert_eq!(
+            picture_file(&state, &real.to_string_lossy()).unwrap_err(),
+            NOT_IN_PROJECT
+        );
+        let shown = image::load_from_memory(&thumbnail(&file).unwrap()).unwrap();
+        assert_eq!((shown.width(), shown.height()), (512, 256));
+    }
 }

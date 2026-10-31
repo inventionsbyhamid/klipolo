@@ -18,6 +18,16 @@ pub(crate) const MEDIA_EXTENSIONS: &[&str] = &[
     "png", "jpg", "jpeg", "webp", "heic", "avif", "tif", "tiff",
 ];
 
+/// The pictures among them: what the library shows as a picture (`media_picture`).
+const PICTURE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "heic", "avif", "tif", "tiff"];
+
+/// Whether `path` names a picture Klipolo imports, by its extension.
+pub(crate) fn is_picture(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| PICTURE_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+}
+
 const MAX_FILES: usize = 100;
 const TOO_MANY: &str = "Only 100 files can be added at once.";
 const UNSUPPORTED: &str = "This file type isn't supported.";
