@@ -85,11 +85,11 @@ async fn every_case_is_judged_and_the_cost_added_up_without_the_key() {
     assert!(stdout.contains("FAIL vertical"), "{stdout}");
     assert!(stdout.contains("     reply: Undone."), "{stdout}");
     assert!(
-        stdout.contains("1/26 passed (target 24); 26 model calls; total $0.04"),
+        stdout.contains("1/27 passed (target 25); 27 model calls; total $0.04"),
         "{stdout}"
     );
     assert!(!stdout.contains(KEY) && !stderr.contains(KEY));
-    assert_eq!(server.received_requests().await.unwrap().len(), 26);
+    assert_eq!(server.received_requests().await.unwrap().len(), 27);
 
     // One case on its own must pass.
     let out = run(&env, &["--only", "undo"]).await;
@@ -152,6 +152,11 @@ fn ideal(message: &str) -> Vec<(&'static str, Value)> {
         "Cut out the underwater training footage at the start" => vec![cut(0.0, 13.5)],
         "Remove the part where Peyton asks her question" => vec![cut(85.5, 95.5)],
         "blur it" | "Make it better" | "Cut the boring part" => vec![ask],
+        // A title card with its picture named but not its words: ask for them.
+        "make a title card with trams behind it" => vec![(
+            "askUser",
+            json!({"question": "What should the title card say?"}),
+        )],
         "Get rid of the ums and uhs" => vec![("removeFillers", json!({}))],
         "Add those big bold word-by-word captions that light up as people talk" => vec![karaoke],
         "When we go vertical keep the camera on the woman astronaut" => vec![
@@ -241,7 +246,7 @@ async fn ideal_answers_pass_every_case() {
     ];
     let out = run(&env, &[]).await;
     let (stdout, stderr) = text(&out);
-    assert!(stdout.contains("26/26 passed"), "{stdout}{stderr}");
+    assert!(stdout.contains("27/27 passed"), "{stdout}{stderr}");
     // A case that allows more than one answer says which passed: the first for each (a question is the second).
     let sticker = &stdout[stdout.find("PASS plane-sticker").expect("the sticker case")..];
     assert!(
@@ -252,7 +257,7 @@ async fn ideal_answers_pass_every_case() {
     assert_eq!(stdout.matches("     passed on alternative #0").count(), 3);
     assert_eq!(out.status.code(), Some(0));
     // One call each: clip A's missing filler words are told to the person, with no refusal round.
-    assert!(stdout.contains("26 model calls"), "{stdout}");
+    assert!(stdout.contains("27 model calls"), "{stdout}");
     assert!(
         stdout.contains("     reply: There are no filler words to remove."),
         "{stdout}"

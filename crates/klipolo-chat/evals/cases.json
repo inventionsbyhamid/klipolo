@@ -259,6 +259,12 @@
       ]
     },
     {
+      "id": "title-card-no-words",
+      "message": "make a title card with trams behind it",
+      "note": "the background is named but not the title's words: ask for them, never make up a title such as trams",
+      "expect": [{"calls": [{"name": "askUser"}], "outcome": {"asked": true, "jobs": false}}]
+    },
+    {
       "id": "title-card-pick",
       "message": "make a title card that says Day 1 in Lisbon",
       "note": "no background is named: the model chooses one and never asks for it",

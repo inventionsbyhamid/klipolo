@@ -40,8 +40,8 @@ use serde_json::{Map, Value, json};
 const KEY_ENV: &str = "MODEL_API_KEY";
 const USAGE: &str =
     "usage: klipolo-chat-eval [--cases <cases.json>] [--only <id>]... [--min-pass <n>]";
-/// The planner's target: at least this many of the 26 cases.
-const MIN_PASS: usize = 24;
+/// The planner's target: at least this many of the 27 cases.
+const MIN_PASS: usize = 25;
 /// Loudness of a window with a word said in it, and of one without, in dBFS.
 const SPEECH_DB: f32 = -20.0;
 const QUIET_DB: f32 = -70.0;

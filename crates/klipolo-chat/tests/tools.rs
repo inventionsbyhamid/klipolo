@@ -1042,7 +1042,9 @@ fn a_title_card_chooses_its_own_background_when_none_is_named() {
         .as_str()
         .unwrap();
     assert!(
-        prompt.contains("If the person named none, choose one that fits the title and the video; never ask for it."),
+        prompt.contains(
+            "If the person named no background, choose one that fits the title and the video; never ask for it."
+        ),
         "{prompt}"
     );
     let description = (tool_list().into_iter())

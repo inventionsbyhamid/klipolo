@@ -329,8 +329,8 @@ pub(super) const MAKE_TITLE_CARD: Tool = Tool {
             (
                 "prompt",
                 string(
-                    "What the background shows, a short phrase. If the person named none, choose one that fits the \
-                     title and the video; never ask for it.",
+                    "What the background shows, a short phrase. If the person named no background, choose one that \
+                     fits the title and the video; never ask for it.",
                 ),
             ),
             at_sec(),
