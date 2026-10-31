@@ -177,9 +177,14 @@ export const VolumeLine = memo(function VolumeLine({
     const set = (patch: Partial<AudioContent>): Op[] => [
       { type: 'updateItem', id, patch: { content: { ...contentNow(id, content), ...patch } } },
     ];
-    if (p.deep && next.duck !== p.duck) void commitLatest('music.duck.undo', () => set({ duck: next.duck }));
-    else if (!p.deep && next.volume !== p.volume) void commitLatest('volume.undo', () => set({ volume: next.volume }));
-    else line.current?.setAttribute('points', shown);
+    // A change that didn't go in (refused, or the music gone) leaves the line where the project has it.
+    const back = (ok: boolean) => {
+      if (!ok) line.current?.setAttribute('points', shown);
+    };
+    if (p.deep && next.duck !== p.duck) void commitLatest('music.duck.undo', () => set({ duck: next.duck })).then(back);
+    else if (!p.deep && next.volume !== p.volume)
+      void commitLatest('volume.undo', () => set({ volume: next.volume })).then(back);
+    else back(false);
   };
   return (
     <>

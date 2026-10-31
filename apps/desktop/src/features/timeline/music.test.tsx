@@ -121,4 +121,21 @@ describe('the music’s volume line', () => {
     expect(deeper.duck).toBeLessThan(-12);
     expect(deeper.volume).toBe(0.3);
   });
+
+  it('a drag that is refused puts the line back where the project has it', async () => {
+    apply.mockResolvedValueOnce(false);
+    useProject.setState({ snapshot: music(), pending: 0, apply });
+    renderWithProviders(<Timeline />);
+    const lane = screen.getByRole('group', { name: 'Music' });
+    const line = lane.querySelector('.tl-volume-line')!;
+    const grip = lane.querySelector('.tl-volume-grip')!;
+    const before = line.getAttribute('points');
+    fireEvent.pointerDown(grip, { button: 0, pointerId: 1, clientY: 100 });
+    fireEvent.pointerMove(grip, { pointerId: 1, clientY: 80 });
+    expect(line.getAttribute('points')).not.toBe(before);
+    fireEvent.pointerUp(grip, { pointerId: 1, clientY: 80 });
+    await act(async () => undefined);
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(line.getAttribute('points')).toBe(before);
+  });
 });
