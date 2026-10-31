@@ -5,8 +5,6 @@ import type { Layout } from '../bindings/Layout';
 import type { Op } from '../bindings/Op';
 import type { Project } from '../bindings/Project';
 import { newClipFor, newId } from './defaults';
-import { FORMAT_SIZE } from './layout';
-import { mainDurationUs } from './timeline';
 
 const MIN_US = 10_000;
 /** An image layer's length when it is added. */
@@ -57,40 +55,16 @@ export function placeable(asset: Asset): boolean {
 }
 
 /**
- * Ops that bring freshly imported media into the video: videos join the end of the main track,
- * audio goes on its own track from the start, images become 5-second layers at the playhead.
- * Clips go in first, so images imported with them attach to them.
+ * Ops that bring freshly imported media into the project: videos join the end of the main track in the order given;
+ * sounds and pictures go to the library (the project's files), never the main track, for the person to place from
+ * there (a drag, the "+", a drop on a lane). One `addAssets` for all of them.
  */
-export function placementOps(assets: Asset[], project: Project, playheadUs: number): Op[] {
+export function placementOps(assets: Asset[], _project: Project, _playheadUs: number): Op[] {
   const usable = assets.filter(placeable);
   if (usable.length === 0) return [];
   const clips = usable.filter((asset) => asset.kind === 'video').map(newClipFor);
-  const ops: Op[] = [
+  return [
     { type: 'addAssets', assets: usable },
     ...clips.map((clip): Op => ({ type: 'insertClip', clip, index: null })),
   ];
-  // Images over the main footage follow it; past its end only layers play, so they stay where they are.
-  const insideVideo = playheadUs < mainDurationUs([...project.timeline.main, ...clips]);
-  const [cw, ch] = FORMAT_SIZE[project.settings.primaryFormat];
-  for (const asset of usable) {
-    if (asset.kind === 'audio') {
-      ops.push({ type: 'addItem', track: { type: 'auto' }, attach: false, item: audioItem(asset) });
-    } else if (asset.kind === 'image') {
-      ops.push({
-        type: 'addItem',
-        track: { type: 'auto' },
-        attach: insideVideo,
-        item: {
-          id: newId(),
-          startUs: playheadUs,
-          durationUs: IMAGE_US,
-          attach: null,
-          layout: layoutFor(imageRect(asset, cw, ch)),
-          content: { type: 'image', assetId: asset.id },
-          effects: [],
-        },
-      });
-    }
-  }
-  return ops;
 }

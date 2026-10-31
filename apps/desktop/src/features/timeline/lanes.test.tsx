@@ -65,7 +65,7 @@ describe('the four lanes', () => {
     expect(sounds.querySelector('.tl-lane')).not.toHaveClass('is-empty');
   });
 
-  it('a sound held over the Music lane shows on the Sounds lane, where it lands; each lane marks only its own', () => {
+  it('a sound held over the Music lane shows on the Music lane, where it lands as music; each lane marks only its own', () => {
     useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
     renderWithProviders(<Timeline />);
     const lane = (name: string) => screen.getByRole('group', { name }).querySelector<HTMLElement>('.tl-lane')!;
@@ -82,6 +82,9 @@ describe('the four lanes', () => {
     ] as const;
     for (const [name, top, height] of rows) box(document.querySelector(`[data-lane="${name}"]`)!, top, height);
     act(() => setDropIndicator(dropTargetAt(40 + 120, 160, 'audio')));
+    expect(lane('Music')).toHaveClass('is-drop');
+    expect(lane('Sound effects')).not.toHaveClass('is-drop');
+    act(() => setDropIndicator(dropTargetAt(40 + 120, 125, 'audio')));
     expect(lane('Sound effects')).toHaveClass('is-drop');
     expect(lane('Music')).not.toHaveClass('is-drop');
     // A picture over the Overlays lane marks that lane alone.

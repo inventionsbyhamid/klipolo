@@ -102,7 +102,7 @@ function edgesOf(project: Project): Float64Array {
 
 /**
  * Over `scroller`'s lanes (below its ruler, `headBottom`): the main lane gives the cut nearest the pointer's time; the
- * Overlays lane a picture layer there; the Sounds and Music lanes a sound. A layer's start keeps to the frame grid, and
+ * Overlays lane a picture layer there; the Sounds lane a sound effect and the Music lane music. A layer's start keeps to the frame grid, and
  * edge or the playhead within 8 px while snapping is on: O(log edges) a frame.
  *
  * Null elsewhere: the ruler, outside the lanes, a read-only project, a zoom, hidden or locked track, and a row that
@@ -154,10 +154,10 @@ export function timelineTargetAt(
     const lane = row.dataset.lane;
     if (lane === 'main') return { lane: 'main', index: nearestCut(project.timeline.main, pointerUs) };
     if (lane === 'layers') return picture();
-    // Music and sound effects are both sound layers; what makes a song music (ducking) is set as it is added. No drop
-    // sets it yet (music drops come with the library), so a sound held over the Music lane lands among the sound
-    // effects and shows there.
-    if (lane === 'sounds' || lane === 'music') return sound('sounds');
+    // Music and sound effects are both sound layers; what makes a song music (ducking) is set as it is added: a sound
+    // let go on the Music lane is added as music (`row: 'music'`, the model's music ops), on the Sounds lane as an
+    // effect.
+    if (lane === 'sounds' || lane === 'music') return sound(lane);
   }
   return null;
 }

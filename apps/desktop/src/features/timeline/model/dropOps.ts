@@ -19,7 +19,10 @@ import { itemSpans, mainIndex } from './index';
 export type DropTarget =
   | { lane: 'main'; index: number }
   | { lane: 'picture'; trackId: string | null; atUs: number; newTrack?: boolean }
-  /** `row`: the timeline lane it was held over (Sounds or Music), so only that lane shows where it lands. */
+  /**
+   * `row`: the timeline lane it was held over, so only that lane shows where it lands. On Music it is added as music
+   * that fits the video (`features/media/place`), never by `dropOps`.
+   */
   | { lane: 'sound'; trackId: string | null; atUs: number; newTrack?: boolean; row?: 'sounds' | 'music' };
 
 /** The cut of `main` nearest `atUs`: its index in the main track (`main.length` is the end). */

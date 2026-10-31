@@ -1,5 +1,6 @@
 import { plural, t } from '@lingui/core/macro';
 import { useCallback } from 'react';
+import type { Asset } from '../../bindings/Asset';
 import type { SkippedFile } from '../../bindings/SkippedFile';
 import { bridge } from '../../bridge/commands';
 import { errorMessage } from '../../lib/errors';
@@ -9,7 +10,20 @@ import { afterCommits, beginCommit, keepAtClose } from '../../state/commitQueue'
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { toast } from '../../state/toasts';
+import { useUi, type LibraryTab } from '../../state/ui';
 import { dropAllOps, type DropTarget } from '../timeline/drops';
+import { isMusicTarget } from './addMedia';
+import { addMusic } from './place';
+
+/** A sound at least this long is music in the Library; shorter ones are sound effects. */
+export const MUSIC_MIN_US = 15_000_000;
+
+/** The Library tab a file shows under. */
+export function tabOf(asset: Asset): LibraryTab {
+  if (asset.kind === 'image') return 'images';
+  if (asset.kind === 'audio') return asset.durationUs >= MUSIC_MIN_US ? 'music' : 'sounds';
+  return 'clips';
+}
 
 const NAMES_SHOWN = 3;
 
@@ -62,7 +76,7 @@ function skippedMessage(skipped: SkippedFile[]): string {
  * "Added 2 clips" once the files are in, with an Undo that takes back this import only while it is still
  * the last change (`undoIf`), never an edit made since.
  */
-function sayAdded(count: number, clips: boolean) {
+function sayAdded(count: number, clips: boolean, libraryOnly: boolean) {
   const revision = useProject.getState().snapshot?.history.revision;
   const text = clips
     ? t({
@@ -70,11 +84,17 @@ function sayAdded(count: number, clips: boolean) {
         message: plural(count, { one: 'Added # clip', other: 'Added # clips' }),
         comment: 'After videos were added to the project',
       })
-    : t({
-        id: 'media.added.files',
-        message: plural(count, { one: 'Added # file', other: 'Added # files' }),
-        comment: 'After files (music, images) were added to the project',
-      });
+    : libraryOnly
+      ? t({
+          id: 'media.added.library',
+          message: plural(count, { one: 'Added # file to the library', other: 'Added # files to the library' }),
+          comment: 'After music, sounds or pictures were added to the Library (not to the video)',
+        })
+      : t({
+          id: 'media.added.files',
+          message: plural(count, { one: 'Added # file', other: 'Added # files' }),
+          comment: 'After files (music, images) were added to the project',
+        });
   toast.info(text, {
     done: true,
     actions: [
@@ -92,8 +112,9 @@ function sayAdded(count: number, clips: boolean) {
 /**
  * Imports files and places them, as one undo step labelled "Import media": `paths` (dropped from Finder), or what the
  * person picks in the file picker (null). With a `target` (files dropped on the timeline) they land there, in order
- * (`dropAllOps`); without, as the Add button places them: videos at the end of the main track in the order given,
- * music on its own track, images at the playhead. Skipped files are named in one toast. The placing waits for any
+ * (`dropAllOps`), a sound let go on the Music lane as music that fits the video; without, as the Add button places
+ * them: videos at the end of the main track in the order given, sounds and pictures into the library (its tab opens),
+ * never the main track. Skipped files are named in one toast. The placing waits for any
  * commit in flight and builds on the project it left. It is kept for the close from the moment it is asked for: a
  * close or quit while the files are read waits for the placing, in its turn.
  */
@@ -118,6 +139,15 @@ export async function importFiles(paths: string[] | null, target: DropTarget | n
     }
     const { assets } = picked;
     if (assets.length === 0) return;
+    // Let go on the Music lane: the first sound is music that fits the video (one step, the file coming in with it).
+    const song = target && isMusicTarget(target) ? assets.find((a) => a.kind === 'audio') : undefined;
+    if (song && target?.lane === 'sound') {
+      await addMusic({ type: 'file', asset: song }, target.atUs);
+      return;
+    }
+    // What goes to the library shows there: its tab opens.
+    const shelved = assets.find((a) => a.kind !== 'video');
+    if (!target && shelved) useUi.getState().setLibraryTab(tabOf(shelved));
     placing = true;
     // What is still settling goes in first, so the placing builds on it.
     flushBursts();
@@ -139,7 +169,15 @@ export async function importFiles(paths: string[] | null, target: DropTarget | n
           void useProject
             .getState()
             .apply(label, ops)
-            .then((ok) => ok && sayAdded(assets.length, assets.every((a) => a.kind === 'video')))
+            .then(
+              (ok) =>
+                ok &&
+                sayAdded(
+                  assets.length,
+                  assets.every((a) => a.kind === 'video'),
+                  !target && assets.every((a) => a.kind !== 'video'),
+                ),
+            )
             .finally(end);
         } finally {
           hold?.release();
@@ -152,7 +190,7 @@ export async function importFiles(paths: string[] | null, target: DropTarget | n
   }
 }
 
-/** Opens the file picker and places what the person picked (videos on the main track, music on its own track). */
+/** Opens the file picker and places what the person picked (videos on the main track, the rest in the library). */
 export function useImportMedia(): () => Promise<void> {
   return useCallback(() => importFiles(null), []);
 }

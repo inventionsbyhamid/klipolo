@@ -187,9 +187,8 @@ describe('where a drop lands on the timeline', () => {
     expect(at(24.01, 30)).toEqual({ lane: 'picture', trackId: null, atUs: 24_000_000 });
     // Sound effects and music are both sound layers.
     expect(at(3, 125)).toEqual({ lane: 'sound', trackId: null, atUs: 3_000_000, row: 'sounds' });
-    // Over the Music lane a sound still lands among the sound effects (nothing makes it music until music drops are
-    // wired), so the drop shows there.
-    expect(at(3, 160)).toEqual({ lane: 'sound', trackId: null, atUs: 3_000_000, row: 'sounds' });
+    // Over the Music lane a sound is music: added there as music that fits the video.
+    expect(at(3, 160)).toEqual({ lane: 'sound', trackId: null, atUs: 3_000_000, row: 'music' });
     // The ruler and below the lanes take nothing.
     expect(at(3, 10)).toBeNull();
     expect(at(3, 250)).toBeNull();

@@ -3,7 +3,7 @@ import type { Asset } from '../bindings/Asset';
 import { fixtureProject } from '../test/fixtures';
 import { newClipFor, newTextItem } from './defaults';
 import { resolveRect } from './layout';
-import { placementOps } from './placement';
+import { imageRect, placementOps } from './placement';
 import { formatDuration, formatPrecise, formatTime, snapToFrame } from './time';
 import {
   clipAt,
@@ -136,34 +136,21 @@ describe('placement', () => {
     fps: 0,
     hasAudio: false,
   };
-  it('adds assets, appends videos, puts music on an audio track and images at the playhead', () => {
+  it('audio_and_images_go_to_the_library_not_the_main_track', () => {
     const ops = placementOps([video, song, logo], fixtureProject(), 2 * S);
-    expect(ops[0]).toMatchObject({ type: 'addAssets' });
+    expect(ops).toHaveLength(2);
+    expect(ops[0]).toMatchObject({ type: 'addAssets', assets: [video, song, logo] });
     expect(ops[1]).toMatchObject({ type: 'insertClip', index: null, clip: { sourceOutUs: 8 * S } });
-    expect(ops[2]).toMatchObject({
-      type: 'addItem',
-      attach: false,
-      item: { startUs: 0, durationUs: 90 * S },
-    });
-    expect(ops[3]).toMatchObject({
-      type: 'addItem',
-      attach: true,
-      item: { startUs: 2 * S, durationUs: 5 * S },
-    });
-    const image = ops[3] as Extract<(typeof ops)[number], { type: 'addItem' }>;
-    expect(image.item.layout.rect.w).toBeCloseTo(0.4);
-    expect(image.item.layout.rect.h).toBeCloseTo(0.4 * 0.5 * (1920 / 1080));
+    // A sound and a picture alone: into the project's files, nothing on the timeline.
+    expect(placementOps([song, logo], fixtureProject(), 0)).toEqual([
+      { type: 'addAssets', assets: [song, logo] },
+    ]);
   });
-  it('attaches images to videos imported with them and keeps tall images whole', () => {
-    const project = fixtureProject();
-    project.timeline.main = [];
+  it('keeps a tall picture whole where it is placed', () => {
     const phone: Asset = { ...logo, id: 'p', name: 'p.png', width: 1170, height: 2532 };
-    const ops = placementOps([phone, video], project, 0);
-    expect(ops.map((op) => op.type)).toEqual(['addAssets', 'insertClip', 'addItem']);
-    const image = ops[2] as Extract<(typeof ops)[number], { type: 'addItem' }>;
-    expect(image.attach).toBe(true);
-    expect(image.item.layout.rect.h).toBe(1);
-    expect(image.item.layout.rect.w).toBeCloseTo((1080 * 1170) / (2532 * 1920));
+    const rect = imageRect(phone, 1920, 1080);
+    expect(rect.h).toBe(1);
+    expect(rect.w).toBeCloseTo((1080 * 1170) / (2532 * 1920));
   });
   it('builds valid defaults', () => {
     expect(newClipFor(video)).toMatchObject({

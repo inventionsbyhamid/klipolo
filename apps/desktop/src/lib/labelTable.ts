@@ -148,6 +148,27 @@ export const TABLE = {
     message: 'Round corners',
     comment: 'Undo history entry',
   }),
+  // The library's media commands (Rust builds them) and the inspector's fields.
+  'media.music.add': msg({ id: 'media.music.add', message: 'Add music', comment: 'Undo history entry' }),
+  'media.sound.add': msg({ id: 'media.sound.add', message: 'Add sound', comment: 'Undo history entry' }),
+  'media.image.add': msg({ id: 'media.image.add', message: 'Add image', comment: 'Undo history entry' }),
+  'media.text.add': msg({ id: 'media.text.add', message: 'Add text', comment: 'Undo history entry' }),
+  'media.title.add': msg({ id: 'media.title.add', message: 'Add title', comment: 'Undo history entry' }),
+  'music.duck.undo': msg({
+    id: 'music.duck.undo',
+    message: 'Change ducking',
+    comment: 'Undo history entry: how much quieter the music gets while people talk',
+  }),
+  'text.background.undo': msg({
+    id: 'text.background.undo',
+    message: 'Change text background',
+    comment: 'Undo history entry',
+  }),
+  'layout.position.undo': msg({ id: 'layout.position.undo', message: 'Move to a position', comment: 'Undo history entry' }),
+  'timing.start.undo': msg({ id: 'timing.start.undo', message: 'Change start', comment: 'Undo history entry' }),
+  'timing.length.undo': msg({ id: 'timing.length.undo', message: 'Change length', comment: 'Undo history entry' }),
+  'title.edit.undo': msg({ id: 'title.edit.undo', message: 'Edit title', comment: 'Undo history entry' }),
+  'title.accent.undo': msg({ id: 'title.accent.undo', message: 'Change accent colour', comment: 'Undo history entry' }),
   'text.add': msg({ id: 'text.add', message: 'Add text', comment: 'Command and undo history entry' }),
   'text.edit.undo': msg({ id: 'text.edit.undo', message: 'Edit text', comment: 'Undo history entry' }),
   'text.remove.undo': msg({

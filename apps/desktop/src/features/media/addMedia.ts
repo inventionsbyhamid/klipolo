@@ -10,6 +10,12 @@ import { usePlayback } from '../../state/playback';
 import { useSelection } from '../../state/selection';
 import { toast } from '../../state/toasts';
 import { commit, dropOps, editable, type DropTarget } from '../timeline/drops';
+import { addMusic } from './place';
+
+/** A drop on the Music lane: the sound is added as music that fits the video (`place.addMusic`). */
+export function isMusicTarget(target: DropTarget): target is Extract<DropTarget, { lane: 'sound' }> {
+  return target.lane === 'sound' && target.row === 'music';
+}
 
 /*
  * What adding media to the timeline does, from the library (a row dragged onto the timeline, a row's menu): it reads
@@ -61,6 +67,10 @@ export const mediaRefusal = {
  * takes no edit, as for every timeline action.
  */
 export function addMedia(assetId: string, target: DropTarget | ((project: Project) => DropTarget)) {
+  if (typeof target !== 'function' && isMusicTarget(target)) {
+    void addMusic({ type: 'asset', id: assetId }, target.atUs);
+    return;
+  }
   keyBurst.after(() => {
     const project = editable();
     if (!project) return;
