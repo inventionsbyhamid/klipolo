@@ -503,6 +503,7 @@ describe('the previews in the Record dialog', () => {
     expect(screen.queryByRole('meter')).toBeNull();
   });
 
+
   it('blob_urls_are_revoked', async () => {
     await openOn(recorderSetup({ cameras: [device('cam')] }));
     await choose('Camera: No camera', 'cam');
@@ -548,6 +549,15 @@ describe('the previews in the Record dialog', () => {
     await sendFrame(fake, 'live', 'display:elsewhere', 'live 2');
     expect(await nameAt(previews().live)).toBe('live 1');
     expect(fake.acks).toEqual(['thumb', 'live', 'camera', 'thumb', 'live']);
+  });
+
+  it('a_frame_that_comes_while_klipolo_is_behind_is_acked_once_and_not_shown', async () => {
+    await openOn();
+    await windowFocus('blur');
+    await sendFrame(fake, 'thumb', 'display:main', 'main 1');
+    expect(fake.acks).toEqual(['thumb']);
+    expect(previews().thumbs).toEqual({});
+    expect(shownIn(card('Display main'))).toBeNull();
   });
 
   it('a_frame_that_fails_to_draw_is_still_acked_and_the_next_one_draws', async () => {
