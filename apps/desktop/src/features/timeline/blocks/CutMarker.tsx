@@ -148,6 +148,11 @@ export const CutMarker = memo(function CutMarker({
     },
     onPointerMove: (e: PointerEvent<HTMLElement>) => {
       if (handedOff) return onBlockPointerMove(e);
+      // No button down: a hold whose release the marker never heard (it went mid-hold) is over; a hover never trims.
+      if ((e.buttons & 1) === 0) {
+        held = null;
+        return;
+      }
       const press = held;
       if (!press || e.pointerId !== press.down.pointerId) return;
       if (Math.hypot(e.clientX - press.down.clientX, e.clientY - press.down.clientY) < DRAG_SLOP_PX) return;
