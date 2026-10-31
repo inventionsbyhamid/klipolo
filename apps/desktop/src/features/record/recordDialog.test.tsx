@@ -229,6 +229,15 @@ describe('the dialog and its choices', () => {
     expect(screen.getByRole('button', { name: 'Microphone: No microphone' })).toBeInTheDocument();
   });
 
+  it('the_microphone_the_select_shows_is_the_one_recorded', async () => {
+    // The setup's default is no longer listed (it was unplugged as it was read): the select never reads "No
+    // microphone" while Record would send that one.
+    await openOn(recorderSetup({ mics: [device('MacBook Pro Microphone'), device('MV7')], mic: 'unplugged' }));
+    expect(screen.getByRole('button', { name: 'Microphone: MacBook Pro Microphone' })).toBeInTheDocument();
+    await userEvent.click(recordButton());
+    expect(fake.armed[0].mic).toBe('MacBook Pro Microphone');
+  });
+
   it('test_run_shows_the_sentence_and_no_record', async () => {
     const dialog = await openOn(refusal('capture.error.testRun'));
     expect(within(dialog).getByRole('alert')).toHaveTextContent('Recording is off in this test run.');

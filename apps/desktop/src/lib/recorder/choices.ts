@@ -32,9 +32,15 @@ export const NO_PICKS: Picks = {
   mirror: true,
 };
 
-/** The choices the dialog opens with: the whole of the first display, the mic the app picked, and no camera. */
+/**
+ * The choices the dialog opens with: the whole of the first display, the mic the app picked, and no camera. A picked
+ * mic that isn't listed (gone as the setup was read) gives way to the first one listed, so the Microphone select
+ * always names the mic a take records.
+ */
 export function defaultPicks(setup: RecorderSetup): Picks {
-  return { ...NO_PICKS, display: setup.devices.displays[0]?.id ?? null, mic: setup.mic };
+  const { displays, mics } = setup.devices;
+  const listed = setup.mic === null || mics.some((m) => m.id === setup.mic);
+  return { ...NO_PICKS, display: displays[0]?.id ?? null, mic: listed ? setup.mic : (mics[0]?.id ?? null) };
 }
 
 /** What a take of these choices records; null while there is no display, or no app chosen for "One app". */
