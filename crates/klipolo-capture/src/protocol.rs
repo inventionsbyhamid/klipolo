@@ -19,7 +19,7 @@ use crate::shell::{Level, WorkerState};
 /// the app's `recorder_send` (`Start` only on the person's own Record press).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "cmd", rename_all = "camelCase", rename_all_fields = "camelCase")]
-#[ts(export)]
+#[ts(export, rename = "CaptureCommand")]
 pub enum Command {
     /// The person's Record press (or "Start from my game"'s key press, which the shell sends as a hotkey).
     Start,
@@ -55,7 +55,7 @@ pub enum Command {
 /// `capture.stop.crashLoop`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 #[serde(tag = "ev", rename_all = "camelCase", rename_all_fields = "camelCase")]
-#[ts(export)]
+#[ts(export, rename = "CaptureEvent")]
 pub enum Event {
     State {
         state: WorkerState,

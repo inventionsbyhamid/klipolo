@@ -28,7 +28,7 @@ pub enum CaptureMode {
 /// Where the HUD flashes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[ts(export, rename = "CaptureCorner")]
 pub enum Corner {
     TopLeft,
     #[default]

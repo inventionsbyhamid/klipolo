@@ -62,7 +62,7 @@ pub struct DeviceInfo {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[ts(export, rename = "CaptureTransport")]
 pub enum Transport {
     BuiltIn,
     Usb,

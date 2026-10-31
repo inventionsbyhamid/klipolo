@@ -251,7 +251,7 @@ pub enum Flash {
 /// How a take is doing: the item's colour and the notes' weight.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[ts(export, rename = "CaptureLevel")]
 pub enum Level {
     Ok,
     Healing,

@@ -9,7 +9,7 @@ pub type SourceId = String;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[ts(export, rename = "CaptureCodec")]
 pub enum Codec {
     H264,
     Hevc,

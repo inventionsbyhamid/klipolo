@@ -102,7 +102,7 @@ pub struct DisplaySetup {
 /// The probe's choices for one display and camera state, and the offers they give.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-#[ts(export)]
+#[ts(export, rename = "CaptureFitted")]
 pub struct Fitted {
     pub choices: Choices,
     pub offers: Vec<PresetOffer>,
