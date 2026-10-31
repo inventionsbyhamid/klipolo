@@ -11,8 +11,8 @@
 //!
 //! File layout (little-endian): magic `KLPOKEY3`, time base (i32 num, i32 den), the stream's start (i64 pts), fps f64,
 //! duration in seconds f64, width u32, height u32, the decoder's pixel format name (u8 length, bytes), the codec's name
-//! (u8 length, bytes), a count u32, then each keyframe's pts (i64, the stream's time base), in order. (Older files,
-//! without the codec or the start, no longer read: their index is built again.)
+//! (u8 length, bytes), a count u32, then each keyframe's pts (i64, the stream's time base), in order. A file under
+//! another magic or layout (another build's) doesn't read, and its index is built again.
 
 use std::io;
 use std::path::{Path, PathBuf};
