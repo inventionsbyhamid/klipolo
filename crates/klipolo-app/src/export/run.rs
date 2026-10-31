@@ -4,13 +4,9 @@
 //! file already in place stays: the dialog lists it.
 
 use klipolo_engine::api::ExportEvent;
-use std::path::Path;
-
 use klipolo_engine::export::job::ExportJob;
-use klipolo_engine::export::jobs::jobs_root;
 use klipolo_engine::export::runner::{
-    DECODE_FAILED, DISK_FULL, ENCODER_BUSY, GPU_FAILED, Launcher, Outcome, STOPPED,
-    discard_job_atomically, run_created,
+    DECODE_FAILED, DISK_FULL, ENCODER_BUSY, GPU_FAILED, Launcher, Outcome, STOPPED, run_created,
 };
 use klipolo_model::coded::Said;
 use tokio::sync::watch;
@@ -40,20 +36,6 @@ pub fn said(event: ExportEvent) -> ExportEvent {
     }
 }
 
-/// Deletes what runs that never ended left in `dir`'s job folder (`.jobs`): the app quit or crashed mid-export, so the
-/// worker stopped with its parts. Klipolo doesn't resume one, so they are only taking space. Called by a start, which
-/// holds the one export slot: no job there is running. Files already in place are never touched.
-pub fn tidy_jobs(dir: &Path) {
-    let Ok(left) = std::fs::read_dir(jobs_root(dir)) else {
-        return;
-    };
-    for job in left.filter_map(Result::ok).filter(|e| e.path().is_dir()) {
-        if let Err(why) = discard_job_atomically(&job.path()) {
-            tracing::warn!(%why, "export: a job left by an earlier run couldn't be deleted");
-        }
-    }
-}
-
 /// Runs `job` from its first segment, telling `emit` (`said`) how it goes; `cancel` stops it and deletes its job. A run
 /// that doesn't finish leaves no job and no part of one behind.
 pub async fn run(
@@ -62,21 +44,21 @@ pub async fn run(
     cancel: watch::Receiver<bool>,
     emit: &(dyn Fn(ExportEvent) + Send + Sync),
 ) -> Outcome {
-    let dir = job.dir.clone();
+    let (dir, id) = (job.dir.clone(), job.job_id.clone());
     let outcome = run_created(launcher, job, cancel, &|event: ExportEvent| {
         emit(said(event))
     })
     .await;
-    if matches!(outcome, Outcome::Paused | Outcome::Failed(_))
-        && let Err(why) = discard_job_atomically(&dir)
-    {
-        tracing::warn!(%why, "export: a job that didn't finish couldn't be deleted");
-    }
+    // Off the async threads: a job's parts can be gigabytes.
+    let finished = matches!(outcome, Outcome::Finished(_));
+    let _ =
+        tokio::task::spawn_blocking(move || super::cleanup::finish_run(&dir, &id, finished)).await;
     outcome
 }
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
     use std::sync::{Arc, Mutex};
 
     use klipolo_engine::api::{ExportQuality, ExportRequest};
@@ -138,26 +120,6 @@ mod tests {
         }
     }
 
-    /// A job an earlier run left (the app quit mid-export) goes at the next start; the videos in the folder stay.
-    #[tokio::test]
-    async fn a_start_clears_jobs_earlier_runs_left() {
-        let dir = tempfile::tempdir().unwrap();
-        let left = jobs_root(dir.path()).join("0a1b2c3d");
-        std::fs::create_dir_all(&left).unwrap();
-        std::fs::write(left.join("landscape-0.mp4"), b"part").unwrap();
-        std::fs::write(dir.path().join("Demo 16x9.mp4"), b"a video").unwrap();
-        tidy_jobs(dir.path());
-        for _ in 0..50 {
-            if std::fs::read_dir(jobs_root(dir.path())).map_or(0, |d| d.count()) == 0 {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-        }
-        assert_eq!(std::fs::read_dir(jobs_root(dir.path())).unwrap().count(), 0);
-        assert!(dir.path().join("Demo 16x9.mp4").is_file());
-        tidy_jobs(&dir.path().join("nowhere"));
-    }
-
     #[tokio::test]
     async fn a_run_that_fails_leaves_no_job_behind() {
         let dir = tempfile::tempdir().unwrap();
@@ -189,6 +151,10 @@ mod tests {
         .await;
         assert!(matches!(outcome, Outcome::Failed(_)), "{outcome:?}");
         assert!(!job_dir.exists(), "its job and parts are gone");
+        assert!(
+            !dir.path().join(".jobs").exists(),
+            "and the empty .jobs with them"
+        );
         let heard = heard.lock().unwrap();
         assert!(matches!(heard.first(), Some(ExportEvent::Started { .. })));
         assert!(matches!(heard.last(), Some(ExportEvent::Failed { .. })));

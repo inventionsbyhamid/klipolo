@@ -108,9 +108,15 @@ async fn prepare(app: AppHandle, req: ExportRequest, dir: PathBuf) -> Result<Bat
     export::refuse_empty(&feed.project)?;
     fonts_checked(&feed, req.allow_stand_ins).await?;
     std::fs::create_dir_all(&dir).map_err(|e| export::folder_error(&e, &dir))?;
-    // Parts an export the app quit in the middle of left behind go now.
-    export::tidy_jobs(&dir);
-    // Decoded sound goes to the worker's own folder: the preview's cache may tidy its files while an export reads them.
+    // Jobs an export cut off by a crash left behind go now (only Klipolo's: `export::tidy_jobs`).
+    let tidied = dir.clone();
+    let _ = tauri::async_runtime::spawn_blocking(move || export::tidy_jobs(&tidied)).await;
+    // Decoded sound comes from (and goes to) the preview's own cache, under its budget: the files the open project
+    // uses, and an unfinished job's, are never evicted from it (`start_engine`'s cache tidy).
+    let pcm_dir = app
+        .state::<EngineState>()
+        .caches()
+        .map(|caches| caches.audio);
     Ok(export::freeze(
         feed.project,
         &feed.speech,
@@ -410,4 +416,18 @@ async fn stop_then_exit(app: AppHandle, exit_code: i32) {
         let _ = tokio::time::timeout(STOP_WAIT, released).await;
     }
     app.exit(exit_code);
+}
+
+/// The export state at launch, with the usual export folder swept of jobs a crash left (`export::sweep_folder`) on a
+/// thread of its own.
+pub(crate) fn state_at_launch() -> ExportState {
+    if let Ok(dir) = export::default_folder() {
+        let swept = std::thread::Builder::new()
+            .name("klipolo-export-sweep".into())
+            .spawn(move || export::sweep_folder(&dir));
+        if let Err(error) = swept {
+            tracing::warn!(%error, "export: the leftover jobs couldn't be swept");
+        }
+    }
+    ExportState::default()
 }

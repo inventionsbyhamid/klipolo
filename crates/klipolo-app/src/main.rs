@@ -57,7 +57,7 @@ fn main() {
             // How Klipolo pays for Meta's models (the Keychain), and this Mac's id with the relay (app support).
             let support = app.path().data_dir().ok().map(|dir| dir.join("Klipolo"));
             app.manage(commands::settings::load(support.as_deref()));
-            app.manage(klipolo_app::export::ExportState::default());
+            app.manage(commands::export::state_at_launch());
             commands::export::guard_menu_quit(app)?;
             Ok(())
         })
