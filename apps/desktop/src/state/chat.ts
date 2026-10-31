@@ -6,7 +6,6 @@ import { useAi } from '../ai/aiStatus';
 import { isCode } from '../bridge/call';
 import { chatBridge } from '../bridge/chat';
 import { errorMessage } from '../lib/errors';
-import { findItem } from '../lib/timeline';
 import {
   creditMoved,
   session,
@@ -17,12 +16,9 @@ import {
 } from './chatMessages';
 import { pictureActions } from './chatPictures';
 import { dropStale, proposalActions, replaceOpen, showOpenProposal } from './chatProposals';
-import { usePlayback } from './playback';
+import { currentView } from './editorView';
 import { useProject } from './project';
-import { useRange } from './range';
-import { useSelection } from './selection';
 import { useSpeech } from './speech';
-import { useUi } from './ui';
 
 export { MAX_MESSAGES, type Message, type ReplyMessage, type FailedMessage } from './chatMessages';
 
@@ -63,17 +59,10 @@ function requestFor(
   baseRevision?: number,
 ): ChatRequest {
   const snapshot = useProject.getState().snapshot;
-  const project = snapshot?.project;
-  const range = useRange.getState().range;
-  const selected = useSelection.getState().selectedId;
-  const item = project && selected && findItem(project, selected) ? selected : null;
   return {
     id,
     text,
-    selection: range ? { start: range.startUs, end: range.endUs } : null,
-    item,
-    playheadUs: usePlayback.getState().playheadUs,
-    format: useUi.getState().previewFormat ?? project?.settings.primaryFormat ?? null,
+    ...currentView(),
     keepOnly,
     baseRevision: baseRevision ?? snapshot?.history.revision ?? 0,
   };
