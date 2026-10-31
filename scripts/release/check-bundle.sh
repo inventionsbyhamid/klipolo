@@ -61,13 +61,10 @@ main_rpaths=$(otool -l "$main" | awk '$1 == "cmd" {r = ($2 == "LC_RPATH")} r && 
 grep -qxF '@executable_path/../Frameworks' <<< "$main_rpaths" \
   || fail "${main#"$app"/} has no @executable_path/../Frameworks LC_RPATH, so it can't find the libraries in Frameworks"
 
-# No file under Contents (binaries, the page, resources) names the builder's home folder or user name. A user name
-# shorter than 4 characters would match ordinary text, so then only the home folder is looked for.
-user=$(id -un)
-patterns=(-e "$home")
-[ "${#user}" -lt 4 ] || patterns+=(-e "$user")
+# No file under Contents (binaries, the page, resources) names the builder's home folder or user name (lib.sh's
+# naming_files: the user name only as a whole path part).
 set +e
-named=$(LC_ALL=C grep -rlF "${patterns[@]}" "$app/Contents")
+named=$(naming_files "$home" "$(id -un)" "$app/Contents")
 status=$?
 set -e
 case $status in

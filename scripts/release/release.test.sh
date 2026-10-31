@@ -101,6 +101,29 @@ app=$(case_app home-in-resources)
 echo "built in $HOME/klipolo" > "$app/Contents/Resources/fonts/note.txt"
 expect "a resource naming the home folder fails" fail "Resources/fonts/note.txt" "$check" "$app" "$arch"
 
+user=$(id -un)
+app=$(case_app user-as-path-part)
+echo "/Volumes/$user/klipolo" > "$app/Contents/Resources/fonts/note.txt"
+expect "the user name as a path part fails" fail "Resources/fonts/note.txt" "$check" "$app" "$arch"
+
+app=$(case_app user-inside-a-word)
+echo "x${user}y ${user}s" > "$app/Contents/Resources/fonts/note.txt"
+expect "the user name inside a longer word passes" pass "$check" "$app" "$arch"
+
+# An account with a common name: only /test/ counts, not "attest" or "testing" or "/tests/".
+names=$work/names
+mkdir -p "$names/plain" "$names/path"
+echo 'attest testing contest /tests/ test.txt' > "$names/plain/a.txt"
+echo 'built in /Volumes/test/klipolo' > "$names/path/b.txt"
+found() {  # found <user> <dir> <expected output>: naming_files' output, with grep's status 0 or 1 to match
+  local out rc
+  out=$(. "$repo/scripts/release/lib.sh" && naming_files /no/such/home "$1" "$2") && rc=0 || rc=$?
+  [ "$out" = "$3" ] && [ "$rc" -eq "$([ -n "$3" ] && echo 0 || echo 1)" ]
+}
+expect "a user named test isn't found in words" pass found test "$names/plain" ""
+expect "a user named test is found as a path part" pass found test "$names/path" "$names/path/b.txt"
+expect "a user name under 4 characters isn't looked for" pass found lib "$names/path" ""
+
 echo
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]

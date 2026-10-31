@@ -40,6 +40,19 @@ is_macho() {
   esac
 }
 
+# The files under <path>... that name the home folder <home> (anywhere) or the user <user> (only as a whole path part,
+# /<user>/, so an account named test or build doesn't match "testing" or "builder"):
+#   naming_files <home> <user> <path>...
+# A user name shorter than 4 characters isn't looked for: /lib/ and /src/ are in every binary. Prints the files found
+# and returns grep's status: 0 some found, 1 none, 2 a file couldn't be read (the files found are printed all the same).
+naming_files() {
+  local home=$1 user=$2
+  shift 2
+  local patterns=(-e "$home")
+  [ "${#user}" -lt 4 ] || patterns+=(-e "/$user/")
+  LC_ALL=C grep -rlF "${patterns[@]}" "$@"
+}
+
 # A release version: X.Y.Z, digits and dots only, as CFBundleShortVersionString and CFBundleVersion require.
 is_version() {
   [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
