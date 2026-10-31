@@ -379,6 +379,53 @@ describe('the take', () => {
     await vi.waitFor(() => expect(fake.sent.at(-1)).toEqual({ take, command: { cmd: 'cancel' } }));
   });
 
+  it('a_take_given_up_after_recording_closes_the_dialog_when_klipolo_is_back', async () => {
+    const take = await pressed();
+    fake.emit(take, state('recording'));
+    // The worker kept crashing: the app finishes the take from its files and frees it, with no `finished`.
+    fake.emit(take, {
+      ev: 'health',
+      note: { code: 'capture.stop.crashLoop', params: {} },
+      level: 'critical',
+      source: null,
+    });
+    fake.emit(take, state('idle'));
+    expect(rec()).toMatchObject({ open: false, take: null, error: null });
+    expect(useToasts.getState().toasts.map((t) => t.text)).toEqual([
+      'The recorder kept stopping, so the recording was saved.',
+    ]);
+  });
+
+  it('a_take_finished_from_its_files_while_saving_closes_the_dialog_when_klipolo_is_back', async () => {
+    const take = await pressed();
+    fake.emit(take, state('recording'));
+    fake.emit(take, state('stopping'));
+    // Its worker died while saving: the app finishes it from its files, then frees it.
+    fake.emit(take, state('idle'));
+    expect(rec()).toMatchObject({ open: false, take: null });
+    expect(useToasts.getState().toasts).toEqual([]);
+  });
+
+  it('a_take_that_fails_after_recording_closes_the_dialog_and_says_why_once', async () => {
+    const take = await pressed();
+    fake.emit(take, state('recording'));
+    fake.emit(take, failed('capture.error.encoder'));
+    expect(rec()).toMatchObject({ open: false, take: null });
+    fake.emit(take, state('idle'));
+    expect(useToasts.getState().toasts.map((t) => t.text)).toEqual(['The video encoder stopped.']);
+  });
+
+  it('a_take_stopped_in_its_countdown_comes_back_to_the_choices', async () => {
+    const take = await pressed();
+    fake.emit(take, countdown(3));
+    // Stopped from the menu bar before the gate: the worker says `stopping` too, and nothing was recorded.
+    fake.emit(take, state('stopping'));
+    fake.emit(take, state('idle'));
+    expect(rec().open).toBe(true);
+    expect(phase()).toBe('choosing');
+    expect(useToasts.getState().toasts).toEqual([]);
+  });
+
   it('a_take_that_fails_before_arming_answers_never_starts', async () => {
     await opened();
     const arming = deferred<ArmedTake>();

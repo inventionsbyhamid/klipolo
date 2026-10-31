@@ -90,6 +90,11 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
   let gateFrom: number | null = null;
   /** The kept note is critical: only another critical one replaces it. */
   let noteCritical = false;
+  /**
+   * The take that passed the start gate (its worker said `recording` or `paused`): it is saved however it ends, so the
+   * dialog goes with it. A `stopping` alone proves nothing: a take stopped in its countdown says it too.
+   */
+  let recorded: string | null = null;
 
   function leave(id: string) {
     leaving?.gone();
@@ -144,16 +149,20 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
   }
 
   /**
-   * Take `id` is over and the choices come back, with what it said while Klipolo was hidden. `freed`: its worker has
-   * gone (`state: idle`); else Record waits for that.
+   * Take `id` is over, and what it said while Klipolo was hidden is said. A take that recorded is saved (the app lands
+   * it), so the dialog goes; one that never recorded leaves the choices. `freed`: its worker has gone (`state: idle`);
+   * else Record waits for that.
    */
   function end(id: string, freed: boolean) {
     if (freed) gone(id);
     else leave(id);
+    const saved = recorded === id;
+    if (saved) recorded = null;
     if (started === id) started = null;
     press = null;
     set(NO_TAKE);
     sayNote();
+    if (saved) get().close();
   }
 
   function countdown(left: number) {
@@ -170,9 +179,12 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
   function takeEvent(id: string, ev: CaptureEvent) {
     switch (ev.ev) {
       case 'state':
+        // A take given up after recording, or finished from its files, ends here with no `finished`.
         if (ev.state === 'idle') return end(id, true);
-        if (ev.state === 'recording' || ev.state === 'paused')
+        if (ev.state === 'recording' || ev.state === 'paused') {
+          recorded = id;
           return set({ worker: ev.state, countdown: null, gate: null, meterDbfs: null });
+        }
         return set({ worker: ev.state });
       case 'countdown':
         return countdown(ev.leftS);
@@ -186,10 +198,13 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
         return keepNote(ev.note, ev.level);
       case 'finished':
         // Saved: the app lands it (`recorder-imported`) and the dialog goes.
-        end(id, false);
-        return get().close();
+        recorded = id;
+        return end(id, false);
       case 'failed':
-        set({ error: said(ev.error), ...(ev.error.code === SCREEN_REFUSED ? { screenRefused: true } : {}) });
+        // After the gate the take is still saved, and the dialog goes: why it stopped is said as its note. Before it,
+        // the choices come back with the sentence.
+        if (recorded === id) keepNote(ev.error, 'critical');
+        else set({ error: said(ev.error), ...(ev.error.code === SCREEN_REFUSED ? { screenRefused: true } : {}) });
         return end(id, false);
       // Heartbeats keep a slow save alive; frames and Start over aren't the dialog's.
       case 'heartbeat':
@@ -307,6 +322,7 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
       if (press) press.cancelled = true;
       press = null;
       started = null;
+      recorded = null;
       leaving?.gone();
       leaving = null;
       held.length = 0;
