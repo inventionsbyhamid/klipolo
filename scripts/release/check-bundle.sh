@@ -6,9 +6,11 @@
 # LC_RPATH is relative (@executable_path/ or @loader_path/), never a machine path such as the dev FFmpeg prefix's.
 # The app must also find its libraries: the main executable's LC_RPATHs include @executable_path/../Frameworks, and
 # every @rpath/<name> that any Mach-O in the bundle loads is a file at Contents/Frameworks/<name>. And no file under
-# Contents names the builder's home folder or user name.
+# Contents names the builder's home folder or user name, nor does the page as built in apps/desktop/dist: the main
+# executable holds the page brotli-compressed, so searching the binary can't see into it.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
+repo=$(cd "$here/../.." && pwd -P)
 . "$here/lib.sh"
 usage() { echo "usage: $0 <Klipolo.app> <x86_64|arm64>" >&2; exit 2; }
 [ $# -eq 2 ] || usage
@@ -61,16 +63,20 @@ main_rpaths=$(otool -l "$main" | awk '$1 == "cmd" {r = ($2 == "LC_RPATH")} r && 
 grep -qxF '@executable_path/../Frameworks' <<< "$main_rpaths" \
   || fail "${main#"$app"/} has no @executable_path/../Frameworks LC_RPATH, so it can't find the libraries in Frameworks"
 
-# No file under Contents (binaries, the page, resources) names the builder's home folder or user name (lib.sh's
-# naming_files: the user name only as a whole path part).
+# No file under Contents (binaries, resources) or in the page's build output names the builder's home folder or user
+# name (lib.sh's naming_files: the user name only as a whole path part). The page is the one `pnpm build` wrote for this
+# bundle (build-mac.sh checks right after building); without it the check fails rather than skip the page.
+page=$repo/apps/desktop/dist
+searched=("$app/Contents")
+if [ -f "$page/index.html" ]; then searched+=("$page"); else fail "no page build at $page to search (pnpm build)"; fi
 set +e
-named=$(naming_files "$home" "$(id -un)" "$app/Contents")
+named=$(naming_files "$home" "$(id -un)" "${searched[@]}")
 status=$?
 set -e
 # grep says 2 when it couldn't read a file, also when it found others: both are failures, and both are told.
 [ -z "$named" ] || fail "these files name the builder's home folder or user name: $(tr '\n' ' ' <<< "$named")"
-[ "$status" -le 1 ] || fail "couldn't read every file under Contents to look for the home folder"
+[ "$status" -le 1 ] || fail "couldn't read every file under Contents and the page to look for the home folder"
 
 [ $rc -eq 0 ] || { echo "RESULT: FAIL" >&2; exit 1; }
 echo "bundle check: $count Mach-O files, $arch only, relative rpaths only, every @rpath library in Frameworks," \
-  "no file names the home folder or the user name"
+  "no file in the app or the page names the home folder or the user name"

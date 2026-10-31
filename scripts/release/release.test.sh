@@ -101,6 +101,17 @@ app=$(case_app home-in-resources)
 echo "built in $HOME/klipolo" > "$app/Contents/Resources/fonts/note.txt"
 expect "a resource naming the home folder fails" fail "Resources/fonts/note.txt" "$check" "$app" "$arch"
 
+# The page is in the binary compressed, so its build output is searched where pnpm build wrote it.
+app=$(case_app home-in-page)
+mkdir -p "$repo/apps/desktop/dist/assets"
+echo "const at = '$HOME/klipolo/src/main.tsx';" > "$repo/apps/desktop/dist/assets/index.js"
+expect "the page's build naming the home folder fails" fail "apps/desktop/dist/assets/index.js" "$check" "$app" "$arch"
+rm -r "$repo/apps/desktop/dist/assets"
+mv "$repo/apps/desktop/dist" "$repo/apps/desktop/dist.away"
+expect "no page build fails" fail "no page build at $repo/apps/desktop/dist" "$check" "$app" "$arch"
+mv "$repo/apps/desktop/dist.away" "$repo/apps/desktop/dist"
+expect "the page's build without the home folder passes" pass "$check" "$app" "$arch"
+
 # A file grep can't read fails the check, and doesn't hide a file that names the home folder.
 app=$(case_app unreadable)
 chmod 000 "$app/Contents/Resources/licenses/NOTICE.txt"
