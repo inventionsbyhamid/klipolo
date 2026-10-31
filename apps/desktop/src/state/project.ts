@@ -18,7 +18,11 @@ import { useUi } from './ui';
 
 export { settled } from './projectSerial';
 
-/** Undo and redo steps asked for in this window (a press the word list kept waiting goes only if none came). */
+/**
+ * Undo and redo steps asked for in this window, chat's Undo chip included (a press the word list kept waiting goes only
+ * if none came). A change Rust makes for chat in undo's turn (Use, Apply: `stepWith`) is no undo or redo, and doesn't
+ * count.
+ */
 let steps = 0;
 export const historySteps = () => steps;
 
@@ -120,10 +124,11 @@ export const useProject = create<ProjectStore>((set, get) => {
    * `.` then ⌘Z within one commit's latency takes back the nudge. `check`, at its turn, can call it off. It goes with
    * the copy's revision at its turn, so Rust refuses it (`project.moved`) when its history's top is a change this
    * window hasn't seen (a chat change not merged yet). Resolves once it has landed (true when it applied), false when
-   * called off or refused. A close waits for it in its turn (`commitsDone`).
+   * called off or refused. A close waits for it in its turn (`commitsDone`). `counted`: it is an undo or a redo
+   * (`historySteps`).
    */
-  function step(task: () => Promise<SnapshotPatch>, check?: () => boolean): Promise<boolean> {
-    steps++;
+  function step(task: () => Promise<SnapshotPatch>, check?: () => boolean, counted = true): Promise<boolean> {
+    if (counted) steps++;
     flushBursts();
     return new Promise((resolve) => {
       const turn = () => {
@@ -200,7 +205,7 @@ export const useProject = create<ProjectStore>((set, get) => {
         },
       ),
     redo: () => step(() => bridge.redo()).then(() => undefined),
-    stepWith: (task) => {
+    stepWith: (task, opts) => {
       let refused: { error: unknown } | null = null;
       return step(async () => {
         try {
@@ -211,7 +216,7 @@ export const useProject = create<ProjectStore>((set, get) => {
           const now = get().snapshot!;
           return { baseRevision: now.history.revision, history: now.history, patch: { clips: [], items: [] } };
         }
-      }).then((done) => {
+      }, undefined, opts?.undo === true).then((done) => {
         if (refused) throw refused.error;
         return done;
       });

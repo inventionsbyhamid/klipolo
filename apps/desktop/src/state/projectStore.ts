@@ -46,11 +46,13 @@ export interface ProjectStore {
    */
   undoIf: (latest: (history: HistoryState) => boolean) => Promise<boolean>;
   /**
-   * A step Rust takes for a part of the app (chat's Undo chip: `chat_undo_last`), in undo's turn: what is still
-   * settling goes in first, it waits its turn in the commit queue, and the patch `task` gives back is merged. Rust's
-   * refusal comes back to the caller as it is (it rejects): nothing is fetched again and nothing said, since there
-   * `project.moved` means the change isn't the last one any more, not that this copy is old. True when it landed.
+   * A change Rust makes for chat (its Undo chip's `chat_undo_last`, Use's `chat_use_picture`, Apply's
+   * `chat_apply_proposal`) in undo's turn: what is still settling goes in first, it waits its turn in the commit queue,
+   * and the patch `task` gives back is merged. Rust's refusal comes back to the caller as it is (it rejects): nothing
+   * is fetched again and nothing said, since there `project.moved` means the change can't be made from chat any more,
+   * not that this copy is old. `undo`: it is an undo (the chip), counted in `historySteps`; Use and Apply aren't. True
+   * when it landed.
    */
-  stepWith: (task: () => Promise<SnapshotPatch>) => Promise<boolean>;
+  stepWith: (task: () => Promise<SnapshotPatch>, opts?: { undo?: boolean }) => Promise<boolean>;
   redo: () => Promise<void>;
 }

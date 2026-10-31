@@ -101,7 +101,7 @@ export function UndoChip({ undo, revision }: { undo: CodedError; revision: numbe
         setBusy(true);
         void useProject
           .getState()
-          .stepWith(() => chatBridge().undoLast(revision))
+          .stepWith(() => chatBridge().undoLast(revision), { undo: true })
           .catch((error: unknown) => {
             if (!isCode(error, 'project.moved')) return toast.error(errorMessage(error));
             setRefused(true);
