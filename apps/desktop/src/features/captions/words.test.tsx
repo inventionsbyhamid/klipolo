@@ -229,4 +229,16 @@ describe('caption words', () => {
     focus.mockRestore();
   });
 
+  it('typing then Escape lets the word go unchanged', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CaptionWords format="portrait" />);
+    await user.click(within(await list()).getByRole('option', { name: 'FREE' }));
+    await user.type(fixField(), 'dom');
+    await user.keyboard('{Escape}');
+    await act(async () => {});
+    expect(txs).toHaveLength(0);
+    expect(screen.queryByRole('textbox', { name: /^Fix the word/ })).toBeNull();
+    expect(within(await list()).getByRole('option', { name: 'FREE' })).toBeInTheDocument();
+  });
+
 });
