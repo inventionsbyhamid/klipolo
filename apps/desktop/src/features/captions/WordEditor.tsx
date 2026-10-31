@@ -131,6 +131,10 @@ export function WordEditor({
           ref={field}
           aria-label={t({ id: 'captions.fix.word', message: `Fix the word ${name}` })}
           value={text}
+          // A fix is exactly what is typed: no autocorrect, no capitals added, no spelling marks.
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
           maxLength={from.length + FIX_MAX_CHARS}
           size={Math.max(4, text.length + 1)}
           onChange={(e) => {
