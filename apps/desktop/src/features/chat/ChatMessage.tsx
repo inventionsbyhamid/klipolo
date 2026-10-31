@@ -3,6 +3,7 @@ import { memo } from 'react';
 import { openSettings } from '../../ai/aiStatus';
 import { SpriteIcon } from '../../design/SpriteIcon';
 import { useChat, type Message } from '../../state/chat';
+import { appLine } from '../../state/chatApps';
 import { Moments } from './Moments';
 import { PictureCard } from './PictureCard';
 import { ProposalCard } from './ProposalCard';
@@ -17,7 +18,8 @@ const SETTINGS = new Set(['budget', 'refused', 'needsKey']);
  * its proposal card, the pictures it asked for and its moments. A failure says what happened, with Retry (busy,
  * network, a server error, this Mac not registered) or Open Settings (credit, a refused key or code); a message too
  * long for chat, one the AI declined (its words are back in the box to reword), or one whose times the project left (it
- * says to ask again), offers neither. The project is untouched.
+ * says to ask again), offers neither. The project is untouched. Another app's reply has no words of its own: "From
+ * {client}" over it, then what it did, and the same chips and cards.
  */
 export const ChatMessage = memo(function ChatMessage({ message: m }: { message: Message }) {
   const { t } = useLingui();
@@ -41,9 +43,17 @@ export const ChatMessage = memo(function ChatMessage({ message: m }: { message: 
         </div>
       </div>
     );
+  const client = m.client;
+  const line = client !== undefined ? appLine(m) : '';
   return (
     <div className="msg-k">
+      {client !== undefined && (
+        <p className="msg-from">
+          {t({ id: 'chatPanel.app.from', message: `From ${client}`, comment: 'Over what another app did: {client} is the app' })}
+        </p>
+      )}
       {m.text && <p>{m.text}</p>}
+      {line && <p>{line}</p>}
       {m.notes.map((n, i) => (
         <p key={`n${i}`} className="muted">
           {n}
@@ -52,7 +62,7 @@ export const ChatMessage = memo(function ChatMessage({ message: m }: { message: 
       {m.questions.map((q, i) => (
         <p key={`q${i}`}>{q}</p>
       ))}
-      {m.applied && <UndoChip undo={m.applied.undo} revision={m.applied.revision} />}
+      {m.applied && <UndoChip undo={m.applied.undo} revision={m.applied.revision} byApp={client !== undefined} />}
       {m.proposal && <ProposalCard message={m} />}
       {m.pictures.map((part) => (
         <PictureCard key={part.picture.id} messageId={m.id} part={part} />

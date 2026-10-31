@@ -90,6 +90,18 @@
   color: var(--color-ink-faint);
 }
 
+/* Over another app's reply: who did it, so an app is never taken for Klipolo. */
+.msg-k > .msg-from {
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  font-weight: var(--weight-medium);
+}
+
+.msg-k > .msg-from + * {
+  margin-top: calc(-1 * var(--space-3));
+}
+
 .msg-row {
   display: flex;
   flex-wrap: wrap;

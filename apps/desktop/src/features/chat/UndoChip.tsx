@@ -36,9 +36,10 @@ export function standing(
  * goes first), which Rust does only while it is still chat's last change; refused (`project.moved`), the chip says
  * plainly it can't be undone from chat any more and points at the top bar's Undo, with nothing to press. Taken back, it reads "Redo" for 10 s, then goes
  * for good (a change after it never brings it back). Buried under later changes before it was used, it does nothing and
- * says why. When it changes under the keyboard, the keyboard goes back to the chat box.
+ * says why. When it changes under the keyboard, the keyboard goes back to the chat box. `byApp`: another app made the
+ * change (its reply in chat), which chat's undo can't take back; the chip takes it back as the top bar's Undo does.
  */
-export function UndoChip({ undo, revision }: { undo: CodedError; revision: number }) {
+export function UndoChip({ undo, revision, byApp = false }: { undo: CodedError; revision: number; byApp?: boolean }) {
   const { t } = useLingui();
   const [busy, setBusy] = useState(false);
   const state = useProject((s) => standing(s.snapshot?.history, undo, revision));
@@ -99,6 +100,14 @@ export function UndoChip({ undo, revision }: { undo: CodedError; revision: numbe
         // One press takes back one change: a second before the first lands would take back the one before.
         if (busy || state !== 'latest') return;
         setBusy(true);
+        // Another app's step isn't chat's last change: it goes back as the top bar's Undo takes it, while still latest.
+        if (byApp) {
+          void useProject
+            .getState()
+            .undoIf((h) => standing(h, undo, revision) === 'latest')
+            .finally(() => setBusy(false));
+          return;
+        }
         void useProject
           .getState()
           .stepWith(() => chatBridge().undoLast(revision), { undo: true })

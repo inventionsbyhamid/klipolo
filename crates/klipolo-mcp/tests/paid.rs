@@ -53,7 +53,8 @@ fn paid_jobs_stop_at_the_run_allowance_across_clients() {
             assert_eq!(result["isError"], false, "{result}");
             assert_eq!(
                 text(&result),
-                "Started in Klipolo (makeSticker). What it makes appears in the edit once it is ready."
+                "Started in Klipolo (makeSticker). Once it is ready, it shows in Klipolo's chat panel, and the \
+                 person places it with Use. Tell them to look for it there."
             );
             assert_eq!(result["structuredContent"], json!({"outcome": "started"}));
         }
