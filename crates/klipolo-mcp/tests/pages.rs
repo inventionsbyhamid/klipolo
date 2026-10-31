@@ -162,6 +162,50 @@ fn page_range_takes_overlapping_lines() {
 }
 
 #[test]
+fn a_line_said_in_no_time_at_a_page_edge_is_read_once() {
+    // A one-word sentence the recognizer gave no length, between two lines.
+    let mut t = FullTranscript {
+        lines: vec![
+            line(0.0, 5.0, "one"),
+            line(5.0, 5.0, "okay"),
+            line(5.5, 10.0, "two"),
+        ],
+        notes: String::new(),
+    };
+    let words = |t: &FullTranscript, from: Option<f64>, to: Option<f64>| -> Vec<String> {
+        lines_of(&page(t, from.map(secs), to.map(secs)))
+            .iter()
+            .map(|l| l.rsplit(' ').next().unwrap().to_owned())
+            .collect()
+    };
+    // Read in two parts at its start: the line before ends there, it starts there.
+    assert_eq!(words(&t, Some(0.0), Some(5.0)), ["one"]);
+    assert_eq!(words(&t, Some(5.0), Some(20.0)), ["okay", "two"]);
+    assert_eq!(words(&t, Some(5.0), None), ["okay", "two"]);
+    // A page or a cut range that starts there, as a long transcript lists them, shows it.
+    let long = talk(1800, 160);
+    let index = page(&long, None, None);
+    let edge = ranges_named(&index)[1].0;
+    let at = long
+        .lines
+        .iter()
+        .position(|l| l.range.start == edge)
+        .unwrap();
+    t.lines = long.lines.clone();
+    t.lines[at].range.end = t.lines[at].range.start;
+    let mut read = Vec::new();
+    for (from, to) in ranges_named(&page(&t, None, None)) {
+        read.extend(
+            lines_of(&page(&t, Some(from), Some(to)))
+                .into_iter()
+                .map(str::to_owned),
+        );
+    }
+    let all: Vec<&str> = t.lines.iter().map(|l| l.text.as_str()).collect();
+    assert_eq!(read, all, "every line once");
+}
+
+#[test]
 fn times_parse_clock_and_seconds() {
     let cases: [(&str, f64); 10] = [
         ("75.5", 75.5),

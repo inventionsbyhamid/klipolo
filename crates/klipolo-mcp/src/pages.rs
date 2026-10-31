@@ -4,7 +4,10 @@
 //! cut at a whole line and names where to go on. The notes (clips not transcribed yet) come last on every read.
 //!
 //! Times are timeline seconds, written exactly (`312.34`, `75.5`), so a page edge is a line's start to the
-//! microsecond: the line before it ends at or before it and never shows on two pages. Cost: one pass over the lines.
+//! microsecond: the line before it ends at or before it and shows on one page only. A line said in no time (a word
+//! the recognizer gave no length) counts as lasting a microsecond, so one at an edge shows on the page it starts.
+//! Lines that overlap (two people talking at once) can show on both pages around an edge; no line is ever left out.
+//! Cost: one pass over the lines.
 
 use std::fmt::Write as _;
 
@@ -155,10 +158,12 @@ fn range(t: &FullTranscript, from: Option<Us>, to: Option<Us>) -> String {
         out.push_str(&t.notes);
         return out;
     }
-    // A line overlaps when it ends after the start and starts before the end; without a start, every line from the
-    // first does.
+    // A line overlaps when it ends after the start and starts before the end (one said in no time lasts a
+    // microsecond); without a start, every line from the first does.
     let first = match from {
-        Some(_) => t.lines.partition_point(|l| l.range.end <= start),
+        Some(_) => t
+            .lines
+            .partition_point(|l| l.range.end.max(l.range.start + 1) <= start),
         None => 0,
     };
     let mut shown = 0;
