@@ -5,6 +5,7 @@ import type { ChatRequest } from '../bindings/ChatRequest';
 import { useAi } from '../ai/aiStatus';
 import { isCode } from '../bridge/call';
 import { chatBridge } from '../bridge/chat';
+import { onMcpReply, type UnlistenFn } from '../bridge/mcp';
 import { errorMessage } from '../lib/errors';
 import {
   creditMoved,
@@ -14,6 +15,7 @@ import {
   type ChatStore,
   type Message,
 } from './chatMessages';
+import { appActions } from './chatApps';
 import { pictureActions } from './chatPictures';
 import { dropStale, proposalActions, replaceOpen, showOpenProposal } from './chatProposals';
 import { currentView } from './editorView';
@@ -74,7 +76,7 @@ let sayings = 0;
 /**
  * The chat panel's conversation: one message at a time, the replies as Rust sent them (their words
  * already clean), the additions merged as one undo step, the proposal cards (`chatProposals`), whose open one the
- * timeline shows red (`useProposal`), and the picture cards (`chatPictures`).
+ * timeline shows red (`useProposal`), the picture cards (`chatPictures`), and what other apps did (`chatApps`).
  */
 export const useChat = create<ChatStore>((set, get) => {
   const push = (m: Message) => set((s) => withMessages([...s.messages, m]));
@@ -208,8 +210,14 @@ export const useChat = create<ChatStore>((set, get) => {
 
     ...proposalActions(set, get),
     ...pictureActions(set, get),
+    ...appActions(set, get),
   };
 });
+
+/** What other apps do (`mcp-reply`) comes into the conversation, named for each app (`chatApps`). */
+export function followApps(): Promise<UnlistenFn> {
+  return onMcpReply((external) => void useChat.getState().receive(external));
+}
 
 // The open proposal is the timeline's red ranges.
 useChat.subscribe((s, was) => {

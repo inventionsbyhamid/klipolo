@@ -25,6 +25,7 @@ import {
   forgetRemovedClips,
   offerAgainOnAiModeChange,
 } from './state/analysis';
+import { followApps } from './state/chat';
 import { followEditorView } from './state/editorView';
 import { useProject } from './state/project';
 import { clearProposalOnProjectSwitch } from './state/proposal';
@@ -108,6 +109,8 @@ export function App() {
     clearProposalOnProjectSwitch();
     // Other apps' calls read the person's view (the selection, the playhead) as Klipolo last heard it.
     followEditorView();
+    // What other apps do shows in chat, named for each app.
+    void followApps();
     // The Music lane's dips: where someone speaks, asked again as the project changes.
     followSpeech();
     // Development builds only: Control Shift P a stand-in chat, Control Shift W sample words (`dev/devChat`).

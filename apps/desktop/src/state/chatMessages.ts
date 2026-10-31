@@ -6,6 +6,7 @@ import type { ChatPicture } from '../bindings/ChatPicture';
 import type { ChatPictureDrawn } from '../bindings/ChatPictureDrawn';
 import type { ChatProposal } from '../bindings/ChatProposal';
 import type { CodedError } from '../bindings/CodedError';
+import type { ExternalReply } from '../bindings/ExternalReply';
 
 /**
  * Where a proposal stands: waiting, being applied, applied, discarded, dropped (the project changed), replaced (a newer
@@ -78,6 +79,13 @@ export type Message =
       proposal: ProposalPart | null;
       /** The pictures it asked for (stickers, title card backgrounds). */
       pictures: PicturePart[];
+      /**
+       * Another app's reply (MCP): the app's name, as it gave it. Its `text` is empty: the panel says what the app did.
+       * Undefined for Klipolo's own.
+       */
+      client?: string;
+      /** An app took back a step of its own: that step's undo label. */
+      undid?: CodedError | null;
     }
   | {
       id: string;
@@ -137,6 +145,11 @@ export interface ChatStore {
   drawPicture: (messageId: string, pictureId: string) => Promise<void>;
   /** Use: places the picture drawn, as one undo step. */
   usePicture: (messageId: string, pictureId: string) => Promise<void>;
+  /**
+   * What another app did (`mcp-reply`), shown as a reply named for the app: its change merged, its proposal waiting
+   * for Apply, its moments, its pictures drawn and placed. Taken in the order Rust told them.
+   */
+  receive: (external: ExternalReply) => Promise<void>;
 }
 
 export type ChatSet = StoreApi<ChatStore>['setState'];
