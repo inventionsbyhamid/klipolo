@@ -1663,3 +1663,35 @@ async fn moments_found_while_the_project_changed_are_left_out() {
     );
     assert_eq!(chat.project.revision(), 1, "only the hand edit");
 }
+
+#[tokio::test]
+async fn a_picture_paid_for_counts_even_when_it_cannot_be_read() {
+    let garbled = Ok(vec![MadeImage {
+        png: b"not a picture at all".to_vec(),
+        revised_prompt: None,
+    }]);
+    let s = studio(talk(), Painter::new(vec![garbled, Ok(Vec::new())]));
+    let card = s
+        .chat
+        .session
+        .ask_picture(sticker(Some((secs(2.0), secs(3.0)))));
+    let failed = s.chat.session.draw_picture(&card.id).await.unwrap_err();
+    assert_eq!(
+        sentence(failed),
+        "Fake Image sent a picture Klipolo couldn't read, so try again."
+    );
+    let spend = s.chat.session.spend();
+    assert_eq!(
+        (spend.pictures, spend.pictures_usd),
+        (1, 0.01),
+        "Muse Image billed it"
+    );
+    // An answer with no picture in it isn't billed.
+    let failed = s.chat.session.draw_picture(&card.id).await.unwrap_err();
+    assert_eq!(
+        sentence(failed),
+        "Fake Image didn't send a picture back, so try again."
+    );
+    assert_eq!(s.chat.session.spend().pictures, 1);
+    assert_eq!(s.chat.project.revision(), 0);
+}

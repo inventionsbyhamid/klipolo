@@ -9,7 +9,7 @@
 //!   new track just under its title's, for as long as the title shows.
 //!
 //! A picture belongs to the project it was asked for: another project (or New chat) forgets it. Each one that comes
-//! back is counted into the session's spend.
+//! back is counted into the session's spend, saved or not (one that can't be read or saved was still paid for).
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -31,7 +31,7 @@ use super::project::{At, CommitError, Projects};
 use super::reply::ChatApplied;
 use super::sources::Models;
 use super::spend::SpendCounter;
-use crate::media::generated::{MadeAsset, make_sticker, make_title_card};
+use crate::media::generated::{MadeAsset, MakeError, make_sticker, make_title_card};
 
 /// Said when a picture is no longer there to draw or use: used already, or another project opened.
 pub const PICTURE_GONE: &str = "That picture is gone. Ask me for it again.";
@@ -190,11 +190,14 @@ impl Pictures {
                 make_title_card(&*maker, &now.file, prompt, format).await
             }
         };
+        // A picture that came back is paid for, kept or not.
+        if made.as_ref().map_or_else(MakeError::billed, |_| true) {
+            spend.picture(models.picture_usd());
+        }
         let made = made.map_err(|e| {
             tracing::warn!(error = %e, "chat: a picture wasn't made");
             said(&e.user_message())
         })?;
-        spend.picture(models.picture_usd());
         let drawn = ChatPictureDrawn {
             id: id.to_owned(),
             path: made.asset.path.clone(),

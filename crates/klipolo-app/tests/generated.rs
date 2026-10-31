@@ -302,7 +302,23 @@ async fn a_picture_that_cannot_be_read_says_so_and_adds_nothing() {
             error.user_message(),
             "Muse Image sent a picture Klipolo couldn't read, so try again."
         );
+        assert!(error.billed(), "a picture came back");
     }
+    assert_eq!(files(&made_folder(&dir)), Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn an_answer_with_no_picture_says_so_and_is_not_billed() {
+    let dir = tempfile::tempdir().unwrap();
+    let maker = Fake::answering(vec![Ok(Vec::new())]);
+    let error = make_sticker(&maker, &project(&dir), "paper plane")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.user_message(),
+        "Muse Image didn't send a picture back, so try again."
+    );
+    assert!(!error.billed());
     assert_eq!(files(&made_folder(&dir)), Vec::<String>::new());
 }
 
