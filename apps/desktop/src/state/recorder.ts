@@ -8,7 +8,7 @@ import { defaultPicks, NO_PICKS, type Picks } from '../lib/recorder/choices';
 import { clipStarts } from '../lib/timeline';
 import { usePlayback } from './playback';
 import { useProject } from './project';
-import { NO_TAKE, takeSlice, type TakeSlice } from './recorderTake';
+import { NO_ERROR, NO_TAKE, refused, takeSlice, type ErrorFrom, type TakeSlice } from './recorderTake';
 import { useSelection } from './selection';
 
 /** The Record dialog and its take (`phaseOf` says which of its views shows). */
@@ -31,8 +31,15 @@ export interface RecorderState {
   gate: string[] | null;
   /** The mic's peak level during the countdown, in dBFS. */
   meterDbfs: number | null;
-  /** Why the take didn't start, or why it stopped, as a sentence. */
+  /** Why the take didn't start, or why it stopped, or why a press was refused, as a sentence. */
   error: string | null;
+  /** The refusal's code (`capture.permission.mic`), when it came with one: what the dialog offers follows it. */
+  errorCode: string | null;
+  /**
+   * Who was refused: a `take` (Record or Try again; the dialog offers Try again) or a `press` (a permission button,
+   * Record without it, a Cancel that couldn't be sent; pressing it again is the way).
+   */
+  errorFrom: ErrorFrom | null;
   /**
    * "Allow screen recording" was pressed in this run of Klipolo: the step says to reopen Klipolo, which applies the
    * grant. Kept across openings.
@@ -85,7 +92,7 @@ const CLOSED = {
   setup: null,
   setupError: null,
   picks: NO_PICKS,
-  error: null,
+  ...NO_ERROR,
   screenRefused: false,
 } satisfies Partial<RecorderState>;
 
@@ -126,7 +133,7 @@ export const useRecorder = create<RecorderStore>((set, get) => {
       await run();
       return true;
     } catch (error) {
-      set({ error: errorMessage(error) });
+      set(refused(error, 'press'));
       return false;
     }
   }

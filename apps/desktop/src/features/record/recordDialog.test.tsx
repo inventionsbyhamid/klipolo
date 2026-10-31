@@ -643,6 +643,44 @@ describe('countdown, saving and failure', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
+  it('a_refused_privacy_press_after_a_failed_take_offers_no_try_again', async () => {
+    const dialog = await openOn(recorderSetup({ permissions: { mic: 'denied' } }));
+    fake.script.arm = () => refusal('capture.error.os');
+    await userEvent.click(recordButton());
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    // The same words again, from the microphone's own "Open privacy settings": that press's, not a take's.
+    fake.script.openPrivacy = () => refusal('capture.error.os');
+    await userEvent.click(screen.getByRole('button', { name: 'Open privacy settings' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Recording failed.');
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  });
+
+  it('cancel_after_a_refused_record_without_it_brings_back_the_choices_with_nothing_to_try_again', async () => {
+    const dialog = await pressRecord();
+    emit('take-1', countdown(3));
+    emit('take-1', gate('mic'));
+    fake.script.send = (_take, command) =>
+      command.cmd === 'withoutSource' ? refusal('capture.error.os') : undefined;
+    await userEvent.click(screen.getByRole('button', { name: 'Record without it' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Recording failed.');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(recordButton()).toBeInTheDocument();
+    expect(within(dialog).queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  });
+
+  it('a_take_refused_the_camera_offers_its_page_by_the_code_not_the_words', async () => {
+    await openOn(recorderSetup({ cameras: [device('FaceTime HD Camera')] }));
+    // Worded differently than the code's own sentence (a value, another language): the code still says which page.
+    fake.script.arm = () =>
+      new Error('Klipolo may not use the camera.', { cause: { code: 'capture.permission.camera', params: {} } });
+    await userEvent.click(recordButton());
+    await userEvent.click(screen.getByRole('button', { name: 'Open privacy settings' }));
+    expect(fake.calls).toContain('openPrivacy:camera');
+  });
+
+
+
   it('arming_that_waits_still_says_getting_ready_and_cancels', async () => {
     await openOn();
     const arming = deferred<ArmedTake>();

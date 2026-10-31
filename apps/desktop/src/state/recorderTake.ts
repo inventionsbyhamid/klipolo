@@ -4,7 +4,7 @@ import type { CaptureEvent } from '../bindings/CaptureEvent';
 import type { CaptureLevel } from '../bindings/CaptureLevel';
 import type { CodedError } from '../bindings/CodedError';
 import type { RecorderEvent } from '../bindings/RecorderEvent';
-import { codedMessage, isCode } from '../bridge/call';
+import { codedMessage, isCode, saidOf } from '../bridge/call';
 import { recorder } from '../bridge/recorder';
 import { errorMessage } from '../lib/errors';
 import { armOptions } from '../lib/recorder/choices';
@@ -24,6 +24,18 @@ export const NO_TAKE = {
   gate: null,
   meterDbfs: null,
 } satisfies Partial<RecorderState>;
+
+/** Where a refusal came from: a take (Record or Try again) or another press (`RecorderState.errorFrom`). */
+export type ErrorFrom = 'take' | 'press';
+
+/** No refusal to say. */
+export const NO_ERROR = { error: null, errorCode: null, errorFrom: null } satisfies Partial<RecorderState>;
+
+/** `error` (from `call`) as the store keeps it: its sentence, its code when it has one, and who was refused. */
+export function refused(error: unknown, from: ErrorFrom): Pick<RecorderState, 'error' | 'errorCode' | 'errorFrom'> {
+  const said = saidOf(error);
+  return { error: errorMessage(error), errorCode: typeof said === 'string' ? null : said.code, errorFrom: from };
+}
 
 /**
  * How long Record waits for the last take's worker to go (its `state: idle`) before it arms the next: the app is busy
@@ -144,7 +156,7 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
         await recorder.stopRunning();
       } catch (stopError) {
         if (presses !== mine) return;
-        if (get().open) set({ error: errorMessage(stopError) });
+        if (get().open) set(refused(stopError, 'press'));
         else toast.error(errorMessage(stopError));
       }
     }
@@ -230,7 +242,13 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
         // After the gate the take is still saved, and the dialog goes: why it stopped is said as its note. Before it,
         // the choices come back with the sentence.
         if (recorded === id) keepNote(ev.error, 'critical');
-        else set({ error: said(ev.error), ...(ev.error.code === SCREEN_REFUSED ? { screenRefused: true } : {}) });
+        else
+          set({
+            error: said(ev.error),
+            errorCode: ev.error.code,
+            errorFrom: 'take',
+            ...(ev.error.code === SCREEN_REFUSED ? { screenRefused: true } : {}),
+          });
         return end(id, false);
       // Heartbeats keep a slow save alive; frames and Start over aren't the dialog's.
       case 'heartbeat':
@@ -277,7 +295,7 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
     held.length = 0;
     gateFrom = null;
     noteCritical = false;
-    set({ ...NO_TAKE, worker: 'starting', error: null, note: null });
+    set({ ...NO_TAKE, ...NO_ERROR, worker: 'starting', note: null });
     await lastTakeGone();
     if (mine.cancelled) return;
     let id: string;
@@ -287,7 +305,7 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
       if (mine.cancelled) return;
       press = null;
       held.length = 0;
-      set({ ...NO_TAKE, error: errorMessage(error) });
+      set({ ...NO_TAKE, ...refused(error, 'take') });
       return;
     }
     if (mine.cancelled) {
@@ -305,7 +323,7 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
     } catch (error) {
       if (press === mine) press = null;
       if (mine.cancelled || isCode(error, STALE)) return;
-      set({ ...NO_TAKE, error: errorMessage(error) });
+      set({ ...NO_TAKE, ...refused(error, 'take') });
       return letGo(id, 'disarm');
     }
     if (press === mine) press = null;
@@ -323,7 +341,8 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
       press = null;
     }
     held.length = 0;
-    set(NO_TAKE);
+    // What a press in the countdown couldn't do goes with it: the choices come back as they were.
+    set({ ...NO_TAKE, ...NO_ERROR });
     if (s.take !== null) await letGo(s.take, started === s.take ? 'cancel' : 'disarm');
   }
 
@@ -334,7 +353,7 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
     try {
       await recorder.send(take, { cmd: 'withoutSource', source });
     } catch (error) {
-      if (!isCode(error, STALE)) set({ error: errorMessage(error) });
+      if (!isCode(error, STALE)) set(refused(error, 'press'));
       return;
     }
     if (get().take !== take) return;

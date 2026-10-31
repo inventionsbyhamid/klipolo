@@ -52,8 +52,6 @@ function Dialog({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving
   const gateKey = useRecorder((s) => s.gate?.join() ?? '');
   /** What the countdown announced: its first number, once per countdown. */
   const [announced, setAnnounced] = useState('');
-  /** The sentence a take that didn't start came back with: Try again presses Record again for it. */
-  const [takeError, setTakeError] = useState<string | null>(null);
   const was = useRef(phase);
 
   useEffect(() => {
@@ -94,10 +92,8 @@ function Dialog({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving
     const before = was.current;
     was.current = phase;
     const dialog = root.current;
-    if (before === 'starting' && phase === 'choosing') {
-      setTakeError(useRecorder.getState().error);
-      title.current?.focus();
-    } else if (dialog && !dialog.contains(document.activeElement)) title.current?.focus();
+    if (before === 'starting' && phase === 'choosing') title.current?.focus();
+    else if (dialog && !dialog.contains(document.activeElement)) title.current?.focus();
   }, [phase]);
 
   // From the Record press the keyboard is on Cancel, and on the start gate's first answer while it asks.
@@ -151,7 +147,7 @@ function Dialog({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving
         <div className="record-body">
           {phase === 'loading' && <Waiting />}
           {phase === 'unavailable' && <Unavailable />}
-          {phase === 'choosing' && <Choosing takeError={takeError} />}
+          {phase === 'choosing' && <Choosing />}
           {phase === 'starting' && (
             <>
               <Preview>
@@ -230,20 +226,14 @@ function Preview({ children }: { children?: ReactNode }) {
  * The choices: the preview (or the Screen Recording step, or what went wrong, in its place), what to record, the
  * microphone and the camera, and what the setup says.
  */
-function Choosing({ takeError }: { takeError: string | null }) {
+function Choosing() {
   const setup = useRecorder((s) => s.setup);
   const step = useRecorder((s) => s.setup !== null && screenStep(s.setup, s.picks, s.screenRefused));
   const error = useRecorder((s) => s.error);
   if (setup === null) return null;
   return (
     <>
-      <Preview>
-        {step ? (
-          <ScreenStep setup={setup} />
-        ) : (
-          error !== null && <Said text={error} retry={error === takeError} pages={setup.privacySettings} />
-        )}
-      </Preview>
+      <Preview>{step ? <ScreenStep setup={setup} /> : error !== null && <Said text={error} setup={setup} />}</Preview>
       <WhatToRecord setup={setup} />
       <Devices setup={setup} />
       <Notes setup={setup} />
@@ -253,11 +243,14 @@ function Choosing({ takeError }: { takeError: string | null }) {
 
 /**
  * Why a press didn't go, in the preview's place: an info icon and the sentence. A take that didn't start offers Try
- * again (Record once more); refused the microphone or the camera, it offers that privacy page too. A permission
- * button's refusal offers neither: pressing it again is the way.
+ * again (Record once more); refused the microphone or the camera, it offers that privacy page too, by the refusal's
+ * code. Any other press's refusal (a permission button, Record without it, Cancel) offers neither: pressing it again
+ * is the way.
  */
-function Said({ text, retry, pages }: { text: string; retry: boolean; pages: boolean }) {
-  const page = retry && pages ? refusedPage(text) : null;
+function Said({ text, setup }: { text: string; setup: RecorderSetup }) {
+  const retry = useRecorder((s) => s.errorFrom === 'take');
+  const code = useRecorder((s) => s.errorCode);
+  const page = retry && setup.privacySettings ? refusedPage(code) : null;
   return (
     <div className="record-step">
       <p role="alert">

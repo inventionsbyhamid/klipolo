@@ -102,9 +102,9 @@ export function gateSentence(id: string): string {
   return codedMessage(coded('capture.gate.waiting', { source: sourceName(id) }));
 }
 
-/** The privacy page a take's refusal sentence is about (the microphone or the camera), else null. */
-export function refusedPage(sentence: string): 'mic' | 'camera' | null {
-  if (sentence === codedMessage(coded('capture.permission.mic'))) return 'mic';
-  if (sentence === codedMessage(coded('capture.permission.camera'))) return 'camera';
+/** The privacy page a take's refusal is about (the microphone or the camera), by its code; else null. */
+export function refusedPage(code: string | null): 'mic' | 'camera' | null {
+  if (code === 'capture.permission.mic') return 'mic';
+  if (code === 'capture.permission.camera') return 'camera';
   return null;
 }

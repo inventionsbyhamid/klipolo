@@ -288,6 +288,35 @@ describe('record', () => {
     expect(rec().error).toBe("This computer can't record that.");
     expect(fake.sent.map((s) => s.command.cmd)).toEqual(['start', 'disarm']);
   });
+
+  it('a_refusal_keeps_its_code_and_whether_a_take_or_a_press_had_it', async () => {
+    const said = () => ({ error: rec().error, code: rec().errorCode, from: rec().errorFrom });
+    await opened(recorderSetup({ permissions: { mic: 'denied' } }));
+    expect(said()).toEqual({ error: null, code: null, from: null });
+    fake.script.arm = () => refusal('capture.error.busy');
+    await rec().record();
+    expect(said()).toEqual({ error: 'That device is in use.', code: 'capture.error.busy', from: 'take' });
+    // The same words from a permission press are the press's: nothing offers to record again for them.
+    fake.script.openPrivacy = () => refusal('capture.error.os');
+    await rec().openPrivacy('mic');
+    expect(said()).toEqual({ error: 'Recording failed.', code: 'capture.error.os', from: 'press' });
+    fake.script.arm = undefined;
+    const take = (await rec().record(), rec().take ?? '');
+    expect(said()).toEqual({ error: null, code: null, from: null });
+    fake.emit(take, failed('capture.permission.camera'));
+    expect(said()).toEqual({
+      error: "Allow Klipolo to use your camera in your computer's privacy settings, then try again.",
+      code: 'capture.permission.camera',
+      from: 'take',
+    });
+  });
+
+  it('a_refusal_without_a_code_keeps_none', async () => {
+    await opened();
+    fake.script.arm = () => new Error('The app went away.');
+    await rec().record();
+    expect([rec().error, rec().errorCode, rec().errorFrom]).toEqual(['The app went away.', null, 'take']);
+  });
 });
 
 describe('the take', () => {
@@ -530,6 +559,21 @@ describe('the take', () => {
     expect(rec().take).toBe('take-2');
     expect(rec().error).toBeNull();
   });
+
+  it('cancel_forgets_what_a_refused_press_in_the_countdown_said', async () => {
+    const take = await pressed();
+    fake.emit(take, countdown(3));
+    fake.emit(take, gate('mic'));
+    fake.script.send = (_take, command) =>
+      command.cmd === 'withoutSource' ? refusal('capture.error.os') : undefined;
+    await rec().recordWithout('mic');
+    expect([rec().error, rec().errorFrom]).toEqual(['Recording failed.', 'press']);
+    await rec().cancel();
+    expect(phase()).toBe('choosing');
+    expect([rec().error, rec().errorCode, rec().errorFrom]).toEqual([null, null, null]);
+  });
+
+
 
   it('a_take_that_fails_before_arming_answers_never_starts', async () => {
     await opened();
