@@ -165,17 +165,18 @@ impl<S: SessionOf> AppHost<S> {
         }
     }
 
-    /// Tells the page what `client` did.
-    fn told(&self, client: &str, reply: ChatReply) {
+    /// Tells the page what `client` did on the project's `opening`.
+    fn told(&self, client: &str, opening: u64, reply: ChatReply) {
         (self.tell)(Told::Reply(Box::new(ExternalReply {
             client: client.to_owned(),
+            opening,
             reply,
         })));
     }
 
-    /// The document's revision now, for a reply's moments and pictures.
-    fn revision_now(&self) -> Option<u64> {
-        Projects::now(&*self.projects.session()).map(|now| now.at.revision)
+    /// Where the open project stands now, for a reply's moments and pictures.
+    fn at_now(&self) -> Option<At> {
+        Projects::now(&*self.projects.session()).map(|now| now.at)
     }
 
     /// Whether an access code's credit, as the relay says now, is below `usd` (or the code is turned off). Waits at
@@ -323,7 +324,7 @@ impl<S: SessionOf> Host for AppHost<S> {
             let applied = reply()
                 .applied(done.patch, undo_label(tx))
                 .on_revision(done.at.revision);
-            self.told(client, applied);
+            self.told(client, done.at.opening, applied);
         }
         Ok(Applied { revision, dropped })
     }
@@ -354,7 +355,8 @@ impl<S: SessionOf> Host for AppHost<S> {
         let card = slot.propose(client, &now, &proposal, &tools);
         drop(slot);
         let id = card.id().to_owned();
-        self.told(client, reply().proposal(card).on_revision(now.at.revision));
+        let proposed = reply().proposal(card).on_revision(now.at.revision);
+        self.told(client, now.at.opening, proposed);
         Ok(id)
     }
 
@@ -390,10 +392,8 @@ impl<S: SessionOf> Host for AppHost<S> {
         let done = undo_by_app(&self.projects.session(), client).map_err(host_error)?;
         let dropped = slot.settle();
         drop(slot);
-        self.told(
-            client,
-            reply().undone(done.patch).on_revision(done.at.revision),
-        );
+        let undone = reply().undone(done.patch).on_revision(done.at.revision);
+        self.told(client, done.at.opening, undone);
         Ok(Applied {
             revision: self.revisions.of(&done.at),
             dropped,
@@ -401,14 +401,14 @@ impl<S: SessionOf> Host for AppHost<S> {
     }
 
     fn show_moments(&self, client: &str, moments: &[Moment]) {
-        let Some(revision) = self.revision_now() else {
+        let Some(at) = self.at_now() else {
             return;
         };
-        let mut shown = reply().on_revision(revision);
+        let mut shown = reply().on_revision(at.revision);
         for moment in moments {
             shown = shown.moment(moment.range, &moment.label);
         }
-        self.told(client, shown);
+        self.told(client, at.opening, shown);
     }
 
     fn estimate_usd(&self, job: &Job) -> f64 {
@@ -432,8 +432,9 @@ impl<S: SessionOf> Host for AppHost<S> {
             return Err(HostError::LowCredit);
         }
         let picture = self.chat.ask_picture(ask);
-        let revision = self.revision_now().unwrap_or_default();
-        self.told(client, reply().picture(picture).on_revision(revision));
+        let at = self.at_now();
+        let asked = (reply().picture(picture)).on_revision(at.as_ref().map_or(0, |at| at.revision));
+        self.told(client, at.map_or(0, |at| at.opening), asked);
         Ok(())
     }
 

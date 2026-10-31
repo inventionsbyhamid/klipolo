@@ -281,6 +281,8 @@ fn host_commits_through_the_one_apply_path_and_publishes() {
     );
     assert_eq!(reply["applied"]["change"]["baseRevision"], 0);
     assert_eq!(reply["revision"], 1);
+    // The page matches the change by the opening and the revision: revisions restart with each opening.
+    assert_eq!(told[0]["reply"]["opening"], 1);
     assert_eq!(reply["proposal"], serde_json::Value::Null);
 
     // A base the project moved on from, or nothing to change: refused, or nothing told.
@@ -518,7 +520,11 @@ fn another_opening_drops_the_proposal_and_its_revisions() {
         r.base() > old,
         "the new opening reads above every old revision"
     );
+    r.told();
     assert!(r.host.apply("Example Client", r.base(), &tx).is_ok());
+    let told = r.told();
+    assert_eq!(told[0]["reply"]["opening"], 2, "the new opening's");
+    assert_eq!(told[0]["reply"]["reply"]["revision"], 1);
 }
 
 #[test]
