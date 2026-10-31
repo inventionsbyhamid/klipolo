@@ -25,6 +25,7 @@ const {
   retry,
   stateOf,
   useAnalysis,
+  whyNoWords,
 } = await import('../../state/analysis');
 const { useProject } = await import('../../state/project');
 const { about, howLong, offerText, offerTitle, progressTitle, spokenProgress, stepDots } = await import('./analysis');
@@ -107,6 +108,21 @@ describe('the store', () => {
     expect(stateOf(useAnalysis.getState().states, 'a')).toEqual({ state: 'running', step: 'transcript', pct: 40 });
     applyEvent({ kind: 'done', payload: { assetId: 'a', approximate: true } });
     expect(stateOf(useAnalysis.getState().states, 'a')).toEqual({ state: 'done', approximate: true });
+    // Why words are rough (and whether timing them again helps), or why there are none, come with it.
+    const stopped = 'Word timing stopped before it finished.';
+    applyEvent({ kind: 'done', payload: { assetId: 'c', approximate: true, approximateReason: stopped, timeAgain: true } });
+    expect(stateOf(useAnalysis.getState().states, 'c')).toEqual({
+      state: 'done',
+      approximate: true,
+      approximateReason: stopped,
+      timeAgain: true,
+    });
+    applyEvent({ kind: 'done', payload: { assetId: 'q', approximate: false, emptyReason: 'No speech found.' } });
+    expect(stateOf(useAnalysis.getState().states, 'q')).toEqual({
+      state: 'done',
+      approximate: false,
+      emptyReason: 'No speech found.',
+    });
     applyEvent({ kind: 'failed', payload: { assetId: 'b', reason: 'This device has used its Klipolo credit.' } });
     expect(stateOf(useAnalysis.getState().states, 'b').state).toBe('failed');
     applyEvent({ kind: 'stopped', payload: { assetId: 'b' } });
@@ -206,6 +222,17 @@ describe('the store', () => {
     await analyze();
     expect(useAnalysis.getState().error).toBeNull();
     expect(useAnalysis.getState().estimate).toBeNull();
+  });
+
+  it('says why a project has no caption words', () => {
+    const silent = { state: 'done', approximate: false, emptyReason: 'No speech found.' } as const;
+    const timed = { state: 'done', approximate: false } as const;
+    expect(whyNoWords({ a: silent }, ['a', 'b'])).toBe('notAnalysed');
+    expect(whyNoWords({ a: silent, b: { state: 'running', step: 'words', pct: 4 } }, ['a', 'b'])).toBeNull();
+    expect(whyNoWords({ a: silent, b: timed }, ['a', 'b'])).toBe('noSpeechOne');
+    expect(whyNoWords({ a: silent, b: silent }, ['a', 'b'])).toBe('noSpeechMany');
+    expect(whyNoWords({ a: timed }, ['a'])).toBeNull();
+    expect(whyNoWords({}, [])).toBeNull();
   });
 
   it('retries a failed clip, and puts the offer off with Not now', async () => {

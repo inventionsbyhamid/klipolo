@@ -46,9 +46,12 @@ export function applyEvent(event: AnalysisEvent) {
     case 'progress':
       next = { state: 'running', step: event.payload.step, pct: event.payload.pct };
       break;
-    case 'done':
-      next = { state: 'done', approximate: event.payload.approximate };
+    case 'done': {
+      // Why some words are rough (and whether timing them again can help), or why there are none.
+      const { approximate, approximateReason, emptyReason, timeAgain } = event.payload;
+      next = { state: 'done', approximate, approximateReason, emptyReason, timeAgain };
       break;
+    }
     case 'failed':
       next = { state: 'failed', reason: event.payload.reason };
       break;
@@ -150,7 +153,10 @@ export async function analyze() {
   }
 }
 
-/** Retry the clips whose analysis failed (what finished is kept, so only the rest is done again). */
+/**
+ * Retry the clips whose analysis failed (what finished is kept, so only the rest is done again), or time a done clip's
+ * rough words again ("Time words again": free, and Rust always times them for the person).
+ */
 export async function retry(assetIds: string[]) {
   useAnalysis.setState({ error: null });
   try {
@@ -169,4 +175,20 @@ export function cancelAnalysis() {
 export function notNow() {
   const { clips = [], missing = [] } = useAnalysis.getState().estimate ?? {};
   useAnalysis.setState((s) => ({ dismissed: [...new Set([...s.dismissed, ...clips, ...missing])], error: null }));
+}
+
+/**
+ * Why the open project has no caption words, for the Captions panel: clips not analysed yet (the panel offers
+ * Analyze), or clips heard with no speech in them (one, or more); null while clips are being analysed, or with no clips.
+ */
+export function whyNoWords(
+  states: Record<string, AssetState>,
+  clipIds: string[],
+): 'notAnalysed' | 'noSpeechOne' | 'noSpeechMany' | null {
+  const all = clipIds.map((id) => stateOf(states, id));
+  if (all.some((s) => s.state === 'running')) return null;
+  if (all.some((s) => s.state === 'none')) return 'notAnalysed';
+  const silent = all.filter((s) => s.state === 'done' && !!s.emptyReason).length;
+  if (silent === 0) return null;
+  return silent === 1 ? 'noSpeechOne' : 'noSpeechMany';
 }

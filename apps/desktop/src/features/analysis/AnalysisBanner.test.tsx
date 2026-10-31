@@ -221,7 +221,7 @@ describe('the analysis banner', () => {
     expect(screen.queryByText(/timed roughly/)).toBeNull();
     act(() => useAnalysis.setState({ states: { a: { state: 'done', approximate: true } } }));
     rerender(<RoughCaptionsNote />);
-    expect(screen.getByText('Some captions are timed roughly')).toBeInTheDocument();
+    expect(screen.getByText('Some captions are timed roughly.')).toBeInTheDocument();
     act(() =>
       useAnalysis.setState({
         states: { a: { state: 'done', approximate: true }, b: { state: 'running', step: 'words', pct: 5 } },
@@ -229,6 +229,32 @@ describe('the analysis banner', () => {
     );
     rerender(<RoughCaptionsNote />);
     expect(screen.getByText('Rough captions until words are timed')).toBeInTheDocument();
+  });
+
+  it('says why captions are rough, and times the words again where that can help', async () => {
+    const stopped = 'Word timing stopped before it finished.';
+    useAnalysis.setState({
+      states: {
+        a: { state: 'done', approximate: true, approximateReason: stopped, timeAgain: true },
+        // Words that don't match their sound: rough, and timing them again wouldn't help.
+        b: { state: 'done', approximate: true, approximateReason: 'Some words are timed roughly.' },
+        c: { state: 'done', approximate: false },
+      },
+    });
+    renderWithProviders(<RoughCaptionsNote />);
+    expect(screen.getByText(`Some captions are timed roughly. ${stopped}`)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Time words again' }));
+    // As the person: the words are timed again whatever the page did before.
+    expect(bridge.start).toHaveBeenCalledWith(['a']);
+  });
+
+  it('offers no way to time words again where it can’t help', () => {
+    useAnalysis.setState({
+      states: { b: { state: 'done', approximate: true, approximateReason: 'Some words are timed roughly.' } },
+    });
+    renderWithProviders(<RoughCaptionsNote />);
+    expect(screen.getByText('Some captions are timed roughly.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Time words again' })).toBeNull();
   });
 
   it('says why a Retry of a failed clip was refused', async () => {

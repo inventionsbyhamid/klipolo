@@ -4,4 +4,4 @@ import type { AnalysisStep } from "./AnalysisStep";
 /**
  * Where a clip's analysis is.
  */
-export type AssetState = { "state": "none" } | { "state": "running", step: AnalysisStep, pct: number, } | { "state": "done", approximate: boolean, } | { "state": "failed", reason: string, };
+export type AssetState = { "state": "none" } | { "state": "running", step: AnalysisStep, pct: number, } | { "state": "done", approximate: boolean, approximateReason?: string, emptyReason?: string, timeAgain?: boolean, } | { "state": "failed", reason: string, };

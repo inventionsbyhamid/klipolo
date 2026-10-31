@@ -99,7 +99,23 @@ pub enum AssetState {
     /// A step is running, `pct` (0 to 100) of the way through it.
     Running { step: AnalysisStep, pct: u8 },
     /// Every step is done; `approximate` when some words are timed roughly.
-    Done { approximate: bool },
+    #[serde(rename_all = "camelCase")]
+    Done {
+        approximate: bool,
+        /// Why some words are timed roughly, as one plain sentence: word timing's own (it failed, stopped or didn't
+        /// finish), or that they don't match their sound.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        approximate_reason: Option<String>,
+        /// Why the clip has no words ("No speech found."), when it has none.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        empty_reason: Option<String>,
+        /// Timing the words again can time the rough ones (word timing failed, stopped or didn't finish): the page
+        /// offers it. Not for words that don't match their sound.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        time_again: bool,
+    },
     /// A step failed or was stopped; the steps before it are kept. `reason` is one plain sentence.
     Failed { reason: String },
 }
@@ -132,6 +148,17 @@ pub struct AnalysisDone {
     pub asset_id: String,
     /// Some words are timed roughly (spread across their turn).
     pub approximate: bool,
+    /// Why, as `AssetState::Done` says it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub approximate_reason: Option<String>,
+    /// Why the clip has no words.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub empty_reason: Option<String>,
+    /// Timing the words again can time the rough ones.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub time_again: bool,
 }
 
 /// `analysis://failed`: a clip's analysis stopped; what finished is kept.
@@ -359,8 +386,8 @@ struct Inner {
     /// counts it as spent.
     reserved: HashMap<String, f64>,
     /// The contents whose rough words were timed again, or whose word timing the person stopped, in this app run: a
-    /// start the page makes on its own (loading cached clips) doesn't time them again; only the person's Analyze or
-    /// Retry does.
+    /// start the page makes on its own (loading cached clips) doesn't time them again; only the person's Analyze,
+    /// Retry or "Time words again" does.
     timed_again: HashSet<String>,
     /// Bumped by every project switch (`project_changed`). A `start` or `estimate` remembers it on entry and does
     /// nothing more once it has moved on: its assets belong to a project no longer open.
@@ -835,7 +862,7 @@ impl AnalysisState {
     fn end(&self, key: &str, outcome: Outcome) {
         let mut inner = lock(&self.inner);
         let state = match outcome {
-            Outcome::Done { approximate } => AssetState::Done { approximate },
+            Outcome::Done(words) => words.state(),
             Outcome::Failed(reason) => AssetState::Failed { reason },
             Outcome::Stopped => AssetState::None,
         };
@@ -935,9 +962,17 @@ fn event_for(asset_id: &str, state: &AssetState) -> Option<AnalysisEvent> {
             step: *step,
             pct: *pct,
         }),
-        AssetState::Done { approximate } => AnalysisEvent::Done(AnalysisDone {
+        AssetState::Done {
+            approximate,
+            approximate_reason,
+            empty_reason,
+            time_again,
+        } => AnalysisEvent::Done(AnalysisDone {
             asset_id,
             approximate: *approximate,
+            approximate_reason: approximate_reason.clone(),
+            empty_reason: empty_reason.clone(),
+            time_again: *time_again,
         }),
         AssetState::Failed { reason } => AnalysisEvent::Failed(AnalysisFailed {
             asset_id,

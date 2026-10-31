@@ -186,6 +186,11 @@
   white-space: nowrap;
 }
 
+/* "Time words again": never squeezed by the sentence before it. */
+.analysis-rough .btn {
+  flex: none;
+}
+
 .analysis-rough .spinner {
   width: 14px;
   height: 14px;

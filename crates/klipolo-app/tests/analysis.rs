@@ -554,6 +554,37 @@ fn asr_usd(seconds: f64) -> f64 {
     seconds / 3600.0 * pricing::ASR_USD_PER_HOUR
 }
 
+/// Done, every word timed.
+fn timed() -> AssetState {
+    AssetState::Done {
+        approximate: false,
+        approximate_reason: None,
+        empty_reason: None,
+        time_again: false,
+    }
+}
+
+/// Done with some words timed roughly, for `reason`; `time_again` when timing them again can help.
+fn timed_roughly(reason: &str, time_again: bool) -> AssetState {
+    AssetState::Done {
+        approximate: true,
+        approximate_reason: Some(reason.into()),
+        empty_reason: None,
+        time_again,
+    }
+}
+
+/// `analysis://asset_done` for clip `id`, its words all timed.
+fn done_timed(id: &str) -> AnalysisEvent {
+    AnalysisEvent::Done(AnalysisDone {
+        asset_id: id.into(),
+        approximate: false,
+        approximate_reason: None,
+        empty_reason: None,
+        time_again: false,
+    })
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // The core tests
 
@@ -583,17 +614,8 @@ async fn cached_asset_makes_no_network_call() {
     started.finished().await;
     server.verify().await;
 
-    assert_eq!(
-        h.state.state_of("clip-a"),
-        AssetState::Done { approximate: false }
-    );
-    assert_eq!(
-        h.events_for("clip-a").last(),
-        Some(&AnalysisEvent::Done(AnalysisDone {
-            asset_id: "clip-a".into(),
-            approximate: false
-        }))
-    );
+    assert_eq!(h.state.state_of("clip-a"), timed());
+    assert_eq!(h.events_for("clip-a").last(), Some(&done_timed("clip-a")));
     assert_eq!(media.sounds.load(Ordering::SeqCst), 0, "nothing decoded");
     assert_eq!(media.copies.load(Ordering::SeqCst), 0);
     // Straight to done: nothing to do, so no "Analyzing" on the way.
@@ -737,10 +759,7 @@ async fn turn_level_captions_publish_before_alignment() {
         .finished()
         .await;
 
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("talk"), timed());
     let published: Vec<(usize, Arc<Speech>)> = h
         .speech
         .lock()
@@ -913,10 +932,7 @@ async fn a_relay_401_registers_again_once_and_retries() {
         .finished()
         .await;
 
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("talk"), timed());
     assert_eq!(h.stored_token().as_deref(), Some(NEW_TOKEN));
     server.verify().await;
 }
@@ -994,10 +1010,7 @@ async fn a_code_whose_device_cannot_register_says_why() {
     let started = empty.state.start(&[cached, fresh]).await;
     assert_eq!(started.refused.as_deref(), Some(NEEDS_KEY));
     started.finished().await;
-    assert_eq!(
-        empty.state.state_of("cached"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(empty.state.state_of("cached"), timed());
     assert_eq!(empty.state.state_of("fresh"), AssetState::None);
     server.verify().await;
 }
@@ -1053,7 +1066,12 @@ async fn a_clip_without_sound_still_gets_its_scene_log() {
 
     assert_eq!(
         h.state.state_of("quiet"),
-        AssetState::Done { approximate: false }
+        AssetState::Done {
+            approximate: false,
+            approximate_reason: None,
+            empty_reason: Some("No speech found.".into()),
+            time_again: false,
+        }
     );
     let found = h.state.analysis_for("quiet").unwrap();
     assert!(found.transcript.as_ref().unwrap().words.is_empty());
@@ -1266,10 +1284,7 @@ async fn a_clip_started_twice_at_once_is_analysed_once() {
     first.finished().await;
     second.finished().await;
 
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("talk"), timed());
     server.verify().await;
 }
 
@@ -1334,17 +1349,8 @@ async fn one_file_imported_twice_is_analysed_and_priced_once() {
 
     let speech = h.last_speech();
     for id in ["first", "second"] {
-        assert_eq!(
-            h.state.state_of(id),
-            AssetState::Done { approximate: false }
-        );
-        assert_eq!(
-            h.events_for(id).last(),
-            Some(&AnalysisEvent::Done(AnalysisDone {
-                asset_id: id.into(),
-                approximate: false
-            }))
-        );
+        assert_eq!(h.state.state_of(id), timed());
+        assert_eq!(h.events_for(id).last(), Some(&done_timed(id)));
         assert!(
             h.events_for(id)
                 .iter()
@@ -1401,10 +1407,7 @@ async fn a_second_start_counts_the_credit_the_first_promised() {
     refused.finished().await;
     started.finished().await;
 
-    assert_eq!(
-        h.state.state_of("first"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("first"), timed());
     assert_eq!(h.state.state_of("second"), AssetState::None);
     // The first's promise is released: the second fits again (the mock's spend doesn't move).
     let estimate = h.state.estimate(std::slice::from_ref(&second)).await;
@@ -1514,7 +1517,10 @@ async fn rough_words_are_timed_again_for_free_once_word_timing_is_back() {
         .await;
     assert_eq!(
         h.state.state_of("talk"),
-        AssetState::Done { approximate: true }
+        timed_roughly(
+            "Klipolo's server is busy right now. Try again in a moment.",
+            true
+        )
     );
     let rough: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
     assert!(rough.approximate);
@@ -1525,10 +1531,7 @@ async fn rough_words_are_timed_again_for_free_once_word_timing_is_back() {
         .finished()
         .await;
 
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("talk"), timed());
     let timed: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
     assert!(!timed.approximate && timed.turns.iter().all(|t| t.aligned));
     assert_eq!(
@@ -1536,6 +1539,71 @@ async fn rough_words_are_timed_again_for_free_once_word_timing_is_back() {
         timed.transcript.words
     );
     assert_eq!(requests(&server, "POST", "/v1/align").await.len(), 2);
+    server.verify().await;
+}
+
+/// A clip done with rough words says why, on its state and its done event, and whether timing them again can help: it
+/// can when word timing failed (the relay couldn't answer), not when the words don't match their sound.
+#[tokio::test(flavor = "multi_thread")]
+async fn rough_words_say_why_and_whether_timing_them_again_can_help() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(asr_answer())
+        .expect(2)
+        .mount(&server)
+        .await;
+    // Word timing can't answer for the first clip; for the second, its words score as never spoken there.
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(ResponseTemplate::new(503))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "words": [
+                {"text": "hello", "startMs": 250, "endMs": 1000, "score": 0.2, "turn": 0},
+                {"text": "there", "startMs": 1100, "endMs": 2000, "score": 0.2, "turn": 0},
+                {"text": "friends", "startMs": 2100, "endMs": 3700, "score": 0.2, "turn": 0}
+            ],
+            "skipped": []
+        })))
+        .expect(1)
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    let down = asset("down", AssetKind::Audio, &h.clip("down.m4a", 1), SECONDS);
+    let odd = asset("odd", AssetKind::Audio, &h.clip("odd.m4a", 2), SECONDS);
+
+    h.state
+        .start(std::slice::from_ref(&down))
+        .await
+        .finished()
+        .await;
+    h.state
+        .start(std::slice::from_ref(&odd))
+        .await
+        .finished()
+        .await;
+
+    let said = "Klipolo's server is busy right now. Try again in a moment.";
+    assert_eq!(h.state.state_of("down"), timed_roughly(said, true));
+    assert_eq!(
+        h.events_for("down").last(),
+        Some(&AnalysisEvent::Done(AnalysisDone {
+            asset_id: "down".into(),
+            approximate: true,
+            approximate_reason: Some(said.into()),
+            empty_reason: None,
+            time_again: true,
+        }))
+    );
+    assert_eq!(h.state.state_of("odd"), timed_roughly(ROUGH_WORDS, false));
     server.verify().await;
 }
 
@@ -1572,10 +1640,7 @@ async fn cancel_during_word_timing_keeps_what_was_heard() {
     h.state.cancel();
     started.finished().await;
     // The request in flight finished: its words are timed.
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("talk"), timed());
     assert!(
         h.cache_dir(&file)
             .load::<TranscriptOut>("transcript")
@@ -1589,10 +1654,7 @@ async fn cancel_during_word_timing_keeps_what_was_heard() {
         .finished()
         .await;
 
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("talk"), timed());
     server.verify().await;
 }
 
@@ -1859,7 +1921,7 @@ async fn cancelled_word_timing_does_not_start_again_by_itself() {
     started.finished().await;
     assert_eq!(
         h.state.state_of("talk"),
-        AssetState::Done { approximate: true }
+        timed_roughly("Word timing stopped before it finished.", true)
     );
     assert_eq!(
         (
@@ -1877,7 +1939,7 @@ async fn cancelled_word_timing_does_not_start_again_by_itself() {
         .await;
     assert_eq!(
         h.state.state_of("talk"),
-        AssetState::Done { approximate: true }
+        timed_roughly("Word timing stopped before it finished.", true)
     );
     assert_eq!(
         (
@@ -1894,10 +1956,7 @@ async fn cancelled_word_timing_does_not_start_again_by_itself() {
         .await
         .finished()
         .await;
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("talk"), timed());
     assert_eq!(h.aligns.load(Ordering::SeqCst), 2);
     server.verify().await;
 }
@@ -1939,7 +1998,7 @@ async fn the_page_times_rough_words_again_once_per_app_run() {
     assert_eq!(h.aligns.load(Ordering::SeqCst), 1, "once, not every time");
     assert_eq!(
         h.state.state_of("talk"),
-        AssetState::Done { approximate: true }
+        timed_roughly("Word timing is not available right now.", true)
     );
     server.verify().await;
 }
@@ -2041,10 +2100,7 @@ async fn a_task_that_panics_still_ends_and_lets_go() {
         .await
         .finished()
         .await;
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("talk"), timed());
     server.verify().await;
 }
 
@@ -2078,10 +2134,7 @@ async fn a_removed_asset_is_forgotten_and_its_twin_keeps_its_analysis() {
     assert!(speech.transcripts.contains_key("first"));
     assert_eq!(h.state.state_of("second"), AssetState::None);
     assert!(h.state.analysis_for("second").is_none());
-    assert_eq!(
-        h.state.state_of("first"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("first"), timed());
     let after: Vec<AnalysisEvent> = h.events.lock().unwrap()[told..].to_vec();
     assert!(after.iter().all(|e| e.asset_id() == "first"), "{after:?}");
     server.verify().await;

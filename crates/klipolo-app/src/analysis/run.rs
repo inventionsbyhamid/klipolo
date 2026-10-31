@@ -18,7 +18,8 @@ use serde::{Deserialize, Serialize};
 
 use super::calls::{Calls, Meter};
 use super::{
-    AnalysisState, AnalysisStep, Cached, Clip, Content, Media, NEEDS_KEY, UNREADABLE, lock,
+    AnalysisState, AnalysisStep, AssetState, Cached, Clip, Content, Media, NEEDS_KEY, UNREADABLE,
+    lock,
 };
 
 /// The clips started together. Cancel stops every request not sent yet; a used-up credit (or a refused key, or no way
@@ -81,12 +82,43 @@ enum Heard {
 
 /// How a clip's analysis ended.
 pub(crate) enum Outcome {
-    Done {
-        approximate: bool,
-    },
+    Done(Words),
     Failed(String),
     /// Cancelled: back to not analysed.
     Stopped,
+}
+
+/// How a finished clip's words came out: timed, timed roughly (why, and whether timing them again can help), or none
+/// (why).
+pub(crate) struct Words {
+    approximate: bool,
+    approximate_reason: Option<String>,
+    empty_reason: Option<String>,
+    time_again: bool,
+}
+
+impl Words {
+    fn of(found: &TranscriptOut) -> Self {
+        Self {
+            approximate: found.approximate,
+            approximate_reason: found
+                .approximate_reason
+                .clone()
+                .filter(|_| found.approximate),
+            empty_reason: found.empty_reason.clone(),
+            time_again: timed_again(found),
+        }
+    }
+
+    /// The clip's state, done.
+    pub(crate) fn state(self) -> AssetState {
+        AssetState::Done {
+            approximate: self.approximate,
+            approximate_reason: self.approximate_reason,
+            empty_reason: self.empty_reason,
+            time_again: self.time_again,
+        }
+    }
 }
 
 /// What one content's steps work with.
@@ -236,9 +268,7 @@ impl AnalysisState {
         // aligner (free: no transcription).
         let retime = first.is_some() && cached.transcript.as_ref().is_some_and(timed_again);
         if let (Some(found), false, false) = (&cached.transcript, needs_scenes, retime) {
-            return Outcome::Done {
-                approximate: found.approximate,
-            };
+            return Outcome::Done(Words::of(found));
         }
         let Some(first) = first else {
             return Outcome::Failed(NEEDS_KEY.into());
@@ -286,9 +316,7 @@ impl AnalysisState {
                 return outcome;
             }
         }
-        Outcome::Done {
-            approximate: transcript.approximate,
-        }
+        Outcome::Done(Words::of(&transcript))
     }
 
     /// The clip's transcript: its sound, its turns (published and cached at once as turn-level captions), its words
@@ -325,8 +353,9 @@ impl AnalysisState {
                 match heard? {
                     Heard::All(out) => out,
                     Heard::Stopped(mut out) => {
-                        // Paid for already: kept, and the clip is analysed with what was timed (its words are timed
-                        // again when the person asks).
+                        // Paid for already: kept, and the clip is analysed with what was timed. Its rough words are
+                        // timed again by the person's Analyze, Retry or "Time words again" (never by the page's own
+                        // start in this app run: `timing_stopped`).
                         out.transcript.key = key.to_owned();
                         self.store(dir, "transcript", &out, &model).await;
                         self.found_transcript(key, &out);
@@ -549,8 +578,8 @@ impl AnalysisState {
         Ok(())
     }
 
-    /// The person stopped the job's word timing with `kept` cached: only the person's Analyze or Retry times its words
-    /// again. A clip with nothing else to do is analysed as far as it got (its words timed roughly where they weren't
+    /// The person stopped the job's word timing with `kept` cached: only the person's Analyze, Retry or "Time words
+    /// again" times its words again. A clip with nothing else to do is analysed as far as it got (its words timed roughly where they weren't
     /// timed); a video whose scene log is still to do goes back to not analysed, as a Cancel during its scene log does
     /// (the page offers it again; it never starts an unfinished video on its own).
     fn timing_stopped(&self, job: &Job<'_>, kept: &TranscriptOut) -> Outcome {
@@ -558,9 +587,7 @@ impl AnalysisState {
         if job.needs_scenes {
             return Outcome::Stopped;
         }
-        Outcome::Done {
-            approximate: kept.approximate,
-        }
+        Outcome::Done(Words::of(kept))
     }
 
     /// How a failed step ends the clip: back to not analysed after Cancel, else failed with the step's sentence.
