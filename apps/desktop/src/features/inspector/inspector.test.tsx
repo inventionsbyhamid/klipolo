@@ -81,7 +81,7 @@ describe('the inspector', () => {
     expect(screen.getByRole('textbox', { name: 'Starts' })).toHaveValue('0:01.0');
     expect(screen.getByRole('textbox', { name: 'Lasts' })).toHaveValue('3.0 s');
     await userEvent.click(
-      within(screen.getByRole('radiogroup', { name: 'Text colour' })).getByRole('radio', { name: 'Yellow' }),
+      within(screen.getByRole('radiogroup', { name: 'Text color' })).getByRole('radio', { name: 'Yellow' }),
     );
     expect(apply).toHaveBeenCalledTimes(1);
     expect(apply).toHaveBeenCalledWith(
@@ -209,8 +209,8 @@ describe('the inspector', () => {
     // It lands (the stand-in answers at once): a burst holds the commit queue until then, and the next waits.
     await act(async () => undefined);
 
-    fireEvent.click(screen.getByRole('button', { name: /^Text colour: more colours$/ }));
-    const hex = screen.getByRole('textbox', { name: 'Hex colour' });
+    fireEvent.click(screen.getByRole('button', { name: /^Text color: more colors$/ }));
+    const hex = screen.getByRole('textbox', { name: 'Hex color' });
     fireEvent.change(hex, { target: { value: '778899' } });
     fireEvent.keyDown(hex, { key: 'Enter' });
     await act(async () => undefined);

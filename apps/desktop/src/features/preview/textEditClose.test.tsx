@@ -192,7 +192,7 @@ it('a text colour picked while Box is on its way keeps the box', async () => {
   useSelection.setState({ selectedId: 'title' });
   renderOpen(<Inspector format="landscape" />);
   await userEvent.click(screen.getByRole('radio', { name: 'Box' }));
-  await userEvent.click(within(screen.getByRole('radiogroup', { name: 'Text colour' })).getByRole('radio', { name: 'Yellow' }));
+  await userEvent.click(within(screen.getByRole('radiogroup', { name: 'Text color' })).getByRole('radio', { name: 'Yellow' }));
   expect(labels()).toEqual(['text.background.undo']);
   await act(async () => release());
   await waitFor(() => expect(heard.applied).toHaveLength(2));
