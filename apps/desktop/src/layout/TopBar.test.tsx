@@ -9,7 +9,8 @@ vi.mock('../bridge/commands', () => ({
 const { bridge } = await import('../bridge/commands');
 const { useProject } = await import('../state/project');
 const { useSaving } = await import('../state/saving');
-const { EXPORT_LATER, TopBar } = await import('./TopBar');
+const { TopBar } = await import('./TopBar');
+const { useExport } = await import('../state/export');
 
 beforeEach(() => {
   useProject.setState({ snapshot: null, pending: 0 });
@@ -17,14 +18,17 @@ beforeEach(() => {
 });
 
 describe('TopBar', () => {
-  it('says why Export is off, with and without a video', () => {
+  it('says why Export is off without a video, and opens the export dialog with one', async () => {
     const { rerender } = render(<TopBar />);
     const exportButton = () => screen.getByRole('button', { name: 'Export' });
     expect(exportButton()).toBeDisabled();
     expect(exportButton().title).toBe('Add a video first');
     useProject.setState({ snapshot: fixtureSnapshot() });
     rerender(<TopBar />);
-    expect(exportButton().title).toBe(EXPORT_LATER);
+    expect(exportButton()).toBeEnabled();
+    expect(exportButton().title).toBe('Export (Command E)');
+    await userEvent.click(exportButton());
+    expect(useExport.getState().open).toBe(true);
   });
 
   it('names the change Undo takes back, and undoes it', async () => {
