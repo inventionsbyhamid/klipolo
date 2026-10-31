@@ -108,6 +108,18 @@ impl Pace {
         mine.push_back(now);
         Ok(())
     }
+
+    /// Takes back the event `take` recorded for `client` at `at`. O(events in the window).
+    fn give_back(&mut self, client: &str, at: Instant) {
+        if let Some(times) = self.apps.get_mut(client)
+            && let Some(i) = times.iter().rposition(|t| *t == at)
+        {
+            times.remove(i);
+        }
+        if let Some(i) = self.all.iter().rposition(|t| *t == at) {
+            self.all.remove(i);
+        }
+    }
 }
 
 #[derive(Default)]
@@ -151,6 +163,11 @@ impl Limits {
     pub fn applied(&self, client: &str, now: Instant) -> Result<(), Paced> {
         let limits = (APPLIED_PER_WINDOW, Some(APPLIED_ALL_PER_WINDOW));
         self.paces().applied.take(client, now, PACE_WINDOW, limits)
+    }
+
+    /// Gives back the place `applied` took for `client` at `at`: the host refused that batch, so nothing applied.
+    pub fn unapplied(&self, client: &str, at: Instant) {
+        self.paces().applied.give_back(client, at);
     }
 
     /// One more job of `usd` for `client` at `now`: `OverCap` when it would take all apps' spending in this run past

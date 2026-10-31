@@ -244,3 +244,41 @@ fn paced_says_how_long_to_wait() {
     // The run's allowance is used: no wait helps.
     assert_eq!(paced("Agent", Paced::OverCap), OVER_CAP);
 }
+
+#[test]
+fn a_batch_the_host_refuses_gives_its_place_back() {
+    let limits = Limits::default();
+    let t0 = Instant::now();
+    for _ in 0..30 {
+        assert_eq!(limits.applied("Agent", t0), Ok(()));
+    }
+    limits.unapplied("Agent", t0);
+    assert_eq!(limits.applied("Agent", t0), Ok(()));
+    assert!(limits.applied("Agent", t0).is_err());
+
+    // Through the server: an app retrying while the person's redo waits uses none of its 30, or of all apps' 60.
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    host.person_edit(&klipolo_model::Transaction {
+        label: "mine".into(),
+        ops: vec![klipolo_model::ops::Op::Rename {
+            name: "Mine".into(),
+        }],
+        ..klipolo_model::Transaction::default()
+    });
+    host.person_undo();
+    for _ in 0..10 {
+        let refused = agent.call("setCaptions", json!({"on": false, "style": null}));
+        assert_eq!(refused["isError"], true, "{refused}");
+    }
+    host.person_redo();
+    for k in 0..30 {
+        let result = agent.call("setCaptions", json!({"on": k % 2 == 1, "style": null}));
+        assert_eq!(outcome(&result), "done", "{k}: {result}");
+    }
+    assert_paced(
+        &agent.call("setCaptions", json!({"on": false, "style": null})),
+        "Agent",
+    );
+}

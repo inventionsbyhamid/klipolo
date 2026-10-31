@@ -208,12 +208,17 @@ fn edit(
         if tx.needs_review(Some(&snap.project)) {
             return refused(words::REMOVES);
         }
-        if let Err(paced) = mcp.limits().applied(client, Instant::now()) {
+        let applied_at = Instant::now();
+        if let Err(paced) = mcp.limits().applied(client, applied_at) {
             return refused(&words::paced(client, paced));
         }
         match host.apply(client, snap.revision, &tx) {
             Ok(applied) => (revision, dropped) = (applied.revision, applied.dropped),
-            Err(e) => return refused(&host_error(host, client, e)),
+            Err(e) => {
+                // Nothing applied: the batch's place in the app's pace, and all apps', goes back.
+                mcp.limits().unapplied(client, applied_at);
+                return refused(&host_error(host, client, e));
+            }
         }
     }
     let changed = revision != snap.revision;
