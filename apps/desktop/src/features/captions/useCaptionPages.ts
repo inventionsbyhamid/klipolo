@@ -82,6 +82,25 @@ function askWhole(key: string, projectId: string, format: FormatKind): Promise<C
 }
 
 /**
+ * `next`, with each page that reads exactly as `prev`'s page of the same index kept as `prev`'s object: an edit to one
+ * word draws its own line again, not every line.
+ */
+function reusePages(prev: CaptionPagesView | null, next: CaptionPagesView | null): CaptionPagesView | null {
+  if (!prev || !next) return next;
+  const old = new Map(prev.pages.map((p) => [p.index, p]));
+  let kept = 0;
+  const pages = next.pages.map((p) => {
+    const was = old.get(p.index);
+    if (was && JSON.stringify(was) === JSON.stringify(p)) {
+      kept += 1;
+      return was;
+    }
+    return p;
+  });
+  return kept === 0 ? next : { ...next, pages };
+}
+
+/**
  * A window of the open project's caption pages in `format`, or null while captions are off or nothing
  * was asked. It is asked again when the revision, the opening or what was said changes (`pagesEpoch`), or the window
  * moves; the last answer stays shown until the next one lands, so nothing flickers. Never per frame.
@@ -141,7 +160,8 @@ export function useCaptionAnswer(
 /**
  * Every page of the open project's captions in `format`, as one answer (`first` 0), asked `MOST` at a time
  * (`askAll`): the Captions view lists them all, its lines wrapping to their words. Asked again as `useCaptionAnswer`
- * is; the last answer stays shown until the next one is complete. `fresh`, `of` and `base` as `useCaptionAnswer`'s.
+ * is; the last answer stays shown until the next one is complete, and a page that reads the same stays the same
+ * object (`reusePages`). `fresh`, `of` and `base` as `useCaptionAnswer`'s.
  */
 export function useAllCaptionPages(format: FormatKind): {
   view: CaptionPagesView | null;
@@ -164,7 +184,7 @@ export function useAllCaptionPages(format: FormatKind): {
     if (key === null || projectId === null) return;
     let live = true;
     void askWhole(key, projectId, format).then((view) => {
-      if (live) setShown({ key, base, view });
+      if (live) setShown((was) => ({ key, base, view: reusePages(was?.view ?? null, view) }));
     });
     return () => {
       live = false;

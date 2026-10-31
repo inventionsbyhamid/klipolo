@@ -53,6 +53,21 @@ describe('the Captions view’s pages', () => {
     await waitFor(() => expect(asked).toHaveLength(2));
   });
 
+  it('keeps a page that reads the same as the one before, so its line isn’t drawn again', async () => {
+    let fixed = false;
+    backend(pages(3, () => 3, (i) => (i === 1 && fixed ? 'fixed' : `cue ${i}`)));
+    const { result } = renderHook(() => useAllCaptionPages('portrait'));
+    await waitFor(() => expect(result.current.view?.pages).toHaveLength(3));
+    const before = result.current.view!.pages;
+    fixed = true;
+    toRevision(4);
+    await waitFor(() => expect(result.current.view!.pages[1].words[0].text).toBe('fixed'));
+    const after = result.current.view!.pages;
+    expect(after[0]).toBe(before[0]);
+    expect(after[2]).toBe(before[2]);
+    expect(after[1]).not.toBe(before[1]);
+  });
+
   it('asks again when the chunks of one answer come from different revisions', async () => {
     let raced = true;
     // The second chunk is answered after an edit landed in Rust, once.

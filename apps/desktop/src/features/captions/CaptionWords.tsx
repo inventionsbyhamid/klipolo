@@ -26,9 +26,8 @@ interface Edit {
   matches: WordView[] | null;
 }
 
-/** What the editor needs from the list, the same for every line. */
+/** What the editor needs from the list, the same for every line (and the same object while the list is up). */
 interface EditorProps {
-  busy: boolean;
   spell: Parameters<typeof WordEditor>[0]['spell'];
   typed: () => void;
   fixAll: Parameters<typeof WordEditor>[0]['fixAll'];
@@ -51,6 +50,7 @@ const Line = memo(function Line({
   selected,
   active,
   edit,
+  busy,
   editor,
   onPress,
 }: {
@@ -64,6 +64,8 @@ const Line = memo(function Line({
   active: string | null;
   /** The word being fixed, when it is on this line, by its key now. */
   edit: (Edit & { key: string }) | null;
+  /** The words are being updated: given only to the line being edited, so the others aren't drawn again for it. */
+  busy: boolean;
   editor: EditorProps;
   onPress: (word: WordView) => void;
 }) {
@@ -84,7 +86,15 @@ const Line = memo(function Line({
         {page.words.map((w) => {
           const key = wordKey(w);
           if (edit && edit.key === key)
-            return <WordEditor key={fileWordKey(edit.word)} word={edit.word} matches={edit.matches} {...editor} />;
+            return (
+              <WordEditor
+                key={fileWordKey(edit.word)}
+                word={edit.word}
+                matches={edit.matches}
+                busy={busy}
+                {...editor}
+              />
+            );
           const hidden = w.look.hidden === true;
           const hint = hidden
             ? t({ id: 'captions.words.hiddenHint', message: 'Hidden. Click to show.' })
@@ -283,8 +293,8 @@ export function CaptionWords({ format }: { format: FormatKind }) {
   const close = useStableCallback(() => setEdit(null));
   const hide = useStableCallback(() => void press({ hidden: true }));
   const editor = useMemo<EditorProps>(
-    () => ({ busy, spell, typed, fixAll, hide, close, list: listRef }),
-    [busy, spell, typed, fixAll, hide, close],
+    () => ({ spell, typed, fixAll, hide, close, list: listRef }),
+    [spell, typed, fixAll, hide, close],
   );
 
   // Each line's share of the selection, as one string, so a line draws again only when its own part changes.
@@ -365,6 +375,7 @@ export function CaptionWords({ format }: { format: FormatKind }) {
               selected={byRow.get(i)?.join('\n') ?? null}
               active={active && sel?.focusRow === i ? active : null}
               edit={i === editRow && edit && editKey ? { ...edit, key: editKey } : null}
+              busy={i === editRow && busy}
               editor={editor}
               onPress={onPress}
             />
