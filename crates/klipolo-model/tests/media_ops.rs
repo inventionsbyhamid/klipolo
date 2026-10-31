@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use common::*;
 use klipolo_model::layout::{resolve_rect, BoxN, Layout};
 use klipolo_model::media::image::{add_image_ops, image_rect, IMAGE_SIZE, IMAGE_US};
+use klipolo_model::media::music::{add_music_ops, is_music, MusicOpts};
 use klipolo_model::media::sound::add_sound_ops;
 use klipolo_model::media::text::{
     add_template_ops, add_text_ops, preset_rect, TextPreset, TitleTemplate, PORTRAIT_CLEAR, TEXT_US,
@@ -368,6 +369,34 @@ fn a_settings_change_that_keeps_the_formats_keeps_every_place() {
     };
     let next = apply_ops(&p, &[Op::SetSettings { settings }]).unwrap();
     assert_eq!(layer(&next, &id).layout, layer(&p, &id).layout);
+}
+
+/// A sound effect never goes on a track that holds music, even where the music leaves room (before it starts): the
+/// Music lane keeps only music.
+#[test]
+fn a_sound_effect_skips_a_track_that_holds_music() {
+    let p = fixture();
+    let song = Asset {
+        id: "song".into(),
+        name: "Song".into(),
+        duration_us: secs(120.0),
+        ..whoosh()
+    };
+    let opts = MusicOpts {
+        start_us: secs(10.0),
+        ..MusicOpts::default()
+    };
+    let p = apply_ops(&p, &add_music_ops(&p, &song, opts).unwrap()).unwrap();
+    let ops = add_sound_ops(&p, &whoosh(), secs(2.0)).unwrap();
+    let p = apply_ops(&p, &ops).unwrap();
+    let id = added(&ops);
+    let track = p
+        .timeline
+        .tracks
+        .iter()
+        .find(|t| t.items.iter().any(|i| i.id == id))
+        .unwrap();
+    assert!(!track.items.iter().any(is_music), "{}", track.name);
 }
 
 /// A sound let go at or past the video's end would play over nothing: refused with no room. With no video at all, it
