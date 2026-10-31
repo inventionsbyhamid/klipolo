@@ -76,9 +76,9 @@ function useInFront(): boolean {
 }
 
 /**
- * The previews run while the choices show and Klipolo is in front: on opening, on every change of choice,
- * and back in front, as the app starts nothing again by itself. They stop on Record (the store stops them first),
- * when Klipolo goes behind or is hidden, and when the dialog goes.
+ * The previews run only while the choices show and Klipolo is in front: on opening, on every change of choice, and
+ * back in front, as the app starts nothing again by itself. They stop on Record (the store stops them first), when
+ * Klipolo goes behind or is hidden, and when the dialog goes.
  */
 function usePreviews(phase: RecorderPhase) {
   const front = useInFront();
