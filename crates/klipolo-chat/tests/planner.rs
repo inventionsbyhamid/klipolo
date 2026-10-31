@@ -12,9 +12,10 @@ use std::task::{Context, Poll, Waker};
 
 use klipolo_chat::{
     AnalysisState, Audience, BoxFuture, ChatContext, ChatError, ChatErrorKind, FunctionCall,
-    Inputs, Item, KEPT_TURNS, LanguageModel, MAX_CONTEXT_TOKENS, ModelError, ModelRequest,
-    ModelResponse, PROPOSED_OUTPUT, PlanOut, Refs, STILL_LISTENING, TOLD_PERSON, TOO_LONG,
-    ToolCall, Turn, View, build_context, plan, remember, sanitize, system_prompt, tools,
+    Inputs, Item, KEPT_TURNS, LanguageModel, Library, LibraryItem, MAX_CONTEXT_TOKENS, MediaKind,
+    ModelError, ModelRequest, ModelResponse, PROPOSED_OUTPUT, PlanOut, Refs, STILL_LISTENING,
+    TOLD_PERSON, TOO_LONG, ToolCall, Turn, View, build_context, plan, remember, sanitize,
+    system_prompt, tools,
 };
 use klipolo_model::Project;
 use klipolo_model::project::{Asset, AssetKind};
@@ -119,6 +120,7 @@ fn inputs(project: &Project, speech: Speech) -> Inputs {
         analysis: (project.assets.iter())
             .map(|a| (a.id.clone(), AnalysisState::Done))
             .collect(),
+        library: Library::default(),
     }
 }
 
@@ -129,6 +131,7 @@ fn context(project: &Project, inputs: &Inputs) -> ChatContext {
         &HashMap::new(),
         &inputs.scenes,
         &inputs.view,
+        &inputs.library,
     )
 }
 
@@ -955,5 +958,127 @@ fn an_empty_exchange_sends_no_empty_reply() {
         !input
             .iter()
             .any(|item| matches!(item, Item::Assistant { .. }))
+    );
+}
+
+#[test]
+fn a_picture_being_drawn_is_said_to_be_on_its_way() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    // No text from the model: the reply says the work has started, not that nothing changed.
+    let sticker = fc(
+        "call_1",
+        "makeSticker",
+        r#"{"prompt": "paper plane", "position": "top-right", "atSec": 0.0, "durationSec": null}"#,
+    );
+    let model = Fake::new(vec![answer("", vec![sticker], 0.002)]);
+    let out = send(&model, &[], "a paper plane sticker in the corner", &i, &p).unwrap();
+    assert_eq!(out.compiled.jobs.len(), 1);
+    assert_eq!(
+        (&out.compiled.additions, &out.compiled.refusals),
+        (&None, &vec![])
+    );
+    assert_eq!(out.reply, "Working on it.");
+}
+
+#[test]
+fn following_or_blurring_alone_is_said_to_be_on_its_way() {
+    // Like a picture being drawn, a subject being followed or blurred is work for a runner: under way, not nothing.
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    for (tool, kind) in [("followSubject", "follow"), ("blurObjects", "blur")] {
+        let job = fc("call_1", tool, r#"{"description": "face"}"#);
+        let model = Fake::new(vec![answer("", vec![job], 0.002)]);
+        let out = send(&model, &[], "keep it on her face", &i, &p).unwrap();
+        assert_eq!(out.compiled.jobs.len(), 1, "{kind}");
+        assert_eq!(out.compiled.additions, None, "{kind}");
+        assert_eq!(out.reply, "Working on it.", "{kind}");
+        // With words of its own, the model's text is the reply.
+        let job = fc("call_1", tool, r#"{"description": "face"}"#);
+        let model = Fake::new(vec![answer("On it.", vec![job], 0.002)]);
+        let out = send(&model, &[], "keep it on her face", &i, &p).unwrap();
+        assert_eq!(out.reply, "On it.", "{kind}");
+    }
+}
+
+#[test]
+fn a_part_still_to_come_is_not_claimed_by_the_models_text() {
+    // Words on screen are still to come, the music goes in: the model's sentence claims both, so it is left out and
+    // what went through is said plainly, then what is still to come.
+    let (p, speech) = talk();
+    let mut i = inputs(&p, speech);
+    let lofi = serde_json::from_value(serde_json::json!({
+        "id": "lofi", "kind": "audio", "path": "/media/lofi.mp3", "name": "lofi.mp3", "durationUs": 60_000_000,
+        "width": 0, "height": 0, "fps": 0.0, "hasAudio": true,
+    }))
+    .unwrap();
+    i.library.items.push(LibraryItem {
+        name: "lofi.mp3".into(),
+        kind: MediaKind::Music,
+        asset: lofi,
+        pack: false,
+    });
+    let model = Fake::new(vec![answer(
+        "Added your title and the lofi music.",
+        vec![
+            fc(
+                "call_1",
+                "addText",
+                r#"{"text": "Day 1", "preset": "title", "atSec": 0, "durationSec": null}"#,
+            ),
+            fc(
+                "call_2",
+                "addMusic",
+                r#"{"file": "lofi", "volume": null, "duck": null, "atSec": 0}"#,
+            ),
+        ],
+        0.002,
+    )]);
+    let out = send(&model, &[], "a title Day 1 and lofi music", &i, &p).unwrap();
+    assert_eq!(model.seen().len(), 1);
+    assert!(out.compiled.additions.is_some());
+    assert_eq!(
+        out.reply,
+        format!(
+            "The music is in. {}",
+            klipolo_chat::compile::TEXT_COMING_SOON
+        )
+    );
+    // With nothing refused for the person, the model's own words stay.
+    let model = Fake::new(vec![answer(
+        "Added the lofi music.",
+        vec![fc(
+            "call_1",
+            "addMusic",
+            r#"{"file": "lofi", "volume": null, "duck": null, "atSec": 0}"#,
+        )],
+        0.002,
+    )]);
+    let out = send(&model, &[], "lofi music", &i, &p).unwrap();
+    assert_eq!(out.reply, "Added the lofi music.");
+}
+
+#[test]
+fn a_media_call_refused_twice_is_named_by_what_it_does() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    // The library is empty: no whoosh to add, in either answer.
+    let whoosh = |id: &str| fc(id, "addSound", r#"{"name": "whoosh", "atSec": [0.5]}"#);
+    let model = Fake::new(vec![
+        answer("Adding a whoosh.", vec![whoosh("call_1")], 0.002),
+        answer("Adding a whoosh.", vec![whoosh("call_2")], 0.002),
+    ]);
+    let out = send(&model, &[], "a whoosh at the start", &i, &p).unwrap();
+    assert_eq!(
+        out.reply,
+        "I couldn't add the sound, so I left that unchanged."
+    );
+    let seen = model.seen();
+    let output = output_for(&seen[1], "call_1");
+    assert!(
+        output.starts_with(
+            "addSound: no sound in Library is called \"whoosh\". Library has no sound."
+        ),
+        "{output}"
     );
 }
