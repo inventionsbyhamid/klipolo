@@ -43,10 +43,10 @@ function DropZone({ over }: { over: boolean }) {
 }
 
 /**
- * The preview panel: the format pills, Add title, the safe area switch (full screen comes when it works),
- * and the engine's frames fitted to the panel in the chosen format with the layers there selectable and editable
- * (`Stage`), under the analysis banner; the inspector docks at the right under the banner while a layer it has fields
- * for is selected, and the frame moves left for it. With no clip yet, the drop zone.
+ * The preview panel: the format pills, Add title, the safe area menu (9:16 only), Full screen (F; it
+ * it works), and the engine's frames fitted to the panel in the chosen format with the layers there selectable and
+ * editable (`Stage`), under the analysis banner; the inspector docks at the right under the banner while a layer it has
+ * fields for is selected, and the frame moves left for it. With no clip yet, the drop zone.
  * `filesOver`: files from Finder are held over the window.
  */
 export function Preview({ filesOver = false }: { filesOver?: boolean }) {
@@ -55,6 +55,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
   const message = useEngine((s) => s.message);
   const hasVideo = useProject((s) => (s.snapshot?.project.timeline.main.length ?? 0) > 0);
   const format = useShownFormat();
+  const portrait = format === 'portrait';
   const safeArea = useUi((s) => s.safeArea);
   const setSafeArea = useUi((s) => s.setSafeArea);
   const inspected = useInspected();
@@ -68,12 +69,18 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
         {status !== 'unavailable' && message && <span className="stage-status">{message}</span>}
         <RoughCaptionsNote />
         <AddTitleMenu disabled={!hasVideo} />
+        {/* The guide is drawn in 9:16 only: elsewhere the switch is off (focusable, so its tooltip says why). */}
         <button
           className="icon-btn"
           aria-label={t({ id: 'preview.safeArea', message: 'Show safe area' })}
-          title={t({ id: 'preview.safeArea.tip', message: 'Safe area: where the apps leave a 9:16 video clear' })}
+          title={
+            portrait
+              ? t({ id: 'preview.safeArea.tip', message: 'Safe area: where the apps leave a 9:16 video clear' })
+              : t({ id: 'preview.safeArea.off', message: 'Shows in 9:16' })
+          }
           aria-pressed={safeArea !== 'off'}
-          onClick={() => setSafeArea(safeArea === 'off' ? 'all' : 'off')}
+          aria-disabled={!portrait || undefined}
+          onClick={() => portrait && setSafeArea(safeArea === 'off' ? 'all' : 'off')}
         >
           <Icon name="safe" />
         </button>
