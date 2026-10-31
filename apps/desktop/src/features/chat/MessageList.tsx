@@ -1,6 +1,7 @@
 import { useLingui } from '@lingui/react/macro';
 import { Fragment, useLayoutEffect, useRef } from 'react';
 import type { Asset } from '../../bindings/Asset';
+import { openSettings, useAi } from '../../ai/aiStatus';
 import { NeedsKey } from '../../ai/NeedsKey';
 import { Icon } from '../../layout/Icon';
 import { offerAgain, stateOf, useAnalysis, useSomeNotAnalysed } from '../../state/analysis';
@@ -39,8 +40,33 @@ function useAnalysisNote(): 'listening' | 'watching' | 'missing' | null {
 }
 
 /**
- * "Ask for an edit", its suggestions (greyed while chat can't run), the NeedsKey card when there is no key or code, and
- * a note while the clips aren't analysed or are being analysed.
+ * Why chat is off with a key or code saved (an access code the relay turned off): the AI status's own sentence, with
+ * the way to Settings. Nothing otherwise (no key or code shows the NeedsKey card).
+ */
+function ChatOff() {
+  const { t } = useLingui();
+  const notice = useAi((s) => (s.status?.mode === 'relay' ? (s.status.notice ?? null) : null));
+  if (!notice) return null;
+  return (
+    <p className="note" role="status">
+      <Icon name="info" />
+      <span>{notice}</span>
+      <button
+        type="button"
+        className="btn btn-secondary btn-sm"
+        style={{ gridColumn: 2, justifySelf: 'start' }}
+        onClick={openSettings}
+      >
+        {t({ id: 'chatPanel.empty.settings', message: 'Open Settings' })}
+      </button>
+    </p>
+  );
+}
+
+/**
+ * "Ask for an edit", its suggestions (greyed while chat can't run), the NeedsKey card when there is no key or code, why
+ * chat is off when an access code was turned off, and a note while the clips aren't analysed or are being analysed
+ *.
  */
 function EmptyChat() {
   const { t } = useLingui();
@@ -57,6 +83,7 @@ function EmptyChat() {
         })}
       </p>
       {!allowed && <NeedsKey />}
+      {!allowed && <ChatOff />}
       {allowed ? (
         <div className="suggestions">
           {SUGGESTIONS.map((s) => (

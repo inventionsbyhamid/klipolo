@@ -937,4 +937,16 @@ describe('chat: more on proposals and the panel', () => {
     expect(useProposal.getState().proposal).toBeNull();
     expect(fake.applied).toEqual([]);
   });
+
+  it('says why chat is off when the access code was turned off, with the way to Settings', async () => {
+    const notice = 'This access code is no longer active. Enter another code or add your own Meta key.';
+    useAi.setState({ status: { mode: 'relay', code: 'KLIP-TEST-0001', active: false, notice } });
+    chat();
+    renderWithProviders(<ChatPanel />);
+    expect(screen.getByText(notice)).toBeInTheDocument();
+    expect(message()).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Open Settings' }));
+    expect(useAi.getState().settingsOpen).toBe(true);
+    useAi.setState({ settingsOpen: false });
+  });
 });
