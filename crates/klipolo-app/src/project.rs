@@ -11,6 +11,7 @@ mod apply;
 mod create;
 mod disk;
 mod library;
+mod recent;
 mod saver;
 mod session;
 #[cfg(test)]
