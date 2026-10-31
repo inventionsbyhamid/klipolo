@@ -22,16 +22,28 @@ vi.mock('../../bridge/engine', () => ({
 }));
 /**
  * Rust's framing (`clip_framing`): the imported clip (b) fills from the centre in every format; the screen recording
- * (a), which has a cursor here, is fitted in 16:9 and fills following the cursor in 9:16 and 1:1.
+ * (a), which has a cursor here, is fitted in 16:9 and fills following the cursor in 9:16 and 1:1. Both are 16:9, so
+ * Fill crops nothing in 16:9 and crops across in 9:16 and 1:1. A 4:3 clip (tall) fills, cropping down in 16:9.
  */
 const fill = { mode: 'fill', focusX: 0.5, focusY: 0.5 } as const;
 const follows = { ...fill, follow: { closer: 1 } };
+const WIDE = {
+  landscape: { x: 0, y: 0, w: 1, h: 1 },
+  portrait: { x: 0.341796875, y: 0, w: 0.31640625, h: 1 },
+  square: { x: 0.21875, y: 0, w: 0.5625, h: 1 },
+};
 const FRAMING: Record<string, ClipFraming> = {
   a: {
     framing: { landscape: { mode: 'fit', focusX: 0.5, focusY: 0.5 }, portrait: follows, square: follows },
     follows: true,
+    fillCrop: WIDE,
   },
-  b: { framing: { landscape: fill, portrait: fill, square: fill }, follows: false },
+  b: { framing: { landscape: fill, portrait: fill, square: fill }, follows: false, fillCrop: WIDE },
+  tall: {
+    framing: { landscape: fill, portrait: fill, square: fill },
+    follows: false,
+    fillCrop: { ...WIDE, landscape: { x: 0, y: 0.125, w: 1, h: 0.75 } },
+  },
 };
 vi.mock('../../bridge/framing', () => ({
   clipFraming: vi.fn((clipId: string) => Promise.resolve(FRAMING[clipId])),
@@ -132,7 +144,7 @@ describe('the clip card', () => {
     );
   });
 
-  it('the Fill focus shows only with Fill; a drag dry-runs in the engine and commits once on release', async () => {
+  it('the Fill focus shows only with Fill, the way it crops; a drag dry-runs and commits once on release', async () => {
     useProject.setState({
       snapshot: withB({ framing: { square: { mode: 'fit', focusX: 0.5, focusY: 0.5 } } }),
     });
@@ -140,9 +152,15 @@ describe('the clip card', () => {
     expect(await screen.findByRole('radio', { name: 'Fit', checked: true })).toBeInTheDocument();
     expect(screen.queryByRole('slider', { name: 'Focus across' })).toBeNull();
     unmount();
+    // A 16:9 video fills 16:9 without cropping: there is nothing to move.
+    const { unmount: unmountWide } = renderWithProviders(<Inspector format="landscape" />);
+    await screen.findByRole('radio', { name: 'Fill', checked: true });
+    expect(screen.queryByText('Fill focus')).toBeNull();
+    unmountWide();
+    // In 9:16 it crops across only.
     renderWithProviders(<Inspector format="portrait" />);
     await screen.findByRole('radio', { name: 'Fill', checked: true });
-    expect(screen.getByRole('slider', { name: 'Focus down' })).toHaveAttribute('aria-valuetext', '50%');
+    expect(screen.queryByRole('slider', { name: 'Focus down' })).toBeNull();
     const across = screen.getByRole('slider', { name: 'Focus across' });
     const root = track(across);
     fireEvent.pointerDown(root, { button: 0, pointerId: 1, clientX: 60 });
@@ -167,6 +185,26 @@ describe('the clip card', () => {
       },
     ]);
     expect(vi.mocked(engine.preview).mock.calls.at(-1)).toEqual(['project', 3, ops]);
+  });
+
+  it('a video taller than the frame moves its Fill focus down', async () => {
+    const snapshot = fixtureSnapshot();
+    snapshot.project.timeline.main.push({ ...snapshot.project.timeline.main[1], id: 'tall' });
+    useProject.setState({ snapshot });
+    useSelection.setState({ selectedId: 'tall' });
+    renderWithProviders(<Inspector format="landscape" />);
+    const down = await screen.findByRole('slider', { name: 'Focus down' });
+    expect(screen.queryByRole('slider', { name: 'Focus across' })).toBeNull();
+    const root = track(down);
+    fireEvent.pointerDown(root, { button: 0, pointerId: 1, clientX: 50 });
+    fireEvent.pointerMove(root, { pointerId: 1, clientX: 70 });
+    fireEvent.pointerUp(root, { pointerId: 1, clientX: 70 });
+    expect(apply).toHaveBeenCalledWith(
+      'clip.framing.focus.undo',
+      [{ type: 'updateClip', id: 'tall', patch: { framing: { landscape: { ...fill, focusY: 0.7 } } } }],
+      undefined,
+      queued,
+    );
   });
 
   it('the speed is one change, from 0.5x to 2x, and a speed set elsewhere shows as it is', async () => {

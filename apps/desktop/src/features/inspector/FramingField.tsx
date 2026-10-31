@@ -15,11 +15,14 @@ import { useClipFraming } from './useClipFraming';
 /** What a framing change starts from before Rust has answered (the centre). */
 const CENTRE: Framing = { mode: 'fill', focusX: 0.5, focusY: 0.5 };
 const percent = (v: number) => `${Math.round(v * 100)}%`;
+/** A Fill crop at least this share of the footage on a side leaves nothing there for a focus to move. */
+const WHOLE = 0.999;
 
 /**
  * A main clip's framing in the format shown: Fit or Fill as Rust frames it (`useClipFraming`: its own, else the
- * model's default), and while Fill crops from a focus of its own (not following the cursor), the Fill focus: Across
- * and Down, which part of the video stays in view (0.5 is the centre). Each change is one undo step built at its turn
+ * model's default), and while Fill crops from a focus of its own (not following the cursor), the Fill focus: which part
+ * of the video stays in view (0.5 is the centre), the way Rust says Fill crops there (`fillCrop`): Across for a video
+ * wider than the frame, Down for a taller one, none when it fits. Each change is one undo step built at its turn
  * on the clip's framing as the project has it then, so another format's change still on its way stays; without a
  * framing of its own in this format, Rust's. A mode change keeps the rest, follow too (Fit ignores it; Fill follows
  * again). A focus drag is dry-run in the preview and commits once on release.
@@ -31,6 +34,9 @@ export function FramingField({ clip, format }: { clip: Clip; format: FormatKind 
   rustNow.current = rust;
   // What it draws in this format: its own framing, else Rust's answer (none shows as chosen until it comes).
   const framing = clip.framing[format] ?? rust?.framing[format] ?? null;
+  const crop = rust?.fillCrop[format];
+  const cropsAcross = !!crop && crop.w < WHOLE;
+  const cropsDown = !!crop && crop.h < WHOLE;
   /** The framing a change builds on: the clip's in this format as the project has it then, else Rust's. */
   const base = (now: Clip): Framing => now.framing[format] ?? rustNow.current?.framing[format] ?? CENTRE;
   const setMode = (mode: FramingMode) =>
@@ -66,35 +72,39 @@ export function FramingField({ clip, format }: { clip: Clip; format: FormatKind 
           onChange={setMode}
         />
       </Field>
-      {framing?.mode === 'fill' && !framing.follow && (
+      {framing?.mode === 'fill' && !framing.follow && (cropsAcross || cropsDown) && (
         <Field
           label={t({ id: 'clip.focus', message: 'Fill focus', comment: 'Which part of a filled video stays in view' })}
           stack
         >
-          <Field label={across}>
-            <ToolSlider
-              label={t({ id: 'clip.focus.across.named', message: 'Focus across' })}
-              commitLabel="clip.framing.focus.undo"
-              value={framing.focusX}
-              min={0}
-              max={1}
-              step={0.01}
-              format={percent}
-              ops={focusOps('focusX')}
-            />
-          </Field>
-          <Field label={down}>
-            <ToolSlider
-              label={t({ id: 'clip.focus.down.named', message: 'Focus down' })}
-              commitLabel="clip.framing.focus.undo"
-              value={framing.focusY}
-              min={0}
-              max={1}
-              step={0.01}
-              format={percent}
-              ops={focusOps('focusY')}
-            />
-          </Field>
+          {cropsAcross && (
+            <Field label={across}>
+              <ToolSlider
+                label={t({ id: 'clip.focus.across.named', message: 'Focus across' })}
+                commitLabel="clip.framing.focus.undo"
+                value={framing.focusX}
+                min={0}
+                max={1}
+                step={0.01}
+                format={percent}
+                ops={focusOps('focusX')}
+              />
+            </Field>
+          )}
+          {cropsDown && (
+            <Field label={down}>
+              <ToolSlider
+                label={t({ id: 'clip.focus.down.named', message: 'Focus down' })}
+                commitLabel="clip.framing.focus.undo"
+                value={framing.focusY}
+                min={0}
+                max={1}
+                step={0.01}
+                format={percent}
+                ops={focusOps('focusY')}
+              />
+            </Field>
+          )}
         </Field>
       )}
     </>
