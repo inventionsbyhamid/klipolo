@@ -1,9 +1,8 @@
 import { useShallow } from 'zustand/react/shallow';
-import { exporter } from '../../bridge/exporter';
 import { Button } from '../../design/Button';
 import { useIntlLocale } from '../../i18n/react';
 import { formatBytes } from '../../lib/format';
-import { useExport } from '../../state/export';
+import { openExported, useExport } from '../../state/export';
 
 /**
  * The files in place, one row each: a small frame of its shape, its name as written (a taken
@@ -36,7 +35,7 @@ export function ExportFiles() {
               variant="ghost"
               size="sm"
               aria-describedby={`export-file-${index}`}
-              onClick={() => void exporter.open(index).catch(() => undefined)}
+              onClick={() => void openExported(index)}
             >
               Open
             </Button>

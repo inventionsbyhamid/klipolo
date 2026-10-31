@@ -1,8 +1,7 @@
-import { exporter } from '../../bridge/exporter';
 import { Button } from '../../design/Button';
 import { Icon } from '../../layout/Icon';
 import { exportedTitle } from '../../state/exportRun';
-import { useExport } from '../../state/export';
+import { revealExported, useExport } from '../../state/export';
 import { ExportFiles } from './ExportFiles';
 import { ExportIcon } from './icons';
 
@@ -34,7 +33,7 @@ export function ExportOutcome({ onClose }: { onClose: () => void }) {
         <Button data-primary onClick={onClose}>
           Done
         </Button>
-        <Button variant="primary" onClick={() => void exporter.reveal().catch(() => undefined)}>
+        <Button variant="primary" onClick={() => void revealExported()}>
           <ExportIcon name="folder" />
           Show in Finder
         </Button>

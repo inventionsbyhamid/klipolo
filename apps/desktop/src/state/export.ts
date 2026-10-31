@@ -45,6 +45,20 @@ interface ExportStore extends ExportRun {
   reset: () => void;
 }
 
+/**
+ * Shows the last export's first file (or file `index`) in Finder; a file that is gone says so in a toast (Rust's
+ * `exports.revealGone`, worded by the bridge).
+ */
+export function revealExported(index?: number): Promise<void> {
+  const shown = index === undefined ? exporter.reveal() : exporter.reveal(index);
+  return shown.catch((error: unknown) => toast.error(errorMessage(error)));
+}
+
+/** Opens file `index` of the last export in its app; one that is gone says so in a toast. */
+export function openExported(index: number): Promise<void> {
+  return exporter.open(index).catch((error: unknown) => toast.error(errorMessage(error)));
+}
+
 /** Events of an earlier run are ignored. */
 let batch = 0;
 
@@ -170,7 +184,7 @@ export const useExport = create<ExportStore>((set, get) => {
       if (e.type === 'finished')
         toast.info(`${exportedTitle(s.files.length)}.`, {
           done: true,
-          actions: [{ label: 'Show in Finder', run: () => void exporter.reveal().catch(() => undefined) }],
+          actions: [{ label: 'Show in Finder', run: () => void revealExported() }],
         });
       else if (s.phase === 'failed') toast.error(s.announcement);
     },

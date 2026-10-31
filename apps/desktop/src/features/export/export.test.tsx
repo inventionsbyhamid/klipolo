@@ -299,6 +299,22 @@ describe('export dialog', () => {
     expect(exporter.reveal).toHaveBeenCalledWith();
   });
 
+  it('Open and Show in Finder say so when the file is gone', async () => {
+    await openAndExport();
+    emit({ type: 'fileReady', index: 0, path: landscape.path }, { type: 'finished' });
+    const gone = { code: 'exports.revealGone', params: {} };
+    vi.mocked(exporter.open).mockRejectedValueOnce(new Error("That video isn't there any more.", { cause: gone }));
+    vi.mocked(exporter.reveal).mockRejectedValueOnce(new Error("That video isn't there any more.", { cause: gone }));
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Show in Finder' }));
+    await waitFor(() =>
+      expect(useToasts.getState().toasts.map((t) => t.text).slice(-2)).toEqual([
+        "That video isn't there any more.",
+        "That video isn't there any more.",
+      ]),
+    );
+  });
+
   it('the run is said at each quarter while it exports', async () => {
     await openAndExport();
     emit(progress(30, 20));
