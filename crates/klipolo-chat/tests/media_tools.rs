@@ -12,9 +12,9 @@ use std::collections::HashMap;
 use klipolo_chat::compile::{TEXT_COMING_SOON, TITLE_CARD};
 use klipolo_chat::tools::{PictureSize, Position, TextPreset};
 use klipolo_chat::{
-    AnalysisState, Audience, ClipMoment, Compiled, FunctionCall, Inputs, Job, Library, LibraryItem,
-    MediaKind, Problem, Refs, Refusal, SceneEntry, SceneLog, ToolCall, View, clip_moment_time,
-    compile,
+    AnalysisState, Audience, Compiled, FunctionCall, Inputs, Job, Library, LibraryItem,
+    MakeSticker, MediaKind, Problem, Refs, Refusal, SceneEntry, SceneLog, ToolCall, View, compile,
+    picture_ops, sticker_placement,
 };
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::contrib::ContribId;
@@ -26,7 +26,7 @@ use klipolo_model::project::{Asset, FormatKind};
 use klipolo_model::query::video_duration;
 use klipolo_model::speech::{Speech, Transcript, Word, WordKind};
 use klipolo_model::time::Us;
-use klipolo_model::timeline::{Clip, ClipSource, Item, ItemContent, TrackKind};
+use klipolo_model::timeline::{Attach, Clip, ClipSource, Item, ItemContent, TrackKind};
 use klipolo_model::{Project, apply_ops};
 use serde_json::json;
 use std::sync::Arc;
@@ -226,6 +226,48 @@ fn layers(p: &Project, kind: TrackKind) -> Vec<Item> {
         .collect();
     out.sort_by_key(|i| i.start_us);
     out
+}
+
+/// The file every clip here plays.
+fn talk_file() -> ClipSource {
+    ClipSource::Asset { id: "talk".into() }
+}
+
+/// The anchor of clip "t" at `s` seconds of the file.
+fn talk_at(s: f64) -> Attach {
+    Attach {
+        clip_id: "t".into(),
+        source: talk_file(),
+        source_us: secs(s),
+    }
+}
+
+/// The one job of a 5 s paper plane sticker the person asked for at `at` seconds on `p`.
+fn sticker_job(p: &Project, at: f64) -> MakeSticker {
+    let i = inputs(p, &format!("a paper plane sticker at {at} s"));
+    let out = compile(
+        p,
+        &i,
+        &[call(
+            "makeSticker",
+            json!({"prompt": "paper plane", "position": null, "atSec": at, "durationSec": 5.0}),
+        )],
+    );
+    match &out.jobs[..] {
+        [Job::MakeSticker(job)] => job.clone(),
+        _ => panic!("{out:?}"),
+    }
+}
+
+/// `p` with `ranges` (timeline seconds) cut out, as the person might while the picture is drawn.
+fn cut_out(p: &Project, ranges: &[(f64, f64)]) -> Project {
+    let ranges = (ranges.iter())
+        .map(|&(a, b)| klipolo_model::time::RangeUs {
+            start: secs(a),
+            end: secs(b),
+        })
+        .collect();
+    apply_ops(p, &[Op::DeleteRanges { ranges }]).unwrap()
 }
 
 /// The one refusal, for call `index`, to the model.
@@ -848,17 +890,14 @@ fn make_sticker_becomes_a_job_not_an_op() {
     assert_eq!((&out.additions, &out.proposal), (&None, &None));
     assert_eq!(
         out.jobs,
-        vec![Job::MakeSticker {
+        vec![Job::MakeSticker(MakeSticker {
             prompt: "paper plane".into(),
             at_us: secs(12.0),
             duration_us: secs(5.0),
             position: Position::TopRight,
             size: PictureSize::Medium,
-            anchor: Some(ClipMoment {
-                clip_id: "t".into(),
-                source_us: secs(12.0),
-            }),
-        }]
+            anchor: Some(talk_at(12.0)),
+        })]
     );
     // The prompt names the picture in the library too: no dashes.
     let out = compile(
@@ -870,7 +909,7 @@ fn make_sticker_becomes_a_job_not_an_op() {
         )],
     );
     assert!(
-        matches!(&out.jobs[..], [Job::MakeSticker { prompt, .. }] if prompt == "paper plane, blue"),
+        matches!(&out.jobs[..], [Job::MakeSticker(MakeSticker { prompt, .. })] if prompt == "paper plane, blue"),
         "{:?}",
         out.jobs
     );
@@ -885,6 +924,90 @@ fn make_sticker_becomes_a_job_not_an_op() {
     );
     assert!(out.jobs.is_empty());
     assert!(refused_to_model(&out, 0).starts_with("makeSticker: atSec 25.5 is not within 0.3 s"));
+}
+
+#[test]
+fn a_sticker_whose_footage_is_cut_while_it_is_drawn_is_dropped() {
+    let p = project();
+    let job = sticker_job(&p, 12.0);
+    assert_eq!(job.anchor, Some(talk_at(12.0)));
+    // Nothing changed: where it was made.
+    assert_eq!(sticker_placement(&p, &job), Some((secs(12.0), secs(5.0))));
+    // The moment it shows over is cut: nowhere to go.
+    assert_eq!(sticker_placement(&cut_out(&p, &[(11.0, 13.0)]), &job), None);
+    // A cut before it moves it earlier with its footage.
+    assert_eq!(
+        sticker_placement(&cut_out(&p, &[(2.0, 4.0)]), &job),
+        Some((secs(10.0), secs(5.0)))
+    );
+}
+
+#[test]
+fn a_cut_after_a_sticker_shortens_it_to_the_new_end() {
+    let p = project();
+    let job = sticker_job(&p, 12.0);
+    // The video now ends at 15.0 s: 3 s are left of the 5.
+    let shorter = cut_out(&p, &[(15.0, 30.0)]);
+    assert_eq!(
+        sticker_placement(&shorter, &job),
+        Some((secs(12.0), secs(3.0)))
+    );
+}
+
+#[test]
+fn a_copy_placed_earlier_doesnt_take_the_sticker() {
+    let p = project();
+    let job = sticker_job(&p, 12.0);
+    // A copy of the whole clip goes before it: the sticker stays on its own clip, now 30 s later.
+    let mut copied = p.clone();
+    let mut copy = copied.timeline.main[0].clone();
+    copy.id = "copy".into();
+    copied.timeline.main.insert(0, copy);
+    assert_eq!(
+        sticker_placement(&copied, &job),
+        Some((secs(42.0), secs(5.0)))
+    );
+}
+
+#[test]
+fn a_sticker_past_the_main_track_has_no_anchor() {
+    // A picture runs to 35 s, past the clips' end at 30 s; a sticker at 32 s has no footage under it.
+    let p = project();
+    let ops = picture_ops(
+        &p,
+        &logo(),
+        secs(25.0),
+        secs(10.0),
+        PictureSize::Small,
+        Position::Center,
+    );
+    let longer = apply_ops(&p, &ops).unwrap();
+    assert_eq!(video_duration(&longer.timeline), secs(35.0));
+    let job = sticker_job(&longer, 32.0);
+    assert_eq!((job.at_us, &job.anchor), (secs(32.0), &None));
+    // Placed at its time, cut at the end: 3 s.
+    assert_eq!(
+        sticker_placement(&longer, &job),
+        Some((secs(32.0), secs(3.0)))
+    );
+    // Past the end once the picture is gone: dropped.
+    assert_eq!(sticker_placement(&p, &job), None);
+}
+
+#[test]
+fn a_sticker_over_a_faster_clip_keeps_to_its_footage() {
+    // The clip plays at twice its speed: 30 s of file in 15 s.
+    let mut p = project();
+    p.timeline.main[0].speed = 2.0;
+    let job = sticker_job(&p, 5.0);
+    // 5 s on the timeline is 10 s of the file.
+    assert_eq!(job.anchor, Some(talk_at(10.0)));
+    assert_eq!(sticker_placement(&p, &job), Some((secs(5.0), secs(5.0))));
+    // Cutting 1 s of the timeline before it (2 s of the file) moves it 1 s earlier.
+    assert_eq!(
+        sticker_placement(&cut_out(&p, &[(1.0, 2.0)]), &job),
+        Some((secs(4.0), secs(5.0)))
+    );
 }
 
 #[test]
@@ -1016,22 +1139,23 @@ fn a_sticker_keeps_to_its_footage_whatever_the_answer_does_before_it() {
         let out = compile(&p, &i, &calls);
         let with_additions = applied(&p, &out);
         // 15 s was c2's 25 s; c1 is 2 s longer now, so that footage plays at 17 s.
-        let [Job::MakeSticker { at_us, anchor, .. }] = &out.jobs[..] else {
+        let [Job::MakeSticker(job)] = &out.jobs[..] else {
             panic!("{:?}", out.jobs);
         };
-        let anchor = anchor.as_ref().expect("over the main track");
+        let anchor = Attach {
+            clip_id: "b".into(),
+            source: talk_file(),
+            source_us: secs(25.0),
+        };
         assert_eq!(
-            (*at_us, anchor),
-            (
-                secs(17.0),
-                &ClipMoment {
-                    clip_id: "b".into(),
-                    source_us: secs(25.0),
-                }
-            ),
+            (job.at_us, &job.anchor),
+            (secs(17.0), &Some(anchor)),
             "{calls:?}"
         );
-        assert_eq!(clip_moment_time(&with_additions, anchor), Some(secs(17.0)));
+        assert_eq!(
+            sticker_placement(&with_additions, job),
+            Some((secs(17.0), secs(5.0)))
+        );
     }
 }
 
@@ -1087,7 +1211,7 @@ fn a_title_cards_background_takes_the_format_the_answer_leaves() {
                         format: FormatKind::Portrait,
                         ..
                     },
-                    Job::MakeSticker { .. }
+                    Job::MakeSticker(_)
                 ]
             ),
             "{calls:?}: {:?}",
@@ -1114,17 +1238,16 @@ fn a_stickers_footage_is_found_again_once_a_removal_is_applied() {
     for calls in both_orders([sticker, cut]) {
         let out = compile(&p, &i, &calls);
         // The removal is only proposed: the sticker is placed on the project as the additions leave it.
-        let [Job::MakeSticker { at_us, anchor, .. }] = &out.jobs[..] else {
+        let [Job::MakeSticker(job)] = &out.jobs[..] else {
             panic!("{:?}", out.jobs);
         };
-        assert_eq!(*at_us, secs(12.0), "{calls:?}");
-        let anchor = anchor.as_ref().unwrap();
+        assert_eq!(job.at_us, secs(12.0), "{calls:?}");
         let proposal = out.proposal.as_ref().expect("the cut, proposed");
         let after = apply_ops(&p, &proposal.tx.ops).unwrap();
-        // Applied, the cut moves "flying" earlier by what it took away; the anchor finds it there.
+        // Applied, the cut moves "flying" earlier by what it took away; the sticker follows it there.
         assert_eq!(
-            clip_moment_time(&after, anchor),
-            Some(secs(12.0) - proposal.removed_us),
+            sticker_placement(&after, job),
+            Some((secs(12.0) - proposal.removed_us, secs(5.0))),
             "{calls:?}"
         );
     }
@@ -1201,10 +1324,10 @@ fn media_additions_apply_at_once_as_one_step() {
     assert_eq!((out.proposal, out.proposed_calls), (None, vec![]));
     assert!(matches!(
         out.jobs.as_slice(),
-        [Job::MakeSticker {
+        [Job::MakeSticker(MakeSticker {
             position: Position::Center,
             ..
-        }]
+        })]
     ));
 }
 

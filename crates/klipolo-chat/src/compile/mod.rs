@@ -46,7 +46,7 @@ use klipolo_model::project::{AssetKind, FormatKind};
 use klipolo_model::risk::{Review, removals};
 use klipolo_model::speech::{Speech, run_spans};
 use klipolo_model::time::{RangeUs, Us};
-use klipolo_model::timeline::ClipSource;
+use klipolo_model::timeline::{Attach, ClipSource};
 use klipolo_model::{ModelError, Project, finish_parts};
 
 use crate::context::{Refs, SceneLog, View, secs};
@@ -56,8 +56,8 @@ use crate::sanitize;
 use crate::tools::{Moment, PictureSize, Position, ToolCall};
 use map::Map;
 pub use media::{
-    ClipMoment, PICTURE_MARGIN, SOUND_VOLUME, TEXT_COMING_SOON, TITLE_CARD, clip_moment_at,
-    clip_moment_time, picture_layout, picture_ops,
+    PICTURE_MARGIN, SOUND_VOLUME, TEXT_COMING_SOON, TITLE_CARD, picture_layout, picture_ops,
+    sticker_placement,
 };
 use trim::Trim;
 
@@ -138,18 +138,8 @@ pub enum Job {
     Blur {
         description: String,
     },
-    /// A sticker of `prompt`, cut out of its background, to show for `duration_us` at `size` and `position`
-    /// (`picture_ops`) over the footage `anchor` names, wherever it plays once the picture is drawn
-    /// (`clip_moment_time`). `at_us` is where that is on the project as the message's additions leave it: the time
-    /// to use when `anchor` is None (past the main track's end) or its footage is gone.
-    MakeSticker {
-        prompt: String,
-        at_us: Us,
-        duration_us: Us,
-        position: Position,
-        size: PictureSize,
-        anchor: Option<ClipMoment>,
-    },
+    /// A sticker to draw and place over its footage (`sticker_placement`).
+    MakeSticker(MakeSticker),
     /// A background about `prompt`, with no lettering, to go under the title layer `title_id`, where that layer is
     /// when the picture comes (it moves with its clip); dropped if the layer is gone. `format` is the shape to draw:
     /// the primary format as the message's additions leave it. A format change still waiting for approval isn't in
@@ -159,6 +149,22 @@ pub enum Job {
         format: FormatKind,
         title_id: Id,
     },
+}
+
+/// A sticker of `prompt` to draw, cut out of its background, and show for `duration_us` at `size` and `position`
+/// (`picture_ops`) over the footage `anchor` names: a clip and a moment of its source, as an attached layer holds its
+/// place (`query::anchor_at`), so it moves with that footage while the picture is drawn. `at_us` is where that footage
+/// played on the project as the message's additions left it, and the start to use when `anchor` is None (past the main
+/// track's end). When the picture comes, `sticker_placement` says where and how long on the project as it is then, or
+/// None to drop the job (that footage was cut, or the start is now at the video's end).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MakeSticker {
+    pub prompt: String,
+    pub at_us: Us,
+    pub duration_us: Us,
+    pub position: Position,
+    pub size: PictureSize,
+    pub anchor: Option<Attach>,
 }
 
 /// A call that compiled to nothing, and why, in one plain sentence on one line.

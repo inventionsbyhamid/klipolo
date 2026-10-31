@@ -7,9 +7,10 @@
 //! - `addText`: STUB until the four text presets are built on the model's text layers: refused for the person
 //!   (`TEXT_COMING_SOON`), nothing added.
 //! - `addImage`: the picture at a size and a place in the frame (`picture_layout`).
-//! - `makeSticker`: a `Job::MakeSticker` only, on the project as the message's additions leave it, with the footage it
-//!   shows over (`ClipMoment`); the app places the picture with `picture_ops` once it is drawn, where that footage
-//!   plays then (`clip_moment_time`). A job's prompt names the picture in the library too, so it has no dashes either.
+//! - `makeSticker`: a `Job::MakeSticker` only, on the project as the message's additions leave it, anchored to the
+//!   footage it shows over as a layer attaches (`Attach`); once the picture is drawn the app asks `sticker_placement`
+//!   where and how long, on the project as it is then, and places it with `picture_ops`. A job's prompt names the
+//!   picture in the library too, so it has no dashes either.
 //! - `makeTitleCard`: the title card template (`TITLE_CARD`, a scene preset filling the frame in every format,
 //!   `Layout::full_frame`) with the person's exact title (`persons_words`) and its other words left empty so only the
 //!   title shows, for the template's own length (`TEMPLATE_SECS`) unless the person gave one, applied at once; and a
@@ -32,12 +33,11 @@ use klipolo_model::media::music::{MusicOpts, add_music_ops};
 use klipolo_model::ops::{Op, TrackTarget};
 use klipolo_model::params::{ParamKind, ParamValue};
 use klipolo_model::project::{Asset, AssetKind, FormatKind};
-use klipolo_model::query::{clip_at, clip_starts, main_track_duration, piece_of, video_duration};
+use klipolo_model::query::{anchor_at, main_track_duration, resolve_attach, video_duration};
 use klipolo_model::time::{MIN_DURATION_US, Us, secs_to_us};
 use klipolo_model::timeline::{Item, ItemContent};
 
-use super::map::{source_at, timeline_at};
-use super::{Compiler, Edit, Job, Refused, label, to_model, to_person, unfounded};
+use super::{Compiler, Edit, Job, MakeSticker, Refused, label, to_model, to_person, unfounded};
 use crate::context::{secs, within_video};
 use crate::evidence::TOLERANCE_US;
 use crate::library::{Found, LibraryItem, MediaKind, is_generic};
@@ -494,38 +494,23 @@ pub(super) fn add_image(
     })
 }
 
-/// A moment of the footage itself: a main-track clip by id, and a time in its source. It stays with that content through
-/// later edits: a split's or a cut's pieces keep the clip's id with a suffix (`query::piece_of`), so the moment plays
-/// wherever a piece of that clip plays that source time (`clip_moment_time`), as the compiler's `map` finds content.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ClipMoment {
-    pub clip_id: Id,
-    pub source_us: Us,
-}
-
-/// The footage playing at timeline time `t` in `p`; None past the main track's end.
-pub fn clip_moment_at(p: &Project, t: Us) -> Option<ClipMoment> {
-    let (i, start) = clip_at(&p.timeline.main, t)?;
-    let clip = &p.timeline.main[i];
-    Some(ClipMoment {
-        clip_id: clip.id.clone(),
-        source_us: source_at(clip, start, t),
-    })
-}
-
-/// Where `moment` plays in `p` now: in its clip, or a piece cut or split from it, that plays its source time. None when
-/// that footage is gone.
-pub fn clip_moment_time(p: &Project, moment: &ClipMoment) -> Option<Us> {
-    let main = &p.timeline.main;
-    (main.iter().zip(clip_starts(main))).find_map(|(clip, start)| {
-        let ours = piece_of(&clip.id, |id| id == moment.clip_id, |_| false).is_some();
-        let plays = (clip.source_in_us..clip.source_out_us).contains(&moment.source_us);
-        (ours && plays).then(|| timeline_at(clip, start, moment.source_us))
-    })
+/// Where a drawn sticker goes on `p`, the project as it is when the picture comes, and for how long: over the footage
+/// its job's anchor names (`query::resolve_attach`, as an attached layer finds its moment: its own clip first, then a
+/// piece or copy of it), or at `at_us` when it has none (past the main track's end). None drops the job: the anchored
+/// footage was cut while the picture was drawn, or the start is now at the video's end or past it. The length is cut
+/// where the video ends.
+pub fn sticker_placement(p: &Project, job: &MakeSticker) -> Option<(Us, Us)> {
+    let start = match &job.anchor {
+        Some(anchor) => resolve_attach(&p.timeline.main, anchor)?,
+        None => job.at_us,
+    };
+    let room = video_duration(&p.timeline).saturating_sub(start);
+    (room >= MIN_DURATION_US).then(|| (start, job.duration_us.min(room)))
 }
 
 /// `makeSticker`'s job, on the project as the message's additions leave it (`with_additions`), whatever came before it
-/// in the answer: where it shows, and the footage it shows over (`ClipMoment`; None past the main track's end).
+/// in the answer: where it shows, and the footage it shows over (`query::anchor_at`, as a layer attaches; None past
+/// the main track's end).
 pub(super) fn make_sticker(
     c: &Compiler,
     with_additions: &Project,
@@ -534,14 +519,14 @@ pub(super) fn make_sticker(
     (at, duration): (Option<Us>, Option<Us>),
 ) -> Result<Job, Refused> {
     let start = start(c, with_additions, "makeSticker", "atSec", at)?;
-    Ok(Job::MakeSticker {
+    Ok(Job::MakeSticker(MakeSticker {
         prompt: sanitize::reply(prompt),
         at_us: start,
         duration_us: length(with_additions, start, duration, PICTURE_SECS),
         position: position.unwrap_or(Position::Center),
         size: PictureSize::Medium,
-        anchor: clip_moment_at(with_additions, start),
-    })
+        anchor: anchor_at(&with_additions.timeline.main, start),
+    }))
 }
 
 /// `makeTitleCard`'s title, an addition on the additions' working copy, and its layer's id for the background's job.
