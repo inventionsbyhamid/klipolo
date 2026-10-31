@@ -96,6 +96,7 @@ struct FakeMedia {
     chunks: Vec<RangeUs>,
     sounds: AtomicUsize,
     copies: AtomicUsize,
+    levels: AtomicUsize,
 }
 
 impl FakeMedia {
@@ -105,6 +106,7 @@ impl FakeMedia {
             chunks,
             sounds: AtomicUsize::new(0),
             copies: AtomicUsize::new(0),
+            levels: AtomicUsize::new(0),
         })
     }
 
@@ -132,6 +134,7 @@ impl Media for FakeMedia {
     }
 
     fn levels(&self, _src: &Path, _cancel: &AtomicBool) -> Option<Levels> {
+        self.levels.fetch_add(1, Ordering::SeqCst);
         Some(Levels {
             db: vec![-20.0; (self.seconds * 10.0) as usize].into(),
         })
@@ -1452,5 +1455,39 @@ async fn cancel_during_word_timing_keeps_what_was_heard() {
         h.state.state_of("talk"),
         AssetState::Done { approximate: false }
     );
+    server.verify().await;
+}
+
+/// A clip's sound levels are cached with its transcript: a clip analysed before gets them with no decode.
+#[tokio::test(flavor = "multi_thread")]
+async fn cached_levels_need_no_decode() {
+    let server = MockServer::start().await;
+    let media = FakeMedia::whole(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    mount_speech(&server, "/v1", &h.aligns, Duration::ZERO).await;
+    nothing_else(&server).await;
+    let file = h.clip("talk.m4a", 2);
+    let clip = asset("talk", AssetKind::Audio, &file, SECONDS);
+
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+    assert_eq!(media.levels.load(Ordering::SeqCst), 1);
+    assert!(h.cache_dir(&file).load::<Value>("levels").is_some());
+
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+
+    assert_eq!(
+        media.levels.load(Ordering::SeqCst),
+        1,
+        "read from the cache"
+    );
+    assert_eq!(h.last_speech().levels["talk"].db.len(), 60);
     server.verify().await;
 }

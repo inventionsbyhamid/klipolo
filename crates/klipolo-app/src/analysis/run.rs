@@ -11,9 +11,10 @@ use klipolo_analysis::providers::{ProviderErrorKind, Transcriber};
 use klipolo_analysis::scenes;
 use klipolo_analysis::transcript::{ROUGH_WORDS, Sound, TranscriptOut, align, finish, hear};
 use klipolo_analysis::{AnalysisError, VideoError};
+use klipolo_model::speech::Levels;
 use klipolo_model::speech::Word;
 use klipolo_platform::qos::{self, Qos};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::calls::{Calls, Meter};
 use super::{
@@ -130,8 +131,18 @@ pub(crate) fn look(root: &Path, path: &Path, video: bool) -> Cached {
     Cached {
         transcript: dir.load("transcript"),
         scenes: if video { dir.load("scenes") } else { None },
+        levels: dir
+            .load::<LevelsFile>("levels")
+            .map(|file| Levels { db: file.db.into() }),
         key: Some(key),
     }
+}
+
+/// `levels.json`: a clip's sound levels, dB per `LEVEL_WINDOW_US` of its sound.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LevelsFile {
+    db: Vec<f32>,
 }
 
 impl AnalysisState {
@@ -175,12 +186,17 @@ impl AnalysisState {
         // What the cache holds shows at once (unless the estimate showed it already).
         self.show_cached(key, &cached);
         let scenes_cached = cached.scenes.is_some();
-        if clip.has_audio {
+        // The levels: cached with the transcript, else from the sound cache (a decode), then cached.
+        if clip.has_audio && cached.levels.is_none() {
             let (src, run) = (clip.path.clone(), run.clone());
             if let Ok(Some(levels)) = self
                 .local(move |media| media.levels(&src, &run.cancel))
                 .await
             {
+                let file = LevelsFile {
+                    db: levels.db.to_vec(),
+                };
+                self.store(&dir, "levels", &file, "").await;
                 self.found_levels(key, levels);
             }
         }
@@ -511,8 +527,8 @@ impl AnalysisState {
         rx.await.map_err(|_| stopped())
     }
 
-    /// Caches `value` as `<name>.json` with the model it came from. A cache that can't be written is noted in the log;
-    /// the result still counts for this session.
+    /// Caches `value` as `<name>.json` with the model it came from (none for what no model made). A cache that can't be
+    /// written is noted in the log; the result still counts for this session.
     async fn store<T: Serialize + Clone + Send + 'static>(
         &self,
         dir: &Dir,
@@ -523,6 +539,9 @@ impl AnalysisState {
         let (dir, value, model) = (dir.clone(), value.clone(), model.to_owned());
         let stored = tokio::task::spawn_blocking(move || {
             dir.store(name, &value)?;
+            if model.is_empty() {
+                return Ok(());
+            }
             dir.set_model(name, &model)
         })
         .await;

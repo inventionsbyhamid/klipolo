@@ -281,6 +281,8 @@ pub(crate) struct Cached {
     pub key: Option<String>,
     pub transcript: Option<TranscriptOut>,
     pub scenes: Option<SceneLog>,
+    /// Its sound levels (`levels.json`), so a clip analysed before needs no decode for them.
+    pub levels: Option<Levels>,
 }
 
 impl Cached {
@@ -703,13 +705,17 @@ impl AnalysisState {
     /// What the cache holds for content `key`, for the engine and chat at once, where they have none of it yet: a clip
     /// analysed before shows its captions as soon as it is seen, whatever is left to do.
     fn show_cached(&self, key: &str, cached: &Cached) {
-        let (transcript, scenes) = match lock(&self.inner).entries.get(key) {
+        let (transcript, scenes, levels) = match lock(&self.inner).entries.get(key) {
             Some(entry) => (
                 entry.analysis.transcript.is_none(),
                 entry.analysis.scenes.is_none(),
+                entry.levels.is_none(),
             ),
-            None => (true, true),
+            None => (true, true, true),
         };
+        if let Some(found) = cached.levels.as_ref().filter(|_| levels) {
+            self.found_levels(key, found.clone());
+        }
         if let Some(found) = cached.transcript.as_ref().filter(|_| transcript) {
             self.found_transcript(key, found);
         }
