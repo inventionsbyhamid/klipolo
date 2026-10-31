@@ -53,8 +53,8 @@ export function armOptions(picks: Picks): ArmOptions | null {
     what,
     mic: picks.mic,
     camera,
-    // The bubble shows the camera: without one there is nothing to show.
+    // Both are the camera's: without one there is nothing to show or mirror.
     cameraBubble: camera !== null && picks.showCamera,
-    mirrorCamera: picks.mirror,
+    mirrorCamera: camera !== null && picks.mirror,
   };
 }

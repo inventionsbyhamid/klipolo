@@ -41,7 +41,7 @@ describe('choices', () => {
       mic: 'usb',
       camera: null,
       cameraBubble: false,
-      mirrorCamera: true,
+      mirrorCamera: false,
     });
   });
 
@@ -56,7 +56,10 @@ describe('choices', () => {
   });
 
   it('the_camera_bubble_and_mirror_go_only_with_a_camera', () => {
-    expect(armOptions(picks({ camera: null, showCamera: true }))?.cameraBubble).toBe(false);
+    expect(armOptions(picks({ camera: null, showCamera: true, mirror: true }))).toMatchObject({
+      cameraBubble: false,
+      mirrorCamera: false,
+    });
     expect(armOptions(picks({ camera: 'facetime', showCamera: true }))).toMatchObject({
       camera: 'facetime',
       cameraBubble: true,
