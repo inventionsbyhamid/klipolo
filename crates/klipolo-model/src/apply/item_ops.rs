@@ -197,6 +197,12 @@ pub(super) fn add_item(
     }
     let mut item = item.clone();
     item.attach = attach_at(p, item.start_us, attach);
+    // The primary format's place is the layout's rect. An override for the primary (`Layout::full_frame` sets one for
+    // every format) would win over the rect there (`resolve_rect`), hiding every later move made to the rect: it
+    // becomes the rect instead.
+    if let Some(rect) = item.layout.overrides.remove(&p.settings.primary_format) {
+        item.layout.rect = rect;
+    }
     // A layer added this way (a paste, a duplicate) is a copy placed by hand, never a source's own.
     item.content.set_tie(None);
     add(p, target, item, places).map(|_| ())
