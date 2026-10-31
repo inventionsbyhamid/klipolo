@@ -383,8 +383,8 @@ fn a_title_card_asks_for_a_background_with_no_lettering() {
 #[tokio::test]
 async fn a_title_card_stays_opaque_in_the_formats_shape() {
     let shapes = [
-        (FormatKind::Landscape, ImageSize::Landscape, (175, 100)),
-        (FormatKind::Portrait, ImageSize::Portrait, (100, 175)),
+        (FormatKind::Landscape, ImageSize::Landscape, (160, 90)),
+        (FormatKind::Portrait, ImageSize::Portrait, (90, 160)),
         (FormatKind::Square, ImageSize::Square, (120, 120)),
     ];
     for (format, size, (w, h)) in shapes {
@@ -414,6 +414,49 @@ async fn a_title_card_stays_opaque_in_the_formats_shape() {
         assert_eq!(made.asset.name, "Day 1 in Lisbon title card background");
         assert_eq!(made.made_with, "Muse Image");
         assert_eq!(made.note, None);
+    }
+}
+
+/// Muse Image draws near the frame's shape but not on it (its portrait is 4:7, 1152 x 2016): the background is cut to
+/// the frame's shape about its middle, so it fills a 9:16 frame with no strip of footage above or below it.
+#[tokio::test]
+async fn a_title_card_drawn_off_the_frames_shape_is_cut_to_it_about_its_middle() {
+    for (format, (w, h), (cw, ch)) in [
+        // 4:7, 9:16 is 110 of its 112 across: a pixel off each side.
+        (FormatKind::Portrait, (112, 196), (110, 196)),
+        // 7:4 is a little tall for 16:9: 98 of its 100 down.
+        (FormatKind::Landscape, (175, 100), (175, 98)),
+        (FormatKind::Square, (130, 120), (120, 120)),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        // Blue, with red edges where the cut goes: none of the red is kept.
+        let mut card = RgbImage::from_pixel(w, h, Rgb([20, 30, 90]));
+        for (x, y, p) in card.enumerate_pixels_mut() {
+            if x < (w - cw) / 2
+                || x >= w - (w - cw).div_ceil(2)
+                || y < (h - ch) / 2
+                || y >= h - (h - ch).div_ceil(2)
+            {
+                *p = Rgb([250, 0, 0]);
+            }
+        }
+        let maker = Fake::drawing(png_of(&card));
+
+        let made = make_title_card(&maker, &project(&dir), "Day 1 in Lisbon", format)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            (made.asset.width, made.asset.height),
+            (cw, ch),
+            "{format:?}"
+        );
+        let saved = image::open(&made.asset.path).unwrap().into_rgb8();
+        assert_eq!(saved.dimensions(), (cw, ch), "{format:?}");
+        assert!(
+            saved.pixels().all(|p| *p == Rgb([20, 30, 90])),
+            "{format:?}: cut about the middle, none of the edges kept"
+        );
     }
 }
 

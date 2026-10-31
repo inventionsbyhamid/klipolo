@@ -1,16 +1,18 @@
 //! Stickers and title card backgrounds drawn on request by an `ImageMaker` (Muse Image in the app) and saved in the
 //! project's media folder (`media_folder`). A sticker is cut out of its white background (`sticker`); a title card
-//! background stays as drawn, with no lettering of its own: Klipolo's title-card template draws the exact title on top,
-//! so its words, spelling, type and copy rules are Klipolo's. What comes back is a new image asset for the caller to
-//! place, with the label for the library ("Made with Muse Image"); nothing is added to the project here. Any failure
-//! says why in one plain sentence and leaves no file, so Try again simply asks again.
+//! background is cut to its frame's shape (`framed`) and otherwise stays as drawn, with no lettering of its own:
+//! Klipolo's title-card template draws the exact title on top, so its words, spelling, type and copy rules are
+//! Klipolo's. What comes back is a new image asset for the caller to place, with the label for the library ("Made with
+//! Muse Image"); nothing is added to the project here. Any failure says why in one plain sentence and leaves no file,
+//! so Try again simply asks again.
 
 use std::fmt;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
-use image::ImageFormat;
+use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 use image::io::{Limits, Reader as ImageReader};
+use image::{DynamicImage, ImageFormat};
 use klipolo_analysis::providers::images::{ImageError, ImageMaker, ImageSize, MadeImage};
 use klipolo_model::project::{Asset, AssetKind, FormatKind};
 use klipolo_model::time::Us;
@@ -160,8 +162,9 @@ pub async fn make_sticker(
 }
 
 /// A title card background about `prompt` in the shape of `format`, for the project saved in `project_file`: drawn by
-/// `maker` with no lettering (`title_card_prompt`) and saved as drawn (opaque) in the project's media folder. The title
-/// itself is drawn on top by Klipolo's title-card template when the background is placed.
+/// `maker` with no lettering (`title_card_prompt`), cut to the frame's shape (`framed`) and saved opaque in the
+/// project's media folder. The title itself is drawn on top by Klipolo's title-card template when the background is
+/// placed.
 pub async fn make_title_card(
     maker: &dyn ImageMaker,
     project_file: &Path,
@@ -179,10 +182,19 @@ pub async fn make_title_card(
     };
     let drawn = draw(maker, &title_card_prompt(prompt), size).await?;
     let made_with = maker.made_with().to_owned();
+    let unreadable = |detail: String| MakeError::Unreadable {
+        made_with: made_with.clone(),
+        detail,
+    };
+    let png = drawn.png;
+    let png = tokio::task::spawn_blocking(move || framed(png, format))
+        .await
+        .map_err(|e| unreadable(e.to_string()))?
+        .map_err(unreadable)?;
     let folder = made_folder(project_file, &made_with);
     let file_slug = format!("title-{}", slug(prompt, "card"));
     let name = format!("{} title card background", name(prompt));
-    let asset = save(folder, file_slug, drawn.png, name, &made_with).await?;
+    let asset = save(folder, file_slug, png, name, &made_with).await?;
     Ok(MadeAsset {
         asset,
         made_with,
@@ -251,6 +263,12 @@ async fn save(
 
 /// A PNG's width and height, once the whole picture decodes.
 fn decoded_size(png: &[u8]) -> Result<(u32, u32), String> {
+    let picture = decoded(png)?;
+    Ok((picture.width(), picture.height()))
+}
+
+/// The whole picture in `png`, up to `MAX_SIDE` a side; an empty one is refused.
+fn decoded(png: &[u8]) -> Result<DynamicImage, String> {
     let mut reader = ImageReader::with_format(Cursor::new(png), ImageFormat::Png);
     let mut limits = Limits::default();
     limits.max_image_width = Some(MAX_SIDE);
@@ -259,8 +277,42 @@ fn decoded_size(png: &[u8]) -> Result<(u32, u32), String> {
     let picture = reader.decode().map_err(|e| e.to_string())?;
     match (picture.width(), picture.height()) {
         (0, _) | (_, 0) => Err("the picture is empty".into()),
-        size => Ok(size),
+        _ => Ok(picture),
     }
+}
+
+/// `png` cut to the shape of `format`'s frame (16:9, 9:16 or 1:1) about its middle, so as a background it fills the
+/// frame with no footage showing round it: Muse Image's sizes are near the frame's but not on it (its portrait is 4:7).
+/// A picture already in that shape (to the pixel) is kept as drawn, byte for byte.
+fn framed(png: Vec<u8>, format: FormatKind) -> Result<Vec<u8>, String> {
+    let picture = decoded(&png)?;
+    let (w, h) = (u64::from(picture.width()), u64::from(picture.height()));
+    let (fw, fh) = format.size();
+    let (fw, fh) = (u64::from(fw), u64::from(fh));
+    // The largest box of the frame's shape inside the picture: as tall as it when the picture is wider, else as wide.
+    let (cw, ch) = if w * fh > h * fw {
+        (h * fw / fh, h)
+    } else {
+        (w, w * fh / fw)
+    };
+    if (cw, ch) == (w, h) || cw == 0 || ch == 0 {
+        return Ok(png);
+    }
+    // Each side under `MAX_SIDE`, so these fit in u32.
+    let cut = picture.crop_imm(
+        ((w - cw) / 2) as u32,
+        ((h - ch) / 2) as u32,
+        cw as u32,
+        ch as u32,
+    );
+    let mut out = Vec::new();
+    cut.write_with_encoder(PngEncoder::new_with_quality(
+        &mut out,
+        CompressionType::Fast,
+        FilterType::Adaptive,
+    ))
+    .map_err(|e| e.to_string())?;
+    Ok(out)
 }
 
 /// An asset name from a prompt: its first words, starting with a capital.
