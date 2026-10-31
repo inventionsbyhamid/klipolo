@@ -28,6 +28,12 @@ fn main() {
         log::install_worker();
         std::process::exit(klipolo_engine::export::worker::main(&args[2..]));
     }
+    // The recorder runs the same way: `--record-worker <take folder> [--resume]` records a take and
+    // `--record-worker --probe <file>` measures the encoders, before Tauri and any window. It logs to the take's
+    // folder (or stderr), and outlives the app.
+    if args.get(1).map(String::as_str) == Some("--record-worker") {
+        std::process::exit(klipolo_capture::worker::main(&args));
+    }
     log::install();
     // The engine's fonts, once: the bundled folder in the app's resources (or the repository's in a dev build).
     if let Err(e) = fonts::configure(FontDirs {
@@ -63,6 +69,8 @@ fn main() {
             app.manage(klipolo_app::captions::CaptionsCache::default());
             commands::captions::follow_speech(app.handle(), &projects);
             app.manage(projects);
+            // Screen recording: off in a test run (`KLIPOLO_TEST`), where it makes no backend and launches no worker.
+            app.manage(recorder::RecorderState::new(app.handle()));
             // How Klipolo pays for Meta's models (the Keychain), and this Mac's id with the relay (app support).
             let support = app.path().data_dir().ok().map(|dir| dir.join("Klipolo"));
             let credentials = commands::settings::load(support.as_deref());
@@ -150,6 +158,13 @@ fn main() {
             commands::export::export_open,
             commands::export::export_files,
             commands::export::export_pick_folder,
+            recorder::commands::recorder_setup,
+            recorder::commands::recorder_arm,
+            recorder::commands::recorder_send,
+            recorder::commands::recorder_stop_running,
+            recorder::commands::recorder_allow_screen,
+            recorder::commands::recorder_reopen,
+            recorder::commands::recorder_open_privacy,
         ])
         .build(tauri::generate_context!())
         .expect("Klipolo could not start");

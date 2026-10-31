@@ -14,6 +14,7 @@
 //!   "Recording is off in this test run." (`state`).
 
 mod active;
+pub mod commands;
 mod config;
 mod env;
 mod events;
