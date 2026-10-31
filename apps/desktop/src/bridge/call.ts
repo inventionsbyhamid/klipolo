@@ -21,6 +21,8 @@ const APP_CODES: Record<string, string> = {
   'engine.audioDamaged':
     "The sound of {file} can't be read after {atUs}, so it's silent from there. The file may be damaged.",
   'engine.waitingForDisk': "Waiting for the disk with {name}. Check that it's connected and awake.",
+  // The preview's notice for a file it needs that isn't there (moved, renamed, its disk gone), once per file.
+  'copies.failed.missing': "{name} isn't where it was. Put it back, then open the project again.",
   'exports.noFormat': 'Pick at least one format.',
   'exports.noProject': 'No project is open.',
   'exports.noVideosFolder': "Klipolo couldn't find your Movies folder.",

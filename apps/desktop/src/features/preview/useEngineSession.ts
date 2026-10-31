@@ -10,7 +10,8 @@ import { sendSeek, usePlayback } from '../../state/playback';
 import { toast } from '../../state/toasts';
 import { resendEditing } from './textEdit';
 
-function onEngineEvent(event: EngineEvent) {
+/** What the page does with an event from the preview engine (exported for its tests). */
+export function onEngineEvent(event: EngineEvent) {
   switch (event.type) {
     case 'ready':
       useEngine.getState().setSession(event.session);
