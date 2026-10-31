@@ -12,7 +12,10 @@
 //! - `words`: what agents read.
 //! - `server`: Streamable HTTP on 127.0.0.1, with a token per run; `connection`: the file that says where it listens
 //!   and with which token, and the server with its file (`McpServer`).
+//! - `bridge`: `klipolo-app --mcp`, MCP over stdio for apps that start a command: it answers what doesn't depend on
+//!   the project, and passes the rest to the server the connection file names.
 
+pub mod bridge;
 pub mod call;
 pub mod connection;
 pub mod host;

@@ -198,6 +198,15 @@ Settings.";
 pub const VERSION_UNKNOWN: &str =
     "Klipolo doesn't speak this MCP-Protocol-Version. Send the version initialize answered with.";
 
+/// What a request through the stdio bridge hears while Klipolo isn't listening.
+pub const OFF: &str = "Klipolo isn't running, or \"Let other apps edit with Klipolo\" is off. Ask the person to open \
+Klipolo and turn it on in Settings.";
+/// What a request through the stdio bridge hears when it went to Klipolo and no answer came back.
+pub const UNANSWERED: &str = "Klipolo stopped before it answered. Try again.";
+/// A request past the most the stdio bridge forwards at once.
+pub const BUSY: &str = "Too many requests at once. Try again in a moment.";
+/// An answer larger than the stdio bridge passes on.
+pub const REPLY_TOO_LARGE: &str = "Klipolo's answer was too large to pass on.";
 
 /// `getSummary`.
 pub const SUMMARY_TOOL: &str = "The project in short: its revision, name, formats, length, captions and clips (c1, c2 \

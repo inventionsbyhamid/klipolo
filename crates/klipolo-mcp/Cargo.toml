@@ -16,11 +16,13 @@ hyper-util = { version = "0.1", features = ["tokio"] }
 klipolo-chat = { path = "../klipolo-chat" }
 # The project, its transactions and history, the time helpers and the cleaning of app names.
 klipolo-model = { path = "../klipolo-model" }
-# The connection file, written so only this user can read it, and read only as a file of its own
-# (`file::write_private`, `file::read_private`).
+# The connection file, written so only this user can read it and read only as a file of its own
+# (`file::write_private`, `file::read_private`); whether the Klipolo that wrote it is alive (`process::is_alive`).
 klipolo-platform = { path = "../klipolo-platform" }
 # Session ids and the token of each run.
 rand = "0.9"
+# The stdio bridge's requests to the server (`bridge`): blocking, plain HTTP to 127.0.0.1, no TLS.
+reqwest = { version = "0.12.28", default-features = false, features = ["blocking"] }
 # What agents read about a proposal (`ProposalOutcome`).
 serde = { version = "1", features = ["derive"] }
 # JSON-RPC messages.
