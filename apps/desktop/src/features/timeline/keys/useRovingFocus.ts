@@ -18,6 +18,7 @@ import { blockElement } from '../drag/registry';
 import { clipIndexAt, mainIndex } from '../model/index';
 import { pxToUs } from '../scale';
 import {
+  cutClipId,
   focusIdOf,
   focusSelection,
   LANE_KEYS,
@@ -31,13 +32,15 @@ import { blockOf, inProject, neighbour, pageFocused } from './focusHelpers';
 import { isMarker, markerFocusedIn, markerFor } from './markers';
 import { reveal, revealRow } from './reveal';
 import { focusStep, moveFocusTo } from './timelineActions';
+import { enterCut } from './transitionActions';
 
 const MOVES = new Set<string>(Object.values(LANE_KEYS));
 
 /**
  * Roving focus over the timeline's blocks: one block is in the Tab order (`tabStopId`: the one last focused or
  * selected, else the first clip in view); ← / → move along its lane, ↑ / ↓ between lanes, Home / End to a lane's ends
- * (selection follows), Enter picks (selects and seeks), Space plays, Shift+F10 or the Menu key opens its menu.
+ * (selection follows; the Video lane stops at each cut between clips), Enter picks (selects and seeks; on a cut it
+ * selects its transition, adds one, or says why it can't), Space plays, Shift+F10 or the Menu key opens its menu.
  *
  * The tab stop is kept mounted and out of bands (`keep`), so a focused block survives scrolling and zooming, and off-
  * window or banded blocks are reachable. Focus never drops to the page: a focused block that goes (deleted, cut,
@@ -193,7 +196,10 @@ export function useRovingFocus(
       moveFocusTo(now, next);
     } else if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      pickBlock(id);
+      // On a cut: its transition is selected, or one is added, or it says why not.
+      const cutOf = cutClipId(id);
+      if (cutOf !== null) enterCut(now, cutOf);
+      else pickBlock(id);
     } else if (e.key === ' ') {
       // Space plays from a block too (a button would take it as a click).
       e.preventDefault();

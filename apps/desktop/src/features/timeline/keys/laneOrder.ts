@@ -1,6 +1,8 @@
 import type { Clip } from '../../../bindings/Clip';
 import type { Item } from '../../../bindings/Item';
 import type { Project } from '../../../bindings/Project';
+import { findClip } from '../../../lib/timeline';
+import { transitionClipId, transitionSelection } from '../../../state/selection';
 import { audioLines } from '../lanes/audioRole';
 import { mainIndex } from '../model/index';
 import { packRows } from '../model/packRows';
@@ -61,10 +63,20 @@ export function laneOrder(project: Project, _expanded = false): Lane[] {
   return lanes;
 }
 
-/** The Video lane: each clip, in order. */
+/** The Video lane: each clip, then the cut after it (zero-length, at the clip's end), but for the last clip's. */
 function mainLane(main: Clip[]): Lane {
   const { starts, ends } = mainIndex(main);
-  return { id: 'main', ids: main.map((c) => c.id), starts: [...starts], ends: [...ends] };
+  const lane: Lane = { id: 'main', ids: [], starts: [], ends: [] };
+  for (let i = 0; i < main.length; i++) {
+    lane.ids.push(main[i].id);
+    lane.starts.push(starts[i]);
+    lane.ends.push(ends[i]);
+    if (i + 1 === main.length) break;
+    lane.ids.push(cutId(main[i].id));
+    lane.starts.push(ends[i]);
+    lane.ends.push(ends[i]);
+  }
+  return lane;
 }
 
 /** Where block `id` is: [lane, index], or null when no lane draws it. */
@@ -79,18 +91,21 @@ export function placeOf(lanes: Lane[], id: string): readonly [number, number] | 
 }
 
 /**
- * What focus on block `id` selects: the block itself. (Klipolo draws no transitions, so the cuts between clips are no
- * stops of their own.)
+ * What focus on block `id` selects: a cut's transition (`transition:<clip id>`), or nothing on a bare cut; any other
+ * block, itself.
  */
-export function focusSelection(_project: Project, id: string): string | null {
-  return id;
+export function focusSelection(project: Project, id: string): string | null {
+  const clipId = cutClipId(id);
+  if (clipId === null) return id;
+  return findClip(project, clipId)?.transitionOut ? transitionSelection(clipId) : null;
 }
 
-/** The block that stands for selection `id` in the lanes: itself. */
+/** The block that stands for selection `id` in the lanes: a transition's cut; anything else, itself. */
 export function focusIdOf(id: string): string;
 export function focusIdOf(id: string | null): string | null;
 export function focusIdOf(id: string | null): string | null {
-  return id;
+  const clipId = transitionClipId(id);
+  return clipId === null ? id : cutId(clipId);
 }
 
 /**
