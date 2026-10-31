@@ -445,3 +445,99 @@ fn made_with_survives_a_save_and_load() {
         .collect();
     assert_eq!(written, ["teapot"]);
 }
+
+/// Two sounds let go on a sound track from the library or Finder go on that track one after the other, each where the
+/// "+" would put it: attached to the clip under it, so a later cut over the first removes it and moves the second.
+#[test]
+fn dropped_sounds_go_one_after_another_and_follow_cuts() {
+    use klipolo_model::media::place::{place_ops, Onto};
+    let mut p = fixture();
+    let mut track = klipolo_model::timeline::Track::new(TrackKind::Audio, "Sounds");
+    track.id = "sfx".into();
+    p.timeline.tracks.push(track);
+    let pop = Asset {
+        id: "pop".into(),
+        name: "Pop".into(),
+        duration_us: secs(0.4),
+        ..whoosh()
+    };
+    let ops = place_ops(&p, &[whoosh(), pop], secs(5.0), &Onto::Track("sfx".into())).unwrap();
+    let p = apply_ops(&p, &ops).unwrap();
+    let on: Vec<(&str, i64)> = p.timeline.tracks[0]
+        .items
+        .iter()
+        .map(|i| (i.id.as_str(), i.start_us))
+        .collect();
+    assert_eq!(on.len(), 2, "both on the track let go on");
+    assert_eq!(on[0].1, secs(5.0));
+    assert_eq!(on[1].1, secs(5.9), "the second where the first ends");
+    assert!(p.timeline.tracks[0]
+        .items
+        .iter()
+        .all(|i| i.attach.is_some()));
+    // A cut over all of the first (4.9 s to 5.9 s): it goes, the second moves back by the cut.
+    let (first, second) = (on[0].0.to_owned(), on[1].0.to_owned());
+    let cut = apply_ops(
+        &p,
+        &[Op::DeleteRanges {
+            ranges: vec![RangeUs {
+                start: secs(4.9),
+                end: secs(5.9),
+            }],
+        }],
+    )
+    .unwrap();
+    let left: Vec<&Item> = layers(&cut);
+    assert!(
+        left.iter().all(|i| i.id != first),
+        "inside the cut: removed"
+    );
+    assert_eq!(layer(&cut, &second).start_us, secs(4.9));
+}
+
+/// A new track is made once for what is let go on it; a picture among sounds goes where pictures go; a video is
+/// refused, and a sound with no room left comes into the project without a layer.
+#[test]
+fn a_drop_makes_one_new_track_and_keeps_each_kind_on_its_own() {
+    use klipolo_model::media::place::{place_ops, Onto};
+    let p = fixture();
+    let logo = p.asset("logo").unwrap().clone();
+    let ops = place_ops(
+        &p,
+        &[whoosh(), logo, whoosh()],
+        secs(2.0),
+        &Onto::New(TrackKind::Audio),
+    )
+    .unwrap();
+    let new_tracks = ops
+        .iter()
+        .filter(|op| matches!(op, Op::AddTrack { .. }))
+        .count();
+    assert_eq!(new_tracks, 1);
+    let p2 = apply_ops(&p, &ops).unwrap();
+    let audio: Vec<_> = p2
+        .timeline
+        .tracks
+        .iter()
+        .filter(|t| t.kind == TrackKind::Audio && !t.items.is_empty())
+        .collect();
+    assert_eq!(audio.len(), 1);
+    assert_eq!(audio[0].items.len(), 2);
+    assert!(p2
+        .timeline
+        .tracks
+        .iter()
+        .any(|t| t.kind == TrackKind::Overlay
+            && t.items
+                .iter()
+                .any(|i| matches!(i.content, ItemContent::Image { .. }))));
+    let video = p.asset("broll").unwrap().clone();
+    assert!(place_ops(&p, &[video], secs(2.0), &Onto::Auto).is_err());
+    let end = video_duration(&p.timeline);
+    let late = Asset {
+        id: "late".into(),
+        ..whoosh()
+    };
+    let e = place_ops(&p, &[late], end, &Onto::Auto).unwrap_err();
+    assert_eq!(e.coded().code, "model.sound.noRoom");
+}
