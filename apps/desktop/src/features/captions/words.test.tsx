@@ -27,6 +27,8 @@ const w = (text: string, i: number, extra: Record<string, unknown> = {}) => ({
 });
 let txs: any[] = [];
 let finds: any[] = [];
+/** How `captions_find` answers (a test can hold it back). */
+let findReply: () => unknown;
 
 const PAGES = [
   {
@@ -53,6 +55,7 @@ beforeEach(async () => {
   forgetCaptionPages();
   txs = [];
   finds = [];
+  findReply = () => [PAGES[1].words[1], PAGES[2].words[0]];
   const snap = fixtureSnapshot();
   snap.project.captions = { ...snap.project.captions, enabled: true };
   useProject.setState({ snapshot: snap });
@@ -62,7 +65,7 @@ beforeEach(async () => {
       return { revision: 0, format: 'portrait', total: 3, first: 0, capped: false, pages: PAGES };
     if (cmd === 'captions_find') {
       finds.push(args);
-      return [PAGES[1].words[1], PAGES[2].words[0]];
+      return findReply();
     }
     if (cmd === 'project_apply') {
       txs.push(args.tx);
@@ -168,11 +171,12 @@ describe('caption words', () => {
     expect(within(box).queryAllByRole('option', { selected: true })).toHaveLength(0);
   });
 
-  it('says changes stay across styles', async () => {
+  it('says changes stay across styles, without a line of the list for it', async () => {
     renderWithProviders(<CaptionWords format="portrait" />);
-    expect(
-      await screen.findByText('Click a word to fix it. Your changes stay when you switch styles.'),
-    ).toBeInTheDocument();
+    expect(await list()).toHaveAccessibleDescription(
+      'Click a word to fix it. Your changes stay when you switch styles.',
+    );
+    expect(screen.queryByText('Click a word to fix it. Your changes stay when you switch styles.')).toBeNull();
   });
 
   it('finds a word: only the lines that say it show', async () => {
@@ -224,4 +228,5 @@ describe('caption words', () => {
     scroll.mockRestore();
     focus.mockRestore();
   });
+
 });

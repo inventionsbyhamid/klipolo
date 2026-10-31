@@ -340,16 +340,7 @@ export function CaptionWords({ format }: { format: FormatKind }) {
           />
         </label>
       </div>
-      {hint ? (
-        <p className="words-hint">{hint}</p>
-      ) : (
-        <p className="words-hint">
-          {t({
-            id: 'captions.words.how',
-            message: 'Click a word to fix it. Your changes stay when you switch styles.',
-          })}
-        </p>
-      )}
+      {hint && <p className="words-hint">{hint}</p>}
       <p role="status" className="words-note">
         {busy ? t({ id: 'captions.words.updating', message: 'Updating…' }) : note}
       </p>
@@ -358,6 +349,15 @@ export function CaptionWords({ format }: { format: FormatKind }) {
         role={total > 0 ? 'listbox' : undefined}
         tabIndex={total > 0 ? 0 : undefined}
         aria-label={total > 0 ? t({ id: 'captions.words.list', message: 'Caption words' }) : undefined}
+        // Said, not shown: the panel keeps its height for words.
+        aria-description={
+          total > 0
+            ? t({
+                id: 'captions.words.how',
+                message: 'Click a word to fix it. Your changes stay when you switch styles.',
+              })
+            : undefined
+        }
         aria-activedescendant={total > 0 && active && !edit ? chipId(idPrefix, active) : undefined}
         // A list that is part of the panel, not a popup: Command Z and Shift Command Z still reach the editor from it.
         data-editor-keys
