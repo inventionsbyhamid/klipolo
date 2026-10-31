@@ -10,7 +10,13 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use klipolo_analysis::providers::images::{
+    ImageError, ImageErrorKind, ImageMaker, ImageSize, MadeImage,
+};
 use klipolo_app::analysis::AssetAnalysis;
+use klipolo_app::chat::pictures::{
+    ChatPictureKind, MOMENT_CUT, PICTURE_GONE, PictureAsk, StickerPlacement, TITLE_GONE,
+};
 use klipolo_app::chat::session::{KEEP_ONLY_READY, MOVED, NEEDS_KEY, OTHER_PROJECT};
 use klipolo_app::chat::{
     BLUR_COMING, ChatOutcome, ChatRequest, ChatSession, CommitError, FOLLOW_COMING, Findings,
@@ -200,6 +206,8 @@ impl LanguageModel for Script {
 /// How the fake credentials answer: the model behind them, through the relay or not, and how many renewals.
 struct Paying {
     readiness: Mutex<Readiness>,
+    /// The picture maker, or the sentence that says why there is none.
+    images: Mutex<Result<Arc<dyn ImageMaker>, String>>,
     recovered: AtomicUsize,
     /// Whether registering again works.
     renews: std::sync::atomic::AtomicBool,
@@ -220,6 +228,7 @@ impl Paying {
     fn with(readiness: Readiness) -> Arc<Self> {
         Arc::new(Self {
             readiness: Mutex::new(readiness),
+            images: Mutex::new(Err(NEEDS_KEY.to_owned())),
             recovered: AtomicUsize::new(0),
             renews: std::sync::atomic::AtomicBool::new(true),
         })
@@ -230,6 +239,15 @@ impl Models for Paying {
     fn ready(&self) -> BoxFuture<'_, Readiness> {
         let readiness = self.readiness.lock().unwrap().clone();
         Box::pin(async move { readiness })
+    }
+
+    fn images(&self) -> BoxFuture<'_, Result<Arc<dyn ImageMaker>, String>> {
+        let images = self.images.lock().unwrap().clone();
+        Box::pin(async move { images })
+    }
+
+    fn picture_usd(&self) -> f64 {
+        0.01
     }
 
     fn recover(&self) -> BoxFuture<'_, bool> {
@@ -996,4 +1014,319 @@ async fn a_selection_made_on_a_revision_the_project_left_is_refused() {
     // Without a selection, "this" names nothing stale: the message is read on the project as it is when its turn comes.
     let out = chat.session.send(request("cut the ums")).await.unwrap();
     assert_eq!(reply(&out)["proposal"]["baseRevision"], 1);
+}
+
+// ---------- Pictures (Muse Image behind `ImageMaker`) ----------
+
+/// An image maker that answers from a script and keeps what it was asked.
+struct Painter {
+    answers: Mutex<VecDeque<Result<Vec<MadeImage>, ImageError>>>,
+    asked: Mutex<Vec<ImageSize>>,
+}
+
+impl Painter {
+    fn new(answers: Vec<Result<Vec<MadeImage>, ImageError>>) -> Arc<Self> {
+        Arc::new(Self {
+            answers: Mutex::new(answers.into()),
+            asked: Mutex::new(Vec::new()),
+        })
+    }
+}
+
+impl ImageMaker for Painter {
+    fn made_with(&self) -> &str {
+        "Fake Image"
+    }
+
+    fn make<'a>(
+        &'a self,
+        _prompt: &'a str,
+        size: ImageSize,
+        _n: u8,
+    ) -> BoxFuture<'a, Result<Vec<MadeImage>, ImageError>> {
+        self.asked.lock().unwrap().push(size);
+        let answer = (self.answers.lock().unwrap().pop_front())
+            .unwrap_or_else(|| Err(ImageError::new(ImageErrorKind::Other, "no more", "no more")));
+        Box::pin(async move { answer })
+    }
+}
+
+/// A dark square on white, as a sticker comes back.
+fn drawn() -> Result<Vec<MadeImage>, ImageError> {
+    let mut picture = image::RgbImage::from_pixel(64, 64, image::Rgb([255, 255, 255]));
+    for x in 16..48 {
+        for y in 16..48 {
+            picture.put_pixel(x, y, image::Rgb([20, 20, 20]));
+        }
+    }
+    let mut png = Vec::new();
+    picture
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    Ok(vec![MadeImage {
+        png,
+        revised_prompt: None,
+    }])
+}
+
+/// Where the fake job puts its sticker: at a fixed time, or nowhere once its moment is cut.
+struct Spot(Option<(Us, Us)>);
+
+impl StickerPlacement for Spot {
+    fn placement(&self, _project: &Project) -> Option<(Us, Us)> {
+        self.0
+    }
+
+    fn ops(&self, project: &Project, asset: &Asset, start_us: Us, duration_us: Us) -> Vec<Op> {
+        let mut ops = Vec::new();
+        if project.asset(&asset.id).is_none() {
+            ops.push(Op::AddAssets {
+                assets: vec![asset.clone()],
+            });
+        }
+        ops.push(Op::AddItem {
+            track: klipolo_model::ops::TrackTarget::Auto,
+            attach: false,
+            item: klipolo_model::timeline::Item {
+                id: "sticker".into(),
+                start_us,
+                duration_us,
+                attach: None,
+                layout: klipolo_model::layout::Layout::full_frame(),
+                content: klipolo_model::timeline::ItemContent::Image {
+                    asset_id: asset.id.clone(),
+                },
+                effects: Vec::new(),
+            },
+        });
+        ops
+    }
+}
+
+struct Studio {
+    chat: Chat,
+    painter: Arc<Painter>,
+    _folder: tempfile::TempDir,
+}
+
+/// A chat on `project`, saved in a folder of its own, whose pictures `painter` draws.
+fn studio(project: Project, painter: Arc<Painter>) -> Studio {
+    let folder = tempfile::tempdir().unwrap();
+    let model = Script::new(vec![]);
+    let paying = Paying::key(model.clone());
+    *paying.images.lock().unwrap() = Ok(painter.clone());
+    let projects =
+        Arc::new(MemoryProjects::open(project, folder.path().join("talk.klipolo")).unwrap());
+    let session = Arc::new(ChatSession::new(projects.clone(), Found::done(), paying));
+    Studio {
+        chat: Chat {
+            session,
+            project: projects,
+            model,
+        },
+        painter,
+        _folder: folder,
+    }
+}
+
+fn sticker(spot: Option<(Us, Us)>) -> PictureAsk {
+    PictureAsk::Sticker {
+        prompt: "paper plane".into(),
+        placement: Arc::new(Spot(spot)),
+    }
+}
+
+/// "talk.mov" with a title layer ("title", 2 to 5 s) on an overlay track: a picture stands in for the title template.
+fn titled() -> Project {
+    let mut p = talk();
+    p.assets.push(Asset {
+        id: "lettering".into(),
+        kind: AssetKind::Image,
+        path: "/media/words.png".into(),
+        name: "words.png".into(),
+        duration_us: secs(5.0),
+        width: 1920,
+        height: 1080,
+        fps: 0.0,
+        rotation: None,
+        has_audio: false,
+        audio_lead_us: None,
+    });
+    let mut track =
+        klipolo_model::timeline::Track::new(klipolo_model::timeline::TrackKind::Overlay, "Words");
+    track.id = "words".into();
+    track.items.push(klipolo_model::timeline::Item {
+        id: "title".into(),
+        start_us: secs(2.0),
+        duration_us: secs(3.0),
+        attach: None,
+        layout: klipolo_model::layout::Layout::full_frame(),
+        content: klipolo_model::timeline::ItemContent::Image {
+            asset_id: "lettering".into(),
+        },
+        effects: Vec::new(),
+    });
+    p.timeline.tracks.push(track);
+    p
+}
+
+fn sentence(error: CommitError) -> String {
+    match error {
+        CommitError::Refused(klipolo_model::coded::Said::Text(text)) => text,
+        other => panic!("a sentence, not {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn a_sticker_is_drawn_then_placed_as_one_undo_step() {
+    let s = studio(talk(), Painter::new(vec![drawn()]));
+    let card = s
+        .chat
+        .session
+        .ask_picture(sticker(Some((secs(2.0), secs(3.0)))));
+    assert_eq!(card.kind, ChatPictureKind::Sticker);
+    assert_eq!(
+        s.chat.project.revision(),
+        0,
+        "nothing is an op until it is drawn"
+    );
+
+    let picture = s.chat.session.draw_picture(&card.id).await.unwrap();
+    assert!(std::path::Path::new(&picture.path).is_file());
+    assert_eq!(picture.made_with, "Fake Image");
+    assert_eq!(*s.painter.asked.lock().unwrap(), [ImageSize::Square]);
+    let spend = s.chat.session.spend();
+    assert_eq!((spend.pictures, spend.pictures_usd), (1, 0.01));
+    assert_eq!(s.chat.project.revision(), 0, "drawn, not placed");
+
+    let placed = s.chat.session.place_picture(&card.id).unwrap();
+    assert_eq!(placed.undo.code, "chat.makeSticker");
+    assert_eq!(s.chat.project.undo_steps(), 1, "one undo step");
+    let p = s.chat.project.project();
+    let item = (p.timeline.tracks.iter().flat_map(|t| &t.items))
+        .find(|i| i.id == "sticker")
+        .expect("the sticker is placed");
+    assert_eq!((item.start_us, item.duration_us), (secs(2.0), secs(3.0)));
+    assert!(p.assets.iter().any(|a| a.path == picture.path));
+    // Used once: it is gone from the chat.
+    let again = s.chat.session.place_picture(&card.id).unwrap_err();
+    assert_eq!(sentence(again), PICTURE_GONE);
+}
+
+#[tokio::test]
+async fn a_sticker_whose_moment_was_cut_while_drawing_is_not_placed() {
+    let s = studio(talk(), Painter::new(vec![drawn()]));
+    let card = s.chat.session.ask_picture(sticker(None));
+    s.chat.session.draw_picture(&card.id).await.unwrap();
+    let refused = s.chat.session.place_picture(&card.id).unwrap_err();
+    assert_eq!(sentence(refused), MOMENT_CUT);
+    assert_eq!(s.chat.project.revision(), 0, "nothing placed");
+}
+
+#[tokio::test]
+async fn a_title_background_is_drawn_in_the_format_then_and_goes_under_its_title() {
+    let s = studio(titled(), Painter::new(vec![drawn()]));
+    let card = s.chat.session.ask_picture(PictureAsk::TitleBackground {
+        prompt: "a calm sea".into(),
+        title_id: "title".into(),
+    });
+    assert_eq!(card.kind, ChatPictureKind::TitleBackground);
+    // The format changes before the drawing starts: the background is drawn in the one the video has then.
+    let portrait = Transaction {
+        label: "Portrait".into(),
+        ops: vec![Op::SetSettings {
+            settings: klipolo_model::project::Settings {
+                formats: vec![FormatKind::Landscape, FormatKind::Portrait],
+                primary_format: FormatKind::Portrait,
+                ..talk().settings
+            },
+        }],
+        ..Default::default()
+    };
+    s.chat.project.hand_edit(&portrait).unwrap();
+    s.chat.session.draw_picture(&card.id).await.unwrap();
+    assert_eq!(*s.painter.asked.lock().unwrap(), [ImageSize::Portrait]);
+
+    s.chat.session.place_picture(&card.id).unwrap();
+    let p = s.chat.project.project();
+    let tracks: Vec<&str> = p.timeline.tracks.iter().map(|t| t.id.as_str()).collect();
+    let title_track = tracks.iter().position(|t| *t == "words").unwrap();
+    assert_eq!(
+        title_track, 1,
+        "a track was put under the title's: {tracks:?}"
+    );
+    let under = &p.timeline.tracks[0].items;
+    assert_eq!(under.len(), 1);
+    assert_eq!(
+        (under[0].start_us, under[0].duration_us),
+        (secs(2.0), secs(3.0))
+    );
+    assert_eq!(
+        s.chat.project.undo_steps(),
+        2,
+        "the format, then the background"
+    );
+}
+
+#[tokio::test]
+async fn a_title_background_whose_title_is_gone_is_dropped() {
+    let s = studio(titled(), Painter::new(vec![drawn()]));
+    let card = s.chat.session.ask_picture(PictureAsk::TitleBackground {
+        prompt: "a calm sea".into(),
+        title_id: "title".into(),
+    });
+    let remove = Transaction {
+        label: "Delete".into(),
+        ops: vec![Op::RemoveItem { id: "title".into() }],
+        ..Default::default()
+    };
+    s.chat.project.hand_edit(&remove).unwrap();
+    let refused = s.chat.session.draw_picture(&card.id).await.unwrap_err();
+    assert_eq!(sentence(refused), TITLE_GONE);
+    assert!(
+        s.painter.asked.lock().unwrap().is_empty(),
+        "nothing was drawn"
+    );
+    assert_eq!(
+        sentence(s.chat.session.place_picture(&card.id).unwrap_err()),
+        PICTURE_GONE
+    );
+}
+
+#[tokio::test]
+async fn a_failed_drawing_says_why_and_try_again_draws_again() {
+    let busy = ImageError::new(
+        ImageErrorKind::Busy,
+        "Muse Image is busy right now, so try again in a moment.",
+        "429",
+    );
+    let s = studio(talk(), Painter::new(vec![Err(busy), drawn()]));
+    let card = s
+        .chat
+        .session
+        .ask_picture(sticker(Some((secs(2.0), secs(3.0)))));
+    let failed = s.chat.session.draw_picture(&card.id).await.unwrap_err();
+    assert_eq!(
+        sentence(failed),
+        "Muse Image is busy right now, so try again in a moment."
+    );
+    assert_eq!(s.chat.session.spend().pictures, 0);
+    assert_eq!(s.chat.project.revision(), 0);
+    // Try again.
+    s.chat.session.draw_picture(&card.id).await.unwrap();
+    s.chat.session.place_picture(&card.id).unwrap();
+    assert_eq!(s.chat.project.undo_steps(), 1);
+}
+
+#[tokio::test]
+async fn pictures_go_with_their_project() {
+    let s = studio(talk(), Painter::new(vec![drawn()]));
+    let card = s
+        .chat
+        .session
+        .ask_picture(sticker(Some((secs(2.0), secs(3.0)))));
+    s.chat.project.switch(Some(talk())).unwrap();
+    let refused = s.chat.session.draw_picture(&card.id).await.unwrap_err();
+    assert_eq!(sentence(refused), PICTURE_GONE);
+    assert!(s.painter.asked.lock().unwrap().is_empty());
 }

@@ -142,7 +142,7 @@ pub struct SessionSpend {
     pub chat_messages: u32,
     /// Pictures drawn for chat (stickers, title card backgrounds).
     pub pictures_usd: f64,
-    /// The pictures asked for.
+    /// The pictures drawn.
     pub pictures: u32,
 }
 

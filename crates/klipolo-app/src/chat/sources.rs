@@ -1,14 +1,17 @@
 //! What a message needs besides the project, each behind a small interface the app fills in: the language model and
-//! whether it can be paid for (`Models`, over the saved credentials and Meta's chat adapter), and what each clip's
-//! analysis found (`Findings`, over `AnalysisState`). Tests use fakes of both.
+//! the picture maker, and whether they can be paid for (`Models`, over the saved credentials and Meta's adapters), and
+//! what each clip's analysis found (`Findings`, over `AnalysisState`). Tests use fakes of both.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use klipolo_analysis::providers::images::ImageMaker;
 use klipolo_analysis::providers::meta_chat::MetaChat;
+use klipolo_analysis::providers::meta_images::MetaImages;
 use klipolo_chat::{AnalysisState as ChatAnalysis, BoxFuture, LanguageModel};
 use klipolo_model::speech::Levels;
 
+use super::session::NEEDS_KEY;
 use crate::analysis::{AnalysisState, AssetAnalysis};
 use crate::credentials::Credentials;
 
@@ -32,6 +35,13 @@ pub enum Readiness {
 pub trait Models: Send + Sync {
     /// Whether a message can go now, and to which model.
     fn ready(&self) -> BoxFuture<'_, Readiness>;
+
+    /// What draws pictures for chat (stickers, title card backgrounds), or why nothing can pay for one, in one
+    /// sentence.
+    fn images(&self) -> BoxFuture<'_, Result<Arc<dyn ImageMaker>, String>>;
+
+    /// What one picture costs, in US dollars: counted into the session's spend when it comes back.
+    fn picture_usd(&self) -> f64;
 
     /// The relay refused the device's token (401): registers the device again (with the saved code). True when it
     /// worked, so the message may be sent once more.
@@ -69,6 +79,22 @@ impl Models for MetaModels {
                 (None, None) => Readiness::NeedsKey,
             }
         })
+    }
+
+    fn images(&self) -> BoxFuture<'_, Result<Arc<dyn ImageMaker>, String>> {
+        Box::pin(async move {
+            let ready = self.credentials.ready().await;
+            match (ready.meta, ready.problem) {
+                // Muse Image through the shared adapter: it waits for one of the device's Meta slots.
+                (Some(meta), _) => Ok(Arc::new(MetaImages::new(meta)) as Arc<dyn ImageMaker>),
+                (None, Some(problem)) => Err(problem),
+                (None, None) => Err(NEEDS_KEY.to_owned()),
+            }
+        })
+    }
+
+    fn picture_usd(&self) -> f64 {
+        klipolo_meta::pricing::image_usd(1)
     }
 
     fn recover(&self) -> BoxFuture<'_, bool> {

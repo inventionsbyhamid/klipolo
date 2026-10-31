@@ -1,9 +1,12 @@
 //! A message's jobs (`klipolo_chat::Job`): work for a runner rather than ops. Following a subject and blurring aren't in
-//! Klipolo yet, so the reply says they are coming and nothing changes for them.
+//! Klipolo yet, so the reply says they are coming and nothing changes for them. A picture to draw goes to `pictures`
+//! (`PictureAsk`), which draws it when the page asks and places it on Use.
 //!
 //! Every kind of job is matched in `start`: a new kind of job the compiler makes doesn't build until it is handled here.
 
 use klipolo_chat::{Compiled, Job};
+
+use super::pictures::PictureAsk;
 
 /// Said for `followSubject`.
 pub const FOLLOW_COMING: &str = "Following a subject isn't in Klipolo yet. It's coming soon.";
@@ -11,8 +14,10 @@ pub const FOLLOW_COMING: &str = "Following a subject isn't in Klipolo yet. It's 
 pub const BLUR_COMING: &str = "Blurring isn't in Klipolo yet. It's coming soon.";
 
 /// What a message's jobs came to.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub(crate) struct Started {
+    /// Pictures to draw.
+    pub pictures: Vec<PictureAsk>,
     /// A sentence for each kind of job Klipolo can't run yet.
     pub coming: Vec<&'static str>,
     /// Their tools, for the turn's note.

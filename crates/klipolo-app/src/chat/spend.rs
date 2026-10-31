@@ -14,7 +14,7 @@ pub struct ChatSpend {
     pub messages: u32,
     /// What the pictures drawn for chat cost.
     pub pictures_usd: f64,
-    /// The pictures asked for.
+    /// The pictures drawn.
     pub pictures: u32,
 }
 
@@ -51,5 +51,12 @@ impl SpendCounter {
             spend.messages += 1;
         }
         spend.chat_usd += usd.max(0.0);
+    }
+
+    /// A picture that came back, costing `usd`.
+    pub(crate) fn picture(&self, usd: f64) {
+        let mut spend = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        spend.pictures += 1;
+        spend.pictures_usd += usd.max(0.0);
     }
 }

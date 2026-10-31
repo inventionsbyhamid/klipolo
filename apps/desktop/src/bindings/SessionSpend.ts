@@ -22,6 +22,6 @@ chatMessages: number,
  */
 picturesUsd: number, 
 /**
- * The pictures asked for.
+ * The pictures drawn.
  */
 pictures: number, };

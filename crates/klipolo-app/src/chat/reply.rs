@@ -12,6 +12,8 @@ use klipolo_model::time::{RangeUs, Us};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use super::pictures::ChatPicture;
+
 /// One message from the person, with what "this" and "here" mean when it is sent.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -64,6 +66,8 @@ pub struct ChatReply {
     undone: Option<SnapshotPatch>,
     proposal: Option<ChatProposal>,
     moments: Vec<ChatMoment>,
+    /// Pictures it asked for, to draw (`chat_draw_picture`) and show with Use and Try again.
+    pictures: Vec<ChatPicture>,
 }
 
 /// Additions applied at once, as one undo step: what changed, and its undo label.
@@ -194,6 +198,16 @@ impl ChatReply {
     pub fn proposal(mut self, proposal: ChatProposal) -> Self {
         self.proposal = Some(proposal);
         self
+    }
+
+    /// A picture asked for (its prompt is cleaned as it is made, `Pictures::ask`).
+    pub fn picture(mut self, picture: ChatPicture) -> Self {
+        self.pictures.push(picture);
+        self
+    }
+
+    pub fn pictures(&self) -> &[ChatPicture] {
+        &self.pictures
     }
 
     pub fn id(&self) -> &str {

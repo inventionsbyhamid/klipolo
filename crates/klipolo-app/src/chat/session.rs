@@ -20,7 +20,9 @@
 //! - **The conversation** keeps the last `KEPT_TURNS` exchanges with their notes (what was applied or proposed, and
 //!   later whether the person applied or discarded it), for the project open; another project, or New chat, starts it
 //!   over.
-//! - **Jobs:** following a subject and blurring aren't in Klipolo yet: the reply says they are coming (`jobs`).
+//! - **Jobs:** following a subject and blurring aren't in Klipolo yet: the reply says they are coming (`jobs`). A
+//!   picture (a sticker, a title card's background) is named in the reply, drawn when the page asks, and placed on Use
+//!   as one undo step (`pictures`).
 //! - **Spend:** every model call's cost goes into the session's AI spend (`SpendCounter`); nothing is shown per message.
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -37,6 +39,7 @@ use klipolo_model::{Project, Transaction};
 use super::describe::{describe, seconds};
 use super::inputs::gather;
 use super::jobs;
+use super::pictures::{ChatPicture, ChatPictureDrawn, PictureAsk, Pictures};
 use super::project::{At, CommitError, ProjectNow, Projects};
 use super::reply::{
     ChatApplied, ChatFailure, ChatFailureKind, ChatOutcome, ChatProposal, ChatReply, ChatRequest,
@@ -90,6 +93,7 @@ pub struct ChatSession {
     /// One message at a time: held from before its context is built until its edits have landed.
     queue: tokio::sync::Mutex<()>,
     talk: Mutex<Talk>,
+    pictures: Pictures,
     spend: SpendCounter,
 }
 
@@ -163,6 +167,7 @@ impl ChatSession {
             models,
             queue: tokio::sync::Mutex::new(()),
             talk: Mutex::default(),
+            pictures: Pictures::default(),
             spend: SpendCounter::default(),
         }
     }
@@ -302,16 +307,39 @@ impl ChatSession {
         Ok(committed.patch)
     }
 
-    /// New chat: the conversation and its proposals are forgotten.
+    /// New chat: the conversation, its proposal and its pictures are forgotten.
     pub fn reset(&self) {
         let mut talk = lock(&self.talk);
         talk.exchanges.clear();
         talk.open = None;
+        self.pictures.clear();
     }
 
     /// Another project opened, or the project closed: everything about the old one is forgotten.
     pub fn project_changed(&self) {
         *lock(&self.talk) = Talk::default();
+        self.pictures.clear();
+    }
+
+    /// A picture for the open project, waiting to be drawn: what its card says. The compiler's picture jobs come in
+    /// here (`jobs`).
+    pub fn ask_picture(&self, ask: PictureAsk) -> ChatPicture {
+        self.pictures.ask(self.projects.now().map(|n| n.at), ask)
+    }
+
+    /// Draws picture `id` (again, for Try again), for its card: about 35 s. A sentence when it can't be drawn.
+    pub async fn draw_picture(&self, id: &str) -> Result<ChatPictureDrawn, CommitError> {
+        (self.pictures)
+            .draw(id, &*self.projects, &*self.models, &self.spend)
+            .await
+    }
+
+    /// Use: places picture `id` in the open project as one undo step. A sentence when it can't be placed (its moment
+    /// or its title is gone).
+    pub fn place_picture(&self, id: &str) -> Result<ChatApplied, CommitError> {
+        let (applied, at) = self.pictures.place(id, &*self.projects)?;
+        lock(&self.talk).last_change = Some(at);
+        Ok(applied)
     }
 
     /// The conversation belongs to the project at `at`: one about another project (or another opening) is forgotten.
@@ -322,6 +350,7 @@ impl ChatSession {
                 owner: Some(at.clone()),
                 ..Talk::default()
             };
+            self.pictures.clear();
         }
     }
 
@@ -335,7 +364,7 @@ impl ChatSession {
         mut out: PlanOut,
     ) -> ChatOutcome {
         let landed = self.commit(now, inputs, &out);
-        let jobs = jobs::start(&out.compiled);
+        let mut jobs = jobs::start(&out.compiled);
         name_clips(&mut out, &now.project, inputs);
 
         let something = landed.undone.is_some()
@@ -385,6 +414,12 @@ impl ChatSession {
         if let Some((proposal_id, proposal)) = landed.proposal {
             made = Some(proposal_id);
             reply = reply.proposal(proposal);
+        }
+        // Pictures are asked for once the edits are in (a title card's title is one of them).
+        if landed.lost.is_none() {
+            for ask in jobs.pictures.drain(..) {
+                reply = reply.picture(self.pictures.ask(Some(now.at.clone()), ask));
+            }
         }
         let turn = Turn {
             user: user.to_owned(),

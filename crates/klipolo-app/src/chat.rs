@@ -8,12 +8,14 @@
 //! - `sources`: the language model as the saved credentials allow it (`Models`) and what the analysis found
 //!   (`Findings`).
 //! - `inputs`: a message's context and compiler inputs from one snapshot. `describe`: a proposal in Klipolo's words.
-//!   `jobs`: work for runners. `spend`: what chat cost this session.
+//!   `jobs`: work for runners. `pictures`: pictures a message asked for, drawn on request and placed on Use. `spend`:
+//!   what chat cost this session.
 //! - `reply`: the shapes the chat panel reads, every model-written text cleaned of dashes as they are built.
 
 mod describe;
 mod inputs;
 mod jobs;
+pub mod pictures;
 pub mod project;
 mod reply;
 pub mod session;
@@ -21,6 +23,9 @@ pub mod sources;
 pub mod spend;
 
 pub use jobs::{BLUR_COMING, FOLLOW_COMING};
+pub use pictures::{
+    ChatPicture, ChatPictureDrawn, ChatPictureKind, PictureAsk, StickerPlacement, background_ops,
+};
 pub use project::{
     At, CommitError, Committed, MemoryProjects, ProjectNow, Projects, commit_reviewed,
 };

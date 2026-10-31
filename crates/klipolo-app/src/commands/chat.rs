@@ -1,14 +1,15 @@
 //! Chat: thin commands over `klipolo_app::chat::ChatSession`. A message comes back as a reply (what was applied, as a
-//! patch the page merges; the proposal, with its id; the moments) or as why nothing happened (`ChatOutcome::Failed`),
-//! never as a rejection. Apply, Discard and Undo name a proposal or chat's last change; a project that moved on is
-//! `project.moved`. No command or event carries a key or a token.
+//! patch the page merges; the proposal, with its id; the moments; the pictures it asked for) or as why nothing happened
+//! (`ChatOutcome::Failed`), never as a rejection. Apply, Discard and Undo name a proposal or chat's last change; a
+//! project that moved on is `project.moved`. A picture is drawn when the page asks (and again for Try again) and placed
+//! on Use. Everything comes back from the commands: no events. None carries a key or a token.
 
 use std::sync::Arc;
 
 use klipolo_app::analysis::AnalysisState;
 use klipolo_app::chat::{
-    At, ChatApplied, ChatOutcome, ChatRequest, ChatSession, CommitError, Committed, MetaModels,
-    ProjectNow, Projects,
+    At, ChatApplied, ChatOutcome, ChatPictureDrawn, ChatRequest, ChatSession, CommitError,
+    Committed, MetaModels, ProjectNow, Projects,
 };
 use klipolo_model::coded::Said;
 use klipolo_model::history::SnapshotPatch;
@@ -91,4 +92,28 @@ pub(crate) fn chat_undo_last(chat: State<'_, ChatHandle>) -> Result<SnapshotPatc
 #[tauri::command(async)]
 pub(crate) fn chat_reset(chat: State<'_, ChatHandle>) {
     chat.reset();
+}
+
+/// Draws picture `id` (again, for Try again) into the project's media folder, for its card, and lets the page show the
+/// file. About 35 s; a plain sentence when it can't be drawn.
+#[tauri::command]
+pub(crate) async fn chat_draw_picture(
+    app: AppHandle,
+    chat: State<'_, ChatHandle>,
+    id: String,
+) -> Result<ChatPictureDrawn, Said> {
+    let drawn = chat.draw_picture(&id).await.map_err(|e| e.said())?;
+    if let Err(error) = app.asset_protocol_scope().allow_file(&drawn.path) {
+        tracing::warn!(%error, "a picture drawn for chat can't be shown");
+    }
+    Ok(drawn)
+}
+
+/// Use: places picture `id` in the open project as one undo step; a plain sentence when its moment or its title is gone.
+#[tauri::command(async)]
+pub(crate) fn chat_use_picture(
+    chat: State<'_, ChatHandle>,
+    id: String,
+) -> Result<ChatApplied, Said> {
+    chat.place_picture(&id).map_err(|e| e.said())
 }

@@ -114,6 +114,8 @@ fn main() {
             commands::chat::chat_discard_proposal,
             commands::chat::chat_undo_last,
             commands::chat::chat_reset,
+            commands::chat::chat_draw_picture,
+            commands::chat::chat_use_picture,
             media_cache::media_peaks_info,
             media_cache::media_peaks,
             media_cache::media_thumbs,
