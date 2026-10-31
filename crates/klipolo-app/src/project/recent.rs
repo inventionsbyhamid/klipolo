@@ -68,7 +68,10 @@ pub(crate) fn recent_in(
     thumbs: Option<&Path>,
     limit: usize,
 ) -> io::Result<Vec<ProjectRow>> {
-    let stamps = read_stamps(stamps);
+    let stamps = read_stamps(stamps).unwrap_or_else(|error| {
+        tracing::warn!(%error, "the recent projects couldn't be read");
+        BTreeMap::new()
+    });
     Ok(project_files(library, &stamps)?
         .into_iter()
         .filter_map(|found| match read(&found.file) {
@@ -87,9 +90,10 @@ pub(crate) fn recent_in(
 const STAMPS_KEPT: usize = 50;
 
 /// Stamps `file` in `stamps` as opened at `now_ms` (again, if it was), keeping the `STAMPS_KEPT` latest; written
-/// atomically. A file that didn't read starts over.
+/// atomically. A file that doesn't read as stamps starts over; one that can't be read at all is left as it is, and the
+/// error is returned.
 pub(super) fn stamp(stamps: &Path, file: &Path, now_ms: u64) -> io::Result<()> {
-    let mut opened = read_stamps(stamps);
+    let mut opened = read_stamps(stamps)?;
     opened.insert(file.to_string_lossy().into_owned(), now_ms);
     if opened.len() > STAMPS_KEPT {
         let mut oldest_first: Vec<(u64, String)> = opened
@@ -157,20 +161,17 @@ fn ms_since_epoch(time: SystemTime) -> u64 {
     })
 }
 
-/// The stamps in `stamps`; none when it is missing or doesn't read (logged).
-fn read_stamps(stamps: &Path) -> BTreeMap<String, u64> {
+/// The stamps in `stamps`: none when it is missing or doesn't read as stamps (logged); an error when it can't be read.
+fn read_stamps(stamps: &Path) -> io::Result<BTreeMap<String, u64>> {
     let bytes = match fs::read(stamps) {
         Ok(bytes) => bytes,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return BTreeMap::new(),
-        Err(error) => {
-            tracing::warn!(%error, "the recent projects couldn't be read");
-            return BTreeMap::new();
-        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
+        Err(error) => return Err(error),
     };
-    serde_json::from_slice(&bytes).unwrap_or_else(|error| {
+    Ok(serde_json::from_slice(&bytes).unwrap_or_else(|error| {
         tracing::warn!(%error, "the recent projects aren't readable");
         BTreeMap::new()
-    })
+    }))
 }
 
 /// `project`, read from `file`, as a row.

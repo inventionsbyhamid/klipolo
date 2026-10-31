@@ -450,3 +450,37 @@ fn links_are_not_listed() {
         [("Here", 1_000)]
     );
 }
+
+/// Stamping over a `recent.json` that doesn't read as stamps starts it over with the one stamp.
+#[test]
+fn stamping_rewrites_a_damaged_recent_json() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    fs::create_dir_all(stamps.parent().unwrap()).unwrap();
+    fs::write(&stamps, "{ not json").unwrap();
+    let file = library.join("Opened.klipolo");
+
+    stamp(&stamps, &file, 5_000).unwrap();
+    assert_eq!(on_disk(&stamps), BTreeMap::from([(key(&file), 5_000)]));
+}
+
+/// A `recent.json` that can't be read at all (no permission, a failing disk) is left as it is: the stamp is skipped
+/// rather than wiping the others.
+#[cfg(unix)]
+#[test]
+fn stamping_leaves_a_recent_json_it_cant_read() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    let kept = library.join("Kept.klipolo");
+    stamped(&stamps, &[(&kept, 5_000)]);
+    fs::set_permissions(&stamps, fs::Permissions::from_mode(0o000)).unwrap();
+    // Run as root, the file still reads: nothing to check.
+    if fs::read(&stamps).is_ok() {
+        return;
+    }
+
+    assert!(stamp(&stamps, &library.join("New.klipolo"), 6_000).is_err());
+    fs::set_permissions(&stamps, fs::Permissions::from_mode(0o644)).unwrap();
+    assert_eq!(on_disk(&stamps), BTreeMap::from([(key(&kept), 5_000)]));
+}
