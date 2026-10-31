@@ -1,4 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
+import { useEffect, useRef, useState } from 'react';
 import icon from '../styles/klipolo-icon.svg';
 import { openSettings } from '../ai/aiStatus';
 import { projects } from '../bridge/projects';
@@ -13,22 +14,84 @@ import { toast } from '../state/toasts';
 import { Icon } from './Icon';
 
 /**
+ * The project's name as a field, from the project menu's Rename: Return, or leaving the field, renames the project in
+ * one undo step ("Rename project"; its exports take the new name); Escape, or a name left empty or as it was, keeps the
+ * name. Return and Escape put the focus back on the name.
+ */
+function RenameField({ name, onDone }: { name: string; onDone: (refocus: boolean) => void }) {
+  const { t } = useLingui();
+  const [value, setValue] = useState(name);
+  const finished = useRef(false);
+  const finish = (rename: boolean, refocus: boolean) => {
+    if (finished.current) return;
+    finished.current = true;
+    const next = value.trim();
+    if (rename && next !== '' && next !== name)
+      void useProject.getState().apply('editor.rename.undo', [{ type: 'rename', name: next }]);
+    onDone(refocus);
+  };
+  return (
+    <input
+      className="input input-sm project-rename"
+      aria-label={t({ id: 'project.rename.field', message: 'Project name' })}
+      value={value}
+      // The model's limit for a project's name.
+      maxLength={200}
+      autoFocus
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finish(true, true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          finish(false, true);
+        }
+      }}
+      onBlur={() => finish(true, false)}
+    />
+  );
+}
+
+/**
  * The project menu, opened from the project's name: New project, All projects (closes the project once
- * its edits are saved, back to the start screen) and Show in Finder (its file, selected). One at a time: while a new
- * project is made or the project closes, its items are off.
+ * its edits are saved, back to the start screen), Rename (the name turns into a field) and Show in Finder (its file,
+ * selected). One at a time: while a new project is made or the project closes, its items are off.
  */
 function ProjectMenu({ name }: { name: string }) {
   const { t } = useLingui();
   const switching = useProject((s) => s.switching);
+  const readOnly = useProject((s) => s.snapshot?.readOnly != null);
+  const [renaming, setRenaming] = useState(false);
+  const nameButton = useRef<HTMLButtonElement>(null);
+  /** The rename ended from the keyboard: the focus goes back to the name once it shows again. */
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (renaming || !refocus.current) return;
+    refocus.current = false;
+    nameButton.current?.focus();
+  }, [renaming]);
   /** Runs `action` unless a switch is under way (a press that reached the item before it turned off). */
   const once = (action: () => void) => () => {
     if (!useProject.getState().switching) action();
   };
   const showInFinder = () => void projects.reveal().catch((error: unknown) => toast.error(errorMessage(error)));
+  if (renaming)
+    return (
+      <RenameField
+        name={name}
+        onDone={(back) => {
+          refocus.current = back;
+          setRenaming(false);
+        }}
+      />
+    );
   return (
     <Menu>
       <MenuTrigger asChild>
-        <button type="button" className="project" title={name}>
+        <button ref={nameButton} type="button" className="project" title={name}>
           <span className="project-name">{name}</span>
           <Icon name="chev-down" />
         </button>
@@ -45,6 +108,9 @@ function ProjectMenu({ name }: { name: string }) {
           })}
         </MenuItem>
         <MenuSeparator />
+        <MenuItem onSelect={once(() => setRenaming(true))} disabled={switching || readOnly}>
+          {t({ id: 'project.menu.rename', message: 'Rename', comment: 'Project menu item: the name becomes a field' })}
+        </MenuItem>
         <MenuItem onSelect={once(showInFinder)} disabled={switching}>
           {t({ id: 'project.menu.finder', message: 'Show in Finder', comment: 'Project menu item' })}
         </MenuItem>

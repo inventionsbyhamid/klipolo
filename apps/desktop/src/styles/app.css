@@ -417,6 +417,11 @@
   height: 16px;
 }
 
+/* The project's name as a field while it is renamed (the project menu's Rename). */
+.project-rename {
+  width: 320px;
+}
+
 /* "Saved", or "Not saved" while saves keep failing (its title says why). */
 .save-state {
   display: inline-flex;
