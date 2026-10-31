@@ -5,6 +5,7 @@ import { errorMessage } from '../lib/errors';
 import {
   openProposal,
   session,
+  SWAP_SETTLE_MS,
   withMessages,
   type ChatGet,
   type ChatSet,
@@ -40,6 +41,9 @@ export function proposalActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'ap
     apply: async (id) => {
       const m = find(id);
       if (!m || m.proposal?.state !== 'open') return;
+      // It just took the place of the card the person was reading: the press was meant for that one.
+      const swapped = m.proposal.swappedAt;
+      if (swapped !== undefined && performance.now() - swapped < SWAP_SETTLE_MS) return;
       const mine = session.now();
       update(id, () => ({ state: 'applying', reason: undefined }));
       let applied: ChatApplied | undefined;

@@ -6,9 +6,10 @@
 //! - `addSound`: a sound at each time as the library's + puts one (`media::sound::add_sound_ops`: the whole file at full
 //!   volume with no fades, attached to the clip under it, cut where the video ends); two times within
 //!   `evidence::TOLERANCE_US` of each other are one sound, at the first.
-//! - `addText`: the person's own words (`persons_words`; words of the model's own are refused back, for it to ask) in
-//!   one of the four text presets, placed by the model's `media::text::add_text_ops` exactly as the canvas's Add title
-//!   and the library's presets place it: each format's own place, in 9:16 inside the area the apps keep clear.
+//! - `addText`: the person's own words (`persons_words`; words of the model's own are refused back, for it to ask), or
+//!   another app's as it gave them (`apps_words`), in one of the four text presets, placed by the model's
+//!   `media::text::add_text_ops` exactly as the canvas's Add title and the library's presets place it: each format's
+//!   own place, in 9:16 inside the area the apps keep clear.
 //! - `addImage`: the picture as the library's + puts one (`media::image::add_image_ops_at`), at a size and in a corner of
 //!   each format's own area (in 9:16 the area the apps keep clear) when one was asked for.
 //! - `makeSticker`: a `Job::MakeSticker` only, on the project as the message's additions leave it, anchored to the
@@ -16,10 +17,10 @@
 //!   `sticker_ops` (where and how long `sticker_placement` says, on the project as it is then). A job's prompt names the
 //!   picture in the library too, so it has no dashes either.
 //! - `makeTitleCard`: the title card template as the canvas adds one (`media::text::add_template_ops`, filling the frame
-//!   in every format) with the person's exact title (`persons_words`) and its other words left empty so only the
-//!   title shows, for the template's own length (`TEMPLATE_US`) unless the person gave one, applied at once; and a
-//!   `Job::MakeTitleBackground` for the picture to go under it, in the primary format as the additions leave it. No
-//!   title of theirs: refused back, for the model to ask.
+//!   in every format) with the person's exact title (`persons_words`, or an app's own: `apps_words`) and its other
+//!   words left empty so only the title shows, for the template's own length (`TEMPLATE_US`) unless the person gave
+//!   one, applied at once; and a `Job::MakeTitleBackground` for the picture to go under it, in the primary format as
+//!   the additions leave it. No title of theirs: refused back, for the model to ask.
 //!
 //! A time from the model stands on the evidence like any other (`Evidence::moment`: a change of shot or topic first),
 //! and is then mapped into the working copy. Nothing is placed at the video's end or past it, and a layer that would
@@ -43,7 +44,9 @@ use klipolo_model::ops::Op;
 use klipolo_model::params::{ParamKind, ParamValue};
 use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::query::{anchor_at, main_track_duration, resolve_attach, video_duration};
+use klipolo_model::text_safety::clean_shown;
 use klipolo_model::time::{MIN_DURATION_US, Us};
+use klipolo_model::validate::MAX_TEXT;
 use klipolo_model::{Project, apply_ops};
 
 use super::{Compiler, Edit, Job, MakeSticker, Refused, label, to_model, unfounded};
@@ -229,6 +232,26 @@ pub(crate) fn persons_words(message: &str, text: &str) -> Option<String> {
     (!span.is_empty()).then(|| span.to_owned())
 }
 
+/// Words another app gives for the screen, as it gave them: control, invisible and bidirectional characters dropped,
+/// but what real text needs kept (joiners, variation selectors, and line breaks, which a text layer draws), and runs of
+/// spaces one space (`text_safety::clean_shown`). Refused when they are longer than a text layer holds (`MAX_TEXT`) or
+/// nothing is left, said for `tool`'s `field` with what to do.
+fn apps_words((tool, field): (&str, &str), text: &str) -> Result<String, Refused> {
+    let n = text.chars().count();
+    if n > MAX_TEXT {
+        return Err(to_model(format!(
+            "{tool}: {field} is {n} characters; words on screen hold at most {MAX_TEXT}. Use fewer words."
+        )));
+    }
+    let words = clean_shown(text, MAX_TEXT);
+    if words.is_empty() {
+        return Err(to_model(format!(
+            "{tool}: {field} has no words to show. Give the words to put on screen."
+        )));
+    }
+    Ok(words)
+}
+
 /// The ops that add the title card template reading `text` (its other words left empty) from `start` for `duration`
 /// (None: `TEMPLATE_US`), as the canvas adds a title template (`media::text::add_template_ops`: filling the frame in
 /// every format, attached to the clip under it); and the new layer's id. Refused when the template holds fewer
@@ -370,11 +393,15 @@ pub(super) fn add_text(
     preset: TextPreset,
     (at, duration): (Option<Us>, Option<Us>),
 ) -> Result<Edit, Refused> {
-    let Some(words) = persons_words(&c.inputs.message, text) else {
-        return Err(to_model(format!(
-            "addText: the words must be the person's own, and they did not write {text:?}. If they gave none, ask \
-             them with askUser."
-        )));
+    let words = if c.by_app {
+        apps_words(("addText", "text"), text)?
+    } else {
+        persons_words(&c.inputs.message, text).ok_or_else(|| {
+            to_model(format!(
+                "addText: the words must be the person's own, and they did not write {text:?}. If they gave none, \
+                 ask them with askUser."
+            ))
+        })?
     };
     let start = start(c, work, "addText", "atSec", at)?;
     let ops = add_text_ops(work, preset.preset(), &words, start)
@@ -472,11 +499,15 @@ pub(super) fn make_title_card(
     title: &str,
     (at, duration): (Option<Us>, Option<Us>),
 ) -> Result<(Edit, Id), Refused> {
-    let Some(words) = persons_words(&c.inputs.message, title) else {
-        return Err(to_model(format!(
-            "makeTitleCard: the title must be the person's own words, and they did not write {title:?}. If they gave \
-             no title, ask them for it with askUser."
-        )));
+    let words = if c.by_app {
+        apps_words(("makeTitleCard", "title"), title)?
+    } else {
+        persons_words(&c.inputs.message, title).ok_or_else(|| {
+            to_model(format!(
+                "makeTitleCard: the title must be the person's own words, and they did not write {title:?}. If they \
+                 gave no title, ask them for it with askUser."
+            ))
+        })?
     };
     let start = start(c, work, "makeTitleCard", "atSec", at)?;
     let (ops, title_id) = title_ops(work, ("makeTitleCard", "title"), &words, start, duration)?;

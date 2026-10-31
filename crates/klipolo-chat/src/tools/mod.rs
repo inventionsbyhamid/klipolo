@@ -206,6 +206,35 @@ impl ToolCall {
             ToolCall::CannotDo { .. } => "cannotDo",
         }
     }
+
+    /// Whether the call names a timeline time or a clip ref, which hold only while the main track's clips stay where
+    /// the context put them (`context::timeline_key`): a range, a split, a trim, a moment, or a media tool's start
+    /// when it gives one (None is the playhead). Every tool is listed, so a new one must say.
+    pub fn names_timeline(&self) -> bool {
+        match self {
+            ToolCall::CutRange { .. }
+            | ToolCall::KeepOnly { .. }
+            | ToolCall::TrimClip { .. }
+            | ToolCall::SplitAt { .. }
+            | ToolCall::FindMoments { .. }
+            | ToolCall::AddSound { .. } => true,
+            ToolCall::AddMusic { at_us, .. }
+            | ToolCall::AddText { at_us, .. }
+            | ToolCall::AddImage { at_us, .. }
+            | ToolCall::MakeSticker { at_us, .. }
+            | ToolCall::MakeTitleCard { at_us, .. } => at_us.is_some(),
+            ToolCall::RemoveSilences { .. }
+            | ToolCall::RemoveFillers
+            | ToolCall::SetFormat { .. }
+            | ToolCall::SetCaptions { .. }
+            | ToolCall::FixCaptionWords { .. }
+            | ToolCall::FollowSubject { .. }
+            | ToolCall::BlurObjects { .. }
+            | ToolCall::Undo
+            | ToolCall::AskUser { .. }
+            | ToolCall::CannotDo { .. } => false,
+        }
+    }
 }
 
 /// The caption styles `setCaptions` offers, in the schema's order, each with how the model is told it looks. Whether a

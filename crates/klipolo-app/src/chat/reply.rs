@@ -75,6 +75,21 @@ pub struct ChatReply {
     pictures: Vec<ChatPicture>,
 }
 
+/// What another app (MCP) did, for the chat panel: its name as it gave it (cleaned, `klipolo_mcp::client_name`), and a
+/// reply built as chat's are: the change it applied with its undo label (which names the app), the step of its own it
+/// undid, the proposal it made, the moments it pointed at, or the picture it asked for.
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ExternalReply {
+    pub client: String,
+    /// Which opening of the project it is about (`At::opening`): revisions start at 0 again with each opening, so the
+    /// page matches the reply's change by the opening and the revision.
+    #[ts(type = "number")]
+    pub opening: u64,
+    pub reply: ChatReply,
+}
+
 /// Additions applied at once, as one undo step: what changed, and its undo label.
 #[derive(Clone, Debug, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -307,6 +322,10 @@ impl ChatProposal {
                 })
                 .collect(),
         }
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
     }
 
     pub fn title(&self) -> &str {

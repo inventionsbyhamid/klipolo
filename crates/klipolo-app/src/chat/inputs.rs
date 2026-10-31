@@ -2,12 +2,13 @@
 //! project's clips' analysis has found then (`Findings`): the model reads the context, and its calls compile against
 //! the same snapshot and inputs. The media the tools may name (`Library`) are what the library lists: the project's own
 //! music, sounds and pictures (a sound file is music or a sound effect as the library's tabs say), then Klipolo's pack.
+//! Another app's calls (MCP) compile against inputs built the same way (`inputs_for`), with no message.
 
 use std::collections::{HashMap, HashSet};
 
 use klipolo_chat::{
-    AnalysisState as ChatAnalysis, ChatContext, Inputs, Library, LibraryItem, MediaKind, SceneLog,
-    SpeakerTurn, View, build_context,
+    AnalysisState as ChatAnalysis, ChatContext, Inputs, Library, LibraryItem, MediaKind, Refs,
+    SceneLog, SpeakerTurn, View, build_context,
 };
 use klipolo_model::Project;
 use klipolo_model::media::music::is_music;
@@ -34,6 +35,28 @@ pub(crate) fn gather(
     view: View,
     pack: Vec<LibraryItem>,
 ) -> (ChatContext, Inputs) {
+    let (inputs, turns) = inputs_for(project, findings, message, view, pack);
+    let context = build_context(
+        project,
+        &inputs.speech,
+        &turns,
+        &inputs.scenes,
+        &inputs.view,
+        &inputs.library,
+    );
+    (context, inputs)
+}
+
+/// The inputs calls on `project` compile against, as `gather` builds them for a message (its context aside), with each
+/// file's speaker turns by asset id: what the analysis found, the library, `message` (the times it says are evidence;
+/// empty for another app's calls) and `view` (the person's playhead and selection).
+pub fn inputs_for(
+    project: &Project,
+    findings: &dyn Findings,
+    message: &str,
+    view: View,
+    pack: Vec<LibraryItem>,
+) -> (Inputs, HashMap<String, Vec<SpeakerTurn>>) {
     let mut speech = Speech::default();
     let mut turns: HashMap<String, Vec<SpeakerTurn>> = HashMap::new();
     let mut scenes: HashMap<String, SceneLog> = HashMap::new();
@@ -61,17 +84,16 @@ pub(crate) fn gather(
         }
     }
     let library = library_of(project, pack);
-    let context = build_context(project, &speech, &turns, &scenes, &view, &library);
     let inputs = Inputs {
         message: message.to_owned(),
         view,
-        refs: context.refs.clone(),
+        refs: Refs::of(project),
         speech,
         scenes,
         analysis,
         library,
     };
-    (context, inputs)
+    (inputs, turns)
 }
 
 /// The media chat's tools may name, as the library lists them: `project`'s own music, sounds and pictures, then `pack`.

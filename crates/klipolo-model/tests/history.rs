@@ -672,3 +672,20 @@ fn over_the_byte_limit_an_apps_steps_fold_before_the_persons_go() {
     assert_eq!((persons_steps(&doc), apps_steps(&doc)), (6, 4));
     assert_eq!(*doc.project(), now);
 }
+
+/// Who made each redo step is counted, as for undo: an app's commit would drop every redo step, so a host tells the
+/// person's (or another app's) apart before it commits.
+#[test]
+fn redo_steps_are_counted_by_who_made_them() {
+    let mut doc = Document::new(fixture()).unwrap();
+    doc.apply(&rename("mine", "Mine")).unwrap();
+    app_rename(&mut doc, "Theirs", &share(10, usize::MAX)).unwrap();
+    assert_eq!(doc.redo_steps_where(|_| true), 0);
+    doc.undo().unwrap();
+    assert_eq!(doc.redo_steps_where(Maker::is_app), 1);
+    assert_eq!(doc.redo_steps_where(|m| *m == Maker::Person), 0);
+    doc.undo().unwrap();
+    assert_eq!(doc.redo_steps(), 2);
+    assert_eq!(doc.redo_steps_where(Maker::is_app), 1);
+    assert_eq!(doc.redo_steps_where(|m| *m == Maker::Person), 1);
+}
