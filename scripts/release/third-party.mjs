@@ -1,11 +1,12 @@
 // Klipolo's third-party notices, printed to stdout (scripts/release/third-party.sh runs it and says where they go):
 //   node third-party.mjs <cargo metadata JSON> <page folder> <licence texts folder>
 // The Rust crates: what the app crate's binary links, following normal dependencies from klipolo-app (build scripts'
-// and tests' dependencies don't ship), for the platforms cargo metadata was filtered to. Klipolo's own crates are
-// left out. The JavaScript packages: every package the page's Vite build reads (run in memory, nothing is written),
-// the packages its stylesheets @import, and the bundler's own runtime helpers that end up in the page (Vite's and
-// Rolldown's). Each package takes the first licence in PREFERRED that it offers; a licence needs its text in the
-// texts folder (<SPDX id>.txt) to be taken at all, so a package with no such licence stops the run.
+// and tests' dependencies don't ship), for the platforms cargo metadata was filtered to, and the Rust standard
+// library. Klipolo's own crates are left out. The JavaScript packages: every package the page's Vite build reads (run
+// in memory, nothing is written), the packages its stylesheets @import, and the bundler's own runtime helpers that end
+// up in the page (Vite's and Rolldown's). Each package takes the first licence in PREFERRED that it offers; a licence
+// needs its text in the texts folder (<SPDX id>.txt) to be taken at all, so a package with no such licence stops the
+// run.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -62,7 +63,7 @@ function rustPackages(meta) {
     seen.add(id);
     for (const d of nodes.get(id).deps) if (d.dep_kinds.some((k) => k.kind === null)) todo.push(d.pkg);
   }
-  return [...seen]
+  return [rustStd(meta.workspace_root), ...[...seen]
     .filter((id) => !own.has(id))
     .map((id) => byId.get(id))
     .map((p) => {
@@ -82,7 +83,23 @@ function rustPackages(meta) {
         dir,
         dirs: git ? upToCheckout(dir) : [dir],
       };
-    });
+    })];
+}
+
+// The Rust standard library, which every Rust binary links but cargo metadata doesn't list: the toolchain's version,
+// from rust-toolchain.toml.
+function rustStd(root) {
+  const m = /^channel\s*=\s*"([^"]+)"/m.exec(read(path.join(root, 'rust-toolchain.toml')));
+  if (!m) throw new Error('no channel in rust-toolchain.toml');
+  return {
+    kind: 'rust',
+    name: 'Rust standard library',
+    version: m[1],
+    license: 'MIT OR Apache-2.0',
+    url: 'https://github.com/rust-lang/rust',
+    authors: ['The Rust Project Developers'],
+    dirs: [],
+  };
 }
 
 // "git+https://github.com/o/r?rev=abc#<commit>" as { url: "https://github.com/o/r", commit }; null for other sources.

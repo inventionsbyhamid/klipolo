@@ -10,7 +10,7 @@ Klipolo's own licence, and the licences of FFmpeg and the fonts, are in NOTICE.t
 
 This file is written by scripts/release/third-party.sh from Cargo.lock and the page's build. Don't edit it by hand.
 
-421 Rust crates and 81 JavaScript packages, under these licences:
+422 Rust crates and 81 JavaScript packages, under these licences:
   0BSD                        1
   Apache-2.0                 11
   BSD-2-Clause                1
@@ -18,7 +18,7 @@ This file is written by scripts/release/third-party.sh from Cargo.lock and the p
   CC0-1.0                     1
   CDLA-Permissive-2.0         1
   ISC                         5
-  MIT                       454
+  MIT                       455
   MPL-2.0                     5
   Unicode-3.0                17
   WTFPL                       2
@@ -417,10 +417,12 @@ Permission to use, copy, modify, and/or distribute this software for any purpose
 THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ----------------------------------------------------------------------------------------------------
-MIT (454)
+MIT (455)
 ----------------------------------------------------------------------------------------------------
 
 Rust crates
+  Rust standard library 1.90.0 (MIT OR Apache-2.0)  https://github.com/rust-lang/rust
+      Authors: The Rust Project Developers
   adler2 2.0.1 (0BSD OR MIT OR Apache-2.0)  https://github.com/oyvindln/adler2
       Copyright (C) Jonas Schievink <jonasschievink@gmail.com>
   aho-corasick 1.1.5 (Unlicense OR MIT)  https://github.com/BurntSushi/aho-corasick
