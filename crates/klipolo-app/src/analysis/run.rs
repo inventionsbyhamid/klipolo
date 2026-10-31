@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use klipolo_analysis::cache::{Dir, content_key};
 use klipolo_analysis::providers::meta::Meta;
 use klipolo_analysis::providers::{ProviderErrorKind, Transcriber};
-use klipolo_analysis::scenes;
+use klipolo_analysis::scenes::{self, SceneLog};
 use klipolo_analysis::transcript::{ROUGH_WORDS, Sound, TranscriptOut, align, finish, hear};
 use klipolo_analysis::{AnalysisError, VideoError};
 use klipolo_model::speech::Levels;
@@ -485,7 +485,7 @@ impl AnalysisState {
     }
 
     /// The clip's scene log from its small copy, snapped to `words` (its transcript's), cached once logged. A clip
-    /// with no picture after all has none.
+    /// with no picture after all has an empty one, made with no request.
     async fn log_scenes(self: &Arc<Self>, job: &Job<'_>, words: &[Word]) -> Result<(), Outcome> {
         let Job {
             key,
@@ -522,7 +522,19 @@ impl AnalysisState {
         };
         let copy = match made {
             Ok(copy) => copy,
-            Err(VideoError::NoVideo) => return Ok(()),
+            Err(VideoError::NoVideo) => {
+                // No picture after all: an empty log, cached, so the clip is never offered again at a scene log's price.
+                let log = SceneLog {
+                    model: String::new(),
+                    fps: 0.0,
+                    items: Vec::new(),
+                    cuts: Vec::new(),
+                    cost_usd: 0.0,
+                };
+                self.store(dir, "scenes", &log, "").await;
+                self.found_scenes(key, log);
+                return Ok(());
+            }
             Err(e) => return Err(self.failure(AnalysisError::from(e), run)),
         };
         calls

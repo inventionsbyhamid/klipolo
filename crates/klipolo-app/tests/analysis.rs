@@ -96,6 +96,8 @@ fn tone(seconds: f64) -> Vec<i16> {
 struct FakeMedia {
     seconds: f64,
     chunks: Vec<RangeUs>,
+    /// False for a video file whose picture stream turns out missing: its small copy can't be made.
+    picture: bool,
     sounds: AtomicUsize,
     copies: AtomicUsize,
     levels: AtomicUsize,
@@ -106,6 +108,19 @@ impl FakeMedia {
         Arc::new(Self {
             seconds,
             chunks,
+            picture: true,
+            sounds: AtomicUsize::new(0),
+            copies: AtomicUsize::new(0),
+            levels: AtomicUsize::new(0),
+        })
+    }
+
+    /// A file with sound and no picture stream.
+    fn without_picture(seconds: f64) -> Arc<Self> {
+        Arc::new(Self {
+            seconds,
+            chunks: Vec::new(),
+            picture: false,
             sounds: AtomicUsize::new(0),
             copies: AtomicUsize::new(0),
             levels: AtomicUsize::new(0),
@@ -155,6 +170,9 @@ impl Media for FakeMedia {
         seen: &mut dyn FnMut(Us),
     ) -> Result<ProxyInfo, VideoError> {
         self.copies.fetch_add(1, Ordering::SeqCst);
+        if !self.picture {
+            return Err(VideoError::NoVideo);
+        }
         std::fs::create_dir_all(dir).unwrap();
         let chunks = self
             .chunks
@@ -1584,6 +1602,52 @@ async fn a_quit_during_word_timing_keeps_the_paid_transcript() {
 
     let timed: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
     assert!(!timed.approximate && timed.turns.iter().all(|t| t.aligned));
+    server.verify().await;
+}
+
+/// A video file with no picture stream after all: its scene log is empty and cached so, so it is analysed once and
+/// never offered again at a scene log's price.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_video_with_no_picture_is_analysed_once() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(asr_answer())
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(align_answer())
+        .expect(1)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let media = FakeMedia::without_picture(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    let file = h.clip("voice.mp4", 5);
+    let clip = asset("voice", AssetKind::Video, &file, SECONDS);
+
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+
+    let log: SceneLog = h
+        .cache_dir(&file)
+        .load("scenes")
+        .expect("an empty scene log is cached");
+    assert!(log.items.is_empty() && log.cost_usd == 0.0);
+    let estimate = h.state.estimate(std::slice::from_ref(&clip)).await;
+    assert_eq!(estimate.cached, ["voice"]);
+    assert!(estimate.clips.is_empty() && estimate.usd == 0.0);
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+    assert_eq!(media.copies.load(Ordering::SeqCst), 1, "looked at once");
     server.verify().await;
 }
 
