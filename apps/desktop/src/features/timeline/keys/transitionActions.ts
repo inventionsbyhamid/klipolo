@@ -1,14 +1,12 @@
 import { select, t } from '@lingui/core/macro';
 import type { Clip } from '../../../bindings/Clip';
-import type { ContribId } from '../../../bindings/ContribId';
 import type { Op } from '../../../bindings/Op';
-import type { ParamValue } from '../../../bindings/ParamValue';
 import type { Project } from '../../../bindings/Project';
 import type { Transition } from '../../../bindings/Transition';
 import { contribLabel, isInstalled } from '../../../lib/contrib';
 import { labelText } from '../../../lib/labels';
 import { sourceLabel } from '../../../lib/timeline';
-import { maxTransitionUs, splitDuration, transitionLengthUs, TRANSITION_DISSOLVE } from '../../../lib/transitions';
+import { splitDuration } from '../../../lib/transitions';
 import { keyBurst } from '../../../state/keyBurst';
 import { usePlayback } from '../../../state/playback';
 import { useProject } from '../../../state/project';
@@ -21,14 +19,14 @@ import { cutId } from './laneOrder';
 import { blockFocused, commit, editable } from './timelineActions';
 
 /*
- * What the transition commands, a cut's marker and the transition card do: each builds one `setTransition`
- * and commits it as one undo step through `useProject.apply`, the path every edit takes.
+ * What Add transition, a cut's marker and Delete do with transitions: each builds one `setTransition` and
+ * commits it as one undo step through `useProject.apply`, the path every edit takes. The transition card builds its
+ * own at its turn (`transitionNow`, `transitionOp`).
  */
 
-/** The commands' names, which are also their undo labels (`transition.add`, `transition.remove`). */
+/** Add transition's name, which is also its undo label (`transition.add`), and a bare cut's tip. */
 export const transitionLabels = {
   add: () => labelText('transition.add'),
-  remove: () => labelText('transition.remove'),
   /** Why a cut can't take one: the tip of its marker. */
   noRoom: () =>
     t({
@@ -144,34 +142,23 @@ export function pickTransition(clipId: string) {
 
 /**
  * Add transition (⌘T, a cut's +, a clip's menu): from clip `clipId` into the next, a dissolve of half a second or the
- * longest that fits, unless the type (`effect`) or the length (`durationUs`, held within the footage on the frame
- * grid) is given. A cut that has one already selects it. Then the new one is selected, and focus on a block moves
- * to its cut.
+ * longest that fits, on the frame grid. A cut that has one already selects it. Then the new one is selected, and
+ * focus on a block moves to its cut.
  */
-export function addTransition(clipId: string, options: { effect?: ContribId; durationUs?: number } = {}) {
+export function addTransition(clipId: string) {
   keyBurst.after(() => {
     const project = editable();
     const i = project ? cutIndex(project, clipId) : -1;
     if (!project || i < 0) return;
     if (project.timeline.main[i].transitionOut) return pickTransition(clipId);
-    const fps = project.settings.fps;
-    const ops = addTransitionOps(project, i, fps);
-    const op = ops[0];
-    if (op?.type !== 'setTransition' || !op.transition) return noRoomToast();
-    const effect = options.effect ?? TRANSITION_DISSOLVE;
-    const durationUs =
-      options.durationUs === undefined
-        ? op.transition.durationUs
-        : transitionLengthUs(options.durationUs, maxTransitionUs(project, i), fps);
+    const ops = addTransitionOps(project, i, project.settings.fps);
+    if (ops.length === 0) return noRoomToast();
     const { before, after } = cutLabels(project, i);
-    const added =
-      effect === TRANSITION_DISSOLVE
-        ? t({ id: 'transition.added', message: `Added a dissolve between ${before} and ${after}` })
-        : t({
-            id: 'transition.addedNamed',
-            message: `Added a transition between ${before} and ${after}`,
-            comment: 'Screen-reader note; {before} and {after} are the clips’ names',
-          });
+    const added = t({
+      id: 'transition.added',
+      message: `Added a dissolve between ${before} and ${after}`,
+      comment: 'Screen-reader note; {before} and {after} are the clips’ names',
+    });
     const note = replacedNote(fadesReplaced(project.timeline.main, i));
     const said = note
       ? t({
@@ -180,7 +167,7 @@ export function addTransition(clipId: string, options: { effect?: ContribId; dur
           comment: 'Screen-reader note: {added} says what went in, {note} which fades it replaced',
         })
       : added;
-    commit('transition.add', [transitionOp(clipId, { effect, durationUs, params: {} })], said, () => {
+    commit('transition.add', ops, said, () => {
       useSelection.getState().select(transitionSelection(clipId));
       if (blockFocused()) useTimelineFocus.getState().focus(cutId(clipId), true);
     });
@@ -202,39 +189,6 @@ export function removeTransition(clipId: string) {
   });
 }
 
-/**
- * Change transition (`transition-set`): clip `clipId`'s transition with a new type (its settings start from the
- * new type's defaults), length (held within the footage on the frame grid) or settings; `reset` keys go back to their
- * defaults. One undo step.
- */
-export function changeTransition(
-  clipId: string,
-  change: { effect?: ContribId; durationUs?: number; params?: Record<string, ParamValue>; reset?: string[] },
-) {
-  keyBurst.after(() => {
-    const project = editable();
-    const i = project ? cutIndex(project, clipId) : -1;
-    const was = i >= 0 ? project!.timeline.main[i].transitionOut : undefined;
-    if (!project || !was) return;
-    const retyped = change.effect !== undefined && change.effect !== was.effect;
-    const params: Record<string, ParamValue> = { ...(retyped ? {} : was.params), ...change.params };
-    for (const key of change.reset ?? []) delete params[key];
-    const durationUs =
-      change.durationUs === undefined
-        ? was.durationUs
-        : transitionLengthUs(change.durationUs, maxTransitionUs(project, i), project.settings.fps);
-    if (durationUs === 0) return noRoomToast();
-    const lengthOnly = change.durationUs !== undefined && !retyped && !change.params;
-    const label = lengthOnly ? 'transition.length.undo' : 'transition.change.undo';
-    const { before, after } = cutLabels(project, i);
-    commit(
-      label,
-      [transitionOp(clipId, { effect: change.effect ?? was.effect, durationUs, params })],
-      t({ id: 'transition.changed', message: `Changed the transition between ${before} and ${after}` }),
-    );
-  });
-}
-
 /** Enter on a cut: its transition is selected; a bare cut with room for one gets one; one without says why. */
 export function enterCut(project: Project, clipId: string) {
   const i = cutIndex(project, clipId);
@@ -245,10 +199,10 @@ export function enterCut(project: Project, clipId: string) {
 }
 
 /**
- * The cut nearest `us` (the clip before it, by index): a binary search over the clips' ends. -1 with fewer than 2
- * clips.
+ * The clip before the cut nearest `us`, by index: a binary search over the clips' ends. -1 with fewer than 2 clips.
+ * (`model/dropOps`' `nearestCut` is where a dropped clip goes, the video's start and end included.)
  */
-export function nearestCut(index: MainIndex, us: number): number {
+export function clipBeforeNearestCut(index: MainIndex, us: number): number {
   const cuts = index.ends.length - 1;
   if (cuts < 1) return -1;
   let lo = 0;

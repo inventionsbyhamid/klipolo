@@ -45,7 +45,7 @@ export function useCommands(): Command[] {
     const { undo, redo } = useProject.getState();
     const selectedItem = selectedId ? findItem(project, selectedId) : null;
     const selectedClip = selectedId && !selectedItem ? findClip(project, selectedId) : null;
-    // Delete with a transition selected removes it (`useTransitionCommands`' Remove transition).
+    // Delete with a transition selected removes it (Remove transition, one undo step).
     const transitionOf = transitionClipId(selectedId);
     const selectedTransition = transitionOf !== null && !!findClip(project, transitionOf)?.transitionOut;
     // A layer on a locked track can't be deleted: the action is unavailable rather than failing with a toast.
