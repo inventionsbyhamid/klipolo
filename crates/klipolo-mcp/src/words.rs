@@ -83,7 +83,7 @@ pub const TITLE_CARD_WORDS: &str = "makeTitleCard: a title card needs the person
 Ask the person to make it there.";
 /// Additions that, checked again before they apply, take something away. Never expected: the compiler proposes those.
 pub const REMOVES: &str = "Klipolo found this would take something out of the edit, so it was not applied. Nothing \
-changed.";
+changed. Ask the person to make this change in Klipolo.";
 pub const PUSHES_OUT: &str = "Klipolo can't make room in its undo history for this without dropping one of the \
 person's steps. Ask the person first.";
 /// A redo the person could take waits: any change of the app's would drop it.

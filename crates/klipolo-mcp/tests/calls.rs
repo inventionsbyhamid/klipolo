@@ -509,6 +509,11 @@ fn agent_words_are_exact() {
     );
     assert_eq!(NOTHING_TO_UNDO, "There is nothing of yours to undo.");
     assert_eq!(
+        REMOVES,
+        "Klipolo found this would take something out of the edit, so it was not applied. Nothing changed. Ask the \
+         person to make this change in Klipolo."
+    );
+    assert_eq!(
         PACED,
         "Klipolo is pacing calls from {client}. Wait {wait}, then try again."
     );
