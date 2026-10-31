@@ -37,7 +37,7 @@ use serde_json::{Map, Value, json};
 use args::{Args, kind};
 pub use error::{Problem, ToolError};
 pub use media::{PictureSize, Position, TextPreset};
-use schema::{boolean, list, nullable_seconds, nullable_words, object, seconds, string, words};
+use schema::{boolean, list, nullable_number, nullable_words, object, seconds, string, words};
 
 /// One tool call as the model made it, whichever provider ran the model: its adapter maps the provider's call into
 /// this.
@@ -317,7 +317,7 @@ const TOOLS: &[Tool] = &[
         parameters: || {
             vec![(
                 "minPauseSec",
-                nullable_seconds(&format!(
+                nullable_number(&format!(
                     "Pauses longer than this many seconds go, from {} to {}. Null when the person gave no length.",
                     PAUSE_SECS.start(),
                     PAUSE_SECS.end()

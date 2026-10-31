@@ -10,8 +10,7 @@ use std::ops::RangeInclusive;
 use klipolo_model::media::music::MUSIC_VOLUME;
 
 use super::schema::{
-    Word, list, nullable_boolean, nullable_number, nullable_seconds, nullable_words, seconds,
-    string, words,
+    Word, list, nullable_boolean, nullable_number, nullable_words, seconds, string, words,
 };
 use super::{Tool, ToolCall};
 
@@ -143,14 +142,14 @@ impl Word for PictureSize {
 fn at_sec() -> (&'static str, serde_json::Value) {
     (
         "atSec",
-        nullable_seconds("When it starts, timeline seconds. Null for the playhead."),
+        nullable_number("When it starts, timeline seconds. Null for the playhead."),
     )
 }
 
 fn duration_sec(default_secs: f64) -> (&'static str, serde_json::Value) {
     (
         "durationSec",
-        nullable_seconds(&format!("How long it shows. Null for {default_secs} s.")),
+        nullable_number(&format!("How long it shows. Null for {default_secs} s.")),
     )
 }
 
@@ -178,7 +177,7 @@ pub(super) const ADD_MUSIC: Tool = Tool {
             ),
             (
                 "atSec",
-                nullable_seconds(
+                nullable_number(
                     "Where it starts. Null for the playhead; 0.0 for background music.",
                 ),
             ),
