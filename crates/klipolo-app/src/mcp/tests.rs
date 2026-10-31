@@ -368,12 +368,16 @@ fn host_proposal_fills_the_chat_slot_and_names_the_client() {
     ));
     let rename_by = |client| from_app(&rename("Theirs"), client);
     assert_eq!(
-        r.host.apply("Example Client", base, &rename_by("Example Client")),
+        r.host
+            .apply("Example Client", base, &rename_by("Example Client")),
         Err(HostError::Moved)
     );
     assert_eq!(r.host.undo_own("Example Client"), Err(HostError::Moved));
     assert_eq!(r.propose("Example Client", None), Err(HostError::Moved));
-    assert_eq!(r.propose("Example Client", Some(&id)), Err(HostError::Moved));
+    assert_eq!(
+        r.propose("Example Client", Some(&id)),
+        Err(HostError::Moved)
+    );
     assert_eq!(r.project().name, "Space station Q&A");
     // Cursor's next proposal takes its place only in place of the one it names.
     assert_eq!(r.propose("Example Client", None), Err(HostError::Moved));
