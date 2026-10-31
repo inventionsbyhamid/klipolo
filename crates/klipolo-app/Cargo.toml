@@ -16,6 +16,8 @@ path = "src/lib.rs"
 tauri-build = { version = "=2.7.1", features = [] }
 
 [dependencies]
+# A new take's auto zoom: its clicks planned into Auto zoom items as the engine plans them (`zooms`).
+klipolo-cursor = { path = "../klipolo-cursor" }
 klipolo-engine = { path = "../klipolo-engine" }
 # The bundled fonts' folder, configured once for the engine at launch.
 klipolo-fonts = { path = "../klipolo-fonts" }

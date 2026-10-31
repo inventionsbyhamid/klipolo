@@ -10,6 +10,9 @@
 //! 4. The clip is the whole take, last on the main track, its camera mirrored as "Mirror my camera" was (`clip_for`).
 //! 5. `Imported { project }` goes to the take's journal and its `imported` mark is written.
 //!
+//! Then its clicks get their auto zoom as a second step, "Add auto zoom" (`zoom`), unless the take was in the project
+//! already: zooms are never added twice.
+//!
 //! The person is told how the take ended when nothing said it already (`Done.note`), then the recorder's notes, then the
 //! import's own (`recording_from` leaves out its repeats).
 
@@ -31,6 +34,7 @@ use super::destination::{self, Day, Destination};
 use super::env::Done;
 use super::setup::{self, Files};
 use super::types::TakeImport;
+use super::zoom::zoom_take;
 use crate::project::{ProjectSessionState, build_and_apply, snapshot_now};
 
 /// The step's label: "Add recording".
@@ -39,9 +43,13 @@ pub(super) const LABEL: &str = "undo.record";
 /// A take in its project.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Landed {
+    /// The project's id.
+    pub(super) project: String,
     pub(super) recording_id: String,
     /// Its clip on the main track.
     pub(super) clip_id: String,
+    /// Added now (false: the take was in its project already).
+    pub(super) added: bool,
     pub(super) notes: Vec<CodedError>,
 }
 
@@ -73,7 +81,7 @@ pub(super) fn import_take(
         .map_err(|e| ImportError::Said(Said::Coded(e)))?;
     let recording = imported.recording;
     let project = destination::open_for(sessions, dir, to)?;
-    let clip_id = add(
+    let (clip_id, added) = add(
         sessions,
         &project,
         imported.assets,
@@ -92,21 +100,23 @@ pub(super) fn import_take(
         }
     }
     Ok(Landed {
+        project,
         recording_id: recording.id,
         clip_id,
+        added,
         notes: all,
     })
 }
 
 /// The step in `project`, unless the take is in it already: its clip's id either way (empty when the person has
-/// deleted that clip since).
+/// deleted that clip since), and whether the step was made now.
 fn add(
     sessions: &ProjectSessionState,
     project: &str,
     assets: Vec<Asset>,
     recording: &Recording,
     mirror: bool,
-) -> Result<String, Said> {
+) -> Result<(String, bool), Said> {
     let clip = clip_for(recording, mirror);
     let clip_id = clip.id.clone();
     let mut there = None;
@@ -136,9 +146,9 @@ fn add(
                 take = recording.id,
                 "recorder: the take is in its project already"
             );
-            clip_id
+            (clip_id, false)
         }
-        None => clip_id,
+        None => (clip_id, true),
     })
 }
 
@@ -201,9 +211,10 @@ pub(super) struct Landing<'a> {
     pub(super) probe: &'a mut dyn FnMut(&Path, &str) -> Result<Asset, String>,
 }
 
-/// Lands `done` (`import_take`): what the page hears as `recorder-imported`, or the note it hears instead, a
-/// `capture.*` code (the take's files stay in its folder either way). A take recorded on a fallback encoder lets the
-/// probe's report go, so the next opening of the Record dialog measures again.
+/// Lands `done` (`import_take`), then adds its auto zoom (`zoom_take`) when it was added now: what the page hears as
+/// `recorder-imported`, or the note it hears instead, a `capture.*` code (the take's files stay in its folder either
+/// way). A take that landed but whose zooms the project refused is still landed, with none. A take recorded on a
+/// fallback encoder lets the probe's report go, so the next opening of the Record dialog measures again.
 pub(super) fn land(
     sessions: &ProjectSessionState,
     done: &Done,
@@ -219,6 +230,19 @@ pub(super) fn land(
         tracing::warn!(take = done.id, ?error, "recorder: the take didn't land");
         not_landed(error)
     })?;
+    let zooms = if landed.added {
+        let (project, take, clip) = (&landed.project, &landed.recording_id, &landed.clip_id);
+        zoom_take(sessions, project, take, clip).unwrap_or_else(|said| {
+            tracing::warn!(
+                take = done.id,
+                ?said,
+                "recorder: the take landed without its auto zoom"
+            );
+            0
+        })
+    } else {
+        0
+    };
     if let Some(files) = with.files {
         setup::forget_stale_probe(files, &landed.notes);
     }
@@ -231,7 +255,7 @@ pub(super) fn land(
         clip_id: landed.clip_id,
         snapshot,
         notes,
-        zooms: 0,
+        zooms,
     })
 }
 
