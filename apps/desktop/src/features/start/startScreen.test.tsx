@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectRow } from '../../bindings/ProjectRow';
@@ -85,11 +85,13 @@ describe('StartScreen', () => {
     renderWithProviders(<StartScreen onRecord={() => undefined} />);
     const main = screen.getByRole('main', { name: 'Your projects' });
     expect(within(main).getByRole('heading', { name: 'Your projects' })).toBeInTheDocument();
-    // Loading: a spinner and one line.
-    expect(within(main).getByRole('status')).toHaveTextContent('Loading your projects');
-    expect(main.querySelector('.spinner')).not.toBeNull();
     expect(invoke).toHaveBeenCalledWith('projects_recent', undefined);
-    // The header's two actions are there from the start.
+    // For a moment only the title: a list that lands by then shows at once, with nothing on the way.
+    expect(within(main).queryByRole('status')).toBeNull();
+    expect(within(main).queryAllByRole('button')).toEqual([]);
+    // Then loading: a spinner and one line, with the header's two actions.
+    expect(await within(main).findByRole('status')).toHaveTextContent('Loading your projects');
+    expect(main.querySelector('.spinner')).not.toBeNull();
     expect(within(main).getByRole('button', { name: 'New project' })).toBeInTheDocument();
     expect(within(main).getByRole('button', { name: 'Record your screen' })).toBeInTheDocument();
 
@@ -228,12 +230,27 @@ describe('StartScreen', () => {
     vi.mocked(bridge.openProject).mockRejectedValue(new Error("That project isn't there any more."));
     renderWithProviders(<StartScreen />);
     await waitFor(() => expect(cards()).toHaveLength(3));
-    await userEvent.click(card('Kiln vlog'));
+    act(() => card('Kiln vlog').focus());
+    await userEvent.keyboard('{Enter}');
     // The store says why; the list is read again, quietly, and the card that went is gone.
     await waitFor(() => expect(cards()).toHaveLength(2));
     expect(invoke).toHaveBeenCalledTimes(2);
     expect(useToasts.getState().toasts.map((toast) => toast.text)).toEqual(["That project isn't there any more."]);
     expect(screen.queryByText('Loading your projects')).not.toBeInTheDocument();
+    // The focus went with the card: it goes on to the first card, not to the page.
+    expect(card('Studio tour')).toHaveFocus();
+  });
+
+  it('a_card_that_still_cannot_be_opened_keeps_the_focus', async () => {
+    recentAnswers(ROWS);
+    vi.mocked(bridge.openProject).mockRejectedValue(new Error("Klipolo couldn't read this project."));
+    renderWithProviders(<StartScreen />);
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    act(() => card('Kiln vlog').focus());
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(card('Kiln vlog')).not.toHaveAttribute('aria-busy'));
+    expect(card('Kiln vlog')).toHaveFocus();
   });
 
   it('new_project_creates_untitled_with_three_formats', async () => {
@@ -264,6 +281,42 @@ describe('StartScreen', () => {
     await waitFor(() => expect(cards()).toHaveLength(3));
     expect(screen.queryByRole('button', { name: 'Record your screen' })).toBeNull();
     expect(screen.getByRole('button', { name: 'New project' })).toBeInTheDocument();
+  });
+
+  it('a_quick_empty_list_shows_its_buttons_only_under_the_invitation', async () => {
+    recentAnswers([]);
+    renderWithProviders(<StartScreen onRecord={() => undefined} />);
+    const head = screen.getByRole('main', { name: 'Your projects' }).querySelector('header')!;
+    // Watched from the first render: the buttons never show in the header, so nothing moves when the list is empty.
+    const shownInHead: string[] = [];
+    const watch = new MutationObserver(() =>
+      shownInHead.push(...[...head.querySelectorAll('button')].map((b) => b.textContent ?? '')),
+    );
+    watch.observe(head, { childList: true, subtree: true });
+    expect(head.querySelectorAll('button')).toHaveLength(0);
+    await screen.findByRole('heading', { name: 'No projects yet' });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    watch.disconnect();
+    expect(shownInHead).toEqual([]);
+    expect(head.querySelectorAll('button')).toHaveLength(0);
+    expect(screen.getAllByRole('button', { name: 'New project' })).toHaveLength(1);
+  });
+
+  it('a_slow_empty_list_takes_the_focus_with_the_buttons', async () => {
+    let answer!: (rows: ProjectRow[]) => void;
+    invoke.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    renderWithProviders(<StartScreen onRecord={() => undefined} />);
+    await screen.findByRole('status');
+    // The person is on Record your screen in the header while the list is read.
+    await userEvent.tab();
+    await userEvent.tab();
+    expect(screen.getByRole('button', { name: 'Record your screen' })).toHaveFocus();
+    answer([]);
+    await screen.findByRole('heading', { name: 'No projects yet' });
+    // The same button, under the invitation now, keeps the focus.
+    const record = screen.getByRole('button', { name: 'Record your screen' });
+    expect(record.closest('.start-empty')).not.toBeNull();
+    expect(record).toHaveFocus();
   });
 
   it('empty_library_invites_new_or_record', async () => {
@@ -340,6 +393,7 @@ describe('StartScreen', () => {
     let answer!: (rows: ProjectRow[]) => void;
     invoke.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
     const first = renderWithProviders(<StartScreen onRecord={() => undefined} />);
+    await screen.findByRole('status');
     check('loading', 1);
     answer(ROWS);
     await waitFor(() => expect(cards()).toHaveLength(3));

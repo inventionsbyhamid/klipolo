@@ -7,6 +7,13 @@ import { newProject, useProject } from '../../state/project';
 import { ProjectCard } from './ProjectCard';
 import './start.css';
 
+/**
+ * How long the screen shows only its title while the list is read. A list that lands by then shows at once, so the
+ * header's buttons never show only to move under "No projects yet"; a slower one shows the loading line, and the
+ * buttons, after it.
+ */
+const QUIET_MS = 200;
+
 /** The start screen's own icons, on the design's 24 px grid (1.8 px stroke, `currentColor`). */
 const ICONS = {
   // A ring with a filled 8 px dot: in the button's ink, never red.
@@ -38,6 +45,21 @@ type Load =
   | { status: 'ready'; rows: ProjectRow[] }
   | { status: 'failed'; retrying: boolean };
 
+/**
+ * Where the focus was in the screen as the list landed, to give it back if what had it is gone: one of the actions
+ * (by its place in their row, as they move under the invitation when the list is empty) or anything else (Try again, a
+ * card that went), which hands it to the first card, else New project.
+ */
+type FocusPlace = { action: number } | 'card';
+
+/** What has the focus in `main`, as a `FocusPlace`; null when it is elsewhere. */
+function focusPlace(main: HTMLElement | null): FocusPlace | null {
+  const active = document.activeElement;
+  if (!main || !(active instanceof HTMLElement) || !main.contains(active)) return null;
+  const actions = active.closest('.start-actions');
+  return actions ? { action: [...actions.children].indexOf(active) } : 'card';
+}
+
 interface StartScreenProps {
   /** Record your screen: opens the Record dialog. Without it there is no recorder, and no Record your screen. */
   onRecord?: () => void;
@@ -52,19 +74,18 @@ export function StartScreen({ onRecord }: StartScreenProps) {
   const { t } = useLingui();
   const titleId = useId();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
+  const [quiet, setQuiet] = useState(true);
   const [opening, setOpening] = useState<string | null>(null);
   const mounted = useRef(true);
   const mainRef = useRef<HTMLElement>(null);
-  const tryAgainRef = useRef<HTMLButtonElement>(null);
-  // Try again had the focus when the list landed: it goes to the first card (or New project), not to the page.
-  const refocus = useRef(false);
+  const refocus = useRef<FocusPlace | null>(null);
 
   /** Reads the list; what is shown stays until it lands. */
   const list = useCallback(() => {
     projects.recent().then(
       (rows) => {
         if (!mounted.current) return;
-        refocus.current = tryAgainRef.current !== null && document.activeElement === tryAgainRef.current;
+        refocus.current = focusPlace(mainRef.current);
         setLoad({ status: 'ready', rows });
       },
       () => {
@@ -82,9 +103,24 @@ export function StartScreen({ onRecord }: StartScreenProps) {
   }, [list]);
 
   useEffect(() => {
-    if (!refocus.current || load.status !== 'ready') return;
-    refocus.current = false;
-    mainRef.current?.querySelector<HTMLElement>('.start-grid .start-card, .start-empty .btn-primary')?.focus();
+    const timer = setTimeout(() => setQuiet(false), QUIET_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // What had the focus went with the list's change (Try again, a card that went, a button that moved): it goes on to
+  // its place in the new list, not to the page. Focus that stayed on something stays.
+  useEffect(() => {
+    const place = refocus.current;
+    if (!place || load.status !== 'ready') return;
+    refocus.current = null;
+    const main = mainRef.current;
+    if (!main || (document.activeElement && document.activeElement !== document.body)) return;
+    const target =
+      place === 'card'
+        ? (main.querySelector<HTMLElement>('.start-grid .start-card') ??
+          main.querySelector<HTMLElement>('.start-actions .btn-primary'))
+        : main.querySelector('.start-actions')?.children[place.action];
+    if (target instanceof HTMLElement) target.focus();
   }, [load]);
 
   // Try again stays where it is, inert with a spinner while the list is asked for again, so the focus stays on it.
@@ -128,6 +164,7 @@ export function StartScreen({ onRecord }: StartScreenProps) {
     </div>
   );
   const empty = load.status === 'ready' && load.rows.length === 0;
+  const waiting = load.status === 'loading' && quiet;
   const nowMs = Date.now();
 
   return (
@@ -138,9 +175,9 @@ export function StartScreen({ onRecord }: StartScreenProps) {
             {t({ id: 'start.title', message: 'Your projects' })}
           </h1>
           {/* With no projects the buttons sit under the invitation instead. */}
-          {!empty && actions}
+          {!empty && !waiting && actions}
         </header>
-        {load.status === 'loading' && (
+        {load.status === 'loading' && !quiet && (
           <div className="start-note" role="status">
             <span className="spinner" aria-hidden />
             {t({ id: 'start.loading', message: 'Loading your projects' })}
@@ -156,7 +193,6 @@ export function StartScreen({ onRecord }: StartScreenProps) {
               })}
             </p>
             <Button
-              ref={tryAgainRef}
               variant="secondary"
               aria-disabled={retrying || undefined}
               aria-busy={retrying || undefined}
