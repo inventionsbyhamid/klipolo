@@ -2,7 +2,7 @@ import { useLingui } from '@lingui/react/macro';
 import { useMemo } from 'react';
 import type { Clip } from '../../bindings/Clip';
 import { labelText } from '../../lib/labels';
-import { findItem } from '../../lib/timeline';
+import { findItem, hasOwnSound } from '../../lib/timeline';
 import { useClipboard } from '../../state/clipboard';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
@@ -21,9 +21,9 @@ const NO_CLIPS: Clip[] = [];
 
 /**
  * The timeline's commands: split, trims to the playhead, nudges, the clipboard, track moves, attaching
- * and a sound layer's mute, plus `useTimelineNavCommands`' (selection steps, edit points, zoom, snapping). Each has a
- * stable id, is `enabled` only when it can act on the selection, and runs the same code from its shortcut, the player
- * bar and the block menu. `useCommands` merges them.
+ * and a sound or video layer's mute, plus `useTimelineNavCommands`' (selection steps, edit points, zoom, snapping).
+ * Each has a stable id, is `enabled` only when it can act on the selection, and runs the same code from its shortcut,
+ * the player bar and the block menu. `useCommands` merges them.
  */
 export function useTimelineCommands(): Command[] {
   const { t } = useLingui();
@@ -44,7 +44,13 @@ export function useTimelineCommands(): Command[] {
     const block = clip || found !== null;
     // A layer on a locked track can be copied, nothing more.
     const layer = found && !found.track.locked ? found : null;
-    const sound = layer?.item.content.type === 'audio' ? layer.item.content : null;
+    // A sound layer, or a video layer whose file has sound: its own switch mutes it. Named as it stands even on a
+    // locked track, where it is off.
+    const content = found?.item.content;
+    const mutable =
+      found && hasOwnSound(project, found.item) && (content?.type === 'audio' || content?.type === 'video')
+        ? content
+        : null;
     const ours = clipboard.projectId === project.id;
     // The commands' names are their undo labels, in the language shown.
     const label = {
@@ -53,7 +59,7 @@ export function useTimelineCommands(): Command[] {
       up: labelText('undo.trackUp'),
       down: labelText('undo.trackDown'),
       attach: labelText(found?.item.attach ? 'undo.attach.free' : 'undo.attach.keep'),
-      mute: labelText(muteLabel(!sound?.muted, 'sound')),
+      mute: labelText(muteLabel(!mutable?.muted, mutable?.type === 'video' ? 'video' : 'sound')),
     };
 
     const edits: Command[] = [
@@ -206,8 +212,8 @@ export function useTimelineCommands(): Command[] {
             comment: 'Comma-separated search words for Mute sound and Unmute sound',
           }),
         ),
-        // A sound layer's own switch, as the inspector's Mute: its volume stays for when it plays again.
-        enabled: sound !== null,
+        // A sound or video layer's own switch, as the inspector's Mute: its volume stays for when it plays again.
+        enabled: layer !== null && mutable !== null,
         run: () => toggleSoundMute(id),
       },
     ];

@@ -7,7 +7,7 @@ import type { TrackKind } from '../../../bindings/TrackKind';
 import type { TrackTarget } from '../../../bindings/TrackTarget';
 import { newClipFor, newId } from '../../../lib/defaults';
 import { FORMAT_SIZE } from '../../../lib/layout';
-import { audioItem, IMAGE_US, imageRect, layoutFor, placeable } from '../../../lib/placement';
+import { audioItem, IMAGE_US, imageRect, layoutFor, placeable, videoLayerLayout } from '../../../lib/placement';
 import { snapToFrame, US_PER_SEC } from '../../../lib/time';
 import { itemSpans, mainIndex } from './index';
 
@@ -49,8 +49,9 @@ export function nearestCut(main: Clip[], atUs: number): number {
  * before, for its own tests.
  *
  * - A video on the main track is a clip inserted at that cut.
- * - Anywhere else a video is a full-canvas video layer (the engine contains it) and an image a 5 s layer, both
- *   attached to the clip under them; on the main track an image goes at the cut's time, exactly.
+ * - Anywhere else a video is a video layer 40 % of the frame in its bottom right corner (`videoLayerLayout`), and an
+ *   image a 5 s layer, both attached to the clip under them; on the main track an image goes at the cut's time,
+ *   exactly.
  * - A sound is a free audio layer, at the cut's time when dropped on the main track.
  * - A layer goes on the track it was dropped on when that track takes it (its kind, shown, unlocked), else wherever it
  *   fits: a video dropped on a sound lane is a picture layer.
@@ -147,7 +148,7 @@ function itemFor(project: Project, asset: Asset, startUs: number): Item {
   return {
     ...base,
     durationUs: asset.durationUs,
-    layout: layoutFor({ x: 0, y: 0, w: 1, h: 1 }),
+    layout: videoLayerLayout(asset, project.settings.primaryFormat),
     content: { type: 'video', assetId: asset.id, sourceInUs: 0, speed: 1, volume: 1, muted: false },
   };
 }
