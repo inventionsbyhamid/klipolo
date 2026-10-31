@@ -40,7 +40,9 @@ pub struct Applied {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HostError {
     NoProject,
-    /// The revision, or the open proposal, isn't the one the caller saw.
+    /// The revision, or the open proposal, isn't the one the caller saw; or, for `apply` and `undo_own`, a proposal
+    /// waits that isn't the caller's own (Klipolo's chat's or another app's). The caller looks at `open_proposal` again
+    /// to tell which.
     Moved,
     /// The project was made by a newer Klipolo.
     ReadOnly,

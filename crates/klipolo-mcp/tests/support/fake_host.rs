@@ -58,12 +58,19 @@ pub struct State {
     pub library: Library,
     /// The person's playhead and selection.
     pub view: View,
+    /// What the snapshot gives as the person's typed message. Always empty in the app; set here to show a call never
+    /// reads it.
+    pub message: String,
+    /// Each file's analysis where it isn't done.
+    pub analysis: HashMap<String, AnalysisState>,
     pub slot: Option<Slot>,
     /// What became of each client's latest proposal once it no longer waits.
     pub outcomes: HashMap<String, ProposalOutcome>,
     pub next_proposal: u64,
     pub moments: Vec<(String, Vec<Moment>)>,
     pub started: Vec<(String, Job)>,
+    /// Each batch an app committed, as it came.
+    pub applied: Vec<(String, Transaction)>,
     /// Each list of connected apps the server told.
     pub connected: Vec<Vec<String>>,
     /// A Meta key or an access code, and enough relay credit.
@@ -132,11 +139,14 @@ impl FakeHost {
                 turns,
                 library: Library::default(),
                 view: View::default(),
+                message: String::new(),
+                analysis: HashMap::new(),
                 slot: None,
                 outcomes: HashMap::new(),
                 next_proposal: 1,
                 moments: Vec::new(),
                 started: Vec::new(),
+                applied: Vec::new(),
                 connected: Vec::new(),
                 credit: true,
                 usd_per_job: 0.04,
@@ -165,6 +175,15 @@ impl FakeHost {
 
     pub fn set_view(&self, view: View) {
         self.state().view = view;
+    }
+
+    /// The project as `change` leaves it, opened afresh (no history), before the test starts.
+    pub fn change_project(&self, change: impl FnOnce(&mut Project)) {
+        let mut s = self.state();
+        let doc = s.doc.as_mut().expect("a project");
+        let mut project = doc.project().clone();
+        change(&mut project);
+        doc.replace(project).expect("a valid project");
     }
 
     /// The person edits by hand: one step they made. A waiting proposal is dropped.
@@ -257,13 +276,16 @@ impl Host for FakeHost {
         let doc = s.doc.as_ref()?;
         let project = doc.shared();
         let inputs = Inputs {
-            message: String::new(),
+            message: s.message.clone(),
             view: s.view,
             refs: Refs::of(&project),
             speech: s.speech.clone(),
             scenes: s.scenes.clone(),
             analysis: (project.assets.iter())
-                .map(|a| (a.id.clone(), AnalysisState::Done))
+                .map(|a| {
+                    let state = s.analysis.get(&a.id).copied();
+                    (a.id.clone(), state.unwrap_or(AnalysisState::Done))
+                })
                 .collect(),
             library: s.library.clone(),
         };
@@ -308,6 +330,7 @@ impl Host for FakeHost {
                 if revision != base {
                     s.drop_waiting("The project changed.");
                 }
+                s.applied.push((client.to_owned(), tx.clone()));
                 Ok(Applied { revision })
             }
             Err(Refused::PushesOut(_)) => Err(HostError::PushesOut),
