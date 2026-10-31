@@ -112,9 +112,8 @@ pub trait Host: Send + Sync + 'static {
     /// after_point: false })`, `shares` the apps' shares of the history limits, so an app's step never pushes out the
     /// person's steps (`PushesOut`) or holds more than its share (`OverShare`). Before that, `RedoWaits` when the redo
     /// holds a step someone else made (`Document::redo_steps_where`): the commit would drop it. A commit changes the
-    /// revision, so it
-    /// drops the open proposal (then `client`'s own), as any revision change does, and says which (`Applied::dropped`):
-    /// the caller proposes its removals again only when it was the one it joined.
+    /// revision, so it drops the open proposal (then `client`'s own), as any revision change does, and says which
+    /// (`Applied::dropped`): the caller proposes its removals again only when it was the one it joined.
     fn apply(&self, client: &str, base: u64, tx: &Transaction) -> Result<Applied, HostError>;
 
     /// Puts `proposal` (what `calls` compiled to on `base`) in the chat panel for the person to apply or discard, as
