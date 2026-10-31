@@ -10,7 +10,7 @@ import type { Track } from '../bindings/Track';
 import { activeIntlLocale } from '../i18n';
 import { agentName } from './agentNames';
 import { contribLabel, isInstalled, isScene } from './contrib';
-import { firstAsset, primarySource } from './recording';
+import { firstAsset, primarySource, soundSources } from './recording';
 import { formatNumber } from './format';
 import { showsPictures, soloOf } from './solo';
 import { US_PER_SEC } from './time';
@@ -161,6 +161,14 @@ export function assetById(project: Pick<Project, 'assets'>, id: string | null | 
 export function hasOwnSound(project: Pick<Project, 'assets'>, item: Item): boolean {
   const content = item.content;
   return content.type === 'audio' || (content.type === 'video' && !!assetById(project, content.assetId)?.hasAudio);
+}
+
+/** Whether main clip `clip` has sound for its Volume and Mute: its file's, or its recording's sound sources. */
+export function clipHasSound(project: Sources, clip: Clip): boolean {
+  const source = clip.source;
+  if (source.type === 'asset') return !!assetById(project, source.id)?.hasAudio;
+  const recording = project.recordings.find((r) => r.id === source.id);
+  return !!recording && soundSources(project, recording).length > 0;
 }
 
 /**

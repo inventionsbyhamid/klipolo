@@ -27,7 +27,7 @@ use klipolo_model::time::{US_PER_SEC, Us};
 pub use background::GRADIENT_ANGLE_DEG;
 pub use captions::CaptionLayer;
 use clip::clip_layers;
-pub use clip::follow_crop_for;
+pub use clip::{fill_crop, follow_crop_for};
 pub use context::{MediaCopy, MediaMap, PlanContext};
 pub use cursor::{
     ARROW_PTS, PRESS, RIPPLE_REACH, RIPPLE_US, SHUTTER, cursor_layer, cursor_layer_id, shapes_in,

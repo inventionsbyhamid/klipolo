@@ -162,6 +162,7 @@ fn main() {
             project::project_undo,
             project::project_redo,
             project::project_snapshot,
+            commands::framing::clip_framing,
             project::project_reveal,
             project::projects_recent,
             media::media_import,

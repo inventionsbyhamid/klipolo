@@ -15,7 +15,7 @@ use crate::registry::Registry;
 mod footage;
 
 use footage::main_layers;
-pub use footage::{follow_crop_for, split_seam};
+pub use footage::{fill_crop, follow_crop_for, split_seam};
 
 /// Main clip `i` at `local_us` into it, appended to `out`: its footage and camera (`main_layers`) with its look, the
 /// zoom and its effects, then its fade to black. Inside a transition `local_us` runs past the clip's ends (negative
