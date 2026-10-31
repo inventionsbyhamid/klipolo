@@ -86,6 +86,30 @@ describe('timeline model', () => {
     ]);
   });
 
+  it('lanes_pack_overlays_without_overlap', () => {
+    // Two titles and a sticker over the same seconds, on tracks of their own (Auto placement), and one after them.
+    const p = fixtureProject();
+    const item = p.timeline.tracks[0].items[0];
+    const at = (id: string, startUs: number) => ({ ...item, id, startUs, durationUs: 3_000_000 });
+    p.timeline.tracks = [
+      { ...p.timeline.tracks[0], id: 'o0', items: [at('title', 1_000_000), at('later', 5_000_000)] },
+      { ...p.timeline.tracks[0], id: 'o1', items: [at('lower', 2_000_000)] },
+      { ...p.timeline.tracks[0], id: 'o2', items: [at('sticker', 3_000_000)] },
+    ];
+    const packing = packRows(p.timeline.tracks);
+    expect(packing.rows).toBe(3);
+    // In each row, every layer ends before the next starts.
+    for (const line of packing.lines)
+      line.items.forEach((a, i) => {
+        const b = line.items[i + 1];
+        if (b) expect(a.startUs + a.durationUs).toBeLessThanOrEqual(b.startUs);
+      });
+    // The three that overlap each have a row; the later one shares one.
+    expect(new Set(['title', 'lower', 'sticker'].map((id) => packing.row.get(id))).size).toBe(3);
+    expect(packing.row.get('later')).toBeDefined();
+    expect(packing.overflow).toEqual([]);
+  });
+
   it('merges per packed row, so no band covers a block in its row, a selected one included', () => {
     // A logo on the lower track from 10:05 to 50:00; 3 s titles every 20 s on the track above.
     const p = fixtureProject();

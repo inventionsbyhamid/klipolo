@@ -40,6 +40,7 @@ fn video() -> Asset {
         rotation: None,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
     }
 }
 

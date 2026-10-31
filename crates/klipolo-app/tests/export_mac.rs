@@ -52,6 +52,7 @@ fn project(clips: usize) -> Project {
         rotation: Some(info.rotation),
         has_audio: info.has_audio,
         audio_lead_us: Some(info.audio_lead_us),
+        made_with: None,
     };
     let mut p = Project::new("Rosa studio visit");
     p.timeline.main = (0..clips)

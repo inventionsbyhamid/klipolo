@@ -9,7 +9,7 @@ import { registerBurst } from '../../state/bursts';
 import { keepAtClose } from '../../state/commitQueue';
 import { historySteps } from '../../state/project';
 import { toast } from '../../state/toasts';
-import { useBurst } from '../preview/useBurst';
+import { useBurst } from '../../state/useBurst';
 import { announce } from '../timeline/announce';
 import { captionPunctuation, currentLook, lookOps, withChange, type LookChange } from './captionOps';
 import { drain, settleKept, type Queued, type QueuedSpelling } from './pressQueue';

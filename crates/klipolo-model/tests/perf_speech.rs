@@ -30,6 +30,7 @@ pub fn two_hours() -> (Project, Speech) {
         rotation: None,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
     }];
     // 400 clips: every 18 s keeps 15 s, as after silence removal.
     p.timeline.main = (0..400)

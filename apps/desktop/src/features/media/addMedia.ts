@@ -4,17 +4,21 @@ import type { Op } from '../../bindings/Op';
 import type { Project } from '../../bindings/Project';
 import { activeIntlLocale } from '../../i18n';
 import { formatNumber } from '../../lib/format';
-import { formatTime } from '../../lib/time';
 import { keyBurst } from '../../state/keyBurst';
 import { usePlayback } from '../../state/playback';
 import { useSelection } from '../../state/selection';
 import { toast } from '../../state/toasts';
 import { commit, dropOps, editable, type DropTarget } from '../timeline/drops';
+import { addMusic, dropUs, isMusicTarget, layerSaid, placeAt } from './place';
+
+export { isMusicTarget };
 
 /*
  * What adding media to the timeline does, from the library (a row dragged onto the timeline, a row's menu): it reads
- * the project when it runs, after any commit in flight has landed (the timeline's commit queue), builds its ops with
- * `dropOps`, commits them as one undo step through `useProject.apply`, says what it did, and selects what it added.
+ * the project when it runs, after any commit in flight has landed (the timeline's commit queue). A sound or a picture
+ * Rust places (`place.ts`: music that fits the video on the Music lane, else as the "+" places it, on the track it was
+ * let go on); a video goes in by `dropOps` (a clip of the main track, or a layer). One undo step either way, said, and
+ * what it added selected.
  */
 
 /** What an add says once it has gone in: where `name` went. */
@@ -27,19 +31,7 @@ function addedSaid(project: Project, op: Op | undefined, name: string): string {
       comment: 'Screen-reader note; {name} is a file name, {position} a number (1 is the first clip)',
     });
   }
-  if (op?.type !== 'addItem') return '';
-  const time = formatTime(op.item.startUs);
-  return op.item.content.type === 'audio'
-    ? t({
-        id: 'media.added.sound',
-        message: `Added ${name} as a sound at ${time}`,
-        comment: 'Screen-reader note; {name} is a file name, {time} a time in the video, e.g. 1:05',
-      })
-    : t({
-        id: 'media.added.layer',
-        message: `Added ${name} as a layer at ${time}`,
-        comment: 'Screen-reader note; {name} is a file name, {time} a time in the video, e.g. 1:05',
-      });
+  return op?.type === 'addItem' ? layerSaid(op.item, name) : '';
 }
 
 /** Why an add can't happen, as the user (or chat, through the toast) hears it. */
@@ -67,6 +59,9 @@ export function addMedia(assetId: string, target: DropTarget | ((project: Projec
     const asset = project.assets.find((a) => a.id === assetId);
     if (!asset) return toast.info(mediaRefusal.unknown());
     const at = typeof target === 'function' ? target(project) : target;
+    const source = { type: 'asset', id: asset.id } as const;
+    if (asset.kind === 'audio' && isMusicTarget(at)) return void addMusic(source, dropUs(project, at));
+    if (asset.kind !== 'video') return void placeAt([source], at);
     const ops = dropOps(project, asset, at, project.settings.fps);
     if (ops.length === 0) return toast.info(mediaRefusal.tooShort());
     const placed = ops.at(-1);
@@ -94,9 +89,4 @@ export function addToMain(assetId: string) {
 /** Add as layer at playhead: a video or image as a picture layer, attached to the clip there. */
 export function addLayerAtPlayhead(assetId: string) {
   addMedia(assetId, () => ({ lane: 'picture', trackId: null, atUs: usePlayback.getState().playheadUs }));
-}
-
-/** Add sound at playhead: a sound, free of the clips. */
-export function addSoundAtPlayhead(assetId: string) {
-  addMedia(assetId, () => ({ lane: 'sound', trackId: null, atUs: usePlayback.getState().playheadUs }));
 }

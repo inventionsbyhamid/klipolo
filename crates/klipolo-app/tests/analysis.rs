@@ -196,6 +196,7 @@ fn asset(id: &str, kind: AssetKind, file: &Path, seconds: f64) -> Asset {
         rotation: video.then_some(0),
         has_audio: kind != AssetKind::Image,
         audio_lead_us: video.then_some(0),
+        made_with: None,
     }
 }
 

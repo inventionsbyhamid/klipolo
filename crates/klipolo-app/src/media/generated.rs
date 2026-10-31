@@ -207,10 +207,12 @@ async fn save(
     name: String,
     made_with: &str,
 ) -> Result<Asset, MakeError> {
-    let made_with = made_with.to_owned();
+    let maker = made_with.to_owned();
     let (file, width, height) = tokio::task::spawn_blocking(move || {
-        let (width, height) =
-            decoded_size(&png).map_err(|detail| MakeError::Unreadable { made_with, detail })?;
+        let (width, height) = decoded_size(&png).map_err(|detail| MakeError::Unreadable {
+            made_with: maker,
+            detail,
+        })?;
         let file = save_new_png(&folder, &file_slug, &png).map_err(|e| MakeError::Save {
             reason: durable::classify(&e),
             detail: e.to_string(),
@@ -234,6 +236,8 @@ async fn save(
         rotation: None,
         has_audio: false,
         audio_lead_us: None,
+        // Kept with the file in the project: the library groups it under "Made with Muse Image".
+        made_with: Some(made_with.to_owned()),
     })
 }
 

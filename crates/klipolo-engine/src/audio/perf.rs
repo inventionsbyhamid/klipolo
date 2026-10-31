@@ -202,6 +202,7 @@ fn two_hours(mic: &str, system: &str) -> Project {
         fps: if kind == AssetKind::Video { 30.0 } else { 0.0 },
         has_audio,
         audio_lead_us: None,
+        made_with: None,
         rotation: None,
     };
     for r in ["a", "b"] {

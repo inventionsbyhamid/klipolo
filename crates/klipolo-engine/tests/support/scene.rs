@@ -283,6 +283,7 @@ pub fn add_checker_image(p: &mut Project, dir: &std::path::Path, id: &str, layer
         fps: 0.0,
         has_audio: false,
         audio_lead_us: None,
+        made_with: None,
         rotation: None,
     });
     if let ItemContent::Generator { params, .. } = &mut scene_item(p, layer).content {

@@ -4,7 +4,7 @@ use crate::captions::looks::{self, Look};
 use crate::contrib::ContribId;
 use crate::cursor_style::CursorStyle;
 use crate::error::{invalid, not_found, Result};
-use crate::layout::{resolve_rect, BoxN, Layout};
+use crate::layout::{resolve_rect, Layout};
 use crate::messages::code;
 use crate::ops::{CursorTarget, TrackPatch};
 use crate::project::{
@@ -25,39 +25,36 @@ pub(super) fn rename(p: &mut Project, name: &str) -> Result<()> {
 }
 
 /// Replace the settings. When the primary format changes, every layout is re-expressed in the new
-/// primary's coordinates and the old primary keeps its exact rect as an override (if still listed, or if it fills the
-/// frame).
-/// Overrides and caption places for formats that are no longer listed are dropped, except an override that fills the
-/// frame: it is kept, so a layer placed with `Layout::full_frame` (a template) fills a format added later too. The
-/// caption style never changes with the formats.
+/// primary's coordinates and the old primary keeps its exact rect as an override.
+/// A layer's overrides for formats that are no longer listed stay in the file, as the camera's modes and a clip's
+/// framing do: a format listed again finds its layers where they were placed (a title's 9:16 place, a template that
+/// fills the frame). Caption places for formats no longer listed are dropped. The caption style never changes with the
+/// formats.
 pub(super) fn set_settings(p: &mut Project, settings: &Settings) -> Result<()> {
     let (old, new) = (p.settings.primary_format, settings.primary_format);
     let formats = settings.formats.as_slice();
     for track in &mut p.timeline.tracks {
         for item in &mut track.items {
-            rebase_layout(&mut item.layout, old, new, formats);
+            rebase_layout(&mut item.layout, old, new);
         }
     }
     p.captions.place.retain(|f, _| formats.contains(f));
     for camera in p.timeline.main.iter_mut().filter_map(|c| c.camera.as_mut()) {
-        rebase_layout(&mut camera.bubble, old, new, formats);
+        rebase_layout(&mut camera.bubble, old, new);
     }
     p.settings = settings.clone();
     Ok(())
 }
 
-fn rebase_layout(layout: &mut Layout, old: FormatKind, new: FormatKind, formats: &[FormatKind]) {
+/// Re-expresses `layout` from the `old` primary in the `new` one: the new primary's place becomes the rect and the old
+/// rect the old primary's override. Overrides for other formats, listed or not, are left as they are.
+fn rebase_layout(layout: &mut Layout, old: FormatKind, new: FormatKind) {
     if old != new {
         let old_rect = layout.rect;
         layout.rect = resolve_rect(layout, old, new);
         layout.overrides.remove(&new);
-        if formats.contains(&old) || old_rect == BoxN::FULL {
-            layout.overrides.insert(old, old_rect);
-        }
+        layout.overrides.insert(old, old_rect);
     }
-    layout
-        .overrides
-        .retain(|format, rect| formats.contains(format) || *rect == BoxN::FULL);
 }
 
 pub(super) fn set_captions(p: &mut Project, captions: &CaptionSettings) -> Result<()> {

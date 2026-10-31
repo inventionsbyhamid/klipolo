@@ -1,36 +1,63 @@
+import { useLingui } from '@lingui/react/macro';
+import type { KeyboardEvent } from 'react';
 import { CaptionsPanel } from '../features/captions/CaptionsPanel';
+import { MediaList } from '../features/media/MediaList';
 import { useImportMedia } from '../features/media/useImportMedia';
-import type { Asset } from '../bindings/Asset';
-import { formatTime } from '../lib/time';
 import { useCaptionsView } from '../state/captionsView';
-import { useProject } from '../state/project';
+import { useUi, type LibraryTab } from '../state/ui';
 import { Icon } from './Icon';
 
+const TABS: LibraryTab[] = ['clips', 'music', 'sounds', 'images'];
+
 /**
- * The library panel: the project's clips, in the order they came in, and Add files. The other tabs come later. Its
- * Captions tab shows the Captions view in its place (9.17).
+ * The library panel (9.16): the Library and Captions view tabs, Add files, and the filter pills Clips,
+ * Music, Sounds and Images over the files of each (yours first, then Klipolo's pack). The pills scroll sideways in a
+ * narrow panel, with a fade at the right edge. The arrow keys move between them. Its Captions tab shows the Captions
+ * view in its place.
  */
 export function Library() {
-  const assets = useProject((s) => s.snapshot?.project.assets);
-  const clips = assets?.filter((a) => a.kind === 'video');
+  const { t } = useLingui();
+  const tab = useUi((s) => s.libraryTab);
+  const setTab = useUi((s) => s.setLibraryTab);
   const importMedia = useImportMedia();
   const captions = useCaptionsView((s) => s.open);
   const setCaptions = useCaptionsView((s) => s.setOpen);
+  const names: Record<LibraryTab, string> = {
+    clips: t({ id: 'library.tab.clips', message: 'Clips' }),
+    music: t({ id: 'library.tab.music', message: 'Music' }),
+    sounds: t({ id: 'library.tab.sounds', message: 'Sounds' }),
+    images: t({ id: 'library.tab.images', message: 'Images' }),
+  };
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const next = TABS[(TABS.indexOf(tab) + step + TABS.length) % TABS.length];
+    setTab(next);
+    e.currentTarget.querySelector<HTMLElement>(`[data-tab="${next}"]`)?.focus();
+  };
+  const libraryLabel = t({ id: 'library.label', message: 'Library' });
+  const captionsLabel = t({ id: 'library.captions', message: 'Captions' });
   return (
-    <aside className="panel library" aria-label={captions ? 'Captions' : 'Library'} data-view={captions ? 'captions' : 'library'}>
+    <aside
+      className="panel library"
+      aria-label={captions ? captionsLabel : libraryLabel}
+      data-view={captions ? 'captions' : 'library'}
+      data-tab={tab}
+    >
       <div className="panel-head">
         <div className="view-tabs" role="tablist">
           <button className="view-tab" role="tab" aria-selected={!captions} onClick={() => setCaptions(false)}>
-            Library
+            {t({ id: 'library.view', message: 'Library' })}
           </button>
           <button className="view-tab" role="tab" aria-selected={captions} onClick={() => setCaptions(true)}>
-            Captions
+            {captionsLabel}
           </button>
         </div>
         <button
           className="icon-btn"
-          aria-label="Add files"
-          title="Add files (Command O)"
+          aria-label={t({ id: 'library.addFiles', message: 'Add files' })}
+          title={t({ id: 'library.addFiles.tip', message: 'Add files (Command O)' })}
           onClick={() => void importMedia()}
         >
           <Icon name="plus" />
@@ -39,48 +66,34 @@ export function Library() {
       {captions ? (
         <CaptionsPanel />
       ) : (
-        <LibraryBody clips={clips} />
+        <>
+          <div
+            className="pills lib-pills"
+            role="tablist"
+            aria-label={t({ id: 'library.show', message: 'Show' })}
+            onKeyDown={onKeyDown}
+          >
+            {TABS.map((name) => (
+              <button
+                key={name}
+                className="pill"
+                role="tab"
+                data-tab={name}
+                id={`library-tab-${name}`}
+                aria-selected={tab === name}
+                aria-controls="library-list"
+                tabIndex={tab === name ? 0 : -1}
+                onClick={() => setTab(name)}
+              >
+                {names[name]}
+              </button>
+            ))}
+          </div>
+          <div className="lib-scroll" role="tabpanel" id="library-list" aria-labelledby={`library-tab-${tab}`}>
+            <MediaList tab={tab} />
+          </div>
+        </>
       )}
     </aside>
-  );
-}
-
-/** The Library view: its filter pills and the clips. */
-function LibraryBody({ clips }: { clips: Asset[] | undefined }) {
-  return (
-    <>
-      <div className="pills lib-pills" role="tablist" aria-label="Show">
-        <button className="pill" role="tab" aria-selected="true">
-          Clips
-        </button>
-        {['Music', 'Sounds', 'Images'].map((label) => (
-          <button key={label} className="pill" role="tab" aria-selected="false" disabled>
-            {label}
-          </button>
-        ))}
-      </div>
-      <div className="lib-scroll">
-        {clips && clips.length > 0 ? (
-          clips.map((clip) => (
-            <div key={clip.id} className="row">
-              <div className="art-clip" aria-hidden>
-                <Icon name="film" />
-              </div>
-              <div className="row-text">
-                <span className="row-title" title={clip.name}>
-                  {clip.name}
-                </span>
-                <span className="row-meta">{formatTime(clip.durationUs)}</span>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="lib-empty">
-            <p className="lib-empty-title">No clips yet</p>
-            <p>Clips you add show up here. After analysis, Klipolo lists the best moments under them.</p>
-          </div>
-        )}
-      </div>
-    </>
   );
 }

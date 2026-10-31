@@ -155,6 +155,7 @@ fn placing(source: &str) -> Project {
         rotation: Some(0),
         has_audio: false,
         audio_lead_us: None,
+        made_with: None,
     }];
     p.timeline.main = vec![Clip::new(
         ClipSource::Asset { id: "v".into() },

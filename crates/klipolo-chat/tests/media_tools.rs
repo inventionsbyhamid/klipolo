@@ -1029,8 +1029,10 @@ fn make_title_card_writes_the_persons_title_over_a_background_job() {
     let titles = layers(&applied(&p, &out), TrackKind::Overlay);
     assert_eq!(titles.len(), 1);
     let title = &titles[0];
-    // The template fills the frame in every format, for its own 4 s.
-    assert_eq!(title.layout, Layout::full_frame());
+    // The template fills the frame in every format, for its own 4 s: the model makes the primary's own place its rect.
+    let mut full = Layout::full_frame();
+    full.overrides.remove(&p.settings.primary_format);
+    assert_eq!(title.layout, full);
     assert_eq!((title.start_us, title.duration_us), (0, secs(4.0)));
     let (source, texts) = generator(title);
     assert_eq!(source, &ContribId::builtin(TITLE_CARD));

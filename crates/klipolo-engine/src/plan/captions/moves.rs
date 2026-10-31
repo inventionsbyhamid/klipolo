@@ -156,6 +156,7 @@ mod tests {
             rotation: None,
             has_audio: true,
             audio_lead_us: None,
+            made_with: None,
         }];
         p.timeline.main = vec![Clip::new(
             ClipSource::Asset { id: "v".into() },
@@ -221,6 +222,7 @@ mod tests {
             rotation: None,
             has_audio: true,
             audio_lead_us: None,
+            made_with: None,
         }];
         let mut c1 = Clip::new(ClipSource::Asset { id: "v".into() }, 0, 2_000_000);
         c1.id = "c1".into();

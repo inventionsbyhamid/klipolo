@@ -38,6 +38,7 @@ fn asset(id: &str, kind: AssetKind, path: String, seconds: f64, w: u32, h: u32) 
         fps: if kind == AssetKind::Video { 30.0 } else { 0.0 },
         has_audio: false,
         audio_lead_us: None,
+        made_with: None,
         rotation: None,
     }
 }
