@@ -24,6 +24,7 @@ use klipolo_model::time::Us;
 use tauri::ipc::Channel;
 use tauri::{State, WebviewWindow};
 
+use crate::media_jobs::MediaJobs;
 use crate::project::ProjectSessionState;
 use crate::state::EngineState;
 
@@ -129,8 +130,12 @@ fn allowed_origins() -> Vec<String> {
 }
 
 /// The app's engine: on the warm-up's GPU backend (or a new one), with the app's sound cache (shared with analysis) and
-/// the thumbnail cache in the app's cache folder.
-async fn start_engine(state: &EngineState, feed: FeedRx) -> Result<Engine, String> {
+/// the thumbnail cache in the app's cache folder. Editing copies attach to it (its GPU class, its thumbnail scans).
+async fn start_engine(
+    state: &EngineState,
+    feed: FeedRx,
+    copies: &MediaJobs,
+) -> Result<Engine, String> {
     let mut backend = GpuBackend::for_preview(state.take_warm_up()).await?;
     if let (Some(caches), Some(sounds)) = (state.caches(), &state.sounds) {
         backend = backend
@@ -144,6 +149,7 @@ async fn start_engine(state: &EngineState, feed: FeedRx) -> Result<Engine, Strin
                     .map(|dir| klipolo_engine::export::jobs::jobs_root(&dir)),
             );
     }
+    let thumbs = backend.thumbs();
     let options = EngineOptions {
         allowed_origins: allowed_origins(),
         max_preview_pixels: backend.max_preview_pixels(),
@@ -154,16 +160,21 @@ async fn start_engine(state: &EngineState, feed: FeedRx) -> Result<Engine, Strin
     };
     let engine = Engine::start(options, feed, backend).await?;
     tracing::info!(adapter = %engine.info().adapter, "the preview engine started");
+    copies.attach(engine.clone(), thumbs);
     Ok(engine)
 }
 
-/// What the UI hears: every engine event except the crash guard's (Klipolo has no agent-made effects). The log notes
-/// playback's starts and stops, with the frames the native layer presented.
-fn event_sink(events: Channel<EngineEvent>) -> EventSink {
+/// What the UI hears: every engine event except the crash guard's (Klipolo has no agent-made effects). Editing copies
+/// hear them too (`copies`: when the video plays, a copy the preview couldn't open, a scan that may have ended). The log
+/// notes playback's starts and stops, with the frames the native layer presented.
+fn event_sink(events: Channel<EngineEvent>, copies: Option<MediaJobs>) -> EventSink {
     let presented = AtomicU64::new(0);
     Arc::new(move |event: EngineEvent| {
         if event.is_guard() {
             return;
+        }
+        if let Some(copies) = &copies {
+            copies.on_engine_event(&event);
         }
         match &event {
             EngineEvent::State {
@@ -206,14 +217,15 @@ pub async fn engine_attach(
     window: WebviewWindow,
     state: State<'_, EngineState>,
     projects: State<'_, ProjectSessionState>,
+    copies: State<'_, MediaJobs>,
     events: Channel<EngineEvent>,
 ) -> Result<EngineInfo, String> {
-    let sink = event_sink(events);
+    let sink = event_sink(events, Some(copies.inner().clone()));
     let setting = std::env::var(PRESENTER_SETTING).ok();
     let feed = projects.subscribe();
     let info = attach(
         &state,
-        || start_engine(&state, feed),
+        || start_engine(&state, feed, &copies),
         &WindowHost(&window),
         sink,
         setting.as_deref(),
@@ -499,7 +511,7 @@ mod tests {
                 Ok(())
             })
         };
-        let sink = event_sink(channel);
+        let sink = event_sink(channel, None);
 
         sink(EngineEvent::FirstDraw {
             contrib: ContribId::builtin("effect.blur"),

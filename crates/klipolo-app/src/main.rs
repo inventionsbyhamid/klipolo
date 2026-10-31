@@ -2,9 +2,11 @@
 
 mod commands;
 mod engine;
+mod english;
 mod log;
 mod media;
 mod media_cache;
+mod media_jobs;
 mod pack;
 mod project;
 mod state;
@@ -14,7 +16,7 @@ use std::sync::Arc;
 use klipolo_engine::render::fonts::{self, FontDirs};
 use klipolo_engine::render::mode::RenderMode;
 use klipolo_engine::render::warm::Warmup;
-use tauri::{Emitter, Manager, RunEvent};
+use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 
 use crate::project::{ProjectSessionState, SaveStatus};
 use crate::state::EngineState;
@@ -92,6 +94,30 @@ fn main() {
             app.manage(analysis);
             app.manage(chat);
             app.manage(commands::export::state_at_launch());
+            // Editing copies of the open project's slow files, beside the thumbnails in the media cache. The preview
+            // reads them once made; they wait while an export holds the slot.
+            let proxies = app
+                .state::<EngineState>()
+                .caches()
+                .map_or_else(
+                    || std::env::temp_dir().join("Klipolo"),
+                    |caches| caches.media,
+                )
+                .join("proxies");
+            let handle = app.handle().clone();
+            let copies = media_jobs::MediaJobs::new(
+                proxies,
+                media_jobs::launcher(),
+                Arc::new(move |list| {
+                    let _ = handle.emit("media-jobs", list);
+                }),
+            );
+            copies.start();
+            copies.watch(app.state::<ProjectSessionState>().subscribe());
+            let exporting = copies.clone();
+            app.state::<klipolo_app::export::ExportState>()
+                .on_busy(Arc::new(move |busy| exporting.set_exporting(busy)));
+            app.manage(copies);
             commands::export::guard_menu_quit(app)?;
             Ok(())
         })
@@ -156,15 +182,31 @@ fn main() {
             commands::export::export_open,
             commands::export::export_files,
             commands::export::export_pick_folder,
+            media_jobs::commands::media_jobs_list,
+            media_jobs::commands::media_jobs_pause,
+            media_jobs::commands::media_jobs_resume,
+            media_jobs::commands::media_job_stop,
+            media_jobs::commands::media_job_retry,
+            media_jobs::commands::media_jobs_set_auto,
         ])
         .build(tauri::generate_context!())
         .expect("Klipolo could not start");
     app.run(|app, event| {
         // Quitting while an export runs asks first.
         commands::export::guard_quit(app, &event);
-        // Every edit is on the disk before the app goes.
-        if let RunEvent::Exit = event {
-            commands::export::on_exit(app);
+        match event {
+            // Every edit is on the disk before the app goes.
+            RunEvent::Exit => commands::export::on_exit(app),
+            // Back in front: a source exported again elsewhere meanwhile must not keep showing its old editing copy.
+            RunEvent::WindowEvent {
+                event: WindowEvent::Focused(true),
+                ..
+            } => {
+                if let Some(copies) = app.try_state::<media_jobs::MediaJobs>() {
+                    copies.recheck();
+                }
+            }
+            _ => {}
         }
     });
 }
