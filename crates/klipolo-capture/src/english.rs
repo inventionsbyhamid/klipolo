@@ -189,7 +189,7 @@ pub const ENGLISH: Messages = &[
     ("capture.import.videoUnreadable", "This take's picture couldn't be read, so there's nothing to edit. Its files are kept in the take's folder."),
     ("capture.import.unreadable", "Part of {source} ({seconds} s at {atUs}) couldn't be read, so it isn't in the edit. Its file is kept in the take's folder."),
     // A saved take the app couldn't add to its project (the project couldn't be opened, made or saved).
-    ("capture.import.notAdded", "The recording couldn't be added to your project. Its files are kept in the take's folder."),
+    ("capture.import.notAdded", "The recording couldn't be added to your project. Its files are in Movies / Klipolo / Recordings."),
     ("capture.import.addedNotOpened", "The recording was added to your project. Open the project from the start screen to see it."),
     // The recorder's menu-bar, notification-area or tray item.
     ("capture.menu.stop", "Stop and save"),
@@ -227,7 +227,7 @@ pub const ENGLISH: Messages = &[
     ("capture.error.os", "Recording failed."),
     // A command or a close for a take (or Check camera's preview) that has already ended: nothing is done.
     ("capture.error.staleTake", "That recording has already ended."),
-    ("capture.error.driveStuck", "The drive stopped answering. What reached it is kept, and Klipolo finishes the recording from it."),
+    ("capture.error.driveStuck", "The drive stopped answering. Klipolo finishes the recording from what was saved. Check the drive before you record again."),
     // A test run (`KLIPOLO_TEST`): the app's recorder makes no backend and launches no worker.
     ("capture.error.testRun", "Recording is off in this test run."),
     // The app's recorder has no folder of its own for its settings.

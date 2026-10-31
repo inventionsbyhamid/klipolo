@@ -297,8 +297,8 @@ pub(super) fn snapshot_after(
 }
 
 /// What the person is told when a take didn't land: the recorder's own words (a take with no picture, one that couldn't
-/// be finished from its files), else "The recording couldn't be added to your project. Its files are kept in the
-/// take's folder."
+/// be finished from its files), else "The recording couldn't be added to your project. Its files are in Movies /
+/// Klipolo / Recordings."
 fn not_landed(error: ImportError) -> CodedError {
     match error {
         ImportError::Said(Said::Coded(said)) if said.code.starts_with("capture.") => said,

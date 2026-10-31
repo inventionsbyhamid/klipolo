@@ -560,7 +560,7 @@
   },
   {
     "code": "capture.import.notAdded",
-    "message": "The recording couldn't be added to your project. Its files are kept in the take's folder.",
+    "message": "The recording couldn't be added to your project. Its files are in Movies / Klipolo / Recordings.",
     "params": []
   },
   {
@@ -735,7 +735,7 @@
   },
   {
     "code": "capture.error.driveStuck",
-    "message": "The drive stopped answering. What reached it is kept, and Klipolo finishes the recording from it.",
+    "message": "The drive stopped answering. Klipolo finishes the recording from what was saved. Check the drive before you record again.",
     "params": []
   },
   {

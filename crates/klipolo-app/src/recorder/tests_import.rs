@@ -474,7 +474,18 @@ fn a_take_that_cannot_land_says_so_in_the_recorders_words() {
     assert_eq!(refused.code, "capture.import.notAdded");
     assert_eq!(
         klipolo_capture::english::english(&refused),
-        "The recording couldn't be added to your project. Its files are kept in the take's folder."
+        "The recording couldn't be added to your project. Its files are in Movies / Klipolo / Recordings."
     );
     assert!(!take.dir.imported_mark().exists());
+}
+
+/// A drive that stops answering while the take saves: what happens, and what to do next.
+#[test]
+fn a_stuck_drive_says_what_happens_and_what_to_do() {
+    let stuck = CodedError::new("capture.error.driveStuck");
+    assert_eq!(
+        klipolo_capture::english::english(&stuck),
+        "The drive stopped answering. Klipolo finishes the recording from what was saved. Check the drive before you \
+         record again."
+    );
 }
