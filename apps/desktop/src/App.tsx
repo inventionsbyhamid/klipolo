@@ -49,8 +49,8 @@ export function App() {
     keepPlayheadInVideo();
     clearRangeOnProjectSwitch();
     clearProposalOnProjectSwitch();
-    // Until chat proposes cuts: Control Shift P shows a sample proposal (development builds only).
-    if (import.meta.env.DEV) void import('./dev/sampleProposal').then((dev) => dev.listenForSampleProposal());
+    // Development builds only: Control Shift P a stand-in chat, Control Shift W sample words (`dev/devChat`).
+    if (import.meta.env.DEV) void import('./dev/devChat').then((dev) => dev.listenForDevKeys());
     void openProject();
   }, []);
   useEngineSession();
