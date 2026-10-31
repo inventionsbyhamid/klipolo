@@ -583,6 +583,19 @@ fn launch_opens_no_project_and_shows_the_start_screen() {
     assert_ne!(opened.project.id, made.project.id);
 }
 
+/// Show in Finder shows the open project's file; with none open, or when its file has gone, it says so.
+#[test]
+fn show_in_finder_names_the_open_projects_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = ProjectSessionState::default();
+    assert_eq!(project_file(&state), Err(Said::code("project.none")));
+    create_in(&state, dir.path(), new_project("Shown", vec![])).unwrap();
+    let file = dir.path().join("Shown.klipolo");
+    assert_eq!(project_file(&state), Ok(file.clone()));
+    std::fs::remove_file(&file).unwrap();
+    assert_eq!(project_file(&state), Err(Said::code("project.revealGone")));
+}
+
 #[test]
 fn save_failures_read_as_plain_sentences() {
     let dir = tempfile::tempdir().unwrap();

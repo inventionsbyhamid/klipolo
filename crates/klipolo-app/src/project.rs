@@ -193,6 +193,33 @@ pub fn projects_recent(
     Ok(rows)
 }
 
+/// The open project's file, for Show in Finder: `project.none` with none open, `project.revealGone` when the file isn't
+/// there (moved or deleted since it was opened).
+fn project_file(state: &ProjectSessionState) -> Result<PathBuf, Said> {
+    let file = lock(state)
+        .as_ref()
+        .map(|open| open.file.clone())
+        .ok_or_else(|| Said::code("project.none"))?;
+    if file.is_file() {
+        Ok(file)
+    } else {
+        Err(Said::code("project.revealGone"))
+    }
+}
+
+/// Shows the open project's file in Finder, selected.
+#[tauri::command(async)]
+pub fn project_reveal(state: State<'_, ProjectSessionState>) -> Result<(), Said> {
+    let file = project_file(&state)?;
+    crate::commands::export::opener(true, &[file])
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| {
+            tracing::warn!(%error, "Finder couldn't be asked to show the project");
+            Said::code("project.revealGone")
+        })
+}
+
 /// Closes the open project once its edits are saved; its analysis stops.
 #[tauri::command(async)]
 pub fn project_close(state: State<'_, ProjectSessionState>) -> Result<(), Said> {

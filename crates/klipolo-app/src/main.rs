@@ -108,6 +108,7 @@ fn main() {
             project::project_undo,
             project::project_redo,
             project::project_snapshot,
+            project::project_reveal,
             project::projects_recent,
             media::media_import,
             commands::settings::settings_get,
