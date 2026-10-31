@@ -4,6 +4,7 @@ mod commands;
 mod engine;
 mod log;
 mod media;
+mod media_cache;
 mod project;
 mod state;
 
@@ -90,6 +91,9 @@ fn main() {
             commands::analysis::analysis_start,
             commands::analysis::analysis_cancel,
             commands::analysis::analysis_states,
+            media_cache::media_peaks_info,
+            media_cache::media_peaks,
+            media_cache::media_thumbs,
         ])
         .build(tauri::generate_context!())
         .expect("Klipolo could not start");

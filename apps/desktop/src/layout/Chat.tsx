@@ -1,10 +1,20 @@
+import { useEffect, useRef } from 'react';
 import { NeedsKey } from '../ai/NeedsKey';
 import { useNeedsKey } from '../ai/aiStatus';
+import { useUi } from '../state/ui';
 import { Icon } from './Icon';
 
-/** The chat panel, as a placeholder: the empty state and a composer that waits for chat to land. */
+/**
+ * The chat panel, as a placeholder: the empty state and a composer that waits for chat to land. Command K puts the
+ * cursor in the composer (`useUi.focusChat`).
+ */
 export function Chat() {
   const needsKey = useNeedsKey();
+  const composer = useRef<HTMLTextAreaElement>(null);
+  const chatFocus = useUi((s) => s.chatFocus);
+  useEffect(() => {
+    if (chatFocus > 0) composer.current?.focus();
+  }, [chatFocus]);
   return (
     <aside className="panel chat" aria-label="Chat">
       <div className="chat-head">
@@ -26,6 +36,7 @@ export function Chat() {
       <div className="composer">
         <div className="input-wrap">
           <textarea
+            ref={composer}
             rows={1}
             placeholder={needsKey ? 'Add a key or code to chat' : 'Say what you want'}
             disabled

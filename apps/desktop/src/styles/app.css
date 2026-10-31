@@ -189,11 +189,11 @@
   margin-left: -2px;
 }
 
-.btn:not(:disabled):hover {
+.btn:not(:disabled):not([aria-disabled="true"]):hover {
   transform: scale(var(--hover-scale));
 }
 
-.btn:not(:disabled):active {
+.btn:not(:disabled):not([aria-disabled="true"]):active {
   transform: scale(var(--press-scale));
   transition-duration: var(--dur-instant);
 }
@@ -203,7 +203,7 @@
   color: var(--color-navy);
 }
 
-.btn-primary:not(:disabled):hover {
+.btn-primary:not(:disabled):not([aria-disabled="true"]):hover {
   background: var(--color-hilite-hover);
 }
 
@@ -212,12 +212,30 @@
   padding: 0 var(--space-5);
 }
 
-.btn:disabled {
+.btn-ghost:not(:disabled):not([aria-disabled="true"]):hover {
+  background: var(--color-bay-hover);
+  color: var(--color-ink);
+  transform: none;
+}
+
+.btn-secondary {
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink);
+}
+
+.btn-secondary:not(:disabled):not([aria-disabled="true"]):hover {
+  box-shadow: inset 0 0 0 1px var(--color-ink);
+}
+
+/* aria-disabled: inert but still focusable, so its tooltip can say why; drawn as disabled. */
+.btn:disabled,
+.btn[aria-disabled="true"] {
   background: #1e2642;
   color: var(--color-ink-disabled);
 }
 
-.btn-ghost:disabled {
+.btn-ghost:disabled,
+.btn-ghost[aria-disabled="true"] {
   background: transparent;
 }
 
@@ -239,17 +257,36 @@
   transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 
-.icon-btn:not(:disabled):hover {
+.icon-btn:not(:disabled):not([aria-disabled="true"]):hover {
   background: var(--color-bay-hover);
   color: var(--color-ink);
 }
 
-.icon-btn:not(:disabled):active {
+.icon-btn:not(:disabled):not([aria-disabled="true"]):active {
   background: var(--color-bay-press);
 }
 
-.icon-btn:disabled {
+.icon-btn:disabled,
+.icon-btn[aria-disabled="true"] {
   color: var(--color-ink-disabled);
+}
+
+/* A toggle that is on: a 4 px paper dot under its icon. */
+.icon-btn[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--color-paper);
+}
+
+.icon-btn-sm {
+  width: 28px;
+  height: 28px;
 }
 
 /* ---------- Pills and segmented ---------- */
@@ -682,33 +719,127 @@
 
 /* ---------- Timeline ---------- */
 
-.tl {
-  --lane-overlay: 24px;
-  --lane-sfx: 22px;
-  --lane-music: 34px;
+/* The timeline: the overview strip, the ruler, then Overlays, Video (the spare height), Sounds and Music, each lane's
+   icon in the 40 px gutter. The lanes scroll sideways under the sticky gutter; the overview strip scrolls them too. */
+.tl-panel {
+  --lane-gap: 5px;
   position: relative;
-  display: grid;
-  grid-template-columns: var(--timeline-gutter) minmax(0, 1fr);
-  grid-template-rows: 10px 24px var(--lane-overlay) minmax(0, 1fr) var(--lane-sfx) var(--lane-music);
-  row-gap: 5px;
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  min-height: 0;
   padding: var(--space-5) var(--space-6) var(--space-5) 0;
 }
 
 @media (max-height: 819px) {
-  .tl {
-    --lane-sfx: 20px;
-    --lane-music: 28px;
-    row-gap: 4px;
+  .tl-panel {
+    --lane-gap: 4px;
     padding-block: var(--space-4);
   }
 }
 
+.tl-overview {
+  position: relative;
+  flex: none;
+  height: 6px;
+  margin: 2px 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-bay-raised);
+  cursor: grab;
+  touch-action: none;
+}
+
+.tl-overview:not([data-fits="false"]) {
+  visibility: hidden;
+}
+
+.ov-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--x);
+  width: var(--w);
+  border-radius: var(--radius-pill);
+  background: var(--color-clip-deep);
+}
+
+.ov-seg + .ov-seg {
+  border-left: 2px solid var(--color-bay);
+}
+
+.ov-tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: var(--x);
+  width: 2px;
+  border-radius: 1px;
+  background: var(--color-cut);
+}
+
+.ov-view {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  min-width: 8px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1.5px var(--color-paper);
+}
+
+.tl-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin-top: var(--lane-gap);
+  overflow-x: auto;
+  /* A short window with three overlay rows can't hold every lane: they scroll rather than clip the Music lane. */
+  overflow-y: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.tl-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.tl-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lane-gap);
+  min-width: 100%;
+  height: 100%;
+}
+
+/* The ruler and the playhead's head stay at the top of the lanes' scroller when the lanes scroll (three overlay rows in
+   a short window), over the lanes, their sticky gutters (z-index 10) and the marks that pass under them. The ruler
+   draws its own part of the playhead and the snap guide. */
+.tl-head {
+  position: sticky;
+  top: 0;
+  z-index: 11;
+  display: flex;
+  flex: none;
+  height: 24px;
+  background: var(--color-bay);
+}
+
+.tl-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  display: grid;
+  flex: none;
+  place-items: center;
+  background: var(--color-bay);
+  color: var(--color-ink-faint);
+}
+
 .tl-ico {
-  grid-column: 1;
   display: grid;
   place-items: center;
-  color: var(--color-ink-faint);
+  width: 24px;
+  height: 24px;
 }
 
 .tl-ico .ico {
@@ -716,124 +847,654 @@
   height: 15px;
 }
 
-.tl-ico.r-overlay { grid-row: 3; }
-.tl-ico.r-video { grid-row: 4; }
-.tl-ico.r-sfx { grid-row: 5; }
-.tl-ico.r-music { grid-row: 6; }
-
-.lane {
-  position: relative;
-  grid-column: 2;
-  min-height: 0;
-  border-radius: var(--radius-sm);
-  background: rgb(7 10 20 / 0.45);
-}
-
-.lane.r-overlay { grid-row: 3; }
-.lane.r-video { grid-row: 4; }
-.lane.r-sfx { grid-row: 5; }
-.lane.r-music { grid-row: 6; }
-
-.tl-overview {
-  position: relative;
-  grid-column: 2;
-  grid-row: 1;
-  height: 6px;
-  align-self: center;
-  border-radius: var(--radius-pill);
-  background: var(--color-bay-raised);
-}
-
-.ov-seg {
-  position: absolute;
-  inset: 0;
-  border-radius: var(--radius-pill);
-  background: var(--color-clip-deep);
-}
-
 .tl-ruler {
   position: relative;
-  grid-column: 2;
-  grid-row: 2;
+  flex: none;
+  height: 24px;
   color: var(--color-ink-faint);
   font-size: var(--text-2xs);
   line-height: var(--lh-2xs);
   font-variant-numeric: tabular-nums;
-  background:
-    repeating-linear-gradient(to right, var(--color-line-strong) 0 1px, transparent 1px var(--minor)) left bottom / 100% 5px no-repeat,
-    repeating-linear-gradient(to right, var(--color-ink-faint) 0 1px, transparent 1px var(--major)) left bottom / 100% 9px no-repeat;
-}
-
-.tl-ruler span {
-  position: absolute;
-  top: 0;
-  left: var(--x);
-  padding-left: 4px;
-}
-
-/* The scrub area: the ruler and the lanes. Click or drag to move the playhead. */
-.tl-marks {
-  position: relative;
-  grid-column: 2;
-  grid-row: 2 / -1;
+  cursor: pointer;
   touch-action: none;
 }
 
-.tl-marks:not([aria-disabled="true"]) {
-  cursor: pointer;
-}
-
-.clip-block {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--color-clip);
-  color: var(--color-navy);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-strong);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.clip-block + .clip-block {
-  border-left: 1px solid var(--color-night);
-}
-
-.playhead {
+.tl-tick {
   position: absolute;
   top: 0;
-  bottom: -3px;
-  left: var(--x);
-  width: 2px;
-  margin-left: -1px;
-  background: var(--color-paper);
+  bottom: 0;
+  padding-left: 4px;
+  white-space: nowrap;
   pointer-events: none;
-  z-index: 2;
 }
 
-.playhead::before {
+.tl-tick::before {
   content: "";
   position: absolute;
-  top: 0;
-  left: 50%;
-  width: 12px;
-  height: 14px;
-  transform: translateX(-50%);
-  border-radius: 3px 3px 6px 6px;
-  background: var(--color-paper);
-  clip-path: polygon(0 0, 100% 0, 100% 60%, 50% 100%, 0 60%);
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: 9px;
+  background: var(--color-ink-faint);
+}
+
+.tl-minor {
+  position: absolute;
+  bottom: 0;
+  height: 5px;
+  background-image: linear-gradient(to right, var(--color-line-strong) 1px, transparent 1px);
+  background-repeat: repeat-x;
+  pointer-events: none;
+}
+
+.tl-frames {
+  position: absolute;
+  bottom: 0;
+  height: 6px;
+  pointer-events: none;
+}
+
+.tl-tip {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  z-index: 20;
+  display: none;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-1);
+  color: var(--color-ink);
+  font-size: var(--text-2xs);
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tl-row {
+  display: flex;
+  flex: none;
+  min-height: 0;
+}
+
+.tl-row.is-grow {
+  flex: 1 1 auto;
+  min-height: 24px;
+}
+
+.tl-lane {
+  position: relative;
+  flex: none;
+  border-radius: var(--radius-sm);
+}
+
+.tl-lane.is-empty {
+  background: color-mix(in srgb, var(--color-night) 45%, transparent);
+}
+
+/* A file held over a lane that takes it: a paper wash and a dashed paper edge, drawn over the lane's blocks (they are
+   z-index 1 to 3) so a full lane still shows it. */
+.tl-lane.is-drop {
+  background-image: linear-gradient(var(--color-paper-wash), var(--color-paper-wash));
+}
+
+.tl-lane.is-drop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  border: 1px dashed var(--color-paper);
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .tl-empty {
-  grid-column: 2;
-  grid-row: 3 / -1;
+  position: absolute;
+  inset: 40px 16px 12px 40px;
   display: grid;
   place-items: center;
+  margin: 0;
   color: var(--color-ink-faint);
   font-size: var(--text-sm);
   pointer-events: none;
+}
+
+/* Over the blocks and everything in them (names, grips), under the gutter: proposed cuts, the time range, the playhead,
+   the snap guide, drop ghosts. Each block is a stacking context of its own (z-index 1), so its name never rises above
+   these, and the playhead and a cut's hatch cross the names. */
+.tl-marks {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Clips: clip-deep with a clip-2 edge, filmstrip over 62 %, the clip's own waveform under it, back to back with a
+   1 px seam where two meet. */
+.tl-clip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  border-radius: 0;
+  background: var(--color-clip-deep);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-clip-2) 55%, transparent);
+  color: var(--color-ink);
+  text-align: left;
+  transition: box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.tl-clip:not([data-first]) {
+  border-left: 1px solid color-mix(in srgb, var(--color-night) 85%, transparent);
+}
+
+.tl-clip[data-first] {
+  border-top-left-radius: var(--radius-sm);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+.tl-clip[data-last] {
+  border-top-right-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.tl-clip canvas {
+  border-radius: inherit;
+}
+
+.tl-clip:hover {
+  box-shadow: inset 0 0 0 1px var(--color-clip-2);
+}
+
+.tl-clip.is-selected {
+  z-index: 2;
+  overflow: visible;
+  box-shadow: inset 0 0 0 2px var(--color-paper);
+}
+
+.tl-clip[data-dragging="true"] {
+  z-index: 20;
+  box-shadow: var(--shadow-1), inset 0 0 0 2px var(--color-paper);
+  will-change: transform;
+}
+
+.tl-clip-name {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 6;
+  max-width: calc(100% - 8px);
+  overflow: hidden;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-night) 78%, transparent);
+  color: var(--color-ink);
+  font-size: var(--text-2xs);
+  line-height: var(--lh-2xs);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* Trim handles: a 12 px pad on each edge; a selected clip shows 8 x 22 paper grips, a selected overlay navy ones. */
+.tl-trim {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 7;
+  width: 12px;
+  max-width: 25%;
+  cursor: ew-resize;
+}
+
+.tl-trim[data-trim="start"] {
+  left: -4px;
+}
+
+.tl-trim[data-trim="end"] {
+  right: -4px;
+}
+
+.tl-trim::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 8px;
+  height: 22px;
+  max-height: calc(100% - 4px);
+  transform: translateY(-50%);
+  border-radius: 3px;
+  background: var(--color-paper);
+  box-shadow: 0 0 0 1.5px var(--color-navy);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.tl-trim[data-shown]::after,
+.tl-clip:hover .tl-trim::after {
+  opacity: 1;
+}
+
+.tl-clip:not(.is-selected):hover .tl-trim::after {
+  opacity: 0.6;
+}
+
+/* Blocks too narrow to draw one by one (zoomed out), merged into bands in their lane's colour. */
+.tl-band {
+  position: absolute;
+  pointer-events: none;
+}
+
+.tl-band.is-round {
+  border-radius: var(--radius-xs);
+}
+
+.tl-band.is-video {
+  top: 0;
+  bottom: 0;
+  background: var(--color-clip-deep);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-clip-2) 55%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--color-clip-2) 55%, transparent);
+}
+
+.tl-band.is-overlay {
+  background: color-mix(in srgb, var(--color-lane-overlay) 30%, transparent);
+}
+
+.tl-band.is-sound {
+  background: var(--color-lane-sfx);
+}
+
+.tl-band.is-music {
+  background: color-mix(in srgb, var(--color-lane-music) 40%, transparent);
+}
+
+/* Layers: overlays (paper at 16 % with a 2 px paper edge; solid paper when selected), sound effects (teal, named to
+   the right in teal) and music (violet body and edge, its waveform at 40 %, its name in a violet tag). */
+.tl-item {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  border-radius: var(--radius-xs);
+  color: var(--color-ink);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  line-height: var(--lh-2xs);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.tl-item.is-selected {
+  z-index: 2;
+}
+
+/* A focused block rises over its neighbours, so the next one never covers its focus ring. */
+.tl-clip:focus-visible,
+.tl-item:focus-visible {
+  z-index: 3;
+}
+
+.tl-item[data-dragging="true"] {
+  z-index: 20;
+  will-change: transform;
+}
+
+.tl-item.is-dimmed > :not(.tl-trim) {
+  opacity: 0.5;
+}
+
+.tl-item-name {
+  position: relative;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.tl-item.is-overlay {
+  overflow: hidden;
+  padding: 0 6px;
+  background: color-mix(in srgb, var(--color-lane-overlay) 16%, transparent);
+  box-shadow: inset 2px 0 0 var(--color-paper);
+}
+
+.tl-item.is-overlay.is-selected {
+  overflow: visible;
+  background: var(--color-paper);
+  box-shadow: none;
+  color: var(--color-navy);
+}
+
+.tl-item.is-overlay .tl-trim::after {
+  left: 3px;
+  width: 3px;
+  height: auto;
+  top: 3px;
+  bottom: 3px;
+  transform: none;
+  border-radius: 2px;
+  background: var(--color-navy);
+  box-shadow: none;
+}
+
+.tl-item.is-overlay.is-selected .tl-trim::after {
+  opacity: 0.55;
+}
+
+.tl-item.is-sound {
+  overflow: visible;
+  min-width: 6px;
+  border-radius: 3px;
+  background: var(--color-lane-sfx);
+}
+
+.tl-item.is-sound .tl-item-name {
+  position: absolute;
+  left: calc(100% + 4px);
+  color: var(--color-lane-sfx);
+  font-weight: var(--weight-strong);
+  overflow: visible;
+}
+
+.tl-item.is-sound.is-selected {
+  box-shadow: 0 0 0 2px var(--color-paper);
+}
+
+.tl-item.is-music {
+  align-items: flex-start;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-lane-music) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-lane-music) 50%, transparent);
+}
+
+.tl-item.is-music canvas {
+  opacity: 0.4;
+}
+
+.tl-item.is-music .tl-item-name {
+  margin: 3px 0 0 4px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: var(--color-lane-music);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-bay) 90%, transparent);
+  color: var(--color-navy);
+  font-weight: var(--weight-strong);
+  line-height: 15px;
+}
+
+.tl-item.is-music.is-selected {
+  box-shadow: inset 0 0 0 2px var(--color-paper);
+}
+
+/* "+N" more layers than the Overlays lane's rows hold. */
+.tl-more {
+  position: sticky;
+  left: 40px;
+  height: 100%;
+  padding: 0 4px;
+  border-radius: var(--radius-xs);
+  background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink-soft);
+  font-size: var(--text-2xs);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: auto;
+}
+
+/* A waiting proposal's removed layers, outlined in red on their lanes (dashed: only shortened). */
+.tl-ghost {
+  position: absolute;
+  border: 2px solid var(--color-cut);
+  border-radius: var(--radius-xs);
+  background: var(--color-cut-wash);
+}
+
+.tl-ghost.is-shortened {
+  border-style: dashed;
+}
+
+/* Proposed cuts: red hatching from the ruler's bottom through every lane, the one bold thing on the timeline. */
+.tl-cut {
+  position: absolute;
+  bottom: 0;
+  min-width: 4px;
+  border-inline: 2px solid var(--color-cut);
+  background:
+    repeating-linear-gradient(135deg, var(--color-cut-hatch) 0 2px, transparent 2px 7px),
+    var(--color-cut-wash);
+  transform-origin: left center;
+}
+
+.tl-cut.no-start {
+  border-left-width: 0;
+}
+
+.tl-cut.no-end {
+  border-right-width: 0;
+}
+
+.tl-cut-tag {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  z-index: 1;
+  transform: translateX(-50%);
+  padding: 0 5px;
+  border-radius: var(--radius-xs);
+  background: var(--color-cut);
+  color: var(--color-navy);
+  font-size: var(--text-2xs);
+  line-height: 16px;
+  font-weight: var(--weight-title);
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Clicks reach the overlay items and clips under it. */
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tl-cut.is-new {
+    animation: tl-draw var(--dur-slow) var(--ease-out) calc(var(--i, 0) * var(--stagger)) both;
+  }
+}
+
+@keyframes tl-draw {
+  from {
+    opacity: 0;
+    transform: scaleX(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The time range you selected: paper, because it is yours. */
+.tl-range {
+  position: absolute;
+  bottom: 0;
+  background: var(--color-paper-wash);
+  border-inline: 2px solid var(--color-paper-edge);
+}
+
+.tl-range-len {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: var(--color-paper);
+  color: var(--color-navy);
+  font-size: var(--text-2xs);
+  line-height: 16px;
+  font-weight: var(--weight-strong);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tl-grip {
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 22px;
+  margin-top: -11px;
+  border-radius: 3px;
+  background: var(--color-paper);
+  box-shadow: 0 0 0 1.5px var(--color-navy);
+  cursor: ew-resize;
+  pointer-events: auto;
+}
+
+/* A 12 px pad around each grip. */
+.tl-grip::before {
+  content: "";
+  position: absolute;
+  inset: -6px -6px;
+}
+
+.tl-grip.is-start {
+  left: -4px;
+}
+
+.tl-grip.is-end {
+  right: -4px;
+}
+
+/* The playhead: a 2 px paper line through the lanes and a 12 x 14 paper head on the ruler. Never red. The head spans
+   the ruler (top and bottom 0, as the line) and runs on as a 2 px stem to its foot: the sticky ruler row covers the
+   lanes' line there. */
+.tl-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: var(--color-paper);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.tl-playhead.is-head {
+  z-index: 2;
+  width: 12px;
+  border-radius: 3px 3px 0 0;
+  clip-path: polygon(0 0, 100% 0, 100% 8.4px, 7px 13px, 7px 100%, 5px 100%, 5px 13px, 0 8.4px);
+}
+
+/* Menus, tooltips and popovers: the dialog surface, 10 px radius, 32 px rows on the hover fill. */
+.menu {
+  z-index: 50;
+  min-width: 208px;
+  padding: 6px;
+  border-radius: var(--radius-md);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-1);
+  animation: menu-in var(--dur-fast) var(--ease-out);
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.menu-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 32px;
+  padding: 0 var(--space-4);
+  border-radius: 8px;
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+  outline: none;
+  cursor: default;
+  user-select: none;
+}
+
+.menu-item[data-highlighted] {
+  background: var(--color-bay-hover);
+}
+
+.menu-item[data-disabled] {
+  color: var(--color-ink-disabled);
+}
+
+.menu-item.has-check {
+  padding-left: 28px;
+}
+
+.menu-item-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-key {
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+}
+
+.menu-check {
+  position: absolute;
+  left: 8px;
+  display: inline-flex;
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 6px;
+  background: var(--color-line);
+}
+
+.menu-label,
+.menu-note {
+  margin: 0;
+  padding: 6px 8px 4px;
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+}
+
+.tooltip {
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-1);
+  color: var(--color-ink);
+  font-size: var(--text-xs);
+}
+
+.popover {
+  z-index: 50;
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-1);
+  color: var(--color-ink);
 }
 
 /* ---------- Player bar ---------- */
@@ -957,6 +1618,18 @@
   position: relative;
   height: 16px;
   opacity: 0.6;
+}
+
+/* A slider that works (the timeline zoom): full strength, and it takes the pointer. */
+.slider.is-live {
+  opacity: 1;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.slider.is-live[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .slider::before {

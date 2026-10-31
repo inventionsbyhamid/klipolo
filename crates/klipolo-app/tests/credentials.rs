@@ -641,6 +641,39 @@ async fn a_saved_key_registers_on_the_next_use_when_the_relay_was_down() {
     assert_eq!(stored(&store, RELAY_TOKEN).as_deref(), Some(TOKEN));
 }
 
+/// A bare 504 (the relay's proxy, or Traefik, giving up on it) is Klipolo's server being busy, like a bare 503: not
+/// Meta's slowness.
+#[tokio::test]
+async fn a_bare_504_from_the_relay_says_klipolos_server_is_busy() {
+    let meta = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "data": [] })))
+        .mount(&meta)
+        .await;
+    let relay = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/devices"))
+        .respond_with(ResponseTemplate::new(504))
+        .mount(&relay)
+        .await;
+    let store = Arc::new(MemoryStore::default());
+    let credentials = Credentials::load(
+        store.clone(),
+        endpoints(&format!("{}/v1", meta.uri()), &relay.uri()),
+        DEVICE.into(),
+    )
+    .with_register_backoff(Duration::ZERO);
+
+    credentials.set_key(KEY).await.unwrap();
+    let ready = credentials.ready().await;
+
+    assert_eq!(
+        ready.problem.as_deref(),
+        Some("Klipolo's server is busy right now. Try again in a moment.")
+    );
+}
+
 #[tokio::test]
 async fn parallel_first_uses_against_a_hanging_relay_cost_one_timeout() {
     let relay = MockServer::start().await;

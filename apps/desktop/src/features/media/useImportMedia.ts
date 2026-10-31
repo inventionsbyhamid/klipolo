@@ -9,6 +9,7 @@ import { afterCommits, beginCommit, keepAtClose } from '../../state/commitQueue'
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { toast } from '../../state/toasts';
+import { dropAllOps, type DropTarget } from '../timeline/drops';
 
 const NAMES_SHOWN = 3;
 
@@ -90,12 +91,13 @@ function sayAdded(count: number, clips: boolean) {
 
 /**
  * Imports files and places them, as one undo step labelled "Import media": `paths` (dropped from Finder), or what the
- * person picks in the file picker (null). They land as the Add button places them: videos at the end of the main
- * track in the order given, music on its own track, images at the playhead. Skipped files are named in one toast. The
- * placing waits for any commit in flight and builds on the project it left. It is kept for the close from the moment
- * it is asked for: a close or quit while the files are read waits for the placing, in its turn.
+ * person picks in the file picker (null). With a `target` (files dropped on the timeline) they land there, in order
+ * (`dropAllOps`); without, as the Add button places them: videos at the end of the main track in the order given,
+ * music on its own track, images at the playhead. Skipped files are named in one toast. The placing waits for any
+ * commit in flight and builds on the project it left. It is kept for the close from the moment it is asked for: a
+ * close or quit while the files are read waits for the placing, in its turn.
  */
-export async function importFiles(paths: string[] | null): Promise<void> {
+export async function importFiles(paths: string[] | null, target: DropTarget | null = null): Promise<void> {
   const projectId = useProject.getState().snapshot?.project.id;
   const label = 'media.import';
   const hold = projectId === undefined ? null : keepAtClose(label);
@@ -127,7 +129,10 @@ export async function importFiles(paths: string[] | null): Promise<void> {
           // Not into another project the person opened while the files were read.
           const snapshot = useProject.getState().snapshot;
           if (!snapshot || snapshot.readOnly || snapshot.project.id !== projectId) return;
-          const ops = placementOps(assets, snapshot.project, usePlayback.getState().playheadUs);
+          const { project } = snapshot;
+          const ops = target
+            ? dropAllOps(project, assets, target, project.settings.fps)
+            : placementOps(assets, project, usePlayback.getState().playheadUs);
           if (ops.length === 0) return;
           // It holds the commit queue until it lands, so an edit made meanwhile builds on the files placed.
           const end = beginCommit();

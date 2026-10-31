@@ -132,10 +132,10 @@ fn allowed_origins() -> Vec<String> {
 /// the thumbnail cache in the app's cache folder.
 async fn start_engine(state: &EngineState, feed: FeedRx) -> Result<Engine, String> {
     let mut backend = GpuBackend::for_preview(state.take_warm_up()).await?;
-    if let (Some(cache), Some(sounds)) = (&state.cache_dir, &state.sounds) {
+    if let (Some(caches), Some(sounds)) = (state.caches(), &state.sounds) {
         backend = backend
             .with_audio_store(sounds.clone())
-            .with_media_cache(cache.join("media"))
+            .with_media_cache(caches.media)
             // Exports land later; until then no export job's files need keeping.
             .with_cache_tidy(None);
     }

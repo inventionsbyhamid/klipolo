@@ -296,10 +296,10 @@ impl GpuBackend {
         self
     }
 
-    /// Where the timeline's thumbnails go (`dir/thumbs`, the app's media cache): scans cut them after the sound cache's
-    /// builds (which they wait for), and preview decoders read the keyframe index stored there.
+    /// Where the timeline's thumbnails go (`thumbs::root_in(dir)`, the app's media cache): scans cut them after the
+    /// sound cache's builds (which they wait for), and preview decoders read the keyframe index stored there.
     pub fn with_media_cache(mut self, dir: PathBuf) -> Self {
-        let root = dir.join("thumbs");
+        let root = crate::media::thumbs::root_in(&dir);
         let thumbs = ThumbStore::new(root.clone(), Arc::new(klipolo_platform::durable::Os));
         self.pcm.set_thumbs(thumbs.clone());
         crate::media::activity::ActivityStore::attach(&thumbs, dir.join("activity"));
