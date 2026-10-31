@@ -1,7 +1,8 @@
 //! The Record dialog's stills of each screen and app in their worker, with the fake backend and a test clock: each
-//! target once a second, in turn, at most 8 of them; a still that fails is tried again on its next turn, and one that
-//! runs late moves the next turn back; the worker ends on the app's Stop or its stdin's end; without Screen Recording
-//! it takes no still; and the Mac's stills read the permission first and never ask. Nothing captures.
+//! target once a second, in turn, at most 8 of them; a still that doesn't come is tried again on its next turn, a
+//! refused one ends the stills, and one that runs late moves the next turn back; the worker ends on the app's Stop or
+//! its stdin's end; without Screen Recording it takes no still; and the Mac's stills read the permission first and
+//! never ask. Nothing captures.
 #![cfg(feature = "synthetic")]
 
 #[path = "common/preview_io.rs"]
@@ -214,7 +215,7 @@ fn a_failed_still_is_retried_next_round() {
     // asked again a second after it failed.
     let targets = displays(2);
     let script = Script {
-        still_fails: vec![(targets[0].1.clone(), 1)],
+        still_fails: vec![(targets[0].1.clone(), 1, PipeError::Os("timed out".into()))],
         ..Script::default()
     };
     let run = over(script, &targets, 2);
@@ -230,6 +231,35 @@ fn a_failed_still_is_retried_next_round() {
         failed(&run.events).is_empty(),
         "a failed still isn't the worker's end"
     );
+}
+
+#[test]
+fn a_refused_still_ends_the_stills() {
+    // The system refuses the second display's still (the person said no to macOS's question, or took the permission
+    // back): the stills end at once with Screen Recording's step, and nothing is asked again. A camera, which no still
+    // can show, ends them too.
+    let targets = displays(2);
+    let script = Script {
+        still_fails: vec![(targets[1].1.clone(), 1, PipeError::PermissionDenied)],
+        ..Script::default()
+    };
+    let run = over(script, &targets, 3);
+    assert_eq!(run.code, 1);
+    assert_eq!(run.stills.len(), 2, "no still after the refusal");
+    assert_eq!(thumb_keys(&run.events), ["display-1"]);
+    assert_eq!(failed(&run.events), ["capture.permission.screen"]);
+    assert!(matches!(run.events.last(), Some(Event::Failed { .. })));
+
+    let camera = [(
+        "camera".to_string(),
+        Target::Camera {
+            id: "camera-1".into(),
+        },
+    )];
+    let run = over(Script::default(), &camera, 3);
+    assert_eq!(run.code, 1);
+    assert_eq!(run.stills.len(), 1);
+    assert_eq!(failed(&run.events), ["capture.error.unsupported"]);
 }
 
 /// The fake backend, its first still taking `.1` of the test clock's time; the clock's time at each still kept.

@@ -7,7 +7,8 @@
 //!   JSON), no sound, nothing written, for the big view of `view` pixels (`live_view_size::ViewPixels` as
 //!   JSON), else the small one;
 //! - `--record-worker --thumbs <targets>`: the Record dialog's stills of each screen and app, about once a second each
-//!   (`run::thumbs`); `targets` is a JSON list of `[key, target]` pairs, each target a `backend::Target`;
+//!   (`run::thumbs`); `targets` is a JSON list of `[key, target]` pairs, each target a `backend::Target` that shows a
+//!   screen (a camera or the system's picker is a usage error);
 //! - `--record-worker --meter <mic id>`: the Record dialog's mic meter, ten peaks a second of that mic alone
 //!   (`run::meter`);
 //! - `--record-worker --probe <out.json>`: the encoder probe, on generated frames only (so without the consent guard,
@@ -66,7 +67,15 @@ pub fn main(args: &[String]) -> i32 {
         ["--thumbs", targets] => {
             log::to_stderr();
             match serde_json::from_str::<Vec<(String, Target)>>(targets) {
-                Ok(targets) => with_backend(|b| run_thumbs(&*b, &targets, PreviewIo::std())),
+                Ok(targets) if targets.iter().all(|(_, t)| shows_a_screen(t)) => {
+                    with_backend(|b| run_thumbs(&*b, &targets, PreviewIo::std()))
+                }
+                Ok(_) => {
+                    eprintln!(
+                        "--thumbs takes screens, apps and windows only, never a camera or the system's picker"
+                    );
+                    2
+                }
                 Err(error) => {
                     eprintln!("--thumbs takes a JSON list of [key, target] pairs: {error}");
                     2
@@ -107,6 +116,11 @@ pub fn main(args: &[String]) -> i32 {
             2
         }
     }
+}
+
+/// Whether a still can be taken of `target`: a display, an app's windows or a window.
+fn shows_a_screen(target: &Target) -> bool {
+    !matches!(target, Target::Camera { .. } | Target::Portal { .. })
 }
 
 /// This OS's backend (the consent guard runs first), or exit 2 in a build without `real-capture`.
@@ -178,6 +192,15 @@ mod tests {
         assert_eq!(main(&args(&["klipolo", "--record-worker", "--meter"])), 2);
         let not_targets = args(&["klipolo", "--record-worker", "--thumbs", screen]);
         assert_eq!(main(&not_targets), 2);
+        // A camera or the system's picker is never a still's target, in any build.
+        for target in [
+            r#"{"kind":"camera","id":"cam"}"#,
+            r#"{"kind":"portal","restoreToken":null,"appId":null}"#,
+        ] {
+            let pairs = format!(r#"[["display-1",{screen}],["other",{target}]]"#);
+            let thumbs = args(&["klipolo", "--record-worker", "--thumbs", &pairs]);
+            assert_eq!(main(&thumbs), 2, "{target}");
+        }
         if !cfg!(feature = "real-capture") {
             assert_eq!(
                 main(&args(&[

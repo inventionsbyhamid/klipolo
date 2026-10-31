@@ -11,7 +11,8 @@
 //! - `live_view`: "liveView", whose first scripted event (any) ends its stream by itself at that time; its frames are
 //!   its picture of `FAKE_DISPLAY` for the view it is told.
 //! - `still`: its picture of `FAKE_DISPLAY` at the width asked, failing a target's first stills as `Script::still_fails`
-//!   says; every still asked for is kept (`stills`).
+//!   says, and `Unsupported` for a camera or the system's picker, as the Mac's; every still asked for is kept
+//!   (`stills`).
 //!
 //! A `Target::Portal` pipe sends a fresh `PipeEvent::RestoreToken` ("fake-restore-1", "fake-restore-2", …) as it
 //! starts, as the portal returns a new single-use token on every start.
@@ -235,16 +236,18 @@ impl Backend for FakeBackend {
     }
 
     /// Its picture of `FAKE_DISPLAY` `width` wide (only a JPEG's start and end markers), unless the script fails this
-    /// one of the target's stills.
+    /// one of the target's stills; `Unsupported` for a camera or the system's picker.
     fn still(&self, target: &Target, width: u32) -> Result<PreviewFrame, PipeError> {
         let mut stills = self.stills.lock().unwrap_or_else(PoisonError::into_inner);
         let before = stills.iter().filter(|(t, _)| t == target).count();
         stills.push((target.clone(), width));
-        let fails = (self.script.still_fails.iter())
-            .find(|(t, _)| t == target)
-            .map_or(0, |(_, n)| *n as usize);
-        if before < fails {
-            return Err(PipeError::Os("a fake still that didn't come".into()));
+        if matches!(target, Target::Camera { .. } | Target::Portal { .. }) {
+            return Err(PipeError::Unsupported);
+        }
+        let fails =
+            (self.script.still_fails.iter()).find(|(t, n, _)| t == target && before < *n as usize);
+        if let Some((_, _, error)) = fails {
+            return Err(error.clone());
         }
         Ok(PreviewFrame {
             jpeg: vec![0xff, 0xd8, 0xff, 0xd9],

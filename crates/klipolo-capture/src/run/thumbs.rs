@@ -5,18 +5,24 @@
 //! - **Consent:** the guard first, so a test run stops there before any call to the backend; then Screen Recording,
 //!   read without a prompt (`Backend::permissions`). When it isn't Granted, the worker refuses with
 //!   `capture.permission.screen` and takes no still; each still reads the preflight again (`platform::macos::thumbs`).
+//!   A still the system refuses (the person said no to macOS's "continue to allow" question, or took the permission
+//!   back) ends the worker the same way, so the question is never raised again turn after turn; so does a target this
+//!   computer can't take a still of (`Unsupported`).
 //! - **The turns:** at most `MAX_THUMBS` targets, in the app's order, each once every `THUMB_EVERY`, their turns
-//!   spread evenly over it, each still `THUMB_WIDTH` pixels wide in its target's shape. A still that fails sends
-//!   nothing and is tried again on its target's next turn. One that runs late moves the next turn back: stills never
-//!   bunch up to catch up.
+//!   spread evenly over it, each still `THUMB_WIDTH` pixels wide in its target's shape. A still that doesn't come (a
+//!   display gone, an app quit, a screenshot that timed out: `NoDevice`, `Os`) sends nothing and is tried again on its
+//!   target's next turn. One that runs late moves the next turn back: stills never bunch up to catch up.
 //! - Each still is a `Thumb` event under the app's key for its target.
 
 use std::time::Duration;
+
+use klipolo_model::coded::CodedError;
 
 use super::preview_loop::{Events, PreviewIo, base64_of, the_app_s_word};
 use crate::backend::{Backend, Permission, PreviewFrame, Target};
 use crate::english::msg;
 use crate::guard::assert_real_capture_allowed;
+use crate::pipe::PipeError;
 use crate::protocol::Event;
 
 /// The most targets that get stills: the first ones the app names.
@@ -33,7 +39,7 @@ pub fn run_thumbs(backend: &dyn Backend, targets: &[(String, Target)], io: Previ
 }
 
 /// Stills of `targets` (each with the app's key for it) to `io`'s output until the app's Stop or its stdin's end. 0 when
-/// stopped (or given no target); 1 when Screen Recording isn't allowed (`Failed` says so).
+/// stopped (or given no target); 1 when Screen Recording isn't allowed or a still is refused (`Failed` says why).
 pub fn thumbs_with(backend: &dyn Backend, targets: &[(String, Target)], io: PreviewIo) -> i32 {
     let PreviewIo {
         input,
@@ -71,10 +77,17 @@ pub fn thumbs_with(backend: &dyn Backend, targets: &[(String, Target)], io: Prev
                 failing[next] = false;
                 events.send(&thumb(key, &still));
             }
-            Err(error) => {
+            Err(error @ (PipeError::NoDevice | PipeError::Os(_))) => {
                 if !std::mem::replace(&mut failing[next], true) {
                     tracing::info!(%error, %key, "thumbs: a still failed; it is tried again next turn");
                 }
+            }
+            Err(error) => {
+                tracing::info!(%error, %key, "thumbs: a still was refused, so the stills end");
+                events.send(&Event::Failed {
+                    error: refusal(&error),
+                });
+                return 1;
             }
         }
         next = (next + 1) % targets.len();
@@ -93,6 +106,14 @@ pub fn thumbs_with(backend: &dyn Backend, targets: &[(String, Target)], io: Prev
         }
     }
     0
+}
+
+/// Why the stills ended, as the app hears it: a refused still is Screen Recording's step.
+fn refusal(error: &PipeError) -> CodedError {
+    match error {
+        PipeError::PermissionDenied => msg!("capture.permission.screen"),
+        _ => error.coded(),
+    }
 }
 
 fn thumb(key: &str, still: &PreviewFrame) -> Event {

@@ -61,8 +61,9 @@ pub struct Script {
     pub live_switch: bool,
     /// The live view's running stream doesn't take this many new view sizes (as one that didn't answer in time).
     pub live_view_refuses: u32,
-    /// A target's first stills that fail (`Backend::still`), as one whose screenshot didn't come.
-    pub still_fails: Vec<(Target, u32)>,
+    /// A target's first stills that fail, and with what (`Backend::still`): `Os` or `NoDevice` as a screenshot that
+    /// didn't come, `PermissionDenied` as one the system refused.
+    pub still_fails: Vec<(Target, u32, PipeError)>,
     /// The sound pipes add the sync blips to `sound` (default true; off for a pure tone, as the mic meter's test reads).
     pub sync_blips: bool,
 }
