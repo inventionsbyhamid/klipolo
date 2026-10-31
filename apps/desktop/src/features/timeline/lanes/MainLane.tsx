@@ -207,6 +207,8 @@ export const MainLane = memo(function MainLane({
           onAdd={addTransition}
           onSelect={pickTransition}
           onNoRoom={noRoomAt}
+          nextClipId={main[i + 1].id}
+          onTrimPress={onTrimPress}
         />,
       );
     }

@@ -1,5 +1,6 @@
 import { useLingui } from '@lingui/react/macro';
 import { memo, useCallback, type MouseEvent, type PointerEvent } from 'react';
+import type { Edge } from '../../../bindings/Edge';
 import { cn } from '../../../design/cn';
 import { useIntlLocale } from '../../../i18n/react';
 import { Icon } from '../../../layout/Icon';
@@ -7,6 +8,13 @@ import { formatSeconds } from '../../../lib/format';
 import { countRender } from '../../../lib/renderCount';
 import { splitDuration } from '../../../lib/transitions';
 import { registerBlock } from '../drag/registry';
+import { DRAG_SLOP_PX } from '../drag/session';
+import {
+  onBlockPointerCancel,
+  onBlockPointerMove,
+  onBlockPointerUp,
+  type PressTrim,
+} from '../drag/useBlockDrag';
 import { cutId } from '../keys/laneOrder';
 import { addTip, transitionLabels, type FadesReplaced } from '../keys/transitionActions';
 import { usToPx } from '../scale';
@@ -17,6 +25,11 @@ export const CHIP_NARROWEST_PX = 14;
 const CHIP_ICON_PX = 18;
 /** A bare cut's spot (px): its Add transition button or note, as wide as a fingertip's aim needs. */
 const SPOT_PX = 20;
+/**
+ * How far (px) either side of its cut a press on a marker is the trim's when it drags: the part of a clip's 12 px trim
+ * pad inside the clip (`.tl-trim`, 4 px of it hangs past the edge).
+ */
+const TRIM_REACH_PX = 8;
 
 interface CutMarkerProps {
   /** The clip before the cut (the transition is its `transitionOut`). */
@@ -33,6 +46,8 @@ interface CutMarkerProps {
   transitionUs: number;
   /** A transition this build lacks: its id, as a tooltip. */
   transitionTitle?: string;
+  /** The clip after the cut: a drag from a press right of the cut trims its start. */
+  nextClipId: string;
   /** Whether a transition fits here (spare footage either side). */
   canAdd: boolean;
   /** The fades at this cut a new transition would replace (the model drops them). */
@@ -45,22 +60,44 @@ interface CutMarkerProps {
   onSelect: (clipId: string) => void;
   /** A bare cut without room: a click says why. */
   onNoRoom: (clipId: string) => void;
+  /** The lane's press on a clip's edge (`blockPress`'s `onTrimPress`), which a drag from near the cut is passed to. */
+  onTrimPress: PressTrim;
 }
 
-/** A press takes focus, as a block's does (WebKit doesn't focus buttons on click), and never reaches the lane. */
-function pressMarker(e: PointerEvent<HTMLElement>) {
-  if (e.button !== 0) return;
-  e.preventDefault();
-  e.stopPropagation();
-  e.currentTarget.focus({ preventScroll: true });
+/** A press near a marker's cut, held until it moves (a trim) or is released (the cut's own click). One at a time. */
+let held: { down: PointerEvent<HTMLElement>; clipId: string; edge: Edge } | null = null;
+/** The last press was passed to a trim: the click its release makes is not the marker's. */
+let handedOff = false;
+
+/** After a press passed to a trim, the click its release makes (on the lane, which would seek) does nothing. */
+function swallowNextClick() {
+  const swallow = (e: Event) => {
+    e.stopPropagation();
+    e.preventDefault();
+    stop();
+  };
+  const later = () => setTimeout(stop, 0);
+  function stop() {
+    window.removeEventListener('click', swallow, true);
+    window.removeEventListener('pointerup', later, true);
+    window.removeEventListener('pointercancel', later, true);
+  }
+  window.addEventListener('click', swallow, true);
+  window.addEventListener('pointerup', later, true);
+  window.addEventListener('pointercancel', later, true);
 }
 
 /**
  * A cut on the Video lane, along the lane's bottom edge, clear of the clips' names at the top and of the trim
- * grips in the middle of their edges, so a press on a clip's edge there still trims.
+ * grips in the middle of their edges.
  * - Its transition: a chip centred on the cut and as wide as it lasts.
  * - Else an "Add transition" button, shown only while its spot is pointed at or has focus.
  * - Else, where neither clip has footage to spare, a note saying so, shown the same way.
+ *
+ * It covers the bottom of the clips' edges, so a press there within `TRIM_REACH_PX` of the cut is held: its first move
+ * of `DRAG_SLOP_PX` or more passes it to the trim of the clip on that side (the end of the one before, the start of
+ * the one after), with nothing focused or selected before that; only a still click acts on the cut. A press farther
+ * along a wide chip takes focus at once and selects on its click.
  *
  * It is a stop on the lane's roving focus (`cut:<clip id>`): ← / → reach it between the clips, Enter selects, adds
  * or says why. Memoized on primitives, like the blocks; its tooltip is the lane's one `CutTip` (`data-tip`).
@@ -82,6 +119,8 @@ export const CutMarker = memo(function CutMarker({
   onAdd,
   onSelect,
   onNoRoom,
+  nextClipId,
+  onTrimPress,
 }: CutMarkerProps) {
   const id = cutId(clipId);
   countRender(id);
@@ -89,15 +128,54 @@ export const CutMarker = memo(function CutMarker({
   const locale = useIntlLocale();
   const ref = useCallback((el: HTMLElement | null) => registerBlock(id, el), [id]);
   const at = usToPx(cutUs, pps);
-  const common = {
-    ref,
-    'data-block-id': id,
-    tabIndex: tabbable ? 0 : -1,
-    onPointerDown: pressMarker,
-  };
-  /** A click (a keyboard's Enter is the lane's: `useRovingFocus`) acts, and never seeks the lane. */
-  const onClick = (act: () => void) => (e: MouseEvent) => {
+  /** Its press, moves and release, for a marker whose cut is `cutX` px into it. */
+  const pointer = (cutX: number) => ({
+    onPointerDown: (e: PointerEvent<HTMLElement>) => {
+      if (e.button !== 0) return;
+      // No focus or text selection from the press itself, and never the lane's (a seek, a time range).
+      e.preventDefault();
+      e.stopPropagation();
+      handedOff = false;
+      const fromCut = e.clientX - e.currentTarget.getBoundingClientRect().left - cutX;
+      if (Math.abs(fromCut) > TRIM_REACH_PX) {
+        held = null;
+        // Takes focus, as a block's press does (WebKit doesn't focus buttons on click).
+        e.currentTarget.focus({ preventScroll: true });
+        return;
+      }
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      held = fromCut < 0 ? { down: e, clipId, edge: 'end' } : { down: e, clipId: nextClipId, edge: 'start' };
+    },
+    onPointerMove: (e: PointerEvent<HTMLElement>) => {
+      if (handedOff) return onBlockPointerMove(e);
+      const press = held;
+      if (!press || e.pointerId !== press.down.pointerId) return;
+      if (Math.hypot(e.clientX - press.down.clientX, e.clientY - press.down.clientY) < DRAG_SLOP_PX) return;
+      held = null;
+      handedOff = true;
+      swallowNextClick();
+      // The trim takes the pointer, focus and selection from here, as a press on that clip's edge would.
+      onTrimPress(press.down, press.clipId, press.edge);
+      onBlockPointerMove(e);
+    },
+    onPointerUp: (e: PointerEvent<HTMLElement>) => {
+      held = null;
+      if (handedOff) onBlockPointerUp(e);
+    },
+    onPointerCancel: () => {
+      held = null;
+      if (handedOff) onBlockPointerCancel();
+    },
+  });
+  const common = { ref, 'data-block-id': id, tabIndex: tabbable ? 0 : -1 };
+  /** A click (a keyboard's Enter is the lane's: `useRovingFocus`) takes focus and acts, and never seeks the lane. */
+  const onClick = (act: () => void) => (e: MouseEvent<HTMLElement>) => {
     e.stopPropagation();
+    if (handedOff) {
+      handedOff = false;
+      return;
+    }
+    e.currentTarget.focus({ preventScroll: true });
     act();
   };
 
@@ -111,6 +189,7 @@ export const CutMarker = memo(function CutMarker({
       <button
         type="button"
         {...common}
+        {...pointer(at - left)}
         data-tip={t({ id: 'transition.chip.tip', message: `${transitionName}, ${length}` })}
         aria-label={t({
           id: 'transition.chip.name',
@@ -133,6 +212,7 @@ export const CutMarker = memo(function CutMarker({
       <button
         type="button"
         {...common}
+        {...pointer(SPOT_PX / 2)}
         data-tip={addTip(replaces)}
         aria-label={t({
           id: 'transition.addBetween',
@@ -154,6 +234,7 @@ export const CutMarker = memo(function CutMarker({
     <button
       type="button"
       {...common}
+      {...pointer(SPOT_PX / 2)}
       data-tip={transitionLabels.noRoom()}
       aria-disabled
       aria-label={t({

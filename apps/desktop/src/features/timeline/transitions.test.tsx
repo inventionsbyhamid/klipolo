@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SnapshotPatch } from '../../bindings/SnapshotPatch';
 import type { Transaction } from '../../bindings/Transaction';
 import { fixtureSnapshot } from '../../test/fixtures';
@@ -28,7 +28,6 @@ const { useToasts } = await import('../../state/toasts');
 const { Timeline } = await import('./Timeline');
 const { Inspector } = await import('../inspector/Inspector');
 const { useEditorShortcuts } = await import('../command-palette/useEditorShortcuts');
-const { MAIN_LANE_PX } = await import('./layout');
 
 const appCss = readFileSync(resolve(__dirname, '../../styles/app.css'), 'utf8');
 /** The declarations of the rule whose selector list is exactly `selector` (as written, one selector a line). */
@@ -43,7 +42,6 @@ function rule(selector: string): string {
   }
   throw new Error(`app.css has no rule for ${selector}`);
 }
-const px = (body: string, property: string) => Number(new RegExp(`(?:^|\\s)${property}: (-?\\d+)px`).exec(body)![1]);
 
 const frames = () => act(() => new Promise((r) => setTimeout(r, 40)));
 const DISSOLVE = 'klipolo.builtin/transition.dissolve';
@@ -251,6 +249,124 @@ describe('transitions at cuts', () => {
   });
 });
 
+/** The element that last took the pointer (`setPointerCapture`): a browser sends it the moves and the release. */
+let captor: Element | null = null;
+const capture = vi.spyOn(Element.prototype, 'setPointerCapture');
+beforeEach(() => {
+  captor = null;
+  capture.mockImplementation(function (this: Element) {
+    captor = this;
+  });
+});
+afterEach(() => capture.mockReset());
+
+/**
+ * A press on marker `el` at `x` px into it (jsdom puts every box at 0, so that is its `clientX`; it has no
+ * hit-testing, so the press goes to the marker itself), moved through `moves` and released at the last, then the
+ * click a release makes. The moves and the release go where the pointer is captured, as a browser sends them.
+ */
+async function pressMarker(el: HTMLElement, x: number, moves: number[] = []) {
+  fireEvent.pointerDown(el, { pointerId: 1, button: 0, clientX: x, clientY: 60 });
+  for (const to of moves) {
+    fireEvent.pointerMove(captor ?? el, { pointerId: 1, clientX: to, clientY: 60 });
+    await frames();
+  }
+  const at = moves.at(-1) ?? x;
+  const target = captor ?? el;
+  fireEvent.pointerUp(target, { pointerId: 1, clientX: at, clientY: 60 });
+  fireEvent.click(target, { clientX: at, detail: 1 });
+  await frames();
+}
+const applied = () => vi.mocked(bridge.apply).mock.calls.map((c) => c[0]);
+const cutMarker = () => document.querySelector<HTMLElement>('[data-block-id="cut:a"]')!;
+
+describe('a press on a cut marker: a drag trims the clip on that side, a still click acts on the cut', () => {
+  it('on the +, a drag from left of the cut trims the clip before it, with nothing moved before the drag', async () => {
+    useProject.setState({ snapshot: withHandles() });
+    renderWithProviders(<Timeline />);
+    const b = screen.getByRole('button', { name: /^broll\.mp4/ });
+    act(() => b.focus());
+    useSelection.setState({ selectedId: 'b' });
+    const add = screen.getByRole('button', { name: 'Add transition between screen.mp4 and broll.mp4' });
+    // The cut is at the middle of the 20 px spot: 2 px left of it, and 2 px is no move yet.
+    fireEvent.pointerDown(add, { pointerId: 1, button: 0, clientX: 8, clientY: 60 });
+    fireEvent.pointerMove(add, { pointerId: 1, clientX: 6, clientY: 60 });
+    expect(b).toHaveFocus();
+    expect(useSelection.getState().selectedId).toBe('b');
+    expect(captor).toBe(add);
+    // 5 px: the press is the trim's, which takes the pointer, focus and selection to a.
+    fireEvent.pointerMove(add, { pointerId: 1, clientX: 3, clientY: 60 });
+    await frames();
+    const a = screen.getByRole('button', { name: /^screen\.mp4/ });
+    expect(captor).toBe(a);
+    expect(a).toHaveFocus();
+    fireEvent.pointerMove(a, { pointerId: 1, clientX: -32, clientY: 60 });
+    await frames();
+    fireEvent.pointerUp(a, { pointerId: 1, clientX: -32, clientY: 60 });
+    // The click that release makes (on the lane, in a browser) neither seeks nor adds.
+    const lane = document.querySelector<HTMLElement>('[data-lane="main"] .tl-lane')!;
+    fireEvent.click(lane, { clientX: 200, detail: 1 });
+    await frames();
+    expect(usePlayback.getState().playheadUs).toBe(25_000_000);
+    // 40 px at 40 px/s: a ends a second earlier. No transition, no toast.
+    expect(applied()).toEqual([
+      { label: 'timeline.trim.clip.undo', ops: [{ type: 'trimClip', id: 'a', edge: 'end', sourceUs: 19_000_000 }] },
+    ]);
+    expect(useToasts.getState().toasts).toEqual([]);
+    expect(useSelection.getState().selectedId).toBe('a');
+  });
+
+  it('on the +, a drag from just right of the cut trims the start of the clip after it', async () => {
+    useProject.setState({ snapshot: withHandles() });
+    renderWithProviders(<Timeline />);
+    await pressMarker(cutMarker(), 12, [17, 52]);
+    // b starts 2 s into its file: a second later.
+    expect(applied()).toEqual([
+      { label: 'timeline.trim.clip.undo', ops: [{ type: 'trimClip', id: 'b', edge: 'start', sourceUs: 3_000_000 }] },
+    ]);
+  });
+
+  it('on the +, a still click adds a transition', async () => {
+    useProject.setState({ snapshot: withHandles() });
+    renderWithProviders(<Timeline />);
+    await pressMarker(cutMarker(), 8);
+    expect(applied().map((tx) => tx.label)).toEqual(['transition.add']);
+    expect(cutMarker()).toHaveFocus();
+    expect(useSelection.getState().selectedId).toBe('transition:a');
+  });
+
+  it("on a transition's chip, a drag near the cut trims either side; a still click selects it", async () => {
+    useProject.setState({ snapshot: withDissolve() });
+    const { unmount } = renderWithProviders(<Timeline />);
+    // The 40 px chip is centred on the cut: 20 px into it.
+    await pressMarker(cutMarker(), 22, [27, 62]);
+    await pressMarker(cutMarker(), 18, [13, -22]);
+    expect(applied()).toEqual([
+      { label: 'timeline.trim.clip.undo', ops: [{ type: 'trimClip', id: 'b', edge: 'start', sourceUs: 3_000_000 }] },
+      { label: 'timeline.trim.clip.undo', ops: [{ type: 'trimClip', id: 'a', edge: 'end', sourceUs: 19_000_000 }] },
+    ]);
+    unmount();
+    renderWithProviders(<Timeline />);
+    await pressMarker(cutMarker(), 21);
+    expect(useSelection.getState().selectedId).toBe('transition:a');
+    expect(applied()).toHaveLength(2);
+  });
+
+  it('at a cut with no room, a still click says why and a drag trims instead of saying it again', async () => {
+    renderWithProviders(<Timeline />);
+    await pressMarker(cutMarker(), 9);
+    expect(useToasts.getState().toasts.map((toast) => toast.text)).toEqual([
+      'Not enough extra footage here for a transition. Trim the clips at this cut to make room.',
+    ]);
+    useToasts.setState({ toasts: [] });
+    await pressMarker(cutMarker(), 11, [16, 51]);
+    expect(useToasts.getState().toasts).toEqual([]);
+    expect(applied()).toEqual([
+      { label: 'timeline.trim.clip.undo', ops: [{ type: 'trimClip', id: 'b', edge: 'start', sourceUs: 1_000_000 }] },
+    ]);
+  });
+});
+
 /** A stand-in engine that applies `setTransition` to the store after `ms`. */
 function engineApplies(ms: number) {
   return (tx: Transaction): Promise<SnapshotPatch> =>
@@ -275,27 +391,6 @@ function engineApplies(ms: number) {
 }
 
 describe('the cut markers and the clips around them', () => {
-  it('a cut sits on the lane’s bottom edge, clear of the trim grips: a press mid-edge trims', async () => {
-    useProject.setState({ snapshot: withHandles() });
-    renderWithProviders(<Timeline />);
-    // The marker's top, in a lane of the default height, is under the 22 px grip centred on the clip's edge.
-    const marks = rule('.tl-transition,\n.tl-cut-spot');
-    const markTop = MAIN_LANE_PX - px(marks, 'bottom') - px(marks, 'height');
-    const grip = px(rule('.tl-trim::after'), 'height');
-    expect(markTop).toBeGreaterThanOrEqual(MAIN_LANE_PX / 2 + grip / 2);
-    // That press trims, with the cut's marker drawn.
-    expect(document.querySelector('[data-block-id="cut:a"]')).not.toBeNull();
-    const a = screen.getByRole('button', { name: /^screen\.mp4/ });
-    const handle = a.querySelector<HTMLElement>('[data-trim="end"]')!;
-    const y = MAIN_LANE_PX / 2;
-    fireEvent.pointerDown(handle, { pointerId: 1, button: 0, clientX: 799, clientY: y });
-    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 759, clientY: y });
-    await frames();
-    fireEvent.pointerUp(handle, { pointerId: 1, clientX: 759, clientY: y });
-    await frames();
-    expect(vi.mocked(bridge.apply).mock.calls.map((c) => c[0].label)).toEqual(['timeline.trim.clip.undo']);
-  });
-
   it('the + shows only while its own spot is pointed at or focused, never for a hover elsewhere on the lane', () => {
     useProject.setState({ snapshot: withHandles() });
     renderWithProviders(<Timeline />);
