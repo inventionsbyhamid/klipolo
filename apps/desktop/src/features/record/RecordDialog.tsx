@@ -5,11 +5,13 @@ import { Button } from '../../design/Button';
 import { Toggle } from '../../design/Toggle';
 import { Tooltip } from '../../design/Tooltip';
 import { Icon } from '../../layout/Icon';
+import { deviceDenied, screenStep } from '../../lib/recorder/permission';
 import { phaseOf, type RecorderPhase } from '../../lib/recorder/phase';
 import { useRecorder } from '../../state/recorder';
 import { DeviceSelect } from './DeviceSelect';
 import { RecordIcon } from './icons';
 import { notesBefore, notReady } from './notes';
+import { DeniedNote, MicAskedAtRecord, ScreenStep, STEP_BUTTON_ID } from './PermissionStep';
 import { WhatToRecord } from './WhatToRecord';
 import './record.css';
 
@@ -182,13 +184,18 @@ function Preview({ children }: { children?: ReactNode }) {
   );
 }
 
-/** The choices: the preview, what to record, the microphone and the camera, and what the setup says. */
+/**
+ * The choices: the preview (or the Screen Recording step, or what went wrong, in its place), what to record, the
+ * microphone and the camera, and what the setup says.
+ */
 function Choosing() {
   const setup = useRecorder((s) => s.setup);
+  const step = useRecorder((s) => s.setup !== null && screenStep(s.setup, s.picks, s.screenRefused));
+  const error = useRecorder((s) => s.error);
   if (setup === null) return null;
   return (
     <>
-      <Preview />
+      <Preview>{step ? <ScreenStep setup={setup} /> : error !== null && <Said text={error} />}</Preview>
       <WhatToRecord setup={setup} />
       <Devices setup={setup} />
       <Notes setup={setup} />
@@ -196,18 +203,39 @@ function Choosing() {
   );
 }
 
+/** Why a press didn't go, in the preview's place: an info icon and the sentence. */
+function Said({ text }: { text: string }) {
+  return (
+    <div className="record-step">
+      <p role="alert">
+        <Icon name="info" />
+        {text}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The microphone and the camera. A refused one says so under its select while it is chosen; a microphone not asked
+ * for yet says macOS asks at the Record press; a camera shows its two toggles.
+ */
 function Devices({ setup }: { setup: RecorderSetup }) {
   const picks = useRecorder((s) => s.picks);
   const pick = useRecorder((s) => s.pick);
+  const pages = setup.privacySettings;
   return (
     <div className="record-devices">
-      <DeviceSelect kind="mic" devices={setup.devices.mics} value={picks.mic} onPick={(mic) => pick({ mic })} />
+      <DeviceSelect kind="mic" devices={setup.devices.mics} value={picks.mic} onPick={(mic) => pick({ mic })}>
+        {deviceDenied(setup, 'mic', picks) && <DeniedNote kind="mic" pages={pages} />}
+        {setup.permissions.mic === 'notAsked' && picks.mic !== null && <MicAskedAtRecord />}
+      </DeviceSelect>
       <DeviceSelect
         kind="camera"
         devices={setup.devices.cameras}
         value={picks.camera}
         onPick={(camera) => pick({ camera })}
       >
+        {deviceDenied(setup, 'camera', picks) && <DeniedNote kind="camera" pages={pages} />}
         {picks.camera !== null && (
           <>
             <ToggleRow
@@ -305,7 +333,10 @@ function RecordButton() {
       variant="primary"
       aria-disabled={waiting !== null || undefined}
       onClick={() => {
-        if (waiting === null) void useRecorder.getState().record();
+        // While the Screen Recording step shows, a press goes to its button: macOS's own prompt is never the only
+        // explanation.
+        if (waiting?.why === 'screen') document.getElementById(STEP_BUTTON_ID)?.focus();
+        else if (waiting === null) void useRecorder.getState().record();
       }}
     >
       <RecordIcon name="record" />

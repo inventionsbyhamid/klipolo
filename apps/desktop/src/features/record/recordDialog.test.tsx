@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RecorderSetup } from '../../bindings/RecorderSetup';
-import { useRecorder } from '../../state/recorder';
+import { REOPEN_GRACE_MS, useRecorder } from '../../state/recorder';
 import { useToasts } from '../../state/toasts';
 import {
   app,
@@ -323,5 +323,115 @@ describe('the dialog and its choices', () => {
     // An en dash or an em dash, named by code so this file has neither.
     const dashes = new RegExp(`[${String.fromCharCode(0x2013, 0x2014)}]`);
     for (const text of said) expect(text).not.toMatch(dashes);
+  });
+});
+
+describe('permission steps', () => {
+  it('permission_step_replaces_record_until_allowed', async () => {
+    const dialog = await openOn(recorderSetup({ permissions: { screen: 'notAsked' } }));
+    // Ask: the step's button is the one yellow, and Record waits for it.
+    expect(dialog).toHaveTextContent('Klipolo needs your permission to record your screen.');
+    const step = screen.getByRole('button', { name: 'Allow screen recording' });
+    expect(yellows(dialog)).toEqual([step]);
+    expect(recordButton()).toHaveAttribute('aria-disabled', 'true');
+    expect(recordButton()).toHaveAccessibleDescription('Allow screen recording first');
+    expect(screen.queryByRole('button', { name: 'Open privacy settings' })).toBeNull();
+    // A press on Record goes to the step's button: macOS's own prompt is never the only explanation.
+    await userEvent.click(recordButton());
+    expect(step).toHaveFocus();
+    expect(fake.calls).toEqual(['setup']);
+    await userEvent.click(step);
+    expect(fake.calls).toEqual(['setup', 'allowScreen']);
+    // Reopen: the same button, so the keyboard stays on it.
+    expect(dialog).toHaveTextContent('Turn on Klipolo in the list that opened, then reopen Klipolo.');
+    expect(step).toHaveAccessibleName('Reopen Klipolo');
+    expect(step).toHaveFocus();
+    expect(yellows(dialog)).toEqual([step]);
+    const settings = screen.getByRole('button', { name: 'Open privacy settings' });
+    expect(settings).toHaveClass('btn-secondary');
+    await userEvent.click(settings);
+    expect(fake.calls).toEqual(['setup', 'allowScreen', 'openPrivacy:screen']);
+    // A double click on Allow never reopens Klipolo; a press after that does.
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + REOPEN_GRACE_MS * 10);
+    await userEvent.click(step);
+    expect(fake.calls).toEqual(['setup', 'allowScreen', 'openPrivacy:screen', 'reopen']);
+    expect(recordButton()).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('a_screen_still_refused_after_reopen_says_how_to_remove_the_older_copy', async () => {
+    const dialog = await openOn(
+      recorderSetup({ permissions: { screen: 'denied' }, screenRefusedAfterReopen: true }),
+    );
+    expect(dialog).toHaveTextContent(
+      "macOS still isn't letting Klipolo record the screen. This can happen when an older copy of Klipolo is in the list.",
+    );
+    expect(dialog).toHaveTextContent(
+      'Open Screen & System Audio Recording, select Klipolo, remove it with the minus button, then press Allow again.',
+    );
+    const settings = screen.getByRole('button', { name: 'Open privacy settings' });
+    const allow = screen.getByRole('button', { name: 'Allow screen recording' });
+    expect(settings).toHaveClass('btn-secondary');
+    expect(yellows(dialog)).toEqual([allow]);
+    // The primary is last.
+    expect(settings.compareDocumentPosition(allow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(recordButton()).toHaveAccessibleDescription('Allow screen recording first');
+  });
+
+  it('a_refused_permission_press_is_said_in_the_step', async () => {
+    const dialog = await openOn(recorderSetup({ permissions: { screen: 'notAsked' } }));
+    fake.script.allowScreen = () => refusal('capture.busy', { place: { code: 'capture.place.menuBar', params: {} } });
+    await userEvent.click(screen.getByRole('button', { name: 'Allow screen recording' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/^A recording is already running\./);
+    // Nothing offers to record again from a refused permission press.
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  });
+
+  it('denied_mic_shows_the_sentence_and_open_privacy_settings', async () => {
+    const dialog = await openOn(recorderSetup({ permissions: { mic: 'denied' } }));
+    const sentence = "Klipolo can't use your microphone. Allow it in Privacy & Security, then try again.";
+    expect(dialog).toHaveTextContent(sentence);
+    const settings = screen.getByRole('button', { name: 'Open privacy settings' });
+    expect(settings).toHaveClass('btn-ghost');
+    expect(settings).toHaveAccessibleDescription(sentence);
+    await userEvent.click(settings);
+    expect(fake.calls).toEqual(['setup', 'openPrivacy:mic']);
+    // "No microphone" still records: the sentence goes with the mic.
+    await choose('Microphone: mic-1', 'No microphone');
+    expect(dialog).not.toHaveTextContent(sentence);
+    expect(recordButton()).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('denied_camera_shows_the_sentence_once_a_camera_is_chosen', async () => {
+    const dialog = await openOn(
+      recorderSetup({ cameras: [device('FaceTime HD Camera')], permissions: { camera: 'denied' } }),
+    );
+    const sentence = "Klipolo can't use your camera. Allow it in Privacy & Security, then try again.";
+    expect(dialog).not.toHaveTextContent(sentence);
+    await choose('Camera: No camera', 'FaceTime HD Camera');
+    expect(dialog).toHaveTextContent(sentence);
+    await userEvent.click(screen.getByRole('button', { name: 'Open privacy settings' }));
+    expect(fake.calls).toEqual(['setup', 'openPrivacy:camera']);
+  });
+
+  it('a_refused_open_privacy_settings_is_said_without_try_again', async () => {
+    const dialog = await openOn(recorderSetup({ permissions: { mic: 'denied' } }));
+    fake.script.openPrivacy = () => refusal('capture.error.os');
+    await userEvent.click(screen.getByRole('button', { name: 'Open privacy settings' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Recording failed.');
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  });
+
+  it('a_mic_not_asked_yet_says_macos_asks_at_record', async () => {
+    const line = 'macOS asks to use your microphone when you press Record.';
+    const dialog = await openOn(recorderSetup({ permissions: { mic: 'notAsked' } }));
+    expect(dialog).toHaveTextContent(line);
+    await choose('Microphone: mic-1', 'No microphone');
+    expect(dialog).not.toHaveTextContent(line);
+  });
+
+  it('without_privacy_pages_there_is_no_open_privacy_settings', async () => {
+    const dialog = await openOn(recorderSetup({ permissions: { mic: 'denied' }, privacySettings: false }));
+    expect(dialog).toHaveTextContent("Klipolo can't use your microphone.");
+    expect(screen.queryByRole('button', { name: 'Open privacy settings' })).toBeNull();
   });
 });
