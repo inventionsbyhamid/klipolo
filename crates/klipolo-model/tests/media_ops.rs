@@ -329,3 +329,43 @@ fn a_full_frame_layer_added_keeps_later_rect_edits_in_its_primary() {
     let copy = &layer(&p, "copy").layout;
     assert_eq!((copy.rect, copy.overrides.get(&Landscape)), (smaller, None));
 }
+
+/// A title placed in a 16:9-only project keeps its own 9:16 place through settings changes made before 9:16 is listed:
+/// 1:1 added first, then 9:16. Its place for a format that isn't listed stays in the file and comes back with it.
+#[test]
+fn a_text_presets_portrait_place_survives_formats_added_one_at_a_time() {
+    let mut p = fixture();
+    p.settings.formats = vec![Landscape];
+    let ops = add_text_ops(&p, TextPreset::Title, "A day at Rosa's studio", secs(1.0)).unwrap();
+    let mut p = apply_ops(&p, &ops).unwrap();
+    let id = added(&ops);
+    let placed = layer(&p, &id).layout.clone();
+    for formats in [vec![Landscape, Square], vec![Landscape, Square, Portrait]] {
+        let settings = Settings {
+            formats,
+            ..p.settings.clone()
+        };
+        p = apply_ops(&p, &[Op::SetSettings { settings }]).unwrap();
+    }
+    let layout = &layer(&p, &id).layout;
+    assert_eq!(layout.overrides, placed.overrides);
+    let portrait = resolve_rect(layout, Landscape, Portrait);
+    assert_eq!(portrait, preset_rect(TextPreset::Title, Portrait));
+    assert!(inside(portrait, PORTRAIT_CLEAR), "{portrait:?}");
+}
+
+/// A settings change that keeps the formats (the frame rate) leaves every layer's places as they were.
+#[test]
+fn a_settings_change_that_keeps_the_formats_keeps_every_place() {
+    let mut p = fixture();
+    p.settings.formats = vec![Landscape, Portrait];
+    let ops = add_text_ops(&p, TextPreset::LowerThird, "Rosa Diaz", secs(1.0)).unwrap();
+    let p = apply_ops(&p, &ops).unwrap();
+    let id = added(&ops);
+    let settings = Settings {
+        fps: if p.settings.fps == 25 { 30 } else { 25 },
+        ..p.settings.clone()
+    };
+    let next = apply_ops(&p, &[Op::SetSettings { settings }]).unwrap();
+    assert_eq!(layer(&next, &id).layout, layer(&p, &id).layout);
+}
