@@ -95,6 +95,18 @@ describe('Settings: Other apps', () => {
     expect(toggle()).toHaveAttribute('aria-checked', 'true');
   });
 
+  it('a_status_that_cant_be_read_says_so', async () => {
+    vi.mocked(mcp.mcpStatus).mockRejectedValue(new Error('Klipolo can\'t do that in this version.'));
+    useAi.setState({ status: { mode: 'key', keyHint: '6789' }, settingsOpen: true });
+    render(<SettingsDialog />);
+    const section = await screen.findByRole('region', { name: 'Other apps' });
+    const note = await within(section).findByText(
+      "Klipolo couldn't read this setting. Close Settings and open it again.",
+    );
+    expect(note.closest('[role="status"]')).not.toBeNull();
+    expect(toggle()).toHaveAttribute('aria-disabled', 'true');
+  });
+
   it('copy_config_puts_the_json_on_the_clipboard', async () => {
     const write = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText: write }, configurable: true });

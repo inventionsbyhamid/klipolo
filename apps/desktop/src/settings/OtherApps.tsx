@@ -26,12 +26,14 @@ export function OtherApps() {
   const [wanted, setWanted] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<'done' | 'failed' | null>(null);
+  /** Rust didn't answer what the setting is (an older Klipolo, or an error): nothing here can work. */
+  const [unread, setUnread] = useState(false);
 
   useEffect(() => {
     let live = true;
     mcpStatus().then(
       (s) => live && setStatus(s),
-      () => undefined,
+      () => live && setUnread(true),
     );
     // While Settings is open, the list follows apps as they come and go.
     const stop = onMcpApps((apps) => live && setStatus((s) => s && { ...s, connected: apps })).catch(() => null);
@@ -109,6 +111,14 @@ export function OtherApps() {
         {said}
       </p>
       {error && <FieldError id="settings-apps-error" text={error} />}
+      {unread && (
+        <Note
+          text={t({
+            id: 'otherApps.unread',
+            message: "Klipolo couldn't read this setting. Close Settings and open it again.",
+          })}
+        />
+      )}
       <div className="input-row">
         <button
           type="button"
