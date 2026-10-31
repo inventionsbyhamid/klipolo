@@ -32,7 +32,7 @@ const rust = rustPackages(JSON.parse(read(metadataFile)));
 const page = await pagePackages(path.resolve(pageDir));
 const all = [...rust, ...page];
 for (const p of all) {
-  p.files = licenceFiles(p.dir, p.licenseFile);
+  p.files = licenceFiles(p.dirs ?? [p.dir], p.licenseFile && path.resolve(p.dir, p.licenseFile));
   p.chosen = choose(p);
   p.copyright = unique(p.files.filter((f) => !/^notice/i.test(path.basename(f))).flatMap((f) => copyrightLines(read(f))));
   p.notices = p.files.filter((f) => /^notice/i.test(path.basename(f))).map((f) => tidy(read(f)));
@@ -65,16 +65,46 @@ function rustPackages(meta) {
   return [...seen]
     .filter((id) => !own.has(id))
     .map((id) => byId.get(id))
-    .map((p) => ({
-      kind: 'rust',
-      name: p.name,
-      version: p.version,
-      license: p.license,
-      licenseFile: p.license_file,
-      url: p.repository || p.homepage || `https://crates.io/crates/${p.name}`,
-      authors: p.authors ?? [],
-      dir: path.dirname(p.manifest_path),
-    }));
+    .map((p) => {
+      const dir = path.dirname(p.manifest_path);
+      const git = gitSource(p.source);
+      return {
+        kind: 'rust',
+        name: p.name,
+        version: p.version,
+        license: p.license,
+        licenseFile: p.license_file,
+        // A git dependency is the repository and commit Cargo.lock pins (a fork, often), not the crate's own
+        // `repository`, and its licence files may sit at the top of that repository rather than in the crate's folder.
+        url: git ? git.url : p.repository || p.homepage || `https://crates.io/crates/${p.name}`,
+        commit: git?.commit,
+        authors: p.authors ?? [],
+        dir,
+        dirs: git ? upToCheckout(dir) : [dir],
+      };
+    });
+}
+
+// "git+https://github.com/o/r?rev=abc#<commit>" as { url: "https://github.com/o/r", commit }; null for other sources.
+function gitSource(source) {
+  const m = /^git\+([^?#]+)(?:\?[^#]*)?#([0-9a-f]{40})$/.exec(source ?? '');
+  if (!m) {
+    if ((source ?? '').startsWith('git+')) throw new Error(`a git source without a full commit: ${source}`);
+    return null;
+  }
+  return { url: m[1].replace(/\.git$/, ''), commit: m[2] };
+}
+
+// <dir> and its parents up to the root of Cargo's git checkout (the folder holding .cargo-ok), nearest first.
+function upToCheckout(dir) {
+  const dirs = [dir];
+  for (let d = dir; !fs.existsSync(path.join(d, '.cargo-ok')); ) {
+    const up = path.dirname(d);
+    if (up === d) throw new Error(`no git checkout root above ${dir}`);
+    d = up;
+    dirs.push(d);
+  }
+  return dirs;
 }
 
 async function pagePackages(dir) {
@@ -171,18 +201,19 @@ function repoUrl(pkg) {
   return r.replace(/^git\+/, '').replace(/^git:\/\//, 'https://').replace(/\.git$/, '').replace(/^github:/, 'https://github.com/');
 }
 
-// The package's licence, copyright and notice files at its top level, and Cargo's license-file if it names another.
-function licenceFiles(dir, licenseFile) {
-  const files = fs
-    .readdirSync(dir)
-    .filter((f) => /^(licen[cs]e|copying|copyright|notice|unlicense)([-._].*)?$/i.test(f))
-    .map((f) => path.join(dir, f))
-    .filter((f) => fs.statSync(f).isFile());
-  if (licenseFile) {
-    const f = path.resolve(dir, licenseFile);
-    if (fs.existsSync(f) && !files.includes(f)) files.push(f);
-  }
-  return files.sort();
+// The licence, copyright and notice files in each of <dirs> (the package's folder, and for a git dependency the
+// folders above it up to its repository's top), and Cargo's license-file if it names another.
+function licenceFiles(dirs, licenseFile) {
+  const files = dirs.flatMap((dir) =>
+    fs
+      .readdirSync(dir)
+      .filter((f) => /^(licen[cs]e|copying|copyright|notice|unlicense)([-._].*)?$/i.test(f))
+      .sort()
+      .map((f) => path.join(dir, f))
+      .filter((f) => fs.statSync(f).isFile()),
+  );
+  if (licenseFile && fs.existsSync(licenseFile) && !files.includes(licenseFile)) files.push(licenseFile);
+  return files;
 }
 
 // The package's licence expression as the sets of licences it allows (OR of ANDs), and the set Klipolo takes: every
@@ -304,7 +335,7 @@ function render(rust, page) {
       lines.push('', title);
       for (const p of group) {
         const choice = p.license === id ? '' : ` (${p.license})`;
-        lines.push(`  ${p.name} ${p.version}${choice}  ${p.url}`);
+        lines.push(`  ${p.name} ${p.version}${choice}  ${p.url}${p.commit ? ` at commit ${p.commit}` : ''}`);
         if (p.copyright.length) lines.push(...p.copyright.map((c) => `      ${c}`));
         else if (p.authors.length) lines.push(`      Authors: ${p.authors.join(', ')}`);
       }

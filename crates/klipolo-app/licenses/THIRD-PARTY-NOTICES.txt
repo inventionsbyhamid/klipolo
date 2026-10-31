@@ -47,7 +47,7 @@ Apache-2.0 (11)
 Rust crates
   codespan-reporting 0.12.0  https://github.com/brendanzab/codespan
       Authors: Brendan Zabarauskas <bjzaba@yahoo.com.au>
-  cpal 0.15.3  https://github.com/rustaudio/cpal
+  cpal 0.15.3  https://github.com/CapSoftware/cpal at commit 6013cb5f8bd34ddfbf7b215b9540fd211ce829fc
   dpi 0.1.2 (Apache-2.0 AND MIT)  https://github.com/rust-windowing/winit
       Copyright (c) 2018 Jorge Aparicio
       Copyright © 2005-2020 Rich Felker, et al.
@@ -487,7 +487,8 @@ Rust crates
       Copyright (c) 2014 Alex Crichton
   chrono 0.4.45 (MIT OR Apache-2.0)  https://github.com/chronotope/chrono
       Copyright (c) 2014, Kang Seonghoon.
-  cidre 0.11.0  https://github.com/yury/cidre.git
+  cidre 0.11.0  https://github.com/CapSoftware/cidre at commit bf84b67079a89d6eaf01c1dab073baaba1ea8f77
+      Copyright (c) Yury Korolev
   cidre-macros 0.3.0  https://crates.io/crates/cidre-macros
   cookie 0.18.2 (MIT OR Apache-2.0)  https://github.com/SergioBenitez/cookie-rs
       Copyright 2017 Sergio Benitez
