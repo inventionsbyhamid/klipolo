@@ -14,7 +14,9 @@
 //! The eval set names a project, its one asset and that asset's transcript, speaker turns and scene log (paths beside
 //! `cases.json`). Every file counts as analyzed, and its loudness is made from the transcript: speech where a word is
 //! said, quiet elsewhere, so pause removal finds the transcript's pauses. Each case is one message on that project, on
-//! the conversation it gives, with the playhead at 0 and no selection unless it says otherwise.
+//! the conversation it gives, with the playhead at 0 and no selection unless it says otherwise. The library the media
+//! tools name is the set's own `library` files (as if just imported: not in the project yet) and Klipolo's pack as its
+//! `pack` manifest lists it, each pack file where the manifest says.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -23,12 +25,13 @@ use std::sync::Arc;
 
 use klipolo_analysis::providers::meta_chat::MetaChat;
 use klipolo_chat::{
-    AnalysisState, Audience, ChatError, Inputs, PlanOut, SceneLog, SpeakerTurn, ToolCall, Turn,
-    View, build_context, plan,
+    AnalysisState, Audience, ChatError, Inputs, Library, LibraryItem, MediaKind, PlanOut, SceneLog,
+    SpeakerTurn, ToolCall, Turn, View, build_context, plan,
 };
 use klipolo_meta::{MetaClient, SecretString};
 use klipolo_model::Project;
 use klipolo_model::load_project;
+use klipolo_model::project::Asset;
 use klipolo_model::speech::{LEVEL_WINDOW_US, Levels, Speech, Transcript, WordKind};
 use klipolo_model::time::{RangeUs, Us};
 use serde::Deserialize;
@@ -37,8 +40,8 @@ use serde_json::{Map, Value, json};
 const KEY_ENV: &str = "MODEL_API_KEY";
 const USAGE: &str =
     "usage: klipolo-chat-eval [--cases <cases.json>] [--only <id>]... [--min-pass <n>]";
-/// The planner's target: at least this many of the 18 cases.
-const MIN_PASS: usize = 16;
+/// The planner's target: at least this many of the 22 cases.
+const MIN_PASS: usize = 20;
 /// Loudness of a window with a word said in it, and of one without, in dBFS.
 const SPEECH_DB: f32 = -20.0;
 const QUIET_DB: f32 = -70.0;
@@ -51,7 +54,45 @@ struct EvalSet {
     transcript: String,
     turns: String,
     scenes: String,
+    /// Klipolo's pack manifest (`assets/library/manifest.json`).
+    #[serde(default)]
+    pack: Option<String>,
+    /// The person's own files in the library.
+    #[serde(default)]
+    library: Vec<OwnFile>,
     cases: Vec<Case>,
+}
+
+/// A file of the person's in the library, made up: a name, what it is, and how long it plays.
+#[derive(Deserialize)]
+struct OwnFile {
+    name: String,
+    /// "music", "sound" or "image".
+    kind: String,
+    #[serde(default)]
+    seconds: f64,
+}
+
+/// The pack's manifest, as far as the library reads it.
+#[derive(Deserialize)]
+struct Manifest {
+    items: Vec<PackItem>,
+}
+
+#[derive(Deserialize)]
+struct PackItem {
+    id: String,
+    name: String,
+    /// "music", "sound" or "sticker".
+    category: String,
+    /// Beside the manifest.
+    file: String,
+    #[serde(default)]
+    duration_ms: Option<u64>,
+    #[serde(default)]
+    width: Option<u32>,
+    #[serde(default)]
+    height: Option<u32>,
 }
 
 /// One message, and what it should come to.
@@ -180,6 +221,77 @@ fn fixture(dir: &Path, set: &EvalSet) -> Result<Fixture, String> {
     })
 }
 
+/// A library file's asset: its JSON read, so a field added later keeps its default.
+fn library_asset(
+    id: &str,
+    kind: MediaKind,
+    path: &str,
+    name: &str,
+    length: Us,
+    size: (u32, u32),
+) -> Result<Asset, String> {
+    let picture = kind == MediaKind::Image;
+    serde_json::from_value(json!({
+        "id": id,
+        "kind": if picture { "image" } else { "audio" },
+        "path": path,
+        "name": name,
+        "durationUs": length,
+        "width": size.0,
+        "height": size.1,
+        "fps": 0.0,
+        "hasAudio": !picture,
+    }))
+    .map_err(|e| format!("{name}: {e}"))
+}
+
+/// The set's own library files, then the pack's items.
+fn library(dir: &Path, set: &EvalSet) -> Result<Library, String> {
+    let mut items = Vec::new();
+    for (i, own) in set.library.iter().enumerate() {
+        let kind = match own.kind.as_str() {
+            "music" => MediaKind::Music,
+            "sound" => MediaKind::Sound,
+            "image" => MediaKind::Image,
+            other => return Err(format!("{}: no kind {other:?}", own.name)),
+        };
+        let path = format!("/library/{}", own.name);
+        let length = secs_to_us(own.seconds.max(1.0));
+        let id = format!("library-{i}");
+        let asset = library_asset(&id, kind, &path, &own.name, length, (1024, 1024))?;
+        items.push(LibraryItem {
+            name: own.name.clone(),
+            kind,
+            asset,
+            pack: false,
+        });
+    }
+    if let Some(manifest) = &set.pack {
+        let manifest_path = dir.join(manifest);
+        let folder = manifest_path.parent().unwrap_or(dir).to_path_buf();
+        let read: Manifest = json(dir, manifest)?;
+        for it in read.items {
+            let kind = match it.category.as_str() {
+                "music" => MediaKind::Music,
+                "sound" => MediaKind::Sound,
+                _ => MediaKind::Image,
+            };
+            let length = it.duration_ms.map_or(5_000_000, |ms| ms as Us * 1000);
+            let size = (it.width.unwrap_or(0), it.height.unwrap_or(0));
+            let path = folder.join(&it.file).to_string_lossy().into_owned();
+            let id = format!("pack-{}", it.id);
+            let asset = library_asset(&id, kind, &path, &it.name, length, size)?;
+            items.push(LibraryItem {
+                name: it.name,
+                kind,
+                asset,
+                pack: true,
+            });
+        }
+    }
+    Ok(Library { items })
+}
+
 /// Loudness for `length` of sound from `transcript`: a window is speech when a word (not a pause) is said in it.
 fn levels(transcript: &Transcript, length: Us) -> Levels {
     let windows = (length.max(0) as usize).div_ceil(LEVEL_WINDOW_US as usize);
@@ -206,6 +318,7 @@ fn run(args: &Args) -> Result<bool, String> {
     };
     let dir = args.cases.parent().unwrap_or(Path::new("."));
     let fx = fixture(dir, &set)?;
+    let library = library(dir, &set)?;
     let cases: Vec<&Case> = (set.cases.iter())
         .filter(|c| args.only.is_empty() || args.only.contains(&c.id))
         .collect();
@@ -232,7 +345,14 @@ fn run(args: &Args) -> Result<bool, String> {
                 end: secs_to_us(b),
             }),
         };
-        let ctx = build_context(&fx.project, &fx.speech, &fx.turns, &fx.scenes, &view);
+        let ctx = build_context(
+            &fx.project,
+            &fx.speech,
+            &fx.turns,
+            &fx.scenes,
+            &view,
+            &library,
+        );
         let inputs = Inputs {
             message: case.message.clone(),
             view,
@@ -240,6 +360,7 @@ fn run(args: &Args) -> Result<bool, String> {
             speech: fx.speech.clone(),
             scenes: fx.scenes.clone(),
             analysis: HashMap::from([(fx.asset.clone(), AnalysisState::Done)]),
+            library: library.clone(),
         };
         let planned = runtime.block_on(plan(
             &model,
@@ -265,8 +386,13 @@ fn run(args: &Args) -> Result<bool, String> {
                 Err(_) => "no answer".to_owned(),
             }
         );
-        if let Err(why) = verdict {
-            println!("     why: {why}");
+        match verdict {
+            Err(why) => println!("     why: {why}"),
+            // Which way it passed, when the case allows more than one.
+            Ok(k) if case.expect.len() > 1 => {
+                println!("     passed on alternative #{k} of {}", case.expect.len());
+            }
+            Ok(_) => {}
         }
         if let Ok(out) = &planned {
             println!("     reply: {}", out.reply);
@@ -306,8 +432,8 @@ fn shown_answers(out: &PlanOut) -> String {
     answers.join(" then ")
 }
 
-/// Ok when one of the case's alternatives matches `out`, else why not.
-fn judge(case: &Case, out: &PlanOut) -> Result<(), String> {
+/// The first of the case's alternatives that `out` matches, by index, else why none does.
+fn judge(case: &Case, out: &PlanOut) -> Result<usize, String> {
     let refused: Vec<&str> = (out.compiled.refusals.iter())
         .filter(|r| r.audience == Audience::Model)
         .map(|r| r.reason.as_str())
@@ -336,7 +462,7 @@ fn judge(case: &Case, out: &PlanOut) -> Result<(), String> {
             continue;
         }
         match outcome_fails(&expect.outcome, out) {
-            None => return Ok(()),
+            None => return Ok(k),
             Some(flag) => why.push(format!("#{k}: {flag}")),
         }
     }
@@ -412,7 +538,8 @@ fn mismatch(expected: &[ExpectedCall], actual: &[(String, Value)]) -> String {
 }
 
 /// Whether `got` matches `want`: a number within 0.01, `{min, max}` a range, a string ignoring case, `{contains}` a
-/// part of it, `{anyOf}` one of several, a list item by item, anything else equal.
+/// part of it, `{anyOf}` one of several, `{minItems}` a list of at least that many items, a list item by item, anything
+/// else equal.
 fn value_matches(want: &Value, got: &Value) -> bool {
     match want {
         Value::Number(n) => {
@@ -436,6 +563,10 @@ fn value_matches(want: &Value, got: &Value) -> bool {
         }
         Value::Object(rule) if rule.contains_key("anyOf") => (rule["anyOf"].as_array())
             .is_some_and(|options| options.iter().any(|w| value_matches(w, got))),
+        Value::Object(rule) if rule.contains_key("minItems") => {
+            let least = rule["minItems"].as_u64().unwrap_or(0) as usize;
+            got.as_array().is_some_and(|g| g.len() >= least)
+        }
         Value::Object(fields) => got.as_object().is_some_and(|g| {
             (fields.iter()).all(|(k, w)| g.get(k).is_some_and(|got| value_matches(w, got)))
         }),
@@ -485,6 +616,61 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
         ToolCall::FollowSubject { description } | ToolCall::BlurObjects { description } => {
             json!({"description": description})
         }
+        ToolCall::AddMusic {
+            file,
+            volume,
+            duck,
+            at_us,
+        } => json!({"file": file, "volume": volume, "duck": duck, "atSec": at_us.map(s)}),
+        ToolCall::AddSound { name, at_us } => {
+            json!({"name": name, "atSec": at_us.iter().map(|&t| s(t)).collect::<Vec<_>>()})
+        }
+        ToolCall::AddText {
+            text,
+            preset,
+            at_us,
+            duration_us,
+        } => json!({
+            "text": text,
+            "preset": preset.key(),
+            "atSec": at_us.map(s),
+            "durationSec": duration_us.map(s),
+        }),
+        ToolCall::AddImage {
+            file,
+            size,
+            position,
+            at_us,
+            duration_us,
+        } => json!({
+            "file": file,
+            "size": size.map(|x| x.key()),
+            "position": position.map(|x| x.key()),
+            "atSec": at_us.map(s),
+            "durationSec": duration_us.map(s),
+        }),
+        ToolCall::MakeSticker {
+            prompt,
+            position,
+            at_us,
+            duration_us,
+        } => json!({
+            "prompt": prompt,
+            "position": position.map(|x| x.key()),
+            "atSec": at_us.map(s),
+            "durationSec": duration_us.map(s),
+        }),
+        ToolCall::MakeTitleCard {
+            title,
+            prompt,
+            at_us,
+            duration_us,
+        } => json!({
+            "title": title,
+            "prompt": prompt,
+            "atSec": at_us.map(s),
+            "durationSec": duration_us.map(s),
+        }),
         ToolCall::AskUser { question } => json!({"question": question}),
         ToolCall::CannotDo { reason } => json!({"reason": reason}),
     };
@@ -537,6 +723,10 @@ mod tests {
         ));
         assert!(value_matches(&json!(true), &json!(true)));
         assert!(!value_matches(&json!(true), &json!(null)));
+        // A list of at least so many items.
+        assert!(value_matches(&json!({"minItems": 3}), &json!([1, 2, 3])));
+        assert!(!value_matches(&json!({"minItems": 3}), &json!([1, 2])));
+        assert!(!value_matches(&json!({"minItems": 1}), &json!("a")));
         let range = json!([{"startSec": {"min": 63.0, "max": 68.0}}]);
         assert!(value_matches(
             &range,
@@ -627,6 +817,27 @@ mod tests {
             ),
             ("setCaptions", json!({"on": true, "style": "karaoke"})),
             ("followSubject", json!({"description": "woman astronaut"})),
+            (
+                "addMusic",
+                json!({"file": "lofi", "volume": null, "duck": true, "atSec": 0.0}),
+            ),
+            ("addSound", json!({"name": "whoosh", "atSec": [12.8, 23.0]})),
+            (
+                "addText",
+                json!({"text": "Day 1", "preset": "title", "atSec": 0.0, "durationSec": 3.0}),
+            ),
+            (
+                "addImage",
+                json!({"file": "logo", "size": "small", "position": "top-right", "atSec": null, "durationSec": null}),
+            ),
+            (
+                "makeSticker",
+                json!({"prompt": "paper plane", "position": null, "atSec": 67.0, "durationSec": 5.0}),
+            ),
+            (
+                "makeTitleCard",
+                json!({"title": "Day 1", "prompt": "trams", "atSec": 0.0, "durationSec": null}),
+            ),
         ];
         for (name, args) in written {
             let call = ToolCall::parse(&FunctionCall {
@@ -637,6 +848,33 @@ mod tests {
             .unwrap();
             assert_eq!(tool_json(&call), (name.to_owned(), args));
         }
+    }
+
+    #[test]
+    fn the_library_is_the_sets_own_files_and_the_pack() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../klipolo-chat/evals");
+        let text = std::fs::read_to_string(dir.join("cases.json")).unwrap();
+        let set: EvalSet = serde_json::from_str(&text).unwrap();
+        let library = library(&dir, &set).unwrap();
+        let first = &library.items[0];
+        assert_eq!(
+            (first.name.as_str(), first.kind, first.pack),
+            ("lofi-beat.mp3", MediaKind::Music, false)
+        );
+        assert!(first.asset.has_audio && first.asset.duration_us > 60_000_000);
+        // The pack as its manifest lists it, each file where the manifest says.
+        assert_eq!(library.items.len(), 1 + 16);
+        let whoosh = (library.items.iter()).find(|i| i.name == "Whoosh").unwrap();
+        assert_eq!((whoosh.kind, whoosh.pack), (MediaKind::Sound, true));
+        assert_eq!(whoosh.asset.duration_us, 900_000);
+        assert!(
+            Path::new(&whoosh.asset.path).is_file(),
+            "{}",
+            whoosh.asset.path
+        );
+        let heart = (library.items.iter()).find(|i| i.name == "Heart").unwrap();
+        assert_eq!(heart.kind, MediaKind::Image);
+        assert!(heart.asset.width > 0 && heart.asset.height > 0);
     }
 
     #[test]

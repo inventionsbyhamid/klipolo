@@ -15,6 +15,10 @@
 //! before what was heard or seen). An edge on a word is padded as `word_cut` pads a cut of the words the range holds,
 //! so a cut never clips a word it keeps or removes; no other edge is padded.
 //!
+//! A moment the media tools place something at (`moment`: a sound, a title, a sticker) stands on the same evidence,
+//! but lands on a change of shot or topic within the tolerance before anything heard or seen there (a whoosh "at every
+//! topic change" plays on the change, not on the word beside it); what the person pointed at still comes first.
+//!
 //! Times are the snapshot's timeline, as the context showed them; the compiler maps them into its working copy after.
 //! Building costs O(words + pauses + scene items + clips) once per message; a lookup is a binary search.
 
@@ -26,7 +30,7 @@ use klipolo_model::speech::silence::timeline_pauses;
 use klipolo_model::speech::{PAUSE_US, Speech, Spoken, spoken, word_cut};
 use klipolo_model::time::{MAX_TIME_US, RangeUs, US_PER_SEC, Us, secs_to_us};
 
-use crate::context::{SceneLog, View, scene_spans, within_video};
+use crate::context::{SceneLog, View, scene_changes, scene_spans, within_video};
 
 /// How far a model's time may lie from what it was shown.
 pub const TOLERANCE_US: Us = 300_000;
@@ -57,6 +61,8 @@ pub(crate) enum Unfounded {
 pub(crate) struct Evidence {
     /// Sorted by time, then by `Source`.
     edges: Vec<(Us, Source)>,
+    /// Where a change of shot or topic starts (`context::scene_changes`), sorted.
+    changes: Vec<Us>,
     spoken: Spoken,
     fps: u32,
 }
@@ -106,20 +112,47 @@ impl Evidence {
         edges.extend((typed_times(message, duration).into_iter()).map(|t| (t, Source::Typed)));
         edges.sort_unstable();
         edges.dedup();
+        let mut changes = scene_changes(p, scenes);
+        changes.sort_unstable();
+        changes.dedup();
         Self {
             edges,
+            changes,
             spoken,
             fps: p.settings.fps,
         }
     }
 
-    /// The edge nearest `t` within `TOLERANCE_US`, if any.
-    pub(crate) fn snap(&self, t: Us) -> Option<(Us, Source)> {
+    /// The edges within `TOLERANCE_US` of `t`.
+    fn near(&self, t: Us) -> impl Iterator<Item = &(Us, Source)> {
         let from = (self.edges).partition_point(|&(at, _)| at < t.saturating_sub(TOLERANCE_US));
         (self.edges[from..].iter())
-            .take_while(|&&(at, _)| at <= t.saturating_add(TOLERANCE_US))
+            .take_while(move |&&(at, _)| at <= t.saturating_add(TOLERANCE_US))
+    }
+
+    /// The edge nearest `t` within `TOLERANCE_US`, if any.
+    pub(crate) fn snap(&self, t: Us) -> Option<(Us, Source)> {
+        (self.near(t))
             .min_by_key(|&&(at, source)| (at.abs_diff(t), source))
             .copied()
+    }
+
+    /// Where something placed at `t` lands: the nearest of what the person pointed at (the selection's ends, a time
+    /// they typed, the playhead), else the nearest change of shot or topic, else the nearest edge (`snap`), each within
+    /// `TOLERANCE_US`; None when nothing is near.
+    pub(crate) fn moment(&self, t: Us) -> Option<Us> {
+        let pointed = (self.near(t))
+            .filter(|(_, source)| *source <= Source::Playhead)
+            .min_by_key(|&&(at, source)| (at.abs_diff(t), source))
+            .map(|&(at, _)| at);
+        let from = (self.changes).partition_point(|&at| at < t.saturating_sub(TOLERANCE_US));
+        let change = (self.changes[from..].iter())
+            .take_while(|&&at| at <= t.saturating_add(TOLERANCE_US))
+            .min_by_key(|&&at| at.abs_diff(t))
+            .copied();
+        pointed
+            .or(change)
+            .or_else(|| self.snap(t).map(|(at, _)| at))
     }
 
     /// `t` on its nearest edge, or as given when none is near: for a time that needs no evidence (a split).
