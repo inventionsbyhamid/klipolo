@@ -53,6 +53,9 @@ fn main() {
                     project::allow_assets(app.handle(), &snapshot.project);
                 }
             }
+            // The Captions panel's pages, one build kept; new speech on the feed is told to the page.
+            app.manage(klipolo_app::captions::CaptionsCache::default());
+            commands::captions::follow_speech(app.handle(), &projects);
             app.manage(projects);
             // How Klipolo pays for Meta's models (the Keychain), and this Mac's id with the relay (app support).
             let support = app.path().data_dir().ok().map(|dir| dir.join("Klipolo"));
@@ -84,6 +87,9 @@ fn main() {
             media_cache::media_peaks_info,
             media_cache::media_peaks,
             media_cache::media_thumbs,
+            commands::captions::captions_pages,
+            commands::captions::captions_find,
+            commands::captions::dev_fixture_speech,
         ])
         .build(tauri::generate_context!())
         .expect("Klipolo could not start");
