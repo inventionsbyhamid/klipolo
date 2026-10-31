@@ -567,8 +567,8 @@ fn relay_status(code: &SecretString, info: &DeviceInfo) -> AiStatus {
     }
 }
 
-/// A relay error as a sentence about Klipolo's server (the client's own wording names Meta): `offline` when it
-/// couldn't be reached, the relay's own sentence when it gave one.
+/// A relay error as a sentence about Klipolo's server: `offline` when it couldn't be reached, the relay's own sentence
+/// when it gave one.
 fn relay_error(error: &MetaError, offline: &str) -> SettingsError {
     tracing::warn!(%error, "relay");
     SettingsError::new(match error {
@@ -577,6 +577,6 @@ fn relay_error(error: &MetaError, offline: &str) -> SettingsError {
         // A bare 504 is the relay (or Traefik in front of it) giving up, not Meta.
         MetaError::TimedOut { message: None, .. } => RELAY_BUSY.to_owned(),
         MetaError::Decode(_) => RELAY_UNREADABLE.to_owned(),
-        other => other.user_message(),
+        other => other.relay_user_message(),
     })
 }

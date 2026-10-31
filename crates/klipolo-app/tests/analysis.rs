@@ -1073,6 +1073,89 @@ async fn a_clip_without_sound_still_gets_its_scene_log() {
     server.verify().await;
 }
 
+/// With an access code every call goes through Klipolo's relay: a relay that can't answer is named as Klipolo's server,
+/// not Meta. With the person's own key, Meta is named.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failure_names_the_service_the_call_went_to() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/devices/me"))
+        .respond_with(device(2.0, 0.0))
+        .mount(&server)
+        .await;
+    for at in ["/meta/v1/asr/transcribe", "/v1/asr/transcribe"] {
+        Mock::given(method("POST"))
+            .and(path(at))
+            .respond_with(ResponseTemplate::new(503))
+            .expect(1)
+            .mount(&server)
+            .await;
+    }
+    nothing_else(&server).await;
+
+    for (store, said) in [
+        (
+            code_store(),
+            "Klipolo's server is busy right now. Try again in a moment.",
+        ),
+        (
+            key_store(),
+            "Meta is busy right now. Try again in a moment.",
+        ),
+    ] {
+        let h = harness(&server, store, FakeMedia::whole(SECONDS));
+        let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 2), SECONDS);
+        h.state
+            .start(std::slice::from_ref(&clip))
+            .await
+            .finished()
+            .await;
+        assert_eq!(
+            h.state.state_of("talk"),
+            AssetState::Failed {
+                reason: said.into()
+            }
+        );
+    }
+    server.verify().await;
+}
+
+/// Word timing runs on Klipolo's relay in both modes: with the person's own key too, a relay that can't answer is named
+/// as Klipolo's server in why the words are rough.
+#[tokio::test(flavor = "multi_thread")]
+async fn word_timing_that_fails_names_klipolos_server() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(asr_answer())
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(ResponseTemplate::new(503))
+        .expect(1)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    let file = h.clip("talk.m4a", 2);
+    let clip = asset("talk", AssetKind::Audio, &file, SECONDS);
+
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+
+    let rough: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
+    assert_eq!(
+        rough.approximate_reason.as_deref(),
+        Some("Klipolo's server is busy right now. Try again in a moment.")
+    );
+    server.verify().await;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Levels and chat's inputs
 

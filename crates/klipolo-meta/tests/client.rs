@@ -574,6 +574,68 @@ async fn unreadable_answer_is_a_decode_error() {
     assert!(matches!(error, MetaError::Decode(_)), "{error:?}");
 }
 
+/// Through Klipolo's relay (an access code), a call that gets no answer, or a failure the relay doesn't explain, names
+/// Klipolo's server: Meta is never reached directly. With the person's own key the same failures name Meta. A
+/// sentence of the relay's own is kept either way.
+#[tokio::test]
+async fn relay_failures_name_klipolos_server_and_key_failures_name_meta() {
+    let unreachable = MetaClient::relay(secret(TOKEN))
+        .with_relay_base(CLOSED)
+        .with_meta_base(CLOSED)
+        .with_ledger(None)
+        .transcribe(wav(), &[])
+        .await
+        .unwrap_err();
+    let cases = [
+        (
+            unreachable,
+            "Could not reach Klipolo's server. Check your internet connection and try again.",
+            "Could not reach Meta. Check your internet connection and try again.",
+        ),
+        (
+            transcribe_error(ResponseTemplate::new(503)).await,
+            "Klipolo's server is busy right now. Try again in a moment.",
+            "Meta is busy right now. Try again in a moment.",
+        ),
+        (
+            transcribe_error(ResponseTemplate::new(400).set_body_json(
+                json!({"error": "invalid_request", "message": "The audio must be mono."}),
+            ))
+            .await,
+            "Klipolo's server could not process this request. Try again.",
+            "Meta could not process this request. Try again.",
+        ),
+        (
+            transcribe_error(ResponseTemplate::new(200).set_body_string("not json")).await,
+            "Klipolo's server sent an answer the app could not read. Try again.",
+            "Meta sent an answer Klipolo could not read. Try again.",
+        ),
+        (
+            transcribe_error(ResponseTemplate::new(504)).await,
+            "Klipolo's server took too long to answer. Try again.",
+            "Meta took too long to answer. Try again.",
+        ),
+        (
+            transcribe_error(ResponseTemplate::new(402)).await,
+            "This device has used its Klipolo credit.",
+            "Your Meta credit has run out.",
+        ),
+    ];
+    for (error, relay, key) in cases {
+        assert_eq!(error.relay_user_message(), relay, "{error:?}");
+        assert_eq!(error.user_message(), key, "{error:?}");
+    }
+    // The relay's own sentence stays.
+    let explained = transcribe_error(ResponseTemplate::new(502).set_body_json(
+        json!({"error": "meta_unreachable", "message": "Klipolo couldn't reach Meta. Try again in a moment."}),
+    ))
+    .await;
+    assert_eq!(
+        explained.relay_user_message(),
+        "Klipolo couldn't reach Meta. Try again in a moment."
+    );
+}
+
 // Files.
 
 /// A file in the temp folder, removed when dropped.
