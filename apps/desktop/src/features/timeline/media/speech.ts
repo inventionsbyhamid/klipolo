@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Project } from '../../../bindings/Project';
 import type { RangeUs } from '../../../bindings/RangeUs';
 import { library } from '../../../bridge/library';
+import { useAnalysis } from '../../../state/analysis';
 import { useProject } from '../../../state/project';
 
 /**
@@ -40,7 +41,10 @@ export function refreshSpeech() {
 
 let following = false;
 
-/** Keeps the ranges current as the project changes (once per page). */
+/**
+ * Keeps the ranges current (once per page): as the project changes, and as a clip's analysis finishes (Rust has given
+ * the engine what was said in it by then).
+ */
 export function followSpeech() {
   if (following) return;
   following = true;
@@ -49,6 +53,13 @@ export function followSpeech() {
     const was = prev.snapshot;
     if (now?.history.revision === was?.history.revision && now?.project.id === was?.project.id) return;
     refreshSpeech();
+  });
+  useAnalysis.subscribe((s, prev) => {
+    if (s.states === prev.states) return;
+    const finished = Object.entries(s.states).some(
+      ([id, now]) => now.state === 'done' && prev.states[id]?.state !== 'done',
+    );
+    if (finished) refreshSpeech();
   });
   refreshSpeech();
 }
