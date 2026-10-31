@@ -64,6 +64,11 @@ export interface TakeSlice {
   actions: Pick<RecorderStore, 'record' | 'cancel' | 'recordWithout'>;
   /** One `recorder-event`: the dialog's take's, or one it lets go; any other take's is ignored. */
   hear: (event: RecorderEvent) => void;
+  /**
+   * The dialog closes. Nothing records without it: a take on its way is cancelled, and a recording one is stopped and
+   * saved, then followed to its end.
+   */
+  closing: () => void;
   /** Forgets every press, take and held event (tests). */
   forget: () => void;
 }
@@ -334,9 +339,17 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
     set({ gate: left.length > 0 ? left : null });
   }
 
+  function closing() {
+    const s = get();
+    if (phaseOf(s) === 'starting') return void cancel();
+    // Recording or paused: Stop saves it. While it saves there is nothing to send. Either way it is followed to its end.
+    if (s.take !== null && (s.worker === 'recording' || s.worker === 'paused')) void tell(s.take, 'stop');
+  }
+
   return {
     actions: { record, cancel, recordWithout },
     hear,
+    closing,
     forget: () => {
       if (press) press.cancelled = true;
       press = null;

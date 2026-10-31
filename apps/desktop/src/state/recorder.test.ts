@@ -379,6 +379,40 @@ describe('the take', () => {
     await vi.waitFor(() => expect(fake.sent.at(-1)).toEqual({ take, command: { cmd: 'cancel' } }));
   });
 
+  it('closing_right_after_record_disarms_the_take_once_it_is_armed', async () => {
+    await opened();
+    const arming = deferred<ArmedTake>();
+    fake.script.arm = () => arming.promise;
+    const pressing = rec().record();
+    await vi.waitFor(() => expect(fake.calls).toContain('arm'));
+    rec().close();
+    expect(rec().open).toBe(false);
+    arming.resolve({ id: 'take-1', countdownS: 3 });
+    await pressing;
+    expect(fake.sent).toEqual([{ take: 'take-1', command: { cmd: 'disarm' } }]);
+    expect(rec().take).toBeNull();
+  });
+
+  it('closing_while_recording_saves_the_take', async () => {
+    const take = await pressed();
+    fake.emit(take, state('recording'));
+    rec().close();
+    expect(rec().open).toBe(false);
+    await vi.waitFor(() => expect(fake.sent.at(-1)).toEqual({ take, command: { cmd: 'stop' } }));
+    // Shift Command R during the take: nothing new shows, nothing changes.
+    await rec().openRecorder();
+    expect(rec()).toMatchObject({ open: false, take, worker: 'recording' });
+    expect(fake.calls.filter((c) => c === 'setup')).toHaveLength(1);
+    // The take is followed to its end: saved, and the dialog stays closed.
+    fake.emit(take, state('stopping'));
+    expect(rec().worker).toBe('stopping');
+    fake.emit(take, { ev: 'finished', session: take });
+    expect(rec()).toMatchObject({ open: false, take: null });
+    fake.emit(take, state('idle'));
+    await rec().openRecorder();
+    expect(rec().open).toBe(true);
+  });
+
   it('a_take_given_up_after_recording_closes_the_dialog_when_klipolo_is_back', async () => {
     const take = await pressed();
     fake.emit(take, state('recording'));

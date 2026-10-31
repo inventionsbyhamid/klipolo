@@ -5,7 +5,6 @@ import type { WorkerState } from '../bindings/WorkerState';
 import { recorder, type TakeImport, type UnlistenFn } from '../bridge/recorder';
 import { errorMessage } from '../lib/errors';
 import { defaultPicks, NO_PICKS, type Picks } from '../lib/recorder/choices';
-import { phaseOf } from '../lib/recorder/phase';
 import { clipStarts } from '../lib/timeline';
 import { usePlayback } from './playback';
 import { useProject } from './project';
@@ -51,10 +50,13 @@ export interface RecorderState {
 export interface RecorderStore extends RecorderState {
   /**
    * Opens the dialog and reads the setup: nothing is armed, asked or captured. Open already, it reads the setup again
-   * only when it couldn't be read (Try again).
+   * only when it couldn't be read (Try again). While a take runs it does nothing.
    */
   openRecorder: () => Promise<void>;
-  /** Closes the dialog; during the countdown the take is cancelled first. */
+  /**
+   * Closes the dialog. From the press through the countdown the take is cancelled first; while it records, it is
+   * stopped and saved, and followed to its end.
+   */
   close: () => void;
   pick: (p: Partial<Picks>) => void;
   /** Record: arms the take, then starts it (its countdown). */
@@ -135,6 +137,8 @@ export const useRecorder = create<RecorderStore>((set, get) => {
 
     openRecorder: async () => {
       const s = get();
+      // A take runs (its dialog hidden, or closed while it records): nothing new opens and nothing changes.
+      if (s.take !== null) return;
       if (s.open && s.setupError === null) return;
       const mine = ++opening;
       set({ ...CLOSED, open: true });
@@ -147,10 +151,8 @@ export const useRecorder = create<RecorderStore>((set, get) => {
     },
 
     close: () => {
-      const s = get();
-      if (!s.open) return;
-      // Nothing records without the dialog: a take on its way is cancelled first.
-      if (phaseOf(s) === 'starting') void s.cancel();
+      if (!get().open) return;
+      takePart.closing();
       opening++;
       set(CLOSED);
     },
