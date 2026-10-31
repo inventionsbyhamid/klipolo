@@ -13,8 +13,8 @@
 //! replace the refused ones: the first answer's other calls and the second's (a repeat of what was done dropped) are
 //! compiled once, in that order, against the same snapshot and inputs, so the message still makes one additions
 //! transaction and one proposal. A call refused back to the model again stays undone, and the reply says so; so does a
-//! tool refused in the first answer that the second answer lets go (no call of it, and no question or `cannotDo`
-//! instead).
+//! call refused in the first answer that the second answer lets go (no new call of its tool for it, counted call by
+//! call, and no question or `cannotDo` instead).
 //!
 //! The reply is the model's text, then the sentences of refusals meant for the person, then what couldn't be done; all
 //! of it without em or en dashes (`sanitize::reply`). When nothing came of the answer but what couldn't be done, the
@@ -260,21 +260,28 @@ pub async fn plan(
         .map(|(call, _)| call.name.as_str())
         .collect();
     let again = Read::of(&second.calls);
-    // A tool refused in the first answer that the second neither calls nor asks or explains about: still not done.
     let dealt_with = (again.calls.iter())
         .any(|c| matches!(c, ToolCall::AskUser { .. } | ToolCall::CannotDo { .. }));
-    let mut dropped: Vec<String> = Vec::new();
-    for name in &refused {
-        let called = second.calls.iter().any(|c| c.name == *name);
-        if !dealt_with && !called && !dropped.iter().any(|d| d == name) {
-            dropped.push((*name).to_owned());
-        }
-    }
+    // The tools of the second answer's new calls, one entry per call (unreadable ones too: they are named anyway).
+    let mut retried: Vec<String> = again.unreadable.clone();
     for call in again.calls {
         let repeat = calls[..kept].contains(&call);
         let redone = done.contains(&call.name()) && !refused.contains(&call.name());
         if !repeat && !redone {
+            retried.push(call.name().to_owned());
             calls.push(call);
+        }
+    }
+    // Each refused call of the first answer needs a new call of its tool in the second, or a question or `cannotDo`
+    // instead: one without is still not done, even when another call of that tool was only repeated.
+    let mut dropped: Vec<String> = Vec::new();
+    for name in refused.iter().filter(|_| !dealt_with) {
+        match retried.iter().position(|r| r == name) {
+            Some(k) => {
+                retried.swap_remove(k);
+            }
+            None if !dropped.iter().any(|d| d == name) => dropped.push((*name).to_owned()),
+            None => {}
         }
     }
     let compiled = compile(project, inputs, &calls);

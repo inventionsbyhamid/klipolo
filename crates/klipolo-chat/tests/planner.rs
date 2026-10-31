@@ -843,6 +843,31 @@ fn a_refused_call_the_second_answer_lets_go_is_named() {
 }
 
 #[test]
+fn each_refused_call_is_tracked_not_just_its_tool() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    // The first answer cuts the "Um," (kept) and an invented range (refused); the second only repeats the first cut.
+    let done = cut_call("call_1", 0.5, 0.8);
+    let model = Fake::new(vec![
+        answer(
+            "",
+            vec![done.clone(), cut_call("call_2", 12.3, 19.7)],
+            0.002,
+        ),
+        answer("Cutting the um.", vec![cut_call("call_3", 0.5, 0.8)], 0.002),
+    ]);
+    let out = send(&model, &[], "cut the um and the boring bit", &i, &p).unwrap();
+    assert_eq!(out.calls, vec![parsed(&done)]);
+    assert!(out.compiled.proposal.is_some());
+    assert!(
+        out.reply.contains("I couldn't make the cut"),
+        "{}",
+        out.reply
+    );
+    assert!(out.note.contains("Not done: cutRange."), "{}", out.note);
+}
+
+#[test]
 fn a_second_answer_does_not_redo_a_tool_already_done() {
     let (p, speech) = talk();
     let i = inputs(&p, speech);
