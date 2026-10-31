@@ -91,6 +91,8 @@ pub struct State {
     pub chat_before_commit: Option<Proposal>,
     /// The person discards the waiting proposal just before the next app's batch or undo.
     pub discard_before_commit: bool,
+    /// Klipolo's chat proposes this just before the next `propose`.
+    pub chat_before_propose: Option<Proposal>,
 }
 
 pub struct FakeHost {
@@ -151,6 +153,7 @@ impl FakeHost {
                 move_before_propose: false,
                 chat_before_commit: None,
                 discard_before_commit: false,
+                chat_before_propose: None,
             }),
         })
     }
@@ -412,6 +415,8 @@ impl Host for FakeHost {
         if std::mem::take(&mut s.move_before_propose) {
             return Err(HostError::Moved);
         }
+        let chat = s.chat_before_propose.take();
+        s.chat_proposes_now(chat);
         let revision = s.doc.as_ref().ok_or(HostError::NoProject)?.revision();
         let open = s.slot.as_ref().map(|slot| slot.id.as_str());
         if revision != base || open != replacing {

@@ -1116,3 +1116,28 @@ fn an_undo_that_drops_the_apps_proposal_says_so() {
     agent.call("setCaptions", captions(false));
     assert_eq!(text(&agent.call("undo", json!({}))), UNDONE);
 }
+
+#[test]
+fn removals_that_cant_reopen_because_another_proposal_waits_say_so() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    agent.cut(0.0, 13.0);
+    // The person's chat proposes between the app's captions and its removals proposed again on top.
+    let (_, proposal) = cut_c1(&host);
+    host.state().chat_before_propose = Some(proposal);
+    let before = host.revision();
+    let result = agent.call("setCaptions", captions(false));
+    assert_eq!(result["isError"], false, "{result}");
+    assert_eq!(
+        text(&result),
+        format!(
+            "{} {}",
+            fill(DONE, &[("tools", "setCaptions")]),
+            fill(WAITING_OTHER, &[("who", KLIPOLO_CHAT)])
+        )
+    );
+    assert_eq!(host.revision(), before + 1);
+    assert_eq!(host.open_proposal().map(|p| p.from), Some(None));
+}

@@ -286,7 +286,13 @@ fn edit(
                 proposed_as = Some((id, removed_us));
             }
             // The additions are in: the answer says so, and that the removals weren't proposed.
-            Err(_) if changed => said.push(words::NOT_PROPOSED.to_owned()),
+            // When someone else's proposal waits now, the app is told to wait for the person, not to retry.
+            Err(_) if changed => {
+                said.push(match someone_else(host.open_proposal().as_ref(), client) {
+                    Some(who) => waiting_other(&who),
+                    None => words::NOT_PROPOSED.to_owned(),
+                })
+            }
             Err(e) => return refused(&host_error(host, client, e)),
         }
     }
