@@ -4,9 +4,9 @@
 //! - **Allow screen recording** asks macOS for Screen Recording (macOS lists Klipolo and asks the first time), then
 //!   opens that settings page, so the person can turn Klipolo on there.
 //! - **Reopen Klipolo** saves the open project and starts Klipolo again, as macOS applies a Screen Recording grant
-//!   only to a relaunched app. Refused while a take is armed through saving (`capture.busy`); a save that fails keeps
-//!   Klipolo open and says why. As it goes ahead it is remembered (`screen_reopen`), so the step can say when macOS
-//!   still refuses.
+//!   only to a relaunched app. Refused while a take is armed through saving (`capture.busy`) and while an export runs
+//!   (the restart would end it); a save that fails keeps Klipolo open and says why. From its start no take arms. As it
+//!   goes ahead it is remembered (`screen_reopen`), so the step can say when macOS still refuses.
 //! - **Open privacy settings** opens Screen Recording's, the camera's or the microphone's page. It only opens the page.
 
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -47,22 +47,30 @@ pub(super) fn allow_screen(backend: &dyn Backend, open: Open<'_>) {
     }
 }
 
-/// "Open privacy settings": `page` with `open`; `capture.error.os` when it didn't open.
+/// "Open privacy settings": `page` with `open`; `capture.permission.settingsDidntOpen` when it didn't open.
 pub(super) fn open_privacy(page: PrivacyPage, open: Open<'_>) -> Result<(), CodedError> {
-    open(privacy_url(page)).map_err(|e| words::os_error(&e.to_string()))
+    open(privacy_url(page)).map_err(|e| words::settings_didnt_open(&e))
 }
 
-/// "Reopen Klipolo": refused while `recorder` has a take, armed through saving (`capture.busy`). Otherwise the project
-/// is saved (`flush`; a failure keeps Klipolo open and says why), the reopen is remembered in `files`, and Klipolo
-/// starts again (`restart`).
+/// "Reopen Klipolo": refused while an export runs (`exporting`: `capture.permission.reopenExporting`) or `recorder`
+/// has a take, armed through saving (`capture.busy`). Otherwise no take arms from now on, the project is saved
+/// (`flush`; a failure keeps Klipolo open and says why, and takes arm again), the reopen is remembered in `files`, and
+/// Klipolo starts again (`restart`).
 pub(super) fn reopen(
     recorder: &Recorder,
     files: Option<&Files>,
+    exporting: bool,
     flush: impl FnOnce() -> Result<(), Said>,
     restart: impl FnOnce(),
 ) -> Result<(), Said> {
-    recorder.refuse_while_busy()?;
-    flush()?;
+    if exporting {
+        return Err(Said::Coded(words::reopen_exporting()));
+    }
+    recorder.begin_reopen()?;
+    if let Err(said) = flush() {
+        recorder.end_reopen();
+        return Err(said);
+    }
     if let Some(files) = files {
         let at_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)

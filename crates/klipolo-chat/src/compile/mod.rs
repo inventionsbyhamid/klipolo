@@ -1,7 +1,7 @@
 //! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
 //! context was built from, out as edits.
 //! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer, and the
-//!   media: `addMusic`, `addSound`, `addImage` and `makeTitleCard`'s title) are one `Transaction` the app
+//!   media: `addMusic`, `addSound`, `addText`, `addImage` and `makeTitleCard`'s title) are one `Transaction` the app
 //!   applies at once: one undo step. An addition is judged by what its part does, not by its tool: one that takes
 //!   something away (the model's own `removals`, as a format dropped with what was placed in it) is compiled again with
 //!   the removals and proposed.
@@ -11,9 +11,9 @@
 //! - `findMoments` gives moments, `followSubject` and `blurObjects` jobs for their runners, `makeSticker` and
 //!   `makeTitleCard`'s background jobs for a picture to be drawn (never an op until it exists), `askUser` questions,
 //!   `undo` a flag. `cannotDo` is a refusal shown to the person, as is a tool that needs an analysis the clip doesn't
-//!   have yet (`STILL_LISTENING`, `ANALYZE_FIRST`), a removal with nothing to remove (`NO_FILLERS`, no pause that
-//!   long) and, until its presets are built, `addText` (`TEXT_COMING_SOON`); every other refusal goes back to the model
-//!   with its reason.
+//!   have yet (`STILL_LISTENING`, `STILL_WATCHING`, `ANALYZE_FIRST`), filler words only roughly timed
+//!   (`ROUGH_FILLERS`) and a removal with nothing to remove (`NO_FILLERS`, no pause that long); every other refusal
+//!   goes back to the model with its reason.
 //!
 //! All calls compile on one working copy, in two phases: the additions in call order (the edits first, then the media
 //! layers on what the edits made, so a trim later in the answer never shortens a picture placed before it), then the
@@ -21,6 +21,9 @@
 //! (`apply_part`), tried on a copy and checked as the batch would end there (`finish_parts`): a call that fails is a
 //! `Refusal` with its index, and the others still compile. The removals' working copy ends as `apply_ops` of the
 //! proposal on the additions' result, so the review takes it as it is (`review_applied`) rather than applying again.
+//! Each phase ends with the music's refit as one more part (`Phase::refit_music`, as `with_music_refit` folds it into a
+//! hand edit): music that reached the video's end is cut or played on to the phase's new end, fading out there, in the
+//! same undo step, and the proposal's review shows the song shortened.
 //!
 //! The model's times are the snapshot's timeline, as its context showed them. A range must stand on the context or the
 //! message (`evidence`), else it is refused; it snaps to what it stands on, and is then mapped into the working copy by
@@ -42,6 +45,7 @@ use std::collections::HashMap;
 
 use klipolo_model::coded::{CodedError, ErrorParam};
 use klipolo_model::ids::Id;
+use klipolo_model::media::music::refit_music_ops;
 use klipolo_model::ops::{Op, Origin, Transaction};
 use klipolo_model::project::{AssetKind, FormatKind};
 use klipolo_model::risk::{Review, removals};
@@ -56,25 +60,34 @@ use crate::library::Library;
 use crate::sanitize;
 use crate::tools::{Moment, PictureSize, Position, ToolCall};
 use map::Map;
-pub use media::{
-    PICTURE_MARGIN, SOUND_VOLUME, TEXT_COMING_SOON, TITLE_CARD, picture_layout, picture_ops,
-    sticker_placement,
-};
+pub use media::{sticker_ops, sticker_placement};
 use trim::Trim;
 
-/// What the person is told when a tool needs a clip's analysis and Klipolo is still making it.
-pub const STILL_LISTENING: &str = "Klipolo is still listening to this clip";
+/// What the person is told when a tool needs a clip's words and Klipolo is still hearing or timing them.
+pub const STILL_LISTENING: &str =
+    "Klipolo is still listening to this clip. Ask me again when its analysis is done.";
+/// What the person is told when finding moments needs a clip's scene log and Klipolo is still making it (its words
+/// are in, so cuts work already).
+pub const STILL_WATCHING: &str =
+    "Klipolo is still watching this clip. Ask me again when its analysis is done.";
 /// What the person is told when a tool needs a clip's analysis and none was started.
 pub const ANALYZE_FIRST: &str = "Analyze this clip first";
 /// What the person is told when `removeFillers` finds no filler word.
 pub const NO_FILLERS: &str = "There are no filler words to remove.";
+/// What the person is told when a filler word is only roughly timed (word timing failed, stopped or ran out, so its
+/// turn's words were spread over it by length): a cut at its guessed time would take real words.
+pub const ROUGH_FILLERS: &str = "Some words in this clip are only roughly timed, so I can't cut filler words exactly. \
+                                 Time the words again in Captions, then ask me.";
 
 /// How far a file's analysis (transcript, loudness, scene log) is. A file missing from `Inputs::analysis` counts as
 /// not started.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AnalysisState {
     NotStarted,
+    /// Its words are being heard or timed.
     Transcribing,
+    /// Its words are in (heard and timed); its scene log is still being made.
+    Watching,
     Done,
 }
 
@@ -115,6 +128,8 @@ pub struct Compiled {
     pub refusals: Vec<Refusal>,
     /// The model asked to undo the last change.
     pub undo: bool,
+    /// The additions that went through but changed nothing (a format the video already has), by call index.
+    pub unchanged: Vec<usize>,
 }
 
 /// Removals for the person to approve.
@@ -153,7 +168,7 @@ pub enum Job {
 }
 
 /// A sticker of `prompt` to draw, cut out of its background, and show for `duration_us` at `size` and `position`
-/// (`picture_ops`) over the footage `anchor` names: a clip and a moment of its source, as an attached layer holds its
+/// (`sticker_ops`) over the footage `anchor` names: a clip and a moment of its source, as an attached layer holds its
 /// place (`query::anchor_at`), so it moves with that footage while the picture is drawn. `at_us` is where that footage
 /// played on the project as the message's additions left it, and the start to use when `anchor` is None (past the main
 /// track's end). When the picture comes, `sticker_placement` says where and how long on the project as it is then, or
@@ -174,8 +189,9 @@ pub struct Refusal {
     pub call_index: usize,
     pub reason: String,
     pub audience: Audience,
-    /// The clip the refusal is about, by its ref in the context (`c4`): set when a clip isn't analyzed yet, so the
-    /// person sees which one `STILL_LISTENING` or `ANALYZE_FIRST` means (the panel shows it beside the sentence).
+    /// The clip the refusal is about, by its ref in the context (`c4`): set when a clip isn't analyzed yet or its
+    /// fillers are only roughly timed, so the person sees which one `STILL_LISTENING`, `STILL_WATCHING`, `ANALYZE_FIRST`
+    /// or `ROUGH_FILLERS` means (the app names it after "this clip").
     pub clip: Option<String>,
 }
 
@@ -269,7 +285,10 @@ struct Phase {
     /// `work` as the batch would end here (transitions refitted, validated): the phase's result.
     done: Project,
     ops: Vec<Op>,
-    labels: Vec<CodedError>,
+    /// Each kept edit's label, with its call's index in the answer.
+    labels: Vec<(usize, CodedError)>,
+    /// The calls whose edits held no ops: they went through and changed nothing.
+    unchanged: Vec<usize>,
 }
 
 impl Phase {
@@ -279,6 +298,7 @@ impl Phase {
             done: start,
             ops: Vec::new(),
             labels: Vec::new(),
+            unchanged: Vec::new(),
         }
     }
 
@@ -304,27 +324,33 @@ impl Phase {
         })
     }
 
-    /// Makes a tried edit part of the batch. An edit with no ops (a format the video already has) adds nothing.
-    fn keep(&mut self, tried: Tried) {
+    /// Makes the tried edit of call `call` part of the batch. An edit with no ops (a format the video already has) adds
+    /// nothing, and the call is noted as having changed nothing.
+    fn keep(&mut self, tried: Tried, call: usize) {
         let Some((work, done)) = tried.after else {
+            self.unchanged.push(call);
             return;
         };
         self.work = work;
         self.done = done;
         self.ops.extend(tried.edit.ops);
-        self.labels.push(tried.edit.label);
+        self.labels.push((call, tried.edit.label));
     }
 
     /// `try_edit`, then `keep`.
-    fn add(&mut self, edit: Edit) -> Result<(), ModelError> {
+    fn add(&mut self, edit: Edit, call: usize) -> Result<(), ModelError> {
         let tried = self.try_edit(edit)?;
-        self.keep(tried);
+        self.keep(tried, call);
         Ok(())
     }
 
-    /// The phase's ops as one chat transaction, labelled for its first call and how many more.
+    /// The phase's ops as one chat transaction, labelled for the first of its calls in the answer (the order the
+    /// person asked in, whatever order they were placed in) and how many more.
     fn transaction(&self) -> Option<Transaction> {
-        let (label, params) = match self.labels.as_slice() {
+        let mut labels = self.labels.clone();
+        labels.sort_by_key(|(call, _)| *call);
+        let labels: Vec<CodedError> = labels.into_iter().map(|(_, label)| label).collect();
+        let (label, params) = match labels.as_slice() {
             [] => return None,
             [one] => (one.code.clone(), one.params.clone()),
             [first, rest @ ..] => (
@@ -489,7 +515,7 @@ impl Compiler<'_> {
                     format_proposed |= matches!(call, ToolCall::SetFormat { .. });
                     waiting.push((i, if_it_removes));
                 }
-                Ok(tried) => adding.keep(tried),
+                Ok(tried) => adding.keep(tried, i),
                 Err(r) => refuse(&mut out, i, r),
             }
         }
@@ -516,7 +542,7 @@ impl Compiler<'_> {
                 // A layer takes nothing away; if one ever did, it would be proposed like any other.
                 Ok((tried, _)) if tried.removes => waiting.push((i, Removal::Moved(call))),
                 Ok((tried, title_id)) => {
-                    adding.keep(tried);
+                    adding.keep(tried, i);
                     // The title is in: its background is drawn for it.
                     if let (Some(title_id), ToolCall::MakeTitleCard { prompt, .. }) =
                         (title_id, call)
@@ -528,6 +554,8 @@ impl Compiler<'_> {
             }
         }
         waiting.sort_by_key(|(i, _)| *i);
+        // A longer video plays the music that reached its end on to the new end.
+        adding.refit_music(self.snapshot);
 
         // The project as the additions leave it: what the app applies them to, and what the proposal starts from.
         let with_additions = adding.done.clone();
@@ -572,15 +600,19 @@ impl Compiler<'_> {
                 Removal::Longer(t) => ("trimClip", trim::lengthen(self, work, &t)),
             };
             let added = edit.and_then(|edit| {
-                (removing.add(edit)).map_err(|e| to_model(format!("{call_name}: {e}")))
+                (removing.add(edit, i)).map_err(|e| to_model(format!("{call_name}: {e}")))
             });
             match added {
                 Ok(()) => out.proposed_calls.push(i),
                 Err(r) => refuse(&mut out, i, r),
             }
         }
+        // A shorter video cuts the music that reached its end there, fading out: Apply takes both in one step.
+        removing.refit_music(&adding.done);
 
         out.additions = adding.transaction();
+        out.unchanged = adding.unchanged.clone();
+        out.unchanged.sort_unstable();
         match removing.transaction() {
             Some(tx) => {
                 let review = tx.review_applied(&adding.done, removing.done);
@@ -618,7 +650,12 @@ impl Compiler<'_> {
                 at_us,
             } => media::add_music(self, work, file, (*volume, *duck), *at_us),
             ToolCall::AddSound { name, at_us } => media::add_sound(self, work, name, at_us),
-            ToolCall::AddText { .. } => media::add_text(),
+            ToolCall::AddText {
+                text,
+                preset,
+                at_us,
+                duration_us,
+            } => media::add_text(self, work, text, *preset, (*at_us, *duration_us)),
             ToolCall::AddImage {
                 file,
                 size,
@@ -630,9 +667,10 @@ impl Compiler<'_> {
         }
     }
 
-    /// The person's refusal when `call` needs an analysis some clip on the main track lacks: its voice files' for
-    /// removing fillers and pauses, and its picture's too for finding moments. Not started anywhere wins over still
-    /// being made, since analyzing is something the person can do; the refusal names the first clip it is about.
+    /// The person's refusal when `call` needs an analysis some clip on the main track lacks: its voice files' words for
+    /// removing fillers and pauses (a scene log still being made doesn't hold them up), and its picture's scene log too
+    /// for finding moments. Not started anywhere wins over still being made, since analyzing is something the person
+    /// can do, and words still to come over a scene log; the refusal names the first clip it is about.
     fn missing_analysis(&self, call: &ToolCall) -> Option<Refused> {
         let pictures = match call {
             ToolCall::RemoveFillers | ToolCall::RemoveSilences { .. } => false,
@@ -650,8 +688,9 @@ impl Compiler<'_> {
         }
         let state =
             |id: &str| (self.inputs.analysis.get(id).copied()).unwrap_or(AnalysisState::NotStarted);
-        // The first clip, in timeline order, with a file never analyzed, and the first with one still being made.
-        let (mut not_started, mut transcribing) = (None, None);
+        // The first clip, in timeline order, with a file never analyzed, the first whose words are still to come, and
+        // the first whose scene log is.
+        let (mut not_started, mut transcribing, mut watching) = (None, None, None);
         for clip in &p.timeline.main {
             let mut files = voices.get(clip.id.as_str()).cloned().unwrap_or_default();
             if pictures
@@ -664,14 +703,16 @@ impl Compiler<'_> {
                 match state(file) {
                     AnalysisState::NotStarted => not_started = not_started.or(Some(&clip.id)),
                     AnalysisState::Transcribing => transcribing = transcribing.or(Some(&clip.id)),
-                    AnalysisState::Done => {}
+                    AnalysisState::Watching if pictures => watching = watching.or(Some(&clip.id)),
+                    AnalysisState::Watching | AnalysisState::Done => {}
                 }
             }
         }
-        let (said, clip) = match (not_started, transcribing) {
-            (Some(clip), _) => (ANALYZE_FIRST, clip),
-            (None, Some(clip)) => (STILL_LISTENING, clip),
-            (None, None) => return None,
+        let (said, clip) = match (not_started, transcribing, watching) {
+            (Some(clip), ..) => (ANALYZE_FIRST, clip),
+            (None, Some(clip), _) => (STILL_LISTENING, clip),
+            (None, None, Some(clip)) => (STILL_WATCHING, clip),
+            (None, None, None) => return None,
         };
         Some(Refused {
             reason: said.to_owned(),
@@ -740,4 +781,28 @@ fn is_edit(call: &ToolCall) -> bool {
             | ToolCall::CannotDo { .. }
             | ToolCall::FindMoments { .. }
     )
+}
+
+impl Phase {
+    /// Fits the music that reached the video's end before the phase (`before`) to where the phase leaves it
+    /// (`refit_music_ops`): one more part of the batch, so the phase's one undo step takes back both and its result
+    /// is what `apply_ops` makes of all its ops. A refit the batch refuses (a bug) is left out, as `with_music_refit`
+    /// leaves it, so the edits still go through.
+    fn refit_music(&mut self, before: &Project) {
+        let refit = refit_music_ops(before, &self.done);
+        if refit.is_empty() {
+            return;
+        }
+        let mut work = self.work.clone();
+        if klipolo_model::apply_part(&mut work, &refit).is_err() {
+            return;
+        }
+        let mut done = work.clone();
+        if finish_parts(&mut done).is_err() {
+            return;
+        }
+        self.work = work;
+        self.done = done;
+        self.ops.extend(refit);
+    }
 }

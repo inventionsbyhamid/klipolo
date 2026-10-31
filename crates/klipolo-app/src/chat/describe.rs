@@ -1,6 +1,7 @@
-//! A proposal in Klipolo's words: its title on the card ("Cut 14 pauses and 9 filler words, 23.4 s in total") and a
-//! short tag over each cut ("um", "pause"), read from what it removes on the project it applies to. A proposal that
-//! removes no footage (a format dropped with what was placed for it) is titled by what it drops: never "0 s".
+//! A proposal in Klipolo's words: its title on the card ("Cut 14 pauses and 9 filler words") and a short tag over each
+//! cut ("um", "pause"), read from what it removes on the project it applies to. The title names what goes, never how
+//! long: the card says the total once under it ("23.4 s in total"). A proposal that removes no footage (a format
+//! dropped with what was placed for it) is titled by what it drops.
 
 use klipolo_model::Project;
 use klipolo_model::project::FormatKind;
@@ -24,7 +25,6 @@ pub(crate) fn describe(
     base: &Project,
     speech: &Speech,
     removals: &Removals,
-    removed_us: Us,
     tools: &[&str],
 ) -> Described {
     let pauses_asked = tools.contains(&"removeSilences");
@@ -61,21 +61,15 @@ pub(crate) fn describe(
     let title = if removals.ranges.is_empty() {
         dropped(removals)
     } else if tools == ["keepOnly"] {
-        format!(
-            "Keep only the parts you chose, cutting {}",
-            seconds(removed_us)
-        )
+        "Keep only the parts you chose".to_owned()
     } else {
-        cut_title(pauses, fillers, others, removed_us)
+        cut_title(pauses, fillers, others)
     };
     Described { title, tags }
 }
 
-/// "Cut 14 pauses and 9 filler words, 23.4 s in total"; "Cut 6.2 s" for one cut of nothing in particular.
-fn cut_title(pauses: usize, fillers: usize, others: usize, removed_us: Us) -> String {
-    if pauses == 0 && fillers == 0 && others == 1 {
-        return format!("Cut {}", seconds(removed_us));
-    }
+/// "Cut 14 pauses and 9 filler words"; "Cut 1 part" for one cut of nothing in particular.
+fn cut_title(pauses: usize, fillers: usize, others: usize) -> String {
     let mut parts = Vec::new();
     if pauses > 0 {
         parts.push(count(pauses, "pause", "pauses"));
@@ -86,7 +80,7 @@ fn cut_title(pauses: usize, fillers: usize, others: usize, removed_us: Us) -> St
     if others > 0 {
         parts.push(count(others, "part", "parts"));
     }
-    format!("Cut {}, {} in total", list(&parts), seconds(removed_us))
+    format!("Cut {}", list(&parts))
 }
 
 /// A proposal with no footage to cut, titled by what it drops.
@@ -158,15 +152,8 @@ mod tests {
 
     use super::*;
 
-    fn titled(removals: Removals, removed_us: Us, tools: &[&str]) -> String {
-        describe(
-            &Project::new("P"),
-            &Speech::default(),
-            &removals,
-            removed_us,
-            tools,
-        )
-        .title
+    fn titled(removals: Removals, tools: &[&str]) -> String {
+        describe(&Project::new("P"), &Speech::default(), &removals, tools).title
     }
 
     #[test]
@@ -175,27 +162,24 @@ mod tests {
             formats: vec![FormatKind::Square],
             ..Removals::default()
         };
-        assert_eq!(titled(one, 0, &["setFormat"]), "Drop the square format");
+        assert_eq!(titled(one, &["setFormat"]), "Drop the square format");
         let two = Removals {
             formats: vec![FormatKind::Square, FormatKind::Portrait],
             ..Removals::default()
         };
         assert_eq!(
-            titled(two, 0, &["setFormat"]),
+            titled(two, &["setFormat"]),
             "Drop the square and portrait formats"
         );
         let layers = Removals {
             items: vec!["a".into()],
             ..Removals::default()
         };
-        assert_eq!(
-            titled(layers, 0, &["trimClip"]),
-            "Remove or shorten 1 layer"
-        );
+        assert_eq!(titled(layers, &["trimClip"]), "Remove or shorten 1 layer");
     }
 
     #[test]
-    fn cuts_are_counted_with_their_total() {
+    fn cuts_are_counted_and_the_total_is_left_to_the_card() {
         let ranges = |n: i64| Removals {
             ranges: (0..n)
                 .map(|k| RangeUs {
@@ -206,18 +190,71 @@ mod tests {
             ..Removals::default()
         };
         // With no words heard, a cut is a pause only when pauses were asked for.
+        assert_eq!(titled(ranges(14), &["removeSilences"]), "Cut 14 pauses");
+        assert_eq!(titled(ranges(1), &["cutRange"]), "Cut 1 part");
+        assert_eq!(titled(ranges(3), &["cutRange"]), "Cut 3 parts");
         assert_eq!(
-            titled(ranges(14), 23_440_000, &["removeSilences"]),
-            "Cut 14 pauses, 23.4 s in total"
+            titled(ranges(2), &["keepOnly"]),
+            "Keep only the parts you chose"
         );
-        assert_eq!(titled(ranges(1), 6_200_000, &["cutRange"]), "Cut 6.2 s");
-        assert_eq!(
-            titled(ranges(3), 3_000_000, &["cutRange"]),
-            "Cut 3 parts, 3.0 s in total"
+    }
+
+    #[test]
+    fn pauses_and_fillers_are_named_together() {
+        use klipolo_model::speech::{Transcript, Word};
+        use klipolo_model::timeline::{Clip, ClipSource};
+        // "So um we went" with a long pause after "went": the um's cut and the pause's.
+        let mut p = Project::new("P");
+        p.assets = vec![
+            serde_json::from_value(serde_json::json!({
+                "id": "talk", "kind": "video", "path": "/m/talk.mov", "name": "talk.mov",
+                "durationUs": 10_000_000, "width": 1920, "height": 1080, "fps": 30.0, "hasAudio": true,
+            }))
+            .unwrap(),
+        ];
+        p.timeline.main = vec![Clip::new(
+            ClipSource::Asset { id: "talk".into() },
+            0,
+            10_000_000,
+        )];
+        let word = |text: &str, start: Us, end: Us, kind: WordKind| Word {
+            text: text.into(),
+            start_us: start,
+            end_us: end,
+            confidence: 0.9,
+            kind,
+        };
+        let mut speech = Speech::default();
+        speech.transcripts.insert(
+            "talk".into(),
+            std::sync::Arc::new(Transcript {
+                key: "k".into(),
+                language: "en".into(),
+                model: "m".into(),
+                covered_us: 10_000_000,
+                complete: true,
+                words: vec![
+                    word("So", 0, 300_000, WordKind::Word),
+                    word("um", 400_000, 700_000, WordKind::Filler),
+                    word("we", 800_000, 1_000_000, WordKind::Word),
+                    word("went.", 1_100_000, 1_400_000, WordKind::Word),
+                ],
+            }),
         );
-        assert_eq!(
-            titled(ranges(2), 41_000_000, &["keepOnly"]),
-            "Keep only the parts you chose, cutting 41.0 s"
-        );
+        let removals = Removals {
+            ranges: vec![
+                RangeUs {
+                    start: 350_000,
+                    end: 750_000,
+                },
+                RangeUs {
+                    start: 2_000_000,
+                    end: 5_000_000,
+                },
+            ],
+            ..Removals::default()
+        };
+        let said = describe(&p, &speech, &removals, &["removeFillers", "removeSilences"]);
+        assert_eq!(said.title, "Cut 1 pause and 1 filler word");
     }
 }

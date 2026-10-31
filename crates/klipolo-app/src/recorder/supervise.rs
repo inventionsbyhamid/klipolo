@@ -5,6 +5,8 @@
 //!   every second whatever it does, saving included (20 s and more on a slow drive). Silent for 5 s gives
 //!   `Kill { hard: false }`, and 2 s later `Kill { hard: true }`. A worker that hasn't said anything yet (a resumed one
 //!   repairing its crashed runs) has 30 s first.
+//! - **A saved take's worker** that doesn't exit within 15 s of `Finished` is asked to stop, then killed: its files are
+//!   complete, and the recorder is freed for the next take.
 //! - **An exit without `Finished`**:
 //!   - after the person's Stop (Stop, Cancel or Disarm sent, or the worker said Stopping): never resumed; the take is
 //!     finished from its files (`Recover`);
@@ -24,6 +26,8 @@ pub const HANG_MS: u64 = 5_000;
 pub const HARD_AFTER_MS: u64 = 2_000;
 /// A worker that hasn't said anything yet gets this long.
 pub const FIRST_WORDS_MS: u64 = 30_000;
+/// A worker that said `Finished` has this long to exit.
+pub const EXIT_GRACE_MS: u64 = 15_000;
 /// At most this many resumes...
 pub const RESUMES: usize = 3;
 /// ...in this long.
@@ -70,6 +74,8 @@ pub struct Supervisor {
     /// The person's Stop, Cancel or Disarm was sent, or a worker said Stopping.
     stopping: bool,
     finished: bool,
+    /// When the worker said `Finished`.
+    finished_ms: Option<u64>,
     /// The worker said why it failed (`Failed`), so an end needn't.
     said_failed: bool,
     hidden: bool,
@@ -89,6 +95,7 @@ impl Supervisor {
             started: false,
             stopping: false,
             finished: false,
+            finished_ms: None,
             said_failed: false,
             hidden: false,
             resumes: VecDeque::new(),
@@ -115,7 +122,10 @@ impl Supervisor {
     pub fn on_event(&mut self, ev: &Event, now_ms: u64) -> Vec<SupervisorAction> {
         self.life_ms = now_ms;
         self.spoke = true;
-        self.asked_ms = None;
+        // A saved take's worker that still talks is still asked to go.
+        if self.finished_ms.is_none() {
+            self.asked_ms = None;
+        }
         let mut out = Vec::new();
         match ev {
             // The supervisor's own while the take records: the page needn't wake once a second while Klipolo is
@@ -146,22 +156,33 @@ impl Supervisor {
         out.push(SupervisorAction::Forward(ev.clone()));
         if matches!(ev, Event::Finished { .. }) && !self.finished {
             self.finished = true;
+            self.finished_ms = Some(now_ms);
             out.push(SupervisorAction::Import);
         }
         out
     }
 
-    /// The clock moved: a silent worker is asked to stop, then killed.
+    /// The clock moved: a silent worker is asked to stop, then killed; so is a saved take's worker that doesn't exit.
     pub fn on_tick(&mut self, now_ms: u64) -> Option<SupervisorAction> {
-        // A finished take's worker is exiting while the take lands (which can take a while), and one finished from its
-        // files has none: never "hung".
-        if self.killed || self.finished || self.exited {
+        // One finished from its files has no worker.
+        if self.killed || self.exited {
             return None;
         }
         if let Some(asked) = self.asked_ms {
             if now_ms.saturating_sub(asked) >= HARD_AFTER_MS {
                 self.killed = true;
                 return Some(SupervisorAction::Kill { hard: true });
+            }
+            return None;
+        }
+        // Saved: its files are complete. It is exiting while the take lands, and only one that stays is asked to go.
+        if let Some(at) = self.finished_ms {
+            if now_ms.saturating_sub(at) >= EXIT_GRACE_MS {
+                tracing::warn!(
+                    "recorder: the worker saved the take but didn't exit, so it is asked to stop"
+                );
+                self.asked_ms = Some(now_ms);
+                return Some(SupervisorAction::Kill { hard: false });
             }
             return None;
         }

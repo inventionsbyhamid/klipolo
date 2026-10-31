@@ -5,10 +5,11 @@
 //! app sound. Each label is its `capture.source.*` code, never worded text, and each id is stable and role-like
 //! (`screen`, `camera`, `mic`), so the page words a gate, meter or health event's source by its id.
 //!
-//! **Fixed by the app:** the quality the setup offered first for the display, no sound, macOS's shortcuts (Option
-//! Command R, P and M), a 3 s countdown, no words for the worker (it reads English), and where the take lands.
+//! **Fixed by the app:** the quality the setup marked best for the display (and the probe's encoders for it), no
+//! sound, macOS's shortcuts (Option Command R, P and M), a 3 s countdown, no words for the worker (it reads English),
+//! and where the take lands.
 
-use klipolo_capture::backend::{CursorCaps, PresetId, Target, VideoSpec};
+use klipolo_capture::backend::{CursorCaps, EncoderPick, PresetId, Target, VideoSpec};
 use klipolo_capture::preflight::cursor::cursor_plan;
 use klipolo_capture::profile::Corner;
 use klipolo_capture::session::{ImportTarget, SessionConfig, SourceConfig, SourceSpec};
@@ -38,6 +39,11 @@ pub struct TakeChoices {
     pub os: String,
     /// The open project, or a new one made when the take lands.
     pub target: ImportTarget,
+    /// The encoders the screen tries, in order (`probe::encoders_for`); empty: the backend's own pick, its first
+    /// hardware H.264 encoder.
+    pub encoders: Vec<EncoderPick>,
+    /// The encoders the camera tries, in order (`probe::camera_encoders_for`); empty: the worker's own order.
+    pub camera_encoders: Vec<EncoderPick>,
 }
 
 /// The config of take `id`.
@@ -53,8 +59,7 @@ pub fn session_config(o: &ArmOptions, id: &str, c: &TakeChoices) -> SessionConfi
         preset: c.preset,
         cursor: cursor_plan(RecordingKind::Screen, &c.cursor_caps, true),
         sound: false,
-        // The backend's own pick: its first hardware H.264 encoder.
-        encoders: Vec::new(),
+        encoders: c.encoders.clone(),
         bubble: false,
         bubble_mirrored: false,
     });
@@ -63,7 +68,7 @@ pub fn session_config(o: &ArmOptions, id: &str, c: &TakeChoices) -> SessionConfi
         let camera = SourceSpec::Camera {
             device: device.clone(),
             preset: c.camera_preset,
-            encoders: Vec::new(),
+            encoders: c.camera_encoders.clone(),
         };
         sources.push(source("camera", SourceRole::Camera, camera));
     }

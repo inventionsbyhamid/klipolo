@@ -60,10 +60,10 @@ fn main() {
             projects.set_save_report(Arc::new(move |status: SaveStatus| {
                 let _ = handle.emit("project-save", status);
             }));
-            // The project open when the app last quit opens again; the page reads it with `project_snapshot`.
+            // Klipolo opens on the start screen, with no project open; the projects opened from it are remembered in
+            // the app's data folder, for its list.
             if let Ok(data) = app.path().app_data_dir() {
-                projects.remember_last_in(data.join("last-project"));
-                projects.open_last();
+                projects.at_launch(&data);
             }
             // The Captions panel's pages, one build kept; new speech on the feed is told to the page.
             app.manage(klipolo_app::captions::CaptionsCache::default());
@@ -117,6 +117,8 @@ fn main() {
             project::project_undo,
             project::project_redo,
             project::project_snapshot,
+            project::project_reveal,
+            project::projects_recent,
             media::media_import,
             commands::settings::settings_get,
             commands::settings::settings_set_key,
@@ -171,6 +173,8 @@ fn main() {
     app.run(|app, event| {
         // Quitting while an export runs asks first.
         commands::export::guard_quit(app, &event);
+        // A take still armed at exit is disarmed: no worker outlives Klipolo waiting with its global key.
+        recorder::release_on_exit(app, &event);
         // Every edit is on the disk before the app goes.
         if let RunEvent::Exit = event
             && let Err(error) = app.state::<ProjectSessionState>().flush()

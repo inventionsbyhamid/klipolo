@@ -289,8 +289,9 @@ fn system_open(reveal: bool, files: &[PathBuf]) -> Result<(), Said> {
     })
 }
 
+/// `open` for `files` (`reveal`: shown in Finder, selected, instead of opened in their app).
 #[cfg(target_os = "macos")]
-fn opener(reveal: bool, files: &[PathBuf]) -> std::process::Command {
+pub(crate) fn opener(reveal: bool, files: &[PathBuf]) -> std::process::Command {
     let mut command = std::process::Command::new("open");
     if reveal {
         command.arg("-R");
@@ -301,7 +302,7 @@ fn opener(reveal: bool, files: &[PathBuf]) -> std::process::Command {
 
 /// Elsewhere the file manager shows the first file's folder.
 #[cfg(not(target_os = "macos"))]
-fn opener(reveal: bool, files: &[PathBuf]) -> std::process::Command {
+pub(crate) fn opener(reveal: bool, files: &[PathBuf]) -> std::process::Command {
     let target = files
         .first()
         .map_or(std::path::Path::new("."), PathBuf::as_path);

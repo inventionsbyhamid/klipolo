@@ -91,8 +91,8 @@ pub const ENGLISH: Messages = &[
     ("capture.stop.noSources", "Every source stopped, so the recording was saved."),
     ("capture.stop.crashLoop", "The recorder kept stopping, so the recording was saved."),
     ("capture.stop.slept", "Your computer slept for a long time, so the recording stopped and was saved."),
-    // The app stops a take once the worker gives a source up because its video encoder kept failing.
-    ("capture.stop.encoder", "The video encoder stopped, so the recording stopped and was saved."),
+    // The app stops a take once the worker gives its screen up because the video encoder kept failing.
+    ("capture.stop.encoder", "The video encoder stopped, so the recording stopped and was saved. Press Record to try again."),
     // "Stop sharing" (the system's screen-sharing control) before the start gate: a start refused, so nothing was
     // recorded or saved.
     ("capture.stop.sharingBeforeStart", "Screen sharing was turned off before the recording started, so nothing was recorded."),
@@ -110,6 +110,8 @@ pub const ENGLISH: Messages = &[
     ("capture.note.soundBlock", "A moment of sound was dropped."),
     ("capture.note.silentSound", "{source} was silent the whole recording."),
     ("capture.note.micFlapping", "{source} keeps disconnecting, so we'll wait until it settles before using it again."),
+    // The camera's encoder gave up mid-take: the app keeps recording the screen without it.
+    ("capture.note.cameraDropped", "The camera stopped recording. The screen kept recording."),
     ("capture.note.micDropping", "{source} keeps disconnecting. We record it again each time it's back."),
     ("capture.note.levels", "{source}'s sound level couldn't be measured, so it plays as it was recorded."),
     ("capture.note.encoderFallback", "{source} was recorded with another video encoder, as the usual one didn't start."),
@@ -147,6 +149,10 @@ pub const ENGLISH: Messages = &[
     ("capture.permission.allowScreen", "Allow screen recording"),
     ("capture.permission.reopen", "Reopen Klipolo"),
     ("capture.permission.openSettings", "Open privacy settings"),
+    // Open privacy settings, when System Settings didn't open.
+    ("capture.permission.settingsDidntOpen", "System Settings didn't open. Open it from the Apple menu, then choose Privacy & Security."),
+    // Reopen Klipolo while an export runs: the restart would end it.
+    ("capture.permission.reopenExporting", "An export is running. Reopen Klipolo when it's done."),
     ("capture.permission.camera", "Allow Klipolo to use your camera in your computer's privacy settings, then try again."),
     ("capture.permission.mic", "Allow Klipolo to use your microphone in your computer's privacy settings, then try again."),
     // The recorder's live view: its one quiet line when it can't run (any failure but Screen Recording's,
@@ -175,7 +181,7 @@ pub const ENGLISH: Messages = &[
     ("capture.busy", "A recording is already running. Stop it from {place}."),
     // Arming while v1 dictation listens to the mic: the mic is the dictation's until it ends.
     ("capture.busyDictating", "Finish dictating first, then record."),
-    ("capture.orphan", "Klipolo closed. Still recording."),
+    ("capture.orphan", "Klipolo closed. The recording goes on until you stop it here."),
     ("capture.quit.ask", "A recording is running. Stop and save it, then quit?"),
     ("capture.import.noVideo", "This take has no picture to edit. Its sound files are in the recording's folder."),
     ("capture.import.videoUnreadable", "This take's picture couldn't be read, so there's nothing to edit. Its files are kept in the take's folder."),
@@ -219,4 +225,8 @@ pub const ENGLISH: Messages = &[
     ("capture.error.driveStuck", "The drive stopped answering, so the recording couldn't be finished. What reached it will be recovered when Klipolo opens."),
     // A test run (`KLIPOLO_TEST`): the app's recorder makes no backend and launches no worker.
     ("capture.error.testRun", "Recording is off in this test run."),
+    // The app's recorder has no folder of its own for its settings.
+    ("capture.error.noSettingsFolder", "Klipolo can't find its settings folder, so it can't record. Reopen Klipolo, then try again."),
+    // A take's folder or worker couldn't be made (a full disk says so with `capture.preflight.diskBlock`).
+    ("capture.error.setUp", "The recording couldn't be set up. Check that your Movies folder can be written to, then press Record again."),
 ];

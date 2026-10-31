@@ -676,6 +676,36 @@ def test_meta_503_passes_through_and_charges_nothing(client, conn, meta, status,
     assert spent(conn, device) == 0
 
 
+@pytest.mark.parametrize(
+    ("status", "body"),
+    [
+        (402, {"error": {"code": "payment_required", "message": "Your plan's billing is past due.", "type": "billing"}}),
+        (402, None),
+        (429, {"error": {"code": "insufficient_quota", "message": "You exceeded your current quota.", "param": None}}),
+        (429, {"error": {"code": "quota_exceeded", "message": "Quota exceeded."}}),
+        (429, {"error": {"code": "billing_hard_limit_reached", "message": "Billing hard limit reached."}}),
+        (429, {"error": {"code": None, "type": "insufficient_quota", "message": "You exceeded your current quota."}}),
+    ],
+    ids=["402", "bare-402", "insufficient-quota", "quota-exceeded", "billing-limit", "quota-as-type"],
+)
+def test_metas_lapsed_credit_is_the_relays_own_budget_answer(client, conn, meta, status, body):
+    # The relay key's Meta credit ran out: every device is told as when the
+    # shared budget is spent, never Meta's billing sentence, never "busy".
+    device = add_device(conn)
+    if body is None:
+        meta.post("/responses").respond(status, text="Payment Required")
+    else:
+        meta.post("/responses").respond(status, json=body, headers={"retry-after": "60"})
+
+    response = client.post("/meta/v1/responses", json=spark_request(), headers=device.headers)
+
+    assert response.status_code == 402
+    assert response.json() == GLOBAL_BUDGET
+    assert "retry-after" not in response.headers
+    assert ledger(conn) == []
+    assert spent(conn, device) == 0
+
+
 def test_meta_error_without_a_json_body_gets_a_plain_reason(client, conn, meta):
     device = add_device(conn)
     meta.post("/responses").respond(502, text="<html>Bad gateway</html>")

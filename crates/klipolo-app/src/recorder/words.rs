@@ -27,7 +27,7 @@ pub(super) fn stale_take() -> CodedError {
     CodedError::new("capture.error.staleTake")
 }
 
-/// "This computer can't record that.": a command the page may not send, or no place for the recorder's files.
+/// "This computer can't record that.": a command the page may not send.
 pub(super) fn refused() -> CodedError {
     CodedError::new("capture.error.unsupported")
 }
@@ -39,6 +39,40 @@ pub(super) fn no_device() -> CodedError {
 
 /// "Recording failed.", with the cause for the log only.
 pub(super) fn os_error(detail: &str) -> CodedError {
-    tracing::warn!(detail, "recorder: a take couldn't start");
+    tracing::warn!(detail, "recorder: something the recorder needs failed");
     CodedError::new("capture.error.os").with("detail", detail)
+}
+
+/// A take's folder, config or worker couldn't be made: a full disk says so ("There isn't enough space to record. Free
+/// up at least 2 GB."), anything else "The recording couldn't be set up. Check that your Movies folder can be written
+/// to, then press Record again.", with the cause for the log only.
+pub(super) fn set_up_failed(error: &std::io::Error) -> CodedError {
+    tracing::warn!(%error, "recorder: a take couldn't be set up");
+    // ENOSPC on macOS and Linux.
+    let full = error.kind() == std::io::ErrorKind::StorageFull || error.raw_os_error() == Some(28);
+    if full {
+        return CodedError::new("capture.preflight.diskBlock");
+    }
+    CodedError::new("capture.error.setUp").with("detail", error.to_string())
+}
+
+/// "Klipolo can't find its settings folder, so it can't record. Reopen Klipolo, then try again."
+pub(super) fn no_settings_folder() -> CodedError {
+    CodedError::new("capture.error.noSettingsFolder")
+}
+
+/// "Klipolo isn't allowed to record that yet.": Screen Recording isn't allowed, so Record would make macOS ask.
+pub(super) fn not_allowed() -> CodedError {
+    CodedError::new("capture.error.permission")
+}
+
+/// "System Settings didn't open. Open it from the Apple menu, then choose Privacy & Security."
+pub(super) fn settings_didnt_open(error: &std::io::Error) -> CodedError {
+    tracing::warn!(%error, "recorder: a privacy settings page didn't open");
+    CodedError::new("capture.permission.settingsDidntOpen").with("detail", error.to_string())
+}
+
+/// "An export is running. Reopen Klipolo when it's done."
+pub(super) fn reopen_exporting() -> CodedError {
+    CodedError::new("capture.permission.reopenExporting")
 }

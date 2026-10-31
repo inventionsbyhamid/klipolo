@@ -5,7 +5,9 @@
 //!   (`kept_parts(0, main_track_duration, merge_ranges(keep))`).
 //! - `removeSilences`: the pauses in the sound (`timeline_pauses`, from the loudness levels) longer than the length
 //!   asked, `PAUSE_US` when none was.
-//! - `removeFillers`: every filler word, each cut as `word_cut` pads it.
+//! - `removeFillers`: every filler word, each cut as `word_cut` pads it. None is cut while any is only roughly timed
+//!   (its word's confidence 0: spread over its turn when word timing failed): the person is told to time the words
+//!   again (`ROUGH_FILLERS`), naming the clip.
 //!
 //! The pauses and fillers are found on the working copy itself, so they need no mapping. Nothing to remove is told to
 //! the person (`NO_FILLERS`, "There are no pauses longer than 1.0 s to remove."): asking the model again could not
@@ -16,10 +18,12 @@ use klipolo_model::coded::ErrorParam;
 use klipolo_model::ops::Op;
 use klipolo_model::query::main_track_duration;
 use klipolo_model::speech::silence::timeline_pauses;
-use klipolo_model::speech::{PAUSE_US, WordKind, spoken, word_cut};
+use klipolo_model::speech::{PAUSE_US, Speech, Spoken, SpokenWord, WordKind, spoken, word_cut};
 use klipolo_model::time::{RangeUs, Us, kept_parts, merge_ranges};
 
-use super::{Compiler, Edit, NO_FILLERS, Refused, label, to_model, to_person, us};
+use super::{
+    Audience, Compiler, Edit, NO_FILLERS, ROUGH_FILLERS, Refused, label, to_model, to_person, us,
+};
 use crate::context::secs;
 use crate::tools::ToolCall;
 
@@ -118,11 +122,23 @@ fn remove_silences(c: &Compiler, work: &Project, min_pause_us: Us) -> Result<Edi
 }
 
 fn remove_fillers(c: &Compiler, work: &Project) -> Result<Edit, Refused> {
-    let words = spoken(work, &c.inputs.speech);
+    let speech = &c.inputs.speech;
+    let words = spoken(work, speech);
     let fps = work.settings.fps;
-    let cuts: Vec<RangeUs> = (words.words.iter().enumerate())
-        .filter(|(_, w)| w.kind == WordKind::Filler)
-        .map(|(i, _)| word_cut(&words, i, i, fps))
+    let fillers: Vec<usize> = (0..words.words.len())
+        .filter(|&i| words.words[i].kind == WordKind::Filler)
+        .collect();
+    if let Some(rough) =
+        (fillers.iter().map(|&i| &words.words[i])).find(|w| guessed(&words, w, speech))
+    {
+        return Err(Refused {
+            reason: ROUGH_FILLERS.to_owned(),
+            audience: Audience::Person,
+            clip: c.inputs.refs.ref_of(&words.spans[rough.span as usize].clip),
+        });
+    }
+    let cuts: Vec<RangeUs> = (fillers.iter())
+        .map(|&i| word_cut(&words, i, i, fps))
         .collect();
     if cuts.is_empty() {
         return Err(to_person(NO_FILLERS.to_owned()));
@@ -135,4 +151,12 @@ fn remove_fillers(c: &Compiler, work: &Project) -> Result<Edit, Refused> {
         )),
         label: label("removeFillers", vec![("count", ErrorParam::from(count))]),
     })
+}
+
+/// Whether `w`'s time is only a guess: its transcript word was spread over its turn by length, not timed (confidence
+/// 0), so a cut there could take the words around it.
+fn guessed(words: &Spoken, w: &SpokenWord, speech: &Speech) -> bool {
+    (speech.transcripts.get(words.asset(w)))
+        .and_then(|t| t.words.get(w.word as usize))
+        .is_some_and(|word| word.confidence == 0.0)
 }

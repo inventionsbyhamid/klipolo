@@ -332,8 +332,11 @@ fn stops_after_two_model_calls() {
         out.compiled.refusals
     );
     assert_plain(&out.reply);
-    assert!(out.reply.contains("couldn't"), "{}", out.reply);
-    assert!(out.reply.contains("the cut"), "{}", out.reply);
+    // What it couldn't find, and what to do next.
+    assert_eq!(
+        out.reply,
+        "I couldn't find that part, so I left the video as it was. Select it on the timeline and ask again."
+    );
     // The model's claim that it is cutting is not repeated when nothing came of it.
     assert!(!out.reply.contains("Cutting it now"), "{}", out.reply);
     assert!((out.usage_usd - 0.008).abs() < 1e-12);
@@ -480,7 +483,7 @@ fn every_model_error_is_one_plain_sentence_and_changes_nothing() {
     let before = p.clone();
     let i = inputs(&p, speech);
     let cases = [
-        (ModelError::Busy, ChatErrorKind::Busy),
+        (ModelError::Busy(None), ChatErrorKind::Busy),
         (ModelError::Unavailable(None), ChatErrorKind::Unavailable),
         (ModelError::Network, ChatErrorKind::Network),
         (ModelError::Refused, ChatErrorKind::Refused),
@@ -729,8 +732,11 @@ fn a_part_still_refused_is_named_beside_what_was_done() {
         "{}",
         out.reply
     );
+    // The square format went in, so the video wasn't left as it was: only the part is.
     assert!(
-        out.reply.contains("I couldn't make the cut"),
+        out.reply.ends_with(
+            "I couldn't find that part, so I left it out. Select it on the timeline and ask again."
+        ),
         "{}",
         out.reply
     );
@@ -828,7 +834,8 @@ fn a_refused_call_the_second_answer_lets_go_is_named() {
     let out = send(&model, &[], "square, and cut the boring bit", &i, &p).unwrap();
     assert!(out.compiled.additions.is_some());
     assert!(
-        out.reply.contains("I couldn't make the cut"),
+        out.reply
+            .contains("I couldn't find that part, so I left it out."),
         "{}",
         out.reply
     );
@@ -847,7 +854,9 @@ fn a_refused_call_the_second_answer_lets_go_is_named() {
         out.reply
     );
     assert!(
-        out.reply.contains("I couldn't make the cut"),
+        out.reply.contains(
+            "I couldn't find that part, so I left the video as it was. Select it on the timeline"
+        ),
         "{}",
         out.reply
     );
@@ -884,7 +893,7 @@ fn each_refused_call_is_tracked_not_just_its_tool() {
     assert_eq!(out.calls, vec![parsed(&done)]);
     assert!(out.compiled.proposal.is_some());
     assert!(
-        out.reply.contains("I couldn't make the cut"),
+        out.reply.contains("I couldn't find that part"),
         "{}",
         out.reply
     );
@@ -1002,9 +1011,9 @@ fn following_or_blurring_alone_is_said_to_be_on_its_way() {
 }
 
 #[test]
-fn a_part_still_to_come_is_not_claimed_by_the_models_text() {
-    // Words on screen are still to come, the music goes in: the model's sentence claims both, so it is left out and
-    // what went through is said plainly, then what is still to come.
+fn a_part_refused_for_the_person_is_not_claimed_by_the_models_text() {
+    // There is no pause to remove (no loudness), the music goes in: the model's sentence claims both, so it is left
+    // out and what went through is said plainly, then why the rest wasn't done.
     let (p, speech) = talk();
     let mut i = inputs(&p, speech);
     let lofi = serde_json::from_value(serde_json::json!({
@@ -1018,44 +1027,56 @@ fn a_part_still_to_come_is_not_claimed_by_the_models_text() {
         asset: lofi,
         pack: false,
     });
+    let music = |id: &str| {
+        fc(
+            id,
+            "addMusic",
+            r#"{"file": "lofi", "volume": null, "duck": null, "atSec": 0}"#,
+        )
+    };
     let model = Fake::new(vec![answer(
-        "Added your title and the lofi music.",
+        "Removed the long pauses and added the lofi music.",
         vec![
-            fc(
-                "call_1",
-                "addText",
-                r#"{"text": "Day 1", "preset": "title", "atSec": 0, "durationSec": null}"#,
-            ),
-            fc(
-                "call_2",
-                "addMusic",
-                r#"{"file": "lofi", "volume": null, "duck": null, "atSec": 0}"#,
-            ),
+            fc("call_1", "removeSilences", r#"{"minPauseSec": 1}"#),
+            music("call_2"),
         ],
         0.002,
     )]);
-    let out = send(&model, &[], "a title Day 1 and lofi music", &i, &p).unwrap();
+    let out = send(&model, &[], "cut the pauses and add lofi", &i, &p).unwrap();
     assert_eq!(model.seen().len(), 1);
     assert!(out.compiled.additions.is_some());
     assert_eq!(
         out.reply,
-        format!(
-            "The music is in. {}",
-            klipolo_chat::compile::TEXT_COMING_SOON
-        )
+        "The music is in. There are no pauses longer than 1.0 s to remove."
     );
     // With nothing refused for the person, the model's own words stay.
     let model = Fake::new(vec![answer(
         "Added the lofi music.",
-        vec![fc(
-            "call_1",
-            "addMusic",
-            r#"{"file": "lofi", "volume": null, "duck": null, "atSec": 0}"#,
-        )],
+        vec![music("call_1")],
         0.002,
     )]);
     let out = send(&model, &[], "lofi music", &i, &p).unwrap();
     assert_eq!(out.reply, "Added the lofi music.");
+    // A format the video already has changed nothing: it isn't said as done.
+    let model = Fake::new(vec![answer(
+        "Made it landscape, cut the pauses and added the music.",
+        vec![
+            fc(
+                "call_1",
+                "setFormat",
+                r#"{"format": "landscape", "keepOthers": true}"#,
+            ),
+            fc("call_2", "removeSilences", r#"{"minPauseSec": 1}"#),
+            music("call_3"),
+        ],
+        0.002,
+    )]);
+    let out = send(&model, &[], "landscape, no pauses, lofi", &i, &p).unwrap();
+    assert_eq!(out.compiled.unchanged, vec![0]);
+    assert_eq!(
+        out.reply,
+        "The music is in. There are no pauses longer than 1.0 s to remove."
+    );
 }
 
 #[test]
@@ -1071,7 +1092,7 @@ fn a_media_call_refused_twice_is_named_by_what_it_does() {
     let out = send(&model, &[], "a whoosh at the start", &i, &p).unwrap();
     assert_eq!(
         out.reply,
-        "I couldn't add the sound, so I left that unchanged."
+        "I couldn't add the sound, so I left the video as it was. Try asking in other words."
     );
     let seen = model.seen();
     let output = output_for(&seen[1], "call_1");

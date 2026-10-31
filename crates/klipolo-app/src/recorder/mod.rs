@@ -5,7 +5,8 @@
 //!   crashed one as a new run, at most 3 times in 10 minutes (`supervise`, `events`, `ticker`).
 //! - **The take** (`take`, `send`): arming launches the worker and captures nothing; only the person's Record press
 //!   starts it. While it records, Klipolo's window hides (`window`); when it is saved, failed or over, the window shows
-//!   again. A take whose encoder gives up mid-take is stopped and saved (`outcomes`).
+//!   again. A take whose screen's encoder gives up mid-take is stopped and saved; one whose camera's does records on
+//!   without the camera (`outcomes`). When Klipolo exits, a take that hasn't started is disarmed (`active`).
 //! - **Setup** (`setup`, `config`): the Record dialog's data from the backend without capture or prompts, and a take's
 //!   config from the person's options and the app's fixed choices.
 //! - **The permission steps** (`permissions`, `screen_reopen`): Allow screen recording, Reopen Klipolo and Open privacy
@@ -18,6 +19,8 @@ pub mod commands;
 mod config;
 mod env;
 mod events;
+#[allow(dead_code, reason = "the preview commands come next")]
+mod frames;
 mod launch;
 mod outcomes;
 mod permissions;
@@ -52,4 +55,5 @@ mod tests_supervise;
     reason = "read by the quit guard and the engine's hold, which come with the take's landing"
 )]
 pub use active::active;
+pub use active::release_on_exit;
 pub use state::RecorderState;

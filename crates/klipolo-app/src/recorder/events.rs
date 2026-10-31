@@ -113,6 +113,7 @@ impl Recorder {
             let mut slot = self.lock();
             if slot.take.as_ref().is_some_and(|t| t.cfg.id == id) {
                 slot.take = None;
+                self.sync_active(&slot);
             }
             drop(slot);
             self.carry_out(vec![Effect::Emit(id, idle())]);
@@ -180,7 +181,10 @@ impl Recorder {
             // that ended before it): `Idle` alone, after `Failed` only when the worker didn't say why, and a folder
             // with nothing recorded goes.
             SupervisorAction::Ended { failed } => match slot.take.take() {
-                Some(take) => ended(take, failed),
+                Some(take) => {
+                    self.sync_active(slot);
+                    ended(take, failed)
+                }
                 None => Vec::new(),
             },
             _ => Vec::new(),
