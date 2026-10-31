@@ -8,7 +8,8 @@
 # Needs cargo (crates are fetched, not built) and the page's packages (pnpm install). It runs the page's Vite build in
 # memory and writes nothing else. Linux and macOS give the same file; on a Mac, run it under the build lock.
 # Run it after any change to Cargo.lock or pnpm-lock.yaml, and commit the file. A package whose licences have no text
-# in scripts/release/licenses stops it: check that the licence can ship in an AGPL-3.0-only app, then add its SPDX text.
+# in scripts/release/licenses stops it: check that the licence can ship in an AGPL-3.0-only app, then add its SPDX text
+# (the ones there are text/<id>.txt from https://github.com/spdx/license-list-data at tag v3.29.0).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 repo=$(cd "$here/../.." && pwd -P)
