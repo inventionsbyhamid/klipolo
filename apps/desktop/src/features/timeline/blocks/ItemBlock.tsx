@@ -209,7 +209,7 @@ export const ItemBlock = memo(function ItemBlock({
           waveToken={look === 'music' ? '--color-lane-music' : undefined}
         />
       )}
-      {/* Music's volume line, its dips under speech and the tag on the piece that reaches the video's end. */}
+      {/* Music's volume line, its dips under speech and their tag. */}
       {!tiny && look === 'music' && content.type === 'audio' && (
         <VolumeLine
           id={id}
@@ -218,7 +218,6 @@ export const ItemBlock = memo(function ItemBlock({
           content={content}
           pps={pps}
           height={height}
-          tag={content.fadeOutUs > 0}
         />
       )}
       {!tiny && (

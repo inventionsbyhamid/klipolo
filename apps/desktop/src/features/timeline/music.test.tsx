@@ -68,7 +68,7 @@ describe('the music’s volume line', () => {
     expect(levelY(0.3)).toBeLessThan(levelY(0.075));
   });
 
-  it('draws in the Music lane with the tag where it ducks, and none where it doesn’t', () => {
+  it('draws in the Music lane with the tag where it ducks, and none where it doesn’t or the piece is too narrow', () => {
     useProject.setState({ snapshot: music(), pending: 0 });
     const { unmount } = renderWithProviders(<Timeline />);
     const lane = screen.getByRole('group', { name: 'Music' });
@@ -76,8 +76,16 @@ describe('the music’s volume line', () => {
     expect(lane).toHaveTextContent('Quieter while people talk');
     unmount();
     useProject.setState({ snapshot: music(0), pending: 0 });
-    renderWithProviders(<Timeline />);
+    const flat = renderWithProviders(<Timeline />);
     expect(screen.getByRole('group', { name: 'Music' })).not.toHaveTextContent('Quieter while people talk');
+    flat.unmount();
+    // Zoomed out so the 30 s piece is 150 px: too narrow for the tag, which would cover the line.
+    useUi.setState({ pxPerSecond: 5 });
+    useProject.setState({ snapshot: music(), pending: 0 });
+    renderWithProviders(<Timeline />);
+    const narrow = screen.getByRole('group', { name: 'Music' });
+    expect(narrow.querySelector('[data-testid="volume-line"]')).not.toBeNull();
+    expect(narrow).not.toHaveTextContent('Quieter while people talk');
   });
 
   it('a drag of the line changes the volume, an Option drag how deep it ducks: one undo step each', async () => {

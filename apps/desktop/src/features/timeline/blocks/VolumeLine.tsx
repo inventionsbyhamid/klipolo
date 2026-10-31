@@ -91,14 +91,15 @@ interface VolumeLineProps {
   content: AudioContent;
   pps: number;
   height: number;
-  /** "Quieter while people talk" at the right, where the line dips. */
-  tag: boolean;
 }
+
+/** A piece narrower than this draws no "Quieter while people talk" tag: it would cover the line. */
+const TAG_MIN_PX = 240;
 
 /**
  * The Music lane's volume line: violet, 2 px, at the music's level, dipping where it ducks under speech,
- * with "Quieter while people talk" at the right when it does. Drag the line up or down to change the volume; Option
- * drag to change how deep it ducks. Each drag is one undo step, committed on release.
+ * with "Quieter while people talk" at the right of each piece wide enough to hold it. Drag the line up or down to
+ * change the volume; Option drag to change how deep it ducks. Each drag is one undo step, committed on release.
  */
 export const VolumeLine = memo(function VolumeLine({
   id,
@@ -107,7 +108,6 @@ export const VolumeLine = memo(function VolumeLine({
   content,
   pps,
   height,
-  tag,
 }: VolumeLineProps) {
   const speech = useSpeech((s) => s.ranges);
   const press = useRef<{ y: number; volume: number; duck: number; deep: boolean; pointerId: number } | null>(null);
@@ -198,7 +198,7 @@ export const VolumeLine = memo(function VolumeLine({
           </title>
         </polyline>
       </svg>
-      {tag && dips && (
+      {dips && width >= TAG_MIN_PX && (
         <span className="tl-duck-tag">
           {t({
             id: 'music.ducking.tag',
