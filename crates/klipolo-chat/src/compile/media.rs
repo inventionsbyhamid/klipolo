@@ -233,17 +233,19 @@ pub(crate) fn persons_words(message: &str, text: &str) -> Option<String> {
 
 /// Words another app gives for the screen, as it gave them: control, invisible and bidirectional characters dropped
 /// and runs of spaces one space (`text_safety::clean`). Refused when they are longer than a text layer holds
-/// (`MAX_TEXT`) or nothing is left, said for `tool`'s `field`.
+/// (`MAX_TEXT`) or nothing is left, said for `tool`'s `field` with what to do.
 fn apps_words((tool, field): (&str, &str), text: &str) -> Result<String, Refused> {
     let n = text.chars().count();
     if n > MAX_TEXT {
         return Err(to_model(format!(
-            "{tool}: {field} is {n} characters; words on screen hold at most {MAX_TEXT}."
+            "{tool}: {field} is {n} characters; words on screen hold at most {MAX_TEXT}. Use fewer words."
         )));
     }
     let words = clean(text, MAX_TEXT);
     if words.is_empty() {
-        return Err(to_model(format!("{tool}: {field} has no words to show.")));
+        return Err(to_model(format!(
+            "{tool}: {field} has no words to show. Give the words to put on screen."
+        )));
     }
     Ok(words)
 }

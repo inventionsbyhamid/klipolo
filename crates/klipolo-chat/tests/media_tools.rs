@@ -739,21 +739,18 @@ fn an_apps_words_go_on_screen_as_it_gave_them() {
     // Control, invisible and bidirectional characters are dropped.
     let out = compile_for_app(&p, &i, &[text("Hi\u{202e}\u{200b} there\u{7}")]);
     assert_eq!(words_on(&the_layer(&p, &out)), "Hi there");
-    // Nothing left to show, or more than a text layer holds: refused, and nothing is added.
+    // Nothing left to show, or more than a text layer holds: refused, saying what to do, and nothing is added.
     let out = compile_for_app(&p, &i, &[text("\u{200b}\u{202e}")]);
     assert_eq!(out.additions, None);
-    assert!(
-        refused_to_model(&out, 0).starts_with("addText: text has no words to show."),
-        "{:?}",
-        out.refusals
+    assert_eq!(
+        refused_to_model(&out, 0),
+        "addText: text has no words to show. Give the words to put on screen."
     );
     let out = compile_for_app(&p, &i, &[text(&"w".repeat(MAX_TEXT + 1))]);
     assert_eq!(out.additions, None);
-    assert!(
-        refused_to_model(&out, 0)
-            .starts_with("addText: text is 2001 characters; words on screen hold at most 2000."),
-        "{:?}",
-        out.refusals
+    assert_eq!(
+        refused_to_model(&out, 0),
+        "addText: text is 2001 characters; words on screen hold at most 2000. Use fewer words."
     );
     let out = compile_for_app(&p, &i, &[text(&"w".repeat(MAX_TEXT))]);
     assert_eq!(words_on(&the_layer(&p, &out)).chars().count(), MAX_TEXT);
