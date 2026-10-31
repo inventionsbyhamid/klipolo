@@ -146,6 +146,29 @@ describe('the clip card', () => {
     );
   });
 
+  it('Fit and Fill wait for Rust’s framing, so a quick click keeps a recording following the cursor', async () => {
+    let answer!: (framing: ClipFraming) => void;
+    vi.mocked(clipFraming).mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    useSelection.setState({ selectedId: 'a' });
+    renderWithProviders(<Inspector format="portrait" />);
+    const fit = screen.getByRole('radio', { name: 'Fit' });
+    expect(fit).toBeDisabled();
+    expect(screen.getByRole('radio', { name: 'Fill' })).toBeDisabled();
+    fireEvent.click(fit);
+    await act(async () => answer(FRAMING.a));
+    expect(apply).not.toHaveBeenCalled();
+    expect(fit).toBeEnabled();
+    await userEvent.click(fit);
+    await waitFor(() =>
+      expect(apply).toHaveBeenCalledWith(
+        'clip.framing.fit.undo',
+        [{ type: 'updateClip', id: 'a', patch: { framing: { portrait: { ...follows, mode: 'fit' } } } }],
+        undefined,
+        queued,
+      ),
+    );
+  });
+
   it('the Fill focus shows only with Fill, the way it crops; a drag dry-runs and commits once on release', async () => {
     useProject.setState({
       snapshot: withB({ framing: { square: { mode: 'fit', focusX: 0.5, focusY: 0.5 } } }),
@@ -187,6 +210,31 @@ describe('the clip card', () => {
       },
     ]);
     expect(vi.mocked(engine.preview).mock.calls.at(-1)).toEqual(['project', 3, ops]);
+  });
+
+  it('Escape during a Fill focus drag closes the card: nothing is committed and the frame goes back', async () => {
+    renderWithProviders(<Inspector format="portrait" />);
+    const across = await screen.findByRole('slider', { name: 'Focus across' });
+    const root = track(across);
+    fireEvent.pointerDown(root, { button: 0, pointerId: 1, clientX: 60 });
+    fireEvent.pointerMove(root, { pointerId: 1, clientX: 30 });
+    await waitFor(() => expect(engine.preview).toHaveBeenCalled());
+    fireEvent.keyDown(across, { key: 'Escape' });
+    expect(useSelection.getState().selectedId).toBeNull();
+    expect(screen.queryByRole('slider', { name: 'Focus across' })).toBeNull();
+    // The dry run is cleared, and the release that comes later commits nothing.
+    expect(engine.previewClear).toHaveBeenCalled();
+    fireEvent.pointerUp(document.body, { pointerId: 1, clientX: 30 });
+    await act(() => new Promise((r) => setTimeout(r, 40)));
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it('the Fill focus is one row under one label, its slider named for the way it moves', async () => {
+    renderWithProviders(<Inspector format="portrait" />);
+    const across = await screen.findByRole('slider', { name: 'Focus across' });
+    const row = screen.getByText('Fill focus').closest('.field')!;
+    expect(row).toContainElement(across);
+    expect(Array.from(row.querySelectorAll('.field-label'), (label) => label.textContent)).toEqual(['Fill focus']);
   });
 
   it('a video taller than the frame moves its Fill focus down', async () => {
@@ -294,6 +342,20 @@ describe('the clip card', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(useSelection.getState().selectedId).toBeNull();
+  });
+
+  it('Duplicate in its more menu puts a copy right after the clip in one step, and selects the copy', async () => {
+    const b = fixtureSnapshot().project.timeline.main[1];
+    renderWithProviders(<Inspector format="landscape" />);
+    await userEvent.click(screen.getByRole('button', { name: 'More' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Duplicate' }));
+    await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    const [label, ops] = apply.mock.calls[0];
+    expect(label).toBe('undo.duplicate');
+    expect(ops).toEqual([{ type: 'insertClip', clip: { ...b, id: expect.any(String) }, index: 2 }]);
+    const copy = (ops[0] as Extract<Op, { type: 'insertClip' }>).clip.id;
+    expect(copy).not.toBe('b');
+    await waitFor(() => expect(useSelection.getState().selectedId).toBe(copy));
   });
 
   it('Escape outside a field closes it', async () => {

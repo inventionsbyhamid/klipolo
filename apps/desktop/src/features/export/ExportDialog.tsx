@@ -12,7 +12,7 @@ import { videoDurationUs } from '../../lib/timeline';
 import { formatTime } from '../../player/time';
 import { stateOf, useAnalysis } from '../../state/analysis';
 import { useExport } from '../../state/export';
-import { notSaved } from '../../state/exportRun';
+import { failedText } from '../../state/exportRun';
 import { useProject } from '../../state/project';
 import { toast } from '../../state/toasts';
 import { ExportFiles } from './ExportFiles';
@@ -356,7 +356,7 @@ function Failed() {
   const lost = useExport(
     useShallow((s) => s.files.filter((_, i) => !s.ready.includes(i)).map((f) => f.format)),
   );
-  const said = [message, notSaved(lost)].filter(Boolean).join(' ');
+  const said = failedText(message ?? '', lost);
   return (
     <>
       <div className="ex-progress">

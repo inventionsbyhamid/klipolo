@@ -262,13 +262,14 @@ afterEach(() => capture.mockReset());
 
 /**
  * A press on marker `el` at `x` px into it (jsdom puts every box at 0, so that is its `clientX`; it has no
- * hit-testing, so the press goes to the marker itself), moved through `moves` and released at the last, then the
- * click a release makes. The moves and the release go where the pointer is captured, as a browser sends them.
+ * hit-testing, so the press goes to the marker itself), moved through `moves` with the button down and released at
+ * the last, then the click a release makes. The moves and the release go where the pointer is captured, as a browser
+ * sends them.
  */
 async function pressMarker(el: HTMLElement, x: number, moves: number[] = []) {
-  fireEvent.pointerDown(el, { pointerId: 1, button: 0, clientX: x, clientY: 60 });
+  fireEvent.pointerDown(el, { pointerId: 1, button: 0, buttons: 1, clientX: x, clientY: 60 });
   for (const to of moves) {
-    fireEvent.pointerMove(captor ?? el, { pointerId: 1, clientX: to, clientY: 60 });
+    fireEvent.pointerMove(captor ?? el, { pointerId: 1, buttons: 1, clientX: to, clientY: 60 });
     await frames();
   }
   const at = moves.at(-1) ?? x;
@@ -289,18 +290,18 @@ describe('a press on a cut marker: a drag trims the clip on that side, a still c
     useSelection.setState({ selectedId: 'b' });
     const add = screen.getByRole('button', { name: 'Add transition between screen.mp4 and broll.mp4' });
     // The cut is at the middle of the 20 px spot: 2 px left of it, and 2 px is no move yet.
-    fireEvent.pointerDown(add, { pointerId: 1, button: 0, clientX: 8, clientY: 60 });
-    fireEvent.pointerMove(add, { pointerId: 1, clientX: 6, clientY: 60 });
+    fireEvent.pointerDown(add, { pointerId: 1, button: 0, buttons: 1, clientX: 8, clientY: 60 });
+    fireEvent.pointerMove(add, { pointerId: 1, buttons: 1, clientX: 6, clientY: 60 });
     expect(b).toHaveFocus();
     expect(useSelection.getState().selectedId).toBe('b');
     expect(captor).toBe(add);
     // 5 px: the press is the trim's, which takes the pointer, focus and selection to a.
-    fireEvent.pointerMove(add, { pointerId: 1, clientX: 3, clientY: 60 });
+    fireEvent.pointerMove(add, { pointerId: 1, buttons: 1, clientX: 3, clientY: 60 });
     await frames();
     const a = screen.getByRole('button', { name: /^screen\.mp4/ });
     expect(captor).toBe(a);
     expect(a).toHaveFocus();
-    fireEvent.pointerMove(a, { pointerId: 1, clientX: -32, clientY: 60 });
+    fireEvent.pointerMove(a, { pointerId: 1, buttons: 1, clientX: -32, clientY: 60 });
     await frames();
     fireEvent.pointerUp(a, { pointerId: 1, clientX: -32, clientY: 60 });
     // The click that release makes (on the lane, in a browser) neither seeks nor adds.
@@ -364,6 +365,56 @@ describe('a press on a cut marker: a drag trims the clip on that side, a still c
     expect(applied()).toEqual([
       { label: 'timeline.trim.clip.undo', ops: [{ type: 'trimClip', id: 'b', edge: 'start', sourceUs: 1_000_000 }] },
     ]);
+  });
+
+  it('a hold whose marker goes before its release ends: a later hover with no button down trims nothing', async () => {
+    const cut = withHandles();
+    useProject.setState({ snapshot: cut });
+    renderWithProviders(<Timeline />);
+    fireEvent.pointerDown(cutMarker(), { pointerId: 1, button: 0, buttons: 1, clientX: 8, clientY: 60 });
+    // The cut goes mid-hold (an undo), so the release lands elsewhere; then it comes back (a redo).
+    const noCut = withHandles();
+    noCut.project.timeline.main = noCut.project.timeline.main.slice(0, 1);
+    act(() => useProject.setState({ snapshot: noCut }));
+    fireEvent.pointerUp(document.body, { pointerId: 1, clientX: 8, clientY: 60 });
+    act(() => useProject.setState({ snapshot: cut }));
+    // Later the pointer passes over the cut with no button down, then clicks empty lane space.
+    fireEvent.pointerMove(cutMarker(), { pointerId: 1, buttons: 0, clientX: 40, clientY: 60 });
+    await frames();
+    const lane = document.querySelector<HTMLElement>('[data-lane="main"] .tl-lane')!;
+    fireEvent.pointerDown(lane, { pointerId: 1, button: 0, buttons: 1, clientX: 200, clientY: 60 });
+    fireEvent.pointerUp(lane, { pointerId: 1, clientX: 200, clientY: 60 });
+    await frames();
+    expect(applied()).toEqual([]);
+    expect(useSelection.getState().selectedId).toBeNull();
+  });
+
+  it('after a drag from the cut trims, a click on the cut with no press (VoiceOver) still adds', async () => {
+    useProject.setState({ snapshot: withHandles() });
+    renderWithProviders(<Timeline />);
+    await pressMarker(cutMarker(), 12, [17, 52]);
+    // VO-Space clicks the cut with no pointer press before it.
+    fireEvent.click(cutMarker(), { detail: 0 });
+    await frames();
+    expect(applied().map((tx) => tx.label)).toEqual(['timeline.trim.clip.undo', 'transition.add']);
+  });
+
+  it("a drag from the cut whose release never comes doesn't eat the next click", async () => {
+    useProject.setState({ snapshot: withHandles() });
+    renderWithProviders(<Timeline />);
+    fireEvent.pointerDown(cutMarker(), { pointerId: 1, button: 0, buttons: 1, clientX: 8, clientY: 60 });
+    fireEvent.pointerMove(cutMarker(), { pointerId: 1, buttons: 1, clientX: 3, clientY: 60 });
+    await frames();
+    // The release never reaches the page (Mission Control mid-drag), and Escape puts the edge back.
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    // The next click on empty lane space seeks there: 200 px at 40 px/s.
+    const lane = document.querySelector<HTMLElement>('[data-lane="main"] .tl-lane')!;
+    fireEvent.pointerDown(lane, { pointerId: 1, button: 0, buttons: 1, clientX: 200, clientY: 60 });
+    fireEvent.pointerUp(lane, { pointerId: 1, clientX: 200, clientY: 60 });
+    fireEvent.click(lane, { clientX: 200, detail: 1 });
+    await frames();
+    expect(usePlayback.getState().playheadUs).toBe(5_000_000);
+    expect(applied()).toEqual([]);
   });
 });
 
