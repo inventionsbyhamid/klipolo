@@ -232,7 +232,8 @@
   background: var(--color-bay-hover);
 }
 
-.line.is-now .word {
+/* The line now playing: brighter chips, but a filler or a hidden word keeps its own look there too. */
+.line.is-now .word:not(.is-filler, .is-hidden) {
   background: var(--color-bay-hover);
 }
 
@@ -245,12 +246,17 @@
   outline-offset: 1px;
 }
 
+/* Dashed by its border, so the active word's ring (an outline) is drawn around it, not instead of it. */
 .word.is-filler {
+  padding: 0 6px;
+  border: 1px dashed var(--color-line-strong);
   background: transparent;
   color: var(--color-ink-faint);
-  outline: 1px dashed var(--color-line-strong);
-  outline-offset: -1px;
   font-style: italic;
+}
+
+.word.is-filler[aria-selected="true"] {
+  background: var(--color-bay-press);
 }
 
 .word.is-hidden {
