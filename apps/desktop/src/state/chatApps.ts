@@ -2,10 +2,10 @@ import { t } from '@lingui/core/macro';
 import type { CodedError } from '../bindings/CodedError';
 import type { ExternalReply } from '../bindings/ExternalReply';
 import type { SnapshotPatch } from '../bindings/SnapshotPatch';
-import { chatBridge } from '../bridge/chat';
 import { inSentence } from '../lib/history';
 import { wordLabel, type LabelParams } from '../lib/labels';
 import {
+  openProposal,
   session,
   withMessages,
   type ChatGet,
@@ -98,18 +98,18 @@ export function appActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'receive
     // project has left: dropped, as Rust drops it.
     let proposal: ReplyMessage['proposal'] = null;
     if (r.proposal) {
-      const open = revision !== undefined && r.proposal.baseRevision >= revision;
-      proposal = { proposal: r.proposal, state: (open ? 'open' : 'dropped') as ProposalState };
+      let state: ProposalState = revision !== undefined && r.proposal.baseRevision >= revision ? 'open' : 'dropped';
+      // Someone else's proposal waits, made on the same project or a newer one: Klipolo never lets an app's replace it,
+      // so this one is older (it was replaced there before its news got here). The one waiting stays as it is.
+      const waiting = openProposal(get().messages);
+      const older = waiting && waiting.message.client !== client;
+      if (state === 'open' && older && waiting.part.proposal.baseRevision >= r.proposal.baseRevision)
+        state = 'superseded';
+      proposal = { proposal: r.proposal, state };
     }
-    // One open proposal at a time: a newer one replaces the one waiting (Rust has already).
-    if (proposal?.state === 'open') {
-      const { messages, replaced } = replaceOpen(get().messages);
-      set(withMessages(messages));
-      for (const old of replaced)
-        void chatBridge()
-          .discard(old)
-          .catch(() => undefined);
-    }
+    // One open proposal at a time: a newer one replaces the one waiting on the page. Rust has replaced it already (its
+    // own, or one on a project that has moved on), so nothing is discarded there: a discard could only reach a newer one.
+    if (proposal?.state === 'open') set(withMessages(replaceOpen(get().messages).messages));
     push({
       id: r.id,
       from: 'klipolo',

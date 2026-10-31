@@ -10,7 +10,7 @@ import type { CodedError } from '../../bindings/CodedError';
 import type { ExternalReply } from '../../bindings/ExternalReply';
 import { useAi } from '../../ai/aiStatus';
 import { installChatBridge } from '../../bridge/chat';
-import { fakeChat, proposal, type FakeChat } from '../../bridge/chatFake';
+import { fakeChat, proposal, reply, type FakeChat } from '../../bridge/chatFake';
 import { useAnalysis } from '../../state/analysis';
 import { followApps, useChat, useChatStandIn } from '../../state/chat';
 import { usePlayback } from '../../state/playback';
@@ -196,8 +196,42 @@ describe('another app in chat', () => {
     await tell(external('Example Client', { proposal: { ...teaser(), id: 'p2' } }));
     await waitFor(() => expect(useProposal.getState().proposal?.id).toBe('p2'));
     expect(screen.getByText('Replaced by the newer proposal below.')).toBeInTheDocument();
-    // Rust replaced it already; telling it to forget the old one changes nothing there.
-    expect(fake.discarded).toEqual(['p1']);
+    // Rust replaced it already: the page never discards for an app.
+    expect(fake.discarded).toEqual([]);
+  });
+
+  it('an_older_app_proposal_leaves_the_persons_open_one_alone', async () => {
+    const mine = proposal('mine', 3, {
+      title: 'Cut 1 filler word',
+      removedUs: S,
+      removals: { ...proposal('x', 0).removals, ranges: [{ start: 2 * S, end: 3 * S }] },
+    });
+    const fake = chat({
+      reply: (r) => reply(r.id, 'Here is the cut.', { proposal: mine }),
+      apply: () => ({ change: changed(4, code('chat.removeFillers')), undo: code('chat.removeFillers') }),
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'cut the ums{Enter}');
+    await waitFor(() => expect(useProposal.getState().proposal?.id).toBe('mine'));
+    // The app proposed on the same revision first; the person's replaced it in Klipolo, and the app's news comes late.
+    await tell(external('Example Client', { proposal: teaser() }));
+    expect(useProposal.getState().proposal?.id).toBe('mine');
+    expect(fake.discarded).toEqual([]);
+    expect(screen.getByText('Replaced by a newer proposal.')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Apply' })).toHaveLength(1);
+    const card = screen.getByRole('group', { name: 'Cut 1 filler word' });
+    await userEvent.click(within(card).getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(fake.applied).toEqual(['mine']));
+  });
+
+  it('an_older_proposal_from_one_app_leaves_another_apps_alone', async () => {
+    const fake = chat();
+    renderWithProviders(<ChatPanel />);
+    await tell(external('Example Client', { proposal: teaser() }));
+    await tell(external('Example Client', { proposal: { ...teaser(), id: 'p2' } }));
+    expect(useProposal.getState().proposal?.id).toBe('p1');
+    expect(screen.getByText('Replaced by a newer proposal.')).toBeInTheDocument();
+    expect(fake.discarded).toEqual([]);
   });
 
   it('an_apps_moments_show_as_chats_do', async () => {

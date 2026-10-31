@@ -10,10 +10,19 @@ import type { ExternalReply } from '../bindings/ExternalReply';
 
 /**
  * Where a proposal stands: waiting, being applied, applied, discarded, dropped (the project changed), replaced (a newer
- * one came: a project has one open proposal at a time), or unshown (Rust applied it but the page couldn't take the
+ * one came: a project has one open proposal at a time), superseded (another app's that a newer one, shown before it,
+ * had already replaced in Klipolo by the time it got here), or unshown (Rust applied it but the page couldn't take the
  * change in: never offered again).
  */
-export type ProposalState = 'open' | 'applying' | 'applied' | 'discarded' | 'dropped' | 'replaced' | 'unshown';
+export type ProposalState =
+  | 'open'
+  | 'applying'
+  | 'applied'
+  | 'discarded'
+  | 'dropped'
+  | 'replaced'
+  | 'superseded'
+  | 'unshown';
 
 /** A proposal in a reply, and what came of it. */
 export interface ProposalPart {

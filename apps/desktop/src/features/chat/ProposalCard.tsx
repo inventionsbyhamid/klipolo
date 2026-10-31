@@ -263,6 +263,12 @@ export function ProposalCard({ message: m }: { message: ReplyMessage }) {
         {t({ id: 'chatPanel.proposal.replaced', message: 'Replaced by the newer proposal below.' })}
       </p>
     );
+  if (state === 'superseded')
+    return (
+      <p className="muted faint">
+        {t({ id: 'chatPanel.proposal.superseded', message: 'Replaced by a newer proposal.' })}
+      </p>
+    );
   const busy = state === 'applying';
   const { apply, discard } = useChat.getState();
   const now = main ? mainIndex(main).mainEndUs : 0;
