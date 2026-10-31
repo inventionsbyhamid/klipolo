@@ -93,7 +93,8 @@ pub(super) fn build(
         }
         inner.used.insert(stem.clone(), source.clone());
     }
-    if let Some(pcm) = Pcm::open(&file_path) {
+    // A hit needs its peaks too: a sound file whose peaks are missing or don't read (another build's) is decoded again.
+    if let Some(pcm) = Pcm::open(&file_path).filter(|_| super::peaks::info(&peaks_path).is_some()) {
         touch(&file_path);
         touch(&peaks_path);
         let pcm = Arc::new(pcm);
