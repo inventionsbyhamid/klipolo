@@ -195,17 +195,25 @@
     },
     {
       "id": "lisbon-title",
-      "message": "put a title 'Day 1 in Lisbon' for 3 seconds at the start",
+      "message": "put a title card 'Day 1 in Lisbon' for 3 seconds at the start",
       "playhead": 40.0,
-      "note": "addText with the title preset, or the title card template; until addText's presets place words, its 'coming soon' answer is not counted as right",
+      "note": "a title card asked for by name: the full-screen template over a background Muse Image draws",
       "expect": [
-        {
-          "calls": [{"name": "addText", "args": {"text": "Day 1 in Lisbon", "preset": "title", "atSec": {"min": 0.0, "max": 0.3}, "durationSec": 3.0}}],
-          "outcome": {"applied": true}
-        },
         {
           "calls": [{"name": "makeTitleCard", "args": {"title": "Day 1 in Lisbon", "atSec": {"min": 0.0, "max": 0.3}, "durationSec": 3.0}}],
           "outcome": {"applied": true, "jobs": true}
+        }
+      ]
+    },
+    {
+      "id": "plain-title",
+      "message": "put a title 'Day 1 in Lisbon' at the start",
+      "playhead": 40.0,
+      "note": "a plain title is words over the video, at once and free: never the title card",
+      "expect": [
+        {
+          "calls": [{"name": "addText", "args": {"text": "Day 1 in Lisbon", "preset": "title", "atSec": {"min": 0.0, "max": 0.3}}}],
+          "outcome": {"applied": true, "jobs": false}
         }
       ]
     },
@@ -228,6 +236,43 @@
           "outcome": {"jobs": true, "applied": false}
         },
         {"calls": [{"name": "askUser"}], "outcome": {"asked": true}}
+      ]
+    },
+    {
+      "id": "lower-third",
+      "message": "add a lower third that says Student questions at 13.5 seconds",
+      "expect": [
+        {
+          "calls": [{"name": "addText", "args": {"text": "Student questions", "preset": "lower-third", "atSec": {"min": 13.2, "max": 13.8}}}],
+          "outcome": {"applied": true}
+        }
+      ]
+    },
+    {
+      "id": "closing-words",
+      "message": "put Thanks for watching at the bottom for the last 3 seconds",
+      "expect": [
+        {
+          "calls": [{"name": "addText", "args": {"text": "Thanks for watching", "preset": {"anyOf": ["caption", "lower-third"]}, "atSec": {"min": 151.7, "max": 152.4}, "durationSec": {"anyOf": [null, {"min": 2.7, "max": 3.3}]}}}],
+          "outcome": {"applied": true}
+        }
+      ]
+    },
+    {
+      "id": "title-card-no-words",
+      "message": "make a title card with trams behind it",
+      "note": "the background is named but not the title's words: ask for them, never make up a title such as trams",
+      "expect": [{"calls": [{"name": "askUser"}], "outcome": {"asked": true, "jobs": false}}]
+    },
+    {
+      "id": "title-card-pick",
+      "message": "make a title card that says Day 1 in Lisbon",
+      "note": "no background is named: the model chooses one and never asks for it",
+      "expect": [
+        {
+          "calls": [{"name": "makeTitleCard", "args": {"title": "Day 1 in Lisbon"}}],
+          "outcome": {"applied": true, "jobs": true}
+        }
       ]
     }
   ]
