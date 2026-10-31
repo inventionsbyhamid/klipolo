@@ -1,9 +1,12 @@
 //! What a clip's analysis found, kept per file so the same clip (re-imported, renamed, moved, or its project reopened)
 //! never costs a second Meta call.
 //!
-//! A file's key is its content: SHA-256 of its size (8 bytes, little-endian), its first 4 MiB and its last 4 MiB (a file
-//! under 4 MiB is read whole, twice), as lowercase hex. Two reads at most, however long the clip; a change only in the
-//! middle of a file over 8 MiB keeps its key (an edit that keeps the length and both ends is not expected of a video).
+//! A file's key is its content: SHA-256 of the key's version (`KEY_VERSION`), its size (8 bytes, little-endian), its
+//! first 4 MiB and its last 4 MiB (a file under 4 MiB is read whole, twice), and, for a file over 8 MiB, 16 samples of
+//! 64 KiB spread evenly over the rest, as lowercase hex. About 9 MiB read however long the clip: an edit in place in the
+//! middle (uncompressed sound edited elsewhere, the same length and ends) is seen when it touches a sample, and missed
+//! only between samples. A new version of the key reads its files under new keys: a folder made under an older one is
+//! never read for a file it may not match (its result is made again).
 //!
 //! Each key has a folder, `<root>/<key>/`, under a root the caller passes (the app: `Klipolo/analysis` in Application
 //! Support): one `<name>.json` per result (`transcript.json`, `scenes.json`) beside `meta.json`, which holds the
@@ -28,6 +31,11 @@ pub const SCHEMA: u32 = 1;
 
 /// How much of each end of a file the key reads.
 const END_BYTES: u64 = 4 * 1024 * 1024;
+/// Hashed first: what the key reads, in this version. Changed whenever that changes.
+const KEY_VERSION: &[u8] = b"klipolo-content-key-2";
+/// The samples read from between a file's ends, and how big each is.
+const MIDDLE_SAMPLES: u64 = 16;
+const SAMPLE_BYTES: u64 = 64 * 1024;
 
 /// Every write in this module, one at a time: a folder's `meta.json` is read, changed and replaced as one step, and
 /// two writes of one file never share its temporary file (`durable::temp_path` is per process, not per thread).
@@ -43,6 +51,7 @@ pub fn content_key(path: &Path) -> io::Result<String> {
     let mut file = File::open(path)?;
     let size = file.metadata()?.len();
     let mut hash = Sha256::new();
+    hash.update(KEY_VERSION);
     hash.update(size.to_le_bytes());
     let mut buf = vec![0u8; END_BYTES.min(size) as usize];
     file.read_exact(&mut buf)?;
@@ -50,6 +59,20 @@ pub fn content_key(path: &Path) -> io::Result<String> {
     file.seek(SeekFrom::Start(size - buf.len() as u64))?;
     file.read_exact(&mut buf)?;
     hash.update(&buf);
+    // Between the ends: samples spread evenly, the first at its start and the last ending at its end.
+    let (from, to) = (END_BYTES, size.saturating_sub(END_BYTES));
+    if to > from {
+        let len = to - from;
+        let take = SAMPLE_BYTES.min(len);
+        let mut sample = vec![0u8; take as usize];
+        for i in 0..MIDDLE_SAMPLES {
+            file.seek(SeekFrom::Start(
+                from + (len - take) * i / (MIDDLE_SAMPLES - 1),
+            ))?;
+            file.read_exact(&mut sample)?;
+            hash.update(&sample);
+        }
+    }
     Ok(hash.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
 

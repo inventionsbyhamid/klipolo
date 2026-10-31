@@ -2,8 +2,9 @@
 //! (`project::ProjectSessionState`), which publishes it to the engine's feed.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 
+use klipolo_engine::audio::pcm::PcmStore;
 use klipolo_engine::media::thumbs;
 use klipolo_engine::render::warm::Warmup;
 use klipolo_engine::session::EngineSlot;
@@ -15,6 +16,9 @@ pub struct EngineState {
     warm: Mutex<Option<Warmup>>,
     /// The app's cache folder (decoded sound, thumbnails); None when it couldn't be found.
     pub(crate) cache_dir: Option<PathBuf>,
+    /// The decoded sound cache (`CacheDirs::audio`), one for the app: the preview plays from it and analysis reads its
+    /// levels, so a file is decoded once. None without a cache folder.
+    pub(crate) sounds: Option<Arc<PcmStore>>,
 }
 
 impl EngineState {
@@ -22,6 +26,9 @@ impl EngineState {
         Self {
             slot: EngineSlot::new(),
             warm: Mutex::new(warm),
+            sounds: cache_dir
+                .as_deref()
+                .map(|dir| PcmStore::new(CacheDirs::in_folder(dir).audio)),
             cache_dir,
         }
     }

@@ -283,3 +283,25 @@ fn silence_reports_the_floor() {
     assert_eq!(info.peak_dbfs, audio::SILENCE_DBFS);
     assert!(samples.iter().all(|&s| s == 0));
 }
+
+/// A cancel stops the extraction between decoded blocks: an error, and no WAV (nor its temporary file) left.
+#[test]
+fn a_cancelled_extraction_stops_and_leaves_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("tone.wav");
+    write_wav(&src, 48_000, 1, &tone(1_000.0, 0.5, 3.0));
+    let out = dir.path().join("sound.wav");
+    let cancel = std::sync::atomic::AtomicBool::new(true);
+
+    let stopped = audio::extract_wav_16k_cancellable(&src, &out, &cancel);
+
+    assert!(
+        matches!(stopped, Err(audio::AudioError::Stopped)),
+        "{stopped:?}"
+    );
+    let left: Vec<_> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+    assert_eq!(left, [std::ffi::OsString::from("tone.wav")]);
+}

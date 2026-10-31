@@ -220,6 +220,12 @@ pub struct Timing {
     pub note: Option<String>,
 }
 
+/// What transcribing a clip whose sound lasts `duration_us` is expected to cost, before any call: the transcriber's
+/// estimate for all of it (silent stretches are left out only once the sound is read). Word timing is free.
+pub fn estimate_usd(transcriber: &dyn Transcriber, duration_us: Us) -> f64 {
+    transcriber.estimate_usd(duration_us.max(0) as f64 / 1e6)
+}
+
 /// A clip's transcript from its WAV: `Sound::load`, `hear`, `align`, `finish`. A silent clip makes no request. A
 /// transcription failure stops it (a budget stop included); an alignment failure only makes words approximate.
 pub async fn transcribe_asset(
