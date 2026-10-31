@@ -17,12 +17,12 @@ use klipolo_mcp::Host;
 use klipolo_mcp::call::from_app;
 use klipolo_mcp::rpc::Mcp;
 use klipolo_mcp::words::{
-    DONE, KLIPOLO_CHAT, NO_MOMENTS, NOT_PROPOSED, PROPOSED_NO_FOOTAGE, READ_FIRST, STALE,
-    UNCHANGED, WAITING_OTHER, fill,
+    DONE, KLIPOLO_CHAT, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS, NOTHING_TO_UNDO, OVER_SHARE,
+    PROPOSED_NO_FOOTAGE, PUSHES_OUT, READ_FIRST, STALE, UNCHANGED, UNDONE, WAITING_OTHER, fill,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
-use klipolo_model::history::Maker;
+use klipolo_model::history::{HistoryLimits, Maker};
 use klipolo_model::ops::{Op, Origin};
 use klipolo_model::project::FormatKind;
 use klipolo_model::time::RangeUs;
@@ -270,6 +270,7 @@ fn another_proposal_waiting_refuses_every_edit() {
         ("setCaptions", json!({"on": false, "style": null})),
         ("cutRange", json!({"startSec": 0, "endSec": 13})),
         ("removeFillers", json!({})),
+        ("undo", json!({})),
     ] {
         assert_refused(&agent.call(tool, arguments), &chats);
     }
@@ -284,9 +285,11 @@ fn another_proposal_waiting_refuses_every_edit() {
         &others,
     );
     assert_refused(&agent.cut(0.0, 13.0), &others);
+    assert_refused(&agent.call("undo", json!({})), &others);
     // Nothing changed, and the other app's proposal still waits.
     assert_eq!((host.revision(), host.project()), (before, project));
-    assert_eq!(host.state().counts.applies, 0);
+    let counts = host.state().counts;
+    assert_eq!((counts.applies, counts.undos), (0, 0));
     let open = host.open_proposal().expect("still waiting");
     assert_eq!(open.from.as_deref(), Some("Other app"));
     assert_ne!(open.id, chat);
@@ -524,6 +527,7 @@ fn agent_words_are_exact() {
         MOVED,
         NOT_PROPOSED,
         LEFT_OUT,
+        UNDONE,
         REMOVES,
         PUSHES_OUT,
         OVER_SHARE,
@@ -842,4 +846,161 @@ fn a_proposal_klipolo_no_longer_remembers_is_waited_on() {
     );
     assert_eq!(host.state().counts.applies, 0);
     assert!(host.open_proposal().is_some());
+}
+
+/// The person renames the project by hand, labelling the step `label`.
+fn person_renames(host: &FakeHost, label: &str) {
+    host.person_edit(&Transaction {
+        label: label.into(),
+        ops: vec![Op::Rename { name: label.into() }],
+        ..Transaction::default()
+    });
+}
+
+fn captions(on: bool) -> Value {
+    json!({"on": on, "style": null})
+}
+
+/// The undo steps, oldest first: their labels and who made them.
+fn steps(host: &FakeHost) -> Vec<(String, Maker)> {
+    let s = host.state();
+    let doc = s.doc.as_ref().unwrap();
+    (doc.undo_view())
+        .map(|step| (step.label.to_owned(), step.maker.clone()))
+        .collect()
+}
+
+#[test]
+fn undo_only_takes_back_the_clients_own_step() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    let other = Agent::open(&mcp, "Other app");
+    assert_refused(&agent.call("undo", json!({})), NOTHING_TO_UNDO);
+    // The person's own step is never an app's to undo.
+    person_renames(&host, "mine");
+    assert_refused(&agent.call("undo", json!({})), NOT_YOURS);
+    // The app's own step goes back, and only it; another app can't take it back.
+    let before = host.revision();
+    assert_eq!(outcome(&agent.call("setCaptions", captions(false))), "done");
+    assert_refused(&other.call("undo", json!({})), NOT_YOURS);
+    let undone = agent.call("undo", json!({}));
+    assert_eq!(undone["isError"], false, "{undone}");
+    assert_eq!(text(&undone), UNDONE);
+    assert_eq!(
+        undone["structuredContent"],
+        json!({"outcome": "done", "revision": before + 2})
+    );
+    let project = host.project();
+    assert!(project.captions.enabled);
+    assert_eq!(project.name, "mine");
+    assert_eq!(steps(&host), [("mine".to_owned(), Maker::Person)]);
+    // What is newest now is the person's again.
+    assert_refused(&agent.call("undo", json!({})), NOT_YOURS);
+    // A step the person made after the app's is newest: the app's waits behind it.
+    agent.call("setCaptions", captions(false));
+    person_renames(&host, "later");
+    assert_refused(&agent.call("undo", json!({})), NOT_YOURS);
+    assert!(!host.project().captions.enabled);
+}
+
+#[test]
+fn apps_of_one_name_are_one_app() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    // Klipolo knows an app by the name it gives, cleaned: two sessions of one name share their steps.
+    let first = Agent::open(&mcp, "Agent");
+    let second = Agent::open(&mcp, "  Agent ");
+    first.call("setCaptions", captions(false));
+    assert_eq!(text(&second.call("undo", json!({}))), UNDONE);
+    // Every app that gives no name is "Unnamed app", one app too. (Another host: the first app's undone step waits
+    // in redo there, and no other app's change drops it.)
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let nameless = Agent::open(&mcp, "");
+    let lookalike = Agent::open(&mcp, "Klipolo");
+    nameless.call("setCaptions", captions(false));
+    assert_eq!(
+        steps(&host).last().map(|(_, maker)| maker.clone()),
+        Some(Maker::App("Unnamed app".into()))
+    );
+    assert_eq!(text(&lookalike.call("undo", json!({}))), UNDONE);
+    assert!(host.project().captions.enabled);
+}
+
+#[test]
+fn agent_steps_never_push_out_the_persons_steps() {
+    // A history of 8 steps: an app's share is 2 of them, all apps' 4.
+    let small = HistoryLimits {
+        steps: 8,
+        bytes: HistoryLimits::default().bytes,
+    };
+    let host = FakeHost::two_clips();
+    host.set_limits(small);
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    // The app's steps sit apart, so they can't fold into one: its share is full.
+    for (k, on) in [false, true].into_iter().enumerate() {
+        assert_eq!(outcome(&agent.call("setCaptions", captions(on))), "done");
+        person_renames(&host, &format!("person {k}"));
+    }
+    let before = (host.revision(), steps(&host));
+    assert_refused(&agent.call("setCaptions", captions(false)), OVER_SHARE);
+    assert_eq!((host.revision(), steps(&host)), before);
+
+    // Seven steps of the person's leave room for one of the app's; the next would push out the person's oldest.
+    let host = FakeHost::two_clips();
+    host.set_limits(small);
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    for k in 0..7 {
+        person_renames(&host, &format!("person {k}"));
+    }
+    assert_eq!(outcome(&agent.call("setCaptions", captions(false))), "done");
+    let before = (host.revision(), steps(&host));
+    assert_refused(&agent.call("setCaptions", captions(true)), PUSHES_OUT);
+    assert_eq!((host.revision(), steps(&host)), before);
+    let kept = steps(&host);
+    assert_eq!(kept[0], ("person 0".to_owned(), Maker::Person));
+    assert_eq!(kept.iter().filter(|(_, m)| *m == Maker::Person).count(), 7);
+}
+
+#[test]
+fn redo_the_person_could_take_is_never_dropped() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    person_renames(&host, "mine");
+    host.person_undo();
+    let before = host.revision();
+    // Any commit would drop the person's redo: the app's change waits for them instead.
+    assert_refused(&agent.call("setCaptions", captions(false)), PUSHES_OUT);
+    assert_eq!(host.revision(), before);
+    assert_eq!(host.state().doc.as_ref().unwrap().redo_steps(), 1);
+    assert!(host.project().captions.enabled);
+    // Once the person redoes it, the app's change applies.
+    host.person_redo();
+    assert_eq!(host.project().name, "mine");
+    assert_eq!(outcome(&agent.call("setCaptions", captions(false))), "done");
+}
+
+#[test]
+fn a_proposal_that_appears_mid_call_is_waited_on() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    let chats = fill(WAITING_OTHER, &[("who", KLIPOLO_CHAT)]);
+    // The person's proposal lands while the app's batch is on its way: the batch waits, and the app is told why.
+    let (_, proposal) = cut_c1(&host);
+    host.state().chat_before_commit = Some(proposal.clone());
+    let before = host.revision();
+    assert_refused(&agent.call("setCaptions", captions(false)), &chats);
+    assert_eq!(host.revision(), before);
+    assert_eq!(host.open_proposal().map(|p| p.from), Some(None));
+    // The same for an undo.
+    host.person_discards();
+    assert_eq!(outcome(&agent.call("setCaptions", captions(false))), "done");
+    host.state().chat_before_commit = Some(proposal);
+    assert_refused(&agent.call("undo", json!({})), &chats);
+    assert!(!host.project().captions.enabled);
 }

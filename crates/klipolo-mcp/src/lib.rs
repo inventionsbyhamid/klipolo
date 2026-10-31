@@ -8,11 +8,12 @@
 //! - `session`: one per `initialize`, with the app's name and what of the project it last read.
 //! - `tools`: chat's edit tools minus its conversation tools, plus four reads; `resources`: the reads; `pages`: the
 //!   transcript in pages.
-//! - `call`: an edit tool's call.
+//! - `call`: an edit tool's call; `limits`: what apps may hold of the undo history.
 //! - `words`: what agents read.
 
 pub mod call;
 pub mod host;
+pub mod limits;
 pub mod pages;
 pub mod resources;
 pub mod rpc;

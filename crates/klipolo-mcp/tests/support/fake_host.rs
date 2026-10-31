@@ -17,8 +17,9 @@ use klipolo_chat::{
     View,
 };
 use klipolo_mcp::host::{Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot};
+use klipolo_mcp::limits::undo_shares;
 use klipolo_mcp::words::KLIPOLO_CHAT;
-use klipolo_model::history::{ByApp, HistoryLimits, Maker, Refused, Share, Whose};
+use klipolo_model::history::{ByApp, HistoryLimits, Maker, Refused};
 use klipolo_model::speech::{Speech, Transcript};
 use klipolo_model::{Document, Project, Transaction, apply_ops, load_project};
 
@@ -81,26 +82,13 @@ pub struct State {
     pub counts: Counts,
     /// The next `propose` finds the project moved, as if someone proposed or edited just before it.
     pub move_before_propose: bool,
+    /// Klipolo's chat proposes this just before the next app's batch or undo, as if the person asked while the app's
+    /// call ran.
+    pub chat_before_commit: Option<Proposal>,
 }
 
 pub struct FakeHost {
     state: Mutex<State>,
-}
-
-/// The apps' shares of `limits`: a quarter for one app, half for all together.
-pub fn shares(client: &str, limits: HistoryLimits) -> [Share<'_>; 2] {
-    [
-        Share {
-            of: Whose::App(client),
-            steps: limits.steps / 4,
-            bytes: limits.bytes / 4,
-        },
-        Share {
-            of: Whose::Apps,
-            steps: limits.steps / 2,
-            bytes: limits.bytes / 2,
-        },
-    ]
 }
 
 impl FakeHost {
@@ -155,6 +143,7 @@ impl FakeHost {
                 limits: HistoryLimits::default(),
                 counts: Counts::default(),
                 move_before_propose: false,
+                chat_before_commit: None,
             }),
         })
     }
@@ -178,6 +167,35 @@ impl FakeHost {
 
     pub fn set_view(&self, view: View) {
         self.state().view = view;
+    }
+
+    /// The history keeps `limits`, and the apps' shares follow them.
+    pub fn set_limits(&self, limits: HistoryLimits) {
+        let mut s = self.state();
+        s.limits = limits;
+        s.doc.as_mut().expect("a project").set_limits(limits);
+    }
+
+    /// The person clicks Undo. A waiting proposal is dropped.
+    pub fn person_undo(&self) {
+        let mut s = self.state();
+        s.doc
+            .as_mut()
+            .expect("a project")
+            .undo()
+            .expect("a step to undo");
+        s.drop_waiting("The project changed.");
+    }
+
+    /// The person clicks Redo. A waiting proposal is dropped.
+    pub fn person_redo(&self) {
+        let mut s = self.state();
+        s.doc
+            .as_mut()
+            .expect("a project")
+            .redo()
+            .expect("a step to redo");
+        s.drop_waiting("The project changed.");
     }
 
     /// The project as `change` leaves it, opened afresh (no history), before the test starts.
@@ -239,6 +257,21 @@ impl FakeHost {
 }
 
 impl State {
+    /// Klipolo's chat proposes what `chat_before_commit` holds, if anything.
+    fn chat_cuts_in(&mut self) {
+        if let Some(proposal) = self.chat_before_commit.take() {
+            let base_revision = self.doc.as_ref().expect("a project").revision();
+            let id = self.new_id();
+            self.slot = Some(Slot {
+                id,
+                base_revision,
+                from: None,
+                calls: Vec::new(),
+                proposal,
+            });
+        }
+    }
+
     fn new_id(&mut self) -> String {
         let id = format!("proposal-{}", self.next_proposal);
         self.next_proposal += 1;
@@ -311,6 +344,7 @@ impl Host for FakeHost {
     fn apply(&self, client: &str, base: u64, tx: &Transaction) -> Result<Applied, HostError> {
         let mut s = self.state();
         s.counts.applies += 1;
+        s.chat_cuts_in();
         if s.others_waiting(client) {
             return Err(HostError::Moved);
         }
@@ -321,7 +355,7 @@ impl Host for FakeHost {
         }
         let next =
             apply_ops(doc.project(), &tx.ops).map_err(|e| HostError::Refused(e.to_string()))?;
-        let shares = shares(client, limits);
+        let shares = undo_shares(client, limits);
         let by = ByApp {
             app: client,
             shares: &shares,
@@ -397,6 +431,7 @@ impl Host for FakeHost {
     fn undo_own(&self, client: &str) -> Result<Applied, HostError> {
         let mut s = self.state();
         s.counts.undos += 1;
+        s.chat_cuts_in();
         if s.others_waiting(client) {
             return Err(HostError::Moved);
         }

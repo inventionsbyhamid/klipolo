@@ -1,6 +1,7 @@
 //! An edit tool's call from an app: chat's own tool, read, checked and compiled as chat's are, then applied, proposed
 //! or refused. In order:
-//! 1. `ToolCall::parse`: a call that doesn't fit its tool is refused with the parse error's sentence.
+//! 1. `ToolCall::parse`: a call that doesn't fit its tool is refused with the parse error's sentence. `undo` undoes the
+//!    app's own newest step and nothing else (`Host::undo_own`), once no one else's proposal waits.
 //! 2. The open project (`NO_PROJECT` without one). A call naming times or clip refs needs the app to have read the
 //!    project's main track as it is now (`Seen`): `READ_FIRST` when it never read, `STALE` when the clips moved since.
 //! 3. `findMoments` only points the person at moments (it is read-only): it compiles alone and is shown.
@@ -13,7 +14,8 @@
 //!    Removals become a proposal for the person, never applied here: in place of the app's own, or, once additions
 //!    applied (which drops it, as any change does), on top of them.
 //!
-//! The only commit is `Host::apply` of additions that `needs_review` passes: no path here cuts footage.
+//! The only commit is `Host::apply` of additions that `needs_review` passes, and the only other change the app's own
+//! undo: no path here cuts footage.
 //!
 //! A result is one text and `structuredContent`: `{"outcome": "done" | "proposed" | "shown" | "refused", "revision"?,
 //! "proposalId"?, "removedSec"?}`. `isError` is true exactly when nothing was done.
@@ -52,6 +54,9 @@ pub fn run(mcp: &Mcp, session: &mut Session, call: &FunctionCall) -> Value {
         Ok(new) => new,
         Err(e) => return refused(&e.to_string()),
     };
+    if new == ToolCall::Undo {
+        return undo(host, client);
+    }
     let Some(mut snap) = host.snapshot() else {
         return refused(words::NO_PROJECT);
     };
@@ -88,6 +93,20 @@ pub fn run(mcp: &Mcp, session: &mut Session, call: &FunctionCall) -> Value {
         return refused(&reasons(mine));
     }
     edit(mcp, client, &snap, &calls, out, own.as_ref())
+}
+
+/// Undoes `client`'s own newest step, unless someone else's proposal waits (the person's, or another app's).
+fn undo(host: &dyn Host, client: &str) -> Value {
+    if let Some(who) = someone_else(host.open_proposal().as_ref(), client) {
+        return refused(&waiting_other(&who));
+    }
+    match host.undo_own(client) {
+        Ok(undone) => answer(
+            &[words::UNDONE.to_owned()],
+            json!({"outcome": "done", "revision": undone.revision}),
+        ),
+        Err(e) => refused(&host_error(host, client, e)),
+    }
 }
 
 /// The calls in `open`, `client`'s own waiting proposal, when Klipolo remembers making it, on `revision`.

@@ -57,6 +57,8 @@ pub const PUSHES_OUT: &str = "Klipolo can't make room in its undo history for th
 person's steps. Ask the person first.";
 pub const OVER_SHARE: &str = "Your changes fill the undo history Klipolo keeps for other apps. Ask the person to \
 continue in Klipolo.";
+/// The app's own newest step, undone.
+pub const UNDONE: &str = "Undone in Klipolo. The person can redo it there.";
 pub const NOT_YOURS: &str = "The last change in Klipolo isn't yours. Only the person can undo it.";
 pub const NOTHING_TO_UNDO: &str = "There is nothing of yours to undo.";
 /// Too many calls from one app, or from all apps together.
