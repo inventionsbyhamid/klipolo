@@ -17,10 +17,13 @@
 //! call, and no question or `cannotDo` instead).
 //!
 //! The reply is the model's text, then the sentences of refusals meant for the person, then what couldn't be done; all
-//! of it without em or en dashes (`sanitize::reply`). When nothing came of the answer and a call of it was refused after
+//! of it without em or en dashes (`sanitize::reply`). When a call was refused for the person beside others that went
+//! through, the model's text, written before that refusal, may claim it: it is left out, and what went through is said
+//! plainly instead ("The music is in."). When nothing came of the answer and a call of it was refused after
 //! the model wrote its text (still refused back, or refused for the person, `cannotDo` aside), that text, which may
 //! claim the edit, is left out. With none of these, the reply is `askUser`'s questions, else a short sentence on what
-//! was done; otherwise the questions are only in `Compiled::questions`.
+//! was done (or, for only work handed to a runner, that it is under way); otherwise the questions are only in
+//! `Compiled::questions`.
 //!
 //! Errors leave the project untouched: nothing is compiled, and each is one plain sentence (`ChatError`). A project
 //! whose context is over budget (`ChatContext::fits`) is refused before any model call.
@@ -430,14 +433,18 @@ fn finish(
         || !compiled.jobs.is_empty()
         || !compiled.questions.is_empty()
         || compiled.undo;
-    // An edit refused for the person (nothing to remove, a clip not analyzed yet): the text was written before it.
+    // An edit refused for the person (nothing to remove, a clip not analyzed yet, words on screen still to come): the
+    // text was written before it, and may say it was done. It is left out; what else was done is said plainly instead.
     let told_undone = (compiled.refusals.iter()).any(|r| {
         r.audience == Audience::Person && !matches!(calls[r.call_index], ToolCall::CannotDo { .. })
     });
     let mut parts: Vec<String> = Vec::new();
     let text = text.trim();
-    if !text.is_empty() && (came_of_it || (unfinished.is_empty() && !told_undone)) {
+    if !text.is_empty() && !told_undone && (came_of_it || unfinished.is_empty()) {
         parts.push(text.to_owned());
+    }
+    if told_undone && came_of_it {
+        parts.extend(done_sentences(&calls, &compiled));
     }
     for r in &compiled.refusals {
         if r.audience == Audience::Person {
@@ -460,6 +467,8 @@ fn finish(
                 (true, true) => "Done. The removals are waiting for you to apply them.",
                 (true, false) => "Done.",
                 (false, true) => "Here is what I would remove. Apply it or discard it.",
+                // Only work for a runner: a picture being drawn, a subject being tracked.
+                (false, false) if !compiled.jobs.is_empty() => "Working on it.",
                 (false, false) => "Nothing changed.",
             }
             .to_owned(),
@@ -474,6 +483,44 @@ fn finish(
         calls,
         answers,
     }
+}
+
+/// What a call that went through did, said plainly for a reply that leaves the model's text out.
+fn done(call: &ToolCall) -> Option<&'static str> {
+    Some(match call {
+        ToolCall::AddMusic { .. } => "The music is in.",
+        ToolCall::AddSound { .. } => "The sound is in.",
+        ToolCall::AddImage { .. } => "The picture is in.",
+        ToolCall::MakeTitleCard { .. } => "The title is in.",
+        ToolCall::MakeSticker { .. } => "The sticker is being drawn.",
+        ToolCall::FollowSubject { .. } | ToolCall::BlurObjects { .. } => "Working on it.",
+        ToolCall::SetFormat { .. } => "The format is changed.",
+        ToolCall::SetCaptions { .. } => "The captions are changed.",
+        ToolCall::FixCaptionWords { .. } => "The words are fixed.",
+        ToolCall::SplitAt { .. } => "The clip is split.",
+        ToolCall::TrimClip { .. } => "The clip is longer.",
+        ToolCall::Undo => "Undone.",
+        // Shown on their own (moments, questions), or proposed, or never done (text still to come).
+        _ => return None,
+    })
+}
+
+/// The calls of `compiled` that went through, each said once (`done`), then the proposal if there is one.
+fn done_sentences(calls: &[ToolCall], compiled: &Compiled) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for (i, call) in calls.iter().enumerate() {
+        let refused = compiled.refusals.iter().any(|r| r.call_index == i);
+        if refused || compiled.proposed_calls.contains(&i) {
+            continue;
+        }
+        if let Some(said) = done(call).filter(|said| !out.iter().any(|o| o == said)) {
+            out.push(said.to_owned());
+        }
+    }
+    if compiled.proposal.is_some() {
+        out.push("Here is what I would remove. Apply it or discard it.".to_owned());
+    }
+    out
 }
 
 /// `text` ending in a full stop, a question mark or an exclamation mark.
@@ -500,6 +547,12 @@ fn task(tool: &str) -> &'static str {
         "findMoments" => "find those moments",
         "followSubject" => "follow the subject",
         "blurObjects" => "add the blur",
+        "addMusic" => "add the music",
+        "addSound" => "add the sound",
+        "addText" => "put the words on screen",
+        "addImage" => "add the picture",
+        "makeSticker" => "make the sticker",
+        "makeTitleCard" => "make the title card",
         "undo" => "undo the last change",
         _ => "do part of this",
     }

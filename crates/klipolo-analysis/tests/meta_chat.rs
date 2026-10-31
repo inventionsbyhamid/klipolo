@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use klipolo_analysis::providers::meta::Meta;
 use klipolo_analysis::providers::meta_chat::{CHAT_MODEL, MetaChat, wire_body};
 use klipolo_chat::{
-    AnalysisState, ChatContext, ChatErrorKind, Inputs, Item, LanguageModel, ModelError,
+    AnalysisState, ChatContext, ChatErrorKind, Inputs, Item, LanguageModel, Library, ModelError,
     ModelRequest, Refs, View, build_context, plan, system_prompt, tools,
 };
 use klipolo_meta::pricing::{SPARK_CACHED_INPUT_USD, SPARK_INPUT_USD, SPARK_OUTPUT_USD};
@@ -109,6 +109,7 @@ fn talk() -> (Project, Inputs, ChatContext) {
         speech,
         scenes: HashMap::new(),
         analysis: HashMap::from([("talk".to_owned(), AnalysisState::Done)]),
+        library: Library::default(),
     };
     let ctx = build_context(
         &p,
@@ -116,6 +117,7 @@ fn talk() -> (Project, Inputs, ChatContext) {
         &HashMap::new(),
         &inputs.scenes,
         &inputs.view,
+        &inputs.library,
     );
     (p, inputs, ctx)
 }

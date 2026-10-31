@@ -15,19 +15,29 @@
 //! the model. Where the meaning is clear it reads leniently: no arguments at all for a tool that takes none, a nullable
 //! value left out, text with stray spaces.
 //!
-//! Adding a tool (the media tools later) is one `ToolCall` variant and one entry in `TOOLS`, where its name,
-//! description, parameters and reader sit together; the tests check every schema is strict and every reader reads
-//! the fields its schema lists.
+//! Adding a tool is one `ToolCall` variant and one entry in `TOOLS`, where its name, description, parameters and reader
+//! sit together; the tests check every schema is strict and every reader reads the fields its schema lists. Splitting
+//! by concern: `schema` (the pieces of a schema, and the words a tool takes), `args` (a call's arguments read field by
+//! field), `error` (why a call couldn't be read), `media` (the media tools and their words).
 
-use std::fmt;
+mod args;
+mod error;
+pub mod media;
+mod schema;
+
 use std::ops::RangeInclusive;
 
 use klipolo_model::captions::styles::BuiltinCaptionStyle;
 use klipolo_model::ops::Edge;
 use klipolo_model::project::FormatKind;
-use klipolo_model::time::{MAX_TIME_US, RangeUs, US_PER_SEC, Us, secs_to_us};
+use klipolo_model::time::{RangeUs, Us};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
+
+use args::{Args, kind};
+pub use error::{Problem, ToolError};
+pub use media::{PictureSize, Position, TextPreset};
+use schema::{boolean, list, nullable_number, nullable_words, object, seconds, string, words};
 
 /// One tool call as the model made it, whichever provider ran the model: its adapter maps the provider's call into
 /// this.
@@ -86,6 +96,45 @@ pub enum ToolCall {
     FollowSubject { description: String },
     /// Blur the one kind of thing `description` names (a short noun phrase) wherever it shows.
     BlurObjects { description: String },
+    /// Play the library's music `file` (a name, not yet resolved) from `at_us` (None: the playhead) to the video's
+    /// end; `volume` None is the default, `duck` None is on.
+    AddMusic {
+        file: String,
+        volume: Option<f64>,
+        duck: Option<bool>,
+        at_us: Option<Us>,
+    },
+    /// Play the library's sound `name` at each of `at_us` (at least one).
+    AddSound { name: String, at_us: Vec<Us> },
+    /// Show `text` in text preset `preset` from `at_us` (None: the playhead) for `duration_us` (None: the default).
+    AddText {
+        text: String,
+        preset: TextPreset,
+        at_us: Option<Us>,
+        duration_us: Option<Us>,
+    },
+    /// Show the library's picture `file`; None for what the person left unsaid.
+    AddImage {
+        file: String,
+        size: Option<PictureSize>,
+        position: Option<Position>,
+        at_us: Option<Us>,
+        duration_us: Option<Us>,
+    },
+    /// Have a sticker of `prompt` drawn, to place once it exists.
+    MakeSticker {
+        prompt: String,
+        position: Option<Position>,
+        at_us: Option<Us>,
+        duration_us: Option<Us>,
+    },
+    /// Show `title` in the full-frame title card template, over a background of `prompt` drawn for it.
+    MakeTitleCard {
+        title: String,
+        prompt: String,
+        at_us: Option<Us>,
+        duration_us: Option<Us>,
+    },
     /// Undo the last change.
     Undo,
     /// Ask the person `question` before doing anything more.
@@ -146,132 +195,16 @@ impl ToolCall {
             ToolCall::FindMoments { .. } => "findMoments",
             ToolCall::FollowSubject { .. } => "followSubject",
             ToolCall::BlurObjects { .. } => "blurObjects",
+            ToolCall::AddMusic { .. } => "addMusic",
+            ToolCall::AddSound { .. } => "addSound",
+            ToolCall::AddText { .. } => "addText",
+            ToolCall::AddImage { .. } => "addImage",
+            ToolCall::MakeSticker { .. } => "makeSticker",
+            ToolCall::MakeTitleCard { .. } => "makeTitleCard",
             ToolCall::Undo => "undo",
             ToolCall::AskUser { .. } => "askUser",
             ToolCall::CannotDo { .. } => "cannotDo",
         }
-    }
-}
-
-/// Why a call couldn't be read: the tool it named, the argument at fault (`ranges[1].endSec`; None for the call as a
-/// whole) and the problem. Its text is one plain sentence for the model, on one line.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ToolError {
-    pub tool: String,
-    pub field: Option<String>,
-    pub problem: Problem,
-}
-
-/// What was wrong with a call.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Problem {
-    /// No tool has the name called.
-    UnknownTool,
-    /// The arguments aren't JSON.
-    NotJson,
-    /// A field the tool needs isn't there.
-    Missing,
-    /// A field the tool doesn't take.
-    Unexpected,
-    /// A value of the wrong JSON type: what it must be, and what it was (`a number of seconds`, `text`).
-    WrongType {
-        expected: &'static str,
-        got: &'static str,
-    },
-    /// A word that isn't one of `allowed` (or null, when `nullable`); `got` is the value given, as JSON.
-    NotOneOf {
-        allowed: Vec<&'static str>,
-        nullable: bool,
-        got: String,
-    },
-    /// Empty text, or a list that needs an item.
-    Empty,
-    /// A number of seconds outside `min..=max`.
-    OutOfRange { min: f64, max: f64, got: f64 },
-    /// An end at or before its start: the start's field and both values as given.
-    NotAfter {
-        start_field: String,
-        start: f64,
-        end: f64,
-    },
-    /// More than one short noun phrase: a list, or over `MAX_PHRASE_WORDS` words.
-    NotOnePhrase,
-}
-
-impl fmt::Display for ToolError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let tool = &self.tool;
-        let field = self.field.as_deref().unwrap_or("the arguments");
-        match &self.problem {
-            Problem::UnknownTool => write!(f, "There is no tool called {tool:?}."),
-            Problem::NotJson => write!(f, "{tool}: the arguments are not valid JSON."),
-            Problem::Missing => write!(f, "{tool}: {field} is missing."),
-            // The model wrote this field's name: quoted, so a line break in it stays on the line.
-            Problem::Unexpected => write!(f, "{tool}: {field:?} is not an argument of this tool."),
-            Problem::WrongType { expected, got } => {
-                write!(f, "{tool}: {field} must be {expected}, not {got}.")
-            }
-            Problem::NotOneOf {
-                allowed,
-                nullable,
-                got,
-            } => {
-                let or_null = if *nullable { " or null" } else { "" };
-                write!(
-                    f,
-                    "{tool}: {field} must be one of {}{or_null}, not {got}.",
-                    allowed.join(", ")
-                )
-            }
-            Problem::Empty => write!(f, "{tool}: {field} must not be empty."),
-            Problem::OutOfRange { min, max, got } => write!(
-                f,
-                "{tool}: {field} must be between {} and {} seconds{}.",
-                said_secs(*min),
-                said_secs(*max),
-                given(*got)
-            ),
-            Problem::NotAfter {
-                start_field,
-                start,
-                end,
-            } => write!(
-                f,
-                "{tool}: {field} ({}) must be after {start_field} ({}).",
-                said_secs(*end),
-                said_secs(*start)
-            ),
-            Problem::NotOnePhrase => write!(
-                f,
-                "{tool}: {field} must be one short noun phrase naming one thing, at most {MAX_PHRASE_WORDS} words; \
-                 call {tool} once for each thing."
-            ),
-        }
-    }
-}
-
-impl std::error::Error for ToolError {}
-
-/// The longest time the model stores, in seconds: a number given past it, either way, is said as "a number past 86400"
-/// rather than printed (`given`).
-const LONGEST_SECS: f64 = (MAX_TIME_US / US_PER_SEC) as f64;
-
-/// Seconds as an error says them: at most three decimals ("12.123", "15", "-1").
-fn said_secs(secs: f64) -> String {
-    // `+ 0.0` turns a rounded -0 into 0.
-    format!("{}", (secs * 1000.0).round() / 1000.0 + 0.0)
-}
-
-/// What was given, after the rule it breaks: ", not 15", or past the longest time either way "; got a number past
-/// 86400", so a model's `1e300` never comes back as hundreds of digits.
-fn given(got: f64) -> String {
-    let longest = said_secs(LONGEST_SECS);
-    if got > LONGEST_SECS {
-        format!("; got a number past {longest}")
-    } else if got < -LONGEST_SECS {
-        format!("; got a number below -{longest}")
-    } else {
-        format!(", not {}", said_secs(got))
     }
 }
 
@@ -314,36 +247,6 @@ pub const PAUSE_SECS: RangeInclusive<f64> = 0.3..=10.0;
 
 /// The most words a noun phrase for `blurObjects` or `followSubject` may have.
 pub const MAX_PHRASE_WORDS: usize = 8;
-
-/// A word a tool takes for one of the model's own values: the model's name for it.
-trait Word: Copy {
-    fn word(self) -> &'static str;
-}
-
-impl Word for FormatKind {
-    fn word(self) -> &'static str {
-        match self {
-            FormatKind::Landscape => "landscape",
-            FormatKind::Portrait => "portrait",
-            FormatKind::Square => "square",
-        }
-    }
-}
-
-impl Word for Edge {
-    fn word(self) -> &'static str {
-        match self {
-            Edge::Start => "start",
-            Edge::End => "end",
-        }
-    }
-}
-
-impl Word for BuiltinCaptionStyle {
-    fn word(self) -> &'static str {
-        self.key()
-    }
-}
 
 /// One tool: what the model reads about it and how its arguments are read.
 struct Tool {
@@ -414,7 +317,7 @@ const TOOLS: &[Tool] = &[
         parameters: || {
             vec![(
                 "minPauseSec",
-                nullable_seconds(&format!(
+                nullable_number(&format!(
                     "Pauses longer than this many seconds go, from {} to {}. Null when the person gave no length.",
                     PAUSE_SECS.start(),
                     PAUSE_SECS.end()
@@ -609,6 +512,12 @@ const TOOLS: &[Tool] = &[
             })
         },
     },
+    media::ADD_MUSIC,
+    media::ADD_SOUND,
+    media::ADD_TEXT,
+    media::ADD_IMAGE,
+    media::MAKE_STICKER,
+    media::MAKE_TITLE_CARD,
     Tool {
         name: "undo",
         description: "Undo the last change.",
@@ -664,295 +573,4 @@ fn style_description() -> String {
         .collect();
     out.push_str("Null keeps the current style.");
     out
-}
-
-fn seconds(description: &str) -> Value {
-    json!({"type": "number", "description": description})
-}
-
-fn nullable_seconds(description: &str) -> Value {
-    json!({"type": ["number", "null"], "description": description})
-}
-
-fn string(description: &str) -> Value {
-    json!({"type": "string", "description": description})
-}
-
-fn boolean(description: &str) -> Value {
-    json!({"type": "boolean", "description": description})
-}
-
-fn words<T: Word>(all: &[T], description: &str) -> Value {
-    let all: Vec<&str> = all.iter().map(|w| w.word()).collect();
-    json!({"type": "string", "enum": all, "description": description})
-}
-
-/// One of `all`, or null: null is listed in the enum too, or a strict schema would refuse it.
-fn nullable_words<T: Word>(all: &[T], description: &str) -> Value {
-    let mut listed: Vec<Value> = all.iter().map(|w| json!(w.word())).collect();
-    listed.push(Value::Null);
-    json!({"type": ["string", "null"], "enum": listed, "description": description})
-}
-
-fn list(items: Value, description: &str) -> Value {
-    json!({"type": "array", "items": items, "description": description})
-}
-
-/// A closed object: every property required, no others.
-fn object(properties: Vec<(&'static str, Value)>) -> Value {
-    let required: Vec<&str> = properties.iter().map(|(name, _)| *name).collect();
-    let properties: Map<String, Value> = (properties.into_iter())
-        .map(|(name, schema)| (name.to_owned(), schema))
-        .collect();
-    json!({
-        "type": "object",
-        "properties": properties,
-        "required": required,
-        "additionalProperties": false,
-    })
-}
-
-/// What a value is, as an error says it was.
-fn kind(value: &Value) -> &'static str {
-    match value {
-        Value::Null => "null",
-        Value::Bool(true) => "true",
-        Value::Bool(false) => "false",
-        Value::Number(_) => "a number",
-        Value::String(_) => "text",
-        Value::Array(_) => "a list",
-        Value::Object(_) => "an object",
-    }
-}
-
-const SECONDS: &str = "a number of seconds";
-
-/// One object of arguments being read: each field is taken out as it is read, so what is left is what the tool
-/// doesn't take.
-struct Args {
-    tool: &'static str,
-    /// Where these arguments sit: empty for the call's own, `ranges[1].` for an item of a list.
-    path: String,
-    map: Map<String, Value>,
-}
-
-impl Args {
-    fn error(&self, key: &str, problem: Problem) -> ToolError {
-        ToolError {
-            tool: self.tool.to_owned(),
-            field: Some(format!("{}{key}", self.path)),
-            problem,
-        }
-    }
-
-    fn take(&mut self, key: &str) -> Result<Value, ToolError> {
-        self.map
-            .remove(key)
-            .ok_or_else(|| self.error(key, Problem::Missing))
-    }
-
-    /// A nullable field: None when it is null or left out.
-    fn take_nullable(&mut self, key: &str) -> Option<Value> {
-        self.map.remove(key).filter(|v| !v.is_null())
-    }
-
-    fn number(&self, key: &str, value: &Value, expected: &'static str) -> Result<f64, ToolError> {
-        value.as_f64().ok_or_else(|| {
-            self.error(
-                key,
-                Problem::WrongType {
-                    expected,
-                    got: kind(value),
-                },
-            )
-        })
-    }
-
-    /// Seconds within `bounds`, as given and in microseconds.
-    fn within(&self, key: &str, secs: f64, bounds: &RangeInclusive<f64>) -> Result<Us, ToolError> {
-        if bounds.contains(&secs) {
-            Ok(secs_to_us(secs))
-        } else {
-            Err(self.error(
-                key,
-                Problem::OutOfRange {
-                    min: *bounds.start(),
-                    max: *bounds.end(),
-                    got: secs,
-                },
-            ))
-        }
-    }
-
-    /// A timeline time: seconds, from 0 to the longest time the model stores.
-    fn time_secs(&mut self, key: &str) -> Result<(f64, Us), ToolError> {
-        let value = self.take(key)?;
-        let secs = self.number(key, &value, SECONDS)?;
-        let bounds = 0.0..=LONGEST_SECS;
-        Ok((secs, self.within(key, secs, &bounds)?))
-    }
-
-    fn time(&mut self, key: &str) -> Result<Us, ToolError> {
-        Ok(self.time_secs(key)?.1)
-    }
-
-    /// A range from `start` to `end`, the end after the start.
-    fn range(&mut self, start: &str, end: &str) -> Result<RangeUs, ToolError> {
-        let (start_secs, start_us) = self.time_secs(start)?;
-        let (end_secs, end_us) = self.time_secs(end)?;
-        if end_us <= start_us {
-            return Err(self.error(
-                end,
-                Problem::NotAfter {
-                    start_field: format!("{}{start}", self.path),
-                    start: start_secs,
-                    end: end_secs,
-                },
-            ));
-        }
-        Ok(RangeUs {
-            start: start_us,
-            end: end_us,
-        })
-    }
-
-    /// `removeSilences`' pause length: null, or seconds within `PAUSE_SECS`.
-    fn nullable_pause(&mut self, key: &str) -> Result<Option<Us>, ToolError> {
-        let Some(value) = self.take_nullable(key) else {
-            return Ok(None);
-        };
-        let secs = self.number(key, &value, "a number of seconds or null")?;
-        self.within(key, secs, &PAUSE_SECS).map(Some)
-    }
-
-    /// Text with its runs of white space read as one space, trimmed; possibly empty.
-    fn label(&mut self, key: &str) -> Result<String, ToolError> {
-        let value = self.take(key)?;
-        let Value::String(text) = &value else {
-            return Err(self.error(
-                key,
-                Problem::WrongType {
-                    expected: "text",
-                    got: kind(&value),
-                },
-            ));
-        };
-        Ok(text.split_whitespace().collect::<Vec<_>>().join(" "))
-    }
-
-    /// Text as `label` reads it, not empty.
-    fn text(&mut self, key: &str) -> Result<String, ToolError> {
-        let text = self.label(key)?;
-        if text.is_empty() {
-            return Err(self.error(key, Problem::Empty));
-        }
-        Ok(text)
-    }
-
-    /// One short noun phrase: no list, at most `MAX_PHRASE_WORDS` words.
-    fn phrase(&mut self, key: &str) -> Result<String, ToolError> {
-        let text = self.text(key)?;
-        let words: Vec<&str> = text.split(' ').collect();
-        let joined = |w: &&str| w.eq_ignore_ascii_case("and") || w.eq_ignore_ascii_case("or");
-        if words.len() > MAX_PHRASE_WORDS
-            || text.contains([',', ';', '&', '+', '/'])
-            || words.iter().any(joined)
-        {
-            return Err(self.error(key, Problem::NotOnePhrase));
-        }
-        Ok(text)
-    }
-
-    fn flag(&mut self, key: &str) -> Result<bool, ToolError> {
-        match self.take(key)? {
-            Value::Bool(b) => Ok(b),
-            other => Err(self.error(
-                key,
-                Problem::WrongType {
-                    expected: "true or false",
-                    got: kind(&other),
-                },
-            )),
-        }
-    }
-
-    fn word_of<T: Word>(
-        &self,
-        key: &str,
-        value: &Value,
-        all: &[T],
-        nullable: bool,
-    ) -> Result<T, ToolError> {
-        (value.as_str())
-            .and_then(|s| all.iter().copied().find(|w| w.word() == s))
-            .ok_or_else(|| {
-                self.error(
-                    key,
-                    Problem::NotOneOf {
-                        allowed: all.iter().map(|w| w.word()).collect(),
-                        nullable,
-                        got: value.to_string(),
-                    },
-                )
-            })
-    }
-
-    fn word<T: Word>(&mut self, key: &str, all: &[T]) -> Result<T, ToolError> {
-        let value = self.take(key)?;
-        self.word_of(key, &value, all, false)
-    }
-
-    fn nullable_word<T: Word>(&mut self, key: &str, all: &[T]) -> Result<Option<T>, ToolError> {
-        match self.take_nullable(key) {
-            Some(value) => self.word_of(key, &value, all, true).map(Some),
-            None => Ok(None),
-        }
-    }
-
-    /// A list of objects, each read by `read` (and refused if it holds fields `read` doesn't take).
-    fn each<T>(
-        &mut self,
-        key: &str,
-        read: fn(&mut Args) -> Result<T, ToolError>,
-    ) -> Result<Vec<T>, ToolError> {
-        let value = self.take(key)?;
-        let Value::Array(items) = value else {
-            return Err(self.error(
-                key,
-                Problem::WrongType {
-                    expected: "a list",
-                    got: kind(&value),
-                },
-            ));
-        };
-        let mut out = Vec::with_capacity(items.len());
-        for (i, item) in items.into_iter().enumerate() {
-            let at = format!("{key}[{i}]");
-            let Value::Object(map) = item else {
-                return Err(self.error(
-                    &at,
-                    Problem::WrongType {
-                        expected: "an object",
-                        got: kind(&item),
-                    },
-                ));
-            };
-            let mut args = Args {
-                tool: self.tool,
-                path: format!("{}{at}.", self.path),
-                map,
-            };
-            out.push(read(&mut args)?);
-            args.finish()?;
-        }
-        Ok(out)
-    }
-
-    /// Refuses the first field left unread.
-    fn finish(self) -> Result<(), ToolError> {
-        match self.map.keys().next() {
-            Some(key) => Err(self.error(key, Problem::Unexpected)),
-            None => Ok(()),
-        }
-    }
 }
