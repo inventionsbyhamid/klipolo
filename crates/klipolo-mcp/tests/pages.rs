@@ -144,6 +144,26 @@ fn page_range_takes_overlapping_lines() {
     // An end before its start reads nothing.
     let backwards = page(&t, Some(secs(12.0)), Some(secs(7.0)));
     assert!(lines_of(&backwards).is_empty());
+    assert!(
+        backwards.contains("the start must be before the end"),
+        "{backwards}"
+    );
+    // Only a start, past the last line or on an empty transcript: nothing from there on, never a word about an end.
+    for (t, from) in [(&t, 30.0), (&t, 20.0), (&FullTranscript::default(), 0.0)] {
+        let past = page(t, Some(secs(from)), None);
+        assert!(lines_of(&past).is_empty());
+        assert!(
+            past.contains(&format!("\nNothing is said from {from} s on.\n")),
+            "{past}"
+        );
+        assert!(!past.contains(" end"), "{past}");
+    }
+    // Only an end, at the start: nothing up to there.
+    let before = page(&t, None, Some(0));
+    assert!(
+        before.contains("\nNothing is said up to 0 s.\n"),
+        "{before}"
+    );
 
     // A range longer than a page is cut at a whole line and names where to go on, which repeats no line.
     let long = talk(1800, 160);

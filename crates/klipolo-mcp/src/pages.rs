@@ -145,16 +145,30 @@ fn split(t: &FullTranscript) -> Vec<&[TranscriptLine]> {
     pages
 }
 
-/// The lines `from..to` overlaps, at most `PAGE_BYTES` with where to go on when they don't all fit.
+/// The lines `from..to` overlaps, at most `PAGE_BYTES` with where to go on when they don't all fit. Without `from`,
+/// from the first line; without `to`, to the last.
 fn range(t: &FullTranscript, from: Option<Us>, to: Option<Us>) -> String {
     let start = from.unwrap_or(0).max(0);
     let end = to.unwrap_or_else(|| end_of(t));
     let (a, b) = (stamp(start), stamp(end));
-    let mut out = format!(
-        "Transcript from {a} to {b} s, in whole lines (the first may start before {a}). {LINES_ARE}\n"
-    );
+    // What the range is, as the app asked for it.
+    let span = match (from, to) {
+        (Some(_), Some(_)) => format!("from {a} to {b} s"),
+        (Some(_), None) => format!("from {a} s on"),
+        _ => format!("up to {b} s"),
+    };
+    let mut out = match from {
+        Some(_) => format!(
+            "Transcript {span}, in whole lines (the first may start before {a} s). {LINES_ARE}\n"
+        ),
+        None => format!("Transcript {span}, in whole lines. {LINES_ARE}\n"),
+    };
     if start >= end {
-        out.push_str("Nothing to read: the start must be before the end.\n");
+        if from.is_some() && to.is_some() {
+            out.push_str("Nothing to read: the start must be before the end.\n");
+        } else {
+            let _ = writeln!(out, "Nothing is said {span}.");
+        }
         out.push_str(&t.notes);
         return out;
     }
@@ -170,9 +184,11 @@ fn range(t: &FullTranscript, from: Option<Us>, to: Option<Us>) -> String {
     for l in t.lines[first..].iter().take_while(|l| l.range.start < end) {
         if shown > 0 && out.len() + l.text.len() + 1 + t.notes.len() + MORE_ROOM > PAGE_BYTES {
             let next = stamp(l.range.start);
+            let to_sec = if to.is_some() { b.as_str() } else { "null" };
             let _ = writeln!(
                 out,
-                "More follows: call getTranscript with fromSec {next} and toSec {b}, or read {TEMPLATE}{next}-{b}."
+                "More follows: call getTranscript with fromSec {next} and toSec {to_sec}, or read \
+                 {TEMPLATE}{next}-{b}."
             );
             break;
         }
@@ -181,7 +197,7 @@ fn range(t: &FullTranscript, from: Option<Us>, to: Option<Us>) -> String {
         shown += 1;
     }
     if shown == 0 {
-        let _ = writeln!(out, "Nothing is said from {a} to {b} s.");
+        let _ = writeln!(out, "Nothing is said {span}.");
     }
     out.push_str(&t.notes);
     out
