@@ -41,8 +41,8 @@ export interface ProjectStore {
   adopt: (change: SnapshotPatch) => Promise<boolean>;
   undo: () => Promise<void>;
   /**
-   * Undo, only if the history still says `latest` at its turn (after a change still settling went in): chat's Undo chip
-   * takes back its own change, never one made since. True when it undid.
+   * Undo, only if the history still says `latest` at its turn (after a change still settling went in): the import
+   * toast's Undo takes back its own import, never a change made since. True when it undid.
    */
   undoIf: (latest: (history: HistoryState) => boolean) => Promise<boolean>;
   /**
