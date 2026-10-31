@@ -48,6 +48,8 @@ pub const MOVED: &str =
 /// Additions applied, and the removals of the same call not proposed: the project moved between the two.
 pub const NOT_PROPOSED: &str = "The removals were not proposed, because the project changed while this call ran. Call \
 getContext again, then retry them.";
+/// A call of the app's waiting proposal that no longer compiles, left out of the proposal that takes its place.
+pub const LEFT_OUT: &str = "Left out of your proposal: {reason}";
 /// Additions that, checked again before they apply, take something away. Never expected: the compiler proposes those.
 pub const REMOVES: &str = "Klipolo found this would take something out of the edit, so it was not applied. Nothing \
 changed.";

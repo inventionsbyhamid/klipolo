@@ -5,11 +5,13 @@
 //!    project's main track as it is now (`Seen`): `READ_FIRST` when it never read, `STALE` when the clips moved since.
 //! 3. `findMoments` only points the person at moments (it is read-only): it compiles alone and is shown.
 //! 4. The proposal slot, shared with Klipolo's chat: while a proposal that isn't the app's own waits, every edit is
-//!    refused (`WAITING_OTHER`).
+//!    refused (`WAITING_OTHER`). The app's own absorbs the call: it compiles after the calls the proposal holds
+//!    (`Own`), on the revision the proposal was made on.
 //! 5. `compile`, with no typed message: an app's words are never the person's times. A refusal of the call is the
-//!    tool's error, with every reason, and nothing changes.
+//!    tool's error, with its reason, and nothing changes.
 //! 6. Additions apply at once as one undo step the app made (`from_app`), checked again first to take nothing away.
-//!    Removals become a proposal for the person, never applied here.
+//!    Removals become a proposal for the person, never applied here: in place of the app's own, or, once additions
+//!    applied (which drops it, as any change does), on top of them.
 //!
 //! The only commit is `Host::apply` of additions that `needs_review` passes: no path here cuts footage.
 //!
@@ -33,6 +35,15 @@ use crate::words::{self, fill};
 /// The most ranges a result names; the rest are counted (`getProposal` lists them all).
 const RANGES_SAID: usize = 10;
 
+/// An app's waiting proposal as Klipolo made it, so the app's next call joins it: whose, its id and the calls in it.
+/// One proposal waits at a time, so one is remembered; it holds only while a proposal with its id waits.
+#[derive(Clone, Debug)]
+pub(crate) struct Own {
+    client: String,
+    id: String,
+    calls: Vec<ToolCall>,
+}
+
 /// What `call` did, as a tool result.
 pub fn run(mcp: &Mcp, session: &mut Session, call: &FunctionCall) -> Value {
     let client = session.client.as_str();
@@ -55,17 +66,36 @@ pub fn run(mcp: &Mcp, session: &mut Session, call: &FunctionCall) -> Value {
         return show(host, client, &snap, new);
     }
     let open = host.open_proposal();
+    // The person decided on the proposal remembered, or it was dropped: it is no one's to join.
+    mcp.own()
+        .take_if(|own| open.as_ref().is_none_or(|p| p.id != own.id));
     if let Some(who) = someone_else(open.as_ref(), client) {
         return refused(&waiting_other(&who));
     }
-    let own = open.filter(|p| p.from.as_deref() == Some(client));
-    let calls = vec![new];
+    let (own, mut calls) = match open {
+        None => (None, Vec::new()),
+        Some(open) => match joined(mcp, client, &open, snap.revision) {
+            Some(calls) => (Some(open), calls),
+            // What it holds isn't known here (the server started again since): it waits for the person like any other.
+            None => return refused(&waiting_other(client)),
+        },
+    };
+    calls.push(new);
     let at = calls.len() - 1;
     let out = compile(&snap.project, &snap.inputs, &calls);
-    if out.refusals.iter().any(|r| r.call_index == at) {
-        return refused(&reasons(&out.refusals));
+    let mine: Vec<&Refusal> = out.refusals.iter().filter(|r| r.call_index == at).collect();
+    if !mine.is_empty() {
+        return refused(&reasons(mine));
     }
-    edit(host, client, &snap, &calls, out, own.as_ref())
+    edit(mcp, client, &snap, &calls, out, own.as_ref())
+}
+
+/// The calls in `open`, `client`'s own waiting proposal, when Klipolo remembers making it, on `revision`.
+fn joined(mcp: &Mcp, client: &str, open: &OpenProposal, revision: u64) -> Option<Vec<ToolCall>> {
+    let own = mcp.own();
+    let own = own.as_ref()?;
+    (own.id == open.id && own.client == client && open.base_revision == revision)
+        .then(|| own.calls.clone())
 }
 
 /// Whether what the app last read (`seen`) is the project's main track as it is now; else what to read.
@@ -94,16 +124,18 @@ pub fn from_app(tx: &Transaction, client: &str) -> Transaction {
     }
 }
 
-/// The compiled `calls`, done: additions applied, then removals proposed (in place of `own`, the app's open proposal,
-/// while the revision is the one it was made on).
+/// The compiled `calls`, the last one the app's new call and the others those of `own`, its waiting proposal: additions
+/// applied, then the removals proposed.
 fn edit(
-    host: &dyn Host,
+    mcp: &Mcp,
     client: &str,
     snap: &Snapshot,
     calls: &[ToolCall],
     out: Compiled,
     own: Option<&OpenProposal>,
 ) -> Value {
+    let host = mcp.host();
+    let at = calls.len() - 1;
     let mut said: Vec<String> = Vec::new();
     let mut revision = snap.revision;
     if let Some(additions) = &out.additions {
@@ -128,10 +160,25 @@ fn edit(
             &[("tools", &names(applied.map(|i| &calls[i])))],
         ));
     }
-    let Some(proposal) = out.proposal else {
+    // The app's own proposal stands as it is, unless the call adds to it or the additions changed the project (which
+    // dropped it).
+    let proposal =
+        (out.proposal).filter(|_| own.is_none() || changed || out.proposed_calls.contains(&at));
+    // An earlier call of its proposal that no longer compiles (it stood on a selection gone since) is left out of what
+    // takes the proposal's place: the app hears which, and why.
+    let left_out: Vec<String> = if own.is_some() && (changed || proposal.is_some()) {
+        (out.refusals.iter())
+            .filter(|r| r.call_index < at)
+            .map(|r| fill(words::LEFT_OUT, &[("reason", &reason(r))]))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let Some(proposal) = proposal else {
         if said.is_empty() {
             said.push(words::UNCHANGED.to_owned());
         }
+        said.extend(left_out);
         return answer(&said, json!({"outcome": "done", "revision": revision}));
     };
     let proposed: Vec<ToolCall> = (out.proposed_calls.iter())
@@ -147,6 +194,11 @@ fn edit(
     match host.propose(client, revision, &proposed, proposal, replacing) {
         Ok(id) => {
             let tools = names(proposed.iter());
+            *mcp.own() = Some(Own {
+                client: client.to_owned(),
+                id: id.clone(),
+                calls: proposed.clone(),
+            });
             said.push(if removed_us > 0 {
                 fill(
                     words::PROPOSED,
@@ -159,6 +211,7 @@ fn edit(
             } else {
                 fill(words::PROPOSED_NO_FOOTAGE, &[("tools", &tools)])
             });
+            said.extend(left_out);
             answer(
                 &said,
                 json!({
@@ -233,21 +286,22 @@ fn host_error(host: &dyn Host, client: &str, e: HostError) -> String {
     }
 }
 
-/// Every refusal's reason, in call order. One for the person names the clip it is about: "Klipolo is still listening
-/// to this clip (c2)."
-fn reasons(refusals: &[Refusal]) -> String {
-    let said: Vec<String> = (refusals.iter())
-        .map(|r| match (r.audience, &r.clip) {
-            (Audience::Person, Some(clip)) => {
-                format!("{} ({clip}).", r.reason.trim_end_matches('.'))
-            }
-            (Audience::Person, None) if !r.reason.ends_with(['.', '?', '!']) => {
-                format!("{}.", r.reason)
-            }
-            _ => r.reason.clone(),
-        })
-        .collect();
+/// The refusals' reasons, one after another.
+fn reasons<'a>(refusals: impl IntoIterator<Item = &'a Refusal>) -> String {
+    let said: Vec<String> = refusals.into_iter().map(reason).collect();
     said.join(" ")
+}
+
+/// A refusal's reason, as a sentence. One for the person names the clip it is about: "Klipolo is still listening to
+/// this clip (c2)."
+fn reason(r: &Refusal) -> String {
+    match (r.audience, &r.clip) {
+        (Audience::Person, Some(clip)) => format!("{} ({clip}).", r.reason.trim_end_matches('.')),
+        (Audience::Person, None) if !r.reason.ends_with(['.', '?', '!']) => {
+            format!("{}.", r.reason)
+        }
+        _ => r.reason.clone(),
+    }
 }
 
 /// Whether `call` can make additions (what `findMoments` and the jobs make is not an edit to apply).

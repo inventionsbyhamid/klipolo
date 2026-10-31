@@ -6,7 +6,7 @@
 //! (-32602) and an unknown resource (-32002). Bad JSON (-32700) is the server's, before a message reaches here.
 //! Nothing here trusts the client.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
 
 use klipolo_chat::FunctionCall;
@@ -43,6 +43,8 @@ pub struct Mcp {
     sessions: Mutex<Sessions>,
     /// The apps last told to the host as connected; locked while telling, so the host hears every change in order.
     told: Mutex<Vec<String>>,
+    /// The waiting proposal an app made here, which its next call joins.
+    own: Mutex<Option<call::Own>>,
 }
 
 impl Mcp {
@@ -51,11 +53,17 @@ impl Mcp {
             host,
             sessions: Mutex::new(Sessions::default()),
             told: Mutex::new(Vec::new()),
+            own: Mutex::new(None),
         }
     }
 
     pub fn host(&self) -> &dyn Host {
         &*self.host
+    }
+
+    /// The waiting proposal an app made here, if Klipolo still holds it: locked briefly, never across a host call.
+    pub(crate) fn own(&self) -> MutexGuard<'_, Option<call::Own>> {
+        locked(&self.own)
     }
 
     /// One message from a client, in session `session` (its `Mcp-Session-Id`). Synchronous: the server runs it on a

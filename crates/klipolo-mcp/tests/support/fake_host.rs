@@ -79,6 +79,8 @@ pub struct State {
     pub usd_per_job: f64,
     pub limits: HistoryLimits,
     pub counts: Counts,
+    /// The next `propose` finds the project moved, as if someone proposed or edited just before it.
+    pub move_before_propose: bool,
 }
 
 pub struct FakeHost {
@@ -152,6 +154,7 @@ impl FakeHost {
                 usd_per_job: 0.04,
                 limits: HistoryLimits::default(),
                 counts: Counts::default(),
+                move_before_propose: false,
             }),
         })
     }
@@ -348,6 +351,9 @@ impl Host for FakeHost {
     ) -> Result<String, HostError> {
         let mut s = self.state();
         s.counts.proposes += 1;
+        if std::mem::take(&mut s.move_before_propose) {
+            return Err(HostError::Moved);
+        }
         let revision = s.doc.as_ref().ok_or(HostError::NoProject)?.revision();
         let open = s.slot.as_ref().map(|slot| slot.id.as_str());
         if revision != base || open != replacing {

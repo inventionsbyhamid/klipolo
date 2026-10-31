@@ -17,8 +17,8 @@ use klipolo_mcp::Host;
 use klipolo_mcp::call::from_app;
 use klipolo_mcp::rpc::Mcp;
 use klipolo_mcp::words::{
-    DONE, KLIPOLO_CHAT, NO_MOMENTS, PROPOSED_NO_FOOTAGE, READ_FIRST, STALE, UNCHANGED,
-    WAITING_OTHER, fill,
+    DONE, KLIPOLO_CHAT, NO_MOMENTS, NOT_PROPOSED, PROPOSED_NO_FOOTAGE, READ_FIRST, STALE,
+    UNCHANGED, WAITING_OTHER, fill,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -523,6 +523,7 @@ fn agent_words_are_exact() {
         WAITING_OTHER,
         MOVED,
         NOT_PROPOSED,
+        LEFT_OUT,
         REMOVES,
         PUSHES_OUT,
         OVER_SHARE,
@@ -638,4 +639,207 @@ fn format_change_keeps_read_times_valid() {
     }
     let result = agent.cut(0.0, 13.0);
     assert_eq!(outcome(&result), "proposed", "{result}");
+}
+
+fn cut_call(a: f64, b: f64) -> ToolCall {
+    ToolCall::CutRange { range: span(a, b) }
+}
+
+fn select(host: &FakeHost, range: Option<RangeUs>) {
+    host.set_view(View {
+        playhead_us: 0,
+        selection: range,
+    });
+}
+
+#[test]
+fn second_removal_joins_the_clients_own_proposal() {
+    let host = FakeHost::two_clips();
+    select(&host, Some(span(49.5, 50.5)));
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    let before = host.revision();
+    let first = agent.cut(0.0, 13.0);
+    let first_id = first["structuredContent"]["proposalId"].clone();
+    let second = agent.cut(49.5, 50.5);
+    assert_eq!(second["isError"], false, "{second}");
+    assert_eq!(
+        text(&second),
+        "Proposed in Klipolo (cutRange): 14 s of footage would go (0 to 13 s, 49.5 to 50.5 s). Nothing is cut until \
+         the person clicks Apply in Klipolo's chat panel. Call getProposal to see what they decided."
+    );
+    // One proposal holds both, in place of the first; nothing is cut.
+    assert_eq!(host.revision(), before);
+    let slot = host.state().slot.clone().expect("a proposal waits");
+    assert_eq!(slot.from.as_deref(), Some("Agent"));
+    assert_eq!(slot.calls, [cut_call(0.0, 13.0), cut_call(49.5, 50.5)]);
+    assert_eq!(slot.proposal.ranges, [span(0.0, 13.0), span(49.5, 50.5)]);
+    assert_ne!(json!(slot.id), first_id);
+    assert_eq!(
+        second["structuredContent"],
+        json!({"outcome": "proposed", "revision": before, "proposalId": slot.id, "removedSec": 14.0})
+    );
+    assert_eq!(host.state().counts.applies, 0);
+    // Another app never joins it: it waits for the person.
+    let other = Agent::open(&mcp, "Other app");
+    other.read();
+    assert_refused(
+        &other.cut(0.0, 13.0),
+        &fill(WAITING_OTHER, &[("who", "Agent")]),
+    );
+    // Once the person decides, the app's next removal stands alone.
+    host.person_discards();
+    let third = agent.cut(49.5, 50.5);
+    assert_eq!(third["structuredContent"]["removedSec"], 1.0, "{third}");
+    assert_eq!(
+        host.state().slot.as_ref().unwrap().calls,
+        [cut_call(49.5, 50.5)]
+    );
+}
+
+#[test]
+fn addition_after_own_removal_applies_and_reopens_the_proposal_on_top() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    let (before, main) = (host.revision(), host.project().timeline.main);
+    let first = agent.cut(0.0, 13.0);
+    let result = agent.call("setCaptions", json!({"on": false, "style": null}));
+    assert_eq!(result["isError"], false, "{result}");
+    assert_eq!(
+        text(&result),
+        "Done in Klipolo (setCaptions). The person can undo it there. Proposed in Klipolo (cutRange): 13 s of \
+         footage would go (0 to 13 s). Nothing is cut until the person clicks Apply in Klipolo's chat panel. Call \
+         getProposal to see what they decided."
+    );
+    // The captions applied as the app's step, and only they: the cut is never in what applied.
+    assert_eq!(host.revision(), before + 1);
+    let project = host.project();
+    assert!(!project.captions.enabled);
+    assert_eq!(project.timeline.main, main);
+    {
+        let s = host.state();
+        let [(_, tx)] = s.applied.as_slice() else {
+            panic!("one batch: {:?}", s.applied)
+        };
+        assert!(
+            tx.ops.iter().all(|op| matches!(op, Op::SetCaptions { .. })),
+            "{tx:?}"
+        );
+    }
+    // The removal waits again, on top of the captions.
+    let slot = host.state().slot.clone().expect("a proposal waits");
+    assert_eq!(slot.from.as_deref(), Some("Agent"));
+    assert_eq!(slot.base_revision, before + 1);
+    assert_eq!(slot.calls, [cut_call(0.0, 13.0)]);
+    assert_eq!(slot.proposal.ranges, [span(0.0, 13.0)]);
+    assert!(!slot.proposal.review.after.captions.enabled);
+    assert_ne!(json!(slot.id), first["structuredContent"]["proposalId"]);
+    assert_eq!(
+        result["structuredContent"],
+        json!({"outcome": "proposed", "revision": before + 1, "proposalId": slot.id, "removedSec": 13.0})
+    );
+    let waiting = agent.call("getProposal", json!({}));
+    assert_eq!(waiting["structuredContent"]["id"], json!(slot.id));
+    // Asked again, the captions are as asked: the proposal stands as it is.
+    let again = agent.call("setCaptions", json!({"on": false, "style": null}));
+    assert_eq!(text(&again), UNCHANGED);
+    assert_eq!(
+        host.state().slot.as_ref().map(|s| s.id.clone()),
+        Some(slot.id)
+    );
+}
+
+#[test]
+fn removals_that_cant_reopen_say_the_additions_are_done() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    agent.cut(0.0, 13.0);
+    let before = host.revision();
+    host.state().move_before_propose = true;
+    let result = agent.call("setCaptions", json!({"on": false, "style": null}));
+    // Never a bare "the project changed": the captions are in, the cut is not proposed.
+    assert_eq!(result["isError"], false, "{result}");
+    assert_eq!(
+        text(&result),
+        format!(
+            "{} {}",
+            fill(DONE, &[("tools", "setCaptions")]),
+            NOT_PROPOSED
+        )
+    );
+    assert_eq!(
+        result["structuredContent"],
+        json!({"outcome": "done", "revision": before + 1})
+    );
+    assert!(host.state().slot.is_none());
+}
+
+#[test]
+fn find_moments_never_touches_the_clients_own_proposal() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    let first = agent.cut(0.0, 13.0);
+    let found = agent.call(
+        "findMoments",
+        json!({"query": "the library", "ranges": [{"startSec": 13, "endSec": 144.04, "label": "the library"}]}),
+    );
+    assert_eq!(outcome(&found), "shown", "{found}");
+    let open = host.open_proposal().expect("still waiting");
+    assert_eq!(json!(open.id), first["structuredContent"]["proposalId"]);
+    assert_eq!(host.state().counts.proposes, 1);
+}
+
+#[test]
+fn an_earlier_call_that_no_longer_stands_is_left_out_and_said() {
+    let host = FakeHost::two_clips();
+    select(&host, Some(span(49.5, 50.5)));
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    agent.cut(49.5, 50.5);
+    // The person selects nothing now: the earlier cut stood on their selection.
+    select(&host, None);
+    let result = agent.cut(0.0, 13.0);
+    assert_eq!(outcome(&result), "proposed", "{result}");
+    let said = text(&result);
+    assert!(
+        said.starts_with("Proposed in Klipolo (cutRange): 13 s of footage would go (0 to 13 s)."),
+        "{said}"
+    );
+    assert!(
+        said.contains(" Left out of your proposal: cutRange: startSec 49.5 is not within 0.3 s of"),
+        "{said}"
+    );
+    assert_eq!(
+        host.state().slot.as_ref().unwrap().calls,
+        [cut_call(0.0, 13.0)]
+    );
+}
+
+#[test]
+fn a_proposal_klipolo_no_longer_remembers_is_waited_on() {
+    let host = FakeHost::two_clips();
+    let first = Mcp::new(host.clone());
+    let agent = Agent::open(&first, "Agent");
+    agent.read();
+    agent.cut(0.0, 13.0);
+    // The server restarted while the app's proposal waited: its calls aren't known, so nothing joins or drops it.
+    let again = Mcp::new(host.clone());
+    let agent = Agent::open(&again, "Agent");
+    agent.read();
+    let waiting = fill(WAITING_OTHER, &[("who", "Agent")]);
+    assert_refused(&agent.cut(0.0, 13.0), &waiting);
+    assert_refused(
+        &agent.call("setCaptions", json!({"on": false, "style": null})),
+        &waiting,
+    );
+    assert_eq!(host.state().counts.applies, 0);
+    assert!(host.open_proposal().is_some());
 }
