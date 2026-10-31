@@ -1152,7 +1152,8 @@
   will-change: transform;
 }
 
-.tl-item.is-dimmed > :not(.tl-trim) {
+.tl-item.is-dimmed > :not(.tl-trim),
+.tl-duck-band.is-dimmed {
   opacity: 0.5;
 }
 

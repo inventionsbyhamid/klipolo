@@ -1,10 +1,11 @@
 import { t } from '@lingui/core/macro';
-import { memo, useRef, type PointerEvent } from 'react';
+import { memo, useCallback, useRef, type PointerEvent } from 'react';
 import type { ItemContent } from '../../../bindings/ItemContent';
 import type { RangeUs } from '../../../bindings/RangeUs';
 import { commitLatest } from '../../../state/commit';
 import type { Op } from '../../../bindings/Op';
 import { contentNow } from '../../../state/latest';
+import { registerFollower } from '../drag/registry';
 import { useSpeech } from '../media/speech';
 import { usToPx } from '../scale';
 
@@ -226,24 +227,35 @@ export const VolumeLine = memo(function VolumeLine({
  * `TAG_MIN_PX` has none. `left`, `width` and `top` are the block's own, in the lane's px.
  */
 export const DuckTag = memo(function DuckTag({
+  id,
   startUs,
   durationUs,
   content,
   left,
   width,
   top,
+  dimmed,
 }: {
+  /** The music block's id: a gesture that moves the block moves the tag, and one that trims it hides the tag. */
+  id: string;
   startUs: number;
   durationUs: number;
   content: Pick<AudioContent, 'duck' | 'muted'>;
   left: number;
   width: number;
   top: number;
+  /** Dimmed as its block is. */
+  dimmed: boolean;
 }) {
   const speech = useSpeech((s) => s.ranges);
+  const ref = useCallback((el: HTMLSpanElement | null) => registerFollower(id, el), [id]);
   if (width < TAG_MIN_PX || duckDips(durationUs, startUs, content, speech).length === 0) return null;
   return (
-    <span className="tl-duck-band" style={{ left: left + 6, width: width - 12, top: top + 3 }}>
+    <span
+      ref={ref}
+      className={dimmed ? 'tl-duck-band is-dimmed' : 'tl-duck-band'}
+      style={{ left: left + 6, width: width - 12, top: top + 3 }}
+    >
       <span className="tl-duck-tag">
         {t({
           id: 'music.ducking.tag',

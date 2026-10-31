@@ -25,7 +25,8 @@ const { useProject } = await import('../../state/project');
 const { useUi } = await import('../../state/ui');
 const { useSpeech } = await import('./media/speech');
 const { Timeline } = await import('./Timeline');
-const { levelPoints, levelY, ATTACK_US, RELEASE_US } = await import('./blocks/VolumeLine');
+const { levelPoints, levelY, ATTACK_US, RELEASE_US, DuckTag } = await import('./blocks/VolumeLine');
+const { shiftBlock, sizeBlock, clearShifts } = await import('./drag/registry');
 
 type AudioContent = Extract<ItemContent, { type: 'audio' }>;
 const S = 1_000_000;
@@ -112,6 +113,35 @@ describe('the music’s volume line', () => {
     const appCss = readFileSync(resolve(__dirname, '../../styles/app.css'), 'utf8');
     expect(appCss).toMatch(/\.tl-duck-tag \{[^}]*position: sticky;[^}]*right: \d+px;/s);
     expect(appCss).toMatch(/\.tl-duck-band \{[^}]*position: absolute;[^}]*justify-content: flex-end;/s);
+  });
+
+  it('the tag goes with its block while a gesture moves it, hides while its edges are dragged, and dims with it', () => {
+    useProject.setState({ snapshot: music(), pending: 0 });
+    renderWithProviders(<Timeline />);
+    const band = screen.getByText('Quieter while people talk').parentElement!;
+    const block = screen.getByRole('group', { name: 'Music' }).querySelector<HTMLElement>('[data-look="music"]')!;
+    const id = block.dataset.blockId!;
+    act(() => shiftBlock(id, 40));
+    expect(band.style.transform).toBe(block.style.transform);
+    expect(band.style.transform).not.toBe('');
+    act(() => sizeBlock(id, Number(block.dataset.left), 100));
+    expect(band.style.visibility).toBe('hidden');
+    act(() => clearShifts());
+    expect([band.style.transform, band.style.visibility]).toEqual(['', '']);
+    // Dimmed as its block is.
+    const { container } = renderWithProviders(
+      <DuckTag
+        id="other"
+        startUs={0}
+        durationUs={30 * S}
+        content={{ duck: -12, muted: false }}
+        left={0}
+        width={600}
+        top={0}
+        dimmed
+      />,
+    );
+    expect(container.querySelector('.tl-duck-band')).toHaveClass('is-dimmed');
   });
 
   it('muted music under speech has no tag: its line is flat', () => {

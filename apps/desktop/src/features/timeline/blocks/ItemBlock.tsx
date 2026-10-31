@@ -235,7 +235,16 @@ export const ItemBlock = memo(function ItemBlock({
         )}
       </button>
       {!tiny && look === 'music' && content.type === 'audio' && (
-        <DuckTag startUs={startUs} durationUs={durationUs} content={content} left={left} width={width} top={top} />
+        <DuckTag
+          id={id}
+          startUs={startUs}
+          durationUs={durationUs}
+          content={content}
+          left={left}
+          width={width}
+          top={top}
+          dimmed={dimmed}
+        />
       )}
     </>
   );
