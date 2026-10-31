@@ -52,8 +52,11 @@ pub struct Script {
     /// Encoder ids whose start a video pipe refuses (VideoToolbox's −12900), as HEVC on a Mac whose probe cached it.
     pub refused_encoders: Vec<String>,
     pub caps: CaptureCaps,
-    /// Screen Recording as `permissions()` reads it (default Granted; camera and mic are always Granted).
+    /// Screen Recording as `permissions()` reads it (default Granted; the camera is always Granted).
     pub screen_permission: Permission,
+    /// The mic's permission as `permissions()` first reads it (default Granted); a test changes it while a worker runs
+    /// through `FakeBackend::mic_permission`.
+    pub mic_permission: Permission,
     /// A screen's cursor source (`Backend::cursor_source`); None: the screen's video pipe sends the cursor itself.
     pub cursor: Option<CursorScript>,
     /// The screen's pipe can show the cursor live (`VideoPipe::set_cursor_in_frames`); false: it refuses, and shows it
@@ -123,6 +126,7 @@ impl Default for Script {
                 },
             },
             screen_permission: Permission::Granted,
+            mic_permission: Permission::Granted,
         }
     }
 }

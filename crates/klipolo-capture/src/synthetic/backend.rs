@@ -66,6 +66,8 @@ pub struct FakeBackend {
     cursor_plans: Arc<Mutex<Vec<CursorPlan>>>,
     /// Each still asked for (`still`), in order: its target and width.
     stills: Arc<Mutex<Vec<(Target, u32)>>>,
+    /// The mic's permission now (`Script::mic_permission` at first).
+    mic_permission: Arc<Mutex<Permission>>,
 }
 
 impl FakeBackend {
@@ -74,6 +76,7 @@ impl FakeBackend {
             VideoFeed::Fixture(path, _) => Some(Arc::new(FixtureVideo::load(path))),
             VideoFeed::Synthetic(_) => None,
         };
+        let mic_permission = Arc::new(Mutex::new(script.mic_permission));
         Self {
             fixture,
             script,
@@ -86,12 +89,19 @@ impl FakeBackend {
             screen_requests: Arc::default(),
             cursor_plans: Arc::default(),
             stills: Arc::default(),
+            mic_permission,
         }
     }
 
     /// Each still asked for so far, in order: its target and width.
     pub fn stills(&self) -> Arc<Mutex<Vec<(Target, u32)>>> {
         self.stills.clone()
+    }
+
+    /// The mic's permission as `permissions()` reads it: a test sets it while a worker runs (the person refusing the mic
+    /// in the system's settings).
+    pub fn mic_permission(&self) -> Arc<Mutex<Permission>> {
+        self.mic_permission.clone()
     }
 
     /// The cursor plan each screen pipe start had, in order (a heal's restart shows the cursor: Burned).
@@ -151,7 +161,10 @@ impl Backend for FakeBackend {
         Permissions {
             screen: self.script.screen_permission,
             camera: Permission::Granted,
-            mic: Permission::Granted,
+            mic: *self
+                .mic_permission
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner),
         }
     }
 

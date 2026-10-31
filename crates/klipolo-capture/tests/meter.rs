@@ -1,6 +1,7 @@
 //! The Record dialog's mic meter in its worker, with the fake backend's synthetic sound: the loudest sample of each
-//! 100 ms of the mic until the app's Stop, and its end when the mic goes; neither the meter nor the stills write a
-//! file; and in a test run both stop at the consent guard before any call to the backend. Nothing captures.
+//! 100 ms of the mic until the app's Stop; the mic opened only while it is allowed (or on the person's press), and the
+//! meter's end when the mic goes or is refused; neither the meter nor the stills write a file; and in a test run both
+//! stop at the consent guard before any call to the backend. Nothing captures.
 #![cfg(feature = "synthetic")]
 
 #[path = "common/preview_io.rs"]
@@ -10,11 +11,11 @@ mod preview_io;
 use std::io::{BufReader, Cursor};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use klipolo_capture::backend::{
-    AudioSpec, Backend, CaptureCaps, DeviceInfo, Devices, Permissions, PreviewFrame, PreviewPipe,
-    ProbeReport, Target, VideoPipes, VideoSpec,
+    AudioSpec, Backend, CaptureCaps, DeviceInfo, Devices, Permission, Permissions, PreviewFrame,
+    PreviewPipe, ProbeReport, Target, VideoPipes, VideoSpec,
 };
 use klipolo_capture::cursor::CursorSource;
 use klipolo_capture::health::SILENCE_DBFS;
@@ -22,20 +23,24 @@ use klipolo_capture::media::StreamInfo;
 use klipolo_capture::pipe::{AudioPipe, PipeError, PipeEvent};
 use klipolo_capture::protocol::{Command, Event};
 use klipolo_capture::run::PreviewIo;
-use klipolo_capture::run::meter::{METER_EVERY, meter_with, run_meter};
+use klipolo_capture::run::meter::{METER_EVERY, PERMISSION_EVERY, meter_with, run_meter};
 use klipolo_capture::run::thumbs::{run_thumbs, thumbs_with};
 use klipolo_capture::shell::Shell;
 use klipolo_capture::synthetic::{FakeBackend, Script, Signal};
 use preview_io::{SharedOut, sent_after};
 
-/// The meter of "mic-1" on `script`'s sound, the app's Stop sent `stop_ms` after it starts: its exit code and what it
-/// told the app.
-fn meter(script: Script, stop_ms: u64) -> (i32, Vec<Event>) {
-    let backend = FakeBackend::new(script);
+/// The meter of "mic-1" on `backend` (`ask`: after the person's "Allow microphone" press), the app's Stop sent
+/// `stop_ms` after it starts: its exit code and what it told the app.
+fn meter_on(backend: &FakeBackend, ask: bool, stop_ms: u64) -> (i32, Vec<Event>) {
     let out = SharedOut::default();
     let io = PreviewIo::new(sent_after(&Command::Stop, stop_ms), Box::new(out.clone()));
-    let code = meter_with(&backend, "mic-1", io);
+    let code = meter_with(backend, "mic-1", ask, io);
     (code, out.events())
+}
+
+/// `meter_on` a new fake backend with `script`, the mic allowed.
+fn meter(script: Script, stop_ms: u64) -> (i32, Vec<Event>) {
+    meter_on(&FakeBackend::new(script), false, stop_ms)
 }
 
 /// Each `Meter` event's source and peak.
@@ -105,6 +110,64 @@ fn meter_sends_the_loudest_sample_of_each_100_ms() {
     assert_eq!(blips + silent, peaks.len(), "{peaks:?}");
     assert!((1..=3).contains(&blips), "{peaks:?}");
     assert!(silent >= 5 * blips, "{peaks:?}");
+}
+
+#[test]
+fn the_meter_opens_the_mic_only_while_it_is_allowed() {
+    // Not answered yet: only after the person's "Allow microphone" press. Refused: never. Nothing opens otherwise.
+    for (permission, ask, opens) in [
+        (Permission::Granted, false, true),
+        (Permission::NotAsked, false, false),
+        (Permission::Unknown, false, false),
+        (Permission::NotAsked, true, true),
+        (Permission::Unknown, true, true),
+        (Permission::Denied, false, false),
+        (Permission::Denied, true, false),
+    ] {
+        let backend = FakeBackend::new(Script {
+            mic_permission: permission,
+            ..sine()
+        });
+        let (code, events) = meter_on(&backend, ask, 300);
+        let case = format!("{permission:?}, ask {ask}");
+        assert_eq!(
+            backend.opened().load(Ordering::SeqCst),
+            u64::from(opens),
+            "{case}"
+        );
+        if opens {
+            assert_eq!(code, 0, "{case}");
+            assert!(failed(&events).is_empty(), "{case}: {events:?}");
+        } else {
+            assert_eq!(code, 1, "{case}");
+            assert_eq!(events.len(), 1, "{case}: {events:?}");
+            assert_eq!(failed(&events), ["capture.permission.mic"], "{case}");
+        }
+    }
+}
+
+#[test]
+fn the_meter_ends_when_the_mic_is_refused_while_it_runs() {
+    // The person turns the mic off in the system's settings 300 ms in (a refused mic on macOS sends silence, never an
+    // error): within about a second the meter ends with the microphone's step, and the mic closes.
+    assert_eq!(PERMISSION_EVERY, Duration::from_secs(1));
+    let backend = FakeBackend::new(sine());
+    let permission = backend.mic_permission();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(300));
+        *permission.lock().unwrap() = Permission::Denied;
+    });
+    let started = Instant::now();
+    let (code, events) = meter_on(&backend, false, 10_000);
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(code, 1);
+    assert!(!peaks(&events).is_empty(), "{events:?}");
+    assert_eq!(failed(&events), ["capture.permission.mic"]);
+    assert!(matches!(events.last(), Some(Event::Failed { .. })));
 }
 
 #[test]
@@ -243,7 +306,9 @@ fn both_forms_stop_at_the_guard_in_a_test_run() {
     };
     let (thumbs_out, meter_out) = (SharedOut::default(), SharedOut::default());
     stops_at_the_guard("thumbs", || run_thumbs(&backend, &screen, io(&thumbs_out)));
-    stops_at_the_guard("meter", || run_meter(&backend, "mic-1", io(&meter_out)));
+    stops_at_the_guard("meter", || {
+        run_meter(&backend, "mic-1", false, io(&meter_out))
+    });
     assert_eq!(
         backend.calls.load(Ordering::SeqCst),
         0,
