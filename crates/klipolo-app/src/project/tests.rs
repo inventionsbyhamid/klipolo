@@ -578,7 +578,7 @@ fn launch_opens_no_project_and_shows_the_start_screen() {
     assert_eq!(
         stamps.keys().cloned().collect::<Vec<_>>(),
         [file.to_string_lossy(), other.to_string_lossy()],
-        "both are stamped: made, then opened"
+        "both are stamped, the one made and the one opened"
     );
     assert_ne!(opened.project.id, made.project.id);
 }
@@ -594,6 +594,24 @@ fn show_in_finder_names_the_open_projects_file() {
     assert_eq!(project_file(&state), Ok(file.clone()));
     std::fs::remove_file(&file).unwrap();
     assert_eq!(project_file(&state), Err(Said::code("project.revealGone")));
+}
+
+/// Show in Finder waits for `open`: one that refuses (the file went just before) says the file is gone, and one that
+/// can't be run says Finder couldn't be asked.
+#[cfg(unix)]
+#[test]
+fn show_in_finder_says_why_finder_did_not_show_the_file() {
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    assert_eq!(finder_said(Ok(ExitStatus::from_raw(0))), Ok(()));
+    assert_eq!(
+        finder_said(Ok(ExitStatus::from_raw(1 << 8))),
+        Err(Said::code("project.revealGone"))
+    );
+    assert_eq!(
+        finder_said(Err(std::io::ErrorKind::NotFound.into())),
+        Err(Said::code("project.revealFailed"))
+    );
 }
 
 #[test]

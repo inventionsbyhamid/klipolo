@@ -207,17 +207,27 @@ fn project_file(state: &ProjectSessionState) -> Result<PathBuf, Said> {
     }
 }
 
-/// Shows the open project's file in Finder, selected.
+/// What `open -R` came to: shown; refused (`project.revealGone`: the file went just before); or not run at all
+/// (`project.revealFailed`).
+fn finder_said(status: std::io::Result<std::process::ExitStatus>) -> Result<(), Said> {
+    match status {
+        Ok(status) if status.success() => Ok(()),
+        Ok(status) => {
+            tracing::warn!(%status, "Finder didn't show the project");
+            Err(Said::code("project.revealGone"))
+        }
+        Err(error) => {
+            tracing::warn!(%error, "Finder couldn't be asked to show the project");
+            Err(Said::code("project.revealFailed"))
+        }
+    }
+}
+
+/// Shows the open project's file in Finder, selected, once `open` has done so (off the main thread).
 #[tauri::command(async)]
 pub fn project_reveal(state: State<'_, ProjectSessionState>) -> Result<(), Said> {
     let file = project_file(&state)?;
-    crate::commands::export::opener(true, &[file])
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| {
-            tracing::warn!(%error, "Finder couldn't be asked to show the project");
-            Said::code("project.revealGone")
-        })
+    finder_said(crate::commands::export::opener(true, &[file]).status())
 }
 
 /// Closes the open project once its edits are saved; its analysis stops.
