@@ -1,4 +1,4 @@
-import { type ReactNode, useId } from 'react';
+import type { ReactNode } from 'react';
 import type { DeviceInfo } from '../../bindings/DeviceInfo';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '../../design/Menu';
 import { Icon } from '../../layout/Icon';
@@ -28,15 +28,12 @@ interface DeviceSelectProps {
  */
 export function DeviceSelect({ kind, devices, value, onPick, children }: DeviceSelectProps) {
   const { label, none } = WORDS[kind];
-  const labelId = useId();
   const listed = devices.map((d) => ({ value: d.id, label: d.name }));
   const choices = kind === 'mic' ? [...listed, { value: NONE, label: none }] : [{ value: NONE, label: none }, ...listed];
   const shown = devices.find((d) => d.id === value)?.name ?? none;
   return (
     <div className="record-field">
-      <span className="record-label" id={labelId}>
-        {label}
-      </span>
+      <span className="record-label">{label}</span>
       <Menu>
         <MenuTrigger asChild>
           <button type="button" className="select" aria-label={`${label}: ${shown}`}>
