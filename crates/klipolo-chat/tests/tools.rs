@@ -1099,15 +1099,14 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "call blurObjects twice",
         "are proposals",
         "cannotDo",
-        // The media tools: names from the library, the song, music under the whole video, topic changes, the
-        // person's own words on screen, and Muse Image only for a picture the library lacks.
+        // The media tools: names from the library, the song, music under the whole video, topic changes, and Muse
+        // Image drawing a new picture, a title card only with the person's words.
         "a name from Library",
         "\"The song\"",
         "Background music starts at 0.0",
         "topic and shot items",
-        "exact words",
-        "Muse Image",
-        "a null atSec is the playhead",
+        "Muse Image draw a new picture",
+        "If the person gave no title words, ask",
         "one or two short, plain, friendly sentences",
         "No markdown",
         "Never use em dashes or en dashes",
