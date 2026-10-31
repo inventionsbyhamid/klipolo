@@ -10,6 +10,7 @@ import type { Op } from '../bindings/Op';
 import type { Settings } from '../bindings/Settings';
 import type { Track } from '../bindings/Track';
 import type { Label } from '../lib/labels';
+import { musicRunOf } from '../lib/musicRuns';
 import { clipOp, itemOp } from '../lib/ops';
 import { commitLatest } from './commit';
 import { useProject } from './project';
@@ -107,6 +108,27 @@ function patched<T extends object>(now: T, patch: PatchOf<T>): T {
 /** Layer `item`'s content (as `rendered`, while it is still of that kind) with `patch`. */
 export function contentOps<C extends ItemContent>(item: Item, rendered: C, patch: PatchOf<C>): Op[] {
   return [itemOp(item, { content: patched(contentNow(item.id, rendered), patch) })];
+}
+
+/**
+ * The pieces of music layer `id`'s run as the project has it now (`musicRunOf`: one song laid back to back); null when
+ * it is in none.
+ */
+export function runNow(id: string): Item[] | null {
+  const tracks = useProject.getState().snapshot?.project.timeline.tracks;
+  return tracks ? musicRunOf(tracks, id) : null;
+}
+
+/**
+ * `patch` on the content of every piece of music layer `id`'s run, each as the project has it now (its volume, its
+ * ducking): a song laid in pieces plays at one level and ducks as one. A layer in no run (a sound effect) is set alone,
+ * as `contentOps` sets it.
+ */
+export function runContentOps<C extends ItemContent>(id: string, rendered: C, patch: PatchOf<C>): Op[] {
+  const run = runNow(id);
+  if (!run || run.length < 2)
+    return [{ type: 'updateItem', id, patch: { content: patched(contentNow(id, rendered), patch) } }];
+  return run.map((piece) => itemOp(piece, { content: patched(contentNow(piece.id, rendered), patch) }));
 }
 
 /** Layer `item`'s layout with `patch` (its opacity, its corners, its motion…). */

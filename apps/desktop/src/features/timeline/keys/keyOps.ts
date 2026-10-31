@@ -2,6 +2,7 @@ import type { Edge } from '../../../bindings/Edge';
 import type { Item } from '../../../bindings/Item';
 import type { Op } from '../../../bindings/Op';
 import type { Project } from '../../../bindings/Project';
+import { musicRunOf } from '../../../lib/musicRuns';
 import { snapToFrame, US_PER_SEC } from '../../../lib/time';
 import { findItem } from '../../../lib/timeline';
 import { defaultTransitionUs, TRANSITION_DISSOLVE } from '../../../lib/transitions';
@@ -96,10 +97,17 @@ export function attachOps(item: Item): Op[] {
   return [{ type: 'setAttach', id: item.id, attached: !item.attach }];
 }
 
-/** ⌫ (and ⌘X after the copy): block `id` out of the video; a layer on a locked track stays. */
+/**
+ * ⌫ (and ⌘X after the copy): block `id` out of the video; a layer on a locked track stays. A song laid in pieces
+ * back to back (`musicRunOf`) goes whole, in one step: no piece is left to start abruptly where the others stopped.
+ */
 export function deleteOps(project: Project, id: string): Op[] {
   const found = findItem(project, id);
-  if (found) return found.track.locked ? [] : [{ type: 'removeItem', id }];
+  if (found) {
+    if (found.track.locked) return [];
+    const run = musicRunOf(project.timeline.tracks, id) ?? [found.item];
+    return run.map((piece): Op => ({ type: 'removeItem', id: piece.id }));
+  }
   return project.timeline.main.some((clip) => clip.id === id) ? [{ type: 'removeClip', id }] : [];
 }
 

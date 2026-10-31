@@ -21,6 +21,12 @@ import { useProject } from './project';
  */
 const drawing = new Set<string>();
 
+/**
+ * What drawing one picture costs (Muse Image's price a picture, `klipolo_meta::pricing::IMAGE_USD`), as the card says
+ * while it draws: each drawing and each Try again is paid for.
+ */
+export const PICTURE_USD = 0.01;
+
 /** A picture's name, the same before and after it is drawn: "Paper plane sticker". */
 export function pictureTitle(picture: ChatPicture): string {
   const name =

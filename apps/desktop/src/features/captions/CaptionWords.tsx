@@ -1,6 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
 import { memo, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
-import type { Asset } from '../../bindings/Asset';
 import type { FormatKind } from '../../bindings/FormatKind';
 import type { PageView } from '../../bindings/PageView';
 import type { WordView } from '../../bindings/WordView';
@@ -9,7 +8,7 @@ import { cn } from '../../design/cn';
 import { SpriteIcon } from '../../design/SpriteIcon';
 import { formatPrecise } from '../../lib/time';
 import { useStableCallback } from '../../lib/useStableCallback';
-import { offerAgain, useAnalysis, whyNoWords } from '../../state/analysis';
+import { offerAgain, useAnalysedClips, useAnalysis, whyNoWords } from '../../state/analysis';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { pageAt, useAllCaptionPages } from './useCaptionPages';
@@ -22,15 +21,10 @@ export const chipId = (prefix: string, key: string) => `${prefix}-${key.replace(
 
 const seek = (w: WordView) => usePlayback.getState().seek(w.startUs);
 
-const NO_ASSETS: Asset[] = [];
-
-/** Why the open project has no caption words (`whyNoWords`), from its videos' and sounds' analysis. */
+/** Why the open project has no caption words (`whyNoWords`), from the analysis of what its main-track clips play. */
 function useWhyNoWords() {
-  const assets = useProject((s) => s.snapshot?.project.assets ?? NO_ASSETS);
-  const clips = useMemo(
-    () => assets.filter((a) => a.kind === 'video' || a.kind === 'audio').map((a) => a.id),
-    [assets],
-  );
+  const analysed = useAnalysedClips();
+  const clips = useMemo(() => analysed.map((a) => a.id), [analysed]);
   return useAnalysis((s) => whyNoWords(s.states, clips));
 }
 

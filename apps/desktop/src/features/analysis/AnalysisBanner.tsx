@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import type { Asset } from '../../bindings/Asset';
 import { openSettings, useAi, useNeedsKey } from '../../ai/aiStatus';
 import {
@@ -8,10 +8,10 @@ import {
   offerFor,
   retry,
   stateOf,
+  useAnalysedClips,
   useAnalysis,
 } from '../../state/analysis';
 import { Icon } from '../../layout/Icon';
-import { useProject } from '../../state/project';
 import {
   FILE_MISSING,
   STEP_LABELS,
@@ -23,8 +23,6 @@ import {
   stepDots,
 } from './analysis';
 import './analysis.css';
-
-const NO_ASSETS: Asset[] = [];
 
 /** The icons the banner needs, from the design's sprite (24 px grid, 1.8 px stroke). */
 const ICONS = {
@@ -51,11 +49,8 @@ function BannerIcon({ name }: { name: keyof typeof ICONS }) {
   );
 }
 
-/** The project's videos and sounds: what analysis is for. */
-function useClips(): Asset[] {
-  const assets = useProject((s) => s.snapshot?.project.assets ?? NO_ASSETS);
-  return useMemo(() => assets.filter((a) => a.kind === 'video' || a.kind === 'audio'), [assets]);
-}
+/** The files the project's main-track clips play: what analysis is for (`useAnalysedClips`). */
+const useClips = useAnalysedClips;
 
 /**
  * Asks for the offer whenever the clips not analysed change (an import, another project, a Cancel) or the way to pay

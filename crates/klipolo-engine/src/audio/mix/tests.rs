@@ -31,6 +31,7 @@ fn source(path: &str, start: i64, end: i64, source_in: i64) -> AudioSource {
         filter: None,
         centre_from: None,
         duck: None,
+        seam: Default::default(),
     }
 }
 

@@ -59,6 +59,8 @@ interface ItemBlockProps {
   muted: boolean;
   pps: number;
   selected: boolean;
+  /** Another piece of the selected song (a run of music): highlighted with it. */
+  inRun?: boolean;
   /** The one block in the Tab order (roving focus, `keys/useRovingFocus`). */
   tabbable: boolean;
   /** The item's track is hidden (or muted, for audio): drawn faded. */
@@ -94,6 +96,7 @@ export const ItemBlock = memo(function ItemBlock({
   muted,
   pps,
   selected,
+  inRun = false,
   tabbable,
   dimmed,
   locked,
@@ -185,7 +188,14 @@ export const ItemBlock = memo(function ItemBlock({
         data-width={width}
         data-look={look}
         style={{ left, width, top, height }}
-        className={cn('tl-item', `is-${look}`, selected && 'is-selected', dimmed && 'is-dimmed', tiny && 'isolate')}
+        className={cn(
+          'tl-item',
+          `is-${look}`,
+          selected && 'is-selected',
+          inRun && 'is-in-run',
+          dimmed && 'is-dimmed',
+          tiny && 'isolate',
+        )}
       >
         {/* Music's waveform, or a video layer's filmstrip, first: its marks and label draw over it. */}
         {!tiny && files && look !== 'sound' && (content.type === 'video' || content.type === 'audio') && (

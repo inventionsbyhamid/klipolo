@@ -78,6 +78,13 @@ pub const NO_FILLERS: &str = "There are no filler words to remove.";
 /// turn's words were spread over it by length): a cut at its guessed time would take real words.
 pub const ROUGH_FILLERS: &str = "Some words in this clip are only roughly timed, so I can't cut filler words exactly. \
                                  Time the words again in Captions, then ask me.";
+/// The most pictures one answer draws (`makeSticker`, `makeTitleCard`): each drawing is paid for, so an answer asking
+/// for more draws its first ones and refuses the rest (`TOO_MANY_PICTURES`).
+pub const MAX_PICTURES: usize = 3;
+/// What the person is told for each picture past the first `MAX_PICTURES` of an answer: a refusal shown to the person,
+/// as `cannotDo` is.
+pub const TOO_MANY_PICTURES: &str =
+    "I draw up to 3 pictures per message, so I left out the rest. Ask me again for them.";
 
 /// How far a file's analysis (transcript, loudness, scene log) is. A file missing from `Inputs::analysis` counts as
 /// not started.
@@ -420,6 +427,8 @@ impl Compiler<'_> {
         let mut titles: Vec<(usize, &str, Id)> = Vec::new();
         // Once a format change is proposed, the later ones in the answer follow it there, so they apply in call order.
         let mut format_proposed = false;
+        // The pictures asked for so far: past `MAX_PICTURES`, the rest are refused before anything is drawn.
+        let mut pictures = 0;
         for (i, call) in calls.iter().enumerate() {
             if out.undo && is_edit(call) {
                 let reason = format!(
@@ -428,6 +437,21 @@ impl Compiler<'_> {
                 );
                 refuse(&mut out, i, to_model(reason));
                 continue;
+            }
+            if matches!(
+                call,
+                ToolCall::MakeSticker { .. } | ToolCall::MakeTitleCard { .. }
+            ) {
+                pictures += 1;
+                if pictures > MAX_PICTURES {
+                    let said = Refused {
+                        reason: TOO_MANY_PICTURES.to_owned(),
+                        audience: Audience::Person,
+                        clip: None,
+                    };
+                    refuse(&mut out, i, said);
+                    continue;
+                }
             }
             if let Some(said) = self.missing_analysis(call) {
                 refuse(&mut out, i, said);

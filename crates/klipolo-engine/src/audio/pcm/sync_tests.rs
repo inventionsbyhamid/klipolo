@@ -42,6 +42,7 @@ pub(super) fn plan(keys: &[&PcmKey]) -> AudioPlan {
                 fade_in_us: 0,
                 fade_out_us: 0,
                 crossfade: Default::default(),
+                seam: Default::default(),
                 filter: None,
                 centre_from: None,
                 duck: None,

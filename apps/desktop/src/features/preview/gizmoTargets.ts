@@ -4,7 +4,7 @@ import type { ItemContent } from '../../bindings/ItemContent';
 import type { Layout } from '../../bindings/Layout';
 import type { Op } from '../../bindings/Op';
 import type { Project } from '../../bindings/Project';
-import { containRect, FORMAT_SIZE, resolveRect } from '../../lib/layout';
+import { containRect, FORMAT_SIZE, pictureRect, resolveRect } from '../../lib/layout';
 import { showsPictures, soloOf } from '../../lib/solo';
 import { scaledStyle } from '../../lib/textLook';
 import { assetById, itemEndUs, itemLabel } from '../../lib/timeline';
@@ -50,13 +50,13 @@ const same = (rect: BoxN) => rect;
 
 /**
  * Where a title template's own picture is in the frame, for picking it: the lower third's card (a share of the frame
- * across, 238 of 1080p's pixels tall, as its `scene.json` places it), the title card's whole frame. Anything else the
- * layout's box.
+ * across, 238 of 1080p's pixels tall, as its `scene.json` places it, inside 9:16's clear area), the title card's whole
+ * frame. Anything else the layout's box.
  */
 const SCENE_PICK: Record<string, (format: FormatKind) => BoxN> = {
   'klipolo.builtin/scene.lower-third': (format) => ({
-    x: 0.05,
-    y: 0.66,
+    x: 0.06,
+    y: 0.58,
     w: 0.56,
     h: 238 / FORMAT_SIZE[format][1],
   }),
@@ -87,7 +87,8 @@ export function gizmoTargets(project: Project, playheadUs: number, format: Forma
         // Missing media draws nothing, so there is nothing to pick.
         const asset = assetById(project, content.assetId);
         if (asset?.kind !== content.type) continue;
-        boxFor = (r) => containRect(r, asset.width, asset.height, format);
+        boxFor = (r) =>
+          (content.type === 'image' ? pictureRect : containRect)(r, asset.width, asset.height, format);
       } else if (scene) {
         const pick = SCENE_PICK[scene.source];
         if (pick) boxFor = () => pick(format);

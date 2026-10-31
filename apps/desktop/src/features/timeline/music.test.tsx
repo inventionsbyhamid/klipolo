@@ -23,6 +23,9 @@ vi.mock('../../bridge/engine', () => ({
 }));
 const { useProject } = await import('../../state/project');
 const { useUi } = await import('../../state/ui');
+const { useSelection } = await import('../../state/selection');
+const { deleteBlock } = await import('./commands');
+const { toggleSoundMute } = await import('./keys/layerActions');
 const { useSpeech } = await import('./media/speech');
 const { Timeline } = await import('./Timeline');
 const { levelPoints, levelY, ATTACK_US, RELEASE_US, DuckTag } = await import('./blocks/VolumeLine');
@@ -42,6 +45,25 @@ function music(duck = -12) {
       content: { ...(song.content as AudioContent), volume: 0.3, duck, fadeInUs: 500_000, fadeOutUs: 2 * S },
     },
   ];
+  return snapshot;
+}
+
+/**
+ * The fixture's song laid as one bed of three pieces back to back, 0 to 30 s, as `add_music_ops` lays a short song
+ * under a longer video: one song, one level.
+ */
+function bed() {
+  const snapshot = music();
+  const audio = snapshot.project.timeline.tracks[1];
+  const [song] = audio.items;
+  const content = song.content as AudioContent;
+  audio.items = ['bed', 'bed-2', 'bed-3'].map((id, k) => ({
+    ...song,
+    id,
+    startUs: k * 10 * S,
+    durationUs: 10 * S,
+    content: { ...content, fadeInUs: k === 0 ? content.fadeInUs : 0, fadeOutUs: k === 2 ? content.fadeOutUs : 0 },
+  }));
   return snapshot;
 }
 
@@ -177,6 +199,88 @@ describe('the music’s volume line', () => {
     const deeper = (apply.mock.calls[1][1][0] as unknown as { patch: { content: AudioContent } }).patch.content;
     expect(deeper.duck).toBeLessThan(-12);
     expect(deeper.volume).toBe(0.3);
+  });
+
+  it('a song laid in pieces is one: a drag on one piece sets them all, each keeping its fades', async () => {
+    useProject.setState({ snapshot: bed(), pending: 0, apply });
+    useSelection.setState({ selectedId: null });
+    renderWithProviders(<Timeline />);
+    const lane = screen.getByRole('group', { name: 'Music' });
+    const grips = lane.querySelectorAll('.tl-volume-grip');
+    expect(grips).toHaveLength(3);
+    fireEvent.pointerDown(grips[1], { button: 0, pointerId: 1, clientY: 100 });
+    fireEvent.pointerUp(grips[1], { pointerId: 1, clientY: 90 });
+    await act(async () => undefined);
+    expect(apply).toHaveBeenCalledTimes(1);
+    const [label, ops] = apply.mock.calls[0];
+    expect(label).toBe('volume.undo');
+    const set = ops.map((op) => {
+      const { id, patch } = op as unknown as { id: string; patch: { content: AudioContent } };
+      return [id, patch.content.volume, patch.content.fadeInUs, patch.content.fadeOutUs];
+    });
+    const louder = set[0][1] as number;
+    expect(louder).toBeGreaterThan(0.3);
+    // Each piece keeps its own fades.
+    expect(set).toEqual([
+      ['bed', louder, 500_000, 0],
+      ['bed-2', louder, 0, 0],
+      ['bed-3', louder, 0, 2 * S],
+    ]);
+  });
+
+  it('selecting one piece of a song highlights the rest of it', () => {
+    useProject.setState({ snapshot: bed(), pending: 0, apply });
+    useSelection.setState({ selectedId: 'bed-2' });
+    renderWithProviders(<Timeline />);
+    const lane = screen.getByRole('group', { name: 'Music' });
+    const block = (id: string) => lane.querySelector<HTMLElement>(`[data-block-id="${id}"]`)!;
+    expect(block('bed-2')).toHaveClass('is-selected');
+    expect(block('bed')).toHaveClass('is-in-run');
+    expect(block('bed-3')).toHaveClass('is-in-run');
+    expect(block('bed-2')).not.toHaveClass('is-in-run');
+  });
+
+  it('Delete on one piece of a song takes every piece, in one undo step', async () => {
+    useProject.setState({ snapshot: bed(), pending: 0, apply });
+    deleteBlock('bed-2', 'undo.delete.layer');
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    expect(apply.mock.calls[0][0]).toBe('undo.delete.layer');
+    expect(apply.mock.calls[0][1]).toEqual([
+      { type: 'removeItem', id: 'bed' },
+      { type: 'removeItem', id: 'bed-2' },
+      { type: 'removeItem', id: 'bed-3' },
+    ]);
+  });
+
+  it('Mute sound on one piece of a song mutes every piece, and Unmute sound unmutes them, one undo step each', async () => {
+    useProject.setState({ snapshot: bed(), pending: 0, apply });
+    toggleSoundMute('bed-2');
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    const set = (call: number) =>
+      apply.mock.calls[call][1].map((op) => {
+        const { id, patch } = op as unknown as { id: string; patch: { content: AudioContent } };
+        return [id, patch.content.muted, patch.content.volume, patch.content.fadeInUs, patch.content.fadeOutUs];
+      });
+    expect(apply.mock.calls[0][0]).toBe('volume.mute.undo');
+    // Every piece muted in one change, each keeping its volume and fades for when it plays again.
+    expect(set(0)).toEqual([
+      ['bed', true, 0.3, 500_000, 0],
+      ['bed-2', true, 0.3, 0, 0],
+      ['bed-3', true, 0.3, 0, 2 * S],
+    ]);
+    // The muted song: Unmute sound from its last piece brings back all three, in one change.
+    const muted = bed();
+    for (const piece of muted.project.timeline.tracks[1].items)
+      piece.content = { ...(piece.content as AudioContent), muted: true };
+    useProject.setState({ snapshot: muted, pending: 0, apply });
+    toggleSoundMute('bed-3');
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
+    expect(apply.mock.calls[1][0]).toBe('volume.unmute.undo');
+    expect(set(1).map(([id, on]) => [id, on])).toEqual([
+      ['bed', false],
+      ['bed-2', false],
+      ['bed-3', false],
+    ]);
   });
 
   it('a drag that is refused puts the line back where the project has it', async () => {
