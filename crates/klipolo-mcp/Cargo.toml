@@ -7,6 +7,11 @@ publish = false
 description = "Other apps edit the open project over MCP, through chat's own tools and compiler"
 
 [dependencies]
+# The server's bodies: read within a limit, answered whole.
+http-body-util = "0.1"
+# HTTP/1 on 127.0.0.1, each connection with a timer on its head (`server`).
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
 # Chat's tools, context and compiler: an app's call is read, checked and compiled exactly as chat's are.
 klipolo-chat = { path = "../klipolo-chat" }
 # The project, its transactions and history, the time helpers and the cleaning of app names.
@@ -19,9 +24,17 @@ rand = "0.9"
 serde = { version = "1", features = ["derive"] }
 # JSON-RPC messages.
 serde_json = "1"
-# A connection file that couldn't be deleted.
+# The token, compared in constant time.
+subtle = "2"
+# The server runs on the app's runtime; each message is handled on a blocking thread.
+tokio = { version = "1", features = ["net", "rt", "sync", "time", "macros"] }
+# When the server listens, and a connection or connection file that failed.
 tracing = "0.1"
 
 [dev-dependencies]
+# A client of the server, over HTTP.
+reqwest = { version = "0.12.28", default-features = false, features = ["json"] }
 # Connection files in a folder of their own.
 tempfile = "3"
+# Tests on a runtime of their own, some with its clock paused.
+tokio = { version = "1", features = ["io-util", "macros", "rt-multi-thread", "test-util"] }

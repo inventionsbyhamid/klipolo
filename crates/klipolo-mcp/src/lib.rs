@@ -10,7 +10,8 @@
 //!   transcript in pages.
 //! - `call`: an edit tool's call; `limits`: the apps' paces and their shares of the undo history.
 //! - `words`: what agents read.
-//! - `connection`: the file that says where the server listens and with which token.
+//! - `server`: Streamable HTTP on 127.0.0.1, with a token per run; `connection`: the file that says where it listens
+//!   and with which token, and the server with its file (`McpServer`).
 
 pub mod call;
 pub mod connection;
@@ -19,11 +20,12 @@ pub mod limits;
 pub mod pages;
 pub mod resources;
 pub mod rpc;
+pub mod server;
 pub mod session;
 pub mod tools;
 pub mod words;
 
-pub use connection::ConnectionFile;
+pub use connection::{ConnectionFile, McpServer};
 pub use host::{Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot};
 pub use rpc::{Handled, Mcp, initialize_result, listed};
 pub use session::{Seen, Session, UNNAMED, client_name};

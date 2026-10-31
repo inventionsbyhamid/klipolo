@@ -1,13 +1,18 @@
 //! The connection file, `<support>/mcp.json`: the port the server listens on and the token it takes, so the stdio
 //! bridge, and any app the person points at it, can reach Klipolo. Only this user can read it (mode 0600). It is
-//! written once the server listens, and deleted when the server stops.
+//! written once the server listens, and deleted when the server stops (`McpServer`).
 
 use std::ffi::OsString;
 use std::fmt;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use tokio::runtime::Handle;
+
+use crate::rpc::Mcp;
+use crate::server::{self, Running};
 
 /// The file's name in the support folder.
 pub const FILE: &str = "mcp.json";
@@ -103,5 +108,56 @@ pub fn remove(dir: &Path) {
             tracing::warn!(error = %e, "the MCP connection file couldn't be deleted");
         }
         _ => {}
+    }
+}
+
+/// The server while it runs, with its connection file. Dropping it stops it, as `stop` does.
+pub struct McpServer {
+    running: Running,
+    dir: PathBuf,
+    token: String,
+}
+
+impl McpServer {
+    /// Listens on 127.0.0.1 with a new token, serving `mcp` on `rt`, then writes `<dir>/mcp.json`. A file that can't
+    /// be written stops the server again. The app keeps one `Mcp` for its whole run and starts it here each time the
+    /// person turns the server on, so the paces, the allowance for jobs and an app's waiting proposal carry over.
+    pub fn start(rt: &Handle, mcp: Arc<Mcp>, dir: &Path) -> io::Result<McpServer> {
+        let token = new_token();
+        let running = server::serve(rt, mcp, token.clone())?;
+        let file = ConnectionFile {
+            port: running.port,
+            token: token.clone(),
+            pid: std::process::id(),
+            version: VERSION,
+        };
+        write(dir, &file)?;
+        Ok(McpServer {
+            running,
+            dir: dir.to_owned(),
+            token,
+        })
+    }
+
+    /// Stops the server (`server::Running::stop`) and deletes the connection file, while it is still this server's.
+    pub fn stop(self) {
+        drop(self);
+    }
+
+    pub fn port(&self) -> u16 {
+        self.running.port
+    }
+
+    /// The apps connected now, each once, sorted.
+    pub fn connected(&self) -> Vec<String> {
+        self.running.connected()
+    }
+}
+
+impl Drop for McpServer {
+    fn drop(&mut self) {
+        if read(&self.dir).is_some_and(|f| f.token == self.token) {
+            remove(&self.dir);
+        }
     }
 }

@@ -2,11 +2,33 @@
 //! HTTP server on 127.0.0.1 that refuses another program on the Mac (no token or a wrong one, a browser page, DNS
 //! rebinding, a huge or slow body, a flood of connections or sessions) before it reads a body, and stays answering.
 
+#[path = "support/client.rs"]
+mod client;
+#[path = "support/fake_host.rs"]
+mod fake_host;
+
 use std::ffi::OsString;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 
-use klipolo_mcp::connection::{self, ConnectionFile, FILE, VERSION, new_token, support_dir_from};
+use client::{Client, head, hello, raw, read_raw, request};
+use fake_host::FakeHost;
+use klipolo_chat::{Job, Moment, Proposal, ToolCall};
+use klipolo_mcp::connection::{
+    self, ConnectionFile, FILE, McpServer, VERSION, new_token, support_dir_from,
+};
+use klipolo_mcp::host::{Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot};
+use klipolo_mcp::rpc::{Mcp, listed};
+use klipolo_mcp::server::{self, BODY_LIMIT, BODY_TIMEOUT, CONNECTIONS, HEAD_TIMEOUT, Running};
+use klipolo_mcp::words::{NO_SUCH_SESSION, NOT_JSON, SESSION_FIRST, TOO_LARGE, TOO_SLOW};
+use klipolo_model::Transaction;
+use serde_json::{Value, json};
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
+use tokio::runtime::Handle;
 
 fn is_token(token: &str) -> bool {
     token.len() == 64
@@ -117,4 +139,555 @@ fn support_dir_is_the_variable_else_application_support() {
     );
     assert_eq!(support_dir_from(None, None), None);
     assert_eq!(connection::SUPPORT_DIR_VAR, "KLIPOLO_SUPPORT_DIR");
+}
+
+const TOKEN: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+/// A server on the test's runtime over the two-clip project, taking `TOKEN`.
+fn serve() -> (Running, Arc<FakeHost>) {
+    let host = FakeHost::two_clips();
+    let mcp = Arc::new(Mcp::new(host.clone()));
+    let running = server::serve(&Handle::current(), mcp, TOKEN.to_owned()).unwrap();
+    (running, host)
+}
+
+/// `Host: 127.0.0.1:{port}`.
+fn ours(port: u16) -> (&'static str, String) {
+    ("Host", format!("127.0.0.1:{port}"))
+}
+
+fn bearer(token: &str) -> (&'static str, String) {
+    ("Authorization", format!("Bearer {token}"))
+}
+
+/// A POST head to `/mcp` that claims a body of `length` bytes, with `headers` after the type and length.
+fn post_head(length: usize, headers: &[(&'static str, String)]) -> String {
+    let mut all = vec![
+        ("Content-Type", "application/json".to_owned()),
+        ("Content-Length", length.to_string()),
+    ];
+    all.extend_from_slice(headers);
+    head("POST", "/mcp", &all)
+}
+
+/// A whole `initialize` request as the app `name`, the connection closed after it.
+fn initialize_bytes(headers: &[(&'static str, String)], name: &str) -> String {
+    let body = request(1, "initialize", hello(name)).to_string();
+    let mut all = headers.to_vec();
+    all.push(("Connection", "close".to_owned()));
+    post_head(body.len(), &all) + &body
+}
+
+/// Refused from its head alone, within a second, and the connection closed with the answer.
+fn assert_refused_closed(answer: &client::Raw, status: u16, what: &str) {
+    assert_eq!(answer.status, status, "{what}: {answer:?}");
+    assert_eq!(answer.header("connection"), Some("close"), "{what}");
+    assert!(answer.closed, "{what}: the connection closes");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn missing_or_wrong_token_is_401_before_the_body_is_read() {
+    let (server, host) = serve();
+    let port = server.port;
+    let mut checker = Client::new(port, TOKEN);
+    checker.initialize("Checker").await;
+    let snapshots = host.state().counts.snapshots;
+    let wrong: Vec<Option<String>> = vec![
+        None,
+        Some("Bearer wrong".into()),
+        Some(format!("Bearer {}", &TOKEN[..63])),
+        Some(format!("Bearer {TOKEN}0")),
+        Some(format!("Bearer {}", TOKEN.to_uppercase())),
+        Some(format!("Basic {TOKEN}")),
+        Some(TOKEN.into()),
+        Some("Bearer ".into()),
+    ];
+    for auth in wrong {
+        let mut headers = vec![ours(port)];
+        if let Some(auth) = &auth {
+            headers.push(("Authorization", auth.clone()));
+        }
+        // The head claims a megabyte, and no body follows: the answer comes from the head alone.
+        let started = Instant::now();
+        let bytes = post_head(1 << 20, &headers);
+        let answer = raw(port, bytes.as_bytes(), Duration::from_secs(1)).await;
+        assert_refused_closed(&answer, 401, &format!("{auth:?}"));
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert_eq!(answer.body, "");
+    }
+    // A client library with an empty token hears the same.
+    let stranger = Client::new(port, "");
+    let answer = stranger
+        .post(&request(1, "initialize", hello("Stranger")))
+        .await;
+    assert_eq!(answer.status(), 401);
+    // Nothing reached Klipolo: no session opened, nothing read, and it still answers.
+    assert_eq!(server.connected(), ["Checker"]);
+    assert_eq!(host.state().counts.snapshots, snapshots);
+    assert!(checker.answers().await);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn browser_origin_is_403() {
+    let (server, _host) = serve();
+    let port = server.port;
+    let mut checker = Client::new(port, TOKEN);
+    checker.initialize("Checker").await;
+    // Any page a browser shows, even one served from Klipolo's own address, and with the token.
+    for origin in [
+        "http://evil.test".to_owned(),
+        "null".to_owned(),
+        format!("http://127.0.0.1:{port}"),
+        format!("http://localhost:{port}"),
+        "chrome-extension://abcdef".to_owned(),
+    ] {
+        for token in [Some(TOKEN), None] {
+            let mut headers = vec![ours(port), ("Origin", origin.clone())];
+            headers.extend(token.map(bearer));
+            let bytes = post_head(1 << 20, &headers);
+            let answer = raw(port, bytes.as_bytes(), Duration::from_secs(1)).await;
+            assert_refused_closed(&answer, 403, &origin);
+        }
+    }
+    assert_eq!(server.connected(), ["Checker"]);
+    assert!(checker.answers().await);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn foreign_host_is_403() {
+    let (server, _host) = serve();
+    let port = server.port;
+    let mut checker = Client::new(port, TOKEN);
+    checker.initialize("Checker").await;
+    // DNS rebinding: a page's own name pointed at 127.0.0.1. Also another port, no port, no `Host`, or two.
+    let hosts: Vec<Vec<(&str, String)>> = vec![
+        vec![("Host", "evil.test".into())],
+        vec![("Host", format!("evil.test:{port}"))],
+        vec![("Host", format!("localhost.evil.test:{port}"))],
+        vec![("Host", format!("127.0.0.1:{}", port.wrapping_add(1)))],
+        vec![("Host", "127.0.0.1".into())],
+        vec![("Host", format!("[::1]:{port}"))],
+        vec![],
+        vec![ours(port), ("Host", "evil.test".into())],
+    ];
+    for host in hosts {
+        let mut headers = host.clone();
+        headers.push(bearer(TOKEN));
+        let bytes = post_head(1 << 20, &headers);
+        let answer = raw(port, bytes.as_bytes(), Duration::from_secs(1)).await;
+        assert_refused_closed(&answer, 403, &format!("{host:?}"));
+    }
+    // Its own names are served: 127.0.0.1 and localhost, in any case.
+    for name in ["127.0.0.1", "localhost", "LocalHost"] {
+        let headers = [("Host", format!("{name}:{port}")), bearer(TOKEN)];
+        let bytes = initialize_bytes(&headers, "Agent");
+        let answer = raw(port, bytes.as_bytes(), Duration::from_secs(2)).await;
+        assert_eq!(answer.status, 200, "{name}: {answer:?}");
+    }
+    assert!(checker.answers().await);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn listens_on_loopback_only() {
+    let (server, _host) = serve();
+    let port = server.port;
+    assert!(TcpStream::connect(("127.0.0.1", port)).await.is_ok());
+    // Not on IPv6's loopback.
+    assert!(TcpStream::connect(("::1", port)).await.is_err());
+    // Not on this machine's address on its network, when it has one.
+    let outward = std::net::UdpSocket::bind("0.0.0.0:0")
+        .and_then(|socket| {
+            socket.connect("192.0.2.1:9")?;
+            socket.local_addr()
+        })
+        .ok()
+        .map(|addr| addr.ip())
+        .filter(|ip| !ip.is_loopback() && !ip.is_unspecified());
+    if let Some(ip) = outward {
+        let reached =
+            tokio::time::timeout(Duration::from_secs(1), TcpStream::connect((ip, port))).await;
+        assert!(!matches!(reached, Ok(Ok(_))), "{ip}:{port} answered");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn new_token_each_start() {
+    let temp = tempfile::tempdir().unwrap();
+    let mcp = Arc::new(Mcp::new(FakeHost::two_clips()));
+    let first = McpServer::start(&Handle::current(), Arc::clone(&mcp), temp.path()).unwrap();
+    let a = connection::read(temp.path()).expect("a connection file");
+    assert!(is_token(&a.token), "{}", a.token);
+    assert_eq!(a.port, first.port());
+    // The file's token is the one the server takes.
+    let mut agent = Client::new(a.port, &a.token);
+    agent.initialize("Agent").await;
+    first.stop();
+
+    let second = McpServer::start(&Handle::current(), Arc::clone(&mcp), temp.path()).unwrap();
+    let b = connection::read(temp.path()).expect("a connection file");
+    assert!(is_token(&b.token), "{}", b.token);
+    assert_ne!(a.token, b.token);
+    // The last run's token is refused.
+    let stale = Client::new(b.port, &a.token);
+    let answer = stale.post(&request(1, "initialize", hello("Agent"))).await;
+    assert_eq!(answer.status(), 401);
+    let mut agent = Client::new(b.port, &b.token);
+    agent.initialize("Agent").await;
+    second.stop();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn connection_file_is_private_and_goes_on_stop() {
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path().join("Klipolo");
+    let mcp = Arc::new(Mcp::new(FakeHost::two_clips()));
+    let server = McpServer::start(&Handle::current(), mcp, &dir).unwrap();
+    let path = dir.join(FILE);
+    let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o600);
+    let file = connection::read(&dir).expect("a connection file");
+    assert_eq!(file.pid, std::process::id());
+    assert_eq!(file.port, server.port());
+    assert_eq!(file.version, 1);
+    let port = server.port();
+    let mut agent = Client::new(port, &file.token);
+    agent.initialize("Agent").await;
+    assert_eq!(server.connected(), ["Agent"]);
+    server.stop();
+    assert!(!path.exists());
+    // The port closes.
+    let mut closed = false;
+    for _ in 0..40 {
+        if TcpStream::connect(("127.0.0.1", port)).await.is_err() {
+            closed = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(closed, "still listening on {port}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_file_another_server_wrote_stays_on_stop() {
+    let temp = tempfile::tempdir().unwrap();
+    let mcp = Arc::new(Mcp::new(FakeHost::two_clips()));
+    let server = McpServer::start(&Handle::current(), mcp, temp.path()).unwrap();
+    let other = ConnectionFile {
+        port: 1,
+        token: new_token(),
+        pid: 1,
+        version: VERSION,
+    };
+    connection::write(temp.path(), &other).unwrap();
+    server.stop();
+    assert_eq!(connection::read(temp.path()), Some(other));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn oversized_body_is_413() {
+    let (server, host) = serve();
+    let port = server.port;
+    let mut checker = Client::new(port, TOKEN);
+    checker.initialize("Checker").await;
+    assert_eq!(BODY_LIMIT, 256 * 1024);
+    // A length past the limit is refused from the head, before a byte of the body is read.
+    let bytes = post_head(BODY_LIMIT + 1, &[ours(port), bearer(TOKEN)]);
+    let answer = raw(port, bytes.as_bytes(), Duration::from_secs(1)).await;
+    assert_refused_closed(&answer, 413, "a length past the limit");
+    assert_eq!(answer.json()["error"]["message"], TOO_LARGE);
+    // A body sent in chunks, with no length, is refused once it passes the limit.
+    let headers = [
+        ours(port),
+        bearer(TOKEN),
+        ("Content-Type", "application/json".to_owned()),
+        ("Transfer-Encoding", "chunked".to_owned()),
+    ];
+    let mut bytes = head("POST", "/mcp", &headers).into_bytes();
+    bytes.extend_from_slice(format!("{:x}\r\n", BODY_LIMIT + 1).as_bytes());
+    bytes.extend(std::iter::repeat_n(b' ', BODY_LIMIT + 1));
+    let answer = raw(port, &bytes, Duration::from_secs(2)).await;
+    assert_refused_closed(&answer, 413, "chunks past the limit");
+    // A body of exactly the limit is read.
+    let mut body = request(1, "initialize", hello("Padded"))
+        .to_string()
+        .into_bytes();
+    body.resize(BODY_LIMIT, b' ');
+    let answer = checker.post_bytes(body).await;
+    assert_eq!(answer.status(), 200);
+    assert_eq!(
+        host.state().connected.last().unwrap(),
+        &["Checker", "Padded"]
+    );
+    assert!(checker.answers().await);
+}
+
+#[tokio::test(start_paused = true)]
+async fn slow_body_is_408_after_10_s() {
+    let (server, _host) = serve();
+    let port = server.port;
+    assert_eq!(BODY_TIMEOUT, Duration::from_secs(10));
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    let bytes = post_head(100, &[ours(port), bearer(TOKEN)]) + "{\"jsonrpc\"";
+    stream.write_all(bytes.as_bytes()).await.unwrap();
+    let started = tokio::time::Instant::now();
+    let early = read_raw(&mut stream, BODY_TIMEOUT - Duration::from_millis(100)).await;
+    assert_eq!((early.status, early.closed), (0, false), "{early:?}");
+    // The paused test clock fires a timer this far off at the end of its wheel's slot, up to about 4 s late: the
+    // refusal is checked to come after the timeout and well before twice it.
+    let answer = read_raw(&mut stream, BODY_TIMEOUT).await;
+    let waited = started.elapsed();
+    assert_refused_closed(&answer, 408, "a slow body");
+    assert_eq!(answer.json()["error"]["message"], TOO_SLOW);
+    assert!(
+        waited >= BODY_TIMEOUT && waited < 2 * BODY_TIMEOUT,
+        "{waited:?}"
+    );
+    // A slow body without the token is refused at once instead.
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    let bytes = post_head(100, &[ours(port)]) + "{\"jsonrpc\"";
+    stream.write_all(bytes.as_bytes()).await.unwrap();
+    let started = tokio::time::Instant::now();
+    let answer = read_raw(&mut stream, Duration::from_secs(1)).await;
+    assert_refused_closed(&answer, 401, "a slow body without the token");
+    assert!(started.elapsed() < Duration::from_secs(1));
+}
+
+#[tokio::test(start_paused = true)]
+async fn slow_head_is_closed_after_10_s() {
+    let (server, _host) = serve();
+    let port = server.port;
+    assert_eq!(HEAD_TIMEOUT, Duration::from_secs(10));
+    // A head that never ends, and a connection that sends nothing.
+    let started_head = format!("POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n");
+    for sent in [started_head.as_str(), ""] {
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        stream.write_all(sent.as_bytes()).await.unwrap();
+        let started = tokio::time::Instant::now();
+        let early = read_raw(&mut stream, HEAD_TIMEOUT - Duration::from_millis(100)).await;
+        assert_eq!(
+            (early.status, early.closed),
+            (0, false),
+            "{sent:?}: {early:?}"
+        );
+        // As for a slow body: after the timeout, and well before twice it, on the paused test clock.
+        let answer = read_raw(&mut stream, HEAD_TIMEOUT).await;
+        let waited = started.elapsed();
+        assert!(answer.closed, "{sent:?}: open after {waited:?}");
+        assert!(!(200..300).contains(&answer.status), "{answer:?}");
+        assert!(
+            waited >= HEAD_TIMEOUT && waited < 2 * HEAD_TIMEOUT,
+            "{waited:?}"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn connections_past_16_wait_until_one_closes() {
+    let (server, _host) = serve();
+    let port = server.port;
+    assert_eq!(CONNECTIONS, 16);
+    let mut held = Vec::new();
+    for _ in 0..CONNECTIONS {
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        stream.write_all(b"POST /mcp HTTP/1.1\r\n").await.unwrap();
+        held.push(stream);
+    }
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    // One more waits, unread, while the others are open.
+    let mut waiting = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    let bytes = initialize_bytes(&[ours(port), bearer(TOKEN)], "Agent");
+    waiting.write_all(bytes.as_bytes()).await.unwrap();
+    let early = read_raw(&mut waiting, Duration::from_millis(500)).await;
+    assert_eq!((early.status, early.closed), (0, false), "{early:?}");
+    assert!(server.connected().is_empty());
+    // One closes: the one waiting is served.
+    drop(held.pop());
+    let answer = read_raw(&mut waiting, Duration::from_secs(2)).await;
+    assert_eq!(answer.status, 200, "{answer:?}");
+    assert_eq!(server.connected(), ["Agent"]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn get_is_405() {
+    let (server, _host) = serve();
+    let port = server.port;
+    // Klipolo sends nothing unasked, so it offers no stream.
+    let get = head("GET", "/mcp", &[ours(port), bearer(TOKEN)]);
+    let answer = raw(port, get.as_bytes(), Duration::from_secs(1)).await;
+    assert_refused_closed(&answer, 405, "GET");
+    assert!(answer.header("allow").unwrap().contains("POST"));
+    let put = post_head(0, &[ours(port), bearer(TOKEN)]).replacen("POST", "PUT", 1);
+    let answer = raw(port, put.as_bytes(), Duration::from_secs(1)).await;
+    assert_refused_closed(&answer, 405, "PUT");
+    // Without the token, the token is what's refused.
+    let get = head("GET", "/mcp", &[ours(port)]);
+    let answer = raw(port, get.as_bytes(), Duration::from_secs(1)).await;
+    assert_refused_closed(&answer, 401, "GET without the token");
+    // Any other path is nowhere.
+    for path in [
+        "/",
+        "/mcp/",
+        "/mcp/identity",
+        "/.well-known/oauth-protected-resource",
+    ] {
+        let bytes = post_head(0, &[ours(port), bearer(TOKEN)]).replacen("/mcp", path, 1);
+        let answer = raw(port, bytes.as_bytes(), Duration::from_secs(1)).await;
+        assert_refused_closed(&answer, 404, path);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn bad_json_is_32700() {
+    let (server, _host) = serve();
+    let client = Client::new(server.port, TOKEN);
+    for body in [&b"{not json"[..], b"", b"\xff\xfe"] {
+        let answer = client.post_bytes(body.to_vec()).await;
+        assert_eq!(answer.status(), 400);
+        let reply: Value = answer.json().await.unwrap();
+        assert_eq!(
+            reply,
+            json!({"jsonrpc": "2.0", "id": null, "error": {"code": -32700, "message": NOT_JSON}})
+        );
+    }
+    // JSON that isn't one message is the protocol's to refuse.
+    let answer = client.post(&json!([request(1, "ping", json!({}))])).await;
+    assert_eq!(answer.status(), 200);
+    let reply: Value = answer.json().await.unwrap();
+    assert_eq!(reply["error"]["code"], -32600);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn initialize_opens_a_session_and_the_rest_need_it() {
+    let (server, _host) = serve();
+    let mut client = Client::new(server.port, TOKEN);
+    // Before a session: only `initialize`.
+    let answer = client.post(&request(5, "ping", json!({}))).await;
+    assert_eq!(answer.status(), 400);
+    let reply: Value = answer.json().await.unwrap();
+    assert_eq!(
+        reply,
+        json!({"jsonrpc": "2.0", "id": 5, "error": {"code": -32600, "message": SESSION_FIRST}})
+    );
+    let answer = client.post(&request(1, "initialize", hello("Agent"))).await;
+    assert_eq!(answer.status(), 200);
+    assert_eq!(answer.headers()["content-type"], "application/json");
+    let session = answer.headers()[client::SESSION_ID]
+        .to_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        session.len() == 32 && session.bytes().all(|b| b.is_ascii_hexdigit()),
+        "{session}"
+    );
+    let reply: Value = answer.json().await.unwrap();
+    assert_eq!(reply["result"]["serverInfo"]["name"], "klipolo");
+    client.session = Some(session);
+    // A notification is accepted with nothing to answer.
+    let ready = client
+        .post(&json!({"jsonrpc": "2.0", "method": "notifications/initialized"}))
+        .await;
+    assert_eq!(ready.status(), 202);
+    assert_eq!(ready.bytes().await.unwrap().len(), 0);
+    assert_eq!(client.ask("ping", json!({})).await["result"], json!({}));
+    let tools = client.ask("tools/list", json!({})).await;
+    assert_eq!(tools["result"], listed("tools/list").unwrap());
+    // A session Klipolo doesn't know: the client opens a new one.
+    client.session = Some("0".repeat(32));
+    let answer = client.post(&request(6, "ping", json!({}))).await;
+    assert_eq!(answer.status(), 404);
+    let reply: Value = answer.json().await.unwrap();
+    assert_eq!(
+        reply,
+        json!({"jsonrpc": "2.0", "id": 6, "error": {"code": -32001, "message": NO_SUCH_SESSION}})
+    );
+}
+
+/// The two-clip host, each project read taking a while; how many reads ran at once, at most.
+struct Slow {
+    host: Arc<FakeHost>,
+    now: AtomicUsize,
+    most: AtomicUsize,
+}
+
+const READ_TAKES: Duration = Duration::from_millis(300);
+
+impl Host for Slow {
+    fn snapshot(&self) -> Option<Snapshot> {
+        let now = self.now.fetch_add(1, Ordering::SeqCst) + 1;
+        self.most.fetch_max(now, Ordering::SeqCst);
+        std::thread::sleep(READ_TAKES);
+        self.now.fetch_sub(1, Ordering::SeqCst);
+        self.host.snapshot()
+    }
+    fn open_proposal(&self) -> Option<OpenProposal> {
+        self.host.open_proposal()
+    }
+    fn apply(&self, client: &str, base: u64, tx: &Transaction) -> Result<Applied, HostError> {
+        self.host.apply(client, base, tx)
+    }
+    fn propose(
+        &self,
+        client: &str,
+        base: u64,
+        calls: &[ToolCall],
+        proposal: Proposal,
+        replacing: Option<&str>,
+    ) -> Result<String, HostError> {
+        self.host.propose(client, base, calls, proposal, replacing)
+    }
+    fn outcome(&self, client: &str) -> ProposalOutcome {
+        self.host.outcome(client)
+    }
+    fn undo_own(&self, client: &str) -> Result<Applied, HostError> {
+        self.host.undo_own(client)
+    }
+    fn show_moments(&self, client: &str, moments: &[Moment]) {
+        self.host.show_moments(client, moments)
+    }
+    fn estimate_usd(&self, job: &Job) -> f64 {
+        self.host.estimate_usd(job)
+    }
+    fn start_paid(&self, client: &str, job: &Job) -> Result<(), HostError> {
+        self.host.start_paid(client, job)
+    }
+    fn connected(&self, clients: &[String]) {
+        self.host.connected(clients)
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn messages_are_handled_one_at_a_time_and_refusals_never_wait() {
+    let slow = Arc::new(Slow {
+        host: FakeHost::two_clips(),
+        now: AtomicUsize::new(0),
+        most: AtomicUsize::new(0),
+    });
+    let mcp = Arc::new(Mcp::new(slow.clone()));
+    let server = server::serve(&Handle::current(), mcp, TOKEN.to_owned()).unwrap();
+    let port = server.port;
+    let mut apps = Vec::new();
+    for name in ["One", "Two", "Three"] {
+        let mut app = Client::new(port, TOKEN);
+        app.initialize(name).await;
+        apps.push(app);
+    }
+    // Three apps read the project at once: the reads run one after another, on threads of their own.
+    let reads = apps.into_iter().map(|app| {
+        tokio::spawn(async move {
+            let context = app.call("getContext", json!({})).await;
+            assert_eq!(context["isError"], false, "{context}");
+        })
+    });
+    let reads: Vec<_> = reads.collect();
+    tokio::time::sleep(READ_TAKES / 3).await;
+    // Meanwhile the server answers at once what it refuses from the head.
+    let started = Instant::now();
+    let bytes = post_head(1 << 20, &[ours(port)]);
+    let answer = raw(port, bytes.as_bytes(), Duration::from_secs(2)).await;
+    assert_refused_closed(&answer, 401, "while reads run");
+    assert!(started.elapsed() < READ_TAKES, "{:?}", started.elapsed());
+    for read in reads {
+        read.await.unwrap();
+    }
+    assert_eq!(slow.most.load(Ordering::SeqCst), 1);
 }

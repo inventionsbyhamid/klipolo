@@ -2510,13 +2510,19 @@ dependencies = [
 name = "klipolo-mcp"
 version = "0.1.0"
 dependencies = [
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "klipolo-chat",
  "klipolo-model",
  "klipolo-platform",
  "rand",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "subtle",
  "tempfile",
+ "tokio",
  "tracing",
 ]
 

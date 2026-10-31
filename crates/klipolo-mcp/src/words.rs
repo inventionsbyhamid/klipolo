@@ -171,6 +171,22 @@ pub const NO_METHOD: &str = "A request needs a method.";
 pub const UNKNOWN_METHOD: &str = "Unknown method.";
 pub const UNKNOWN_RESOURCE: &str = "No such resource.";
 
+/// A body that isn't JSON (-32700).
+pub const NOT_JSON: &str = "The request body isn't JSON.";
+/// A body past the server's limit.
+pub const TOO_LARGE: &str = "The request is too large.";
+/// A body slower than the server waits for.
+pub const TOO_SLOW: &str = "The request took too long to arrive.";
+/// A message other than `initialize` with no `Mcp-Session-Id`.
+pub const SESSION_FIRST: &str = "Send initialize first, then its Mcp-Session-Id with each request.";
+/// A session Klipolo doesn't know: it started again, or the session went idle.
+pub const NO_SUCH_SESSION: &str =
+    "Klipolo doesn't know this session. Send initialize to open a new one.";
+/// Too many sessions opened lately, by this app or by all apps together.
+pub const SESSIONS_PACED: &str = "Klipolo is pacing new sessions. Wait a minute, then try again.";
+/// A message Klipolo failed on.
+pub const FAILED: &str = "Klipolo couldn't finish that request.";
+
 /// `getSummary`.
 pub const SUMMARY_TOOL: &str = "The project in short: its revision, name, formats, length, captions and clips (c1, c2 \
 and so on, in timeline seconds), then the person's playhead and selection.";
