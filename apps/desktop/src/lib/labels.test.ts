@@ -59,4 +59,18 @@ describe('undo labels as message ids', () => {
     expect(wordLabel('effect.remove.undo', { effect: 'pack://x@1/fx/glow' })).toBe('Remove missing effect');
     expect([...NAMED_CONTRIBS].sort()).toEqual(BUILTINS.map((def) => def.id).sort());
   });
+
+  it('undo_label_names_the_client', () => {
+    expect(historyAction('undo', 'chat.setFormat', { format: 'portrait', client: 'Example Client' })).toBe(
+      'Undo make it vertical (from Example Client)',
+    );
+    expect(historyAction('redo', 'chat.addText', { text: 'Day 1', preset: 'title', client: 'Muse Spark agent' })).toBe(
+      'Redo add the words Day 1 (from Muse Spark agent)',
+    );
+    // A step folded from an app's earlier ones names the app once.
+    expect(wordLabel('mcp.fromEarlier', { client: 'Example Client' })).toBe('Earlier changes from Example Client');
+    expect(historyAction('undo', 'mcp.fromEarlier', { client: 'Example Client' })).toBe('Undo earlier changes from Example Client');
+    // The person's own changes read as before.
+    expect(historyAction('undo', 'chat.setFormat', { format: 'portrait' })).toBe('Undo make it vertical');
+  });
 });
