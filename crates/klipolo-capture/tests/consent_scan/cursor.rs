@@ -5,7 +5,7 @@
 use super::scan::{code_of, names_word, sources};
 
 /// Names that read keys, key codes or modifier state, or ask the person for a permission: never in this crate. Matched
-/// as whole words (an import alias names its original too).
+/// as whole words (an import alias names the item it aliases too).
 const KEYBOARD_AND_PROMPTS: &[&str] = &[
     // macOS: key event masks, taps, key state, the listen-event and Accessibility prompts.
     "NSEventMaskKeyDown",
