@@ -282,6 +282,38 @@ fn a_take_the_worker_stopped_saving_lands_from_its_files_and_says_so() {
     assert!(rec.visible());
 }
 
+/// A drive that stops answering while the take saves: the worker says so itself (`capture.error.driveStuck`) and ends,
+/// and the take is finished from its files and lands with no second note saying the same.
+#[test]
+fn a_take_whose_drive_stopped_answering_is_told_once() {
+    let sessions = Arc::new(Sessions::with_project());
+    let (rec, landed) = landing_in(&sessions);
+    let id = rec.arm(options_screen()).unwrap().id;
+    rec.send(Command::Start).unwrap();
+    rec.launch.emit(state(Recording));
+    write_cut_off(&SessionDir::at(&rec.take_dir(&id)));
+    rec.send(Command::Stop).unwrap();
+    rec.launch.emit(state(Stopping));
+    let stuck = CodedError::new("capture.error.driveStuck");
+    rec.launch.emit(Event::Failed {
+        error: stuck.clone(),
+    });
+    rec.launch.exit(Some(1));
+    rec.settle();
+    let finished = rec.finished();
+    assert!(finished.len() == 1 && finished[0].recover);
+    assert_eq!(finished[0].note, None, "said once, by the worker");
+    let import = landed.lock().unwrap()[0].clone().unwrap();
+    assert!(
+        !(import.notes.iter()).any(|n| n.code == "capture.note.savedFromFiles"),
+        "{:?}",
+        import.notes
+    );
+    assert_eq!(sessions.project().recordings.len(), 1, "landed");
+    let failed = Event::Failed { error: stuck };
+    assert_eq!(rec.events().iter().filter(|e| **e == failed).count(), 1);
+}
+
 /// A take that keeps crashing says why itself (`capture.stop.crashLoop`), so its landing adds no second note.
 #[test]
 fn a_crash_looped_take_is_not_told_twice() {
