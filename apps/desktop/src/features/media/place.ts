@@ -13,7 +13,7 @@ import { queueCommand } from '../../state/commit';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
-import { announce } from '../timeline/announce';
+import { announce } from '../../state/announce';
 import { layerStartUs, type DropTarget } from '../timeline/drops';
 
 /*
@@ -146,7 +146,8 @@ export function isMusicTarget(target: DropTarget): target is Extract<DropTarget,
 export function placeAt(sources: MediaSource[], target: DropTarget): Promise<boolean> {
   const project = useProject.getState().snapshot?.project;
   if (!project) return Promise.resolve(false);
-  return placing(() => library.place(sources, dropUs(project, target), dropOnto(target)));
+  // One file from the library: it gets a layer, or Rust refuses it with why (no file goes in without one).
+  return placing(async () => (await library.place(sources, dropUs(project, target), dropOnto(target))).patch);
 }
 
 /** A pack item let go on the timeline: music on the Music lane, else placed where it was let go. */

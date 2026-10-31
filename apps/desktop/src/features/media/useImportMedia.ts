@@ -5,7 +5,9 @@ import type { Op } from '../../bindings/Op';
 import type { Project } from '../../bindings/Project';
 import type { SkippedFile } from '../../bindings/SkippedFile';
 import type { SnapshotPatch } from '../../bindings/SnapshotPatch';
+import type { UnplacedFile } from '../../bindings/UnplacedFile';
 import { bridge } from '../../bridge/commands';
+import { codedMessage } from '../../bridge/call';
 import { library } from '../../bridge/library';
 import { errorMessage } from '../../lib/errors';
 import { placementOps } from '../../lib/placement';
@@ -74,45 +76,81 @@ function skippedMessage(skipped: SkippedFile[]): string {
   return `${lead} ${parts}`;
 }
 
+/** One undo step an import made: the revision it left the project at, and its label. */
+interface Made {
+  revision: number;
+  label: string | null;
+}
+
+/** What one step of an import did: whether it went in, and the files that came in with no layer (and why). */
+interface Stepped {
+  ok: boolean;
+  unplaced: UnplacedFile[];
+}
+
 /**
- * "Added 2 clips" once the files are in, with an Undo that takes back this import only while it is still
- * the last change (`undoIf`), never an edit made since.
+ * The toast's Undo: takes back the import's steps, newest first, each only while it is still the last change, never an
+ * edit made since (`undoIf`). Nothing when nothing went in.
  */
-function sayAdded(count: number, clips: boolean, libraryOnly: boolean) {
-  const revision = useProject.getState().snapshot?.history.revision;
-  const text = clips
-    ? t({
-        id: 'media.added.clips',
-        message: plural(count, { one: 'Added # clip', other: 'Added # clips' }),
-        comment: 'After videos were added to the project',
-      })
-    : libraryOnly
+function undoAction(made: Made[]) {
+  if (made.length === 0) return [];
+  return [
+    {
+      label: t({ id: 'media.added.undo', message: 'Undo' }),
+      run: () =>
+        void (async () => {
+          let expected = made[made.length - 1].revision;
+          for (const step of [...made].reverse()) {
+            const undone = await useProject
+              .getState()
+              .undoIf((history) => history.revision === expected && history.undoLabel === step.label);
+            if (!undone) return;
+            expected = useProject.getState().snapshot?.history.revision ?? -1;
+          }
+        })(),
+    },
+  ];
+}
+
+/**
+ * "Added 2 clips" once the files are in, naming how many came in with no layer and why, with an Undo that
+ * takes back the import's steps.
+ */
+function sayAdded(count: number, clips: boolean, libraryOnly: boolean, made: Made[], unplaced: UnplacedFile[]) {
+  const said = unplaced.length > 0 ? codedMessage(unplaced[0].reason) : '';
+  const why = `${said.charAt(0).toLowerCase()}${said.slice(1)}`;
+  const text =
+    unplaced.length > 0
       ? t({
-          id: 'media.added.library',
-          message: plural(count, { one: 'Added # file to the library', other: 'Added # files to the library' }),
-          comment: 'After music, sounds or pictures were added to the Library (not to the video)',
+          id: 'media.added.unplaced',
+          message: plural(unplaced.length, {
+            one: `Added ${count} files, # went to the library only: ${why}`,
+            other: `Added ${count} files, # went to the library only: ${why}`,
+          }),
+          comment: 'Files let go on the timeline, some of which got no place on it; {why} says why',
         })
-      : t({
-          id: 'media.added.files',
-          message: plural(count, { one: 'Added # file', other: 'Added # files' }),
-          comment: 'After files (music, images) were added to the project',
-        });
-  toast.info(text, {
-    done: true,
-    actions: [
-      {
-        label: t({ id: 'media.added.undo', message: 'Undo' }),
-        run: () =>
-          void useProject
-            .getState()
-            .undoIf((history) => history.revision === revision && history.undoLabel === 'media.import'),
-      },
-    ],
-  });
+      : clips
+        ? t({
+            id: 'media.added.clips',
+            message: plural(count, { one: 'Added # clip', other: 'Added # clips' }),
+            comment: 'After videos were added to the project',
+          })
+        : libraryOnly
+          ? t({
+              id: 'media.added.library',
+              message: plural(count, { one: 'Added # file to the library', other: 'Added # files to the library' }),
+              comment: 'After music, sounds or pictures were added to the Library (not to the video)',
+            })
+          : t({
+              id: 'media.added.files',
+              message: plural(count, { one: 'Added # file', other: 'Added # files' }),
+              comment: 'After files (music, images) were added to the project',
+            });
+  toast.info(text, { done: true, actions: undoAction(made) });
 }
 
 /** "Added lofi.mp3 as music", and where the other files dropped with it went. */
-function sayMusicAdded(song: Asset, rest: Asset[]) {
+function sayMusicAdded(song: Asset, rest: Asset[], made: Made[]) {
   const name = song.name;
   const others = rest.length;
   const text =
@@ -135,40 +173,73 @@ function sayMusicAdded(song: Asset, rest: Asset[]) {
             }),
             comment: '{name} is the file let go on the Music lane; the others went where Add files puts them',
           });
-  toast.info(text, { done: true });
+  toast.info(text, { done: true, actions: undoAction(made) });
+}
+
+/** "Added some of the files": a later step couldn't go in (it said why); what went in can be taken back. */
+function sayPartly(made: Made[]) {
+  toast.info(
+    t({
+      id: 'media.added.partly',
+      message: 'Added some of the files. The rest couldn’t go in.',
+      comment: 'An import whose later part was refused; the refusal was said on its own',
+    }),
+    { done: true, actions: undoAction(made) },
+  );
 }
 
 /**
  * The undo steps that place freshly imported `assets`, each sent at the placing's turn, one after another: `music` (a
  * sound let go on the Music lane) as music from there; then, let go on another lane (`target`), the videos as
  * `dropAllOps` puts them and the sounds and pictures as the library's "+" does (`library.place`, on the track let go
- * on); with no lane, all of them where the Add button puts them (`placementOps`).
+ * on); with no lane, all of them where the Add button puts them (`placementOps`). A step with nothing to do (files too
+ * short to place) isn't one.
  */
 function placeSteps(
   project: Project,
   assets: Asset[],
   target: DropTarget | null,
   music: { song: Asset; target: DropTarget } | null,
-): (() => Promise<boolean>)[] {
-  const send = (task: () => Promise<SnapshotPatch>) => () => useProject.getState().send(task);
-  const apply = (ops: Op[]) => () =>
-    ops.length === 0 ? Promise.resolve(true) : useProject.getState().apply('media.import', ops);
-  const steps: (() => Promise<boolean>)[] = [];
+): (() => Promise<Stepped>)[] {
+  const send = (task: () => Promise<SnapshotPatch>) => async (): Promise<Stepped> => ({
+    ok: await useProject.getState().send(task),
+    unplaced: [],
+  });
+  const apply = (ops: Op[]) => async (): Promise<Stepped> => ({
+    ok: await useProject.getState().apply('media.import', ops),
+    unplaced: [],
+  });
+  const steps: (() => Promise<Stepped>)[] = [];
   if (music) {
     const from = dropUs(project, music.target);
     steps.push(send(() => library.addMusic({ type: 'file', asset: music.song }, from)));
   }
+  const plain = (ops: Op[]) => {
+    if (ops.length > 0) steps.push(apply(ops));
+  };
   if (!target) {
-    if (assets.length > 0) steps.push(apply(placementOps(assets)));
+    plain(placementOps(assets));
     return steps;
   }
   const videos = assets.filter((a) => a.kind === 'video');
   const others = assets.filter((a) => a.kind !== 'video');
-  if (videos.length > 0) steps.push(apply(dropAllOps(project, videos, target, project.settings.fps)));
+  if (videos.length > 0) plain(dropAllOps(project, videos, target, project.settings.fps));
   if (others.length > 0) {
     const at = dropUs(project, target);
     const onto = dropOnto(target);
-    steps.push(send(() => library.place(others.map((asset) => ({ type: 'file', asset })), at, onto)));
+    steps.push(async () => {
+      let unplaced: UnplacedFile[] = [];
+      const ok = await useProject.getState().send(async () => {
+        const answer = await library.place(
+          others.map((asset) => ({ type: 'file', asset })),
+          at,
+          onto,
+        );
+        unplaced = answer.unplaced;
+        return answer.patch;
+      });
+      return { ok, unplaced };
+    });
   }
   return steps;
 }
@@ -226,18 +297,27 @@ export async function importFiles(paths: string[] | null, target: DropTarget | n
         const { project } = snapshot;
         const steps = placeSteps(project, rest, lane, song && target ? { song, target } : null);
         if (steps.length === 0) return hold?.release();
-        // It holds the commit queue until every step lands, so an edit made meanwhile builds on the files placed.
+        // It holds the commit queue until every step lands, so an edit made meanwhile builds on the files placed. A step
+        // that doesn't go in stops the rest (it says why); what went in before it can be taken back.
         const end = beginCommit();
         void (async () => {
-          let ok = true;
-          for (const step of steps) ok = (await step().catch(() => false)) && ok;
-          if (!ok) return;
-          if (song) sayMusicAdded(song, rest);
+          const made: Made[] = [];
+          const unplaced: UnplacedFile[] = [];
+          for (const step of steps) {
+            const done = await step().catch((): Stepped => ({ ok: false, unplaced: [] }));
+            if (!done.ok) return made.length > 0 && sayPartly(made);
+            const history = useProject.getState().snapshot?.history;
+            if (history) made.push({ revision: history.revision, label: history.undoLabel });
+            unplaced.push(...done.unplaced);
+          }
+          if (song) sayMusicAdded(song, rest, made);
           else
             sayAdded(
               assets.length,
               assets.every((a) => a.kind === 'video'),
               !target && assets.every((a) => a.kind !== 'video'),
+              made,
+              unplaced,
             );
         })().finally(() => {
           end();

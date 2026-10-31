@@ -39,7 +39,9 @@ beforeEach(() => {
   vi.mocked(bridge.importMedia).mockReset();
   vi.mocked(bridge.undo).mockReset();
   vi.mocked(library.addMusic).mockReset().mockResolvedValue(fixturePatch(fixtureSnapshot()));
-  vi.mocked(library.place).mockReset().mockResolvedValue(fixturePatch(fixtureSnapshot()));
+  vi.mocked(library.place)
+    .mockReset()
+    .mockResolvedValue({ patch: fixturePatch(fixtureSnapshot()), unplaced: [] });
 });
 
 describe('importing media', () => {
@@ -383,5 +385,94 @@ describe('where a drop lands on the timeline', () => {
     expect(scroller.scrollLeft).toBeLessThan(500);
     stop();
     raf.mockRestore();
+  });
+
+  /** The project after one more step: at `revision`, `label` on top of its history. */
+  const after = (revision: number, label: string) => {
+    const snapshot = fixtureSnapshot();
+    snapshot.history = { ...snapshot.history, revision, undoLabel: label };
+    return { ...fixturePatch(snapshot), baseRevision: revision - 1 };
+  };
+  const sound = (): Asset => ({
+    ...fixtureSnapshot().project.assets.find((a) => a.kind === 'audio')!,
+    id: 'pop',
+    path: '/pop.wav',
+    name: 'pop.wav',
+    durationUs: 400_000,
+  });
+
+  it('the toast’s Undo after one sound let go on the Sounds lane takes it back', async () => {
+    vi.mocked(bridge.importMedia).mockResolvedValue({ assets: [sound()], skipped: [] });
+    vi.mocked(library.place).mockResolvedValue({ patch: after(4, 'media.sound.add'), unplaced: [] });
+    await importFiles(['/pop.wav'], { lane: 'sound', trackId: null, atUs: 2_000_000, row: 'sounds' });
+    await vi.waitFor(() => expect(useToasts.getState().toasts).toHaveLength(1));
+    const [added] = useToasts.getState().toasts;
+    expect(added.text).toBe('Added 1 file');
+    vi.mocked(bridge.undo).mockResolvedValue(after(5, 'text.add'));
+    added.actions![0].run();
+    await vi.waitFor(() => expect(bridge.undo).toHaveBeenCalledTimes(1));
+  });
+
+  it('the toast’s Undo after videos and a sound let go together takes back both steps, newest first', async () => {
+    const broll = fixtureSnapshot().project.assets[5];
+    const clip: Asset = { ...broll, id: 'n1', path: '/n1.mp4', name: 'n1.mp4' };
+    vi.mocked(bridge.importMedia).mockResolvedValue({ assets: [clip, sound()], skipped: [] });
+    vi.mocked(bridge.apply).mockResolvedValue(after(4, 'media.import'));
+    vi.mocked(library.place).mockResolvedValue({ patch: after(5, 'media.sound.add'), unplaced: [] });
+    await importFiles(['/n1.mp4', '/pop.wav'], { lane: 'picture', trackId: null, atUs: 2_000_000 });
+    await vi.waitFor(() => expect(useToasts.getState().toasts).toHaveLength(1));
+    // Undoing the sound leaves the videos' step on top, then that goes too.
+    vi.mocked(bridge.undo)
+      .mockResolvedValueOnce(after(6, 'media.import'))
+      .mockResolvedValueOnce(after(7, 'text.add'));
+    useToasts.getState().toasts[0].actions![0].run();
+    await vi.waitFor(() => expect(bridge.undo).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(bridge.undo).toHaveBeenCalledTimes(2);
+  });
+
+  it('files that got no layer are named with why; a refused step stops the rest; nothing added says nothing', async () => {
+    const late = { ...sound(), id: 'late', name: 'late.wav' };
+    vi.mocked(bridge.importMedia).mockResolvedValue({ assets: [sound(), late], skipped: [] });
+    vi.mocked(library.place).mockResolvedValue({
+      patch: after(4, 'media.import'),
+      unplaced: [{ name: 'late.wav', reason: { code: 'model.sound.noRoom', params: {} } }],
+    });
+    await importFiles(['/pop.wav', '/late.wav'], { lane: 'sound', trackId: null, atUs: 2_000_000, row: 'sounds' });
+    await vi.waitFor(() => expect(useToasts.getState().toasts).toHaveLength(1));
+    expect(useToasts.getState().toasts[0].text).toBe(
+      'Added 2 files, 1 went to the library only: a sound has to start before the video ends.',
+    );
+    useToasts.setState({ toasts: [] });
+    // Music refused (its own toast says why): the files after it don't go in.
+    const song: Asset = { ...sound(), id: 'lofi', path: '/lofi.mp3', name: 'lofi.mp3', durationUs: 60_000_000 };
+    vi.mocked(bridge.importMedia).mockResolvedValue({ assets: [song, late], skipped: [] });
+    vi.mocked(library.addMusic).mockRejectedValue({ code: 'model.music.noRoom', params: {} });
+    await importFiles(['/lofi.mp3', '/late.wav'], { lane: 'sound', trackId: null, atUs: 2_000_000, row: 'music' });
+    await vi.waitFor(() => expect(library.addMusic).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(bridge.apply).not.toHaveBeenCalled();
+    expect(useToasts.getState().toasts.map((t) => t.text)).not.toContain('Added lofi.mp3 as music, 1 file to the library');
+    useToasts.setState({ toasts: [] });
+    // Files too short to place: nothing goes in, and no "Added" is said.
+    const blip: Asset = { ...fixtureSnapshot().project.assets[5], id: 'b', path: '/b.mp4', name: 'b.mp4', durationUs: 5_000 };
+    vi.mocked(bridge.importMedia).mockResolvedValue({ assets: [blip], skipped: [] });
+    await importFiles(['/b.mp4']);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(bridge.apply).not.toHaveBeenCalled();
+    expect(useToasts.getState().toasts.map((t) => t.text).filter((text) => text.startsWith('Added'))).toEqual([]);
+  });
+
+  it('a read-only project gives no lane refusal: nothing goes in anywhere', () => {
+    useUi.setState({ pxPerSecond: 10, snapping: false });
+    useProject.setState({ snapshot: { ...fixtureSnapshot(), readOnly: 'From a newer Klipolo' } as never });
+    const scroller = lanes();
+    registerDropTarget(
+      (cx, cy, kind) => timelineTargetAt(scroller, 20, cx, cy, kind),
+      scroller,
+      (cx, cy) => timelineLaneAt(scroller, 20, cx, cy),
+    );
+    expect(dropRefusal(x(3), 30, 'image')).toBeNull();
+    expect(dropRefusal(x(3), 80, 'audio')).toBeNull();
   });
 });

@@ -25,7 +25,7 @@ vi.mock('../../bridge/library', () => ({
     addSound: vi.fn(() => answer()),
     addImage: vi.fn(() => answer()),
     addText: vi.fn(() => answer()),
-    place: vi.fn(() => answer()),
+    place: vi.fn(() => answer().then((patch) => ({ patch, unplaced: [] }))),
     pack: vi.fn(() => Promise.resolve(PACK)),
     picture: vi.fn(() => Promise.reject(new Error('no pictures in tests'))),
     speechRanges: vi.fn(() => Promise.resolve([])),
