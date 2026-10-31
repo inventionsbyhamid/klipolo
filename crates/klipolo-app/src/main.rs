@@ -158,13 +158,8 @@ fn main() {
         // Quitting while an export runs asks first.
         commands::export::guard_quit(app, &event);
         // Every edit is on the disk before the app goes.
-        if let RunEvent::Exit = event
-            && let Err(error) = app.state::<ProjectSessionState>().flush()
-        {
-            tracing::warn!(
-                detail = error.detail(),
-                "the last edits couldn't be saved at quit"
-            );
+        if let RunEvent::Exit = event {
+            commands::export::on_exit(app);
         }
     });
 }
