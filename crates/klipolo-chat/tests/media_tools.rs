@@ -1560,6 +1560,33 @@ fn media_additions_apply_at_once_as_one_step() {
 }
 
 #[test]
+fn the_undo_step_is_named_for_the_answers_first_call() {
+    // The music is asked for first; the clip's split goes in before it (layers go on what the edits make), yet the one
+    // undo step is named for the music, then how many more.
+    let p = project();
+    let i = inputs(&p, "add lofi, and split the clip at 12 s");
+    let out = compile(
+        &p,
+        &i,
+        &[
+            call(
+                "addMusic",
+                json!({"file": "lofi", "volume": null, "duck": null, "atSec": 0.0}),
+            ),
+            call("splitAt", json!({"atSec": 12.0})),
+        ],
+    );
+    let tx = out.additions.as_ref().expect("additions");
+    assert_eq!(tx.label, "chat.andMore");
+    let params = tx.params.as_ref().unwrap();
+    match &params["first"] {
+        ErrorParam::Coded(first) => assert_eq!(first.code, "chat.addMusic"),
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(params["more"], ErrorParam::from(1usize));
+}
+
+#[test]
 fn media_tools_read_their_arguments() {
     use ToolCall::*;
     assert_eq!(

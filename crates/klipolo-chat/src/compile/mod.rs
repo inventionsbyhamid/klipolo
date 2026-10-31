@@ -265,7 +265,8 @@ struct Phase {
     /// `work` as the batch would end here (transitions refitted, validated): the phase's result.
     done: Project,
     ops: Vec<Op>,
-    labels: Vec<CodedError>,
+    /// Each kept edit's label, with its call's index in the answer.
+    labels: Vec<(usize, CodedError)>,
 }
 
 impl Phase {
@@ -300,27 +301,32 @@ impl Phase {
         })
     }
 
-    /// Makes a tried edit part of the batch. An edit with no ops (a format the video already has) adds nothing.
-    fn keep(&mut self, tried: Tried) {
+    /// Makes the tried edit of call `call` part of the batch. An edit with no ops (a format the video already has) adds
+    /// nothing.
+    fn keep(&mut self, tried: Tried, call: usize) {
         let Some((work, done)) = tried.after else {
             return;
         };
         self.work = work;
         self.done = done;
         self.ops.extend(tried.edit.ops);
-        self.labels.push(tried.edit.label);
+        self.labels.push((call, tried.edit.label));
     }
 
     /// `try_edit`, then `keep`.
-    fn add(&mut self, edit: Edit) -> Result<(), ModelError> {
+    fn add(&mut self, edit: Edit, call: usize) -> Result<(), ModelError> {
         let tried = self.try_edit(edit)?;
-        self.keep(tried);
+        self.keep(tried, call);
         Ok(())
     }
 
-    /// The phase's ops as one chat transaction, labelled for its first call and how many more.
+    /// The phase's ops as one chat transaction, labelled for the first of its calls in the answer (the order the
+    /// person asked in, whatever order they were placed in) and how many more.
     fn transaction(&self) -> Option<Transaction> {
-        let (label, params) = match self.labels.as_slice() {
+        let mut labels = self.labels.clone();
+        labels.sort_by_key(|(call, _)| *call);
+        let labels: Vec<CodedError> = labels.into_iter().map(|(_, label)| label).collect();
+        let (label, params) = match labels.as_slice() {
             [] => return None,
             [one] => (one.code.clone(), one.params.clone()),
             [first, rest @ ..] => (
@@ -485,7 +491,7 @@ impl Compiler<'_> {
                     format_proposed |= matches!(call, ToolCall::SetFormat { .. });
                     waiting.push((i, if_it_removes));
                 }
-                Ok(tried) => adding.keep(tried),
+                Ok(tried) => adding.keep(tried, i),
                 Err(r) => refuse(&mut out, i, r),
             }
         }
@@ -512,7 +518,7 @@ impl Compiler<'_> {
                 // A layer takes nothing away; if one ever did, it would be proposed like any other.
                 Ok((tried, _)) if tried.removes => waiting.push((i, Removal::Moved(call))),
                 Ok((tried, title_id)) => {
-                    adding.keep(tried);
+                    adding.keep(tried, i);
                     // The title is in: its background is drawn for it.
                     if let (Some(title_id), ToolCall::MakeTitleCard { prompt, .. }) =
                         (title_id, call)
@@ -568,7 +574,7 @@ impl Compiler<'_> {
                 Removal::Longer(t) => ("trimClip", trim::lengthen(self, work, &t)),
             };
             let added = edit.and_then(|edit| {
-                (removing.add(edit)).map_err(|e| to_model(format!("{call_name}: {e}")))
+                (removing.add(edit, i)).map_err(|e| to_model(format!("{call_name}: {e}")))
             });
             match added {
                 Ok(()) => out.proposed_calls.push(i),
