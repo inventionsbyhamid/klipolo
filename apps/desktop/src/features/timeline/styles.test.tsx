@@ -40,7 +40,17 @@ async function tailwindUtilities(names: string[]): Promise<Set<string>> {
     },
   });
   const css = compiler.build(names);
-  return new Set(names.filter((name) => css.includes(`.${escape(name)}`)));
+  return new Set(names.filter((name) => hasClass(css, name)));
+}
+
+/** Whether `css` has a selector for the class `name` by its whole name: `.flex-no` is not in `.flex-none`. */
+function hasClass(css: string, name: string): boolean {
+  const selector = `.${escape(name)}`;
+  for (let at = css.indexOf(selector); at !== -1; at = css.indexOf(selector, at + 1)) {
+    // What follows is no more of a class name (a letter, a digit, `-`, `_`, or an escape's `\`).
+    if (!/[\w\\-]/.test(css.charAt(at + selector.length))) return true;
+  }
+  return false;
 }
 
 /** Every class on the elements `selector` finds that neither app.css nor Tailwind defines. */
@@ -63,6 +73,10 @@ beforeEach(() => {
 });
 
 describe('the timeline draws with classes app.css defines', () => {
+  it("counts a Tailwind class only by its whole name, never as the start of another's", async () => {
+    expect(await tailwindUtilities(['flex-none', 'flex-no'])).toEqual(new Set(['flex-none']));
+  });
+
   it('zoomed out, every lane draws its bands in a colour app.css gives them', async () => {
     useProject.setState({ snapshot: { ...fixtureSnapshot(), project: longProject() }, pending: 0 });
     useUi.setState({ pxPerSecond: 0.2 });
