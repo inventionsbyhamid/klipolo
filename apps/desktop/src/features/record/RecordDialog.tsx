@@ -73,6 +73,8 @@ function usePlace(): Place {
     window.addEventListener('blur', blur);
     window.addEventListener('focus', focus);
     document.addEventListener('visibilitychange', update);
+    // What changed between the first render and listening.
+    update();
     return () => {
       window.removeEventListener('blur', blur);
       window.removeEventListener('focus', focus);

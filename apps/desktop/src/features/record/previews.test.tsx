@@ -331,6 +331,13 @@ describe('the previews in the Record dialog', () => {
     expect(screen.getByRole('meter', { name: 'Microphone level' })).toBeInTheDocument();
   });
 
+  it('focus_that_comes_as_the_dialog_mounts_is_not_missed', async () => {
+    // Behind at the first render, in front by the time the dialog listens, with no event in between.
+    vi.spyOn(document, 'hasFocus').mockReturnValueOnce(false).mockReturnValue(true);
+    await openOn();
+    expect(fake.previewed).toEqual([want()]);
+  });
+
   it('previews_stop_on_close_record_and_blur', async () => {
     await openOn();
     expect(fake.previewed).toEqual([want()]);
