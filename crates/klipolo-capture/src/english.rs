@@ -190,6 +190,7 @@ pub const ENGLISH: Messages = &[
     ("capture.import.unreadable", "Part of {source} ({seconds} s at {atUs}) couldn't be read, so it isn't in the edit. Its file is kept in the take's folder."),
     // A saved take the app couldn't add to its project (the project couldn't be opened, made or saved).
     ("capture.import.notAdded", "The recording couldn't be added to your project. Its files are kept in the take's folder."),
+    ("capture.import.addedNotOpened", "The recording was added to your project. Open the project from the start screen to see it."),
     // The recorder's menu-bar, notification-area or tray item.
     ("capture.menu.stop", "Stop and save"),
     ("capture.menu.pause", "Pause"),

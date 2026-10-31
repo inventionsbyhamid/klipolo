@@ -26,16 +26,17 @@ use klipolo_capture::recover::{self, RecoverError};
 use klipolo_capture::session::{self, SessionDir, read_config};
 use klipolo_model::Op;
 use klipolo_model::coded::{CodedError, Said};
+use klipolo_model::history::Snapshot;
 use klipolo_model::project::{Asset, Recording};
 use klipolo_model::timeline::ClipSource;
 use klipolo_platform::durable;
 
-use super::destination::{self, Day, Destination};
+use super::destination::{self, Day, Destination, Target};
 use super::env::Done;
 use super::setup::{self, Files};
 use super::types::TakeImport;
 use super::zoom::zoom_take;
-use crate::project::{ProjectSessionState, build_and_apply, snapshot_now};
+use crate::project::{ProjectSessionState, build_and_apply, open_in, snapshot_now};
 
 /// The step's label: "Add recording".
 pub(super) const LABEL: &str = "undo.record";
@@ -45,6 +46,8 @@ pub(super) const LABEL: &str = "undo.record";
 pub(super) struct Landed {
     /// The project's id.
     pub(super) project: String,
+    /// Where the project is saved.
+    pub(super) file: PathBuf,
     pub(super) recording_id: String,
     /// Its clip on the main track.
     pub(super) clip_id: String,
@@ -80,13 +83,16 @@ pub(super) fn import_take(
     let (imported, notes) = recording_from(&manifest, dir, &manifest_peaks, probe)
         .map_err(|e| ImportError::Said(Said::Coded(e)))?;
     let recording = imported.recording;
-    let target = destination::open_for(sessions, dir, to)?;
-    let project = target.id;
+    let Target {
+        id: project,
+        file,
+        made,
+    } = destination::open_for(sessions, dir, to)?;
     let mirror = mirror_of(dir);
     let (clip_id, added) = add(sessions, &project, imported.assets, &recording, mirror)
         .inspect_err(|_| {
-            if let Some(file) = &target.made {
-                destination::unmake(sessions, file);
+            if made {
+                destination::unmake(sessions, &file);
             }
         })?;
     imported_in(dir, &project);
@@ -102,6 +108,7 @@ pub(super) fn import_take(
     }
     Ok(Landed {
         project,
+        file,
         recording_id: recording.id,
         clip_id,
         added,
@@ -214,8 +221,9 @@ pub(super) struct Landing<'a> {
 
 /// Lands `done` (`import_take`), then adds its auto zoom (`zoom_take`) when it was added now: what the page hears as
 /// `recorder-imported`, or the note it hears instead, a `capture.*` code (the take's files stay in its folder either
-/// way). A take that landed but whose zooms the project refused is still landed, with none. A take recorded on a
-/// fallback encoder lets the probe's report go, so the next opening of the Record dialog measures again.
+/// way). Its snapshot is the take's project, open again should it have closed meanwhile (`snapshot_after`). A take that
+/// landed but whose zooms the project refused is still landed, with none. A take recorded on a fallback encoder lets
+/// the probe's report go, so the next opening of the Record dialog measures again.
 pub(super) fn land(
     sessions: &ProjectSessionState,
     done: &Done,
@@ -247,7 +255,7 @@ pub(super) fn land(
     if let Some(files) = with.files {
         setup::forget_stale_probe(files, &landed.notes);
     }
-    let snapshot = snapshot_now(sessions).map_err(|said| not_landed(said.into()))?;
+    let snapshot = snapshot_after(sessions, &landed)?;
     let mut notes: Vec<CodedError> = done.note.iter().cloned().collect();
     notes.extend(landed.notes);
     Ok(TakeImport {
@@ -257,6 +265,34 @@ pub(super) fn land(
         snapshot,
         notes,
         zooms,
+    })
+}
+
+/// The take's project as it is now, open, for the page. Should the person have closed it, or opened another, while the
+/// take landed, it opens again (the open one saved and closed first, as for a take whose project isn't open when it
+/// lands), so a take that was added is never reported as not added. When it can't be opened:
+/// `capture.import.addedNotOpened`, "The recording was added to your project. Open the project from the start screen to
+/// see it."
+pub(super) fn snapshot_after(
+    sessions: &ProjectSessionState,
+    landed: &Landed,
+) -> Result<Snapshot, CodedError> {
+    if let Ok(snapshot) = snapshot_now(sessions)
+        && snapshot.project.id == landed.project
+    {
+        return Ok(snapshot);
+    }
+    tracing::warn!(
+        take = landed.recording_id,
+        "recorder: the take's project closed while it landed, so it opens again"
+    );
+    open_in(sessions, &landed.file).map_err(|said| {
+        tracing::error!(
+            ?said,
+            take = landed.recording_id,
+            "recorder: the take's project couldn't be opened again"
+        );
+        CodedError::new("capture.import.addedNotOpened")
     })
 }
 

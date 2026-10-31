@@ -564,6 +564,11 @@
     "params": []
   },
   {
+    "code": "capture.import.addedNotOpened",
+    "message": "The recording was added to your project. Open the project from the start screen to see it.",
+    "params": []
+  },
+  {
     "code": "capture.menu.stop",
     "message": "Stop and save",
     "params": []

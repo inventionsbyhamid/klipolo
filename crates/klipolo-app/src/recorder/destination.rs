@@ -53,15 +53,18 @@ pub(super) struct Destination<'a> {
 /// The project a take lands in, open now.
 pub(super) struct Target {
     pub(super) id: String,
-    /// The file of the project made for this take just now; None for one that was there.
-    pub(super) made: Option<PathBuf>,
+    /// Where it is saved.
+    pub(super) file: PathBuf,
+    /// Made for this take just now.
+    pub(super) made: bool,
 }
 
 impl Target {
-    fn there(id: &str) -> Self {
+    fn there(id: &str, file: &Path) -> Self {
         Self {
             id: id.to_owned(),
-            made: None,
+            file: file.to_path_buf(),
+            made: false,
         }
     }
 }
@@ -72,23 +75,24 @@ pub(super) fn open_for(
     dir: &SessionDir,
     to: &Destination<'_>,
 ) -> Result<Target, Said> {
-    let open = open_id(sessions);
+    let open = open_project(sessions);
+    let open_is = |id: &str| open.as_ref().filter(|(open, _)| open == id);
     if let Some(landed) = recover::ending(dir).imported
-        && open.as_ref() == Some(&landed)
+        && let Some((id, file)) = open_is(&landed)
     {
-        return Ok(Target::there(&landed));
+        return Ok(Target::there(id, file));
     }
     let (name, formats) = match to.target {
         ImportTarget::Project { id } => {
-            if open.as_ref() == Some(id) {
-                return Ok(Target::there(id));
+            if let Some((id, file)) = open_is(id) {
+                return Ok(Target::there(id, file));
             }
             if let Some(file) = to.file.filter(|file| holds(file, id)) {
                 tracing::info!(
                     "recorder: the take's project isn't open now, so it opens again for the take"
                 );
                 open_in(sessions, file)?;
-                return Ok(Target::there(id));
+                return Ok(Target::there(id, file));
             }
             tracing::warn!("recorder: the take's project is gone, so the take lands in a new one");
             (recording_name(to.today), FORMATS.to_vec())
@@ -101,7 +105,8 @@ pub(super) fn open_for(
     tracing::info!("recorder: a new project was made for the take");
     Ok(Target {
         id: snapshot.project.id,
-        made: Some(file),
+        file,
+        made: true,
     })
 }
 
@@ -124,9 +129,12 @@ pub(super) fn unmake(sessions: &ProjectSessionState, file: &Path) {
     }
 }
 
-/// The open project's id.
-fn open_id(sessions: &ProjectSessionState) -> Option<String> {
-    with_open(sessions, |open| Ok(open.document.project().id.clone())).ok()
+/// The open project's id and file.
+fn open_project(sessions: &ProjectSessionState) -> Option<(String, PathBuf)> {
+    with_open(sessions, |open| {
+        Ok((open.document.project().id.clone(), open.file.clone()))
+    })
+    .ok()
 }
 
 /// `file` is still project `id`'s.
