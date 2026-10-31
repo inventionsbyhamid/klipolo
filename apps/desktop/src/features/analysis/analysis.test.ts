@@ -136,6 +136,16 @@ describe('the store', () => {
     expect(useAnalysis.getState().estimate?.clips).toEqual(['a']);
   });
 
+  it('shows why nothing can pay yet, as the sentence to retry, and drops it when the next estimate has none', async () => {
+    const problem = "Klipolo's server is busy right now. Try again in a moment.";
+    bridge.estimate.mockResolvedValueOnce(estimate({ usd: 0, problem }));
+    await offerFor(['a', 'b']);
+    expect(useAnalysis.getState().error).toBe(problem);
+    bridge.estimate.mockResolvedValueOnce(estimate());
+    await offerFor(['a', 'b']);
+    expect(useAnalysis.getState().error).toBeNull();
+  });
+
   it('asks nothing when every clip is analysed', async () => {
     useAnalysis.setState({ states: { a: { state: 'done', approximate: false } }, estimate: estimate() });
     await offerFor(['a']);

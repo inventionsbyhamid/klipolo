@@ -79,21 +79,23 @@ let asked = 0;
 
 /**
  * The clips `assetIds` (the project's videos and sounds) as the banner offers them: the ones not analysed are
- * estimated; those cached load at once, at no cost (`analysis_start`), and the offer is for the rest.
+ * estimated; those cached load at once, at no cost (`analysis_start`), and the offer is for the rest. A new offer
+ * starts without the last one's sentence; when nothing can pay yet (the device isn't registered), the estimate's
+ * problem is the sentence, shown with Retry.
  */
 export async function offerFor(assetIds: string[]) {
   const { states } = useAnalysis.getState();
   const fresh = assetIds.filter((id) => stateOf(states, id).state === 'none');
   const ask = ++asked;
   if (fresh.length === 0) {
-    useAnalysis.setState({ estimate: null });
+    useAnalysis.setState({ estimate: null, error: null });
     return;
   }
-  useAnalysis.setState({ busy: true });
+  useAnalysis.setState({ busy: true, error: null });
   try {
     const estimate = await analysisBridge.estimate(fresh);
     if (ask !== asked) return;
-    useAnalysis.setState({ estimate, busy: false });
+    useAnalysis.setState({ estimate, busy: false, error: estimate.problem ?? null });
     if (estimate.cached.length > 0) await analysisBridge.start(estimate.cached).catch(() => undefined);
   } catch {
     if (ask === asked) useAnalysis.setState({ estimate: null, busy: false });
