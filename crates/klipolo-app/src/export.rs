@@ -12,8 +12,12 @@
 //! No Tauri types here: the commands in `commands/export.rs` are thin layers over it, and `tests/export_mac.rs` drives
 //! it with the real worker.
 
+mod captions;
 mod estimate;
+mod fonts;
 mod naming;
 
+pub use captions::export_speech;
 pub use estimate::{Estimate, apple_silicon, estimate};
+pub use fonts::{missing_fonts, refuse_missing};
 pub use naming::{format_word, plan_files};
