@@ -84,4 +84,15 @@ describe('export run', () => {
     expect(s.announcement).toBe('The disk is full. 9:16 was not saved.');
     expect(s.ready).toEqual([0]);
   });
+
+  it('progress is said at each quarter, never every frame', () => {
+    let s = run([started, progress(10, null)]);
+    expect(s.announcement).toBe('');
+    s = { ...s, ...applyEvent(s, progress(50, 20)) };
+    expect(s.announcement).toBe('25% exported.');
+    s = { ...s, ...applyEvent(s, progress(60, 18)) };
+    expect(s.announcement).toBe('25% exported.');
+    s = { ...s, ...applyEvent(s, progress(160, 4)) };
+    expect(s.announcement).toBe('75% exported.');
+  });
 });

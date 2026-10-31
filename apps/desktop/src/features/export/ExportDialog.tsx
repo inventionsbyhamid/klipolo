@@ -50,6 +50,7 @@ function viewOf(phase: string): View {
 function Dialog() {
   const view = useExport((s) => viewOf(s.phase));
   const announcement = useExport((s) => s.announcement);
+  const failed = useExport((s) => s.phase === 'failed');
   const root = useRef<HTMLDivElement>(null);
   const close = () => useExport.getState().setOpen(false);
 
@@ -102,9 +103,13 @@ function Dialog() {
         onKeyDown={onKeyDown}
       >
         {view === 'done' ? <ExportOutcome onClose={close} /> : <Working view={view} onClose={close} />}
-        {/* The one status region: mounted with the dialog, so what it says next is announced. */}
+        {/* Mounted with the dialog, so what they say next is announced: progress and results as a status, a failure as
+            an alert. */}
         <p role="status" className="sr-only">
-          {announcement}
+          {failed ? '' : announcement}
+        </p>
+        <p role="alert" className="sr-only">
+          {failed ? announcement : ''}
         </p>
       </div>
     </div>

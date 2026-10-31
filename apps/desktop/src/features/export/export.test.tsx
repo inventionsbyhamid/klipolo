@@ -77,6 +77,7 @@ const progress = (frame: number, etaS: number | null, totalFrames = 100): Export
   segmentsTotal: 1,
 });
 const status = () => screen.getByRole('status');
+const alert = () => screen.getByRole('alert');
 const dialog = () => screen.getByRole('dialog');
 
 function renderExport() {
@@ -248,7 +249,8 @@ describe('export dialog', () => {
       { type: 'failed', message: { code: 'exports.diskFull', params: {} } },
     );
     expect(await screen.findByText('The disk is full. 9:16 was not saved.', { selector: 'span' })).toBeInTheDocument();
-    expect(status()).toHaveTextContent('The disk is full. 9:16 was not saved.');
+    expect(alert()).toHaveTextContent('The disk is full. 9:16 was not saved.');
+    expect(status()).toBeEmptyDOMElement();
     expect(screen.getByText('Billing tutorial 16x9.mp4')).toBeInTheDocument();
     const again = screen.getByRole('button', { name: 'Try again' });
     expect(again).toHaveFocus();
@@ -295,6 +297,12 @@ describe('export dialog', () => {
     expect(done.text).toBe('Exported 1 video.');
     done.actions![0].run();
     expect(exporter.reveal).toHaveBeenCalledWith();
+  });
+
+  it('the run is said at each quarter while it exports', async () => {
+    await openAndExport();
+    emit(progress(30, 20));
+    expect(status()).toHaveTextContent('25% exported.');
   });
 
   it('Export is off until there is a video, and says why', () => {

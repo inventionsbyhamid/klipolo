@@ -125,8 +125,16 @@ export function applyEvent(s: ExportRun, e: ExportEvent): Partial<ExportRun> {
         totalFrames: e.totalFrames,
         segmentsTotal: e.segmentsTotal,
       };
-    case 'progress':
+    case 'progress': {
+      // Said at each quarter (progress is announced at 25 % steps, not every frame).
+      const was = Math.floor(exportPercent(s) / 25);
+      const now = Math.floor(exportPercent(e) / 25);
+      const quarter =
+        now > was && now < 4
+          ? { announcement: t({ id: 'export.announce.quarter', message: `${now * 25}% exported.` }) }
+          : {};
       return {
+        ...quarter,
         frame: e.frame,
         totalFrames: e.totalFrames,
         segmentsDone: e.segmentsDone,
@@ -135,6 +143,7 @@ export function applyEvent(s: ExportRun, e: ExportEvent): Partial<ExportRun> {
         // "Trying again" until the new attempt has measured its time left.
         retrying: s.retrying && e.etaS === null,
       };
+    }
     case 'finishing':
       return { finishing: true, etaS: null };
     case 'retrying':
