@@ -311,6 +311,35 @@ def test_after_apply_the_agent_reads_the_proposal(tmp_path):
     assert out.splitlines()[:2] == ["→ getProposal {}", "← applied"]
 
 
+def test_after_proposing_the_run_answers_getproposal_itself(tmp_path):
+    # Klipolo's texts say to call getProposal, but in the run that proposed, the person can't have decided yet.
+    waits = (
+        "The person hasn't decided yet, and this run can't wait for them. Tell them the cut waits for their Apply in "
+        "Klipolo, and stop."
+    )
+    meta = Meta(
+        response(call("keepOnly", {"ranges": [{"startSec": 61.2, "endSec": 91.0}]}, "call_1")),
+        response(call("getProposal", {}, "call_2")),
+        response(call("getProposal", {}, "call_3")),
+        response(call("getProposal", {}, "call_4")),
+        response(message("The teaser's cut waits for your Apply in Klipolo.")),
+    )
+    command, log = klipolo(tmp_path)
+    code, out, err = run(meta, command)
+    assert (code, err) == (0, "")
+    assert [entry["call"] for entry in calls_made(log)] == ["keepOnly"], "no getProposal reached Klipolo"
+    assert out == (
+        '→ keepOnly {"ranges": [{"startSec": 61.2, "endSec": 91.0}]}\n'
+        "← proposed, waits for Apply (152.6 s would go)\n"
+        + "→ getProposal {}\n← waits for Apply\n" * 3
+        + "\nThe teaser's cut waits for your Apply in Klipolo.\n\nCost: $0.008\n"
+    )
+    bodies = meta.bodies()
+    assert len(bodies) == 5
+    for body, call_id in zip(bodies[2:], ("call_2", "call_3", "call_4")):
+        assert body["input"][-1] == {"type": "function_call_output", "call_id": call_id, "output": waits}
+
+
 def test_klipolo_not_running_ends_the_run_with_the_bridges_own_sentence(tmp_path):
     meta = Meta(response(call("getContext", {}, "call_1"), usage=(6000, 0, 40)))
     command, log = klipolo(tmp_path, mode="off")
@@ -572,8 +601,8 @@ class Session:
 def run_call(session, name, arguments, schemas=None):
     console = agent.Console(io.StringIO(), io.StringIO())
     fc = agent.FunctionCall(name=name, call_id="call_1", arguments=arguments)
-    output, off = asyncio.run(agent.run_call(session, fc, schemas or {}, console))
-    return output, off, console.out.getvalue()
+    called = asyncio.run(agent.run_call(session, fc, schemas or {}, console))
+    return called.output, called.stop, console.out.getvalue()
 
 
 def test_an_mcp_error_goes_back_to_the_model():

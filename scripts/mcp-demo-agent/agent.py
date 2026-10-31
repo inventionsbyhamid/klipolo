@@ -38,7 +38,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, TextIO
+from typing import Any, NamedTuple, TextIO
 
 import anyio
 import httpx
@@ -87,6 +87,12 @@ UNREADABLE = "Meta sent an answer the agent could not read. Try again."
 NOT_AN_OBJECT = "The arguments were not a JSON object. Call the tool again with a JSON object."
 NOT_A_BRIDGE = "{exe} did not answer as Klipolo's MCP bridge. Pass --klipolo with a Klipolo that has it."
 STOPPED_ANSWERING = "Klipolo stopped answering. Check that it's open, then run the agent again."
+PROPOSAL_TOOL = "getProposal"
+# What a getProposal hears in the run that proposed (Klipolo's own texts say to ask it while the person decides).
+WAITS_FOR_APPLY = (
+    "The person hasn't decided yet, and this run can't wait for them. Tell them the cut waits for their Apply in "
+    "Klipolo, and stop."
+)
 # What the SDK raises once the bridge's pipes are closed.
 CLOSED = (anyio.ClosedResourceError, anyio.BrokenResourceError, anyio.EndOfStream)
 
@@ -533,9 +539,23 @@ def gone(error: McpError) -> bool:
     return closed or data.code == httpx.codes.REQUEST_TIMEOUT
 
 
-async def run_call(session: Any, call: FunctionCall, schemas: dict[str, Any], console: Console) -> tuple[str, bool]:
-    """Makes one call in Klipolo and prints it: what goes back to the model, and whether the run must end (Klipolo isn't
-    running, or stopped answering). A refusal goes back as Klipolo wrote it (its refusals are written for agents)."""
+class Called(NamedTuple):
+    """What came of one call."""
+
+    # What goes back to the model.
+    output: str
+    # The run must end: Klipolo isn't running, or stopped answering.
+    stop: bool = False
+    # Klipolo's `structuredContent.outcome` (`done`, `proposed`, `started`...), when it gave one.
+    outcome: str | None = None
+
+
+async def run_call(
+    session: Any, call: FunctionCall, schemas: dict[str, Any], console: Console, proposed: bool = False
+) -> Called:
+    """Makes one call in Klipolo and prints it. A refusal goes back as Klipolo wrote it (its refusals are written for
+    agents). Once this run has `proposed`, a `getProposal` is answered here: the person can't have decided yet, and
+    Klipolo's texts would have the model ask again and again."""
     try:
         arguments = json.loads(call.arguments) if call.arguments.strip() else {}
     except ValueError:
@@ -543,25 +563,30 @@ async def run_call(session: Any, call: FunctionCall, schemas: dict[str, Any], co
     if not isinstance(arguments, dict):
         console.say(f"→ {call.name} {shorten(call.arguments)}")
         console.say(f"← {NOT_AN_OBJECT}")
-        return NOT_AN_OBJECT, False
+        return Called(NOT_AN_OBJECT)
     if call.name in schemas:
         arguments = without_added_nulls(arguments, schemas[call.name])
     console.say(f"→ {call.name} {shorten(json.dumps(arguments, ensure_ascii=False))}")
+    if proposed and call.name == PROPOSAL_TOOL:
+        console.say("← waits for Apply")
+        return Called(WAITS_FOR_APPLY)
     try:
         result = await session.call_tool(call.name, arguments)
     except McpError as e:
         if gone(e):
             console.say(f"← {STOPPED_ANSWERING}")
-            return STOPPED_ANSWERING, True
+            return Called(STOPPED_ANSWERING, stop=True)
         said = e.error.message or "Klipolo refused the call."
         console.say(f"← {first_line(said)}")
-        return said, False
+        return Called(said)
     except CLOSED:
         console.say(f"← {STOPPED_ANSWERING}")
-        return STOPPED_ANSWERING, True
+        return Called(STOPPED_ANSWERING, stop=True)
     text = "\n".join(part.text for part in result.content if getattr(part, "type", None) == "text")
     console.say(f"← {outcome(result, text)}")
-    return text, bool(result.isError) and text.startswith(KLIPOLO_OFF)
+    structured = result.structuredContent if isinstance(result.structuredContent, dict) else {}
+    kind = structured.get("outcome") if isinstance(structured.get("outcome"), str) else None
+    return Called(text, stop=bool(result.isError) and text.startswith(KLIPOLO_OFF), outcome=kind)
 
 
 def klipolo_env() -> dict[str, str]:
@@ -684,6 +709,8 @@ async def converse(
     schemas = {t.name: t.inputSchema for t in listed.tools}
     instructions = instructions_for(hello.instructions)
     inputs = [user_message(request)]
+    # A call of this run left a proposal waiting for the person.
+    proposed = False
     timeout = httpx.Timeout(ANSWER_TIMEOUT_S, connect=CONNECT_TIMEOUT_S)
     headers = {"User-Agent": f"klipolo-mcp-demo-agent/{VERSION}"}
     async with httpx.AsyncClient(transport=transport, timeout=timeout, headers=headers) as http:
@@ -711,9 +738,10 @@ async def converse(
                 return 1
             inputs.extend(answer.replay)
             for call in answer.calls:
-                output, stop = await run_call(session, call, schemas, console)
-                inputs.append({"type": "function_call_output", "call_id": call.call_id, "output": output})
-                if stop:
+                called = await run_call(session, call, schemas, console, proposed=proposed)
+                proposed = proposed or called.outcome == "proposed"
+                inputs.append({"type": "function_call_output", "call_id": call.call_id, "output": called.output})
+                if called.stop:
                     return 1
     return 1
 
