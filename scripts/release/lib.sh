@@ -60,13 +60,15 @@ is_source_url() {
   [[ "$1" =~ $re ]]
 }
 
-# <notice> with its {{SOURCE_URL}} placeholder replaced by <url>, in place: fill_source_url <notice> <url>. The URL is
-# checked first, as bash would read a & in it as the text replaced.
+# <notice> with its {{SOURCE_URL}} placeholder replaced by <url>, in place: fill_source_url <notice> <url>. The
+# replacement is quoted in an assignment, so bash 5.2's patsub_replacement never reads a & in it, and bash 3.2 (which
+# keeps quotes in a replacement inside "${...}") takes it as plain text too.
 fill_source_url() {
   local placeholder='{{SOURCE_URL}}' text
   is_source_url "$2" || { echo "refused: not an https:// source code address: $2" >&2; return 1; }
   text=$(< "$1")
-  printf '%s\n' "${text//"$placeholder"/$2}" > "$1"
+  text=${text//"$placeholder"/"$2"}
+  printf '%s\n' "$text" > "$1"
 }
 
 # A release version: X.Y.Z, digits and dots only, as CFBundleShortVersionString and CFBundleVersion require.
