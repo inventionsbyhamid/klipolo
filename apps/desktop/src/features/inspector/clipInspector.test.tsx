@@ -133,6 +133,8 @@ describe('the clip card', () => {
     expect(await screen.findByRole('radio', { name: 'Fill' })).toHaveAttribute('aria-checked', 'true');
     // The crop follows the cursor, so there is no focus to set.
     expect(screen.queryByRole('slider', { name: 'Focus across' })).toBeNull();
+    // Its mic is its sound.
+    expect(screen.getByRole('slider', { name: 'Volume' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('radio', { name: 'Fit' }));
     await waitFor(() =>
       expect(apply).toHaveBeenCalledWith(

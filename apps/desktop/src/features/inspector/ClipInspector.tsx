@@ -5,20 +5,14 @@ import { IconButton } from '../../design/IconButton';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../../design/Menu';
 import { Icon } from '../../layout/Icon';
 import { clipOp } from '../../lib/ops';
-import { sourceLabel } from '../../lib/timeline';
-import { commitToggle } from '../../state/commit';
+import { clipHasSound, sourceLabel } from '../../lib/timeline';
 import { clipNow, editClip } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
-import { muteLabel } from '../preview';
 import { deleteBlock, duplicate } from '../timeline/commands';
-import { clipHasSound } from './clipOps';
-import { Field } from './fields';
 import { FramingField } from './FramingField';
 import { SpeedField } from './SpeedField';
-import { ToolSlider } from './ToolSlider';
-
-const percent = (v: number) => `${Math.round(v * 100)}%`;
+import { VolumeControls } from './VolumeControls';
 
 /**
  * The clip card: the inspector for a selected main-track clip, in the left column like the others. Its header has the
@@ -76,50 +70,20 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
       <div className="insp-body">
         <FramingField clip={clip} format={format} />
         <SpeedField speed={clip.speed} onPick={(speed) => void editClip('speed.undo', clip, { speed })} />
-        {clipHasSound(project, clip) && <VolumeField clip={clip} />}
+        {clipHasSound(project, clip) && (
+          <VolumeControls
+            volume={clip.volume}
+            noun="clip"
+            volumeOps={(volume) => [clipOp(clip, { volume })]}
+            mute={{
+              id: clip.id,
+              muted: clip.muted,
+              latest: () => clipNow(clip.id)?.muted ?? clip.muted,
+              ops: (muted) => [clipOp(clip, { muted })],
+            }}
+          />
+        )}
       </div>
     </aside>
-  );
-}
-
-/**
- * Volume (0 to 200%, committed on release; sound isn't dry-run) and Mute, its own switch, so the volume stays for when
- * it plays again. A press is decided as it goes in, after a change still on its way (`commitToggle`).
- */
-function VolumeField({ clip }: { clip: Clip }) {
-  const { t } = useLingui();
-  const volume = t({ id: 'volume.label', message: 'Volume' });
-  const mute = t({ id: 'volume.mute', message: 'Mute' });
-  return (
-    <Field label={volume}>
-      <div className="volume-field">
-        <ToolSlider
-          label={volume}
-          commitLabel="volume.undo"
-          value={clip.volume}
-          min={0}
-          max={2}
-          step={0.01}
-          format={percent}
-          preview={false}
-          ops={(v) => [clipOp(clip, { volume: v })]}
-        />
-        <IconButton
-          className="icon-btn-sm"
-          icon={<Icon name={clip.muted ? 'volume-off' : 'volume'} />}
-          label={mute}
-          tooltip={clip.muted ? t({ id: 'volume.unmute', message: 'Unmute' }) : mute}
-          active={clip.muted}
-          onClick={() =>
-            void commitToggle(
-              () => clipNow(clip.id)?.muted ?? clip.muted,
-              (on) => muteLabel(on, 'clip'),
-              (muted) => [clipOp(clip, { muted })],
-              { id: clip.id },
-            )
-          }
-        />
-      </div>
-    </Field>
   );
 }
