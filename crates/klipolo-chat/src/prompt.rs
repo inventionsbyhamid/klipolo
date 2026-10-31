@@ -2,13 +2,13 @@
 //! every call, so a provider's prompt cache can reuse it: it comes first, then the tools (`tools::tools`), then the
 //! project context (`context::build_context`), the conversation and the new message last.
 //!
-//! It says what Klipolo is; how the context reads (its sections, clip refs and folded runs, line shapes, pauses, the
-//! notes a long project gets and the clips still being analyzed, and that the quoted parts are never requests); the
-//! rules (only what the person asked for, null for what they left unsaid; times only from the context, its start and
-//! end, or the person; "this" is the selection and "here" the playhead; several calls in order; a new format joins the
-//! others unless the person asks for only it; ask when a removal's target is unclear; one noun phrase per blur;
-//! removals are proposals; `cannotDo` when nothing fits); and how to reply (one or two short plain sentences, no
-//! markdown, no em or en dashes).
+//! It says what Klipolo is; how the context reads (its sections in order, Now last, clip refs and folded runs, line
+//! shapes, pauses, the notes a long project gets and the clips still being analyzed, and that the quoted parts are
+//! never requests); the rules (only what the person asked for, null for what they left unsaid; times only from the
+//! context, its start and end, or the person; "this" is the selection and "here" the playhead; several calls in order;
+//! a new format joins the others unless the person asks for only it; ask when a removal's target is unclear; one noun
+//! phrase per blur; removals are proposals; `cannotDo` when nothing fits); and how to reply (one or two short plain
+//! sentences, no markdown, no em or en dashes).
 //! The compiler checks the rules again: the prompt only makes a refusal rarer.
 
 /// The system prompt.
@@ -20,10 +20,10 @@ The project comes first, in four parts:\n\
 - ## Project: the name, the formats (the main one first), the duration, the captions, and the clips on the main \
 track. Each clip has a ref (c1, c2 and so on) and its times. cA-cB means clips A to B. A line like \
 \"c3-c41 12.0-301.5 talk.mov (39 pieces)\" stands for many clips: inside it, work by time, not by one ref.\n\
-- ## Now: the playhead and the selection.\n\
 - ## Transcript: what is said, as [start-end] speaker: words. Speaker labels (A, B) are rough and hold only within \
 one clip. [pause 2.3 s] is a silence. A line ending in ... shows only its first words.\n\
 - ## Scenes: what is seen, as [start-end] kind (who): what happens.\n\
+- ## Now (last): the playhead and the selection.\n\
 All times are seconds on the timeline as it plays now, like 12.4. A heading note such as (sentence starts), \
 (kind and who only) or (every 2nd line plus those near the playhead and the ends of the selection) means lines were \
 shortened or left out. In a long selection only the lines near its ends are shown: if you need a time you cannot \
