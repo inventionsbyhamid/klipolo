@@ -39,6 +39,18 @@ describe('the preview’s header', () => {
     expect(safe).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('Show safe area reads off outside 9:16, with the guide on for 9:16', () => {
+    useUi.setState({ previewFormat: 'portrait', safeArea: 'all' });
+    renderWithProviders(<Preview />);
+    const safe = screen.getByRole('button', { name: 'Show safe area' });
+    expect(safe).toHaveAttribute('aria-pressed', 'true');
+    act(() => useUi.setState({ previewFormat: 'landscape' }));
+    expect(safe).toHaveAttribute('aria-pressed', 'false');
+    // Back in 9:16, the guide is on again.
+    act(() => useUi.setState({ previewFormat: 'portrait' }));
+    expect(safe).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('has no full screen button until full screen works', () => {
     renderWithProviders(<Preview />);
     expect(screen.queryByRole('button', { name: 'Full screen preview' })).toBeNull();

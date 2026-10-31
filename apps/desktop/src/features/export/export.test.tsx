@@ -274,8 +274,8 @@ describe('export dialog', () => {
       { type: 'fileReady', index: 0, path: landscape.path },
       { type: 'failed', message: { code: 'exports.diskFull', params: {} } },
     );
-    expect(await screen.findByText('The disk is full. Free up space, then try again. 9:16 was not saved.', { selector: 'span' })).toBeInTheDocument();
-    expect(alert()).toHaveTextContent('The disk is full. Free up space, then try again. 9:16 was not saved.');
+    expect(await screen.findByText('9:16 was not saved. The disk is full. Free up space, then try again.', { selector: 'span' })).toBeInTheDocument();
+    expect(alert()).toHaveTextContent('9:16 was not saved. The disk is full. Free up space, then try again.');
     expect(status()).toBeEmptyDOMElement();
     expect(screen.getByText('Billing tutorial 16x9.mp4')).toBeInTheDocument();
     const again = screen.getByRole('button', { name: 'Try again' });

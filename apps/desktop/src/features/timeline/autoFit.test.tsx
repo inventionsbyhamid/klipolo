@@ -2,7 +2,7 @@ import { act } from '@testing-library/react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Clip } from '../../bindings/Clip';
 import type { Snapshot } from '../../bindings/Snapshot';
-import { fixtureSnapshot } from '../../test/fixtures';
+import { fixtureSnapshot, titleItem } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 
 /*
@@ -57,6 +57,20 @@ function withClip(snapshot: Snapshot, id: string, seconds = 180): Snapshot {
   };
 }
 
+/** `snapshot` with a title on no clip, from 2 s to `endSeconds`, on its overlay track, one revision on. */
+function withLayer(snapshot: Snapshot, endSeconds: number): Snapshot {
+  const title = { ...titleItem, id: 'free', startUs: 2 * S, durationUs: (endSeconds - 2) * S, attach: null };
+  const { project, history } = snapshot;
+  const tracks = project.timeline.tracks.map((track) =>
+    track.kind === 'overlay' ? { ...track, items: [...track.items, title] } : track,
+  );
+  return {
+    ...snapshot,
+    project: { ...project, timeline: { ...project.timeline, tracks } },
+    history: { ...history, revision: history.revision + 1 },
+  };
+}
+
 const pps = () => useUi.getState().pxPerSecond;
 
 beforeEach(() => {
@@ -93,5 +107,25 @@ describe('the timeline’s zoom as clips come in', () => {
     expect(pps()).toBe(80);
     act(() => useProject.setState({ snapshot: withClip(useProject.getState().snapshot!, 'c1') }));
     expect(pps()).toBe(80);
+  });
+
+  it('a project with only layers fits them as it opens, and so does one opened after an empty project', async () => {
+    await act(() => useProject.getState().load(withLayer(empty('a'), 60)));
+    renderWithProviders(<Timeline />);
+    expect(pps()).toBeCloseTo(fit(60), 6);
+    // An empty project leaves the zoom (nothing to fit), and the next one with only layers fits.
+    await act(() => useProject.getState().load(empty('b')));
+    expect(pps()).toBeCloseTo(fit(60), 6);
+    await act(() => useProject.getState().load(withLayer(empty('c'), 120)));
+    expect(pps()).toBeCloseTo(fit(120), 6);
+  });
+
+  it('an empty project waits for its first clips: a layer added before them leaves the zoom', async () => {
+    await act(() => useProject.getState().load(empty()));
+    renderWithProviders(<Timeline />);
+    act(() => useProject.setState({ snapshot: withLayer(useProject.getState().snapshot!, 60) }));
+    expect(pps()).toBe(40);
+    act(() => useProject.setState({ snapshot: withClip(useProject.getState().snapshot!, 'c1') }));
+    expect(pps()).toBeCloseTo(fit(180), 6);
   });
 });

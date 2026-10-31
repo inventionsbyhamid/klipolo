@@ -104,14 +104,18 @@ export function notSaved(formats: FormatKind[]): string {
     : t({ id: 'export.failed.notSavedOne', message: `${list} was not saved.` });
 }
 
+/** A failure in words: which formats were not saved first, then why, which ends with what to do. */
+export function failedText(why: string, lost: FormatKind[]): string {
+  return [notSaved(lost), why].filter(Boolean).join(' ');
+}
+
 /** A run that failed: why, and which of its formats were not saved. */
 function failed(s: ExportRun, why: string): Partial<ExportRun> {
-  const lost = notSaved(unsavedFormats(s));
   return {
     ...stopped,
     phase: 'failed',
     message: why,
-    announcement: lost ? `${why} ${lost}` : why,
+    announcement: failedText(why, unsavedFormats(s)),
   };
 }
 
