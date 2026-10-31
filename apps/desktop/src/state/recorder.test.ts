@@ -567,7 +567,7 @@ describe('the take', () => {
     expect(phase()).toBe('saving');
     fake.emit(take, { ev: 'finished', session: take });
     expect(useToasts.getState().toasts.map((t) => t.text)).toEqual([
-      'The video encoder stopped, so the recording stopped and was saved.',
+      'The video encoder stopped, so the recording stopped and was saved. Press Record to try again.',
     ]);
     expect(rec().open).toBe(false);
     expect(rec().note).toBeNull();
