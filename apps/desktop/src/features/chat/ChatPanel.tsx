@@ -20,7 +20,7 @@ export const CHAT_BODY_ID = 'chat-body';
  * 56 px strip, never hidden: an Open button and the chat icon, with a red dot while a proposal waits. Folded, the panel
  * stays mounted (`hidden` and `inert`): a reply on its way still lands, and the announcer (outside the folded part)
  * still speaks. A fold with the keyboard inside puts it on the strip; Command K (`useUi.focusChat`) opens chat with the
- * cursor in the composer, and Command Enter applies the proposal that is open.
+ * cursor in the composer, and Command Enter (the editor's `apply-proposal`) applies the proposal that is open.
  */
 export function ChatPanel() {
   const { t } = useLingui();
@@ -47,18 +47,6 @@ export function ChatPanel() {
       focusComposer();
     }
   });
-  // Command Enter applies the proposal that is open.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey && e.key === 'Enter') || e.defaultPrevented) return;
-      const open = openProposal(useChat.getState().messages);
-      if (!open) return;
-      e.preventDefault();
-      void useChat.getState().apply(open.message.id);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
   const expand = () => {
     wantFocus.current = true;
     useChatPanel.getState().setCollapsed(false);

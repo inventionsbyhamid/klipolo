@@ -5,6 +5,7 @@ import { mockIPC } from '@tauri-apps/api/mocks';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { CodedError } from '../../bindings/CodedError';
 import { useAi } from '../../ai/aiStatus';
+import { useEditorShortcuts } from '../command-palette/useEditorShortcuts';
 import { useAnalysis } from '../../state/analysis';
 import { installChatBridge } from '../../bridge/chat';
 import { fakeChat, proposal, reply, type FakeChatScript } from '../../bridge/chatFake';
@@ -584,6 +585,32 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     ])
       expect(within(card).getByText(line)).toBeInTheDocument();
     expect(within(card).queryByText(/0\.0 s/)).toBeNull();
+  });
+
+  it('Command Enter applies the open proposal through the editor’s keys, but not while a dialog is open', async () => {
+    /** The editor's keys, as the app mounts them beside chat. */
+    function EditorKeys() {
+      useEditorShortcuts();
+      return null;
+    }
+    const fake = chat({ reply: (r) => reply(r.id, 'I found 3.', { proposal: cuts() }) });
+    renderWithProviders(
+      <>
+        <ChatPanel />
+        <EditorKeys />
+        <div role="dialog" aria-label="Settings">
+          <button type="button">Close</button>
+        </div>
+      </>,
+    );
+    await userEvent.type(message(), 'cut the pauses{Enter}');
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    screen.getByRole('button', { name: 'Close' }).focus();
+    await userEvent.keyboard('{Meta>}{Enter}{/Meta}');
+    expect(fake.applied).toEqual([]);
+    message().focus();
+    await userEvent.keyboard('{Meta>}{Enter}{/Meta}');
+    await waitFor(() => expect(fake.applied).toEqual(['p1']));
   });
 
   it('an empty chat says when the clips aren’t analysed yet, and while they are', () => {
