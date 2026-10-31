@@ -526,3 +526,32 @@ fn damaged_energies_are_refused_and_made_again_from_the_cached_sound() {
     }
     assert!(cached(&cache).iter().all(|n| !n.ends_with(".tmp")));
 }
+
+/// A cache whose files carry another build's magics is a miss: the next opening decodes the file again and writes them
+/// anew, with no error, and the sound, peaks and energies it writes read.
+#[test]
+fn a_cache_under_another_magic_is_decoded_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let wav = dir.path().join("voice.wav");
+    write_wav(&wav, 5);
+    let key = PcmKey {
+        path: wav.display().to_string(),
+    };
+    let cache = dir.path().join("cache");
+    PcmStore::new(cache.clone()).build(&key).unwrap();
+    let stem = crate::media::key::stem(&key.path, &crate::media::key::CacheKind::Pcm).unwrap();
+    let files = ["pcm", "peaks", "energy"].map(|ext| cache.join(format!("{stem}.{ext}")));
+    for file in &files {
+        let mut bytes = std::fs::read(file).unwrap();
+        bytes[..8].copy_from_slice(b"XXXXXXX1");
+        std::fs::write(file, &bytes).unwrap();
+    }
+    let next = PcmStore::new(cache.clone());
+    let pcm = next.build(&key).expect("decoded again, not an error");
+    assert!(pcm.is_complete());
+    assert!(next.energies(&key, &pcm).is_some());
+    assert!(super::peaks::info(&files[1]).is_some());
+    for file in &files {
+        assert_ne!(&std::fs::read(file).unwrap()[..8], b"XXXXXXX1");
+    }
+}
