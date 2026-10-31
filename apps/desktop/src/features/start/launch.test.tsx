@@ -33,8 +33,9 @@ function opened(name: string, opening: number): Snapshot {
 }
 
 /**
- * Rust as launch and the start screen see it: `open` is the project open now (none at launch), `rows` the library's
- * list; `holdApply`, when set, holds every edit's answer until it is called. Every command is kept in `heard`.
+ * Rust as launch, the start screen and the project menu see it: `open` is the project open now (none at launch),
+ * `rows` the library's list; `holdApply`, when set, holds every edit's answer until it is called. Every command is
+ * kept in `heard`.
  */
 const rust = {
   open: null as Snapshot | null,
@@ -141,14 +142,16 @@ describe('launch', () => {
     rust.rows = [row('Studio tour', Date.now() - 60_000)];
     await launch();
     await screen.findByRole('button', { name: 'Studio tour' });
-    // From the keyboard: Enter on the card.
+    // From the keyboard: Enter on the card. The card goes with the start screen, and the focus goes on to the
+    // project's name in the top bar.
     act(() => card('Studio tour').focus());
     await userEvent.keyboard('{Enter}');
     expect(await screen.findByRole('main', { name: 'Preview' })).toBeInTheDocument();
     expect(startScreen()).toBeNull();
     expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(rust.heard).toContain('project_open');
-    expect(within(topBar()).getByText('Studio tour')).toBeInTheDocument();
+    const name = within(topBar()).getByRole('button', { name: 'Studio tour' });
+    await waitFor(() => expect(name).toHaveFocus());
   });
 
   it('a_reload_of_the_page_shows_the_project_rust_has_open', async () => {
@@ -156,7 +159,37 @@ describe('launch', () => {
     await launch();
     expect(await screen.findByRole('main', { name: 'Preview' })).toBeInTheDocument();
     expect(startScreen()).toBeNull();
-    expect(within(topBar()).getByText('Kiln vlog')).toBeInTheDocument();
+    expect(within(topBar()).getByRole('button', { name: 'Kiln vlog' })).toBeInTheDocument();
     expect(rust.heard).not.toContain('projects_recent');
+  });
+
+  it('all_projects_saves_closes_and_shows_the_start_screen', async () => {
+    rust.open = opened('Studio tour', 1);
+    rust.rows = [row('Studio tour', Date.now() - 60_000)];
+    const { useProject } = await launch();
+    await screen.findByRole('main', { name: 'Preview' });
+
+    // An edit is on its way to Rust as All projects is chosen.
+    let land!: () => void;
+    rust.holdApply = new Promise((resolve) => (land = resolve));
+    const editing = useProject.getState().apply('editor.rename.undo', [{ type: 'rename', name: 'Renamed' }]);
+    await userEvent.click(within(topBar()).getByRole('button', { name: 'Studio tour' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'All projects' }));
+    // The close waits for the edit, so it is saved with the project.
+    await waitFor(() => expect(rust.heard).toContain('project_apply'));
+    expect(rust.heard).not.toContain('project_close');
+    rust.rows = [row('Studio tour', Date.now()), row('Older', Date.now() - 3_600_000)];
+    land();
+    await editing;
+
+    // Closed: the start screen, its list read again (the project just closed is there, with the time it was opened).
+    expect(await screen.findByRole('main', { name: 'Your projects' })).toBeInTheDocument();
+    const order = rust.heard.filter((cmd) => cmd === 'project_apply' || cmd === 'project_close');
+    expect(order).toEqual(['project_apply', 'project_close']);
+    expect(await screen.findByRole('button', { name: 'Older' })).toBeInTheDocument();
+    expect(rust.heard.filter((cmd) => cmd === 'projects_recent')).toHaveLength(1);
+    expect(editor()).toBeNull();
+    expect(useProject.getState().snapshot).toBeNull();
+    expect(within(topBar()).queryByRole('button', { name: /Undo/ })).toBeNull();
   });
 });

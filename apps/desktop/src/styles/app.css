@@ -378,6 +378,7 @@
   box-shadow: 0 0 0 1px var(--color-line);
 }
 
+/* The project's name: it opens the project menu. */
 .project {
   display: inline-flex;
   align-items: center;
@@ -386,6 +387,12 @@
   min-width: 0;
   padding: 0 var(--space-3) 0 var(--space-4);
   border-radius: var(--radius-md);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.project:hover,
+.project[data-state="open"] {
+  background: var(--color-bay-hover);
 }
 
 .project-name {

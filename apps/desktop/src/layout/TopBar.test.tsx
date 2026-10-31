@@ -1,15 +1,25 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Snapshot } from '../bindings/Snapshot';
 import { fixturePatch, fixtureSnapshot } from '../test/fixtures';
 
 vi.mock('../bridge/commands', () => ({
-  bridge: { apply: vi.fn(), undo: vi.fn(), redo: vi.fn(), snapshot: vi.fn() },
+  bridge: {
+    apply: vi.fn(),
+    undo: vi.fn(),
+    redo: vi.fn(),
+    snapshot: vi.fn(),
+    createProject: vi.fn(),
+    closeProject: vi.fn(),
+  },
 }));
+vi.mock('../bridge/projects', () => ({ projects: { recent: vi.fn(), reveal: vi.fn() } }));
 const { bridge } = await import('../bridge/commands');
+const { projects } = await import('../bridge/projects');
 const { useProject } = await import('../state/project');
 const { useSaving } = await import('../state/saving');
+const { useToasts } = await import('../state/toasts');
 const { TopBar } = await import('./TopBar');
 const { useExport } = await import('../state/export');
 
@@ -19,9 +29,19 @@ function emptySnapshot(): Snapshot {
   return { ...snapshot, project: { ...snapshot.project, timeline: { main: [], tracks: [] } } };
 }
 
+/** The project menu, opened from the project's name. */
+async function openMenu(name: string) {
+  await userEvent.click(screen.getByRole('button', { name }));
+  return screen.findByRole('menu');
+}
+
 beforeEach(() => {
   useProject.setState({ snapshot: null, pending: 0 });
   useSaving.setState({ failing: null, saved: null });
+  useToasts.setState({ toasts: [] });
+  vi.mocked(bridge.createProject).mockReset();
+  vi.mocked(bridge.closeProject).mockReset();
+  vi.mocked(projects.reveal).mockReset();
 });
 
 describe('TopBar', () => {
@@ -73,5 +93,61 @@ describe('TopBar', () => {
     useSaving.setState({ failing: "Your disk is full, so changes aren't being saved. Free up some space." });
     rerender(<TopBar />);
     expect(screen.getByText('Not saved').title).toMatch(/disk is full/);
+  });
+
+  it('the project name opens the project menu', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    render(<TopBar />);
+    const name = screen.getByRole('button', { name: 'Billing tutorial' });
+    expect(name).toHaveAttribute('aria-haspopup', 'menu');
+    expect(name.title).toBe('Billing tutorial');
+    const menu = await openMenu('Billing tutorial');
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'New project',
+      'All projects',
+      'Show in Finder',
+    ]);
+  });
+
+  it('project_menu_new_project_creates_and_opens_it', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    const made = emptySnapshot();
+    made.project = { ...made.project, id: 'new', name: 'Untitled project' };
+    vi.mocked(bridge.createProject).mockResolvedValue({ ...made, opening: 2 });
+    render(<TopBar />);
+    await userEvent.click(within(await openMenu('Billing tutorial')).getByRole('menuitem', { name: 'New project' }));
+    expect(bridge.createProject).toHaveBeenCalledWith('Untitled project', ['landscape', 'portrait', 'square']);
+    await waitFor(() => expect(useProject.getState().snapshot?.project.id).toBe('new'));
+    expect(screen.getByRole('button', { name: 'Untitled project' })).toBeInTheDocument();
+    expect(bridge.closeProject).not.toHaveBeenCalled();
+  });
+
+  it('all projects closes the project', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    vi.mocked(bridge.closeProject).mockResolvedValue(undefined);
+    render(<TopBar />);
+    await userEvent.click(within(await openMenu('Billing tutorial')).getByRole('menuitem', { name: 'All projects' }));
+    await waitFor(() => expect(useProject.getState().snapshot).toBeNull());
+    expect(bridge.closeProject).toHaveBeenCalledTimes(1);
+    // The bar is the start screen's now.
+    expect(screen.queryByRole('button', { name: 'Billing tutorial' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Export' })).toBeNull();
+  });
+
+  it('show in finder shows the project file, or says why it cannot', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    vi.mocked(projects.reveal).mockResolvedValueOnce(undefined);
+    render(<TopBar />);
+    await userEvent.click(within(await openMenu('Billing tutorial')).getByRole('menuitem', { name: 'Show in Finder' }));
+    expect(projects.reveal).toHaveBeenCalledTimes(1);
+    expect(useToasts.getState().toasts).toEqual([]);
+
+    vi.mocked(projects.reveal).mockRejectedValueOnce(new Error("This project's file isn't there any more."));
+    await userEvent.click(within(await openMenu('Billing tutorial')).getByRole('menuitem', { name: 'Show in Finder' }));
+    await waitFor(() =>
+      expect(useToasts.getState().toasts.map((toast) => toast.text)).toEqual([
+        "This project's file isn't there any more.",
+      ]),
+    );
   });
 });

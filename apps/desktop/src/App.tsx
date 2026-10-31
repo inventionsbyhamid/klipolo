@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { followAiStatus } from './ai/aiStatus';
 import { isCode } from './bridge/call';
 import { bridge } from './bridge/commands';
@@ -69,6 +69,22 @@ function Editor() {
 }
 
 /**
+ * The start screen, until a project opens. The card or button pressed from the keyboard goes with it, so the focus goes
+ * on to the project's name in the top bar, where the editor starts. (Its cleanup runs before the screen leaves the page:
+ * the focus is still in it.)
+ */
+function Start() {
+  useLayoutEffect(
+    () => () => {
+      if (!document.querySelector('.start-panel')?.contains(document.activeElement)) return;
+      queueMicrotask(() => document.querySelector<HTMLElement>('.topbar .project')?.focus());
+    },
+    [],
+  );
+  return <StartScreen />;
+}
+
+/**
  * The window: the start screen until a project opens, then the editor's layout.
  * The top bar, the dialogs and the toasts stay throughout.
  */
@@ -103,7 +119,7 @@ export function App() {
     <TooltipProvider>
       <div className={cn('app', !open && 'is-start')}>
         <TopBar />
-        {open ? <Editor /> : asked && <StartScreen />}
+        {open ? <Editor /> : asked && <Start />}
         <SettingsDialog />
         <ExportDialog />
         <Toaster />

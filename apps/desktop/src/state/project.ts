@@ -144,11 +144,27 @@ export const useProject = create<ProjectStore>((set, get) => {
     });
   }
 
+  /**
+   * Every edit made goes in before the project closes or another takes its place, as at quit: what is still settling,
+   * every commit on its way and every edit waiting its turn (a press's, a queued drop, an undo), each in its turn.
+   */
+  async function landEdits() {
+    flushBursts({ closing: true });
+    await commitsDone();
+  }
+
   return {
     snapshot: null,
     pending: 0,
-    create: (name, formats) => run(() => bridge.createProject(name, formats), true),
-    open: (path) => run(() => bridge.openProject(path), true),
+    // With no project open (the start screen) it goes at once, so a second press already finds it pending.
+    create: async (name, formats) => {
+      if (get().snapshot) await landEdits();
+      return run(() => bridge.createProject(name, formats), true);
+    },
+    open: async (path) => {
+      if (get().snapshot) await landEdits();
+      return run(() => bridge.openProject(path), true);
+    },
     load: (snapshot) => {
       if (get().snapshot?.project.id !== snapshot.project.id) return run(async () => snapshot, true);
       // As `adopt`: what is still settling goes first (Rust refuses it: it was built on the copy before), and it holds
@@ -166,10 +182,7 @@ export const useProject = create<ProjectStore>((set, get) => {
       }).finally(end);
     },
     close: async () => {
-      // Every edit made goes in before the project closes, as at quit: what is still settling, every commit on its way
-      // and every edit waiting its turn (a press's, a queued drop, an undo), each in its turn.
-      flushBursts({ closing: true });
-      await commitsDone();
+      await landEdits();
       await run(async () => {
         await bridge.closeProject();
         return null;
