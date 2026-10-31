@@ -78,10 +78,10 @@ impl Stills {
         if matches!(target, Target::Camera { .. } | Target::Portal { .. }) {
             return Err(PipeError::Unsupported);
         }
-        if !CGPreflightScreenCaptureAccess() {
-            return Err(PipeError::PermissionDenied);
-        }
         objc::ar_pool(|| {
+            if !CGPreflightScreenCaptureAccess() {
+                return Err(PipeError::PermissionDenied);
+            }
             let shot = self.through(target, |picked| {
                 let size = still_size(picked.pixels, width);
                 shoot(
