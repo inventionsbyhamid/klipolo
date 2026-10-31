@@ -1,5 +1,4 @@
 import type { Anchor } from '../../bindings/Anchor';
-import type { BoxN } from '../../bindings/BoxN';
 import type { FormatKind } from '../../bindings/FormatKind';
 import type { Layout } from '../../bindings/Layout';
 import type { Motion } from '../../bindings/Motion';
@@ -7,7 +6,7 @@ import type { TextStyle } from '../../bindings/TextStyle';
 import { builtinId } from '../../lib/contrib';
 import { layoutPatchFor } from '../../lib/geometry';
 import { anchorForRect, resolveRect } from '../../lib/layout';
-import { safeRect } from '../../lib/safeAreas';
+import { placedAt } from '../../lib/placement';
 
 /** How long an animation picked in the inspector runs (0.3 s), at most the layer's length. */
 export const ANIMATION_US = 300_000;
@@ -78,29 +77,8 @@ export function backdropStyle(style: TextStyle, backdrop: Backdrop): TextStyle {
   return { ...style, background: null, shadow: false };
 }
 
-/** Kept clear around a layer placed at a grid position: 4 % of the shorter side. */
-const MARGIN = 0.04;
-
-/**
- * The box `rect` (in `format`) moved to grid position `anchor`, `MARGIN` in from the edges (in 9:16, from the safe
- * area's edges), its size kept.
- */
-export function placedAt(rect: BoxN, anchor: Anchor, format: FormatKind, canvas: [number, number]): BoxN {
-  const [w, h] = canvas;
-  const short = Math.min(w, h);
-  const area = safeRect(format, 'all') ?? { x: 0, y: 0, w: 1, h: 1 };
-  const mx = (MARGIN * short) / w;
-  const my = (MARGIN * short) / h;
-  const left = area.x + mx;
-  const top = area.y + my;
-  const right = area.x + area.w - mx - rect.w;
-  const bottom = area.y + area.h - my - rect.h;
-  const col = anchor.endsWith('Left') ? 0 : anchor.endsWith('Right') ? 2 : 1;
-  const row = anchor.startsWith('top') ? 0 : anchor.startsWith('bottom') ? 2 : 1;
-  const x = col === 0 ? left : col === 2 ? right : area.x + (area.w - rect.w) / 2;
-  const y = row === 0 ? top : row === 2 ? bottom : area.y + (area.h - rect.h) / 2;
-  return { ...rect, x, y };
-}
+/** The Position grid's places (`placedAt`) live in `lib/placement`, which places a new video layer at one too. */
+export { placedAt };
 
 /** The layout placed at grid position `anchor` in `format` (an override in a format other than the primary). */
 export function positionedLayout(

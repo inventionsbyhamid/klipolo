@@ -1,3 +1,4 @@
+import type { Anchor } from '../bindings/Anchor';
 import type { Asset } from '../bindings/Asset';
 import type { BoxN } from '../bindings/BoxN';
 import type { FormatKind } from '../bindings/FormatKind';
@@ -30,19 +31,40 @@ export function imageRect(asset: Asset, cw: number, ch: number): BoxN {
   return { x: (1 - w) / 2, y: (1 - h) / 2, w, h };
 }
 
+/** Kept clear around a layer placed at a grid position: 4 % of the shorter side. */
+const MARGIN = 0.04;
+
+/**
+ * The box `rect` (in `format`) moved to grid position `anchor` (the inspector's Position grid), `MARGIN` in from the
+ * edges (in 9:16, from the safe area's edges), its size kept.
+ */
+export function placedAt(rect: BoxN, anchor: Anchor, format: FormatKind, canvas: [number, number]): BoxN {
+  const [w, h] = canvas;
+  const short = Math.min(w, h);
+  const area = safeRect(format, 'all') ?? { x: 0, y: 0, w: 1, h: 1 };
+  const mx = (MARGIN * short) / w;
+  const my = (MARGIN * short) / h;
+  const left = area.x + mx;
+  const top = area.y + my;
+  const right = area.x + area.w - mx - rect.w;
+  const bottom = area.y + area.h - my - rect.h;
+  const col = anchor.endsWith('Left') ? 0 : anchor.endsWith('Right') ? 2 : 1;
+  const row = anchor.startsWith('top') ? 0 : anchor.startsWith('bottom') ? 2 : 1;
+  const x = col === 0 ? left : col === 2 ? right : area.x + (area.w - rect.w) / 2;
+  const y = row === 0 ? top : row === 2 ? bottom : area.y + (area.h - rect.h) / 2;
+  return { ...rect, x, y };
+}
+
 /** A new video layer fits within this share of the frame's width and of its height. */
 const VIDEO_LAYER_MAX = 0.4;
-/** Kept clear between a new video layer and the edges: 4 % of the shorter side, as a layer placed on the grid. */
-const VIDEO_LAYER_MARGIN = 0.04;
 
 /**
  * A new video layer's box in `format`: the video's own shape, within 40 % of the frame's width and height (a video of
- * the frame's shape is 40 % wide), in the bottom right corner, `VIDEO_LAYER_MARGIN` in from the edges of what the apps
- * leave clear in 9:16 (the "all" safe area) and of the frame elsewhere. A video of unknown size gets the frame's shape.
+ * the frame's shape is 40 % wide), at the Position grid's Bottom right (`placedAt`: inside the safe area in 9:16). A
+ * video of unknown size gets the frame's shape.
  */
 export function videoLayerRect(asset: Asset, format: FormatKind): BoxN {
   const [cw, ch] = FORMAT_SIZE[format];
-  const area = safeRect(format, 'all') ?? { x: 0, y: 0, w: 1, h: 1 };
   const aspect = asset.width > 0 && asset.height > 0 ? asset.width / asset.height : cw / ch;
   let w = VIDEO_LAYER_MAX;
   let h = (w * cw) / (aspect * ch);
@@ -50,10 +72,7 @@ export function videoLayerRect(asset: Asset, format: FormatKind): BoxN {
     h = VIDEO_LAYER_MAX;
     w = (h * ch * aspect) / cw;
   }
-  const short = Math.min(cw, ch);
-  const right = area.x + area.w - (VIDEO_LAYER_MARGIN * short) / cw;
-  const bottom = area.y + area.h - (VIDEO_LAYER_MARGIN * short) / ch;
-  return { x: right - w, y: bottom - h, w, h };
+  return placedAt({ x: 0, y: 0, w, h }, 'bottomRight', format, FORMAT_SIZE[format]);
 }
 
 /**
