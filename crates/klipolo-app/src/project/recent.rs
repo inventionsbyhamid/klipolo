@@ -94,11 +94,13 @@ pub(crate) fn recent_in(
 const STAMPS_KEPT: usize = 50;
 
 /// Stamps `file` in `stamps` as opened at `now_ms` (again, if it was), keeping the `STAMPS_KEPT` latest; written
-/// atomically. The stamp is always the newest one: a millisecond after the newest other when the clock went back since
-/// that was written, so the project just opened lists first and is never the one let go. A file that doesn't read as
-/// stamps starts over; one that can't be read at all is left as it is, and the error is returned.
+/// atomically. The stamp is always the newest one, so the project just opened lists first and is never the one let go:
+/// stamps later than now come back to it first (`back_to`), and the new one is a millisecond after the newest other
+/// when that is now. A file that doesn't read as stamps starts over; one that can't be read at all is left as it is,
+/// and the error is returned.
 pub(super) fn stamp(stamps: &Path, file: &Path, now_ms: u64) -> io::Result<()> {
     let mut opened = read_stamps(stamps)?;
+    back_to(&mut opened, now_ms);
     let key = file.to_string_lossy().into_owned();
     let newest_other = opened
         .iter()
@@ -123,6 +125,22 @@ pub(super) fn stamp(stamps: &Path, file: &Path, now_ms: u64) -> io::Result<()> {
         fs::create_dir_all(dir)?;
     }
     write_atomic(stamps, &json, Durability::Ordered)
+}
+
+/// Stamps later than `now_ms` (written while the clock ran ahead, or before it was set back) come back to it, a
+/// millisecond apart in the order they were written, the latest at `now_ms`. Left ahead, one would list first until the
+/// clock passed it, and every stamp after it would be put after it, as far ahead.
+fn back_to(opened: &mut BTreeMap<String, u64>, now_ms: u64) {
+    let mut ahead: Vec<(u64, String)> = opened
+        .iter()
+        .filter(|&(_, &ms)| ms > now_ms)
+        .map(|(file, &ms)| (ms, file.clone()))
+        .collect();
+    ahead.sort_unstable();
+    let count = u64::try_from(ahead.len()).unwrap_or(u64::MAX);
+    for (place, (_, file)) in (1..).zip(ahead) {
+        opened.insert(file, now_ms.saturating_sub(count - place));
+    }
 }
 
 /// Now, in ms since the Unix epoch.

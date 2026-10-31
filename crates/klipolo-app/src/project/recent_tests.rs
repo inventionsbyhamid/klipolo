@@ -461,9 +461,10 @@ fn links_are_not_listed() {
     );
 }
 
-/// A project just opened is always stamped newest, even when the clock went back since the last stamp (it is then a
-/// millisecond after it), so it lists first and is never the stamp let go. A time later than now reads as now, and
-/// the list still keeps the order the times were written in.
+/// A project just opened is always stamped newest, so it lists first and is never the stamp let go: stamps written
+/// while the clock ran ahead (here, a day) come back to now first, a millisecond apart in the order they were written,
+/// and the new stamp is a millisecond after the latest. Until then a time later than now reads as now, and the list
+/// keeps the order the times were written in.
 #[test]
 fn a_stamp_is_always_the_newest_and_future_times_read_as_now() {
     let dir = tempfile::tempdir().unwrap();
@@ -473,11 +474,12 @@ fn a_stamp_is_always_the_newest_and_future_times_read_as_now() {
         &Project::new("Opened while the clock ran ahead"),
         1_000,
     );
+    let before = saved(&library, &Project::new("Opened just before it"), 1_000);
     let after = saved(&library, &Project::new("Opened after"), 1_000);
     let now = now_ms();
     let tomorrow = now + 86_400_000;
-    // 49 projects opened "tomorrow" too (no longer in the library), a millisecond apart, before the one ahead.
-    let others: Vec<PathBuf> = (0..49)
+    // 48 projects opened "tomorrow" too (no longer in the library), a millisecond apart, before the two above.
+    let others: Vec<PathBuf> = (0..48)
         .map(|n| dir.path().join(format!("Moved {n:02}.klipolo")))
         .collect();
     let mut opened: Vec<(&Path, u64)> = others
@@ -485,28 +487,86 @@ fn a_stamp_is_always_the_newest_and_future_times_read_as_now() {
         .zip(tomorrow - 100..)
         .map(|(file, ms)| (file.as_path(), ms))
         .collect();
-    opened.push((&ahead, tomorrow));
+    opened.extend([
+        (before.as_path(), tomorrow - 1),
+        (ahead.as_path(), tomorrow),
+    ]);
     stamped(&stamps, &opened);
-
-    stamp(&stamps, &after, now).unwrap();
-    let written = on_disk(&stamps);
-    assert_eq!(written.len(), 50);
-    assert_eq!(written[&key(&after)], tomorrow + 1);
-    assert!(
-        !written.contains_key(&key(&others[0])),
-        "the oldest stamp went, not the new one"
-    );
 
     let rows = recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap();
     assert_eq!(
         rows.iter().map(|row| row.name.as_str()).collect::<Vec<_>>(),
-        ["Opened after", "Opened while the clock ran ahead"]
+        [
+            "Opened while the clock ran ahead",
+            "Opened just before it",
+            "Opened after"
+        ]
     );
     let read_at = now_ms();
     assert!(
-        rows.iter()
+        rows[..2]
+            .iter()
             .all(|row| now <= row.opened_ms && row.opened_ms <= read_at),
         "a time later than now reads as now"
+    );
+
+    stamp(&stamps, &after, now).unwrap();
+    let written = on_disk(&stamps);
+    assert_eq!(written.len(), 50);
+    assert_eq!(
+        [
+            written[&key(&others[1])],
+            written[&key(&before)],
+            written[&key(&ahead)],
+            written[&key(&after)]
+        ],
+        [now - 48, now - 1, now, now + 1],
+        "back to now in their order, and the new stamp after them"
+    );
+    assert!(
+        !written.contains_key(&key(&others[0])),
+        "the oldest stamp went, not the new one"
+    );
+    assert_eq!(
+        names(&recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap())
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>(),
+        [
+            "Opened after",
+            "Opened while the clock ran ahead",
+            "Opened just before it"
+        ]
+    );
+}
+
+/// A stamp written while the clock ran far ahead (a year) doesn't drag the stamps after it ahead with it: once it is
+/// back to now, each later open is stamped at its own time.
+#[test]
+fn a_stamp_ahead_of_the_clock_drags_no_later_stamp() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    let ahead = saved(&library, &Project::new("Ahead"), 1_000);
+    let first = saved(&library, &Project::new("First"), 1_000);
+    let second = saved(&library, &Project::new("Second"), 1_000);
+    // A fixed clock in the past, so the list shows every time as written.
+    let now: u64 = 1_700_000_000_000;
+    stamped(&stamps, &[(&ahead, now + 365 * 86_400_000)]);
+
+    stamp(&stamps, &first, now).unwrap();
+    stamp(&stamps, &second, now + 60_000).unwrap();
+    let written = on_disk(&stamps);
+    assert_eq!(
+        [
+            written[&key(&ahead)],
+            written[&key(&first)],
+            written[&key(&second)]
+        ],
+        [now, now + 1, now + 60_000]
+    );
+    assert_eq!(
+        names(&recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap()),
+        [("Second", now + 60_000), ("First", now + 1), ("Ahead", now)]
     );
 }
 
