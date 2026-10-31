@@ -150,7 +150,7 @@ export function MediaList({ tab }: { tab: LibraryTab }) {
           <p>
             {t({
               id: 'library.clips.emptyText',
-              message: 'Clips you add show up here. After analysis, Klipolo lists the best moments under them.',
+              message: 'Clips you add show up here. Ask chat for the best moments once Klipolo has listened to them.',
             })}
           </p>
         </div>

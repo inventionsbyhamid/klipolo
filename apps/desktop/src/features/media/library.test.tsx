@@ -99,6 +99,23 @@ describe('the Library', () => {
     expect(useUi.getState().libraryTab).toBe('clips');
   });
 
+  it('with no clips, the Clips tab says what shows there and where the best moments come from', () => {
+    const snapshot = useProject.getState().snapshot!;
+    snapshot.project.assets = snapshot.project.assets.filter((a) => a.kind !== 'video');
+    snapshot.project.recordings = [];
+    snapshot.project.timeline.main = [];
+    renderWithProviders(<Library />);
+    const panel = screen.getByRole('tabpanel');
+    expect(within(panel).getByText('No clips yet')).toBeInTheDocument();
+    expect(
+      within(panel).getByText(
+        'Clips you add show up here. Ask chat for the best moments once Klipolo has listened to them.',
+      ),
+    ).toBeInTheDocument();
+    // Nothing lists moments under the clips: the tab never says it does.
+    expect(panel).not.toHaveTextContent('lists the best moments');
+  });
+
   it('Music lists your songs, then the pack’s beds; the "+" adds music under the whole video', async () => {
     useUi.setState({ libraryTab: 'music' });
     renderWithProviders(<Library />);
