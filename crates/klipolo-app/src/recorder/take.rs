@@ -54,6 +54,8 @@ pub struct Recorder {
     /// A take is the slot's (`active`), mirrored so it is read without the slot's lock, which covers file and process
     /// work.
     pub(super) active: AtomicBool,
+    /// The slot's take's id, mirrored with `active` (quitting reads it on the main thread).
+    pub(super) current: Mutex<Option<String>>,
     /// Quitting during a take (`quitting`): the take waited for, and one no longer waited for.
     pub(super) quit: Mutex<Quit>,
 }
@@ -65,13 +67,16 @@ impl Recorder {
             slot: Mutex::default(),
             handled: AtomicU64::new(0),
             active: AtomicBool::new(false),
+            current: Mutex::default(),
             quit: Mutex::default(),
         })
     }
 
-    /// `active` follows the slot's take, and the engine's background media work waits while there is one; called
-    /// wherever the take is placed or let go, under the lock, so a hold and its release never cross.
+    /// `active` and `current` follow the slot's take, and the engine's background media work waits while there is one;
+    /// called wherever the take is placed or let go, under the lock, so a hold and its release never cross.
     pub(super) fn sync_active(&self, slot: &Slot) {
+        *self.current.lock().unwrap_or_else(PoisonError::into_inner) =
+            slot.take.as_ref().map(|t| t.cfg.id.clone());
         let active = slot.take.is_some();
         if self.active.swap(active, Ordering::SeqCst) != active {
             self.env.sink.hold_media(active);
@@ -191,9 +196,9 @@ impl Recorder {
         })
     }
 
-    /// The take's id while there is one, armed through saving.
+    /// The take's id while there is one, armed through saving. Read without the slot's lock.
     pub fn take_id(&self) -> Option<String> {
-        self.lock().take.as_ref().map(|t| t.cfg.id.clone())
+        (self.current.lock().unwrap_or_else(PoisonError::into_inner)).clone()
     }
 
     /// A worker launched with `args`, numbered.

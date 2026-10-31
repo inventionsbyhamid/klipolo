@@ -5,6 +5,10 @@
 //!
 //! The wait belongs to that take: a quit something else holds on to (an export's "Keep exporting") leaves the next take
 //! to hold the next quit. A second quit while it waits is held too; the one exit follows the landing.
+//!
+//! The exit request comes on the main thread, which never waits for the recorder's lock (it covers file work: a
+//! journal read on a drive that stopped answering): the hold is decided from the take's mirrored id, and Stop goes out
+//! at once when the lock is free, else from the wait's own thread.
 
 use std::sync::{Arc, PoisonError};
 use std::time::Duration;
@@ -49,13 +53,16 @@ impl Recorder {
             take = id,
             "recorder: Klipolo quits during a take, so it is stopped and lands first"
         );
-        self.stop_running();
+        let stopped = self.stop_running_if_free();
         let deadline = self.now_ms().saturating_add(QUIT_WAIT_MS);
         let me = self.clone();
         let waiting = id.clone();
         let spawned = std::thread::Builder::new()
             .name("klipolo-record-quit".into())
             .spawn(move || {
+                if !stopped {
+                    me.stop_running();
+                }
                 while me.take_id().as_ref() == Some(&waiting) && me.now_ms() < deadline {
                     std::thread::sleep(LOOK);
                 }

@@ -4,7 +4,7 @@
 //! captures.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use klipolo_capture::protocol::{Command, Event};
@@ -126,6 +126,48 @@ fn quitting_waits_30_s_at_most_for_the_take() {
     rec.launch.emit(state(Armed));
     rec.settle();
     assert!(rec.state.hold_quit(Box::new(|| ())));
+}
+
+/// Quitting never waits for the recorder's lock, which covers file work: with it held (the take's journal read on a
+/// drive that stopped answering), the exit is still held at once, and Stop goes out once the lock is free.
+#[test]
+fn quitting_never_waits_for_the_recorders_lock() {
+    let rec = fixture();
+    rec.arm(options_screen()).unwrap();
+    rec.send(Command::Start).unwrap();
+    rec.launch.emit(state(Recording));
+    rec.settle();
+    let (held_tx, held) = mpsc::channel();
+    let (free, free_rx) = mpsc::channel::<()>();
+    let recorder = rec.rec().clone();
+    let holder = std::thread::spawn(move || {
+        let _slot = recorder.lock();
+        held_tx.send(()).unwrap();
+        let _ = free_rx.recv();
+    });
+    held.recv().unwrap();
+    let exited = Arc::new(AtomicBool::new(false));
+    let flag = exited.clone();
+    let state = &rec.state;
+    let answered = std::thread::scope(|s| {
+        let (tx, rx) = mpsc::channel();
+        s.spawn(move || {
+            let held = state.hold_quit(Box::new(move || flag.store(true, Ordering::SeqCst)));
+            let _ = tx.send(held);
+        });
+        let answered = rx.recv_timeout(Duration::from_secs(1));
+        free.send(()).unwrap();
+        answered
+    });
+    holder.join().unwrap();
+    assert_eq!(answered, Ok(true), "held at once, without the lock");
+    assert!(wait_until(|| rec
+        .launch
+        .commands()
+        .contains(&Command::Stop)));
+    assert!(!exited.load(Ordering::SeqCst), "waiting for the take");
+    rec.move_clock_ms(QUIT_WAIT_MS);
+    assert!(wait_until(|| exited.load(Ordering::SeqCst)), "30 s: exits");
 }
 
 /// No take, a take that has ended, or a test run: quitting goes straight ahead.
