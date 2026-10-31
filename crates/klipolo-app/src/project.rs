@@ -41,8 +41,6 @@ pub(crate) use session::opened;
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::watch;
 
-use crate::commands::analysis::AnalysisHandle;
-
 /// A project file's extension: `~/Movies/Klipolo/<name>.klipolo`.
 pub(crate) const PROJECT_EXTENSION: &str = "klipolo";
 /// How long closing, switching or quitting waits for the last save.
@@ -103,6 +101,8 @@ fn set_open(state: &ProjectSessionState, open: Option<OpenProject>) -> Result<u6
     if guard.is_some() {
         state.flush().map_err(|e| Said::Text(e.to_string()))?;
     }
+    // The switch is sure now (the old project saved, the new one read): analysis lets the old project go.
+    state.switching();
     if let Some(open) = &open {
         state.remember_last(&open.file);
     }
@@ -136,15 +136,13 @@ pub(crate) fn allow_assets(app: &AppHandle, project: &Project) {
 }
 
 /// A new project named `name` (the first format is its primary), saved in the library and opened. The open project's
-/// analysis stops first (`AnalysisState::project_changed`).
+/// analysis stops once the switch is sure (`ProjectSessionState::on_switch`).
 #[tauri::command(async)]
 pub fn project_create(
     state: State<'_, ProjectSessionState>,
-    analysis: State<'_, AnalysisHandle>,
     name: String,
     formats: Vec<FormatKind>,
 ) -> Result<Snapshot, Said> {
-    analysis.project_changed();
     create_in(&state, &library_dir()?, new_project(&name, formats))
 }
 
@@ -153,10 +151,8 @@ pub fn project_create(
 pub fn project_open(
     app: AppHandle,
     state: State<'_, ProjectSessionState>,
-    analysis: State<'_, AnalysisHandle>,
     path: String,
 ) -> Result<Snapshot, Said> {
-    analysis.project_changed();
     let snapshot = open_in(&state, Path::new(&path))?;
     allow_assets(&app, &snapshot.project);
     Ok(snapshot)
@@ -164,11 +160,7 @@ pub fn project_open(
 
 /// Closes the open project once its edits are saved; its analysis stops.
 #[tauri::command(async)]
-pub fn project_close(
-    state: State<'_, ProjectSessionState>,
-    analysis: State<'_, AnalysisHandle>,
-) -> Result<(), Said> {
-    analysis.project_changed();
+pub fn project_close(state: State<'_, ProjectSessionState>) -> Result<(), Said> {
     set_open(&state, None).map(|_| ())
 }
 

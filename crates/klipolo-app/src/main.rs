@@ -62,6 +62,10 @@ fn main() {
             let sounds = app.state::<EngineState>().sounds.clone();
             let analysis =
                 commands::analysis::load(app.handle(), support.as_deref(), credentials, sounds);
+            // Another project opening (or this one closing) stops analysis, once the switch is sure.
+            let stopping = analysis.clone();
+            app.state::<ProjectSessionState>()
+                .on_switch(Arc::new(move || stopping.project_changed()));
             app.manage(analysis);
             Ok(())
         })

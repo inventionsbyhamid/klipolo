@@ -18,7 +18,13 @@ pub struct ProjectSessionState {
     last: Mutex<Option<PathBuf>>,
     /// What was said in the clips (analysis), sent with every publish.
     speech: Mutex<Arc<Speech>>,
+    /// Told when the open project is about to change (another opens, a new one, or it closes), once the change is sure:
+    /// the old project is saved and the new one read. Analysis stops and forgets the old project's clips here.
+    on_switch: Mutex<Option<SwitchHook>>,
 }
+
+/// What `ProjectSessionState::on_switch` calls.
+pub(crate) type SwitchHook = Arc<dyn Fn() + Send + Sync>;
 
 impl Default for ProjectSessionState {
     fn default() -> Self {
@@ -35,6 +41,28 @@ impl ProjectSessionState {
             saver,
             last: Mutex::default(),
             speech: Mutex::default(),
+            on_switch: Mutex::default(),
+        }
+    }
+
+    /// `hook` is called whenever the open project changes, after the old one is saved and before the new one is
+    /// published (`set_open`); never for a create or open that failed.
+    pub(crate) fn on_switch(&self, hook: SwitchHook) {
+        *self
+            .on_switch
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(hook);
+    }
+
+    /// The open project is changing: tells the hook.
+    pub(super) fn switching(&self) {
+        let hook = self
+            .on_switch
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        if let Some(hook) = hook {
+            hook();
         }
     }
 
