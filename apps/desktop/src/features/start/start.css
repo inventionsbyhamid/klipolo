@@ -1,0 +1,175 @@
+/* The start screen: one panel under the top bar, holding a column of your projects. Tokens only. */
+
+.start-panel {
+  margin: 0 var(--gutter) var(--gutter);
+  overflow-y: auto;
+}
+
+.start {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: var(--space-9);
+}
+
+.start-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  /* As tall with its buttons as without them, so the title stays put from one state to the next. */
+  min-height: var(--hit-comfort);
+  margin-bottom: var(--space-8);
+}
+
+.start-title {
+  word-spacing: 0.08em;
+  letter-spacing: var(--tracking-display);
+  font-size: var(--text-2xl);
+  line-height: var(--lh-2xl);
+  font-weight: var(--weight-display);
+  font-stretch: var(--wdth-display);
+}
+
+.start-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+}
+
+/* ---------- Cards ---------- */
+
+.start-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(208px, 1fr));
+  gap: var(--space-6);
+  /* Out by the cards' padding, so their pictures line up with the title and the buttons. */
+  margin: 0 calc(-1 * var(--space-4));
+  padding: 0;
+  list-style: none;
+}
+
+.start-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  text-align: left;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.start-card:hover {
+  background: var(--color-bay-hover);
+}
+
+.start-pic {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  margin-bottom: var(--space-4);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-clip-deep);
+  color: var(--color-clip-2);
+}
+
+.start-pic .ico {
+  width: 32px;
+  height: 32px;
+}
+
+/* Tile 0 of the thumbnail sprite, whole and centred (its size and the sheet come from the card). */
+.start-tile {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  background-repeat: no-repeat;
+}
+
+.start-name {
+  overflow: hidden;
+  font-size: var(--text-md);
+  line-height: var(--lh-md);
+  font-weight: var(--weight-strong);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.start-meta {
+  overflow: hidden;
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Loading, failed, empty ---------- */
+
+.start-note,
+.start-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  padding: var(--space-11) 0 var(--space-12);
+  color: var(--color-ink-soft);
+  text-align: center;
+}
+
+.start-note[role="status"] {
+  flex-direction: row;
+  gap: var(--space-4);
+}
+
+.start-said {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  max-width: 44ch;
+  text-align: left;
+}
+
+.start-empty {
+  gap: var(--space-5);
+}
+
+.start-empty p {
+  max-width: 40ch;
+}
+
+.start-empty .start-actions {
+  justify-content: center;
+  margin-top: var(--space-4);
+}
+
+.start-empty .start-title {
+  color: var(--color-ink);
+}
+
+/* Spinners keep turning under reduced motion: they mean "working". */
+.start .spinner {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 2px solid var(--color-paper-track);
+  border-top-color: var(--color-paper);
+  border-radius: 50%;
+  animation: start-spin 0.9s linear infinite;
+}
+
+@keyframes start-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
