@@ -58,11 +58,39 @@ pub fn pieces(keys: &[Key], gap_us: Us) -> Vec<(Us, Us)> {
     out
 }
 
+/// What a take's auto zoom adds over `span`, the zooms already there being `taken`: the pieces of `auto_plan`'s plan,
+/// the last ending one move out after its last hold when that is sooner and keeps the take's path
+/// (`out_after_hold`), less any that overlap `taken` (as `auto_spans`). O(n log n) in the facts in the span, for the
+/// take's plan and the last piece's own.
+pub fn take_spans(
+    facts: &TimelineFacts,
+    using: &[FocusKind],
+    span: (Us, Us),
+    taken: &[(Us, Us)],
+    rules: Rules,
+) -> Vec<(Us, Us)> {
+    let plan = auto_plan(facts, using, span, rules);
+    let mut spans = pieces(plan.keys(), rules.out_gap_us);
+    if let Some(last) = spans.last_mut()
+        && let Some(out) = out_after_hold(&plan, last.1, rules.out_gap_us)
+    {
+        let own = auto_plan(facts, using, (last.0, out[1].at), rules);
+        let before = (plan.keys().iter()).filter(|k| (last.0..out[0].at).contains(&k.at));
+        if own.keys().iter().eq(before.chain(&out)) {
+            last.1 = out[1].at;
+        }
+    }
+    free_of(spans, taken)
+}
+
 /// The plan's pieces (`pieces` at `gap_us`) of some length that overlap none of `taken` (the zooms already there, in
-/// any order; one that only touches a piece leaves it), in time order as the keys are. The last ends one move out
-/// after its last hold when the take goes on for at least `gap_us` after that (`out_after_hold`). O((pieces + taken)
-/// log taken).
+/// any order; one that only touches a piece leaves it), in time order as the keys are. O((pieces + taken) log taken).
 pub fn auto_spans(plan: &Plan, taken: &[(Us, Us)], gap_us: Us) -> Vec<(Us, Us)> {
+    free_of(pieces(plan.keys(), gap_us), taken)
+}
+
+/// `spans` of some length that overlap none of `taken`, in their order. O((spans + taken) log taken).
+fn free_of(spans: Vec<(Us, Us)>, taken: &[(Us, Us)]) -> Vec<(Us, Us)> {
     let mut taken: Vec<(Us, Us)> = taken.iter().copied().filter(|t| t.0 < t.1).collect();
     taken.sort_unstable();
     // The furthest end among the spans starting up to each, so an overlap is one binary search.
@@ -76,34 +104,40 @@ pub fn auto_spans(plan: &Plan, taken: &[(Us, Us)], gap_us: Us) -> Vec<(Us, Us)> 
         let n = taken.partition_point(|t| t.0 < b);
         a < b && (n == 0 || reach[n - 1] <= a)
     };
-    let mut out = pieces(plan.keys(), gap_us);
-    if let Some(last) = out.last_mut() {
-        last.1 = out_after_hold(plan, last.1, gap_us);
-    }
-    out.into_iter().filter(free).collect()
+    spans.into_iter().filter(free).collect()
 }
 
-/// Where the last piece, ending at `end`, ends instead. The camera holds its last shot as long as it can, so its move
-/// out arrives at the span's end: an item ending there would keep the zoom on through the rest of the take. Moved to
-/// start as that shot's hold ends, the move arrives one move later; that is the end when the whole frame then rests at
-/// least `gap_us` before `end`, as the camera zooms out between two shots that far apart. Planned on its own, as the
-/// engine plans an item, the shorter piece takes the same path up to that hold's end and zooms out from there.
-fn out_after_hold(plan: &Plan, end: Us, gap_us: Us) -> Us {
+/// The last piece, ending at `end`, ended sooner: its last two keys with the move out starting as the last shot's
+/// hold ends. The camera holds its last shot as long as it can, so its move out arrives at the span's end, and an item
+/// ending there would keep the zoom on through the rest of the take. None when the move already starts as the hold
+/// ends, or when the whole frame would then rest less than `gap_us` before `end` (the camera zooms out between two
+/// shots only that far apart).
+///
+/// Planned on its own, as the engine plans an item, the shorter piece usually takes the same path up to that hold's
+/// end and then this move out. Not always: an action kept on screen (a rest, under `CLICKS`) that starts during the
+/// sooner move out is checked against a different path, and the item's own camera may widen or drop its shot. So
+/// `take_spans` keeps the shorter end only when the piece's own plan has exactly these keys.
+fn out_after_hold(plan: &Plan, end: Us, gap_us: Us) -> Option<[Key; 2]> {
     let (keys, Some(shot)) = (plan.keys(), plan.shots().last()) else {
-        return end;
+        return None;
     };
     let [.., out, last] = keys else {
-        return end;
+        return None;
     };
     if !out.moving || last.at != end || out.at <= shot.to {
-        return end;
+        return None;
     }
     let sooner = shot.to.saturating_add(last.at - out.at);
-    if end.saturating_sub(sooner) >= gap_us {
-        sooner
-    } else {
-        end
-    }
+    (end.saturating_sub(sooner) >= gap_us).then_some([
+        Key {
+            at: shot.to,
+            ..*out
+        },
+        Key {
+            at: sooner,
+            ..*last
+        },
+    ])
 }
 
 /// One Auto zoom item per span, each attached to the clip under it on the first zoom track with room: the whole
