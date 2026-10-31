@@ -219,11 +219,11 @@ impl RecorderState {
         permissions::open_privacy(page, open)
     }
 
-    /// "Reopen Klipolo": refused while an export runs (`exporting`) or during a take; else the project is saved
-    /// (`flush`), then Klipolo `restart`s. No take arms meanwhile.
+    /// "Reopen Klipolo": refused while an export runs (`exporting`, before and after the save) or during a take; else
+    /// the project is saved (`flush`), then Klipolo `restart`s. No take arms meanwhile.
     pub(super) fn reopen(
         &self,
-        exporting: bool,
+        exporting: &dyn Fn() -> bool,
         flush: impl FnOnce() -> Result<(), Said>,
         restart: impl FnOnce(),
     ) -> Result<(), Said> {

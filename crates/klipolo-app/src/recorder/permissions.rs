@@ -52,22 +52,32 @@ pub(super) fn open_privacy(page: PrivacyPage, open: Open<'_>) -> Result<(), Code
     open(privacy_url(page)).map_err(|e| words::settings_didnt_open(&e))
 }
 
-/// "Reopen Klipolo": refused while an export runs (`exporting`: `capture.permission.reopenExporting`) or `recorder`
-/// has a take, armed through saving (`capture.busy`). Otherwise no take arms from now on, the project is saved
-/// (`flush`; a failure keeps Klipolo open and says why, and takes arm again), the reopen is remembered in `files`, and
-/// Klipolo starts again (`restart`).
+/// "Reopen Klipolo": refused while an export runs (`exporting`: `capture.permission.reopenExporting`, asked again once
+/// the project is saved, as one may start meanwhile) or `recorder` has a take, armed through saving (`capture.busy`).
+/// Otherwise no take arms from now on, the project is saved (`flush`; a failure keeps Klipolo open and says why, and
+/// takes arm again), the reopen is remembered in `files`, and Klipolo starts again (`restart`). A second press while it
+/// is under way does nothing more.
 pub(super) fn reopen(
     recorder: &Recorder,
     files: Option<&Files>,
-    exporting: bool,
+    exporting: &dyn Fn() -> bool,
     flush: impl FnOnce() -> Result<(), Said>,
     restart: impl FnOnce(),
 ) -> Result<(), Said> {
-    if exporting {
+    if exporting() {
         return Err(Said::Coded(words::reopen_exporting()));
     }
-    recorder.begin_reopen()?;
-    if let Err(said) = flush() {
+    if !recorder.begin_reopen()? {
+        tracing::info!("recorder: Reopen Klipolo is under way already");
+        return Ok(());
+    }
+    let saved = flush().and_then(|()| {
+        if exporting() {
+            return Err(Said::Coded(words::reopen_exporting()));
+        }
+        Ok(())
+    });
+    if let Err(said) = saved {
         recorder.end_reopen();
         return Err(said);
     }

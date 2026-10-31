@@ -93,12 +93,16 @@ impl Recorder {
         Ok(())
     }
 
-    /// Reopen Klipolo begins: refused while a take is the recorder's; from now on no take arms.
-    pub(super) fn begin_reopen(&self) -> Result<(), CodedError> {
+    /// Reopen Klipolo begins: refused while a take is the recorder's; from now on no take arms. False when it is under
+    /// way already (a second press): nothing more to do.
+    pub(super) fn begin_reopen(&self) -> Result<bool, CodedError> {
         let mut slot = self.lock();
+        if slot.reopening {
+            return Ok(false);
+        }
         self.refuse_while_busy_in(&slot)?;
         slot.reopening = true;
-        Ok(())
+        Ok(true)
     }
 
     /// Reopen Klipolo didn't go ahead (the project couldn't be saved): takes arm again.
@@ -144,12 +148,14 @@ impl Recorder {
             "--record-worker".to_string(),
             dir.root.to_string_lossy().into_owned(),
         ];
-        let launched = session::write_config(&dir, &cfg).and_then(|()| self.spawn(slot, &args));
-        let (worker, stdout, wait) = launched.map_err(|e| {
-            // Only its config was written this instant: nothing recorded is lost.
+        // Only its config was written this instant: nothing recorded is lost when it goes again.
+        let undo = |error: CodedError| {
             let _ = std::fs::remove_dir_all(&dir.root);
-            words::set_up_failed(&e)
-        })?;
+            error
+        };
+        session::write_config(&dir, &cfg).map_err(|e| undo(words::set_up_failed(&e)))?;
+        let (worker, stdout, wait) = (self.spawn(slot, &args))
+            .map_err(|e| undo(words::worker_didnt_start(&e)))?;
         let generation = worker.generation;
         slot.take = Some(Take {
             dir,

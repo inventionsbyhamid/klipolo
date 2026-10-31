@@ -3,7 +3,7 @@
 //! sends. No process starts.
 
 use std::io::{self, BufRead, Read, Write};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 
@@ -26,6 +26,8 @@ pub(super) struct Launched {
     kills: Mutex<Vec<bool>>,
     /// Lines and exits sent to the recorder (`Fixture::settle` waits for it to handle as many).
     pub(super) sent: AtomicU64,
+    /// Launches fail, as when the app's binary can't be run.
+    pub(super) refuse: AtomicBool,
 }
 
 /// Launches fake workers: each is a pair of in-memory pipes the test drives.
@@ -88,6 +90,9 @@ fn end(far: &Mutex<Far>, code: Option<i32>, sent: &AtomicU64) {
 
 impl Launch for FakeLaunch {
     fn spawn(&self, args: &[String]) -> io::Result<WorkerIo> {
+        if self.0.refuse.load(Ordering::SeqCst) {
+            return Err(io::ErrorKind::PermissionDenied.into());
+        }
         self.0.spawned.lock().unwrap().push(args.to_vec());
         let (tx, rx) = channel();
         let far = Arc::new(Mutex::new(Far {

@@ -737,5 +737,10 @@
     "code": "capture.error.setUp",
     "message": "The recording couldn't be set up. Check that your Movies folder can be written to, then press Record again.",
     "params": []
+  },
+  {
+    "code": "capture.error.workerDidntStart",
+    "message": "The recorder didn't start. Reopen Klipolo, then press Record again.",
+    "params": []
   }
 ]

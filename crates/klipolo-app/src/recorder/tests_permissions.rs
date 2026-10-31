@@ -69,7 +69,7 @@ fn reopen_is_refused_during_a_take_and_flushes_first() {
     let steps = Mutex::new(Vec::new());
     let reopen = || {
         rec.state.reopen(
-            false,
+            &|| false,
             || {
                 steps.lock().unwrap().push("flush");
                 Ok(())
@@ -80,7 +80,7 @@ fn reopen_is_refused_during_a_take_and_flushes_first() {
     // An export runs: the restart would end it.
     let exporting = rec
         .state
-        .reopen(true, || panic!("never saves"), || panic!("never restarts"));
+        .reopen(&|| true, || panic!("never saves"), || panic!("never restarts"));
     assert_eq!(
         code_of(&exporting.unwrap_err()),
         "capture.permission.reopenExporting"
@@ -93,7 +93,7 @@ fn reopen_is_refused_during_a_take_and_flushes_first() {
     );
     // A failed save keeps Klipolo open, with what went wrong, and takes arm again.
     let failed = rec.state.reopen(
-        false,
+        &|| false,
         || Err(Said::Text("The disk is full.".into())),
         || panic!("never restarts with unsaved edits"),
     );
@@ -116,7 +116,7 @@ fn reopen_is_refused_during_a_take_and_flushes_first() {
     let steps = Mutex::new(Vec::new());
     rec.state
         .reopen(
-            false,
+            &|| false,
             || {
                 steps.lock().unwrap().push("flush");
                 Ok(())
@@ -133,7 +133,7 @@ fn reopen_is_refused_during_a_take_and_flushes_first() {
 fn no_take_arms_while_klipolo_reopens() {
     let rec = fixture();
     let refused = rec.state.reopen(
-        false,
+        &|| false,
         || {
             let busy = rec.state.arm(&options_screen()).unwrap_err();
             assert_eq!(busy.code, "capture.busy");
@@ -146,8 +146,50 @@ fn no_take_arms_while_klipolo_reopens() {
     rec.arm(options_screen()).unwrap();
     // A reopen that goes ahead keeps refusing until Klipolo is gone.
     let rec = fixture();
-    rec.state.reopen(false, || Ok(()), || ()).unwrap();
+    rec.state.reopen(&|| false, || Ok(()), || ()).unwrap();
     assert_eq!(rec.arm(options_screen()).unwrap_err().code, "capture.busy");
+}
+
+/// A second press of Reopen Klipolo while it saves does nothing more (no second save, no second restart, and no "A
+/// recording is already running"). An export that starts while the project saves keeps Klipolo open: the restart would
+/// end it. Takes arm again then.
+#[test]
+fn a_second_reopen_press_does_nothing_more_and_an_export_started_meanwhile_keeps_klipolo_open() {
+    let rec = fixture();
+    let steps = Mutex::new(Vec::new());
+    rec.state
+        .reopen(
+            &|| false,
+            || {
+                steps.lock().unwrap().push("flush");
+                let again = rec.state.reopen(
+                    &|| false,
+                    || panic!("never saves twice"),
+                    || panic!("never restarts twice"),
+                );
+                assert_eq!(again, Ok(()));
+                Ok(())
+            },
+            || steps.lock().unwrap().push("restart"),
+        )
+        .unwrap();
+    assert_eq!(*steps.lock().unwrap(), ["flush", "restart"]);
+
+    let rec = fixture();
+    let exporting = std::sync::atomic::AtomicBool::new(false);
+    let refused = rec.state.reopen(
+        &|| exporting.load(Ordering::SeqCst),
+        || {
+            exporting.store(true, Ordering::SeqCst);
+            Ok(())
+        },
+        || panic!("never restarts during an export"),
+    );
+    assert_eq!(
+        code_of(&refused.unwrap_err()),
+        "capture.permission.reopenExporting"
+    );
+    rec.arm(options_screen()).unwrap();
 }
 
 #[test]
@@ -205,7 +247,7 @@ fn still_refused_after_reopen_the_step_explains_until_it_is_allowed() {
     // Reopen Klipolo went ahead, and macOS still says no after the relaunch.
     let (parts, _world) = world(dir.path(), Script::default());
     let state = super::state::RecorderState::build(false, || parts);
-    state.reopen(false, || Ok(()), || ()).unwrap();
+    state.reopen(&|| false, || Ok(()), || ()).unwrap();
     assert!(setup_with(Permission::NotAsked).screen_refused_after_reopen);
     assert!(setup_with(Permission::Denied).screen_refused_after_reopen);
     // Allowed: nothing to explain, and a later refusal starts again from the first ask.

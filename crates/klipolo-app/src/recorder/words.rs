@@ -43,9 +43,9 @@ pub(super) fn os_error(detail: &str) -> CodedError {
     CodedError::new("capture.error.os").with("detail", detail)
 }
 
-/// A take's folder, config or worker couldn't be made: a full disk says so ("There isn't enough space to record. Free
-/// up at least 2 GB."), anything else "The recording couldn't be set up. Check that your Movies folder can be written
-/// to, then press Record again.", with the cause for the log only.
+/// A take's folder or config couldn't be made: a full disk says so ("There isn't enough space to record. Free up at
+/// least 2 GB."), anything else "The recording couldn't be set up. Check that your Movies folder can be written to,
+/// then press Record again.", with the cause for the log only.
 pub(super) fn set_up_failed(error: &std::io::Error) -> CodedError {
     tracing::warn!(%error, "recorder: a take couldn't be set up");
     // ENOSPC on macOS and Linux.
@@ -54,6 +54,13 @@ pub(super) fn set_up_failed(error: &std::io::Error) -> CodedError {
         return CodedError::new("capture.preflight.diskBlock");
     }
     CodedError::new("capture.error.setUp").with("detail", error.to_string())
+}
+
+/// The take's worker couldn't be launched: "The recorder didn't start. Reopen Klipolo, then press Record again.", with
+/// the cause for the log only.
+pub(super) fn worker_didnt_start(error: &std::io::Error) -> CodedError {
+    tracing::warn!(%error, "recorder: the take's worker couldn't be launched");
+    CodedError::new("capture.error.workerDidntStart").with("detail", error.to_string())
 }
 
 /// "Klipolo can't find its settings folder, so it can't record. Reopen Klipolo, then try again."

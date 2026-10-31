@@ -227,6 +227,8 @@ pub const ENGLISH: Messages = &[
     ("capture.error.testRun", "Recording is off in this test run."),
     // The app's recorder has no folder of its own for its settings.
     ("capture.error.noSettingsFolder", "Klipolo can't find its settings folder, so it can't record. Reopen Klipolo, then try again."),
-    // A take's folder or worker couldn't be made (a full disk says so with `capture.preflight.diskBlock`).
+    // A take's folder or config couldn't be made (a full disk says so with `capture.preflight.diskBlock`).
     ("capture.error.setUp", "The recording couldn't be set up. Check that your Movies folder can be written to, then press Record again."),
+    // The take's worker (this app's own binary) couldn't be launched.
+    ("capture.error.workerDidntStart", "The recorder didn't start. Reopen Klipolo, then press Record again."),
 ];

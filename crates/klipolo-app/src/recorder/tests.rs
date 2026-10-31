@@ -35,6 +35,24 @@ fn arm_spawns_one_worker_for_the_take_folder_and_nothing_starts() {
     assert_eq!(rec.launch.commands(), [Command::Start]);
 }
 
+/// A worker that can't be launched says so, not that the Movies folder can't be written to, and leaves no folder.
+#[test]
+fn a_worker_that_cannot_launch_says_the_recorder_didnt_start() {
+    let rec = fixture();
+    rec.launch.0.refuse.store(true, Ordering::SeqCst);
+    let error = rec.arm(options_screen()).unwrap_err();
+    assert_eq!(error.code, "capture.error.workerDidntStart");
+    assert_eq!(
+        klipolo_capture::english::english(&error),
+        "The recorder didn't start. Reopen Klipolo, then press Record again."
+    );
+    let left = std::fs::read_dir(&rec.root).map_or(0, |d| d.count());
+    assert_eq!(left, 0, "no take folder left");
+    assert!(!rec.state.active());
+    rec.launch.0.refuse.store(false, Ordering::SeqCst);
+    rec.arm(options_screen()).unwrap();
+}
+
 #[test]
 fn second_arm_while_a_take_runs_is_busy() {
     let rec = fixture();
@@ -284,7 +302,7 @@ fn test_run_never_makes_a_backend_or_worker() {
     );
     let flushed = AtomicBool::new(false);
     let refused = state.reopen(
-        false,
+        &|| false,
         || {
             flushed.store(true, Ordering::SeqCst);
             Ok(())
