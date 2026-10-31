@@ -628,3 +628,32 @@ fn a_page_whose_channel_has_gone_gets_nothing_more() {
     p.says(live, frame());
     assert_eq!(p.frames().len(), 1);
 }
+
+/// While a preview waits behind for macOS's answer, the ticker reads the permissions (they ask the OS) outside the
+/// previews' lock, so Klipolo's focus and page-load handlers never wait for that read.
+#[test]
+fn the_ticker_reads_the_permissions_outside_the_previews_lock() {
+    let asked = Permissions {
+        camera: Permission::NotAsked,
+        ..all_allowed()
+    };
+    let p = previewing(asked);
+    p.set(Previews {
+        ask: Some(PrivacyPage::Camera),
+        camera: Some("camera-1".into()),
+        ..nothing()
+    })
+    .unwrap();
+    p.state.window_in_front(false);
+    let previews = std::sync::Arc::downgrade(p.state.preview_workers().unwrap());
+    let reads = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let seen = reads.clone();
+    p.on_read(move || {
+        let locked = previews.upgrade().is_some_and(|p| p.locked());
+        seen.lock().unwrap().push(locked);
+    });
+    p.advance_ms(100);
+    let reads = reads.lock().unwrap().clone();
+    assert!(!reads.is_empty(), "the ticker read them");
+    assert!(reads.iter().all(|locked| !locked), "never under the lock");
+}

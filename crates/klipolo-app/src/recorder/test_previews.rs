@@ -29,7 +29,12 @@ use super::types::{PreviewFrame, PreviewId, Previews, WhatToRecord};
 struct Allowing {
     inner: Arc<dyn Backend>,
     now: Arc<Mutex<Permissions>>,
+    /// Called at every read of the permissions: what a test looks at then.
+    on_read: OnRead,
 }
+
+/// What a test runs at every read of the permissions.
+type OnRead = Arc<Mutex<Option<Box<dyn Fn() + Send>>>>;
 
 impl Backend for Allowing {
     fn caps(&self) -> CaptureCaps {
@@ -39,6 +44,9 @@ impl Backend for Allowing {
         self.inner.devices()
     }
     fn permissions(&self) -> Permissions {
+        if let Some(look) = self.on_read.lock().unwrap().as_ref() {
+            look();
+        }
         *self.now.lock().unwrap()
     }
     fn mic_permission(&self) -> Permission {
@@ -91,6 +99,7 @@ impl PreviewOut for Page {
 pub(super) struct Previewing {
     pub(super) rec: Fixture,
     allowed: Arc<Mutex<Permissions>>,
+    on_read: OnRead,
     pub(super) page: Arc<Page>,
 }
 
@@ -116,16 +125,22 @@ pub(super) fn previewing(allowed: Permissions) -> Previewing {
         exe: None,
     });
     let allowed = Arc::new(Mutex::new(allowed));
-    let now = allowed.clone();
+    let on_read = OnRead::default();
+    let (now, look) = (allowed.clone(), on_read.clone());
     let rec = fixture_changed(script, move |parts| {
         let make = std::mem::replace(&mut parts.backend, Box::new(|| unreachable!()));
-        let backend: Arc<dyn Backend> = Arc::new(Allowing { inner: make(), now });
+        let backend: Arc<dyn Backend> = Arc::new(Allowing {
+            inner: make(),
+            now,
+            on_read: look,
+        });
         parts.backend = Box::new(move || backend.clone());
     });
     rec.state.setup().unwrap();
     Previewing {
         rec,
         allowed,
+        on_read,
         page: Arc::default(),
     }
 }
@@ -146,6 +161,11 @@ impl Previewing {
         let set = self.state.previews(&want, self.page.clone());
         self.settle();
         set
+    }
+
+    /// `look` runs at every read of the permissions from now on.
+    pub(super) fn on_read(&self, look: impl Fn() + Send + 'static) {
+        *self.on_read.lock().unwrap() = Some(Box::new(look));
     }
 
     /// The person changes a permission (in System Settings, or by answering macOS).

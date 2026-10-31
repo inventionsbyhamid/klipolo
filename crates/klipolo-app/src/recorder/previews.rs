@@ -260,6 +260,12 @@ impl PreviewWorkers {
         self.run.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
+    /// The previews' lock is held now, by any thread.
+    #[cfg(test)]
+    pub(super) fn locked(&self) -> bool {
+        self.run.try_lock().is_err()
+    }
+
     fn now_ms(&self) -> u64 {
         self.clock.now_ns() / 1_000_000
     }
@@ -399,8 +405,10 @@ impl PreviewWorkers {
     /// The ticker: a closed preview that hasn't ended is killed, and a launch that waited its turn goes. False once
     /// neither is left (the ticker then ends).
     pub(super) fn tick(self: &Arc<Self>) -> bool {
-        // Read without a prompt, and before the lock (they ask the OS), only while a preview waits for macOS's answer.
-        let allowed = self.lock().asking_behind().then(|| (self.permissions)());
+        // Read without a prompt, and before the lock (they ask the OS), only while a preview waits for macOS's answer:
+        // the look's guard goes at the end of its own statement, before the read.
+        let asking = self.lock().asking_behind();
+        let allowed = asking.then(|| (self.permissions)());
         let now = self.now_ms();
         let mut run = self.lock();
         if let Some(allowed) = allowed {
