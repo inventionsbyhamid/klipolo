@@ -3,10 +3,11 @@
 //!
 //! - **Allow screen recording** asks macOS for Screen Recording (macOS lists Klipolo and asks the first time), then
 //!   opens that settings page, so the person can turn Klipolo on there.
-//! - **Reopen Klipolo** saves the open project and starts Klipolo again, as macOS applies a Screen Recording grant
-//!   only to a relaunched app. Refused while a take is armed through saving (`capture.busy`) and while an export runs
-//!   (the restart would end it); a save that fails keeps Klipolo open and says why. From its start no take arms. As it
-//!   goes ahead it is remembered (`screen_reopen`), so the step can say when macOS still refuses.
+//! - **Reopen Klipolo** saves the open project, then quits Klipolo, which opens again once it has gone (`relaunch`), as
+//!   macOS applies a Screen Recording grant only to a relaunched app. Refused while a take is armed through saving
+//!   (`capture.busy`) and while an export runs (the quit would end it); a save that fails keeps Klipolo open and says
+//!   why. From its start no take arms. As it goes ahead it is remembered (`screen_reopen`), so the step can say when
+//!   macOS still refuses.
 //! - **Open privacy settings** opens Screen Recording's, the camera's or the microphone's page. It only opens the page.
 
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -55,8 +56,8 @@ pub(super) fn open_privacy(page: PrivacyPage, open: Open<'_>) -> Result<(), Code
 /// "Reopen Klipolo": refused while an export runs (`exporting`: `capture.permission.reopenExporting`, asked again once
 /// the project is saved, as one may start meanwhile) or `recorder` has a take, armed through saving (`capture.busy`).
 /// Otherwise no take arms from now on, the project is saved (`flush`; a failure keeps Klipolo open and says why, and
-/// takes arm again), the reopen is remembered in `files`, and Klipolo starts again (`restart`). A second press while it
-/// is under way does nothing more.
+/// takes arm again), the reopen is remembered in `files`, and Klipolo quits to open again (`restart`). A second press
+/// while it is under way does nothing more.
 pub(super) fn reopen(
     recorder: &Recorder,
     files: Option<&Files>,

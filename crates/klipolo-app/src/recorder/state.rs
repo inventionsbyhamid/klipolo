@@ -20,6 +20,7 @@ use super::env::{Env, Sink};
 use super::launch::{Launch, ProcessLaunch, WorkerIo};
 use super::permissions::{self, Open};
 use super::previews::PreviewWorkers;
+use super::relaunch::Relaunch;
 use super::setup::{self, Files, Probing, Shown};
 use super::sink::AppSink;
 use super::take::Recorder;
@@ -97,6 +98,8 @@ struct On {
 pub struct RecorderState {
     /// None in a test run.
     on: Option<On>,
+    /// Whether the exit under way is Reopen Klipolo's (`relaunch`).
+    relaunch: Relaunch,
 }
 
 impl RecorderState {
@@ -108,7 +111,10 @@ impl RecorderState {
     pub(super) fn build(test_run: bool, parts: impl FnOnce() -> Parts) -> Self {
         if test_run {
             tracing::info!("recorder: off in this test run (KLIPOLO_TEST)");
-            return Self { on: None };
+            return Self {
+                on: None,
+                relaunch: Relaunch::default(),
+            };
         }
         let parts = parts();
         let backend = Arc::new(LazyBackend {
@@ -142,7 +148,13 @@ impl RecorderState {
                 probe_failed: AtomicBool::new(false),
                 previews,
             }),
+            relaunch: Relaunch::default(),
         }
+    }
+
+    /// Whether the exit under way is Reopen Klipolo's.
+    pub(super) fn relaunch(&self) -> &Relaunch {
+        &self.relaunch
     }
 
     fn on(&self) -> Result<&On, CodedError> {
@@ -240,7 +252,8 @@ impl RecorderState {
     }
 
     /// "Reopen Klipolo": refused while an export runs (`exporting`, before and after the save) or during a take; else
-    /// the project is saved (`flush`), then Klipolo `restart`s. No take arms meanwhile.
+    /// the project is saved (`flush`), then Klipolo quits (`restart`) to open again (`relaunch`). No take arms
+    /// meanwhile.
     pub(super) fn reopen(
         &self,
         exporting: &dyn Fn() -> bool,

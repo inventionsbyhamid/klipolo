@@ -194,6 +194,58 @@ fn a_second_reopen_press_does_nothing_more_and_an_export_started_meanwhile_keeps
     rec.arm(options_screen()).unwrap();
 }
 
+/// Reopen Klipolo's quit relaunches Klipolo only once the project is saved: never when the save fails, an export runs,
+/// or one starts while the project saves. The command's quit asks to exit with the reopen's code, which the app's exit
+/// hears (`relaunch_on_exit`).
+#[test]
+fn the_relaunch_is_started_only_after_the_flush_succeeds() {
+    use super::relaunch::REOPEN_EXIT_CODE;
+    let rec = fixture();
+    let relaunch = rec.state.relaunch();
+    let quit = || relaunch.exit_requested(Some(REOPEN_EXIT_CODE));
+    // An export runs.
+    let _ = rec.state.reopen(&|| true, || panic!("never saves"), quit);
+    assert!(!relaunch.due());
+    // The save fails.
+    let failed = rec.state.reopen(
+        &|| false,
+        || Err(Said::Text("The disk is full.".into())),
+        quit,
+    );
+    assert!(failed.is_err());
+    assert!(!relaunch.due());
+    // An export starts while the project saves.
+    let exporting = std::sync::atomic::AtomicBool::new(false);
+    let refused = rec.state.reopen(
+        &|| exporting.load(Ordering::SeqCst),
+        || {
+            exporting.store(true, Ordering::SeqCst);
+            Ok(())
+        },
+        quit,
+    );
+    assert!(refused.is_err());
+    assert!(!relaunch.due());
+    // Saved, and nothing exports: the quit goes ahead and Klipolo opens again, once.
+    let saved = Mutex::new(false);
+    rec.state
+        .reopen(
+            &|| false,
+            || {
+                assert!(!relaunch.due(), "not before the save");
+                *saved.lock().unwrap() = true;
+                Ok(())
+            },
+            || {
+                assert!(*saved.lock().unwrap());
+                quit();
+            },
+        )
+        .unwrap();
+    assert!(relaunch.due());
+    assert!(!relaunch.due(), "once");
+}
+
 #[test]
 fn privacy_pages_open_the_right_settings() {
     let rec = fixture();

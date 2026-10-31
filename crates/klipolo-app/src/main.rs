@@ -215,6 +215,8 @@ fn main() {
         recorder::release_on_exit(app, &event);
         // The Record dialog's previews stop when the window goes behind, hides or minimises, and none outlives Klipolo.
         recorder::follow_window(app, &event);
+        // Reopen Klipolo's exit, once it goes ahead, starts the waiter that opens Klipolo again when this one has gone.
+        recorder::relaunch_on_exit(app, &event);
         if let RunEvent::Exit = event {
             // Other apps' access ends with the app: the server stops and its connection file goes.
             if let Some(mcp) = app.try_state::<McpState>() {

@@ -15,8 +15,9 @@
 //!   has landed, or after 30 s.
 //! - **Setup** (`setup`, `config`): the Record dialog's data from the backend without capture or prompts, and a take's
 //!   config from the person's options and the app's fixed choices.
-//! - **The permission steps** (`permissions`, `screen_reopen`): Allow screen recording, Reopen Klipolo and Open privacy
-//!   settings, each on the person's own press.
+//! - **The permission steps** (`permissions`, `screen_reopen`, `relaunch`): Allow screen recording, Reopen Klipolo
+//!   and Open privacy settings, each on the person's own press. Reopen Klipolo quits, and a waiter outside Klipolo
+//!   opens it again once it has gone.
 //! - **The Record dialog's previews** (`previews`, `live_view`, `check`, `frames`): stills of each screen and app, the
 //!   live picture of the choice, the camera and the mic's level, each in a worker of its own while the dialog is open
 //!   and Klipolo is in front, within the consent rules, and stopped before a take arms.
@@ -39,6 +40,7 @@ mod outcomes;
 mod permissions;
 mod previews;
 mod quitting;
+mod relaunch;
 mod screen_reopen;
 mod send;
 mod setup;
@@ -77,6 +79,8 @@ mod tests_plan;
 #[cfg(test)]
 mod tests_previews;
 #[cfg(test)]
+mod tests_relaunch;
+#[cfg(test)]
 mod tests_stop;
 #[cfg(test)]
 mod tests_supervise;
@@ -86,4 +90,5 @@ mod tests_zoom;
 pub use active::release_on_exit;
 pub use app_quit::guard_quit;
 pub use previews::{follow_window, page_loads};
+pub use relaunch::relaunch_on_exit;
 pub use state::RecorderState;
