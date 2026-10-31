@@ -108,7 +108,8 @@ impl Mcp {
         })
     }
 
-    /// The apps connected now (a session used within `IDLE`), each once, sorted.
+    /// The apps with a session now, each once, sorted. A session goes once `expire` finds it unused for `IDLE`, so
+    /// one may be listed a little longer than that, until the next `expire`.
     pub fn connected(&self) -> Vec<String> {
         locked(&self.sessions).connected()
     }

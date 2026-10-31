@@ -1,7 +1,7 @@
 //! The tools an app is offered: chat's own edit tools, byte for byte (`klipolo_chat::tools`), minus the two that talk
-//! to the person in Klipolo's chat (`askUser`, `cannotDo`: an app talks to its own person), then four reads. Each as MCP
-//! lists a tool: `{name, description, inputSchema, annotations}`, the schema strict as chat's (closed, every property
-//! required, a value that may be left unsaid nullable). The list never changes while an app is connected.
+//! to the person in Klipolo's chat (`askUser`, `cannotDo`: an app talks to its own person), then four reads. Each as
+//! MCP lists a tool: `{name, description, inputSchema, annotations}`, the schema strict as chat's (closed, every
+//! property required, a value that may be left unsaid nullable). The list never changes while an app is connected.
 
 use std::sync::LazyLock;
 
