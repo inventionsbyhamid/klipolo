@@ -211,12 +211,15 @@ pub fn model_error(e: MetaError) -> ModelError {
             ModelError::Budget(MetaError::Budget { message }.user_message())
         }
         MetaError::RateLimited { .. } => ModelError::Busy,
-        MetaError::Overloaded { .. } => ModelError::Unavailable,
+        MetaError::Overloaded { .. } | MetaError::TimedOut { .. } | MetaError::NotConfigured => {
+            ModelError::Unavailable
+        }
         MetaError::Network(_) => ModelError::Network,
         MetaError::Unauthorized | MetaError::NotAllowed { .. } => ModelError::Refused,
         MetaError::BadRequest { .. }
         | MetaError::Decode(_)
         | MetaError::AlignUnavailable
-        | MetaError::LocalFile { .. } => ModelError::other(e.to_string()),
+        | MetaError::LocalFile { .. }
+        | MetaError::Refused { .. } => ModelError::other(e.to_string()),
     }
 }

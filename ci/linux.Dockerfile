@@ -32,10 +32,14 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
 WORKDIR /src
 
 # Node 22 and pnpm (the version apps/desktop/package.json names), for the page's typecheck and tests. Last, so the layers
-# above stay cached.
+# above stay cached. The tarball is checked against the SHA-256 nodejs.org publishes in SHASUMS256.txt.
 USER root
-RUN curl -fsSL https://nodejs.org/dist/v22.21.1/node-v22.21.1-linux-x64.tar.xz \
-      | tar -xJ -C /usr/local --strip-components=1 --exclude CHANGELOG.md --exclude README.md --exclude LICENSE \
+ARG NODE_SHA256=680d3f30b24a7ff24b98db5e96f294c0070f8f9078df658da1bce1b9c9873c88
+RUN curl -fsSL -o /tmp/node.tar.xz https://nodejs.org/dist/v22.21.1/node-v22.21.1-linux-x64.tar.xz \
+  && echo "$NODE_SHA256  /tmp/node.tar.xz" | sha256sum -c - \
+  && tar -xJ -f /tmp/node.tar.xz -C /usr/local --strip-components=1 \
+      --exclude CHANGELOG.md --exclude README.md --exclude LICENSE \
+  && rm /tmp/node.tar.xz \
   && npm install -g pnpm@11.15.1 \
   && npm cache clean --force
 USER ubuntu

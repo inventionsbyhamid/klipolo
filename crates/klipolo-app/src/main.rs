@@ -1,8 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod commands;
 mod engine;
 mod log;
 mod media;
+mod media_cache;
 mod project;
 mod state;
 
@@ -52,6 +54,9 @@ fn main() {
                 }
             }
             app.manage(projects);
+            // How Klipolo pays for Meta's models (the Keychain), and this Mac's id with the relay (app support).
+            let support = app.path().data_dir().ok().map(|dir| dir.join("Klipolo"));
+            app.manage(commands::settings::load(support.as_deref()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -72,6 +77,13 @@ fn main() {
             project::project_redo,
             project::project_snapshot,
             media::media_import,
+            commands::settings::settings_get,
+            commands::settings::settings_set_key,
+            commands::settings::settings_set_code,
+            commands::settings::settings_clear,
+            media_cache::media_peaks_info,
+            media_cache::media_peaks,
+            media_cache::media_thumbs,
         ])
         .build(tauri::generate_context!())
         .expect("Klipolo could not start");

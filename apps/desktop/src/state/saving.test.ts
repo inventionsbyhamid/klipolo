@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SaveStatus } from '../bridge/commands';
 import { fixtureSnapshot } from '../test/fixtures';
 
@@ -20,6 +20,11 @@ const opened = (revision: number, opening = 1) => {
   return { ...snapshot, opening, history: { ...snapshot.history, revision } };
 };
 
+/** Each test's follower, stopped after it, so none hears the next test's project. */
+let following: (() => void) | null = null;
+const follow = async () => (following = await followSaves());
+afterEach(() => following?.());
+
 beforeEach(() => {
   useProject.setState({ snapshot: null, pending: 0 });
   useSaving.setState({ failing: null, saved: null });
@@ -28,7 +33,7 @@ beforeEach(() => {
 
 describe('save state', () => {
   it('a project just opened is saved; an edit is saving until its revision lands', async () => {
-    await followSaves();
+    await follow();
     useProject.setState({ snapshot: opened(3) });
     expect(saveState()).toBe('saved');
     useProject.setState({ snapshot: opened(4) });
@@ -43,7 +48,7 @@ describe('save state', () => {
   });
 
   it('failing saves say why and stay; the save that works again says so', async () => {
-    await followSaves();
+    await follow();
     useProject.setState({ snapshot: opened(3) });
     useProject.setState({ snapshot: opened(4) });
     tell({ ok: false, message: "Your disk is full, so changes aren't being saved. Free up some space." });
@@ -52,5 +57,22 @@ describe('save state', () => {
     tell({ ok: true, opening: 1, revision: 4 });
     expect(saveState()).toBe('saved');
     expect(useToasts.getState().toasts.map((t) => t.text)).toEqual(['Your changes are saved again.']);
+  });
+
+  it('a late save of the last opening never puts a project just opened back on Saving', async () => {
+    await follow();
+    useProject.setState({ snapshot: opened(4) });
+    // Another project opened before the last one's final save reported.
+    useProject.setState({ snapshot: opened(0, 2) });
+    expect(saveState()).toBe('saved');
+    tell({ ok: true, opening: 1, revision: 4 });
+    expect(saveState()).toBe('saved');
+  });
+
+  it('stopping leaves the store alone: no subscription stays behind', async () => {
+    (await follow())();
+    following = null;
+    useProject.setState({ snapshot: opened(3) });
+    expect(useSaving.getState().saved).toBeNull();
   });
 });

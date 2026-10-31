@@ -130,8 +130,8 @@ export const usePlayback = create<PlaybackStore>((set, get) => ({
     if (!s.playing || !frame.playback || frame.seq !== s.seq) return;
     // Only the clock's anchor moves the playhead's animation; the store follows for what depends on the scene (no DOM
     // write per frame). Backward, a frame is drawn as the clock enters it from above, at its last µs, and shows while
-    // the clock runs down through it: the clock is anchored there, so it doesn't run a frame ahead of the picture.
-    // A backward run that starts mid-frame (L→J, J J, a seek while going backward) starts from where the clock was held,
+    // the clock runs down through it: the clock is anchored there, so it doesn't run a frame ahead of the picture. A
+    // backward run that starts mid-frame (L→J, J J, a seek while going backward) starts from where the clock was held,
     // not from its first frame's last µs, or the playhead would sit ahead of the picture for the whole run.
     const fps = frameRate();
     const held = clockAnchor();

@@ -206,9 +206,9 @@ fn newer_projects_refuse_edits() {
     );
 }
 
-/// Undo and redo go with the revision the UI's copy had at their turn: a change it hasn't merged yet (a chat edit) on top
-/// of the history, or another project, refuses them with `project.moved`, so Undo never takes back a change the person
-/// hasn't seen. Without a base they take the top step as it is.
+/// Undo and redo go with the revision the UI's copy had at their turn: a change it hasn't merged yet (a chat edit) on
+/// top of the history, or another project, refuses them with `project.moved`, so Undo never takes back a change the
+/// person hasn't seen. Without a base they take the top step as it is.
 #[test]
 fn undo_and_redo_refuse_a_history_the_copy_has_not_seen() {
     let dir = tempfile::tempdir().unwrap();
@@ -557,5 +557,100 @@ fn a_new_project_leaves_no_file_when_the_open_one_cant_be_saved() {
         std::fs::read_dir(&library).unwrap().count(),
         0,
         "no file for the project that didn't open"
+    );
+}
+
+/// Two imported clips, each 10 s of `clip.mp4`, in a session saved to `file`.
+fn two_clips(file: &Path) -> ProjectSessionState {
+    use klipolo_model::project::{Asset, AssetKind};
+    use klipolo_model::timeline::{Clip, ClipSource};
+    let (state, _) = session(file, "Cuts");
+    let asset = Asset {
+        id: "v".into(),
+        kind: AssetKind::Video,
+        path: "/media/clip.mp4".into(),
+        name: "clip.mp4".into(),
+        duration_us: 20_000_000,
+        width: 1920,
+        height: 1080,
+        fps: 30.0,
+        rotation: None,
+        has_audio: true,
+        audio_lead_us: None,
+    };
+    let clip = |id: &str, from: i64| {
+        let mut clip = Clip::new(
+            ClipSource::Asset { id: "v".into() },
+            from,
+            from + 10_000_000,
+        );
+        clip.id = id.into();
+        clip
+    };
+    let ops = vec![
+        Op::AddAssets {
+            assets: vec![asset],
+        },
+        Op::InsertClip {
+            clip: clip("a", 0),
+            index: None,
+        },
+        Op::InsertClip {
+            clip: clip("b", 10_000_000),
+            index: None,
+        },
+    ];
+    let add = Transaction {
+        label: "media.import".into(),
+        ops,
+        ..rename("")
+    };
+    with_open(&state, |open| apply_and_commit(open, &add)).unwrap();
+    state
+}
+
+/// A time range selected over the whole video and deleted (one `deleteRanges`, as the timeline sends it): the project
+/// that is left has no clips, still checks out, saves and opens again; one undo brings both clips back.
+#[test]
+fn deleting_everything_leaves_valid_empty_project() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("p.klipolo");
+    let state = two_clips(&file);
+    let all = Transaction {
+        label: "undo.delete.range".into(),
+        ops: vec![Op::DeleteRanges {
+            ranges: vec![klipolo_model::time::RangeUs {
+                start: 0,
+                end: 20_000_000,
+            }],
+        }],
+        ..rename("")
+    };
+    let change = with_open(&state, |open| apply_and_commit(open, &all)).unwrap();
+    assert_eq!(
+        change.patch.main.as_deref(),
+        Some(&[][..]),
+        "the main track is empty"
+    );
+    let empty = lock(&state).as_ref().unwrap().document.project().clone();
+    assert!(empty.timeline.main.is_empty());
+    assert_eq!(empty.assets.len(), 1, "the file stays in the project");
+    klipolo_model::validate::validate(&empty).expect("an empty project is valid");
+    // It saves, and the file opens again as the same empty project.
+    state.flush().unwrap();
+    assert_eq!(read(&file).unwrap(), empty);
+    // One step back: both clips again.
+    with_open(&state, |open| step(open, false)).unwrap();
+    let back = lock(&state)
+        .as_ref()
+        .unwrap()
+        .document
+        .project()
+        .timeline
+        .main
+        .clone();
+    assert_eq!(
+        back.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+        ["a", "b"]
     );
 }

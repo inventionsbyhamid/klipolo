@@ -1,15 +1,18 @@
-//! The speech services the analysis needs, behind interfaces it owns: a `Transcriber` hears speaker turns in a WAV, an
-//! `Aligner` times each turn's words. Their types and errors are Klipolo's own, so no vendor's type reaches the
-//! pipeline: each vendor lives in an adapter that implements the traits and maps its types and errors (`meta` today).
-//! Tests use small fakes of the traits.
+//! The services the analysis needs, behind interfaces it owns: a `Transcriber` hears speaker turns in a WAV, an
+//! `Aligner` times each turn's words, a `SceneLogger` watches a video and logs what happens in it. Their types and
+//! errors are Klipolo's own, so no vendor's type reaches the pipeline: each vendor lives in an adapter that implements
+//! the traits and maps its types and errors (`meta` today). Tests use small fakes of the traits.
 //!
-//! Times are whole milliseconds from the start of the WAV sent, as the services count them; the pipeline turns them
-//! into the clip's sound time.
+//! Times are whole milliseconds from the start of the WAV or video sent, as the services count them; the pipeline turns
+//! them into the clip's own time.
 
+pub mod images;
 pub mod meta;
 pub mod meta_chat;
+pub mod meta_images;
 
 use std::future::Future;
+use std::path::Path;
 use std::pin::Pin;
 use std::time::Duration;
 
@@ -135,6 +138,73 @@ pub trait Aligner: Send + Sync {
         wav: Vec<u8>,
         turns: &'a [AlignTurn],
     ) -> BoxFuture<'a, Result<Alignment, ProviderError>>;
+}
+
+/// What kind of moment a scene log item is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SceneKind {
+    /// A new shot: who or what is on screen now.
+    Shot,
+    /// Something said that matters (a question, an answer, a key statement): its gist, not a transcript.
+    Speech,
+    /// A visible action, gesture or demonstration.
+    Action,
+    /// A reaction: laughing, smiling, clapping, surprise.
+    Reaction,
+    /// Text that appears on screen: a title, caption, lower third or sign.
+    Text,
+    /// The talk turns to another topic.
+    Topic,
+    Other,
+}
+
+/// One moment a scene logger saw, timed in the video it was sent.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneMoment {
+    pub start_ms: u64,
+    /// At or after `start_ms` (equal for an instant, such as a cut).
+    pub end_ms: u64,
+    pub kind: SceneKind,
+    /// Who it is about ("woman in a blue shirt", a name shown on screen); empty when no one in particular.
+    pub who: String,
+    /// What happens, in one line.
+    pub text: String,
+    /// The text on screen during it, as written; empty for none.
+    pub on_screen_text: String,
+}
+
+/// A scene logger's answer for one video.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneAnswer {
+    /// In time order as the service gave them.
+    pub moments: Vec<SceneMoment>,
+    /// What the call cost, in US dollars.
+    pub cost_usd: f64,
+}
+
+/// A video (its picture and sound) to a timestamped log of what happens in it.
+pub trait SceneLogger: Send + Sync {
+    /// The model's id, kept in the log (`SceneLog::model`).
+    fn model(&self) -> &str;
+
+    /// Videos it watches at once for one clip. A provider that limits a whole device keeps that limit itself, across
+    /// every caller.
+    fn max_in_flight(&self) -> usize;
+
+    /// What watching `seconds` of video sampled `fps` times a second is expected to cost, in US dollars, before any
+    /// call (the estimate shown before analysis).
+    fn estimate_usd(&self, seconds: f64, fps: f64) -> f64;
+
+    /// The moments in `video` (an MP4 of at most ten minutes, with its sound), its picture sampled `fps` times a
+    /// second (at most 2).
+    fn watch<'a>(
+        &'a self,
+        video: &'a Path,
+        fps: f64,
+    ) -> BoxFuture<'a, Result<SceneAnswer, ProviderError>>;
 }
 
 /// What kind of failure a service reported, which decides what the pipeline does next.

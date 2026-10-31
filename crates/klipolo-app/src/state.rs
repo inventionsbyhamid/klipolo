@@ -1,9 +1,10 @@
 //! What the app holds for the preview: the one engine and its caches. The open project is the project session's
 //! (`project::ProjectSessionState`), which publishes it to the engine's feed.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
+use klipolo_engine::media::thumbs;
 use klipolo_engine::render::warm::Warmup;
 use klipolo_engine::session::EngineSlot;
 
@@ -31,5 +32,33 @@ impl EngineState {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take()
+    }
+}
+
+/// The engine's caches in the app's cache folder, named once: decoded sound and its waveform peaks in `audio`,
+/// thumbnails (`thumbs::root_in`) and the rest in `media`. `start_engine` hands these to the engine, and the timeline's
+/// media commands read from the same folders.
+pub(crate) struct CacheDirs {
+    pub(crate) audio: PathBuf,
+    pub(crate) media: PathBuf,
+}
+
+impl CacheDirs {
+    pub(crate) fn in_folder(root: &Path) -> Self {
+        Self {
+            audio: root.join("audio"),
+            media: root.join("media"),
+        }
+    }
+
+    pub(crate) fn thumbs(&self) -> PathBuf {
+        thumbs::root_in(&self.media)
+    }
+}
+
+impl EngineState {
+    /// The engine's caches, when the app's cache folder was found.
+    pub(crate) fn caches(&self) -> Option<CacheDirs> {
+        self.cache_dir.as_deref().map(CacheDirs::in_folder)
     }
 }

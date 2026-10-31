@@ -4,6 +4,7 @@ import type { Op } from '../bindings/Op';
 import type { SnapshotPatch } from '../bindings/SnapshotPatch';
 import { fixtureSnapshot } from '../test/fixtures';
 import { commitInFlight } from './commitQueue';
+import { keyBurst } from './keyBurst';
 import { useProject } from './project';
 
 const OPS: Op[] = [{ type: 'removeItem', id: 'title' }];
@@ -116,6 +117,21 @@ describe('the revision an edit is sent on: a stale one is refused, never rebased
     expect(await Promise.all([first, during])).toEqual([false, false]);
     expect(state.sent).toEqual([3, 3]);
     expect(useProject.getState().snapshot!.history.revision).toBe(5);
+  });
+
+  it('a held nudge built before a chat change merged is refused (probe E)', async () => {
+    // The nudge's ops are built at the press, on the copy at 3; it settles for 400 ms.
+    const { state } = rust(3);
+    keyBurst.push('text.add', OPS, 'nudge:title');
+    // Meanwhile Rust commits chat's change (3 → 4), and its reply's change merges here.
+    state.revision = 4;
+    await useProject.getState().adopt(patch(3));
+    keyBurst.flush();
+    await vi.waitFor(() => expect(useProject.getState().pending).toBe(0));
+    // It went on the revision it was built on, and Rust refused it.
+    expect(state.sent).toEqual([3]);
+    expect(state.revision).toBe(4);
+    expect(useProject.getState().snapshot!.history.revision).toBe(4);
   });
 
 

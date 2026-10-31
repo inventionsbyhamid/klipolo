@@ -15,7 +15,12 @@ def test_defaults_match_the_documented_caps():
     assert settings.align_concurrency == 2
     assert settings.align_threads == 3
     assert settings.meta_api_key == ""
-    assert settings.allowed_models == {"muse-spark-1.3", "muse-spark-1.2", "muse-voice-transcribe-1.0"}
+    assert settings.allowed_models == {
+        "muse-spark-1.3",
+        "muse-spark-1.2",
+        "muse-voice-transcribe-1.0",
+        "muse-image-1.0",
+    }
 
 
 def test_environment_overrides_defaults():

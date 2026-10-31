@@ -14,3 +14,16 @@ export function skip(deltaUs: number, durationUs: number) {
   const at = playing ? clockUs() : playheadUs;
   seek(Math.min(Math.max(at + deltaUs, 0), durationUs));
 }
+
+/**
+ * Keeps the paused playhead inside the video as edits change its length: an undo or a delete that makes it shorter
+ * than where the playhead was brings the playhead to its new end. Returns the stop.
+ */
+export function keepPlayheadInVideo(): () => void {
+  return useProject.subscribe((s, prev) => {
+    if (!s.snapshot || s.snapshot === prev.snapshot) return;
+    const durationUs = videoDurationUs(s.snapshot.project.timeline);
+    const { playing, playheadUs, seek } = usePlayback.getState();
+    if (!playing && playheadUs > durationUs) seek(durationUs);
+  });
+}
