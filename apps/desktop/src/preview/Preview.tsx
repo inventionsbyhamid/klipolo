@@ -46,11 +46,12 @@ function DropZone({ over }: { over: boolean }) {
 }
 
 /**
- * Whether the card docks: `wanted`, except while a timeline press or drag holds the dock (`state/dockHold`); then what
- * it was before, so the frame never changes size under the pointer. It follows `wanted` again once the hold ends.
+ * Whether the card docks: `wanted`, except while a timeline press or drag, or a keyboard walk along the lanes, holds the
+ * dock (`state/dockHold`); then what it was before, so the frame never changes size under the pointer or at every bare
+ * cut. It follows `wanted` again once the hold ends.
  */
 function useSteadyDock(wanted: boolean): boolean {
-  const held = useDockHold((s) => s.press);
+  const held = useDockHold((s) => s.press || s.walk);
   const [shown, setShown] = useState(wanted);
   if (!held && shown !== wanted) setShown(wanted);
   return held ? shown : wanted;
@@ -60,8 +61,8 @@ function useSteadyDock(wanted: boolean): boolean {
  * The preview panel: the format pills, Add title, the safe area menu (9:16 only), Full screen (F; it
  * it works), and the engine's frames fitted to the panel in the chosen format with the layers there selectable and
  * editable (`Stage`), under the analysis banner; the inspector docks at the right under the banner while a main clip, a
- * transition or a layer it has fields for is selected, and the frame moves left for it (never mid-press on the
- * timeline: `useSteadyDock`). With no clip yet, the drop zone.
+ * transition or a layer it has fields for is selected, and the frame moves left for it (never mid-press or mid-walk on
+ * the timeline: `useSteadyDock`). With no clip yet, the drop zone.
  * `filesOver`: files from Finder are held over the window.
  */
 export function Preview({ filesOver = false }: { filesOver?: boolean }) {

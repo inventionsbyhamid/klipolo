@@ -6,7 +6,8 @@ import { renderWithProviders } from '../test/render';
 /*
  * The card docks beside the frame while a clip, a layer or a transition is selected, and the frame gives it room. A
  * press on the timeline selects at once, so the dock waits for the release: the frame never changes size under the
- * edge frame a trim shows, or under the pointer of a move.
+ * edge frame a trim shows, or under the pointer of a move. A keyboard walk along the lanes passes bare cuts, which
+ * select nothing, so the dock waits until the walk settles.
  */
 
 vi.mock('../bridge/commands', () => ({ bridge: { apply: vi.fn() }, mediaUrl: (p: string) => p }));
@@ -23,7 +24,7 @@ vi.mock('../bridge/framing', () => ({
   clipFraming: vi.fn(() => new Promise(() => undefined)),
 }));
 const { bridge } = await import('../bridge/commands');
-const { releaseDock } = await import('../state/dockHold');
+const { releaseDock, useDockHold } = await import('../state/dockHold');
 const { useProject } = await import('../state/project');
 const { usePlayback } = await import('../state/playback');
 const { useSelection } = await import('../state/selection');
@@ -54,6 +55,7 @@ function Editor() {
 
 beforeEach(() => {
   releaseDock();
+  useDockHold.setState({ walk: false });
   useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
   useSelection.setState({ selectedId: null });
   useTimelineFocus.setState({ activeId: null, pending: false });
@@ -126,6 +128,43 @@ describe('the dock holds still through a timeline press', () => {
     expect(docked()).toBe(true);
     release(a, 759);
     await frames();
+    expect(docked()).toBe(true);
+  });
+});
+
+describe('the dock holds still while the keyboard walks the Video lane', () => {
+  const cut = () => document.querySelector<HTMLElement>('[data-block-id="cut:a"]')!;
+  const step = async (key: 'ArrowLeft' | 'ArrowRight') => {
+    fireEvent.keyDown(document.activeElement!, { key });
+    await frames();
+  };
+  const settle = () => act(() => new Promise((r) => setTimeout(r, 450)));
+
+  it('arrowing across a bare cut never undocks the card; the dock follows once the walk stops', async () => {
+    useSelection.setState({ selectedId: 'a' });
+    renderWithProviders(<Editor />);
+    expect(docked()).toBe(true);
+    act(() => block(/^screen\.mp4/).focus());
+    // Clip, bare cut (nothing selected), clip: the frame keeps its size at every step.
+    await step('ArrowRight');
+    expect(cut()).toHaveFocus();
+    expect(useSelection.getState().selectedId).toBeNull();
+    expect(docked()).toBe(true);
+    await step('ArrowRight');
+    expect(useSelection.getState().selectedId).toBe('b');
+    expect(docked()).toBe(true);
+    expect(screen.getByRole('complementary', { name: 'broll.mp4 settings' })).toBeInTheDocument();
+    // The walk stops on the cut: once it settles, nothing is selected and the card goes.
+    await step('ArrowLeft');
+    expect(cut()).toHaveFocus();
+    expect(docked()).toBe(true);
+    await settle();
+    expect(docked()).toBe(false);
+    // From there onto a clip: the card docks once the walk settles there, not at the step.
+    await step('ArrowRight');
+    expect(useSelection.getState().selectedId).toBe('b');
+    expect(docked()).toBe(false);
+    await settle();
     expect(docked()).toBe(true);
   });
 });
