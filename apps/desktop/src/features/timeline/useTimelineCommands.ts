@@ -16,12 +16,14 @@ import { stepTrack, toggleAttach, toggleSoundMute } from './keys/layerActions';
 import { split, trimToPlayhead } from './keys/timelineActions';
 import { clipIndexAt, mainIndex } from './model/index';
 import { useTimelineNavCommands } from './useTimelineNavCommands';
+import { useTransitionCommands } from './useTransitionCommands';
 
 const NO_CLIPS: Clip[] = [];
 
 /**
  * The timeline's commands: split, trims to the playhead, nudges, the clipboard, track moves, attaching
- * and a sound layer's mute, plus `useTimelineNavCommands`' (selection steps, edit points, zoom, snapping). Each has a
+ * and a sound layer's mute, plus `useTransitionCommands`' (add a transition with ⌘T, change one, remove one) and
+ * `useTimelineNavCommands`' (selection steps, edit points, zoom, snapping). Each has a
  * stable id, is `enabled` only when it can act on the selection, and runs the same code from its shortcut, the player
  * bar and the block menu. `useCommands` merges them.
  */
@@ -31,6 +33,7 @@ export function useTimelineCommands(): Command[] {
   const selectedId = useSelection((s) => s.selectedId);
   const clipboard = useClipboard();
   const nav = useTimelineNavCommands();
+  const transitions = useTransitionCommands();
   const index = mainIndex(project?.timeline.main ?? NO_CLIPS);
   // The playhead changes every frame: this re-renders only when it flips (a run reads the playhead then).
   const clipUnderPlayhead = usePlayback((s) => clipIndexAt(index, s.playheadUs) >= 0);
@@ -211,6 +214,6 @@ export function useTimelineCommands(): Command[] {
         run: () => toggleSoundMute(id),
       },
     ];
-    return [...edits, ...nav];
-  }, [t, project, selectedId, clipboard, nav, index, clipUnderPlayhead]);
+    return [...edits, ...transitions, ...nav];
+  }, [t, project, selectedId, clipboard, nav, transitions, index, clipUnderPlayhead]);
 }

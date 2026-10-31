@@ -10,11 +10,11 @@ import { openProposal } from '../../state/chatMessages';
 import { useProject } from '../../state/project';
 import { useExport } from '../../state/export';
 import { useRange } from '../../state/range';
-import { useSelection } from '../../state/selection';
+import { transitionClipId, useSelection } from '../../state/selection';
 import { useUi } from '../../state/ui';
 import { switchFormat } from '../editor/formats';
 import { importFiles } from '../media/useImportMedia';
-import { deleteBlock, deleteRange, useTimelineCommands } from '../timeline/commands';
+import { deleteBlock, deleteRange, removeTransition, useTimelineCommands } from '../timeline/commands';
 import { searchWords, type Command } from './command';
 import { useTransportCommands } from './useTransportCommands';
 
@@ -45,11 +45,21 @@ export function useCommands(): Command[] {
     const { undo, redo } = useProject.getState();
     const selectedItem = selectedId ? findItem(project, selectedId) : null;
     const selectedClip = selectedId && !selectedItem ? findClip(project, selectedId) : null;
+    // Delete with a transition selected removes it (`useTransitionCommands`' Remove transition).
+    const transitionOf = transitionClipId(selectedId);
+    const selectedTransition = transitionOf !== null && !!findClip(project, transitionOf)?.transitionOut;
     // A layer on a locked track can't be deleted: the action is unavailable rather than failing with a toast.
-    const deletable = range !== null || Boolean((selectedItem && !selectedItem.track.locked) || selectedClip);
+    const deletable =
+      range !== null || Boolean((selectedItem && !selectedItem.track.locked) || selectedClip || selectedTransition);
     // A project of layers alone is a video too.
     const hasVideo = videoDurationUs(project.timeline) > 0;
-    const deleteLabel = range ? 'undo.delete.range' : selectedClip ? 'undo.delete.clip' : 'undo.delete.layer';
+    const deleteLabel = range
+      ? 'undo.delete.range'
+      : selectedTransition
+        ? 'transition.remove'
+        : selectedClip
+          ? 'undo.delete.clip'
+          : 'undo.delete.layer';
 
     const head: Command[] = [
       {
@@ -107,16 +117,23 @@ export function useCommands(): Command[] {
     ];
     const remove: Command = {
       id: 'delete',
-      action: range ? 'deleteRanges' : selectedClip ? 'removeClip' : 'removeItem',
+      action: range
+        ? 'deleteRanges'
+        : selectedTransition
+          ? 'setTransition'
+          : selectedClip
+            ? 'removeClip'
+            : 'removeItem',
       group: 'edit',
       label: labelText(deleteLabel),
       shortcut: '⌫',
       keywords: searchWords(t({ id: 'command.delete.keywords', message: 'remove' })),
       enabled: deletable,
-      // The selected time range first (its footage goes, in one step), else the selected clip or layer.
+      // The selected time range first (its footage goes, in one step), else the selected transition, clip or layer.
       run: () => {
         const now = useRange.getState().range;
         if (now) deleteRange(now);
+        else if (transitionOf !== null) removeTransition(transitionOf);
         else if (selectedId) deleteBlock(selectedId, deleteLabel);
       },
     };
