@@ -274,13 +274,14 @@ describe('chat', () => {
     expect(screen.queryByText(/^Selection /)).toBeNull();
   });
 
-  it('names a selected title in the chip and sends it as "this"', async () => {
+  it('shows no chip for a selected title: chat can’t change a layer, so it isn’t "this"', async () => {
     const fake = chat();
     useSelection.setState({ selectedId: 'title' });
     renderWithProviders(<ChatPanel />);
-    expect(screen.getByText(/^Title: /)).toBeInTheDocument();
+    expect(screen.queryByText(/^Title: /)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Clear selection' })).toBeNull();
     await userEvent.type(message(), 'make it bigger{Enter}');
-    await waitFor(() => expect(fake.requests[0]?.item).toBe('title'));
+    await waitFor(() => expect(fake.requests).toHaveLength(1));
   });
 
   it('moment chips seek and play; Keep only these sends their ranges', async () => {
