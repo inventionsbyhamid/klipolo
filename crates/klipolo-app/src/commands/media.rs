@@ -339,8 +339,8 @@ pub fn library_pack(state: State<'_, ProjectSessionState>) -> Vec<PackItem> {
     state.pack().items()
 }
 
-/// The longest side of a picture the library shows: its tiles are 64 px wide, so this is room for a 2x screen and more.
-const PICTURE_SIDE: u32 = 512;
+/// The longest side of a picture the library shows: its tiles are 64 px wide, so this is room for a 2x screen.
+const PICTURE_SIDE: u32 = 256;
 const PICTURE_UNREADABLE: &str = "That picture couldn't be read.";
 
 /// A picture for the library, as a PNG at most `PICTURE_SIDE` px on its long side: a pack sticker by its id, or a
@@ -444,7 +444,7 @@ mod tests {
     }
 
     /// A picture the project uses through a link is read from what the link leads to, and only when that is a
-    /// picture: a `logo.png` linked to a key file gives nothing back. What goes back is the picture at 512 px at most.
+    /// picture: a `logo.png` linked to a key file gives nothing back. What goes back is the picture at 256 px at most.
     #[test]
     fn a_linked_picture_is_followed_and_must_lead_to_a_picture() {
         let dir = tempfile::tempdir().unwrap();
@@ -470,6 +470,6 @@ mod tests {
             NOT_IN_PROJECT
         );
         let shown = image::load_from_memory(&thumbnail(&file).unwrap()).unwrap();
-        assert_eq!((shown.width(), shown.height()), (512, 256));
+        assert_eq!((shown.width(), shown.height()), (256, 128));
     }
 }
