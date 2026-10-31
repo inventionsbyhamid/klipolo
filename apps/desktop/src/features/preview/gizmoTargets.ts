@@ -4,7 +4,7 @@ import type { ItemContent } from '../../bindings/ItemContent';
 import type { Layout } from '../../bindings/Layout';
 import type { Op } from '../../bindings/Op';
 import type { Project } from '../../bindings/Project';
-import { containRect, FORMAT_SIZE, resolveRect } from '../../lib/layout';
+import { containRect, FORMAT_SIZE, pictureRect, resolveRect } from '../../lib/layout';
 import { showsPictures, soloOf } from '../../lib/solo';
 import { scaledStyle } from '../../lib/textLook';
 import { assetById, itemEndUs, itemLabel } from '../../lib/timeline';
@@ -87,7 +87,8 @@ export function gizmoTargets(project: Project, playheadUs: number, format: Forma
         // Missing media draws nothing, so there is nothing to pick.
         const asset = assetById(project, content.assetId);
         if (asset?.kind !== content.type) continue;
-        boxFor = (r) => containRect(r, asset.width, asset.height, format);
+        boxFor = (r) =>
+          (content.type === 'image' ? pictureRect : containRect)(r, asset.width, asset.height, format);
       } else if (scene) {
         const pick = SCENE_PICK[scene.source];
         if (pick) boxFor = () => pick(format);

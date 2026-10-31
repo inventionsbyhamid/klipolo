@@ -421,6 +421,71 @@ async fn image_layer_is_drawn_contained() {
     );
 }
 
+/// A title card's background, a 16:9 picture placed over the whole frame (`Layout::full_frame`), drawn in 9:16: it
+/// covers the frame to its corners, its middle third showing, with none of the red background round it.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs a GPU"]
+async fn a_full_frame_picture_covers_a_frame_of_another_shape() {
+    let dir = tempfile::tempdir().unwrap();
+    let png = dir.path().join("wide.png");
+    // Green in its middle third, blue at its sides (what 9:16 cuts off).
+    let wide = image::RgbaImage::from_fn(96, 54, |x, _| {
+        if (32..64).contains(&x) {
+            image::Rgba([0, 255, 0, 255])
+        } else {
+            image::Rgba([0, 0, 255, 255])
+        }
+    });
+    wide.save(&png).unwrap();
+    let mut p = red_background(project());
+    let logo = p.assets.iter_mut().find(|a| a.id == "logo").unwrap();
+    (logo.path, logo.width, logo.height) = (png.display().to_string(), 96, 54);
+    let mut layer = item(
+        "card",
+        0.0,
+        2.0,
+        bx(0.0, 0.0, 1.0, 1.0),
+        ItemContent::Image {
+            asset_id: "logo".into(),
+        },
+    );
+    layer.layout = klipolo_model::layout::Layout::full_frame();
+    p.timeline.tracks = vec![overlay_track("o", vec![layer])];
+    let mut backend = GpuBackend::new(klipolo_engine::render::mode::RenderMode::Contained)
+        .await
+        .unwrap();
+    let redraw = backend.redraw().unwrap();
+    let plan = frame_plan(&ctx(p), secs(1.0), FormatKind::Portrait);
+    let mut render = async || {
+        let req = RenderRequest {
+            plan: plan.clone(),
+            width: 360,
+            height: 640,
+            output: Output::Rgba,
+        };
+        backend.render(req).await.unwrap().finish().await.unwrap()
+    };
+    let _ = render().await;
+    let f = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            redraw.notified().await;
+            let f = render().await;
+            if near(pixel(&f.bytes, f.stride, 180, 320), [0, 255, 0], 2) {
+                break f;
+            }
+        }
+    })
+    .await
+    .expect("redraw after the picture loads, then drawn with it");
+    for (x, y) in [(1, 1), (358, 1), (1, 638), (358, 638), (180, 320)] {
+        assert!(
+            near(pixel(&f.bytes, f.stride, x, y), [0, 255, 0], 8),
+            "({x}, {y}): {:?}, the picture's middle third to the frame's edges",
+            pixel(&f.bytes, f.stride, x, y)
+        );
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU"]
 async fn text_layer_draws_glyphs_inside_its_box() {

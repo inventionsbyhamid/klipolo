@@ -618,6 +618,94 @@ fn images_and_videos_keep_their_shape() {
     assert_eq!(overlay.source.time_us, secs(4.0), "2 s in + 1 s × 2");
 }
 
+/// A picture whose box is the whole frame (a title card's background) covers it in every format, keeping its shape,
+/// rather than sitting inside it with footage showing round it: Muse Image's 4:7 portrait in 9:16, and a 16:9 picture
+/// drawn for a landscape video shown in its 9:16 version.
+#[test]
+fn a_full_frame_picture_covers_the_frame_in_every_format() {
+    let mut p = project();
+    let logo = p.asset("logo").unwrap().clone();
+    for (id, (w, h)) in [("tall", (1152, 2016)), ("wide", (1920, 1080))] {
+        let mut card = logo.clone();
+        (card.id, card.width, card.height) = (id.into(), w, h);
+        p.assets.push(card);
+    }
+    p.settings.formats = vec![Landscape, Portrait, Square];
+    let background = |id: &str, start: f64| {
+        let mut layer = item(
+            id,
+            start,
+            3.0,
+            FULL,
+            ItemContent::Image {
+                asset_id: id.into(),
+            },
+        );
+        layer.layout = klipolo_model::layout::Layout::full_frame();
+        layer
+    };
+    p.timeline.tracks = vec![overlay_track(
+        "o",
+        vec![background("tall", 1.0), background("wide", 5.0)],
+    )];
+    let c = ctx(p);
+    let picture = |at: f64, format| {
+        let plan = frame_plan(&c, secs(at), format);
+        match plan.layers.iter().find(|l| matches!(l, Layer::Image(_))) {
+            Some(Layer::Image(i)) => i.dest,
+            _ => panic!("no picture"),
+        }
+    };
+    // 4:7 in 1080 × 1920: as tall as the frame, 1097 px across, 9 px past each side.
+    close(
+        picture(2.0, Portrait),
+        bx(
+            -8.571428571428571 / 1080.0,
+            0.0,
+            1097.142857142857 / 1080.0,
+            1.0,
+        ),
+    );
+    // 16:9 in 1080 × 1920: as tall as the frame, 3413 px across, its middle third shown.
+    close(
+        picture(6.0, Portrait),
+        bx(
+            -1166.6666666666667 / 1080.0,
+            0.0,
+            3413.3333333333335 / 1080.0,
+            1.0,
+        ),
+    );
+    // And as it is in its own shape: the frame exactly.
+    close(picture(6.0, Landscape), FULL);
+    for (at, format) in [(2.0, Landscape), (2.0, Square), (6.0, Square)] {
+        let d = picture(at, format);
+        assert!(
+            d.x <= 1e-9 && d.y <= 1e-9 && d.x + d.w >= 1.0 - 1e-9 && d.y + d.h >= 1.0 - 1e-9,
+            "{format:?} at {at}: covers the frame: {d:?}"
+        );
+    }
+    // A picture in a box of its own still sits inside it.
+    let mut boxed = project();
+    boxed.timeline.tracks = vec![overlay_track(
+        "o",
+        vec![item(
+            "logo",
+            1.0,
+            3.0,
+            bx(0.1, 0.1, 0.4, 0.2),
+            ItemContent::Image {
+                asset_id: "logo".into(),
+            },
+        )],
+    )];
+    let plan = frame_plan(&ctx(boxed), secs(2.0), Landscape);
+    let Some(Layer::Image(logo)) = plan.layers.iter().find(|l| matches!(l, Layer::Image(_))) else {
+        panic!("no image")
+    };
+    close(logo.dest, bx(0.24375, 0.1, 0.1125, 0.2));
+}
+
 #[test]
 fn track_order_is_z_order_and_hidden_tracks_are_skipped() {
     let mut p = project();
