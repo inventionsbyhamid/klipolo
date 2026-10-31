@@ -1275,3 +1275,34 @@ async fn a_second_start_counts_the_credit_the_first_promised() {
     assert!((estimate.credit_left_usd.unwrap() - 0.1).abs() < 1e-9);
     server.verify().await;
 }
+
+/// A code whose device can't register now: the estimate says why (to show with Retry), never a $0 price to accept.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_estimate_says_why_a_code_cannot_pay_yet() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/devices"))
+        .respond_with(ResponseTemplate::new(503))
+        .expect(1)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let store = MemoryStore::default();
+    store.set(RELAY_CODE, &secret(CODE)).unwrap();
+    let h = harness(&server, store, FakeMedia::whole(SECONDS));
+    let clip = asset("long", AssetKind::Video, &h.clip("long.mov", 1), 155.04);
+
+    let estimate = h.state.estimate(std::slice::from_ref(&clip)).await;
+
+    assert_eq!(
+        estimate.problem.as_deref(),
+        Some("Klipolo's server is busy right now. Try again in a moment.")
+    );
+    assert_eq!(estimate.clips, ["long"]);
+    // Nothing to pay with: nothing to ask for, and no problem to report (the page asks for a key or code).
+    let none = harness(&server, MemoryStore::default(), FakeMedia::whole(SECONDS));
+    let other = asset("other", AssetKind::Audio, &none.clip("b.m4a", 2), SECONDS);
+    let estimate = none.state.estimate(std::slice::from_ref(&other)).await;
+    assert_eq!((estimate.problem, estimate.usd), (None, 0.0));
+    server.verify().await;
+}

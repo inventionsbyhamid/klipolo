@@ -199,6 +199,12 @@ pub struct Estimate {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub refusal: Option<String>,
+    /// Why nothing can pay for `clips` yet although a key or code is saved (the device couldn't register with
+    /// Klipolo's relay), as one sentence to show with Retry. `usd` is 0 then. None with no key and no code: the page
+    /// asks for one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub problem: Option<String>,
 }
 
 /// What a clip's analysis found so far: what chat reads (Plan 4), in the clip's own times (words and turns in its sound
@@ -414,24 +420,31 @@ impl AnalysisState {
     }
 
     /// What analysing `assets` costs (see the module notes): each content once, however many assets are on it. Reads
-    /// each file's two ends for its cache key and shows what its cache holds (`show_cached`); asks the relay for the
-    /// credit left with an access code.
+    /// each file's two ends for its cache key and shows what its cache holds (`show_cached`). When some need paying
+    /// for, gets the adapter as a start would (`Credentials::ready`, which registers the device the first time; why it
+    /// can't is `Estimate::problem`) and, with an access code, asks the relay for the credit left.
     pub async fn estimate(&self, assets: &[Asset]) -> Estimate {
-        let meta = self.credentials.meta();
         let mut estimate = Estimate::default();
+        let mut paid = Vec::new();
         for (content, ids) in self.contents(assets).await {
             if content.cached.complete(&content.clip) {
                 estimate.cached.extend(ids);
-                continue;
+            } else {
+                estimate.seconds += content.clip.duration_us as f64 / 1e6;
+                estimate.clips.extend(ids);
+                paid.push(content);
             }
-            estimate.seconds += content.clip.duration_us as f64 / 1e6;
-            if let Some(meta) = &meta {
-                estimate.usd += price(meta, &content.clip, &content.cached);
-            }
-            estimate.clips.extend(ids);
         }
-        let relay = meta.is_some_and(|m| m.client().is_relay());
-        if relay && !estimate.clips.is_empty() {
+        if paid.is_empty() {
+            return estimate;
+        }
+        let ready = self.credentials.ready().await;
+        let Some(meta) = ready.meta else {
+            estimate.problem = ready.problem;
+            return estimate;
+        };
+        estimate.usd = paid.iter().map(|c| price(&meta, &c.clip, &c.cached)).sum();
+        if meta.client().is_relay() {
             let status = self.credentials.status().await;
             let reserved = lock(&self.inner).reserved.values().sum();
             (estimate.credit_left_usd, estimate.refusal) = credit(&status, estimate.usd, reserved);

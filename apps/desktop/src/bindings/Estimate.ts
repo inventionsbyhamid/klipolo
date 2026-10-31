@@ -28,4 +28,10 @@ creditLeftUsd?: number,
 /**
  * Why analysing `clips` is refused now (more than the credit left, or a code turned off), as one sentence.
  */
-refusal?: string, };
+refusal?: string, 
+/**
+ * Why nothing can pay for `clips` yet although a key or code is saved (the device couldn't register with
+ * Klipolo's relay), as one sentence to show with Retry. `usd` is 0 then. None with no key and no code: the page
+ * asks for one.
+ */
+problem?: string, };
