@@ -44,6 +44,10 @@
 //!
 //! The speaker turns and scene items are neutral inputs keyed by asset id (what the analysis stored, in that file's
 //! time): no provider's type reaches this crate.
+//!
+//! For other apps that edit through the same tools: `ChatContext::section` gives one section by its heading,
+//! `full_transcript` every Transcript line at full detail however long the project (for them to read in pages), and
+//! `timeline_key` says whether the times and clip refs of a context read earlier still hold.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -187,6 +191,32 @@ impl ChatContext {
     pub fn fits(&self) -> bool {
         self.tokens <= MAX_CONTEXT_TOKENS
     }
+
+    /// The section headed `## {heading}` (bare, or with a note: `## Transcript (sentence starts)`): its heading line
+    /// through the line before the next `## `, the blank line that ends it included. None when the text has no such
+    /// section. Free text never starts a line, so only a heading does.
+    pub fn section(&self, heading: &str) -> Option<&str> {
+        let text = self.text.as_str();
+        let head = format!("## {heading}");
+        let mut at = 0;
+        let start = loop {
+            let end = text[at..].find('\n').map_or(text.len(), |i| at + i);
+            if let Some(rest) = text[at..end].strip_prefix(head.as_str())
+                && (rest.is_empty() || rest.starts_with(" ("))
+            {
+                break at;
+            }
+            if end == text.len() {
+                return None;
+            }
+            at = end + 1;
+        };
+        let body = text[start..].find('\n').map_or(text.len(), |i| start + i);
+        let end = text[body..]
+            .find("\n## ")
+            .map_or(text.len(), |i| body + i + 1);
+        Some(&text[start..end])
+    }
 }
 
 /// About how many tokens `text` takes: `CHARS_PER_TOKEN` characters each, rounded up.
@@ -206,28 +236,10 @@ pub fn build_context(
 ) -> ChatContext {
     let starts = clip_starts(&project.timeline.main);
     let spoken = spoken(project, speech);
-    // Each file's speaker turns by start, as a word finds its turn by binary search; sorted here when they come
-    // otherwise.
-    let turns: HashMap<&str, Cow<'_, [SpeakerTurn]>> = (turns.iter())
-        .map(|(asset, list)| {
-            // One total order, so turns that start together are found the same way whatever order they came in.
-            let order = |a: &SpeakerTurn, b: &SpeakerTurn| {
-                (a.start_us, a.end_us, &a.speaker).cmp(&(b.start_us, b.end_us, &b.speaker))
-            };
-            let list = if list.is_sorted_by(|a, b| order(a, b).is_le()) {
-                Cow::Borrowed(list.as_slice())
-            } else {
-                let mut sorted = list.clone();
-                sorted.sort_by(order);
-                Cow::Owned(sorted)
-            };
-            (asset.as_str(), list)
-        })
-        .collect();
+    let turns = sorted_turns(turns);
     let said = said(project, speech, &turns, &spoken);
     let lines = lines(&said);
     let pieces = scene_pieces(project, &starts, scenes);
-    let (untranscribed, transcribing) = transcription(project, speech);
     let unlogged = clips_where(project, |clip| match &clip.source {
         ClipSource::Asset { id } => {
             project
@@ -239,16 +251,7 @@ pub fn build_context(
     });
 
     // What Transcript and Scenes say after their lines.
-    let mut transcript_tail = String::new();
-    if !untranscribed.is_empty() {
-        let _ = writeln!(transcript_tail, "Not transcribed yet: {untranscribed}.");
-    }
-    if !transcribing.is_empty() {
-        let _ = writeln!(transcript_tail, "Still transcribing: {transcribing}.");
-    }
-    if transcript_tail.is_empty() && lines.is_empty() {
-        transcript_tail.push_str("No speech.\n");
-    }
+    let transcript_tail = transcript_notes(project, speech, lines.is_empty());
     let scenes_tail = if !unlogged.is_empty() {
         format!("No scene log yet: {unlogged}.\n")
     } else if pieces.is_empty() {
@@ -387,6 +390,114 @@ pub fn build_context(
         text,
         refs: Refs::of(project),
     }
+}
+
+/// One line of the transcript as the context writes it at full detail (`[12.4-18.9] A: text`, pauses marked), without
+/// its line break, and the timeline range its words span.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TranscriptLine {
+    pub range: RangeUs,
+    pub text: String,
+}
+
+/// The context's Transcript at full detail however long the project: every line, never shortened or thinned, in
+/// timeline order, and the `notes` the context writes after them (`Not transcribed yet: c2.`, `Still transcribing:
+/// ...`, `No speech.`), each with its line break.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FullTranscript {
+    pub lines: Vec<TranscriptLine>,
+    pub notes: String,
+}
+
+/// The transcript of `project` with its `speech` and each file's speaker `turns`, as `build_context` writes its lines
+/// before any budget shortens them. O(words).
+pub fn full_transcript(
+    project: &Project,
+    speech: &Speech,
+    turns: &HashMap<String, Vec<SpeakerTurn>>,
+) -> FullTranscript {
+    let spoken = spoken(project, speech);
+    let turns = sorted_turns(turns);
+    let said = said(project, speech, &turns, &spoken);
+    let lines = lines(&said);
+    let notes = transcript_notes(project, speech, lines.is_empty());
+    let lines = (lines.iter())
+        .filter_map(|l| {
+            let mut text = line_text(&said, l, false);
+            // A line with no text to show writes nothing.
+            text.pop()?;
+            Some(TranscriptLine {
+                range: RangeUs {
+                    start: said[l.start].start_us,
+                    end: said[l.end - 1].end_us,
+                },
+                text,
+            })
+        })
+        .collect();
+    FullTranscript { lines, notes }
+}
+
+/// A key for where the main track's clips are: each clip's id with its timeline start and end. Equal keys mean the
+/// times and clip refs a context gave still name the same footage; a format, captions or a word fix leave it as it
+/// was, a cut, a split, a trim or a speed change don't. The same on every run and build (FNV-1a). O(clips).
+pub fn timeline_key(project: &Project) -> u64 {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    let mut hash = OFFSET;
+    let mut eat = |bytes: &[u8]| {
+        for &b in bytes {
+            hash = (hash ^ u64::from(b)).wrapping_mul(PRIME);
+        }
+    };
+    let main = &project.timeline.main;
+    for (clip, start) in main.iter().zip(clip_starts(main)) {
+        // The id's length first, so no two lists of ids read as the same bytes.
+        eat(&(clip.id.len() as u64).to_le_bytes());
+        eat(clip.id.as_bytes());
+        eat(&start.to_le_bytes());
+        eat(&start.saturating_add(clip.duration_us()).to_le_bytes());
+    }
+    hash
+}
+
+/// Each file's speaker turns by start, as a word finds its turn by binary search; sorted here when they come otherwise.
+fn sorted_turns(
+    turns: &HashMap<String, Vec<SpeakerTurn>>,
+) -> HashMap<&str, Cow<'_, [SpeakerTurn]>> {
+    (turns.iter())
+        .map(|(asset, list)| {
+            // One total order, so turns that start together are found the same way whatever order they came in.
+            let order = |a: &SpeakerTurn, b: &SpeakerTurn| {
+                (a.start_us, a.end_us, &a.speaker).cmp(&(b.start_us, b.end_us, &b.speaker))
+            };
+            let list = if list.is_sorted_by(|a, b| order(a, b).is_le()) {
+                Cow::Borrowed(list.as_slice())
+            } else {
+                let mut sorted = list.clone();
+                sorted.sort_by(order);
+                Cow::Owned(sorted)
+            };
+            (asset.as_str(), list)
+        })
+        .collect()
+}
+
+/// What Transcript says after its lines: the clips not transcribed yet, those heard part of the way, and `No speech.`
+/// when it has no lines and neither.
+fn transcript_notes(project: &Project, speech: &Speech, no_lines: bool) -> String {
+    let (untranscribed, transcribing) = transcription(project, speech);
+    let mut notes = String::new();
+    if !untranscribed.is_empty() {
+        let _ = writeln!(notes, "Not transcribed yet: {untranscribed}.");
+    }
+    if !transcribing.is_empty() {
+        let _ = writeln!(notes, "Still transcribing: {transcribing}.");
+    }
+    if notes.is_empty() && no_lines {
+        notes.push_str("No speech.\n");
+    }
+    notes
 }
 
 /// How briefly Transcript and Scenes are told (the module notes' Budget).

@@ -260,7 +260,7 @@ pub(super) const ADD_TEXT: Tool = Tool {
     },
     read: |a| {
         Ok(ToolCall::AddText {
-            text: a.text("text")?,
+            text: a.shown("text")?,
             preset: a.word("preset", &TEXT_PRESETS)?,
             at_us: a.nullable_time("atSec")?,
             duration_us: a.nullable_length("durationSec", &OVERLAY_SECS)?,
@@ -339,7 +339,7 @@ pub(super) const MAKE_TITLE_CARD: Tool = Tool {
     },
     read: |a| {
         Ok(ToolCall::MakeTitleCard {
-            title: a.text("title")?,
+            title: a.shown("title")?,
             prompt: a.text("prompt")?,
             at_us: a.nullable_time("atSec")?,
             duration_us: a.nullable_length("durationSec", &OVERLAY_SECS)?,

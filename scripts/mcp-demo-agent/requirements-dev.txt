@@ -1,0 +1,2 @@
+# The tests' needs, on top of requirements.txt.
+pytest==9.2.0

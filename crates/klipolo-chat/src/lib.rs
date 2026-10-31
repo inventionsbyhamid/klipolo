@@ -18,11 +18,12 @@ pub mod tools;
 
 pub use compile::{
     ANALYZE_FIRST, AnalysisState, Audience, Compiled, Inputs, Job, MakeSticker, NO_FILLERS,
-    Proposal, Refusal, STILL_LISTENING, compile, sticker_ops, sticker_placement,
+    Proposal, ROUGH_FILLERS, Refusal, STILL_LISTENING, STILL_WATCHING, compile, compile_for_app,
+    sticker_ops, sticker_placement,
 };
 pub use context::{
-    ChatContext, MAX_CONTEXT_TOKENS, Refs, SceneEntry, SceneLog, SpeakerTurn, View, build_context,
-    estimate_tokens,
+    ChatContext, FullTranscript, MAX_CONTEXT_TOKENS, Refs, SceneEntry, SceneLog, SpeakerTurn,
+    TranscriptLine, View, build_context, estimate_tokens, full_transcript, timeline_key,
 };
 pub use library::{Library, LibraryItem, MediaKind};
 pub use model::{BoxFuture, Item, LanguageModel, ModelError, ModelRequest, ModelResponse};

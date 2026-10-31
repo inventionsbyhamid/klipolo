@@ -551,3 +551,23 @@ export const TABLE = {
     comment: 'Undo history entry',
   }),
 } satisfies Record<string, MessageDescriptor>;
+
+/**
+ * Labels for other apps' steps (MCP). Klipolo's host makes them, so they use its namespace (`mcp`) and stay out of
+ * `TABLE`: a step folded from one app's earlier steps, and how a label whose step another app made (its params carry
+ * the app's name as `client`) names the app.
+ */
+export const MCP_LABELS: Record<string, MessageDescriptor> = {
+  'mcp.fromEarlier': msg({
+    id: 'mcp.fromEarlier',
+    message: 'Earlier changes from {client}',
+    comment: 'Undo history entry: several older changes another app made, kept as one step; {client} is the app',
+  }),
+};
+
+/** A label whose step another app made: "Make it vertical (from Example Client)". */
+export const FROM_CLIENT = msg({
+  id: 'history.fromApp',
+  message: '{label} (from {client})',
+  comment: 'Undo history entry another app made: {label} is the change, {client} the app',
+});

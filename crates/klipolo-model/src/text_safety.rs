@@ -52,6 +52,66 @@ pub fn clean(text: &str, max_chars: usize) -> String {
     out
 }
 
+/// The invisible characters real text needs, which words put on screen keep: the zero-width joiner and non-joiner (an
+/// emoji sequence such as 👩‍💻, the Persian `می‌شود`) and the variation selectors (an emoji's form, as in ❤️; an
+/// ideograph's variant).
+fn shaping(c: char) -> bool {
+    matches!(c as u32, 0x200C | 0x200D | 0xFE00..=0xFE0F | 0xE0100..=0xE01EF)
+}
+
+/// What starts a new line: a line feed, a carriage return (with the line feed after it, one break), next line, and the
+/// line and paragraph separators.
+fn line_break(c: char) -> bool {
+    matches!(c, '\n' | '\r' | '\u{85}' | '\u{2028}' | '\u{2029}')
+}
+
+/// Words another app gives for the screen (a text layer's words, a title card's title), cleaned as `clean` cleans, but
+/// keeping what real text needs: joiners and variation selectors (`shaping`), and line breaks, which a text layer draws
+/// (each kind of break one `\n`; spaces beside a break, and breaks at either end, go). Control, other invisible and
+/// bidirectional characters go; other runs of spaces are one space; at most `max_chars` characters, breaks counted.
+/// Cleaning what is clean changes nothing.
+pub fn clean_shown(text: &str, max_chars: usize) -> String {
+    let mut out = String::new();
+    let mut count = 0;
+    let (mut space, mut breaks, mut after_cr) = (false, 0usize, false);
+    for c in text.chars() {
+        if line_break(c) {
+            let joined = c == '\n' && after_cr;
+            after_cr = c == '\r';
+            if !joined && count > 0 {
+                breaks += 1;
+                space = false;
+            }
+            continue;
+        }
+        after_cr = false;
+        if c.is_whitespace() {
+            space = count > 0 && breaks == 0;
+            continue;
+        }
+        if c.is_control() || (invisible(c) && !shaping(c)) {
+            continue;
+        }
+        let before = if breaks > 0 {
+            breaks
+        } else {
+            usize::from(space)
+        };
+        if count + before + 1 > max_chars {
+            break;
+        }
+        if breaks > 0 {
+            out.extend(std::iter::repeat_n('\n', breaks));
+        } else if space {
+            out.push(' ');
+        }
+        (space, breaks) = (false, 0);
+        out.push(c);
+        count += before + 1;
+    }
+    out
+}
+
 /// The first character in `text` that would hide, reorder or break what is shown: a control
 /// character, a line or paragraph separator, or an invisible one; but not what real text uses: one variation selector
 /// right after a visible character (`❤️`, `1️⃣`), and a zero-width joiner or non-joiner between two visible characters
@@ -108,6 +168,37 @@ mod tests {
         for c in ['a', 'é', ' ', '\n', 'ß', '中', '😀'] {
             assert!(!invisible(c), "{:04X}", c as u32);
         }
+    }
+
+    /// Words an app puts on screen keep what real text needs: joiners and variation selectors, and line breaks (a text
+    /// layer draws them), each kind of break one line break; control, invisible and bidirectional characters go, and
+    /// spaces as `clean` folds them, none beside a line break.
+    #[test]
+    fn words_to_show_keep_joiners_selectors_and_line_breaks() {
+        for kept in [
+            "\u{1F469}\u{200D}\u{1F4BB}",
+            "\u{645}\u{6CC}\u{200C}\u{634}\u{648}\u{62F}",
+            "\u{2764}\u{FE0F}",
+            "\u{2764}\u{FE0E}",
+            "\u{845B}\u{E0100}",
+            "\u{845B}\u{E01EF}",
+            "one\ntwo",
+        ] {
+            assert_eq!(clean_shown(kept, 100), kept, "{kept:?}");
+        }
+        assert_eq!(
+            clean_shown(" a \r\n b\rc\u{2028}d\u{2029}e\u{85}f\u{B}g ", 100),
+            "a\nb\nc\nd\ne\nf g"
+        );
+        assert_eq!(clean_shown("a\u{202E}b\u{200B}c\u{7}\u{FEFF}", 100), "abc");
+        assert_eq!(clean_shown("a   b\t\tc", 100), "a b c");
+        assert_eq!(clean_shown("\n\n a \n\n", 100), "a");
+        assert_eq!(clean_shown("a\n\n\nb", 100), "a\n\n\nb");
+        assert_eq!(clean_shown("abcdef", 3), "abc");
+        assert_eq!(clean_shown("ab cd", 3), "ab");
+        // Cleaning what is clean changes nothing.
+        let once = clean_shown(" \u{1F469}\u{200D}\u{1F4BB} a\r\nb ", 100);
+        assert_eq!(clean_shown(&once, 100), once);
     }
 
     /// Where a joiner may sit. Between two visible characters it is real text (an emoji
