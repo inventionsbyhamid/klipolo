@@ -91,4 +91,6 @@ pub use active::release_on_exit;
 pub use app_quit::guard_quit;
 pub use previews::{follow_window, page_loads};
 pub use relaunch::relaunch_on_exit;
+#[cfg(test)]
+pub(crate) use sink::hold_background;
 pub use state::RecorderState;

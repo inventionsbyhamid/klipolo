@@ -1,5 +1,5 @@
 //! Where the recorder's outcomes go in the app (`AppSink`): the page's events, a finished take's landing, and the
-//! engine's background media work, held while a take is the recorder's.
+//! background media work (the engine's and editing copies), held while a take is the recorder's.
 //!
 //! Events:
 //! - `recorder-event` (`RecorderEvent`): the worker's events and the recorder's own, each with its take's id.
@@ -19,6 +19,7 @@ use super::env::{Done, Sink};
 use super::import::{Landing, land};
 use super::setup::Files;
 use super::types::RecorderEvent;
+use crate::media_jobs::MediaJobs;
 use crate::project::{ProjectSessionState, library_dir};
 use crate::state::EngineState;
 
@@ -78,8 +79,23 @@ impl Sink for AppSink {
     }
 
     fn hold_media(&self, held: bool) {
-        if let Some(engine) = self.app.try_state::<EngineState>() {
-            engine.hold_for_recording(held);
-        }
+        let engine = self.app.try_state::<EngineState>();
+        let copies = self.app.try_state::<MediaJobs>();
+        hold_background(engine.as_deref(), copies.as_deref(), held);
+    }
+}
+
+/// A take holds Klipolo's background media work from arming until it has landed, so nothing competes with it: the
+/// engine's (`EngineState::hold_for_recording`) and editing copies (`MediaJobs::set_recording`). `held` false lets go.
+pub(crate) fn hold_background(
+    engine: Option<&EngineState>,
+    copies: Option<&MediaJobs>,
+    held: bool,
+) {
+    if let Some(engine) = engine {
+        engine.hold_for_recording(held);
+    }
+    if let Some(copies) = copies {
+        copies.set_recording(held);
     }
 }
