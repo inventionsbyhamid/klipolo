@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Asset } from '../../bindings/Asset';
 import type { Estimate } from '../../bindings/Estimate';
+import type { Item } from '../../bindings/Item';
 import type { Snapshot } from '../../bindings/Snapshot';
 import { renderWithProviders } from '../../test/render';
 
@@ -44,9 +45,27 @@ const CLIPS = [clip('a', 'rosa-interview-a.mov'), clip('b', 'rosa-wheel-broll.mo
 /** What a clip whose file is gone says. */
 const GONE = "Klipolo can't find this clip's file. Put it back or import it again.";
 
-function showProject(assets: Asset[]) {
-  const snapshot = { project: { assets } } as unknown as Snapshot;
+/** A project of `assets`, each played by a clip on the main track (what analysis is for); `layers` on its tracks. */
+function showProject(assets: Asset[], { layers = [] as Item[], extra = [] as Asset[] } = {}) {
+  const main = assets.map((a) => ({ id: `clip-${a.id}`, source: { type: 'asset', id: a.id } }));
+  const tracks = [{ id: 'audio', kind: 'audio', items: layers }];
+  const snapshot = {
+    project: { assets: [...assets, ...extra], recordings: [], timeline: { main, tracks } },
+  } as unknown as Snapshot;
   useProject.setState({ snapshot });
+}
+
+/** A sound layer of `assetId`: music when it ducks, a sound effect when it doesn't. */
+function soundLayer(id: string, assetId: string, duck?: number): Item {
+  return {
+    id,
+    startUs: 0,
+    durationUs: 16_000_000,
+    attach: null,
+    layout: { anchor: 'topLeft', rect: { x: 0, y: 0, w: 1, h: 1 }, rotation: 0, opacity: 1, radius: 0, overrides: {} },
+    content: { type: 'audio', assetId, sourceInUs: 0, volume: 0.3, fadeInUs: 0, fadeOutUs: 0, effect: null, duck },
+    effects: [],
+  };
 }
 
 function offer(over: Partial<Estimate> = {}): Estimate {
@@ -72,6 +91,25 @@ describe('the analysis banner', () => {
     expect(bridge.estimate).toHaveBeenCalledWith(['a', 'b']);
     await userEvent.click(screen.getByRole('button', { name: 'Analyze' }));
     expect(bridge.start).toHaveBeenCalledWith(['a', 'b']);
+  });
+
+  it('offers only what main-track clips play: not the pack’s music, a placed sound or a song never placed', async () => {
+    bridge.estimate.mockResolvedValue(offer({ clips: ['a'] }));
+    const music = [
+      clip('klipolo-pack-soft-ambient', 'Soft ambient', 'audio'),
+      clip('klipolo-pack-whoosh', 'Whoosh', 'audio'),
+      clip('song', 'my-song.mp3', 'audio'),
+      clip('logo', 'logo.png', 'image'),
+    ];
+    showProject([CLIPS[0]], {
+      extra: music,
+      layers: [soundLayer('bed', 'klipolo-pack-soft-ambient', -12), soundLayer('whoosh', 'klipolo-pack-whoosh')],
+    });
+    renderWithProviders(<AnalysisBanner />);
+
+    expect(await screen.findByText('Analyze 1 clip for about $0.04')).toBeInTheDocument();
+    expect(bridge.estimate).toHaveBeenCalledTimes(1);
+    expect(bridge.estimate).toHaveBeenCalledWith(['a']);
   });
 
   it('refuses with why when the estimate is over the credit left', async () => {
