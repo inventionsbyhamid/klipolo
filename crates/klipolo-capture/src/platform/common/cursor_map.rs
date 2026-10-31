@@ -1,6 +1,6 @@
 //! The cursor's place in the captured picture and its time on the host clock, for every OS's source.
 //! Pure, built on every OS. Places are mapped with the area's bounds at that moment, so a window that moves keeps its
-//! cursor (Beats Cap 6).
+//! cursor.
 
 /// A global point (top-left origin, points) inside an area (its global top-left and size, points), 0-1. Outside the
 /// area is outside 0-1; an area with no size (or a non-finite one) puts every point outside, at (−1, −1).

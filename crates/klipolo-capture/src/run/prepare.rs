@@ -1,5 +1,5 @@
 //! What a worker does with its take before anything runs (`run::threads`): a fresh take is armed; a resumed one is
-//! finished first (`run::resume`) and goes on recording, unless the person already stopped it. A journaled Stop (Task
+//! finished first (`run::resume`) and goes on recording, unless the person already stopped it. A journaled Stop,
 //! or a Stop or Cancel that reached the worker while it prepared, only finishes the
 //! take: no pipe, no device, whatever the app asked.
 

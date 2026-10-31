@@ -8,7 +8,7 @@ use klipolo_capture::recover::{RecoverError, repair};
 use klipolo_capture::session::{SessionDir, SessionLock};
 
 /// A kill loses at most what never reached `write()` (≤ 0.7 s of video): whole fragments past the last `Durable` mark
-/// are kept. But a power cut can land a fragment's box headers without its media, which the structural walk accepts
+/// are kept. But a power cut can land a fragment's box headers without its media, which the structural walk accepts:
 /// past the mark, a fragment counts only if its samples are whole NAL units. The cut bytes that aren't
 /// zeros are kept beside the file, once, however often repair runs.
 #[test]

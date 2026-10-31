@@ -1,5 +1,5 @@
 //! VideoToolbox's hardware H.264 and HEVC encoders (`VTCopyVideoEncoderList`): a list, no session and no capture. The
-//! probe measures each, and a take pins the one it chose by its id: on a T2 Mac that is the T2's
+//! probe measures each, and a take pins the one it chose by its id: on a 2018-2020 Intel Mac with a T2 that is the
 //! `ave` HEVC beside Quick Sync's `gva` H.264, which "require hardware" alone wouldn't tell apart.
 
 use cidre::{cf, cm, ns, os, vt};

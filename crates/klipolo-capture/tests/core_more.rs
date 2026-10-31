@@ -120,8 +120,7 @@ fn the_mic_rules_clock_stops_while_the_take_is_paused() {
 
 #[test]
 fn the_status_lines_are_in_the_person_s_words() {
-    // The item's lines come from the session's words, nested names included; English only where they word nothing
-    //.
+    // The item's lines come from the session's words, nested names included; English only where they word nothing.
     let mut c = cfg(&[Src::Screen, Src::Mic], 3);
     c.words = [
         ("capture.source.mic", "Mikrofon"),
@@ -260,8 +259,7 @@ fn a_screen_that_stops_while_the_display_sleeps_restarts_once_it_wakes() {
 #[test]
 fn a_screen_the_display_s_sleep_stopped_in_a_pause_comes_back_at_resume_with_its_budget_whole() {
     // Locked: the take pauses, the display sleeps, and capture stops before any tick saw the display asleep (the usual
-    // order). That spends no restart; the display wakes during the pause, and Resume brings the screen back
-    //.
+    // order). That spends no restart; the display wakes during the pause, and Resume brings the screen back.
     let mut h = Harness::recording(&[Src::Screen, Src::Mic]);
     h.feed_for(3.0);
     h.command(Command::Pause);

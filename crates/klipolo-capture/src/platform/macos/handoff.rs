@@ -49,8 +49,8 @@ pub(super) struct Shared {
     pub(super) paused: AtomicBool,
     /// The encoder's next frame is a keyframe (asked for, or the first after a start or a resume).
     pub(super) key_wanted: AtomicBool,
-    /// The stream draws the cursor in its frames: burned in from the start, or since the cursor's live switch, so
-    /// `screen::damage` counts the cursor's moves as real changes.
+    /// The stream draws the cursor in its frames: burned in from the start, or since the cursor's live switch,
+    /// so `screen::damage` counts the cursor's moves as real changes.
     pub(super) cursor_in_frames: AtomicBool,
     pub(super) delivered: AtomicU64,
     pub(super) complete: AtomicU64,

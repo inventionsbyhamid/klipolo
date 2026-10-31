@@ -82,7 +82,7 @@ pub(crate) fn levels(
 }
 
 /// What a crashed sound run's levels give the journal: its `Levels`; or, when its file can't be read for them, a mild
-/// note (`label`: the source's), since levels are only a hint for import. A bad sector never fails a repair or a resume
+/// note (`label`: the source's), since levels are only a hint for import. A bad sector never fails a repair or a resume.
 /// `Ok(None)`: nothing to say (the file isn't a CAF of ours). Err only when `step` stopped
 /// the read (a cancelled repair).
 pub(crate) fn levels_or_note(

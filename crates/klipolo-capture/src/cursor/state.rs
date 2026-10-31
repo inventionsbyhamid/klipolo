@@ -3,7 +3,7 @@
 //! most `MAX_SHAPES`, and is defined at the opening). The latest shape, visibility and area are kept, and written at
 //! the gate and when a pause ends, wherever the file doesn't already show them. So a source that sends its current
 //! shape as it starts (during the countdown) draws as that shape, never as the Arrow look. The latest place is kept
-//! too, and written as a move then, so the cursor is where it is from the gate, not from the first move or beat
+//! too, and written as a move then, so the cursor is where it is from the gate, not from the first move or beat;
 //! and so is a switch to sampled clicks (a monitor that couldn't start switches in the
 //! countdown). A resumed take's writer knows what its file shows from the file (`Kept::shown_in`).
 

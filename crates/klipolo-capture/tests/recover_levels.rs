@@ -1,4 +1,4 @@
-//! A sound run's levels are a hint for import: a file that can't be read for them never fails a repair or a resume
+//! A sound run's levels are a hint for import: a file that can't be read for them never fails a repair or a resume.
 //! Its own test binary, because the failpoint it arms holds for the whole process.
 #![cfg(feature = "synthetic")]
 

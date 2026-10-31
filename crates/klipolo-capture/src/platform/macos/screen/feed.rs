@@ -5,8 +5,7 @@
 //!   microseconds) and handed to the encoder thread over a bounded channel; a full one drops the frame, counted as the
 //!   encoder's (it was behind), which breaks no GOP since the frame was never encoded;
 //! - a `Complete` frame that changed only Klipolo's own windows (the camera bubble, the HUD; `damage`) is counted as
-//!   `Idle` and never encoded, unless a keyframe is wanted, it follows a blank picture, or no real frame was sent yet
-//!;
+//!   `Idle` and never encoded, unless a keyframe is wanted, it follows a blank picture, or no real frame was sent yet;
 //! - an `Idle` buffer is only counted: the still screen's re-feed is the encoder thread's, on its own clock, since on a
 //!   fully still screen ScreenCaptureKit stops sending even idle buffers (3.4 s without one in the smoke run);
 //! - every buffer's arrival is the stream's sign of life (`Shared::alive`), which the encoder thread watches;

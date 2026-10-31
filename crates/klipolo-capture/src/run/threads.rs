@@ -241,8 +241,7 @@ fn session(
         }
     };
     // Whoever takes it first ends the session: the ending thread, or this one once the shell returns. A thread that
-    // can't start never drops it, so the take's lock stays held and the core keeps recording until the shell returns
-    // (Part B).
+    // can't start never drops it, so the take's lock stays held and the core keeps recording until the shell returns.
     let finishing = Arc::new(Mutex::new(Some(finishing)));
     let take = |f: &Mutex<Option<_>>| f.lock().unwrap_or_else(PoisonError::into_inner).take();
     let ends = {

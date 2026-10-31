@@ -177,8 +177,7 @@ impl Gating {
 }
 
 /// Whether the sampler sends the main queue another block (it stores when it ran): only once the last one, sent at
-/// `sent_ns` (0: none yet), has run (`main_ns`). A queued block runs in order anyway, so a stall never piles them up
-///.
+/// `sent_ns` (0: none yet), has run (`main_ns`). A queued block runs in order anyway, so a stall never piles them up.
 pub fn ping_due(sent_ns: u64, main_ns: u64) -> bool {
     sent_ns == 0 || main_ns >= sent_ns
 }
@@ -213,8 +212,7 @@ impl ClockOffset {
     }
 
     /// The correction once `OFFSET_EVENTS` events came: the smallest lag seen, when it is past 1 s, else 0. A stall only
-    /// adds lag, so a stall over the first events can't decide a false offset, and any prompt delivery since lowers it
-    ///.
+    /// adds lag, so a stall over the first events can't decide a false offset, and any prompt delivery since lowers it.
     pub fn offset(&self) -> Option<i64> {
         let least = self.least.filter(|_| self.n >= OFFSET_EVENTS)?;
         Some(if least.abs() > OFFSET_LIMIT_NS {

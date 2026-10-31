@@ -56,7 +56,7 @@ pub fn plan(walk: &Walk) -> Option<RemuxPlan> {
 impl Fmp4Writer {
     /// Stop's plan from the writer's own index, with no walk. It holds only while the file is exactly the head and
     /// every fragment emitted (`bytes_written` bytes): only when the durable writer's last snapshot says
-    /// `wrote_exactly(key, bytes_written())`. After a lost or failed write the file holds less, so Stop walks it instead
+    /// `wrote_exactly(key, bytes_written())`. After a lost or failed write the file holds less, so Stop walks it instead;
     /// `write_tail` refuses a shorter file anyway.
     pub fn remux_plan(&self) -> Option<RemuxPlan> {
         let track = TrackInfo {

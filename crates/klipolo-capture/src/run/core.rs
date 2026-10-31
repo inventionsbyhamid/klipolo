@@ -217,7 +217,7 @@ impl SessionCore {
     }
 
     /// Whether the captured display is awake now. The threads layer asks the backend as a pipe's stop or stall (or a
-    /// failed restart) arrives, so a stop the display's sleep caused is known at once and never spends a restart
+    /// failed restart) arrives, so a stop the display's sleep caused is known at once and never spends a restart;
     /// the tick passes it too.
     pub fn display(&mut self, awake: bool) {
         self.display_awake = awake;

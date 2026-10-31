@@ -47,8 +47,7 @@ pub const MIC_FALLBACK_NS: u64 = 3_000_000_000;
 pub const LOST_NOTE_NS: u64 = 10_000_000_000;
 /// A picture blank for longer than this is noted.
 pub const BLANK_NOTE_NS: u64 = 3_000_000_000;
-/// A mic back after a blip restarts on its own device at most this often in `BLIP_WINDOW_NS`; past that it is flapping
-///.
+/// A mic back after a blip restarts on its own device at most this often in `BLIP_WINDOW_NS`; past that it is flapping.
 pub const BLIPS_PER_WINDOW: usize = 3;
 pub const BLIP_WINDOW_NS: u64 = 60_000_000_000;
 /// A flapping mic with nothing to fall back to says so at most this often (`mic_dropping`).

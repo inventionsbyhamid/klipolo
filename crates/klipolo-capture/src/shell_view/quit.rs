@@ -17,7 +17,7 @@ pub const QUIT_OVERDUE_CODE: i32 = 1;
 
 /// How long a system quit waits for the session in `state` (None: no status yet) after asking it to stop. `Starting`
 /// gets the take's bound: a pipe's start can wait on the system's picker, and its Stop then ends a take whose folder
-/// exists (Part B).
+/// exists.
 pub fn quit_wait(state: Option<WorkerState>) -> Duration {
     match state {
         Some(

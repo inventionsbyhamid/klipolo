@@ -121,8 +121,8 @@ fn captures(file: &str) -> bool {
         // screen recording", through `Backend::request_screen_permission` (the app's caller is pinned
         // below).
         "platform/macos/screen_permission.rs",
-        // The recorder's live view of the chosen screen or window: the one exception to capture only after a press
-        //. It runs only while the recorder is open and in front and screen recording is already allowed
+        // The recorder's live view of the chosen screen or window: the one exception to capture only after a press.
+        // It runs only while the recorder is open and in front and screen recording is already allowed
         // (its `start` reads the preflight before the content list), and never opens the camera or the mic.
         "platform/macos/live_view.rs",
         "platform/windows/wgc.rs",

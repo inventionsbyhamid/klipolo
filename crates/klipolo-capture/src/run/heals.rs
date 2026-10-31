@@ -34,8 +34,7 @@ impl SessionCore {
                 self.srcs[i].blank = *blank;
                 let _ = self.heal.decide(source, self.srcs[i].kind, &event, now_ns);
             }
-            // "Stop sharing" before the gate is a start refused: nothing was recorded, so it never says "was saved"
-            // (carried).
+            // "Stop sharing" before the gate is a start refused: nothing was recorded, so it never says "was saved".
             (PipeEvent::StoppedByUser, WorkerState::Starting | WorkerState::Countdown) => {
                 fx.push(Effect::Emit(Event::Failed {
                     error: msg!("capture.stop.sharingBeforeStart"),

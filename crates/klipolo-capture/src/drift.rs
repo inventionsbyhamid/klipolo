@@ -5,7 +5,7 @@
 //! fitted to a line, `frame = rate × (1 + drift) × (t − offset)`, and the engine resamples by that ratio, so sources
 //! sources stay within 10 ms of each other after an hour once corrected.
 //!
-//! The line itself (robust least squares, two rounds of rejection, exact integer means) moved to `klipolo_model::fit`
+//! The line itself (robust least squares, two rounds of rejection, exact integer means) moved to `klipolo_model::fit`,
 //! where Sync uses it too; this module re-exports it, so the recorder's code and tests are unchanged.
 
 pub use klipolo_model::fit::{Anchor, Fit, MIN_ANCHORS, fit};

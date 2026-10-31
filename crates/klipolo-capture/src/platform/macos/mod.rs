@@ -21,7 +21,7 @@
 //!   sampled fallback), with the system cursor left out of the frames and put back live (`screen`).
 //!
 //! Nothing in the listing files opens a device or asks for a permission. ScreenCaptureKit's content list, which shows
-//! macOS's monthly screen-recording prompt, is read only by the capture pipes' `start`, after Record, and by the live
+//! macOS's monthly screen-recording prompt, is read only by the capture pipes' `start`, after Record, and by
 //! the live view's, only once Screen Recording's preflight says it is allowed (the one exception). The one
 //! request Klipolo makes itself, Screen Recording's (`screen_permission`), runs only on the person's press of "Allow
 //! screen recording".

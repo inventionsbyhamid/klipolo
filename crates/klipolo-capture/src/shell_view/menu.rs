@@ -77,7 +77,7 @@ pub fn action_text(action: MenuAction, state: WorkerState, words: &Words) -> Str
     words.say(action_code(action, state), &[])
 }
 
-/// The shortcut a native menu shows beside `action` (in `KeyBindings`' syntax): Start over's, when the person set one
+/// The shortcut a native menu shows beside `action` (in `KeyBindings`' syntax): Start over's, when the person set one.
 /// The others' keys mean other things before the take starts (the start key starts it), so they show none.
 pub fn menu_shortcut(action: MenuAction, keys: &KeyBindings) -> Option<&str> {
     let key = keys.start_over.as_deref().filter(|k| !k.is_empty());

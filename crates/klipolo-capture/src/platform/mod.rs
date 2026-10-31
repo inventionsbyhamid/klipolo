@@ -16,7 +16,7 @@ pub mod macos;
 #[cfg(all(feature = "real-capture", target_os = "macos"))]
 use self::macos as imp;
 
-// `self::`: once the `windows` crate is a dependency, a bare `windows` is ambiguous.
+// `self::`: once the `windows` crate is a dependency, a bare `windows` is ambiguous (E0659).
 #[cfg(all(feature = "real-capture", windows))]
 mod windows;
 #[cfg(all(feature = "real-capture", windows))]

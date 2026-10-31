@@ -63,8 +63,7 @@ impl SelfCheck {
         if self.link.sampled.load(Ordering::Acquire) {
             return (false, None);
         }
-        // The main queue's time first, then the downs: every down its handler sent before that block ran is seen
-        //.
+        // The main queue's time first, then the downs: every down its handler sent before that block ran is seen.
         let main = self.ping(now);
         for (at, btn) in self.downs.try_iter() {
             self.gating.monitor_down(at, btn);

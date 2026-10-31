@@ -140,7 +140,7 @@ fn screen_recording_pulled_before_the_gate_is_a_refusal() {
 
 #[test]
 fn stop_sharing_before_the_gate_is_a_refusal_never_said_to_be_saved() {
-    // The system's "Stop sharing" during the countdown (carried): no take, and the words say so.
+    // The system's "Stop sharing" during the countdown: no take, and the words say so.
     let mut h = Harness::new(cfg(&[Src::Screen, Src::Mic], 3));
     h.command(Command::Start);
     assert_eq!(h.state(), WorkerState::Countdown);

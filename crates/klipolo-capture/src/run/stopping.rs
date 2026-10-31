@@ -112,7 +112,7 @@ impl Core {
 
 /// A journal line for a second handle, while the writer's own may still be mid-write: it starts with a newline, in the
 /// same write, so it never glues onto a line the writer left half-written after `open_append`'s check.
-/// n5). The reader skips the empty line this may leave.
+/// The reader skips the empty line this may leave.
 fn apart(line: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(line.len() + 1);
     out.push(b'\n');

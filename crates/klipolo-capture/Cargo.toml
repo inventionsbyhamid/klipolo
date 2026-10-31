@@ -41,7 +41,7 @@ tracing = "0.1"
 # The worker's own log (a take's diagnostics.log, else stderr), as the app's.
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
 # The worker shell's menu-bar, notification-area or tray item and its menu (muda, re-exported) on every OS,
-# 26, 30), the version tauri already builds.
+# the version tauri already builds.
 tray-icon = { version = "0.25", optional = true }
 
 # The microphone on macOS and Windows: Cap's cpal fork at the engine's pin (macOS streams stop and release the
@@ -54,9 +54,9 @@ cpal = { git = "https://github.com/CapSoftware/cpal", rev = "6013cb5f8bd3", opti
 # permission states and Core Audio's device properties, and the capture pipes later. objc2's AppKit for the
 # running apps and the screens' names, Core Graphics for the displays and the screen-recording check, Foundation for
 # the apps' `Info.plist`. The worker shell: AppKit's application, HUD panel, status item image and workspace
-# notices; Foundation's notification blocks (block2); Core Foundation's distributed notices; libc's kqueue. The camera
-#: Core Image (`ci`) for Check camera's JPEG, and Core Graphics' sRGB colour space for it. The cursor
-# C10): the global mouse monitor's handler (AppKit's `block2` methods) and a mouse event's place (`NSEvent.CGEvent`, Core
+# notices; Foundation's notification blocks (block2); Core Foundation's distributed notices; libc's kqueue. The camera:
+# Core Image (`ci`) for Check camera's JPEG, and Core Graphics' sRGB colour space for it. The cursor:
+# the global mouse monitor's handler (AppKit's `block2` methods) and a mouse event's place (`NSEvent.CGEvent`, Core
 # Graphics' `CGEvent`).
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = { version = "0.6", optional = true }
