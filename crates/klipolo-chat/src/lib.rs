@@ -17,8 +17,9 @@ pub mod sanitize;
 pub mod tools;
 
 pub use compile::{
-    ANALYZE_FIRST, AnalysisState, Audience, Compiled, Inputs, Job, NO_FILLERS, Proposal, Refusal,
-    STILL_LISTENING, compile, picture_layout, picture_ops,
+    ANALYZE_FIRST, AnalysisState, Audience, ClipMoment, Compiled, Inputs, Job, NO_FILLERS,
+    Proposal, Refusal, STILL_LISTENING, clip_moment_at, clip_moment_time, compile, picture_layout,
+    picture_ops,
 };
 pub use context::{
     ChatContext, MAX_CONTEXT_TOKENS, Refs, SceneEntry, SceneLog, SpeakerTurn, View, build_context,

@@ -56,7 +56,8 @@ use crate::sanitize;
 use crate::tools::{Moment, PictureSize, Position, ToolCall};
 use map::Map;
 pub use media::{
-    PICTURE_MARGIN, SOUND_VOLUME, TEXT_COMING_SOON, TITLE_CARD, picture_layout, picture_ops,
+    ClipMoment, PICTURE_MARGIN, SOUND_VOLUME, TEXT_COMING_SOON, TITLE_CARD, clip_moment_at,
+    clip_moment_time, picture_layout, picture_ops,
 };
 use trim::Trim;
 
@@ -137,22 +138,25 @@ pub enum Job {
     Blur {
         description: String,
     },
-    /// A sticker of `prompt`, cut out of its background, to show from `at_us` for `duration_us` at `size` and
-    /// `position` (`picture_ops`), on the project as the additions leave it.
+    /// A sticker of `prompt`, cut out of its background, to show for `duration_us` at `size` and `position`
+    /// (`picture_ops`) over the footage `anchor` names, wherever it plays once the picture is drawn
+    /// (`clip_moment_time`). `at_us` is where that is on the project as the message's additions leave it: the time
+    /// to use when `anchor` is None (past the main track's end) or its footage is gone.
     MakeSticker {
         prompt: String,
         at_us: Us,
         duration_us: Us,
         position: Position,
         size: PictureSize,
+        anchor: Option<ClipMoment>,
     },
-    /// A background about `prompt` in `format`'s shape, with no lettering, to go under the title layer `title_id` the
-    /// additions placed from `at_us` for `duration_us` (it moves with its clip, so the app reads where it is then).
+    /// A background about `prompt`, with no lettering, to go under the title layer `title_id`, where that layer is
+    /// when the picture comes (it moves with its clip); dropped if the layer is gone. `format` is the shape to draw:
+    /// the primary format as the message's additions leave it. A format change still waiting for approval isn't in
+    /// it, so the app reads the project's primary format again when it starts drawing.
     MakeTitleBackground {
         prompt: String,
         format: FormatKind,
-        at_us: Us,
-        duration_us: Us,
         title_id: Id,
     },
 }
@@ -371,10 +375,14 @@ impl Compiler<'_> {
             undo: calls.iter().any(|c| matches!(c, ToolCall::Undo)),
             ..Compiled::default()
         };
-        // In call order: the additions compile now; removals and moments wait for the project the additions make.
+        // In call order: the additions compile now; removals, moments and pictures to draw wait for the project the
+        // additions make, so what comes later in the answer never moves them.
         let mut adding = Phase::new(self.snapshot.clone());
         let mut waiting: Vec<(usize, Removal)> = Vec::new();
         let mut moments: Vec<(usize, &[Moment])> = Vec::new();
+        let mut jobs: Vec<(usize, Job)> = Vec::new();
+        let mut stickers: Vec<(usize, &ToolCall)> = Vec::new();
+        let mut titles: Vec<(usize, &str, Id)> = Vec::new();
         // Once a format change is proposed, the later ones in the answer follow it there, so they apply in call order.
         let mut format_proposed = false;
         for (i, call) in calls.iter().enumerate() {
@@ -410,32 +418,21 @@ impl Compiler<'_> {
                     continue;
                 }
                 ToolCall::FollowSubject { description } => {
-                    out.jobs.push(Job::Follow {
-                        description: description.clone(),
-                    });
+                    let description = description.clone();
+                    jobs.push((i, Job::Follow { description }));
                     continue;
                 }
                 ToolCall::BlurObjects { description } => {
-                    out.jobs.push(Job::Blur {
-                        description: description.clone(),
-                    });
+                    let description = description.clone();
+                    jobs.push((i, Job::Blur { description }));
                     continue;
                 }
                 ToolCall::FindMoments { moments: found, .. } => {
                     moments.push((i, found));
                     continue;
                 }
-                ToolCall::MakeSticker {
-                    prompt,
-                    position,
-                    at_us,
-                    duration_us,
-                } => {
-                    let times = (*at_us, *duration_us);
-                    match media::make_sticker(self, &adding.work, prompt, *position, times) {
-                        Ok(job) => out.jobs.push(job),
-                        Err(r) => refuse(&mut out, i, r),
-                    }
+                ToolCall::MakeSticker { .. } => {
+                    stickers.push((i, call));
                     continue;
                 }
                 ToolCall::MakeTitleCard {
@@ -444,22 +441,18 @@ impl Compiler<'_> {
                     at_us,
                     duration_us,
                 } => {
-                    let made = media::make_title_card(
-                        self,
-                        &adding.work,
-                        (title, prompt),
-                        (*at_us, *duration_us),
-                    );
+                    let made =
+                        media::make_title_card(self, &adding.work, title, (*at_us, *duration_us));
                     // The title is an addition; its background is drawn only once the title is in.
-                    let tried = made.and_then(|(edit, job)| {
+                    let tried = made.and_then(|(edit, title_id)| {
                         let tried = (adding.try_edit(edit))
                             .map_err(|e| to_model(format!("makeTitleCard: {e}")))?;
-                        Ok((tried, job))
+                        Ok((tried, title_id))
                     });
                     match tried {
-                        Ok((tried, job)) => {
+                        Ok((tried, title_id)) => {
                             adding.keep(tried);
-                            out.jobs.push(job);
+                            titles.push((i, prompt.as_str(), title_id));
                         }
                         Err(r) => refuse(&mut out, i, r),
                     }
@@ -519,6 +512,30 @@ impl Compiler<'_> {
                 Err(r) => refuse(&mut out, i, r),
             }
         }
+        for (i, call) in stickers {
+            let ToolCall::MakeSticker {
+                prompt,
+                position,
+                at_us,
+                duration_us,
+            } = call
+            else {
+                continue;
+            };
+            let times = (*at_us, *duration_us);
+            match media::make_sticker(self, &with_additions, prompt, *position, times) {
+                Ok(job) => jobs.push((i, job)),
+                Err(r) => refuse(&mut out, i, r),
+            }
+        }
+        for (i, prompt, title_id) in titles {
+            jobs.push((
+                i,
+                media::title_background(prompt, &with_additions, title_id),
+            ));
+        }
+        jobs.sort_by_key(|(i, _)| *i);
+        out.jobs = jobs.into_iter().map(|(_, job)| job).collect();
         // The removals in call order, on top.
         let mut removing = Phase::new(with_additions);
         for (i, removal) in waiting {

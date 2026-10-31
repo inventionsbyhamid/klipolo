@@ -22,7 +22,7 @@ pub(super) struct Map<'a> {
 }
 
 /// Where the source moment `source_us` of `c` (which starts at `start`) plays on the timeline.
-fn timeline_at(c: &Clip, start: Us, source_us: Us) -> Us {
+pub(super) fn timeline_at(c: &Clip, start: Us, source_us: Us) -> Us {
     let into = source_us.clamp(c.source_in_us, c.source_out_us) - c.source_in_us;
     start.saturating_add(scaled(into, c.speed))
 }

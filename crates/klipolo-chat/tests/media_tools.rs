@@ -12,8 +12,9 @@ use std::collections::HashMap;
 use klipolo_chat::compile::{TEXT_COMING_SOON, TITLE_CARD};
 use klipolo_chat::tools::{PictureSize, Position, TextPreset};
 use klipolo_chat::{
-    AnalysisState, Audience, Compiled, FunctionCall, Inputs, Job, Library, LibraryItem, MediaKind,
-    Problem, Refs, Refusal, SceneEntry, SceneLog, ToolCall, View, compile,
+    AnalysisState, Audience, ClipMoment, Compiled, FunctionCall, Inputs, Job, Library, LibraryItem,
+    MediaKind, Problem, Refs, Refusal, SceneEntry, SceneLog, ToolCall, View, clip_moment_time,
+    compile,
 };
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::contrib::ContribId;
@@ -834,6 +835,10 @@ fn make_sticker_becomes_a_job_not_an_op() {
             duration_us: secs(5.0),
             position: Position::TopRight,
             size: PictureSize::Medium,
+            anchor: Some(ClipMoment {
+                clip_id: "t".into(),
+                source_us: secs(12.0),
+            }),
         }]
     );
     // The prompt names the picture in the library too: no dashes.
@@ -897,8 +902,6 @@ fn make_title_card_writes_the_persons_title_over_a_background_job() {
         vec![Job::MakeTitleBackground {
             prompt: "Lisbon trams at sunset".into(),
             format: FormatKind::Landscape,
-            at_us: 0,
-            duration_us: secs(4.0),
             title_id: title.id.clone(),
         }]
     );
@@ -947,6 +950,165 @@ fn a_title_card_without_the_persons_title_is_refused_to_ask() {
         reason.starts_with("makeTitleCard: ") && reason.contains("askUser"),
         "{reason}"
     );
+}
+
+/// "talk.mov" as two pieces: c1 plays its 0 to 10 s, c2 its 20 to 30 s, at 10 to 20 s on the timeline.
+fn two_pieces() -> Project {
+    let mut p = project();
+    let piece = |id: &str, from: f64, to: f64| {
+        let mut c = Clip::new(
+            ClipSource::Asset { id: "talk".into() },
+            secs(from),
+            secs(to),
+        );
+        c.id = id.into();
+        c
+    };
+    p.timeline.main = vec![piece("a", 0.0, 10.0), piece("b", 20.0, 30.0)];
+    p
+}
+
+/// c1's end moved out to 12 s: c2 starts 2 s later.
+fn longer_c1() -> ToolCall {
+    call(
+        "trimClip",
+        json!({"clip": "c1", "edge": "end", "toSec": 12.0}),
+    )
+}
+
+/// The answer's calls in their order and the other way round.
+fn both_orders(calls: [ToolCall; 2]) -> [[ToolCall; 2]; 2] {
+    let [x, y] = calls;
+    [[x.clone(), y.clone()], [y, x]]
+}
+
+#[test]
+fn a_sticker_keeps_to_its_footage_whatever_the_answer_does_before_it() {
+    let p = two_pieces();
+    let i = inputs(
+        &p,
+        "a paper plane sticker at 15 s, and the first clip to end at 12 s",
+    );
+    let sticker = call(
+        "makeSticker",
+        json!({"prompt": "paper plane", "position": null, "atSec": 15.0, "durationSec": null}),
+    );
+    for calls in both_orders([sticker, longer_c1()]) {
+        let out = compile(&p, &i, &calls);
+        let with_additions = applied(&p, &out);
+        // 15 s was c2's 25 s; c1 is 2 s longer now, so that footage plays at 17 s.
+        let [Job::MakeSticker { at_us, anchor, .. }] = &out.jobs[..] else {
+            panic!("{:?}", out.jobs);
+        };
+        let anchor = anchor.as_ref().expect("over the main track");
+        assert_eq!(
+            (*at_us, anchor),
+            (
+                secs(17.0),
+                &ClipMoment {
+                    clip_id: "b".into(),
+                    source_us: secs(25.0),
+                }
+            ),
+            "{calls:?}"
+        );
+        assert_eq!(clip_moment_time(&with_additions, anchor), Some(secs(17.0)));
+    }
+}
+
+#[test]
+fn a_title_card_moves_with_its_footage_whatever_the_answer_does_before_it() {
+    let p = two_pieces();
+    let i = inputs(
+        &p,
+        "a title card saying Day one at 15 s, and the first clip to end at 12 s",
+    );
+    let card = call(
+        "makeTitleCard",
+        json!({"title": "Day one", "prompt": "trams", "atSec": 15.0, "durationSec": null}),
+    );
+    for calls in both_orders([card, longer_c1()]) {
+        let out = compile(&p, &i, &calls);
+        let titles = layers(&applied(&p, &out), TrackKind::Overlay);
+        assert_eq!(titles[0].start_us, secs(17.0), "{calls:?}");
+        assert!(
+            matches!(&out.jobs[..], [Job::MakeTitleBackground { title_id, .. }] if *title_id == titles[0].id)
+        );
+    }
+}
+
+#[test]
+fn a_title_cards_background_takes_the_format_the_answer_leaves() {
+    let p = project();
+    let i = inputs(
+        &p,
+        "make it vertical, with a title card saying Day 1 and a plane sticker when I say flying",
+    );
+    let card = call(
+        "makeTitleCard",
+        json!({"title": "Day 1", "prompt": "trams", "atSec": 0.0, "durationSec": null}),
+    );
+    let portrait = call(
+        "setFormat",
+        json!({"format": "portrait", "keepOthers": true}),
+    );
+    let sticker = call(
+        "makeSticker",
+        json!({"prompt": "plane", "position": "top-right", "atSec": 12.0, "durationSec": null}),
+    );
+    let mut seen = Vec::new();
+    for calls in both_orders([card, portrait]) {
+        let calls = [calls[0].clone(), calls[1].clone(), sticker.clone()];
+        let out = compile(&p, &i, &calls);
+        assert!(
+            matches!(
+                &out.jobs[..],
+                [
+                    Job::MakeTitleBackground {
+                        format: FormatKind::Portrait,
+                        ..
+                    },
+                    Job::MakeSticker { .. }
+                ]
+            ),
+            "{calls:?}: {:?}",
+            out.jobs
+        );
+        seen.push(out.jobs[1].clone());
+    }
+    // A new format moves no footage: the sticker is the same either way.
+    assert_eq!(seen[0], seen[1]);
+}
+
+#[test]
+fn a_stickers_footage_is_found_again_once_a_removal_is_applied() {
+    let p = project();
+    let i = inputs(
+        &p,
+        "a plane sticker when I say flying, and cut the first words",
+    );
+    let sticker = call(
+        "makeSticker",
+        json!({"prompt": "plane", "position": null, "atSec": 12.0, "durationSec": null}),
+    );
+    let cut = call("cutRange", json!({"startSec": 0.5, "endSec": 2.0}));
+    for calls in both_orders([sticker, cut]) {
+        let out = compile(&p, &i, &calls);
+        // The removal is only proposed: the sticker is placed on the project as the additions leave it.
+        let [Job::MakeSticker { at_us, anchor, .. }] = &out.jobs[..] else {
+            panic!("{:?}", out.jobs);
+        };
+        assert_eq!(*at_us, secs(12.0), "{calls:?}");
+        let anchor = anchor.as_ref().unwrap();
+        let proposal = out.proposal.as_ref().expect("the cut, proposed");
+        let after = apply_ops(&p, &proposal.tx.ops).unwrap();
+        // Applied, the cut moves "flying" earlier by what it took away; the anchor finds it there.
+        assert_eq!(
+            clip_moment_time(&after, anchor),
+            Some(secs(12.0) - proposal.removed_us),
+            "{calls:?}"
+        );
+    }
 }
 
 #[test]
