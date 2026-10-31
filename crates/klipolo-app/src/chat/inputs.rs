@@ -19,14 +19,14 @@ use klipolo_model::timeline::ItemContent;
 use super::sources::Findings;
 use crate::analysis::chat::{scene_entries, speaker_turns};
 
-/// The context the model reads for `project`, and the inputs its calls compile against: `message` (the times it says
-/// are evidence) and `view` (the playhead, the selection) as sent.
 /// A sound file this long or longer is music on the library's tabs, unless the timeline plays it as a sound effect (the
 /// page's `MUSIC_MIN_US`, `features/media`).
 pub const MUSIC_MIN_US: Us = 15_000_000;
 /// The ids of the pack's files in a project start with this: they are listed with the pack, not as the project's own.
 const PACK_PREFIX: &str = "klipolo-pack-";
 
+/// The context the model reads for `project`, and the inputs its calls compile against: `message` (the times it says
+/// are evidence) and `view` (the playhead, the selection) as sent.
 pub(crate) fn gather(
     project: &Project,
     findings: &dyn Findings,
