@@ -17,6 +17,9 @@ const PREFERRED = [
   'MIT', 'Apache-2.0', 'ISC', 'BSD-3-Clause', 'BSD-2-Clause', 'Zlib', '0BSD', 'Unicode-3.0', 'MPL-2.0', 'CC0-1.0',
   'CDLA-Permissive-2.0', 'WTFPL',
 ];
+// Licences that can't be shipped in an AGPL-3.0-only app, whatever texts are in the folder: a package offering only
+// these stops the run, and a text for one of them is refused.
+const DENIED = ['GPL-2.0-only', 'GPL-2.0', 'LGPL-2.0-only', 'LGPL-2.0'];
 const RULE = '-'.repeat(100);
 
 const [metadataFile, pageDir, textsDir] = process.argv.slice(2);
@@ -28,6 +31,12 @@ const texts = new Map(
   fs.readdirSync(textsDir).filter((f) => f.endsWith('.txt')).map((f) => [f.slice(0, -4), tidy(read(path.join(textsDir, f)))]),
 );
 const problems = [];
+for (const id of DENIED) {
+  if (texts.has(id)) {
+    console.error(`refused: ${textsDir}/${id}.txt: ${id} can't ship in an AGPL-3.0-only app, so it has no text there`);
+    process.exit(1);
+  }
+}
 
 const rust = rustPackages(JSON.parse(read(metadataFile)));
 const page = await pagePackages(path.resolve(pageDir));
@@ -249,9 +258,15 @@ function choose(p) {
     return [];
   }
   const rank = (id) => (PREFERRED.includes(id) ? PREFERRED.indexOf(id) : PREFERRED.length);
-  const usable = options.filter((o) => o.every((id) => texts.has(id)));
+  const denied = (id) => DENIED.includes(id.split(' WITH ')[0]);
+  const usable = options.filter((o) => o.every((id) => texts.has(id) && !denied(id)));
   if (!usable.length) {
-    problems.push(`${label} is under "${p.license}": none of it has a text in scripts/release/licenses`);
+    const deniedIds = unique(options.flat().filter(denied));
+    problems.push(
+      deniedIds.length
+        ? `${label} is under "${p.license}": ${deniedIds.join(', ')} can't ship in an AGPL-3.0-only app`
+        : `${label} is under "${p.license}": none of it has a text in scripts/release/licenses`,
+    );
     return [];
   }
   usable.sort((a, b) => Math.max(...a.map(rank)) - Math.max(...b.map(rank)) || a.length - b.length);
