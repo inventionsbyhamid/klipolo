@@ -1,6 +1,7 @@
 //! How takes end. Stop is taken in every state the worker reports, "Stop the running recording" reaches whichever take
-//! runs, and a take whose encoder gives up mid-take, or whose worker keeps crashing, ends with plain words and keeps
-//! what was written. Fake workers only: nothing captures.
+//! runs, a take whose screen's encoder gives up mid-take, or whose worker keeps crashing, ends with plain words and
+//! keeps what was written, and one whose camera's encoder gives up records on without the camera. Fake workers only:
+//! nothing captures.
 
 use klipolo_capture::protocol::{Command, Event};
 use klipolo_capture::shell::Level;
@@ -121,54 +122,53 @@ fn encoder_gave_up(source: &str) -> Event {
 }
 
 /// The macOS encoder can fail mid-take (two H.264 sessions on one engine, the screen's and the camera's). Once the
-/// worker gives a source up for its encoder, the take stops and is saved: the page hears why in plain words, and
+/// worker gives the screen up for its encoder, the take stops and is saved: the page hears why in plain words, and
 /// Klipolo comes back with the take, whose folder holds everything written so far.
 #[test]
-fn an_encoder_that_gives_up_mid_take_stops_and_saves_the_take() {
-    for source in ["camera", "screen"] {
-        let rec = fixture();
-        let mut options = options_screen();
-        options.camera = Some("camera-1".into());
-        let id = rec.arm(options).unwrap().id;
-        rec.send(Command::Start).unwrap();
-        rec.launch.emit(state(Recording));
-        assert!(!rec.visible());
-        rec.launch.emit(encoder_gave_up(source));
-        rec.settle();
-        assert_eq!(
-            rec.launch.commands(),
-            [Command::Start, Command::Stop],
-            "{source}: stopped by the app"
-        );
-        let stopped = Event::Health {
-            note: CodedError::new("capture.stop.encoder"),
-            level: Level::Critical,
-            source: Some(source.into()),
-        };
-        let events = rec.events();
-        assert_eq!(
-            &events[events.len() - 2..],
-            [encoder_gave_up(source), stopped]
-        );
-        assert_eq!(
-            klipolo_capture::english::english(&CodedError::new("capture.stop.encoder")),
-            "The video encoder stopped, so the recording stopped and was saved."
-        );
-        // A second note from the worker never stops it twice.
-        rec.launch.emit(encoder_gave_up(source));
-        rec.settle();
-        assert_eq!(rec.launch.commands().len(), 2);
-        // The worker saves the take, and Klipolo comes back with it.
-        rec.launch.emit(state(Stopping));
-        rec.launch.emit(Event::Finished {
-            session: id.clone(),
-        });
-        rec.launch.exit(Some(0));
-        let finished = rec.finished();
-        assert!(finished.len() == 1 && !finished[0].recover, "{source}");
-        assert!(rec.take_dir(&id).is_dir(), "{source}: its folder stays");
-        assert!(rec.visible(), "{source}");
-    }
+fn a_screen_encoder_that_gives_up_mid_take_stops_and_saves_the_take() {
+    let rec = fixture();
+    let mut options = options_screen();
+    options.camera = Some("camera-1".into());
+    let id = rec.arm(options).unwrap().id;
+    rec.send(Command::Start).unwrap();
+    rec.launch.emit(state(Recording));
+    assert!(!rec.visible());
+    rec.launch.emit(encoder_gave_up("screen"));
+    rec.settle();
+    assert_eq!(
+        rec.launch.commands(),
+        [Command::Start, Command::Stop],
+        "stopped by the app"
+    );
+    let stopped = Event::Health {
+        note: CodedError::new("capture.stop.encoder"),
+        level: Level::Critical,
+        source: Some("screen".into()),
+    };
+    let events = rec.events();
+    assert_eq!(
+        &events[events.len() - 2..],
+        [encoder_gave_up("screen"), stopped]
+    );
+    assert_eq!(
+        klipolo_capture::english::english(&CodedError::new("capture.stop.encoder")),
+        "The video encoder stopped, so the recording stopped and was saved. Press Record to try again."
+    );
+    // A second note from the worker never stops it twice.
+    rec.launch.emit(encoder_gave_up("screen"));
+    rec.settle();
+    assert_eq!(rec.launch.commands().len(), 2);
+    // The worker saves the take, and Klipolo comes back with it.
+    rec.launch.emit(state(Stopping));
+    rec.launch.emit(Event::Finished {
+        session: id.clone(),
+    });
+    rec.launch.exit(Some(0));
+    let finished = rec.finished();
+    assert!(finished.len() == 1 && !finished[0].recover);
+    assert!(rec.take_dir(&id).is_dir(), "its folder stays");
+    assert!(rec.visible());
+
     // A worker that dies while it saves is never resumed: the take is finished from its files.
     let rec = fixture();
     let id = rec.arm(options_screen()).unwrap().id;
@@ -181,6 +181,43 @@ fn an_encoder_that_gives_up_mid_take_stops_and_saves_the_take() {
     let finished = rec.finished();
     assert!(finished.len() == 1 && finished[0].recover);
     assert!(rec.take_dir(&id).is_dir());
+    assert!(rec.visible());
+}
+
+/// The camera's encoder giving up drops the camera and keeps the screen recording: the page hears it once, as a
+/// warning, Klipolo stays hidden, and the person's own Stop saves the take as usual.
+#[test]
+fn a_camera_encoder_that_gives_up_drops_the_camera_and_the_screen_records_on() {
+    let rec = fixture();
+    let mut options = options_screen();
+    options.camera = Some("camera-1".into());
+    let id = rec.arm(options).unwrap().id;
+    rec.send(Command::Start).unwrap();
+    rec.launch.emit(state(Recording));
+    rec.launch.emit(encoder_gave_up("camera"));
+    rec.launch.emit(encoder_gave_up("camera"));
+    rec.settle();
+    assert_eq!(rec.launch.commands(), [Command::Start], "the take goes on");
+    let dropped = Event::Health {
+        note: CodedError::new("capture.note.cameraDropped"),
+        level: Level::Warning,
+        source: Some("camera".into()),
+    };
+    let notes = (rec.events().into_iter()).filter(|e| *e == dropped).count();
+    assert_eq!(notes, 1, "said once");
+    assert_eq!(
+        klipolo_capture::english::english(&CodedError::new("capture.note.cameraDropped")),
+        "The camera stopped recording. The screen kept recording."
+    );
+    assert!(!rec.visible(), "Klipolo stays out of the way");
+    rec.send(Command::Stop).unwrap();
+    rec.launch.emit(state(Stopping));
+    rec.launch.emit(Event::Finished {
+        session: id.clone(),
+    });
+    rec.launch.exit(Some(0));
+    let finished = rec.finished();
+    assert!(finished.len() == 1 && !finished[0].recover);
     assert!(rec.visible());
 }
 

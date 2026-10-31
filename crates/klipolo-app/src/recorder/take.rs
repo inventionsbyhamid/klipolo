@@ -26,8 +26,10 @@ pub(super) struct Take {
     /// None between a worker's end and its resume, and while the take is finished from its files.
     pub(super) worker: Option<Worker>,
     pub(super) sup: Supervisor,
-    /// The app stopped it (its encoder gave up): said once.
+    /// The app stopped it (its screen's encoder gave up): said once.
     pub(super) stopped_by_app: bool,
+    /// Its camera's encoder gave up and the screen records on: said once.
+    pub(super) camera_dropped: bool,
 }
 
 #[derive(Default)]
@@ -119,6 +121,7 @@ impl Recorder {
             worker: Some(worker),
             sup: Supervisor::new(self.now_ms()),
             stopped_by_app: false,
+            camera_dropped: false,
         });
         Ok(Reader {
             generation,
