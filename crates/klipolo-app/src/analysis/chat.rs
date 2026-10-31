@@ -6,13 +6,18 @@ use klipolo_analysis::providers::SceneKind;
 use klipolo_analysis::scenes::SceneLog;
 use klipolo_analysis::transcript::Turn;
 
-use super::{AnalysisState, AssetState};
+use super::{AnalysisState, AnalysisStep, AssetState};
 
 impl AnalysisState {
-    /// How far `asset_id`'s analysis is, as chat's compiler asks: running is still listening; a transcript (cached,
-    /// or kept when a later step failed) is done; nothing yet is not started.
+    /// How far `asset_id`'s analysis is, as chat's compiler asks: the scene log running is still watching (its words
+    /// are in by then: the scene log comes last), any other step still listening; a transcript (cached, or kept when a
+    /// later step failed) is done; nothing yet is not started.
     pub fn chat_state(&self, asset_id: &str) -> klipolo_chat::AnalysisState {
         match self.state_of(asset_id) {
+            AssetState::Running {
+                step: AnalysisStep::Scenes,
+                ..
+            } => klipolo_chat::AnalysisState::Watching,
             AssetState::Running { .. } => klipolo_chat::AnalysisState::Transcribing,
             _ if self
                 .analysis_for(asset_id)

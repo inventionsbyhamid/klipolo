@@ -21,6 +21,7 @@ import { usePlayback } from './playback';
 import { useProject } from './project';
 import { useRange } from './range';
 import { useSelection } from './selection';
+import { useSpeech } from './speech';
 import { useUi } from './ui';
 
 export { MAX_MESSAGES, type Message, type ReplyMessage, type FailedMessage } from './chatMessages';
@@ -241,4 +242,13 @@ useProject.subscribe((s, was) => {
     const next = staleMoments(dropped, a.history.revision) ?? dropped;
     if (next !== was) useChat.setState(withMessages(next));
   }
+});
+
+// Words timed again (Captions' "Time the words again", or word timing finishing) are new words at new times on the same
+// revision: an open proposal made on the old ones would cut where they were, so it is dropped as a hand edit drops it
+// (Rust refuses it too). The panel follows `speech-changed` (`startSpeechFeed`).
+useSpeech.subscribe((s, was) => {
+  if (s.pagesEpoch === was.pagesEpoch) return;
+  const next = dropStale(useChat.getState().messages, null);
+  if (next) useChat.setState(withMessages(next));
 });

@@ -56,6 +56,7 @@ pub const TOO_LONG: &str =
     "This project is too long for chat right now. Select a part and ask again.";
 /// Said when the credit is used up and the provider gave no sentence of its own.
 pub const OUT_OF_CREDIT: &str = "Your AI credit has run out.";
+/// Said when the provider is busy, or doesn't answer, and gave no sentence of its own (who: Meta, Klipolo's server).
 pub const BUSY: &str = "Klipolo AI is busy right now. Try again in a moment.";
 pub const UNAVAILABLE: &str = "Klipolo AI isn't answering right now. Try again in a moment.";
 pub const NO_CONNECTION: &str =
@@ -163,7 +164,7 @@ impl ChatError {
         };
         let (kind, message) = match e {
             ModelError::Budget(s) => (ChatErrorKind::Budget, said(Some(s), OUT_OF_CREDIT)),
-            ModelError::Busy => (ChatErrorKind::Busy, BUSY.to_owned()),
+            ModelError::Busy(s) => (ChatErrorKind::Busy, said(s, BUSY)),
             ModelError::Unavailable(s) => (ChatErrorKind::Unavailable, said(s, UNAVAILABLE)),
             ModelError::Network => (ChatErrorKind::Network, NO_CONNECTION.to_owned()),
             ModelError::Refused => (ChatErrorKind::Refused, NOT_ACCEPTED.to_owned()),
@@ -456,7 +457,7 @@ fn finish(
     }
     let not_done: Vec<String> = unfinished.iter().chain(dropped).cloned().collect();
     if !not_done.is_empty() {
-        parts.push(could_not(&not_done));
+        parts.push(could_not(&not_done, came_of_it));
     }
     if parts.is_empty() {
         parts.extend(compiled.questions.iter().map(|q| full_stop(q.trim())));
@@ -560,8 +561,27 @@ fn task(tool: &str) -> &'static str {
     }
 }
 
-/// "I couldn't make the cut, so I left that unchanged." for the tools named.
-fn could_not(tools: &[String]) -> String {
+/// Whether a tool works on a part of the video the model names by its times: refused back, that part stood on nothing
+/// the context showed, so the person is asked to point at it.
+fn names_a_part(tool: &str) -> bool {
+    matches!(tool, "cutRange" | "keepOnly" | "trimClip" | "findMoments")
+}
+
+/// What the reply says the tools named couldn't do, with what to do next, `else_done` when something else of the
+/// answer went through (so the video wasn't left as it was). Parts of the video it couldn't find: "I couldn't find that
+/// part, so I left the video as it was. Select it on the timeline and ask again." Anything else by what it does: "I
+/// couldn't add the sound, so I left the video as it was. Try asking in other words."
+fn could_not(tools: &[String], else_done: bool) -> String {
+    let left = if else_done {
+        "so I left it out"
+    } else {
+        "so I left the video as it was"
+    };
+    if tools.iter().all(|t| names_a_part(t)) {
+        return format!(
+            "I couldn't find that part, {left}. Select it on the timeline and ask again."
+        );
+    }
     let mut tasks: Vec<&str> = Vec::new();
     for t in tools {
         let task = task(t);
@@ -574,8 +594,12 @@ fn could_not(tools: &[String]) -> String {
         [rest @ .., last] => format!("{} or {last}", rest.join(", ")),
         [] => "do part of this".to_owned(),
     };
-    let it = if tasks.len() > 1 { "those" } else { "that" };
-    format!("I couldn't {list}, so I left {it} unchanged.")
+    let left = if else_done && tasks.len() > 1 {
+        "so I left those out"
+    } else {
+        left
+    };
+    format!("I couldn't {list}, {left}. Try asking in other words.")
 }
 
 /// One line on what `calls` came to, with the tools `dropped` in a refusal round: "Applied setFormat. Proposed cutRange

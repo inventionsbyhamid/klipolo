@@ -37,7 +37,7 @@ beforeEach(() => {
 describe('chat and the timeline', () => {
   it('proposal_ranges_reach_the_timeline: the card and the red cuts show one proposal, and go together', async () => {
     const p = proposal('p1', 3, {
-      title: 'Cut 1 pause and 1 um',
+      title: 'Cut 1 pause and 1 filler word',
       removedUs: 2 * S,
       removals: {
         ...proposal('x', 0).removals,
@@ -60,7 +60,7 @@ describe('chat and the timeline', () => {
     );
     expect(document.querySelectorAll('[data-cut]')).toHaveLength(0);
     await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'cut the um and the pause{Enter}');
-    await screen.findByRole('group', { name: 'Cut 1 pause and 1 um' });
+    await screen.findByRole('group', { name: 'Cut 1 pause and 1 filler word' });
     const cuts = () => [...document.querySelectorAll<HTMLElement>('[data-cut]')];
     expect(cuts().map((c) => c.textContent)).toEqual(['um', 'pause']);
     // Pointing at a cut in the card's list lights it on the timeline.
