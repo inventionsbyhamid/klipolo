@@ -25,7 +25,7 @@ track. Each clip has a ref (c1, c2 and so on) and its times. cA-cB means clips A
 - ## Transcript: what is said, as [start-end] speaker: words. Speaker labels (A, B) are rough and hold only within \
 one clip. [pause 2.3 s] is a silence. A line ending in ... shows only its first words.\n\
 - ## Scenes: what is seen, as [start-end] kind (who): what happens.\n\
-- ## Library: music, sounds and images to add, by name: the person's own, then Klipolo's after pack:.\n\
+- ## Library: music, sounds and images to add, by name: the person's own, then Klipolo's pack after \"pack:\".\n\
 - ## Now (last): the playhead and the selection.\n\
 All times are seconds on the timeline as it plays now, like 12.4. A heading note such as (sentence starts), \
 (kind and who only) or (every 2nd line plus those near the playhead and the ends of the selection) means lines were \
