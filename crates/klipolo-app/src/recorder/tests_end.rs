@@ -170,6 +170,70 @@ fn quitting_never_waits_for_the_recorders_lock() {
     assert!(wait_until(|| exited.load(Ordering::SeqCst)), "30 s: exits");
 }
 
+/// The recorder's lock held by another thread until the returned sender is used (or dropped).
+fn hold_the_lock(rec: &Fixture) -> (std::thread::JoinHandle<()>, mpsc::Sender<()>) {
+    let (held_tx, held) = mpsc::channel();
+    let (free, free_rx) = mpsc::channel::<()>();
+    let recorder = rec.rec().clone();
+    let holder = std::thread::spawn(move || {
+        let _slot = recorder.lock();
+        held_tx.send(()).unwrap();
+        let _ = free_rx.recv();
+    });
+    held.recv().unwrap();
+    (holder, free)
+}
+
+/// The 30 s bound holds even when the recorder's lock stays held past it (its file work hangs on a drive that stopped
+/// answering): Klipolo exits at 30 s without having sent Stop, and nothing is sent after.
+#[test]
+fn quitting_waits_30_s_at_most_while_the_recorders_lock_stays_held() {
+    let rec = fixture();
+    rec.arm(options_screen()).unwrap();
+    rec.send(Command::Start).unwrap();
+    rec.launch.emit(state(Recording));
+    rec.settle();
+    let (holder, free) = hold_the_lock(&rec);
+    let exited = Arc::new(AtomicBool::new(false));
+    let flag = exited.clone();
+    assert!(
+        rec.state
+            .hold_quit(Box::new(move || flag.store(true, Ordering::SeqCst)))
+    );
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(!exited.load(Ordering::SeqCst), "waiting for the take");
+    rec.move_clock_ms(QUIT_WAIT_MS);
+    let in_time = wait_until(|| exited.load(Ordering::SeqCst));
+    free.send(()).unwrap();
+    holder.join().unwrap();
+    assert!(in_time, "30 s: exits with the lock still held");
+    assert_eq!(
+        rec.launch.commands(),
+        [Command::Start],
+        "no Stop got through"
+    );
+}
+
+/// The quit's Stop goes to the take it waits for only: a Stop held back by a busy lock goes out once the lock is free,
+/// and never to another take.
+#[test]
+fn the_quits_stop_names_the_take_it_waits_for() {
+    let rec = fixture();
+    let id = rec.arm(options_screen()).unwrap().id;
+    rec.send(Command::Start).unwrap();
+    rec.launch.emit(state(Recording));
+    rec.settle();
+    assert!(rec.rec().stop_take_if_free("another"), "not the take: done");
+    assert_eq!(rec.launch.commands(), [Command::Start], "nothing sent");
+    let (holder, free) = hold_the_lock(&rec);
+    assert!(!rec.rec().stop_take_if_free(&id), "the lock is busy");
+    free.send(()).unwrap();
+    holder.join().unwrap();
+    assert_eq!(rec.launch.commands(), [Command::Start], "nothing sent");
+    assert!(rec.rec().stop_take_if_free(&id));
+    assert_eq!(rec.launch.commands(), [Command::Start, Command::Stop]);
+}
+
 /// No take, a take that has ended, or a test run: quitting goes straight ahead.
 #[test]
 fn a_quit_without_a_take_is_never_held() {

@@ -53,17 +53,19 @@ impl Recorder {
             take = id,
             "recorder: Klipolo quits during a take, so it is stopped and lands first"
         );
-        let stopped = self.stop_running_if_free();
+        let mut stopped = self.stop_take_if_free(&id);
         let deadline = self.now_ms().saturating_add(QUIT_WAIT_MS);
         let me = self.clone();
         let waiting = id.clone();
         let spawned = std::thread::Builder::new()
             .name("klipolo-record-quit".into())
             .spawn(move || {
-                if !stopped {
-                    me.stop_running();
-                }
+                // Stop goes once the lock is free, tried again at every look, so a lock held past the deadline never
+                // keeps Klipolo open.
                 while me.take_id().as_ref() == Some(&waiting) && me.now_ms() < deadline {
+                    if !stopped {
+                        stopped = me.stop_take_if_free(&waiting);
+                    }
                     std::thread::sleep(LOOK);
                 }
                 me.end_wait(&waiting);

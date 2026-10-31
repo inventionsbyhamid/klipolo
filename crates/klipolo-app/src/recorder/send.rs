@@ -55,15 +55,18 @@ impl Recorder {
         stop_in(&mut self.lock())
     }
 
-    /// `stop_running` only when the recorder's lock is free now, so a caller that mustn't wait for file work under it
-    /// (the main thread) never does: false when it is held, and nothing was sent.
-    pub(super) fn stop_running_if_free(&self) -> bool {
+    /// Stop for take `id` only, and only when the recorder's lock is free now, so a caller that mustn't wait for file
+    /// work under it (the main thread, quitting's wait) never does: false when it is held, and nothing was sent. True
+    /// once Stop went, or when `id` isn't the recorder's take any more (nothing to stop: another take is never told).
+    pub(super) fn stop_take_if_free(&self, id: &str) -> bool {
         let mut slot = match self.slot.try_lock() {
             Ok(slot) => slot,
             Err(TryLockError::Poisoned(slot)) => slot.into_inner(),
             Err(TryLockError::WouldBlock) => return false,
         };
-        stop_in(&mut slot);
+        if slot.take.as_ref().is_some_and(|take| take.cfg.id == id) {
+            stop_in(&mut slot);
+        }
         true
     }
 }
