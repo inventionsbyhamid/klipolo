@@ -402,6 +402,7 @@ fn host_error(host: &dyn Host, client: &str, e: HostError) -> String {
         },
         HostError::ReadOnly => words::READ_ONLY.to_owned(),
         HostError::PushesOut => words::PUSHES_OUT.to_owned(),
+        HostError::RedoWaits => words::REDO_WAITS.to_owned(),
         HostError::OverShare => words::OVER_SHARE.to_owned(),
         HostError::NotYours => words::NOT_YOURS.to_owned(),
         HostError::NothingToUndo => words::NOTHING_TO_UNDO.to_owned(),

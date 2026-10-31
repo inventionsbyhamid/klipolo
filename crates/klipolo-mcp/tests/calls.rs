@@ -19,7 +19,7 @@ use klipolo_mcp::rpc::Mcp;
 use klipolo_mcp::words::{
     DECIDED, DONE, KLIPOLO_CHAT, MOVED, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS, NOTHING_TO_UNDO,
     OVER_SHARE, OWN_CHANGED, OWN_MOVED, OWN_WAITING, PROPOSED_NO_FOOTAGE, PUSHES_OUT, READ_FIRST,
-    STALE, UNCHANGED, UNDO_DROPPED, UNDONE, WAITING_OTHER, fill,
+    REDO_WAITS, STALE, UNCHANGED, UNDO_DROPPED, UNDONE, WAITING_OTHER, fill,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -532,6 +532,7 @@ fn agent_words_are_exact() {
         OWN_WAITING,
         DECIDED,
         UNDO_DROPPED,
+        REDO_WAITS,
         UNDONE,
         STARTED,
         REMOVES,
@@ -983,8 +984,13 @@ fn redo_the_person_could_take_is_never_dropped() {
     person_renames(&host, "mine");
     host.person_undo();
     let before = host.revision();
-    // Any commit would drop the person's redo: the app's change waits for them instead.
-    assert_refused(&agent.call("setCaptions", captions(false)), PUSHES_OUT);
+    // Any commit would drop the person's redo: the app's change waits for them instead, and the app is told why.
+    assert_refused(&agent.call("setCaptions", captions(false)), REDO_WAITS);
+    assert_eq!(
+        REDO_WAITS,
+        "The person undid a change in Klipolo and can still redo it. Wait until they redo it or make an edit of their \
+         own, then try again."
+    );
     assert_eq!(host.revision(), before);
     assert_eq!(host.state().doc.as_ref().unwrap().redo_steps(), 1);
     assert!(host.project().captions.enabled);
@@ -992,6 +998,14 @@ fn redo_the_person_could_take_is_never_dropped() {
     host.person_redo();
     assert_eq!(host.project().name, "mine");
     assert_eq!(outcome(&agent.call("setCaptions", captions(false))), "done");
+    // An app's own undone step in redo is its own to drop: its next change applies.
+    assert_eq!(text(&agent.call("undo", json!({}))), UNDONE);
+    assert_eq!(outcome(&agent.call("setCaptions", captions(false))), "done");
+    // Another app's undone step waits for that app the same way.
+    let other = Agent::open(&mcp, "Other app");
+    assert_eq!(outcome(&other.call("setCaptions", captions(true))), "done");
+    assert_eq!(text(&other.call("undo", json!({}))), UNDONE);
+    assert_refused(&agent.call("setCaptions", captions(true)), REDO_WAITS);
 }
 
 #[test]

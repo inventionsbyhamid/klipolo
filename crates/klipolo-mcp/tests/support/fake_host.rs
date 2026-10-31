@@ -3,9 +3,10 @@
 //! chat and every app, and counters for what the server asked of it.
 //!
 //! Its rules, as the app keeps them: an app's batch commits with `commit_tx_keeping` as a step the app made, within
-//! the apps' shares of the history; any change to the project drops a waiting proposal; a proposal is set only on the
-//! revision and slot the caller saw; an app undoes only its own newest step; while a proposal that isn't the app's own
-//! waits, its batches and undos are refused (checked under the same lock as the commit).
+//! the apps' shares of the history, and waits while the redo holds a step someone else made; any change to the project
+//! drops a waiting proposal; a proposal is set only on the revision and slot the caller saw; an app undoes only its
+//! own newest step; while a proposal that isn't the app's own waits, its batches and undos are refused (checked under
+//! the same lock as the commit).
 
 #![allow(dead_code)]
 
@@ -377,6 +378,11 @@ impl Host for FakeHost {
         let doc = s.doc.as_mut().ok_or(HostError::NoProject)?;
         if doc.revision() != base {
             return Err(HostError::Moved);
+        }
+        // A commit drops every redo step: one someone else made waits for them, told apart from a push-out.
+        let mine = Maker::App(client.to_owned());
+        if doc.redo_steps_where(|maker| *maker != mine) > 0 {
+            return Err(HostError::RedoWaits);
         }
         let next =
             apply_ops(doc.project(), &tx.ops).map_err(|e| HostError::Refused(e.to_string()))?;

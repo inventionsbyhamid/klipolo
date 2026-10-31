@@ -52,6 +52,9 @@ pub enum HostError {
     ReadOnly,
     /// Making room in the history would push out a step someone else made (the person's, or another app's).
     PushesOut,
+    /// The redo holds a step someone else made (the person undid a change, or another app did): a commit drops every
+    /// redo step, so the change waits until its maker redoes it or edits.
+    RedoWaits,
     /// The app's share of the history, or all apps' together, is full.
     OverShare,
     /// The newest undo step isn't this app's.
@@ -105,7 +108,9 @@ pub trait Host: Send + Sync + 'static {
     /// under the host's own lock, in one step with the commit, so a proposal that appeared after the caller looked
     /// still wins. Implementations commit with `Document::commit_tx_keeping(tx, next, &ByApp { app: client, shares,
     /// after_point: false })`, `shares` the apps' shares of the history limits, so an app's step never pushes out the
-    /// person's steps (`PushesOut`) or holds more than its share (`OverShare`). A commit changes the revision, so it
+    /// person's steps (`PushesOut`) or holds more than its share (`OverShare`). Before that, `RedoWaits` when the redo
+    /// holds a step someone else made (`Document::redo_steps_where`): the commit would drop it. A commit changes the
+    /// revision, so it
     /// drops the open proposal (then `client`'s own), as any revision change does, and says which (`Applied::dropped`):
     /// the caller proposes its removals again only when it was the one it joined.
     fn apply(&self, client: &str, base: u64, tx: &Transaction) -> Result<Applied, HostError>;
