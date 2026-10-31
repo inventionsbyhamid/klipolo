@@ -25,6 +25,7 @@ const { useProject } = await import('../../state/project');
 const { useUi } = await import('../../state/ui');
 const { useSelection } = await import('../../state/selection');
 const { deleteBlock } = await import('./commands');
+const { toggleSoundMute } = await import('./keys/layerActions');
 const { useSpeech } = await import('./media/speech');
 const { Timeline } = await import('./Timeline');
 const { levelPoints, levelY, ATTACK_US, RELEASE_US, DuckTag } = await import('./blocks/VolumeLine');
@@ -248,6 +249,37 @@ describe('the music’s volume line', () => {
       { type: 'removeItem', id: 'bed' },
       { type: 'removeItem', id: 'bed-2' },
       { type: 'removeItem', id: 'bed-3' },
+    ]);
+  });
+
+  it('Mute sound on one piece of a song mutes every piece, and Unmute sound unmutes them, one undo step each', async () => {
+    useProject.setState({ snapshot: bed(), pending: 0, apply });
+    toggleSoundMute('bed-2');
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    const set = (call: number) =>
+      apply.mock.calls[call][1].map((op) => {
+        const { id, patch } = op as unknown as { id: string; patch: { content: AudioContent } };
+        return [id, patch.content.muted, patch.content.volume, patch.content.fadeInUs, patch.content.fadeOutUs];
+      });
+    expect(apply.mock.calls[0][0]).toBe('volume.mute.undo');
+    // Every piece muted in one change, each keeping its volume and fades for when it plays again.
+    expect(set(0)).toEqual([
+      ['bed', true, 0.3, 500_000, 0],
+      ['bed-2', true, 0.3, 0, 0],
+      ['bed-3', true, 0.3, 0, 2 * S],
+    ]);
+    // The muted song: Unmute sound from its last piece brings back all three, in one change.
+    const muted = bed();
+    for (const piece of muted.project.timeline.tracks[1].items)
+      piece.content = { ...(piece.content as AudioContent), muted: true };
+    useProject.setState({ snapshot: muted, pending: 0, apply });
+    toggleSoundMute('bed-3');
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
+    expect(apply.mock.calls[1][0]).toBe('volume.unmute.undo');
+    expect(set(1).map(([id, on]) => [id, on])).toEqual([
+      ['bed', false],
+      ['bed-2', false],
+      ['bed-3', false],
     ]);
   });
 
