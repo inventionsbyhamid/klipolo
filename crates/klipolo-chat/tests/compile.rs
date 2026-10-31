@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use klipolo_chat::compile::STILL_WATCHING;
+use klipolo_chat::compile::{ROUGH_FILLERS, STILL_WATCHING};
 use klipolo_chat::evidence::typed_times;
 use klipolo_chat::{
     ANALYZE_FIRST, AnalysisState, Audience, FunctionCall, Inputs, Job, Library, Moment, Refs,
@@ -1588,6 +1588,53 @@ fn voice_tools_work_while_the_scene_log_is_made() {
         ),
         (STILL_LISTENING, Some("c2"))
     );
+}
+
+#[test]
+fn roughly_timed_fillers_are_never_cut() {
+    // Word timing failed for part of the clip: "uh" was spread over its turn (confidence 0), so its time is a guess.
+    let (p, mut speech) = talk();
+    let mut words = said("Um, so today we look at the new module. It took |1.5 uh a long time.");
+    let uh = words.iter().position(|w| w.text == "uh").unwrap();
+    words[uh].confidence = 0.0;
+    speech
+        .transcripts
+        .insert("talk".into(), transcript(words, 30.0));
+    let out = compile(
+        &p,
+        &inputs(&p, speech, "remove the ums"),
+        &[call("removeFillers", "{}")],
+    );
+    assert_eq!(out.proposal, None, "not even the timed um");
+    assert_eq!(
+        out.refusals,
+        vec![Refusal {
+            call_index: 0,
+            reason: ROUGH_FILLERS.into(),
+            audience: Audience::Person,
+            clip: Some("c1".into()),
+        }]
+    );
+    assert_eq!(
+        ROUGH_FILLERS,
+        "Some words in this clip are only roughly timed, so I can't cut filler words exactly. Time the words again \
+         in Captions, then ask me."
+    );
+    // Rough words that aren't fillers don't stop it: only a filler's own time is cut.
+    let (p, mut speech) = talk();
+    let mut words = said("Um, so today we look at the new module. It took |1.5 uh a long time.");
+    let module = words.iter().position(|w| w.text == "module.").unwrap();
+    words[module].confidence = 0.0;
+    speech
+        .transcripts
+        .insert("talk".into(), transcript(words, 30.0));
+    let out = compile(
+        &p,
+        &inputs(&p, speech, "remove the ums"),
+        &[call("removeFillers", "{}")],
+    );
+    assert_eq!(out.refusals, vec![]);
+    assert_eq!(out.proposal.expect("both fillers").ranges.len(), 2);
 }
 
 /// A 60 s song, as the person's own music file.

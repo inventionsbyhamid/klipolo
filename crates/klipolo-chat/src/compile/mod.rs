@@ -76,6 +76,10 @@ pub const STILL_WATCHING: &str =
 pub const ANALYZE_FIRST: &str = "Analyze this clip first";
 /// What the person is told when `removeFillers` finds no filler word.
 pub const NO_FILLERS: &str = "There are no filler words to remove.";
+/// What the person is told when a filler word is only roughly timed (word timing failed, stopped or ran out, so its
+/// turn's words were spread over it by length): a cut at its guessed time would take real words.
+pub const ROUGH_FILLERS: &str = "Some words in this clip are only roughly timed, so I can't cut filler words exactly. \
+                                 Time the words again in Captions, then ask me.";
 
 /// How far a file's analysis (transcript, loudness, scene log) is. A file missing from `Inputs::analysis` counts as
 /// not started.
@@ -185,8 +189,9 @@ pub struct Refusal {
     pub call_index: usize,
     pub reason: String,
     pub audience: Audience,
-    /// The clip the refusal is about, by its ref in the context (`c4`): set when a clip isn't analyzed yet, so the
-    /// person sees which one `STILL_LISTENING` or `ANALYZE_FIRST` means (the panel shows it beside the sentence).
+    /// The clip the refusal is about, by its ref in the context (`c4`): set when a clip isn't analyzed yet or its
+    /// fillers are only roughly timed, so the person sees which one `STILL_LISTENING`, `STILL_WATCHING`, `ANALYZE_FIRST`
+    /// or `ROUGH_FILLERS` means (the app names it after "this clip").
     pub clip: Option<String>,
 }
 
