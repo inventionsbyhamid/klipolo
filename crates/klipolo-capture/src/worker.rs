@@ -143,7 +143,10 @@ mod tests {
         let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
         assert_eq!(main(&args(&["klipolo", "--record-worker"])), 2);
         assert_eq!(main(&args(&["klipolo", "--record-worker", "--probe"])), 2);
-        assert_eq!(main(&args(&["klipolo", "--record-worker", "--live-view"])), 2);
+        assert_eq!(
+            main(&args(&["klipolo", "--record-worker", "--live-view"])),
+            2
+        );
         let not_a_target = args(&["klipolo", "--record-worker", "--live-view", "{}"]);
         assert_eq!(main(&not_a_target), 2);
         let screen = r#"{"kind":"display","id":"display-1"}"#;

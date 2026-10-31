@@ -6,9 +6,9 @@
 
 use std::str::FromStr;
 
-use klipolo_platform::caps::OsFamily;
 use global_hotkey::GlobalHotKeyManager;
 use global_hotkey::hotkey::{Code, HotKey};
+use klipolo_platform::caps::OsFamily;
 
 use crate::shell::{HotkeyAction, KeyBindings};
 use crate::shell_view::{HotkeyRegistry, shortcut_text};

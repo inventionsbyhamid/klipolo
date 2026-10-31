@@ -101,7 +101,10 @@ fn a_separate_take_writes_a_header_moves_presses_and_each_shape_once() {
     );
     h.run_to(6.0 * S);
     let t = h.cursor_track();
-    assert_eq!(t.header().unwrap().capture, klipolo_cursor::Capture::Separate);
+    assert_eq!(
+        t.header().unwrap().capture,
+        klipolo_cursor::Capture::Separate
+    );
     assert_eq!((t.clicks().count(), t.shapes().len()), (1, 1));
     assert!(h.files.contains_key("cursors/0.png"));
     assert!(!t.notes().lost_any(), "{:?}", t.notes());

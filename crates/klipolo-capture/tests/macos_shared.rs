@@ -63,7 +63,10 @@ fn a_game_category_or_game_mode_marks_a_game() {
         "com.gog.galaxy",
     ] {
         let facts = app_facts(launcher, &plist, None);
-        assert!(!klipolo_capture::games::looks_like_game(&facts), "{launcher}");
+        assert!(
+            !klipolo_capture::games::looks_like_game(&facts),
+            "{launcher}"
+        );
     }
 }
 
@@ -275,7 +278,10 @@ fn a_whole_display_leaves_out_klipolo_and_the_notifications() {
     ];
     // The worker (40, no bundle id in a dev build), its parent (20) and another Klipolo (60); the system's alert panels
     // (50) stay in, so a tutorial can show a prompt being answered.
-    assert_eq!(left_out(&apps, 40, 20, Some("com.klipolo.app")), [1, 2, 3, 5]);
+    assert_eq!(
+        left_out(&apps, 40, 20, Some("com.klipolo.app")),
+        [1, 2, 3, 5]
+    );
     // A worker without a bundle id never matches every app that has none.
     assert_eq!(left_out(&apps, 99, 98, Some("")), [2]);
     assert_eq!(NOTIFICATION_APPS, ["com.apple.notificationcenterui"]);

@@ -1,5 +1,7 @@
 use klipolo_capture::shell::{Level, StatusView, WorkerState};
-use klipolo_capture::shell_view::{HotkeyRegistry, KeysController, Words, menu_lines, status_title};
+use klipolo_capture::shell_view::{
+    HotkeyRegistry, KeysController, Words, menu_lines, status_title,
+};
 
 #[test]
 fn the_title_shows_the_state_and_elapsed_time() {
