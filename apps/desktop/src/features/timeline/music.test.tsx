@@ -227,6 +227,18 @@ describe('the music’s volume line', () => {
     ]);
   });
 
+  it('selecting one piece of a song highlights the rest of it', () => {
+    useProject.setState({ snapshot: bed(), pending: 0, apply });
+    useSelection.setState({ selectedId: 'bed-2' });
+    renderWithProviders(<Timeline />);
+    const lane = screen.getByRole('group', { name: 'Music' });
+    const block = (id: string) => lane.querySelector<HTMLElement>(`[data-block-id="${id}"]`)!;
+    expect(block('bed-2')).toHaveClass('is-selected');
+    expect(block('bed')).toHaveClass('is-in-run');
+    expect(block('bed-3')).toHaveClass('is-in-run');
+    expect(block('bed-2')).not.toHaveClass('is-in-run');
+  });
+
   it('Delete on one piece of a song takes every piece, in one undo step', async () => {
     useProject.setState({ snapshot: bed(), pending: 0, apply });
     deleteBlock('bed-2', 'undo.delete.layer');

@@ -23,6 +23,8 @@ export interface LineView {
   fromUs: number;
   toUs: number;
   selectedId: string | null;
+  /** The pieces of the selected song (a run of music, `musicRunOf`): the others are highlighted with it, as one song. */
+  runIds?: ReadonlySet<string>;
   /** The block in the Tab order (roving focus). */
   tabStopId: string | null;
   /** Blocks that stay mounted and never band: selected, focused, dragged. */
@@ -93,6 +95,7 @@ export function linePieces(
         muted={track.kind === 'audio' && track.muted}
         pps={o.pps}
         selected={item.id === o.selectedId}
+        inRun={item.id !== o.selectedId && (o.runIds?.has(item.id) ?? false)}
         tabbable={item.id === o.tabStopId}
         dimmed={track.hidden || (track.kind === 'audio' && track.muted)}
         locked={track.locked}

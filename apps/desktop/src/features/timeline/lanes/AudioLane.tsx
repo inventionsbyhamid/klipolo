@@ -3,6 +3,7 @@ import type { Asset } from '../../../bindings/Asset';
 import type { Recording } from '../../../bindings/Recording';
 import type { Track } from '../../../bindings/Track';
 import { useLocale } from '../../../i18n/react';
+import { musicRunOf } from '../../../lib/musicRuns';
 import type { PressBlock, PressTrim } from '../drag/useBlockDrag';
 import { audioLines, type AudioRole } from './audioRole';
 import { linePieces, rowBox, type Box, type Pieces } from './TrackLane';
@@ -53,7 +54,10 @@ export const AudioLane = memo(function AudioLane({
   const out: Pieces = { bands: [], blocks: [] };
   const look = role === 'music' ? 'music' : 'sound';
   const box = audioBox(role, rowPx);
-  const line = { ...view, sources: { assets, recordings } };
+  // A song laid in pieces is one: selecting a piece highlights the others with it.
+  const run = role === 'music' && view.selectedId ? musicRunOf(tracks, view.selectedId) : null;
+  const runIds = run && run.length > 1 ? new Set(run.map((piece) => piece.id)) : undefined;
+  const line = { ...view, runIds, sources: { assets, recordings } };
   for (const { track, items } of audioLines(tracks)[role].lines)
     linePieces(items, () => track, box, `${role}:${track.id}`, line, out, look);
   return [...out.bands, ...out.blocks];
