@@ -169,18 +169,12 @@ expect "an unreadable file fails" fail "couldn't read every file" "$check" "$app
 echo "built in $HOME/klipolo" > "$app/Contents/Resources/fonts/note.txt"
 expect "an unreadable file doesn't hide one naming the home folder" fail "Resources/fonts/note.txt" "$check" "$app" "$arch"
 
-user=$(id -un)
-app=$(case_app user-as-path-part)
-echo "/Volumes/$user/klipolo" > "$app/Contents/Resources/fonts/note.txt"
-expect "the user name as a path part fails" fail "Resources/fonts/note.txt" "$check" "$app" "$arch"
-
-app=$(case_app user-inside-a-word)
-echo "x${user}y ${user}s" > "$app/Contents/Resources/fonts/note.txt"
-expect "the user name inside a longer word passes" pass "$check" "$app" "$arch"
-
-# An account with a common name: only /test/ counts, not "attest" or "testing" or "/tests/".
+# The user name, through lib.sh's naming_files with fixed names (whoever runs the test): only as a whole path part.
 names=$work/names
-mkdir -p "$names/plain" "$names/path"
+mkdir -p "$names/long-word" "$names/long-path" "$names/plain" "$names/path"
+echo 'xklipolobuildery klipolobuilders klipolobuilder.txt' > "$names/long-word/a.txt"
+echo 'built in /Volumes/klipolobuilder/klipolo' > "$names/long-path/b.txt"
+# An account with a common name: only /test/ counts, not "attest" or "testing" or "/tests/".
 echo 'attest testing contest /tests/ test.txt' > "$names/plain/a.txt"
 echo 'built in /Volumes/test/klipolo' > "$names/path/b.txt"
 found() {  # found <user> <dir> <expected output>: naming_files' output, with grep's status 0 or 1 to match
@@ -188,6 +182,8 @@ found() {  # found <user> <dir> <expected output>: naming_files' output, with gr
   out=$(. "$repo/scripts/release/lib.sh" && naming_files /no/such/home "$1" "$2") && rc=0 || rc=$?
   [ "$out" = "$3" ] && [ "$rc" -eq "$([ -n "$3" ] && echo 0 || echo 1)" ]
 }
+expect "a long user name is found as a path part" pass found klipolobuilder "$names/long-path" "$names/long-path/b.txt"
+expect "a long user name inside longer words isn't found" pass found klipolobuilder "$names/long-word" ""
 expect "a user named test isn't found in words" pass found test "$names/plain" ""
 expect "a user named test is found as a path part" pass found test "$names/path" "$names/path/b.txt"
 expect "a user name under 4 characters isn't looked for" pass found lib "$names/path" ""
