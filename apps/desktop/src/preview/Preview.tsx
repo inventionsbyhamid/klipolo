@@ -45,8 +45,8 @@ function DropZone({ over }: { over: boolean }) {
 /**
  * The preview panel: the format pills, Add title, the safe area switch, and the engine's frames fitted to
  * the panel in the chosen format with the layers there selectable and editable (`Stage`), under the analysis banner;
- * the inspector docks at the right while a layer it has fields for is selected, and the frame and banner move left for
- * it. With no clip yet, the drop zone.
+ * the inspector docks at the right under the banner while a layer it has fields for is selected, and the frame moves
+ * left for it. With no clip yet, the drop zone.
  * `filesOver`: files from Finder are held over the window.
  */
 export function Preview({ filesOver = false }: { filesOver?: boolean }) {
@@ -83,8 +83,11 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
       </div>
       <div className={docked ? 'stage-body has-inspector' : 'stage-body'}>
         {hasVideo && <AnalysisBanner />}
-        {hasVideo ? <Stage /> : <DropZone over={filesOver} />}
-        {docked && <Inspector format={format} />}
+        {/* Under the banner: the frame, and the inspector docked at its right. */}
+        <div className="stage-main">
+          {hasVideo ? <Stage /> : <DropZone over={filesOver} />}
+          {docked && <Inspector format={format} />}
+        </div>
       </div>
     </main>
   );

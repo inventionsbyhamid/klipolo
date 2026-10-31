@@ -2213,16 +2213,24 @@
 
 /* ---------- Inspector ---------- */
 
-.stage-body.has-inspector .screen,
-.stage-body.has-inspector .analysis-banner {
+/* What sits under the analysis banner: the frame, and the inspector docked at its right. */
+.stage-main {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.stage-body.has-inspector .screen {
   margin-right: calc(var(--inspector-w) + var(--space-6));
 }
 
 .inspector {
   position: absolute;
   top: 0;
-  right: var(--space-6);
-  bottom: var(--space-6);
+  right: 0;
+  bottom: 0;
   z-index: 2;
   width: var(--inspector-w);
   display: flex;
