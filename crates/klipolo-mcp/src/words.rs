@@ -86,9 +86,10 @@ pub const REMOVES: &str = "Klipolo found this would take something out of the ed
 changed. Ask the person to make this change in Klipolo.";
 pub const PUSHES_OUT: &str = "Klipolo can't make room in its undo history for this without dropping one of the \
 person's steps. Ask the person first.";
-/// A redo the person could take waits: any change of the app's would drop it.
-pub const REDO_WAITS: &str = "The person undid a change in Klipolo and can still redo it. Wait until they redo it or \
-make an edit of their own, then try again.";
+/// A step in the redo that someone else made (the person, or another app) waits: any change of the app's would drop
+/// it. The person can redo it in Klipolo, whoever made it.
+pub const REDO_WAITS: &str = "A change undone in Klipolo can still be redone there. Wait until the person redoes it or \
+makes an edit of their own, then try again.";
 pub const OVER_SHARE: &str = "Your changes fill the undo history Klipolo keeps for other apps. Ask the person to \
 continue in Klipolo.";
 /// The app's own newest step, undone.

@@ -1010,8 +1010,8 @@ fn redo_the_person_could_take_is_never_dropped() {
     assert_refused(&agent.call("setCaptions", captions(false)), REDO_WAITS);
     assert_eq!(
         REDO_WAITS,
-        "The person undid a change in Klipolo and can still redo it. Wait until they redo it or make an edit of their \
-         own, then try again."
+        "A change undone in Klipolo can still be redone there. Wait until the person redoes it or makes an edit of \
+         their own, then try again."
     );
     assert_eq!(host.revision(), before);
     assert_eq!(host.state().doc.as_ref().unwrap().redo_steps(), 1);
