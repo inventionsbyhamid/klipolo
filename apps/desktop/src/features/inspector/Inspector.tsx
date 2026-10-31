@@ -1,4 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
+import type { Clip } from '../../bindings/Clip';
 import type { FormatKind } from '../../bindings/FormatKind';
 import type { Item } from '../../bindings/Item';
 import type { Project } from '../../bindings/Project';
@@ -7,11 +8,12 @@ import { IconButton } from '../../design/IconButton';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../../design/Menu';
 import { Icon, type IconName } from '../../layout/Icon';
 import { contribLabel } from '../../lib/contrib';
-import { findItem } from '../../lib/timeline';
+import { findClip, findItem } from '../../lib/timeline';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
 import { deleteBlock, duplicate, stepTrack } from '../timeline/commands';
 import { AudioInspector } from './AudioInspector';
+import { ClipInspector } from './ClipInspector';
 import { ImageInspector } from './ImageInspector';
 import { commitLatest } from '../../state/latest';
 import { TemplateInspector } from './TemplateInspector';
@@ -30,8 +32,17 @@ export function inspectedKind(item: Item): Inspected | null {
   return null;
 }
 
-/** The selected layer the inspector shows, with its track; null when nothing it has fields for is selected. */
-export function useInspected(): { item: Item; track: Track; kind: Inspected } | null {
+/** A selected main-track clip: the clip card shows it (it has no layer or track). */
+export interface InspectedClip {
+  kind: 'clip';
+  clip: Clip;
+}
+
+/**
+ * The selected layer the inspector shows, with its track, or the selected main-track clip; null when nothing it has
+ * fields for is selected.
+ */
+export function useInspected(): { item: Item; track: Track; kind: Inspected } | InspectedClip | null {
   const project = useProject((s) => s.snapshot?.project);
   const selectedId = useSelection((s) => s.selectedId);
   return inspectedOf(project, selectedId);
@@ -40,6 +51,8 @@ export function useInspected(): { item: Item; track: Track; kind: Inspected } | 
 export function inspectedOf(project: Project | undefined, selectedId: string | null) {
   if (!project || !selectedId) return null;
   const found = findItem(project, selectedId);
+  const clip = found ? null : findClip(project, selectedId);
+  if (clip) return { kind: 'clip' as const, clip };
   const kind = found && inspectedKind(found.item);
   return found && kind ? { ...found, kind } : null;
 }
@@ -57,12 +70,14 @@ const ICONS: Record<Inspected, IconName> = {
  * selected. Its header has the kind's icon and name, a more menu (Duplicate, Bring forward, Delete) and a close button;
  * its body the fields of that kind, scrolling with a fade at the bottom. On a locked track it says so and offers
  * Unlock. Changes apply at once and each is one undo step.
+ * A main-track clip has a card of its own (`ClipInspector`).
  */
 export function Inspector({ format }: { format: FormatKind }) {
   const { t } = useLingui();
   const inspected = useInspected();
   const primary = useProject((s) => s.snapshot?.project.settings.primaryFormat ?? 'landscape');
   if (!inspected) return null;
+  if (inspected.kind === 'clip') return <ClipInspector key={inspected.clip.id} clip={inspected.clip} format={format} />;
   const { item, track, kind } = inspected;
   const content = item.content;
   const title =

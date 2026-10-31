@@ -2301,6 +2301,13 @@
   color: var(--color-ink-soft);
 }
 
+/* A long name (a clip's file) ends in an ellipsis. */
+.insp-head h3 .insp-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* The body scrolls, with a 20 px fade at the bottom. */
 .insp-body {
   -webkit-mask-image: linear-gradient(#000 calc(100% - 20px), transparent);
