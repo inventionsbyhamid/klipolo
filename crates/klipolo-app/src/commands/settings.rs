@@ -29,7 +29,7 @@ pub(crate) fn load(support: Option<&Path>) -> CredentialsState {
         })
         // Without app support the id lasts this run only; the relay sees a new device next time.
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    Arc::new(Credentials::load(store(), Endpoints::from_env(), device))
+    Arc::new(Credentials::load(store(), Endpoints::for_app(), device))
 }
 
 #[cfg(target_os = "macos")]

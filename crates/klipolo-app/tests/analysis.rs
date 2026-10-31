@@ -16,12 +16,12 @@ use klipolo_analysis::providers::meta::{
 };
 use klipolo_analysis::proxy::{ProxyChunk, ProxyInfo};
 use klipolo_analysis::scenes::{SceneItem, SceneLog};
-use klipolo_analysis::transcript::{Timing, TranscriptOut, Turn, finish};
+use klipolo_analysis::transcript::{ROUGH_WORDS, Timing, TranscriptOut, Turn, finish};
 use klipolo_app::analysis::chat::{scene_entries, speaker_turns};
 use klipolo_app::analysis::media::{EngineMedia, Media};
 use klipolo_app::analysis::{
     AnalysisDone, AnalysisEvent, AnalysisFailed, AnalysisState, AnalysisStep, AnalysisStopped,
-    Asked, AssetState, NEEDS_KEY,
+    Asked, AssetState, FILE_MISSING, NEEDS_KEY,
 };
 use klipolo_app::credentials::{
     Credentials, Endpoints, META_API_KEY, MemoryStore, RELAY_CODE, RELAY_TOKEN, SecretStore,
@@ -40,7 +40,9 @@ const TOKEN: &str = "relay-analysis-token-0123456789";
 const NEW_TOKEN: &str = "relay-analysis-new-token-9876543";
 const CODE: &str = "KLIP-TEST-0003";
 const DEVICE: &str = "6f1c2a4e-9d3b-4b7a-8e21-0c5d9f3a7b64";
-const CREDIT_USED: &str = "This device has used its Klipolo credit.";
+/// The relay's 402 sentence, as `services/relay/relay/proxy.py` sends it (`BUDGET_MESSAGE`).
+const CREDIT_USED: &str =
+    "This device has used its Klipolo credit. Add your own Meta key in Settings.";
 const RATE: u32 = 16_000;
 /// The test clips' length: one turn of speech in it.
 const SECONDS: f64 = 6.0;
@@ -94,6 +96,8 @@ fn tone(seconds: f64) -> Vec<i16> {
 struct FakeMedia {
     seconds: f64,
     chunks: Vec<RangeUs>,
+    /// False for a video file whose picture stream turns out missing: its small copy can't be made.
+    picture: bool,
     sounds: AtomicUsize,
     copies: AtomicUsize,
     levels: AtomicUsize,
@@ -104,6 +108,19 @@ impl FakeMedia {
         Arc::new(Self {
             seconds,
             chunks,
+            picture: true,
+            sounds: AtomicUsize::new(0),
+            copies: AtomicUsize::new(0),
+            levels: AtomicUsize::new(0),
+        })
+    }
+
+    /// A file with sound and no picture stream.
+    fn without_picture(seconds: f64) -> Arc<Self> {
+        Arc::new(Self {
+            seconds,
+            chunks: Vec::new(),
+            picture: false,
             sounds: AtomicUsize::new(0),
             copies: AtomicUsize::new(0),
             levels: AtomicUsize::new(0),
@@ -153,6 +170,9 @@ impl Media for FakeMedia {
         seen: &mut dyn FnMut(Us),
     ) -> Result<ProxyInfo, VideoError> {
         self.copies.fetch_add(1, Ordering::SeqCst);
+        if !self.picture {
+            return Err(VideoError::NoVideo);
+        }
         std::fs::create_dir_all(dir).unwrap();
         let chunks = self
             .chunks
@@ -535,6 +555,37 @@ fn asr_usd(seconds: f64) -> f64 {
     seconds / 3600.0 * pricing::ASR_USD_PER_HOUR
 }
 
+/// Done, every word timed.
+fn timed() -> AssetState {
+    AssetState::Done {
+        approximate: false,
+        approximate_reason: None,
+        empty_reason: None,
+        time_again: false,
+    }
+}
+
+/// Done with some words timed roughly, for `reason`; `time_again` when timing them again can help.
+fn timed_roughly(reason: &str, time_again: bool) -> AssetState {
+    AssetState::Done {
+        approximate: true,
+        approximate_reason: Some(reason.into()),
+        empty_reason: None,
+        time_again,
+    }
+}
+
+/// `analysis://asset_done` for clip `id`, its words all timed.
+fn done_timed(id: &str) -> AnalysisEvent {
+    AnalysisEvent::Done(AnalysisDone {
+        asset_id: id.into(),
+        approximate: false,
+        approximate_reason: None,
+        empty_reason: None,
+        time_again: false,
+    })
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // The core tests
 
@@ -564,19 +615,16 @@ async fn cached_asset_makes_no_network_call() {
     started.finished().await;
     server.verify().await;
 
-    assert_eq!(
-        h.state.state_of("clip-a"),
-        AssetState::Done { approximate: false }
-    );
-    assert_eq!(
-        h.events_for("clip-a").last(),
-        Some(&AnalysisEvent::Done(AnalysisDone {
-            asset_id: "clip-a".into(),
-            approximate: false
-        }))
-    );
+    assert_eq!(h.state.state_of("clip-a"), timed());
+    assert_eq!(h.events_for("clip-a").last(), Some(&done_timed("clip-a")));
     assert_eq!(media.sounds.load(Ordering::SeqCst), 0, "nothing decoded");
     assert_eq!(media.copies.load(Ordering::SeqCst), 0);
+    // Straight to done: nothing to do, so no "Analyzing" on the way.
+    let told = h.events_for("clip-a");
+    assert!(
+        !told.iter().any(|e| matches!(e, AnalysisEvent::Progress(_))),
+        "{told:?}"
+    );
     let speech = h.last_speech();
     assert_eq!(
         speech.transcripts["clip-a"].words,
@@ -630,8 +678,8 @@ async fn estimate_matches_pricing_formula() {
 }
 
 /// The relay runs out of credit at the scene log (402): the run stops there, nothing asks again, the clip fails with
-/// the relay's sentence and the way on (a Meta key), and the transcript it finished is kept: published and cached. No
-/// scene log is cached.
+/// the relay's sentence, which gives the way on (a Meta key) once, and the transcript it finished is kept: published
+/// and cached. No scene log is cached.
 #[tokio::test(flavor = "multi_thread")]
 async fn relay_402_stops_and_keeps_finished_steps() {
     let server = MockServer::start().await;
@@ -657,7 +705,8 @@ async fn relay_402_stops_and_keeps_finished_steps() {
     assert_eq!(started.refused, None);
     started.finished().await;
 
-    let reason = format!("{CREDIT_USED} Add your own Meta API key in Settings to keep going.");
+    // The relay's sentence says what to do already: the way on is said once.
+    let reason = CREDIT_USED.to_owned();
     assert_eq!(
         h.state.state_of("clip-a"),
         AssetState::Failed {
@@ -711,10 +760,7 @@ async fn turn_level_captions_publish_before_alignment() {
         .finished()
         .await;
 
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("talk"), timed());
     let published: Vec<(usize, Arc<Speech>)> = h
         .speech
         .lock()
@@ -887,10 +933,7 @@ async fn a_relay_401_registers_again_once_and_retries() {
         .finished()
         .await;
 
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("talk"), timed());
     assert_eq!(h.stored_token().as_deref(), Some(NEW_TOKEN));
     server.verify().await;
 }
@@ -968,10 +1011,7 @@ async fn a_code_whose_device_cannot_register_says_why() {
     let started = empty.state.start(&[cached, fresh]).await;
     assert_eq!(started.refused.as_deref(), Some(NEEDS_KEY));
     started.finished().await;
-    assert_eq!(
-        empty.state.state_of("cached"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(empty.state.state_of("cached"), timed());
     assert_eq!(empty.state.state_of("fresh"), AssetState::None);
     server.verify().await;
 }
@@ -991,8 +1031,8 @@ async fn an_estimate_over_the_credit_left_is_refused() {
     let clip = asset("long", AssetKind::Video, &h.clip("long.mov", 1), 155.04);
 
     let estimate = h.state.estimate(std::slice::from_ref(&clip)).await;
-    let refusal = "Your access code has $0.02 left, and this needs about $0.07. Trim the clips first, or add your own \
-                   Meta key in Settings.";
+    let refusal = "Your access code has $0.02 left, and this needs about $0.07. Analyze fewer or shorter files, or add \
+                   your own Meta key in Settings.";
     assert!((estimate.credit_left_usd.unwrap() - 0.02).abs() < 1e-9);
     assert_eq!(estimate.refusal.as_deref(), Some(refusal));
 
@@ -1027,7 +1067,12 @@ async fn a_clip_without_sound_still_gets_its_scene_log() {
 
     assert_eq!(
         h.state.state_of("quiet"),
-        AssetState::Done { approximate: false }
+        AssetState::Done {
+            approximate: false,
+            approximate_reason: None,
+            empty_reason: Some("No speech found.".into()),
+            time_again: false,
+        }
     );
     let found = h.state.analysis_for("quiet").unwrap();
     assert!(found.transcript.as_ref().unwrap().words.is_empty());
@@ -1044,6 +1089,89 @@ async fn a_clip_without_sound_still_gets_its_scene_log() {
         .collect();
     assert!(progress.contains(&AnalysisStep::Scenes));
     assert!(!progress.contains(&AnalysisStep::Transcript));
+    server.verify().await;
+}
+
+/// With an access code every call goes through Klipolo's relay: a relay that can't answer is named as Klipolo's server,
+/// not Meta. With the person's own key, Meta is named.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failure_names_the_service_the_call_went_to() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/devices/me"))
+        .respond_with(device(2.0, 0.0))
+        .mount(&server)
+        .await;
+    for at in ["/meta/v1/asr/transcribe", "/v1/asr/transcribe"] {
+        Mock::given(method("POST"))
+            .and(path(at))
+            .respond_with(ResponseTemplate::new(503))
+            .expect(1)
+            .mount(&server)
+            .await;
+    }
+    nothing_else(&server).await;
+
+    for (store, said) in [
+        (
+            code_store(),
+            "Klipolo's server is busy right now. Try again in a moment.",
+        ),
+        (
+            key_store(),
+            "Meta is busy right now. Try again in a moment.",
+        ),
+    ] {
+        let h = harness(&server, store, FakeMedia::whole(SECONDS));
+        let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 2), SECONDS);
+        h.state
+            .start(std::slice::from_ref(&clip))
+            .await
+            .finished()
+            .await;
+        assert_eq!(
+            h.state.state_of("talk"),
+            AssetState::Failed {
+                reason: said.into()
+            }
+        );
+    }
+    server.verify().await;
+}
+
+/// Word timing runs on Klipolo's relay in both modes: with the person's own key too, a relay that can't answer is named
+/// as Klipolo's server in why the words are rough.
+#[tokio::test(flavor = "multi_thread")]
+async fn word_timing_that_fails_names_klipolos_server() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(asr_answer())
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(ResponseTemplate::new(503))
+        .expect(1)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    let file = h.clip("talk.m4a", 2);
+    let clip = asset("talk", AssetKind::Audio, &file, SECONDS);
+
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+
+    let rough: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
+    assert_eq!(
+        rough.approximate_reason.as_deref(),
+        Some("Klipolo's server is busy right now. Try again in a moment.")
+    );
     server.verify().await;
 }
 
@@ -1157,10 +1285,7 @@ async fn a_clip_started_twice_at_once_is_analysed_once() {
     first.finished().await;
     second.finished().await;
 
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("talk"), timed());
     server.verify().await;
 }
 
@@ -1225,17 +1350,8 @@ async fn one_file_imported_twice_is_analysed_and_priced_once() {
 
     let speech = h.last_speech();
     for id in ["first", "second"] {
-        assert_eq!(
-            h.state.state_of(id),
-            AssetState::Done { approximate: false }
-        );
-        assert_eq!(
-            h.events_for(id).last(),
-            Some(&AnalysisEvent::Done(AnalysisDone {
-                asset_id: id.into(),
-                approximate: false
-            }))
-        );
+        assert_eq!(h.state.state_of(id), timed());
+        assert_eq!(h.events_for(id).last(), Some(&done_timed(id)));
         assert!(
             h.events_for(id)
                 .iter()
@@ -1289,8 +1405,8 @@ async fn a_second_start_counts_the_credit_the_first_promised() {
 
     let started = h.state.start(std::slice::from_ref(&first)).await;
     assert_eq!(started.refused, None);
-    let refusal = "Your access code has $0.03 left, and this needs about $0.07. Trim the clips first, or add your own \
-                   Meta key in Settings.";
+    let refusal = "Your access code has $0.03 left, and this needs about $0.07. Analyze fewer or shorter files, or add \
+                   your own Meta key in Settings.";
     let estimate = h.state.estimate(std::slice::from_ref(&second)).await;
     assert_eq!(estimate.refusal.as_deref(), Some(refusal));
     let refused = h.state.start(std::slice::from_ref(&second)).await;
@@ -1298,10 +1414,7 @@ async fn a_second_start_counts_the_credit_the_first_promised() {
     refused.finished().await;
     started.finished().await;
 
-    assert_eq!(
-        h.state.state_of("first"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("first"), timed());
     assert_eq!(h.state.state_of("second"), AssetState::None);
     // The first's promise is released: the second fits again (the mock's spend doesn't move).
     let estimate = h.state.estimate(std::slice::from_ref(&second)).await;
@@ -1411,7 +1524,10 @@ async fn rough_words_are_timed_again_for_free_once_word_timing_is_back() {
         .await;
     assert_eq!(
         h.state.state_of("talk"),
-        AssetState::Done { approximate: true }
+        timed_roughly(
+            "Klipolo's server is busy right now. Try again in a moment.",
+            true
+        )
     );
     let rough: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
     assert!(rough.approximate);
@@ -1422,10 +1538,7 @@ async fn rough_words_are_timed_again_for_free_once_word_timing_is_back() {
         .finished()
         .await;
 
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("talk"), timed());
     let timed: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
     assert!(!timed.approximate && timed.turns.iter().all(|t| t.aligned));
     assert_eq!(
@@ -1433,6 +1546,71 @@ async fn rough_words_are_timed_again_for_free_once_word_timing_is_back() {
         timed.transcript.words
     );
     assert_eq!(requests(&server, "POST", "/v1/align").await.len(), 2);
+    server.verify().await;
+}
+
+/// A clip done with rough words says why, on its state and its done event, and whether timing them again can help: it
+/// can when word timing failed (the relay couldn't answer), not when the words don't match their sound.
+#[tokio::test(flavor = "multi_thread")]
+async fn rough_words_say_why_and_whether_timing_them_again_can_help() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(asr_answer())
+        .expect(2)
+        .mount(&server)
+        .await;
+    // Word timing can't answer for the first clip; for the second, its words score as never spoken there.
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(ResponseTemplate::new(503))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "words": [
+                {"text": "hello", "startMs": 250, "endMs": 1000, "score": 0.2, "turn": 0},
+                {"text": "there", "startMs": 1100, "endMs": 2000, "score": 0.2, "turn": 0},
+                {"text": "friends", "startMs": 2100, "endMs": 3700, "score": 0.2, "turn": 0}
+            ],
+            "skipped": []
+        })))
+        .expect(1)
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    let down = asset("down", AssetKind::Audio, &h.clip("down.m4a", 1), SECONDS);
+    let odd = asset("odd", AssetKind::Audio, &h.clip("odd.m4a", 2), SECONDS);
+
+    h.state
+        .start(std::slice::from_ref(&down))
+        .await
+        .finished()
+        .await;
+    h.state
+        .start(std::slice::from_ref(&odd))
+        .await
+        .finished()
+        .await;
+
+    let said = "Klipolo's server is busy right now. Try again in a moment.";
+    assert_eq!(h.state.state_of("down"), timed_roughly(said, true));
+    assert_eq!(
+        h.events_for("down").last(),
+        Some(&AnalysisEvent::Done(AnalysisDone {
+            asset_id: "down".into(),
+            approximate: true,
+            approximate_reason: Some(said.into()),
+            empty_reason: None,
+            time_again: true,
+        }))
+    );
+    assert_eq!(h.state.state_of("odd"), timed_roughly(ROUGH_WORDS, false));
     server.verify().await;
 }
 
@@ -1469,10 +1647,7 @@ async fn cancel_during_word_timing_keeps_what_was_heard() {
     h.state.cancel();
     started.finished().await;
     // The request in flight finished: its words are timed.
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("talk"), timed());
     assert!(
         h.cache_dir(&file)
             .load::<TranscriptOut>("transcript")
@@ -1486,10 +1661,187 @@ async fn cancel_during_word_timing_keeps_what_was_heard() {
         .finished()
         .await;
 
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
+    assert_eq!(h.state.state_of("talk"), timed());
+    server.verify().await;
+}
+
+/// The app quits (or crashes) while words are timed: the transcript, paid for already, is cached with its words timed
+/// roughly, for a reason another try can fix. The next launch transcribes nothing and times the words again.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_quit_during_word_timing_keeps_the_paid_transcript() {
+    let server = MockServer::start().await;
+    let media = FakeMedia::whole(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(asr_answer())
+        .expect(1)
+        .mount(&server)
+        .await;
+    // The first launch's word timing doesn't answer before the quit; the next launch's does.
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(Counted {
+            count: h.aligns.clone(),
+            template: align_answer().set_delay(Duration::from_secs(30)),
+        })
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(align_answer())
+        .expect(1)
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let file = h.clip("talk.m4a", 2);
+    let clip = asset("talk", AssetKind::Audio, &file, SECONDS);
+
+    // The first launch runs on a runtime of its own, shut down while it times words, as quitting the app stops it.
+    let quitting = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+    {
+        let (state, clip) = (h.state.clone(), clip.clone());
+        quitting.spawn(async move {
+            state
+                .start(std::slice::from_ref(&clip))
+                .await
+                .finished()
+                .await
+        });
+    }
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while h.aligns.load(Ordering::SeqCst) == 0 {
+        assert!(Instant::now() < deadline, "word timing never started");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    quitting.shutdown_background();
+
+    let kept: TranscriptOut = h
+        .cache_dir(&file)
+        .load("transcript")
+        .expect("the paid transcript is cached");
+    assert!(kept.approximate && !kept.turns.is_empty());
+    assert_ne!(kept.approximate_reason.as_deref(), Some(ROUGH_WORDS));
+
+    // The next launch: a new analysis over the same cache. The clip costs nothing, and the page's own start as the
+    // project opens times its words.
+    let relaunched = AnalysisState::new(
+        Arc::new(Credentials::load(
+            Arc::new(key_store()),
+            Endpoints {
+                meta_base: format!("{}/v1", server.uri()),
+                relay_base: server.uri(),
+            },
+            DEVICE.into(),
+        )),
+        media,
+        h.cache_root.clone(),
+        h.clips.with_file_name("work-again"),
+        Arc::new(|_| {}),
+        Arc::new(|_| {}),
     );
+    let estimate = relaunched.estimate(std::slice::from_ref(&clip)).await;
+    assert_eq!(
+        (estimate.cached, estimate.usd),
+        (vec!["talk".to_owned()], 0.0)
+    );
+    relaunched
+        .start_as(std::slice::from_ref(&clip), Asked::Page)
+        .await
+        .finished()
+        .await;
+
+    let timed: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
+    assert!(!timed.approximate && timed.turns.iter().all(|t| t.aligned));
+    server.verify().await;
+}
+
+/// A video file with no picture stream after all: its scene log is empty and cached so, so it is analysed once and
+/// never offered again at a scene log's price.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_video_with_no_picture_is_analysed_once() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(asr_answer())
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(align_answer())
+        .expect(1)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let media = FakeMedia::without_picture(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    let file = h.clip("voice.mp4", 5);
+    let clip = asset("voice", AssetKind::Video, &file, SECONDS);
+
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+
+    let log: SceneLog = h
+        .cache_dir(&file)
+        .load("scenes")
+        .expect("an empty scene log is cached");
+    assert!(log.items.is_empty() && log.cost_usd == 0.0);
+    let estimate = h.state.estimate(std::slice::from_ref(&clip)).await;
+    assert_eq!(estimate.cached, ["voice"]);
+    assert!(estimate.clips.is_empty() && estimate.usd == 0.0);
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+    assert_eq!(media.copies.load(Ordering::SeqCst), 1, "looked at once");
+    server.verify().await;
+}
+
+/// A clip whose file was moved or deleted is neither priced nor offered, and analysing it says what to do, with no
+/// request and nothing decoded.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_missing_file_is_not_priced_or_offered() {
+    let server = MockServer::start().await;
+    nothing_else(&server).await;
+    let media = FakeMedia::whole(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    let here = asset("here", AssetKind::Audio, &h.clip("here.m4a", 1), SECONDS);
+    let gone_file = h.clip("gone.mov", 2);
+    std::fs::remove_file(&gone_file).unwrap();
+    let gone = asset("gone", AssetKind::Video, &gone_file, 155.04);
+
+    let estimate = h.state.estimate(&[here, gone.clone()]).await;
+    assert_eq!(estimate.clips, ["here"]);
+    assert_eq!(estimate.missing, ["gone"]);
+    assert!(
+        (estimate.usd - asr_usd(SECONDS)).abs() < 1e-12,
+        "{}",
+        estimate.usd
+    );
+    assert!((estimate.seconds - SECONDS).abs() < 1e-9);
+
+    let started = h.state.start(std::slice::from_ref(&gone)).await;
+    assert_eq!(started.refused, None);
+    started.finished().await;
+    assert_eq!(
+        h.state.state_of("gone"),
+        AssetState::Failed {
+            reason: FILE_MISSING.into()
+        }
+    );
+    assert_eq!(media.sounds.load(Ordering::SeqCst), 0);
     server.verify().await;
 }
 
@@ -1576,7 +1928,7 @@ async fn cancelled_word_timing_does_not_start_again_by_itself() {
     started.finished().await;
     assert_eq!(
         h.state.state_of("talk"),
-        AssetState::Done { approximate: true }
+        timed_roughly("Word timing stopped before it finished.", true)
     );
     assert_eq!(
         (
@@ -1594,7 +1946,7 @@ async fn cancelled_word_timing_does_not_start_again_by_itself() {
         .await;
     assert_eq!(
         h.state.state_of("talk"),
-        AssetState::Done { approximate: true }
+        timed_roughly("Word timing stopped before it finished.", true)
     );
     assert_eq!(
         (
@@ -1611,10 +1963,7 @@ async fn cancelled_word_timing_does_not_start_again_by_itself() {
         .await
         .finished()
         .await;
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("talk"), timed());
     assert_eq!(h.aligns.load(Ordering::SeqCst), 2);
     server.verify().await;
 }
@@ -1656,8 +2005,78 @@ async fn the_page_times_rough_words_again_once_per_app_run() {
     assert_eq!(h.aligns.load(Ordering::SeqCst), 1, "once, not every time");
     assert_eq!(
         h.state.state_of("talk"),
-        AssetState::Done { approximate: true }
+        // That try's own reason: the relay couldn't answer.
+        timed_roughly(
+            "Klipolo's server is busy right now. Try again in a moment.",
+            true
+        )
     );
+    server.verify().await;
+}
+
+/// A re-time that times no more turns says why now: the attempt's own reason (the day's word timing used up, and when it
+/// resets) replaces the cached one, on the clip's state and in the cache. A later try whose words only don't match their
+/// sound leaves that reason as it is.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_retime_that_times_nothing_more_says_why_now() {
+    let server = MockServer::start().await;
+    let quota =
+        "This device has used today's 120 minutes of word timing. It resets at midnight UTC.";
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(
+            ResponseTemplate::new(429)
+                .set_body_json(json!({"error": "align_quota", "message": quota})),
+        )
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "words": [
+                {"text": "hello", "startMs": 250, "endMs": 1000, "score": 0.2, "turn": 0},
+                {"text": "there", "startMs": 1100, "endMs": 2000, "score": 0.2, "turn": 0},
+                {"text": "friends", "startMs": 2100, "endMs": 3700, "score": 0.2, "turn": 0}
+            ],
+            "skipped": []
+        })))
+        .expect(1)
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    let file = h.clip("talk.m4a", 2);
+    let mut rough = finish(
+        "muse-voice-transcribe-1.0",
+        us(SECONDS),
+        cached_transcript().turns,
+        None,
+        0.0003,
+    );
+    rough.approximate_reason = Some("Word timing didn't finish last time.".into());
+    h.cache_dir(&file).store("transcript", &rough).unwrap();
+    let clip = asset("talk", AssetKind::Audio, &file, SECONDS);
+
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+    assert_eq!(h.state.state_of("talk"), timed_roughly(quota, true));
+    let cached: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
+    assert_eq!(cached.approximate_reason.as_deref(), Some(quota));
+
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+    assert_eq!(h.state.state_of("talk"), timed_roughly(quota, true));
+    let cached: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
+    assert_eq!(cached.approximate_reason.as_deref(), Some(quota));
     server.verify().await;
 }
 
@@ -1725,11 +2144,12 @@ async fn a_task_that_panics_still_ends_and_lets_go() {
         .respond_with(device(2.0, 0.0))
         .mount(&server)
         .await;
+    // Before anything is paid for: a fault later (timing words) keeps the transcript, and nothing is left to promise.
     let h = harness_with(
         &server,
         code_store(),
         FakeMedia::whole(SECONDS),
-        Some(AnalysisStep::Words),
+        Some(AnalysisStep::Transcript),
     );
     mount_speech(&server, "/meta/v1", &h.aligns, Duration::ZERO).await;
     nothing_else(&server).await;
@@ -1757,10 +2177,7 @@ async fn a_task_that_panics_still_ends_and_lets_go() {
         .await
         .finished()
         .await;
-    assert_eq!(
-        h.state.state_of("talk"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("talk"), timed());
     server.verify().await;
 }
 
@@ -1794,10 +2211,7 @@ async fn a_removed_asset_is_forgotten_and_its_twin_keeps_its_analysis() {
     assert!(speech.transcripts.contains_key("first"));
     assert_eq!(h.state.state_of("second"), AssetState::None);
     assert!(h.state.analysis_for("second").is_none());
-    assert_eq!(
-        h.state.state_of("first"),
-        AssetState::Done { approximate: false }
-    );
+    assert_eq!(h.state.state_of("first"), timed());
     let after: Vec<AnalysisEvent> = h.events.lock().unwrap()[told..].to_vec();
     assert!(after.iter().all(|e| e.asset_id() == "first"), "{after:?}");
     server.verify().await;
