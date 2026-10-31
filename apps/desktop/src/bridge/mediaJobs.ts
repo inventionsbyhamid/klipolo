@@ -25,7 +25,12 @@ export const mediaJobs = {
   retry: (path: string) => call<void>('media_job_retry', { path }),
   /** Whether copies are made by themselves. Off: unfinished ones are forgotten; finished ones stay in use. */
   setAuto: (auto: boolean) => call<void>('media_jobs_set_auto', { auto }),
-  /** The whole list again, on every change. */
-  onChange: (handler: (list: MediaJobList) => void): Promise<UnlistenFn> =>
-    listen<MediaJobList>('media-jobs', (event) => handler(event.payload)),
+  /**
+   * The whole list again, on every change. Stopping never fails: where Tauri's events can't be removed (the page's
+   * tests, a window closing) there is nothing left to stop.
+   */
+  onChange: async (handler: (list: MediaJobList) => void): Promise<UnlistenFn> => {
+    const off = await listen<MediaJobList>('media-jobs', (event) => handler(event.payload));
+    return () => void Promise.resolve(off()).catch(() => undefined);
+  },
 };
