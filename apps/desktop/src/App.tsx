@@ -71,9 +71,9 @@ function Editor() {
 /**
  * The start screen, until a project opens. The card or button pressed from the keyboard goes with it, so the focus goes
  * on to the project's name in the top bar, where the editor starts. (Its cleanup runs before the screen leaves the page:
- * the focus is still in it.)
+ * the focus is still in it.) Coming back from a project (`afterProject`), the focus goes to its title.
  */
-function Start() {
+function Start({ afterProject }: { afterProject: boolean }) {
   useLayoutEffect(
     () => () => {
       if (!document.querySelector('.start-panel')?.contains(document.activeElement)) return;
@@ -81,7 +81,7 @@ function Start() {
     },
     [],
   );
-  return <StartScreen />;
+  return <StartScreen takeFocus={afterProject} />;
 }
 
 /**
@@ -115,11 +115,16 @@ export function App() {
   }, []);
   useEngineSession();
   const open = useProject((s) => s.snapshot !== null);
+  // A project has been open in this page: the start screen shows after All projects, not at launch.
+  const [hadProject, setHadProject] = useState(false);
+  useEffect(() => {
+    if (open) setHadProject(true);
+  }, [open]);
   return (
     <TooltipProvider>
       <div className={cn('app', !open && 'is-start')}>
         <TopBar />
-        {open ? <Editor /> : asked && <Start />}
+        {open ? <Editor /> : asked && <Start afterProject={hadProject} />}
         <SettingsDialog />
         <ExportDialog />
         <Toaster />

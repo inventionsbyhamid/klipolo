@@ -123,6 +123,8 @@ describe('launch', () => {
     // Record your screen waits for the recorder: New project is the way on.
     expect(within(startScreen()!).getByRole('button', { name: 'New project' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Record your screen' })).toBeNull();
+    // Launch leaves the focus alone.
+    expect(document.activeElement).toBe(document.body);
   });
 
   it('a_project_that_cant_be_opened_says_why_on_the_start_screen', async () => {
@@ -191,5 +193,25 @@ describe('launch', () => {
     expect(editor()).toBeNull();
     expect(useProject.getState().snapshot).toBeNull();
     expect(within(topBar()).queryByRole('button', { name: /Undo/ })).toBeNull();
+  });
+
+  it('all_projects_from_the_keyboard_puts_the_focus_on_the_title', async () => {
+    rust.open = opened('Studio tour', 1);
+    rust.rows = [row('Studio tour', Date.now() - 60_000)];
+    await launch();
+    await screen.findByRole('main', { name: 'Preview' });
+    act(() => within(topBar()).getByRole('button', { name: 'Studio tour' }).focus());
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'New project' })).toHaveFocus());
+    await userEvent.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'All projects' })).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    // The menu's trigger went with the editor: the focus goes to the start screen's title, not to the page.
+    const title = await screen.findByRole('heading', { name: 'Your projects' });
+    await waitFor(() => expect(title).toHaveFocus());
+    // Tab goes on from there, to New project.
+    await screen.findByRole('button', { name: 'Studio tour' });
+    await userEvent.tab();
+    expect(within(startScreen()!).getByRole('button', { name: 'New project' })).toHaveFocus();
   });
 });

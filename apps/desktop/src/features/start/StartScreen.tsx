@@ -63,6 +63,11 @@ function focusPlace(main: HTMLElement | null): FocusPlace | null {
 interface StartScreenProps {
   /** Record your screen: opens the Record dialog. Without it there is no recorder, and no Record your screen. */
   onRecord?: () => void;
+  /**
+   * Coming back from a project (All projects): the focus went with the editor, so it goes to the title, where the
+   * keyboard and VoiceOver start the screen. At launch it is left alone.
+   */
+  takeFocus?: boolean;
 }
 
 /**
@@ -70,7 +75,7 @@ interface StartScreenProps {
  * screen. A card opens its project (and the list is read again when it can't be opened: it may have moved); New project
  * makes "Untitled project" in all three formats and opens it. Shown while no project is open.
  */
-export function StartScreen({ onRecord }: StartScreenProps) {
+export function StartScreen({ onRecord, takeFocus = false }: StartScreenProps) {
   const { t } = useLingui();
   const titleId = useId();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
@@ -78,6 +83,7 @@ export function StartScreen({ onRecord }: StartScreenProps) {
   const [opening, setOpening] = useState<string | null>(null);
   const mounted = useRef(true);
   const mainRef = useRef<HTMLElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const refocus = useRef<FocusPlace | null>(null);
 
   /** Reads the list; what is shown stays until it lands. */
@@ -106,6 +112,11 @@ export function StartScreen({ onRecord }: StartScreenProps) {
     const timer = setTimeout(() => setQuiet(false), QUIET_MS);
     return () => clearTimeout(timer);
   }, []);
+
+  // As the screen shows: a press that already put the focus somewhere keeps it.
+  useEffect(() => {
+    if (takeFocus && (!document.activeElement || document.activeElement === document.body)) titleRef.current?.focus();
+  }, [takeFocus]);
 
   // What had the focus went with the list's change (Try again, a card that went, a button that moved): it goes on to
   // its place in the new list, not to the page. Focus that stayed on something stays.
@@ -174,7 +185,7 @@ export function StartScreen({ onRecord }: StartScreenProps) {
     <div className="panel start-panel">
       <main className="start" aria-labelledby={titleId} ref={mainRef}>
         <header className="start-head">
-          <h1 id={titleId} className="start-title">
+          <h1 id={titleId} className="start-title" ref={titleRef} tabIndex={-1}>
             {t({ id: 'start.title', message: 'Your projects' })}
           </h1>
           {/* With no projects the buttons sit under the invitation instead. */}
