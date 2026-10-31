@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- the mocked backend's IPC arguments */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mockConvertFileSrc, mockIPC } from '@tauri-apps/api/mocks';
@@ -103,6 +105,25 @@ describe('pictures chat asks for', () => {
     expect(within(c).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     await waitFor(() => expect(notices()).toHaveTextContent('Paper plane sticker is ready.'));
     expect(useProject.getState().snapshot!.history.revision).toBe(3);
+  });
+
+  it('says what each drawing costs while it draws, the price Rust counts for a picture', async () => {
+    let release: () => void = () => undefined;
+    chat({
+      drawPicture: async () => {
+        await new Promise<void>((done) => (release = done));
+        return picture(1);
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add a paper plane sticker{Enter}');
+    const c = await card();
+    expect(await within(c).findByText('Drawing it now.')).toBeInTheDocument();
+    expect(within(c).getByText('Costs about $0.01.')).toBeInTheDocument();
+    await act(async () => release());
+    await waitFor(() => expect(within(c).queryByText('Costs about $0.01.')).toBeNull());
+    const pricing = readFileSync(resolve(__dirname, '../../../../../crates/klipolo-meta/src/pricing.rs'), 'utf8');
+    expect(pricing).toMatch(/pub const IMAGE_USD: f64 = 0\.01;/);
   });
 
   it('Use places it as one undo step: the card shows its Undo chip, with the keyboard on it', async () => {
