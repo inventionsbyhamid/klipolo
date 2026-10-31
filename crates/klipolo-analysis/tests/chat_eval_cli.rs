@@ -85,11 +85,11 @@ async fn every_case_is_judged_and_the_cost_added_up_without_the_key() {
     assert!(stdout.contains("FAIL vertical"), "{stdout}");
     assert!(stdout.contains("     reply: Undone."), "{stdout}");
     assert!(
-        stdout.contains("1/25 passed (target 23); 25 model calls; total $0.04"),
+        stdout.contains("1/26 passed (target 24); 26 model calls; total $0.04"),
         "{stdout}"
     );
     assert!(!stdout.contains(KEY) && !stderr.contains(KEY));
-    assert_eq!(server.received_requests().await.unwrap().len(), 25);
+    assert_eq!(server.received_requests().await.unwrap().len(), 26);
 
     // One case on its own must pass.
     let out = run(&env, &["--only", "undo"]).await;
@@ -186,9 +186,14 @@ fn ideal(message: &str) -> Vec<(&'static str, Value)> {
             "addMusic",
             json!({"file": "lofi-beat.mp3", "volume": null, "duck": true, "atSec": 0.0}),
         )],
-        "put a title 'Day 1 in Lisbon' for 3 seconds at the start" => vec![(
+        // A title card asked for by name; a plain title over the video.
+        "put a title card 'Day 1 in Lisbon' for 3 seconds at the start" => vec![(
             "makeTitleCard",
             json!({"title": "Day 1 in Lisbon", "prompt": "Lisbon", "atSec": 0.0, "durationSec": 3.0}),
+        )],
+        "put a title 'Day 1 in Lisbon' at the start" => vec![(
+            "addText",
+            json!({"text": "Day 1 in Lisbon", "preset": "title", "atSec": 0.0, "durationSec": null}),
         )],
         "a whoosh at every topic change" => vec![(
             "addSound",
@@ -236,23 +241,18 @@ async fn ideal_answers_pass_every_case() {
     ];
     let out = run(&env, &[]).await;
     let (stdout, stderr) = text(&out);
-    assert!(stdout.contains("25/25 passed"), "{stdout}{stderr}");
-    // A case that allows more than one answer says which passed: the title card template for the Lisbon title, the
-    // first alternative for the others.
-    let lisbon = &stdout[stdout.find("PASS lisbon-title").expect("the Lisbon case")..];
-    assert!(
-        lisbon.contains("\n     passed on alternative #1 of 2\n"),
-        "{stdout}"
-    );
+    assert!(stdout.contains("26/26 passed"), "{stdout}{stderr}");
+    // A case that allows more than one answer says which passed: the first for each (a question is the second).
     let sticker = &stdout[stdout.find("PASS plane-sticker").expect("the sticker case")..];
     assert!(
         sticker.contains("\n     passed on alternative #0 of 2\n"),
         "{stdout}"
     );
-    assert_eq!(stdout.matches("     passed on alternative ").count(), 4);
+    assert_eq!(stdout.matches("     passed on alternative ").count(), 3);
+    assert_eq!(stdout.matches("     passed on alternative #0").count(), 3);
     assert_eq!(out.status.code(), Some(0));
     // One call each: clip A's missing filler words are told to the person, with no refusal round.
-    assert!(stdout.contains("25 model calls"), "{stdout}");
+    assert!(stdout.contains("26 model calls"), "{stdout}");
     assert!(
         stdout.contains("     reply: There are no filler words to remove."),
         "{stdout}"

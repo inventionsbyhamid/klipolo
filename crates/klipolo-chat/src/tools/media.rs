@@ -241,7 +241,8 @@ pub(super) const ADD_SOUND: Tool = Tool {
 
 pub(super) const ADD_TEXT: Tool = Tool {
     name: "addText",
-    description: "Show words on screen in a text preset.",
+    description: "Show words over the video in a text preset, at once and free: a title, a name, a caption. For a \
+                  full-screen title card, use makeTitleCard.",
     parameters: || {
         vec![
             ("text", string("The words, as the person wrote them.")),
@@ -320,7 +321,8 @@ pub(super) const MAKE_STICKER: Tool = Tool {
 pub(super) const MAKE_TITLE_CARD: Tool = Tool {
     name: "makeTitleCard",
     description: "A full-screen title card: the person's title over a background Muse Image draws, with no lettering \
-                  in the picture.",
+                  in the picture. Only when the person asks for a title card or a picture behind the title; for words \
+                  over the video, use addText.",
     parameters: || {
         vec![
             ("title", string("The title, the person's exact words.")),

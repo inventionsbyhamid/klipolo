@@ -1051,7 +1051,32 @@ fn a_title_card_chooses_its_own_background_when_none_is_named() {
         .as_str()
         .unwrap()
         .to_owned();
-    assert!(!description.contains("Only when"), "{description}");
+    // It asks for no question about the picture: it says only which request it is for.
+    assert!(
+        description.contains(
+            "Only when the person asks for a title card or a picture behind the title; for words over the video, use \
+             addText."
+        ),
+        "{description}"
+    );
+}
+
+#[test]
+fn a_plain_title_goes_over_the_video_and_a_title_card_only_when_asked() {
+    let describe = |name: &str| {
+        (tool_list().into_iter())
+            .find(|t| t["name"] == name)
+            .unwrap()["description"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let words = describe("addText");
+    assert!(
+        words.contains("at once and free: a title, a name, a caption. For a full-screen title card, use makeTitleCard."),
+        "{words}"
+    );
+    assert!(describe("makeTitleCard").contains("for words over the video, use addText."));
 }
 
 #[test]

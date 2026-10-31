@@ -195,17 +195,25 @@
     },
     {
       "id": "lisbon-title",
-      "message": "put a title 'Day 1 in Lisbon' for 3 seconds at the start",
+      "message": "put a title card 'Day 1 in Lisbon' for 3 seconds at the start",
       "playhead": 40.0,
-      "note": "addText with the title preset, or the title card template; until addText's presets place words, its 'coming soon' answer is not counted as right",
+      "note": "a title card asked for by name: the full-screen template over a background Muse Image draws",
       "expect": [
-        {
-          "calls": [{"name": "addText", "args": {"text": "Day 1 in Lisbon", "preset": "title", "atSec": {"min": 0.0, "max": 0.3}, "durationSec": 3.0}}],
-          "outcome": {"applied": true}
-        },
         {
           "calls": [{"name": "makeTitleCard", "args": {"title": "Day 1 in Lisbon", "atSec": {"min": 0.0, "max": 0.3}, "durationSec": 3.0}}],
           "outcome": {"applied": true, "jobs": true}
+        }
+      ]
+    },
+    {
+      "id": "plain-title",
+      "message": "put a title 'Day 1 in Lisbon' at the start",
+      "playhead": 40.0,
+      "note": "a plain title is words over the video, at once and free: never the title card",
+      "expect": [
+        {
+          "calls": [{"name": "addText", "args": {"text": "Day 1 in Lisbon", "preset": "title", "atSec": {"min": 0.0, "max": 0.3}}}],
+          "outcome": {"applied": true, "jobs": false}
         }
       ]
     },
