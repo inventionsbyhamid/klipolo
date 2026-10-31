@@ -1,0 +1,317 @@
+/* The Record dialog: the one wide dialog. Values from tokens.css only. Generic pieces the shared design
+   primitives will carry (dialog head and foot, spinner, notes) are scoped to the dialog here, so they can't clash with
+   those when they land. No red anywhere: the record glyph is ink. */
+
+.record-scrim {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--color-scrim);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+/* 720 px wide (the one wide dialog, so its preview reads), the window's height minus 64 at most. Head and
+   foot stay; the body scrolls between them. */
+.record-dialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--space-8);
+  width: 720px;
+  max-width: calc(100vw - 64px);
+  max-height: calc(100vh - 64px);
+  padding: var(--space-8);
+  border-radius: var(--radius-xl);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-3);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .record-dialog {
+    animation: record-rise var(--dur-slow) var(--ease-out) both;
+  }
+}
+
+@keyframes record-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.record-dialog .dialog-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-5);
+}
+
+.record-dialog .dialog-head > div {
+  flex: 1;
+}
+
+.record-dialog .dialog-title {
+  word-spacing: 0.08em;
+  letter-spacing: var(--tracking-display);
+  font-size: var(--text-2xl);
+  line-height: var(--lh-2xl);
+  font-weight: var(--weight-display);
+  font-stretch: var(--wdth-display);
+  outline: none;
+}
+
+.record-dialog .dialog-sub {
+  margin-top: var(--space-3);
+  color: var(--color-ink-soft);
+  font-size: var(--text-md);
+}
+
+.record-dialog .dialog-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+}
+
+.record-dialog .dialog-foot .left {
+  margin-right: auto;
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+/* The body scrolls; its own padding keeps focus rings inside the scrolled box. */
+.record-body {
+  display: grid;
+  align-content: start;
+  gap: var(--space-8);
+  min-height: 0;
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-8));
+  padding: var(--space-2) var(--space-8);
+  overflow-y: auto;
+}
+
+.record-label {
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--weight-medium);
+}
+
+.record-section,
+.record-field {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: var(--space-4);
+}
+
+.record-field > .select {
+  justify-self: stretch;
+}
+
+.record-caption {
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+/* ---------- Waiting and the setup's refusal ---------- */
+
+.record-wait {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--color-ink-soft);
+  font-size: var(--text-md);
+}
+
+.record-dialog .spinner {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--color-paper-track);
+  border-top-color: var(--color-paper);
+  animation: record-spin 0.9s linear infinite;
+}
+
+@keyframes record-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* A sentence that says what happened (written, not coloured: there is no error colour) and its way out. */
+.record-said {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-5);
+}
+
+.record-said p,
+.record-step p {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  color: var(--color-ink);
+  font-size: var(--text-md);
+  line-height: var(--lh-md);
+}
+
+.record-said .ico,
+.record-step .ico,
+.record-note .ico,
+.record-denied .ico {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-top: 2px;
+}
+
+/* ---------- Preview ---------- */
+
+/* 16:9 over the full width, on the darkest surface; the clip art until the live preview. */
+.record-preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-night);
+}
+
+.record-art {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-ink-faint);
+}
+
+.record-art .ico {
+  width: 40px;
+  height: 40px;
+}
+
+/* ---------- Cards ---------- */
+
+.record-section .seg {
+  margin-bottom: var(--space-1);
+}
+
+.record-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-5);
+  justify-self: stretch;
+}
+
+.record-card {
+  display: grid;
+  min-width: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+  text-align: left;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.record-card:hover {
+  background: var(--color-bay-hover);
+}
+
+.record-card[aria-checked="true"] {
+  box-shadow: inset 0 0 0 2px var(--color-paper);
+}
+
+/* Until a still arrives: the screen or app icon, soft, on the pressed surface. */
+.record-pic {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  margin-bottom: var(--space-4);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-bay-press);
+  color: var(--color-ink-soft);
+}
+
+.record-pic .ico {
+  width: 28px;
+  height: 28px;
+}
+
+.record-pic img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.record-name {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-meta {
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Microphone and camera ---------- */
+
+.record-devices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-8);
+  align-items: start;
+}
+
+.record-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+.record-hint {
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+/* ---------- Notes ---------- */
+
+.record-notes {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.record-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
