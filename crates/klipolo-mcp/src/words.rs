@@ -209,6 +209,15 @@ pub const BUSY: &str = "Too many requests at once. Try again in a moment.";
 pub const REPLY_TOO_LARGE: &str = "Klipolo's answer was too large to pass on. Ask for a smaller part, such as the \
 transcript between two times.";
 
+/// `addText`'s `text`, for an app: the words it gives go on screen as it gave them (chat's own asks for the person's).
+pub const TEXT_FIELD: &str = "The words to show, as you want them on screen.";
+/// `makeTitleCard`'s `title`, for an app.
+pub const TITLE_FIELD: &str = "The title to show, in your own words.";
+/// `makeTitleCard`, for an app: chat's own is for the person's title, when they ask for one.
+pub const TITLE_CARD_TOOL: &str = "A full-screen title card: your title over a background Muse Image draws, with no \
+lettering in the picture. Use it when a title card or a picture behind the title is wanted; for words over the video, \
+use addText.";
+
 /// `getSummary`.
 pub const SUMMARY_TOOL: &str = "The project in short: its revision, name, formats, length, captions and clips (c1, c2 \
 and so on, in timeline seconds), then the person's playhead and selection.";

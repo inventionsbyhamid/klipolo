@@ -2,6 +2,9 @@
 //! to the person in Klipolo's chat (`askUser`, `cannotDo`: an app talks to its own person), then four reads. Each as
 //! MCP lists a tool: `{name, description, inputSchema, annotations}`, the schema strict as chat's (closed, every
 //! property required, a value that may be left unsaid nullable). The list never changes while an app is connected.
+//!
+//! Only the words about words on screen are an app's own (`apps_words`): chat's model puts the person's words there, an
+//! app its own (`klipolo_chat::compile_for_app`), so `addText`'s text and `makeTitleCard` say so.
 
 use std::sync::LazyLock;
 
@@ -40,12 +43,8 @@ fn build() -> Value {
         .filter(|t| !CONVERSATION.contains(&t["name"].as_str().unwrap_or_default()))
         .map(|t| {
             let name = t["name"].as_str().unwrap_or_default();
-            listed(
-                name,
-                &t["description"],
-                t["parameters"].clone(),
-                name == SHOWS,
-            )
+            let (description, schema) = apps_words(name, &t["description"], &t["parameters"]);
+            listed(name, &description, schema, name == SHOWS)
         });
     let nullable_seconds =
         |description: &str| json!({"type": ["number", "null"], "description": description});
@@ -65,6 +64,25 @@ fn build() -> Value {
     .into_iter()
     .map(|(name, description, schema)| listed(name, &json!(description), schema, true));
     Value::Array(edits.chain(reads).collect())
+}
+
+/// Chat's tool `name` (its `description` and `schema`) as an app reads it: the words it puts on screen are its own.
+fn apps_words(name: &str, description: &Value, schema: &Value) -> (Value, Value) {
+    let (mut description, mut schema) = (description.clone(), schema.clone());
+    let mut field = |field: &str, said: &str| {
+        if let Some(property) = schema.pointer_mut(&format!("/properties/{field}")) {
+            property["description"] = json!(said);
+        }
+    };
+    match name {
+        "addText" => field("text", words::TEXT_FIELD),
+        "makeTitleCard" => {
+            field("title", words::TITLE_FIELD);
+            description = json!(words::TITLE_CARD_TOOL);
+        }
+        _ => {}
+    }
+    (description, schema)
 }
 
 fn listed(name: &str, description: &Value, schema: Value, read_only: bool) -> Value {

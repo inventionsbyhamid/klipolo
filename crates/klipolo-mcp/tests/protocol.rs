@@ -211,14 +211,56 @@ fn tools_list_is_chat_tools_minus_conversation_tools_plus_reads() {
         assert!(!description.is_empty());
         assert!(!description.contains(['\u{2013}', '\u{2014}']), "{name}");
         match chat.iter().find(|t| t["name"] == name) {
-            // An edit tool: chat's, byte for byte.
+            // An edit tool: chat's, byte for byte, but where chat's words ask for the person's own words on screen.
             Some(chat_tool) => {
-                assert_eq!(*schema, chat_tool["parameters"], "{name}");
-                assert_eq!(tool["description"], chat_tool["description"], "{name}");
+                let (mut ours, mut chats) = (tool.clone(), chat_tool.clone());
+                for words in [
+                    &mut ours["inputSchema"]["properties"],
+                    &mut chats["parameters"]["properties"],
+                ] {
+                    for field in ["text", "title"] {
+                        if let Some(said) = words.get_mut(field)
+                            && matches!(name, "addText" | "makeTitleCard")
+                        {
+                            said["description"] = json!("");
+                        }
+                    }
+                }
+                if name == "makeTitleCard" {
+                    ours["description"] = json!("");
+                    chats["description"] = json!("");
+                }
+                assert_eq!(ours["inputSchema"], chats["parameters"], "{name}");
+                assert_eq!(ours["description"], chats["description"], "{name}");
             }
             None => assert!(name.starts_with("get"), "{name}"),
         }
     }
+    // An app gives its own words for the screen: its tools say so, where chat's ask for the person's.
+    let tool = |name: &str| listed.iter().find(|t| t["name"] == name).unwrap().clone();
+    let chat_tool = |name: &str| chat.iter().find(|t| t["name"] == name).unwrap().clone();
+    let said = [
+        tool("addText")["inputSchema"]["properties"]["text"]["description"].clone(),
+        tool("makeTitleCard")["inputSchema"]["properties"]["title"]["description"].clone(),
+        tool("makeTitleCard")["description"].clone(),
+    ];
+    for said in &said {
+        let said = said.as_str().unwrap();
+        assert!(!said.contains("person"), "{said}");
+        assert!(!said.contains(['\u{2013}', '\u{2014}']), "{said}");
+    }
+    assert_eq!(said[0], json!(klipolo_mcp::words::TEXT_FIELD));
+    assert_eq!(said[1], json!(klipolo_mcp::words::TITLE_FIELD));
+    assert_eq!(said[2], json!(klipolo_mcp::words::TITLE_CARD_TOOL));
+    assert_eq!(
+        chat_tool("makeTitleCard")["parameters"]["properties"]["title"]["description"],
+        "The title, the person's exact words.",
+        "chat's own stay"
+    );
+    assert_eq!(
+        chat_tool("addText")["parameters"]["properties"]["text"]["description"],
+        "The words, as the person wrote them."
+    );
     let transcript = listed
         .iter()
         .find(|t| t["name"] == "getTranscript")
