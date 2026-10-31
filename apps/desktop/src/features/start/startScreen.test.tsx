@@ -89,6 +89,9 @@ describe('StartScreen', () => {
     expect(within(main).getByRole('status')).toHaveTextContent('Loading your projects');
     expect(main.querySelector('.spinner')).not.toBeNull();
     expect(invoke).toHaveBeenCalledWith('projects_recent', undefined);
+    // The header's two actions are there from the start.
+    expect(within(main).getByRole('button', { name: 'New project' })).toBeInTheDocument();
+    expect(within(main).getByRole('button', { name: 'Record your screen' })).toBeInTheDocument();
 
     answer(ROWS);
     await waitFor(() => expect(cards()).toHaveLength(3));
@@ -106,9 +109,6 @@ describe('StartScreen', () => {
     ]);
     // A long name is cut with an ellipsis; the whole name is in its tooltip.
     expect(card('Studio tour').querySelector('.start-name')).toHaveAttribute('title', 'Studio tour');
-    // The header's two actions.
-    expect(within(main).getByRole('button', { name: 'New project' })).toBeInTheDocument();
-    expect(within(main).getByRole('button', { name: 'Record your screen' })).toBeInTheDocument();
     // A card is named by its name and described by its line.
     expect(screen.getByRole('button', { name: 'Studio tour' })).toHaveAccessibleDescription(
       'Opened 2 hours ago, 4:12',
@@ -280,7 +280,12 @@ describe('StartScreen', () => {
   });
 
   it('read_failure_says_so_with_try_again', async () => {
-    recentAnswers(new Error("Klipolo couldn't make its projects folder."), ROWS);
+    let answer!: (rows: ProjectRow[]) => void;
+    invoke
+      .mockImplementationOnce(async () => {
+        throw new Error("Klipolo couldn't make its projects folder.");
+      })
+      .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
     renderWithProviders(<StartScreen />);
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(
@@ -291,11 +296,27 @@ describe('StartScreen', () => {
     expect(screen.queryByText("Klipolo couldn't make its projects folder.")).not.toBeInTheDocument();
     const again = screen.getByRole('button', { name: 'Try again' });
     expect(again).toHaveClass('btn-secondary');
+    // New project and Record your screen stay in the header, a way on.
+    expect(screen.getByRole('button', { name: 'New project' })).toBeInTheDocument();
 
-    await userEvent.click(again);
-    await waitFor(() => expect(cards()).toHaveLength(3));
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.tab();
+    expect(again).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    // Asking again: the button stays, inert with a spinner, and keeps the focus; another press does nothing.
+    expect(again).toBeInTheDocument();
+    expect(again).toHaveAttribute('aria-disabled', 'true');
+    expect(again.querySelector('.spinner')).not.toBeNull();
+    expect(again).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
     expect(invoke).toHaveBeenCalledTimes(2);
+
+    answer(ROWS);
+    await waitFor(() => expect(cards()).toHaveLength(3));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    // The focus goes on to the first card, not back to the page.
+    expect(card('Studio tour')).toHaveFocus();
   });
 
   it('one_yellow_and_no_red_or_dash', async () => {
@@ -314,7 +335,7 @@ describe('StartScreen', () => {
     let answer!: (rows: ProjectRow[]) => void;
     invoke.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
     const first = renderWithProviders(<StartScreen />);
-    check('loading', 0);
+    check('loading', 1);
     answer(ROWS);
     await waitFor(() => expect(cards()).toHaveLength(3));
     check('list', 1);

@@ -39,7 +39,11 @@ function StartIcon({ name }: { name: keyof typeof ICONS }) {
   );
 }
 
-type Load = { status: 'loading' } | { status: 'ready'; rows: ProjectRow[] } | { status: 'failed' };
+/** What the screen shows: the list on its way, the list, or that it couldn't be read (`retrying`: asked again). */
+type Load =
+  | { status: 'loading' }
+  | { status: 'ready'; rows: ProjectRow[] }
+  | { status: 'failed'; retrying: boolean };
 
 const noop = () => undefined;
 
@@ -59,15 +63,21 @@ export function StartScreen({ onRecord = noop }: StartScreenProps) {
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [opening, setOpening] = useState<string | null>(null);
   const mounted = useRef(true);
+  const mainRef = useRef<HTMLElement>(null);
+  const tryAgainRef = useRef<HTMLButtonElement>(null);
+  // Try again had the focus when the list landed: it goes to the first card (or New project), not to the page.
+  const refocus = useRef(false);
 
   /** Reads the list; what is shown stays until it lands. */
   const list = useCallback(() => {
     projects.recent().then(
       (rows) => {
-        if (mounted.current) setLoad({ status: 'ready', rows });
+        if (!mounted.current) return;
+        refocus.current = tryAgainRef.current !== null && document.activeElement === tryAgainRef.current;
+        setLoad({ status: 'ready', rows });
       },
       () => {
-        if (mounted.current) setLoad({ status: 'failed' });
+        if (mounted.current) setLoad({ status: 'failed', retrying: false });
       },
     );
   }, []);
@@ -80,8 +90,17 @@ export function StartScreen({ onRecord = noop }: StartScreenProps) {
     };
   }, [list]);
 
+  useEffect(() => {
+    if (!refocus.current || load.status !== 'ready') return;
+    refocus.current = false;
+    mainRef.current?.querySelector<HTMLElement>('.start-grid .start-card, .start-empty .btn-primary')?.focus();
+  }, [load]);
+
+  // Try again stays where it is, inert with a spinner while the list is asked for again, so the focus stays on it.
+  const retrying = load.status === 'failed' && load.retrying;
   const tryAgain = () => {
-    setLoad({ status: 'loading' });
+    if (load.status !== 'failed' || load.retrying) return;
+    setLoad({ status: 'failed', retrying: true });
     list();
   };
 
@@ -120,13 +139,13 @@ export function StartScreen({ onRecord = noop }: StartScreenProps) {
 
   return (
     <div className="panel start-panel">
-      <main className="start" aria-labelledby={titleId}>
+      <main className="start" aria-labelledby={titleId} ref={mainRef}>
         <header className="start-head">
           <h1 id={titleId} className="start-title">
             {t({ id: 'start.title', message: 'Your projects' })}
           </h1>
-          {/* While loading there is nothing to choose yet; with no projects the buttons sit under the invitation. */}
-          {(load.status === 'failed' || (load.status === 'ready' && !empty)) && actions}
+          {/* With no projects the buttons sit under the invitation instead. */}
+          {!empty && actions}
         </header>
         {load.status === 'loading' && (
           <div className="start-note" role="status">
@@ -143,7 +162,14 @@ export function StartScreen({ onRecord = noop }: StartScreenProps) {
                 message: "Klipolo couldn't read your projects folder. Check the disk, then try again.",
               })}
             </p>
-            <Button variant="secondary" onClick={tryAgain}>
+            <Button
+              ref={tryAgainRef}
+              variant="secondary"
+              aria-disabled={retrying || undefined}
+              aria-busy={retrying || undefined}
+              onClick={tryAgain}
+            >
+              {retrying && <span className="spinner" aria-hidden />}
               {t({ id: 'start.tryAgain', message: 'Try again' })}
             </Button>
           </div>
