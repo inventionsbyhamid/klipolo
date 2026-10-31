@@ -43,6 +43,12 @@ fn main() {
             let cache = app.path().app_cache_dir().ok();
             app.manage(EngineState::new(Some(warm), cache));
             let projects = ProjectSessionState::default();
+            // Klipolo's pack where this install has it; a project's pack files point here as it opens.
+            projects.set_pack(
+                pack::pack_dir(app.path().resource_dir().ok())
+                    .map(|dir| pack::Pack::read(&dir))
+                    .unwrap_or_default(),
+            );
             let handle = app.handle().clone();
             projects.set_save_report(Arc::new(move |status: SaveStatus| {
                 let _ = handle.emit("project-save", status);

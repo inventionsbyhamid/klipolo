@@ -39,6 +39,8 @@ pub(crate) use session::ProjectSessionState;
 #[cfg(test)]
 pub(crate) use session::opened;
 use tauri::State;
+
+use crate::pack::Pack;
 use tokio::sync::watch;
 
 /// A project file's extension: `~/Movies/Klipolo/<name>.klipolo`.
@@ -67,8 +69,10 @@ fn read_only_refusal() -> Said {
 }
 
 /// Reads `file` into an open project; one from a newer Klipolo opens read-only.
-pub(crate) fn open_file(file: &Path) -> Result<OpenProject, Said> {
-    let project = read(file)?;
+pub(crate) fn open_file(file: &Path, pack: &Pack) -> Result<OpenProject, Said> {
+    let mut project = read(file)?;
+    // Saved where another install (or a moved app) had the pack: its files are this install's.
+    pack.repoint(&mut project);
     let read_only = is_read_only(&project);
     let document = Document::new(project).map_err(|e| Said::Coded(e.coded()))?;
     Ok(OpenProject {

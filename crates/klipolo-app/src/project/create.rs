@@ -56,7 +56,7 @@ pub(crate) fn create_in(
 
 /// Opens the project in `file` (the open one is saved and closed first): its snapshot, with the opening it made.
 pub(crate) fn open_in(state: &ProjectSessionState, file: &Path) -> Result<Snapshot, Said> {
-    let open = open_file(file)?;
+    let open = open_file(file, &state.pack())?;
     let mut snapshot = open.document.snapshot();
     snapshot.opening = Some(set_open(state, Some(open))?);
     Ok(snapshot)

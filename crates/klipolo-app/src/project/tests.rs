@@ -294,7 +294,7 @@ fn newer_projects_refuse_edits() {
     save(&file, &project, Durability::Full).unwrap();
     let before = std::fs::read(&file).unwrap();
     let state = ProjectSessionState::default();
-    let open = open_file(&file).unwrap();
+    let open = open_file(&file, &Pack::default()).unwrap();
     let notice = open.document.snapshot().read_only;
     assert_eq!(
         notice.as_deref(),
@@ -821,5 +821,64 @@ fn music_added_by_command_follows_a_cut_in_one_undo_step() {
     assert_eq!(
         music_end(&state),
         (20_000_000, MUSIC_FADE_OUT_US, 20_000_000)
+    );
+}
+
+/// A pack in `dir` with one sound, `whoosh`, as Klipolo's manifest lists it.
+fn pack_in(dir: &Path) -> Pack {
+    std::fs::create_dir_all(dir.join("sounds")).unwrap();
+    std::fs::write(dir.join("sounds/whoosh.wav"), b"RIFF").unwrap();
+    std::fs::write(
+        dir.join("manifest.json"),
+        r#"{"items": [{"id": "whoosh", "name": "Whoosh", "category": "sound", "file": "sounds/whoosh.wav", "duration_ms": 900}]}"#,
+    )
+    .unwrap();
+    Pack::read(dir)
+}
+
+/// A project saved where one install had the pack (an app since moved, a translocated copy, a removed build) opens with
+/// its pack sounds pointed at this install's pack; the person's own files keep their paths.
+#[test]
+fn pack_files_saved_with_one_pack_dir_open_from_another() {
+    let dir = tempfile::tempdir().unwrap();
+    let (old, new) = (
+        pack_in(&dir.path().join("old")),
+        pack_in(&dir.path().join("new")),
+    );
+    let mut project = Project::new("Pack sounds");
+    let whoosh = old.asset("whoosh").unwrap();
+    assert!(
+        whoosh
+            .path
+            .starts_with(&*dir.path().join("old").to_string_lossy())
+    );
+    let mut own = whoosh.clone();
+    own.id = "kiln".into();
+    own.path = "/Users/rosa/Sounds/kiln-door.wav".into();
+    project.assets = vec![whoosh, own];
+    let file = dir.path().join("Pack sounds.klipolo");
+    save(&file, &project, Durability::Full).unwrap();
+    std::fs::remove_dir_all(dir.path().join("old")).unwrap();
+    let open = open_file(&file, &new).unwrap();
+    let paths: Vec<&str> = open
+        .document
+        .project()
+        .assets
+        .iter()
+        .map(|a| a.path.as_str())
+        .collect();
+    let moved = dir.path().join("new/sounds/whoosh.wav");
+    assert_eq!(
+        paths,
+        [
+            &*moved.to_string_lossy(),
+            "/Users/rosa/Sounds/kiln-door.wav"
+        ]
+    );
+    // With no pack at all (a build without one), the path stays as saved.
+    let open = open_file(&file, &Pack::default()).unwrap();
+    assert_eq!(
+        open.document.project().assets[0].path,
+        project.assets[0].path
     );
 }

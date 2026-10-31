@@ -5,7 +5,6 @@
 //! someone speaks for the Music lane's ducking dips.
 
 use std::collections::BTreeMap;
-use std::sync::OnceLock;
 
 use klipolo_model::coded::Said;
 use klipolo_model::history::SnapshotPatch;
@@ -17,10 +16,10 @@ use klipolo_model::params::ParamValue;
 use klipolo_model::project::{Asset, AssetKind, Project};
 use klipolo_model::time::{RangeUs, Us};
 use serde::Deserialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::State;
 use ts_rs::TS;
 
-use crate::pack::{Pack, PackItem, pack_dir};
+use crate::pack::{Pack, PackItem};
 use crate::project::{ProjectSessionState, asset_kind, build_and_apply, servable};
 
 /// The file a media command places.
@@ -68,16 +67,6 @@ const NOT_IN_PACK: &str = "That item isn't in Klipolo's pack.";
 /// The largest picture the library shows from its own file.
 const MAX_PICTURE_BYTES: u64 = 40 * 1024 * 1024;
 
-/// The pack, read once.
-fn pack(app: &AppHandle) -> &'static Pack {
-    static PACK: OnceLock<Pack> = OnceLock::new();
-    PACK.get_or_init(|| {
-        pack_dir(app.path().resource_dir().ok())
-            .map(|dir| Pack::read(&dir))
-            .unwrap_or_default()
-    })
-}
-
 /// `source` as an asset of `project`, or why not.
 fn resolve(project: &Project, pack: &Pack, source: &MediaSource) -> Result<Asset, Said> {
     match source {
@@ -105,7 +94,6 @@ fn coded(e: klipolo_model::ModelError) -> Said {
 
 /// Commits what `build` makes of the open project and `source`'s asset, labelled `label`.
 fn place(
-    app: &AppHandle,
     state: &ProjectSessionState,
     label: &str,
     source: &MediaSource,
@@ -113,14 +101,14 @@ fn place(
     project_id: Option<String>,
     build: impl FnOnce(&Project, &Asset) -> Result<Vec<Op>, Said>,
 ) -> Result<SnapshotPatch, Said> {
-    let pack = pack(app);
+    let pack = state.pack();
     build_and_apply(
         state,
         project_id.as_deref(),
         base_revision,
         label,
         |project| {
-            let asset = resolve(project, pack, source)?;
+            let asset = resolve(project, &pack, source)?;
             build(project, &asset)
         },
     )
@@ -131,7 +119,6 @@ fn place(
 /// out, ducking under speech, on an audio track of its own (`add_music_ops`).
 #[tauri::command(async)]
 pub fn media_add_music(
-    app: AppHandle,
     state: State<'_, ProjectSessionState>,
     source: MediaSource,
     start_us: Option<Us>,
@@ -139,7 +126,6 @@ pub fn media_add_music(
     project_id: Option<String>,
 ) -> Result<SnapshotPatch, Said> {
     place(
-        &app,
         &state,
         "media.music.add",
         &source,
@@ -159,7 +145,6 @@ pub fn media_add_music(
 /// video's end (`add_sound_ops`).
 #[tauri::command(async)]
 pub fn media_add_sound(
-    app: AppHandle,
     state: State<'_, ProjectSessionState>,
     source: MediaSource,
     at_us: Us,
@@ -167,7 +152,6 @@ pub fn media_add_sound(
     project_id: Option<String>,
 ) -> Result<SnapshotPatch, Said> {
     place(
-        &app,
         &state,
         "media.sound.add",
         &source,
@@ -180,7 +164,6 @@ pub fn media_add_sound(
 /// Picture `source` at `at_us`: medium, centred, for 5 s, moving with the clip under it (`add_image_ops`).
 #[tauri::command(async)]
 pub fn media_add_image(
-    app: AppHandle,
     state: State<'_, ProjectSessionState>,
     source: MediaSource,
     at_us: Us,
@@ -188,7 +171,6 @@ pub fn media_add_image(
     project_id: Option<String>,
 ) -> Result<SnapshotPatch, Said> {
     place(
-        &app,
         &state,
         "media.image.add",
         &source,
@@ -264,22 +246,21 @@ pub fn media_update_item(
 
 /// Klipolo's pack, as the library lists it.
 #[tauri::command(async)]
-pub fn library_pack(app: AppHandle) -> Vec<PackItem> {
-    pack(&app).items()
+pub fn library_pack(state: State<'_, ProjectSessionState>) -> Vec<PackItem> {
+    state.pack().items()
 }
 
 /// A picture's bytes for the library: a pack sticker by its id, or a picture the open project uses (its path), never
 /// any other file.
 #[tauri::command(async)]
 pub fn media_picture(
-    app: AppHandle,
     state: State<'_, ProjectSessionState>,
     pack_id: Option<String>,
     path: Option<String>,
 ) -> Result<tauri::ipc::Response, String> {
     let file = match (pack_id, path) {
         (Some(id), _) => {
-            let pack = pack(&app);
+            let pack = state.pack();
             pack.asset(&id)
                 .filter(|asset| asset.kind == AssetKind::Image)
                 .and(pack.file(&id))

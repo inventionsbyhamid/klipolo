@@ -1,10 +1,14 @@
 //! Klipolo's own pack of sounds, music beds and stickers (`assets/library`, CC0, made by `scripts/gen-library.py`):
 //! what its manifest lists, as the library shows it and as assets a project adds. The files ship in the app's resources
-//! (`library/`); a project names them by their path there, as any file.
+//! (`library/`); a project names them by their path there, as any file, and by their id (`klipolo-pack-<item>`). That
+//! path is where the pack was when the file was added: the app moved, macOS ran it from a translocated copy, or another
+//! build saved the project, and it is somewhere else now. So each opening points the project's pack files at this
+//! install's pack again (`Pack::repoint`), by id; the decoders, the peaks, the page's media and export all read the
+//! path as it is then.
 
 use std::path::{Path, PathBuf};
 
-use klipolo_model::project::{Asset, AssetKind};
+use klipolo_model::project::{Asset, AssetKind, Project};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -113,6 +117,27 @@ impl Pack {
             .iter()
             .find(|(item, _)| item.id == id)
             .map(|(_, file)| file.as_path())
+    }
+
+    /// Points `project`'s pack files (assets whose id is `klipolo-pack-<item>`) at this pack's copy of each item; an item
+    /// this pack doesn't have keeps its path (it reports as missing if it is gone). How many it changed.
+    pub(crate) fn repoint(&self, project: &mut Project) -> usize {
+        let mut changed = 0;
+        for asset in &mut project.assets {
+            let Some(file) = asset
+                .id
+                .strip_prefix(ASSET_PREFIX)
+                .and_then(|item| self.file(item))
+            else {
+                continue;
+            };
+            let path = file.to_string_lossy();
+            if asset.path != path {
+                asset.path = path.into_owned();
+                changed += 1;
+            }
+        }
+        changed
     }
 
     /// Item `id` as a project's asset: always the same id for the same item, named as the library names it.
