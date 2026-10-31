@@ -7,7 +7,8 @@ import { fixtureSnapshot, titleItem } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 
 /*
- * A layer's block menu: Mute for a video layer with sound as for a sound layer, the same command as the palette's.
+ * A layer's block menu: Mute for a video layer with sound as for a sound layer, and the layer order (Bring forward,
+ * Send back) for every layer, each the same command as its shortcut.
  */
 
 vi.mock('../../bridge/commands', () => ({ bridge: { apply: vi.fn() }, mediaUrl: (p: string) => p }));
@@ -41,6 +42,13 @@ function withVideo({ muted = false, silent = false } = {}): Snapshot {
     content: { type: 'video', assetId: 'pip', sourceInUs: 0, speed: 1, volume: 0.8, muted },
   };
   project.timeline.tracks[0].items.push(layer);
+  return snapshot;
+}
+
+/** `snapshot` with an empty overlay track over the first one. */
+function withTrackAbove(snapshot: Snapshot): Snapshot {
+  const { tracks } = snapshot.project.timeline;
+  tracks.splice(1, 0, { ...tracks[0], id: 'above', name: 'Overlay 2', items: [] });
   return snapshot;
 }
 
@@ -99,5 +107,39 @@ describe("a layer's block menu", () => {
     renderWithProviders(<Timeline />);
     const items = await openMenu(/^Video layer, pip\.mp4/);
     expect(names(items).some((name) => /mute/i.test(name ?? ''))).toBe(false);
+  });
+
+  it('a picture layer can be brought forward or sent back, off where no track of its kind is there', async () => {
+    useProject.setState({ snapshot: withTrackAbove(fixtureSnapshot()), pending: 0 });
+    renderWithProviders(<Timeline />);
+    const items = await openMenu(/Set up billing/);
+    expect(names(items)).toEqual(
+      expect.arrayContaining([expect.stringMatching(/^Bring forward/), expect.stringMatching(/^Send back/)]),
+    );
+    const forward = screen.getByRole('menuitem', { name: /^Bring forward/ });
+    expect(forward).toHaveTextContent('⌥↑');
+    expect(screen.getByRole('menuitem', { name: /^Send back/ })).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(forward);
+    await frames();
+    expect(bridge.apply).toHaveBeenCalledWith({
+      label: 'undo.trackUp',
+      ops: [{ type: 'moveItem', id: 'title', trackId: 'above', startUs: 1_000_000 }],
+    });
+  });
+
+  it('a sound layer moves a track up or down from its menu too', async () => {
+    const snapshot = fixtureSnapshot();
+    const { tracks } = snapshot.project.timeline;
+    tracks.push({ ...tracks[1], id: 'sounds-2', name: 'Audio 2', items: [] });
+    useProject.setState({ snapshot, pending: 0 });
+    renderWithProviders(<Timeline />);
+    await openMenu(/^Sound layer, music\.mp3/);
+    expect(screen.getByRole('menuitem', { name: /^Move to the track below/ })).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(screen.getByRole('menuitem', { name: /^Move to the track above/ }));
+    await frames();
+    expect(bridge.apply).toHaveBeenCalledWith({
+      label: 'undo.trackUp',
+      ops: [{ type: 'moveItem', id: 'song', trackId: 'sounds-2', startUs: 0 }],
+    });
   });
 });

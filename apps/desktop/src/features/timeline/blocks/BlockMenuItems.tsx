@@ -41,11 +41,19 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
     (content?.type === 'video' && !!project && !!assetById(project, content.assetId)?.hasAudio);
 
   const split = { id: 'split', label: t({ id: 'timeline.menu.split', message: 'Split at playhead' }) };
+  // The layer order (⌥↑ / ⌥↓): a picture layer is brought forward or sent back, over or under the others; a sound or
+  // zoom layer moves to the track above or below.
+  const picture = found?.track.kind === 'overlay';
+  const order = [
+    { id: 'track-up', label: picture ? t({ id: 'timeline.menu.forward', message: 'Bring forward' }) : undefined },
+    { id: 'track-down', label: picture ? t({ id: 'timeline.menu.back', message: 'Send back' }) : undefined },
+  ];
   const groups: { id: string; label?: string }[][] =
     kind === 'clip'
       ? [[split], [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }, { id: 'paste-effects' }], [{ id: 'delete' }]]
       : [
           [split, { id: 'attach' }, ...(mutes ? [{ id: 'sound-mute' }] : [])],
+          order,
           [
             { id: 'copy' },
             { id: 'cut' },
