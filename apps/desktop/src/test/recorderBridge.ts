@@ -45,10 +45,27 @@ export type SetupOver = Partial<Omit<RecorderSetup, 'permissions' | 'displays'>>
 };
 
 /**
+ * The notes the app's setup adds about the default devices' permissions, worded as it words them: a refused
+ * microphone while one is picked, and a refused camera while the computer has one.
+ */
+function permissionNotes(setup: RecorderSetup): CodedError[] {
+  const notes: CodedError[] = [];
+  if (setup.mic !== null && setup.permissions.mic === 'denied') notes.push({ code: 'capture.permission.mic', params: {} });
+  if (setup.devices.cameras.length > 0 && setup.permissions.camera === 'denied')
+    notes.push({ code: 'capture.permission.camera', params: {} });
+  return notes;
+}
+
+/**
  * A Mac's setup: one display (`main`), one mic (`mic-1`, the default), no camera and no app, every permission granted,
- * nothing running.
+ * nothing running. Its notes are the test's own, then those the app adds for a refused microphone or camera.
  */
 export function recorderSetup(over: SetupOver = {}): RecorderSetup {
+  const setup = setupOf(over);
+  return { ...setup, notes: [...setup.notes, ...permissionNotes(setup)] };
+}
+
+function setupOf(over: SetupOver): RecorderSetup {
   const { displays = [display('main')], apps = [], mics = [device('mic-1')], cameras = [], permissions, ...rest } = over;
   return {
     caps: {

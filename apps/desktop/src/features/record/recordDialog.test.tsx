@@ -512,6 +512,29 @@ describe('permission steps', () => {
     expect(fake.calls).toEqual(['setup', 'openPrivacy:camera']);
   });
 
+  it('a_denied_camera_with_no_camera_chosen_says_nothing_about_the_camera', async () => {
+    // macOS refused the camera once; every opening starts on "No camera", which records all the same.
+    const dialog = await openOn(
+      recorderSetup({ cameras: [device('FaceTime HD Camera')], permissions: { camera: 'denied' } }),
+    );
+    expect(dialog).not.toHaveTextContent(/camera.*then try again/);
+    expect(dialog.querySelector('.record-notes')).toBeNull();
+    expect(recordButton()).not.toHaveAttribute('aria-disabled');
+    // Chosen, it is said once, under its row.
+    await choose('Camera: No camera', 'FaceTime HD Camera');
+    expect(dialog.textContent!.match(/use your camera/g)).toHaveLength(1);
+  });
+
+  it('a_denied_mic_is_said_once_under_its_row', async () => {
+    const dialog = await openOn(recorderSetup({ permissions: { mic: 'denied' } }));
+    expect(dialog.textContent!.match(/use your microphone/g)).toHaveLength(1);
+    expect(dialog.querySelector('.record-notes')).toBeNull();
+    // With "No microphone", nothing asks for it.
+    await choose('Microphone: mic-1', 'No microphone');
+    expect(dialog).not.toHaveTextContent(/microphone.*then try again/);
+    expect(dialog.querySelector('.record-notes')).toBeNull();
+  });
+
   it('a_refused_open_privacy_settings_is_said_without_try_again', async () => {
     const dialog = await openOn(recorderSetup({ permissions: { mic: 'denied' } }));
     fake.script.openPrivacy = () => refusal('capture.error.os');

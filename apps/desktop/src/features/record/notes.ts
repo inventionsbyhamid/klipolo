@@ -19,13 +19,17 @@ const BLOCKING = [
 
 /**
  * Notes the setup words about the default camera and mic: the dialog says them for the devices chosen instead
- * (`notesBefore`), and the camera's fit for the take's display under the camera (`cameraNote`).
+ * (`notesBefore`), the camera's fit for the take's display under the camera (`cameraNote`), and a refused microphone
+ * or camera under its row, only while one is chosen (`DeniedNote`): "No microphone" and "No camera" record all the
+ * same.
  */
 const FOR_THE_CHOICE: ReadonlySet<string> = new Set([
   'capture.preflight.cameraBusy',
   'capture.preflight.cameraOff',
   'capture.preflight.virtualMic',
   'capture.preflight.cameraWithScreen',
+  'capture.permission.mic',
+  'capture.permission.camera',
 ]);
 
 /** Notes about the mic the setup picked, said only while it is the one chosen. */
