@@ -231,6 +231,26 @@
       ]
     },
     {
+      "id": "lower-third",
+      "message": "add a lower third that says Student questions at 13.5 seconds",
+      "expect": [
+        {
+          "calls": [{"name": "addText", "args": {"text": {"contains": "student questions"}, "preset": "lower-third", "atSec": {"min": 13.2, "max": 13.8}}}],
+          "outcome": {"applied": true}
+        }
+      ]
+    },
+    {
+      "id": "closing-words",
+      "message": "put Thanks for watching at the bottom for the last 3 seconds",
+      "expect": [
+        {
+          "calls": [{"name": "addText", "args": {"text": {"contains": "thanks for watching"}, "preset": {"anyOf": ["caption", "lower-third"]}, "atSec": {"min": 151.7, "max": 152.4}, "durationSec": {"anyOf": [null, {"min": 2.7, "max": 3.3}]}}}],
+          "outcome": {"applied": true}
+        }
+      ]
+    },
+    {
       "id": "title-card-pick",
       "message": "make a title card that says Day 1 in Lisbon",
       "note": "no background is named: the model chooses one and never asks for it",

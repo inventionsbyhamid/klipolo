@@ -85,11 +85,11 @@ async fn every_case_is_judged_and_the_cost_added_up_without_the_key() {
     assert!(stdout.contains("FAIL vertical"), "{stdout}");
     assert!(stdout.contains("     reply: Undone."), "{stdout}");
     assert!(
-        stdout.contains("1/23 passed (target 21); 23 model calls; total $0.03"),
+        stdout.contains("1/25 passed (target 23); 25 model calls; total $0.04"),
         "{stdout}"
     );
     assert!(!stdout.contains(KEY) && !stderr.contains(KEY));
-    assert_eq!(server.received_requests().await.unwrap().len(), 23);
+    assert_eq!(server.received_requests().await.unwrap().len(), 25);
 
     // One case on its own must pass.
     let out = run(&env, &["--only", "undo"]).await;
@@ -198,6 +198,15 @@ fn ideal(message: &str) -> Vec<(&'static str, Value)> {
             "makeSticker",
             json!({"prompt": "paper plane", "position": "top-right", "atSec": 67.0, "durationSec": null}),
         )],
+        // Words on screen in a text preset, in the person's own words.
+        "add a lower third that says Student questions at 13.5 seconds" => vec![(
+            "addText",
+            json!({"text": "Student questions", "preset": "lower-third", "atSec": 13.5, "durationSec": null}),
+        )],
+        "put Thanks for watching at the bottom for the last 3 seconds" => vec![(
+            "addText",
+            json!({"text": "Thanks for watching", "preset": "caption", "atSec": 152.04, "durationSec": 3.0}),
+        )],
         // A title card whose background the person didn't name: the model chooses one.
         "make a title card that says Day 1 in Lisbon" => vec![(
             "makeTitleCard",
@@ -227,7 +236,7 @@ async fn ideal_answers_pass_every_case() {
     ];
     let out = run(&env, &[]).await;
     let (stdout, stderr) = text(&out);
-    assert!(stdout.contains("23/23 passed"), "{stdout}{stderr}");
+    assert!(stdout.contains("25/25 passed"), "{stdout}{stderr}");
     // A case that allows more than one answer says which passed: the title card template for the Lisbon title, the
     // first alternative for the others.
     let lisbon = &stdout[stdout.find("PASS lisbon-title").expect("the Lisbon case")..];
@@ -243,7 +252,7 @@ async fn ideal_answers_pass_every_case() {
     assert_eq!(stdout.matches("     passed on alternative ").count(), 4);
     assert_eq!(out.status.code(), Some(0));
     // One call each: clip A's missing filler words are told to the person, with no refusal round.
-    assert!(stdout.contains("23 model calls"), "{stdout}");
+    assert!(stdout.contains("25 model calls"), "{stdout}");
     assert!(
         stdout.contains("     reply: There are no filler words to remove."),
         "{stdout}"
