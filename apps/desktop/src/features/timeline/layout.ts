@@ -35,5 +35,15 @@ export const SHORT_WINDOW = '(max-height: 819px)';
 export const CLIP_MIN_PX = 16;
 export const LAYER_MIN_PX = 12;
 export const SOUND_MIN_PX = 6;
+/**
+ * A bare cut's marker (Add transition, or the note that none fits) draws only between clips at least this wide, unless
+ * it has focus: a window then mounts at most 3 views / 40 px, about 90 of them, inside the mounted-block budget.
+ */
+export const CUT_MIN_PX = 40;
+/**
+ * A transition's chip draws between clips at least this wide (or when focused or selected); between narrower clips
+ * (but not banded ones) it shows as a tint at the clips' edges (`ClipBlock`), no element of its own.
+ */
+export const CHIP_MIN_PX = 30;
 /** Room after the video to drop and drag into. */
 export const TAIL_US = 10_000_000;

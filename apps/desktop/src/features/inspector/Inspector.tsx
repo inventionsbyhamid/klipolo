@@ -16,6 +16,7 @@ import { ImageInspector } from './ImageInspector';
 import { commitLatest } from '../../state/latest';
 import { TemplateInspector } from './TemplateInspector';
 import { TextInspector } from './TextInspector';
+import { TransitionInspector, useInspectedTransition } from './TransitionInspector';
 import { VideoInspector } from './VideoInspector';
 
 /** What the inspector shows: a text, a picture, a title template, music, a sound effect or a video layer. */
@@ -64,8 +65,11 @@ const ICONS: Record<Inspected, IconName> = {
 export function Inspector({ format }: { format: FormatKind }) {
   const { t } = useLingui();
   const inspected = useInspected();
+  const transition = useInspectedTransition();
   const primary = useProject((s) => s.snapshot?.project.settings.primaryFormat ?? 'landscape');
   const project = useProject((s) => s.snapshot?.project);
+  // A transition selected at a cut: its own card (`TransitionInspector`).
+  if (transition) return <TransitionInspector key={transition.clip.id} {...transition} />;
   if (!inspected) return null;
   const { item, track, kind } = inspected;
   // A layer goes a track up or down only when one of its kind is there to take it (not on a locked track).
