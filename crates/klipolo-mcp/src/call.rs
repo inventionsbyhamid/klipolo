@@ -27,7 +27,6 @@
 //! "revision"?, "proposalId"?, "removedSec"?}`, the outcome what changed most (a proposal, then the project, then a
 //! job started). `isError` is true exactly when nothing was done; when part was, the text says what wasn't.
 
-use klipolo_chat::compile::TEXT_COMING_SOON;
 use klipolo_chat::{
     ANALYZE_FIRST, Audience, Compiled, FunctionCall, Job, Moment, Refusal, ToolCall, compile,
     timeline_key,
@@ -435,6 +434,8 @@ fn reasons<'a>(refusals: impl IntoIterator<Item = &'a Refusal>) -> String {
 
 /// How chat refuses a title card whose words the person didn't type: an app's words never are.
 const CHAT_TITLE_WORDS: &str = "makeTitleCard: the title must be the person's own words";
+/// How chat refuses words on screen the person didn't type.
+const CHAT_TEXT_WORDS: &str = "addText: the words must be the person's own";
 /// How chat ends a refusal of a time that stands on nothing: what counts for chat's model.
 const CHAT_TIMES_FROM: &str = ", the selection, the playhead, the video's start or end, or a time the person said. Use \
 a time from the context.";
@@ -443,9 +444,9 @@ const CHAT_ASK: &str = " with askUser";
 
 /// A refusal's reason, as a sentence an app can act on. Chat words some for its own model and the person in its panel;
 /// an app reads them in its own terms:
-/// - a title card, which needs the person's own words, is for Klipolo's chat (`TITLE_CARD_WORDS`);
-/// - a clip not analyzed yet is the person's to analyze (`NOT_ANALYZED`), and words on screen are coming
-///   (`TEXT_SOON`);
+/// - a title card and words on screen, which need the person's own words, are for Klipolo's chat
+///   (`TITLE_CARD_WORDS`, `TEXT_WORDS`);
+/// - a clip not analyzed yet is the person's to analyze (`NOT_ANALYZED`);
 /// - a time must stand on the reads an app has, never its own words (`TIMES_FROM`);
 /// - it asks its own person, not through `askUser`.
 ///
@@ -454,16 +455,14 @@ fn reason(r: &Refusal) -> String {
     if r.reason.starts_with(CHAT_TITLE_WORDS) {
         return words::TITLE_CARD_WORDS.to_owned();
     }
-    if r.audience == Audience::Person {
-        if r.reason == ANALYZE_FIRST {
-            return match &r.clip {
-                Some(clip) => fill(words::NOT_ANALYZED, &[("clip", clip)]),
-                None => words::NOT_ANALYZED.replace(" ({clip})", ""),
-            };
-        }
-        if r.reason == TEXT_COMING_SOON {
-            return words::TEXT_SOON.to_owned();
-        }
+    if r.reason.starts_with(CHAT_TEXT_WORDS) {
+        return words::TEXT_WORDS.to_owned();
+    }
+    if r.audience == Audience::Person && r.reason == ANALYZE_FIRST {
+        return match &r.clip {
+            Some(clip) => fill(words::NOT_ANALYZED, &[("clip", clip)]),
+            None => words::NOT_ANALYZED.replace(" ({clip})", ""),
+        };
     }
     let said = (r.reason)
         .replace(CHAT_TIMES_FROM, words::TIMES_FROM)

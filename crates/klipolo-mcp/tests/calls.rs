@@ -19,8 +19,8 @@ use klipolo_mcp::rpc::Mcp;
 use klipolo_mcp::words::{
     DECIDED, DONE, KLIPOLO_CHAT, MOVED, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS, NOTHING_TO_UNDO,
     OVER_SHARE, OWN_CHANGED, OWN_MOVED, OWN_WAITING, PROPOSED_NO_FOOTAGE, PUSHES_OUT, READ_FIRST,
-    REDO_WAITS, STALE, TEXT_SOON, TITLE_CARD_WORDS, UNCHANGED, UNDO_DROPPED, UNDONE, WAITING_OTHER,
-    fill,
+    REDO_WAITS, STALE, TEXT_WORDS, TITLE_CARD_WORDS, UNCHANGED, UNDO_DROPPED, UNDONE,
+    WAITING_OTHER, fill,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -564,7 +564,7 @@ fn agent_words_are_exact() {
         READ_ONLY,
         TITLE_CARD_WORDS,
         NOT_ANALYZED,
-        TEXT_SOON,
+        TEXT_WORDS,
         TIMES_FROM,
     ] {
         assert!(!said.contains(['\u{2013}', '\u{2014}']), "{said}");
@@ -1248,8 +1248,16 @@ fn chat_worded_refusals_are_said_for_apps() {
         assert!(text(&result).ends_with(ends), "{result}");
         assert!(!text(&result).contains("askUser"), "{result}");
     }
-    // Words on screen aren't built yet, from chat or from an app.
+    // Words on screen are the person's own, typed in Klipolo's chat: an app is told where the person adds them, and
+    // nothing about askUser.
     let words = json!({"text": "Hello", "preset": "title", "atSec": null, "durationSec": null});
-    assert_refused(&agent.call("addText", words), TEXT_SOON);
+    let result = agent.call("addText", words);
+    assert_refused(&result, TEXT_WORDS);
+    assert_eq!(
+        TEXT_WORDS,
+        "addText: words on screen need the person's own words, typed in Klipolo's chat. Ask the person to add them \
+         there."
+    );
+    assert!(!text(&result).contains("askUser"));
     assert_eq!(host.state().counts.applies, 0);
 }

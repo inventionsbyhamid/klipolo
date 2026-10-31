@@ -73,14 +73,15 @@ again. Call getProposal to see what the person did.";
 /// A clip Klipolo hasn't analyzed, which the call needs: only the person can start that, in Klipolo.
 pub const NOT_ANALYZED: &str = "Klipolo hasn't analyzed this clip yet ({clip}). Ask the person to analyze it in \
 Klipolo, then try again.";
-/// `addText` until its presets are built.
-pub const TEXT_SOON: &str = "Putting words on screen is coming soon in Klipolo.";
 /// What a time must stand on, after "a word, a pause, a scene, a clip's start or end": an app's own words never count.
 pub const TIMES_FROM: &str = ", the person's selection or playhead in Klipolo, or the video's start or end. Use a \
 time from getContext or getTranscript.";
 /// `makeTitleCard` from an app: a title card's words are the person's own, typed in Klipolo's chat, never an app's.
 pub const TITLE_CARD_WORDS: &str = "makeTitleCard: a title card needs the person's own words, typed in Klipolo's chat. \
 Ask the person to make it there.";
+/// `addText` from an app: words on screen are the person's own, typed in Klipolo's chat, never an app's.
+pub const TEXT_WORDS: &str = "addText: words on screen need the person's own words, typed in Klipolo's chat. Ask the \
+person to add them there.";
 /// Additions that, checked again before they apply, take something away. Never expected: the compiler proposes those.
 pub const REMOVES: &str = "Klipolo found this would take something out of the edit, so it was not applied. Nothing \
 changed. Ask the person to make this change in Klipolo.";
