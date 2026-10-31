@@ -158,7 +158,7 @@ pub struct Job {
     /// Its file name.
     pub name: String,
     pub state: JobState,
-    /// 0–1, from frames already copied.
+    /// 0 to 1, from frames already copied.
     pub progress: f64,
     /// The copy's frame rate: the source's own, exactly (`decide::proxy_rate`), so the preview reads copy frame n where
     /// it would read source frame n.
