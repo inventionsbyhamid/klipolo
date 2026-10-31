@@ -1756,3 +1756,50 @@ async fn a_picture_paid_for_counts_even_when_it_cannot_be_read() {
     assert_eq!(s.chat.session.spend().pictures, 1);
     assert_eq!(s.chat.project.revision(), 0);
 }
+
+#[tokio::test]
+async fn every_picture_paid_for_stays_in_the_muse_image_folder() {
+    let exists = |path: &str| std::path::Path::new(path).is_file();
+    let s = studio(
+        talk(),
+        Painter::new(vec![drawn(), drawn(), drawn(), drawn()]),
+    );
+    // Try again keeps the first picture as well.
+    let card = s.chat.session.ask_picture(sticker(None));
+    let first = s.chat.session.draw_picture(&card.id).await.unwrap();
+    let second = s.chat.session.draw_picture(&card.id).await.unwrap();
+    assert!(
+        exists(&first.path) && exists(&second.path),
+        "both pictures are kept"
+    );
+    // Its moment cut: nothing placed, the pictures kept.
+    s.chat.session.place_picture(&card.id).unwrap_err();
+    // New chat and another project forget the cards, not the pictures.
+    let card = s
+        .chat
+        .session
+        .ask_picture(sticker(Some((secs(2.0), secs(3.0)))));
+    let third = s.chat.session.draw_picture(&card.id).await.unwrap();
+    s.chat.session.reset();
+    let card = s
+        .chat
+        .session
+        .ask_picture(sticker(Some((secs(2.0), secs(3.0)))));
+    let fourth = s.chat.session.draw_picture(&card.id).await.unwrap();
+    s.chat.project.switch(Some(talk())).unwrap();
+    s.chat.session.project_changed();
+    let paths: std::collections::HashSet<&str> = [&first, &second, &third, &fourth]
+        .iter()
+        .map(|p| p.path.as_str())
+        .collect();
+    assert_eq!(paths.len(), 4, "four files: {paths:?}");
+    for picture in [&first, &second, &third, &fourth] {
+        assert!(exists(&picture.path), "{} is kept", picture.path);
+        assert!(
+            picture.path.contains("Fake Image"),
+            "in the maker's folder: {}",
+            picture.path
+        );
+    }
+    assert_eq!(s.chat.session.spend().pictures, 4);
+}

@@ -2,8 +2,9 @@
 //! title. A picture is never an op until it exists, and everything comes back from commands:
 //! - a reply names each picture it asked for (`ChatPicture`);
 //! - `draw` draws it (about 35 s) into the project's media folder, not into the project, for its card; Try again draws
-//!   it again. A title card's background is drawn in the video's primary format as it is when the drawing starts, and
-//!   not at all once its title is gone;
+//!   it again. Every picture drawn stays in that folder (Muse Image's), paid for, whatever becomes of its card. A title
+//!   card's background is drawn in the video's primary format as it is when the drawing starts, and not at all once its
+//!   title is gone;
 //! - `place` (Use) puts it in the project as one undo step from chat: a sticker where its job says once the picture is
 //!   there (`StickerPlacement`; nowhere when the moment it was for was cut meanwhile, said plainly), a background on a
 //!   new track just under its title's, for as long as the title shows.
@@ -11,7 +12,6 @@
 //! A picture belongs to the project it was asked for: another project (or New chat) forgets it. Each one that comes
 //! back is counted into the session's spend, saved or not (one that can't be read or saved was still paid for).
 
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use klipolo_chat::sanitize;
@@ -209,11 +209,9 @@ impl Pictures {
         };
         let mut waiting = self.lock();
         match waiting.iter_mut().find(|w| w.id == id) {
-            // Try again: the picture drawn before was never placed, so its file goes.
+            // Try again: the card shows the new picture; the one before stays in the folder, paid for.
             Some(w) => {
-                if let Some(old) = w.drawn.replace(made) {
-                    let _ = std::fs::remove_file(PathBuf::from(old.asset.path));
-                }
+                w.drawn = Some(made);
                 Ok(drawn)
             }
             // Forgotten while it was drawn (another project, New chat).
