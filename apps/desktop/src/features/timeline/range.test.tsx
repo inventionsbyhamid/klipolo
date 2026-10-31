@@ -115,7 +115,7 @@ describe('a time range on the timeline', () => {
     fireEvent.keyDown(window, { key: 'Backspace' });
     await frames();
     expect(useProject.getState().snapshot!.project.timeline.main).toEqual([]);
-    expect(exportButton()).toBeDisabled();
+    expect(exportButton()).toHaveAttribute('aria-disabled', 'true');
     expect(exportButton()).toHaveAttribute('title', 'Add a video first');
     expect(screen.getByText('Clips line up here in the order you add them.')).toBeInTheDocument();
   });

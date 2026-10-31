@@ -347,14 +347,18 @@ describe('export dialog', () => {
     expect(status()).toHaveTextContent('25% exported.');
   });
 
-  it('Export is off until there is a video, and says why', () => {
+  it('Export is off until there is a video, and says why', async () => {
     useProject.setState({ snapshot: null });
     const { rerender } = renderWithProviders(<ExportButton />);
-    expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled();
+    // Off but not `disabled`, so WebKit shows why on hover; a press opens nothing.
+    expect(screen.getByRole('button', { name: 'Export' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Export' }).title).toBe('Add a video first');
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(useExport.getState().open).toBe(false);
     useProject.setState({ snapshot: fixtureSnapshot() });
     rerender(<ExportButton />);
-    expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Export' })).not.toHaveAttribute('aria-disabled');
     expect(screen.getByRole('button', { name: 'Export' }).title).toBe('Export (Command E)');
   });
 });

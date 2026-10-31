@@ -62,11 +62,11 @@ describe('TopBar', () => {
     useProject.setState({ snapshot: emptySnapshot() });
     const { rerender } = render(<TopBar />);
     const exportButton = () => screen.getByRole('button', { name: 'Export' });
-    expect(exportButton()).toBeDisabled();
+    expect(exportButton()).toHaveAttribute('aria-disabled', 'true');
     expect(exportButton().title).toBe('Add a video first');
     useProject.setState({ snapshot: fixtureSnapshot() });
     rerender(<TopBar />);
-    expect(exportButton()).toBeEnabled();
+    expect(exportButton()).not.toHaveAttribute('aria-disabled');
     expect(exportButton().title).toBe('Export (Command E)');
     await userEvent.click(exportButton());
     expect(useExport.getState().open).toBe(true);
