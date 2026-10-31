@@ -7,7 +7,7 @@ export const RECORDER_WORDS: Readonly<Record<string, string>> = {
   'capture.preflight.bluetoothMic':
     "Your headphones' microphone lowers the sound quality while recording, so Klipolo picked {fallback}.",
   'capture.preflight.cameraWithScreen':
-    "This computer can't record your camera at the same time as the screen. Klipolo records the screen alone, as with No camera.",
+    "This computer can't record your camera at the same time as the screen. Klipolo will record the screen without your camera.",
   'capture.preflight.micMissing': "The microphone you chose isn't connected, so Klipolo picked {fallback}.",
   'capture.preflight.profilePreset':
     "The quality you chose for {app} isn't available on this computer now, so Klipolo picked the best one for it.",

@@ -295,9 +295,9 @@ describe('the dialog and its choices', () => {
   });
 
   it('the_camera_s_note_at_the_take_s_quality_shows_while_a_camera_is_chosen', async () => {
-    // What happens then, by the choice's own name.
+    // Why, then what happens.
     const note =
-      "This computer can't record your camera at the same time as the screen. Klipolo records the screen alone, as with No camera.";
+      "This computer can't record your camera at the same time as the screen. Klipolo will record the screen without your camera.";
     const base = recorderSetup({ cameras: [device('FaceTime HD Camera')] });
     const offer = (over: Partial<PresetOffer>): PresetOffer => ({
       id: 'native60',
