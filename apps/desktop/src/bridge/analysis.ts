@@ -37,6 +37,8 @@ export const analysisBridge = {
   start: (assetIds: string[], byPage = false) => call<void>('analysis_start', { assetIds, byPage }),
   /** Stops after the requests in flight; their clips go back to not analysed. */
   cancel: () => call<void>('analysis_cancel'),
+  /** These clips left the project: they hear no more about their analysis. */
+  forget: (assetIds: string[]) => call<void>('analysis_forget', { assetIds }),
   /** Every clip Rust knows of, and where its analysis is. */
   states: () => call<AssetAnalysisState[]>('analysis_states'),
   /** Every progress, done, failed and stopped event, until the returned function is called. */

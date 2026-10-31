@@ -88,6 +88,27 @@ export function clearAnalysisOnProjectSwitch(): () => void {
   });
 }
 
+/**
+ * A clip removed from the open project (not the project switching): the store forgets it, so it no longer counts for
+ * the banner or the rough-captions note, and Rust stops telling it anything (`analysis_forget`). Its file's analysis
+ * carries on for any other clip on it. Gives the stop function.
+ */
+export function forgetRemovedClips(): () => void {
+  return useProject.subscribe((s, prev) => {
+    const now = s.snapshot;
+    const before = prev.snapshot;
+    if (!now || !before || now.project.id !== before.project.id || now.opening !== before.opening) return;
+    if (now.project.assets === before.project.assets) return;
+    const kept = new Set(now.project.assets.map((a) => a.id));
+    const gone = before.project.assets.map((a) => a.id).filter((id) => !kept.has(id));
+    if (gone.length === 0) return;
+    useAnalysis.setState((st) => ({
+      states: Object.fromEntries(Object.entries(st.states).filter(([id]) => kept.has(id))),
+    }));
+    void analysisBridge.forget(gone).catch(() => undefined);
+  });
+}
+
 /** Offers asked for, so an older estimate never replaces a newer one. */
 let asked = 0;
 

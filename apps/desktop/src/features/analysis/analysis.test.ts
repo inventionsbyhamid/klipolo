@@ -8,13 +8,24 @@ vi.mock('../../bridge/analysis', () => ({
     start: vi.fn(),
     cancel: vi.fn(),
     states: vi.fn(),
+    forget: vi.fn(),
     onEvent: vi.fn(),
   },
 }));
 const { analysisBridge } = await import('../../bridge/analysis');
 const { refreshAiStatus } = await import('../../ai/aiStatus');
-const { analyze, applyEvent, clearAnalysisOnProjectSwitch, followAnalysis, notNow, offerFor, retry, stateOf, useAnalysis } =
-  await import('../../state/analysis');
+const {
+  analyze,
+  applyEvent,
+  clearAnalysisOnProjectSwitch,
+  followAnalysis,
+  forgetRemovedClips,
+  notNow,
+  offerFor,
+  retry,
+  stateOf,
+  useAnalysis,
+} = await import('../../state/analysis');
 const { useProject } = await import('../../state/project');
 const { about, howLong, offerText, offerTitle, progressTitle, spokenProgress, stepDots } = await import('./analysis');
 
@@ -160,6 +171,21 @@ describe('the store', () => {
     expect(useAnalysis.getState().states.a).toBeDefined();
     useProject.setState({ snapshot: snapshot('two', 2) });
     expect(useAnalysis.getState()).toMatchObject({ states: {}, estimate: null, error: null, dismissed: [] });
+    stop();
+  });
+
+  it('forgets a clip removed from the project, and tells Rust, keeping the others', () => {
+    bridge.forget.mockResolvedValue(undefined);
+    const stop = forgetRemovedClips();
+    const snapshot = (ids: string[]) =>
+      ({ project: { id: 'one', assets: ids.map((id) => ({ id })) }, opening: 1 }) as never;
+    useProject.setState({ snapshot: snapshot(['a', 'b']) });
+    useAnalysis.setState({
+      states: { a: { state: 'done', approximate: true }, b: { state: 'done', approximate: true } },
+    });
+    useProject.setState({ snapshot: snapshot(['a']) });
+    expect(Object.keys(useAnalysis.getState().states)).toEqual(['a']);
+    expect(bridge.forget).toHaveBeenCalledWith(['b']);
     stop();
   });
 
