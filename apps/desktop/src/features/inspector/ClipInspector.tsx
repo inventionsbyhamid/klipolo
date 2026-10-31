@@ -6,15 +6,20 @@ import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../../d
 import { activeIntlLocale } from '../../i18n';
 import { Icon } from '../../layout/Icon';
 import { formatNumber } from '../../lib/format';
+import { clipOp } from '../../lib/ops';
 import { sourceLabel } from '../../lib/timeline';
-import { editClip } from '../../state/latest';
+import { commitToggle } from '../../state/commit';
+import { clipNow, editClip } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
+import { muteLabel } from '../preview';
 import { deleteBlock, duplicate } from '../timeline/commands';
-import { speedChoices } from './clipOps';
+import { clipHasSound, speedChoices } from './clipOps';
 import { Field, Select } from './fields';
 import { FramingField } from './FramingField';
+import { ToolSlider } from './ToolSlider';
 
+const percent = (v: number) => `${Math.round(v * 100)}%`;
 /** "1.25×". */
 const speedText = (speed: number) => `${formatNumber(activeIntlLocale(), speed)}×`;
 
@@ -22,7 +27,8 @@ const speedText = (speed: number) => `${formatNumber(activeIntlLocale(), speed)}
  * The clip card: the inspector for a selected main-track clip, in the left column like the others. Its header has the
  * film icon and the clip's file name, a more menu (Duplicate, Delete: the timeline's own commands; a main clip has no
  * layer order) and a close button. Its fields: Fit or Fill in the format shown, and the Fill focus while Fill crops
- * (`FramingField`); and Speed (0.5x to 2x, the clip's length follows). Each change is one undo step.
+ * (`FramingField`); Speed (0.5x to 2x, the clip's length follows); and when the clip has sound, Volume (0 to 200%) and
+ * Mute. Each change is one undo step.
  */
 export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind }) {
   const { t } = useLingui();
@@ -73,6 +79,7 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
       <div className="insp-body">
         <FramingField clip={clip} format={format} />
         <SpeedField clip={clip} />
+        {clipHasSound(project, clip) && <VolumeField clip={clip} />}
       </div>
     </aside>
   );
@@ -90,6 +97,48 @@ function SpeedField({ clip }: { clip: Clip }) {
         choices={speedChoices(clip.speed).map((speed) => ({ value: String(speed), label: speedText(speed) }))}
         onPick={(v) => void editClip('speed.undo', clip, { speed: Number(v) })}
       />
+    </Field>
+  );
+}
+
+/**
+ * Volume (0 to 200%, committed on release; sound isn't dry-run) and Mute, its own switch, so the volume stays for when
+ * it plays again. A press is decided as it goes in, after a change still on its way (`commitToggle`).
+ */
+function VolumeField({ clip }: { clip: Clip }) {
+  const { t } = useLingui();
+  const volume = t({ id: 'volume.label', message: 'Volume' });
+  const mute = t({ id: 'volume.mute', message: 'Mute' });
+  return (
+    <Field label={volume}>
+      <div className="volume-field">
+        <ToolSlider
+          label={volume}
+          commitLabel="volume.undo"
+          value={clip.volume}
+          min={0}
+          max={2}
+          step={0.01}
+          format={percent}
+          preview={false}
+          ops={(v) => [clipOp(clip, { volume: v })]}
+        />
+        <IconButton
+          className="icon-btn-sm"
+          icon={<Icon name={clip.muted ? 'volume-off' : 'volume'} />}
+          label={mute}
+          tooltip={clip.muted ? t({ id: 'volume.unmute', message: 'Unmute' }) : mute}
+          active={clip.muted}
+          onClick={() =>
+            void commitToggle(
+              () => clipNow(clip.id)?.muted ?? clip.muted,
+              (on) => muteLabel(on, 'clip'),
+              (muted) => [clipOp(clip, { muted })],
+              { id: clip.id },
+            )
+          }
+        />
+      </div>
     </Field>
   );
 }

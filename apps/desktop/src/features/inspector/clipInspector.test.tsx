@@ -10,8 +10,8 @@ import { renderWithProviders } from '../../test/render';
 
 /*
  * The clip card: the docked inspector for a selected main-track clip. Fit or Fill in the format shown, as Rust frames
- * it (`clip_framing`), the Fill focus while Fill crops, and Speed; each change is one labelled step, built at its turn
- * through the commit queue.
+ * it (`clip_framing`), the Fill focus while Fill crops, Speed, and Volume and Mute; each change is one labelled step,
+ * built at its turn through the commit queue.
  */
 
 const apply = vi.fn<(label: string, ops: Op[], params?: LabelParams) => Promise<boolean>>(() =>
@@ -74,7 +74,7 @@ beforeEach(() => {
 });
 
 describe('the clip card', () => {
-  it('shows the selected clip by its file name, framed as Rust draws it, with its speed', async () => {
+  it('shows the selected clip by its file name, framed as Rust draws it, with its speed and sound', async () => {
     renderWithProviders(<Inspector format="landscape" />);
     expect(screen.getByRole('complementary', { name: 'broll.mp4 settings' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'broll.mp4' })).toBeInTheDocument();
@@ -83,6 +83,8 @@ describe('the clip card', () => {
     expect(screen.getByRole('radio', { name: 'Fit' })).toHaveAttribute('aria-checked', 'false');
     expect(clipFraming).toHaveBeenCalledWith('b');
     expect(screen.getByRole('button', { name: 'Speed: 1×' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveAttribute('aria-valuetext', '100%');
+    expect(screen.getByRole('button', { name: 'Mute' })).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('Fit and Fill set the format shown only, built from the framing Rust draws, and keep the other formats', async () => {
@@ -189,6 +191,56 @@ describe('the clip card', () => {
     useProject.setState({ snapshot: withB({ speed: 1.1 }) });
     renderWithProviders(<Inspector format="landscape" />);
     expect(screen.getByRole('button', { name: 'Speed: 1.1×' })).toBeInTheDocument();
+  });
+
+  it('the volume goes to 200% and commits on release without a dry run; Mute is its own switch', async () => {
+    renderWithProviders(<Inspector format="landscape" />);
+    const volume = screen.getByRole('slider', { name: 'Volume' });
+    expect(volume).toHaveAttribute('aria-valuemax', '2');
+    const root = track(volume);
+    fireEvent.pointerDown(root, { button: 0, pointerId: 1, clientX: 50 });
+    fireEvent.pointerMove(root, { pointerId: 1, clientX: 40 });
+    expect(volume).toHaveAttribute('aria-valuetext', '80%');
+    fireEvent.pointerUp(root, { pointerId: 1, clientX: 40 });
+    expect(engine.preview).not.toHaveBeenCalled();
+    expect(apply).toHaveBeenCalledWith(
+      'volume.undo',
+      [{ type: 'updateClip', id: 'b', patch: { volume: 0.8 } }],
+      undefined,
+      queued,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Mute' }));
+    await waitFor(() =>
+      expect(apply).toHaveBeenLastCalledWith(
+        'volume.mute.undo',
+        [{ type: 'updateClip', id: 'b', patch: { muted: true } }],
+        { noun: 'clip' },
+        queued,
+      ),
+    );
+  });
+
+  it('a muted clip unmutes; a clip without sound has no volume', async () => {
+    useProject.setState({ snapshot: withB({ muted: true }) });
+    const { unmount } = renderWithProviders(<Inspector format="landscape" />);
+    const mute = screen.getByRole('button', { name: 'Mute' });
+    expect(mute).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(mute);
+    await waitFor(() =>
+      expect(apply).toHaveBeenCalledWith(
+        'volume.unmute.undo',
+        [{ type: 'updateClip', id: 'b', patch: { muted: false } }],
+        { noun: 'clip' },
+        queued,
+      ),
+    );
+    unmount();
+    // camera.mp4 has no sound.
+    useProject.setState({ snapshot: withB({ source: { type: 'asset', id: 'camera' } }) });
+    renderWithProviders(<Inspector format="landscape" />);
+    expect(screen.getByRole('heading', { name: 'camera.mp4' })).toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: 'Volume' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Mute' })).toBeNull();
   });
 
   it('its more menu duplicates or deletes the clip, and has no layer order; Close lets it go', async () => {
