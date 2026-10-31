@@ -79,9 +79,9 @@ describe('export run', () => {
       { type: 'failed', message: { code: 'exports.diskFull', params: {} } },
     ]);
     expect(s.phase).toBe('failed');
-    expect(s.message).toBe('The disk is full.');
+    expect(s.message).toBe('The disk is full. Free up space, then try again.');
     expect(unsavedFormats(s)).toEqual(['portrait']);
-    expect(s.announcement).toBe('The disk is full. 9:16 was not saved.');
+    expect(s.announcement).toBe('The disk is full. Free up space, then try again. 9:16 was not saved.');
     expect(s.ready).toEqual([0]);
   });
 
