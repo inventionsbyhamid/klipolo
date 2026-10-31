@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- the mocked backend's IPC arguments */
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -34,15 +34,13 @@ function opened(name: string, opening: number): Snapshot {
 
 /**
  * Rust as launch, the start screen and the project menu see it: `open` is the project open now (none at launch),
- * `rows` the library's list; `holdApply`, when set, holds every edit's answer until it is called. Every command is
- * kept in `heard`.
+ * `rows` the library's list. Every command is kept in `heard`.
  */
 const rust = {
   open: null as Snapshot | null,
   rows: [] as ProjectRow[],
   heard: [] as string[],
   openings: 0,
-  holdApply: null as Promise<void> | null,
 };
 
 function fakeRust() {
@@ -68,7 +66,6 @@ function fakeRust() {
           rust.open = null;
           return null;
         case 'project_apply':
-          await rust.holdApply;
           return revisionPatch(4);
         case 'engine_attach':
           return { port: 0, token: '', maxPreviewPixels: 0, adapter: '', presenter: 'socket', gpuClass: 'software' };
@@ -84,15 +81,17 @@ function fakeRust() {
 
 /**
  * Klipolo launching: a fresh page (the app's once-per-load start runs again) over `rust` as it is. Gives the page's
- * own project store.
+ * own project store, toolbar bursts and commit queue.
  */
 async function launch() {
   vi.resetModules();
   fakeRust();
   const { App } = await import('../../App');
   const { useProject } = await import('../../state/project');
+  const { useBurst } = await import('../../state/useBurst');
+  const { beginCommit } = await import('../../state/commitQueue');
   render(<App />);
-  return { useProject };
+  return { useProject, useBurst, beginCommit };
 }
 
 const startScreen = () => screen.queryByRole('main', { name: 'Your projects' });
@@ -102,7 +101,7 @@ const topBar = () => document.querySelector<HTMLElement>('header.topbar')!;
 
 afterEach(() => {
   clearMocks();
-  Object.assign(rust, { open: null, rows: [], heard: [], openings: 0, holdApply: null });
+  Object.assign(rust, { open: null, rows: [], heard: [], openings: 0 });
 });
 
 describe('launch', () => {
@@ -125,6 +124,14 @@ describe('launch', () => {
     expect(screen.queryByRole('button', { name: 'Record your screen' })).toBeNull();
     // Launch leaves the focus alone.
     expect(document.activeElement).toBe(document.body);
+  });
+
+  it('new_project_right_after_launch_makes_and_opens_it', async () => {
+    await launch();
+    await userEvent.click(await screen.findByRole('button', { name: 'New project' }));
+    expect(await screen.findByRole('main', { name: 'Preview' })).toBeInTheDocument();
+    expect(rust.heard.filter((cmd) => cmd === 'project_create')).toHaveLength(1);
+    expect(within(topBar()).getByRole('button', { name: 'Untitled project' })).toBeInTheDocument();
   });
 
   it('a_project_that_cant_be_opened_says_why_on_the_start_screen', async () => {
@@ -168,21 +175,19 @@ describe('launch', () => {
   it('all_projects_saves_closes_and_shows_the_start_screen', async () => {
     rust.open = opened('Studio tour', 1);
     rust.rows = [row('Studio tour', Date.now() - 60_000)];
-    const { useProject } = await launch();
+    const { useProject, useBurst, beginCommit } = await launch();
     await screen.findByRole('main', { name: 'Preview' });
 
-    // An edit is on its way to Rust as All projects is chosen.
-    let land!: () => void;
-    rust.holdApply = new Promise((resolve) => (land = resolve));
-    const editing = useProject.getState().apply('editor.rename.undo', [{ type: 'rename', name: 'Renamed' }]);
+    // A slider's change is still settling, behind a commit on its way, as All projects is chosen.
+    const burst = renderHook(() => useBurst());
+    const landed = beginCommit();
+    act(() => burst.result.current.push({ label: 'text.color.undo', ops: [{ type: 'rename', name: 'Renamed' }] }));
     await userEvent.click(within(topBar()).getByRole('button', { name: 'Studio tour' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'All projects' }));
-    // The close waits for the edit, so it is saved with the project.
-    await waitFor(() => expect(rust.heard).toContain('project_apply'));
+    // The close waits for the change, so it is saved with the project.
     expect(rust.heard).not.toContain('project_close');
     rust.rows = [row('Studio tour', Date.now()), row('Older', Date.now() - 3_600_000)];
-    land();
-    await editing;
+    landed();
 
     // Closed: the start screen, its list read again (the project just closed is there, with the time it was opened).
     expect(await screen.findByRole('main', { name: 'Your projects' })).toBeInTheDocument();
@@ -193,6 +198,7 @@ describe('launch', () => {
     expect(editor()).toBeNull();
     expect(useProject.getState().snapshot).toBeNull();
     expect(within(topBar()).queryByRole('button', { name: /Undo/ })).toBeNull();
+    burst.unmount();
   });
 
   it('all_projects_from_the_keyboard_puts_the_focus_on_the_title', async () => {
