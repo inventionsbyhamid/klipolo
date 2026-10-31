@@ -8,6 +8,7 @@
 
 pub mod images;
 pub mod meta;
+pub mod meta_chat;
 pub mod meta_images;
 
 use std::future::Future;

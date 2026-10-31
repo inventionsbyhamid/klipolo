@@ -405,10 +405,18 @@ fn remove_silences_uses_levels_and_min_pause() {
     );
     assert_eq!(proposal.removed_us, secs(2.2));
     assert_eq!(proposal.tx.label, "chat.removeSilences");
-    // No pause that long: said back to the model.
+    // No pause that long: told to the person, with the length asked.
     let none = compile(&p, &i, &[call("removeSilences", r#"{"minPauseSec": 5}"#)]);
     assert_eq!(none.proposal, None);
-    assert!(refused_to_model(&none, 0).starts_with("removeSilences: "));
+    assert_eq!(
+        none.refusals,
+        vec![Refusal {
+            call_index: 0,
+            reason: "There are no pauses longer than 5.0 s to remove.".into(),
+            audience: Audience::Person,
+            clip: None,
+        }]
+    );
 }
 
 #[test]
@@ -465,6 +473,7 @@ fn additions_and_removals_split_in_one_answer() {
     );
     assert_eq!(additions.origin, Some(Origin::Chat));
     assert_eq!(additions.label, "chat.setFormat");
+    assert_eq!(out.proposed_calls, vec![1], "the pause removal is proposed");
     let proposal = out.proposal.clone().expect("the pauses are proposed");
     assert_eq!(
         proposal.tx.ops,
@@ -1456,4 +1465,60 @@ fn questions_jobs_and_cannot_do_pass_through() {
         ]
     );
     assert_eq!((out.additions, out.proposal, out.undo), (None, None, false));
+}
+
+#[test]
+fn proposed_calls_name_the_calls_in_the_proposal() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech, "square, no ums, and cut the rest");
+    let calls = [
+        call("setFormat", r#"{"format": "square", "keepOthers": true}"#),
+        call("removeFillers", "{}"),
+        cut(17.0, 21.0),
+        cut(7.9, 29.8),
+        call("askUser", r#"{"question": "Anything else?"}"#),
+    ];
+    let out = compile(&p, &i, &calls);
+    assert_eq!(out.proposed_calls, vec![1, 3]);
+    assert_eq!(
+        out.refusals
+            .iter()
+            .map(|r| r.call_index)
+            .collect::<Vec<_>>(),
+        vec![2]
+    );
+    // With nothing proposed, no call is.
+    let out = compile(&p, &i, &calls[..1]);
+    assert_eq!((out.proposal, out.proposed_calls), (None, vec![]));
+}
+
+#[test]
+fn nothing_to_remove_is_told_to_the_person() {
+    // No loudness for talk.mov: no pause to find. Shown to the person, never sent back for a second model call.
+    let (p, speech) = talk();
+    let i = inputs(&p, speech, "remove pauses over a second");
+    let out = compile(&p, &i, &[call("removeSilences", r#"{"minPauseSec": 1}"#)]);
+    assert_eq!(out.proposal, None);
+    assert_eq!(
+        out.refusals,
+        vec![Refusal {
+            call_index: 0,
+            reason: "There are no pauses longer than 1.0 s to remove.".into(),
+            audience: Audience::Person,
+            clip: None,
+        }]
+    );
+    // No speech in the clips: no filler word.
+    let p = three_clips();
+    let i = inputs(&p, Speech::default(), "remove the ums");
+    let out = compile(&p, &i, &[call("removeFillers", "{}")]);
+    assert_eq!(
+        out.refusals,
+        vec![Refusal {
+            call_index: 0,
+            reason: "There are no filler words to remove.".into(),
+            audience: Audience::Person,
+            clip: None,
+        }]
+    );
 }

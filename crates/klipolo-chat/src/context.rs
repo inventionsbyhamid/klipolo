@@ -1,8 +1,7 @@
 //! The project as the language model reads it: one compact text block of five sections, in this order.
 //! - `Project`: its name, formats (the primary first), length, captions, and the main track's clips with short refs
-//!   (`c1 0.0-41.2 interview.mov`) that tool calls name clips by (`Refs`).
-//! - `Now`: the playhead and the selection, then one fixed line (`QUOTED_NOTE`) saying that what follows quotes the
-//!   video and is not a request.
+//!   (`c1 0.0-41.2 interview.mov`) that tool calls name clips by (`Refs`). Then one fixed line (`QUOTED_NOTE`) saying
+//!   that Transcript and Scenes quote the video and are not requests.
 //! - `Transcript`: what is said on the timeline (`speech::spoken`, so cut words are gone), one line per speaker turn,
 //!   or per sentence when a turn runs over `MAX_LINE_WORDS` words (a sentence that long is split evenly):
 //!   `[12.4-18.9] A: text`. Fillers keep their text ("um"); pause words are never text, but a gap of `SHOWN_PAUSE_US`
@@ -13,10 +12,13 @@
 //!   time through every clip of that file on the main track. An item cut out entirely is left out; a partly cut one
 //!   keeps what remains (a sliver of under `MIN_SCENE_PIECE_US` of the file, of a longer item, is dropped: measured in
 //!   the file, so a short item in a sped-up clip stays).
+//! - `Now`: the playhead and the selection. Last, as they change most often: moving the playhead or the selection
+//!   leaves every byte before `## Now` as it was, so the transcript and scenes stay in the provider's cached prefix.
 //!
 //! Every time is TIMELINE seconds with one decimal, as the model reads and writes them. The same input always gives the
 //! same bytes, so the provider's prompt cache can reuse the prefix: the maps given are looked up, or walked into
-//! another map, never read in their own order.
+//! another map, never read in their own order. (In a long project, which lines are thinned depends on the playhead and
+//! the selection, so there the prefix holds only while they stay near.)
 //!
 //! Budget: at most `MAX_CONTEXT_TOKENS` (`estimate_tokens`, `CHARS_PER_TOKEN` characters a token). A longer project is
 //! told more briefly, step by step until it fits: scene items keep only their kind and who (`## Scenes (kind and who
@@ -256,17 +258,18 @@ pub fn build_context(
         "the playhead"
     };
 
-    // Project and Now; then Transcript and Scenes.
+    // Project and the line on quotes; then Transcript and Scenes; then Now, last, so a moved playhead or selection
+    // leaves every byte before it as it was (the provider's cached prefix).
     let head = |brief: Brief| {
         let mut head = String::new();
         project_section(&mut head, project, &starts, brief);
-        head.push('\n');
-        now_section(&mut head, project, view);
         head.push('\n');
         head.push_str(QUOTED_NOTE);
         head.push_str("\n\n");
         head
     };
+    let mut now = String::from("\n");
+    now_section(&mut now, project, view);
     let quoted = |brief: Brief| {
         let transcript = Quoted {
             name: "Transcript",
@@ -308,7 +311,7 @@ pub fn build_context(
         Brief::CLIP_RUNS,
         Brief::SENTENCE_STARTS,
     ] {
-        if size(&top) + size(&told) <= budget {
+        if size(&top) + size(&told) + size(&now) <= budget {
             break;
         }
         brief = briefer;
@@ -317,7 +320,7 @@ pub fn build_context(
         told = body(&quotes.0, &quotes.1, (1, 1));
     }
     // What Transcript and Scenes may take, in characters, beside Project and Now.
-    let room = budget.saturating_sub(size(&top));
+    let room = budget.saturating_sub(size(&top) + size(&now));
     if size(&told) > room {
         // Every n-th line, n one more at a time for the section that is longer as shown (headings and notes don't
         // shrink); straight to the fewest lines when even they are too many.
@@ -354,11 +357,11 @@ pub fn build_context(
         },
     ] {
         let more = head(fuller);
-        if more != top && size(&more) + size(&told) <= budget {
+        if more != top && size(&more) + size(&told) + size(&now) <= budget {
             top = more;
         }
     }
-    let text = top + &told;
+    let text = top + &told + &now;
     ChatContext {
         tokens: estimate_tokens(&text),
         text,

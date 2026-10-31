@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use klipolo_chat::context::QUOTED_NOTE;
 use klipolo_chat::{
     ChatContext, MAX_CONTEXT_TOKENS, SceneEntry, SceneLog, SpeakerTurn, View, build_context,
     estimate_tokens,
@@ -318,17 +319,48 @@ fn selection_and_playhead_appear_in_now() {
     };
     assert!(section(&inputs.context(&end).text, "Now").starts_with("Playhead: 144.0 (end)\n"));
 
-    // Sections in order: Project, Now, Transcript, Scenes.
+    // Sections in order: Project, Transcript, Scenes, Now (last, so what comes before it stays one cached prefix).
     let at = |name: &str| {
         text.find(&format!("## {name}"))
             .unwrap_or_else(|| panic!("{name}"))
     };
     assert_eq!(at("Project"), 0);
     assert!(
-        at("Project") < at("Now")
-            && at("Now") < at("Transcript")
+        at("Project") < at("Transcript")
             && at("Transcript") < at("Scenes")
+            && at("Scenes") < at("Now")
     );
+    // The line on quotes comes right before what it is about.
+    assert!(text.contains(&format!("\n\n{QUOTED_NOTE}\n\n## Transcript\n")));
+}
+
+#[test]
+fn a_moved_playhead_changes_nothing_before_now() {
+    let inputs = two_clips();
+    let views = [
+        view_at(5.0),
+        view_at(120.0),
+        View {
+            playhead_us: secs(20.3),
+            selection: Some(RangeUs {
+                start: secs(15.0),
+                end: secs(18.2),
+            }),
+        },
+    ];
+    let texts: Vec<String> = views.iter().map(|v| inputs.context(v).text).collect();
+    let before_now =
+        |text: &str| text[..text.find("\n## Now\n").expect("a Now section")].to_owned();
+    // The whole project, its speech and its scenes are in what they share.
+    let shared = before_now(&texts[0]);
+    for section in ["## Project", "## Transcript", "## Scenes"] {
+        assert!(shared.contains(section), "{section} before Now");
+    }
+    for text in &texts[1..] {
+        assert_ne!(text, &texts[0]);
+        assert_eq!(before_now(text), shared);
+        assert!(text.ends_with("\n"), "{text}");
+    }
 }
 
 #[test]
