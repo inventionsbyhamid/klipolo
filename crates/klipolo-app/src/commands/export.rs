@@ -95,7 +95,8 @@ impl StartSteps for AppSteps<'_> {
 }
 
 /// Saves the latest edits (the export reads the project as saved), then freezes the open project into a batch for
-/// `dir`: refused when it has nothing to show or uses a font that isn't on this Mac, and when the folder can't be made.
+/// `dir`: refused when it has nothing to show or uses a font that isn't on this Mac, and when the folder can't be made
+/// or written in.
 async fn prepare(app: AppHandle, req: ExportRequest, dir: PathBuf) -> Result<Batch, Said> {
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || handle.state::<ProjectSessionState>().flush())
@@ -108,7 +109,8 @@ async fn prepare(app: AppHandle, req: ExportRequest, dir: PathBuf) -> Result<Bat
     let feed = open_feed(&app.state::<ProjectSessionState>())?;
     export::refuse_empty(&feed.project)?;
     fonts_checked(&feed, req.allow_stand_ins).await?;
-    std::fs::create_dir_all(&dir).map_err(|e| export::folder_error(&e, &dir))?;
+    // A folder Klipolo can't write in is named now, rather than failing as the job is written.
+    export::make_folder(&dir)?;
     // Jobs an export cut off by a crash left behind go now (only Klipolo's: `export::tidy_jobs`).
     let tidied = dir.clone();
     let _ = tauri::async_runtime::spawn_blocking(move || export::tidy_jobs(&tidied)).await;

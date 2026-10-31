@@ -30,6 +30,7 @@ use std::sync::Arc;
 
 use klipolo_engine::api::{ExportRequest, PlannedFile};
 use klipolo_engine::export::contrib::JobContribs;
+use klipolo_engine::export::jobs::jobs_root;
 use klipolo_engine::export::runner::Batch;
 use klipolo_model::coded::{CodedError, Said};
 use klipolo_model::project::Project;
@@ -157,9 +158,37 @@ pub fn refuse_empty(project: &Project) -> Result<(), Said> {
     Ok(())
 }
 
-/// Why the export folder `dir` couldn't be made, as a code naming it.
+/// Makes the export folder `dir` and its jobs folder, where an export's job is written, and checks a file can be
+/// written there: a folder on a disk that can't be written to, or one Klipolo isn't allowed to write to, is said by its
+/// name before the export starts (`folder_error`), never as an export that didn't start.
+pub fn make_folder(dir: &Path) -> Result<(), Said> {
+    make_folder_with(
+        dir,
+        |path| std::fs::create_dir_all(path),
+        |path| {
+            std::fs::write(path, b"")?;
+            std::fs::remove_file(path)
+        },
+    )
+}
+
+/// `make_folder` through `create` (a folder and those above it) and `probe` (a file written there and removed). The
+/// probe's name is this process's own, so no other Klipolo's file is touched.
+fn make_folder_with(
+    dir: &Path,
+    create: impl Fn(&Path) -> io::Result<()>,
+    probe: impl Fn(&Path) -> io::Result<()>,
+) -> Result<(), Said> {
+    let jobs = jobs_root(dir);
+    create(dir)
+        .and_then(|()| create(&jobs))
+        .and_then(|()| probe(&jobs.join(format!(".probe-{}", std::process::id()))))
+        .map_err(|e| folder_error(&e, dir))
+}
+
+/// Why the export folder `dir` couldn't be made or written to, as a code naming it.
 pub fn folder_error(e: &io::Error, dir: &Path) -> Said {
-    tracing::warn!(error = %e, "the export folder couldn't be made");
+    tracing::warn!(error = %e, "the export folder couldn't be made or written to");
     let named = |code: &str| Said::Coded(CodedError::new(code).with("folder", folder_label(dir)));
     match durable::classify(e) {
         DiskReason::Full => Said::code("exports.folder.diskFull"),
@@ -279,6 +308,59 @@ mod tests {
             Said::Coded(
                 CodedError::new("exports.folder.denied").with("folder", "Movies / Klipolo")
             )
+        );
+    }
+
+    #[test]
+    fn a_folder_klipolo_cant_write_in_is_named_before_the_export_starts() {
+        let dir = Path::new("/Volumes/Card/Exports");
+        let named = |code: &str| {
+            Err(Said::Coded(
+                CodedError::new(code).with("folder", "Card / Exports"),
+            ))
+        };
+        // The folder is there, but Klipolo isn't allowed to make its jobs folder in it.
+        let no_jobs = |path: &Path| {
+            if path == dir {
+                Ok(())
+            } else {
+                Err(io::Error::from(io::ErrorKind::PermissionDenied))
+            }
+        };
+        assert_eq!(
+            make_folder_with(dir, no_jobs, |_| Ok(())),
+            named("exports.folder.denied")
+        );
+        // Both folders are there from before, but nothing can be written on their disk.
+        let read_only = |_: &Path| Err(io::Error::from(io::ErrorKind::ReadOnlyFilesystem));
+        assert_eq!(
+            make_folder_with(dir, |_| Ok(()), read_only),
+            named("exports.folder.readOnly")
+        );
+        // Where it can write: the folder, then its jobs folder, then a file written in that.
+        let done = std::cell::RefCell::new(Vec::new());
+        let step = |path: &Path| {
+            done.borrow_mut().push(path.to_path_buf());
+            Ok(())
+        };
+        let made = make_folder_with(dir, step, step);
+        assert_eq!(made, Ok(()));
+        let done = done.into_inner();
+        assert_eq!(done[..2], [dir.to_path_buf(), dir.join(".jobs")]);
+        assert_eq!(done[2].parent(), Some(dir.join(".jobs").as_path()));
+    }
+
+    #[test]
+    fn making_the_folder_leaves_its_jobs_folder_and_nothing_in_it() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("Klipolo");
+        assert_eq!(make_folder(&dir), Ok(()));
+        let jobs = dir.join(".jobs");
+        assert!(jobs.is_dir());
+        assert_eq!(
+            std::fs::read_dir(&jobs).unwrap().count(),
+            0,
+            "the probe is gone"
         );
     }
 }
