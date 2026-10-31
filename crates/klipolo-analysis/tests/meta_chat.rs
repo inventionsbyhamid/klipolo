@@ -837,3 +837,53 @@ async fn chat_holds_its_own_slot_never_the_analysiss() {
         started.elapsed()
     );
 }
+
+/// An answer that never comes is given up after the time limit, saying who took too long, and chat's slot is free
+/// for the next message.
+#[tokio::test]
+async fn an_answer_that_never_comes_times_out_and_frees_the_slot() {
+    let stalled = || {
+        ResponseTemplate::new(200)
+            .set_body_json(spark(vec![message("Late.")], 10, 0, 5))
+            .set_delay(Duration::from_secs(30))
+    };
+    // Through the relay: Klipolo's server.
+    let server = MockServer::start().await;
+    answer_once(&server, stalled()).await;
+    answer_once(&server, ok(spark(vec![message("Hi.")], 10, 0, 5))).await;
+    let model = chat(&server).with_answer_timeout(Duration::from_millis(300));
+    let started = Instant::now();
+    let e = model.respond(&neutral_request()).await.unwrap_err();
+    assert_eq!(
+        e,
+        ModelError::Unavailable(Some(
+            "Klipolo's server took too long to answer. Try again.".into()
+        ))
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "{:?}",
+        started.elapsed()
+    );
+    // The slot was let go with the dropped call: the next message is answered.
+    let answer = model.respond(&neutral_request()).await.unwrap();
+    assert_eq!(answer.text, "Hi.");
+    // With the person's own key: Meta.
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/responses"))
+        .respond_with(stalled())
+        .mount(&server)
+        .await;
+    let direct = MetaChat::new(
+        MetaClient::direct(SecretString::from("sk-direct-key"))
+            .with_meta_base(server.uri())
+            .with_ledger(None),
+    )
+    .with_answer_timeout(Duration::from_millis(300));
+    let e = direct.respond(&neutral_request()).await.unwrap_err();
+    assert_eq!(
+        e,
+        ModelError::Unavailable(Some("Meta took too long to answer. Try again.".into()))
+    );
+}

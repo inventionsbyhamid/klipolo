@@ -12,8 +12,10 @@
 //! The relay takes 4 Meta calls at once from a device; the analysis holds 3 (`meta::RELAY_META_CALLS`) and chat the
 //! fourth: `MetaChat` keeps its own single slot, shared by its clones, and never takes one of `Meta::call`'s. A busy
 //! answer (the relay's `busy`, or Traefik's plain-text 429) is asked again after a short wait, at most
-//! `CHAT_BUSY_RETRIES` times; then it is `ModelError::Busy`. Each answer is priced from its `usage`, cached input at
-//! the cached price (`pricing::spark_usd`); the client writes the spend ledger's row.
+//! `CHAT_BUSY_RETRIES` times; then it is `ModelError::Busy`. A message's answer gets `CHAT_ANSWER_TIMEOUT` in all
+//! (waits for the slot and busy retries included); past it the message fails saying who took too long, and chat is
+//! free for the next one. Each answer is priced from its `usage`, cached input at the cached price
+//! (`pricing::spark_usd`); the client writes the spend ledger's row.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -39,6 +41,9 @@ pub const CHAT_CALLS: usize = 1;
 pub const CHAT_BUSY_RETRIES: u32 = 2;
 /// The longest wait before asking again, whatever `Retry-After` says.
 pub const CHAT_BUSY_WAIT_MAX: Duration = Duration::from_secs(5);
+/// The longest one model call of a message may take, from asking for chat's slot to the answer: the planner's longest
+/// answers took about 30 s, and the person is waiting. Past it the call is dropped (its request with it).
+pub const CHAT_ANSWER_TIMEOUT: Duration = Duration::from_secs(90);
 
 /// Muse Spark as chat's language model, within chat's own slot. Its clones share the client and the slot.
 #[derive(Clone, Debug)]
@@ -46,6 +51,7 @@ pub struct MetaChat {
     client: MetaClient,
     slot: Arc<Semaphore>,
     busy_wait_max: Duration,
+    answer_timeout: Duration,
 }
 
 impl MetaChat {
@@ -55,12 +61,19 @@ impl MetaChat {
             client,
             slot: Arc::new(Semaphore::new(CHAT_CALLS)),
             busy_wait_max: CHAT_BUSY_WAIT_MAX,
+            answer_timeout: CHAT_ANSWER_TIMEOUT,
         }
     }
 
     /// The longest wait before a busy answer is asked again (`CHAT_BUSY_WAIT_MAX`; tests shorten it).
     pub fn with_busy_wait_max(mut self, wait: Duration) -> Self {
         self.busy_wait_max = wait;
+        self
+    }
+
+    /// The longest one call may take (`CHAT_ANSWER_TIMEOUT`; tests shorten it).
+    pub fn with_answer_timeout(mut self, timeout: Duration) -> Self {
+        self.answer_timeout = timeout;
         self
     }
 
@@ -86,21 +99,30 @@ impl LanguageModel for MetaChat {
     ) -> BoxFuture<'a, Result<ModelResponse, ModelError>> {
         Box::pin(async move {
             let body = wire_body(request);
-            let _slot = (self.slot.acquire().await)
-                .map_err(|_| ModelError::other("chat's slot is closed"))?;
-            let mut retries = 0;
-            loop {
-                match self.client.respond(body.clone()).await {
-                    Ok(out) => return answer(out),
-                    Err(e) => match self.busy_wait(&e) {
-                        Some(wait) if retries < CHAT_BUSY_RETRIES => {
-                            tokio::time::sleep(wait).await;
-                            retries += 1;
-                        }
-                        _ => return Err(model_error(e, self.client.is_relay())),
-                    },
+            let asked = async {
+                let _slot = (self.slot.acquire().await)
+                    .map_err(|_| ModelError::other("chat's slot is closed"))?;
+                let mut retries = 0;
+                loop {
+                    match self.client.respond(body.clone()).await {
+                        Ok(out) => return answer(out),
+                        Err(e) => match self.busy_wait(&e) {
+                            Some(wait) if retries < CHAT_BUSY_RETRIES => {
+                                tokio::time::sleep(wait).await;
+                                retries += 1;
+                            }
+                            _ => return Err(model_error(e, self.client.is_relay())),
+                        },
+                    }
                 }
-            }
+            };
+            // Dropped past the limit: the request goes, and so does the slot.
+            (tokio::time::timeout(self.answer_timeout, asked).await).unwrap_or_else(|_| {
+                Err(ModelError::Unavailable(Some(format!(
+                    "{} took too long to answer. Try again.",
+                    who(self.client.is_relay())
+                ))))
+            })
         })
     }
 }
@@ -199,6 +221,12 @@ pub const QUOTA_CODES: [&str; 3] = [
     "quota_exceeded",
     "billing_hard_limit_reached",
 ];
+
+/// Who answers chat, as the person knows it: Klipolo's server through the relay (an access code), Meta with their own
+/// key.
+fn who(relay: bool) -> &'static str {
+    if relay { "Klipolo's server" } else { "Meta" }
+}
 
 /// A Meta client error in chat's terms, `relay` saying whether the call went through the relay. A 402, or a 429 whose
 /// code says the quota is used up (`QUOTA_CODES`, a direct key's), keeps the relay's or Meta's sentence (which credit,
