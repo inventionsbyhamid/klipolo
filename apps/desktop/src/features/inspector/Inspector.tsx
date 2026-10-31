@@ -10,7 +10,7 @@ import { contribLabel } from '../../lib/contrib';
 import { findItem } from '../../lib/timeline';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
-import { deleteBlock, duplicate, stepTrack } from '../timeline/commands';
+import { deleteBlock, duplicate, stepTrack, trackStepOps } from '../timeline/commands';
 import { AudioInspector } from './AudioInspector';
 import { ImageInspector } from './ImageInspector';
 import { commitLatest } from '../../state/latest';
@@ -57,16 +57,19 @@ const ICONS: Record<Inspected, IconName> = {
 
 /**
  * The inspector: a raised card docked to the right inside the preview while an overlay or a sound is
- * selected. Its header has the kind's icon and name, a more menu (Duplicate, Bring forward, Delete) and a close button;
- * its body the fields of that kind, scrolling with a fade at the bottom. On a locked track it says so and offers
+ * selected. Its header has the kind's icon and name, a more menu (Duplicate, Bring forward and Send back for a picture
+ * layer, Delete) and a close button; its body the fields of that kind, scrolling with a fade at the bottom. On a locked track it says so and offers
  * Unlock. Changes apply at once and each is one undo step.
  */
 export function Inspector({ format }: { format: FormatKind }) {
   const { t } = useLingui();
   const inspected = useInspected();
   const primary = useProject((s) => s.snapshot?.project.settings.primaryFormat ?? 'landscape');
+  const project = useProject((s) => s.snapshot?.project);
   if (!inspected) return null;
   const { item, track, kind } = inspected;
+  // A layer goes a track up or down only when one of its kind is there to take it (not on a locked track).
+  const canStep = (direction: 1 | -1) => !!project && trackStepOps(project, item.id, direction).length > 0;
   const content = item.content;
   const title =
     kind === 'text'
@@ -110,10 +113,15 @@ export function Inspector({ format }: { format: FormatKind }) {
             <MenuItem onSelect={() => duplicate(item.id)} disabled={track.locked}>
               {t({ id: 'inspector.duplicate', message: 'Duplicate' })}
             </MenuItem>
-            {(kind === 'text' || kind === 'image' || kind === 'template') && (
-              <MenuItem onSelect={() => stepTrack(item.id, 1)} disabled={track.locked}>
-                {t({ id: 'inspector.forward', message: 'Bring forward' })}
-              </MenuItem>
+            {(kind === 'text' || kind === 'image' || kind === 'template' || kind === 'video') && (
+              <>
+                <MenuItem onSelect={() => stepTrack(item.id, 1)} disabled={!canStep(1)}>
+                  {t({ id: 'inspector.forward', message: 'Bring forward' })}
+                </MenuItem>
+                <MenuItem onSelect={() => stepTrack(item.id, -1)} disabled={!canStep(-1)}>
+                  {t({ id: 'inspector.back', message: 'Send back' })}
+                </MenuItem>
+              </>
             )}
             <MenuSeparator />
             <MenuItem onSelect={() => deleteBlock(item.id, 'undo.delete.layer')} disabled={track.locked}>

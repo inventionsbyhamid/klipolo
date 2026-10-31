@@ -191,4 +191,43 @@ describe("a video layer's card", () => {
       queued,
     );
   });
+
+  it('the more menu brings it forward or sends it back a track, and Duplicate and Delete are there', async () => {
+    const snapshot = withVideo('v1');
+    // An overlay track under the layer's and one over it.
+    const { tracks } = snapshot.project.timeline;
+    const empty = (id: string) => ({ ...tracks[0], id, name: id, items: [] });
+    snapshot.project.timeline.tracks = [empty('below'), tracks[0], empty('above'), tracks[1]];
+    renderWithProviders(<Inspector format="landscape" />);
+    const more = () => userEvent.click(screen.getByRole('button', { name: 'More' }));
+    await more();
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Duplicate',
+      'Bring forward',
+      'Send back',
+      'Delete',
+    ]);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Send back' }));
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    expect(apply.mock.calls[0].slice(0, 2)).toEqual([
+      'undo.trackDown',
+      [{ type: 'moveItem', id: 'v1', trackId: 'below', startUs: 1_000_000 }],
+    ]);
+    await more();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Bring forward' }));
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
+    expect(apply.mock.calls[1].slice(0, 2)).toEqual([
+      'undo.trackUp',
+      [{ type: 'moveItem', id: 'v1', trackId: 'above', startUs: 1_000_000 }],
+    ]);
+  });
+
+  it('Bring forward and Send back are off while no track of its kind is there to take it', async () => {
+    withVideo('v1');
+    renderWithProviders(<Inspector format="landscape" />);
+    await userEvent.click(screen.getByRole('button', { name: 'More' }));
+    expect(screen.getByRole('menuitem', { name: 'Bring forward' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('menuitem', { name: 'Send back' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('menuitem', { name: 'Duplicate' })).not.toHaveAttribute('aria-disabled');
+  });
 });
