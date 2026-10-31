@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type { Op } from '../../bindings/Op';
-import type { Label } from '../../lib/labels';
-import { registerBurst, SETTLE_MS } from '../../state/bursts';
-import type { Built } from '../../state/editBase';
-import { captureBase } from '../../state/project';
-import { clearPreview, dropPendingPreview, previewOps } from '../../state/livePreview';
-import { queueCommit } from '../../state/commit';
+import type { Op } from '../bindings/Op';
+import type { Label } from '../lib/labels';
+import { registerBurst, SETTLE_MS } from './bursts';
+import type { Built } from './editBase';
+import { captureBase } from './project';
+import { clearPreview, dropPendingPreview, previewOps } from './livePreview';
+import { queueCommit } from './commit';
 
 /** One change of a burst: quick changes commit as one undo step `SETTLE_MS` (`state/bursts`) after the last one. */
 export interface BurstChange {

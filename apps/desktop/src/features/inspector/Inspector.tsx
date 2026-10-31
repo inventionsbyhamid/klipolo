@@ -13,7 +13,7 @@ import { useSelection } from '../../state/selection';
 import { deleteBlock, duplicate, stepTrack } from '../timeline/commands';
 import { AudioInspector } from './AudioInspector';
 import { ImageInspector } from './ImageInspector';
-import { commitLatest } from './latest';
+import { commitLatest } from '../../state/latest';
 import { TemplateInspector } from './TemplateInspector';
 import { TextInspector } from './TextInspector';
 

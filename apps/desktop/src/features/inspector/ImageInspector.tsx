@@ -5,7 +5,7 @@ import { layoutPatchFor, scaleAbout } from '../../lib/geometry';
 import { resolveRect } from '../../lib/layout';
 import { AnimationField, PositionField, TimingField } from './common';
 import { Field } from './fields';
-import { layoutOps } from './latest';
+import { layoutOps } from '../../state/latest';
 import { ToolSlider } from './ToolSlider';
 
 /** The model's largest corner radius (a share of the shorter side): fully round ends. */

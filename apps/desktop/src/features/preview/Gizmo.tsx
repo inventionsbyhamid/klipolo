@@ -6,7 +6,7 @@ import { videoDurationUs } from '../../lib/timeline';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
-import { focusInspectorText } from '../inspector/focus';
+import { focusInspectorText } from '../../lib/inspectorFocus';
 import { GizmoHandles } from './GizmoHandles';
 import { useTextEdit } from './textEdit';
 import type { GizmoTarget } from './gizmoTargets';

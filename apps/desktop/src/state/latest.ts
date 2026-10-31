@@ -1,17 +1,18 @@
-import type { CameraLayout } from '../../bindings/CameraLayout';
-import type { Clip } from '../../bindings/Clip';
-import type { ClipPatch } from '../../bindings/ClipPatch';
-import type { EffectInstance } from '../../bindings/EffectInstance';
-import type { EffectTarget } from '../../bindings/EffectTarget';
-import type { Item } from '../../bindings/Item';
-import type { ItemContent } from '../../bindings/ItemContent';
-import type { Layout } from '../../bindings/Layout';
-import type { Op } from '../../bindings/Op';
-import type { Settings } from '../../bindings/Settings';
-import type { Track } from '../../bindings/Track';
-import type { Label } from '../../lib/labels';
-import { useProject } from '../../state/project';
-import { clipOp, commitLatest, itemOp } from '../preview/toolbar/toolOps';
+import type { CameraLayout } from '../bindings/CameraLayout';
+import type { Clip } from '../bindings/Clip';
+import type { ClipPatch } from '../bindings/ClipPatch';
+import type { EffectInstance } from '../bindings/EffectInstance';
+import type { EffectTarget } from '../bindings/EffectTarget';
+import type { Item } from '../bindings/Item';
+import type { ItemContent } from '../bindings/ItemContent';
+import type { Layout } from '../bindings/Layout';
+import type { Op } from '../bindings/Op';
+import type { Settings } from '../bindings/Settings';
+import type { Track } from '../bindings/Track';
+import type { Label } from '../lib/labels';
+import { clipOp, itemOp } from '../lib/ops';
+import { commitLatest } from './commit';
+import { useProject } from './project';
 
 /*
  * Ops carry whole values (a layer's content or layout, a clip's camera or framing, the settings, a point, an index in

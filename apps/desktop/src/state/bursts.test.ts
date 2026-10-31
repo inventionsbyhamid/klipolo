@@ -12,7 +12,7 @@ vi.mock('../bridge/engine', () => ({
 const { bridge } = await import('../bridge/commands');
 const { useProject } = await import('./project');
 const { beginCommit } = await import('./commitQueue');
-const { useBurst } = await import('../features/preview/useBurst');
+const { useBurst } = await import('./useBurst');
 const { registerBurst } = await import('./bursts');
 
 it('closing commits a change still settling in a burst, ahead of the close', async () => {

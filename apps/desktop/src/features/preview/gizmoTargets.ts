@@ -8,7 +8,7 @@ import { containRect, FORMAT_SIZE, resolveRect } from '../../lib/layout';
 import { showsPictures, soloOf } from '../../lib/solo';
 import { scaledStyle } from '../../lib/textLook';
 import { assetById, itemEndUs, itemLabel } from '../../lib/timeline';
-import { contentNow, layoutNow } from '../inspector/latest';
+import { contentNow, layoutNow } from '../../state/latest';
 import { textBox } from './textBox';
 
 export interface GizmoTarget {

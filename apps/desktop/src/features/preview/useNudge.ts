@@ -7,7 +7,7 @@ import { FORMAT_SIZE } from '../../lib/layout';
 import { toast } from '../../state/toasts';
 import { samePlacement, type Placement } from './gizmoGesture';
 import type { GizmoTarget } from './gizmoTargets';
-import { useBurst } from './useBurst';
+import { useBurst } from '../../state/useBurst';
 
 const ARROWS: Record<string, [number, number]> = {
   ArrowLeft: [-1, 0],

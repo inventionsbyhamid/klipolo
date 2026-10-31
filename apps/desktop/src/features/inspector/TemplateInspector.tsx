@@ -6,10 +6,10 @@ import type { Op } from '../../bindings/Op';
 import type { ParamSpec } from '../../bindings/ParamSpec';
 import { BUILTINS } from '../../lib/contrib';
 import { clearPreview, dropPendingPreview, previewOps } from '../../state/livePreview';
-import { itemOp } from '../preview';
+import { itemOp } from '../../lib/ops';
 import { TimingField } from './common';
 import { Field, Swatches, type Swatch } from './fields';
-import { commitLatest, contentNow } from './latest';
+import { commitLatest, contentNow } from '../../state/latest';
 
 export type GeneratorContent = Extract<ItemContent, { type: 'generator' }>;
 

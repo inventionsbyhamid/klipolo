@@ -4,7 +4,7 @@ import type { ItemContent } from '../../../bindings/ItemContent';
 import type { RangeUs } from '../../../bindings/RangeUs';
 import { commitLatest } from '../../../state/commit';
 import type { Op } from '../../../bindings/Op';
-import { contentNow } from '../../inspector/latest';
+import { contentNow } from '../../../state/latest';
 import { useSpeech } from '../media/speech';
 import { usToPx } from '../scale';
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Op } from '../../bindings/Op';
 import { Slider } from '../../design/Slider';
 import { clearPreview, dropPendingPreview, previewOps } from '../../state/livePreview';
-import { useBurst } from '../preview';
+import { useBurst } from '../../state/useBurst';
 import type { Label } from '../../lib/labels';
 
 interface ToolSliderProps {

@@ -5,7 +5,7 @@ import { Segmented } from '../../design/Segmented';
 import { useSpeech } from '../timeline/media/speech';
 import { TimingField } from './common';
 import { Field } from './fields';
-import { commitLatest, contentOps } from './latest';
+import { commitLatest, contentOps } from '../../state/latest';
 import { ToolSlider } from './ToolSlider';
 
 export type AudioContent = Extract<ItemContent, { type: 'audio' }>;

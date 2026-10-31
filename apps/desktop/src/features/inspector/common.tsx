@@ -14,7 +14,7 @@ import {
   type InChoice,
   type OutChoice,
 } from './inspectorOps';
-import { commitLatest, editLayout } from './latest';
+import { commitLatest, editLayout } from '../../state/latest';
 
 /** The shortest a layer can be made in the inspector (the model's least is 10 ms). */
 const MIN_LENGTH_US = 100_000;

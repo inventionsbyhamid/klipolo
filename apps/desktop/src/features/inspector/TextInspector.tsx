@@ -7,11 +7,11 @@ import { Segmented } from '../../design/Segmented';
 import type { Label } from '../../lib/labels';
 import { useBundledFamilies } from '../../lib/fonts';
 import { scaledStyle } from '../../lib/textLook';
-import { itemOp } from '../preview';
+import { itemOp } from '../../lib/ops';
 import { AnimationField, PositionField, TimingField } from './common';
 import { Field, Select, Swatches, type Swatch } from './fields';
 import { backdropOf, backdropStyle, type Backdrop } from './inspectorOps';
-import { commitLatest, contentNow } from './latest';
+import { commitLatest, contentNow } from '../../state/latest';
 import { TextField } from './TextField';
 import { ToolSlider } from './ToolSlider';
 
