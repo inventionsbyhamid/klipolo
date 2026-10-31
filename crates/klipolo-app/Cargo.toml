@@ -24,6 +24,8 @@ klipolo-model = { path = "../klipolo-model" }
 klipolo-analysis = { path = "../klipolo-analysis" }
 # The Meta client: key checks, the relay's device registration and status.
 klipolo-meta = { path = "../klipolo-meta" }
+# A chat reply's text made fit to show (`sanitize::reply`).
+klipolo-chat = { path = "../klipolo-chat" }
 # The OS's logs folder for the app's log.
 klipolo-platform = { path = "../klipolo-platform" }
 # `protocol-asset`: the page reads imported media and the engine's thumbnails through `asset:` URLs.

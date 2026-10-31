@@ -2377,6 +2377,7 @@ version = "0.1.0"
 dependencies = [
  "image",
  "klipolo-analysis",
+ "klipolo-chat",
  "klipolo-engine",
  "klipolo-fonts",
  "klipolo-meta",
