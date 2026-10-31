@@ -3,7 +3,7 @@
 //! - **The main picture** (the screen, window or game; the camera in Camera only): no take. The other pipes stop, the
 //!   empty folder goes (exit 3) and the app hears `Failed`, `capture.permission.screen` when Screen Recording wasn't
 //!   allowed, else the pipe's own error.
-//! - **Any other source** leaves the start gate at once with its note, and the take goes on
+//! - **Any other source** leaves the start gate at once with its note, and the take goes on:
 //!   the gate never asks "{source} isn't sending anything yet" about it 3 s later. The camera beside a
 //!   screen is no exception (every backend that lists a camera records it, so none is refused as "not yet").
 #![cfg(feature = "synthetic")]

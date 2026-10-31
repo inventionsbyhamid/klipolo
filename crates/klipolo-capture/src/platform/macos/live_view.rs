@@ -1,11 +1,12 @@
-//! The recorder's live view on the Mac (the one capture before Record): `MacLiveView`, the `PreviewPipe` over
+//! The recorder's live view on the Mac (the one exception to capture only after a press): `MacLiveView`, the `PreviewPipe` over
 //! a small ScreenCaptureKit stream of the take's own target with the take's own content filter (`filter`: Klipolo's
 //! windows and the notification apps left out of a display, a window by itself, an app's or game's windows on their
 //! display).
 //!
 //! **Never a prompt:** `start` reads Screen Recording's preflight (`CGPreflightScreenCaptureAccess`, which never asks)
 //! before anything else, and a refusal calls nothing more. Only then is the content list read and the stream opened
-//! (macOS's own periodic "continue to allow" confirmation may appear then, which is accepted).
+//! (macOS's own periodic "continue to allow" confirmation may appear then: macOS's own
+//! reminder, not a request Klipolo makes).
 //!
 //! **The stream:** scaled by ScreenCaptureKit itself (never captured full size) to the picture `live_view_size` gives
 //! for the view that shows it: in the recorder's small view, 640 × 640 in the target's shape at 10 frames a second; in

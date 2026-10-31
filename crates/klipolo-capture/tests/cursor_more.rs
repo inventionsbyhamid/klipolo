@@ -1,7 +1,7 @@
 //! The cursor writer's finer rules: the held place before a move after a
 //! still and the rest point, an area not known at the header, a time ahead of its arrival,
 //! a press still down at the end, the heal when the live switch is refused, a full
-//! shape store; and the plan (beside `cursor.rs`; the disk budget is `cursor_disk.rs`). On the
+//! shape store; and the plan (`cursor_plan`; the main cursor tests are `cursor.rs`, the disk budget `cursor_disk.rs`). On the
 //! synchronous harness.
 #![cfg(feature = "synthetic")]
 

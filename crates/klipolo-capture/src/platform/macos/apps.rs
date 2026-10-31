@@ -1,4 +1,4 @@
-//! The running apps for the app picker, and which look like games (detection only suggests). Read
+//! The running apps for the app picker, and which look like games (detection only suggests, never starts anything). Read
 //! without capture or prompts:
 //! - `NSWorkspace`'s running apps with the regular activation policy (windows and a Dock icon), Klipolo left out;
 //! - each bundle's `Info.plist` through `NSBundle`: `LSApplicationCategoryType`, `GCSupportsGameMode` and

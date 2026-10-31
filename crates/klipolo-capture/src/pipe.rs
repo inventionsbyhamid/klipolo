@@ -1,6 +1,5 @@
 //! The capture seams every OS implements: a `VideoPipe` captures and encodes, an `AudioPipe` captures PCM. Both send
 //! through bounded channels and never block a capture callback: a full channel drops and counts.
-//! performance).
 //!
 //! **Starting.** A pipe's `start` may block for as long as a system picker is open (Linux's ScreenCast portal waits for
 //! the person's choice), so the session starts its pipes concurrently, each on its own thread, and never holds a lock

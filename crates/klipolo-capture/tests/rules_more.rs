@@ -1,4 +1,4 @@
-//! More rules than `tests/rules.rs` covers: the start gate's other case, the heal table's other
+//! The rules beyond `tests/rules.rs`: the start gate's count from when the pipes started, the heal table's other
 //! rows, the drop warning, the rate meter, and a mic that never sends.
 use klipolo_capture::disk::{RateMeter, outlook};
 use klipolo_capture::gate::{GateSample, GateState, StartGate};

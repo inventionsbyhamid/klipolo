@@ -1,5 +1,5 @@
-//! Capture begins only when the person presses Record or Check camera: never in tests, builds or device inspection
-//!. The one exception, the recorder's live view, is a capture file
+//! Capture begins only when the person presses Record or Check camera: never in tests, builds or device inspection.
+//! The one exception, the recorder's live view, is a capture file
 //! of its own (`captures`). These checks read source text only, every OS's on every OS, so a
 //! Linux run checks the macOS and Windows code too, and each later task's files are checked as they land.
 

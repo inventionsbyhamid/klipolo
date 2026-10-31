@@ -1,5 +1,5 @@
-//! The macOS cursor's shape looks, their decisions (the shape
-//! budget and the animated cursor). Pure, built on every OS, so every OS's tests run them.
+//! The macOS cursor's shape looks and their decisions, the shape check's budget and the animated cursor included.
+//! Pure, built on every OS, so every OS's tests run them.
 //! - `NilRun`: no current system cursor is "shape unknown", never hidden; nil for 5 s straight falls back to
 //!   the arrow look.
 //! - `SeedReads`, `SeedTrust` (option 1): Core Graphics' cursor seed, read before each look and peeked at after

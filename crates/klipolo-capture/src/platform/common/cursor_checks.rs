@@ -1,5 +1,5 @@
-//! The macOS cursor source's runtime self-checks (the open findings are
-//! handled both ways, the take checking for itself). Pure, built on every OS, so every OS's tests run them.
+//! The macOS cursor source's runtime self-checks: where the monitor's behaviour isn't certain, the take checks it
+//! for itself. Pure, built on every OS, so every OS's tests run them.
 //! - `Gating`: does the global monitor deliver? A `pressedMouseButtons` down edge with no
 //!   monitor down near it, twice within a minute, or a pointer that moved more than 2 points while the monitor sent
 //!   nothing for 1 s, switches the take to sampled clicks. It watches the whole take (a monitor can stop mid-take), and

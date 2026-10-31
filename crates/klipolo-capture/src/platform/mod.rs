@@ -1,6 +1,6 @@
 //! The OS capture backends, behind the `real-capture` feature, which only the app turns on (capture
-//! capture consent). Each OS's backend starts as one that can't record and fills in over its tasks: macOS 20-24,
-//! Windows 26-29, Linux 30-32. Their pure helpers (`common`) are built on every OS, without `real-capture`, so every
+//! consent: no test or CI run starts a real capture). macOS's backend records; Windows' and Linux's can't record
+//! yet. Their pure helpers (`common`) are built on every OS, without `real-capture`, so every
 //! OS's tests run them; the FFmpeg encoder for Windows and Linux (`ffmpeg_encode`) joins this module later.
 
 pub mod common;

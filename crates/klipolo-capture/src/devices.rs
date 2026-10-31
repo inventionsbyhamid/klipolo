@@ -1,6 +1,5 @@
 //! What a computer can record and may record, read without capture or prompts (device inspection never
-//! never activates capture). Each OS lists these from its own registries (never cpal's listing):
-//! macOS, Windows and Linux.
+//! activates capture). Each OS lists these from its own registries, never through cpal's listing.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;

@@ -1,5 +1,5 @@
 //! Screen Recording's own request, the one permission request Klipolo makes itself. It runs only
-//! on the person's press of "Allow screen recording" in the recorder (a permission request begins only after
+//! on the person's press of "Allow screen recording" in the recorder (the consent rule: a permission request begins only after
 //! the person's explicit press), never while listing, in preflight or in a test (the consent guard).
 //!
 //! `CGRequestScreenCaptureAccess` adds Klipolo to Privacy & Security › Screen Recording and shows macOS's own prompt the

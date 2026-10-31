@@ -1,5 +1,5 @@
-//! The cursor's shapes and visibility, on the sampler thread (the
-//! shape check's budget and the animated cursor). The decisions are `platform::common::cursor_looks`'.
+//! The cursor's shapes and visibility, on the sampler thread, the shape check's budget and the animated cursor
+//! included. The decisions are `platform::common::cursor_looks`'.
 //! - **When to look.** `currentSystem` costs about 0.3 ms a call, so Core Graphics' cursor seed (a private counter,
 //!   16 ns) says when the cursor changed, and a look runs then; a safety look (1 Hz still, 3 Hz moving) also runs. The
 //!   seed is read again after each look: a new shape it didn't show either time drops it for the take (`SeedTrust`).

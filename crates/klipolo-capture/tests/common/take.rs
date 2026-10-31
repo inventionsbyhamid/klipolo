@@ -23,7 +23,7 @@ use klipolo_capture::writer::{DurableWriter, WriterSnapshot};
 use klipolo_model::project::SourceRole;
 
 use super::config::config_with;
-// Some tests call it from here; most test binaries don't.
+// The power-loss replay tests call it from here; most test binaries don't.
 #[allow(unused_imports)]
 pub use super::replay::replay;
 

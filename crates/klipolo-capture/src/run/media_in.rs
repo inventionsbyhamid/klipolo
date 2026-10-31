@@ -82,7 +82,7 @@ impl SessionCore {
                     self.end_without_a_take(now_ns, &mut fx);
                 } else {
                     // Its note says why, so the start gate never asks about it again: it
-                    // fix review): it leaves the gate at once, and the countdown goes on with the rest.
+                    // leaves the gate at once, and the countdown goes on with the rest.
                     self.leave_gate(&id);
                     self.maybe_count_down(now_ns, &mut fx);
                     self.advance(now_ns, &mut fx);
