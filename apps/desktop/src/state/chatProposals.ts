@@ -42,9 +42,19 @@ export function proposalActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'ap
       if (!m || m.proposal?.state !== 'open') return;
       const mine = session.now();
       update(id, () => ({ state: 'applying', reason: undefined }));
-      let applied: ChatApplied;
+      let applied: ChatApplied | undefined;
+      let shown: boolean;
       try {
-        applied = await chatBridge().apply(m.proposal.proposal.id);
+        // In the commit queue's turn, behind a change still settling, and merged whatever became of the conversation:
+        // Rust made the change.
+        shown = await useProject.getState().stepWith(() =>
+          chatBridge()
+            .apply(m.proposal!.proposal.id)
+            .then((made) => {
+              applied = made;
+              return made.change;
+            }),
+        );
       } catch (error) {
         if (session.now() !== mine) return;
         // The project changed since it was made (`project.moved`): dropped, as a hand edit drops it. Refused for any
@@ -54,15 +64,15 @@ export function proposalActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'ap
         return;
       }
       if (session.now() !== mine) return;
+      if (!applied) {
+        // Not sent (the project can't be edited now): it waits again.
+        update(id, () => ({ state: 'open' }));
+        return;
+      }
+      const made = applied;
       // Rust made the change, so the card never opens again. When the page can't take it in (the project couldn't be
       // read again), it says so rather than offer to apply it twice.
-      const shown = await useProject
-        .getState()
-        .adopt(applied.change)
-        .catch(() => false);
-      if (session.now() !== mine) return;
-      if (shown)
-        update(id, () => ({ state: 'applied', undo: applied.undo, revision: applied.change.history.revision }));
+      if (shown) update(id, () => ({ state: 'applied', undo: made.undo, revision: made.change.history.revision }));
       else update(id, () => ({ state: 'unshown' }));
     },
 
