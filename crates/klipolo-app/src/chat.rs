@@ -23,6 +23,7 @@ pub mod session;
 pub mod sources;
 pub mod spend;
 
+pub use inputs::inputs_for;
 pub use jobs::{BLUR_COMING, FOLLOW_COMING};
 pub use pictures::{
     ChatPicture, ChatPictureDrawn, ChatPictureKind, PictureAsk, StickerPlacement, background_ops,
