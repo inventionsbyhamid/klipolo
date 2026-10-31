@@ -1,0 +1,160 @@
+import { act, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Asset } from '../../bindings/Asset';
+import type { Estimate } from '../../bindings/Estimate';
+import type { Snapshot } from '../../bindings/Snapshot';
+import { renderWithProviders } from '../../test/render';
+
+vi.mock('../../bridge/analysis', () => ({
+  analysisBridge: {
+    estimate: vi.fn(),
+    start: vi.fn(),
+    cancel: vi.fn(),
+    states: vi.fn(),
+    onEvent: vi.fn(),
+  },
+}));
+const { analysisBridge } = await import('../../bridge/analysis');
+const { useAnalysis } = await import('../../state/analysis');
+const { useAi } = await import('../../ai/aiStatus');
+const { useProject } = await import('../../state/project');
+const { AnalysisBanner } = await import('./AnalysisBanner');
+const { RoughCaptionsNote } = await import('./RoughCaptionsNote');
+
+const bridge = vi.mocked(analysisBridge);
+
+function clip(id: string, name: string, kind: Asset['kind'] = 'video'): Asset {
+  return {
+    id,
+    kind,
+    path: `/clips/${name}`,
+    name,
+    durationUs: 65_000_000,
+    width: 1920,
+    height: 1080,
+    fps: 30,
+    hasAudio: true,
+  };
+}
+
+const CLIPS = [clip('a', 'rosa-interview-a.mov'), clip('b', 'rosa-wheel-broll.mov')];
+
+function showProject(assets: Asset[]) {
+  const snapshot = { project: { assets } } as unknown as Snapshot;
+  useProject.setState({ snapshot });
+}
+
+function offer(over: Partial<Estimate> = {}): Estimate {
+  return { usd: 0.04, seconds: 130, cached: [], clips: ['a', 'b'], ...over };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  bridge.start.mockResolvedValue(undefined);
+  bridge.cancel.mockResolvedValue(undefined);
+  useAnalysis.setState({ states: {}, estimate: null, error: null, dismissed: [], busy: false });
+  useAi.setState({ status: { mode: 'relay', budgetUsd: 2, spentUsd: 0, active: true }, settingsOpen: false });
+});
+
+describe('the analysis banner', () => {
+  it('offers the clips with their cost and the credit left, and Analyze starts them', async () => {
+    bridge.estimate.mockResolvedValue(offer({ creditLeftUsd: 2 }));
+    showProject(CLIPS);
+    renderWithProviders(<AnalysisBanner />);
+
+    expect(await screen.findByText('Analyze 2 clips for about $0.04')).toBeInTheDocument();
+    expect(screen.getByText(/You have \$2\.00 left on your access code\./)).toBeInTheDocument();
+    expect(bridge.estimate).toHaveBeenCalledWith(['a', 'b']);
+    await userEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    expect(bridge.start).toHaveBeenCalledWith(['a', 'b']);
+  });
+
+  it('refuses with why when the estimate is over the credit left', async () => {
+    const refusal =
+      'Your access code has $0.02 left, and this needs about $0.07. Trim the clips first, or add your own Meta key in ' +
+      'Settings.';
+    bridge.estimate.mockResolvedValue(offer({ creditLeftUsd: 0.02, refusal }));
+    showProject(CLIPS);
+    renderWithProviders(<AnalysisBanner />);
+
+    expect(await screen.findByText(new RegExp(refusal.replace(/[.$]/g, '\\$&')))).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Analyze' })).toBeDisabled();
+  });
+
+  it('asks for a key or code without one', async () => {
+    useAi.setState({ status: { mode: 'none' } });
+    bridge.estimate.mockResolvedValue(offer());
+    showProject(CLIPS);
+    renderWithProviders(<AnalysisBanner />);
+
+    expect(await screen.findByText('Add your Meta API key or access code in Settings')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Open Settings' }));
+    expect(useAi.getState().settingsOpen).toBe(true);
+  });
+
+  it('says why Analyze could not start, with Retry', async () => {
+    bridge.estimate.mockResolvedValue(offer());
+    bridge.start.mockRejectedValueOnce(new Error("Klipolo's server is busy right now. Try again in a moment."));
+    showProject(CLIPS);
+    renderWithProviders(<AnalysisBanner />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Analyze' }));
+
+    expect(await screen.findByText("Klipolo's server is busy right now. Try again in a moment.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(bridge.start).toHaveBeenCalledTimes(2);
+  });
+
+  it('lists each clip with its step while they run, and Cancel stops them', async () => {
+    bridge.estimate.mockResolvedValue(offer());
+    showProject(CLIPS);
+    useAnalysis.setState({
+      states: {
+        a: { state: 'running', step: 'words', pct: 64 },
+        b: { state: 'running', step: 'scenes', pct: 22 },
+      },
+    });
+    renderWithProviders(<AnalysisBanner />);
+
+    expect(screen.getByText('Analyzing 2 clips')).toBeInTheDocument();
+    expect(screen.getByText('rosa-interview-a.mov')).toBeInTheDocument();
+    expect(screen.getByText('Timing words')).toBeInTheDocument();
+    expect(screen.getByText('64%')).toBeInTheDocument();
+    expect(screen.getByText('Watching the footage')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(bridge.cancel).toHaveBeenCalled();
+  });
+
+  it('keeps a failed clip with its reason and Retry', async () => {
+    bridge.estimate.mockResolvedValue(offer({ clips: [] }));
+    showProject(CLIPS);
+    const reason = 'This device has used its Klipolo credit. Add your own Meta API key in Settings to keep going.';
+    useAnalysis.setState({ states: { a: { state: 'failed', reason }, b: { state: 'done', approximate: false } } });
+    renderWithProviders(<AnalysisBanner />);
+
+    expect(screen.getByText("Couldn't finish 1 clip")).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(reason);
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(bridge.start).toHaveBeenCalledWith(['a']);
+  });
+
+  it('shows nothing once every clip is analysed', async () => {
+    showProject(CLIPS);
+    useAnalysis.setState({
+      states: { a: { state: 'done', approximate: false }, b: { state: 'done', approximate: true } },
+    });
+    const { container } = renderWithProviders(<AnalysisBanner />);
+    await act(async () => undefined);
+    expect(container).toBeEmptyDOMElement();
+    expect(bridge.estimate).not.toHaveBeenCalled();
+  });
+
+  it('notes rough captions in the preview header while words are timed', () => {
+    useAnalysis.setState({ states: { a: { state: 'running', step: 'transcript', pct: 50 } } });
+    const { rerender } = renderWithProviders(<RoughCaptionsNote />);
+    expect(screen.queryByText('Rough captions until words are timed')).toBeNull();
+    act(() => useAnalysis.setState({ states: { a: { state: 'running', step: 'words', pct: 10 } } }));
+    rerender(<RoughCaptionsNote />);
+    expect(screen.getByText('Rough captions until words are timed')).toBeInTheDocument();
+  });
+});
