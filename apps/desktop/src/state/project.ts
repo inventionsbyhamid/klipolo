@@ -82,6 +82,8 @@ export const useProject = create<ProjectStore>((set, get) => {
     // the store changes, so what watches it (a drag) already sees it as a change from elsewhere.
     if (switching) changedElsewhere();
     set((s) => ({ snapshot, pending: s.pending - 1 }));
+    // A project that opens shows its whole video (once there are clips: the timeline fits it).
+    if (switching && snapshot) useUi.getState().oweFit();
     // Said once however many queued edits it refused.
     if (moved && !quietMoved)
       toast.info(codedMessage({ code: 'project.moved', params: {} }), { key: 'project.moved' });

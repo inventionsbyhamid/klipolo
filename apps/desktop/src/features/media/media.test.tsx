@@ -488,13 +488,19 @@ describe('where a drop lands on the timeline', () => {
     expect(bridge.apply).not.toHaveBeenCalled();
     expect(useToasts.getState().toasts.map((t) => t.text)).not.toContain('Added lofi.mp3 as music, 1 file to the library');
     useToasts.setState({ toasts: [] });
-    // Files too short to place: nothing goes in, and no "Added" is said.
+    // Files too short to place: nothing goes in, no "Added" is said, and the toast says why.
     const blip: Asset = { ...fixtureSnapshot().project.assets[5], id: 'b', path: '/b.mp4', name: 'b.mp4', durationUs: 5_000 };
     vi.mocked(bridge.importMedia).mockResolvedValue({ assets: [blip], skipped: [] });
     await importFiles(['/b.mp4']);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(bridge.apply).not.toHaveBeenCalled();
-    expect(useToasts.getState().toasts.map((t) => t.text).filter((text) => text.startsWith('Added'))).toEqual([]);
+    expect(useToasts.getState().toasts.map((t) => t.text)).toEqual(['This file is too short to add.']);
+    useToasts.setState({ toasts: [] });
+    const blip2: Asset = { ...blip, id: 'b2', path: '/b2.mp4', name: 'b2.mp4' };
+    vi.mocked(bridge.importMedia).mockResolvedValue({ assets: [blip, blip2], skipped: [] });
+    await importFiles(['/b.mp4', '/b2.mp4']);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(useToasts.getState().toasts.map((t) => t.text)).toEqual(['These files are too short to add.']);
   });
 
   it('the toast counts only what went in: a file too short to place is left out, on the Music lane and elsewhere', async () => {

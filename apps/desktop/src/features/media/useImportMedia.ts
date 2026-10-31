@@ -17,6 +17,7 @@ import { useProject } from '../../state/project';
 import { toast } from '../../state/toasts';
 import { useUi, type LibraryTab } from '../../state/ui';
 import { dropAllOps, type DropTarget } from '../timeline/drops';
+import { mediaRefusal } from './addMedia';
 import { dropOnto, dropUs, isMusicTarget } from './place';
 
 /** A sound at least this long is music in the Library; shorter ones are sound effects. */
@@ -316,7 +317,11 @@ export async function importFiles(paths: string[] | null, target: DropTarget | n
         if (!snapshot || snapshot.readOnly || snapshot.project.id !== projectId) return hold?.release();
         const { project } = snapshot;
         const steps = placeSteps(project, rest, lane, song && target ? { song, target } : null);
-        if (steps.length === 0) return hold?.release();
+        // Nothing to place: every file is too short to go in, which is said.
+        if (steps.length === 0) {
+          toast.info(assets.length > 1 ? mediaRefusal.tooShortMany() : mediaRefusal.tooShort());
+          return hold?.release();
+        }
         // It holds the commit queue until every step lands, so an edit made meanwhile builds on the files placed. A step
         // that doesn't go in stops the rest (it says why); what went in before it can be taken back.
         const end = beginCommit();

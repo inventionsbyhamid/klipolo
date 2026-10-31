@@ -14,13 +14,13 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 use klipolo_app::export::{
-    ExportState, StartSteps, Started, create_job, freeze, run, start_on_slot,
+    ExportState, StartSteps, Started, create_job, freeze, make_folder, run, start_on_slot,
 };
 use klipolo_engine::api::{ExportEvent, ExportQuality, ExportRequest};
 use klipolo_engine::export::job::ExportJob;
 use klipolo_engine::export::runner::{Batch, Outcome, ProcessLauncher, discard_job};
 use klipolo_engine::render::probe::probe_media;
-use klipolo_model::coded::Said;
+use klipolo_model::coded::{CodedError, Said};
 use klipolo_model::project::{Asset, AssetKind, FormatKind, Project};
 use klipolo_model::speech::Speech;
 use klipolo_model::time::secs_to_us;
@@ -286,4 +286,27 @@ async fn cancel_removes_partial_output() {
     assert_eq!(jobs_left(dir.path()).await, 0, "no job or part of one left");
     assert!(!dir.path().join(".jobs").exists(), "nor an empty .jobs");
     assert!(state.files().is_empty());
+}
+
+/// A folder Klipolo may not write in (its permissions, as on a shared or locked folder) is named before the export
+/// starts, and nothing is made in it.
+#[test]
+fn a_folder_klipolo_cant_write_in_is_named_before_the_export_starts() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = tempfile::tempdir().unwrap();
+    let dir = root.path().join("Exports");
+    std::fs::create_dir(&dir).unwrap();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let said = make_folder(&dir);
+    // Writable again, so the temporary folder can go.
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let parent = root.path().file_name().unwrap().to_string_lossy();
+    assert_eq!(
+        said,
+        Err(Said::Coded(
+            CodedError::new("exports.folder.denied").with("folder", format!("{parent} / Exports"))
+        ))
+    );
+    assert!(!dir.join(".jobs").exists(), "nothing made in it");
 }

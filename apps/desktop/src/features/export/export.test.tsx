@@ -274,8 +274,8 @@ describe('export dialog', () => {
       { type: 'fileReady', index: 0, path: landscape.path },
       { type: 'failed', message: { code: 'exports.diskFull', params: {} } },
     );
-    expect(await screen.findByText('The disk is full. 9:16 was not saved.', { selector: 'span' })).toBeInTheDocument();
-    expect(alert()).toHaveTextContent('The disk is full. 9:16 was not saved.');
+    expect(await screen.findByText('The disk is full. Free up space, then try again. 9:16 was not saved.', { selector: 'span' })).toBeInTheDocument();
+    expect(alert()).toHaveTextContent('The disk is full. Free up space, then try again. 9:16 was not saved.');
     expect(status()).toBeEmptyDOMElement();
     expect(screen.getByText('Billing tutorial 16x9.mp4')).toBeInTheDocument();
     const again = screen.getByRole('button', { name: 'Try again' });
@@ -347,14 +347,18 @@ describe('export dialog', () => {
     expect(status()).toHaveTextContent('25% exported.');
   });
 
-  it('Export is off until there is a video, and says why', () => {
+  it('Export is off until there is a video, and says why', async () => {
     useProject.setState({ snapshot: null });
     const { rerender } = renderWithProviders(<ExportButton />);
-    expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled();
+    // Off but not `disabled`, so WebKit shows why on hover; a press opens nothing.
+    expect(screen.getByRole('button', { name: 'Export' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Export' }).title).toBe('Add a video first');
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(useExport.getState().open).toBe(false);
     useProject.setState({ snapshot: fixtureSnapshot() });
     rerender(<ExportButton />);
-    expect(screen.getByRole('button', { name: 'Export' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Export' })).not.toHaveAttribute('aria-disabled');
     expect(screen.getByRole('button', { name: 'Export' }).title).toBe('Export (Command E)');
   });
 });

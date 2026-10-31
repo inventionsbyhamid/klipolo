@@ -27,7 +27,7 @@ import { SnapGuide } from './SnapGuide';
 import { TimelineLanes } from './TimelineLanes';
 import { useFollowPlayhead } from './useFollowPlayhead';
 import { useViewport } from './useViewport';
-import { peekZoomScroll, registerZoomTarget, takeZoomScroll, zoomGestures } from './zoomControl';
+import { fitTimeline, peekZoomScroll, registerZoomTarget, takeZoomScroll, zoomGestures } from './zoomControl';
 
 /** The timeline panel's id. */
 export const TIMELINE_PANEL_ID = 'timeline-panel';
@@ -133,6 +133,13 @@ export function TimelineView() {
       registerDropTarget(null);
     };
   }, []);
+  // The whole video in view as a project opens, or as an empty one gets its first clips (`fitOwed`), once its lanes
+  // are laid out: what was just added isn't off to the right. After the person zooms, nothing is owed.
+  const fitOwed = useUi((s) => s.fitOwed);
+  const hasClips = project.timeline.main.length > 0;
+  useLayoutEffect(() => {
+    if (fitOwed && hasClips) fitTimeline();
+  }, [fitOwed, hasClips]);
   // One selection at a time: a block picked clears the time range (making a range clears the block's).
   useEffect(
     () =>

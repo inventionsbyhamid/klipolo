@@ -623,7 +623,7 @@ fn save_failures_read_as_plain_sentences() {
     let err = save(&file, &Project::new("x"), Durability::Ordered).unwrap_err();
     assert_eq!(
         err.to_string(),
-        "Klipolo couldn't save your changes. The disk reported an error."
+        "The disk reported an error, so changes aren't being saved. Check that it's connected. Klipolo keeps trying."
     );
     assert!(!err.detail().is_empty(), "the details go to the log");
     let full = SaveError::io(&std::io::Error::from_raw_os_error(libc::ENOSPC));
