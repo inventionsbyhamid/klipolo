@@ -34,7 +34,8 @@ pub enum MetaError {
     /// now, with the server's reason when it gave one.
     #[error("Meta or the relay is overloaded or unavailable (5xx){}", detail(.message.as_ref()))]
     Overloaded { message: Option<String> },
-    /// Any other refused request (400, 404, 413, 422...), with the server's reason.
+    /// Any other refused request (400, 404, 413, 422...), with the server's reason (for the log only: the person
+    /// reads a plain sentence).
     #[error("bad request{}", detail(Some(.message)))]
     BadRequest { message: String },
     /// The request never got an answer (connection, timeout, cut off body).
@@ -183,10 +184,8 @@ impl MetaError {
                 message.as_deref().unwrap_or_default(),
                 "Meta is busy right now. Try again in a moment.",
             ),
-            Self::BadRequest { message } => match sentence(message, "") {
-                reason if reason.is_empty() => "Meta could not process this request.".into(),
-                reason => format!("Meta could not process this request. {reason}"),
-            },
+            // The server's own text (often about fields the person never sees) is for the log: `Display` has it.
+            Self::BadRequest { .. } => "Meta could not process this request. Try again.".into(),
             Self::Network(_) => {
                 "Could not reach Meta. Check your internet connection and try again.".into()
             }

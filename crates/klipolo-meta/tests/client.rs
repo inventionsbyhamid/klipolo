@@ -510,6 +510,26 @@ async fn other_statuses_map_to_their_errors() {
     );
 }
 
+/// A refused request's own text (Meta's, about fields the person never sees) goes to the log only: the person reads a
+/// plain sentence with a next step.
+#[tokio::test]
+async fn a_refused_requests_own_text_stays_in_the_log() {
+    let meta_bad = json!({"error": {
+        "message": "Invalid 'input[0].content[1].file_id': file-9 was not found",
+        "type": "invalid_request_error",
+    }});
+    let error = transcribe_error(ResponseTemplate::new(400).set_body_json(meta_bad)).await;
+
+    assert_eq!(
+        error.user_message(),
+        "Meta could not process this request. Try again."
+    );
+    assert!(
+        error.to_string().contains("file-9 was not found"),
+        "{error}"
+    );
+}
+
 #[tokio::test]
 async fn redirects_are_not_followed() {
     let server = MockServer::start().await;
