@@ -142,6 +142,18 @@ expect "a user named test isn't found in words" pass found test "$names/plain" "
 expect "a user named test is found as a path part" pass found test "$names/path" "$names/path/b.txt"
 expect "a user name under 4 characters isn't looked for" pass found lib "$names/path" ""
 
+# sign.sh --list prints paths inside the app, whatever characters the app's own path has (it signs nothing). It runs
+# from this folder, as it reads the checkout's entitlements.
+odd="$work/odd|name [1] & co.v2"
+mkdir -p "$odd"
+make_app "$odd"
+listed() {  # listed <app> <expected output>
+  local out
+  out=$("$here/sign.sh" --list "$1") && [ "$out" = "$2" ]
+}
+expect "sign.sh --list prints paths inside an app under an odd path" pass \
+  listed "$odd/Klipolo.app" "Contents/Frameworks/libfoo.1.dylib"
+
 echo
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]
