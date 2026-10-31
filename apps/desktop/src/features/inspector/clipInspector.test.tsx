@@ -10,8 +10,8 @@ import { renderWithProviders } from '../../test/render';
 
 /*
  * The clip card: the docked inspector for a selected main-track clip. Fit or Fill in the format shown, as Rust frames
- * it (`clip_framing`), and the Fill focus while Fill crops; each change is one labelled step, built at its turn through
- * the commit queue.
+ * it (`clip_framing`), the Fill focus while Fill crops, and Speed; each change is one labelled step, built at its turn
+ * through the commit queue.
  */
 
 const apply = vi.fn<(label: string, ops: Op[], params?: LabelParams) => Promise<boolean>>(() =>
@@ -74,7 +74,7 @@ beforeEach(() => {
 });
 
 describe('the clip card', () => {
-  it('shows the selected clip by its file name, framed as Rust draws it', async () => {
+  it('shows the selected clip by its file name, framed as Rust draws it, with its speed', async () => {
     renderWithProviders(<Inspector format="landscape" />);
     expect(screen.getByRole('complementary', { name: 'broll.mp4 settings' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'broll.mp4' })).toBeInTheDocument();
@@ -82,6 +82,7 @@ describe('the clip card', () => {
     expect(await screen.findByRole('radio', { name: 'Fill' })).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByRole('radio', { name: 'Fit' })).toHaveAttribute('aria-checked', 'false');
     expect(clipFraming).toHaveBeenCalledWith('b');
+    expect(screen.getByRole('button', { name: 'Speed: 1×' })).toBeInTheDocument();
   });
 
   it('Fit and Fill set the format shown only, built from the framing Rust draws, and keep the other formats', async () => {
@@ -164,6 +165,30 @@ describe('the clip card', () => {
       },
     ]);
     expect(vi.mocked(engine.preview).mock.calls.at(-1)).toEqual(['project', 3, ops]);
+  });
+
+  it('the speed is one change, from 0.5x to 2x, and a speed set elsewhere shows as it is', async () => {
+    const { unmount } = renderWithProviders(<Inspector format="landscape" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Speed: 1×' }));
+    expect(screen.getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual([
+      '0.5×',
+      '0.75×',
+      '1×',
+      '1.25×',
+      '1.5×',
+      '2×',
+    ]);
+    await userEvent.click(screen.getByRole('menuitemradio', { name: '2×' }));
+    expect(apply).toHaveBeenCalledWith(
+      'speed.undo',
+      [{ type: 'updateClip', id: 'b', patch: { speed: 2 } }],
+      undefined,
+      queued,
+    );
+    unmount();
+    useProject.setState({ snapshot: withB({ speed: 1.1 }) });
+    renderWithProviders(<Inspector format="landscape" />);
+    expect(screen.getByRole('button', { name: 'Speed: 1.1×' })).toBeInTheDocument();
   });
 
   it('its more menu duplicates or deletes the clip, and has no layer order; Close lets it go', async () => {
