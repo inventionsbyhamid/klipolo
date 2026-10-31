@@ -57,6 +57,29 @@
   transition: stroke-dashoffset var(--dur-base) var(--ease-out);
 }
 
+/* ---------- Settings ---------- */
+
+/* Its own section in Settings, under Other apps, set apart by a hairline as that one is. */
+.copies-settings {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--color-line);
+}
+
+.copies-settings .section-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  line-height: var(--lh-lg);
+  font-weight: var(--weight-strong);
+}
+
+.copies-settings .copies-auto {
+  min-height: 28px;
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+}
+
 /* ---------- The popover ---------- */
 
 .copies-popover {

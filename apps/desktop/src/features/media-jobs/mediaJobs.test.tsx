@@ -42,6 +42,7 @@ const { MediaJobsPill } = await import('./MediaJobsPill');
 const { MediaJobsFeed } = await import('./MediaJobsFeed');
 const { SETTLE_MS } = await import('./usePressGuard');
 const { TopBar } = await import('../../layout/TopBar');
+const { CopiesSettings } = await import('./CopiesSettings');
 const { useProject } = await import('../../state/project');
 const { useEngineSession } = await import('../preview/useEngineSession');
 const { fixtureSnapshot } = await import('../../test/fixtures');
@@ -250,6 +251,26 @@ describe('the editing copies pill', () => {
     // Nothing for the person to resume: Pause all can still hold it off.
     expect(screen.getByRole('button', { name: 'Pause all' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Resume all' })).toBeNull();
+  });
+
+  it('can be turned back on in Settings once turned off in the popover and the pill is gone', async () => {
+    useMediaJobs.setState({ jobs: [working] });
+    renderWithProviders(<TopBar />);
+    await userEvent.click(screen.getByRole('button', { name: /^Preparing 1 file/ }));
+    await userEvent.click(screen.getByRole('switch', { name: 'Make editing copies automatically' }));
+    expect(mediaJobs.setAuto).toHaveBeenLastCalledWith(false);
+    // Rust forgets the copy being made and lists none while copies are off: closed, the pill goes.
+    act(() => useMediaJobs.getState().receive([], []));
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('button', { name: /Preparing|Editing copies/ })).toBeNull();
+
+    renderWithProviders(<CopiesSettings />);
+    const again = screen.getByRole('switch', { name: 'Make editing copies automatically' });
+    expect(again).toHaveAttribute('aria-checked', 'false');
+    await userEvent.click(again);
+    expect(mediaJobs.setAuto).toHaveBeenLastCalledWith(true);
+    expect(again).toHaveAttribute('aria-checked', 'true');
+    expect(localStorage.getItem('klipolo.autoCopies')).toBe('on');
   });
 
   it('sits in the top bar only while a project is open, and says what copies are for', async () => {
