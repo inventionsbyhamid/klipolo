@@ -1580,6 +1580,57 @@
   color: var(--color-ink);
 }
 
+/* ---------- Toggle ---------- */
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  width: 36px;
+  height: 20px;
+  flex: none;
+  padding: 0 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.toggle-knob {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-ink-soft);
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+.toggle[data-state="checked"] {
+  background: var(--color-paper);
+  box-shadow: none;
+}
+
+.toggle[data-state="checked"] .toggle-knob {
+  background: var(--color-navy);
+  transform: translateX(16px);
+}
+
+.toggle:disabled {
+  box-shadow: inset 0 0 0 1px var(--color-line);
+}
+
+.toggle:disabled .toggle-knob {
+  background: var(--color-ink-disabled);
+}
+
+/* The knob jumps instead of sliding. */
+@media (prefers-reduced-motion: reduce) {
+  .toggle-knob {
+    transition: background-color var(--dur-fast) var(--ease-out);
+  }
+}
+
 /* ---------- Player bar ---------- */
 
 .playerbar {
