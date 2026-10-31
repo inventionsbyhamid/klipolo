@@ -173,6 +173,8 @@ fn main() {
     app.run(|app, event| {
         // Quitting while an export runs asks first.
         commands::export::guard_quit(app, &event);
+        // Quitting during a take stops it and waits (30 s at most) for it to land in its project.
+        recorder::guard_quit(app, &event);
         // A take still armed at exit is disarmed: no worker outlives Klipolo waiting with its global key.
         recorder::release_on_exit(app, &event);
         // Every edit is on the disk before the app goes.

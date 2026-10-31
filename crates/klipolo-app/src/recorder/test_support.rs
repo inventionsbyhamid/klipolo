@@ -277,6 +277,11 @@ impl Fixture {
         read_config(&SessionDir::at(&self.take_dir(id))).unwrap()
     }
 
+    /// The clock moves `ms` milliseconds, the supervisor left alone.
+    pub(super) fn move_clock_ms(&self, ms: u64) {
+        self.clock.0.fetch_add(ms * 1_000_000, Ordering::SeqCst);
+    }
+
     /// The clock moves `s` seconds, ticking the supervisor every half second as the app's ticker does.
     pub(super) fn advance_s(&self, s: u64) {
         self.settle();

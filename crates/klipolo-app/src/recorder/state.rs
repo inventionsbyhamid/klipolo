@@ -245,6 +245,15 @@ impl RecorderState {
         self.on.as_ref().is_some_and(|on| on.recorder.active())
     }
 
+    /// Klipolo is asked to exit during a take: true when the exit is held, the take stopped, and `exit` called once it
+    /// has landed or after 30 s (`quitting`). False with no take, in a test run, or once the wait for this take is over.
+    pub(super) fn hold_quit(&self, exit: Box<dyn FnOnce() + Send>) -> bool {
+        match &self.on {
+            Some(on) => on.recorder.hold_quit(exit),
+            None => false,
+        }
+    }
+
     /// Klipolo exits: a take that hasn't started is disarmed. True when one was.
     pub(super) fn disarm_unstarted(&self) -> bool {
         self.on

@@ -11,6 +11,8 @@
 //!   again should another be open by then), or a new "Recording, {Mon D}" for a take from the start screen, as one
 //!   undo step, and the page hears `recorder-imported`. The engine's background media work waits from arming until the
 //!   take has landed.
+//! - **Quitting during a take** (`quitting`, `app_quit`): the exit is held, the take stopped, and Klipolo exits once it
+//!   has landed, or after 30 s.
 //! - **Setup** (`setup`, `config`): the Record dialog's data from the backend without capture or prompts, and a take's
 //!   config from the person's options and the app's fixed choices.
 //! - **The permission steps** (`permissions`, `screen_reopen`): Allow screen recording, Reopen Klipolo and Open privacy
@@ -19,6 +21,7 @@
 //!   "Recording is off in this test run." (`state`).
 
 mod active;
+mod app_quit;
 pub mod commands;
 mod config;
 mod destination;
@@ -28,6 +31,7 @@ mod import;
 mod launch;
 mod outcomes;
 mod permissions;
+mod quitting;
 mod screen_reopen;
 mod send;
 mod setup;
@@ -61,10 +65,6 @@ mod tests_stop;
 #[cfg(test)]
 mod tests_supervise;
 
-#[allow(
-    unused_imports,
-    reason = "read by the quit guard and the engine's hold, which come with the take's landing"
-)]
-pub use active::active;
 pub use active::release_on_exit;
+pub use app_quit::guard_quit;
 pub use state::RecorderState;

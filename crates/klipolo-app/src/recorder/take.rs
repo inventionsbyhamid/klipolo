@@ -10,6 +10,7 @@ use klipolo_capture::session::{self, SessionConfig, SessionDir};
 use klipolo_model::coded::CodedError;
 
 use super::env::Env;
+use super::quitting::Quit;
 use super::supervise::Supervisor;
 use super::types::ArmedTake;
 use super::words;
@@ -53,6 +54,8 @@ pub struct Recorder {
     /// A take is the slot's (`active`), mirrored so it is read without the slot's lock, which covers file and process
     /// work.
     pub(super) active: AtomicBool,
+    /// Quitting during a take (`quitting`): the take waited for, and one no longer waited for.
+    pub(super) quit: Mutex<Quit>,
 }
 
 impl Recorder {
@@ -62,6 +65,7 @@ impl Recorder {
             slot: Mutex::default(),
             handled: AtomicU64::new(0),
             active: AtomicBool::new(false),
+            quit: Mutex::default(),
         })
     }
 

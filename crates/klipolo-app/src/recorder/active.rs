@@ -40,11 +40,7 @@ impl Recorder {
     }
 }
 
-/// A take is armed, records or saves. Never in a test run, nor before the recorder is managed.
-#[allow(
-    dead_code,
-    reason = "read by the quit guard and the engine's hold, which come with the take's landing"
-)]
+/// A take is armed, records, saves or lands. Never in a test run, nor before the recorder is managed.
 pub fn active(app: &AppHandle) -> bool {
     app.try_state::<RecorderState>()
         .is_some_and(|state| state.active())
