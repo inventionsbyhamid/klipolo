@@ -980,6 +980,26 @@ fn a_picture_being_drawn_is_said_to_be_on_its_way() {
 }
 
 #[test]
+fn following_or_blurring_alone_is_said_to_be_on_its_way() {
+    // Like a picture being drawn, a subject being followed or blurred is work for a runner: under way, not nothing.
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    for (tool, kind) in [("followSubject", "follow"), ("blurObjects", "blur")] {
+        let job = fc("call_1", tool, r#"{"description": "face"}"#);
+        let model = Fake::new(vec![answer("", vec![job], 0.002)]);
+        let out = send(&model, &[], "keep it on her face", &i, &p).unwrap();
+        assert_eq!(out.compiled.jobs.len(), 1, "{kind}");
+        assert_eq!(out.compiled.additions, None, "{kind}");
+        assert_eq!(out.reply, "Working on it.", "{kind}");
+        // With words of its own, the model's text is the reply.
+        let job = fc("call_1", tool, r#"{"description": "face"}"#);
+        let model = Fake::new(vec![answer("On it.", vec![job], 0.002)]);
+        let out = send(&model, &[], "keep it on her face", &i, &p).unwrap();
+        assert_eq!(out.reply, "On it.", "{kind}");
+    }
+}
+
+#[test]
 fn a_media_call_refused_twice_is_named_by_what_it_does() {
     let (p, speech) = talk();
     let i = inputs(&p, speech);
