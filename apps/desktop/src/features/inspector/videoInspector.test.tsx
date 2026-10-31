@@ -114,6 +114,29 @@ describe("a video layer's card", () => {
     );
   });
 
+  it('Size is one change, named for the layer as a resize on the canvas is', async () => {
+    withVideo('v1');
+    const { unmount } = renderWithProviders(<Inspector format="landscape" />);
+    dragSlider('Size', 50);
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(apply.mock.calls[0][0]).toBe('gizmo.resize.undo');
+    expect(apply.mock.calls[0][2]).toEqual({ layer: 'video' });
+    unmount();
+    // A picture's says "Resize image".
+    const snapshot = fixtureSnapshot();
+    snapshot.project.timeline.tracks[0].items.push({
+      ...videoLayer('pic'),
+      content: { type: 'image', assetId: 'logo' },
+    });
+    useProject.setState({ snapshot, pending: 0, apply });
+    useSelection.setState({ selectedId: 'pic' });
+    renderWithProviders(<Inspector format="landscape" />);
+    dragSlider('Size', 50);
+    // It goes in once the first has landed (the commit queue).
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
+    expect(apply.mock.calls[1].slice(0, 3)).toEqual(['gizmo.resize.undo', expect.any(Array), { layer: 'image' }]);
+  });
+
   it('a video whose file has no sound has no Volume or Mute', () => {
     const snapshot = withVideo('v1');
     snapshot.project.assets.find((a) => a.id === 'broll')!.hasAudio = false;
