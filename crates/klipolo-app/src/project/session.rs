@@ -2,6 +2,7 @@
 //! next launch.
 
 use klipolo_engine::registry::Registry;
+use klipolo_model::time::RangeUs;
 
 use super::*;
 
@@ -37,6 +38,15 @@ impl ProjectSessionState {
     /// The engine's side of the feed.
     pub fn subscribe(&self) -> FeedRx {
         self.feed.subscribe()
+    }
+
+    /// Where someone speaks on the open project's timeline, as the engine's mix ducks music under it
+    /// (`ducking_speech`, from the speech the feed carries): empty when nothing ducks, nobody is heard yet, or no
+    /// project is open.
+    pub(crate) fn ducking_speech(&self) -> Vec<RangeUs> {
+        self.feed.borrow().as_ref().map_or_else(Vec::new, |feed| {
+            klipolo_engine::audio::plan::ducking_speech(&feed.project, &feed.speech).to_vec()
+        })
     }
 
     /// Where save failures (and the save that works again) are told.

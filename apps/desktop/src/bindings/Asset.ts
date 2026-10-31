@@ -21,4 +21,10 @@ rotation?: number, hasAudio: boolean,
  * None means never probed: a video imported before the lead was read, filled from the probe when its project
  * files and images stay None (no lead). Left out of the JSON while None.
  */
-audioLeadUs?: number, };
+audioLeadUs?: number, 
+/**
+ * The tool that made the file, when Klipolo had one make it ("Muse Image" for a sticker or a title card made in
+ * chat): the library groups such files under its name. None for a file the person brought; left out of the JSON
+ * while None.
+ */
+madeWith?: string, };

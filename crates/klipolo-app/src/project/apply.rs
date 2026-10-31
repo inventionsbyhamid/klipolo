@@ -1,11 +1,15 @@
 //! The one apply path every edit takes: applying a batch as one undo step, the publish-and-save tail, and refusing a
 //! batch built on a base the project moved on from.
 
+use klipolo_model::Op;
+use klipolo_model::media::music::apply_with_music_refit;
+
 use super::*;
 
 /// Applies the ops once and records the result as one undo step (`Document::commit_tx`: its label keeps its params, so
-/// "Undo Rename to “Intro”" can be worded), returning what changed. Saving happens in the background once `with_open`
-/// publishes the new revision.
+/// "Undo Rename to “Intro”" can be worded), returning what changed. Music that reached the video's end is fitted to its
+/// new end in the same step (`apply_with_music_refit`): a cut keeps the song playing to the end, fading out there, and
+/// one undo takes back both. Saving happens in the background once `with_open` publishes the new revision.
 pub(crate) fn apply_and_commit(
     open: &mut OpenProject,
     tx: &Transaction,
@@ -16,10 +20,14 @@ pub(crate) fn apply_and_commit(
     let change = if tx.ops.is_empty() {
         Change::none(open.document.revision())
     } else {
-        let next =
-            apply_ops(open.document.project(), &tx.ops).map_err(|e| Said::Coded(e.coded()))?;
+        let done = apply_with_music_refit(open.document.project(), tx.ops.clone())
+            .map_err(|e| Said::Coded(e.coded()))?;
+        if let Some(why) = &done.refused {
+            // A bug in the refit: the edit still goes in, without it.
+            tracing::warn!(%why, "the music's refit was refused");
+        }
         open.document.set_limits(history_limits());
-        open.document.commit_tx(tx, next)
+        open.document.commit_tx(tx, done.project)
     };
     Ok(open.document.snapshot_patch(change))
 }
@@ -122,6 +130,31 @@ pub(crate) fn apply_transaction(
     on_open(state, |open| {
         check(open, project_id, base)?;
         apply_and_commit(open, tx).map_err(ApplyError::Refused)
+    })
+    .unwrap_or(Err(ApplyError::NoProject))
+}
+
+/// Builds a batch from the open project as it is (under the lock, so nothing lands between) and commits it by the path
+/// every edit takes, labelled `label`: for the media commands, whose ops Rust builds (music that fits the video, a
+/// title preset). Refused as [`apply_transaction`] refuses a batch when the open project isn't `project_id` at `base`
+/// (each when given); `build` refusing says why.
+pub(crate) fn build_and_apply(
+    state: &ProjectSessionState,
+    project_id: Option<&str>,
+    base: Option<u64>,
+    label: &str,
+    build: impl FnOnce(&Project) -> Result<Vec<Op>, Said>,
+) -> Result<SnapshotPatch, ApplyError> {
+    on_open(state, |open| {
+        let id = project_id.map_or_else(|| open.document.project().id.clone(), str::to_owned);
+        check(open, &id, base)?;
+        let ops = build(open.document.project()).map_err(ApplyError::Refused)?;
+        let tx = Transaction {
+            label: label.into(),
+            ops,
+            ..Default::default()
+        };
+        apply_and_commit(open, &tx).map_err(ApplyError::Refused)
     })
     .unwrap_or(Err(ApplyError::NoProject))
 }

@@ -23,22 +23,22 @@ use std::time::Duration;
 
 #[cfg(test)]
 use apply::apply_and_commit;
-pub(crate) use apply::{ApplyError, apply_transaction, step, with_open};
+pub(crate) use apply::{ApplyError, apply_transaction, build_and_apply, step, with_open};
 pub(crate) use create::{create_in, new_project, open_in, snapshot_now};
 pub(crate) use disk::{SaveError, save};
 use klipolo_engine::session::{FeedRx, ProjectFeed};
+use klipolo_model::Transaction;
 use klipolo_model::coded::Said;
 use klipolo_model::contrib::AssetPath;
 use klipolo_model::history::{Change, Document, HistoryLimits, Snapshot, SnapshotPatch};
-use klipolo_model::project::{FormatKind, Project};
-use klipolo_model::{Transaction, apply_ops};
+use klipolo_model::project::{AssetKind, FormatKind, Project};
 use klipolo_platform::pressure::{self, Pressure};
 pub(crate) use library::{library_dir, read};
 pub(crate) use saver::{SaveStatus, Saver, Version};
 pub(crate) use session::ProjectSessionState;
 #[cfg(test)]
 pub(crate) use session::opened;
-use tauri::{AppHandle, Manager, State};
+use tauri::State;
 use tokio::sync::watch;
 
 /// A project file's extension: `~/Movies/Klipolo/<name>.klipolo`.
@@ -89,6 +89,17 @@ pub(crate) fn uses_path(state: &ProjectSessionState, path: &str) -> bool {
     })
 }
 
+/// The kind of the open project's file at `path`; None when it uses no such file.
+pub(crate) fn asset_kind(state: &ProjectSessionState, path: &str) -> Option<AssetKind> {
+    lock(state).as_ref().and_then(|open| {
+        let assets = &open.document.project().assets;
+        assets
+            .iter()
+            .find(|asset| asset.path == path)
+            .map(|asset| asset.kind)
+    })
+}
+
 /// A command that panicked must not leave the project locked for the rest of the session.
 fn lock(state: &ProjectSessionState) -> MutexGuard<'_, Option<OpenProject>> {
     state.open.lock().unwrap_or_else(PoisonError::into_inner)
@@ -109,28 +120,14 @@ fn set_open(state: &ProjectSessionState, open: Option<OpenProject>) -> Result<u6
     Ok(state.opens.load(Ordering::SeqCst))
 }
 
-/// The files of `project`'s assets the page may read: local files of a media type Klipolo imports, never a pack's file
-/// or anything else a project file names.
-fn served_files(project: &Project) -> Vec<PathBuf> {
-    project
-        .assets
-        .iter()
-        .filter_map(|asset| match AssetPath::parse(&asset.path) {
-            Some(AssetPath::File(path)) if crate::media::supported(Path::new(path)) => {
-                Some(PathBuf::from(path))
-            }
-            _ => None,
-        })
-        .collect()
-}
-
-/// Lets the UI's asset protocol read `project`'s media files (`served_files`).
-pub(crate) fn allow_assets(app: &AppHandle, project: &Project) {
-    let scope = app.asset_protocol_scope();
-    for file in served_files(project) {
-        // A missing file just won't preview; the project still opens.
-        let _ = scope.allow_file(file);
-    }
+/// Whether the page may be sent the bytes of `path`, a file the open project uses (`uses_path`): a local file of a media
+/// type Klipolo imports, never a pack's file or anything else a project file names (a project edited by hand to point at
+/// `~/.ssh/id_rsa`).
+pub(crate) fn servable(path: &str) -> bool {
+    matches!(
+        AssetPath::parse(path),
+        Some(AssetPath::File(file)) if crate::media::supported(Path::new(file))
+    )
 }
 
 /// A new project named `name` (the first format is its primary), saved in the library and opened.
@@ -145,14 +142,8 @@ pub fn project_create(
 
 /// Opens the project file at `path` (the open one is saved and closed first).
 #[tauri::command(async)]
-pub fn project_open(
-    app: AppHandle,
-    state: State<'_, ProjectSessionState>,
-    path: String,
-) -> Result<Snapshot, Said> {
-    let snapshot = open_in(&state, Path::new(&path))?;
-    allow_assets(&app, &snapshot.project);
-    Ok(snapshot)
+pub fn project_open(state: State<'_, ProjectSessionState>, path: String) -> Result<Snapshot, Said> {
+    open_in(&state, Path::new(&path))
 }
 
 /// Closes the open project once its edits are saved.
@@ -223,11 +214,6 @@ fn step_at(
 /// The whole open project (the UI resynchronises with it when a patch doesn't follow its revision, and reads it when
 /// the page loads).
 #[tauri::command(async)]
-pub fn project_snapshot(
-    app: AppHandle,
-    state: State<'_, ProjectSessionState>,
-) -> Result<Snapshot, Said> {
-    let snapshot = snapshot_now(&state)?;
-    allow_assets(&app, &snapshot.project);
-    Ok(snapshot)
+pub fn project_snapshot(state: State<'_, ProjectSessionState>) -> Result<Snapshot, Said> {
+    snapshot_now(&state)
 }
