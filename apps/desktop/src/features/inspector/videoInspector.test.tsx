@@ -21,6 +21,7 @@ vi.mock('../../bridge/engine', () => ({
 const { useProject } = await import('../../state/project');
 const { useSelection } = await import('../../state/selection');
 const { usePlayback } = await import('../../state/playback');
+const { useAnnouncer } = await import('../../state/announce');
 const { Inspector } = await import('./Inspector');
 
 /** Where a change through the commit queue was asked for (`useProject.apply`'s `built`). */
@@ -189,6 +190,30 @@ describe("a video layer's card", () => {
       [{ type: 'updateClip', id: 'a', patch: { speed: 2 } }],
       undefined,
       queued,
+    );
+  });
+
+  it("a separated camera's speed says what it does to its clip's transitions, as the clip card's does", async () => {
+    const snapshot = withVideo('a-camera');
+    // A one-second dissolve from a into b, with 0.6 s of a's take after it: enough at 1x, 0.3 s at 2x.
+    const [a, b] = snapshot.project.timeline.main;
+    snapshot.project.timeline.main[0] = {
+      ...a,
+      sourceOutUs: 59_400_000,
+      transitionOut: { effect: 'klipolo.builtin/transition.dissolve', durationUs: 1_000_000, params: {} },
+    };
+    snapshot.project.timeline.main[1] = { ...b, sourceInUs: 2_000_000 };
+    renderWithProviders(<Inspector format="landscape" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Speed: 1×' }));
+    await userEvent.click(screen.getByRole('menuitemradio', { name: '2×' }));
+    expect(apply).toHaveBeenCalledWith(
+      'speed.undo.note',
+      [{ type: 'updateClip', id: 'a', patch: { speed: 2 } }],
+      { note: 'A transition is shortened.' },
+      queued,
+    );
+    await vi.waitFor(() =>
+      expect(useAnnouncer.getState().message).toMatch(/^Changed the speed of .+ to 2×\. A transition is shortened\.$/),
     );
   });
 

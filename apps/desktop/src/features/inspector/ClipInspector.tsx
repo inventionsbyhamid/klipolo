@@ -8,11 +8,11 @@ import { Icon } from '../../layout/Icon';
 import { formatNumber } from '../../lib/format';
 import { clipOp } from '../../lib/ops';
 import { clipHasSound, sourceLabel } from '../../lib/timeline';
-import { announce } from '../../state/announce';
-import { clipNow, editClip } from '../../state/latest';
+import { clipNow } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
-import { deleteBlock, duplicate, speedNote } from '../timeline/commands';
+import { deleteBlock, duplicate } from '../timeline/commands';
+import { setClipSpeed } from './clipSpeed';
 import { cardEscape } from './common';
 import { FramingField } from './FramingField';
 import { SpeedField } from './SpeedField';
@@ -32,26 +32,7 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
   if (!project) return null;
   const title = sourceLabel(project, clip.source);
   const close = () => useSelection.getState().select(null);
-  /** One step; the model refits the transitions at its cuts, and it says when it shortens or removes one. */
-  const setSpeed = (speed: number) => {
-    const now = useProject.getState().snapshot?.project;
-    const note = now ? speedNote(now, clip.id, speed) : '';
-    const shown = `${formatNumber(locale, speed)}×`;
-    const said = note
-      ? t({
-          id: 'clip.speed.saidNote',
-          message: `Changed the speed of ${title} to ${shown}. ${note}`,
-          comment: 'Screen-reader note; {shown} is e.g. 2×; {note} says what it did to transitions',
-        })
-      : t({
-          id: 'clip.speed.said',
-          message: `Changed the speed of ${title} to ${shown}`,
-          comment: 'Screen-reader note; {shown} is e.g. 2×',
-        });
-    void editClip(note ? { id: 'speed.undo.note', params: { note } } : 'speed.undo', clip, { speed }).then(
-      (ok) => ok && announce(said),
-    );
-  };
+  const setSpeed = (speed: number) => setClipSpeed(clip, speed, title, `${formatNumber(locale, speed)}×`);
   return (
     <aside
       className="inspector"
