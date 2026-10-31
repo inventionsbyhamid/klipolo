@@ -24,6 +24,7 @@ vi.mock('../../bridge/engine', () => ({
 const { useProject } = await import('../../state/project');
 const { useUi } = await import('../../state/ui');
 const { useSelection } = await import('../../state/selection');
+const { deleteBlock } = await import('./commands');
 const { useSpeech } = await import('./media/speech');
 const { Timeline } = await import('./Timeline');
 const { levelPoints, levelY, ATTACK_US, RELEASE_US, DuckTag } = await import('./blocks/VolumeLine');
@@ -223,6 +224,18 @@ describe('the music’s volume line', () => {
       ['bed', louder, 500_000, 0],
       ['bed-2', louder, 0, 0],
       ['bed-3', louder, 0, 2 * S],
+    ]);
+  });
+
+  it('Delete on one piece of a song takes every piece, in one undo step', async () => {
+    useProject.setState({ snapshot: bed(), pending: 0, apply });
+    deleteBlock('bed-2', 'undo.delete.layer');
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    expect(apply.mock.calls[0][0]).toBe('undo.delete.layer');
+    expect(apply.mock.calls[0][1]).toEqual([
+      { type: 'removeItem', id: 'bed' },
+      { type: 'removeItem', id: 'bed-2' },
+      { type: 'removeItem', id: 'bed-3' },
     ]);
   });
 
