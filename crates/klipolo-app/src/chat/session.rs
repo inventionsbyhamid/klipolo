@@ -605,8 +605,7 @@ impl ChatSession {
                         .map(ToolCall::name)
                         .collect();
                     let removed_us = review.removals.ranges.iter().map(RangeUs::len).sum();
-                    let said =
-                        describe(&base, &inputs.speech, &review.removals, removed_us, &tools);
+                    let said = describe(&base, &inputs.speech, &review.removals, &tools);
                     let id = uuid::Uuid::new_v4().to_string();
                     let card = ChatProposal::new(
                         id.clone(),

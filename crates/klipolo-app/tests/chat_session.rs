@@ -444,7 +444,7 @@ async fn apply_is_one_undo_step() {
     assert_eq!(r["proposal"]["baseRevision"], 0);
     let ranges = r["proposal"]["removals"]["ranges"].as_array().unwrap();
     assert_eq!(ranges.len(), 2, "both fillers: {r:#}");
-    assert_eq!(r["proposal"]["title"], "Cut 2 filler words, 1.0 s in total");
+    assert_eq!(r["proposal"]["title"], "Cut 2 filler words");
     let tags: Vec<&str> = (r["proposal"]["tags"].as_array().unwrap().iter())
         .map(|t| t["label"].as_str().unwrap())
         .collect();
@@ -879,12 +879,7 @@ async fn keep_only_these_proposes_without_the_model() {
     };
     let r = reply(&chat.session.send(keep).await.unwrap());
     assert_eq!(r["text"], KEEP_ONLY_READY);
-    assert!(
-        r["proposal"]["title"]
-            .as_str()
-            .unwrap()
-            .starts_with("Keep only the parts you chose, cutting")
-    );
+    assert_eq!(r["proposal"]["title"], "Keep only the parts you chose");
     assert!(chat.model.seen().is_empty());
 }
 
@@ -914,7 +909,7 @@ async fn the_selection_is_this() {
         "{context}"
     );
     let r = reply(&out);
-    assert_eq!(r["proposal"]["title"], "Cut 6.0 s");
+    assert_eq!(r["proposal"]["title"], "Cut 1 part");
     assert_eq!(r["proposal"]["removedUs"], secs(6.0));
 }
 
