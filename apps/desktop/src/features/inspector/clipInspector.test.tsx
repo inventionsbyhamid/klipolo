@@ -53,6 +53,8 @@ const { clipFraming } = await import('../../bridge/framing');
 const { useProject } = await import('../../state/project');
 const { useSelection } = await import('../../state/selection');
 const { usePlayback } = await import('../../state/playback');
+const { useAnnouncer } = await import('../../state/announce');
+const { labelText } = await import('../../lib/labels');
 const { Inspector } = await import('./Inspector');
 
 /** Where a change through the commit queue was asked for (`useProject.apply`'s `built`): every edit goes that way. */
@@ -279,6 +281,42 @@ describe('the clip card', () => {
     useProject.setState({ snapshot: withB({ speed: 1.1 }) });
     renderWithProviders(<Inspector format="landscape" />);
     expect(screen.getByRole('button', { name: 'Speed: 1.1×' })).toBeInTheDocument();
+  });
+
+  it('a speed that leaves a transition too little footage says it shortens it, in its undo label and aloud', async () => {
+    // A one-second dissolve from a into b, which has 0.6 s of footage before it: enough at 1x, 0.3 s at 2x.
+    const snapshot = withB({ sourceInUs: 600_000 });
+    snapshot.project.timeline.main[0].transitionOut = {
+      effect: 'klipolo.builtin/transition.dissolve',
+      durationUs: 1_000_000,
+      params: {},
+    };
+    useProject.setState({ snapshot });
+    renderWithProviders(<Inspector format="landscape" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Speed: 1×' }));
+    await userEvent.click(screen.getByRole('menuitemradio', { name: '2×' }));
+    expect(apply).toHaveBeenCalledWith(
+      'speed.undo.note',
+      [{ type: 'updateClip', id: 'b', patch: { speed: 2 } }],
+      { note: 'A transition is shortened.' },
+      queued,
+    );
+    expect(labelText({ id: 'speed.undo.note', params: { note: 'A transition is shortened.' } })).toBe(
+      'Change speed. A transition is shortened.',
+    );
+    await waitFor(() =>
+      expect(useAnnouncer.getState().message).toBe('Changed the speed of broll.mp4 to 2×. A transition is shortened.'),
+    );
+    // A speed with room to spare says only what it did.
+    await userEvent.click(screen.getByRole('button', { name: 'Speed: 1×' }));
+    await userEvent.click(screen.getByRole('menuitemradio', { name: '0.5×' }));
+    expect(apply).toHaveBeenLastCalledWith(
+      'speed.undo',
+      [{ type: 'updateClip', id: 'b', patch: { speed: 0.5 } }],
+      undefined,
+      queued,
+    );
+    await waitFor(() => expect(useAnnouncer.getState().message).toBe('Changed the speed of broll.mp4 to 0.5×'));
   });
 
   it('the volume goes to 200% and commits on release without a dry run; Mute is its own switch', async () => {

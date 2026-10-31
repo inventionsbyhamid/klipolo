@@ -14,6 +14,7 @@ import {
   videoDurationUs,
 } from '../../../lib/timeline';
 import { beginCommit } from '../../../state/commitQueue';
+import { holdDockForWalk } from '../../../state/dockHold';
 import { keyBurst } from '../../../state/keyBurst';
 import { usePlayback } from '../../../state/playback';
 import { useProject } from '../../../state/project';
@@ -28,7 +29,7 @@ import { dragging } from '../drag/controller';
 import { editPoints, nextEdit, previousEdit } from '../model/editPoints';
 import { clipIndexAt, mainIndex } from '../model/index';
 import { deleteRangeOps } from '../model/rangeOps';
-import { refitNote, trimRefit } from '../model/refit';
+import { refitNote, removeRefit, trimRefit } from '../model/refit';
 import { deleteOps, trimToPlayheadOps } from './keyOps';
 import { focusIdOf, focusSelection, laneOrder, stepFrom, type LaneKey } from './laneOrder';
 import { isMarker } from './markers';
@@ -66,9 +67,11 @@ export function blockFocused(): boolean {
 
 /**
  * Keyboard focus moves to block `id` (selecting it): the view mounts it, scrolls to it if it's out of view and
- * focuses it. The arrow keys and the Select previous / next / above / below commands go through here.
+ * focuses it. The arrow keys and the Select previous / next / above / below commands go through here. The preview
+ * keeps its dock until the walk settles, so a bare cut on the way (it selects nothing) doesn't resize the frame.
  */
 export function moveFocusTo(project: Project, id: string) {
+  holdDockForWalk();
   useSelection.getState().select(focusSelection(project, id));
   useTimelineFocus.getState().focus(id, true);
 }
@@ -212,7 +215,17 @@ export function deleteBlock(id: string, undo: LabelId) {
     const project = editable();
     if (!project) return;
     const label = blockLabel(project, id);
-    commit(undo, deleteOps(project, id), t({ id: 'timeline.key.deleted', message: `Deleted ${label}` }));
+    // The model refits the transitions around a clip taken out: the delete says when it loses or shortens one.
+    const i = project.timeline.main.findIndex((clip) => clip.id === id);
+    const note = i < 0 ? '' : refitNote(removeRefit(project, i));
+    if (!note)
+      return commit(undo, deleteOps(project, id), t({ id: 'timeline.key.deleted', message: `Deleted ${label}` }));
+    const said = t({
+      id: 'timeline.key.deletedNote',
+      message: `Deleted ${label}. ${note}`,
+      comment: 'Screen-reader note; {note} is a sentence on what it does to transitions, e.g. “A transition is removed.”',
+    });
+    commit({ id: 'undo.delete.clip.note', params: { note } }, deleteOps(project, id), said);
   });
 }
 

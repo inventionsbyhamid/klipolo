@@ -7,6 +7,7 @@ import {
   onAbandon,
   onCloseStart,
 } from '../../../state/commitQueue';
+import { holdDock, releaseDock } from '../../../state/dockHold';
 import { keyBurst } from '../../../state/keyBurst';
 import { showFrameAt, usePlayback } from '../../../state/playback';
 import { useProject } from '../../../state/project';
@@ -93,6 +94,8 @@ export function beginDrag(
   if ('clipId' in gesture && from < 0) return;
   const s = newSession(e, gesture, view, snapshot, from, playheadUs);
   session = s;
+  // Held at the press already; again for a gesture that ended one its release never reached (`cancelDrag` above).
+  holdDock();
   stopWatching = watchSession(
     s,
     () => session === s,
@@ -328,10 +331,11 @@ function finish() {
   if (s.started) lower(s, false);
 }
 
-/** The live gesture ends: no pointer, key or store event reaches it any more. */
+/** The live gesture ends: no pointer, key or store event reaches it any more, and the preview docks again. */
 function detach(s: Session) {
   if (session === s) session = null;
   unshowEdge(s);
+  releaseDock();
   stopWatching?.();
   stopWatching = null;
   window.removeEventListener('keydown', onKey, true);

@@ -17,6 +17,7 @@ import { commitLatest } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { transitionClipId, useSelection } from '../../state/selection';
 import { removeTransition, transitionName, transitionNow, transitionOp } from '../timeline/commands';
+import { cardEscape } from './common';
 import { Field, Select, Swatches } from './fields';
 import { textSwatches } from './TextInspector';
 import { ToolSlider } from './ToolSlider';
@@ -90,13 +91,7 @@ export function TransitionInspector({ project, clip, index, transition }: Inspec
     <aside
       className="inspector"
       aria-label={t({ id: 'inspector.transition.label', message: 'Transition settings' })}
-      onKeyDown={(e) => {
-        // Escape in a field is the field's; elsewhere it closes the card.
-        if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) {
-          e.stopPropagation();
-          close();
-        }
-      }}
+      onKeyDown={cardEscape(close)}
     >
       <div className="insp-head">
         <h3>

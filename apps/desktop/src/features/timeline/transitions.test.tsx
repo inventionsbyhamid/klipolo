@@ -28,6 +28,7 @@ const { useToasts } = await import('../../state/toasts');
 const { Timeline } = await import('./Timeline');
 const { Inspector } = await import('../inspector/Inspector');
 const { useEditorShortcuts } = await import('../command-palette/useEditorShortcuts');
+const { labelText } = await import('../../lib/labels');
 
 const appCss = readFileSync(resolve(__dirname, '../../styles/app.css'), 'utf8');
 /** The declarations of the rule whose selector list is exactly `selector` (as written, one selector a line). */
@@ -504,6 +505,86 @@ describe('the cut markers and the clips around them', () => {
     await userEvent.click(item);
     await frames();
     expect(useToasts.getState().toasts.at(-1)?.text).toMatch(/^Not enough extra footage here for a transition/);
+  });
+
+  it('in a project with one clip, ⌘T and the clip’s menu say a transition goes between two clips', async () => {
+    const needsTwo = 'A transition goes between two clips. Split this clip or add another video first.';
+    const s = fixtureSnapshot();
+    s.project.timeline.main = s.project.timeline.main.slice(0, 1);
+    useProject.setState({ snapshot: s });
+    renderWithProviders(
+      <>
+        <Timeline />
+        <ShortcutsHarness />
+      </>,
+    );
+    fireEvent.keyDown(window, { key: 't', metaKey: true });
+    await frames();
+    expect(bridge.apply).not.toHaveBeenCalled();
+    expect(useToasts.getState().toasts.at(-1)?.text).toBe(needsTwo);
+    // The clip selected: the same.
+    useToasts.setState({ toasts: [] });
+    act(() => useSelection.getState().select('a'));
+    fireEvent.keyDown(window, { key: 't', metaKey: true });
+    await frames();
+    expect(bridge.apply).not.toHaveBeenCalled();
+    expect(useToasts.getState().toasts.at(-1)?.text).toBe(needsTwo);
+    // Its menu lists Add transition after, off, with the same note as its tooltip and description.
+    const a = screen.getByRole('button', { name: /^screen\.mp4/ });
+    act(() => a.focus());
+    fireEvent.keyDown(a, { key: 'F10', shiftKey: true });
+    const item = await screen.findByRole('menuitem', { name: /^Add transition after/ });
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).toHaveAttribute('title', needsTwo);
+    expect(item).toHaveAccessibleDescription(needsTwo);
+  });
+
+  it('Delete on a clip says what it does to the transitions it touched, in its undo label and aloud', async () => {
+    // a, b and a copy of b (c) with 0.3 s of footage before it: the second dissolve into b goes into c once b goes,
+    // and c has room for 0.6 s of it.
+    const s = withDissolve();
+    const [, b] = s.project.timeline.main;
+    s.project.timeline.main.push({ ...b, id: 'c', sourceInUs: 300_000 });
+    useProject.setState({ snapshot: s });
+    useSelection.setState({ selectedId: 'b' });
+    renderWithProviders(
+      <>
+        <Timeline />
+        <ShortcutsHarness />
+      </>,
+    );
+    fireEvent.keyDown(window, { key: 'Delete' });
+    await frames();
+    expect(bridge.apply).toHaveBeenLastCalledWith({
+      label: 'undo.delete.clip.note',
+      params: { note: 'A transition is shortened.' },
+      ops: [{ type: 'removeClip', id: 'b' }],
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('Deleted broll.mp4. A transition is shortened.');
+    // The last clip: the transition into it has nowhere to go.
+    useProject.setState({ snapshot: withDissolve() });
+    act(() => useSelection.getState().select('b'));
+    fireEvent.keyDown(window, { key: 'Delete' });
+    await frames();
+    expect(bridge.apply).toHaveBeenLastCalledWith({
+      label: 'undo.delete.clip.note',
+      params: { note: 'A transition is removed.' },
+      ops: [{ type: 'removeClip', id: 'b' }],
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('Deleted broll.mp4. A transition is removed.');
+    expect(labelText({ id: 'undo.delete.clip.note', params: { note: 'A transition is removed.' } })).toBe(
+      'Delete clip. A transition is removed.',
+    );
+    // A clip with no transition at either cut: only what it did.
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    act(() => useSelection.getState().select('b'));
+    fireEvent.keyDown(window, { key: 'Delete' });
+    await frames();
+    expect(bridge.apply).toHaveBeenLastCalledWith({
+      label: 'undo.delete.clip',
+      ops: [{ type: 'removeClip', id: 'b' }],
+    });
+    expect(screen.getByRole('status')).toHaveTextContent(/^Deleted broll\.mp4$/);
   });
 
   it('a type this build lacks reads "Missing transition" once, its id as the tooltip', () => {

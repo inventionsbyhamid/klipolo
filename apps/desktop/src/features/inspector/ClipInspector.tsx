@@ -3,13 +3,17 @@ import type { Clip } from '../../bindings/Clip';
 import type { FormatKind } from '../../bindings/FormatKind';
 import { IconButton } from '../../design/IconButton';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../../design/Menu';
+import { useIntlLocale } from '../../i18n/react';
 import { Icon } from '../../layout/Icon';
+import { formatNumber } from '../../lib/format';
 import { clipOp } from '../../lib/ops';
 import { clipHasSound, sourceLabel } from '../../lib/timeline';
+import { announce } from '../../state/announce';
 import { clipNow, editClip } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
-import { deleteBlock, duplicate } from '../timeline/commands';
+import { deleteBlock, duplicate, speedNote } from '../timeline/commands';
+import { cardEscape } from './common';
 import { FramingField } from './FramingField';
 import { SpeedField } from './SpeedField';
 import { VolumeControls } from './VolumeControls';
@@ -23,21 +27,36 @@ import { VolumeControls } from './VolumeControls';
  */
 export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind }) {
   const { t } = useLingui();
+  const locale = useIntlLocale();
   const project = useProject((s) => s.snapshot?.project);
   if (!project) return null;
   const title = sourceLabel(project, clip.source);
   const close = () => useSelection.getState().select(null);
+  /** One step; the model refits the transitions at its cuts, and it says when it shortens or removes one. */
+  const setSpeed = (speed: number) => {
+    const now = useProject.getState().snapshot?.project;
+    const note = now ? speedNote(now, clip.id, speed) : '';
+    const shown = `${formatNumber(locale, speed)}×`;
+    const said = note
+      ? t({
+          id: 'clip.speed.saidNote',
+          message: `Changed the speed of ${title} to ${shown}. ${note}`,
+          comment: 'Screen-reader note; {shown} is e.g. 2×; {note} says what it did to transitions',
+        })
+      : t({
+          id: 'clip.speed.said',
+          message: `Changed the speed of ${title} to ${shown}`,
+          comment: 'Screen-reader note; {shown} is e.g. 2×',
+        });
+    void editClip(note ? { id: 'speed.undo.note', params: { note } } : 'speed.undo', clip, { speed }).then(
+      (ok) => ok && announce(said),
+    );
+  };
   return (
     <aside
       className="inspector"
       aria-label={t({ id: 'inspector.label', message: `${title} settings`, comment: '{title}: Title, Image, Music' })}
-      onKeyDown={(e) => {
-        // Escape in a field puts its value back (the field handles it); elsewhere it closes the inspector.
-        if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
-          e.stopPropagation();
-          close();
-        }
-      }}
+      onKeyDown={cardEscape(close)}
     >
       <div className="insp-head">
         <h3 title={title}>
@@ -69,7 +88,7 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
       </div>
       <div className="insp-body">
         <FramingField clip={clip} format={format} />
-        <SpeedField speed={clip.speed} onPick={(speed) => void editClip('speed.undo', clip, { speed })} />
+        <SpeedField speed={clip.speed} onPick={setSpeed} />
         {clipHasSound(project, clip) && (
           <VolumeControls
             volume={clip.volume}
