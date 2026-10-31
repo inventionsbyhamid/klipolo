@@ -415,3 +415,33 @@ fn a_sound_at_or_past_the_video_end_is_refused() {
     let empty = apply_ops(&empty, &ops).unwrap();
     assert_eq!(layer(&empty, &added(&ops)).duration_us, secs(0.9));
 }
+
+/// The tool that made a file is saved with it and read back as it was; a file nobody made has no `madeWith` written.
+#[test]
+fn made_with_survives_a_save_and_load() {
+    let mut p = fixture();
+    p.assets.push(Asset {
+        id: "teapot".into(),
+        kind: AssetKind::Image,
+        path: "/m/Rosa Media/Muse Image/teapot.png".into(),
+        name: "teapot.png".into(),
+        duration_us: 0,
+        width: 512,
+        height: 512,
+        has_audio: false,
+        made_with: Some("Muse Image".into()),
+        ..whoosh()
+    });
+    let json = serde_json::to_string(&p).unwrap();
+    let loaded = klipolo_model::load_project(&json).unwrap();
+    assert_eq!(loaded.assets, p.assets);
+    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let written: Vec<_> = value["assets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|a| a.get("madeWith").is_some())
+        .map(|a| a["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(written, ["teapot"]);
+}
