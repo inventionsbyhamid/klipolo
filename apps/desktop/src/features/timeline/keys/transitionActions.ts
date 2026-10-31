@@ -34,6 +34,13 @@ export const transitionLabels = {
       message: 'Not enough extra footage here for a transition',
       comment: 'A cut whose clips have no footage past their ends to blend',
     }),
+  /** Why a video of one clip can't take one (⌘T's toast, the clip menu's note): it has no cut. */
+  needsTwo: () =>
+    t({
+      id: 'transition.needsTwo',
+      message: 'A transition goes between two clips. Split this clip or add another video first.',
+      comment: 'Add transition in a video of one clip',
+    }),
 };
 
 /** The op that sets (or, with null, removes) clip `clipId`'s transition into the next clip. */

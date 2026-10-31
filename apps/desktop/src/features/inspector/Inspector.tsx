@@ -14,6 +14,7 @@ import { useSelection } from '../../state/selection';
 import { deleteBlock, duplicate, stepTrack, trackStepOps } from '../timeline/commands';
 import { AudioInspector } from './AudioInspector';
 import { ClipInspector } from './ClipInspector';
+import { cardEscape } from './common';
 import { ImageInspector } from './ImageInspector';
 import { commitLatest } from '../../state/latest';
 import { TemplateInspector } from './TemplateInspector';
@@ -109,13 +110,7 @@ export function Inspector({ format }: { format: FormatKind }) {
     <aside
       className="inspector"
       aria-label={t({ id: 'inspector.label', message: `${title} settings`, comment: '{title}: Title, Image, Music' })}
-      onKeyDown={(e) => {
-        // Escape in a field puts its value back (the field handles it); elsewhere it closes the inspector.
-        if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
-          e.stopPropagation();
-          close();
-        }
-      }}
+      onKeyDown={cardEscape(close)}
     >
       <div className="insp-head">
         <h3>
