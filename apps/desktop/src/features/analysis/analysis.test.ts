@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Estimate } from '../../bindings/Estimate';
 
-vi.mock('../../ai/aiStatus', () => ({ refreshAiStatus: vi.fn() }));
+vi.mock('../../ai/aiStatus', async (real) => ({ ...(await real<object>()), refreshAiStatus: vi.fn() }));
 vi.mock('../../bridge/analysis', () => ({
   analysisBridge: {
     estimate: vi.fn(),
@@ -13,7 +13,7 @@ vi.mock('../../bridge/analysis', () => ({
   },
 }));
 const { analysisBridge } = await import('../../bridge/analysis');
-const { refreshAiStatus } = await import('../../ai/aiStatus');
+const { refreshAiStatus, useAi } = await import('../../ai/aiStatus');
 const {
   analyze,
   applyEvent,
@@ -21,6 +21,8 @@ const {
   followAnalysis,
   forgetRemovedClips,
   notNow,
+  offerAgain,
+  offerAgainOnAiModeChange,
   offerFor,
   retry,
   stateOf,
@@ -222,6 +224,33 @@ describe('the store', () => {
     await analyze();
     expect(useAnalysis.getState().error).toBeNull();
     expect(useAnalysis.getState().estimate).toBeNull();
+  });
+
+  it('offers the clips again after Not now once the way to pay changes', () => {
+    const stop = offerAgainOnAiModeChange();
+    useAi.setState({ status: { mode: 'none' } });
+    useAnalysis.setState({ dismissed: ['a', 'b'] });
+    useAi.setState({ status: { mode: 'none' } });
+    expect(useAnalysis.getState().dismissed).toEqual(['a', 'b']);
+    // An access code added in the top bar.
+    useAi.setState({ status: { mode: 'relay', budgetUsd: 2, spentUsd: 0, active: true } });
+    expect(useAnalysis.getState().dismissed).toEqual([]);
+    stop();
+  });
+
+  it('Analyze from outside the banner forgets Not now and offers the project’s clips again', async () => {
+    bridge.estimate.mockResolvedValue(estimate());
+    const assets = [
+      { id: 'a', kind: 'video' },
+      { id: 'b', kind: 'audio' },
+      { id: 'logo', kind: 'image' },
+    ];
+    useProject.setState({ snapshot: { project: { id: 'one', assets }, opening: 1 } as never });
+    useAnalysis.setState({ dismissed: ['a', 'b'] });
+    await offerAgain();
+    expect(useAnalysis.getState().dismissed).toEqual([]);
+    expect(bridge.estimate).toHaveBeenCalledWith(['a', 'b']);
+    expect(useAnalysis.getState().estimate?.clips).toEqual(['a', 'b']);
   });
 
   it('says why a project has no caption words', () => {

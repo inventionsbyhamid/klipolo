@@ -9,7 +9,7 @@ import { cn } from '../../design/cn';
 import { SpriteIcon } from '../../design/SpriteIcon';
 import { formatPrecise } from '../../lib/time';
 import { useStableCallback } from '../../lib/useStableCallback';
-import { useAnalysis, whyNoWords } from '../../state/analysis';
+import { offerAgain, useAnalysis, whyNoWords } from '../../state/analysis';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { pageAt, useAllCaptionPages } from './useCaptionPages';
@@ -396,6 +396,12 @@ export function CaptionWords({ format }: { format: FormatKind }) {
         </label>
       </div>
       {hint && <p className="words-hint">{hint}</p>}
+      {enabled && view !== null && total === 0 && noWords === 'notAnalysed' && (
+        // The offer comes back in the analysis banner, with its price, even after "Not now".
+        <button type="button" className="btn btn-secondary btn-sm words-analyze" onClick={() => void offerAgain()}>
+          {t({ id: 'captions.words.analyze', message: 'Analyze' })}
+        </button>
+      )}
       <p role="status" className="words-note">
         {busy
           ? t({ id: 'captions.words.updating', message: 'Updating…' })

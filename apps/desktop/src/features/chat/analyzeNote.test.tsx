@@ -1,0 +1,48 @@
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { mockIPC } from '@tauri-apps/api/mocks';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { useAi } from '../../ai/aiStatus';
+import { useAnalysis } from '../../state/analysis';
+import { useChat } from '../../state/chat';
+import { useProject } from '../../state/project';
+import { fixtureSnapshot } from '../../test/fixtures';
+import { renderWithProviders } from '../../test/render';
+import { MessageList } from './MessageList';
+
+/** The fixture project's videos and sounds (`fixtureProject`). */
+const CLIPS = ['screen', 'camera', 'mic', 'music', 'broll'];
+let estimated: unknown[] = [];
+
+beforeEach(() => {
+  estimated = [];
+  mockIPC((cmd, args) => {
+    if (cmd !== 'analysis_estimate') return null;
+    estimated.push(args);
+    return { usd: 0.04, seconds: 130, cached: [], clips: CLIPS, missing: [] };
+  });
+  useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
+  useAi.setState({ status: { mode: 'key', keyHint: '6789' } });
+  useChat.getState().reset(fixtureSnapshot().project.id);
+  useAnalysis.setState({ states: {}, estimate: null, error: null, dismissed: [], busy: false });
+});
+
+describe('the empty chat’s analysis note', () => {
+  it('offers Analyze while the clips aren’t analysed, even after Not now', async () => {
+    useAnalysis.setState({ dismissed: CLIPS });
+    renderWithProviders(<MessageList />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+
+    expect(estimated).toEqual([{ assetIds: CLIPS }]);
+    expect(useAnalysis.getState().dismissed).toEqual([]);
+    expect(useAnalysis.getState().estimate?.clips).toEqual(CLIPS);
+  });
+
+  it('has no Analyze while the clips are being analysed', () => {
+    useAnalysis.setState({ states: { screen: { state: 'running', step: 'words', pct: 40 } } });
+    renderWithProviders(<MessageList />);
+    expect(screen.getByText(/still listening/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Analyze' })).toBeNull();
+  });
+});

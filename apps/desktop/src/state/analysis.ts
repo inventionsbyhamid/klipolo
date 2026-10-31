@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { AssetState } from '../bindings/AssetState';
 import type { Estimate } from '../bindings/Estimate';
-import { refreshAiStatus } from '../ai/aiStatus';
+import { refreshAiStatus, useAi } from '../ai/aiStatus';
 import { analysisBridge, type AnalysisEvent, type UnlistenFn } from '../bridge/analysis';
 import { useProject } from './project';
 
@@ -175,6 +175,31 @@ export function cancelAnalysis() {
 export function notNow() {
   const { clips = [], missing = [] } = useAnalysis.getState().estimate ?? {};
   useAnalysis.setState((s) => ({ dismissed: [...new Set([...s.dismissed, ...clips, ...missing])], error: null }));
+}
+
+/** The open project's videos and sounds, by id: what analysis is for. */
+function projectClipIds(): string[] {
+  const assets = useProject.getState().snapshot?.project.assets ?? [];
+  return assets.filter((a) => a.kind === 'video' || a.kind === 'audio').map((a) => a.id);
+}
+
+/**
+ * Analyze from outside the banner (the Captions panel with no words, chat's note): "Not now" is forgotten and the
+ * banner offers the clips not analysed again, with their price.
+ */
+export function offerAgain(): Promise<void> {
+  useAnalysis.setState({ dismissed: [] });
+  return offerFor(projectClipIds());
+}
+
+/**
+ * The way to pay changed (a key or code added or removed): "Not now" is forgotten, so the banner's new offer (asked for
+ * by the banner on the same change) shows. Gives the stop function.
+ */
+export function offerAgainOnAiModeChange(): () => void {
+  return useAi.subscribe((s, prev) => {
+    if (s.status?.mode !== prev.status?.mode) useAnalysis.setState({ dismissed: [] });
+  });
 }
 
 /**
