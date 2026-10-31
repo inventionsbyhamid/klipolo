@@ -58,6 +58,7 @@ fn main() {
             let support = app.path().data_dir().ok().map(|dir| dir.join("Klipolo"));
             app.manage(commands::settings::load(support.as_deref()));
             app.manage(klipolo_app::export::ExportState::default());
+            commands::export::guard_menu_quit(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

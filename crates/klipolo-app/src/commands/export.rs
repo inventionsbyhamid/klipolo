@@ -307,6 +307,48 @@ fn opener(reveal: bool, files: &[PathBuf]) -> std::process::Command {
     command
 }
 
+/// The app menu's Quit item, which asks Tauri to exit (so the guard below hears it).
+#[cfg(target_os = "macos")]
+const QUIT_ITEM: &str = "klipolo-quit";
+
+/// Command Q reaches the quit guard: the standard menu's Quit ends a Mac app at once, with no exit request to hold, so
+/// the app menu gets its own Quit (same name, same keys) that asks Tauri to exit instead. Elsewhere the window's close
+/// is the way out, and it is guarded already.
+#[cfg(target_os = "macos")]
+pub(crate) fn guard_menu_quit(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem, MenuItemKind};
+    let menu = Menu::default(app.handle())?;
+    if let Some(MenuItemKind::Submenu(first)) = menu.items()?.into_iter().next() {
+        for item in first.items()? {
+            if let MenuItemKind::Predefined(standard) = &item
+                && standard.text()?.starts_with("Quit")
+            {
+                let name = standard.text()?;
+                first.remove(standard)?;
+                first.append(&MenuItem::with_id(
+                    app,
+                    QUIT_ITEM,
+                    name,
+                    true,
+                    Some("CmdOrCtrl+Q"),
+                )?)?;
+            }
+        }
+    }
+    app.set_menu(menu)?;
+    app.on_menu_event(|app, event| {
+        if event.id() == QUIT_ITEM {
+            app.exit(0);
+        }
+    });
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn guard_menu_quit(_app: &tauri::App) -> tauri::Result<()> {
+    Ok(())
+}
+
 /// The quit guard: quitting (Command Q, or closing the window) while an export runs asks first. Keep exporting goes
 /// back to it; Quit stops it (its job and parts deleted, as Cancel does), then quits.
 pub(crate) fn guard_quit(app: &AppHandle, event: &RunEvent) {
