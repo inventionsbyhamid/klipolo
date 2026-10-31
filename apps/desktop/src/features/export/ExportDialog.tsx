@@ -10,6 +10,7 @@ import { formatFileSize } from '../../lib/format';
 import { FORMAT_SHORT } from '../../lib/layout';
 import { videoDurationUs } from '../../lib/timeline';
 import { formatTime } from '../../player/time';
+import { stateOf, useAnalysis } from '../../state/analysis';
 import { useExport } from '../../state/export';
 import { notSaved } from '../../state/exportRun';
 import { useProject } from '../../state/project';
@@ -148,6 +149,7 @@ function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () =
   const quality = useExport((s) => s.quality);
   const folder = useExport((s) => s.folder);
   const [plan, setPlan] = useState<ExportPlan | null>(null);
+  const making = useCaptionsBeingMade();
   const checked: FormatKind[] =
     view === 'choose'
       ? FORMATS.filter((f) => (run.picked ?? [primaryFormat]).includes(f))
@@ -198,12 +200,48 @@ function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () =
         onToggle={toggle}
       />
       {view === 'choose' && <Options folder={plan?.folder ?? folder} />}
+      {view === 'choose' && making > 0 && <CaptionsNote count={making} />}
       {view === 'running' && <ExportProgress />}
       {view === 'failed' && <Failed />}
-      {view === 'choose' && <ChooseFoot count={checked.length} bytes={plan?.bytes ?? null} formats={checked} onClose={onClose} locale={locale} />}
+      {view === 'choose' && <ChooseFoot count={checked.length} bytes={plan?.bytes ?? null} formats={checked} onClose={onClose} locale={locale} captions={making > 0} />}
       {view === 'running' && <RunningFoot />}
       {view === 'failed' && <FailedFoot onClose={onClose} />}
     </>
+  );
+}
+
+/**
+ * How many clips in the video still have their captions being made (their analysis hasn't timed its words yet), while
+ * captions are on: an export now freezes only finished transcripts, so their captions are left out.
+ */
+function useCaptionsBeingMade(): number {
+  const clips = useProject(
+    useShallow((s) => {
+      const project = s.snapshot?.project;
+      if (!project?.captions.enabled) return [];
+      const ids = project.timeline.main.flatMap((c) => (c.source.type === 'asset' ? [c.source.id] : []));
+      return [...new Set(ids)];
+    }),
+  );
+  return useAnalysis((s) =>
+    clips.reduce((n, id) => {
+      const state = stateOf(s.states, id);
+      return state.state === 'running' && state.step !== 'scenes' ? n + 1 : n;
+    }, 0),
+  );
+}
+
+/** "Captions are still being made for 2 clips. …", plainly; the export still goes. */
+function CaptionsNote({ count }: { count: number }) {
+  return (
+    <p className="ex-note" id="export-captions-note">
+      <Icon name="info" />
+      <span>
+        {count > 1
+          ? `Captions are still being made for ${count} clips. Exporting now leaves their captions out.`
+          : 'Captions are still being made for 1 clip. Exporting now leaves its captions out.'}
+      </span>
+    </p>
   );
 }
 
@@ -241,12 +279,15 @@ function ChooseFoot({
   formats,
   onClose,
   locale,
+  captions,
 }: {
   count: number;
   bytes: number | null;
   formats: FormatKind[];
   onClose: () => void;
   locale: string;
+  /** The captions note is shown: Export is described by it. */
+  captions: boolean;
 }) {
   const none = count === 0;
   const stopped = useExport((s) => s.phase === 'cancelled');
@@ -265,7 +306,7 @@ function ChooseFoot({
         variant="primary"
         data-primary
         aria-disabled={none || undefined}
-        aria-describedby={none ? 'export-summary' : undefined}
+        aria-describedby={none ? 'export-summary' : captions ? 'export-captions-note' : undefined}
         onClick={() => !none && void useExport.getState().start(formats)}
       >
         <Icon name="export" />

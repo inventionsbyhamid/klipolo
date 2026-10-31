@@ -255,6 +255,26 @@
   color: var(--color-ink-soft);
 }
 
+/* The captions note: raised, an info icon, soft text. */
+.ex-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+}
+
+.ex-note .ico {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin-top: 1px;
+}
+
 /* ---------- Progress ---------- */
 
 .ex-progress {

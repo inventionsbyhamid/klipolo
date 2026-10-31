@@ -42,6 +42,7 @@ const { useProject } = await import('../../state/project');
 const { useExport } = await import('../../state/export');
 const { useToasts } = await import('../../state/toasts');
 const { commitLatest } = await import('../../state/commit');
+const { useAnalysis } = await import('../../state/analysis');
 const { ExportButton } = await import('./ExportButton');
 const { ExportDialog } = await import('./ExportDialog');
 
@@ -103,6 +104,7 @@ beforeEach(() => {
   useProject.setState({ snapshot: fixtureSnapshot(), pending: 0, apply });
   useExport.getState().reset();
   useExport.setState({ open: false, quality: 'high', folder: null });
+  useAnalysis.setState({ states: {} });
 });
 
 describe('export dialog', () => {
@@ -126,6 +128,30 @@ describe('export dialog', () => {
     expect(exporter.start).not.toHaveBeenCalled();
     // Picking a format to export never changes the project.
     expect(apply).not.toHaveBeenCalled();
+  });
+
+  it('says when captions are still being made for a clip in the video, and still exports', async () => {
+    const captioned = fixtureSnapshot();
+    captioned.project.captions = { ...captioned.project.captions, enabled: true };
+    useProject.setState({ snapshot: captioned });
+    // The B-roll clip's words are still being timed; a clip that isn't in the video doesn't count.
+    useAnalysis.setState({
+      states: {
+        broll: { state: 'running', step: 'words', pct: 40 },
+        music: { state: 'running', step: 'transcript', pct: 10 },
+      },
+    });
+    renderExport();
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    const note = 'Captions are still being made for 1 clip. Exporting now leaves its captions out.';
+    expect(screen.getByText(note)).toBeInTheDocument();
+    const go = screen.getByRole('button', { name: 'Export 1 video' });
+    expect(go).toHaveAccessibleDescription(note);
+    // Done, or captions off: nothing to say.
+    act(() => useAnalysis.setState({ states: { broll: { state: 'done', approximate: false } } }));
+    expect(screen.queryByText(/still being made/)).toBeNull();
+    await userEvent.click(go);
+    expect(exporter.start).toHaveBeenCalledWith(['landscape'], 'high', expect.any(Function));
   });
 
   it('quality defaults to High, and Smaller file plans smaller files', async () => {
