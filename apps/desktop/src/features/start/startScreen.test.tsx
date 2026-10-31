@@ -16,6 +16,7 @@ vi.mock('../../bridge/commands', () => ({
 }));
 const { bridge } = await import('../../bridge/commands');
 const { useProject } = await import('../../state/project');
+const { useToasts } = await import('../../state/toasts');
 const { StartScreen } = await import('./StartScreen');
 
 const MINUTE = 60_000;
@@ -65,6 +66,7 @@ const card = (name: string) => cards().find((c) => c.textContent?.includes(name)
 beforeEach(() => {
   vi.spyOn(Date, 'now').mockReturnValue(NOW);
   useProject.setState({ snapshot: null, pending: 0 });
+  useToasts.setState({ toasts: [] });
   vi.mocked(bridge.createProject).mockResolvedValue(fixtureSnapshot());
   vi.mocked(bridge.openProject).mockResolvedValue(fixtureSnapshot());
 });
@@ -210,6 +212,23 @@ describe('StartScreen', () => {
     expect(bridge.openProject).toHaveBeenCalledWith('/Users/me/Movies/Klipolo/Kiln vlog.klipolo');
     expect(bridge.createProject).not.toHaveBeenCalled();
     await waitFor(() => expect(card('Kiln vlog')).not.toHaveAttribute('aria-busy'));
+  });
+
+  it('a_failed_open_lists_the_projects_again', async () => {
+    // The file went (moved or deleted) after the list was read.
+    recentAnswers(
+      ROWS,
+      ROWS.filter((row) => row.name !== 'Kiln vlog'),
+    );
+    vi.mocked(bridge.openProject).mockRejectedValue(new Error("That project isn't there any more."));
+    renderWithProviders(<StartScreen />);
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    await userEvent.click(card('Kiln vlog'));
+    // The store says why; the list is read again, quietly, and the card that went is gone.
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(useToasts.getState().toasts.map((toast) => toast.text)).toEqual(["That project isn't there any more."]);
+    expect(screen.queryByText('Loading your projects')).not.toBeInTheDocument();
   });
 
   it('new_project_creates_untitled_with_three_formats', async () => {

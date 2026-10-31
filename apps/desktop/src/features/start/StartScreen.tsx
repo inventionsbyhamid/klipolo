@@ -1,5 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
-import { useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { FormatKind } from '../../bindings/FormatKind';
 import type { ProjectRow } from '../../bindings/ProjectRow';
 import { projects } from '../../bridge/projects';
@@ -50,34 +50,39 @@ interface StartScreenProps {
 
 /**
  * Where Klipolo opens: your projects, last opened first, with New project (the one red) and Record your
- * screen. A card opens its project; New project makes "Untitled project" in all three formats and opens it. Shown while
- * no project is open.
+ * screen. A card opens its project (and the list is read again when it can't be opened: it may have moved); New project
+ * makes "Untitled project" in all three formats and opens it. Shown while no project is open.
  */
 export function StartScreen({ onRecord = noop }: StartScreenProps) {
   const { t } = useLingui();
   const titleId = useId();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
-  const [attempt, setAttempt] = useState(0);
   const [opening, setOpening] = useState<string | null>(null);
+  const mounted = useRef(true);
 
-  useEffect(() => {
-    let alive = true;
+  /** Reads the list; what is shown stays until it lands. */
+  const list = useCallback(() => {
     projects.recent().then(
       (rows) => {
-        if (alive) setLoad({ status: 'ready', rows });
+        if (mounted.current) setLoad({ status: 'ready', rows });
       },
       () => {
-        if (alive) setLoad({ status: 'failed' });
+        if (mounted.current) setLoad({ status: 'failed' });
       },
     );
+  }, []);
+
+  useEffect(() => {
+    mounted.current = true;
+    list();
     return () => {
-      alive = false;
+      mounted.current = false;
     };
-  }, [attempt]);
+  }, [list]);
 
   const tryAgain = () => {
     setLoad({ status: 'loading' });
-    setAttempt((n) => n + 1);
+    list();
   };
 
   // One project at a time: a second press while one is opening (or being made) would open twice; the first one wins.
@@ -88,7 +93,12 @@ export function StartScreen({ onRecord = noop }: StartScreenProps) {
     void useProject
       .getState()
       .open(path)
-      .finally(() => setOpening(null));
+      .then((opened) => {
+        if (!mounted.current) return;
+        setOpening(null);
+        // It couldn't be opened (the store says why): the list as it is now.
+        if (!opened) list();
+      });
   };
   const newProject = () => {
     if (!busy()) void useProject.getState().create(NEW_PROJECT.name, [...NEW_PROJECT.formats]);
