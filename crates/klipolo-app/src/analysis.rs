@@ -4,9 +4,11 @@
 //!
 //! - **Estimate** (`AnalysisState::estimate`): what analysing the clips asked for costs at Meta's list prices (the
 //!   providers' own estimates: `transcript::estimate_usd`, `scenes::estimate_usd`), how long they are, and which are
-//!   cached already (they cost nothing). With an access code it also gives the credit left, and why Analyze is refused
-//!   when the estimate is over it. What it finds cached shows at once (a re-imported clip's captions, before Analyze).
-//! - **Start** (`AnalysisState::start`): cached clips load at once, with no network call. The others run each its own
+//!   cached already (they cost nothing). A clip whose file can't be found or opened is neither priced nor offered
+//!   (`Estimate::missing`). With an access code it also gives the credit left, and why Analyze is refused when the
+//!   estimate is over it. What it finds cached shows at once (a re-imported clip's captions, before Analyze).
+//! - **Start** (`AnalysisState::start`): cached clips load at once, with no network call; a clip whose file is missing
+//!   fails at once, saying what to do (`FILE_MISSING`). The others run each its own
 //!   pipeline, all at once (the Meta adapter keeps the device's request slots): its sound (step `audio`), its speaker
 //!   turns (`transcript`, published at once as turn-level captions), its word times (`words`), then its scene log
 //!   (`scenes`) for a video. Decoding (the sound, the scene log's small copy) runs one clip at a time on a thread of
@@ -65,6 +67,9 @@ pub const NEEDS_KEY: &str = "Add your Meta API key or access code in Settings.";
 pub const ADD_KEY: &str = "Add your own Meta API key in Settings to keep going.";
 /// A clip whose file can't be read.
 pub const UNREADABLE: &str = "Klipolo could not read this clip.";
+/// A clip whose file was moved, deleted or can't be opened: nothing to price or analyse.
+pub const FILE_MISSING: &str =
+    "Klipolo can't find this clip's file. Put it back or import it again.";
 /// A request refused because the run was cancelled (never shown: the clip goes back to not analysed).
 pub(crate) const STOPPED: &str = "Stopped.";
 
@@ -192,6 +197,9 @@ pub struct Estimate {
     pub cached: Vec<String>,
     /// The clips asked for that need analysing (or the steps of it not cached yet), in the order asked.
     pub clips: Vec<String>,
+    /// The clips asked for whose file Klipolo can't find or open (moved, deleted): neither priced nor offered
+    /// (`FILE_MISSING` says what to do).
+    pub missing: Vec<String>,
     /// With an access code: the credit left, when Klipolo's relay said.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -477,7 +485,9 @@ impl AnalysisState {
         let mut estimate = Estimate::default();
         let mut paid = Vec::new();
         for (content, ids) in self.contents(assets, generation).await {
-            if content.cached.complete(&content.clip) {
+            if content.cached.key.is_none() {
+                estimate.missing.extend(ids);
+            } else if content.cached.complete(&content.clip) {
                 estimate.cached.extend(ids);
             } else {
                 estimate.seconds += content.clip.duration_us as f64 / 1e6;
@@ -542,6 +552,14 @@ impl AnalysisState {
                 .filter(|content| inner.claimed.insert(content.key.clone()))
                 .collect()
         };
+        // A clip whose file can't be found or opened has nothing to analyse or pay for: it fails at once, saying what
+        // to do.
+        let (missing, contents): (Vec<Content>, Vec<Content>) = contents
+            .into_iter()
+            .partition(|content| content.cached.key.is_none());
+        for content in &missing {
+            self.end(&content.key, Outcome::Failed(FILE_MISSING.into()));
+        }
         let (ready, paid): (Vec<Content>, Vec<Content>) = contents
             .into_iter()
             .partition(|content| content.cached.complete(&content.clip));

@@ -165,8 +165,8 @@ export function cancelAnalysis() {
   void analysisBridge.cancel().catch(() => undefined);
 }
 
-/** "Not now": the offer goes until other clips come. */
+/** "Not now": the offer (and the clips whose file is gone) goes until other clips come. */
 export function notNow() {
-  const clips = useAnalysis.getState().estimate?.clips ?? [];
-  useAnalysis.setState((s) => ({ dismissed: [...new Set([...s.dismissed, ...clips])], error: null }));
+  const { clips = [], missing = [] } = useAnalysis.getState().estimate ?? {};
+  useAnalysis.setState((s) => ({ dismissed: [...new Set([...s.dismissed, ...clips, ...missing])], error: null }));
 }

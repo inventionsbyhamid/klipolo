@@ -21,7 +21,7 @@ use klipolo_app::analysis::chat::{scene_entries, speaker_turns};
 use klipolo_app::analysis::media::{EngineMedia, Media};
 use klipolo_app::analysis::{
     AnalysisDone, AnalysisEvent, AnalysisFailed, AnalysisState, AnalysisStep, AnalysisStopped,
-    Asked, AssetState, NEEDS_KEY,
+    Asked, AssetState, FILE_MISSING, NEEDS_KEY,
 };
 use klipolo_app::credentials::{
     Credentials, Endpoints, META_API_KEY, MemoryStore, RELAY_CODE, RELAY_TOKEN, SecretStore,
@@ -1737,6 +1737,42 @@ async fn a_video_with_no_picture_is_analysed_once() {
         .finished()
         .await;
     assert_eq!(media.copies.load(Ordering::SeqCst), 1, "looked at once");
+    server.verify().await;
+}
+
+/// A clip whose file was moved or deleted is neither priced nor offered, and analysing it says what to do, with no
+/// request and nothing decoded.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_missing_file_is_not_priced_or_offered() {
+    let server = MockServer::start().await;
+    nothing_else(&server).await;
+    let media = FakeMedia::whole(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    let here = asset("here", AssetKind::Audio, &h.clip("here.m4a", 1), SECONDS);
+    let gone_file = h.clip("gone.mov", 2);
+    std::fs::remove_file(&gone_file).unwrap();
+    let gone = asset("gone", AssetKind::Video, &gone_file, 155.04);
+
+    let estimate = h.state.estimate(&[here, gone.clone()]).await;
+    assert_eq!(estimate.clips, ["here"]);
+    assert_eq!(estimate.missing, ["gone"]);
+    assert!(
+        (estimate.usd - asr_usd(SECONDS)).abs() < 1e-12,
+        "{}",
+        estimate.usd
+    );
+    assert!((estimate.seconds - SECONDS).abs() < 1e-9);
+
+    let started = h.state.start(std::slice::from_ref(&gone)).await;
+    assert_eq!(started.refused, None);
+    started.finished().await;
+    assert_eq!(
+        h.state.state_of("gone"),
+        AssetState::Failed {
+            reason: FILE_MISSING.into()
+        }
+    );
+    assert_eq!(media.sounds.load(Ordering::SeqCst), 0);
     server.verify().await;
 }
 

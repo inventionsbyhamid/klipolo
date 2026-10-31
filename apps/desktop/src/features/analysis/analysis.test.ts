@@ -32,7 +32,7 @@ const { about, howLong, offerText, offerTitle, progressTitle, spokenProgress, st
 const bridge = vi.mocked(analysisBridge);
 
 function estimate(over: Partial<Estimate> = {}): Estimate {
-  return { usd: 0.04, seconds: 130, cached: [], clips: ['a', 'b'], ...over };
+  return { usd: 0.04, seconds: 130, cached: [], clips: ['a', 'b'], missing: [], ...over };
 }
 
 beforeEach(() => {

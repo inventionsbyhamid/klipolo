@@ -46,7 +46,7 @@ function showProject(assets: Asset[]) {
 }
 
 function offer(over: Partial<Estimate> = {}): Estimate {
-  return { usd: 0.04, seconds: 130, cached: [], clips: ['a', 'b'], ...over };
+  return { usd: 0.04, seconds: 130, cached: [], clips: ['a', 'b'], missing: [], ...over };
 }
 
 beforeEach(() => {
@@ -142,6 +142,30 @@ describe('the analysis banner', () => {
     expect(screen.getByText('Watching the footage')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(bridge.cancel).toHaveBeenCalled();
+  });
+
+  it('leaves a clip whose file is gone out of the offer and says what to do for it', async () => {
+    bridge.estimate.mockResolvedValue(offer({ usd: 0.02, clips: ['a'], missing: ['b'] }));
+    showProject(CLIPS);
+    renderWithProviders(<AnalysisBanner />);
+
+    expect(await screen.findByText('Analyze 1 clip for about $0.02')).toBeInTheDocument();
+    expect(screen.getByText('rosa-wheel-broll.mov')).toBeInTheDocument();
+    expect(screen.getByText("Klipolo can't find this clip's file. Put it back or import it again.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    expect(bridge.start).toHaveBeenCalledWith(['a']);
+  });
+
+  it('lists clips whose file is gone on their own when nothing else is offered, until Not now', async () => {
+    bridge.estimate.mockResolvedValue(offer({ usd: 0, clips: [], missing: ['b'] }));
+    showProject(CLIPS);
+    const { container } = renderWithProviders(<AnalysisBanner />);
+
+    expect(await screen.findByText("Klipolo can't find 1 clip")).toBeInTheDocument();
+    expect(screen.getByText("Klipolo can't find this clip's file. Put it back or import it again.")).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Analyze' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('keeps a failed clip with its reason and Retry', async () => {
