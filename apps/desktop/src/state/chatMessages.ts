@@ -99,6 +99,10 @@ export interface ChatStore {
   /** What the person has typed in the chat box and not sent: kept while chat is folded. */
   draft: string;
   setDraft: (draft: string) => void;
+  /** A sentence about chat that isn't a message (an Undo chip refused), said aloud until the next message goes. */
+  notice: string | null;
+  /** Says `text` aloud (the Announcer). */
+  say: (text: string) => void;
   /** Another project (or none), or New chat: the conversation starts over, and a reply under way is dropped. */
   reset: (projectId: string | null) => void;
   /**

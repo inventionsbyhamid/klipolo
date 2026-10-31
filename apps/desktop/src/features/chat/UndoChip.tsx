@@ -8,6 +8,7 @@ import { chatBridge } from '../../bridge/chat';
 import { Icon } from '../../layout/Icon';
 import { errorMessage } from '../../lib/errors';
 import { historyAction } from '../../lib/history';
+import { useChat } from '../../state/chat';
 import { useProject } from '../../state/project';
 import { toast } from '../../state/toasts';
 import { useReturnFocus } from './focus';
@@ -88,6 +89,7 @@ export function UndoChip({ undo, revision }: { undo: CodedError; revision: numbe
     );
   }
   const name = historyAction('undo', undo.code, undo.params);
+  const refusedText = t({ id: 'chatPanel.undo.refused', message: 'This change can’t be undone from chat any more.' });
   const chip = (
     <button
       type="button"
@@ -102,8 +104,9 @@ export function UndoChip({ undo, revision }: { undo: CodedError; revision: numbe
           .getState()
           .stepWith(() => chatBridge().undoLast(revision))
           .catch((error: unknown) => {
-            if (isCode(error, 'project.moved')) setRefused(true);
-            else toast.error(errorMessage(error));
+            if (!isCode(error, 'project.moved')) return toast.error(errorMessage(error));
+            setRefused(true);
+            useChat.getState().say(refusedText);
           })
           .finally(() => setBusy(false));
       }}

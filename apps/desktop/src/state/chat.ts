@@ -90,15 +90,17 @@ export const useChat = create<ChatStore>((set, get) => {
     pending: null,
     draft: '',
     setDraft: (draft) => set({ draft }),
+    notice: null,
+    say: (notice) => set({ notice }),
 
     reset: (projectId) => {
       session.next();
-      set({ projectId, messages: [], pending: null, draft: '' });
+      set({ projectId, messages: [], pending: null, draft: '', notice: null });
     },
 
     newChat: () => {
       session.next();
-      set({ messages: [], pending: null });
+      set({ messages: [], pending: null, notice: null });
       void chatBridge()
         .reset()
         .catch(() => undefined);
@@ -112,7 +114,7 @@ export const useChat = create<ChatStore>((set, get) => {
       const live = () => session.now() === mine && get().projectId === snapshot.project.id;
       const id = crypto.randomUUID();
       const keepOnly = options?.keepOnly ?? [];
-      set({ pending: { id } });
+      set({ pending: { id }, notice: null });
       if (options?.echo !== false) push({ id: `${id}:you`, from: 'person', text: trimmed });
       const request = requestFor(id, trimmed, keepOnly, options?.baseRevision);
       const again = { text: trimmed, keepOnly, baseRevision: request.baseRevision };

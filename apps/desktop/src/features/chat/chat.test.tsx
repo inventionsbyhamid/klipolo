@@ -744,7 +744,7 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     refuse = true;
     await userEvent.click(screen.getByRole('button', { name: 'Undo add text' }));
     expect(fake.undone).toEqual([4]);
-    expect(await screen.findByText('This change can’t be undone from chat any more.')).toBeInTheDocument();
+    expect(await screen.findByText('This change can’t be undone from chat any more.', { selector: 'p.muted' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Undo add text|Retry/ })).toBeNull();
     refuse = false;
     act(() => useChat.getState().newChat());
@@ -824,5 +824,21 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     act(() => useChat.getState().setDraft(''));
     await act(() => useChat.getState().send('Keep only these', { keepOnly: [{ start: 0, end: S }], baseRevision: 1 }));
     expect(message()).toHaveValue('');
+  });
+
+  it('a refused Undo chip is said aloud', async () => {
+    const undo = code('text.add');
+    chat({
+      reply: (r) => reply(r.id, 'Added the title.', { applied: { change: changed(4, undo), undo } }),
+      undoLast: () => {
+        throw new Error('The video changed.', { cause: code('project.moved') });
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add a title{Enter}');
+    await screen.findByText('Added the title.');
+    await userEvent.click(screen.getByRole('button', { name: 'Undo add text' }));
+    const live = document.querySelector('[aria-live="polite"]');
+    await waitFor(() => expect(live).toHaveTextContent('This change can’t be undone from chat any more.'));
   });
 });
