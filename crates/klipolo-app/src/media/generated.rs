@@ -1,8 +1,9 @@
-//! Stickers and title cards drawn on request by an `ImageMaker` (Muse Image in the app) and saved in the project's
-//! media folder (`media_folder`). A sticker is cut out of its white background (`sticker`); a title card stays as
-//! drawn. What comes back is a new image asset for the caller to place, with the label for the library ("Made with
-//! Muse Image"); nothing is added to the project here. Any failure says why in one plain sentence and leaves no file,
-//! so Try again simply asks again.
+//! Stickers and title card backgrounds drawn on request by an `ImageMaker` (Muse Image in the app) and saved in the
+//! project's media folder (`media_folder`). A sticker is cut out of its white background (`sticker`); a title card
+//! background stays as drawn, with no lettering of its own: Klipolo's title-card template draws the exact title on top,
+//! so its words, spelling, type and copy rules are Klipolo's. What comes back is a new image asset for the caller to
+//! place, with the label for the library ("Made with Muse Image"); nothing is added to the project here. Any failure
+//! says why in one plain sentence and leaves no file, so Try again simply asks again.
 
 use std::fmt;
 use std::io::Cursor;
@@ -22,7 +23,7 @@ use super::sticker::{CutOutError, cut_out_white};
 const IMAGE_DURATION_US: Us = 5_000_000;
 /// The most words of a prompt kept in an asset's name.
 const NAME_WORDS: usize = 6;
-/// The longest name taken from a prompt, before " sticker" or " title card".
+/// The longest name taken from a prompt, before " sticker" or " title card background".
 const NAME_CHARS: usize = 48;
 /// The biggest picture accepted: Muse Image's are 1600 px on their long side.
 const MAX_SIDE: u32 = 4096;
@@ -33,6 +34,16 @@ pub fn sticker_prompt(prompt: &str) -> String {
     format!(
         "A single {prompt} as a sticker illustration with a bold dark outline, centred with empty margin on all sides, \
          on a plain white background, nothing else"
+    )
+}
+
+/// The words Muse Image gets for a title card about `prompt`: a background only. Muse Image's own lettering can't be
+/// held to the title's words, spelling or type, so it is asked for none, and for a calm middle third where Klipolo's
+/// template puts the title.
+pub fn title_card_prompt(prompt: &str) -> String {
+    format!(
+        "A background for a title card about {prompt}, with no text, letters, numbers or signs anywhere, and calm, \
+         uncluttered space in the middle third for a title"
     )
 }
 
@@ -98,8 +109,8 @@ impl fmt::Display for MakeError {
 
 impl std::error::Error for MakeError {}
 
-/// A sticker of `prompt` for the project saved in `project_file`: drawn by `maker` on white, cut out, and saved as a PNG
-/// in the project's media folder. When the cut-out would erase most of the picture (or find nothing to cut), the
+/// A sticker of `prompt` for the project saved in `project_file`: drawn by `maker` on white, cut out, and saved as a
+/// PNG in the project's media folder. When the cut-out would erase most of the picture (or find nothing to cut), the
 /// picture is kept whole with a note.
 pub async fn make_sticker(
     maker: &dyn ImageMaker,
@@ -136,8 +147,9 @@ pub async fn make_sticker(
     })
 }
 
-/// A title card of `prompt` in the shape of `format`, for the project saved in `project_file`: drawn by `maker` and
-/// saved as drawn (opaque) in the project's media folder.
+/// A title card background about `prompt` in the shape of `format`, for the project saved in `project_file`: drawn by
+/// `maker` with no lettering (`title_card_prompt`) and saved as drawn (opaque) in the project's media folder. The title
+/// itself is drawn on top by Klipolo's title-card template when the background is placed.
 pub async fn make_title_card(
     maker: &dyn ImageMaker,
     project_file: &Path,
@@ -153,11 +165,11 @@ pub async fn make_title_card(
         FormatKind::Portrait => ImageSize::Portrait,
         FormatKind::Square => ImageSize::Square,
     };
-    let drawn = draw(maker, prompt, size).await?;
+    let drawn = draw(maker, &title_card_prompt(prompt), size).await?;
     let made_with = maker.made_with().to_owned();
     let folder = made_folder(project_file, &made_with);
     let file_slug = format!("title-{}", slug(prompt, "card"));
-    let name = format!("{} title card", name(prompt));
+    let name = format!("{} title card background", name(prompt));
     let asset = save(folder, file_slug, drawn.png, name, &made_with).await?;
     Ok(MadeAsset {
         asset,

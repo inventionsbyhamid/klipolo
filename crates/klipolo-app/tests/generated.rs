@@ -11,7 +11,9 @@ use klipolo_analysis::providers::BoxFuture;
 use klipolo_analysis::providers::images::{
     ImageError, ImageErrorKind, ImageMaker, ImageSize, MadeImage,
 };
-use klipolo_app::media::generated::{MakeError, make_sticker, make_title_card, sticker_prompt};
+use klipolo_app::media::generated::{
+    MakeError, make_sticker, make_title_card, sticker_prompt, title_card_prompt,
+};
 use klipolo_app::media::media_folder::slug;
 use klipolo_app::media::sticker::ERASES_MOST_NOTE;
 use klipolo_model::project::{AssetKind, FormatKind};
@@ -350,6 +352,17 @@ async fn try_again_after_a_failure_works() {
     assert!(again.unwrap().asset.path.ends_with("paper-plane-1.png"));
 }
 
+/// Muse Image draws only the background: its own lettering can't be held to the title's words, spelling, type or copy
+/// rules, so the prompt asks for none, and Klipolo's title-card template draws the exact title on top.
+#[test]
+fn a_title_card_asks_for_a_background_with_no_lettering() {
+    assert_eq!(
+        title_card_prompt("Day 1 in Lisbon"),
+        "A background for a title card about Day 1 in Lisbon, with no text, letters, numbers or signs anywhere, and \
+         calm, uncluttered space in the middle third for a title"
+    );
+}
+
 #[tokio::test]
 async fn a_title_card_stays_opaque_in_the_formats_shape() {
     let shapes = [
@@ -366,7 +379,10 @@ async fn a_title_card_stays_opaque_in_the_formats_shape() {
             .await
             .unwrap();
 
-        assert_eq!(maker.asked(), [("Day 1 in Lisbon".to_owned(), size, 1)]);
+        assert_eq!(
+            maker.asked(),
+            [(title_card_prompt("Day 1 in Lisbon"), size, 1)]
+        );
         assert!(
             made.asset.path.ends_with("title-day-1-in-lisbon-1.png"),
             "{}",
@@ -378,7 +394,7 @@ async fn a_title_card_stays_opaque_in_the_formats_shape() {
             "kept as drawn"
         );
         assert_eq!((made.asset.width, made.asset.height), (w, h));
-        assert_eq!(made.asset.name, "Day 1 in Lisbon title card");
+        assert_eq!(made.asset.name, "Day 1 in Lisbon title card background");
         assert_eq!(made.made_with, "Muse Image");
         assert_eq!(made.note, None);
     }

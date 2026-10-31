@@ -1,5 +1,6 @@
-//! A development tool for the Muse Image smoke test, never part of the app: it draws stickers and title cards for real
-//! and saves them as the app would, or cuts out a PNG you already have, with the time it took.
+//! A development tool for the Muse Image smoke test, never part of the app: it draws stickers and title card
+//! backgrounds (no lettering; the app draws the title on top) for real and saves them as the app would, or cuts out a
+//! PNG you already have, with the time it took.
 //!
 //! ```text
 //! klipolo-image sticker <prompt> --out <folder> [--fast]
@@ -75,7 +76,7 @@ async fn run(args: Vec<String>) -> Result<(), String> {
             };
             let (maker, used) = maker(ask.fast)?;
             println!(
-                "Asking Muse Image with a {used} for a {} title card of {:?}",
+                "Asking Muse Image with a {used} for a {} title card background about {:?}",
                 ask.words[0], ask.words[1]
             );
             let started = Instant::now();
