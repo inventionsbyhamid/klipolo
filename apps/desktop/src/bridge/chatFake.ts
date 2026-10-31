@@ -3,12 +3,19 @@ import type { ChatOutcome } from '../bindings/ChatOutcome';
 import type { ChatProposal } from '../bindings/ChatProposal';
 import type { ChatReply } from '../bindings/ChatReply';
 import type { ChatRequest } from '../bindings/ChatRequest';
+import type { SnapshotPatch } from '../bindings/SnapshotPatch';
+import { useProject } from '../state/project';
 import type { ChatBridge } from './chat';
+import { bridge } from './commands';
 
-/** How a fake chat answers: `reply` for every message; `apply` for Apply (else refused, as for a gone proposal). */
+/**
+ * How a fake chat answers: `reply` for every message; `apply` for Apply (else refused, as for a gone proposal);
+ * `undoLast` for the Undo chip (else the project's own undo while that change is still its latest, as Rust allows).
+ */
 export interface FakeChatScript {
   reply: (request: ChatRequest) => ChatOutcome | Promise<ChatOutcome>;
   apply?: (proposalId: string) => ChatApplied | Promise<ChatApplied>;
+  undoLast?: (revision: number) => SnapshotPatch | Promise<SnapshotPatch>;
 }
 
 /** A fake chat bridge and what it was asked. */
@@ -17,6 +24,8 @@ export type FakeChat = ChatBridge & {
   applied: string[];
   discarded: string[];
   resets: number;
+  /** The revisions the Undo chip asked to take back. */
+  undone: number[];
 };
 
 /** A chat bridge that answers from `script` (tests; a development build's fake chat). */
@@ -26,6 +35,7 @@ export function fakeChat(script: FakeChatScript): FakeChat {
     applied: [],
     discarded: [],
     resets: 0,
+    undone: [],
     send: async (request) => {
       fake.requests.push(request);
       const outcome = await script.reply(request);
@@ -44,6 +54,13 @@ export function fakeChat(script: FakeChatScript): FakeChat {
     },
     reset: async () => {
       fake.resets += 1;
+    },
+    undoLast: async (revision) => {
+      fake.undone.push(revision);
+      if (script.undoLast) return script.undoLast(revision);
+      if (useProject.getState().snapshot?.history.revision !== revision)
+        throw new Error('That change is no longer the last one.', { cause: { code: 'project.moved', params: {} } });
+      return bridge.undo();
     },
   };
   return fake;

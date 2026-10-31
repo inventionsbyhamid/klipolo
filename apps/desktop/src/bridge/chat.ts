@@ -1,13 +1,14 @@
 import type { ChatApplied } from '../bindings/ChatApplied';
 import type { ChatOutcome } from '../bindings/ChatOutcome';
 import type { ChatRequest } from '../bindings/ChatRequest';
+import type { SnapshotPatch } from '../bindings/SnapshotPatch';
 import { call } from './call';
 
 /**
  * What the chat panel asks of Rust: the planner's commands (`crates/klipolo-app`'s `chat` shapes, filled in with the
  * planner). Everything the model wrote reaches the page already cleaned of em and en dashes (`klipolo_app::chat`), so
  * the page shows it as it is. Edits come back as patches the page merges (`useProject.adopt`); the Undo chip under them
- * takes them back through `useProject.undoIf`, so no command of its own.
+ * takes one back through `undoLast`, which Rust allows only while it is still chat's last change.
  */
 export interface ChatBridge {
   /**
@@ -25,6 +26,11 @@ export interface ChatBridge {
   discard(proposalId: string): Promise<void>;
   /** A new chat: Rust forgets the conversation it keeps for the model. */
   reset(): Promise<void>;
+  /**
+   * Takes back chat's change that made `revision` (`ChatApplied.change.history.revision`): what the undo changed.
+   * Rejects with `project.moved` once that change is no longer chat's last.
+   */
+  undoLast(revision: number): Promise<SnapshotPatch>;
 }
 
 /** The planner's commands in the app. */
@@ -33,6 +39,7 @@ export const tauriChat: ChatBridge = {
   apply: (proposalId) => call<ChatApplied>('chat_apply_proposal', { id: proposalId }),
   discard: (proposalId) => call<void>('chat_discard_proposal', { id: proposalId }),
   reset: () => call<void>('chat_reset'),
+  undoLast: (revision) => call<SnapshotPatch>('chat_undo_last', { revision }),
 };
 
 let current: ChatBridge = tauriChat;

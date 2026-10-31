@@ -719,4 +719,33 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     expect(fake.requests[1].baseRevision).toBe(7);
   });
 
+  it('Undo takes a chat change back through chat with the revision it made, and says so plainly once it can’t', async () => {
+    const undo = code('text.add');
+    let refuse = false;
+    let made = 3;
+    const fake = chat({
+      reply: (r) => {
+        made += 1;
+        return reply(r.id, 'Added the title.', { applied: { change: changed(made, undo), undo } });
+      },
+      undoLast: (revision) => {
+        if (refuse) throw new Error('The video changed.', { cause: code('project.moved') });
+        return changed(revision + 1, null, { canRedo: true, redoLabel: 'text.add' });
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add a title{Enter}');
+    await screen.findByText('Added the title.');
+    refuse = true;
+    await userEvent.click(screen.getByRole('button', { name: 'Undo add text' }));
+    expect(fake.undone).toEqual([4]);
+    expect(await screen.findByText('This change can’t be undone from chat any more.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Undo add text|Retry/ })).toBeNull();
+    refuse = false;
+    act(() => useChat.getState().newChat());
+    await userEvent.type(message(), 'add a title{Enter}');
+    await userEvent.click(await screen.findByRole('button', { name: 'Undo add text' }));
+    expect(fake.undone).toEqual([4, 5]);
+    expect(await screen.findByRole('button', { name: 'Redo add text' })).toBeInTheDocument();
+  });
 });

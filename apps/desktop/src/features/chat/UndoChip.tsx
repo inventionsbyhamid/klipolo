@@ -3,9 +3,13 @@ import { useEffect, useState } from 'react';
 import type { CodedError } from '../../bindings/CodedError';
 import type { HistoryState } from '../../bindings/HistoryState';
 import { Tooltip } from '../../design/Tooltip';
+import { isCode } from '../../bridge/call';
+import { chatBridge } from '../../bridge/chat';
 import { Icon } from '../../layout/Icon';
+import { errorMessage } from '../../lib/errors';
 import { historyAction } from '../../lib/history';
 import { useProject } from '../../state/project';
+import { toast } from '../../state/toasts';
 import { useReturnFocus } from './focus';
 
 /** How long "Redo" shows after an Undo. */
@@ -26,10 +30,12 @@ export function standing(
 }
 
 /**
- * Undo for a chat edit: an outline chip with the undo icon. It undoes only while that edit is still the
- * latest change, checked again when the undo's turn comes (a change still settling goes in first, and then this one is
- * no longer the latest: `useProject.undoIf`). Taken back, it reads "Redo" for 10 s, then goes for good (a change
- * after it never brings it back). Buried under later changes before it was used, it does nothing and says why. When it changes under the keyboard, the keyboard goes back to the chat box.
+ * Undo for a chat edit: an outline chip with the undo icon. It asks Rust to take back the change that made
+ * `revision` (`chatBridge().undoLast`), which Rust does only while it is still chat's last change; refused
+ * (`project.moved`), the chip says plainly it can't be undone from chat any more, with nothing to press. Taken back, it
+ * reads "Redo" for 10 s, then goes for good (a change after it never brings it back). Buried under later changes
+ * before it was used, it does nothing and says why. When it changes under the keyboard, the keyboard goes back to the
+ * chat box.
  */
 export function UndoChip({ undo, revision }: { undo: CodedError; revision: number }) {
   const { t } = useLingui();
@@ -38,6 +44,8 @@ export function UndoChip({ undo, revision }: { undo: CodedError; revision: numbe
   const [redoGone, setRedoGone] = useState(false);
   /** It was taken back once: after its Redo, it never shows again as a buried Undo. */
   const [used, setUsed] = useState(false);
+  /** Rust refused it: the change is no longer chat's last. */
+  const [refused, setRefused] = useState(false);
   useEffect(() => {
     if (state !== 'undone') return setRedoGone(false);
     setUsed(true);
@@ -45,8 +53,14 @@ export function UndoChip({ undo, revision }: { undo: CodedError; revision: numbe
     return () => clearTimeout(timer);
   }, [state]);
   const gone = (state === 'undone' && redoGone) || (used && state === 'buried');
-  const focusProps = useReturnFocus(!gone && state !== 'buried');
+  const focusProps = useReturnFocus(!gone && !refused && state !== 'buried');
   if (gone) return null;
+  if (refused)
+    return (
+      <p className="muted">
+        {t({ id: 'chatPanel.undo.refused', message: 'This change can’t be undone from chat any more.' })}
+      </p>
+    );
   if (state === 'undone') {
     return (
       <div className="msg-row" {...focusProps}>
@@ -83,9 +97,13 @@ export function UndoChip({ undo, revision }: { undo: CodedError; revision: numbe
         // One press takes back one change: a second before the first lands would take back the one before.
         if (busy || state !== 'latest') return;
         setBusy(true);
-        void useProject
-          .getState()
-          .undoIf((h) => standing(h, undo, revision) === 'latest')
+        void chatBridge()
+          .undoLast(revision)
+          .then((change) => useProject.getState().adopt(change))
+          .catch((error: unknown) => {
+            if (isCode(error, 'project.moved')) setRefused(true);
+            else toast.error(errorMessage(error));
+          })
           .finally(() => setBusy(false));
       }}
     >
