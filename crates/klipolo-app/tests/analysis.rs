@@ -1135,3 +1135,28 @@ async fn a_clip_started_twice_at_once_is_analysed_once() {
     );
     server.verify().await;
 }
+
+/// A clip whose transcript is cached but not its scene log (its credit ran out last time): the estimate offers only the
+/// scene log, and the transcript is in the engine and for chat at once, before anything starts.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cached_transcript_shows_before_the_rest_is_analysed() {
+    let server = MockServer::start().await;
+    nothing_else(&server).await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    let file = h.clip("a.mp4", 1);
+    let transcript = cached_transcript();
+    h.cache_dir(&file).store("transcript", &transcript).unwrap();
+    let clip = asset("clip-a", AssetKind::Video, &file, SECONDS);
+
+    let estimate = h.state.estimate(std::slice::from_ref(&clip)).await;
+
+    assert_eq!(estimate.clips, ["clip-a"]);
+    assert!((estimate.usd - scene_usd(SECONDS)).abs() < 1e-12);
+    assert_eq!(
+        h.last_speech().transcripts["clip-a"].words,
+        transcript.transcript.words
+    );
+    assert!(h.state.analysis_for("clip-a").unwrap().transcript.is_some());
+    assert_eq!(h.state.state_of("clip-a"), AssetState::None);
+    server.verify().await;
+}

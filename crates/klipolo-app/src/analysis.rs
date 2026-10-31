@@ -5,7 +5,7 @@
 //! - **Estimate** (`AnalysisState::estimate`): what analysing the clips asked for costs at Meta's list prices (the
 //!   providers' own estimates: `transcript::estimate_usd`, `scenes::estimate_usd`), how long they are, and which are
 //!   cached already (they cost nothing). With an access code it also gives the credit left, and why Analyze is refused
-//!   when the estimate is over it.
+//!   when the estimate is over it. What it finds cached shows at once (a re-imported clip's captions, before Analyze).
 //! - **Start** (`AnalysisState::start`): cached clips load at once, with no network call. The others run each its own
 //!   pipeline, all at once (the Meta adapter keeps the device's request slots): its sound (step `audio`), its speaker
 //!   turns (`transcript`, published at once as turn-level captions), its word times (`words`), then its scene log
@@ -347,13 +347,14 @@ impl AnalysisState {
         })
     }
 
-    /// What analysing `assets` costs (see the module notes). Reads each file's two ends for its cache key; asks the
-    /// relay for the credit left with an access code.
+    /// What analysing `assets` costs (see the module notes). Reads each file's two ends for its cache key and shows
+    /// what its cache holds (`show_cached`); asks the relay for the credit left with an access code.
     pub async fn estimate(&self, assets: &[Asset]) -> Estimate {
         let meta = self.credentials.meta();
         let mut estimate = Estimate::default();
         for clip in clips_of(assets) {
             let cached = self.look(&clip).await;
+            self.show_cached(&clip.id, &cached);
             if cached.complete(&clip) {
                 estimate.cached.push(clip.id);
                 continue;
@@ -374,7 +375,7 @@ impl AnalysisState {
 
     /// Starts analysing `assets` (see the module notes). A clip another start took on is left to it. Cached clips load
     /// whatever else happens; the others start only when something can pay for them and, with an access code, their
-    /// estimate is within the credit left (`Started::refused` says why not).
+    /// estimate is within the credit left (`Started::refused` says why not; what of them is cached shows all the same).
     pub async fn start(self: &Arc<Self>, assets: &[Asset]) -> Started {
         let clips: Vec<Clip> = {
             let mut inner = lock(&self.inner);
@@ -400,6 +401,9 @@ impl AnalysisState {
         };
         if let Some(reason) = &refused {
             tracing::info!(%reason, clips = paid.len(), "analysis: refused");
+            for (clip, cached) in &paid {
+                self.show_cached(&clip.id, cached);
+            }
             let mut inner = lock(&self.inner);
             for (clip, _) in &paid {
                 inner.claimed.remove(&clip.id);
@@ -563,6 +567,24 @@ impl AnalysisState {
         inner.assets.entry(asset_id.to_owned()).or_default().state = state;
         inner.claimed.remove(asset_id);
         (self.events)(event);
+    }
+
+    /// What the cache holds for `asset_id`, for the engine and chat at once, where they have none of it yet: a clip
+    /// analysed before shows its captions as soon as it is seen, whatever is left to do.
+    fn show_cached(&self, asset_id: &str, cached: &Cached) {
+        let (transcript, scenes) = match lock(&self.inner).assets.get(asset_id) {
+            Some(entry) => (
+                entry.analysis.transcript.is_none(),
+                entry.analysis.scenes.is_none(),
+            ),
+            None => (true, true),
+        };
+        if let Some(found) = cached.transcript.as_ref().filter(|_| transcript) {
+            self.found_transcript(asset_id, found);
+        }
+        if let Some(found) = cached.scenes.as_ref().filter(|_| scenes) {
+            self.found_scenes(asset_id, found.clone());
+        }
     }
 
     /// `asset_id`'s analysis, changed by `edit`.

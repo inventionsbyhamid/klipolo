@@ -129,19 +129,15 @@ impl AnalysisState {
         run: &Arc<Run>,
         first: Option<Meta>,
     ) -> Outcome {
-        let Some(key) = cached.key else {
+        let Some(key) = cached.key.clone() else {
             return Outcome::Failed(UNREADABLE.into());
         };
         let Ok(dir) = Dir::new(&self.cache_root, &key) else {
             return Outcome::Failed(UNREADABLE.into());
         };
-        if let Some(found) = &cached.transcript {
-            self.found_transcript(&clip.id, found);
-        }
+        // What the cache holds shows at once (unless the estimate showed it already).
+        self.show_cached(&clip.id, &cached);
         let scenes_cached = cached.scenes.is_some();
-        if let Some(found) = cached.scenes {
-            self.found_scenes(&clip.id, found);
-        }
         if clip.has_audio {
             let (src, run) = (clip.path.clone(), run.clone());
             if let Ok(Some(levels)) = self
@@ -219,6 +215,9 @@ impl AnalysisState {
         dir: &Dir,
         key: &str,
     ) -> Result<TranscriptOut, Outcome> {
+        if run.cancelled() {
+            return Err(Outcome::Stopped);
+        }
         let model = Transcriber::model(calls).to_owned();
         let mut out = if clip.has_audio {
             self.progress(&clip.id, AnalysisStep::Audio, 0);
