@@ -63,7 +63,7 @@ type Spell = (words: WordView[], text: string, from: string, closing?: boolean, 
 
 /**
  * A word being fixed in place: the chip becomes a field with the word as said (never the style's
- * capitals), and the fix bar opens in the flow under its line: "Change Teo to Theo. Teo appears 4 times.", with Fix
+ * capitals), and the fix bar opens in the flow under its line: "Change Teo to Theo. It appears 4 times.", with Fix
  * all, Just this one and Hide. Enter fixes all (or just this one, when it shows once); Escape lets go without a change.
  * Leaving the field for anything but the bar saves the change for just this word, as does the project closing with it
  * open (the close waits for it) or the field going with the focus in it; a text saved already sends nothing twice. A
@@ -195,7 +195,8 @@ export function WordEditor({
               {t({ id: 'captions.fix.type', message: 'Type the right spelling for' })} <b>{name}</b>.
             </>
           )}
-          {many && ` ${t({ id: 'captions.fix.count', message: `${name} appears ${count} times.` })}`}
+          {/* "It": a sentence never starts with the word as said, lower case ("studio appears 7 times."). */}
+          {many && ` ${t({ id: 'captions.fix.count', message: `It appears ${count} times.` })}`}
         </p>
         <div className="actions">
           {changed && many && (

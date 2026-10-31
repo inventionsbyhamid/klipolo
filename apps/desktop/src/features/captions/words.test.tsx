@@ -106,7 +106,7 @@ describe('caption words', () => {
     await user.clear(fixField());
     await user.type(fixField(), 'Theo');
     const bar = screen.getByRole('group', { name: 'Fix word' });
-    expect(bar).toHaveTextContent('Change Teo to Theo. Teo appears 2 times.');
+    expect(bar).toHaveTextContent('Change Teo to Theo. It appears 2 times.');
     expect(within(bar).getByRole('button', { name: 'Just this one' })).toBeInTheDocument();
     // Enter fixes all: each place keeps the marks around it ("Teo." reads "Theo.").
     await user.keyboard('{Enter}');
