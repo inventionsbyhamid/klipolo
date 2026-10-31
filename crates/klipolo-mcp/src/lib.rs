@@ -4,9 +4,11 @@
 //! protocol and reaches the app only through `host::Host`: no Tauri type, no model vendor, and it never calls a model
 //! (an MCP client is its own planner).
 //!
+//! - `pages`: the transcript in pages.
 //! - `words`: what agents read.
 
 pub mod host;
+pub mod pages;
 pub mod words;
 
 pub use host::{Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot};
