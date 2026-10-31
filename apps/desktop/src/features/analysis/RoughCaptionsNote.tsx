@@ -1,3 +1,4 @@
+import { useNeedsKey } from '../../ai/aiStatus';
 import type { AssetState } from '../../bindings/AssetState';
 import { retry, useAnalysis } from '../../state/analysis';
 import './analysis.css';
@@ -18,7 +19,8 @@ const LEAD = 'Some captions are timed roughly.';
  * each turn's words spread across it ("Rough captions until words are timed", with a spinner); once its analysis is
  * done with some words still timed roughly, the note says so, and why when timing them again can help (word timing
  * failed, stopped or didn't finish), with "Time words again" for those clips (free; the person asks, so Rust times them
- * whatever it did before). Words that don't match their sound can't be helped: the note says only that they are rough.
+ * whatever it did before) while there is a key or code to time them with. Words that don't match their sound can't be
+ * helped: the note says only that they are rough.
  * Nothing otherwise. Only the open project's clips count (the store forgets the last project's).
  */
 export function RoughCaptionsNote() {
@@ -27,6 +29,8 @@ export function RoughCaptionsNote() {
   );
   const text = useAnalysis((s) => rough(s.states)?.text ?? null);
   const again = useAnalysis((s) => rough(s.states)?.again ?? '');
+  // Without a key or code nothing can time the words: the button would do nothing.
+  const needsKey = useNeedsKey();
   if (timing) {
     return (
       <span className="stage-status analysis-rough">
@@ -41,7 +45,7 @@ export function RoughCaptionsNote() {
       <span className="analysis-rough-text" title={text}>
         {text}
       </span>
-      {again && (
+      {again && !needsKey && (
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => void retry(again.split(' '))}>
           Time words again
         </button>

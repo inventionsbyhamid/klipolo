@@ -259,6 +259,23 @@ describe('the analysis banner', () => {
     expect(screen.queryByRole('button', { name: 'Time words again' })).toBeNull();
   });
 
+  it('offers no way to time words again without a key or code, as it couldn’t run', () => {
+    useAi.setState({ status: { mode: 'none' } });
+    useAnalysis.setState({
+      states: {
+        a: {
+          state: 'done',
+          approximate: true,
+          approximateReason: 'Word timing stopped before it finished.',
+          timeAgain: true,
+        },
+      },
+    });
+    renderWithProviders(<RoughCaptionsNote />);
+    expect(screen.getByText(/Word timing stopped before it finished\./)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Time words again' })).toBeNull();
+  });
+
   it('says why a Retry of a failed clip was refused', async () => {
     bridge.estimate.mockResolvedValue(offer({ clips: [] }));
     showProject(CLIPS);
