@@ -34,11 +34,27 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const project = useProject((s) => s.snapshot?.project);
   const byId = new Map(commands.map((c) => [c.id, c]));
   const found = project ? findItem(project, blockId) : null;
+  // A clip with one after it and no transition into it yet (one it has is selected at its cut).
+  const main = project?.timeline.main ?? [];
+  const at = found ? -1 : main.findIndex((clip) => clip.id === blockId);
+  const transitionAfter = at >= 0 && at + 1 < main.length && !main[at].transitionOut;
 
   const split = { id: 'split', label: t({ id: 'timeline.menu.split', message: 'Split at playhead' }) };
+  const addTransition = {
+    id: 'add-transition',
+    label: t({
+      id: 'timeline.menu.addTransition',
+      message: 'Add transition after',
+      comment: 'A clip’s menu item: a transition from this clip into the next one',
+    }),
+  };
   const groups: { id: string; label?: string }[][] =
     kind === 'clip'
-      ? [[split], [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }, { id: 'paste-effects' }], [{ id: 'delete' }]]
+      ? [
+          [split, ...(transitionAfter ? [addTransition] : [])],
+          [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }, { id: 'paste-effects' }],
+          [{ id: 'delete' }],
+        ]
       : [
           [split, { id: 'attach' }, ...(found?.item.content.type === 'audio' ? [{ id: 'sound-mute' }] : [])],
           [
