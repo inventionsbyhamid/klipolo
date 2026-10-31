@@ -106,8 +106,8 @@ fn whole_or_index(t: &FullTranscript) -> String {
     }
     let pages = split(t);
     let mut out = format!(
-        "Transcript, in {} pages as it is long. {LINES_ARE} Read a page with getTranscript and the times listed for it, \
-         or as {TEMPLATE}<from>-<to>.\n",
+        "The transcript is long, so it comes in {} pages. {LINES_ARE} Read a page with getTranscript and the times \
+         listed for it, or as {TEMPLATE}<from>-<to>.\n",
         pages.len()
     );
     let end = end_of(t);
