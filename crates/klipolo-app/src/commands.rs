@@ -2,4 +2,5 @@
 
 pub(crate) mod analysis;
 pub(crate) mod chat;
+pub(crate) mod export;
 pub(crate) mod settings;
