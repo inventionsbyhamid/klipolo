@@ -6,8 +6,10 @@ import { cn } from './design/cn';
 import { Toaster } from './design/Toaster';
 import { TooltipProvider } from './design/Tooltip';
 import { useEditorShortcuts } from './features/command-palette/useEditorShortcuts';
+import { useRecordShortcut } from './features/command-palette/useRecordShortcut';
 import { ExportDialog } from './features/export/ExportDialog';
 import { useFinderDrop } from './features/media/useFinderDrop';
+import { RecordDialog } from './features/record/RecordDialog';
 import { StartScreen } from './features/start/StartScreen';
 import { followSpeech } from './features/timeline/media/speech';
 import { useEngineSession } from './features/preview/useEngineSession';
@@ -28,6 +30,7 @@ import {
 import { useProject } from './state/project';
 import { clearProposalOnProjectSwitch } from './state/proposal';
 import { clearRangeOnProjectSwitch } from './state/range';
+import { followRecorder, useRecorder } from './state/recorder';
 import { followSaves } from './state/saving';
 import { toast } from './state/toasts';
 import { keepPlayheadInVideo, keepPlayheadOnReload, restorePlayhead } from './state/transport';
@@ -68,6 +71,9 @@ function Editor() {
   );
 }
 
+/** Record your screen (the start screen's): opens the Record dialog. */
+const openRecorder = () => void useRecorder.getState().openRecorder();
+
 /**
  * The start screen, until a project opens. The card or button pressed from the keyboard goes with it, so the focus goes
  * on to the project's name in the top bar, where the editor starts. (Its cleanup runs before the screen leaves the page:
@@ -81,7 +87,7 @@ function Start({ afterProject }: { afterProject: boolean }) {
     },
     [],
   );
-  return <StartScreen takeFocus={afterProject} />;
+  return <StartScreen onRecord={openRecorder} takeFocus={afterProject} />;
 }
 
 /**
@@ -98,6 +104,8 @@ export function App() {
     void followSaves();
     void followAiStatus();
     void followAnalysis();
+    // The Record dialog's previews and takes, and every take that lands.
+    void followRecorder();
     clearAnalysisOnProjectSwitch();
     offerAgainOnAiModeChange();
     forgetRemovedClips();
@@ -114,6 +122,7 @@ export function App() {
     void loadOpenProject().finally(() => setAsked(true));
   }, []);
   useEngineSession();
+  useRecordShortcut();
   const open = useProject((s) => s.snapshot !== null);
   // A project has been open in this page: the start screen shows after All projects, not at launch.
   const [hadProject, setHadProject] = useState(false);
@@ -127,6 +136,7 @@ export function App() {
         {open ? <Editor /> : asked && <Start afterProject={hadProject} />}
         <SettingsDialog />
         <ExportDialog />
+        <RecordDialog />
         <Toaster />
       </div>
     </TooltipProvider>

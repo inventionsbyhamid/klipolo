@@ -119,9 +119,9 @@ describe('launch', () => {
     // The top bar holds the app icon, the AI chip and Settings.
     expect(within(topBar()).getByRole('button', { name: 'Settings' })).toBeInTheDocument();
     expect(within(topBar()).queryByRole('button', { name: 'Export' })).toBeNull();
-    // Record your screen waits for the recorder: New project is the way on.
+    // New project, and Record your screen beside it.
     expect(within(startScreen()!).getByRole('button', { name: 'New project' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Record your screen' })).toBeNull();
+    expect(within(startScreen()!).getByRole('button', { name: 'Record your screen' })).toBeInTheDocument();
     // Launch leaves the focus alone.
     expect(document.activeElement).toBe(document.body);
   });
