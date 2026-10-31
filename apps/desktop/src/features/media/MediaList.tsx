@@ -125,7 +125,7 @@ export function MediaList({ tab }: { tab: LibraryTab }) {
   const pack = usePack((s) => s.items);
   useEffect(loadPack, []);
   if (!project) return null;
-  // A recording's files are named by their recording ("Recording 1", "Camera of Recording 1"), as its clips are.
+  // A recording's files are named by their source and recording ("Screen of Recording 1"), as the timeline names them.
   const named = (asset: Asset): Asset => ({ ...asset, name: assetName(project, asset) });
   const shelved = shelves(project);
   const own = {

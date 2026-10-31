@@ -370,10 +370,10 @@ describe('the clip card', () => {
       ),
     );
     unmount();
-    // camera.mp4 has no sound.
+    // The recording's camera file, added on its own, has no sound. It is named as the Library names it.
     useProject.setState({ snapshot: withB({ source: { type: 'asset', id: 'camera' } }) });
     renderWithProviders(<Inspector format="landscape" />);
-    expect(screen.getByRole('heading', { name: 'camera.mp4' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Camera of Recording 1' })).toBeInTheDocument();
     expect(screen.queryByRole('slider', { name: 'Volume' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Mute' })).toBeNull();
   });

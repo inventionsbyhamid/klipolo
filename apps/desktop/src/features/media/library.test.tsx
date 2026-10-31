@@ -100,14 +100,16 @@ describe('the Library', () => {
   });
 
   it('a_recording_s_files_are_named_by_their_recording', () => {
-    // The fixture's recording: its screen is the main footage, with a camera and a mic beside it.
+    // The fixture's recording: its screen is the main footage, with a camera and a mic beside it. Each row adds that
+    // file alone, so each is named by its source: the screen's row isn't the recording itself.
     renderWithProviders(<Library />);
     const clips = within(screen.getByRole('list', { name: 'Your clips' }));
-    expect(clips.getByText('Recording 1')).toBeInTheDocument();
+    expect(clips.getByText('Screen of Recording 1')).toBeInTheDocument();
     expect(clips.getByText('Camera of Recording 1')).toBeInTheDocument();
+    expect(clips.queryByText('Recording 1')).toBeNull();
     expect(clips.queryByText('screen.mp4')).toBeNull();
     expect(clips.queryByText('camera.mp4')).toBeNull();
-    expect(clips.getByRole('button', { name: 'Add Recording 1 to the end' })).toBeInTheDocument();
+    expect(clips.getByRole('button', { name: 'Add Screen of Recording 1 to the end' })).toBeInTheDocument();
     // Its mic, a minute long, is with the songs.
     act(() => useUi.setState({ libraryTab: 'music' }));
     expect(within(screen.getByRole('tabpanel')).getByText('Mic of Recording 1')).toBeInTheDocument();
