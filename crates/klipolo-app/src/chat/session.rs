@@ -49,6 +49,8 @@ pub const KEPT_PROPOSALS: usize = 4;
 pub const NO_PROJECT: &str = "Open a project first.";
 /// Said when another project opened while the message waited its turn.
 pub const OTHER_PROJECT: &str = "Another project opened, so I didn't send that.";
+/// Said for a message with no words.
+pub const EMPTY: &str = "Type what you'd like to change first.";
 /// Said for a project from a newer Klipolo.
 pub const READ_ONLY: &str = "This project is from a newer Klipolo, so chat can't change it.";
 /// Said with no key and no code (the panel shows the NeedsKey card).
@@ -190,6 +192,9 @@ impl ChatSession {
         if now.read_only {
             return failed(ChatFailureKind::Other, READ_ONLY);
         }
+        if text.is_empty() && request.keep_only.is_empty() {
+            return failed(ChatFailureKind::Other, EMPTY);
+        }
         let view = View {
             playhead_us: request.playhead_us,
             selection: request.selection,
@@ -214,15 +219,14 @@ impl ChatSession {
         };
         let mut planned = ask(model).await;
         // The relay refused the device's token: registered again once, and the message sent again.
-        if relay && matches!(&planned, Err(e) if e.kind == ChatErrorKind::Refused) {
-            if let Err(e) = &planned {
-                self.spend.message(e.usage_usd, e.model_calls);
-            }
-            if self.models.recover().await
-                && let Readiness::Ready { model, .. } = self.models.ready().await
-            {
-                planned = ask(model).await;
-            }
+        if relay
+            && let Err(refused) = &planned
+            && refused.kind == ChatErrorKind::Refused
+            && self.models.recover().await
+            && let Readiness::Ready { model, .. } = self.models.ready().await
+        {
+            self.spend.message(refused.usage_usd, refused.model_calls);
+            planned = ask(model).await;
         }
         match planned {
             Err(error) => {

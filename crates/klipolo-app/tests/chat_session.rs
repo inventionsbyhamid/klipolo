@@ -201,6 +201,8 @@ impl LanguageModel for Script {
 struct Paying {
     readiness: Mutex<Readiness>,
     recovered: AtomicUsize,
+    /// Whether registering again works.
+    renews: std::sync::atomic::AtomicBool,
 }
 
 impl Paying {
@@ -219,6 +221,7 @@ impl Paying {
         Arc::new(Self {
             readiness: Mutex::new(readiness),
             recovered: AtomicUsize::new(0),
+            renews: std::sync::atomic::AtomicBool::new(true),
         })
     }
 }
@@ -231,7 +234,8 @@ impl Models for Paying {
 
     fn recover(&self) -> BoxFuture<'_, bool> {
         self.recovered.fetch_add(1, Ordering::SeqCst);
-        Box::pin(async { true })
+        let renews = self.renews.load(Ordering::SeqCst);
+        Box::pin(async move { renews })
     }
 }
 
@@ -612,6 +616,22 @@ async fn a_token_the_relay_refused_is_renewed_once_and_the_message_sent_again() 
     assert!(reply(&out)["proposal"].is_object());
     assert_eq!(paying.recovered.load(Ordering::SeqCst), 1);
 
+    assert_eq!(
+        chat.session.spend().messages,
+        2,
+        "both tries reached the model"
+    );
+
+    // A renewal that fails: the refusal is said, its cost counted once.
+    let model = Script::new(vec![Err(ModelError::Refused)]);
+    let paying = Paying::relay(model.clone());
+    paying.renews.store(false, Ordering::SeqCst);
+    let chat = chat_with(model.clone(), Found::done(), paying.clone());
+    let v = json(&chat.session.send(request("cut the ums")).await);
+    assert_eq!(v["kind"], "refused");
+    assert_eq!(chat.session.spend().messages, 1);
+    assert_eq!(model.seen().len(), 1);
+
     // With the person's own key, a refusal is a wrong key: said, nothing renewed.
     let model = Script::new(vec![Err(ModelError::Refused)]);
     let paying = Paying::key(model.clone());
@@ -620,6 +640,14 @@ async fn a_token_the_relay_refused_is_renewed_once_and_the_message_sent_again() 
     assert_eq!(v["kind"], "refused");
     assert_eq!(paying.recovered.load(Ordering::SeqCst), 0);
     assert_eq!(model.seen().len(), 1);
+}
+
+#[tokio::test]
+async fn an_empty_message_is_not_sent() {
+    let chat = chat(vec![]);
+    let v = json(&chat.session.send(request("  ")).await);
+    assert_eq!(v["kind"], "other");
+    assert!(chat.model.seen().is_empty());
 }
 
 #[tokio::test]
