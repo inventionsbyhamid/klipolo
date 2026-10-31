@@ -20,12 +20,17 @@ use crate::project::{ProjectSessionState, SaveStatus};
 use crate::state::EngineState;
 
 fn main() {
-    // Export runs out of process in this same binary: no second executable, always the same version. Before Tauri
-    // starts and before any window exists; its log is stderr, which the app forwards into its own.
+    // Export and editing copies run out of process in this same binary: no second executable, always the same
+    // version. Before Tauri starts and before any window exists; their log is stderr, which the app forwards into its
+    // own.
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("--export-worker") {
         log::install_worker();
         std::process::exit(klipolo_engine::export::worker::main(&args[2..]));
+    }
+    if args.get(1).map(String::as_str) == Some("--proxy-worker") {
+        log::install_worker();
+        std::process::exit(klipolo_engine::media::proxy::worker::main(&args[2..]));
     }
     log::install();
     // The engine's fonts, once: the bundled folder in the app's resources (or the repository's in a dev build).
