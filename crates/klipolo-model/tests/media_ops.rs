@@ -541,3 +541,68 @@ fn a_drop_makes_one_new_track_and_keeps_each_kind_on_its_own() {
     let e = place_ops(&p, &[late], end, &Onto::Auto).unwrap_err();
     assert_eq!(e.coded().code, "model.sound.noRoom");
 }
+
+/// A sound let go on a track that holds music goes on a sound track instead, and so does one that would overflow its
+/// own track up onto a music track.
+#[test]
+fn a_dropped_sound_never_lands_on_a_track_that_holds_music() {
+    use klipolo_model::media::place::{place_ops, Onto};
+    let p = fixture();
+    let song = Asset {
+        id: "song".into(),
+        name: "Song".into(),
+        duration_us: secs(120.0),
+        ..whoosh()
+    };
+    let opts = MusicOpts {
+        start_us: secs(10.0),
+        ..MusicOpts::default()
+    };
+    let p = apply_ops(&p, &add_music_ops(&p, &song, opts).unwrap()).unwrap();
+    let music_track = p
+        .timeline
+        .tracks
+        .iter()
+        .find(|t| t.items.iter().any(is_music))
+        .unwrap()
+        .id
+        .clone();
+    // Let go on the music track, before the music starts (it has room there).
+    let placed = place_ops(
+        &p,
+        &[whoosh()],
+        secs(2.0),
+        &Onto::Track(music_track.clone()),
+    )
+    .unwrap();
+    let p2 = apply_ops(&p, &placed).unwrap();
+    let on = |p: &Project, asset: &str| {
+        p.timeline
+            .tracks
+            .iter()
+            .find(|t| {
+                t.items
+                    .iter()
+                    .any(|i| matches!(&i.content, ItemContent::Audio { asset_id, .. } if asset_id == asset))
+            })
+            .unwrap()
+            .clone()
+    };
+    assert!(!on(&p2, "whoosh").items.iter().any(is_music));
+    // A sound track below the music, already holding a sound at 2 s: the next one there goes up, past the music.
+    let mut q = p.clone();
+    let mut sfx = klipolo_model::timeline::Track::new(TrackKind::Audio, "Sounds");
+    sfx.id = "sfx".into();
+    q.timeline.tracks.insert(0, sfx);
+    let first = place_ops(&q, &[whoosh()], secs(2.0), &Onto::Track("sfx".into())).unwrap();
+    let q = apply_ops(&q, &first).unwrap();
+    let pop = Asset {
+        id: "pop".into(),
+        ..whoosh()
+    };
+    let second = place_ops(&q, &[pop], secs(2.0), &Onto::Track("sfx".into())).unwrap();
+    let q = apply_ops(&q, &second).unwrap();
+    let landed = on(&q, "pop");
+    assert_ne!(landed.id, music_track);
+    assert!(!landed.items.iter().any(is_music));
+}

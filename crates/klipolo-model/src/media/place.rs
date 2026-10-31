@@ -10,6 +10,7 @@ use crate::project::{Asset, AssetKind, Project};
 use crate::time::Us;
 use crate::timeline::TrackKind;
 
+use super::music::is_music;
 use super::{image, sound};
 
 /// Which track a drop names: none (wherever there is room), the track it was let go on, or a new track of its kind.
@@ -22,8 +23,8 @@ pub enum Onto {
 
 /// The ops that place `assets` (sounds and pictures) from `at_us`, one after another: each starts where the one before
 /// it ends. A sound goes where `sound::add_sound_ops` puts it and a picture where `image::add_image_ops` does, attached
-/// to the clip under it; on `onto`'s track when that track takes its kind (shown and unlocked), else wherever there is
-/// room. A new track is made once, for the files of its kind. A file with no room left (at or past the video's end)
+/// to the clip under it; on `onto`'s track when that track takes it (its kind, shown and unlocked, and for a sound
+/// effect holding no music), else wherever there is room. A new track is made once, for the files of its kind. A file with no room left (at or past the video's end)
 /// still comes into the project, without a layer. Refused for a video, and when no file is placed at all (no room).
 pub fn place_ops(p: &Project, assets: &[Asset], at_us: Us, onto: &Onto) -> Result<Vec<Op>> {
     if assets.iter().any(|a| a.kind == AssetKind::Video) {
@@ -73,11 +74,15 @@ pub fn place_ops(p: &Project, assets: &[Asset], at_us: Us, onto: &Onto) -> Resul
             ops.push(add);
             track = Some(id);
         }
+        // A sound effect never goes on a track that holds music (`auto_track` keeps it off them too).
         let takes = |id: &Id| {
-            now.timeline
-                .tracks
-                .iter()
-                .any(|t| &t.id == id && t.kind == kind && !t.locked && !t.hidden)
+            now.timeline.tracks.iter().any(|t| {
+                &t.id == id
+                    && t.kind == kind
+                    && !t.locked
+                    && !t.hidden
+                    && !(kind == TrackKind::Audio && t.items.iter().any(is_music))
+            })
         };
         if let Some(id) = track.as_ref().filter(|id| takes(id)) {
             for op in &mut built {

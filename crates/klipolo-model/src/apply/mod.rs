@@ -634,8 +634,8 @@ pub(crate) fn id_taken(p: &Project, id: &str) -> bool {
             .any(|t| t.id == id || t.items.iter().any(|item| item.id == id))
 }
 
-/// Put `item` on the first unlocked, visible track above `from` (same kind) where it fits, or a
-/// new track right above. A new track's id is derived from the item's (`{item}-track`, numbered if
+/// Put `item` on the first unlocked, visible track above `from` (same kind) where it fits, a sound effect never on one
+/// that holds music, or a new track right above. A new track's id is derived from the item's (`{item}-track`, numbered if
 /// taken), so repeating an edit repeats the id. `reserved` says which ids outside `tracks` are taken
 /// ([`Outside`]); the new id avoids those and every track and item id. With `in_order`, every track above is known to
 /// be in order, so fitting is a binary search ([`fits_in_order`]). Returns where the item went.
@@ -648,6 +648,8 @@ pub(crate) fn place_above(
 ) -> (usize, usize) {
     let kind = tracks[from].kind;
     let (start, end) = (item.start_us, item.end_us());
+    // A sound effect never goes up onto a track that holds music.
+    let sound = kind == TrackKind::Audio && !crate::media::music::is_music(&item);
     let above = from.saturating_add(1).min(tracks.len());
     let fit = |track: &Track| {
         if in_order {
@@ -656,10 +658,14 @@ pub(crate) fn place_above(
             fits(track, start, end, None)
         }
     };
-    if let Some(j) = (above..tracks.len()).find(|&j| {
-        let track = &tracks[j];
-        track.kind == kind && !track.locked && !track.hidden && fit(track)
-    }) {
+    // Shown, unlocked, of the kind, and for a sound effect holding no music.
+    let open = |track: &Track| {
+        if track.kind != kind || track.locked || track.hidden {
+            return false;
+        }
+        !sound || !track.items.iter().any(crate::media::music::is_music)
+    };
+    if let Some(j) = (above..tracks.len()).find(|&j| open(&tracks[j]) && fit(&tracks[j])) {
         return (j, insert_sorted(&mut tracks[j], item));
     }
     let mut track = Track::new(kind, default_track_name(kind, tracks));
