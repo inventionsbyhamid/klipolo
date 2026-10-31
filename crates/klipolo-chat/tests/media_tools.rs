@@ -1050,6 +1050,17 @@ fn make_title_card_writes_the_persons_title_over_a_background_job() {
 }
 
 #[test]
+fn the_title_card_lasts_as_long_as_its_template() {
+    // The default length is the template's own `duration`, its words coming in and going out included.
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../klipolo-model/presets")
+        .join(TITLE_CARD)
+        .join("scene.json");
+    let scene = klipolo_model::Scene::from_stored(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(klipolo_chat::tools::media::TEMPLATE_SECS, scene.duration);
+}
+
+#[test]
 fn a_title_card_keeps_a_length_the_person_gave_and_its_template_holds_its_title() {
     let p = project();
     let long = "word ".repeat(20);
