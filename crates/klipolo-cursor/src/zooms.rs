@@ -2,6 +2,9 @@
 //! on the whole frame, and each piece no zoom covers yet becomes one Auto zoom item attached to the clip under it. The
 //! engine plans inside each item from the same facts the same way, so the zooms play as planned here. Plain geometry:
 //! no IO, no model.
+//!
+//! A click within about 350 ms of a take's end gets no zoom: the camera holds a shot through its click, then needs a
+//! whole move to reach the whole frame by the end.
 
 use klipolo_model::cursor_style::FocusKind;
 use klipolo_model::layout::{Anchor, BoxN, Layout};
