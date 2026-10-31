@@ -42,9 +42,10 @@ make_app() {
 EOF
   cp "$build/klipolo-app" "$c/MacOS/"
   cp "$build/libfoo.1.dylib" "$c/Frameworks/"
-  for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt THIRD-PARTY-NOTICES.txt; do
+  for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt Archivo-OFL.txt; do
     echo "$f" > "$c/Resources/licenses/$f"
   done
+  printf 'Klipolo: third-party notices\n\nMIT\n' > "$c/Resources/licenses/THIRD-PARTY-NOTICES.txt"
   printf 'Klipolo\nSource code: https://github.com/owner/klipolo (commit %s)\n' "$commit" \
     > "$c/Resources/licenses/NOTICE.txt"
   echo 'OFL' > "$c/Resources/fonts/OFL.txt"
@@ -86,6 +87,14 @@ expect "no third-party notices fails" fail "licenses/THIRD-PARTY-NOTICES.txt isn
 app=$(case_app empty-third-party)
 : > "$app/Contents/Resources/licenses/THIRD-PARTY-NOTICES.txt"
 expect "empty third-party notices fail" fail "licenses/THIRD-PARTY-NOTICES.txt is empty" "$check" "$app" "$arch"
+
+app=$(case_app stub-third-party)
+printf 'x' > "$app/Contents/Resources/licenses/THIRD-PARTY-NOTICES.txt"
+expect "1-byte third-party notices fail" fail "doesn't start 'Klipolo: third-party notices'" "$check" "$app" "$arch"
+
+app=$(case_app no-archivo)
+rm "$app/Contents/Resources/licenses/Archivo-OFL.txt"
+expect "no Archivo licence fails" fail "licenses/Archivo-OFL.txt isn't in the app" "$check" "$app" "$arch"
 
 # NOTICE.txt's source code line: a placeholder left fails, and so does a notice without the address or the full commit.
 app=$(case_app source-placeholder)

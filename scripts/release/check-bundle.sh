@@ -26,13 +26,18 @@ rc=0
 fail() { echo "FAIL: $*"; rc=1; }
 is_macho "$main" || fail "the main executable ${main#"$app"/} isn't a Mach-O file"
 
-for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt NOTICE.txt THIRD-PARTY-NOTICES.txt; do
+for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt NOTICE.txt THIRD-PARTY-NOTICES.txt Archivo-OFL.txt; do
   if [ ! -f "$app/Contents/Resources/licenses/$f" ]; then
     fail "licenses/$f isn't in the app"
   elif [ ! -s "$app/Contents/Resources/licenses/$f" ]; then
     fail "licenses/$f is empty"
   fi
 done
+# The third-party notices are the file third-party.sh writes, not a stand-in: it starts with its title.
+notices=$app/Contents/Resources/licenses/THIRD-PARTY-NOTICES.txt
+if [ -s "$notices" ] && [ "$(head -n 1 "$notices")" != "Klipolo: third-party notices" ]; then
+  fail "licenses/THIRD-PARTY-NOTICES.txt doesn't start 'Klipolo: third-party notices' (scripts/release/third-party.sh)"
+fi
 [ -d "$app/Contents/Resources/fonts" ] || fail "the fonts aren't in the app"
 # NOTICE.txt gives the public address of the source code and the commit built (the AGPL's source offer for this
 # version). build-mac.sh fills its {{SOURCE_URL}} and {{SOURCE_COMMIT}} placeholders from KLIPOLO_SOURCE_URL and the
