@@ -3,7 +3,7 @@
 //! - `addMusic`: `media::music::add_music_ops` (30 %, ducking under speech, fades, to the video's end) from the time
 //!   given, else the playhead. "The song" and the like are the person's one music file (`library::is_generic`).
 //! - `addSound`: the whole file at full volume with no fades at each time, attached to the clip under it, cut where the
-//!   video ends; two times on one moment are one sound.
+//!   video ends; two times within `evidence::TOLERANCE_US` of each other are one sound, at the first.
 //! - `addText`: STUB until the four text presets are built on the model's text layers: refused for the person
 //!   (`TEXT_COMING_SOON`), nothing added.
 //! - `addImage`: the picture at a size and a place in the frame (`picture_layout`).
@@ -39,6 +39,7 @@ use klipolo_model::timeline::{Item, ItemContent};
 use super::map::{source_at, timeline_at};
 use super::{Compiler, Edit, Job, Refused, label, to_model, to_person, unfounded};
 use crate::context::{secs, within_video};
+use crate::evidence::TOLERANCE_US;
 use crate::library::{Found, LibraryItem, MediaKind, is_generic};
 use crate::sanitize;
 use crate::tools::media::{PICTURE_SECS, TEMPLATE_SECS};
@@ -399,7 +400,11 @@ pub(super) fn add_sound(
     for (k, &t) in times.iter().enumerate() {
         let field = format!("atSec[{k}]");
         let at = start(c, work, "addSound", &field, Some(t))?;
-        if !starts.contains(&at) {
+        // Two times within the evidence's tolerance are one moment: one sound, at the first.
+        if !starts
+            .iter()
+            .any(|&s| s.abs_diff(at) <= TOLERANCE_US.unsigned_abs())
+        {
             starts.push(at);
         }
     }

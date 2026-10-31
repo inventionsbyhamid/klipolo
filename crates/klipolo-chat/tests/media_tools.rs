@@ -493,6 +493,25 @@ fn add_sound_at_topic_changes_snaps_to_scene_items() {
         )],
     );
     assert_eq!(layers(&applied(&p, &twice), TrackKind::Audio).len(), 1);
+    // Two times on edges 0.1 s apart ("we" ends at 10.5 s, "went" starts at 10.6 s) are one moment too: one sound, at
+    // the first.
+    let close = compile(
+        &p,
+        &i,
+        &[call(
+            "addSound",
+            json!({"name": "whoosh", "atSec": [10.5, 10.6]}),
+        )],
+    );
+    let sounds = layers(&applied(&p, &close), TrackKind::Audio);
+    assert_eq!(
+        sounds.iter().map(|s| s.start_us).collect::<Vec<_>>(),
+        [secs(10.5)]
+    );
+    assert_eq!(
+        close.additions.unwrap().params.unwrap()["count"],
+        ErrorParam::from(1usize)
+    );
 }
 
 #[test]
