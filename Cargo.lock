@@ -2424,6 +2424,7 @@ dependencies = [
  "ffmpeg-next",
  "image",
  "klipolo-analysis",
+ "klipolo-capture",
  "klipolo-chat",
  "klipolo-engine",
  "klipolo-fonts",

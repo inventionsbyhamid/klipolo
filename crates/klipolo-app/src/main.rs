@@ -7,6 +7,7 @@ mod media;
 mod media_cache;
 mod pack;
 mod project;
+mod recorder;
 mod state;
 
 use std::sync::Arc;

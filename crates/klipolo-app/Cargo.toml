@@ -30,6 +30,9 @@ klipolo-meta = { path = "../klipolo-meta" }
 klipolo-chat = { path = "../klipolo-chat" }
 # The OS's logs folder for the app's log; the analysis thread's QoS.
 klipolo-platform = { path = "../klipolo-platform" }
+# Screen recording: the take's worker (`--record-worker`, this binary), the setup read without capture or prompts, and
+# the OS's capture backends (`real-capture`, which only the app turns on).
+klipolo-capture = { path = "../klipolo-capture", features = ["real-capture"] }
 # `protocol-asset`: the page reads imported media and the engine's thumbnails through `asset:` URLs.
 tauri = { version = "=2.12.1", features = ["protocol-asset"] }
 # The file picker behind Add files.
@@ -57,6 +60,8 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "tiff"
 # Reading a test file's streams as the probe does (the engine's FFmpeg bindings, at their version and features).
 ffmpeg = { package = "ffmpeg-next", version = "=9.0.0", default-features = false, features = ["codec", "format"] }
 libc = "0.2"
+# The recorder's tests: the fake backend (no device, no prompt) beside the real one the app builds.
+klipolo-capture = { path = "../klipolo-capture", features = ["real-capture", "synthetic"] }
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "test-util"] }
 # Meta and the relay, mocked for the credentials tests.
