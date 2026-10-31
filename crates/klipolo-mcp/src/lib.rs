@@ -10,8 +10,10 @@
 //!   transcript in pages.
 //! - `call`: an edit tool's call; `limits`: the apps' paces and their shares of the undo history.
 //! - `words`: what agents read.
+//! - `connection`: the file that says where the server listens and with which token.
 
 pub mod call;
+pub mod connection;
 pub mod host;
 pub mod limits;
 pub mod pages;
@@ -21,6 +23,7 @@ pub mod session;
 pub mod tools;
 pub mod words;
 
+pub use connection::ConnectionFile;
 pub use host::{Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot};
 pub use rpc::{Handled, Mcp, initialize_result, listed};
 pub use session::{Seen, Session, UNNAMED, client_name};

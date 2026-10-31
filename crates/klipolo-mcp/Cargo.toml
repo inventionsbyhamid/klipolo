@@ -11,9 +11,17 @@ description = "Other apps edit the open project over MCP, through chat's own too
 klipolo-chat = { path = "../klipolo-chat" }
 # The project, its transactions and history, the time helpers and the cleaning of app names.
 klipolo-model = { path = "../klipolo-model" }
-# Session ids.
+# The connection file, written so only this user can read it (`file::write_private`).
+klipolo-platform = { path = "../klipolo-platform" }
+# Session ids and the token of each run.
 rand = "0.9"
 # What agents read about a proposal (`ProposalOutcome`).
 serde = { version = "1", features = ["derive"] }
 # JSON-RPC messages.
 serde_json = "1"
+# A connection file that couldn't be deleted.
+tracing = "0.1"
+
+[dev-dependencies]
+# Connection files in a folder of their own.
+tempfile = "3"
