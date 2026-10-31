@@ -1,5 +1,6 @@
 import { t } from '@lingui/core/macro';
 import { create } from 'zustand';
+import type { BackFromReopen } from '../bindings/BackFromReopen';
 import type { PrivacyPage } from '../bindings/PrivacyPage';
 import type { Project } from '../bindings/Project';
 import type { RecorderSetup } from '../bindings/RecorderSetup';
@@ -260,6 +261,23 @@ export function followRecorder(): Promise<UnlistenFn> {
   );
   following = mine;
   return mine;
+}
+
+/**
+ * At launch: when Klipolo has just opened again through Reopen Klipolo, which the person pressed while choosing what to
+ * record, the project they had open opens again, then the Record dialog. Resolves once the project is open (the
+ * dialog's setup is read after); a project that can't open says why, and the dialog stays closed.
+ */
+export async function reopenWhereLeft(): Promise<void> {
+  let back: BackFromReopen | null;
+  try {
+    back = await recorder.backFromReopen();
+  } catch {
+    return;
+  }
+  if (back === null) return;
+  if (back.project !== null && !(await useProject.getState().open(back.project))) return;
+  void useRecorder.getState().openRecorder();
 }
 
 /** Back to as it was at launch: closed, no take, nothing followed, asked or waited for (tests). */

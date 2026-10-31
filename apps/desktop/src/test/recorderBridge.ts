@@ -1,5 +1,6 @@
 import type { AppInfo } from '../bindings/AppInfo';
 import type { ArmedTake } from '../bindings/ArmedTake';
+import type { BackFromReopen } from '../bindings/BackFromReopen';
 import type { ArmOptions } from '../bindings/ArmOptions';
 import type { CaptureCommand } from '../bindings/CaptureCommand';
 import type { CaptureEvent } from '../bindings/CaptureEvent';
@@ -134,6 +135,8 @@ export interface FakeRecorderScript {
   stopRunning?: () => Answer<StoppedTake | null>;
   allowScreen?: () => Answer<void> | undefined;
   reopen?: () => Answer<void> | undefined;
+  /** What the app says at launch about a Reopen Klipolo just before; null (an ordinary launch) by default. */
+  backFromReopen?: () => Answer<BackFromReopen | null>;
   openPrivacy?: () => Answer<void> | undefined;
   /** The previews, as wanted: run by default. */
   previews?: (want: Previews) => Answer<void> | undefined;
@@ -147,7 +150,10 @@ export interface FakeRecorderScript {
 /** A fake recorder, what it was asked, and the events it can send. */
 export type FakeRecorder = RecorderBridge & {
   script: FakeRecorderScript;
-  /** Every call in order: `setup`, `arm`, `send:start`, `stopRunning`, `allowScreen`, `reopen`, `openPrivacy:mic`. */
+  /**
+   * Every call in order: `setup`, `arm`, `send:start`, `stopRunning`, `allowScreen`, `reopen`, `backFromReopen`,
+   * `openPrivacy:mic`.
+   */
   calls: string[];
   /** What each arming asked for. */
   armed: ArmOptions[];
@@ -225,6 +231,10 @@ export function fakeRecorder(script: FakeRecorderScript = {}): FakeRecorder {
     reopen: () => {
       record('reopen');
       return answer(fake.script.reopen?.(), () => undefined);
+    },
+    backFromReopen: () => {
+      record('backFromReopen');
+      return answer(fake.script.backFromReopen?.(), () => null);
     },
     openPrivacy: (page) => {
       record(`openPrivacy:${page}`);

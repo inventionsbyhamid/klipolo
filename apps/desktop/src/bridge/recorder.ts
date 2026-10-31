@@ -1,6 +1,7 @@
 import { Channel } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { ArmedTake } from '../bindings/ArmedTake';
+import type { BackFromReopen } from '../bindings/BackFromReopen';
 import type { ArmOptions } from '../bindings/ArmOptions';
 import type { CaptureCommand } from '../bindings/CaptureCommand';
 import type { CodedError } from '../bindings/CodedError';
@@ -59,6 +60,11 @@ export interface RecorderBridge {
    * Klipolo has gone. Refused with `capture.busy` during a take.
    */
   reopen(): Promise<void>;
+  /**
+   * Klipolo opened just after Reopen Klipolo: the project open then (null on the start screen), to open again with the
+   * Record dialog. Once per run; null otherwise.
+   */
+  backFromReopen(): Promise<BackFromReopen | null>;
   /** "Open privacy settings": the Screen Recording, camera or microphone page. It only opens the page. */
   openPrivacy(page: PrivacyPage): Promise<void>;
   /**
@@ -91,6 +97,7 @@ export const tauriRecorder: RecorderBridge = {
   stopRunning: () => call<StoppedTake | null>('recorder_stop_running'),
   allowScreen: () => call<void>('recorder_allow_screen'),
   reopen: () => call<void>('recorder_reopen'),
+  backFromReopen: () => call<BackFromReopen | null>('recorder_back_from_reopen'),
   openPrivacy: (page) => call<void>('recorder_open_privacy', { page }),
   previews: (want, onFrame) => call<void>('recorder_previews', { want, frames: new Channel<ArrayBuffer>(onFrame) }),
   previewsOff: () => call<void>('recorder_previews_off'),
@@ -109,6 +116,7 @@ export const recorder: RecorderBridge = {
   stopRunning: () => current.stopRunning(),
   allowScreen: () => current.allowScreen(),
   reopen: () => current.reopen(),
+  backFromReopen: () => current.backFromReopen(),
   openPrivacy: (page) => current.openPrivacy(page),
   previews: (want, onFrame) => current.previews(want, onFrame),
   previewsOff: () => current.previewsOff(),

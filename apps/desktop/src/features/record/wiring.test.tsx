@@ -13,7 +13,13 @@ import { useRecorder } from '../../state/recorder';
 import { useSelection } from '../../state/selection';
 import { useToasts } from '../../state/toasts';
 import { fixtureSnapshot, revisionPatch } from '../../test/fixtures';
-import { type FakeRecorder, installFakeRecorder, recorderSetup, takeImport } from '../../test/recorderBridge';
+import {
+  type FakeRecorder,
+  type FakeRecorderScript,
+  installFakeRecorder,
+  recorderSetup,
+  takeImport,
+} from '../../test/recorderBridge';
 
 // The editor's panels stand in for themselves: these tests are about the recorder's place in the window.
 vi.mock('../../layout/Library', () => ({ Library: () => <aside aria-label="Library" /> }));
@@ -97,6 +103,9 @@ describe('in the window', () => {
           case 'project_create':
             rust.open = opened(args.name, 1);
             return rust.open;
+          case 'project_open':
+            rust.open = opened(String(args.path).replace(/^.*\//, '').replace(/\.klipolo$/, ''), 2);
+            return rust.open;
           case 'engine_attach':
             return { port: 0, token: '', maxPreviewPixels: 0, adapter: '', presenter: 'socket', gpuClass: 'software' };
           case 'analysis_states':
@@ -109,12 +118,12 @@ describe('in the window', () => {
     );
   }
 
-  /** Klipolo launching (a fresh page) over `rust`, with a recorder that captures nothing. */
-  async function launch() {
+  /** Klipolo launching (a fresh page) over `rust`, with a recorder that captures nothing and answers as `script` says. */
+  async function launch(script: FakeRecorderScript = {}) {
     vi.resetModules();
     fakeRust();
     const bridge = await import('../../test/recorderBridge');
-    const fake = await bridge.installFakeRecorder();
+    const fake = await bridge.installFakeRecorder(script);
     const { App } = await import('../../App');
     const stores = {
       useProject: (await import('../../state/project')).useProject,
@@ -169,6 +178,32 @@ describe('in the window', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull());
     await pressShiftCommandR();
     expect(await screen.findByRole('dialog', { name: 'Record' })).toBeInTheDocument();
+  });
+
+  it('reopen_klipolo_comes_back_to_its_project_with_the_record_dialog', async () => {
+    const file = '/Users/me/Movies/Klipolo/Studio tour.klipolo';
+    const { fake, useProject } = await launch({ backFromReopen: () => ({ project: file }) });
+    // Klipolo is back where the person was: their project, and Record.
+    expect(await screen.findByRole('dialog', { name: 'Record' })).toBeInTheDocument();
+    expect(useProject.getState().snapshot?.project.name).toBe('Studio tour');
+    expect(screen.getByRole('main', { name: 'Preview' })).toBeInTheDocument();
+    expect(rust.heard.filter((cmd) => cmd === 'project_open')).toHaveLength(1);
+    expect(fake.calls.filter((call) => call === 'backFromReopen')).toHaveLength(1);
+  });
+
+  it('reopen_klipolo_from_the_start_screen_comes_back_to_the_record_dialog_there', async () => {
+    await launch({ backFromReopen: () => ({ project: null }) });
+    expect(await screen.findByRole('dialog', { name: 'Record' })).toBeInTheDocument();
+    expect(screen.getByRole('main', { name: 'Your projects' })).toBeInTheDocument();
+    expect(rust.heard).not.toContain('project_open');
+  });
+
+  it('an_ordinary_launch_opens_no_record_dialog', async () => {
+    const { fake } = await launch();
+    await screen.findByRole('main', { name: 'Your projects' });
+    await waitFor(() => expect(fake.calls).toContain('backFromReopen'));
+    expect(recordDialog()).toBeNull();
+    expect(fake.calls).not.toContain('setup');
   });
 
   it('record_from_the_start_screen_lands_and_opens_the_new_project', async () => {

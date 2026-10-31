@@ -32,7 +32,7 @@ import { followEditorView } from './state/editorView';
 import { useProject } from './state/project';
 import { clearProposalOnProjectSwitch } from './state/proposal';
 import { clearRangeOnProjectSwitch } from './state/range';
-import { followRecorder, useRecorder } from './state/recorder';
+import { followRecorder, reopenWhereLeft, useRecorder } from './state/recorder';
 import { followSaves } from './state/saving';
 import { toast } from './state/toasts';
 import { keepPlayheadInVideo, keepPlayheadOnReload, restorePlayhead } from './state/transport';
@@ -125,7 +125,10 @@ export function App() {
     if (import.meta.env.DEV) void import('./dev/devChat').then((dev) => dev.listenForDevKeys());
     // Until a clip's analysis feeds speech: Control Shift S shows sample speech under the music (development only).
     if (import.meta.env.DEV) void import('./dev/sampleSpeech').then((dev) => dev.listenForSampleSpeech());
-    void loadOpenProject().finally(() => setAsked(true));
+    // Back from Reopen Klipolo, the project the person had open opens again, with the Record dialog.
+    void loadOpenProject()
+      .then(reopenWhereLeft)
+      .finally(() => setAsked(true));
   }, []);
   useEngineSession();
   useRecordShortcut();
