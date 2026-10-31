@@ -95,7 +95,7 @@ fn title(p: &Project) -> &Layout {
 }
 
 #[test]
-fn switching_the_format_moves_nothing_and_undoes_in_one_step() {
+fn switching_the_format_keeps_overrides_rederives_the_rest_and_undoes_in_one_step() {
     let before = placed();
     let mut doc = Document::new(before.clone()).unwrap();
     let tx = switch_to(&before, FormatKind::Portrait);

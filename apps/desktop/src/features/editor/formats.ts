@@ -17,8 +17,9 @@ export function useShownFormat(): FormatKind {
 
 /**
  * Makes `format` the project's main format, as one undo step ("Switch to 9:16"): one `setSettings` op, every format the
- * project has kept and `format` joining them. The model re-derives each layer's place for the new primary and keeps
- * the hand overrides per format, so nothing placed moves. Built at its turn in the commit queue from the settings then:
+ * project has kept and `format` joining them. The model keeps each format's hand override and how the format left looks;
+ * a format without an override of its own (1:1, say) re-derives its layers' places from the new primary, so they can
+ * move there. Built at its turn in the commit queue from the settings then:
  * two quick switches each build on the one before. The format already shown changes nothing. Resolves with whether it
  * went in (true when there was nothing to do).
  */
