@@ -51,8 +51,8 @@ uuid = { version = "1", features = ["v4"] }
 security-framework = "3.7"
 
 [dev-dependencies]
-# A portrait photo's EXIF orientation, and a full disk's errno, in the import and save tests.
-image = { version = "0.25", default-features = false, features = ["jpeg"] }
+# A portrait photo's EXIF orientation, a TIFF to import, and a full disk's errno, in the import and save tests.
+image = { version = "0.25", default-features = false, features = ["jpeg", "tiff"] }
 libc = "0.2"
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "test-util"] }

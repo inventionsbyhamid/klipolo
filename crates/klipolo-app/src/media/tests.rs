@@ -310,3 +310,20 @@ fn mp3_with_cover_art_is_audio() {
         song.duration_us
     );
 }
+
+/// A TIFF, as the `image` crate writes one, imports as a picture at its size.
+#[test]
+fn a_tiff_imports_as_a_picture() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("scan.tif");
+    image::RgbImage::from_pixel(40, 20, image::Rgb([10, 200, 30]))
+        .save(&path)
+        .unwrap();
+    let result = probe_each(vec![path], probe_asset);
+    assert!(result.skipped.is_empty(), "{:?}", result.skipped);
+    let scan = &result.assets[0];
+    assert_eq!(
+        (scan.kind, scan.width, scan.height),
+        (AssetKind::Image, 40, 20)
+    );
+}
