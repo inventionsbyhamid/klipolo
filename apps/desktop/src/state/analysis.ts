@@ -110,7 +110,7 @@ export async function offerFor(assetIds: string[]) {
     const estimate = await analysisBridge.estimate(fresh);
     if (ask !== asked) return;
     useAnalysis.setState({ estimate, busy: false });
-    if (estimate.cached.length > 0) await analysisBridge.start(estimate.cached).catch(() => undefined);
+    if (estimate.cached.length > 0) await analysisBridge.start(estimate.cached, true).catch(() => undefined);
   } catch {
     if (ask === asked) useAnalysis.setState({ estimate: null, busy: false });
   }

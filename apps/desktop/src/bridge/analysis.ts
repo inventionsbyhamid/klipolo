@@ -30,8 +30,11 @@ const EVENTS = {
 export const analysisBridge = {
   /** What analysing these clips costs, which are cached, and with an access code the credit left and any refusal. */
   estimate: (assetIds: string[]) => call<Estimate>('analysis_estimate', { assetIds }),
-  /** Cached clips load at once; the others start, or the Error says why they can't. */
-  start: (assetIds: string[]) => call<void>('analysis_start', { assetIds }),
+  /**
+   * Cached clips load at once; the others start, or the Error says why they can't. `byPage`: the page asks on its own
+   * (loading cached clips), not the person, so rough words are timed again at most once per clip per app run.
+   */
+  start: (assetIds: string[], byPage = false) => call<void>('analysis_start', { assetIds, byPage }),
   /** Stops after the requests in flight; their clips go back to not analysed. */
   cancel: () => call<void>('analysis_cancel'),
   /** Every clip Rust knows of, and where its analysis is. */

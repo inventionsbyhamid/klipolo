@@ -132,7 +132,8 @@ describe('the store', () => {
     useAnalysis.setState({ states: { d: { state: 'done', approximate: false } } });
     await offerFor(['a', 'c', 'd']);
     expect(bridge.estimate).toHaveBeenCalledWith(['a', 'c']);
-    expect(bridge.start).toHaveBeenCalledWith(['c']);
+    // The page's own start: rough words are timed again at most once per app run.
+    expect(bridge.start).toHaveBeenCalledWith(['c'], true);
     expect(useAnalysis.getState().estimate?.clips).toEqual(['a']);
   });
 
