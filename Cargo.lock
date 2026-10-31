@@ -2389,6 +2389,7 @@ dependencies = [
  "klipolo-chat",
  "klipolo-engine",
  "klipolo-fonts",
+ "klipolo-mcp",
  "klipolo-meta",
  "klipolo-model",
  "klipolo-platform",

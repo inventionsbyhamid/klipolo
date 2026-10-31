@@ -30,6 +30,8 @@ klipolo-meta = { path = "../klipolo-meta" }
 klipolo-chat = { path = "../klipolo-chat" }
 # The OS's logs folder for the app's log; the analysis thread's QoS.
 klipolo-platform = { path = "../klipolo-platform" }
+# `klipolo-app --mcp`: the stdio bridge to the MCP server, for apps that start a command.
+klipolo-mcp = { path = "../klipolo-mcp" }
 # `protocol-asset`: the page reads imported media and the engine's thumbnails through `asset:` URLs.
 tauri = { version = "=2.12.1", features = ["protocol-asset"] }
 # The file picker behind Add files.

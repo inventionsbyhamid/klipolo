@@ -20,6 +20,11 @@ use crate::project::{ProjectSessionState, SaveStatus};
 use crate::state::EngineState;
 
 fn main() {
+    // `--mcp`: MCP over stdio for MCP apps that start a command, passed on to the Klipolo that is
+    // running. First of all, before any log: its stdout carries only JSON lines.
+    if std::env::args().nth(1).as_deref() == Some("--mcp") {
+        std::process::exit(klipolo_mcp::bridge::main());
+    }
     // Export runs out of process in this same binary: no second executable, always the same version. Before Tauri
     // starts and before any window exists; its log is stderr, which the app forwards into its own.
     let args: Vec<String> = std::env::args().collect();
