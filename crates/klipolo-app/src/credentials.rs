@@ -299,6 +299,16 @@ impl Credentials {
         lock(&self.meta).clone()
     }
 
+    /// `meta`, with the change of credentials it was built at: something kept that was built from it is built again
+    /// once this number moves on.
+    pub fn meta_at(&self) -> (Option<Meta>, u64) {
+        let _held = lock(&self.held);
+        (
+            lock(&self.meta).clone(),
+            self.generation.load(Ordering::SeqCst),
+        )
+    }
+
     /// The adapter for an AI feature about to run. The first time, the device registers with the relay (with the
     /// saved code, if any), so word timing works in key mode too.
     ///

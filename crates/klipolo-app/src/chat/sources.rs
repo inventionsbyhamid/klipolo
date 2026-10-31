@@ -3,9 +3,10 @@
 //! what each clip's analysis found (`Findings`, over `AnalysisState`). Tests use fakes of both.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use klipolo_analysis::providers::images::ImageMaker;
+use klipolo_analysis::providers::meta::Meta;
 use klipolo_analysis::providers::meta_chat::MetaChat;
 use klipolo_analysis::providers::meta_images::MetaImages;
 use klipolo_chat::{AnalysisState as ChatAnalysis, BoxFuture, LanguageModel};
@@ -45,30 +46,47 @@ pub trait Models: Send + Sync {
     fn recover(&self) -> BoxFuture<'_, bool>;
 }
 
-/// Muse Spark through the app's credentials: the person's key, or an access code through the relay.
+/// Muse Spark through the app's credentials: the person's key, or an access code through the relay. Its chat model
+/// (`MetaChat`, with chat's own request slot) is built once for each change of credentials.
 pub struct MetaModels {
     credentials: Arc<Credentials>,
+    /// The chat model, with the change of credentials it was built at.
+    chat: Mutex<Option<(u64, Arc<MetaChat>)>>,
 }
 
 impl MetaModels {
     pub fn new(credentials: Arc<Credentials>) -> Self {
-        Self { credentials }
+        Self {
+            credentials,
+            chat: Mutex::new(None),
+        }
+    }
+
+    /// The chat model for `meta`, built at change `generation`: the one kept, unless the credentials changed since.
+    fn chat_for(&self, meta: &Meta, generation: u64) -> Arc<MetaChat> {
+        let mut kept = self.chat.lock().unwrap_or_else(PoisonError::into_inner);
+        match &*kept {
+            Some((built, chat)) if *built == generation => chat.clone(),
+            _ => {
+                let chat = Arc::new(MetaChat::new(meta.client().clone()));
+                *kept = Some((generation, chat.clone()));
+                chat
+            }
+        }
     }
 }
 
 impl Models for MetaModels {
     fn ready(&self) -> BoxFuture<'_, Readiness> {
         Box::pin(async move {
-            let ready = self.credentials.ready().await;
-            match (ready.meta, ready.problem) {
+            let problem = self.credentials.ready().await.problem;
+            // The adapter as it is now, with the change it was built at (a registration just now included).
+            let (meta, generation) = self.credentials.meta_at();
+            match (meta, problem) {
                 // A key with a registration problem still chats: only word timing needs the relay.
-                (Some(meta), _) => {
-                    // Chat keeps its own slot, apart from the analysis's (`MetaChat`); one message goes at a time
-                    // (`ChatSession`'s queue), so one model call is in flight.
-                    Readiness::Ready {
-                        model: Arc::new(MetaChat::new(meta.client().clone())),
-                    }
-                }
+                (Some(meta), _) => Readiness::Ready {
+                    model: self.chat_for(&meta, generation),
+                },
                 (None, Some(problem)) => Readiness::Problem(problem),
                 (None, None) => Readiness::NeedsKey,
             }
@@ -162,6 +180,56 @@ mod tests {
             endpoints,
             "device".into(),
         ))
+    }
+
+    fn model_of(readiness: Readiness) -> *const () {
+        match readiness {
+            Readiness::Ready { model } => Arc::as_ptr(&model) as *const (),
+            _ => panic!("a model"),
+        }
+    }
+
+    #[tokio::test]
+    async fn the_chat_model_is_built_once_per_change_of_credentials() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let meta = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/models"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"data": []})))
+            .mount(&meta)
+            .await;
+        let store = MemoryStore::default();
+        store
+            .set(META_API_KEY, &SecretString::from("sk-test".to_owned()))
+            .unwrap();
+        store
+            .set(RELAY_TOKEN, &SecretString::from("token".to_owned()))
+            .unwrap();
+        let endpoints = Endpoints {
+            meta_base: format!("{}/v1", meta.uri()),
+            relay_base: meta.uri(),
+        };
+        let credentials = Arc::new(Credentials::load(
+            Arc::new(store),
+            endpoints,
+            "device".into(),
+        ));
+        let models = MetaModels::new(credentials.clone());
+        let first = model_of(models.ready().await);
+        assert_eq!(
+            model_of(models.ready().await),
+            first,
+            "one model while the key stays"
+        );
+        credentials.set_key("sk-other").await.unwrap();
+        assert_ne!(
+            model_of(models.ready().await),
+            first,
+            "another key, another model"
+        );
+        credentials.clear().await.unwrap();
+        assert!(matches!(models.ready().await, Readiness::NeedsKey));
     }
 
     #[tokio::test]
