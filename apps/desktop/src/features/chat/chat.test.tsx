@@ -103,6 +103,11 @@ describe('chat', () => {
     await waitFor(() => expect(calls.project_undo).toHaveLength(1));
     // Taken back: the chip turns into Redo for a while.
     expect(await screen.findByRole('button', { name: 'Redo add text' })).toBeInTheDocument();
+    // A change after that buries it: the chip goes for good, never back as an Undo that does nothing.
+    act(() =>
+      useProject.setState({ snapshot: { ...useProject.getState().snapshot!, history: changed(6, code('clip.split')).history } }),
+    );
+    expect(screen.queryByRole('button', { name: /^(Undo|Redo) add text/ })).toBeNull();
   });
 
   it('takes back nothing once another change came after it: the chip says so', async () => {

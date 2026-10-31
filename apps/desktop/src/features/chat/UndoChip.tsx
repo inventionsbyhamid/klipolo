@@ -28,22 +28,26 @@ export function standing(
 /**
  * Undo for a chat edit: an outline chip with the undo icon. It undoes only while that edit is still the
  * latest change, checked again when the undo's turn comes (a change still settling goes in first, and then this one is
- * no longer the latest: `useProject.undoIf`). Taken back, it reads "Redo" for 10 s, then goes. Buried under later
- * changes, it does nothing and says why. When it changes under the keyboard, the keyboard goes back to the chat box.
+ * no longer the latest: `useProject.undoIf`). Taken back, it reads "Redo" for 10 s, then goes for good (a change
+ * after it never brings it back). Buried under later changes before it was used, it does nothing and says why. When it changes under the keyboard, the keyboard goes back to the chat box.
  */
 export function UndoChip({ undo, revision }: { undo: CodedError; revision: number }) {
   const { t } = useLingui();
   const [busy, setBusy] = useState(false);
   const state = useProject((s) => standing(s.snapshot?.history, undo, revision));
   const [redoGone, setRedoGone] = useState(false);
+  /** It was taken back once: after its Redo, it never shows again as a buried Undo. */
+  const [used, setUsed] = useState(false);
   useEffect(() => {
     if (state !== 'undone') return setRedoGone(false);
+    setUsed(true);
     const timer = setTimeout(() => setRedoGone(true), REDO_MS);
     return () => clearTimeout(timer);
   }, [state]);
-  const focusProps = useReturnFocus(state === 'latest' || (state === 'undone' && !redoGone));
+  const gone = (state === 'undone' && redoGone) || (used && state === 'buried');
+  const focusProps = useReturnFocus(!gone && state !== 'buried');
+  if (gone) return null;
   if (state === 'undone') {
-    if (redoGone) return null;
     return (
       <div className="msg-row" {...focusProps}>
         <button
