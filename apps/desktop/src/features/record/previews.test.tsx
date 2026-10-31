@@ -271,6 +271,16 @@ describe('the previews in the Record dialog', () => {
     expect(meter).toHaveAttribute('aria-valuenow', '90');
   });
 
+  it('closing_while_klipolo_is_behind_still_stops_the_previews', async () => {
+    await openOn();
+    await windowFocus('blur');
+    expect(fake.previewed).toEqual([want()]);
+    // The app may still hold a preview waiting for macOS's answer: the dialog's close stops it.
+    act(() => rec().close());
+    await flush();
+    expect(fake.previewed).toEqual([want(), 'off']);
+  });
+
   it('a_dialog_opened_while_klipolo_is_behind_waits_for_it_to_be_in_front', async () => {
     vi.spyOn(document, 'hasFocus').mockReturnValue(false);
     await openOn();
