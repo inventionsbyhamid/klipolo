@@ -319,6 +319,13 @@ fn stills_refused_by_the_system_never_start_again_by_themselves() {
     assert_eq!(p.launched(THUMBS).len(), 1);
     assert_eq!(p.told(live), [Command::Stop]);
     assert!(p.told(p.worker(CAMERA)).is_empty(), "the camera goes on");
+    // Closing the previews, or Klipolo going behind and back, doesn't clear it.
+    p.state.previews_off();
+    p.state.window_in_front(false);
+    p.state.window_in_front(true);
+    let refused = p.set(everything()).unwrap_err();
+    assert_eq!(refused.code, "capture.permission.screen");
+    assert_eq!(p.launched(THUMBS).len(), 1);
     // The dialog reopens (it reads its setup again): they start again.
     p.state.setup().unwrap();
     p.set(everything()).unwrap();
@@ -577,4 +584,47 @@ fn an_answer_given_while_klipolo_is_behind_is_still_heard() {
     p.advance_ms(500);
     p.set(camera_only).unwrap();
     assert_eq!(p.launched(CAMERA).len(), 2);
+}
+
+#[test]
+fn off_stops_every_preview_and_their_late_frames() {
+    let p = previewing(all_allowed());
+    p.set(everything()).unwrap();
+    let workers = [THUMBS, LIVE, CAMERA, METER].map(|flag| p.worker(flag));
+    p.state.previews_off();
+    for worker in workers {
+        assert_eq!(p.told(worker), [Command::Stop], "worker {worker}");
+    }
+    p.says(workers[1], frame());
+    p.says(workers[2], frame());
+    assert!(p.frames().is_empty());
+}
+
+#[test]
+fn a_page_whose_channel_has_gone_gets_nothing_more() {
+    let p = previewing(all_allowed());
+    let want = Previews {
+        live: Some(screen()),
+        mic: Some("mic-1".into()),
+        ..nothing()
+    };
+    p.set(want.clone()).unwrap();
+    let (live, meter) = (p.worker(LIVE), p.worker(METER));
+    p.page.gone.store(true, std::sync::atomic::Ordering::SeqCst);
+    p.says(live, frame());
+    // Forgotten: nothing more goes to it, frames or events, even were it to come back.
+    p.page
+        .gone
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    p.says(live, frame());
+    let peak = Event::Meter {
+        source: "mic".into(),
+        peak_dbfs: -20.0,
+    };
+    p.says(meter, peak);
+    assert!(p.frames().is_empty() && p.heard().is_empty());
+    // The page's next ask brings its new channel.
+    p.set(want).unwrap();
+    p.says(live, frame());
+    assert_eq!(p.frames().len(), 1);
 }

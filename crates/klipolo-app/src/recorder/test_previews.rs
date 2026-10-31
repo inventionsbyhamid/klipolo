@@ -3,6 +3,7 @@
 //! sets and changes as it runs (read again at every ask), and a page that keeps the frames and events it gets. The
 //! dialog's setup is read first, as the dialog does on opening. Nothing captures and nothing asks.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -65,10 +66,15 @@ impl Backend for Allowing {
 pub(super) struct Page {
     frames: Mutex<Vec<(PreviewFrame, Vec<u8>)>>,
     events: Mutex<Vec<(PreviewId, Event)>>,
+    /// Its channel has gone (the page went away): no frame reaches it.
+    pub(super) gone: AtomicBool,
 }
 
 impl PreviewOut for Page {
     fn frame(&self, message: Vec<u8>) -> bool {
+        if self.gone.load(Ordering::SeqCst) {
+            return false;
+        }
         let length = usize::from(u16::from_be_bytes([message[0], message[1]]));
         let header = serde_json::from_slice(&message[2..2 + length]).expect("a frame's header");
         let jpeg = message[2 + length..].to_vec();
