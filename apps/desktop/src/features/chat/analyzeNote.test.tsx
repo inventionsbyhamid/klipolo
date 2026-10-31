@@ -39,6 +39,15 @@ describe('the empty chat’s analysis note', () => {
     expect(useAnalysis.getState().estimate?.clips).toEqual(CLIPS);
   });
 
+  it('has no Analyze when every clip not done failed: the banner’s Retry is the way on', () => {
+    const done = { state: 'done', approximate: false } as const;
+    const failed = { state: 'failed', reason: 'Klipolo could not read this clip.' } as const;
+    useAnalysis.setState({ states: { screen: failed, camera: done, mic: done, music: done, broll: done } });
+    renderWithProviders(<MessageList />);
+    expect(screen.getByText(/Analyze the clips first/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Analyze' })).toBeNull();
+  });
+
   it('has no Analyze while the clips are being analysed', () => {
     useAnalysis.setState({ states: { screen: { state: 'running', step: 'words', pct: 40 } } });
     renderWithProviders(<MessageList />);

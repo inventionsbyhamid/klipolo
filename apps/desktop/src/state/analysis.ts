@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { Asset } from '../bindings/Asset';
 import type { AssetState } from '../bindings/AssetState';
 import type { Estimate } from '../bindings/Estimate';
 import { refreshAiStatus, useAi } from '../ai/aiStatus';
@@ -175,6 +176,19 @@ export function cancelAnalysis() {
 export function notNow() {
   const { clips = [], missing = [] } = useAnalysis.getState().estimate ?? {};
   useAnalysis.setState((s) => ({ dismissed: [...new Set([...s.dismissed, ...clips, ...missing])], error: null }));
+}
+
+const NO_ASSETS: Asset[] = [];
+
+/**
+ * Whether a video or sound of the open project is not analysed (never, or stopped): what Analyze (`offerAgain`) offers.
+ * A clip that failed isn't: the banner's Retry is its way on.
+ */
+export function useSomeNotAnalysed(): boolean {
+  const assets = useProject((s) => s.snapshot?.project.assets ?? NO_ASSETS);
+  return useAnalysis((s) =>
+    assets.some((a) => (a.kind === 'video' || a.kind === 'audio') && stateOf(s.states, a.id).state === 'none'),
+  );
 }
 
 /** The open project's videos and sounds, by id: what analysis is for. */
