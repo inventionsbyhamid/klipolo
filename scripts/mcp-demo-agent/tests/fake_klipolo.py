@@ -3,10 +3,12 @@
 of Klipolo's real tools (`fixtures/tools_list.json`) with Klipolo's real instructions and answers calls as Klipolo
 words them.
 
-    fake_klipolo.py --mcp [--mode on|off] [--log <file>]
+    fake_klipolo.py --mcp [--mode on|off|silent|crash|slow] [--log <file>]
 
-`--mode off` answers every call as the bridge does while Klipolo isn't running. `--log` appends one JSON line when it
-starts (its argv, and whether MODEL_API_KEY reached it) and one per call (the tool and its arguments).
+`--mode off` answers every call as the bridge does while Klipolo isn't running. `silent` never answers at all (a
+program that isn't the bridge), `crash` dies on the first call, and `slow` takes 30 s over each call. `--log` appends
+one JSON line when it starts (its argv, and whether MODEL_API_KEY reached it) and one per call (the tool and its
+arguments).
 """
 
 import argparse
@@ -80,7 +82,7 @@ def answer(name: str, arguments: dict, mode: str) -> types.CallToolResult:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mcp", action="store_true")
-    parser.add_argument("--mode", choices=("on", "off"), default="on")
+    parser.add_argument("--mode", choices=("on", "off", "silent", "crash", "slow"), default="on")
     parser.add_argument("--log")
     args = parser.parse_args()
 
@@ -90,6 +92,10 @@ def main() -> None:
                 f.write(json.dumps(entry) + "\n")
 
     log({"started": sys.argv[1:], "has_key": "MODEL_API_KEY" in os.environ})
+    if args.mode == "silent":
+        for _ in sys.stdin:
+            pass
+        return
     server = Server("klipolo", instructions=INSTRUCTIONS)
 
     @server.list_tools()
@@ -99,6 +105,10 @@ def main() -> None:
     @server.call_tool()
     async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
         log({"call": name, "arguments": arguments})
+        if args.mode == "crash":
+            os._exit(3)
+        if args.mode == "slow":
+            await anyio.sleep(30)
         return answer(name, arguments, args.mode)
 
     async def serve() -> None:

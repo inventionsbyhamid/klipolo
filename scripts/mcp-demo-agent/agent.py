@@ -21,8 +21,9 @@ cost that much, it asks Muse Spark no more). KLIPOLO_META_BASE overrides Meta's 
 Cuts are only proposed: they wait for the person's Apply in Klipolo. Run it again afterwards ("I clicked Apply. Is the
 teaser ready?") and it reads what became of the proposal with getProposal.
 
-Exit status: 0 with a reply, 1 when the run stopped (Klipolo not running, a Meta error, the turn or spend limit), 2 for
-a missing key or a wrong option. Every run that started Klipolo prints its cost last, however it ended.
+Exit status: 0 with a reply, 1 when the run stopped (Klipolo not running or not answering, a Meta error, the turn or
+spend limit), 2 for a missing key or a wrong option. Every run that started Klipolo prints its cost last, however it
+ended.
 """
 
 from __future__ import annotations
@@ -36,13 +37,15 @@ import os
 import re
 import sys
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Any, TextIO
 
+import anyio
 import httpx
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import get_default_environment, stdio_client
 from mcp.shared.exceptions import McpError
-from mcp.types import Implementation
+from mcp.types import CONNECTION_CLOSED, Implementation
 
 VERSION = "0.1.0"
 # How Klipolo shows this app: "Connected: Muse Spark agent", and "(from Muse Spark agent)" on its changes.
@@ -58,6 +61,10 @@ SUPPORT_DIR_ENV = "KLIPOLO_SUPPORT_DIR"
 MAX_TURNS = 8
 # The most a run may cost before the agent stops asking Muse Spark (--max-usd), in US dollars.
 MAX_USD = 0.10
+# The bridge answers its hello and its tool list itself, at once; a program that doesn't is not the bridge.
+HELLO_TIMEOUT_S = 15
+# Longer than the bridge's own 30 s for a request plus its longest 60 s pace (`bridge::REQUEST_TIMEOUT`, `LONGEST_PACE`).
+CALL_TIMEOUT_S = 120
 # As Klipolo's chat asks (`meta_chat::CHAT_MAX_OUTPUT_TOKENS`, `CHAT_ANSWER_TIMEOUT`; `client::SHORT_TIMEOUT`).
 MAX_OUTPUT_TOKENS = 8192
 ANSWER_TIMEOUT_S = 90.0
@@ -78,6 +85,10 @@ UNREACHABLE = "Could not reach Meta. Check your internet connection and try agai
 TOO_SLOW = "Meta took too long to answer. Try again."
 UNREADABLE = "Meta sent an answer the agent could not read. Try again."
 NOT_AN_OBJECT = "The arguments were not a JSON object. Call the tool again with a JSON object."
+NOT_A_BRIDGE = "{exe} did not answer as Klipolo's MCP bridge. Pass --klipolo with a Klipolo that has it."
+STOPPED_ANSWERING = "Klipolo stopped answering. Check that it's open, then run the agent again."
+# What the SDK raises once the bridge's pipes are closed.
+CLOSED = (anyio.ClosedResourceError, anyio.BrokenResourceError, anyio.EndOfStream)
 
 SYSTEM_PROMPT = (
     "You edit the video open in Klipolo, a Mac video editor, with Klipolo's tools. "
@@ -514,9 +525,17 @@ def outcome(result: Any, text: str) -> str:
     return first_line(text)
 
 
+def gone(error: McpError) -> bool:
+    """Whether the SDK gave up on the bridge: its stream closed, or no answer came in `CALL_TIMEOUT_S`. Klipolo's own
+    refusals carry other words."""
+    data = error.error
+    closed = data.code == CONNECTION_CLOSED and data.message == "Connection closed"
+    return closed or data.code == httpx.codes.REQUEST_TIMEOUT
+
+
 async def run_call(session: Any, call: FunctionCall, schemas: dict[str, Any], console: Console) -> tuple[str, bool]:
-    """Makes one call in Klipolo and prints it: what goes back to the model, and whether Klipolo isn't running. A
-    refusal goes back as Klipolo wrote it (its refusals are written for agents)."""
+    """Makes one call in Klipolo and prints it: what goes back to the model, and whether the run must end (Klipolo isn't
+    running, or stopped answering). A refusal goes back as Klipolo wrote it (its refusals are written for agents)."""
     try:
         arguments = json.loads(call.arguments) if call.arguments.strip() else {}
     except ValueError:
@@ -531,9 +550,15 @@ async def run_call(session: Any, call: FunctionCall, schemas: dict[str, Any], co
     try:
         result = await session.call_tool(call.name, arguments)
     except McpError as e:
+        if gone(e):
+            console.say(f"← {STOPPED_ANSWERING}")
+            return STOPPED_ANSWERING, True
         said = e.error.message or "Klipolo refused the call."
         console.say(f"← {first_line(said)}")
         return said, False
+    except CLOSED:
+        console.say(f"← {STOPPED_ANSWERING}")
+        return STOPPED_ANSWERING, True
     text = "\n".join(part.text for part in result.content if getattr(part, "type", None) == "text")
     console.say(f"← {outcome(result, text)}")
     return text, bool(result.isError) and text.startswith(KLIPOLO_OFF)
@@ -566,64 +591,131 @@ async def run(
     meta_base: str = DEFAULT_META_BASE,
     max_turns: int = MAX_TURNS,
     max_usd: float = MAX_USD,
+    hello_timeout: float = HELLO_TIMEOUT_S,
+    call_timeout: float = CALL_TIMEOUT_S,
 ) -> int:
     """One request, start to end: Klipolo started with `command`, Muse Spark asked at most `max_turns` times, and not
     again once the run has cost `max_usd` (the calls it already asked for are made: Klipolo's calls cost no Meta). The
-    exit status; the cost is printed last, whatever happened."""
+    bridge gets `hello_timeout` seconds for its hello and tool list, and `call_timeout` for each call. The exit status;
+    the cost is printed last, whatever happened."""
     console = Console(out, err)
-    cost = 0.0
+    tally = Tally()
     params = StdioServerParameters(command=command[0], args=list(command[1:]), env=klipolo_env())
+    client = Implementation(name=CLIENT_NAME, version=VERSION)
+    code: int | None = None
     try:
         async with stdio_client(params) as (read, write):
-            async with ClientSession(read, write, client_info=Implementation(name=CLIENT_NAME, version=VERSION)) as session:
-                try:
-                    hello = await session.initialize()
-                    listed = await session.list_tools()
-                except McpError as e:
-                    console.fail(f"Klipolo's MCP bridge did not answer: {e.error.message}")
-                    return 1
-                tools = [function_tool(t.name, t.description, t.inputSchema) for t in listed.tools]
-                schemas = {t.name: t.inputSchema for t in listed.tools}
-                instructions = instructions_for(hello.instructions)
-                inputs = [user_message(request)]
-                timeout = httpx.Timeout(ANSWER_TIMEOUT_S, connect=CONNECT_TIMEOUT_S)
-                headers = {"User-Agent": f"klipolo-mcp-demo-agent/{VERSION}"}
-                async with httpx.AsyncClient(transport=transport, timeout=timeout, headers=headers) as http:
-                    for turn in range(1, max_turns + 1):
-                        if cost >= max_usd:
-                            console.fail(
-                                f"Stopped at the ${max_usd:.2f} limit. Run again with --max-usd to allow more."
-                            )
-                            return 1
-                        try:
-                            answer = await respond(http, meta_base, key, request_body(model, instructions, tools, inputs))
-                        except MetaError as e:
-                            console.fail(e.message)
-                            return 1
-                        cost += spark_usd(answer.usage)
-                        problem = cut_short(answer)
-                        if problem:
-                            console.fail(problem)
-                            return 1
-                        if not answer.calls:
-                            if console.printed:
-                                console.say()
-                            console.say(answer.text or "Muse Spark gave no reply.")
-                            return 0
-                        if turn == max_turns:
-                            console.fail(f"Stopped after {max_turns} model turns without a final reply.")
-                            return 1
-                        inputs.extend(answer.replay)
-                        for call in answer.calls:
-                            output, off = await run_call(session, call, schemas, console)
-                            inputs.append({"type": "function_call_output", "call_id": call.call_id, "output": output})
-                            if off:
-                                return 1
-        return 1
+            async with ClientSession(
+                read, write, read_timeout_seconds=timedelta(seconds=call_timeout), client_info=client
+            ) as session:
+                code = await converse(
+                    session,
+                    request,
+                    console,
+                    tally,
+                    exe=command[0],
+                    model=model,
+                    key=key,
+                    transport=transport,
+                    meta_base=meta_base,
+                    max_turns=max_turns,
+                    max_usd=max_usd,
+                    hello_timeout=hello_timeout,
+                )
+    except Exception as e:
+        # The SDK's own tasks met the bridge's closed pipes: it is gone, whatever the run was doing.
+        if not only_closed(e):
+            raise
+        if code is None:
+            console.fail(STOPPED_ANSWERING if tally.said_hello else NOT_A_BRIDGE.format(exe=command[0]))
     finally:
         if console.printed:
             console.say()
-        console.say(f"Cost: ${cost:.3f}")
+        console.say(f"Cost: ${tally.cost:.3f}")
+    return 1 if code is None else code
+
+
+@dataclass
+class Tally:
+    """What a run has come to so far."""
+
+    cost: float = 0.0
+    # The bridge answered the hello and listed its tools.
+    said_hello: bool = False
+
+
+def _leaves(error: BaseException) -> list[BaseException]:
+    inner = getattr(error, "exceptions", None)
+    if isinstance(inner, (list, tuple)) and inner:
+        return [leaf for e in inner for leaf in _leaves(e)]
+    return [error]
+
+
+def only_closed(error: BaseException) -> bool:
+    """Whether `error` (or every error of its group) is a closed or broken pipe."""
+    return all(isinstance(leaf, CLOSED) for leaf in _leaves(error))
+
+
+async def converse(
+    session: Any,
+    request: str,
+    console: Console,
+    tally: Tally,
+    *,
+    exe: str,
+    model: str,
+    key: str,
+    transport: httpx.AsyncBaseTransport | None,
+    meta_base: str,
+    max_turns: int,
+    max_usd: float,
+    hello_timeout: float,
+) -> int:
+    """The bridge's hello and tool list, then the model's turns and calls. The exit status."""
+    try:
+        with anyio.fail_after(hello_timeout):
+            hello = await session.initialize()
+            listed = await session.list_tools()
+    except (TimeoutError, McpError, *CLOSED):
+        console.fail(NOT_A_BRIDGE.format(exe=exe))
+        return 1
+    tally.said_hello = True
+    tools = [function_tool(t.name, t.description, t.inputSchema) for t in listed.tools]
+    schemas = {t.name: t.inputSchema for t in listed.tools}
+    instructions = instructions_for(hello.instructions)
+    inputs = [user_message(request)]
+    timeout = httpx.Timeout(ANSWER_TIMEOUT_S, connect=CONNECT_TIMEOUT_S)
+    headers = {"User-Agent": f"klipolo-mcp-demo-agent/{VERSION}"}
+    async with httpx.AsyncClient(transport=transport, timeout=timeout, headers=headers) as http:
+        for turn in range(1, max_turns + 1):
+            if tally.cost >= max_usd:
+                console.fail(f"Stopped at the ${max_usd:.2f} limit. Run again with --max-usd to allow more.")
+                return 1
+            try:
+                answer = await respond(http, meta_base, key, request_body(model, instructions, tools, inputs))
+            except MetaError as e:
+                console.fail(e.message)
+                return 1
+            tally.cost += spark_usd(answer.usage)
+            problem = cut_short(answer)
+            if problem:
+                console.fail(problem)
+                return 1
+            if not answer.calls:
+                if console.printed:
+                    console.say()
+                console.say(answer.text or "Muse Spark gave no reply.")
+                return 0
+            if turn == max_turns:
+                console.fail(f"Stopped after {max_turns} model turns without a final reply.")
+                return 1
+            inputs.extend(answer.replay)
+            for call in answer.calls:
+                output, stop = await run_call(session, call, schemas, console)
+                inputs.append({"type": "function_call_output", "call_id": call.call_id, "output": output})
+                if stop:
+                    return 1
+    return 1
 
 
 def describe(error: BaseException) -> str:

@@ -5,9 +5,11 @@ import asyncio
 import io
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
+import anyio
 import httpx
 import pytest
 from mcp.shared.exceptions import McpError
@@ -133,7 +135,7 @@ def calls_made(log):
     return [entry for entry in logged(log) if "call" in entry]
 
 
-def run(meta, command, request=DEMO, max_turns=agent.MAX_TURNS):
+def run(meta, command, request=DEMO, **options):
     out, err = io.StringIO(), io.StringIO()
     code = asyncio.run(
         agent.run(
@@ -144,7 +146,7 @@ def run(meta, command, request=DEMO, max_turns=agent.MAX_TURNS):
             out=out,
             err=err,
             transport=httpx.MockTransport(meta),
-            max_turns=max_turns,
+            **options,
         )
     )
     return code, out.getvalue(), err.getvalue()
@@ -317,6 +319,65 @@ def test_klipolo_not_running_ends_the_run_with_the_bridges_own_sentence(tmp_path
     assert out == f"→ getContext {{}}\n← {fake_klipolo.OFF}\n\nCost: $0.008\n"
     assert err == ""
     assert len(meta.requests) == 1, "Meta isn't asked again"
+
+
+STOPPED_ANSWERING = "Klipolo stopped answering. Check that it's open, then run the agent again."
+
+
+def test_a_program_that_never_answers_as_the_bridge_ends_the_run(tmp_path):
+    assert (agent.HELLO_TIMEOUT_S, agent.CALL_TIMEOUT_S) == (15, 120)
+    meta = Meta()
+    command, _ = klipolo(tmp_path, mode="silent")
+    code, out, err = run(meta, command, hello_timeout=1)
+    assert code == 1
+    assert err == f"{command[0]} did not answer as Klipolo's MCP bridge. Pass --klipolo with a Klipolo that has it.\n"
+    assert out == "Cost: $0.000\n"
+    assert meta.requests == []
+
+
+def test_a_program_that_exits_at_once_ends_the_run_with_the_same_sentence():
+    # The SDK's writer may meet the closed pipe before or after the hello fails: either way, one sentence.
+    command = [shutil.which("true")]
+    for _ in range(10):
+        meta = Meta()
+        code, out, err = run(meta, command)
+        assert code == 1
+        assert err == f"{command[0]} did not answer as Klipolo's MCP bridge. Pass --klipolo with a Klipolo that has it.\n"
+        assert out == "Cost: $0.000\n"
+        assert meta.requests == []
+
+
+@pytest.mark.parametrize("said_hello, said", [(False, "not a bridge"), (True, STOPPED_ANSWERING)])
+def test_a_pipe_that_breaks_under_the_sdk_ends_the_run_with_one_sentence(tmp_path, monkeypatch, said_hello, said):
+    # When the SDK's own writer meets the closed pipe, its task group raises that error as the run leaves the session.
+    async def breaks(session, request, console, tally, **options):
+        tally.said_hello = said_hello
+        raise ExceptionGroup("unhandled errors in a TaskGroup", [anyio.BrokenResourceError()])
+
+    monkeypatch.setattr(agent, "converse", breaks)
+    command, _ = klipolo(tmp_path)
+    if said == "not a bridge":
+        said = f"{command[0]} did not answer as Klipolo's MCP bridge. Pass --klipolo with a Klipolo that has it."
+    code, out, err = run(Meta(), command)
+    assert (code, out, err) == (1, "Cost: $0.000\n", said + "\n")
+
+
+def test_klipolo_stopping_mid_run_ends_it_without_asking_meta_again(tmp_path):
+    meta = Meta(response(call("getContext", {}, "call_1"), usage=(6000, 0, 40)), response(message("Never asked for.")))
+    command, log = klipolo(tmp_path, mode="crash")
+    code, out, err = run(meta, command)
+    assert (code, err) == (1, "")
+    assert out == f"→ getContext {{}}\n← {STOPPED_ANSWERING}\n\nCost: $0.008\n"
+    assert len(meta.requests) == 1
+
+
+def test_a_call_klipolo_never_answers_ends_the_run_at_the_time_limit(tmp_path):
+    meta = Meta(response(call("getContext", {}, "call_1"), usage=(6000, 0, 40)), response(message("Never asked for.")))
+    command, _ = klipolo(tmp_path, mode="slow")
+    code, out, err = run(meta, command, call_timeout=1)
+    assert (code, err) == (1, "")
+    assert out == f"→ getContext {{}}\n← {STOPPED_ANSWERING}\n\nCost: $0.008\n"
+    assert len(meta.requests) == 1
 
 
 def test_the_run_stops_after_8_model_turns(tmp_path):
