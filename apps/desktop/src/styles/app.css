@@ -2029,3 +2029,520 @@
 .checker {
   background: conic-gradient(#1e2746 25%, #27315a 0 50%, #1e2746 0 75%, #27315a 0) 0 0 / 14px 14px;
 }
+
+/* ---------- Overlays on the canvas ---------- */
+
+/* The stage: the frame and, over it, the same box unclipped for the layers' boxes and handles. */
+.screen > .frame,
+.frame-handles {
+  grid-area: 1 / 1;
+}
+
+.frame-handles {
+  position: relative;
+  pointer-events: none;
+}
+
+.frame-handles[data-settling] {
+  opacity: 0;
+}
+
+.frame-handles[data-settling] * {
+  pointer-events: none;
+}
+
+.gizmo {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: auto;
+  touch-action: none;
+  outline: none;
+}
+
+.gizmo.is-movable {
+  cursor: move;
+}
+
+.gizmo:not(.is-selected):hover {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-paper) 60%, transparent);
+}
+
+/* Selected: a 1.5 px paper outline 5 px outside its box; keyboard focus adds a second ring. */
+.gizmo.is-selected {
+  outline: 1.5px solid var(--color-paper);
+  outline-offset: 5px;
+}
+
+.gizmo.is-selected:focus-visible {
+  box-shadow: 0 0 0 9px color-mix(in srgb, var(--color-paper) 35%, transparent);
+}
+
+.gizmo.is-fixed {
+  cursor: not-allowed;
+}
+
+.gizmo.is-dragging {
+  will-change: transform;
+}
+
+/* Eight 10 px paper handles with a navy edge, centred on the outline's corners and edges. */
+.gizmo-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--color-paper);
+  box-shadow: 0 0 0 1.5px var(--color-navy);
+}
+
+/* Each handle can be taken 4 px past what it draws. */
+.gizmo-handle::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+
+.gizmo-handle.is-nw { left: -10px; top: -10px; cursor: nwse-resize; }
+.gizmo-handle.is-ne { right: -10px; top: -10px; cursor: nesw-resize; }
+.gizmo-handle.is-sw { left: -10px; bottom: -10px; cursor: nesw-resize; }
+.gizmo-handle.is-se { right: -10px; bottom: -10px; cursor: nwse-resize; }
+.gizmo-handle.is-n { left: calc(50% - 5px); top: -10px; cursor: ns-resize; }
+.gizmo-handle.is-s { left: calc(50% - 5px); bottom: -10px; cursor: ns-resize; }
+.gizmo-handle.is-w { left: -10px; top: calc(50% - 5px); cursor: ew-resize; }
+.gizmo-handle.is-e { right: -10px; top: calc(50% - 5px); cursor: ew-resize; }
+
+/* A small layer: its handles stay outside it, so its body can still be moved. */
+.gizmo-handle.is-out::after {
+  inset: 0;
+}
+
+/* The line a moving layer snapped to: dashed paper, across the canvas. */
+.snap-guide {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.snap-guide.is-x {
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed color-mix(in srgb, var(--color-paper) 70%, transparent);
+}
+
+.snap-guide.is-y {
+  left: 0;
+  right: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--color-paper) 70%, transparent);
+}
+
+.safe-area {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.safe-area-shapes {
+  fill: rgb(3 5 12 / 0.6);
+}
+
+.safe-area-clear {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-paper) 60%, transparent);
+}
+
+/* A title typed on the canvas: its box with the outline, the look behind a transparent-background textarea. */
+.text-edit {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.text-edit.is-editing {
+  pointer-events: auto;
+  outline: 1.5px solid var(--color-paper);
+  outline-offset: 5px;
+}
+
+.text-edit-cell {
+  display: grid;
+  flex: none;
+}
+
+.text-edit-look,
+.text-edit-area {
+  grid-area: 1 / 1;
+  min-width: 0;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.text-edit-look {
+  pointer-events: none;
+}
+
+.text-edit-area {
+  overflow: hidden;
+  resize: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+}
+
+/* ---------- Inspector ---------- */
+
+.stage-body.has-inspector .screen {
+  margin-right: calc(var(--inspector-w) + var(--space-6));
+}
+
+.inspector {
+  position: absolute;
+  top: 0;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  z-index: 2;
+  width: var(--inspector-w);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+}
+
+.insp-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-3) var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.insp-head h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0 auto 0 0;
+  overflow: hidden;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.insp-head h3 .ico {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--color-ink-soft);
+}
+
+/* The body scrolls, with a 20 px fade at the bottom. */
+.insp-body {
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 20px), transparent);
+  mask-image: linear-gradient(#000 calc(100% - 20px), transparent);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-5) var(--space-8);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-bay-press) transparent;
+}
+
+.insp-locked {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-4);
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.field-label {
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+}
+
+.field-col {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+/* Below 1280 wide the inspector is 236 px: Background's label goes above its choices. */
+@media (max-width: 1279px) {
+  .field-narrow-col {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+}
+
+.field-note {
+  margin: 0;
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+.input {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 40px;
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink);
+  font: inherit;
+  font-size: var(--text-md);
+  outline: none;
+}
+
+.input:hover {
+  box-shadow: inset 0 0 0 1px var(--color-ink-soft);
+}
+
+.input:focus,
+.input:focus-within {
+  box-shadow: inset 0 0 0 2px var(--color-paper);
+}
+
+.input-sm {
+  height: 30px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--color-bay);
+  font-size: var(--text-sm);
+}
+
+.textarea {
+  height: auto;
+  min-height: 40px;
+  padding: var(--space-3) var(--space-4);
+  line-height: var(--lh-sm);
+  resize: none;
+}
+
+.text-field {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 var(--space-2) 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--color-bay);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.select:hover {
+  box-shadow: inset 0 0 0 1px var(--color-ink-soft);
+}
+
+.select-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.select .ico {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--color-ink-faint);
+}
+
+.two {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+/* A typed time or length: its label inside the field, faint, before the value. */
+.value-field {
+  gap: var(--space-2);
+}
+
+.value-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.slider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.slider-root {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 20px;
+  touch-action: none;
+  user-select: none;
+}
+
+.slider-track {
+  position: relative;
+  flex: 1;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-bay-press);
+}
+
+.slider-range {
+  position: absolute;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-paper);
+}
+
+.slider-thumb {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-paper);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.5);
+}
+
+.slider-thumb:focus-visible {
+  outline: 2px solid var(--color-paper);
+  outline-offset: 2px;
+}
+
+.slider-val {
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.2);
+}
+
+.swatch[aria-checked="true"] {
+  box-shadow: 0 0 0 2px var(--color-bay-raised), 0 0 0 4px var(--color-paper);
+}
+
+.swatch.add {
+  display: grid;
+  place-items: center;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink-soft);
+}
+
+.swatch.add .ico {
+  width: 12px;
+  height: 12px;
+}
+
+.hex-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 132px;
+  color: var(--color-ink-faint);
+  font-size: var(--text-sm);
+}
+
+.pos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 18px);
+  gap: 3px;
+  width: max-content;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bay);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+}
+
+.pos-grid button {
+  display: grid;
+  place-items: center;
+  height: 14px;
+  padding: 0;
+  border-radius: 3px;
+}
+
+.pos-grid button::after {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-ink-faint);
+}
+
+.pos-grid button:hover {
+  background: var(--color-bay-hover);
+}
+
+.pos-grid button.on {
+  background: var(--color-paper);
+}
+
+.pos-grid button.on::after {
+  background: var(--color-navy);
+}
+
+.seg-sm button {
+  height: 24px;
+  padding: 0 var(--space-4);
+  font-size: var(--text-xs);
+}
+
+.seg-fill {
+  display: flex;
+}
+
+.seg-fill button {
+  flex: 1;
+}
