@@ -191,6 +191,12 @@ fn show_outcome(outcome: &ChatOutcome) -> Option<String> {
             change["history"]["revision"]
         );
     }
+    for picture in v["pictures"].as_array().into_iter().flatten() {
+        println!(
+            "  picture asked for: {} {}",
+            picture["kind"], picture["prompt"]
+        );
+    }
     if v["undone"].is_object() {
         println!("  undone: revision {}", v["undone"]["history"]["revision"]);
     }
