@@ -189,19 +189,14 @@ pub enum Audience {
 
 /// Compiles `calls` against `project`, the snapshot `inputs` come from.
 pub fn compile(project: &Project, inputs: &Inputs, calls: &[ToolCall]) -> Compiled {
-    let c = Compiler {
-        snapshot: project,
-        inputs,
-        evidence: Evidence::new(
-            project,
-            &inputs.speech,
-            &inputs.scenes,
-            &inputs.view,
-            &inputs.message,
-        ),
-        map: Map::new(project),
-    };
-    c.run(calls)
+    Compiler::new(project, inputs, false).run(calls)
+}
+
+/// Compiles another app's `calls` (over MCP) as `compile` does chat's, but for the words they put on screen: an app
+/// acts for its own person, so `addText`'s words and `makeTitleCard`'s title are taken as it gave them, cleaned and
+/// within what a text layer holds (`media::apps_words`), where chat's model may only quote the person.
+pub fn compile_for_app(project: &Project, inputs: &Inputs, calls: &[ToolCall]) -> Compiled {
+    Compiler::new(project, inputs, true).run(calls)
 }
 
 /// One call's ops and its undo label.
@@ -382,6 +377,26 @@ struct Compiler<'a> {
     inputs: &'a Inputs,
     evidence: Evidence,
     map: Map<'a>,
+    /// The calls are another app's (`compile_for_app`), not chat's model's.
+    by_app: bool,
+}
+
+impl<'a> Compiler<'a> {
+    fn new(snapshot: &'a Project, inputs: &'a Inputs, by_app: bool) -> Compiler<'a> {
+        Compiler {
+            snapshot,
+            inputs,
+            evidence: Evidence::new(
+                snapshot,
+                &inputs.speech,
+                &inputs.scenes,
+                &inputs.view,
+                &inputs.message,
+            ),
+            map: Map::new(snapshot),
+            by_app,
+        }
+    }
 }
 
 impl Compiler<'_> {
