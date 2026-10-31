@@ -1,7 +1,7 @@
 //! klipolo-capture's codes and their English: every `capture.*` code the recorder sends. They are all declared
 //! here up front, so the later tasks use them and invent none. `msg!` and `code!` refuse to compile a code
 //! that isn't here. The UI words every code in the person's language (its descriptors come from
-//! `src/bindings/captureCodes.json`); logs and MCP replies read `english()`. The UI's own messages live under
+//! `apps/desktop/src/bindings/captureCodes.json`); logs and MCP replies read `english()`. The UI's own messages live under
 //! `recorder.*`, `source.*` and `marker.*`, never under `capture`, which is Rust's; the permission steps' copy is coded
 //! here too, beside the permissions' own notes.
 //!

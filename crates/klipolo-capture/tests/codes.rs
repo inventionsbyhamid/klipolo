@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-/// `src/bindings/captureCodes.json`: this crate's codes, their English and their values, for the UI's catalogue (written
-/// exactly as klipolo-ai's `export_bindings_ai_codes` writes `aiCodes.json`).
+/// `apps/desktop/src/bindings/captureCodes.json`: this crate's codes, their English and their values, for the UI's
+/// catalogue (written exactly as klipolo-model's `export_bindings_model_codes` writes `modelCodes.json`).
 #[test]
 fn export_bindings_capture_codes() {
     let list: Vec<serde_json::Value> = klipolo_capture::english::ENGLISH
@@ -16,7 +16,8 @@ fn export_bindings_capture_codes() {
             serde_json::json!({ "code": code, "message": message, "params": params })
         })
         .collect();
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/bindings");
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/desktop/src/bindings");
+    std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("captureCodes.json"),
         serde_json::to_string_pretty(&list).unwrap() + "\n",
