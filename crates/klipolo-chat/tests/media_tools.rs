@@ -9,19 +9,20 @@
 
 use std::collections::HashMap;
 
-use klipolo_chat::compile::TITLE_CARD;
 use klipolo_chat::tools::{PictureSize, Position, TextPreset};
 use klipolo_chat::{
     AnalysisState, Audience, Compiled, FunctionCall, Inputs, Job, Library, LibraryItem,
     MakeSticker, MediaKind, Problem, Refs, SceneEntry, SceneLog, ToolCall, View, compile,
-    picture_ops, sticker_placement,
+    sticker_placement,
 };
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::contrib::ContribId;
 use klipolo_model::layout::{Anchor, Layout, resolve_rect};
+use klipolo_model::media::image::{Spot, add_image_ops, image_layout};
 use klipolo_model::media::music::is_music;
+use klipolo_model::media::sound::add_sound_ops;
 use klipolo_model::media::text::{
-    PORTRAIT_CLEAR, TextPreset as ModelPreset, preset_rect, text_item,
+    PORTRAIT_CLEAR, TextPreset as ModelPreset, TitleTemplate, preset_rect, text_item,
 };
 use klipolo_model::ops::Op;
 use klipolo_model::params::ParamValue;
@@ -928,6 +929,69 @@ fn nothing_is_placed_at_or_past_the_videos_end() {
     assert_eq!(video_duration(&after.timeline), secs(30.0));
 }
 
+/// The layers `ops` add, without their ids (chat's and the library's are each new).
+fn layers_of(ops: &[Op]) -> Vec<Item> {
+    (ops.iter())
+        .filter_map(|op| match op {
+            Op::AddItem { item, .. } => Some(Item {
+                id: String::new(),
+                ..item.clone()
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The layers `out`'s additions add, without their ids.
+fn added_layers(out: &Compiled) -> Vec<Item> {
+    layers_of(&out.additions.as_ref().expect("additions").ops)
+}
+
+#[test]
+fn chat_places_sounds_and_pictures_as_the_librarys_plus_does() {
+    let p = project();
+    let i = inputs(&p, "a whoosh and the logo at 12 s");
+    // A sound: the same layer as the library's + makes at that moment.
+    let out = compile(
+        &p,
+        &i,
+        &[call("addSound", json!({"name": "whoosh", "atSec": [12.0]}))],
+    );
+    let plus = add_sound_ops(&p, &whoosh(), secs(12.0)).unwrap();
+    assert_eq!(added_layers(&out), layers_of(&plus));
+    // A picture with no size or place given: the same, medium and in the middle, for its 5 s.
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "addImage",
+            json!({"file": "logo", "size": null, "position": null, "atSec": 12.0, "durationSec": null}),
+        )],
+    );
+    let plus = add_image_ops(&p, &logo(), secs(12.0)).unwrap();
+    assert_eq!(added_layers(&out), layers_of(&plus));
+    // In a corner, each format has its own: in 9:16, inside the area the apps keep clear.
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "addImage",
+            json!({"file": "logo", "size": "small", "position": "top-right", "atSec": 12.0, "durationSec": null}),
+        )],
+    );
+    let layout = &added_layers(&out)[0].layout;
+    assert_eq!(
+        layout,
+        &image_layout(800, 400, 0.2, Spot::TopRight, FormatKind::Landscape)
+    );
+    let portrait = resolve_rect(layout, FormatKind::Landscape, FormatKind::Portrait);
+    let c = PORTRAIT_CLEAR;
+    assert!(
+        portrait.x >= c.x && portrait.y >= c.y && portrait.x + portrait.w <= c.x + c.w,
+        "{portrait:?}"
+    );
+}
+
 #[test]
 fn make_sticker_becomes_a_job_not_an_op() {
     let p = project();
@@ -1030,14 +1094,12 @@ fn a_copy_placed_earlier_doesnt_take_the_sticker() {
 fn a_sticker_past_the_main_track_has_no_anchor() {
     // A picture runs to 35 s, past the clips' end at 30 s; a sticker at 32 s has no footage under it.
     let p = project();
-    let ops = picture_ops(
-        &p,
-        &logo(),
-        secs(25.0),
-        secs(10.0),
-        PictureSize::Small,
-        Position::Center,
-    );
+    let mut ops = add_image_ops(&p, &logo(), secs(25.0)).unwrap();
+    for op in &mut ops {
+        if let Op::AddItem { item, .. } = op {
+            item.duration_us = secs(10.0);
+        }
+    }
     let longer = apply_ops(&p, &ops).unwrap();
     assert_eq!(video_duration(&longer.timeline), secs(35.0));
     let job = sticker_job(&longer, 32.0);
@@ -1092,7 +1154,7 @@ fn make_title_card_writes_the_persons_title_over_a_background_job() {
     assert_eq!(title.layout, full);
     assert_eq!((title.start_us, title.duration_us), (0, secs(4.0)));
     let (source, texts) = generator(title);
-    assert_eq!(source, &ContribId::builtin(TITLE_CARD));
+    assert_eq!(source, &TitleTemplate::TitleCard.source());
     // Exactly as the person wrote it, and only it: the template's own subtitle is left empty.
     assert_eq!(
         texts,
@@ -1113,7 +1175,7 @@ fn the_title_card_lasts_as_long_as_its_template() {
     // The default length is the template's own `duration`, its words coming in and going out included.
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../klipolo-model/presets")
-        .join(TITLE_CARD)
+        .join("scene.title-card")
         .join("scene.json");
     let scene = klipolo_model::Scene::from_stored(&std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(klipolo_chat::tools::media::TEMPLATE_SECS, scene.duration);

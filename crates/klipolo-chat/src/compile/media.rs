@@ -2,18 +2,20 @@
 //! and pictures Muse Image draws first as jobs.
 //! - `addMusic`: `media::music::add_music_ops` (30 %, ducking under speech, fades, to the video's end) from the time
 //!   given, else the playhead. "The song" and the like are the person's one music file (`library::is_generic`).
-//! - `addSound`: the whole file at full volume with no fades at each time, attached to the clip under it, cut where the
-//!   video ends; two times within `evidence::TOLERANCE_US` of each other are one sound, at the first.
+//! - `addSound`: a sound at each time as the library's + puts one (`media::sound::add_sound_ops`: the whole file at full
+//!   volume with no fades, attached to the clip under it, cut where the video ends); two times within
+//!   `evidence::TOLERANCE_US` of each other are one sound, at the first.
 //! - `addText`: the person's own words (`persons_words`; words of the model's own are refused back, for it to ask) in
 //!   one of the four text presets, placed by the model's `media::text::add_text_ops` exactly as the canvas's Add title
 //!   and the library's presets place it: each format's own place, in 9:16 inside the area the apps keep clear.
-//! - `addImage`: the picture at a size and a place in the frame (`picture_layout`).
+//! - `addImage`: the picture as the library's + puts one (`media::image::add_image_ops_at`), at a size and in a corner of
+//!   each format's own area (in 9:16 the area the apps keep clear) when one was asked for.
 //! - `makeSticker`: a `Job::MakeSticker` only, on the project as the message's additions leave it, anchored to the
 //!   footage it shows over as a layer attaches (`Attach`); once the picture is drawn the app asks `sticker_placement`
 //!   where and how long, on the project as it is then, and places it with `picture_ops`. A job's prompt names the
 //!   picture in the library too, so it has no dashes either.
-//! - `makeTitleCard`: the title card template (`TITLE_CARD`, a scene preset filling the frame in every format,
-//!   `Layout::full_frame`) with the person's exact title (`persons_words`) and its other words left empty so only the
+//! - `makeTitleCard`: the title card template as the canvas adds one (`media::text::add_template_ops`, filling the frame
+//!   in every format) with the person's exact title (`persons_words`) and its other words left empty so only the
 //!   title shows, for the template's own length (`TEMPLATE_US`) unless the person gave one, applied at once; and a
 //!   `Job::MakeTitleBackground` for the picture to go under it, in the primary format as the additions leave it. No
 //!   title of theirs: refused back, for the model to ask.
@@ -23,22 +25,26 @@
 //! play past the end is cut there, so no media call makes the video longer. A file from the pack comes in with the ops
 //! that first place it.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use klipolo_model::Project;
 use klipolo_model::coded::ErrorParam;
-use klipolo_model::contrib::{Catalog, ContribId};
+use klipolo_model::contrib::Catalog;
 use klipolo_model::ids::{Id, new_id};
 use klipolo_model::layout::{Anchor, BoxN, Layout};
-use klipolo_model::media::image::IMAGE_US;
+use klipolo_model::media::image::{IMAGE_US, add_image_ops_at};
 use klipolo_model::media::music::{MusicOpts, add_music_ops};
-use klipolo_model::media::text::{TEMPLATE_US, TEXT_US, add_text_ops};
+use klipolo_model::media::sound::add_sound_ops;
+use klipolo_model::media::text::{
+    TEMPLATE_US, TEXT_US, TitleTemplate, add_template_ops, add_text_ops,
+};
 use klipolo_model::ops::{Op, TrackTarget};
 use klipolo_model::params::{ParamKind, ParamValue};
 use klipolo_model::project::{Asset, AssetKind, FormatKind};
 use klipolo_model::query::{anchor_at, main_track_duration, resolve_attach, video_duration};
 use klipolo_model::time::{MIN_DURATION_US, Us};
 use klipolo_model::timeline::{Item, ItemContent};
+use klipolo_model::{Project, apply_ops};
 
 use super::{Compiler, Edit, Job, MakeSticker, Refused, label, to_model, unfounded};
 use crate::context::{secs, within_video};
@@ -47,12 +53,8 @@ use crate::library::{Found, LibraryItem, MediaKind, is_generic};
 use crate::sanitize;
 use crate::tools::{PictureSize, Position, TextPreset};
 
-/// A sound effect's volume: full, to be heard over the voice.
-pub const SOUND_VOLUME: f64 = 1.0;
 /// Kept clear between a picture and the frame's edges: a share of the frame's shorter side.
 pub const PICTURE_MARGIN: f64 = 0.04;
-/// The title card template `makeTitleCard` shows (`klipolo_model::presets::SCENE_PRESETS`).
-pub const TITLE_CARD: &str = "scene.title-card";
 /// The most names a refusal lists, then how many more there are: as many as Library shows of a kind.
 const LISTED: usize = crate::context::LIBRARY_NAMES;
 /// What may stand around a title the person quoted, left out of it.
@@ -310,17 +312,18 @@ pub(crate) fn persons_words(message: &str, text: &str) -> Option<String> {
 }
 
 /// The ops that add the title card template reading `text` (its other words left empty) from `start` for `duration`
-/// (None: `TEMPLATE_US`), filling the frame, attached to the clip under it; and the new layer's id and length.
-/// Refused when the template holds fewer characters, said for `tool`'s `field`.
+/// (None: `TEMPLATE_US`), as the canvas adds a title template (`media::text::add_template_ops`: filling the frame in
+/// every format, attached to the clip under it); and the new layer's id. Refused when the template holds fewer
+/// characters, said for `tool`'s `field`.
 fn title_ops(
     work: &Project,
     (tool, field): (&str, &str),
     text: &str,
     start: Us,
     duration: Option<Us>,
-) -> Result<(Vec<Op>, String, Us), Refused> {
-    let source = ContribId::builtin(TITLE_CARD);
-    let def = (Catalog::builtin().get(&source))
+) -> Result<(Vec<Op>, Id), Refused> {
+    let template = TitleTemplate::TitleCard;
+    let def = (Catalog::builtin().get(&template.source()))
         .ok_or_else(|| to_model(format!("{tool}: this build has no title card template.")))?;
     let mut params = BTreeMap::new();
     for spec in &def.params {
@@ -341,22 +344,14 @@ fn title_ops(
         };
         params.insert(spec.key.clone(), ParamValue::Text(value));
     }
-    let duration = length(work, start, duration, TEMPLATE_US);
-    let id = new_id();
-    let ops = vec![Op::AddItem {
-        track: TrackTarget::Auto,
-        attach: start < main_track_duration(&work.timeline.main),
-        item: Item {
-            id: id.clone(),
-            start_us: start,
-            duration_us: duration,
-            attach: None,
-            layout: Layout::full_frame(),
-            content: ItemContent::generator(source, params),
-            effects: Vec::new(),
-        },
-    }];
-    Ok((ops, id, duration))
+    let ops = add_template_ops(work, template, params, start);
+    let id = (ops.iter())
+        .find_map(|op| match op {
+            Op::AddItem { item, .. } => Some(item.id.clone()),
+            _ => None,
+        })
+        .ok_or_else(|| to_model(format!("{tool}: the title card template added nothing.")))?;
+    Ok((lasting(ops, length(work, start, duration, TEMPLATE_US)), id))
 }
 
 pub(super) fn add_music(
@@ -404,7 +399,6 @@ pub(super) fn add_sound(
             item.name
         )));
     }
-    let video_end = video_duration(&work.timeline);
     let mut starts: Vec<Us> = Vec::with_capacity(times.len());
     for (k, &t) in times.iter().enumerate() {
         let field = format!("atSec[{k}]");
@@ -417,40 +411,23 @@ pub(super) fn add_sound(
             starts.push(at);
         }
     }
+    // The file comes in once, then a sound at each moment as the library's + puts one (`add_sound_ops`).
     let mut ops = Vec::with_capacity(starts.len() + 1);
-    if work.asset(&asset.id).is_none() {
-        ops.push(Op::AddAssets {
+    let with_file = if work.asset(&asset.id).is_none() {
+        let add = Op::AddAssets {
             assets: vec![asset.clone()],
-        });
-    }
-    let main_end = main_track_duration(&work.timeline.main);
+        };
+        let with_file = apply_ops(work, std::slice::from_ref(&add))
+            .map_err(|e| to_model(format!("addSound: {e}")))?;
+        ops.push(add);
+        Cow::Owned(with_file)
+    } else {
+        Cow::Borrowed(work)
+    };
     for &at in &starts {
-        ops.push(Op::AddItem {
-            track: TrackTarget::Auto,
-            attach: at < main_end,
-            item: Item {
-                id: new_id(),
-                start_us: at,
-                duration_us: asset.duration_us.min(video_end - at),
-                attach: None,
-                // Sound has no picture: the whole canvas, as every sound layer's box.
-                layout: Layout::new(Anchor::TopLeft, BoxN::FULL),
-                content: ItemContent::Audio {
-                    asset_id: asset.id.clone(),
-                    source_in_us: 0,
-                    volume: SOUND_VOLUME,
-                    muted: false,
-                    fade_in_us: 0,
-                    fade_out_us: 0,
-                    effect: None,
-                    drift_ppm: 0.0,
-                    centre_from: None,
-                    tie: None,
-                    duck: None,
-                },
-                effects: Vec::new(),
-            },
-        });
+        let sound =
+            add_sound_ops(&with_file, asset, at).map_err(|e| to_model(format!("addSound: {e}")))?;
+        ops.extend(sound);
     }
     Ok(Edit {
         ops,
@@ -507,16 +484,13 @@ pub(super) fn add_image(
         )));
     }
     let start = start(c, work, "addImage", "atSec", at)?;
-    let duration = length(work, start, duration, IMAGE_US);
+    let size = size.unwrap_or(PictureSize::Medium);
+    let spot = position.unwrap_or(Position::Center).spot();
+    // As the library's + puts a picture (`add_image_ops`), at a size and in a corner when one was asked for.
+    let ops = add_image_ops_at(work, &item.asset, start, size.share(), spot)
+        .map_err(|e| to_model(format!("addImage: {e}")))?;
     Ok(Edit {
-        ops: picture_ops(
-            work,
-            &item.asset,
-            start,
-            duration,
-            size.unwrap_or(PictureSize::Medium),
-            position.unwrap_or(Position::Center),
-        ),
+        ops: lasting(ops, length(work, start, duration, IMAGE_US)),
         label: label(
             "addImage",
             vec![("file", ErrorParam::from(item.name.as_str()))],
@@ -573,7 +547,7 @@ pub(super) fn make_title_card(
         )));
     };
     let start = start(c, work, "makeTitleCard", "atSec", at)?;
-    let (ops, title_id, _) = title_ops(work, ("makeTitleCard", "title"), &words, start, duration)?;
+    let (ops, title_id) = title_ops(work, ("makeTitleCard", "title"), &words, start, duration)?;
     let edit = Edit {
         ops,
         label: label(

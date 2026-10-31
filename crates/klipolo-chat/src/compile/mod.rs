@@ -55,9 +55,7 @@ use crate::library::Library;
 use crate::sanitize;
 use crate::tools::{Moment, PictureSize, Position, ToolCall};
 use map::Map;
-pub use media::{
-    PICTURE_MARGIN, SOUND_VOLUME, TITLE_CARD, picture_layout, picture_ops, sticker_placement,
-};
+pub use media::{PICTURE_MARGIN, picture_layout, picture_ops, sticker_placement};
 use trim::Trim;
 
 /// What the person is told when a tool needs a clip's analysis and Klipolo is still making it.

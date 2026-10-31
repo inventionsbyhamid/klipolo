@@ -96,6 +96,20 @@ impl Position {
     }
 }
 
+impl Position {
+    /// The model's place for it (`media::image::Spot`).
+    pub fn spot(self) -> klipolo_model::media::image::Spot {
+        use klipolo_model::media::image::Spot;
+        match self {
+            Position::TopLeft => Spot::TopLeft,
+            Position::TopRight => Spot::TopRight,
+            Position::BottomLeft => Spot::BottomLeft,
+            Position::BottomRight => Spot::BottomRight,
+            Position::Center => Spot::Center,
+        }
+    }
+}
+
 impl PictureSize {
     /// The tool's word for it ("medium").
     pub fn key(self) -> &'static str {
