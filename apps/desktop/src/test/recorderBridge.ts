@@ -12,7 +12,8 @@ import type { RecorderSetup } from '../bindings/RecorderSetup';
 import type { Snapshot } from '../bindings/Snapshot';
 import type { StoppedTake } from '../bindings/StoppedTake';
 import { codedMessage } from '../bridge/call';
-import type { RecorderBridge, TakeImport } from '../bridge/recorder';
+import { installRecorderBridge, type RecorderBridge, type TakeImport } from '../bridge/recorder';
+import { followRecorder, forgetRecorder } from '../state/recorder';
 
 /** A display as the setup lists it: 2560 x 1440 at 60 Hz unless `over` says otherwise. */
 export function display(id: string, over: Partial<DisplayInfo> = {}): DisplayInfo {
@@ -200,5 +201,17 @@ export function fakeRecorder(script: FakeRecorderScript = {}): FakeRecorder {
       for (const handler of [...landings]) handler(landed);
     },
   };
+  return fake;
+}
+
+/**
+ * A fresh recorder store on a new fake: the store forgets the last test's dialog and take, the fake is installed, and
+ * the store follows its events, as the app does at launch.
+ */
+export async function installFakeRecorder(script: FakeRecorderScript = {}): Promise<FakeRecorder> {
+  forgetRecorder();
+  const fake = fakeRecorder(script);
+  installRecorderBridge(fake);
+  await followRecorder();
   return fake;
 }
