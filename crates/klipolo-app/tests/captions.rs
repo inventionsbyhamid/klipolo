@@ -232,8 +232,8 @@ fn pages_never_cross_a_cut() {
         60.0,
         words_at(0.0, "one two three four five six"),
     );
-    // Cut from inside "three" to inside "four" (0.6 to 0.85 s is three, 0.9 s four): the words on each side of the cut
-    // never share a page.
+    // A cut in the gap between "three" (0.6 to 0.85 s) and "four" (from 0.9 s): the words on each side of it never
+    // share a page.
     let cut = apply_ops(
         &p,
         &[Op::DeleteRanges {
@@ -251,6 +251,77 @@ fn pages_never_cross_a_cut() {
     assert_eq!(texts, ["one two three", "four five six"]);
     let four = view.pages[1].words.first().unwrap();
     assert_eq!(four.cut_before, Some(true), "a cut lies before it");
+}
+
+#[test]
+fn a_cut_through_a_word_leaves_it_whole_on_one_side() {
+    let (p, sp) = captioned(
+        "karaoke",
+        60.0,
+        words_at(0.0, "one two three four five six"),
+    );
+    // Cut through "four" (0.9 to 1.15 s): it shows once, on the far side of the cut, as the whole word heard, so a
+    // fix of it covers all of it.
+    let cut = apply_ops(
+        &p,
+        &[Op::DeleteRanges {
+            ranges: vec![RangeUs {
+                start: s(0.95),
+                end: s(1.0),
+            }],
+        }],
+    )
+    .unwrap();
+    let f = feed(cut, sp, 1);
+    let cache = CaptionsCache::default();
+    let view = answer(&cache, Some(&f), "p1", FormatKind::Landscape, ALL).unwrap();
+    let texts: Vec<String> = view.pages.iter().map(|pg| shown(&pg.words)).collect();
+    assert_eq!(texts, ["one two three", "four five six"]);
+    let four = &view.pages[1].words[0];
+    assert_eq!(
+        (four.source_start_us, four.source_end_us),
+        (s(0.9), s(1.15))
+    );
+    assert_eq!(four.cut_before, Some(true));
+}
+
+#[test]
+fn a_word_names_its_range_in_its_files_sound_time() {
+    // The file's sound starts 0.3 s after its picture: a word heard at 8 s in the sound plays at 8.3 s of the file.
+    let (mut p, sp) = talk("clean");
+    p.assets[0].audio_lead_us = Some(s(0.3));
+    let p = apply_ops(&p, &[]).unwrap();
+    let heard = sp.transcripts["v"]
+        .words
+        .iter()
+        .find(|w| w.text == "Teo")
+        .unwrap()
+        .clone();
+    let f = feed(p.clone(), sp.clone(), 1);
+    let words = all_words(&CaptionsCache::default(), &f, FormatKind::Landscape);
+    let teo = words.iter().find(|w| w.text == "Teo").unwrap();
+    // Its range is the transcript's (what a fix names), its time on the timeline the file's.
+    assert_eq!(
+        (teo.source_start_us, teo.source_end_us),
+        (heard.start_us, heard.end_us)
+    );
+    assert_eq!(teo.start_us, heard.start_us + s(0.3));
+    // A fix sent at that range changes that word, and only it.
+    let fixed = apply_ops(
+        &p,
+        &[Op::FixWords {
+            asset_id: teo.asset_id.clone(),
+            start_us: teo.source_start_us,
+            end_us: teo.source_end_us,
+            text: Some("Theo".into()),
+        }],
+    )
+    .unwrap();
+    let f = feed(fixed, sp, 2);
+    let words = all_words(&CaptionsCache::default(), &f, FormatKind::Landscape);
+    let texts: Vec<&str> = words.iter().map(|w| w.text.as_str()).collect();
+    assert!(texts.contains(&"Theo"), "{texts:?}");
+    assert!(texts.contains(&"Teo."), "{texts:?}");
 }
 
 #[test]
