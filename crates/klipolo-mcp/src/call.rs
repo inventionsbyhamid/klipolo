@@ -1,5 +1,5 @@
 //! An edit tool's call from an app: chat's own tool, read, checked and compiled as chat's are, then applied, proposed
-//! or refused. In order:
+//! or refused. The app's pace of calls is checked before a call reaches here (`rpc`). In order:
 //! 1. `ToolCall::parse`: a call that doesn't fit its tool is refused with the parse error's sentence. `undo` undoes the
 //!    app's own newest step and nothing else (`Host::undo_own`), once no one else's proposal waits.
 //! 2. The open project (`NO_PROJECT` without one). A call naming times or clip refs needs the app to have read the
@@ -7,13 +7,16 @@
 //! 3. `findMoments` only points the person at moments (it is read-only): it compiles alone and is shown.
 //! 4. The proposal slot, shared with Klipolo's chat: while a proposal that isn't the app's own waits, every edit is
 //!    refused (`WAITING_OTHER`). The app's own absorbs the call: it compiles after the calls the proposal holds
-//!    (`Own`), on the revision the proposal was made on.
+//!    (`Own`), on the revision the proposal was made on, while the clips they name stay where they were (else
+//!    `OWN_MOVED`) and they still remove what was proposed (else `OWN_CHANGED`). One Klipolo doesn't know waits for
+//!    the person (`OWN_WAITING`).
 //! 5. `compile`, with no typed message: an app's words are never the person's times. A refusal of the call is the
 //!    tool's error, with its reason, and nothing changes.
 //! 6. Additions apply at once as one undo step the app made (`from_app`), checked again first to take nothing away,
-//!    within the app's pace of applied batches (`Limits::applied`).
+//!    within the app's pace of applied batches (`Limits::applied`; a batch the host refuses gives its place back).
 //!    Removals become a proposal for the person, never applied here: in place of the app's own, or, once additions
-//!    applied (which drops it, as any change does), on top of them.
+//!    applied, on top of them, only when the commit dropped the app's own proposal. One the person decided on while
+//!    the call ran stays decided (`DECIDED`).
 //! 7. Each job that costs money passes the run's allowance and the app's pace of jobs (`Limits::paid`), then only
 //!    `Host::start_paid` starts it, after the app's own checks. Nothing here calls a model.
 //!
