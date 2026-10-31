@@ -39,6 +39,8 @@ function clip(id: string, name: string, kind: Asset['kind'] = 'video'): Asset {
 }
 
 const CLIPS = [clip('a', 'rosa-interview-a.mov'), clip('b', 'rosa-wheel-broll.mov')];
+/** What a clip whose file is gone says. */
+const GONE = "Klipolo can't find this clip's file. Put it back or import it again.";
 
 function showProject(assets: Asset[]) {
   const snapshot = { project: { assets } } as unknown as Snapshot;
@@ -151,7 +153,7 @@ describe('the analysis banner', () => {
 
     expect(await screen.findByText('Analyze 1 clip for about $0.02')).toBeInTheDocument();
     expect(screen.getByText('rosa-wheel-broll.mov')).toBeInTheDocument();
-    expect(screen.getByText("Klipolo can't find this clip's file. Put it back or import it again.")).toBeInTheDocument();
+    expect(screen.getByText(GONE)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Analyze' }));
     expect(bridge.start).toHaveBeenCalledWith(['a']);
   });
@@ -162,7 +164,7 @@ describe('the analysis banner', () => {
     const { container } = renderWithProviders(<AnalysisBanner />);
 
     expect(await screen.findByText("Klipolo can't find 1 clip")).toBeInTheDocument();
-    expect(screen.getByText("Klipolo can't find this clip's file. Put it back or import it again.")).toBeInTheDocument();
+    expect(screen.getByText(GONE)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Analyze' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
     expect(container).toBeEmptyDOMElement();

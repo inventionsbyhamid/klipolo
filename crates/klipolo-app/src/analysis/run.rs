@@ -552,7 +552,8 @@ impl AnalysisState {
         let copy = match made {
             Ok(copy) => copy,
             Err(VideoError::NoVideo) => {
-                // No picture after all: an empty log, cached, so the clip is never offered again at a scene log's price.
+                // No picture after all: an empty log, cached, so the clip is never offered again at a scene log's
+                // price.
                 let log = SceneLog {
                     model: String::new(),
                     fps: 0.0,
@@ -579,9 +580,9 @@ impl AnalysisState {
     }
 
     /// The person stopped the job's word timing with `kept` cached: only the person's Analyze, Retry or "Time words
-    /// again" times its words again. A clip with nothing else to do is analysed as far as it got (its words timed roughly where they weren't
-    /// timed); a video whose scene log is still to do goes back to not analysed, as a Cancel during its scene log does
-    /// (the page offers it again; it never starts an unfinished video on its own).
+    /// again" times its words again. A clip with nothing else to do is analysed as far as it got (its words timed
+    /// roughly where they weren't timed); a video whose scene log is still to do goes back to not analysed, as a Cancel
+    /// during its scene log does (the page offers it again; it never starts an unfinished video on its own).
     fn timing_stopped(&self, job: &Job<'_>, kept: &TranscriptOut) -> Outcome {
         lock(&self.inner).timed_again.insert(job.key.to_owned());
         if job.needs_scenes {

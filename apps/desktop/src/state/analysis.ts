@@ -204,7 +204,8 @@ export function offerAgainOnAiModeChange(): () => void {
 
 /**
  * Why the open project has no caption words, for the Captions panel: clips not analysed yet (the panel offers
- * Analyze), or clips heard with no speech in them (one, or more); null while clips are being analysed, or with no clips.
+ * Analyze), or clips heard with no speech in them (one, or more); null while clips are being analysed, or with no
+ * clips.
  */
 export function whyNoWords(
   states: Record<string, AssetState>,

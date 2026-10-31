@@ -112,7 +112,10 @@ describe('the store', () => {
     expect(stateOf(useAnalysis.getState().states, 'a')).toEqual({ state: 'done', approximate: true });
     // Why words are rough (and whether timing them again helps), or why there are none, come with it.
     const stopped = 'Word timing stopped before it finished.';
-    applyEvent({ kind: 'done', payload: { assetId: 'c', approximate: true, approximateReason: stopped, timeAgain: true } });
+    applyEvent({
+      kind: 'done',
+      payload: { assetId: 'c', approximate: true, approximateReason: stopped, timeAgain: true },
+    });
     expect(stateOf(useAnalysis.getState().states, 'c')).toEqual({
       state: 'done',
       approximate: true,
