@@ -151,6 +151,7 @@ fn media(id: String, kind: AssetKind, duration_us: Us, has_audio: bool) -> Asset
         fps: if kind == AssetKind::Video { 60.0 } else { 0.0 },
         has_audio,
         audio_lead_us: None,
+        made_with: None,
         rotation: None,
     }
 }

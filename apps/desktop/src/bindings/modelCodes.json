@@ -859,6 +859,21 @@
     "params": []
   },
   {
+    "code": "model.sound.noSound",
+    "message": "That file has no sound to play.",
+    "params": []
+  },
+  {
+    "code": "model.sound.noRoom",
+    "message": "A sound has to start before the video ends.",
+    "params": []
+  },
+  {
+    "code": "model.image.notImage",
+    "message": "That file isn't a picture.",
+    "params": []
+  },
+  {
     "code": "model.layer.zoom",
     "message": "Zoom must be between 1× and 5×.",
     "params": []

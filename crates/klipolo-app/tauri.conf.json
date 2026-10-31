@@ -65,7 +65,8 @@
       "icons/icon.png"
     ],
     "resources": {
-      "../../assets/fonts/": "fonts/"
+      "../../assets/fonts/": "fonts/",
+      "../../assets/library/": "library/"
     },
     "macOS": {
       "minimumSystemVersion": "15.0",

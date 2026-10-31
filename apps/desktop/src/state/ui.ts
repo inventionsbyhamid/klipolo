@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { FormatKind } from '../bindings/FormatKind';
+import type { SafeAreaId } from '../lib/safeAreas';
 
 /**
  * The view settings the editor reads: the timeline's zoom and snapping, and the format the preview shows. Panel
@@ -20,7 +21,18 @@ interface UiStore {
   /** Bumped by Command K: the chat panel opens and puts the cursor in its composer. */
   chatFocus: number;
   focusChat: () => void;
+  /** The 9:16 safe area the preview shows ("Show safe area"), or off. */
+  safeArea: SafeAreaId;
+  /** The area shown last (what a drag in 9:16 shows and snaps to while it's off). */
+  lastSafeArea: SafeAreaId;
+  setSafeArea: (area: SafeAreaId) => void;
+  /** The Library's filter pill. */
+  libraryTab: LibraryTab;
+  setLibraryTab: (tab: LibraryTab) => void;
 }
+
+/** The Library's tabs: your clips, music, sounds and images. */
+export type LibraryTab = 'clips' | 'music' | 'sounds' | 'images';
 
 export const useUi = create<UiStore>((set) => ({
   pxPerSecond: 40,
@@ -32,4 +44,10 @@ export const useUi = create<UiStore>((set) => ({
   setPreviewFormat: (previewFormat) => set({ previewFormat }),
   chatFocus: 0,
   focusChat: () => set((s) => ({ chatFocus: s.chatFocus + 1 })),
+  safeArea: 'off',
+  lastSafeArea: 'all',
+  setSafeArea: (safeArea) =>
+    set((s) => ({ safeArea, lastSafeArea: safeArea === 'off' ? s.lastSafeArea : safeArea })),
+  libraryTab: 'clips',
+  setLibraryTab: (libraryTab) => set({ libraryTab }),
 }));

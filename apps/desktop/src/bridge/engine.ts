@@ -42,4 +42,6 @@ export const engine = {
   preview: (projectId: string, baseRevision: number, ops: Op[]) =>
     call<void>('engine_preview', { projectId, baseRevision, ops }),
   previewClear: () => call<void>('engine_preview_clear'),
+  /** While a title is typed on the canvas the page draws it: the preview leaves out text layer `item` (null: none). */
+  setEditing: (item: string | null) => call<void>('engine_set_editing', { item }),
 };

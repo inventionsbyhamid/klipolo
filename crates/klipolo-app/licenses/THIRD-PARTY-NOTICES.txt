@@ -10,7 +10,7 @@ Klipolo's own licence, and the licences of FFmpeg and the fonts, are in NOTICE.t
 
 This file is written by scripts/release/third-party.sh from Cargo.lock and the page's build. Don't edit it by hand.
 
-422 Rust crates and 81 JavaScript packages, under these licences:
+425 Rust crates and 81 JavaScript packages, under these licences:
   0BSD                        1
   Apache-2.0                 11
   BSD-2-Clause                1
@@ -18,7 +18,7 @@ This file is written by scripts/release/third-party.sh from Cargo.lock and the p
   CC0-1.0                     1
   CDLA-Permissive-2.0         1
   ISC                         5
-  MIT                       455
+  MIT                       458
   MPL-2.0                     5
   Unicode-3.0                17
   WTFPL                       2
@@ -417,7 +417,7 @@ Permission to use, copy, modify, and/or distribute this software for any purpose
 THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ----------------------------------------------------------------------------------------------------
-MIT (455)
+MIT (458)
 ----------------------------------------------------------------------------------------------------
 
 Rust crates
@@ -742,6 +742,8 @@ Rust crates
       Copyright (c) 2015 Andrew Gallant
   jiff-core 0.1.1 (Unlicense OR MIT)  https://github.com/BurntSushi/jiff
       Copyright (c) 2015 Andrew Gallant
+  jpeg-decoder 0.3.2 (MIT OR Apache-2.0)  https://github.com/image-rs/jpeg-decoder
+      Copyright (c) 2016 The jpeg-decoder Developers
   json-patch 4.2.0 (MIT/Apache-2.0)  https://github.com/idubrov/json-patch
       Copyright (c) 2017 Ivan Dubrov
   jsonptr 0.7.1 (MIT OR Apache-2.0)  https://github.com/chanced/jsonptr
@@ -1105,6 +1107,8 @@ Rust crates
       Authors: David Tolnay <dtolnay@gmail.com>
   thread_local 1.1.10 (MIT OR Apache-2.0)  https://github.com/Amanieu/thread_local-rs
       Copyright (c) 2016 The Rust Project Developers
+  tiff 0.9.1  https://github.com/image-rs/image-tiff
+      Copyright (c) 2018 PistonDevelopers
   time 0.3.55 (MIT OR Apache-2.0)  https://github.com/time-rs/time
       Copyright (c) Jacob Pratt et al.
   time-core 0.1.9 (MIT OR Apache-2.0)  https://github.com/time-rs/time
@@ -1214,6 +1218,8 @@ Rust crates
       Copyright (c) 2023 dAxpeDDa
   web_atoms 0.2.6 (MIT OR Apache-2.0)  https://github.com/servo/html5ever
       Copyright (c) 2014 The html5ever Project Developers
+  weezl 0.1.12 (MIT OR Apache-2.0)  https://github.com/image-rs/weezl
+      Copyright (c) HeroicKatora 2020
   wgpu 25.0.2 (MIT OR Apache-2.0)  https://github.com/gfx-rs/wgpu
       Copyright (c) 2021 The gfx-rs developers
   wgpu-core 25.0.2 (MIT OR Apache-2.0)  https://github.com/gfx-rs/wgpu

@@ -19,7 +19,10 @@ import { itemSpans, mainIndex } from './index';
 export type DropTarget =
   | { lane: 'main'; index: number }
   | { lane: 'picture'; trackId: string | null; atUs: number; newTrack?: boolean }
-  /** `row`: the timeline lane it was held over (Sounds or Music), so only that lane shows where it lands. */
+  /**
+   * `row`: the timeline lane it was held over, so only that lane shows where it lands. On Music it is added as music
+   * that fits the video (`features/media/place`), never by `dropOps`.
+   */
   | { lane: 'sound'; trackId: string | null; atUs: number; newTrack?: boolean; row?: 'sounds' | 'music' };
 
 /** The cut of `main` nearest `atUs`: its index in the main track (`main.length` is the end). */
@@ -40,8 +43,10 @@ export function nearestCut(main: Clip[], atUs: number): number {
 }
 
 /**
- * The ops that put `asset` at `target` (one undo step): the same builders the Import button uses (`lib/placement`),
- * so the media panel's drag and menu, a Finder drop and chat ("add the b-roll after the intro") all agree.
+ * The ops that put `asset` at `target` (one undo step): the same builders the Import button uses (`lib/placement`).
+ * The library and Finder drops send videos here (a clip of the main track, or a video layer); sounds and pictures go in
+ * through Rust as the library's "+" places them (`features/media/place`). Its sound and picture layers are built as
+ * before, for its own tests.
  *
  * - A video on the main track is a clip inserted at that cut.
  * - Anywhere else a video is a full-canvas video layer (the engine contains it) and an image a 5 s layer, both

@@ -195,6 +195,10 @@ pub const MESSAGES: Messages = &[
     // media/music.rs: music the chat or the library adds (`add_music_ops`).
     ("model.music.noSound", "That file has no sound to play as music."),
     ("model.music.noRoom", "Music has to start before the video ends, and end after it starts."),
+    // media/sound.rs and image.rs: sound effects and pictures the chat or the library adds.
+    ("model.sound.noSound", "That file has no sound to play."),
+    ("model.sound.noRoom", "A sound has to start before the video ends."),
+    ("model.image.notImage", "That file isn't a picture."),
     ("model.layer.zoom", "Zoom must be between 1× and 5×."),
     ("model.layer.zoomArea", "The zoom area is invalid."),
     // params.rs: `label` is the setting's label (English). Also sent, outside the sentence: `contribution` and `key`,
