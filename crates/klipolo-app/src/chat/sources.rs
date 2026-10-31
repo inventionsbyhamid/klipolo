@@ -18,12 +18,8 @@ use crate::credentials::Credentials;
 /// Whether a message can go to the model now.
 #[derive(Clone)]
 pub enum Readiness {
-    /// The model to send it to. `relay`: through Klipolo's relay, where a refused token is renewed once
-    /// (`Models::recover`) and the message sent again.
-    Ready {
-        model: Arc<dyn LanguageModel>,
-        relay: bool,
-    },
+    /// The model to send it to.
+    Ready { model: Arc<dyn LanguageModel> },
     /// Neither a key nor a code: the panel asks for one.
     NeedsKey,
     /// A key or code is saved, but nothing can pay yet (with a code, this Mac couldn't register with the relay): why, in
@@ -43,8 +39,9 @@ pub trait Models: Send + Sync {
     /// What one picture costs, in US dollars: counted into the session's spend when it comes back.
     fn picture_usd(&self) -> f64;
 
-    /// The relay refused the device's token (401): registers the device again (with the saved code). True when it
-    /// worked, so the message may be sent once more.
+    /// The model refused the credentials (`ChatErrorKind::Refused`). True when they could be renewed (through Klipolo's
+    /// relay, the device registers again with the saved code), so the message may be sent once more; false when there
+    /// is nothing to renew (the person's own key was refused: a wrong key) or renewing failed.
     fn recover(&self) -> BoxFuture<'_, bool>;
 }
 
@@ -66,13 +63,10 @@ impl Models for MetaModels {
             match (ready.meta, ready.problem) {
                 // A key with a registration problem still chats: only word timing needs the relay.
                 (Some(meta), _) => {
-                    let client = meta.client().clone();
-                    let relay = client.is_relay();
                     // Chat keeps its own slot, apart from the analysis's (`MetaChat`); one message goes at a time
                     // (`ChatSession`'s queue), so one model call is in flight.
                     Readiness::Ready {
-                        model: Arc::new(MetaChat::new(client)),
-                        relay,
+                        model: Arc::new(MetaChat::new(meta.client().clone())),
                     }
                 }
                 (None, Some(problem)) => Readiness::Problem(problem),
@@ -99,6 +93,11 @@ impl Models for MetaModels {
 
     fn recover(&self) -> BoxFuture<'_, bool> {
         Box::pin(async move {
+            // Only the relay's device token can be renewed; Meta refusing the person's own key is a wrong key.
+            let relay = (self.credentials.meta()).is_some_and(|meta| meta.client().is_relay());
+            if !relay {
+                return false;
+            }
             (self.credentials.recover_unauthorized().await)
                 .inspect_err(
                     |e| tracing::warn!(error = %e, "chat: the device couldn't register again"),
@@ -131,5 +130,51 @@ impl Findings for AnalysisState {
 
     fn levels(&self) -> HashMap<String, Arc<Levels>> {
         self.speech().levels.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::TcpListener;
+
+    use klipolo_meta::SecretString;
+
+    use super::*;
+    use crate::credentials::{Endpoints, META_API_KEY, MemoryStore, RELAY_TOKEN, SecretStore};
+
+    /// Credentials with the person's own key and a device token saved (nothing to register), Meta and the relay at
+    /// `server`, which never answers.
+    fn with_key(server: &TcpListener) -> Arc<Credentials> {
+        let store = MemoryStore::default();
+        store
+            .set(META_API_KEY, &SecretString::from("sk-test".to_owned()))
+            .unwrap();
+        store
+            .set(RELAY_TOKEN, &SecretString::from("token".to_owned()))
+            .unwrap();
+        let at = format!("http://{}", server.local_addr().unwrap());
+        let endpoints = Endpoints {
+            meta_base: at.clone(),
+            relay_base: at,
+        };
+        Arc::new(Credentials::load(
+            Arc::new(store),
+            endpoints,
+            "device".into(),
+        ))
+    }
+
+    #[tokio::test]
+    async fn a_refused_key_is_not_renewed() {
+        let server = TcpListener::bind("127.0.0.1:0").unwrap();
+        server.set_nonblocking(true).unwrap();
+        let models = MetaModels::new(with_key(&server));
+        assert!(matches!(models.ready().await, Readiness::Ready { .. }));
+        // The person's own key: nothing to renew, so it says so at once and asks nobody.
+        let renewed = tokio::time::timeout(std::time::Duration::from_secs(5), models.recover())
+            .await
+            .expect("answered without asking the relay");
+        assert!(!renewed);
+        assert!(server.accept().is_err(), "nothing was sent");
     }
 }

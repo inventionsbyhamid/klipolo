@@ -206,6 +206,8 @@ impl LanguageModel for Script {
 /// How the fake credentials answer: the model behind them, through the relay or not, and how many renewals.
 struct Paying {
     readiness: Mutex<Readiness>,
+    /// Through the relay, where a refused token can be renewed.
+    relay: bool,
     /// The picture maker, or the sentence that says why there is none.
     images: Mutex<Result<Arc<dyn ImageMaker>, String>>,
     recovered: AtomicUsize,
@@ -215,19 +217,21 @@ struct Paying {
 
 impl Paying {
     fn key(model: Arc<Script>) -> Arc<Self> {
-        Self::with(Readiness::Ready {
-            model,
-            relay: false,
-        })
+        Self::new(Readiness::Ready { model }, false)
     }
 
     fn relay(model: Arc<Script>) -> Arc<Self> {
-        Self::with(Readiness::Ready { model, relay: true })
+        Self::new(Readiness::Ready { model }, true)
     }
 
     fn with(readiness: Readiness) -> Arc<Self> {
+        Self::new(readiness, false)
+    }
+
+    fn new(readiness: Readiness, relay: bool) -> Arc<Self> {
         Arc::new(Self {
             readiness: Mutex::new(readiness),
+            relay,
             images: Mutex::new(Err(NEEDS_KEY.to_owned())),
             recovered: AtomicUsize::new(0),
             renews: std::sync::atomic::AtomicBool::new(true),
@@ -251,6 +255,9 @@ impl Models for Paying {
     }
 
     fn recover(&self) -> BoxFuture<'_, bool> {
+        if !self.relay {
+            return Box::pin(async { false });
+        }
         self.recovered.fetch_add(1, Ordering::SeqCst);
         let renews = self.renews.load(Ordering::SeqCst);
         Box::pin(async move { renews })

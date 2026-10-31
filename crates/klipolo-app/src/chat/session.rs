@@ -15,8 +15,8 @@
 //! - **The project moved while the model answered** (a hand edit meanwhile): nothing of the answer is applied or
 //!   proposed, and the reply says so.
 //! - **Errors** never touch the project: each is one plain sentence (`ChatFailure`). No key or code is `NeedsKey`; a
-//!   code whose device couldn't register says why with Retry; a token the relay refused is renewed once and the message
-//!   sent again.
+//!   code whose device couldn't register says why with Retry; refused credentials are renewed once when the adapter can
+//!   (a relay's device token) and the message sent again.
 //! - **The conversation** keeps the last `KEPT_TURNS` exchanges with their notes (what was applied or proposed, and
 //!   later whether the person applied or discarded it), for the project open; another project, or New chat, starts it
 //!   over.
@@ -226,8 +226,8 @@ impl ChatSession {
             return Ok(self.land(&request.id, &text, &now, &inputs, out));
         }
 
-        let (model, relay) = match self.models.ready().await {
-            Readiness::Ready { model, relay } => (model, relay),
+        let model = match self.models.ready().await {
+            Readiness::Ready { model } => model,
             Readiness::Problem(problem) => {
                 return Ok(failed(ChatFailureKind::Registration, &problem));
             }
@@ -241,12 +241,11 @@ impl ChatSession {
             async move { plan(&*model, history, context, text, inputs, project).await }
         };
         let mut planned = ask(model).await;
-        // The relay refused the device's token: registered again once, and the message sent again.
-        if relay
-            && let Err(refused) = &planned
+        // Credentials refused: renewed once when they can be (the adapter knows), and the message sent again.
+        if let Err(refused) = &planned
             && refused.kind == ChatErrorKind::Refused
             && self.models.recover().await
-            && let Readiness::Ready { model, .. } = self.models.ready().await
+            && let Readiness::Ready { model } = self.models.ready().await
         {
             self.spend.message(refused.usage_usd, refused.model_calls);
             planned = ask(model).await;
