@@ -8,9 +8,9 @@ import catalog from './builtin-catalog.json';
 import { contribName } from './contribNames';
 
 /**
- * Built-in contributions, pinned to Rust by `crates/klipolo-model/tests/contrib.rs` (`builtin_catalog_json_is_current`).
- * Their `name` is English from Rust; the UI shows `contribLabel`, which names a built-in by its id in the language
- * shown (`contribNames`).
+ * Built-in contributions, pinned to Rust by `crates/klipolo-model/tests/contrib.rs`
+ * (`builtin_catalog_json_is_current`). Their `name` is English from Rust; the UI shows `contribLabel`, which names a
+ * built-in by its id in the language shown (`contribNames`).
  */
 export const BUILTINS = catalog as ContribDef[];
 
@@ -109,7 +109,9 @@ const MISSING_IN_SENTENCE: Record<ContribKind, MessageDescriptor> = {
   }),
 };
 
-/** `contribLabel` for a name inside a sentence (an undo label's value): one that isn't installed is "missing effect". */
+/**
+ * `contribLabel` for a name inside a sentence (an undo label's value): one that isn't installed is "missing effect".
+ */
 export function contribLabelInSentence(id: ContribId, kind: ContribKind, inI18n: I18n = i18n): string {
   return (
     contribName(id, inI18n) ??

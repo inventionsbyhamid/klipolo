@@ -1,5 +1,5 @@
-//! The project file on disk: an atomic save (`klipolo_platform::durable`: tmp + sync + rename) and why a save failed, in
-//! words the person can act on.
+//! The project file on disk: an atomic save (`klipolo_platform::durable`: tmp + sync + rename) and why a save failed,
+//! in words the person can act on.
 
 use std::fs;
 use std::io;
@@ -68,7 +68,8 @@ pub(crate) fn save(
 }
 
 /// Writes `<file>.<pid>.tmp`, pushes it to the disk, then renames it over `file`, so a crash or power cut never leaves
-/// half a file. A failed write removes the temporary file. Through `steps` (the saver's disk: the real one, or a test's).
+/// half a file. A failed write removes the temporary file. Through `steps` (the saver's disk: the real one, or a
+/// test's).
 pub(crate) fn save_with(
     steps: &dyn Steps,
     file: &Path,

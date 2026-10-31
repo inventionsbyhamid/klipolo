@@ -17,6 +17,12 @@ use super::still::encode_jpeg;
 const STRIP_FILE: &str = "strip.json";
 const VERSION: u32 = 1;
 
+/// The thumbnails' folder in a media cache (`GpuBackend::with_media_cache`'s folder): the one place this is named, so
+/// the engine that writes them and the app that serves them read the same layout.
+pub fn root_in(media_cache: &Path) -> PathBuf {
+    media_cache.join("thumbs")
+}
+
 /// Where a chunk's tiles came from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fill {

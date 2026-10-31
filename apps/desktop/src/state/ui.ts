@@ -17,6 +17,9 @@ interface UiStore {
   /** The format the preview shows; null: the project's primary one. */
   previewFormat: FormatKind | null;
   setPreviewFormat: (format: FormatKind | null) => void;
+  /** Bumped by Command K: the chat panel opens and puts the cursor in its composer. */
+  chatFocus: number;
+  focusChat: () => void;
 }
 
 export const useUi = create<UiStore>((set) => ({
@@ -27,4 +30,6 @@ export const useUi = create<UiStore>((set) => ({
   timelineExpanded: false,
   previewFormat: null,
   setPreviewFormat: (previewFormat) => set({ previewFormat }),
+  chatFocus: 0,
+  focusChat: () => set((s) => ({ chatFocus: s.chatFocus + 1 })),
 }));

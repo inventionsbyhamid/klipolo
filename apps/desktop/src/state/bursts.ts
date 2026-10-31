@@ -4,6 +4,9 @@
  */
 const flushes = new Set<(closing: boolean) => boolean>();
 
+/** How long a burst waits after its last change before it commits (ms): presses within it are one undo step. */
+export const SETTLE_MS = 400;
+
 /**
  * `flush` commits its pending change and says whether there was one; `closing`, the project is closing (or the app
  * quitting). A burst's commit is kept at close (`useBurst`): it goes in its turn, and the close waits for it. Returns
@@ -17,9 +20,9 @@ export function registerBurst(flush: (closing: boolean) => boolean): () => void 
 }
 
 /**
- * Closing's rounds at most. Today's deepest nesting takes two to three: a word colour's key settle presses into the word
- * list's queue while its words update, the queue's settle sends it, kept at close; a colour's key settle
- * pushed into its field's burst goes in the next round. Six leave room; a round with nothing pending ends it.
+ * Closing's rounds at most. Today's deepest nesting takes two to three: a word colour's key settle presses into the
+ * word list's queue while its words update, the queue's settle sends it, kept at close; a colour's key
+ * settle pushed into its field's burst goes in the next round. Six leave room; a round with nothing pending ends it.
  */
 const CLOSING_ROUNDS = 6;
 

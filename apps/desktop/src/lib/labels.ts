@@ -90,8 +90,8 @@ function wordNumber(key: string, value: number, inI18n: I18n): string {
 
 /**
  * A label's values in words: a time (`…Us`) as a clock, a short length (`…DurationUs`) in seconds, a moment (`…AtMs`)
- * as a date and time, a size (`…Bytes`) as a file size, a contribution id as its name, a nested code worded the same way; other text as it is (a clip's
- * name). `inI18n` is the catalogue to
+ * as a date and time, a size (`…Bytes`) as a file size, a contribution id as its name, a nested code worded the same
+ * way; other text as it is (a clip's name). `inI18n` is the catalogue to word with: the language shown, or the
  * built-in English for the planner.
  */
 export function wordParams(
