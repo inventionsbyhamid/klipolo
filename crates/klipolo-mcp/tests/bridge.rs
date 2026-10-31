@@ -20,8 +20,8 @@ use klipolo_mcp::bridge::{Bridge, IN_FLIGHT, LINE_LIMIT, REPLY_LIMIT};
 use klipolo_mcp::connection::{self, ConnectionFile, McpServer, VERSION};
 use klipolo_mcp::rpc::{Mcp, initialize_result, listed, tool_result};
 use klipolo_mcp::words::{
-    BUSY, NO_METHOD, NOT_JSON, OFF, ONE_MESSAGE, REPLY_TOO_LARGE, TOO_LARGE, UNANSWERED,
-    sessions_paced,
+    BUSY, MAY_BE_MADE, NO_METHOD, NOT_JSON, OFF, ONE_MESSAGE, REPLY_TOO_LARGE, TOO_LARGE,
+    UNANSWERED, sessions_paced,
 };
 use serde_json::{Value, json};
 
@@ -823,14 +823,49 @@ fn passes_on_only_a_whole_reply_to_the_request() {
     assert_eq!(out.refused(1), REPLY_TOO_LARGE);
     let nearly = out.reply(2);
     assert_eq!(nearly["result"]["isError"], false);
+    // Each went to Klipolo and may have been carried out: the app reads the project before it tries again.
     for id in 3..=6 {
-        assert_eq!(out.refused(id), UNANSWERED, "{}", tools[id as usize]);
+        assert_eq!(out.refused(id), MAY_BE_MADE, "{}", tools[id as usize]);
     }
     assert!(elsewhere.got().is_empty(), "the redirect isn't followed");
     assert_eq!(
         out.reply(7),
         json!({"jsonrpc": "2.0", "id": 7, "error": {"code": -32600, "message": "Too large."}})
     );
+}
+
+/// A request that went to Klipolo and got no answer (the connection closed, or the time ran out) may still have been
+/// carried out: the app hears so, and to read the project before trying again, never a plain "try again" that could
+/// add the same words twice. One that never reached Klipolo's handling (its session opening went unanswered) says it
+/// stopped.
+#[test]
+fn a_request_sent_without_an_answer_may_already_be_made() {
+    let klipolo = program(|got| match got.method().as_str() {
+        "tools/call" => Vec::new(),
+        _ => like_klipolo(got),
+    });
+    let dir = tempfile::tempdir().unwrap();
+    file_for(dir.path(), klipolo.port, TOKEN, std::process::id());
+    let (bridge, out) = bridge(dir.path());
+    let words = json!({"text": "Day 1", "preset": "title", "atSec": null, "durationSec": null});
+    bridge.line(&call(1, "addText", words));
+    bridge.wait();
+    assert_eq!(out.refused(1), MAY_BE_MADE);
+    assert!(MAY_BE_MADE.contains("getContext"), "names the read");
+    assert_eq!(
+        klipolo.methods(),
+        ["initialize", "notifications/initialized", "tools/call"],
+        "sent once, never again"
+    );
+
+    let mute = program(|_| Vec::new());
+    let dir = tempfile::tempdir().unwrap();
+    file_for(dir.path(), mute.port, TOKEN, std::process::id());
+    let (bridge, out) = self::bridge(dir.path());
+    bridge.line(&call(2, "getSummary", json!({})));
+    bridge.wait();
+    assert_eq!(out.refused(2), UNANSWERED);
+    assert_eq!(mute.methods(), ["initialize"]);
 }
 
 /// Each request on a thread of its own, at most `IN_FLIGHT` at once: one more hears so at once, the rest go on.

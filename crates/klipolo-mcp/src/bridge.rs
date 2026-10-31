@@ -19,8 +19,9 @@
 //!
 //! Each forwarded request runs on a thread of its own, at most `IN_FLIGHT` at once. Requests go only to 127.0.0.1,
 //! with no proxy, no redirect, a new connection each time (Klipolo closes idle ones), and never an `Origin`. Only a
-//! whole reply to the request, at most `REPLY_LIMIT`, is passed on; a request that got none hears so
-//! (`words::UNANSWERED`), never silence. The bridge logs nothing, so the token and the headers show nowhere. When its
+//! whole reply to the request, at most `REPLY_LIMIT`, is passed on; a request that got none hears so, never silence:
+//! one that went to Klipolo may have been carried out (`words::MAY_BE_MADE`: read the project before trying again), and
+//! is never sent twice; one Klipolo never took in can be tried again (`words::UNANSWERED`). The bridge logs nothing, so the token and the headers show nowhere. When its
 //! input ends, it waits for the requests in flight, ends its session and returns.
 
 use std::io::{self, BufRead, Read, Write};
@@ -127,8 +128,10 @@ enum Failed {
     Off,
     /// The token was refused (401).
     Refused,
-    /// It went to Klipolo, and no whole reply to it came back.
+    /// Klipolo didn't take it in: its session couldn't open, or Klipolo no longer knew it.
     Unanswered,
+    /// It went to Klipolo, and no whole reply to it came back: Klipolo may have carried it out.
+    Lost,
     /// The reply was larger than `REPLY_LIMIT`.
     TooLarge,
     /// New sessions are paced, for this long still.
@@ -141,6 +144,7 @@ impl Failed {
         match self {
             Failed::Off | Failed::Refused => words::OFF.to_owned(),
             Failed::Unanswered => words::UNANSWERED.to_owned(),
+            Failed::Lost => words::MAY_BE_MADE.to_owned(),
             Failed::TooLarge => words::REPLY_TOO_LARGE.to_owned(),
             Failed::Paced(wait) => words::sessions_paced(*wait),
         }
@@ -379,11 +383,19 @@ impl Inner {
                     self.forget(&link);
                     return Err(Failed::Off);
                 }
-                Sent::Lost => return Err(Failed::Unanswered),
+                // It went, and may have been carried out: never sent again.
+                Sent::Lost => return Err(Failed::Lost),
                 Sent::Answered { status, body, .. } => (status, body),
             };
             match status {
-                StatusCode::OK => return body.and_then(|body| answering(body, id)),
+                StatusCode::OK => {
+                    return body.and_then(|body| answering(body, id)).map_err(
+                        |failed| match failed {
+                            Failed::Unanswered => Failed::Lost,
+                            failed => failed,
+                        },
+                    );
+                }
                 StatusCode::UNAUTHORIZED if refused.is_none() => {
                     self.forget(&link);
                     refused = Some((link.port, link.token));
@@ -404,7 +416,8 @@ impl Inner {
                         Some(said @ Value::Object(_)) => {
                             Ok(json!({"jsonrpc": "2.0", "id": id, "error": said}))
                         }
-                        _ => Err(Failed::Unanswered),
+                        // An answer that isn't Klipolo's: what became of the request isn't known.
+                        _ => Err(Failed::Lost),
                     };
                 }
             }

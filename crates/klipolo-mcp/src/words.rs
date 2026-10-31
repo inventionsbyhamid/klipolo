@@ -196,8 +196,13 @@ pub const VERSION_UNKNOWN: &str =
 /// What a request through the stdio bridge hears while Klipolo isn't listening.
 pub const OFF: &str = "Klipolo isn't running, or \"Let other apps edit with Klipolo\" is off. Ask the person to open \
 Klipolo and turn it on in Settings.";
-/// What a request through the stdio bridge hears when it went to Klipolo and no answer came back.
+/// What a request through the stdio bridge hears when Klipolo stopped before it took the request in (its session
+/// couldn't open): nothing was done.
 pub const UNANSWERED: &str = "Klipolo stopped before it answered. Try again.";
+/// What a request through the stdio bridge hears when it went to Klipolo and no whole answer came back (the time ran
+/// out, or the connection closed): Klipolo may have carried it out, so trying again at once could make a change twice.
+pub const MAY_BE_MADE: &str = "No answer came back from Klipolo, but a change you asked for may already be made. Call \
+getContext to see the project as it is now before trying again.";
 /// A request past the most the stdio bridge forwards at once.
 pub const BUSY: &str = "Too many requests at once. Try again in a moment.";
 /// An answer larger than the stdio bridge passes on.
