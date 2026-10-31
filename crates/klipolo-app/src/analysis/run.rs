@@ -97,6 +97,8 @@ struct Job<'a> {
     work: &'a Path,
     /// Its cache folder.
     dir: &'a Dir,
+    /// A video whose scene log is still to do (after its words).
+    needs_scenes: bool,
 }
 
 /// Why a clip's analysis ended without its steps saying how (its task panicked, or was dropped part-way).
@@ -260,6 +262,7 @@ impl AnalysisState {
             run,
             work: &work.0,
             dir: &dir,
+            needs_scenes,
         };
         let transcript = match cached.transcript {
             Some(found) if retime => match self.time_again(&job, found).await {
@@ -295,6 +298,7 @@ impl AnalysisState {
             run,
             work,
             dir,
+            ..
         } = *job;
         if run.cancelled() {
             return Err(Outcome::Stopped);
@@ -323,7 +327,7 @@ impl AnalysisState {
                         out.transcript.key = key.to_owned();
                         self.store(dir, "transcript", &out, &model).await;
                         self.found_transcript(key, &out);
-                        return Err(self.timing_stopped(key, &out));
+                        return Err(self.timing_stopped(job, &out));
                     }
                 }
             } else {
@@ -421,9 +425,10 @@ impl AnalysisState {
             run,
             work,
             dir,
+            ..
         } = *job;
         if run.cancelled() {
-            return Err(self.timing_stopped(key, &found));
+            return Err(self.timing_stopped(job, &found));
         }
         self.progress(key, AnalysisStep::Audio, 0);
         let wav = work.join("sound.wav");
@@ -454,7 +459,7 @@ impl AnalysisState {
         let aligned = |t: &TranscriptOut| t.turns.iter().filter(|t| t.aligned).count();
         if aligned(&timed) <= aligned(&found) {
             return if run.cancelled() {
-                Err(self.timing_stopped(key, &found))
+                Err(self.timing_stopped(job, &found))
             } else {
                 Ok(found)
             };
@@ -467,7 +472,7 @@ impl AnalysisState {
             .await;
         self.found_transcript(key, &timed);
         if run.cancelled() {
-            return Err(self.timing_stopped(key, &timed));
+            return Err(self.timing_stopped(job, &timed));
         }
         Ok(timed)
     }
@@ -482,6 +487,7 @@ impl AnalysisState {
             run,
             work,
             dir,
+            ..
         } = *job;
         // The copy is the step's first half, by how far into the clip its frames have got.
         calls.meter.begin(AnalysisStep::Scenes, 0, 0, 50);
@@ -524,10 +530,15 @@ impl AnalysisState {
         Ok(())
     }
 
-    /// The person stopped content `key`'s word timing with `kept` cached: it is analysed as far as it got (its words
-    /// timed roughly where they weren't timed), and only the person's Analyze or Retry times them again.
-    fn timing_stopped(&self, key: &str, kept: &TranscriptOut) -> Outcome {
-        lock(&self.inner).timed_again.insert(key.to_owned());
+    /// The person stopped the job's word timing with `kept` cached: only the person's Analyze or Retry times its words
+    /// again. A clip with nothing else to do is analysed as far as it got (its words timed roughly where they weren't
+    /// timed); a video whose scene log is still to do goes back to not analysed, as a Cancel during its scene log does
+    /// (the page offers it again; it never starts an unfinished video on its own).
+    fn timing_stopped(&self, job: &Job<'_>, kept: &TranscriptOut) -> Outcome {
+        lock(&self.inner).timed_again.insert(job.key.to_owned());
+        if job.needs_scenes {
+            return Outcome::Stopped;
+        }
         Outcome::Done {
             approximate: kept.approximate,
         }

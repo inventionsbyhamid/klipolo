@@ -1795,3 +1795,58 @@ async fn a_removed_asset_is_forgotten_and_its_twin_keeps_its_analysis() {
     assert!(after.iter().all(|e| e.asset_id() == "first"), "{after:?}");
     server.verify().await;
 }
+
+/// A video whose word timing the person stops goes back to not analysed (its scene log is still to do, and the page
+/// offers it), with what was heard cached; nothing of its scene log is sent.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_video_stopped_during_word_timing_goes_back_to_not_analysed() {
+    let server = MockServer::start().await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(asr_answer())
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(Counted {
+            count: h.aligns.clone(),
+            template: ResponseTemplate::new(429)
+                .insert_header("retry-after", "1")
+                .set_body_json(json!({"error": "busy", "message": "Busy."})),
+        })
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/files"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "file-1"})))
+        .expect(0)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let file = h.clip("talk.mp4", 3);
+    let clip = asset("talk", AssetKind::Video, &file, SECONDS);
+
+    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while h.aligns.load(Ordering::SeqCst) == 0 {
+        assert!(Instant::now() < deadline, "word timing never started");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    h.state.cancel();
+    started.finished().await;
+
+    assert_eq!(h.state.state_of("talk"), AssetState::None);
+    assert_eq!(
+        h.events_for("talk").last(),
+        Some(&AnalysisEvent::Stopped(AnalysisStopped {
+            asset_id: "talk".into()
+        }))
+    );
+    assert!(
+        h.cache_dir(&file)
+            .load::<TranscriptOut>("transcript")
+            .is_some()
+    );
+    server.verify().await;
+}
