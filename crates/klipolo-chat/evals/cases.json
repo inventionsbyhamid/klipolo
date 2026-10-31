@@ -197,10 +197,11 @@
       "id": "lisbon-title",
       "message": "put a title 'Day 1 in Lisbon' for 3 seconds at the start",
       "playhead": 40.0,
-      "note": "addText with the title preset, or the title card template; addText's call alone is checked until its presets place words",
+      "note": "addText with the title preset, or the title card template; until addText's presets place words, its 'coming soon' answer is not counted as right",
       "expect": [
         {
-          "calls": [{"name": "addText", "args": {"text": "Day 1 in Lisbon", "preset": "title", "atSec": {"min": 0.0, "max": 0.3}, "durationSec": 3.0}}]
+          "calls": [{"name": "addText", "args": {"text": "Day 1 in Lisbon", "preset": "title", "atSec": {"min": 0.0, "max": 0.3}, "durationSec": 3.0}}],
+          "outcome": {"applied": true}
         },
         {
           "calls": [{"name": "makeTitleCard", "args": {"title": "Day 1 in Lisbon", "atSec": {"min": 0.0, "max": 0.3}, "durationSec": 3.0}}],
