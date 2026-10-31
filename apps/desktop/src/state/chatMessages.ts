@@ -172,9 +172,15 @@ export interface ChatStore {
 export type ChatSet = StoreApi<ChatStore>['setState'];
 export type ChatGet = StoreApi<ChatStore>['getState'];
 
-/** `messages` with the oldest dropped past the cap. */
+/**
+ * `messages` with the oldest dropped past the cap, but never the proposal waiting: out of the log, it would still wait in
+ * Klipolo with nothing left to Apply or Discard (an app pointing at moments can fill the log fast).
+ */
 export function withMessages(messages: Message[]) {
-  return { messages: messages.length > MAX_MESSAGES ? messages.slice(messages.length - MAX_MESSAGES) : messages };
+  if (messages.length <= MAX_MESSAGES) return { messages };
+  const kept = messages.slice(messages.length - MAX_MESSAGES);
+  const open = openProposal(messages)?.message;
+  return { messages: open && !kept.includes(open) ? [open, ...kept.slice(1)] : kept };
 }
 
 /** The newest proposal still waiting for the person, and its message: what the timeline shows red. */

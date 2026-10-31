@@ -12,7 +12,7 @@ import { useAi } from '../../ai/aiStatus';
 import { installChatBridge } from '../../bridge/chat';
 import { fakeChat, proposal, reply, type FakeChat } from '../../bridge/chatFake';
 import { useAnalysis } from '../../state/analysis';
-import { followApps, useChat, useChatStandIn } from '../../state/chat';
+import { followApps, MAX_MESSAGES, useChat, useChatStandIn } from '../../state/chat';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { useProposal } from '../../state/proposal';
@@ -363,6 +363,18 @@ describe('another app in chat', () => {
     expect(await within(screen.getByRole('log')).findByText('From Example Client')).toBeInTheDocument();
     expect(useProject.getState().snapshot).toBe(withIt);
     expect(calls.project_snapshot).toBeUndefined();
+  });
+
+  it('the_waiting_proposal_stays_however_many_messages_come_after', async () => {
+    chat();
+    await useChat.getState().receive(external('Example Client', { proposal: teaser() }));
+    // An app pointing at moments, many times: the log keeps its newest messages, and the proposal waiting.
+    for (let i = 0; i < MAX_MESSAGES + 5; i++)
+      await useChat.getState().receive(external('Example Client', { moments: [{ startUs: i * S, endUs: (i + 1) * S, label: `Moment ${i}` }] }));
+    const messages = useChat.getState().messages;
+    expect(messages).toHaveLength(MAX_MESSAGES);
+    expect(messages.some((m) => m.from === 'klipolo' && m.kind === 'reply' && m.proposal?.state === 'open')).toBe(true);
+    expect(useProposal.getState().proposal?.id).toBe('p1');
   });
 
   it('nothing_shows_with_no_project_open', async () => {
