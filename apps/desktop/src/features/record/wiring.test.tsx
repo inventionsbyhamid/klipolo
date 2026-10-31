@@ -9,10 +9,11 @@ import type { WorkerState } from '../../bindings/WorkerState';
 import { wordLabel } from '../../lib/labels';
 import { beginCommit } from '../../state/commitQueue';
 import { useProject } from '../../state/project';
+import { useRecorder } from '../../state/recorder';
 import { useSelection } from '../../state/selection';
 import { useToasts } from '../../state/toasts';
 import { fixtureSnapshot, revisionPatch } from '../../test/fixtures';
-import { type FakeRecorder, installFakeRecorder, takeImport } from '../../test/recorderBridge';
+import { type FakeRecorder, installFakeRecorder, recorderSetup, takeImport } from '../../test/recorderBridge';
 
 // The editor's panels stand in for themselves: these tests are about the recorder's place in the window.
 vi.mock('../../layout/Library', () => ({ Library: () => <aside aria-label="Library" /> }));
@@ -25,6 +26,14 @@ const S = 1_000_000;
 
 // The worker's events, as the app forwards them.
 const state = (s: WorkerState): CaptureEvent => ({ ev: 'state', state: s, elapsedUs: 0 });
+const failed = (code: string): CaptureEvent => ({ ev: 'failed', error: { code, params: {} } });
+const critical = (code: string): CaptureEvent => ({
+  ev: 'health',
+  note: { code, params: {} },
+  level: 'critical',
+  source: null,
+});
+
 /** A project as Rust opens it: the fixture, under its own id and name. */
 function opened(name: string, opening: number): Snapshot {
   const snapshot = fixtureSnapshot();
@@ -189,6 +198,7 @@ describe('in the window', () => {
 
 describe('a take that lands', () => {
   let fake: FakeRecorder;
+  const rec = () => useRecorder.getState();
   /** The project's undo calls, and what each found on top. */
   let undos: (string | null)[];
 
@@ -212,6 +222,17 @@ describe('a take that lands', () => {
     clearMocks();
     vi.restoreAllMocks();
   });
+
+  /** Opens the dialog, presses Record, and gives the take it armed, recording. */
+  async function recording(): Promise<string> {
+    fake.script.setup = () => recorderSetup();
+    await rec().openRecorder();
+    await rec().record();
+    const take = rec().take;
+    if (take === null) throw new Error('Record armed no take');
+    fake.emit(take, state('recording'));
+    return take;
+  }
 
   it('landing_toast_names_the_recording', async () => {
     const first = withTake(fixtureSnapshot(), 'take-clip', 40);
@@ -303,5 +324,56 @@ describe('a take that lands', () => {
         'The recorder stopped while saving, so Klipolo finished the recording from its files.',
       ]),
     );
+  });
+
+  it('added_not_opened_is_a_note_not_a_failure', async () => {
+    const take = await recording();
+    fake.emit(take, state('stopping'));
+    fake.emit(take, { ev: 'finished', session: take });
+    expect(rec().open).toBe(false);
+    // The landing couldn't open the project after adding the take.
+    fake.emit(take, critical('capture.import.addedNotOpened'));
+    fake.emit(take, state('idle'));
+    expect(toasts().map((t) => [t.kind, t.text])).toEqual([
+      ['info', 'The recording was added to your project. Open the project from the start screen to see it.'],
+    ]);
+    expect(rec().error).toBeNull();
+
+    // A take finished from its files (no `finished`) says it as it ends, the same way.
+    useToasts.setState({ toasts: [] });
+    const next = await recording();
+    fake.emit(next, critical('capture.import.addedNotOpened'));
+    fake.emit(next, state('idle'));
+    expect(toasts().map((t) => t.kind)).toEqual(['info']);
+  });
+
+  it('a_take_that_was_not_added_says_why_once_klipolo_is_back', async () => {
+    const take = await recording();
+    fake.emit(take, state('stopping'));
+    fake.emit(take, { ev: 'finished', session: take });
+    fake.emit(take, critical('capture.import.notAdded'));
+    fake.emit(take, state('idle'));
+    expect(toasts().map((t) => [t.kind, t.text])).toEqual([
+      ['error', "The recording couldn't be added to your project. Its files are in Movies / Klipolo / Recordings."],
+    ]);
+    // Its worker has gone: a later note of that take is no one's.
+    fake.emit(take, critical('capture.import.notAdded'));
+    expect(toasts()).toHaveLength(1);
+  });
+
+  it('a_take_given_up_while_saving_still_lands', async () => {
+    const take = await recording();
+    fake.emit(take, state('stopping'));
+    // The drive stopped answering while it saved: the worker gives up, and Klipolo finishes it from its files.
+    fake.emit(take, failed('capture.error.driveStuck'));
+    expect(rec().open).toBe(false);
+    expect(texts()).toEqual([
+      'The drive stopped answering. Klipolo finishes the recording from what was saved. Check the drive before you record again.',
+    ]);
+    fake.land(takeImport(withTake(fixtureSnapshot(), 'take-clip', 40), 'take-clip', { take, recordingId: 'rec' }));
+    await vi.waitFor(() => expect(texts()).toContain('Added Recording 1, 0:40.'));
+    expect(useProject.getState().snapshot?.project.timeline.main.at(-1)?.id).toBe('take-clip');
+    fake.emit(take, state('idle'));
+    expect(rec().error).toBeNull();
   });
 });

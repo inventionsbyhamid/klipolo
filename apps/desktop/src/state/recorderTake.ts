@@ -59,6 +59,13 @@ const NOTE_TOAST = 'recorder-note';
  * recording, which the window, hidden for the take, can't show when it happens.
  */
 const KEPT_NOTES: ReadonlySet<string> = new Set(['capture.note.cameraDropped']);
+/**
+ * A take was added to its project, which then couldn't be opened to show it: news, not a failure ("The recording was
+ * added to your project. Open the project from the start screen to see it.").
+ */
+const ADDED_NOT_OPENED = 'capture.import.addedNotOpened';
+/** The toast that says what became of a saved take's landing when it didn't show in the editor. */
+const LANDING_TOAST = 'recorder-landing';
 
 /** A note of this kind is said as Klipolo comes back from a take, so a landed take's own notes leave it out. */
 export function saidOnReturn(code: string): boolean {
@@ -113,6 +120,13 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
   let gateFrom: number | null = null;
   /** The kept note is critical: only another critical one replaces it. */
   let noteCritical = false;
+  /** The kept note says the take was added (`ADDED_NOT_OPENED`): said as news, not as a failure. */
+  let noteAdded = false;
+  /**
+   * The take saved and let go whose landing is still to come (it lands before its worker's `state: idle`): what its
+   * landing says, when it didn't land in the editor, is still heard.
+   */
+  let landing: string | null = null;
   /**
    * The take that passed the start gate (its worker said `recording` or `paused`): it is saved however it ends, so the
    * dialog goes with it. A `stopping` alone proves nothing: a take stopped in its countdown says it too.
@@ -132,6 +146,7 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
 
   function gone(id: string) {
     departed.add(id);
+    if (landing === id) landing = null;
     if (leaving?.id !== id) return;
     leaving.gone();
     leaving = null;
@@ -185,7 +200,8 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
     if (note === null) return;
     set({ note: null });
     noteCritical = false;
-    toast.error(note, { key: NOTE_TOAST });
+    if (noteAdded) toast.info(note, { key: NOTE_TOAST });
+    else toast.error(note, { key: NOTE_TOAST });
   }
 
   function keepNote(note: CodedError, level: CaptureLevel) {
@@ -193,7 +209,17 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
     if (!critical && !KEPT_NOTES.has(note.code)) return;
     if (noteCritical && !critical) return;
     noteCritical = critical;
+    noteAdded = note.code === ADDED_NOT_OPENED;
     set({ note: said(note) });
+  }
+
+  /**
+   * What a saved take's landing said instead of landing in the editor, now that Klipolo is back: that it was added to a
+   * project that couldn't be opened is news; anything else says it wasn't added, and where its files are.
+   */
+  function sayLanding(note: CodedError) {
+    if (note.code === ADDED_NOT_OPENED) toast.info(said(note), { key: LANDING_TOAST });
+    else toast.error(said(note), { key: LANDING_TOAST });
   }
 
   /**
@@ -202,10 +228,12 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
    * else Record waits for that.
    */
   function end(id: string, freed: boolean) {
-    if (freed) gone(id);
-    else leave(id);
     const saved = recorded === id;
     if (saved) recorded = null;
+    // Saved, it lands next (a take given up while saving, `driveStuck`, too): what its landing says is still heard.
+    if (saved && !freed) landing = id;
+    if (freed) gone(id);
+    else leave(id);
     if (started === id) started = null;
     press = null;
     set(NO_TAKE);
@@ -269,6 +297,8 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
   }
 
   function hear(e: RecorderEvent) {
+    if (e.take === landing && e.take !== get().take && e.event.ev === 'health' && e.event.level === 'critical')
+      return sayLanding(e.event.note);
     if (leaving?.id === e.take) {
       if (e.event.ev === 'state' && e.event.state === 'idle') gone(e.take);
       return;
@@ -307,6 +337,7 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
     held.length = 0;
     gateFrom = null;
     noteCritical = false;
+    noteAdded = false;
     set({ ...NO_TAKE, ...NO_ERROR, worker: 'starting', note: null });
     await lastTakeGone();
     if (mine.cancelled) return;
@@ -395,6 +426,8 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
       departed.clear();
       gateFrom = null;
       noteCritical = false;
+      noteAdded = false;
+      landing = null;
     },
   };
 }
