@@ -15,9 +15,9 @@ function sampleSpeech() {
   const { mainEndUs } = mainIndex(snapshot.project.timeline.main);
   const ranges = [];
   for (let at = 2 * S, k = 0; at + S < mainEndUs; k++) {
-    const end = Math.min(mainEndUs, at + (2.5 + (k % 3)) * S);
+    const end = Math.min(mainEndUs, at + (1.5 + (k % 3)) * S);
     ranges.push({ start: at, end });
-    at = end + (1 + (k % 2)) * S;
+    at = end + (3 + (k % 3)) * S;
   }
   return ranges;
 }
