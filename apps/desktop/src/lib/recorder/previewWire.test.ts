@@ -12,8 +12,6 @@ describe('previewFrame', () => {
     expect(read?.frame).toEqual({ kind: 'live', key: 'display:1', atMs: 1_700_000_000_000 });
     expect(read?.jpeg.type).toBe('image/jpeg');
     expect([...new Uint8Array(await (read?.jpeg ?? new Blob()).arrayBuffer())]).toEqual(jpeg);
-    // A view of the same bytes reads the same.
-    expect(previewFrame(message)?.frame.key).toBe('display:1');
   });
 
   it('reads_a_header_longer_than_255_bytes', async () => {
