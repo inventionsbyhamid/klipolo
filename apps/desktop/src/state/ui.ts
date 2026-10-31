@@ -8,9 +8,15 @@ import type { SafeAreaId } from '../lib/safeAreas';
  * lanes (`timelineExpanded` is never on).
  */
 interface UiStore {
-  /** Timeline zoom: pixels per second of video. */
+  /** Timeline zoom: pixels per second of video. Any zoom pays a fit still owed (`fitOwed`): the person's stays. */
   pxPerSecond: number;
   setPxPerSecond: (pxPerSecond: number) => void;
+  /**
+   * The timeline fits the whole video at its next chance (`TimelineView`): owed as a project opens, and kept while it
+   * has no clips, so an empty project fits once its first clips come in. Never after the person zooms.
+   */
+  fitOwed: boolean;
+  oweFit: () => void;
   /** Dragged blocks snap to the playhead, cuts and edges. */
   snapping: boolean;
   setSnapping: (snapping: boolean) => void;
@@ -36,7 +42,9 @@ export type LibraryTab = 'clips' | 'music' | 'sounds' | 'images';
 
 export const useUi = create<UiStore>((set) => ({
   pxPerSecond: 40,
-  setPxPerSecond: (pps) => set({ pxPerSecond: Math.min(2400, Math.max(0.02, pps)) }),
+  setPxPerSecond: (pps) => set({ pxPerSecond: Math.min(2400, Math.max(0.02, pps)), fitOwed: false }),
+  fitOwed: false,
+  oweFit: () => set({ fitOwed: true }),
   snapping: true,
   setSnapping: (snapping) => set({ snapping }),
   timelineExpanded: false,
