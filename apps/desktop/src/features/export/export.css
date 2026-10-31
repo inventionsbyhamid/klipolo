@@ -1,0 +1,423 @@
+/* The export dialog and the top bar's Export while one runs. Values from
+   tokens.css only. The generic dialog pieces are scoped to this dialog, as Settings scopes its own, so the two can't
+   clash before the shared design primitives carry them. */
+
+.ex-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Dialog ---------- */
+
+.export-scrim {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--color-scrim);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+.export-dialog {
+  display: grid;
+  gap: var(--space-8);
+  width: var(--dialog-w);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  padding: var(--space-8);
+  border-radius: var(--radius-xl);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-3);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .export-dialog {
+    animation: export-rise var(--dur-slow) var(--ease-out) both;
+  }
+}
+
+@keyframes export-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.export-dialog .dialog-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-5);
+}
+
+.export-dialog .dialog-head > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.export-dialog .dialog-title {
+  margin: 0;
+  word-spacing: 0.08em;
+  letter-spacing: -0.01em;
+  font-size: var(--text-2xl);
+  line-height: var(--lh-2xl);
+  font-weight: var(--weight-display);
+  font-stretch: var(--wdth-display);
+}
+
+.export-dialog .dialog-title:focus {
+  outline: none;
+}
+
+.export-dialog .dialog-sub {
+  margin: var(--space-3) 0 0;
+  overflow: hidden;
+  color: var(--color-ink-soft);
+  font-size: var(--text-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.export-dialog .dialog-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+}
+
+.export-dialog .dialog-foot .left {
+  margin-right: auto;
+  color: var(--color-ink-faint);
+  font-size: var(--text-sm);
+}
+
+.export-dialog .btn-secondary[aria-disabled="true"] {
+  box-shadow: none;
+}
+
+/* ---------- Format cards ---------- */
+
+.ex-label {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+}
+
+.ex-formats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.ex-fmt {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+  color: var(--color-ink);
+  text-align: center;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.ex-fmt:not(.is-locked):hover {
+  background: var(--color-bay-hover);
+}
+
+.ex-fmt[aria-checked="true"] {
+  box-shadow: inset 0 0 0 2px var(--color-paper);
+}
+
+.ex-fmt.is-locked {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.ex-box {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1.5px var(--color-line-strong);
+  color: transparent;
+}
+
+.ex-box .ico {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.6;
+}
+
+[aria-checked="true"] > .ex-box {
+  background: var(--color-paper);
+  box-shadow: none;
+  color: var(--color-navy);
+}
+
+.ex-shape {
+  display: grid;
+  place-items: end center;
+  height: 76px;
+}
+
+/* The frame drawn to scale: clip blue (your footage) with a light edge. */
+.ex-shape i,
+.ex-art i {
+  display: block;
+  border-radius: 4px;
+  background: linear-gradient(160deg, var(--color-clip), var(--color-clip-deep));
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-paper) 35%, transparent);
+}
+
+.ex-shape .ex-frame-landscape {
+  width: 104px;
+  height: 58px;
+}
+
+.ex-shape .ex-frame-portrait {
+  width: 42px;
+  height: 76px;
+}
+
+.ex-shape .ex-frame-square {
+  width: 64px;
+  height: 64px;
+}
+
+.ex-name {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-title);
+  font-variant-numeric: tabular-nums;
+}
+
+.ex-meta {
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.ex-fmt .ex-meta {
+  margin-top: -6px;
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+}
+
+/* ---------- Quality and folder ---------- */
+
+.ex-opts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--space-5) var(--space-6);
+  margin: 0;
+}
+
+.ex-opts dt {
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+}
+
+.ex-opts dd {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.ex-path {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ex-path .ico {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--color-ink-soft);
+}
+
+/* ---------- Progress ---------- */
+
+.ex-progress {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+}
+
+.ex-progress p {
+  margin: 0;
+}
+
+.ex-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+
+.ex-title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+}
+
+.ex-pct {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-title);
+  font-stretch: var(--wdth-title);
+  font-variant-numeric: tabular-nums;
+}
+
+.ex-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--color-bay-press);
+}
+
+.ex-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-paper);
+  transition: width var(--dur-base) var(--ease-out);
+}
+
+.ex-failed {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  color: var(--color-ink);
+  font-size: var(--text-md);
+}
+
+.ex-failed .ico {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin-top: 1px;
+  color: var(--color-ink-soft);
+}
+
+.ex-done {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-ink);
+  font-weight: var(--weight-medium);
+}
+
+.ex-done .ico {
+  width: 16px;
+  height: 16px;
+}
+
+.ex-spinner {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--color-paper-wash);
+  border-top-color: var(--color-paper);
+  animation: export-spin 0.9s linear infinite;
+}
+
+@keyframes export-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* ---------- Files ---------- */
+
+.ex-done-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--color-paper);
+  color: var(--color-navy);
+}
+
+.ex-done-mark .ico {
+  width: 24px;
+  height: 24px;
+  stroke-width: 2.4;
+}
+
+.ex-files {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ex-file {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+}
+
+.ex-art {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bay);
+}
+
+.ex-art .ex-frame-landscape {
+  width: 30px;
+  height: 17px;
+}
+
+.ex-art .ex-frame-portrait {
+  width: 17px;
+  height: 30px;
+}
+
+.ex-art .ex-frame-square {
+  width: 24px;
+  height: 24px;
+}
+
+.ex-file-text {
+  display: grid;
+  min-width: 0;
+}
+
+.ex-file-name {
+  overflow: hidden;
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
