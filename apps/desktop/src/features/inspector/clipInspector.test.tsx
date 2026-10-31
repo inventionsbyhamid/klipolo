@@ -336,6 +336,20 @@ describe('the clip card', () => {
     expect(useSelection.getState().selectedId).toBeNull();
   });
 
+  it('Duplicate in its more menu puts a copy right after the clip in one step, and selects the copy', async () => {
+    const b = fixtureSnapshot().project.timeline.main[1];
+    renderWithProviders(<Inspector format="landscape" />);
+    await userEvent.click(screen.getByRole('button', { name: 'More' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Duplicate' }));
+    await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    const [label, ops] = apply.mock.calls[0];
+    expect(label).toBe('undo.duplicate');
+    expect(ops).toEqual([{ type: 'insertClip', clip: { ...b, id: expect.any(String) }, index: 2 }]);
+    const copy = (ops[0] as Extract<Op, { type: 'insertClip' }>).clip.id;
+    expect(copy).not.toBe('b');
+    await waitFor(() => expect(useSelection.getState().selectedId).toBe(copy));
+  });
+
   it('Escape outside a field closes it', async () => {
     renderWithProviders(<Inspector format="landscape" />);
     act(() => screen.getByRole('button', { name: 'More' }).focus());
