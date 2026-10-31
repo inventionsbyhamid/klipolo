@@ -522,7 +522,7 @@
       "annotations": {
         "readOnlyHint": false
       },
-      "description": "Have Muse Image draw a new sticker when no picture in Library fits. It is placed once drawn.",
+      "description": "Have Muse Image draw a new sticker when no picture in Library fits. Once drawn, it waits in Klipolo's chat panel for the person to place it with Use.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {

@@ -50,6 +50,11 @@ c1 0.0-182.4 talk.mov
 [75.8-91.0] Maya: Everything after that was just catching up.
 Now: playhead 0.0, no selection."""
 SUMMARY = 'Revision 3\n\nProject "Launch talk", landscape 16:9, 182.4 s.'
+# What a picture's start answers (`words::STARTED`): it waits in Klipolo's chat for the person's Use.
+STARTED = (
+    "Started in Klipolo ({name}). Once it is ready, it shows in Klipolo's chat panel, and the person places it with "
+    "Use. Tell them to look for it there."
+)
 REFUSED = (
     "cutRange: Klipolo can't cut at 12.3 s: no word, pause, scene or clip edge is there, the person's selection or "
     "playhead in Klipolo, or the video's start or end. Use a time from getContext or getTranscript.\n"
@@ -82,7 +87,7 @@ def answer(name: str, arguments: dict, mode: str) -> types.CallToolResult:
         )
     if name in ("makeSticker", "makeTitleCard"):
         return types.CallToolResult(
-            content=text(f"Started in Klipolo ({name}). What it makes appears in the edit once it is ready."),
+            content=text(STARTED.format(name=name)),
             structuredContent={"outcome": "started"},
             isError=False,
         )

@@ -42,6 +42,16 @@ def test_klipolo_schemas_are_strict_already_and_pass_unchanged():
         assert schema == before, "the input is not changed"
 
 
+def test_klipolo_says_an_apps_sticker_waits_for_the_persons_use():
+    # A picture an app starts waits in Klipolo's chat panel until the person places it with Use.
+    assert klipolo_tool("makeSticker")["description"] == (
+        "Have Muse Image draw a new sticker when no picture in Library fits. Once drawn, it waits in Klipolo's chat "
+        "panel for the person to place it with Use."
+    )
+    for tool in KLIPOLO_TOOLS:
+        assert "placed once drawn" not in tool["description"], tool["name"]
+
+
 def test_properties_named_like_keywords_stay_properties():
     # followSubject and blurObjects take a property named "description"; setFormat one named "format".
     for name, prop in (("followSubject", "description"), ("blurObjects", "description"), ("setFormat", "format")):

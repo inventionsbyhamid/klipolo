@@ -362,7 +362,7 @@ def test_pictures_klipolo_draws_are_said_to_be_outside_the_cost(tmp_path):
     title = {"title": "Launch day", "prompt": "a rocket at dawn", "atSec": 2.5, "durationSec": None}
     meta = Meta(
         response(call("makeTitleCard", title, "call_1"), call("makeTitleCard", title, "call_2")),
-        response(message("Your title cards are on their way.")),
+        response(message("Your title cards will show in Klipolo's chat panel. Place each with Use.")),
     )
     command, log = klipolo(tmp_path)
     code, out, err = run(meta, command)
@@ -370,9 +370,17 @@ def test_pictures_klipolo_draws_are_said_to_be_outside_the_cost(tmp_path):
     line = '→ makeTitleCard {"title": "Launch day", "prompt": "a rocket at dawn", "atSec": 2.5, "durationSec": null}\n'
     assert out == (
         (line + "← started, a picture billed in Klipolo (about $0.01)\n") * 2
-        + "\nYour title cards are on their way.\n\nCost: $0.003\n"
+        + "\nYour title cards will show in Klipolo's chat panel. Place each with Use.\n\nCost: $0.003\n"
         + "Not in this total: 2 pictures billed in Klipolo, about $0.01 each.\n"
     )
+    # Klipolo's own words go back to Muse Spark: the picture waits in Klipolo's chat for the person's Use.
+    started = (
+        "Started in Klipolo (makeTitleCard). Once it is ready, it shows in Klipolo's chat panel, and the person places "
+        "it with Use. Tell them to look for it there."
+    )
+    assert meta.bodies()[1]["input"][-2:] == [
+        {"type": "function_call_output", "call_id": call_id, "output": started} for call_id in ("call_1", "call_2")
+    ]
 
 
 def test_klipolo_not_running_ends_the_run_with_the_bridges_own_sentence(tmp_path):
