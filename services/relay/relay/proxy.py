@@ -957,6 +957,13 @@ async def _meta_error(upstream: httpx.Response, settings: Settings) -> Response:
         return error_response(502, "meta_auth", "The relay could not use its Meta key. Try again later.")
     if status < 400:
         return error_response(502, "meta_error", "Meta sent an unexpected answer. Try again.")
+    if status == 402 or (status == 429 and _upstream_code(body) in _QUOTA_CODES):
+        # The relay's own Meta credit is used up: every device is stopped, as
+        # when the shared budget runs out. Passed through, Meta's sentence
+        # would be about a billing account the person doesn't have, and a 429
+        # would read as busy and be retried.
+        logger.error("Meta's credit for the relay's key is used up (%d)", status)
+        return error_response(402, "budget", GLOBAL_BUDGET_MESSAGE)
     retry_after = upstream.headers.get("retry-after")
     headers = {"Retry-After": retry_after} if retry_after else None
     return error_response(status, _meta_code(body), _meta_reason(body, settings.meta_api_key), headers)
@@ -967,15 +974,30 @@ async def _meta_error(upstream: httpx.Response, settings: Settings) -> Response:
 # other error is `meta_error`.
 _PASSED_META_CODES = frozenset({"content_policy_violation"})
 
+# The codes of a Meta 429 that mean the key's credit or quota is used up, not
+# a busy moment (the app reads the same ones from a direct key's 429).
+_QUOTA_CODES = frozenset({"insufficient_quota", "quota_exceeded", "billing_hard_limit_reached"})
 
-def _meta_code(body: bytes) -> str:
+
+def _upstream_code(body: bytes) -> str | None:
+    """Meta's own error code (`{"error": {"code": ...}}`, else its `type`), if any."""
     try:
         data = json.loads(body)
     except ValueError:
-        return "meta_error"
+        return None
     error = data.get("error") if isinstance(data, dict) else None
-    code = error.get("code") if isinstance(error, dict) else None
-    return code if isinstance(code, str) and code in _PASSED_META_CODES else "meta_error"
+    if not isinstance(error, dict):
+        return None
+    for field in ("code", "type"):
+        value = error.get(field)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _meta_code(body: bytes) -> str:
+    code = _upstream_code(body)
+    return code if code in _PASSED_META_CODES else "meta_error"
 
 
 def _meta_reason(body: bytes, key: str) -> str:

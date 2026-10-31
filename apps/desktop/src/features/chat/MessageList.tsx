@@ -1,5 +1,6 @@
 import { useLingui } from '@lingui/react/macro';
 import { Fragment, useLayoutEffect, useRef } from 'react';
+import { openSettings, useAi } from '../../ai/aiStatus';
 import { NeedsKey } from '../../ai/NeedsKey';
 import { Icon } from '../../layout/Icon';
 import { offerAgain, stateOf, useAnalysedClips, useAnalysis, useSomeNotAnalysed } from '../../state/analysis';
@@ -17,22 +18,49 @@ const SUGGESTIONS = [
 ];
 
 /**
- * Where the project's clips are with analysis, for the empty chat's note: some still being analysed, some not analysed
- * (never, failed or stopped), or every one done (or no clips).
+ * Where the project's clips are with analysis, for the empty chat's note: some still being heard (their words still to
+ * come), some only being watched (the scene log, last: their words are in, so cuts work), some not analysed (never,
+ * failed or stopped), or every one done (or no clips).
  */
-function useAnalysisNote(): 'running' | 'missing' | null {
+function useAnalysisNote(): 'listening' | 'watching' | 'missing' | null {
   const clips = useAnalysedClips();
   return useAnalysis((s) => {
-    const states = clips.map((a) => stateOf(s.states, a.id).state);
-    if (states.includes('running')) return 'running';
-    if (states.some((state) => state !== 'done')) return 'missing';
+    const states = clips.map((a) => stateOf(s.states, a.id));
+    if (states.some((a) => a.state === 'running' && a.step !== 'scenes')) return 'listening';
+    if (states.some((a) => a.state === 'running')) return 'watching';
+    if (states.some((a) => a.state !== 'done')) return 'missing';
     return null;
   });
 }
 
 /**
- * "Ask for an edit", its suggestions (greyed while chat can't run), the NeedsKey card when there is no key or code, and
- * a note while the clips aren't analysed or are being analysed.
+ * Why chat is off with a key or code saved (an access code the relay turned off): the AI status's own sentence, with
+ * the way to Settings. Nothing otherwise (no key or code shows the NeedsKey card).
+ */
+function ChatOff() {
+  const { t } = useLingui();
+  const notice = useAi((s) => (s.status?.mode === 'relay' ? (s.status.notice ?? null) : null));
+  if (!notice) return null;
+  return (
+    <p className="note" role="status">
+      <Icon name="info" />
+      <span>{notice}</span>
+      <button
+        type="button"
+        className="btn btn-secondary btn-sm"
+        style={{ gridColumn: 2, justifySelf: 'start' }}
+        onClick={openSettings}
+      >
+        {t({ id: 'chatPanel.empty.settings', message: 'Open Settings' })}
+      </button>
+    </p>
+  );
+}
+
+/**
+ * "Ask for an edit", its suggestions (greyed while chat can't run), the NeedsKey card when there is no key or code, why
+ * chat is off when an access code was turned off, and a note while the clips aren't analysed or are being analysed
+ *.
  */
 function EmptyChat() {
   const { t } = useLingui();
@@ -49,6 +77,7 @@ function EmptyChat() {
         })}
       </p>
       {!allowed && <NeedsKey />}
+      {!allowed && <ChatOff />}
       {allowed ? (
         <div className="suggestions">
           {SUGGESTIONS.map((s) => (
@@ -70,16 +99,22 @@ function EmptyChat() {
         <p className="note">
           <Icon name="info" />
           <span>
-            {analysis === 'running'
+            {analysis === 'listening'
               ? t({
                   id: 'chatPanel.empty.analysing',
                   message: 'Klipolo is still listening to these clips. Cuts and moments work when analysis is done.',
                 })
-              : t({
-                  id: 'chatPanel.empty.notAnalysed',
-                  message:
-                    'Analyze the clips first to cut pauses, find moments and add captions. Format and music work now.',
-                })}
+              : analysis === 'watching'
+                ? t({
+                    id: 'chatPanel.empty.watching',
+                    message:
+                      'Klipolo is still watching these clips. Cutting ums and pauses works now. Moments work when analysis is done.',
+                  })
+                : t({
+                    id: 'chatPanel.empty.notAnalysed',
+                    message:
+                      'Analyze the clips first to cut pauses, find moments and add captions. Format and music work now.',
+                  })}
           </span>
           {analysis === 'missing' && offerable && (
             // The offer comes back in the analysis banner, with its price, even after "Not now".
