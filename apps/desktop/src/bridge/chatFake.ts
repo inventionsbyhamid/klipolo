@@ -19,7 +19,7 @@ export interface FakeChatScript {
   undoLast?: (revision: number) => SnapshotPatch | Promise<SnapshotPatch>;
   /** Drawing a picture (else it is gone); Use (else it is gone). */
   drawPicture?: (pictureId: string) => ChatPictureDrawn | Promise<ChatPictureDrawn>;
-  usePicture?: (pictureId: string) => ChatApplied | Promise<ChatApplied>;
+  usePicture?: (pictureId: string, path: string) => ChatApplied | Promise<ChatApplied>;
 }
 
 /** A fake chat bridge and what it was asked. */
@@ -33,6 +33,8 @@ export type FakeChat = ChatBridge & {
   /** The pictures asked to be drawn, and used, in order. */
   drawn: string[];
   used: string[];
+  /** The drawing each Use named, by its path. */
+  usedPaths: string[];
 };
 
 /** Said for a picture the fake has no answer for. */
@@ -48,6 +50,7 @@ export function fakeChat(script: FakeChatScript): FakeChat {
     undone: [],
     drawn: [],
     used: [],
+    usedPaths: [],
     send: async (request) => {
       fake.requests.push(request);
       const outcome = await script.reply(request);
@@ -79,10 +82,11 @@ export function fakeChat(script: FakeChatScript): FakeChat {
       if (!script.drawPicture) throw new Error(PICTURE_GONE, { cause: PICTURE_GONE });
       return script.drawPicture(pictureId);
     },
-    usePicture: async (pictureId) => {
+    usePicture: async (pictureId, path) => {
       fake.used.push(pictureId);
+      fake.usedPaths.push(path);
       if (!script.usePicture) throw new Error(PICTURE_GONE, { cause: PICTURE_GONE });
-      return script.usePicture(pictureId);
+      return script.usePicture(pictureId, path);
     },
   };
   return fake;

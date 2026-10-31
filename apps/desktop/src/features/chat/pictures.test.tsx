@@ -11,6 +11,8 @@ import { installChatBridge, tauriChat } from '../../bridge/chat';
 import { fakeChat, reply, type FakeChatScript } from '../../bridge/chatFake';
 import { useAnalysis } from '../../state/analysis';
 import { useChat, useChatStandIn } from '../../state/chat';
+import { beginCommit } from '../../state/commitQueue';
+import { historySteps } from '../../state/project';
 import { useProject } from '../../state/project';
 import { fixturePatch, fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
@@ -46,7 +48,7 @@ const plane: ChatPicture = {
   id: 'pic1',
   kind: 'sticker',
   prompt: 'paper plane',
-  place: 'Goes in the middle at 12.0 s for 3.0 s.',
+  place: 'Goes in the middle, over the moment it was asked for.',
 };
 
 function picture(n: number): ChatPictureDrawn {
@@ -67,7 +69,8 @@ function chat(script: Partial<FakeChatScript> = {}) {
 }
 
 const message = () => screen.getByRole('textbox', { name: 'Message' });
-const live = () => document.querySelector('[aria-live="polite"]');
+/** Where the panel says what isn't a message (a picture ready, placed). */
+const notices = () => document.querySelector('[data-chat-notices]');
 /** The card of the paper plane, once the reply is there. */
 const card = () => screen.findByRole('group', { name: 'Paper plane sticker' });
 const art = (c: HTMLElement) => c.querySelector('img');
@@ -93,10 +96,12 @@ describe('pictures chat asks for', () => {
     expect(art(c)).toHaveAttribute('src', expect.stringContaining('paper-plane-1.png'));
     // The title and the group name say what it is; the picture adds nothing for a screen reader to repeat.
     expect(art(c)).toHaveAttribute('alt', '');
-    expect(c).toHaveTextContent('1600 x 1600, transparent background. Goes in the middle at 12.0 s for 3.0 s.');
+    expect(c).toHaveTextContent(
+      '1600 x 1600, transparent background. Goes in the middle, over the moment it was asked for.',
+    );
     expect(within(c).getByRole('button', { name: 'Use' })).toBeInTheDocument();
     expect(within(c).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
-    await waitFor(() => expect(live()).toHaveTextContent('Paper plane sticker is ready.'));
+    await waitFor(() => expect(notices()).toHaveTextContent('Paper plane sticker is ready.'));
     expect(useProject.getState().snapshot!.history.revision).toBe(3);
   });
 
@@ -112,7 +117,7 @@ describe('pictures chat asks for', () => {
     const chip = await within(c).findByRole('button', { name: 'Undo add the paper plane sticker' });
     expect(chip).toHaveFocus();
     expect(within(c).queryByRole('button', { name: 'Use' })).toBeNull();
-    await waitFor(() => expect(live()).toHaveTextContent('Placed.'));
+    await waitFor(() => expect(notices()).toHaveTextContent('Placed.'));
   });
 
   it('a placed picture the timeline couldn’t take in says so', async () => {
@@ -244,10 +249,149 @@ describe('pictures chat asks for', () => {
       chat_undo_last: () => changed(5, undo),
     });
     expect(await tauriChat.drawPicture('pic1')).toEqual(picture(1));
-    await tauriChat.usePicture('pic1');
+    await tauriChat.usePicture('pic1', picture(1).path);
     await tauriChat.undoLast(4);
     expect(calls.chat_draw_picture).toEqual([{ id: 'pic1' }]);
-    expect(calls.chat_use_picture).toEqual([{ id: 'pic1' }]);
+    expect(calls.chat_use_picture).toEqual([{ id: 'pic1', path: picture(1).path }]);
     expect(calls.chat_undo_last).toEqual([{ revision: 4 }]);
+  });
+
+  it('Use during Try again places the picture shown, and the card stops saying it draws', async () => {
+    let n = 0;
+    let release: () => void = () => undefined;
+    const undo = placedSticker();
+    const fake = chat({
+      drawPicture: async () => {
+        n += 1;
+        if (n === 2) await new Promise<void>((done) => (release = done));
+        return picture(n);
+      },
+      usePicture: () => ({ change: changed(4, undo), undo }),
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add a paper plane sticker{Enter}');
+    const c = await card();
+    await userEvent.click(await within(c).findByRole('button', { name: 'Try again' }));
+    await within(c).findByText('Drawing a new one.');
+    await userEvent.click(within(c).getByRole('button', { name: 'Use' }));
+    // Rust is told which drawing: the one the card shows.
+    expect(fake.usedPaths).toEqual([picture(1).path]);
+    await within(c).findByRole('button', { name: 'Undo add the paper plane sticker' });
+    act(() => release());
+    await waitFor(() => expect(fake.drawn).toEqual(['pic1', 'pic1']));
+    await act(async () => undefined);
+    expect(within(c).queryByText('Drawing a new one.')).toBeNull();
+    expect(c.querySelector('.spinner')).toBeNull();
+    expect(c).not.toHaveAttribute('aria-busy');
+  });
+
+  it('a Use refused during Try again brings Try again back', async () => {
+    let n = 0;
+    chat({
+      drawPicture: async () => {
+        n += 1;
+        if (n === 2) await new Promise<void>(() => undefined);
+        return picture(n);
+      },
+      usePicture: () => {
+        throw new Error('The video changed. Try again.', { cause: code('project.moved') });
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add a paper plane sticker{Enter}');
+    const c = await card();
+    await userEvent.click(await within(c).findByRole('button', { name: 'Try again' }));
+    await userEvent.click(within(c).getByRole('button', { name: 'Use' }));
+    expect(await within(c).findByRole('alert')).toHaveTextContent('The video changed. Try again.');
+    expect(within(c).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(within(c).queryByText('Drawing a new one.')).toBeNull();
+    expect(c).not.toHaveAttribute('aria-busy');
+  });
+
+  it('Use waits behind a change still on its way, and is no undo step', async () => {
+    const undo = placedSticker();
+    const fake = chat({ drawPicture: () => picture(1), usePicture: () => ({ change: changed(4, undo), undo }) });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add a paper plane sticker{Enter}');
+    const c = await card();
+    const steps = historySteps();
+    const end = beginCommit();
+    await userEvent.click(await within(c).findByRole('button', { name: 'Use' }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fake.used).toEqual([]);
+    act(() => end());
+    await waitFor(() => expect(fake.used).toEqual(['pic1']));
+    await waitFor(() => expect(useProject.getState().snapshot!.history.revision).toBe(4));
+    // A sticker placed is no undo or redo for the caption words' press queue.
+    expect(historySteps()).toBe(steps);
+  });
+
+  it('a Use that lands after New chat still brings its change to the timeline', async () => {
+    const undo = placedSticker();
+    let land: () => void = () => undefined;
+    chat({
+      drawPicture: () => picture(1),
+      usePicture: async () => {
+        await new Promise<void>((done) => (land = done));
+        return { change: changed(4, undo), undo };
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add a paper plane sticker{Enter}');
+    const c = await card();
+    await userEvent.click(await within(c).findByRole('button', { name: 'Use' }));
+    act(() => useChat.getState().newChat());
+    act(() => land());
+    await waitFor(() => expect(useProject.getState().snapshot!.history.revision).toBe(4));
+  });
+
+  it('a notice said while Klipolo thinks is still heard', async () => {
+    let answer: (o: ReturnType<typeof reply>) => void = () => undefined;
+    let n = 0;
+    chat({
+      reply: (r) => {
+        n += 1;
+        if (n === 1) return reply(r.id, 'Made one with Muse Image.', { pictures: [plane] });
+        return new Promise((done) => (answer = done));
+      },
+      drawPicture: async () => {
+        await new Promise((r) => setTimeout(r, 50));
+        return picture(1);
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add a paper plane sticker{Enter}');
+    await card();
+    // Another message thinks while the picture lands.
+    await userEvent.type(message(), 'and make it vertical{Enter}');
+    await waitFor(() => expect(notices()).toHaveTextContent('Paper plane sticker is ready.'));
+    act(() => answer(reply('m2', 'Done.')));
+    await screen.findByText('Done.');
+    expect(notices()).toHaveTextContent('Paper plane sticker is ready.');
+  });
+
+  it('the card stops looking after the keyboard once the person went elsewhere', async () => {
+    let n = 0;
+    let release: () => void = () => undefined;
+    chat({
+      drawPicture: async () => {
+        n += 1;
+        if (n === 2) await new Promise<void>((done) => (release = done));
+        return picture(n);
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add a paper plane sticker{Enter}');
+    const c = await card();
+    // Try again: its button goes while it draws, and the keyboard goes to the card.
+    await userEvent.click(await within(c).findByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(c).toHaveFocus());
+    // The person clicks somewhere that takes no focus: the keyboard is on the page now.
+    act(() => c.blur());
+    await act(async () => undefined);
+    act(() => release());
+    await waitFor(() => expect(art(c)).toHaveAttribute('src', expect.stringContaining('paper-plane-2.png')));
+    expect(c).not.toHaveFocus();
+    expect(document.activeElement).toBe(document.body);
   });
 });

@@ -15,7 +15,10 @@ import {
 } from './chatMessages';
 import { useProject } from './project';
 
-/** The pictures being drawn now, by id: a picture is never drawn twice at once (each drawing is paid for). */
+/**
+ * The pictures being drawn now, by conversation and id: a picture is never drawn twice at once (each drawing is paid
+ * for). A drawing still out when the conversation starts over blocks nothing in the new one.
+ */
 const drawing = new Set<string>();
 
 /** A picture's name, the same before and after it is drawn: "Paper plane sticker". */
@@ -60,9 +63,10 @@ export function pictureActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'dra
   return {
     drawPicture: async (messageId, pictureId) => {
       const part = find(messageId, pictureId);
-      if (settled(part) || drawing.has(pictureId)) return;
       const mine = session.now();
-      drawing.add(pictureId);
+      const key = `${mine}:${pictureId}`;
+      if (settled(part) || drawing.has(key)) return;
+      drawing.add(key);
       update(messageId, pictureId, (p) =>
         p.drawn ? { again: true, reason: undefined } : { state: 'drawing', reason: undefined },
       );
@@ -80,23 +84,26 @@ export function pictureActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'dra
             : { state: 'failed', again: false, reason: errorMessage(error) },
         );
       } finally {
-        drawing.delete(pictureId);
+        drawing.delete(key);
         creditMoved();
       }
     },
 
     usePicture: async (messageId, pictureId) => {
       const part = find(messageId, pictureId);
-      if (part?.state !== 'drawn') return;
+      if (part?.state !== 'drawn' || !part.drawn) return;
+      // The drawing the card shows, by its path: Rust places that one, though Try again may land a newer one first.
+      const path = part.drawn.path;
       const mine = session.now();
-      update(messageId, pictureId, () => ({ state: 'placing', reason: undefined }));
+      // A drawing still under way (Try again) no longer changes the card: what Use made of it does.
+      update(messageId, pictureId, () => ({ state: 'placing', again: false, reason: undefined }));
       let applied: ChatApplied | undefined;
       let shown: boolean;
       try {
         // In the commit queue's turn, behind a change still settling: merged whatever became of the conversation.
         shown = await useProject.getState().stepWith(() =>
           chatBridge()
-            .usePicture(pictureId)
+            .usePicture(pictureId, path)
             .then((made) => {
               applied = made;
               return made.change;

@@ -38,10 +38,11 @@ export interface ChatBridge {
    */
   drawPicture(pictureId: string): Promise<ChatPictureDrawn>;
   /**
-   * Use: places the picture drawn in the project as one undo step. Rejects with a plain sentence when it can't be
-   * placed any more (the moment it was for was cut, its title is gone), or with `project.moved`.
+   * Use: places the drawing at `path` (the one the card shows: a newer one may have landed) in the project as one undo
+   * step. Rejects with a plain sentence when it can't be placed any more (the moment it was for was cut, its title is
+   * gone, that drawing isn't there), or with `project.moved`.
    */
-  usePicture(pictureId: string): Promise<ChatApplied>;
+  usePicture(pictureId: string, path: string): Promise<ChatApplied>;
 }
 
 /** The planner's commands in the app. */
@@ -52,7 +53,7 @@ export const tauriChat: ChatBridge = {
   reset: () => call<void>('chat_reset'),
   undoLast: (revision) => call<SnapshotPatch>('chat_undo_last', { revision }),
   drawPicture: (pictureId) => call<ChatPictureDrawn>('chat_draw_picture', { id: pictureId }),
-  usePicture: (pictureId) => call<ChatApplied>('chat_use_picture', { id: pictureId }),
+  usePicture: (pictureId, path) => call<ChatApplied>('chat_use_picture', { id: pictureId, path }),
 };
 
 let current: ChatBridge = tauriChat;

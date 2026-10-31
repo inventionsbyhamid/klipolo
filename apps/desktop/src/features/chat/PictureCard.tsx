@@ -41,8 +41,17 @@ export function PictureCard({ messageId, part }: { messageId: string; part: Pict
   }, [state, again]);
 
   const onBlur = (e: FocusEvent<HTMLDivElement>) => {
-    // Focus given to something outside the card: no longer ours to look after. A control that went away gives none.
-    if (e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) inside.current = false;
+    const box = e.currentTarget;
+    const left = e.target;
+    if (e.relatedTarget instanceof Node && box.contains(e.relatedTarget)) return;
+    // Focus given to something outside the card: no longer ours to look after.
+    if (e.relatedTarget instanceof Node) return void (inside.current = false);
+    // None given: checked once the event is over (as `useReturnFocus` does). A control still in the page that lost it
+    // means the person clicked somewhere that takes none; one that is gone went with the card's change, which the
+    // effect above looks after.
+    queueMicrotask(() => {
+      if (left.isConnected && document.activeElement !== left) inside.current = false;
+    });
   };
 
   const tryAgain = (
