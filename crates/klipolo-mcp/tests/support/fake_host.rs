@@ -89,6 +89,8 @@ pub struct State {
     /// Klipolo's chat proposes this just before the next app's batch or undo, as if the person asked while the app's
     /// call ran.
     pub chat_before_commit: Option<Proposal>,
+    /// The person discards the waiting proposal just before the next app's batch or undo.
+    pub discard_before_commit: bool,
 }
 
 pub struct FakeHost {
@@ -148,6 +150,7 @@ impl FakeHost {
                 counts: Counts::default(),
                 move_before_propose: false,
                 chat_before_commit: None,
+                discard_before_commit: false,
             }),
         })
     }
@@ -261,9 +264,23 @@ impl FakeHost {
 }
 
 impl State {
-    /// Klipolo's chat proposes what `chat_before_commit` holds, if anything.
-    fn chat_cuts_in(&mut self) {
-        if let Some(proposal) = self.chat_before_commit.take() {
+    /// What the person does while an app's call runs, just before its commit: discards the waiting proposal, or has
+    /// Klipolo's chat propose one.
+    fn person_cuts_in(&mut self) {
+        if std::mem::take(&mut self.discard_before_commit)
+            && let Some(slot) = self.slot.take()
+            && let Some(client) = slot.from
+        {
+            self.outcomes
+                .insert(client, ProposalOutcome::Discarded { id: slot.id });
+        }
+        let chat = self.chat_before_commit.take();
+        self.chat_proposes_now(chat);
+    }
+
+    /// Klipolo's chat proposes `proposal`, if any, on the current revision.
+    fn chat_proposes_now(&mut self, proposal: Option<Proposal>) {
+        if let Some(proposal) = proposal {
             let base_revision = self.doc.as_ref().expect("a project").revision();
             let id = self.new_id();
             self.slot = Some(Slot {
@@ -289,19 +306,20 @@ impl State {
             .is_some_and(|slot| slot.from.as_deref() != Some(client))
     }
 
-    /// A change to the project drops the waiting proposal: its removals were judged on the project before it.
-    fn drop_waiting(&mut self, why: &str) {
-        if let Some(slot) = self.slot.take()
-            && let Some(client) = slot.from
-        {
+    /// A change to the project drops the waiting proposal: its removals were judged on the project before it. The id
+    /// of the one dropped.
+    fn drop_waiting(&mut self, why: &str) -> Option<String> {
+        let slot = self.slot.take()?;
+        if let Some(client) = slot.from {
             self.outcomes.insert(
                 client,
                 ProposalOutcome::Dropped {
-                    id: slot.id,
+                    id: slot.id.clone(),
                     why: why.to_owned(),
                 },
             );
         }
+        Some(slot.id)
     }
 }
 
@@ -348,7 +366,7 @@ impl Host for FakeHost {
     fn apply(&self, client: &str, base: u64, tx: &Transaction) -> Result<Applied, HostError> {
         let mut s = self.state();
         s.counts.applies += 1;
-        s.chat_cuts_in();
+        s.person_cuts_in();
         if s.others_waiting(client) {
             return Err(HostError::Moved);
         }
@@ -368,11 +386,13 @@ impl Host for FakeHost {
         match doc.commit_tx_keeping(tx, next, &by) {
             Ok(_) => {
                 let revision = doc.revision();
-                if revision != base {
-                    s.drop_waiting("The project changed.");
-                }
+                let dropped = if revision != base {
+                    s.drop_waiting("The project changed.")
+                } else {
+                    None
+                };
                 s.applied.push((client.to_owned(), tx.clone()));
-                Ok(Applied { revision })
+                Ok(Applied { revision, dropped })
             }
             Err(Refused::PushesOut(_)) => Err(HostError::PushesOut),
             Err(Refused::OverShare(..)) => Err(HostError::OverShare),
@@ -435,7 +455,7 @@ impl Host for FakeHost {
     fn undo_own(&self, client: &str) -> Result<Applied, HostError> {
         let mut s = self.state();
         s.counts.undos += 1;
-        s.chat_cuts_in();
+        s.person_cuts_in();
         if s.others_waiting(client) {
             return Err(HostError::Moved);
         }
@@ -447,8 +467,8 @@ impl Host for FakeHost {
             Some(true) => {
                 doc.undo().ok_or(HostError::NothingToUndo)?;
                 let revision = doc.revision();
-                s.drop_waiting("The project changed.");
-                Ok(Applied { revision })
+                let dropped = s.drop_waiting("The project changed.");
+                Ok(Applied { revision, dropped })
             }
         }
     }

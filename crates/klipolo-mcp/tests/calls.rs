@@ -17,9 +17,9 @@ use klipolo_mcp::Host;
 use klipolo_mcp::call::from_app;
 use klipolo_mcp::rpc::Mcp;
 use klipolo_mcp::words::{
-    DONE, KLIPOLO_CHAT, MOVED, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS, NOTHING_TO_UNDO, OVER_SHARE,
-    OWN_CHANGED, OWN_MOVED, OWN_WAITING, PROPOSED_NO_FOOTAGE, PUSHES_OUT, READ_FIRST, STALE,
-    UNCHANGED, UNDONE, WAITING_OTHER, fill,
+    DECIDED, DONE, KLIPOLO_CHAT, MOVED, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS, NOTHING_TO_UNDO,
+    OVER_SHARE, OWN_CHANGED, OWN_MOVED, OWN_WAITING, PROPOSED_NO_FOOTAGE, PUSHES_OUT, READ_FIRST,
+    STALE, UNCHANGED, UNDONE, WAITING_OTHER, fill,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -530,6 +530,7 @@ fn agent_words_are_exact() {
         OWN_MOVED,
         OWN_CHANGED,
         OWN_WAITING,
+        DECIDED,
         UNDONE,
         STARTED,
         REMOVES,
@@ -1065,4 +1066,35 @@ fn a_join_on_another_revision_says_to_retry() {
         MOVED,
     );
     assert_eq!(host.state().counts.applies, 0);
+}
+
+#[test]
+fn a_proposal_the_person_discards_mid_call_stays_discarded() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    let first = agent.cut(0.0, 13.0);
+    let id = first["structuredContent"]["proposalId"].clone();
+    let before = host.revision();
+    // The person clicks Discard while the app's next call compiles, just before its captions commit.
+    host.state().discard_before_commit = true;
+    let result = agent.call("setCaptions", json!({"on": false, "style": null}));
+    assert_eq!(result["isError"], false, "{result}");
+    assert_eq!(
+        text(&result),
+        format!("{} {}", fill(DONE, &[("tools", "setCaptions")]), DECIDED)
+    );
+    assert_eq!(
+        result["structuredContent"],
+        json!({"outcome": "done", "revision": before + 1})
+    );
+    // Nothing came back: no proposal waits, and the person's Discard is what the app reads.
+    assert!(host.state().slot.is_none());
+    assert_eq!(host.state().counts.proposes, 1);
+    let outcome = agent.call("getProposal", json!({}));
+    assert_eq!(
+        outcome["structuredContent"],
+        json!({"status": "discarded", "id": id})
+    );
 }

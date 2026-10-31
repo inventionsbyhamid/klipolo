@@ -1,6 +1,6 @@
 //! The `Host` contract the calls rely on, as the fake host keeps it: while a proposal that isn't an app's own waits,
 //! the app's batches and undos are refused under the host's lock, so a proposal that appears after the app looked
-//! still wins; any commit drops the open proposal.
+//! still wins; any commit drops the open proposal, and says which it dropped.
 
 #[path = "support/fake_host.rs"]
 mod fake_host;
@@ -78,7 +78,7 @@ fn an_apps_undo_waits_for_someone_elses_proposal_too() {
     let host = FakeHost::two_clips();
     let base = host.revision();
     let applied = host.apply("Agent", base, &square(&host)).expect("applies");
-    assert_eq!(applied.revision, base + 1);
+    assert_eq!((applied.revision, applied.dropped), (base + 1, None));
     let after = host.project();
     let (call, proposal) = cut_c1(&host);
     host.propose("Other app", applied.revision, &[call], proposal, None)
@@ -104,7 +104,8 @@ fn an_apps_own_proposal_never_blocks_its_batches_and_a_commit_drops_it() {
         .expect("proposes");
     let applied = host.apply("Agent", base, &square(&host)).expect("applies");
     assert_eq!(applied.revision, base + 1);
-    // The revision changed: its proposal was judged on the one before, so it is dropped.
+    // The revision changed: its proposal was judged on the one before, so it is dropped, and the commit says which.
+    assert_eq!(applied.dropped.as_deref(), Some(id.as_str()));
     assert_eq!(host.open_proposal(), None);
     assert_eq!(
         host.outcome("Agent"),

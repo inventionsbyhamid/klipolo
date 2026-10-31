@@ -30,10 +30,14 @@ pub struct OpenProposal {
     pub from: Option<String>,
 }
 
-/// A batch committed: the project's revision after it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// A batch committed, or a step undone: the project's revision after it, and the waiting proposal it dropped.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Applied {
     pub revision: u64,
+    /// The id of the proposal that was waiting and went with the change (the revision changed), if one did: only ever
+    /// the app's own, since another's refuses the change. None when none waited, the person decided on it first, or
+    /// nothing changed.
+    pub dropped: Option<String>,
 }
 
 /// Why the host didn't do what was asked. Nothing changed.
@@ -102,7 +106,8 @@ pub trait Host: Send + Sync + 'static {
     /// still wins. Implementations commit with `Document::commit_tx_keeping(tx, next, &ByApp { app: client, shares,
     /// after_point: false })`, `shares` the apps' shares of the history limits, so an app's step never pushes out the
     /// person's steps (`PushesOut`) or holds more than its share (`OverShare`). A commit changes the revision, so it
-    /// drops the open proposal (then `client`'s own), as any revision change does.
+    /// drops the open proposal (then `client`'s own), as any revision change does, and says which (`Applied::dropped`):
+    /// the caller proposes its removals again only when it was the one it joined.
     fn apply(&self, client: &str, base: u64, tx: &Transaction) -> Result<Applied, HostError>;
 
     /// Puts `proposal` (what `calls` compiled to on `base`) in the chat panel for the person to apply or discard, as
@@ -124,7 +129,8 @@ pub trait Host: Send + Sync + 'static {
     /// Undoes the newest undo step, only when `client` made it (its maker is `Maker::App(client)`): `NotYours` when
     /// someone else did, `NothingToUndo` when there is none. Refused with `Moved`, nothing undone, when a proposal
     /// waits that isn't `client`'s own, checked under the host's own lock in one step with the undo. An undo changes
-    /// the revision, so it drops the open proposal (then `client`'s own), as any revision change does.
+    /// the revision, so it drops the open proposal (then `client`'s own), as any revision change does, and says which
+    /// (`Applied::dropped`).
     fn undo_own(&self, client: &str) -> Result<Applied, HostError>;
 
     /// Points the person at `moments` (timeline ranges), as `client` found them.

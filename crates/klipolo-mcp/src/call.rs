@@ -199,6 +199,8 @@ fn edit(
     let compiled = |i: &usize| !out.refusals.iter().any(|r| r.call_index == *i);
     let mut said: Vec<String> = Vec::new();
     let mut revision = snap.revision;
+    // The waiting proposal the additions' commit dropped, if one waited.
+    let mut dropped: Option<String> = None;
     if let Some(additions) = &out.additions {
         let tx = from_app(additions, client);
         if tx.needs_review(Some(&snap.project)) {
@@ -208,7 +210,7 @@ fn edit(
             return refused(&paced(client));
         }
         match host.apply(client, snap.revision, &tx) {
-            Ok(applied) => revision = applied.revision,
+            Ok(applied) => (revision, dropped) = (applied.revision, applied.dropped),
             Err(e) => return refused(&host_error(host, client, e)),
         }
     }
@@ -222,10 +224,16 @@ fn edit(
         ));
     }
 
+    // The commit dropped no proposal of the app's: the person decided on it while this call ran (a Discard), and their
+    // decision stands. Its removals aren't proposed again.
+    let decided = changed && own.is_some_and(|o| dropped.as_deref() != Some(o.id.as_str()));
+    if decided {
+        said.push(words::DECIDED.to_owned());
+    }
     // The app's own proposal stands as it is, unless the call adds to it or the additions changed the project (which
-    // dropped it).
-    let proposal =
-        (out.proposal).filter(|_| own.is_none() || changed || out.proposed_calls.contains(&at));
+    // dropped it, and it waits again on top of them).
+    let proposal = (out.proposal)
+        .filter(|_| !decided && (own.is_none() || changed || out.proposed_calls.contains(&at)));
     let mut proposed_as: Option<(String, Us)> = None;
     if let Some(proposal) = proposal {
         let proposed: Vec<ToolCall> = (out.proposed_calls.iter())

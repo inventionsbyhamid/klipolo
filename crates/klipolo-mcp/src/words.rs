@@ -63,6 +63,9 @@ getProposal), then try again.";
 /// The app's own proposal waits, and Klipolo doesn't know the calls in it (the server started again since it was made).
 pub const OWN_WAITING: &str = "Your proposal is waiting for the person in Klipolo. Wait until they apply or discard it \
 (call getProposal), then try again.";
+/// The app's own proposal went while its call ran (the person decided on it), so its removals aren't proposed again.
+pub const DECIDED: &str = "Your earlier proposal was decided in Klipolo while this call ran, so it was not proposed \
+again. Call getProposal to see what the person did.";
 /// Additions that, checked again before they apply, take something away. Never expected: the compiler proposes those.
 pub const REMOVES: &str = "Klipolo found this would take something out of the edit, so it was not applied. Nothing \
 changed.";
