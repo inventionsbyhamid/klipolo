@@ -78,6 +78,8 @@ function swallowNextClick() {
   };
   const later = () => setTimeout(stop, 0);
   function stop() {
+    // The gesture is over: a later click on a cut (one with no press too, as VoiceOver's) is the cut's own.
+    handedOff = false;
     window.removeEventListener('click', swallow, true);
     window.removeEventListener('pointerup', later, true);
     window.removeEventListener('pointercancel', later, true);

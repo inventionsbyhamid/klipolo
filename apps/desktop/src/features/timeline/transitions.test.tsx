@@ -388,6 +388,16 @@ describe('a press on a cut marker: a drag trims the clip on that side, a still c
     expect(applied()).toEqual([]);
     expect(useSelection.getState().selectedId).toBeNull();
   });
+
+  it('after a drag from the cut trims, a click on the cut with no press (VoiceOver) still adds', async () => {
+    useProject.setState({ snapshot: withHandles() });
+    renderWithProviders(<Timeline />);
+    await pressMarker(cutMarker(), 12, [17, 52]);
+    // VO-Space clicks the cut with no pointer press before it.
+    fireEvent.click(cutMarker(), { detail: 0 });
+    await frames();
+    expect(applied().map((tx) => tx.label)).toEqual(['timeline.trim.clip.undo', 'transition.add']);
+  });
 });
 
 /** A stand-in engine that applies `setTransition` to the store after `ms`. */
