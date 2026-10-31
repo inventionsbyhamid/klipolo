@@ -369,3 +369,20 @@ fn a_settings_change_that_keeps_the_formats_keeps_every_place() {
     let next = apply_ops(&p, &[Op::SetSettings { settings }]).unwrap();
     assert_eq!(layer(&next, &id).layout, layer(&p, &id).layout);
 }
+
+/// A sound let go at or past the video's end would play over nothing: refused with no room. With no video at all, it
+/// plays whole wherever it is put.
+#[test]
+fn a_sound_at_or_past_the_video_end_is_refused() {
+    let p = fixture();
+    let end = video_duration(&p.timeline);
+    for at in [end, end + secs(3.0)] {
+        let e = add_sound_ops(&p, &whoosh(), at).unwrap_err();
+        assert_eq!(e.coded().code, "model.sound.noRoom", "at {at}");
+    }
+    let mut empty = fixture();
+    empty.timeline.main.clear();
+    let ops = add_sound_ops(&empty, &whoosh(), secs(4.0)).unwrap();
+    let empty = apply_ops(&empty, &ops).unwrap();
+    assert_eq!(layer(&empty, &added(&ops)).duration_us, secs(0.9));
+}

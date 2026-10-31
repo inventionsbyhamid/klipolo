@@ -17,17 +17,17 @@ pub const SOUND_VOLUME: f64 = 1.0;
 
 /// The ops that add `asset` as a sound effect at `at_us`: on the first audio track with room (`TrackTarget::Auto`),
 /// attached to the clip under it (none past the main track's end), the whole file, cut where the video ends when it
-/// would play past it (a video that ends at or before `at_us`, or none, cuts nothing). The file comes in with it when the
+/// would play past it (with no video yet, it plays whole). The file comes in with it when the
 /// project doesn't have it yet (the library's pack). Refused when the file has no sound, or no room is left before the
-/// end.
+/// end (a moment at or past the video's end plays over nothing).
 pub fn add_sound_ops(p: &Project, asset: &Asset, at_us: Us) -> Result<Vec<Op>> {
     if !asset.has_audio || asset.duration_us < MIN_DURATION_US {
         return Err(invalid(code!("model.sound.noSound")));
     }
     let start = at_us.max(0);
     let video = video_duration(&p.timeline);
-    let length = if video > start {
-        asset.duration_us.min(video - start)
+    let length = if video > 0 {
+        asset.duration_us.min(video.saturating_sub(start))
     } else {
         asset.duration_us
     };
