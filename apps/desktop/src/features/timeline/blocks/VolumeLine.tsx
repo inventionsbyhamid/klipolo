@@ -33,9 +33,30 @@ export function levelAt(y: number): number {
 }
 
 /**
+ * Where the music ducks under speech (`speech`, sorted), in the layer's own time: each dip goes down from `a` to `b`,
+ * stays low to `c` and is back up by `d`, easing in over `ATTACK_US` before the words and out over `RELEASE_US` after.
+ * None when it doesn't duck (no depth, or 0 dB) or nobody speaks while it plays.
+ */
+export function duckDips(
+  durationUs: number,
+  startUs: number,
+  duck: number | undefined,
+  speech: RangeUs[],
+): [number, number, number, number][] {
+  const dips: [number, number, number, number][] = [];
+  if (duck === undefined || !(duck < 0)) return dips;
+  for (const r of speech) {
+    const from = r.start - startUs;
+    const to = r.end - startUs;
+    if (to + RELEASE_US <= 0 || from - ATTACK_US >= durationUs) continue;
+    dips.push([from - ATTACK_US, from, to, to + RELEASE_US]);
+  }
+  return dips;
+}
+
+/**
  * The music's level across the layer, as the mix plays it: its volume, its fades, and the dips under speech
- * (`speech`, sorted), each easing in over `ATTACK_US` before the words and out over `RELEASE_US` after. Points are (µs
- * from the layer's start, gain), at every bend.
+ * (`duckDips`). Points are (µs from the layer's start, gain), at every bend.
  */
 export function levelPoints(
   durationUs: number,
@@ -45,15 +66,7 @@ export function levelPoints(
 ): [number, number][] {
   const duck = content.duck !== undefined && content.duck < 0 ? 10 ** (content.duck / 20) : 1;
   const volume = content.muted ? 0 : content.volume;
-  // The dips' shapes in the layer's own time: down from `a` to `b`, low to `c`, back up by `d`.
-  const dips: [number, number, number, number][] = [];
-  if (duck < 1)
-    for (const r of speech) {
-      const from = r.start - startUs;
-      const to = r.end - startUs;
-      if (to + RELEASE_US <= 0 || from - ATTACK_US >= durationUs) continue;
-      dips.push([from - ATTACK_US, from, to, to + RELEASE_US]);
-    }
+  const dips = duckDips(durationUs, startUs, content.duck, speech);
   const duckAt = (us: number) => {
     let gain = 1;
     for (const [a, b, c, d] of dips) {
@@ -114,7 +127,8 @@ export const VolumeLine = memo(function VolumeLine({
   const line = useRef<SVGPolylineElement>(null);
   const width = Math.max(1, usToPx(durationUs, pps));
   const points = levelPoints(durationUs, startUs, content, speech);
-  const dips = content.duck !== undefined && content.duck < 0 && points.some(([, g]) => g < content.volume * 0.999);
+  // Tagged where it ducks under someone speaking: its fades alone are no dip.
+  const dips = duckDips(durationUs, startUs, content.duck, speech).length > 0;
   const drawn = (pts: [number, number][]) =>
     pts.map(([us, g]) => `${((us / durationUs) * width).toFixed(1)},${(levelY(g) * height).toFixed(1)}`).join(' ');
   const shown = drawn(points);

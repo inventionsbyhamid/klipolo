@@ -88,6 +88,14 @@ describe('the music’s volume line', () => {
     expect(narrow).not.toHaveTextContent('Quieter while people talk');
   });
 
+  it('fades alone are no dip: music that ducks with nobody speaking has no tag', () => {
+    useUi.setState({ pxPerSecond: 40 });
+    useSpeech.setState({ ranges: [] });
+    useProject.setState({ snapshot: music(-12), pending: 0 });
+    renderWithProviders(<Timeline />);
+    expect(screen.getByRole('group', { name: 'Music' })).not.toHaveTextContent('Quieter while people talk');
+  });
+
   it('a drag of the line changes the volume, an Option drag how deep it ducks: one undo step each', async () => {
     useProject.setState({ snapshot: music(), pending: 0, apply });
     renderWithProviders(<Timeline />);
