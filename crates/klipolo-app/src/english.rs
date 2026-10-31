@@ -21,6 +21,7 @@ pub const APP: Messages = &[
     ("copies.paused.playing", "Paused while the video plays. It goes on when you stop."),
     ("copies.paused.exporting", "Paused while you export. It goes on when the export ends."),
     ("copies.paused.recording", "Paused while you record. It goes on when the take ends."),
+    ("copies.paused.analyzing", "Paused while Klipolo analyzes your video. It goes on by itself."),
     ("copies.paused.held", "Paused. Press Resume all to go on."),
     ("copies.paused.diskFull", "Paused because the disk is almost full. Free up space, then press Resume all."),
     ("copies.paused.hot", "Paused because this Mac is running hot. It tries again in 5 minutes."),

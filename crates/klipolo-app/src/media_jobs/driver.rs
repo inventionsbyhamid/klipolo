@@ -147,6 +147,14 @@ impl Driver {
             }
             // The take's own hold keeps the engine's scans waiting (`Hold::Recording`); copies only wait here.
             Msg::Recording(recording) => self.state().recording = recording,
+            Msg::Analyzing(analyzing) => {
+                let was = std::mem::replace(&mut self.state().analyzing, analyzing);
+                if was && !analyzing {
+                    let until = Instant::now() + SETTLE;
+                    self.quiet_until = Some(until);
+                    self.drive_at = Some(until);
+                }
+            }
             Msg::Event {
                 run,
                 event: ProxyEvent::Done { path: reported },

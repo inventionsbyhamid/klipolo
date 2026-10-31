@@ -1070,6 +1070,85 @@ fn a_take_pauses_the_copy_being_made_until_it_ends() {
     });
 }
 
+/// Analysis is the person's own action: while it decodes a clip on this Mac (its sound, its small copy), the copy being
+/// made pauses, keeping its finished segments, and its row says why; once analysis stops decoding, the copy is made on
+/// from its job.
+#[test]
+fn a_copy_being_made_pauses_while_analysis_decodes_and_goes_on_after() {
+    tauri::async_runtime::block_on(async {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a.mp4");
+        overwrite(&a, b"source a");
+        let root = dir.path().join("media/proxies");
+        let worker = Arc::new(StandIn::default());
+        let stops = Arc::new(Notify::new());
+        *worker.hold.lock().unwrap() = Some(stops.clone());
+        let jobs = scheduler(&root, &worker, &Arc::default());
+        let preview = Arc::new(FakePreview::default());
+        jobs.attach_preview(preview.clone(), None);
+        let (_publish, rx) = watch::channel(feed(&[&a]));
+        jobs.watch(rx);
+        eventually("a's copy is being made", &jobs, || {
+            state_of(&jobs.list().jobs, &a) == Some(MediaJobState::Working)
+        })
+        .await;
+
+        jobs.set_analyzing(true);
+        // The worker stops after its current frame, as asked.
+        stops.notify_one();
+        eventually("a's copy waits for analysis", &jobs, || {
+            reason_of(&jobs, &a).as_deref() == Some("copies.paused.analyzing")
+        })
+        .await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(worker.launched.lock().unwrap().len(), 1);
+
+        jobs.set_analyzing(false);
+        eventually("a's copy is made after analysis", &jobs, || {
+            preview.last().contains_key(&*a.to_string_lossy())
+        })
+        .await;
+        let launched = worker.launched.lock().unwrap().clone();
+        assert_eq!(launched.len(), 2, "{launched:?}");
+        assert_eq!(launched[0].0, launched[1].0, "made on from its job");
+    });
+}
+
+/// While analysis decodes a clip on this Mac, no copy starts, though the files are listed; once it stops, they are
+/// made.
+#[test]
+fn no_copy_starts_while_analysis_decodes() {
+    tauri::async_runtime::block_on(async {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a.mp4");
+        overwrite(&a, b"source a");
+        let root = dir.path().join("media/proxies");
+        let worker = Arc::new(StandIn::default());
+        let jobs = scheduler(&root, &worker, &Arc::default());
+        jobs.set_analyzing(true);
+        let preview = Arc::new(FakePreview::default());
+        jobs.attach_preview(preview.clone(), None);
+        let (_publish, rx) = watch::channel(feed(&[&a]));
+        jobs.watch(rx);
+        eventually("a is listed", &jobs, || jobs.list().jobs.len() == 1).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(
+            worker.launched.lock().unwrap().is_empty(),
+            "nothing starts while analysis decodes"
+        );
+        assert_eq!(
+            state_of(&jobs.list().jobs, &a),
+            Some(MediaJobState::Waiting)
+        );
+
+        jobs.set_analyzing(false);
+        eventually("a's copy is made", &jobs, || {
+            state_of(&jobs.list().jobs, &a) == Some(MediaJobState::Done)
+        })
+        .await;
+    });
+}
+
 /// A video layer (picture in picture) gets its copy as main clips do: the timeline's files are listed in its order,
 /// layers' included, before files it doesn't use; and once the copy is in the preview's map, the layer reads it with
 /// the same times, while a plan without the map (export's) reads the file itself.

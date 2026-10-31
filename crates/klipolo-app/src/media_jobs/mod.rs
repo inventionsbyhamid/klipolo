@@ -2,9 +2,9 @@
 //! whenever the project or its set of video files changes; each is probed once (cached by its key) and the policy
 //! (`needs_proxy`, by the engine's GPU class) picks those that play and scrub slowly. Copies are made one at a time by
 //! the app binary run as `--proxy-worker`, in timeline order, and pause while the person plays the video, exports or
-//! records (`schedule`). A finished copy goes to the engine (`Engine::set_media`), whose preview reads it in place of
-//! the source file with the same times; export never sees it. A copy the preview can't open (a purged cache) falls back
-//! to the source file there, and the copy is made again.
+//! records, and while analysis decodes a clip on this Mac (`schedule`). A finished copy goes to the engine
+//! (`Engine::set_media`), whose preview reads it in place of the source file with the same times; export never sees it.
+//! A copy the preview can't open (a purged cache) falls back to the source file there, and the copy is made again.
 //!
 //! Never losing work: a paused, crashed or quit copy keeps every finished segment, and the next start resumes it
 //! (`ProxyJob::open_with`). Copies are keyed by their source file (`key::stem`), never by project, so a renamed or
@@ -60,8 +60,8 @@ use schedule::{Action, Failure, Job, JobState, Pause, ScheduleState};
 pub const PROXY_DISK_BUDGET: u64 = 10 << 30;
 /// `media-jobs` events carry progress at most this often (state changes go at once).
 const PROGRESS_EVERY: Duration = Duration::from_millis(250);
-/// After playback stops, copies wait this long before starting again: a worker launched as the person scrubs, only
-/// to pause at the next Play, would cost its start and its partial segment for nothing.
+/// After playback stops (or analysis stops decoding), copies wait this long before starting again: a worker launched
+/// as the person scrubs, only to pause at the next Play, would cost its start and its partial segment for nothing.
 const SETTLE: Duration = Duration::from_secs(2);
 /// How long a command waits for the driver's answer.
 const COMMAND_WAIT: Duration = Duration::from_secs(10);
@@ -163,6 +163,7 @@ enum Msg {
     Playing(bool),
     Exporting(bool),
     Recording(bool),
+    Analyzing(bool),
     Event {
         run: u64,
         event: ProxyEvent,
@@ -332,6 +333,13 @@ impl MediaJobs {
     #[allow(dead_code, reason = "the recorder's take hold calls it")]
     pub fn set_recording(&self, recording: bool) {
         self.send(Msg::Recording(recording));
+    }
+
+    /// Analysis started (true) or stopped (false) decoding a clip on this Mac (its sound, its small copy): copies wait,
+    /// as analysis is the person's own action, so the two never decode video at once. After it stops, copies wait
+    /// `SETTLE` before starting again: the next clip's decode often follows at once.
+    pub fn set_analyzing(&self, analyzing: bool) {
+        self.send(Msg::Analyzing(analyzing));
     }
 
     /// The engine's events that concern copies (its event sink calls this for each).

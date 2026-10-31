@@ -3,12 +3,12 @@
 //! English for the page to show). `MediaJobs` (`mod.rs`) owns one and does what `next` says.
 //!
 //! One copy runs at a time, and only while nothing else wants the computer: it pauses while the person plays the video
-//! (`playing`), exports (`exporting`) or records a take (`recording`), while they asked it to (`user_paused`, or
-//! automatic copies are off), and it never starts while a thumbnails-only scan runs (`scanning`): one background job at
-//! a time. A copy that paused itself because the disk is almost full, the computer runs hot or the encoder is busy
-//! holds the whole queue: the next copy would meet the same. So does a copy whose worker stopped without a word
-//! (crashed or killed): it is started again by itself after `RESTART_WAITS`, from its finished segments, and fails
-//! after that many restarts.
+//! (`playing`), exports (`exporting`) or records a take (`recording`), while analysis decodes a clip on this Mac
+//! (`analyzing`), and while they asked it to (`user_paused`, or automatic copies are off); and it never starts while a
+//! thumbnails-only scan runs (`scanning`): one background job at a time. A copy that paused itself because the disk is
+//! almost full, the computer runs hot or the encoder is busy holds the whole queue: the next copy would meet the same.
+//! So does a copy whose worker stopped without a word (crashed or killed): it is started again by itself after
+//! `RESTART_WAITS`, from its finished segments, and fails after that many restarts.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -42,6 +42,8 @@ pub enum Pause {
     Exporting,
     /// A take is recording.
     Recording,
+    /// Analysis decodes a clip on this Mac (the person's own action).
+    Analyzing,
     /// A hold: the person's pause, an action's, or automatic copies off (the list's `held` says which).
     User,
     /// The disk is almost full: it waits for Resume.
@@ -235,7 +237,14 @@ impl Job {
     fn ready(&self) -> bool {
         matches!(
             self.state,
-            Waiting | Paused(Pause::Playing | Pause::Exporting | Pause::Recording | Pause::User)
+            Waiting
+                | Paused(
+                    Pause::Playing
+                        | Pause::Exporting
+                        | Pause::Recording
+                        | Pause::Analyzing
+                        | Pause::User
+                )
         )
     }
 }
@@ -246,6 +255,7 @@ fn pause_code(why: Pause) -> &'static str {
         Pause::Playing => code!("copies.paused.playing"),
         Pause::Exporting => code!("copies.paused.exporting"),
         Pause::Recording => code!("copies.paused.recording"),
+        Pause::Analyzing => code!("copies.paused.analyzing"),
         Pause::User => code!("copies.paused.held"),
         Pause::Disk => code!("copies.paused.diskFull"),
         Pause::Thermal => code!("copies.paused.hot"),
@@ -280,6 +290,8 @@ pub struct ScheduleState {
     pub exporting: bool,
     /// A take is recording: copies wait for it.
     pub recording: bool,
+    /// Analysis decodes a clip on this Mac: copies wait for it, as analysis is the person's own action.
+    pub analyzing: bool,
     /// The person paused copies (`media_jobs_pause`, the pill).
     pub user_paused: bool,
     /// An action paused them (`media_jobs_pause` with `by: "action"`): a hold of its own, so
@@ -301,6 +313,7 @@ impl ScheduleState {
             playing: false,
             exporting: false,
             recording: false,
+            analyzing: false,
             user_paused: false,
             action_paused: false,
             scanning: false,
@@ -318,6 +331,8 @@ impl ScheduleState {
             Some(Pause::Exporting)
         } else if self.recording {
             Some(Pause::Recording)
+        } else if self.analyzing {
+            Some(Pause::Analyzing)
         } else if self.playing {
             Some(Pause::Playing)
         } else {
@@ -597,6 +612,25 @@ mod tests {
         assert_eq!(s.next(), Action::Start(0));
     }
 
+    /// Analysis decoding a clip on this Mac (the person's own action) holds copies, with its own words: the running
+    /// copy pauses, nothing else starts, and they go on once it stops.
+    #[test]
+    fn analysis_decoding_holds_copies() {
+        let mut s = ScheduleState::with(vec![job("a.mp4", Waiting), job("b.mp4", Waiting)]);
+        s.started(0);
+        s.analyzing = true;
+        assert_eq!(s.hold(), Some(Pause::Analyzing));
+        assert_eq!(s.next(), Action::Pause(0, Pause::Analyzing));
+        s.paused(0, Pause::Analyzing);
+        assert_eq!(
+            s.jobs[0].reason(),
+            Some(CodedError::new("copies.paused.analyzing"))
+        );
+        assert_eq!(s.next(), Action::Nothing, "nothing starts while it decodes");
+        s.analyzing = false;
+        assert_eq!(s.next(), Action::Start(0));
+    }
+
     #[test]
     fn an_export_pauses_it_too_and_a_user_pause_holds_until_resume() {
         let mut s = ScheduleState::with(vec![job("a.mp4", Waiting)]);
@@ -797,6 +831,7 @@ mod tests {
             (Pause::Playing, "copies.paused.playing"),
             (Pause::Exporting, "copies.paused.exporting"),
             (Pause::Recording, "copies.paused.recording"),
+            (Pause::Analyzing, "copies.paused.analyzing"),
             (Pause::User, "copies.paused.held"),
             (Pause::Disk, "copies.paused.diskFull"),
             (Pause::Thermal, "copies.paused.hot"),

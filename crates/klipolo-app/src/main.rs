@@ -140,6 +140,10 @@ fn main() {
             let exporting = copies.clone();
             app.state::<klipolo_app::export::ExportState>()
                 .on_busy(Arc::new(move |busy| exporting.set_exporting(busy)));
+            // Analysis is the person's own action: copies wait while it decodes a clip on this Mac.
+            let analyzing = copies.clone();
+            app.state::<commands::analysis::AnalysisHandle>()
+                .on_decoding(move |on| analyzing.set_analyzing(on));
             app.manage(copies);
             commands::export::guard_menu_quit(app)?;
             Ok(())

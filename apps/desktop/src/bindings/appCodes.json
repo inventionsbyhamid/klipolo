@@ -15,6 +15,11 @@
     "params": []
   },
   {
+    "code": "copies.paused.analyzing",
+    "message": "Paused while Klipolo analyzes your video. It goes on by itself.",
+    "params": []
+  },
+  {
     "code": "copies.paused.held",
     "message": "Paused. Press Resume all to go on.",
     "params": []
