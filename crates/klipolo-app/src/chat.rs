@@ -10,7 +10,8 @@
 //! - `inputs`: a message's context and compiler inputs from one snapshot. `describe`: a proposal in Klipolo's words.
 //!   `jobs`: work for runners. `pictures`: pictures a message asked for, drawn on request and placed on Use. `spend`:
 //!   what chat cost this session.
-//! - `reply`: the shapes the chat panel reads, every model-written text cleaned of dashes as they are built.
+//! - `reply`: the shapes the chat panel reads, every model-written text cleaned of dashes as they are built; another
+//!   app's change comes to the panel as an `ExternalReply`.
 
 mod describe;
 mod inputs;
@@ -33,7 +34,7 @@ pub use project::{
 };
 pub use reply::{
     ChatApplied, ChatFailure, ChatFailureKind, ChatMoment, ChatOutcome, ChatProposal, ChatReply,
-    ChatRequest, ProposalTag,
+    ChatRequest, ExternalReply, ProposalTag,
 };
 pub use session::ChatSession;
 pub use sources::{Findings, MetaModels, Models, Readiness};
