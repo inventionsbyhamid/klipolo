@@ -67,6 +67,10 @@ export interface Session {
   ops: Op[];
   /** The undo label of `ops` (null until a frame has made some). */
   label: LabelId | null;
+  /** A trim's edge frame, in its dry run: what the preview shows while it trims (null: a move). */
+  edgeUs: number | null;
+  /** The edge frame the preview was last asked to show (null: it shows the playhead's). */
+  shownUs: number | null;
   said: string;
   newTrackId: string;
   /** Where a clip was grabbed, from its start: a commit that lands before it lifts moves its start. */
@@ -118,6 +122,8 @@ export function newSession(
     shifted: new Set(),
     ops: [],
     label: null,
+    edgeUs: null,
+    shownUs: null,
     said: '',
     newTrackId: newId(),
     grabOffsetUs: gesture.kind === 'clip' ? gesture.grabUs - mainIndex(main).starts[from] : 0,
