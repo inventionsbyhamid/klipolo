@@ -89,6 +89,15 @@ describe('SettingsDialog', () => {
     expect(screen.getByRole('radio', { name: /My Meta API key/ })).toHaveFocus();
   });
 
+  it("shows what AI cost this session, with a key or a code", async () => {
+    const session = { analysisUsd: 0.08, chatUsd: 0.02, chatMessages: 4, picturesUsd: 0, pictures: 0 };
+    openOn({ mode: 'key', keyHint: '6789', session });
+    const spend = screen.getByRole('group', { name: 'This session' });
+    expect(spend).toHaveTextContent('This session$0.10');
+    expect(spend).toHaveTextContent('Analysis $0.08, Chat $0.02 for 4 messages');
+    await act(async () => undefined);
+  });
+
   it("shows the code's credit, never more spent than the budget", async () => {
     openOn({ ...relay, spentUsd: 2.31 });
     expect(screen.getByDisplayValue('KLIP-TEST-0001')).toHaveAttribute('readonly');
