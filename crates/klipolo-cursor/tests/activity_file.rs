@@ -51,10 +51,21 @@ fn a_damaged_chunk_reads_as_unknown_and_is_missing_again() {
         missing(&decode(&bytes[..bytes.len() - 5], 150 * S)),
         vec![2]
     );
-    // A damaged header, or a file for another duration, reads as all missing, to be written again from the start.
+    // A damaged header, one under another build's magic, or a file for another duration, reads as all missing, to be
+    // written again from the start.
     let mut head_damaged = bytes.clone();
     head_damaged[9] ^= 0x01;
-    for a in [decode(&head_damaged, 150 * S), decode(&bytes, 151 * S)] {
+    // Another magic over a header that is otherwise whole: its checksum made again, so only the magic refuses it.
+    let mut other_magic = bytes.clone();
+    other_magic[..8].copy_from_slice(b"XXXXACT1");
+    let sum = crc32fast::hash(&other_magic[..16]).to_le_bytes();
+    other_magic[16..20].copy_from_slice(&sum);
+    assert_eq!(stored_duration(&other_magic), None);
+    for a in [
+        decode(&head_damaged, 150 * S),
+        decode(&other_magic, 150 * S),
+        decode(&bytes, 151 * S),
+    ] {
         assert_eq!((a.append_at(), missing(&a)), (0, vec![0, 1, 2]));
         assert!(!a.is_complete() && a.complete_through() == 0);
     }
