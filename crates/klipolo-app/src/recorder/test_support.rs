@@ -84,6 +84,8 @@ pub(super) struct World {
     pub(super) screen_requests: Arc<AtomicU64>,
     /// Encoder probes run.
     pub(super) probes: Arc<AtomicU64>,
+    /// What the fake probe writes; None: nothing, as a probe that hung or crashed.
+    pub(super) probe_writes: Arc<Mutex<Option<ProbeReport>>>,
     /// The open project's id; None: the start screen.
     pub(super) project: Arc<Mutex<Option<String>>>,
     pub(super) root: PathBuf,
@@ -107,6 +109,7 @@ pub(super) fn world(dir: &Path, script: Script) -> (Parts, World) {
         backends: Arc::default(),
         screen_requests,
         probes: Arc::default(),
+        probe_writes: Arc::new(Mutex::new(Some(probe_report()))),
         project: Arc::new(Mutex::new(Some("project-1".into()))),
         root: dir.join("Recordings"),
         files: Files {
@@ -118,15 +121,20 @@ pub(super) fn world(dir: &Path, script: Script) -> (Parts, World) {
         world.probes.clone(),
         world.project.clone(),
     );
+    let writes = world.probe_writes.clone();
     let parts = Parts {
         backend: Box::new(move || {
             made.fetch_add(1, Ordering::SeqCst);
             backend.clone()
         }),
         launch: Arc::new(world.launch.clone()),
+        // About as long as a real probe takes to start, so two setups at once overlap.
         probe: Box::new(move |out: &Path| {
             probes.fetch_add(1, Ordering::SeqCst);
-            std::fs::write(out, serde_json::to_vec(&probe_report()).unwrap()).unwrap();
+            std::thread::sleep(Duration::from_millis(50));
+            if let Some(report) = writes.lock().unwrap().clone() {
+                std::fs::write(out, serde_json::to_vec(&report).unwrap()).unwrap();
+            }
         }),
         clock: world.clock.clone(),
         sink: world.sink.clone(),

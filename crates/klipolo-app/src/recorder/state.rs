@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use klipolo_capture::backend::Backend;
+use klipolo_capture::backend::{Backend, Permission};
 use klipolo_capture::preflight::RecorderSetup;
 use klipolo_capture::protocol::{Command, Event};
 use klipolo_capture::session::ImportTarget;
@@ -18,7 +18,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use super::env::{Done, Env, Sink};
 use super::launch::{Launch, ProcessLaunch, WorkerIo};
 use super::permissions::{self, Open};
-use super::setup::{self, Files};
+use super::setup::{self, Files, Probing, Shown};
 use super::take::Recorder;
 use super::types::{ArmOptions, ArmedTake, PrivacyPage, RecorderEvent, StoppedTake};
 use super::window::{MainWindow, Window};
@@ -73,8 +73,10 @@ struct On {
     files: Option<Files>,
     root: Option<PathBuf>,
     open_project: Box<dyn Fn() -> Option<String> + Send + Sync>,
-    /// The setup the Record dialog was opened with: arming plans from it rather than listing the devices again.
-    last_setup: Mutex<Option<RecorderSetup>>,
+    /// What the Record dialog was opened with: arming plans from it rather than listing the devices again.
+    last_setup: Mutex<Option<Shown>>,
+    /// One encoder probe at a time.
+    probing: Mutex<()>,
 }
 
 pub struct RecorderState {
@@ -117,6 +119,7 @@ impl RecorderState {
                 root: parts.root,
                 open_project: parts.open_project,
                 last_setup: Mutex::new(None),
+                probing: Mutex::new(()),
             }),
         }
     }
@@ -130,34 +133,52 @@ impl RecorderState {
         self.on.as_ref().map(|on| &on.recorder)
     }
 
+    /// What the dialog was last shown.
+    #[cfg(test)]
+    pub(super) fn shown(&self) -> Option<Shown> {
+        self.on.as_ref().and_then(|on| lock(&on.last_setup).clone())
+    }
+
     /// The Record dialog's data: devices, permissions, each display's qualities and space, and the notes. No capture
-    /// and no prompt; the encoder probe runs the first time. Arming then plans from this setup.
+    /// and no prompt; the encoder probe runs the first time, one at a time. While a take is the recorder's, neither the
+    /// probe nor the folder's measure runs beside it. Arming then plans from this setup.
     pub(super) fn setup(&self) -> Result<RecorderSetup, CodedError> {
         let on = self.on()?;
-        let files = on.files.as_ref().ok_or_else(words::refused)?;
+        let files = on.files.as_ref().ok_or_else(words::no_settings_folder)?;
         let own_take = on.recorder.take_id().is_some();
         let backend = on.backend.get();
-        let probe: &dyn Fn(&Path) = &*on.probe;
-        let setup =
-            setup::recorder_setup(&*backend, files, Some(probe), on.root.as_deref(), own_take);
-        *lock(&on.last_setup) = Some(setup.clone());
+        let probing = if own_take {
+            Probing::Kept
+        } else {
+            Probing::Run {
+                run: &*on.probe,
+                one_at_a_time: &on.probing,
+            }
+        };
+        let root = on.root.as_deref();
+        let shown = setup::recorder_setup(&*backend, files, probing, root, !own_take, own_take);
+        let setup = shown.setup.clone();
+        *lock(&on.last_setup) = Some(shown);
         Ok(setup)
     }
 
     /// Arms a take from the person's options: its worker waits for their Record, and nothing is captured. It lands in
-    /// the open project, or in a new one when none is open. `capture.busy` while a take is the recorder's.
+    /// the open project, or in a new one when none is open. `capture.busy` while a take is the recorder's or Klipolo
+    /// reopens; `capture.error.permission` until Screen Recording is allowed (Record would make macOS ask, and only the
+    /// person's Allow press may).
     pub(super) fn arm(&self, options: &ArmOptions) -> Result<ArmedTake, CodedError> {
         let on = self.on()?;
         on.recorder.refuse_while_busy()?;
+        let files = on.files.as_ref().ok_or_else(words::no_settings_folder)?;
+        let backend = on.backend.get();
+        if backend.permissions().screen != Permission::Granted {
+            return Err(words::not_allowed());
+        }
         let shown = lock(&on.last_setup).clone();
-        let setup = match shown {
-            Some(setup) => setup,
-            // Not opened from the dialog: the setup now, without a probe or the folder's measure.
-            None => {
-                let files = on.files.as_ref().ok_or_else(words::refused)?;
-                setup::recorder_setup(&*on.backend.get(), files, None, None, false)
-            }
-        };
+        // Not opened from the dialog: the setup now, with a kept probe report only and no folder measure.
+        let shown = shown.unwrap_or_else(|| {
+            setup::recorder_setup(&*backend, files, Probing::Kept, None, false, false)
+        });
         let target = match (on.open_project)() {
             Some(id) => ImportTarget::Project { id },
             None => ImportTarget::New,
@@ -166,8 +187,8 @@ impl RecorderState {
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_millis() as u64);
         let id = klipolo_model::ids::new_id();
-        let cfg = setup::plan(&setup, options, &id, target, created_ms)?;
-        on.recorder.arm(cfg)
+        let (cfg, notes) = setup::plan(&shown, options, &id, target, created_ms)?;
+        on.recorder.arm(cfg, notes)
     }
 
     /// One command to take `take`'s worker.

@@ -3,6 +3,7 @@
 //! (`RecorderSetup`) are klipolo-capture's.
 
 use klipolo_capture::protocol::Event;
+use klipolo_model::coded::CodedError;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -42,7 +43,7 @@ pub struct ArmOptions {
 }
 
 /// An armed take: its worker waits for the person's Record.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct ArmedTake {
@@ -50,6 +51,11 @@ pub struct ArmedTake {
     pub id: String,
     /// The countdown after Record, in seconds, before the take records.
     pub countdown_s: u32,
+    /// What the person is told before Record: the camera this computer can't record beside the screen
+    /// (`capture.preflight.cameraWithScreen`; the take records without it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub notes: Option<Vec<CodedError>>,
 }
 
 /// What "Stop the running recording" stopped (`recorder_stop_running`).
