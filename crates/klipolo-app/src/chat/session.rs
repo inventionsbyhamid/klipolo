@@ -28,22 +28,30 @@
 //!   came after it.
 //! - **Spend:** every model call's cost goes into the session's AI spend (`SpendCounter`); nothing is shown per
 //!   message.
+//! - **Other apps** (MCP) share the one proposal slot (`slot`, `SlotGuard`): an app's proposal waits there as chat's
+//!   do, Apply and Discard take it by id the same way, and what became of it (applied, discarded, or dropped and why)
+//!   is kept for the app. Every write to the slot takes its lock first, before the project's: Apply holds it until its
+//!   commit lands, so a proposal being applied still waits for every app. Nothing takes it while holding the project's
+//!   lock (a project switch tells `project_changed` under that lock: a proposal left from the old project is dropped
+//!   the next time the slot is read, `SlotGuard::settle`) or chat's conversation lock.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use klipolo_chat::{
-    Audience, ChatErrorKind, Compiled, Inputs, PlanOut, ToolCall, Turn, View, compile, plan,
+    Audience, ChatErrorKind, Compiled, Inputs, PlanOut, Proposal, ToolCall, Turn, View, compile,
+    plan,
 };
 use klipolo_model::coded::CodedError;
 use klipolo_model::history::SnapshotPatch;
-use klipolo_model::speech::Transcript;
-use klipolo_model::time::RangeUs;
+use klipolo_model::risk::Review;
+use klipolo_model::speech::{Speech, Transcript};
+use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::ClipSource;
 use klipolo_model::{Project, Transaction};
 
 use super::describe::{describe, seconds};
-use super::inputs::gather;
+use super::inputs::{gather, inputs_for};
 use super::jobs;
 use super::pictures::{ChatPicture, ChatPictureDrawn, PictureAsk, Pictures};
 use super::project::{At, CommitError, ProjectNow, Projects};
@@ -107,6 +115,9 @@ pub struct ChatSession {
     models: Arc<dyn Models>,
     /// One message at a time: held from before its context is built until its edits have landed.
     queue: tokio::sync::Mutex<()>,
+    /// The one proposal waiting for Apply or Discard, chat's or another app's. Taken before the project's lock and
+    /// `talk`, never while holding either.
+    slot: Mutex<Slot>,
     talk: Mutex<Talk>,
     pictures: Pictures,
     spend: SpendCounter,
@@ -119,10 +130,176 @@ struct Talk {
     owner: Option<At>,
     /// Oldest first, at most `KEPT_EXCHANGES`.
     exchanges: Vec<Exchange>,
-    /// The one proposal waiting for Apply or Discard.
-    open: Option<Stored>,
     /// Where the project stood right after chat's last change: `undo_last` takes it back only from there.
     last_change: Option<At>,
+}
+
+/// The chat panel's one proposal slot, which other apps share.
+#[derive(Default)]
+struct Slot {
+    open: Option<Stored>,
+    /// What became of each app's latest proposal once it no longer waits, by app: its id, and what.
+    decided: HashMap<String, (String, Decided)>,
+}
+
+impl Slot {
+    /// `stored` no longer waits: what became of it is kept for the app that made it.
+    fn decide(&mut self, stored: &Stored, what: Decided) {
+        if let Some(app) = &stored.from {
+            self.decided.insert(app.clone(), (stored.id.clone(), what));
+        }
+    }
+}
+
+/// What became of an app's proposal once it no longer waits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Decided {
+    /// The person applied it: one undo step of theirs.
+    Applied,
+    /// The person discarded it.
+    Discarded,
+    /// It went before the person decided.
+    Dropped(Gone),
+}
+
+/// Why a waiting proposal went before the person decided.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Gone {
+    /// The project changed under it: an edit, an undo, a change chat or an app made.
+    Changed,
+    /// The clip's words were timed again since (Captions).
+    Retimed,
+    /// Klipolo's chat made a newer proposal in its place.
+    Replaced,
+    /// The person started a new chat.
+    NewChat,
+    /// Another project opened, or the project closed.
+    Closed,
+}
+
+/// The proposal waiting for the person, as another app reads it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Waiting {
+    pub id: String,
+    /// Where the project stood when it was made: it applies only there.
+    pub at: At,
+    /// The app that made it; None for Klipolo's chat.
+    pub from: Option<String>,
+    /// Its card's title.
+    pub title: String,
+    /// How much footage it takes away in all, and where, on the timeline as it is.
+    pub removed_us: Us,
+    pub ranges: Vec<RangeUs>,
+}
+
+/// The proposal slot, held (`ChatSession::slot`): other apps read it, and put their proposals in it, through this.
+pub struct SlotGuard<'a> {
+    slot: MutexGuard<'a, Slot>,
+    chat: &'a ChatSession,
+}
+
+impl SlotGuard<'_> {
+    /// Drops the waiting proposal once the project moved on from where it was made (an edit, an undo, another project):
+    /// it can never apply. Its id, when one went.
+    pub fn settle(&mut self) -> Option<String> {
+        let now = self.chat.projects.now().map(|n| n.at);
+        let open = self.slot.open.as_ref()?;
+        if now.as_ref() == Some(&open.at) {
+            return None;
+        }
+        let old = self.slot.open.take()?;
+        self.slot
+            .decide(&old, Decided::Dropped(gone(&old.at, now.as_ref())));
+        if old.from.is_none() {
+            lock(&self.chat.talk).noted(&old.id, DROPPED_NOTE);
+        }
+        Some(old.id)
+    }
+
+    /// The proposal waiting for the person, once one that can no longer apply is dropped (`settle`).
+    pub fn waiting(&mut self) -> Option<Waiting> {
+        self.settle();
+        self.slot.open.as_ref().map(Stored::waiting)
+    }
+
+    /// Puts app `client`'s proposal in the chat panel: `proposal`, compiled from `tools`' calls on the project `now`
+    /// (the open project as it stands, under this guard), in place of the one waiting, which must be the app's own (the
+    /// caller checks). The card the person sees.
+    pub fn propose(
+        &mut self,
+        client: &str,
+        now: &ProjectNow,
+        proposal: &Proposal,
+        tools: &[&str],
+    ) -> ChatProposal {
+        let chat = self.chat;
+        let (inputs, _) = inputs_for(
+            &now.project,
+            &*chat.findings,
+            "",
+            View::default(),
+            Vec::new(),
+        );
+        let id = uuid::Uuid::new_v4().to_string();
+        let made = card(
+            &id,
+            now.at.revision,
+            &now.project,
+            &inputs.speech,
+            &proposal.review,
+            tools,
+            Some(client),
+        );
+        self.slot.open = Some(Stored::new(
+            &made,
+            now.at.clone(),
+            &proposal.tx,
+            &proposal.review,
+            Words::read(&inputs),
+            Some(client.to_owned()),
+        ));
+        // A new one waits: what became of its earlier one no longer answers the app.
+        self.slot.decided.remove(client);
+        made
+    }
+
+    /// What became of `client`'s latest proposal, once it no longer waits.
+    pub fn decided(&self, client: &str) -> Option<(String, Decided)> {
+        self.slot.decided.get(client).cloned()
+    }
+}
+
+/// Why a proposal made at `made` can't apply with the project at `now`.
+fn gone(made: &At, now: Option<&At>) -> Gone {
+    if now.is_some_and(|now| now.same_project(made)) {
+        Gone::Changed
+    } else {
+        Gone::Closed
+    }
+}
+
+/// The card for removals `review` made on `base` (the project they apply to, its words in `speech`) by `tools`' calls:
+/// Klipolo's title for them and a tag over each cut, for proposal `id` on `revision`. Chat's proposals and other apps'
+/// are worded alike, but that an app's keepOnly keeps parts it suggests (`from`: the app; None for chat).
+fn card(
+    id: &str,
+    revision: u64,
+    base: &Project,
+    speech: &Speech,
+    review: &Review,
+    tools: &[&str],
+    from: Option<&str>,
+) -> ChatProposal {
+    let removed_us = review.removals.ranges.iter().map(RangeUs::len).sum();
+    let said = describe(base, speech, &review.removals, tools, from);
+    ChatProposal::new(
+        id,
+        revision,
+        &said.title,
+        review.removals.clone(),
+        removed_us,
+        said.tags,
+    )
 }
 
 struct Exchange {
@@ -141,6 +318,47 @@ struct Stored {
     after: Project,
     /// The words it was made on (`Words::read`).
     words: Words,
+    /// The app that made it; None for chat's own.
+    from: Option<String>,
+    /// Its card's title, the footage it takes away and where.
+    title: String,
+    removed_us: Us,
+    ranges: Vec<RangeUs>,
+}
+
+impl Stored {
+    /// The proposal `card` shows, made at `at` as `tx` judged by `review`, on `words`, by `from`.
+    fn new(
+        card: &ChatProposal,
+        at: At,
+        tx: &Transaction,
+        review: &Review,
+        words: Words,
+        from: Option<String>,
+    ) -> Self {
+        Self {
+            id: card.id().to_owned(),
+            at,
+            tx: tx.clone(),
+            after: review.after.clone(),
+            words,
+            from,
+            title: card.title().to_owned(),
+            removed_us: review.removals.ranges.iter().map(RangeUs::len).sum(),
+            ranges: review.removals.ranges.clone(),
+        }
+    }
+
+    fn waiting(&self) -> Waiting {
+        Waiting {
+            id: self.id.clone(),
+            at: self.at.clone(),
+            from: self.from.clone(),
+            title: self.title.clone(),
+            removed_us: self.removed_us,
+            ranges: self.ranges.clone(),
+        }
+    }
 }
 
 /// Each file's transcript as a message read it, by asset id (None: it had none yet). Words timed again since are a new
@@ -211,6 +429,7 @@ impl ChatSession {
             findings,
             models,
             queue: tokio::sync::Mutex::new(()),
+            slot: Mutex::default(),
             talk: Mutex::default(),
             pictures: Pictures::default(),
             spend: SpendCounter::default(),
@@ -315,28 +534,30 @@ impl ChatSession {
         })
     }
 
-    /// Applies proposal `id` as one undo step. Refused with `project.moved` (and dropped) when the project moved on
-    /// from the revision it was made for, or when it is gone (replaced, discarded, dropped, another project). Refused
-    /// for any other reason (a read-only project, a disk that refused it), it stays open for Retry.
+    /// Applies proposal `id` (chat's, or another app's) as one undo step of the person's. Refused with `project.moved`
+    /// (and dropped) when the project moved on from the revision it was made for, or when it is gone (replaced,
+    /// discarded, dropped, another project). Refused for any other reason (a read-only project, a disk that refused
+    /// it), it stays open for Retry. The slot is held until the commit lands: while it is applied, it still waits.
     pub fn apply(&self, id: &str) -> Result<ChatApplied, CommitError> {
-        let stored = {
-            let mut talk = lock(&self.talk);
-            let open = talk.open.as_ref().is_some_and(|p| p.id == id);
-            open.then(|| talk.open.take()).flatten()
-        };
-        let Some(stored) = stored else {
+        let mut slot = lock(&self.slot);
+        let Some(stored) = slot.open.take_if(|p| p.id == id) else {
             return Err(CommitError::Moved);
         };
         if !stored.words.still(&*self.findings) {
+            slot.decide(&stored, Decided::Dropped(Gone::Retimed));
             lock(&self.talk).noted(id, RETIMED_NOTE);
             return Err(CommitError::Moved);
         }
         let committed = (self.projects).commit(&stored.at, &stored.tx, Some(stored.after.clone()));
+        // Why it can't apply, read before the conversation's lock is taken.
+        let why = matches!(committed, Err(CommitError::Moved))
+            .then(|| gone(&stored.at, self.projects.now().map(|n| n.at).as_ref()));
         let mut talk = lock(&self.talk);
         match committed {
             Ok(c) => {
                 talk.last_change = Some(c.at.clone());
                 talk.noted(id, APPLIED_NOTE);
+                slot.decide(&stored, Decided::Applied);
                 Ok(ChatApplied {
                     change: c.patch,
                     undo: undo_label(&stored.tx),
@@ -344,13 +565,12 @@ impl ChatSession {
             }
             Err(CommitError::Moved) => {
                 talk.noted(id, DROPPED_NOTE);
+                slot.decide(&stored, Decided::Dropped(why.unwrap_or(Gone::Changed)));
                 Err(CommitError::Moved)
             }
-            // Still open, unless a newer proposal came meanwhile.
+            // Still open: the slot was held, so nothing newer came meanwhile.
             Err(e) => {
-                if talk.open.is_none() {
-                    talk.open = Some(stored);
-                }
+                slot.open = Some(stored);
                 Err(e)
             }
         }
@@ -358,10 +578,19 @@ impl ChatSession {
 
     /// Drops proposal `id`: nothing changes.
     pub fn discard(&self, id: &str) {
-        let mut talk = lock(&self.talk);
-        if talk.open.as_ref().is_some_and(|p| p.id == id) {
-            talk.open = None;
-            talk.noted(id, DISCARDED_NOTE);
+        let mut slot = lock(&self.slot);
+        if let Some(stored) = slot.open.take_if(|p| p.id == id) {
+            slot.decide(&stored, Decided::Discarded);
+            lock(&self.talk).noted(id, DISCARDED_NOTE);
+        }
+    }
+
+    /// The proposal slot, held, for another app (MCP): what waits, and the app's own proposals. Every write to it takes
+    /// this lock first, before the project's; never take it while holding the project's lock.
+    pub fn slot(&self) -> SlotGuard<'_> {
+        SlotGuard {
+            slot: lock(&self.slot),
+            chat: self,
         }
     }
 
@@ -375,16 +604,23 @@ impl ChatSession {
         Ok(committed.patch)
     }
 
-    /// New chat: the conversation, its proposal, its last change and its pictures are forgotten.
+    /// New chat: the conversation, its proposal (another app's too: it shows in the panel), its last change and its
+    /// pictures are forgotten.
     pub fn reset(&self) {
+        let mut slot = lock(&self.slot);
+        if let Some(old) = slot.open.take() {
+            slot.decide(&old, Decided::Dropped(Gone::NewChat));
+        }
+        drop(slot);
         let mut talk = lock(&self.talk);
         talk.exchanges.clear();
-        talk.open = None;
         talk.last_change = None;
         self.pictures.clear();
     }
 
-    /// Another project opened, or the project closed: everything about the old one is forgotten.
+    /// Another project opened, or the project closed: everything about the old one is forgotten. Called under the
+    /// project's lock, so the slot isn't taken here: a proposal left from the old project is dropped the next time the
+    /// slot is read (`SlotGuard::settle`), and can never apply meanwhile (it names the old project).
     pub fn project_changed(&self) {
         *lock(&self.talk) = Talk::default();
         self.pictures.clear();
@@ -591,6 +827,9 @@ impl ChatSession {
                 }
             }
         }
+        // Held from the check that the project still stands where the answer left it until its proposal is kept, so no
+        // app's change lands between.
+        let mut slot = lock(&self.slot);
         if let Some(p) = &compiled.proposal {
             // Made on the project the additions leave: as committed (applied once), it is judged again on that.
             let review = if landed.applied.is_some() {
@@ -605,25 +844,26 @@ impl ChatSession {
                         .filter_map(|&i| out.calls.get(i))
                         .map(ToolCall::name)
                         .collect();
-                    let removed_us = review.removals.ranges.iter().map(RangeUs::len).sum();
-                    let said = describe(&base, &inputs.speech, &review.removals, &tools);
                     let id = uuid::Uuid::new_v4().to_string();
-                    let card = ChatProposal::new(
-                        id.clone(),
+                    let made = card(
+                        &id,
                         at.revision,
-                        &said.title,
-                        review.removals.clone(),
-                        removed_us,
-                        said.tags,
+                        &base,
+                        &inputs.speech,
+                        &review,
+                        &tools,
+                        None,
                     );
-                    landed.proposal = Some((id.clone(), card));
-                    lock(&self.talk).keep(Stored {
-                        id,
-                        at: at.clone(),
-                        tx: p.tx.clone(),
-                        after: review.after,
-                        words: Words::read(inputs),
-                    });
+                    let stored =
+                        Stored::new(&made, at.clone(), &p.tx, &review, Words::read(inputs), None);
+                    landed.proposal = Some((id, made));
+                    // A newer proposal replaces the one waiting, so red always means "will be cut".
+                    if let Some(old) = slot.open.replace(stored) {
+                        slot.decide(&old, Decided::Dropped(Gone::Replaced));
+                        if old.from.is_none() {
+                            lock(&self.talk).noted(&old.id, REPLACED_NOTE);
+                        }
+                    }
                 }
                 // Nothing to remove once the additions are in.
                 Some(_) if still => {}
@@ -639,11 +879,13 @@ impl ChatSession {
             }
         }
         // A proposal made on a revision the project left can never apply: dropped, and its turn says so.
-        let mut talk = lock(&self.talk);
-        if let Some(old) = talk.open.take_if(|p| p.at != at) {
-            talk.noted(&old.id, DROPPED_NOTE);
+        if let Some(old) = slot.open.take_if(|p| p.at != at) {
+            slot.decide(&old, Decided::Dropped(gone(&old.at, Some(&at))));
+            if old.from.is_none() {
+                lock(&self.talk).noted(&old.id, DROPPED_NOTE);
+            }
         }
-        drop(talk);
+        drop(slot);
         landed
     }
 }
@@ -653,13 +895,6 @@ impl Talk {
         self.exchanges.push(exchange);
         let over = self.exchanges.len().saturating_sub(KEPT_EXCHANGES);
         self.exchanges.drain(..over);
-    }
-
-    /// `stored` is the open proposal now; the one open before is replaced.
-    fn keep(&mut self, stored: Stored) {
-        if let Some(old) = self.open.replace(stored) {
-            self.noted(&old.id, REPLACED_NOTE);
-        }
     }
 
     /// What became of proposal `id`, added to the note of the exchange that made it.

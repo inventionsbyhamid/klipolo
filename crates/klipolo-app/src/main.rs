@@ -3,12 +3,14 @@
 mod commands;
 mod engine;
 mod log;
+mod mcp;
 mod media;
 mod media_cache;
 mod pack;
 mod project;
 mod recorder;
 mod state;
+mod view;
 
 use std::sync::Arc;
 
@@ -18,10 +20,17 @@ use klipolo_engine::render::warm::Warmup;
 use tauri::webview::PageLoadEvent;
 use tauri::{Emitter, Manager, RunEvent};
 
+use crate::mcp::McpState;
 use crate::project::{ProjectSessionState, SaveStatus};
 use crate::state::EngineState;
+use crate::view::{ViewHandle, ViewState};
 
 fn main() {
+    // `--mcp`: MCP over stdio for MCP apps that start a command, passed on to the Klipolo that is
+    // running. First of all, before any log: its stdout carries only JSON lines.
+    if std::env::args().nth(1).as_deref() == Some("--mcp") {
+        std::process::exit(klipolo_mcp::bridge::main());
+    }
     // Export runs out of process in this same binary: no second executable, always the same version. Before Tauri
     // starts and before any window exists; its log is stderr, which the app forwards into its own.
     let args: Vec<String> = std::env::args().collect();
@@ -91,15 +100,29 @@ fn main() {
                 sounds,
             );
             // Chat over the open project, what analysis found and the same credentials.
-            let chat = commands::chat::load(app.handle(), credentials, analysis.clone());
-            // Another project opening (or this one closing) stops analysis and starts chat over, once the switch is
-            // sure.
-            let (stopping, forgetting) = (analysis.clone(), chat.clone());
+            let chat = commands::chat::load(app.handle(), credentials.clone(), analysis.clone());
+            // The person's view as the page last told it, which other apps' calls read as the person's.
+            let view: ViewHandle = Arc::new(ViewState::default());
+            // Another project opening (or this one closing) stops analysis, starts chat over and forgets the view, once
+            // the switch is sure.
+            let (stopping, forgetting, unseen) = (analysis.clone(), chat.clone(), view.clone());
             app.state::<ProjectSessionState>()
                 .on_switch(Arc::new(move || {
                     stopping.project_changed();
                     forgetting.project_changed();
+                    unseen.forget();
                 }));
+            // Other apps (MCP) edit through chat's tools and its proposal slot, listening at launch when the person
+            // left it on.
+            let mcp = mcp::load(
+                app.handle(),
+                chat.clone(),
+                analysis.clone(),
+                credentials,
+                view.clone(),
+            );
+            app.manage(mcp);
+            app.manage(view);
             app.manage(analysis);
             app.manage(chat);
             app.manage(commands::export::state_at_launch());
@@ -143,6 +166,9 @@ fn main() {
             commands::chat::chat_reset,
             commands::chat::chat_draw_picture,
             commands::chat::chat_use_picture,
+            mcp::mcp_status,
+            mcp::mcp_set_enabled,
+            view::editor_view,
             media_cache::media_peaks_info,
             media_cache::media_peaks,
             media_cache::media_thumbs,
@@ -189,8 +215,12 @@ fn main() {
         recorder::release_on_exit(app, &event);
         // The Record dialog's previews stop when the window goes behind, hides or minimises, and none outlives Klipolo.
         recorder::follow_window(app, &event);
-        // Every edit is on the disk before the app goes.
         if let RunEvent::Exit = event {
+            // Other apps' access ends with the app: the server stops and its connection file goes.
+            if let Some(mcp) = app.try_state::<McpState>() {
+                mcp.stop();
+            }
+            // Every edit is on the disk, then a running export stops, before the app goes.
             commands::export::on_exit(app);
         }
     });

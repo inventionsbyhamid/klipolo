@@ -11,7 +11,7 @@ use super::apply::commit_reviewed;
 use super::*;
 
 /// Where `open` stands in `state`.
-fn at_of(state: &ProjectSessionState, open: &OpenProject) -> At {
+pub(super) fn at_of(state: &ProjectSessionState, open: &OpenProject) -> At {
     At {
         project_id: open.document.project().id.clone(),
         opening: state.opens.load(Ordering::SeqCst),

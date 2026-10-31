@@ -21,10 +21,7 @@ export function historyAction(
       ? t({ id: 'history.undo', message: 'Undo' })
       : t({ id: 'history.redo', message: 'Redo' });
   }
-  const action =
-    i18n.locale === 'en' && /^[A-Z][a-z]*\b/.test(label)
-      ? label.charAt(0).toLowerCase() + label.slice(1)
-      : label;
+  const action = inSentence(label);
   return kind === 'undo'
     ? t({
         id: 'history.undo.named',
@@ -36,4 +33,12 @@ export function historyAction(
         message: `Redo ${action}`,
         comment: '{action} is the name of the edit to make again, e.g. "add text", "split clip"',
       });
+}
+
+/**
+ * An undo label as the rest of a sentence ("Undo make it vertical"): in English its first letter lowercased unless the
+ * first word is an acronym or a name in capitals ("LUT", "TikTok" stay as they are). Other languages keep its casing.
+ */
+export function inSentence(label: string): string {
+  return i18n.locale === 'en' && /^[A-Z][a-z]*\b/.test(label) ? label.charAt(0).toLowerCase() + label.slice(1) : label;
 }

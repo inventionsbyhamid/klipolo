@@ -6,13 +6,23 @@ import type { ChatPicture } from '../bindings/ChatPicture';
 import type { ChatPictureDrawn } from '../bindings/ChatPictureDrawn';
 import type { ChatProposal } from '../bindings/ChatProposal';
 import type { CodedError } from '../bindings/CodedError';
+import type { ExternalReply } from '../bindings/ExternalReply';
 
 /**
  * Where a proposal stands: waiting, being applied, applied, discarded, dropped (the project changed), replaced (a newer
- * one came: a project has one open proposal at a time), or unshown (Rust applied it but the page couldn't take the
+ * one came: a project has one open proposal at a time), superseded (another app's that a newer one, shown before it,
+ * had already replaced in Klipolo by the time it got here), or unshown (Rust applied it but the page couldn't take the
  * change in: never offered again).
  */
-export type ProposalState = 'open' | 'applying' | 'applied' | 'discarded' | 'dropped' | 'replaced' | 'unshown';
+export type ProposalState =
+  | 'open'
+  | 'applying'
+  | 'applied'
+  | 'discarded'
+  | 'dropped'
+  | 'replaced'
+  | 'superseded'
+  | 'unshown';
 
 /** A proposal in a reply, and what came of it. */
 export interface ProposalPart {
@@ -23,7 +33,15 @@ export interface ProposalPart {
   revision?: number;
   /** Open again after Apply was refused (not because the project moved): why, in one sentence, with Retry. */
   reason?: string;
+  /**
+   * When it took the place of a proposal that was open (`performance.now()`): an app proposed again. Apply waits
+   * `SWAP_SETTLE_MS` from then, so a press meant for the card before never applies this one unread.
+   */
+  swappedAt?: number;
 }
+
+/** How long Apply is ignored after a proposal took the place of an open one. */
+export const SWAP_SETTLE_MS = 500;
 
 /**
  * Where a picture a reply asked for stands: being drawn, drawn (its card shows it with Use and Try again), being
@@ -78,6 +96,13 @@ export type Message =
       proposal: ProposalPart | null;
       /** The pictures it asked for (stickers, title card backgrounds). */
       pictures: PicturePart[];
+      /**
+       * Another app's reply (MCP): the app's name, as it gave it. Its `text` is empty: the panel says what the app did.
+       * Undefined for Klipolo's own.
+       */
+      client?: string;
+      /** An app took back a step of its own: that step's undo label. */
+      undid?: CodedError | null;
     }
   | {
       id: string;
@@ -137,14 +162,25 @@ export interface ChatStore {
   drawPicture: (messageId: string, pictureId: string) => Promise<void>;
   /** Use: places the picture drawn, as one undo step. */
   usePicture: (messageId: string, pictureId: string) => Promise<void>;
+  /**
+   * What another app did (`mcp-reply`), shown as a reply named for the app: its change merged, its proposal waiting
+   * for Apply, its moments, its pictures drawn and placed. Taken in the order Rust told them.
+   */
+  receive: (external: ExternalReply) => Promise<void>;
 }
 
 export type ChatSet = StoreApi<ChatStore>['setState'];
 export type ChatGet = StoreApi<ChatStore>['getState'];
 
-/** `messages` with the oldest dropped past the cap. */
+/**
+ * `messages` with the oldest dropped past the cap, but never the proposal waiting: out of the log, it would still wait in
+ * Klipolo with nothing left to Apply or Discard (an app pointing at moments can fill the log fast).
+ */
 export function withMessages(messages: Message[]) {
-  return { messages: messages.length > MAX_MESSAGES ? messages.slice(messages.length - MAX_MESSAGES) : messages };
+  if (messages.length <= MAX_MESSAGES) return { messages };
+  const kept = messages.slice(messages.length - MAX_MESSAGES);
+  const open = openProposal(messages)?.message;
+  return { messages: open && !kept.includes(open) ? [open, ...kept.slice(1)] : kept };
 }
 
 /** The newest proposal still waiting for the person, and its message: what the timeline shows red. */

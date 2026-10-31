@@ -50,9 +50,9 @@ run "cargo fmt --all --check" cargo fmt --all --check
 # The bundled pack (assets/library): what scripts/gen-library.py writes, the same bytes every run, CC0 and small.
 run "bundled pack" scripts/gen-library.test.sh
 run "cargo check --workspace --all-targets" cargo check --workspace --all-targets --locked
-run "clippy model, cursor, platform, engine, fonts, speech-wire, meta, analysis, chat, capture" \
+run "clippy model, cursor, platform, engine, fonts, speech-wire, meta, analysis, chat, mcp, capture" \
   cargo clippy -p klipolo-model -p klipolo-cursor -p klipolo-platform -p klipolo-engine -p klipolo-fonts \
-  -p klipolo-speech-wire -p klipolo-meta -p klipolo-analysis -p klipolo-chat \
+  -p klipolo-speech-wire -p klipolo-meta -p klipolo-analysis -p klipolo-chat -p klipolo-mcp \
   -p klipolo-capture --features klipolo-capture/synthetic --all-targets --locked -- -D warnings
 # The app crate: its non-GUI code (the engine commands, on the blank backend here; no window opens).
 run "clippy app" cargo clippy -p klipolo-app --all-targets --locked -- -D warnings
@@ -64,9 +64,10 @@ run "clippy engine (trial)" cargo clippy -p klipolo-engine --all-targets --featu
 run "check capture (real-capture)" cargo check -p klipolo-capture --features real-capture --locked
 # The Meta client's tests answer from a local mock server; nothing here reaches Meta. The recorder's tests use
 # its synthetic sources and fake backend (the kill sweep included); nothing here captures.
-run "test model, cursor, platform, fonts, speech-wire, meta, analysis, chat, capture" cargo test \
+run "test model, cursor, platform, fonts, speech-wire, meta, analysis, chat, mcp, capture" cargo test \
   -p klipolo-model -p klipolo-cursor -p klipolo-platform -p klipolo-fonts -p klipolo-speech-wire -p klipolo-meta \
-  -p klipolo-analysis -p klipolo-chat -p klipolo-capture --features klipolo-capture/synthetic --locked --no-fail-fast
+  -p klipolo-analysis -p klipolo-chat -p klipolo-mcp -p klipolo-capture --features klipolo-capture/synthetic --locked \
+  --no-fail-fast
 run "test app" cargo test -p klipolo-app --locked --no-fail-fast
 # The fonts crate's download tests against a local server (`test-hosts`); nothing here reaches Google.
 run "test fonts (local download server)" cargo test -p klipolo-fonts --features test-hosts --locked

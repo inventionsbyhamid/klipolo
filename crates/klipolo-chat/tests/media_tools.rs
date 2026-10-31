@@ -13,7 +13,7 @@ use klipolo_chat::tools::{PictureSize, Position, TextPreset};
 use klipolo_chat::{
     AnalysisState, Audience, Compiled, FunctionCall, Inputs, Job, Library, LibraryItem,
     MakeSticker, MediaKind, Problem, Refs, SceneEntry, SceneLog, ToolCall, View, compile,
-    sticker_ops, sticker_placement,
+    compile_for_app, sticker_ops, sticker_placement,
 };
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::contrib::ContribId;
@@ -31,6 +31,7 @@ use klipolo_model::query::video_duration;
 use klipolo_model::speech::{Speech, Transcript, Word, WordKind};
 use klipolo_model::time::Us;
 use klipolo_model::timeline::{Attach, Clip, ClipSource, Item, ItemContent, TrackKind};
+use klipolo_model::validate::MAX_TEXT;
 use klipolo_model::{Project, apply_ops};
 use serde_json::json;
 use std::sync::Arc;
@@ -720,6 +721,117 @@ fn add_text_takes_the_persons_own_words_or_asks() {
         reason.starts_with("addText: the words must be the person's own")
             && reason.contains("askUser"),
         "{reason}"
+    );
+}
+
+/// Another app over MCP acts for its own person: there is no message of the person's, and the words it gives go on
+/// screen as it gave them, cleaned and within what a text layer holds. Chat's model, with the same call, still has to
+/// quote the person.
+#[test]
+fn an_apps_words_go_on_screen_as_it_gave_them() {
+    let p = project();
+    let i = inputs(&p, "");
+    let text = |words: &str| {
+        call(
+            "addText",
+            json!({"text": words, "preset": "title", "atSec": 0.0, "durationSec": null}),
+        )
+    };
+    let out = compile_for_app(&p, &i, &[text("Day 1 in Lisbon")]);
+    assert_eq!(out.refusals, vec![]);
+    assert_eq!(out.additions.as_ref().unwrap().label, "chat.addText");
+    assert_eq!(words_on(&the_layer(&p, &out)), "Day 1 in Lisbon");
+    let out = compile(&p, &i, &[text("Day 1 in Lisbon")]);
+    assert_eq!(out.additions, None);
+    assert!(
+        refused_to_model(&out, 0).starts_with("addText: the words must be the person's own"),
+        "{:?}",
+        out.refusals
+    );
+    // Control, invisible and bidirectional characters are dropped.
+    let out = compile_for_app(&p, &i, &[text("Hi\u{202e}\u{200b} there\u{7}")]);
+    assert_eq!(words_on(&the_layer(&p, &out)), "Hi there");
+    // What real text needs stays: joiners in an emoji sequence and a Persian word, variation selectors (the emoji
+    // form, an ideographic variant), and line breaks, which a text layer draws (a CR LF, or a paragraph separator, is
+    // one line break; spaces around it go).
+    for (given, shown) in [
+        (
+            "\u{1F469}\u{200D}\u{1F4BB} Day 1",
+            "\u{1F469}\u{200D}\u{1F4BB} Day 1",
+        ),
+        ("I \u{2764}\u{FE0F} Lisbon", "I \u{2764}\u{FE0F} Lisbon"),
+        (
+            "\u{645}\u{6CC}\u{200C}\u{634}\u{648}\u{62F}",
+            "\u{645}\u{6CC}\u{200C}\u{634}\u{648}\u{62F}",
+        ),
+        ("\u{845B}\u{E0100}", "\u{845B}\u{E0100}"),
+        (
+            "Day 1 \r\n  Lisbon\u{2029}Portugal ",
+            "Day 1\nLisbon\nPortugal",
+        ),
+    ] {
+        let out = compile_for_app(&p, &i, &[text(given)]);
+        assert_eq!(words_on(&the_layer(&p, &out)), shown, "{given:?}");
+    }
+    // Nothing left to show, or more than a text layer holds: refused, saying what to do, and nothing is added.
+    let out = compile_for_app(&p, &i, &[text("\u{200b}\u{202e}")]);
+    assert_eq!(out.additions, None);
+    assert_eq!(
+        refused_to_model(&out, 0),
+        "addText: text has no words to show. Give the words to put on screen."
+    );
+    let out = compile_for_app(&p, &i, &[text(&"w".repeat(MAX_TEXT + 1))]);
+    assert_eq!(out.additions, None);
+    assert_eq!(
+        refused_to_model(&out, 0),
+        "addText: text is 2001 characters; words on screen hold at most 2000. Use fewer words."
+    );
+    let out = compile_for_app(&p, &i, &[text(&"w".repeat(MAX_TEXT))]);
+    assert_eq!(words_on(&the_layer(&p, &out)).chars().count(), MAX_TEXT);
+}
+
+/// An app's title card takes its own title, within what the template holds, over the same background job chat's makes.
+#[test]
+fn an_apps_title_card_takes_its_own_title_over_a_background_job() {
+    let p = project();
+    let i = inputs(&p, "");
+    let card = |title: &str| {
+        call(
+            "makeTitleCard",
+            json!({"title": title, "prompt": "Lisbon trams at sunset", "atSec": 0.0, "durationSec": null}),
+        )
+    };
+    let out = compile_for_app(&p, &i, &[card("Day 1 in Lisbon")]);
+    assert_eq!(out.refusals, vec![]);
+    assert_eq!(out.additions.as_ref().unwrap().label, "chat.makeTitleCard");
+    let title = the_layer(&p, &out);
+    let (_, texts) = generator(&title);
+    assert_eq!(
+        texts,
+        HashMap::from([("title", "Day 1 in Lisbon"), ("subtitle", "")])
+    );
+    assert_eq!(
+        out.jobs,
+        vec![Job::MakeTitleBackground {
+            prompt: "Lisbon trams at sunset".into(),
+            format: FormatKind::Landscape,
+            title_id: title.id.clone(),
+        }]
+    );
+    let out = compile_for_app(&p, &i, &[card(&"word ".repeat(20))]);
+    assert_eq!((&out.additions, out.jobs.len()), (&None, 0));
+    assert!(
+        refused_to_model(&out, 0)
+            .starts_with("makeTitleCard: title is 99 characters; a title card holds at most 60."),
+        "{:?}",
+        out.refusals
+    );
+    let out = compile(&p, &i, &[card("Day 1 in Lisbon")]);
+    assert_eq!((&out.additions, out.jobs.len()), (&None, 0));
+    assert!(
+        refused_to_model(&out, 0).contains("askUser"),
+        "{:?}",
+        out.refusals
     );
 }
 

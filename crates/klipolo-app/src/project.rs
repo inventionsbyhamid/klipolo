@@ -3,11 +3,13 @@
 //! saver writes it 2 s after the last change (`saver`), and the project is flushed to the disk before it closes or
 //! switches and on quit.
 //!
-//! **One apply path.** Hand edits (and later chat) commit through `with_open`, so every edit is one undo step, reaches
-//! the engine and is saved. `apply_transaction` applies a batch, refusing it when the project moved on from the base
-//! the caller built it on (never rebased). Every command fails with a code the UI words, or a plain sentence (`Said`).
+//! **One apply path.** Hand edits, chat and other apps (`apps`) commit through `with_open`, so every edit is one undo
+//! step, reaches the engine and is saved. `apply_transaction` applies a batch, refusing it when the project moved on
+//! from the base the caller built it on (never rebased). Every command fails with a code the UI words, or a plain
+//! sentence (`Said`).
 
 mod apply;
+mod apps;
 mod chat;
 mod create;
 mod disk;
@@ -28,6 +30,7 @@ use apply::apply_and_commit;
 pub(crate) use apply::{
     ApplyError, apply_transaction, build_and_apply, build_named_and_apply, step, with_open,
 };
+pub(crate) use apps::{AppRefused, commit_by_app, undo_by_app};
 pub(crate) use create::{create_file_in, create_in, new_project, open_in, snapshot_now};
 pub(crate) use disk::{SaveError, save};
 use klipolo_engine::session::{FeedRx, ProjectFeed};

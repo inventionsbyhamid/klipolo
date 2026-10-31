@@ -754,6 +754,12 @@ impl Document {
         self.redo.len()
     }
 
+    /// The redo steps whose maker `mine` accepts. An app's commit drops every redo step, so a host asks this before
+    /// one: a step another made waits for its maker. O(steps).
+    pub fn redo_steps_where(&self, mine: impl Fn(&Maker) -> bool) -> usize {
+        self.redo.iter().filter(|s| mine(&s.maker)).count()
+    }
+
     /// What the undo and redo steps hold: their patches' [`ProjectPatch::approx_bytes`] plus their labels and params.
     pub fn history_bytes(&self) -> usize {
         self.bytes

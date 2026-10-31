@@ -50,7 +50,8 @@ pub const DEEPEST_DUCK_DB: f64 = -30.0;
 /// The most channels a sound file plays as (the engine folds a file with more into two), so the channels a source
 /// can play centred from (`SourceMix::centre_from`).
 pub const PLAYED_CHANNELS: u8 = 2;
-const MAX_TEXT: usize = 2000;
+/// The most characters a text layer holds.
+pub const MAX_TEXT: usize = 2000;
 /// Rounding slack when comparing against source durations.
 const SOURCE_SLACK_US: Us = 1_000;
 
