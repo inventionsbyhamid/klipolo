@@ -2,22 +2,21 @@ import { useLingui } from '@lingui/react/macro';
 import { useMemo } from 'react';
 import type { FormatKind } from '../../bindings/FormatKind';
 import { historyAction } from '../../lib/history';
+import { FORMAT_SHORT } from '../../lib/layout';
 import { labelText } from '../../lib/labels';
 import { findClip, findItem, videoDurationUs } from '../../lib/timeline';
 import { useProject } from '../../state/project';
+import { useExport } from '../../state/export';
 import { useRange } from '../../state/range';
 import { useSelection } from '../../state/selection';
-import { toast } from '../../state/toasts';
 import { useUi } from '../../state/ui';
+import { switchFormat } from '../editor/formats';
 import { importFiles } from '../media/useImportMedia';
 import { deleteBlock, deleteRange, useTimelineCommands } from '../timeline/commands';
 import { searchWords, type Command } from './command';
 import { useTransportCommands } from './useTransportCommands';
 
-/** Why Export is off while a video is open: the export dialog lands in a later build. */
-export const EXPORT_LATER = 'Export comes in the next build.';
-
-/** The formats 1, 2 and 3 show, in the preview's order. */
+/** The formats 1, 2 and 3 switch to, in the preview's order. */
 const FORMAT_KEYS: readonly FormatKind[] = ['landscape', 'portrait', 'square'];
 
 /**
@@ -47,7 +46,6 @@ export function useCommands(): Command[] {
     // A project of layers alone is a video too.
     const hasVideo = videoDurationUs(project.timeline) > 0;
     const deleteLabel = range ? 'undo.delete.range' : selectedClip ? 'undo.delete.clip' : 'undo.delete.layer';
-    const formats = project.settings.formats;
 
     const head: Command[] = [
       {
@@ -107,10 +105,14 @@ export function useCommands(): Command[] {
       id: `format-${i + 1}`,
       action: 'previewFormat',
       group: 'view',
-      label: t({ id: 'command.format', message: `Show ${format}`, comment: 'Command: preview another format' }),
+      label: t({
+        id: 'command.format',
+        message: `Switch to ${FORMAT_SHORT[format]}`,
+        comment: 'Command: make another format the main one',
+      }),
       shortcut: String(i + 1),
-      enabled: formats.includes(format),
-      run: () => useUi.getState().setPreviewFormat(format),
+      enabled: true,
+      run: () => void switchFormat(format),
     }));
     const projectCommands: Command[] = [
       {
@@ -120,7 +122,7 @@ export function useCommands(): Command[] {
         label: t({ id: 'command.export', message: 'Export' }),
         shortcut: '⌘E',
         enabled: hasVideo,
-        run: () => toast.info(EXPORT_LATER),
+        run: () => useExport.getState().setOpen(true),
       },
     ];
     return { head, remove, view, projectCommands };
