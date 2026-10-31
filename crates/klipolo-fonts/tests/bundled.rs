@@ -98,6 +98,35 @@ fn aliases_never_collide_with_installed_names() {
     );
 }
 
+/// A project saves a font as its family and source; the alias is made from them only when the faces are registered, so
+/// a saved project never holds one and opens with the aliases this build makes.
+#[test]
+fn a_saved_font_holds_its_family_and_source_never_its_alias() {
+    use klipolo_fonts::alias::alias;
+    use klipolo_model::font::{FontRef, FontSource};
+    let google = FontRef {
+        family: "Playfair Display".into(),
+        source: FontSource::Google {
+            version: "v37".into(),
+        },
+    };
+    for (font, saved) in [
+        (
+            FontRef::inter(),
+            r#"{"family":"Inter","source":{"type":"bundled"}}"#,
+        ),
+        (
+            google,
+            r#"{"family":"Playfair Display","source":{"type":"google","version":"v37"}}"#,
+        ),
+    ] {
+        let json = serde_json::to_string(&font).unwrap();
+        assert_eq!(json, saved);
+        assert!(!json.contains(&alias(&font)), "{json}");
+        assert_eq!(serde_json::from_str::<FontRef>(saved).unwrap(), font);
+    }
+}
+
 /// Every built-in caption style draws in bundled faces, and its `charEm` (the model's width estimate for
 /// paging) is within 10 % of its face's measured average advance, in the style's case.
 #[test]
