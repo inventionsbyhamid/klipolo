@@ -15,6 +15,7 @@ import { videoDurationUs } from './lib/timeline';
 import { PlayerBar } from './player/PlayerBar';
 import { Preview } from './preview/Preview';
 import { SettingsDialog } from './settings/SettingsDialog';
+import { followAnalysis } from './state/analysis';
 import { usePlayback } from './state/playback';
 import { useProject } from './state/project';
 import { followSaves } from './state/saving';
@@ -84,6 +85,7 @@ export function App() {
     started = true;
     void followSaves();
     void followAiStatus();
+    void followAnalysis();
     void openProject();
   }, []);
   useEngineSession();
