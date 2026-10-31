@@ -19,6 +19,7 @@ pub mod smooth;
 pub mod summary;
 pub mod timeline;
 pub mod track;
+pub mod zooms;
 
 pub use format::{Capture, Line, SystemShape};
 pub use klipolo_model::cursor_style::ClickSource;

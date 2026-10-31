@@ -1,7 +1,8 @@
 import { create } from 'zustand';
+import type { Asset } from '../bindings/Asset';
 import type { AssetState } from '../bindings/AssetState';
 import type { Estimate } from '../bindings/Estimate';
-import { refreshAiStatus } from '../ai/aiStatus';
+import { refreshAiStatus, useAi } from '../ai/aiStatus';
 import { analysisBridge, type AnalysisEvent, type UnlistenFn } from '../bridge/analysis';
 import { useProject } from './project';
 
@@ -46,9 +47,12 @@ export function applyEvent(event: AnalysisEvent) {
     case 'progress':
       next = { state: 'running', step: event.payload.step, pct: event.payload.pct };
       break;
-    case 'done':
-      next = { state: 'done', approximate: event.payload.approximate };
+    case 'done': {
+      // Why some words are rough (and whether timing them again can help), or why there are none.
+      const { approximate, approximateReason, emptyReason, timeAgain } = event.payload;
+      next = { state: 'done', approximate, approximateReason, emptyReason, timeAgain };
       break;
+    }
     case 'failed':
       next = { state: 'failed', reason: event.payload.reason };
       break;
@@ -150,7 +154,10 @@ export async function analyze() {
   }
 }
 
-/** Retry the clips whose analysis failed (what finished is kept, so only the rest is done again). */
+/**
+ * Retry the clips whose analysis failed (what finished is kept, so only the rest is done again), or time a done clip's
+ * rough words again ("Time words again": free, and Rust always times them for the person).
+ */
 export async function retry(assetIds: string[]) {
   useAnalysis.setState({ error: null });
   try {
@@ -165,8 +172,63 @@ export function cancelAnalysis() {
   void analysisBridge.cancel().catch(() => undefined);
 }
 
-/** "Not now": the offer goes until other clips come. */
+/** "Not now": the offer (and the clips whose file is gone) goes until other clips come. */
 export function notNow() {
-  const clips = useAnalysis.getState().estimate?.clips ?? [];
-  useAnalysis.setState((s) => ({ dismissed: [...new Set([...s.dismissed, ...clips])], error: null }));
+  const { clips = [], missing = [] } = useAnalysis.getState().estimate ?? {};
+  useAnalysis.setState((s) => ({ dismissed: [...new Set([...s.dismissed, ...clips, ...missing])], error: null }));
+}
+
+const NO_ASSETS: Asset[] = [];
+
+/**
+ * Whether a video or sound of the open project is not analysed (never, or stopped): what Analyze (`offerAgain`) offers.
+ * A clip that failed isn't: the banner's Retry is its way on.
+ */
+export function useSomeNotAnalysed(): boolean {
+  const assets = useProject((s) => s.snapshot?.project.assets ?? NO_ASSETS);
+  return useAnalysis((s) =>
+    assets.some((a) => (a.kind === 'video' || a.kind === 'audio') && stateOf(s.states, a.id).state === 'none'),
+  );
+}
+
+/** The open project's videos and sounds, by id: what analysis is for. */
+function projectClipIds(): string[] {
+  const assets = useProject.getState().snapshot?.project.assets ?? [];
+  return assets.filter((a) => a.kind === 'video' || a.kind === 'audio').map((a) => a.id);
+}
+
+/**
+ * Analyze from outside the banner (the Captions panel with no words, chat's note): "Not now" is forgotten and the
+ * banner offers the clips not analysed again, with their price.
+ */
+export function offerAgain(): Promise<void> {
+  useAnalysis.setState({ dismissed: [] });
+  return offerFor(projectClipIds());
+}
+
+/**
+ * The way to pay changed (a key or code added or removed): "Not now" is forgotten, so the banner's new offer (asked for
+ * by the banner on the same change) shows. Gives the stop function.
+ */
+export function offerAgainOnAiModeChange(): () => void {
+  return useAi.subscribe((s, prev) => {
+    if (s.status?.mode !== prev.status?.mode) useAnalysis.setState({ dismissed: [] });
+  });
+}
+
+/**
+ * Why the open project has no caption words, for the Captions panel: clips not analysed yet (the panel offers
+ * Analyze), or clips heard with no speech in them (one, or more); null while clips are being analysed, or with no
+ * clips.
+ */
+export function whyNoWords(
+  states: Record<string, AssetState>,
+  clipIds: string[],
+): 'notAnalysed' | 'noSpeechOne' | 'noSpeechMany' | null {
+  const all = clipIds.map((id) => stateOf(states, id));
+  if (all.some((s) => s.state === 'running')) return null;
+  if (all.some((s) => s.state === 'none')) return 'notAnalysed';
+  const silent = all.filter((s) => s.state === 'done' && !!s.emptyReason).length;
+  if (silent === 0) return null;
+  return silent === 1 ? 'noSpeechOne' : 'noSpeechMany';
 }

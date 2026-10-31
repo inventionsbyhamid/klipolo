@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -39,6 +41,8 @@ function clip(id: string, name: string, kind: Asset['kind'] = 'video'): Asset {
 }
 
 const CLIPS = [clip('a', 'rosa-interview-a.mov'), clip('b', 'rosa-wheel-broll.mov')];
+/** What a clip whose file is gone says. */
+const GONE = "Klipolo can't find this clip's file. Put it back or import it again.";
 
 function showProject(assets: Asset[]) {
   const snapshot = { project: { assets } } as unknown as Snapshot;
@@ -46,7 +50,7 @@ function showProject(assets: Asset[]) {
 }
 
 function offer(over: Partial<Estimate> = {}): Estimate {
-  return { usd: 0.04, seconds: 130, cached: [], clips: ['a', 'b'], ...over };
+  return { usd: 0.04, seconds: 130, cached: [], clips: ['a', 'b'], missing: [], ...over };
 }
 
 beforeEach(() => {
@@ -72,8 +76,8 @@ describe('the analysis banner', () => {
 
   it('refuses with why when the estimate is over the credit left', async () => {
     const refusal =
-      'Your access code has $0.02 left, and this needs about $0.07. Trim the clips first, or add your own Meta key in ' +
-      'Settings.';
+      'Your access code has $0.02 left, and this needs about $0.07. Analyze fewer or shorter files, or add your own ' +
+      'Meta key in Settings.';
     bridge.estimate.mockResolvedValue(offer({ creditLeftUsd: 0.02, refusal }));
     showProject(CLIPS);
     renderWithProviders(<AnalysisBanner />);
@@ -144,6 +148,30 @@ describe('the analysis banner', () => {
     expect(bridge.cancel).toHaveBeenCalled();
   });
 
+  it('leaves a clip whose file is gone out of the offer and says what to do for it', async () => {
+    bridge.estimate.mockResolvedValue(offer({ usd: 0.02, clips: ['a'], missing: ['b'] }));
+    showProject(CLIPS);
+    renderWithProviders(<AnalysisBanner />);
+
+    expect(await screen.findByText('Analyze 1 clip for about $0.02')).toBeInTheDocument();
+    expect(screen.getByText('rosa-wheel-broll.mov')).toBeInTheDocument();
+    expect(screen.getByText(GONE)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    expect(bridge.start).toHaveBeenCalledWith(['a']);
+  });
+
+  it('lists clips whose file is gone on their own when nothing else is offered, until Not now', async () => {
+    bridge.estimate.mockResolvedValue(offer({ usd: 0, clips: [], missing: ['b'] }));
+    showProject(CLIPS);
+    const { container } = renderWithProviders(<AnalysisBanner />);
+
+    expect(await screen.findByText("Klipolo can't find 1 clip")).toBeInTheDocument();
+    expect(screen.getByText(GONE)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Analyze' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it('keeps a failed clip with its reason and Retry', async () => {
     bridge.estimate.mockResolvedValue(offer({ clips: [] }));
     showProject(CLIPS);
@@ -197,7 +225,7 @@ describe('the analysis banner', () => {
     expect(screen.queryByText(/timed roughly/)).toBeNull();
     act(() => useAnalysis.setState({ states: { a: { state: 'done', approximate: true } } }));
     rerender(<RoughCaptionsNote />);
-    expect(screen.getByText('Some captions are timed roughly')).toBeInTheDocument();
+    expect(screen.getByText('Some captions are timed roughly.')).toBeInTheDocument();
     act(() =>
       useAnalysis.setState({
         states: { a: { state: 'done', approximate: true }, b: { state: 'running', step: 'words', pct: 5 } },
@@ -207,6 +235,70 @@ describe('the analysis banner', () => {
     expect(screen.getByText('Rough captions until words are timed')).toBeInTheDocument();
   });
 
+  it('says why captions are rough, and times the words again where that can help', async () => {
+    const stopped = 'Word timing stopped before it finished.';
+    useAnalysis.setState({
+      states: {
+        a: { state: 'done', approximate: true, approximateReason: stopped, timeAgain: true },
+        // Words that don't match their sound: rough, and timing them again wouldn't help.
+        b: { state: 'done', approximate: true, approximateReason: 'Some words are timed roughly.' },
+        c: { state: 'done', approximate: false },
+      },
+    });
+    renderWithProviders(<RoughCaptionsNote />);
+    expect(screen.getByText('Some captions are timed roughly.')).toBeInTheDocument();
+    expect(screen.getByText(stopped)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Time words again' }));
+    // As the person: the words are timed again whatever the page did before.
+    expect(bridge.start).toHaveBeenCalledWith(['a']);
+  });
+
+  it('offers no way to time words again where it can’t help', () => {
+    useAnalysis.setState({
+      states: { b: { state: 'done', approximate: true, approximateReason: 'Some words are timed roughly.' } },
+    });
+    renderWithProviders(<RoughCaptionsNote />);
+    expect(screen.getByText('Some captions are timed roughly.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Time words again' })).toBeNull();
+  });
+
+  it('offers no way to time words again without a key or code, as it couldn’t run', () => {
+    useAi.setState({ status: { mode: 'none' } });
+    useAnalysis.setState({
+      states: {
+        a: {
+          state: 'done',
+          approximate: true,
+          approximateReason: 'Word timing stopped before it finished.',
+          timeAgain: true,
+        },
+      },
+    });
+    renderWithProviders(<RoughCaptionsNote />);
+    expect(screen.getByText(/Word timing stopped before it finished\./)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Time words again' })).toBeNull();
+  });
+
+  it('shows the reason in full, on a line of its own under the note', () => {
+    const quota = "This device has used today's 120 minutes of word timing. It resets at midnight UTC.";
+    useAnalysis.setState({
+      states: { a: { state: 'done', approximate: true, approximateReason: quota, timeAgain: true } },
+    });
+    renderWithProviders(<RoughCaptionsNote />);
+    const reason = screen.getByText(quota);
+    expect(reason).toHaveClass('analysis-rough-reason');
+    expect(reason).not.toHaveTextContent('Some captions are timed roughly.');
+    // jsdom draws no CSS: the stylesheet itself must let the reason wrap, never cut it off with an ellipsis.
+    const css = readFileSync(resolve(__dirname, 'analysis.css'), 'utf8');
+    const rule = (selector: string) =>
+      css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.]/g, '\\.')}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
+    for (const selector of ['.analysis-rough.is-done', '.analysis-rough.is-done .analysis-rough-text']) {
+      expect(rule(selector)).toMatch(/white-space:\s*normal/);
+      expect(rule(selector)).toMatch(/overflow:\s*visible/);
+    }
+    expect(rule('.analysis-rough-reason')).not.toMatch(/nowrap|ellipsis/);
+  });
+
   it('says why a Retry of a failed clip was refused', async () => {
     bridge.estimate.mockResolvedValue(offer({ clips: [] }));
     showProject(CLIPS);
@@ -214,8 +306,8 @@ describe('the analysis banner', () => {
       states: { a: { state: 'failed', reason: 'Meta is busy right now. Try again in a moment.' } },
     });
     const refusal =
-      'Your access code has $0.00 left, and this needs about $0.04. Trim the clips first, or add your own Meta key in ' +
-      'Settings.';
+      'Your access code has $0.00 left, and this needs about $0.04. Analyze fewer or shorter files, or add your own ' +
+      'Meta key in Settings.';
     bridge.start.mockRejectedValueOnce(new Error(refusal));
     renderWithProviders(<AnalysisBanner />);
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));

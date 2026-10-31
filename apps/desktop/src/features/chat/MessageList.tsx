@@ -3,7 +3,7 @@ import { Fragment, useLayoutEffect, useRef } from 'react';
 import type { Asset } from '../../bindings/Asset';
 import { NeedsKey } from '../../ai/NeedsKey';
 import { Icon } from '../../layout/Icon';
-import { stateOf, useAnalysis } from '../../state/analysis';
+import { offerAgain, stateOf, useAnalysis, useSomeNotAnalysed } from '../../state/analysis';
 import { useCanChat, useChat } from '../../state/chat';
 import { useChatPanel } from '../../state/chatPanel';
 import { useProject } from '../../state/project';
@@ -44,6 +44,7 @@ function EmptyChat() {
   const { t } = useLingui();
   const allowed = useCanChat();
   const analysis = useAnalysisNote();
+  const offerable = useSomeNotAnalysed();
   return (
     <div className="chat-empty">
       <h3>{t({ id: 'chatPanel.empty.title', message: 'Ask for an edit' })}</h3>
@@ -86,6 +87,17 @@ function EmptyChat() {
                     'Analyze the clips first to cut pauses, find moments and add captions. Format and music work now.',
                 })}
           </span>
+          {analysis === 'missing' && offerable && (
+            // The offer comes back in the analysis banner, with its price, even after "Not now".
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              style={{ gridColumn: 2, justifySelf: 'start' }}
+              onClick={() => void offerAgain()}
+            >
+              {t({ id: 'chatPanel.empty.analyze', message: 'Analyze' })}
+            </button>
+          )}
         </p>
       )}
     </div>

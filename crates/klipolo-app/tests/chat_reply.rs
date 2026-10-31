@@ -66,7 +66,7 @@ fn serializes_as_the_page_reads_it() {
             0,
             [],
         ))
-        .at(7);
+        .on_revision(7);
     let json = serde_json::to_value(ChatOutcome::Reply(Box::new(reply))).unwrap();
     assert_eq!(json["type"], "reply");
     assert_eq!(json["id"], "r1");

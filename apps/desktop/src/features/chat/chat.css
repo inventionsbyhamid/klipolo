@@ -121,7 +121,9 @@
 .moment:focus-visible,
 .p-cut:focus-visible,
 .p-list-toggle:focus-visible,
-.card.proposal:focus-visible {
+.card.proposal:focus-visible,
+.card.gen:focus-visible,
+.gen-why:focus-visible {
   outline: 2px solid var(--color-paper);
   outline-offset: 2px;
 }
@@ -328,6 +330,111 @@
 .card.applied b {
   color: var(--color-ink);
   font-weight: var(--weight-strong);
+}
+
+/* The picture a reply asked for: its art on a checkerboard, so a sticker's cut-out shows */
+.gen {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: var(--space-5);
+  padding: var(--space-4);
+}
+
+.gen-art {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 10px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+}
+
+.gen-art img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.checker {
+  background: conic-gradient(
+      var(--color-bay-raised) 25%,
+      var(--color-bay-hover) 0 50%,
+      var(--color-bay-raised) 0 75%,
+      var(--color-bay-hover) 0
+    )
+    0 0 / 14px 14px;
+}
+
+.gen-art .spinner,
+.gen-drawing .spinner {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--color-paper-track);
+  border-top-color: var(--color-paper);
+  animation: chat-spin 0.9s linear infinite;
+}
+
+.gen-drawing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.gen-drawing .spinner {
+  width: 12px;
+  height: 12px;
+}
+
+/* No picture yet and none on its way: a still placeholder. */
+.gen-art .ico {
+  width: 24px;
+  height: 24px;
+  color: var(--color-ink-faint);
+}
+
+
+@keyframes chat-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gen-art .spinner,
+  .gen-drawing .spinner {
+    animation: none;
+  }
+}
+
+.gen-body {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+.gen-title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+}
+
+.gen-meta {
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+.gen .p-actions {
+  flex-wrap: wrap;
+  margin-top: var(--space-4);
+}
+
+@media (max-width: 1279px) {
+  .gen {
+    grid-template-columns: 84px minmax(0, 1fr);
+  }
 }
 
 /* Moment chips */

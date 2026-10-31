@@ -13,7 +13,9 @@ import {
 import { Icon } from '../../layout/Icon';
 import { useProject } from '../../state/project';
 import {
+  FILE_MISSING,
   STEP_LABELS,
+  missingTitle,
   offerText,
   offerTitle,
   progressTitle,
@@ -72,17 +74,40 @@ function useOffer(clips: Asset[]) {
   }, [ids, mode]);
 }
 
-/** One clip's row while its analysis runs or after it failed: its step and step dots, or why it stopped. */
-function JobRow({ clip }: { clip: Asset }) {
-  const state = useAnalysis((s) => stateOf(s.states, clip.id));
+/** A clip's art and name, as each row of the banner starts. */
+function ClipName({ clip }: { clip: Asset }) {
   return (
-    <div className="analysis-job">
+    <>
       <span className={clip.kind === 'video' ? 'art-clip' : 'art-clip is-sound'} aria-hidden>
         {clip.kind === 'video' ? <Icon name="film" /> : <BannerIcon name="wave" />}
       </span>
       <span className="analysis-job-name" title={clip.name}>
         {clip.name}
       </span>
+    </>
+  );
+}
+
+/** The clips whose file Klipolo can't find (moved or deleted): left out of the offer, each with what to do. */
+function MissingRows({ clips }: { clips: Asset[] }) {
+  return (
+    <div className="analysis-jobs">
+      {clips.map((clip) => (
+        <div key={clip.id} className="analysis-job">
+          <ClipName clip={clip} />
+          <span className="analysis-job-reason">{FILE_MISSING}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** One clip's row while its analysis runs or after it failed: its step and step dots, or why it stopped. */
+function JobRow({ clip }: { clip: Asset }) {
+  const state = useAnalysis((s) => stateOf(s.states, clip.id));
+  return (
+    <div className="analysis-job">
+      <ClipName clip={clip} />
       {state.state === 'running' && (
         <>
           <span className="analysis-job-step">
@@ -119,7 +144,8 @@ function JobRow({ clip }: { clip: Asset }) {
  * The analysis banner at the top of the preview. After an import it offers "Analyze 2 clips for about
  * $0.04" (clips analyzed before load at once, at no cost); with an access code it shows the credit left and refuses,
  * with why, when the estimate is over it. While clips are analysed it lists each with its step; a clip that failed
- * keeps what finished and offers Retry. Without a key or code it asks for one in Settings.
+ * keeps what finished and offers Retry. Without a key or code it asks for one in Settings. A clip whose file is gone
+ * is never offered: it is listed under the offer with what to do.
  */
 export function AnalysisBanner() {
   const clips = useClips();
@@ -169,7 +195,21 @@ export function AnalysisBanner() {
   }
 
   const offered = estimate?.clips.filter((id) => !dismissed.includes(id)) ?? [];
-  if (!estimate || offered.length === 0) return null;
+  const gone = clips.filter((c) => estimate?.missing.includes(c.id) && !dismissed.includes(c.id));
+  if (!estimate || (offered.length === 0 && gone.length === 0)) return null;
+  const missing = gone.length > 0 && <MissingRows clips={gone} />;
+  if (offered.length === 0) {
+    // Only clips whose file is gone: what to do for each.
+    return (
+      <section className="analysis-banner is-progress" aria-label="Analysis">
+        <p className="analysis-title">{missingTitle(gone.length)}</p>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={notNow}>
+          Not now
+        </button>
+        {missing}
+      </section>
+    );
+  }
   if (needsKey) {
     return (
       <section className="analysis-banner" aria-label="Analysis">
@@ -190,6 +230,7 @@ export function AnalysisBanner() {
             Open Settings
           </button>
         </div>
+        {missing}
       </section>
     );
   }
@@ -217,6 +258,7 @@ export function AnalysisBanner() {
             Retry
           </button>
         </div>
+        {missing}
       </section>
     );
   }
@@ -249,6 +291,7 @@ export function AnalysisBanner() {
           </button>
         )}
       </div>
+      {missing}
     </section>
   );
 }

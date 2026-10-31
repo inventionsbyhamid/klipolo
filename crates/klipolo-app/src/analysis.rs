@@ -4,17 +4,20 @@
 //!
 //! - **Estimate** (`AnalysisState::estimate`): what analysing the clips asked for costs at Meta's list prices (the
 //!   providers' own estimates: `transcript::estimate_usd`, `scenes::estimate_usd`), how long they are, and which are
-//!   cached already (they cost nothing). With an access code it also gives the credit left, and why Analyze is refused
-//!   when the estimate is over it. What it finds cached shows at once (a re-imported clip's captions, before Analyze).
-//! - **Start** (`AnalysisState::start`): cached clips load at once, with no network call. The others run each its own
+//!   cached already (they cost nothing). A clip whose file can't be found or opened is neither priced nor offered
+//!   (`Estimate::missing`). With an access code it also gives the credit left, and why Analyze is refused when the
+//!   estimate is over it. What it finds cached shows at once (a re-imported clip's captions, before Analyze).
+//! - **Start** (`AnalysisState::start`): cached clips load at once, with no network call; a clip whose file is missing
+//!   fails at once, saying what to do (`FILE_MISSING`). The others run each its own
 //!   pipeline, all at once (the Meta adapter keeps the device's request slots): its sound (step `audio`), its speaker
 //!   turns (`transcript`, published at once as turn-level captions), its word times (`words`), then its scene log
 //!   (`scenes`) for a video. Decoding (the sound, the scene log's small copy) runs one clip at a time on a thread of
 //!   utility priority, and one video call runs at a time.
 //! - **Results** go into the engine's `Speech` (a new `Arc<Speech>` for the open revision: the captions update live),
 //!   with each clip's sound levels (`Speech::levels`, from the sound cache's energies), and are kept here for chat
-//!   (`AnalysisState::analysis_for`). Each finished step is cached (`klipolo_analysis::cache`): `transcript.json` once
-//!   its words are timed, `scenes.json` once logged. Nothing half done is cached.
+//!   (`AnalysisState::analysis_for`). Each finished step is cached (`klipolo_analysis::cache`): `transcript.json` as
+//!   soon as it is heard (its words timed roughly, for a quit or a crash to keep) and again once they are timed,
+//!   `scenes.json` once logged. A half-done scene log isn't cached.
 //! - **Stops:** Cancel (`AnalysisState::cancel`) sends nothing more after the requests in flight; their clips go back to
 //!   not analysed and keep what was cached. A used-up credit (402) stops every paid request of the run, and the clips
 //!   that needed one fail with the reason (the relay's sentence and the way on: a Meta key); word timing, which is free,
@@ -64,6 +67,9 @@ pub const NEEDS_KEY: &str = "Add your Meta API key or access code in Settings.";
 pub const ADD_KEY: &str = "Add your own Meta API key in Settings to keep going.";
 /// A clip whose file can't be read.
 pub const UNREADABLE: &str = "Klipolo could not read this clip.";
+/// A clip whose file was moved, deleted or can't be opened: nothing to price or analyse.
+pub const FILE_MISSING: &str =
+    "Klipolo can't find this clip's file. Put it back or import it again.";
 /// A request refused because the run was cancelled (never shown: the clip goes back to not analysed).
 pub(crate) const STOPPED: &str = "Stopped.";
 
@@ -93,7 +99,23 @@ pub enum AssetState {
     /// A step is running, `pct` (0 to 100) of the way through it.
     Running { step: AnalysisStep, pct: u8 },
     /// Every step is done; `approximate` when some words are timed roughly.
-    Done { approximate: bool },
+    #[serde(rename_all = "camelCase")]
+    Done {
+        approximate: bool,
+        /// Why some words are timed roughly, as one plain sentence: word timing's own (it failed, stopped or didn't
+        /// finish), or that they don't match their sound.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        approximate_reason: Option<String>,
+        /// Why the clip has no words ("No speech found."), when it has none.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        empty_reason: Option<String>,
+        /// Timing the words again can time the rough ones (word timing failed, stopped or didn't finish): the page
+        /// offers it. Not for words that don't match their sound.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        time_again: bool,
+    },
     /// A step failed or was stopped; the steps before it are kept. `reason` is one plain sentence.
     Failed { reason: String },
 }
@@ -126,6 +148,17 @@ pub struct AnalysisDone {
     pub asset_id: String,
     /// Some words are timed roughly (spread across their turn).
     pub approximate: bool,
+    /// Why, as `AssetState::Done` says it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub approximate_reason: Option<String>,
+    /// Why the clip has no words.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub empty_reason: Option<String>,
+    /// Timing the words again can time the rough ones.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub time_again: bool,
 }
 
 /// `analysis://failed`: a clip's analysis stopped; what finished is kept.
@@ -191,6 +224,9 @@ pub struct Estimate {
     pub cached: Vec<String>,
     /// The clips asked for that need analysing (or the steps of it not cached yet), in the order asked.
     pub clips: Vec<String>,
+    /// The clips asked for whose file Klipolo can't find or open (moved, deleted): neither priced nor offered
+    /// (`FILE_MISSING` says what to do).
+    pub missing: Vec<String>,
     /// With an access code: the credit left, when Klipolo's relay said.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -350,8 +386,8 @@ struct Inner {
     /// counts it as spent.
     reserved: HashMap<String, f64>,
     /// The contents whose rough words were timed again, or whose word timing the person stopped, in this app run: a
-    /// start the page makes on its own (loading cached clips) doesn't time them again; only the person's Analyze or
-    /// Retry does.
+    /// start the page makes on its own (loading cached clips) doesn't time them again; only the person's Analyze,
+    /// Retry or "Time words again" does.
     timed_again: HashSet<String>,
     /// Bumped by every project switch (`project_changed`). A `start` or `estimate` remembers it on entry and does
     /// nothing more once it has moved on: its assets belong to a project no longer open.
@@ -476,7 +512,9 @@ impl AnalysisState {
         let mut estimate = Estimate::default();
         let mut paid = Vec::new();
         for (content, ids) in self.contents(assets, generation).await {
-            if content.cached.complete(&content.clip) {
+            if content.cached.key.is_none() {
+                estimate.missing.extend(ids);
+            } else if content.cached.complete(&content.clip) {
                 estimate.cached.extend(ids);
             } else {
                 estimate.seconds += content.clip.duration_us as f64 / 1e6;
@@ -541,6 +579,14 @@ impl AnalysisState {
                 .filter(|content| inner.claimed.insert(content.key.clone()))
                 .collect()
         };
+        // A clip whose file can't be found or opened has nothing to analyse or pay for: it fails at once, saying what
+        // to do.
+        let (missing, contents): (Vec<Content>, Vec<Content>) = contents
+            .into_iter()
+            .partition(|content| content.cached.key.is_none());
+        for content in &missing {
+            self.end(&content.key, Outcome::Failed(FILE_MISSING.into()));
+        }
         let (ready, paid): (Vec<Content>, Vec<Content>) = contents
             .into_iter()
             .partition(|content| content.cached.complete(&content.clip));
@@ -590,7 +636,11 @@ impl AnalysisState {
             );
         let mut tasks = Vec::new();
         for (content, meta) in starting {
-            self.progress(&content.key, AnalysisStep::Audio, 0);
+            // Only a content with something to send shows as running: one whose results are all cached goes straight
+            // to done, with no "Analyzing" on the way.
+            if meta.is_some() {
+                self.progress(&content.key, AnalysisStep::Audio, 0);
+            }
             tasks.push(tokio::spawn(self.clone().analyse(
                 content,
                 run.clone(),
@@ -740,6 +790,13 @@ impl AnalysisState {
             .filter(|a| a.transcript.is_some() || a.scenes.is_some())
     }
 
+    /// What this session's analysis calls cost, in US dollars: every file analysed since the app started, each once
+    /// (what came from the cache cost nothing).
+    pub fn spent_usd(&self) -> f64 {
+        let inner = lock(&self.inner);
+        inner.entries.values().map(|e| e.analysis.spent_usd).sum()
+    }
+
     /// The speech found so far, as the engine has it.
     pub fn speech(&self) -> Arc<Speech> {
         Arc::new(lock(&self.inner).speech.clone())
@@ -812,7 +869,7 @@ impl AnalysisState {
     fn end(&self, key: &str, outcome: Outcome) {
         let mut inner = lock(&self.inner);
         let state = match outcome {
-            Outcome::Done { approximate } => AssetState::Done { approximate },
+            Outcome::Done(words) => words.state(),
             Outcome::Failed(reason) => AssetState::Failed { reason },
             Outcome::Stopped => AssetState::None,
         };
@@ -912,9 +969,17 @@ fn event_for(asset_id: &str, state: &AssetState) -> Option<AnalysisEvent> {
             step: *step,
             pct: *pct,
         }),
-        AssetState::Done { approximate } => AnalysisEvent::Done(AnalysisDone {
+        AssetState::Done {
+            approximate,
+            approximate_reason,
+            empty_reason,
+            time_again,
+        } => AnalysisEvent::Done(AnalysisDone {
             asset_id,
             approximate: *approximate,
+            approximate_reason: approximate_reason.clone(),
+            empty_reason: empty_reason.clone(),
+            time_again: *time_again,
         }),
         AssetState::Failed { reason } => AnalysisEvent::Failed(AnalysisFailed {
             asset_id,
@@ -947,7 +1012,8 @@ fn price(meta: &Meta, clip: &Clip, cached: &Cached) -> f64 {
 }
 
 /// With an access code: the credit left (when the relay said), less what the runs going have `reserved`, and why `usd`
-/// of analysis is refused (a code turned off, or more than is left).
+/// of analysis is refused (a code turned off, or more than is left). Analysis covers each file whole, however its clip
+/// is trimmed, so the way on is fewer or shorter files.
 fn credit(status: &AiStatus, usd: f64, reserved: f64) -> (Option<f64>, Option<String>) {
     if status.mode != AiMode::Relay {
         return (None, None);
@@ -965,8 +1031,8 @@ fn credit(status: &AiStatus, usd: f64, reserved: f64) -> (Option<f64>, Option<St
     }
     let refusal = left.filter(|&left| usd > left).map(|left| {
         format!(
-            "Your access code has ${left:.2} left, and this needs {}. Trim the clips first, or add your own Meta key \
-             in Settings.",
+            "Your access code has ${left:.2} left, and this needs {}. Analyze fewer or shorter files, or add your own \
+             Meta key in Settings.",
             about(usd)
         )
     });
@@ -1077,8 +1143,8 @@ mod tests {
         assert_eq!(
             credit(&relay(2.0, 2.4), 0.004, 0.0).1.as_deref(),
             Some(
-                "Your access code has $0.00 left, and this needs less than $0.01. Trim the clips first, or add \
-                 your own Meta key in Settings."
+                "Your access code has $0.00 left, and this needs less than $0.01. Analyze fewer or shorter files, \
+                 or add your own Meta key in Settings."
             )
         );
         let off = AiStatus {

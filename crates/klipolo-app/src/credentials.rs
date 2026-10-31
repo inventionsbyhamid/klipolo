@@ -59,7 +59,7 @@ const RELAY_BUSY: &str = "Klipolo's server is busy right now. Try again in a mom
 const RELAY_UNREADABLE: &str = "Klipolo's server sent an answer the app couldn't read. Try again.";
 const STORE_FAILED: &str = "Klipolo couldn't save this in your Mac's Keychain. Try again.";
 
-/// Where Meta and Klipolo's relay are: `KLIPOLO_META_BASE` and `KLIPOLO_RELAY_BASE`, else the real ones.
+/// Where Meta and Klipolo's relay are.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Endpoints {
     /// Meta's API, e.g. `https://api.meta.ai/v1`.
@@ -69,11 +69,31 @@ pub struct Endpoints {
 }
 
 impl Endpoints {
+    /// The real ones: Meta's API and Klipolo's relay.
+    pub fn real() -> Self {
+        Self {
+            meta_base: klipolo_meta::DEFAULT_META_BASE.to_owned(),
+            relay_base: klipolo_meta::DEFAULT_RELAY_BASE.to_owned(),
+        }
+    }
+
+    /// `KLIPOLO_META_BASE` and `KLIPOLO_RELAY_BASE` when set, else the real ones: for tools and tests.
     pub fn from_env() -> Self {
         Self {
             meta_base: klipolo_meta::meta_base(),
             relay_base: klipolo_meta::relay_base(),
         }
+    }
+
+    /// The app's: `from_env` in a debug build (tests, a staging relay); the real ones in a release build, whatever the
+    /// environment says, so nothing set around the shipped app (`launchctl setenv`, say) can send the person's key or
+    /// the device's token elsewhere.
+    pub fn for_app() -> Self {
+        Self::for_build(cfg!(debug_assertions), Self::from_env)
+    }
+
+    fn for_build(debug: bool, from_env: impl FnOnce() -> Self) -> Self {
+        if debug { from_env() } else { Self::real() }
     }
 }
 
@@ -122,6 +142,28 @@ pub struct AiStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub notice: Option<String>,
+    /// What AI cost since the app started, as Klipolo counts it: the app adds it (`SessionSpend`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub session: Option<SessionSpend>,
+}
+
+/// What AI cost since the app started, by kind, in US dollars at Meta's prices: Settings shows it with a key or a
+/// code. Nothing is shown per message.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SessionSpend {
+    /// Transcripts, word times and scene logs.
+    pub analysis_usd: f64,
+    /// Chat's messages.
+    pub chat_usd: f64,
+    /// The messages that reached the model.
+    pub chat_messages: u32,
+    /// Pictures drawn for chat (stickers, title card backgrounds).
+    pub pictures_usd: f64,
+    /// The pictures drawn.
+    pub pictures: u32,
 }
 
 /// How long a device registration may take (it is a tiny POST).
@@ -189,11 +231,11 @@ impl Held {
 }
 
 /// The client AI features use, from what `store` holds: the key (with the device's relay token for word timing) when
-/// there is one, else the access code's relay token; None with neither. Meta's base URL comes from the environment
-/// (`KLIPOLO_META_BASE`).
+/// there is one, else the access code's relay token; None with neither. Meta's base URL is the app's
+/// (`Endpoints::for_app`).
 pub fn ai_client(store: &dyn SecretStore, relay_base: &str) -> Option<MetaClient> {
     let endpoints = Endpoints {
-        meta_base: klipolo_meta::meta_base(),
+        meta_base: Endpoints::for_app().meta_base,
         relay_base: relay_base.to_owned(),
     };
     client_for(&Held::read(store), &endpoints)
@@ -275,6 +317,16 @@ impl Credentials {
     /// The shared adapter as it is now (None without a key or code). Clones share its slots.
     pub fn meta(&self) -> Option<Meta> {
         lock(&self.meta).clone()
+    }
+
+    /// `meta`, with the change of credentials it was built at: something kept that was built from it is built again
+    /// once this number moves on.
+    pub fn meta_at(&self) -> (Option<Meta>, u64) {
+        let _held = lock(&self.held);
+        (
+            lock(&self.meta).clone(),
+            self.generation.load(Ordering::SeqCst),
+        )
     }
 
     /// The adapter for an AI feature about to run. The first time, the device registers with the relay (with the
@@ -567,8 +619,8 @@ fn relay_status(code: &SecretString, info: &DeviceInfo) -> AiStatus {
     }
 }
 
-/// A relay error as a sentence about Klipolo's server (the client's own wording names Meta): `offline` when it
-/// couldn't be reached, the relay's own sentence when it gave one.
+/// A relay error as a sentence about Klipolo's server: `offline` when it couldn't be reached, the relay's own sentence
+/// when it gave one.
 fn relay_error(error: &MetaError, offline: &str) -> SettingsError {
     tracing::warn!(%error, "relay");
     SettingsError::new(match error {
@@ -577,6 +629,29 @@ fn relay_error(error: &MetaError, offline: &str) -> SettingsError {
         // A bare 504 is the relay (or Traefik in front of it) giving up, not Meta.
         MetaError::TimedOut { message: None, .. } => RELAY_BUSY.to_owned(),
         MetaError::Decode(_) => RELAY_UNREADABLE.to_owned(),
-        other => other.user_message(),
+        other => other.relay_user_message(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A release build never takes Meta's or the relay's address from the environment; a debug build (tests, a
+    /// staging relay) does.
+    #[test]
+    fn only_a_debug_build_takes_its_addresses_from_the_environment() {
+        let elsewhere = || Endpoints {
+            meta_base: "http://elsewhere.test/v1".into(),
+            relay_base: "http://elsewhere.test".into(),
+        };
+        assert_eq!(
+            Endpoints::for_build(false, elsewhere),
+            Endpoints {
+                meta_base: "https://api.meta.ai/v1".into(),
+                relay_base: "https://api.klipolo.com".into(),
+            }
+        );
+        assert_eq!(Endpoints::for_build(true, elsewhere), elsewhere());
+    }
 }
