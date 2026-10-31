@@ -1,5 +1,6 @@
 import { useLingui } from '@lingui/react/macro';
 import { useChat } from '../../state/chat';
+import { appLine } from '../../state/chatApps';
 
 /**
  * Says politely what chat answered, once, a failure too, and what waits for the person. Beside it, in a place of its
@@ -20,6 +21,12 @@ export function Announcer() {
     if (last.proposal?.state === 'open') {
       const title = last.proposal.proposal.title;
       text = t({ id: 'chatPanel.announce.review', message: `Needs your review: ${title}` });
+    } else if (last.client !== undefined) {
+      // Another app's: who, then what it did (its moments and pictures show in the log).
+      const [client, line] = [last.client, appLine(last)];
+      text = line
+        ? t({ id: 'mcp.announce.did', message: `From ${client}: ${line}` })
+        : t({ id: 'mcp.from', message: `From ${client}` });
     } else text = t({ id: 'chatPanel.announce.says', message: `Klipolo: ${last.text}` });
   }
   return (

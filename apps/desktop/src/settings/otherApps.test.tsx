@@ -135,9 +135,12 @@ describe('Settings: Other apps', () => {
     for (const file of [
       'OtherApps.tsx',
       '../bridge/mcp.ts',
+      '../state/chatApps.ts',
       '../state/editorView.ts',
       '../features/chat/ChatMessage.tsx',
       '../features/chat/ProposalCard.tsx',
+      '../features/chat/Announcer.tsx',
+      '../features/chat/UndoChip.tsx',
       '../lib/labelTable.ts',
       '../lib/labels.ts',
     ]) {
