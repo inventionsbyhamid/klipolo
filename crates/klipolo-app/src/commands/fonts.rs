@@ -49,7 +49,10 @@ pub fn fonts_face(
     let dir = bundled_dir().ok_or("Klipolo's fonts aren't installed.")?;
     std::fs::read(dir.join(face.file))
         .map(tauri::ipc::Response::new)
-        .map_err(|e| e.to_string())
+        .map_err(|error| {
+            tracing::warn!(%error, file = face.file, "a bundled font couldn't be read");
+            "Klipolo couldn't read that font. Try again, or reinstall Klipolo.".to_string()
+        })
 }
 
 #[cfg(test)]
