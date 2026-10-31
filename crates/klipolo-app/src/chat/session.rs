@@ -71,8 +71,9 @@ pub const KEEP_ONLY_READY: &str = "Here is what I would remove. Apply it or disc
 pub const KEEP_ONLY_MOVED: &str =
     "Those moments don't match the video any more. Ask me to find them again.";
 
-/// What a message's turn note gets when nothing of it landed.
+/// What a message's turn note says when nothing of it landed.
 const MOVED_NOTE: &str = "Nothing was applied: the person changed the project meanwhile.";
+const NOT_APPLIED_NOTE: &str = "Nothing was applied: the changes no longer fit the project.";
 const APPLIED_NOTE: &str = "The person applied the proposal.";
 const DISCARDED_NOTE: &str = "The person discarded the proposal.";
 const DROPPED_NOTE: &str =
@@ -336,12 +337,22 @@ impl ChatSession {
         let mut notes: Vec<String> = Vec::new();
         if let Some(dropped) = landed.dropped {
             notes.push(dropped.to_owned());
-            note = format!("{note} The removals were not proposed.");
+            note = format!(
+                "{} The removals were not proposed.",
+                without_proposed(&note)
+            )
+            .trim()
+            .to_owned();
         }
         if let Some(lost) = landed.lost {
-            // Nothing of the answer landed: its words may claim it did.
+            // Nothing of the answer landed: its words, and the note, may claim it did.
             out.reply = lost.to_owned();
-            note = format!("{note} {MOVED_NOTE}");
+            note = (if lost == MOVED {
+                MOVED_NOTE
+            } else {
+                NOT_APPLIED_NOTE
+            })
+            .to_owned();
         } else if !jobs.coming.is_empty() {
             if something {
                 notes.extend(jobs.coming.iter().map(|s| (*s).to_owned()));
@@ -515,6 +526,19 @@ fn keep_only(project: &Project, inputs: &Inputs, ranges: Vec<RangeUs>) -> PlanOu
     }
 }
 
+/// A turn's note without what it says was proposed ("Proposed cutRange (10.0 s)."): the proposal wasn't made.
+fn without_proposed(note: &str) -> String {
+    let Some(at) = note.find("Proposed ") else {
+        return note.to_owned();
+    };
+    let end = note[at..]
+        .find(" s).")
+        .map_or(note.len(), |e| at + e + " s).".len());
+    format!("{} {}", note[..at].trim(), note[end..].trim())
+        .trim()
+        .to_owned()
+}
+
 /// A refusal about a clip that isn't analyzed yet names it: "Analyze this clip first (interview.mov)."
 fn name_clips(out: &mut PlanOut, project: &Project, inputs: &Inputs) {
     for r in &out.compiled.refusals {
@@ -536,5 +560,22 @@ fn name_clips(out: &mut PlanOut, project: &Project, inputs: &Inputs) {
         if out.reply.contains(&said) && !out.reply.contains(&named) {
             out.reply = out.reply.replacen(&said, &named, 1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::without_proposed;
+
+    #[test]
+    fn a_note_drops_what_it_says_was_proposed() {
+        assert_eq!(
+            without_proposed(
+                "Applied setFormat. Proposed removeFillers, cutRange (1.0 s). Asked: Which part?"
+            ),
+            "Applied setFormat. Asked: Which part?"
+        );
+        assert_eq!(without_proposed("Proposed cutRange (6.0 s)."), "");
+        assert_eq!(without_proposed("Applied setFormat."), "Applied setFormat.");
     }
 }
