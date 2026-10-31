@@ -1376,7 +1376,9 @@
   right: -4px;
 }
 
-/* The playhead: a 2 px paper line through the lanes and a 12 x 14 paper head on the ruler. Never red. */
+/* The playhead: a 2 px paper line through the lanes and a 12 x 14 paper head on the ruler. Never red. The head spans
+   the ruler (top and bottom 0, as the line) and runs on as a 2 px stem to its foot: the sticky ruler row covers the
+   lanes' line there. */
 .tl-playhead {
   position: absolute;
   top: 0;
@@ -1389,12 +1391,10 @@
 }
 
 .tl-playhead.is-head {
-  bottom: auto;
   z-index: 2;
   width: 12px;
-  height: 14px;
-  border-radius: 3px 3px 6px 6px;
-  clip-path: polygon(0 0, 100% 0, 100% 60%, 50% 100%, 0 60%);
+  border-radius: 3px 3px 0 0;
+  clip-path: polygon(0 0, 100% 0, 100% 8.4px, 7px 13px, 7px 100%, 5px 100%, 5px 13px, 0 8.4px);
 }
 
 /* Menus, tooltips and popovers: the dialog surface, 10 px radius, 32 px rows on the hover fill. */

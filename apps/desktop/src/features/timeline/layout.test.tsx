@@ -86,3 +86,17 @@ describe('the lanes in a 1100 x 700 window', () => {
     expect(appCss).toMatch(/\.tl-head \{[^}]*position: sticky;[^}]*top: 0;[^}]*background: var\(--color-bay\)/s);
   });
 });
+
+describe('the ruler row over the lanes', () => {
+  /** A rule's body in app.css. */
+  const rule = (selector: string) =>
+    new RegExp(`(?:^|\\n)${selector.replace(/\./g, '\\.')} \\{([^}]*)\\}`).exec(appCss)![1];
+
+  it("draws the playhead's stem under its head, since the sticky ruler row covers the line there", () => {
+    const head = rule('.tl-playhead.is-head');
+    // The head spans the ruler's height as the line does (no height of its own), and its shape runs on as a 2 px stem
+    // (x 5 to 7 of 12, the line's place) to the ruler's foot.
+    expect(head).not.toMatch(/height:|bottom:/);
+    expect(head).toMatch(/clip-path: polygon\([^)]*7px 100%, 5px 100%[^)]*\)/);
+  });
+});

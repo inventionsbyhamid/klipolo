@@ -9,7 +9,8 @@ const HORIZON_US = 3_600_000_000;
 
 /**
  * The paper playhead at the current time (never red): a 2 px line across the lanes, or (`head`) its
- * 12 x 14 px head on the ruler.
+ * 12 x 14 px head on the ruler with the line's stem under it to the ruler's foot (the sticky ruler row covers the
+ * lanes' line there).
  * Outside React, and with no work per frame: paused, a store subscription sets its `transform`; playing, one linear
  * Web Animations transform animation moves it on the compositor from the clock's anchor at the clock's rate (backward
  * it comes to rest at the start), restarted only when the engine's frames re-anchor the clock.
