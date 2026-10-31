@@ -33,7 +33,15 @@ export interface ProposalPart {
   revision?: number;
   /** Open again after Apply was refused (not because the project moved): why, in one sentence, with Retry. */
   reason?: string;
+  /**
+   * When it took the place of a proposal that was open (`performance.now()`): an app proposed again. Apply waits
+   * `SWAP_SETTLE_MS` from then, so a press meant for the card before never applies this one unread.
+   */
+  swappedAt?: number;
 }
+
+/** How long Apply is ignored after a proposal took the place of an open one. */
+export const SWAP_SETTLE_MS = 500;
 
 /**
  * Where a picture a reply asked for stands: being drawn, drawn (its card shows it with Use and Try again), being

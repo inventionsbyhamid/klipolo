@@ -126,7 +126,11 @@ export function appActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'receive
     }
     // One open proposal at a time: a newer one replaces the one waiting on the page. Rust has replaced it already (its
     // own, or one on a project that has moved on), so nothing is discarded there: a discard could only reach a newer one.
-    if (proposal?.state === 'open') set(withMessages(replaceOpen(get().messages).messages));
+    if (proposal?.state === 'open') {
+      const { messages, replaced } = replaceOpen(get().messages);
+      set(withMessages(messages));
+      if (replaced.length > 0) proposal.swappedAt = performance.now();
+    }
     push({
       id: r.id,
       from: 'klipolo',

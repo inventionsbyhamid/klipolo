@@ -200,6 +200,19 @@ describe('another app in chat', () => {
     expect(fake.discarded).toEqual([]);
   });
 
+  it('an_apply_right_as_an_app_replaces_its_proposal_waits_to_be_pressed_again', async () => {
+    const fake = chat({ apply: () => ({ change: changed(4, code('chat.keepOnly')), undo: code('chat.keepOnly') }) });
+    renderWithProviders(<ChatPanel />);
+    await tell(external('Example Client', { proposal: teaser() }));
+    await tell(external('Example Client', { proposal: { ...teaser(), id: 'p2', removedUs: 40 * S } }));
+    // The press meant the card the person was reading: the newer one isn't applied unread.
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(fake.applied).toEqual([]);
+    await act(async () => new Promise((done) => setTimeout(done, 600)));
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(fake.applied).toEqual(['p2']));
+  });
+
   it('an_older_app_proposal_leaves_the_persons_open_one_alone', async () => {
     const mine = proposal('mine', 3, {
       title: 'Cut 1 filler word',
