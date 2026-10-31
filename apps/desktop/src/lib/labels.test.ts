@@ -24,6 +24,32 @@ describe('undo labels as message ids', () => {
     expect(wordParams({ language: 'not a code' })).toEqual({ language: 'not a code' });
   });
 
+  it("words every change chat's compiler and picture jobs label, never as a bare Undo", () => {
+    for (const tool of [
+      'cutRange',
+      'keepOnly',
+      'removeSilences',
+      'removeFillers',
+      'trimClip',
+      'splitAt',
+      'setFormat',
+      'setCaptions',
+      'fixCaptionWords',
+      'addMusic',
+      'addSound',
+      'addText',
+      'addImage',
+      'makeTitleCard',
+      'makeSticker',
+      'titleBackground',
+    ]) {
+      expect(historyAction('undo', `chat.${tool}`), tool).not.toBe('Undo');
+    }
+    expect(historyAction('undo', 'chat.addText', { text: 'Day 1 in Lisbon', preset: 'title' })).toBe(
+      'Undo add the words Day 1 in Lisbon',
+    );
+  });
+
   it('names built-in contributions from their id, never their English name', () => {
     expect(contribName('klipolo.builtin/effect.blur')).toBe('Blur');
     expect(wordLabel('effect.add.undo', { effect: 'klipolo.builtin/effect.vignette' })).toBe('Add Vignette');
