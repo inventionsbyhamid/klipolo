@@ -251,8 +251,9 @@ fn bare(text: &str) -> String {
 
 /// Every place `format`'s pages show `text` (matched whole, ignoring case and the marks around it, as said or fixed,
 /// never in the style's capitals), in timeline order, hidden words left out: one per file word, so the copies of a
-/// clip, which one fix covers, count once. What "Fix all" fixes. None when `project_id` isn't open; empty for a text
-/// with no letter or digit.
+/// clip, which one fix covers, count once. What "Fix all" fixes: matched whatever their case, so the page gives each
+/// place its own first letter's case ("The" starting a sentence stays capital). None when `project_id` isn't open;
+/// empty for a text with no letter or digit.
 pub fn find(
     cache: &CaptionsCache,
     feed: Option<&ProjectFeed>,

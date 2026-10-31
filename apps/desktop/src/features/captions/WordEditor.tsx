@@ -19,19 +19,39 @@ export function around(text: string): [string, string, string] {
 const sameFileWords = (a: WordView, b: WordView) =>
   a.assetId === b.assetId && a.sourceStartUs === b.sourceStartUs && a.sourceEndUs === b.sourceEndUs;
 
+/** Whether `text` starts with a capital letter; null when it starts with no cased letter (a digit, "3d"). */
+function capital(text: string): boolean | null {
+  const first = text.charAt(0);
+  if (first.toLowerCase() === first.toUpperCase()) return null;
+  return first !== first.toLowerCase();
+}
+
+/** `core` with its first letter in the case `to` (when given). */
+function withCapital(core: string, to: boolean | null): string {
+  if (to === null || core === '') return core;
+  const first = core.charAt(0);
+  return (to ? first.toUpperCase() : first.toLowerCase()) + core.slice(1);
+}
+
 /**
  * "Fix all": one `fixWords` per place the word shows (`matches`, from `captions_find`), in the file's sound time. The
  * word being edited reads exactly as typed; every other place keeps the marks around it ("Teo," reads "Theo,") around
- * the letters typed. None when nothing is left of what was typed but marks (taking a word out is a hide, not a fix).
+ * the letters typed, and its own first letter's case where it differs from the word edited's ("the" mid-sentence and
+ * "The" starting one, both fixed to "a", read "a" and "A"). None when nothing is left of what was typed but marks
+ * (taking a word out is a hide, not a fix).
  */
 export function fixAllOps(word: WordView, matches: WordView[], typed: string): Op[] {
   const core = around(tidy(typed))[1];
   if (!core) return [];
+  const edited = capital(around(word.said ?? word.text)[1]);
   const all = matches.some((m) => sameFileWords(m, word)) ? matches : [word, ...matches];
   return all.flatMap((m) => {
     const said = m.said ?? m.text;
-    const [before, , after] = around(said);
-    const text = sameFileWords(m, word) ? tidy(typed) : `${before}${core}${after}`;
+    const [before, own, after] = around(said);
+    const mine = capital(own);
+    // The typed word's own case where this place's first letter agrees with the edited word's; else this place's.
+    const cased = edited === null || mine === null || mine === edited ? core : withCapital(core, mine);
+    const text = sameFileWords(m, word) ? tidy(typed) : `${before}${cased}${after}`;
     if (text === said) return [];
     const op = fixOp([m], text);
     return op ? [op] : [];
