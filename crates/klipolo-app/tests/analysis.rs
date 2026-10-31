@@ -1850,3 +1850,32 @@ async fn a_video_stopped_during_word_timing_goes_back_to_not_analysed() {
     );
     server.verify().await;
 }
+
+/// A start or estimate whose assets were read for an opening the switch has since left (the commands take the opening
+/// before reading the assets) does nothing.
+#[tokio::test(flavor = "multi_thread")]
+async fn assets_read_for_an_opening_left_behind_start_nothing() {
+    let server = MockServer::start().await;
+    nothing_else(&server).await;
+    let media = FakeMedia::whole(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 2), SECONDS);
+
+    let opening = h.state.opening();
+    h.state.project_changed();
+    let estimate = h
+        .state
+        .estimate_at(opening, std::slice::from_ref(&clip))
+        .await;
+    let started = h
+        .state
+        .start_at(opening, std::slice::from_ref(&clip), Asked::Person)
+        .await;
+    started.finished().await;
+
+    assert!(estimate.clips.is_empty() && estimate.cached.is_empty());
+    assert!(h.state.states().is_empty());
+    assert!(h.events.lock().unwrap().is_empty());
+    assert_eq!(media.sounds.load(Ordering::SeqCst), 0);
+    server.verify().await;
+}

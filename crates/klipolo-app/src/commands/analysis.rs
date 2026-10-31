@@ -63,8 +63,10 @@ pub(crate) async fn analysis_estimate(
     projects: State<'_, ProjectSessionState>,
     asset_ids: Vec<String>,
 ) -> Result<Estimate, String> {
+    // The opening first: a switch while the assets are read is seen.
+    let opening = analysis.opening();
     let assets = projects.assets(&asset_ids);
-    Ok(analysis.estimate(&assets).await)
+    Ok(analysis.estimate_at(opening, &assets).await)
 }
 
 /// Analyses these clips: cached ones load at once; the others start, or the error says why they can't (no key or code,
@@ -77,13 +79,15 @@ pub(crate) async fn analysis_start(
     asset_ids: Vec<String>,
     by_page: Option<bool>,
 ) -> Result<(), String> {
+    // The opening first: a switch while the assets are read is seen.
+    let opening = analysis.opening();
     let assets = projects.assets(&asset_ids);
     let asked = if by_page == Some(true) {
         Asked::Page
     } else {
         Asked::Person
     };
-    match analysis.start_as(&assets, asked).await.refused {
+    match analysis.start_at(opening, &assets, asked).await.refused {
         Some(reason) => Err(reason),
         None => Ok(()),
     }

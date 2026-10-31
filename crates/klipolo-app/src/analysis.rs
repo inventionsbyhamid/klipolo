@@ -231,6 +231,11 @@ pub enum Asked {
     Page,
 }
 
+/// Which project opening analysis serves (`project_changed` moves it on). A command takes it before reading the open
+/// project's assets, so a switch between the two is seen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Opening(u64);
+
 /// What a `start` set going.
 pub struct Started {
     tasks: Vec<JoinHandle<()>>,
@@ -427,6 +432,11 @@ impl AnalysisState {
         lock(&self.inner).generation
     }
 
+    /// The opening analysis serves now.
+    pub fn opening(&self) -> Opening {
+        Opening(self.generation())
+    }
+
     /// `assets` as contents: each analysable clip's cache read, its asset put on its content (`on_content`), and the
     /// clips on one content grouped, in the order asked. None once the project changed since `generation`.
     async fn contents(&self, assets: &[Asset], generation: u64) -> Vec<(Content, Vec<String>)> {
@@ -457,7 +467,12 @@ impl AnalysisState {
     /// can't is `Estimate::problem`) and, with an access code, asks the relay for the credit left.
     /// An estimate the project switch overtook is empty.
     pub async fn estimate(&self, assets: &[Asset]) -> Estimate {
-        let generation = self.generation();
+        self.estimate_at(self.opening(), assets).await
+    }
+
+    /// `estimate`, for assets read during `opening`: empty when the project has changed since.
+    pub async fn estimate_at(&self, opening: Opening, assets: &[Asset]) -> Estimate {
+        let generation = opening.0;
         let mut estimate = Estimate::default();
         let mut paid = Vec::new();
         for (content, ids) in self.contents(assets, generation).await {
@@ -503,7 +518,17 @@ impl AnalysisState {
     /// A start the project switch overtook (its assets belong to the project no longer open) does nothing and
     /// promises no credit.
     pub async fn start_as(self: &Arc<Self>, assets: &[Asset], asked: Asked) -> Started {
-        let generation = self.generation();
+        self.start_at(self.opening(), assets, asked).await
+    }
+
+    /// `start_as`, for assets read during `opening`: nothing starts when the project has changed since.
+    pub async fn start_at(
+        self: &Arc<Self>,
+        opening: Opening,
+        assets: &[Asset],
+        asked: Asked,
+    ) -> Started {
+        let generation = opening.0;
         let contents: Vec<Content> = {
             let looked = self.contents(assets, generation).await;
             let mut inner = lock(&self.inner);
