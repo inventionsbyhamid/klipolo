@@ -1,10 +1,11 @@
 //! MCP over JSON-RPC 2.0: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`,
 //! `resources/templates/list` and `resources/read`, one message in and at most one reply out. `initialize` opens a
-//! session; every other message needs one (`Handled::NoSession` otherwise). An edit tool's call goes to `call::run`; a
-//! read is answered here. Refusals an agent can act on are tool results with `isError`; JSON-RPC errors are only for a
-//! message that isn't one object or a request without a method (-32600), an unknown method (-32601), an unknown tool
-//! (-32602) and an unknown resource (-32002). Bad JSON (-32700) is the server's, before a message reaches here.
-//! Nothing here trusts the client.
+//! session, unless the app or all apps together opened too many in the last minute (`Handled::Paced`); every other
+//! message needs one (`Handled::NoSession` otherwise). An edit tool's call goes to `call::run`, which paces the app's
+//! calls itself; a read is answered here. Refusals an agent can act on are tool results with `isError`; JSON-RPC
+//! errors are only for a message that isn't one object or a request without a method (-32600), an unknown method
+//! (-32601), an unknown tool (-32602) and an unknown resource (-32002). Bad JSON (-32700) is the server's, before a
+//! message reaches here. Nothing here trusts the client.
 
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
