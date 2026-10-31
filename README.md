@@ -116,14 +116,20 @@ Before a release:
 
 - After any change to `Cargo.lock` or `pnpm-lock.yaml`, run
   `scripts/release/third-party.sh` and commit
-  `crates/klipolo-app/licenses/THIRD-PARTY-NOTICES.txt`. The gate fails until
-  you do.
+  `crates/klipolo-app/licenses/THIRD-PARTY-NOTICES.txt`. The JavaScript part
+  follows the page's imports, so importing a package the page didn't use
+  before needs it too. The gate and `build-mac.sh` fail until you do.
+- A merge conflict in that file: don't keep both sides. Finish the merge,
+  run `scripts/release/third-party.sh` and commit what it writes.
 - After changing the release scripts, run `scripts/release/release.test.sh`.
   It checks them on a small bundle made with clang, in seconds.
 
 Tauri warns on every build that the identifier `com.klipolo.app` ends with
-`.app`. That is expected: the Keychain and the app's folders use this
-identifier, so it stays.
+`.app`. It is a known cost, kept for now: the app's folders in
+`~/Library/Application Support` and `~/Library/Caches` are named
+`com.klipolo.app`, so Finder shows them as app packages (open them with
+Show Package Contents). Changing the identifier later means moving the saved
+key in the Keychain and those folders' data to the new name.
 
 ## Preview the site locally
 
