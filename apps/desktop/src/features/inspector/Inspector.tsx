@@ -16,6 +16,7 @@ import { ImageInspector } from './ImageInspector';
 import { commitLatest } from '../../state/latest';
 import { TemplateInspector } from './TemplateInspector';
 import { TextInspector } from './TextInspector';
+import { TransitionInspector, useInspectedTransition } from './TransitionInspector';
 
 /** What the inspector shows: a text, a picture, a title template, music or a sound effect. */
 export type Inspected = 'text' | 'image' | 'template' | 'music' | 'sound';
@@ -61,7 +62,10 @@ const ICONS: Record<Inspected, IconName> = {
 export function Inspector({ format }: { format: FormatKind }) {
   const { t } = useLingui();
   const inspected = useInspected();
+  const transition = useInspectedTransition();
   const primary = useProject((s) => s.snapshot?.project.settings.primaryFormat ?? 'landscape');
+  // A transition selected at a cut: its own card (`TransitionInspector`).
+  if (transition) return <TransitionInspector key={transition.clip.id} {...transition} />;
   if (!inspected) return null;
   const { item, track, kind } = inspected;
   const content = item.content;

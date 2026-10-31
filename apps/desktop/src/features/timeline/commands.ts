@@ -5,6 +5,6 @@
 export { duplicate } from './keys/clipboardActions';
 export { stepTrack } from './keys/layerActions';
 export { deleteBlock, deleteRange, markRange } from './keys/timelineActions';
-export { removeTransition } from './keys/transitionActions';
+export { removeTransition, transitionName, transitionNow, transitionOp } from './keys/transitionActions';
 export { useTimelineCommands } from './useTimelineCommands';
 export { useZoomTarget, zoomRange, zoomTo, zoomViewUs } from './zoomControl';

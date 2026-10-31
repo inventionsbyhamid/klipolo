@@ -2432,6 +2432,11 @@
   gap: var(--space-4);
 }
 
+/* The transition card's Remove: a small secondary button at its own width, after the fields. */
+.insp-remove {
+  justify-self: start;
+}
+
 .field {
   display: grid;
   grid-template-columns: 66px minmax(0, 1fr);
