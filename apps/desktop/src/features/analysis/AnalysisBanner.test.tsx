@@ -72,8 +72,8 @@ describe('the analysis banner', () => {
 
   it('refuses with why when the estimate is over the credit left', async () => {
     const refusal =
-      'Your access code has $0.02 left, and this needs about $0.07. Trim the clips first, or add your own Meta key in ' +
-      'Settings.';
+      'Your access code has $0.02 left, and this needs about $0.07. Analyze fewer or shorter files, or add your own ' +
+      'Meta key in Settings.';
     bridge.estimate.mockResolvedValue(offer({ creditLeftUsd: 0.02, refusal }));
     showProject(CLIPS);
     renderWithProviders(<AnalysisBanner />);
@@ -214,8 +214,8 @@ describe('the analysis banner', () => {
       states: { a: { state: 'failed', reason: 'Meta is busy right now. Try again in a moment.' } },
     });
     const refusal =
-      'Your access code has $0.00 left, and this needs about $0.04. Trim the clips first, or add your own Meta key in ' +
-      'Settings.';
+      'Your access code has $0.00 left, and this needs about $0.04. Analyze fewer or shorter files, or add your own ' +
+      'Meta key in Settings.';
     bridge.start.mockRejectedValueOnce(new Error(refusal));
     renderWithProviders(<AnalysisBanner />);
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));

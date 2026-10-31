@@ -990,8 +990,8 @@ async fn an_estimate_over_the_credit_left_is_refused() {
     let clip = asset("long", AssetKind::Video, &h.clip("long.mov", 1), 155.04);
 
     let estimate = h.state.estimate(std::slice::from_ref(&clip)).await;
-    let refusal = "Your access code has $0.02 left, and this needs about $0.07. Trim the clips first, or add your own \
-                   Meta key in Settings.";
+    let refusal = "Your access code has $0.02 left, and this needs about $0.07. Analyze fewer or shorter files, or add \
+                   your own Meta key in Settings.";
     assert!((estimate.credit_left_usd.unwrap() - 0.02).abs() < 1e-9);
     assert_eq!(estimate.refusal.as_deref(), Some(refusal));
 
@@ -1282,8 +1282,8 @@ async fn a_second_start_counts_the_credit_the_first_promised() {
 
     let started = h.state.start(std::slice::from_ref(&first)).await;
     assert_eq!(started.refused, None);
-    let refusal = "Your access code has $0.03 left, and this needs about $0.07. Trim the clips first, or add your own \
-                   Meta key in Settings.";
+    let refusal = "Your access code has $0.03 left, and this needs about $0.07. Analyze fewer or shorter files, or add \
+                   your own Meta key in Settings.";
     let estimate = h.state.estimate(std::slice::from_ref(&second)).await;
     assert_eq!(estimate.refusal.as_deref(), Some(refusal));
     let refused = h.state.start(std::slice::from_ref(&second)).await;

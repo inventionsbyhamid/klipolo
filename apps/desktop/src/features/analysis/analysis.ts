@@ -43,7 +43,8 @@ export function howLong(seconds: number): string {
 
 /**
  * The offer's sentence: what Analyze does and how long it takes, what clips analyzed before cost, and with an access
- * code the credit left, or why Analyze is refused (Rust's sentence, which suggests trimming first).
+ * code the credit left, or why Analyze is refused (Rust's sentence, which suggests fewer or shorter files: analysis
+ * covers each file whole, however its clip is trimmed).
  */
 export function offerText(estimate: Estimate, videos: boolean): string {
   const them = estimate.clips.length === 1 ? 'it' : 'them';

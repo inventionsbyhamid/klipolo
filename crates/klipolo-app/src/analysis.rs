@@ -947,7 +947,8 @@ fn price(meta: &Meta, clip: &Clip, cached: &Cached) -> f64 {
 }
 
 /// With an access code: the credit left (when the relay said), less what the runs going have `reserved`, and why `usd`
-/// of analysis is refused (a code turned off, or more than is left).
+/// of analysis is refused (a code turned off, or more than is left). Analysis covers each file whole, however its clip
+/// is trimmed, so the way on is fewer or shorter files.
 fn credit(status: &AiStatus, usd: f64, reserved: f64) -> (Option<f64>, Option<String>) {
     if status.mode != AiMode::Relay {
         return (None, None);
@@ -965,8 +966,8 @@ fn credit(status: &AiStatus, usd: f64, reserved: f64) -> (Option<f64>, Option<St
     }
     let refusal = left.filter(|&left| usd > left).map(|left| {
         format!(
-            "Your access code has ${left:.2} left, and this needs {}. Trim the clips first, or add your own Meta key \
-             in Settings.",
+            "Your access code has ${left:.2} left, and this needs {}. Analyze fewer or shorter files, or add your own \
+             Meta key in Settings.",
             about(usd)
         )
     });
@@ -1077,8 +1078,8 @@ mod tests {
         assert_eq!(
             credit(&relay(2.0, 2.4), 0.004, 0.0).1.as_deref(),
             Some(
-                "Your access code has $0.00 left, and this needs less than $0.01. Trim the clips first, or add \
-                 your own Meta key in Settings."
+                "Your access code has $0.00 left, and this needs less than $0.01. Analyze fewer or shorter files, \
+                 or add your own Meta key in Settings."
             )
         );
         let off = AiStatus {

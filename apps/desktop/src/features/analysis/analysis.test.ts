@@ -60,8 +60,8 @@ describe('the offer', () => {
 
   it('gives the refusal instead of the credit', () => {
     const refusal =
-      'Your access code has $0.02 left, and this needs about $0.07. Trim the clips first, or add your own Meta key in ' +
-      'Settings.';
+      'Your access code has $0.02 left, and this needs about $0.07. Analyze fewer or shorter files, or add your own ' +
+      'Meta key in Settings.';
     const text = offerText(estimate({ creditLeftUsd: 0.02, refusal }), true);
     expect(text.endsWith(refusal)).toBe(true);
     expect(text).not.toContain('You have');
