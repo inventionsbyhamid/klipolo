@@ -71,6 +71,7 @@ pub async fn start_on_slot(
     };
     // The slot's job from now on: a Cancel naming it reaches it before its first event.
     state.set_job(job.job_id.clone());
+    state.set_job_dir(job.dir.clone());
     if *cancel.borrow() {
         steps.drop_new(&job);
         state.release();

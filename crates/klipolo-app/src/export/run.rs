@@ -60,6 +60,7 @@ pub async fn run(
 mod tests {
     use std::path::Path;
     use std::sync::{Arc, Mutex};
+    use std::time::Duration;
 
     use klipolo_engine::api::{ExportQuality, ExportRequest};
     use klipolo_engine::export::runner::Attempt;
@@ -166,6 +167,88 @@ mod tests {
                 .count(),
             0,
             "no file in the folder"
+        );
+    }
+
+    /// A worker that runs until it is killed (a long export), saying nothing.
+    struct Hangs;
+
+    impl Launcher for Hangs {
+        fn launch(&self, _job: &Path) -> Result<Attempt, String> {
+            let (lines_tx, lines) = tokio::sync::mpsc::unbounded_channel();
+            let (exit_tx, exit) = tokio::sync::oneshot::channel();
+            let held = Mutex::new(Some((lines_tx, exit_tx)));
+            Ok(Attempt {
+                lines,
+                exit,
+                kill: Box::new(move || {
+                    if let Some((lines_tx, exit_tx)) = held.lock().unwrap().take() {
+                        drop(lines_tx);
+                        let _ = exit_tx.send(false);
+                    }
+                }),
+                pause: Box::new(|| {}),
+            })
+        }
+    }
+
+    /// Quitting while an export runs (any quit, held by the guard or not): the run stops and its job folder, `.jobs`
+    /// with it, is gone by the time `clear_on_quit` returns, before the process could end.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn quitting_mid_export_leaves_no_job_behind() {
+        let dir = tempfile::tempdir().unwrap();
+        let (project, speech) = klipolo_engine::test_support::captions_project("caption.bold", &[]);
+        let req = ExportRequest {
+            formats: vec![FormatKind::Landscape],
+            quality: ExportQuality::High,
+            caption_file: None,
+            allow_stand_ins: false,
+            replaces: None,
+            allow_missing_cursor: false,
+        };
+        let state = Arc::new(crate::export::ExportState::default());
+        let cancel = state.reserve().unwrap();
+        let batch = crate::export::freeze(
+            Arc::new(project),
+            &speech,
+            "en".into(),
+            &req,
+            dir.path(),
+            None,
+        );
+        let job = crate::export::create_job(batch).await.unwrap();
+        let job_dir = job.dir.clone();
+        state.set_job(job.job_id.clone());
+        state.set_job_dir(job_dir.clone());
+        let (started_tx, started) = tokio::sync::oneshot::channel();
+        let started_tx = Mutex::new(Some(started_tx));
+        let running = state.clone();
+        let task = tokio::spawn(async move {
+            let _slot = crate::export::Releases(&running);
+            run(&Hangs, job, cancel, &move |e| {
+                if matches!(e, ExportEvent::Started { .. })
+                    && let Some(tx) = started_tx.lock().unwrap().take()
+                {
+                    let _ = tx.send(());
+                }
+            })
+            .await
+        });
+        started.await.unwrap();
+        assert!(job_dir.is_dir(), "it runs");
+        let quitting = state.clone();
+        tokio::task::spawn_blocking(move || {
+            crate::export::clear_on_quit(&quitting, Duration::from_secs(10))
+        })
+        .await
+        .unwrap();
+        assert!(!job_dir.exists(), "the job is gone as the quit goes on");
+        assert!(!dir.path().join(".jobs").exists(), "and .jobs with it");
+        assert!(!state.is_running());
+        let outcome = task.await.unwrap();
+        assert!(
+            !matches!(outcome, Outcome::Finished(_)),
+            "it stopped: {outcome:?}"
         );
     }
 }

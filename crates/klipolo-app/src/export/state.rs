@@ -30,6 +30,8 @@ struct Slot {
     stop: watch::Sender<bool>,
     /// The job, once the run has one (written by a start, `set_job`, or `ExportEvent::Started`).
     job: Option<String>,
+    /// The job's folder, once written (`set_job_dir`): quitting deletes it on the spot (`cleanup::clear_on_quit`).
+    job_dir: Option<PathBuf>,
     /// The run has said how it ended (failed, finished or stopped) and is letting go of the slot.
     ended: bool,
     /// The project it exports (id, name), once known: a Cancel that doesn't name the job acts only on the open
@@ -67,6 +69,13 @@ impl ExportState {
         }
     }
 
+    /// The run's job folder, as soon as it is written.
+    pub fn set_job_dir(&self, dir: PathBuf) {
+        if let Some(slot) = lock(&self.running).as_mut() {
+            slot.job_dir = Some(dir);
+        }
+    }
+
     /// Takes the one export slot; the receiver hears Cancel. The last batch's files are forgotten.
     pub fn reserve(&self) -> Result<watch::Receiver<bool>, Said> {
         let mut running = lock(&self.running);
@@ -77,6 +86,7 @@ impl ExportState {
         *running = Some(Slot {
             stop,
             job: None,
+            job_dir: None,
             ended: false,
             project: None,
         });
@@ -134,13 +144,17 @@ impl ExportState {
         Ok(())
     }
 
-    /// Quit's stop: the run is stopped and its job deleted, as Cancel does. None when nothing runs; else the receiver
-    /// hears the slot released.
-    pub fn stop_for_quit(&self) -> Option<watch::Receiver<bool>> {
+    /// Quit's stop: the run is stopped, as Cancel does. None when nothing runs; else its job and folder as far as they
+    /// are written, and a receiver that hears the slot released.
+    pub fn stop_for_quit(&self) -> Option<Stopped> {
         let running = lock(&self.running);
         running.as_ref().map(|slot| {
             let _ = slot.stop.send(true);
-            slot.stop.subscribe()
+            Stopped {
+                job: slot.job.clone(),
+                dir: slot.job_dir.clone(),
+                released: slot.stop.subscribe(),
+            }
         })
     }
 
@@ -207,6 +221,13 @@ impl ExportState {
     pub fn set_quitting(&self) {
         self.quitting.store(true, Ordering::SeqCst);
     }
+}
+
+/// A run Quit stopped: its job and folder (when written), and what hears its slot released.
+pub struct Stopped {
+    pub job: Option<String>,
+    pub dir: Option<PathBuf>,
+    pub released: watch::Receiver<bool>,
 }
 
 /// Lets go of the slot when dropped. The run's task holds one, so a panic in it (the runner, an event's `emit`) still

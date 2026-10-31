@@ -2,6 +2,8 @@
 //! only Klipolo's own:
 //! - a run that ends without its files deletes its job (and the folder a Cancel set aside) on the spot, then the
 //!   `.jobs` folder when it is empty (`finish_run`);
+//! - quitting while one runs stops it and deletes its folder on the thread that quits, before the process can end
+//!   (`clear_on_quit`): a background delete could be cut off;
 //! - a crash or a force quit leaves one behind: the next start, and the next launch for the usual folder, sweep it
 //!   (`tidy_jobs`, `sweep_folder`).
 //!
@@ -13,10 +15,12 @@
 
 use std::io;
 use std::path::Path;
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 
 use klipolo_engine::export::job::JOB_FILE;
 use klipolo_engine::export::jobs::{discarded_name, jobs_root, tidy_staging, valid_job_id};
+
+use super::ExportState;
 
 /// `dir` and everything in it, now; a folder already gone is fine. Tried a few times: a delete running beside it (the
 /// engine's own, on its thread) can make one pass meet files that just went.
@@ -55,6 +59,29 @@ pub fn finish_run(dir: &Path, job: &str, finished: bool) {
     }
     if let Some(root) = dir.parent() {
         remove_root_if_empty(root);
+    }
+}
+
+/// Quitting while an export runs (the guard's Quit, or a quit nothing can hold): stops the run, deletes its job folder
+/// at once, waits up to `wait` for the run to let go of the slot, and deletes whatever its worker wrote meanwhile.
+/// Blocking: it runs on the thread that quits, so the process can't end before the files are gone.
+pub fn clear_on_quit(state: &ExportState, wait: Duration) {
+    let Some(stopped) = state.stop_for_quit() else {
+        return;
+    };
+    let job = stopped.job.as_deref();
+    if let Some(dir) = &stopped.dir {
+        remove_job(dir, job);
+    }
+    let until = Instant::now() + wait;
+    while state.is_running() && Instant::now() < until {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    if let Some(dir) = &stopped.dir {
+        remove_job(dir, job);
+        if let Some(root) = dir.parent() {
+            remove_root_if_empty(root);
+        }
     }
 }
 
@@ -119,7 +146,7 @@ pub fn sweep_folder(dir: &Path) {
 
 /// The job folder `dir` holds for a test, its files' times moved `age` into the past.
 #[cfg(test)]
-pub(super) fn age(dir: &Path, age: std::time::Duration) {
+pub(super) fn age(dir: &Path, age: Duration) {
     let then = SystemTime::now() - age;
     let mut paths: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
         .unwrap()
@@ -138,7 +165,6 @@ pub(super) fn age(dir: &Path, age: std::time::Duration) {
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
-    use std::time::Duration;
 
     use super::*;
 

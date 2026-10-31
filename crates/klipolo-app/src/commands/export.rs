@@ -26,7 +26,7 @@ use crate::project::ProjectSessionState;
 /// How long a start waits for this Mac's fonts to be read before checking them: past it nothing is called missing,
 /// and the worker still stops on a frame it would draw with a stand-in.
 const FONTS_WAIT: Duration = Duration::from_secs(2);
-/// How long Quit waits for a stopped export to delete its job before the app goes anyway.
+/// How long Quit waits for a stopped export to let go of its slot before the app goes anyway.
 const STOP_WAIT: Duration = Duration::from_secs(10);
 
 /// The open project as the engine sees it (the latest edit in), with what was said and its text's language.
@@ -357,7 +357,8 @@ pub(crate) fn guard_menu_quit(_app: &tauri::App) -> tauri::Result<()> {
 }
 
 /// The quit guard: quitting (Command Q, or closing the window) while an export runs asks first. Keep exporting goes
-/// back to it; Quit stops it (its job and parts deleted, as Cancel does), then quits.
+/// back to it; Quit stops it (its job and parts deleted, as Cancel does), then quits. A quit that can't be asked about
+/// still stops it and deletes its job on the way out.
 pub(crate) fn guard_quit(app: &AppHandle, event: &RunEvent) {
     match event {
         RunEvent::ExitRequested { api, code, .. } => {
@@ -371,6 +372,13 @@ pub(crate) fn guard_quit(app: &AppHandle, event: &RunEvent) {
         } => {
             if asks_first(app, 0) {
                 api.prevent_close();
+            }
+        }
+        // A quit nothing could ask before (the Dock's Quit, logging out, an AppleScript quit: a Mac app gets no exit
+        // request for those): the running export stops and its job goes now, before the process ends.
+        RunEvent::Exit => {
+            if let Some(state) = app.try_state::<ExportState>() {
+                export::clear_on_quit(&state, EXIT_WAIT);
             }
         }
         _ => {}
@@ -407,16 +415,19 @@ fn asks_first(app: &AppHandle, exit_code: i32) -> bool {
     true
 }
 
-/// Stops the running export, waits (briefly) for its run to delete its job and let go of the slot, then quits.
+/// Stops the running export and deletes its job here, waiting (briefly) for its run to let go of the slot, then quits:
+/// nothing is left to a background delete the exit could cut off.
 async fn stop_then_exit(app: AppHandle, exit_code: i32) {
-    let ended = app.state::<ExportState>().stop_for_quit();
-    if let Some(mut ended) = ended {
-        // The run releases its slot (dropping the sender) once its job is deleted.
-        let released = async { while ended.changed().await.is_ok() {} };
-        let _ = tokio::time::timeout(STOP_WAIT, released).await;
-    }
+    let handle = app.clone();
+    let _ = tauri::async_runtime::spawn_blocking(move || {
+        export::clear_on_quit(&handle.state::<ExportState>(), STOP_WAIT);
+    })
+    .await;
     app.exit(exit_code);
 }
+
+/// How long a quit nothing could hold (the Dock's Quit, logging out) waits for a stopped export to let go of its slot.
+const EXIT_WAIT: Duration = Duration::from_secs(2);
 
 /// The export state at launch, with the usual export folder swept of jobs a crash left (`export::sweep_folder`) on a
 /// thread of its own.
