@@ -16,7 +16,7 @@ export interface ProjectStore {
   /** Every edit made goes in first (`commitsDone`), then the project closes once it's saved. */
   close: () => Promise<void>;
   /**
-   * A project Rust already opened, as Rust has it now (the page loading on the project open at launch). Another project
+   * A project Rust already opened, as Rust has it now (the page loading again with a project open). Another project
    * opens as any does; the open one takes it as a change from elsewhere, keeping the playhead, selection and preview
    * format, and keeping its own copy when that is newer.
    */

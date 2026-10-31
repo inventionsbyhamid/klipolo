@@ -1,18 +1,11 @@
 import { useLingui } from '@lingui/react/macro';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import type { FormatKind } from '../../bindings/FormatKind';
 import type { ProjectRow } from '../../bindings/ProjectRow';
 import { projects } from '../../bridge/projects';
 import { Button } from '../../design/Button';
-import { useProject } from '../../state/project';
+import { newProject, useProject } from '../../state/project';
 import { ProjectCard } from './ProjectCard';
 import './start.css';
-
-/** A new project: "Untitled project" in all three formats, 16:9 first. */
-const NEW_PROJECT: { name: string; formats: FormatKind[] } = {
-  name: 'Untitled project',
-  formats: ['landscape', 'portrait', 'square'],
-};
 
 /** The start screen's own icons, on the design's 24 px grid (1.8 px stroke, `currentColor`). */
 const ICONS = {
@@ -45,10 +38,8 @@ type Load =
   | { status: 'ready'; rows: ProjectRow[] }
   | { status: 'failed'; retrying: boolean };
 
-const noop = () => undefined;
-
 interface StartScreenProps {
-  /** Record your screen: opens the Record dialog. */
+  /** Record your screen: opens the Record dialog. Without it there is no recorder, and no Record your screen. */
   onRecord?: () => void;
 }
 
@@ -57,7 +48,7 @@ interface StartScreenProps {
  * screen. A card opens its project (and the list is read again when it can't be opened: it may have moved); New project
  * makes "Untitled project" in all three formats and opens it. Shown while no project is open.
  */
-export function StartScreen({ onRecord = noop }: StartScreenProps) {
+export function StartScreen({ onRecord }: StartScreenProps) {
   const { t } = useLingui();
   const titleId = useId();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
@@ -119,19 +110,21 @@ export function StartScreen({ onRecord = noop }: StartScreenProps) {
         if (!opened) list();
       });
   };
-  const newProject = () => {
-    if (!busy()) void useProject.getState().create(NEW_PROJECT.name, [...NEW_PROJECT.formats]);
+  const create = () => {
+    if (!busy()) void newProject();
   };
 
   const actions = (
     <div className="start-actions">
-      <Button variant="primary" onClick={newProject}>
+      <Button variant="primary" onClick={create}>
         {t({ id: 'start.new', message: 'New project' })}
       </Button>
-      <Button variant="secondary" onClick={() => onRecord()}>
-        <StartIcon name="record" />
-        {t({ id: 'start.record', message: 'Record your screen' })}
-      </Button>
+      {onRecord && (
+        <Button variant="secondary" onClick={() => onRecord()}>
+          <StartIcon name="record" />
+          {t({ id: 'start.record', message: 'Record your screen' })}
+        </Button>
+      )}
     </div>
   );
   const empty = load.status === 'ready' && load.rows.length === 0;

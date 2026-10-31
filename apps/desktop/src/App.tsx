@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { followAiStatus } from './ai/aiStatus';
 import { isCode } from './bridge/call';
 import { bridge } from './bridge/commands';
+import { cn } from './design/cn';
 import { Toaster } from './design/Toaster';
 import { TooltipProvider } from './design/Tooltip';
 import { useEditorShortcuts } from './features/command-palette/useEditorShortcuts';
 import { ExportDialog } from './features/export/ExportDialog';
 import { useFinderDrop } from './features/media/useFinderDrop';
+import { StartScreen } from './features/start/StartScreen';
 import { followSpeech } from './features/timeline/media/speech';
 import { useEngineSession } from './features/preview/useEngineSession';
 import { Timeline } from './features/timeline/Timeline';
@@ -30,26 +32,49 @@ import { followSaves } from './state/saving';
 import { toast } from './state/toasts';
 import { keepPlayheadInVideo, keepPlayheadOnReload, restorePlayhead } from './state/transport';
 
-/** The name and formats a first launch's project gets: all three formats, 16:9 first. */
-const NEW_PROJECT = { name: 'Untitled project', formats: ['landscape', 'portrait', 'square'] as const };
-
 let started = false;
 
-/** The project Rust opened at launch (the one open when the app last quit), else a new one on a first launch. */
-async function openProject() {
+/**
+ * The project Rust has open as the page loads: none at launch, so the start screen shows; after a reload of the page
+ * (development, a WebKit restart), the one being edited, with the playhead where it was. Settles once Rust has answered.
+ */
+async function loadOpenProject() {
   try {
     await useProject.getState().load(await bridge.snapshot());
-    // A reload of the page (development, a WebKit restart) keeps the playhead where it was.
     restorePlayhead();
   } catch (error) {
-    if (!isCode(error, 'project.none')) return toast.error(errorMessage(error));
-    await useProject.getState().create(NEW_PROJECT.name, [...NEW_PROJECT.formats]);
+    if (!isCode(error, 'project.none')) toast.error(errorMessage(error));
   }
 }
 
-/** The window. */
-export function App() {
+/**
+ * The editor, while a project is open: the library, the preview, the timeline and chat, and the player bar. Finder
+ * drops and the editor's keys work only here.
+ */
+function Editor() {
   const [filesOver, setFilesOver] = useState(false);
+  useFinderDrop(setFilesOver);
+  useEditorShortcuts();
+  return (
+    <>
+      <div className="workspace">
+        <Library />
+        <Preview filesOver={filesOver} />
+        <Timeline />
+        <Chat />
+      </div>
+      <PlayerBar />
+    </>
+  );
+}
+
+/**
+ * The window: the start screen until a project opens, then the editor's layout.
+ * The top bar, the dialogs and the toasts stay throughout.
+ */
+export function App() {
+  // Until Rust says what is open, neither screen shows: a reload with a project open never flashes the start screen.
+  const [asked, setAsked] = useState(false);
   useEffect(() => {
     // Once per page load (React's strict mode runs effects twice in development).
     if (started) return;
@@ -70,23 +95,15 @@ export function App() {
     if (import.meta.env.DEV) void import('./dev/devChat').then((dev) => dev.listenForDevKeys());
     // Until a clip's analysis feeds speech: Control Shift S shows sample speech under the music (development only).
     if (import.meta.env.DEV) void import('./dev/sampleSpeech').then((dev) => dev.listenForSampleSpeech());
-    void openProject();
+    void loadOpenProject().finally(() => setAsked(true));
   }, []);
   useEngineSession();
-  useFinderDrop(setFilesOver);
-  useEditorShortcuts();
   const open = useProject((s) => s.snapshot !== null);
   return (
     <TooltipProvider>
-      <div className="app">
+      <div className={cn('app', !open && 'is-start')}>
         <TopBar />
-        <div className="workspace">
-          <Library />
-          <Preview filesOver={filesOver} />
-          {open ? <Timeline /> : <section className="panel timeline" aria-label="Timeline" />}
-          <Chat />
-        </div>
-        <PlayerBar />
+        {open ? <Editor /> : asked && <StartScreen />}
         <SettingsDialog />
         <ExportDialog />
         <Toaster />

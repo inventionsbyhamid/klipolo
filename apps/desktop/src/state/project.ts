@@ -228,6 +228,11 @@ export const useProject = create<ProjectStore>((set, get) => {
   };
 });
 
+/** The start screen's and the project menu's New project: "Untitled project" in all three formats, 16:9 first. */
+export function newProject(): Promise<boolean> {
+  return useProject.getState().create('Untitled project', ['landscape', 'portrait', 'square']);
+}
+
 /** Where an edit built now is built (`Built`): for ops built before they go in, such as a held burst's. */
 export function captureBase(): Built {
   return capture(useProject.getState().snapshot);

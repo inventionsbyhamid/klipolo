@@ -82,7 +82,7 @@ describe('StartScreen', () => {
   it('lists_projects_with_name_opened_time_and_duration', async () => {
     let answer!: (rows: ProjectRow[]) => void;
     invoke.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
-    renderWithProviders(<StartScreen />);
+    renderWithProviders(<StartScreen onRecord={() => undefined} />);
     const main = screen.getByRole('main', { name: 'Your projects' });
     expect(within(main).getByRole('heading', { name: 'Your projects' })).toBeInTheDocument();
     // Loading: a spinner and one line.
@@ -171,11 +171,9 @@ describe('StartScreen', () => {
     renderWithProviders(<StartScreen />);
     await waitFor(() => expect(cards()).toHaveLength(3));
 
-    // From the keyboard: Tab goes to New project, Record your screen, then the first card; Enter opens it.
+    // From the keyboard: Tab goes to New project, then the first card; Enter opens it.
     await userEvent.tab();
     expect(screen.getByRole('button', { name: 'New project' })).toHaveFocus();
-    await userEvent.tab();
-    expect(screen.getByRole('button', { name: 'Record your screen' })).toHaveFocus();
     await userEvent.tab();
     expect(card('Studio tour')).toHaveFocus();
     await userEvent.keyboard('{Enter}');
@@ -260,6 +258,14 @@ describe('StartScreen', () => {
     expect(bridge.createProject).not.toHaveBeenCalled();
   });
 
+  it('record_is_hidden_without_a_recorder', async () => {
+    recentAnswers(ROWS);
+    renderWithProviders(<StartScreen />);
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    expect(screen.queryByRole('button', { name: 'Record your screen' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'New project' })).toBeInTheDocument();
+  });
+
   it('empty_library_invites_new_or_record', async () => {
     recentAnswers([]);
     const onRecord = vi.fn();
@@ -296,10 +302,9 @@ describe('StartScreen', () => {
     expect(screen.queryByText("Klipolo couldn't make its projects folder.")).not.toBeInTheDocument();
     const again = screen.getByRole('button', { name: 'Try again' });
     expect(again).toHaveClass('btn-secondary');
-    // New project and Record your screen stay in the header, a way on.
+    // New project stays in the header, a way on.
     expect(screen.getByRole('button', { name: 'New project' })).toBeInTheDocument();
 
-    await userEvent.tab();
     await userEvent.tab();
     await userEvent.tab();
     expect(again).toHaveFocus();
@@ -334,7 +339,7 @@ describe('StartScreen', () => {
 
     let answer!: (rows: ProjectRow[]) => void;
     invoke.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
-    const first = renderWithProviders(<StartScreen />);
+    const first = renderWithProviders(<StartScreen onRecord={() => undefined} />);
     check('loading', 1);
     answer(ROWS);
     await waitFor(() => expect(cards()).toHaveLength(3));
@@ -342,13 +347,13 @@ describe('StartScreen', () => {
     first.unmount();
 
     recentAnswers([]);
-    const second = renderWithProviders(<StartScreen />);
+    const second = renderWithProviders(<StartScreen onRecord={() => undefined} />);
     await screen.findByText('No projects yet');
     check('empty', 1);
     second.unmount();
 
     recentAnswers(new Error('no'));
-    renderWithProviders(<StartScreen />);
+    renderWithProviders(<StartScreen onRecord={() => undefined} />);
     await screen.findByRole('alert');
     check('failed', 1);
 

@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Snapshot } from '../bindings/Snapshot';
 import { fixturePatch, fixtureSnapshot } from '../test/fixtures';
 
 vi.mock('../bridge/commands', () => ({
@@ -12,13 +13,33 @@ const { useSaving } = await import('../state/saving');
 const { TopBar } = await import('./TopBar');
 const { useExport } = await import('../state/export');
 
+/** The fixture project with nothing on its timeline. */
+function emptySnapshot(): Snapshot {
+  const snapshot = fixtureSnapshot();
+  return { ...snapshot, project: { ...snapshot.project, timeline: { main: [], tracks: [] } } };
+}
+
 beforeEach(() => {
   useProject.setState({ snapshot: null, pending: 0 });
   useSaving.setState({ failing: null, saved: null });
 });
 
 describe('TopBar', () => {
+  it('top_bar_on_the_start_screen_has_no_undo_redo_or_export', () => {
+    render(<TopBar />);
+    const bar = screen.getByRole('banner');
+    // The app icon, the AI chip and Settings.
+    expect(within(bar).getByRole('img', { name: 'Klipolo' })).toBeInTheDocument();
+    expect(within(bar).getByRole('button', { name: 'Settings' })).toBeInTheDocument();
+    expect(within(bar).queryByRole('button', { name: /Undo|Redo/ })).toBeNull();
+    expect(within(bar).queryByRole('button', { name: 'Export' })).toBeNull();
+    expect(within(bar).queryByText('Untitled project')).toBeNull();
+    expect(within(bar).queryByText('Saved')).toBeNull();
+    expect(bar.querySelector('.project, .topbar-divider')).toBeNull();
+  });
+
   it('says why Export is off without a video, and opens the export dialog with one', async () => {
+    useProject.setState({ snapshot: emptySnapshot() });
     const { rerender } = render(<TopBar />);
     const exportButton = () => screen.getByRole('button', { name: 'Export' });
     expect(exportButton()).toBeDisabled();
