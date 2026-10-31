@@ -57,6 +57,8 @@ export function App() {
     followSpeech();
     // Until chat proposes cuts: Control Shift P shows a sample proposal (development builds only).
     if (import.meta.env.DEV) void import('./dev/sampleProposal').then((dev) => dev.listenForSampleProposal());
+    // Until a clip's analysis feeds speech: Control Shift S shows sample speech under the music (development only).
+    if (import.meta.env.DEV) void import('./dev/sampleSpeech').then((dev) => dev.listenForSampleSpeech());
     void openProject();
   }, []);
   useEngineSession();
