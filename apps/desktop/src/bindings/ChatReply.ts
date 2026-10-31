@@ -27,8 +27,9 @@ questions: Array<string>, applied: ChatApplied | null,
  */
 undone: SnapshotPatch | null, proposal: ChatProposal | null, moments: Array<ChatMoment>, 
 /**
- * The revision after its commits (what it applied, what the model's undo changed): the one its moments' times
- * are on, which "Keep only these" sends back.
+ * The revision after its commits (what it applied, what the model's undo changed), which "Keep only these" sends
+ * back. Its moments' times are on it: moments found beside the model's undo, or while the project moved on, are
+ * left out.
  */
 revision: number, 
 /**
