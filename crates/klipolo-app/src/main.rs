@@ -171,6 +171,8 @@ fn main() {
     app.run(|app, event| {
         // Quitting while an export runs asks first.
         commands::export::guard_quit(app, &event);
+        // A take still armed at exit is disarmed: no worker outlives Klipolo waiting with its global key.
+        recorder::release_on_exit(app, &event);
         // Every edit is on the disk before the app goes.
         if let RunEvent::Exit = event
             && let Err(error) = app.state::<ProjectSessionState>().flush()

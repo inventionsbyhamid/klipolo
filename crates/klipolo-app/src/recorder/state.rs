@@ -207,6 +207,13 @@ impl RecorderState {
     pub(super) fn active(&self) -> bool {
         self.on.as_ref().is_some_and(|on| on.recorder.active())
     }
+
+    /// Klipolo exits: a take that hasn't started is disarmed. True when one was.
+    pub(super) fn disarm_unstarted(&self) -> bool {
+        self.on
+            .as_ref()
+            .is_some_and(|on| on.recorder.disarm_unstarted())
+    }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {

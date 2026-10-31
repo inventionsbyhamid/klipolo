@@ -208,6 +208,43 @@ fn the_recorder_is_active_from_arming_through_saving() {
     assert!(!rec.state.active());
 }
 
+/// Klipolo exits: a take that hasn't started is disarmed, so no armed worker outlives the app with ⌥⌘R registered. A
+/// take past its start records on, orphaned, and stops from its own menu-bar item.
+#[test]
+fn exiting_disarms_a_take_that_has_not_started() {
+    for said in [None, Some(Armed), Some(Starting), Some(Countdown)] {
+        let rec = fixture();
+        rec.arm(options_screen()).unwrap();
+        if said.is_some() && said != Some(Armed) {
+            rec.send(Command::Start).unwrap();
+        }
+        if let Some(s) = said {
+            rec.launch.emit(state(s));
+        }
+        rec.settle();
+        assert!(rec.state.disarm_unstarted(), "{said:?}");
+        assert_eq!(
+            rec.launch.commands().last(),
+            Some(&Command::Disarm),
+            "{said:?}"
+        );
+        // Sent once.
+        assert!(!rec.state.disarm_unstarted());
+    }
+    let rec = fixture();
+    rec.arm(options_screen()).unwrap();
+    rec.send(Command::Start).unwrap();
+    rec.launch.emit(state(Recording));
+    rec.settle();
+    assert!(
+        !rec.state.disarm_unstarted(),
+        "recording: left to its worker"
+    );
+    assert_eq!(rec.launch.commands(), [Command::Start]);
+    let rec = fixture();
+    assert!(!rec.state.disarm_unstarted(), "no take");
+}
+
 #[test]
 fn test_run_never_makes_a_backend_or_worker() {
     assert!(
@@ -255,6 +292,7 @@ fn test_run_never_makes_a_backend_or_worker() {
     );
     assert_eq!(code_of(&refused.unwrap_err()), test_run_code);
     assert!(!state.active());
+    assert!(!state.disarm_unstarted());
     assert!(
         !built.load(Ordering::SeqCst),
         "no backend, no launch, no probe"

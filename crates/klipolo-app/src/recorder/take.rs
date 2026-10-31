@@ -2,7 +2,7 @@
 //! captures: arming launches a worker that waits, and only the person's Record press (`send(Start)`) starts it.
 
 use std::io::{self, BufRead, Write};
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use klipolo_capture::session::{self, SessionConfig, SessionDir};
@@ -45,6 +45,9 @@ pub struct Recorder {
     pub(super) slot: Mutex<Slot>,
     /// Lines and exits handled so far (tests wait for their fake worker's).
     pub(super) handled: AtomicU64,
+    /// A take is the slot's (`active`), mirrored so it is read without the slot's lock, which covers file and process
+    /// work.
+    pub(super) active: AtomicBool,
 }
 
 impl Recorder {
@@ -53,7 +56,13 @@ impl Recorder {
             env,
             slot: Mutex::default(),
             handled: AtomicU64::new(0),
+            active: AtomicBool::new(false),
         })
+    }
+
+    /// `active` follows the slot's take; called wherever the take is placed or let go, under the lock.
+    pub(super) fn sync_active(&self, slot: &Slot) {
+        self.active.store(slot.take.is_some(), Ordering::SeqCst);
     }
 
     /// The slot, locked. A command that panicked must not leave the recorder locked for the rest of the session.
@@ -90,6 +99,7 @@ impl Recorder {
             countdown_s: cfg.countdown_s,
         };
         let reader = self.place(&mut slot, cfg)?;
+        self.sync_active(&slot);
         self.start_ticker(&mut slot);
         drop(slot);
         reader.start(self);

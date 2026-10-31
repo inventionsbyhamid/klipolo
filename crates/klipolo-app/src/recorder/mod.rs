@@ -53,4 +53,5 @@ mod tests_supervise;
     reason = "read by the quit guard and the engine's hold, which come with the take's landing"
 )]
 pub use active::active;
+pub use active::release_on_exit;
 pub use state::RecorderState;
