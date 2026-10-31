@@ -3,6 +3,10 @@
 `fixtures/tools_list.json` is what Klipolo's `tools/list` answers (`klipolo_mcp::listed("tools/list")`), and
 `fixtures/initialize.json` what its `initialize` answers. Klipolo's schemas are strict already, so they must pass
 through unchanged.
+
+To refresh them, print `serde_json::to_string_pretty` of `klipolo_mcp::listed("tools/list")` and of
+`klipolo_mcp::initialize_result("2025-11-25")` from a build of the Klipolo they must match. `test_real_bridge.py`, run
+with that build's bridge, says when they no longer match.
 """
 
 import copy

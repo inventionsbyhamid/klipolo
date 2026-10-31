@@ -341,7 +341,7 @@
         "additionalProperties": false,
         "properties": {
           "atSec": {
-            "description": "Start. Null for the playhead; 0.0 for background music.",
+            "description": "Start. Null for 0.0, as background music.",
             "type": [
               "number",
               "null"
@@ -438,7 +438,7 @@
             "type": "string"
           },
           "text": {
-            "description": "The words, as the person wrote them.",
+            "description": "The words to show, as you want them on screen.",
             "type": "string"
           }
         },
@@ -574,7 +574,7 @@
       "annotations": {
         "readOnlyHint": false
       },
-      "description": "A full-screen title card: the person's title over a background Muse Image draws, with no lettering in the picture. Only when the person asks for a title card or a picture behind the title; for words over the video, use addText.",
+      "description": "A full-screen title card: your title over a background Muse Image draws, with no lettering in the picture. Use it when a title card or a picture behind the title is wanted; for words over the video, use addText.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -597,7 +597,7 @@
             "type": "string"
           },
           "title": {
-            "description": "The title, the person's exact words.",
+            "description": "The title to show, in your own words.",
             "type": "string"
           }
         },
