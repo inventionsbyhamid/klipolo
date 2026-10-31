@@ -18,7 +18,9 @@ use super::frames::{AppOut, PreviewOut};
 use super::permissions::open_url;
 use super::relaunch::REOPEN_EXIT_CODE;
 use super::state::RecorderState;
-use super::types::{ArmOptions, ArmedTake, PreviewKind, Previews, PrivacyPage, StoppedTake};
+use super::types::{
+    ArmOptions, ArmedTake, BackFromReopen, PreviewKind, Previews, PrivacyPage, StoppedTake,
+};
 use super::words;
 use crate::project::ProjectSessionState;
 
@@ -90,6 +92,13 @@ pub async fn recorder_reopen(app: AppHandle) -> Result<(), Said> {
         state.reopen(&exporting, flush, || app.exit(REOPEN_EXIT_CODE))
     })
     .await
+}
+
+/// Klipolo opened just after Reopen Klipolo: the project open then, so the page opens it again with the Record dialog,
+/// where the person was. Once per run; None otherwise, and in a test run.
+#[tauri::command]
+pub async fn recorder_back_from_reopen(app: AppHandle) -> Result<Option<BackFromReopen>, Said> {
+    blocking(app, |_, state| Ok(state.back_from_reopen())).await
 }
 
 /// "Open privacy settings": Screen Recording's, the camera's or the microphone's page.

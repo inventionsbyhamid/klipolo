@@ -308,3 +308,47 @@ fn still_refused_after_reopen_the_step_explains_until_it_is_allowed() {
     assert!(!setup_with(Permission::Granted).screen_refused_after_reopen);
     assert!(!setup_with(Permission::NotAsked).screen_refused_after_reopen);
 }
+
+/// Klipolo opens again just after Reopen Klipolo: the page gets the project open then, once, to open it again with the
+/// Record dialog. From the start screen there is none.
+#[test]
+fn back_from_reopen_klipolo_gives_the_project_that_was_open_once() {
+    use super::types::BackFromReopen;
+    let dir = tempfile::tempdir().unwrap();
+    let launch = || {
+        let (parts, world) = world(dir.path(), Script::default());
+        (super::state::RecorderState::build(false, || parts), world)
+    };
+    let (state, world) = launch();
+    assert_eq!(state.back_from_reopen(), None, "an ordinary launch");
+    state.reopen(&|| false, || Ok(()), || ()).unwrap();
+    let file = world.project.lock().unwrap().clone().unwrap().file;
+    let (again, again_world) = launch();
+    let project = Some(file.to_string_lossy().into_owned());
+    assert_eq!(again.back_from_reopen(), Some(BackFromReopen { project }));
+    assert_eq!(again.back_from_reopen(), None, "once");
+    // Pressed on the start screen.
+    *again_world.project.lock().unwrap() = None;
+    again.reopen(&|| false, || Ok(()), || ()).unwrap();
+    let (back, _) = launch();
+    assert_eq!(
+        back.back_from_reopen(),
+        Some(BackFromReopen { project: None })
+    );
+}
+
+/// A launch long after Reopen Klipolo isn't its reopen, and the memory stays for the setup's "still refused".
+#[test]
+fn a_launch_long_after_reopen_klipolo_is_not_its_reopen() {
+    use super::screen_reopen::{back_from, refused_after_reopen, remember};
+    let dir = tempfile::tempdir().unwrap();
+    let files = super::setup::Files {
+        dir: dir.path().join("recorder"),
+    };
+    let tour = std::path::Path::new("/p/Tour.klipolo");
+    remember(&files, 1_000, Some(tour)).unwrap();
+    let back = back_from(&files, 1_000 + 120_000).unwrap();
+    assert_eq!(back.project.as_deref(), Some("/p/Tour.klipolo"));
+    assert_eq!(back_from(&files, 1_000 + 120_001), None);
+    assert!(refused_after_reopen(&files, Permission::Denied));
+}

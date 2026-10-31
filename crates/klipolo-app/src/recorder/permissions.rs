@@ -10,6 +10,7 @@
 //!   macOS still refuses.
 //! - **Open privacy settings** opens Screen Recording's, the camera's or the microphone's page. It only opens the page.
 
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use klipolo_capture::backend::Backend;
@@ -56,11 +57,12 @@ pub(super) fn open_privacy(page: PrivacyPage, open: Open<'_>) -> Result<(), Code
 /// "Reopen Klipolo": refused while an export runs (`exporting`: `capture.permission.reopenExporting`, asked again once
 /// the project is saved, as one may start meanwhile) or `recorder` has a take, armed through saving (`capture.busy`).
 /// Otherwise no take arms from now on, the project is saved (`flush`; a failure keeps Klipolo open and says why, and
-/// takes arm again), the reopen is remembered in `files`, and Klipolo quits to open again (`restart`). A second press
-/// while it is under way does nothing more.
+/// takes arm again), the reopen is remembered in `files` with the `project` open (its file), and Klipolo quits to open
+/// again (`restart`). A second press while it is under way does nothing more.
 pub(super) fn reopen(
     recorder: &Recorder,
     files: Option<&Files>,
+    project: Option<&Path>,
     exporting: &dyn Fn() -> bool,
     flush: impl FnOnce() -> Result<(), Said>,
     restart: impl FnOnce(),
@@ -86,7 +88,7 @@ pub(super) fn reopen(
         let at_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_millis() as u64);
-        if let Err(error) = screen_reopen::remember(files, at_ms) {
+        if let Err(error) = screen_reopen::remember(files, at_ms, project) {
             tracing::warn!(%error, "recorder: Reopen Klipolo wasn't remembered");
         }
     }

@@ -21,10 +21,11 @@ use super::launch::{Launch, ProcessLaunch, WorkerIo};
 use super::permissions::{self, Open};
 use super::previews::PreviewWorkers;
 use super::relaunch::Relaunch;
+use super::screen_reopen;
 use super::setup::{self, Files, Probing, Shown};
 use super::sink::AppSink;
 use super::take::Recorder;
-use super::types::{ArmOptions, ArmedTake, PrivacyPage, StoppedTake};
+use super::types::{ArmOptions, ArmedTake, BackFromReopen, PrivacyPage, StoppedTake};
 use super::window::{MainWindow, Window};
 use super::words;
 use crate::project::{ProjectSessionState, with_open};
@@ -93,6 +94,8 @@ struct On {
     probe_failed: AtomicBool,
     /// The Record dialog's previews.
     previews: Arc<PreviewWorkers>,
+    /// Klipolo opened just after Reopen Klipolo: what the page opens again, given once.
+    back: Mutex<Option<BackFromReopen>>,
 }
 
 pub struct RecorderState {
@@ -135,6 +138,8 @@ impl RecorderState {
         let permissions = Box::new(move || read.get().permissions());
         let previews =
             PreviewWorkers::new(launch, clock, recorder.clone(), permissions, parts.ticker);
+        let back =
+            (parts.files.as_ref()).and_then(|files| screen_reopen::back_from(files, now_ms()));
         Self {
             on: Some(On {
                 recorder,
@@ -147,6 +152,7 @@ impl RecorderState {
                 probing: Mutex::new(()),
                 probe_failed: AtomicBool::new(false),
                 previews,
+                back: Mutex::new(back),
             }),
             relaunch: Relaunch::default(),
         }
@@ -261,7 +267,21 @@ impl RecorderState {
         restart: impl FnOnce(),
     ) -> Result<(), Said> {
         let on = self.on()?;
-        permissions::reopen(&on.recorder, on.files.as_ref(), exporting, flush, restart)
+        let project = (on.open_project)().map(|opened| opened.file);
+        permissions::reopen(
+            &on.recorder,
+            on.files.as_ref(),
+            project.as_deref(),
+            exporting,
+            flush,
+            restart,
+        )
+    }
+
+    /// Klipolo opened just after Reopen Klipolo: the project open then, for the page to open again with the Record
+    /// dialog. Once per run; None otherwise, and in a test run.
+    pub(super) fn back_from_reopen(&self) -> Option<BackFromReopen> {
+        self.on.as_ref().and_then(|on| lock(&on.back).take())
     }
 
     /// The Record dialog's previews (`previews`); `capture.error.testRun` in a test run.
@@ -289,6 +309,13 @@ impl RecorderState {
             .as_ref()
             .is_some_and(|on| on.recorder.disarm_unstarted())
     }
+}
+
+/// Now, in ms since 1970.
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
