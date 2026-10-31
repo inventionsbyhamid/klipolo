@@ -144,6 +144,7 @@ fn project(path: &str) -> Project {
         fps: f64::from(FPS),
         has_audio: false,
         audio_lead_us: None,
+        made_with: None,
         rotation: None,
     }];
     p.timeline.main = vec![Clip::new(

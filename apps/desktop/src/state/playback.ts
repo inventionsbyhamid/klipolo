@@ -3,6 +3,7 @@ import type { StateReason } from '../bindings/StateReason';
 import { engine } from '../bridge/engine';
 import { errorMessage } from '../lib/errors';
 import { frameIndexAt, frameStartUs } from '../lib/time';
+import { noteFrameShown } from './framesShown';
 import { clockAnchor, clockUs, holdClock, reportFrame } from './playClock';
 import { toast } from './toasts';
 
@@ -126,6 +127,8 @@ export const usePlayback = create<PlaybackStore>((set, get) => ({
     set((s) => ({ playheadUs: 0, playing: false, rate: 1, seq: s.seq + 1 }));
   },
   onFrame: (frame) => {
+    // Work waiting for the picture to catch up (a title typed on the canvas hands back to the preview's frames).
+    noteFrameShown();
     const s = get();
     if (!s.playing || !frame.playback || frame.seq !== s.seq) return;
     // Only the clock's anchor moves the playhead's animation; the store follows for what depends on the scene (no DOM

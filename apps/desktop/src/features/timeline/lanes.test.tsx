@@ -19,7 +19,10 @@ const { useSelection } = await import('../../state/selection');
 const { useUi } = await import('../../state/ui');
 const { Timeline } = await import('./Timeline');
 const { audioRole } = await import('./lanes/audioRole');
-const { dropTargetAt, setDropIndicator } = await import('./dropTarget');
+const { dropTargetAt, setDropIndicator, useDropIndicator } = await import('./dropTarget');
+const { layerStartUs } = await import('./model/dropOps');
+const { usToPx } = await import('./scale');
+const { videoDurationUs } = await import('../../lib/timeline');
 
 const S = 1_000_000;
 type AudioContent = Extract<ItemContent, { type: 'audio' }>;
@@ -65,7 +68,7 @@ describe('the four lanes', () => {
     expect(sounds.querySelector('.tl-lane')).not.toHaveClass('is-empty');
   });
 
-  it('a sound held over the Music lane shows on the Sounds lane, where it lands; each lane marks only its own', () => {
+  it('a sound held over the Music lane shows on the Music lane, where it lands as music; each lane marks only its own', () => {
     useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
     renderWithProviders(<Timeline />);
     const lane = (name: string) => screen.getByRole('group', { name }).querySelector<HTMLElement>('.tl-lane')!;
@@ -82,7 +85,19 @@ describe('the four lanes', () => {
     ] as const;
     for (const [name, top, height] of rows) box(document.querySelector(`[data-lane="${name}"]`)!, top, height);
     act(() => setDropIndicator(dropTargetAt(40 + 120, 160, 'audio')));
+    expect(lane('Music')).toHaveClass('is-drop');
+    expect(lane('Sound effects')).not.toHaveClass('is-drop');
+    // Music fills the video from where it is let go: its ghost runs to the video's end, not the file's length.
+    const ghost = document.querySelector<HTMLElement>('[data-drop-indicator]')!;
+    const project = useProject.getState().snapshot!.project;
+    const held = useDropIndicator.getState().target as { atUs: number };
+    const from = layerStartUs(project, held.atUs, project.settings.fps);
+    const pps = useUi.getState().pxPerSecond;
+    expect(ghost.style.width).toBe(`${Math.max(4, usToPx(videoDurationUs(project.timeline) - from, pps))}px`);
+    act(() => setDropIndicator(dropTargetAt(40 + 120, 125, 'audio')));
     expect(lane('Sound effects')).toHaveClass('is-drop');
+    // A sound effect's ghost is its own length (a file from Finder: not known yet).
+    expect(ghost.style.width).toBe('48px');
     expect(lane('Music')).not.toHaveClass('is-drop');
     // A picture over the Overlays lane marks that lane alone.
     act(() => setDropIndicator(dropTargetAt(40 + 120, 30, 'image')));

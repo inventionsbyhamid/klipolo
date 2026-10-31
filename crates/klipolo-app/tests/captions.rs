@@ -65,6 +65,7 @@ fn video(id: &str, secs: f64) -> Asset {
         rotation: None,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
     }
 }
 

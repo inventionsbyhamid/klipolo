@@ -294,7 +294,7 @@ fn newer_projects_refuse_edits() {
     save(&file, &project, Durability::Full).unwrap();
     let before = std::fs::read(&file).unwrap();
     let state = ProjectSessionState::default();
-    let open = open_file(&file).unwrap();
+    let open = open_file(&file, &Pack::default()).unwrap();
     let notice = open.document.snapshot().read_only;
     assert_eq!(
         notice.as_deref(),
@@ -588,26 +588,11 @@ fn save_failures_read_as_plain_sentences() {
     );
 }
 
-/// The page may read a project's media through the asset protocol, and nothing else its file names: not a pack's file,
-/// not a file of another type (a project edited by hand to point at `~/.ssh/id_rsa`).
+/// The page may be sent a project's media files, and nothing else its file names: not a pack's file, not a file of
+/// another type (a project edited by hand to point at `~/.ssh/id_rsa`).
 #[test]
 fn only_a_projects_media_files_are_served_to_the_page() {
-    use klipolo_model::project::{Asset, AssetKind};
-    let asset = |path: &str| Asset {
-        id: path.into(),
-        kind: AssetKind::Video,
-        path: path.into(),
-        name: "x".into(),
-        duration_us: 1_000_000,
-        width: 16,
-        height: 9,
-        fps: 30.0,
-        rotation: Some(0),
-        has_audio: false,
-        audio_lead_us: Some(0),
-    };
-    let mut project = Project::new("Served");
-    project.assets = [
+    let served: Vec<&str> = [
         "/clips/talk.MOV",
         "/music/song.mp3",
         "/pictures/logo.png",
@@ -615,11 +600,12 @@ fn only_a_projects_media_files_are_served_to_the_page() {
         "/home/me/notes.txt",
         "pack://fx@1/glow.png",
     ]
-    .map(asset)
-    .to_vec();
+    .into_iter()
+    .filter(|path| servable(path))
+    .collect();
     assert_eq!(
-        served_files(&project),
-        ["/clips/talk.MOV", "/music/song.mp3", "/pictures/logo.png"].map(PathBuf::from)
+        served,
+        ["/clips/talk.MOV", "/music/song.mp3", "/pictures/logo.png"]
     );
 }
 
@@ -684,6 +670,7 @@ fn two_clips(file: &Path) -> ProjectSessionState {
         rotation: None,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
     };
     let clip = |id: &str, from: i64| {
         let mut clip = Clip::new(
@@ -759,5 +746,139 @@ fn deleting_everything_leaves_valid_empty_project() {
     assert_eq!(
         back.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
         ["a", "b"]
+    );
+}
+
+/// Music added through a media command plays to the video's end; a cut made after it keeps it playing to the new end,
+/// fading out there, in the cut's own undo step (the apply path every edit takes refits the music).
+#[test]
+fn music_added_by_command_follows_a_cut_in_one_undo_step() {
+    use klipolo_model::media::music::{MUSIC_FADE_OUT_US, MusicOpts, add_music_ops, is_music};
+    use klipolo_model::project::{Asset, AssetKind};
+    use klipolo_model::query::video_duration;
+    use klipolo_model::timeline::ItemContent;
+    let dir = tempfile::tempdir().unwrap();
+    let state = two_clips(&dir.path().join("p.klipolo"));
+    let song = Asset {
+        id: "song".into(),
+        kind: AssetKind::Audio,
+        path: "/music/song.mp3".into(),
+        name: "song.mp3".into(),
+        duration_us: 60_000_000,
+        width: 0,
+        height: 0,
+        fps: 0.0,
+        rotation: None,
+        has_audio: true,
+        audio_lead_us: None,
+        made_with: None,
+    };
+    let added = build_and_apply(&state, None, Some(1), "media.music.add", |p| {
+        add_music_ops(p, &song, MusicOpts::default()).map_err(|e| Said::Coded(e.coded()))
+    })
+    .unwrap();
+    assert_eq!(added.history.undo_label.as_deref(), Some("media.music.add"));
+    // Built on a revision the project moved on from: refused.
+    let stale = build_and_apply(&state, None, Some(1), "media.music.add", |_| Ok(Vec::new()));
+    assert_eq!(stale.unwrap_err(), ApplyError::Moved);
+    let music_end = |state: &ProjectSessionState| {
+        let guard = lock(state);
+        let p = guard.as_ref().unwrap().document.project();
+        let music: Vec<_> = p
+            .timeline
+            .tracks
+            .iter()
+            .flat_map(|t| &t.items)
+            .filter(|i| is_music(i))
+            .collect();
+        let last = music.iter().max_by_key(|i| i.end_us()).unwrap();
+        let ItemContent::Audio { fade_out_us, .. } = last.content else {
+            panic!("music")
+        };
+        (last.end_us(), fade_out_us, video_duration(&p.timeline))
+    };
+    assert_eq!(
+        music_end(&state),
+        (20_000_000, MUSIC_FADE_OUT_US, 20_000_000)
+    );
+    let cut = Transaction {
+        label: "undo.delete.range".into(),
+        ops: vec![Op::DeleteRanges {
+            ranges: vec![klipolo_model::time::RangeUs {
+                start: 5_000_000,
+                end: 9_000_000,
+            }],
+        }],
+        ..rename("")
+    };
+    with_open(&state, |open| apply_and_commit(open, &cut)).unwrap();
+    assert_eq!(
+        music_end(&state),
+        (16_000_000, MUSIC_FADE_OUT_US, 16_000_000)
+    );
+    // One undo: the cut and the refit go back together.
+    with_open(&state, |open| step(open, false)).unwrap();
+    assert_eq!(
+        music_end(&state),
+        (20_000_000, MUSIC_FADE_OUT_US, 20_000_000)
+    );
+}
+
+/// A pack in `dir` with one sound, `whoosh`, as Klipolo's manifest lists it.
+fn pack_in(dir: &Path) -> Pack {
+    std::fs::create_dir_all(dir.join("sounds")).unwrap();
+    std::fs::write(dir.join("sounds/whoosh.wav"), b"RIFF").unwrap();
+    std::fs::write(
+        dir.join("manifest.json"),
+        r#"{"items": [{"id": "whoosh", "name": "Whoosh", "category": "sound", "file": "sounds/whoosh.wav", "duration_ms": 900}]}"#,
+    )
+    .unwrap();
+    Pack::read(dir)
+}
+
+/// A project saved where one install had the pack (an app since moved, a translocated copy, a removed build) opens with
+/// its pack sounds pointed at this install's pack; the person's own files keep their paths.
+#[test]
+fn pack_files_saved_with_one_pack_dir_open_from_another() {
+    let dir = tempfile::tempdir().unwrap();
+    let (old, new) = (
+        pack_in(&dir.path().join("old")),
+        pack_in(&dir.path().join("new")),
+    );
+    let mut project = Project::new("Pack sounds");
+    let whoosh = old.asset("whoosh").unwrap();
+    assert!(
+        whoosh
+            .path
+            .starts_with(&*dir.path().join("old").to_string_lossy())
+    );
+    let mut own = whoosh.clone();
+    own.id = "kiln".into();
+    own.path = "/Users/rosa/Sounds/kiln-door.wav".into();
+    project.assets = vec![whoosh, own];
+    let file = dir.path().join("Pack sounds.klipolo");
+    save(&file, &project, Durability::Full).unwrap();
+    std::fs::remove_dir_all(dir.path().join("old")).unwrap();
+    let open = open_file(&file, &new).unwrap();
+    let paths: Vec<&str> = open
+        .document
+        .project()
+        .assets
+        .iter()
+        .map(|a| a.path.as_str())
+        .collect();
+    let moved = dir.path().join("new/sounds/whoosh.wav");
+    assert_eq!(
+        paths,
+        [
+            &*moved.to_string_lossy(),
+            "/Users/rosa/Sounds/kiln-door.wav"
+        ]
+    );
+    // With no pack at all (a build without one), the path stays as saved.
+    let open = open_file(&file, &Pack::default()).unwrap();
+    assert_eq!(
+        open.document.project().assets[0].path,
+        project.assets[0].path
     );
 }

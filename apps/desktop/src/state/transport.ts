@@ -27,3 +27,45 @@ export function keepPlayheadInVideo(): () => void {
     if (!playing && playheadUs > durationUs) seek(durationUs);
   });
 }
+
+/** Where the playhead was when the page went away (a reload in development, a WebKit content restart). */
+const KEPT = 'klipolo.playhead';
+
+/**
+ * Keeps the playhead's place across a reload of the page: it is noted as the page goes (`pagehide`), with the project
+ * it was in, and `restorePlayhead` takes it back once that project is open again. Nothing is kept across projects or
+ * past the session (sessionStorage). Returns the stop.
+ */
+export function keepPlayheadOnReload(): () => void {
+  const note = () => {
+    const project = useProject.getState().snapshot?.project.id;
+    if (!project) return;
+    try {
+      sessionStorage.setItem(KEPT, JSON.stringify({ project, us: usePlayback.getState().playheadUs }));
+    } catch {
+      // Storage refused (private mode, quota): the playhead starts at 0, as before.
+    }
+  };
+  window.addEventListener('pagehide', note);
+  return () => window.removeEventListener('pagehide', note);
+}
+
+/** The playhead back where it was before the page reloaded, when the same project is open (within its video). */
+export function restorePlayhead() {
+  const kept = takeKept();
+  const snapshot = useProject.getState().snapshot;
+  if (!kept || !snapshot || kept.project !== snapshot.project.id || typeof kept.us !== 'number') return;
+  const durationUs = videoDurationUs(snapshot.project.timeline);
+  usePlayback.getState().seek(Math.min(Math.max(kept.us, 0), durationUs));
+}
+
+/** What `keepPlayheadOnReload` noted, taken once (null when nothing was, or storage is refused). */
+function takeKept(): { project?: string; us?: number } | null {
+  try {
+    const kept = JSON.parse(sessionStorage.getItem(KEPT) ?? 'null') as { project?: string; us?: number } | null;
+    sessionStorage.removeItem(KEPT);
+    return kept;
+  } catch {
+    return null;
+  }
+}

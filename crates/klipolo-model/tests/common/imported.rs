@@ -102,6 +102,7 @@ pub fn sync_shapes(p: &mut Project) -> Vec<klipolo_model::ops::Op> {
     use klipolo_model::ops::{Op, SourcePatch};
     p.assets.push(Asset {
         audio_lead_us: Some(40_000),
+        made_with: None,
         ..asset("interview", AssetKind::Video, 600.0, 1920, 1080, true)
     });
     p.assets

@@ -1,5 +1,7 @@
+import { t } from '@lingui/core/macro';
 import { create } from 'zustand';
 import type { AssetKind } from '../../bindings/AssetKind';
+import { kindOfPath } from '../../lib/mediaKinds';
 import type { Project } from '../../bindings/Project';
 import { snapToFrame } from '../../lib/time';
 import { usePlayback } from '../../state/playback';
@@ -16,14 +18,48 @@ export type { DropTarget } from './model/dropOps';
 
 /** The map from a point to a target; `kind`: what is dragged, when known (files in Finder aren't). */
 type TargetAt = (clientX: number, clientY: number, kind?: AssetKind | null) => DropTarget | null;
+/** The timeline lane under a point: Overlays, Video, Sounds or Music; null off the lanes. */
+export type Lane = 'layers' | 'main' | 'sounds' | 'music';
+type LaneAt = (clientX: number, clientY: number) => Lane | null;
 
 /** The timeline's point-to-target map and its lanes' scroller, while one is on screen (`TimelineView` registers it). */
 let targetAt: TargetAt | null = null;
+let laneAt: LaneAt | null = null;
 let lanes: HTMLElement | null = null;
 
-export function registerDropTarget(fn: TargetAt | null, scroller: HTMLElement | null = null) {
+export function registerDropTarget(
+  fn: TargetAt | null,
+  scroller: HTMLElement | null = null,
+  lane: LaneAt | null = null,
+) {
   targetAt = fn;
+  laneAt = fn ? lane : null;
   lanes = fn ? scroller : null;
+}
+
+/** What each lane takes, as the person hears it when something else is let go there. */
+const goesOn = {
+  audio: () => t({ id: 'drop.refused.sound', message: 'Sounds go on the Sounds or Music lane.' }),
+  image: () => t({ id: 'drop.refused.picture', message: 'Pictures go on the Overlays lane.' }),
+  video: () => t({ id: 'drop.refused.video', message: 'Videos go on the Video or Overlays lane.' }),
+};
+
+/**
+ * Why media of `kind` let go at this point goes nowhere: it is over a lane that won't take it (a picture on the Video
+ * or a sound lane, a sound on the Video or Overlays lane, a video on a sound lane). Null where it would land, off the
+ * lanes, in a read-only project, or when the kind isn't known.
+ */
+export function dropRefusal(clientX: number, clientY: number, kind: AssetKind | null): string | null {
+  // A read-only project takes nothing anywhere: no lane is the wrong one.
+  if (!kind || useProject.getState().snapshot?.readOnly || dropTargetAt(clientX, clientY, kind)) return null;
+  const lane = laneAt?.(clientX, clientY) ?? null;
+  return lane ? goesOn[kind]() : null;
+}
+
+/** What Finder is dragging, by the files' extensions: one kind when they are all of it, else null (any lane). */
+export function kindOfPaths(paths: string[]): AssetKind | null {
+  const kinds = new Set(paths.map(kindOfPath));
+  return kinds.size === 1 ? [...kinds][0] : null;
 }
 
 /**
@@ -102,12 +138,12 @@ function edgesOf(project: Project): Float64Array {
 
 /**
  * Over `scroller`'s lanes (below its ruler, `headBottom`): the main lane gives the cut nearest the pointer's time; the
- * Overlays lane a picture layer there; the Sounds and Music lanes a sound. A layer's start keeps to the frame grid, and
+ * Overlays lane a picture layer there; the Sounds lane a sound effect and the Music lane music. A layer's start keeps to the frame grid, and
  * edge or the playhead within 8 px while snapping is on: O(log edges) a frame.
  *
  * Null elsewhere: the ruler, outside the lanes, a read-only project, a zoom, hidden or locked track, and a row that
- * won't take what is dragged (`kind`: a sound over a picture row, a picture over a sound row), so the indicator shows
- * only where the media will really land. The main track takes every kind.
+ * won't take what is dragged (`kind`: a sound over a picture row, a picture over a sound row, a sound or a picture over
+ * the main track), so the indicator shows only where the media will really land (`dropRefusal` says why not).
  */
 export function timelineTargetAt(
   scroller: HTMLElement,
@@ -152,12 +188,33 @@ export function timelineTargetAt(
   for (const row of scroller.querySelectorAll<HTMLElement>('[data-lane]')) {
     if (!within(row)) continue;
     const lane = row.dataset.lane;
-    if (lane === 'main') return { lane: 'main', index: nearestCut(project.timeline.main, pointerUs) };
+    // The main track takes videos (and files from Finder of mixed kinds); a sound or a picture goes on its own lane.
+    if (lane === 'main')
+      return kind === 'audio' || kind === 'image'
+        ? null
+        : { lane: 'main', index: nearestCut(project.timeline.main, pointerUs) };
     if (lane === 'layers') return picture();
-    // Music and sound effects are both sound layers; what makes a song music (ducking) is set as it is added. No drop
-    // sets it yet (music drops come with the library), so a sound held over the Music lane lands among the sound
-    // effects and shows there.
-    if (lane === 'sounds' || lane === 'music') return sound('sounds');
+    // Music and sound effects are both sound layers; what makes a song music (ducking) is set as it is added: a sound
+    // let go on the Music lane is added as music (`row: 'music'`, the model's music ops), on the Sounds lane as an
+    // effect.
+    if (lane === 'sounds' || lane === 'music') return sound(lane);
+  }
+  return null;
+}
+
+/** The lane of `scroller` under this point, below its ruler (`headBottom`); null off the lanes. */
+export function timelineLaneAt(
+  scroller: HTMLElement,
+  headBottom: number,
+  clientX: number,
+  clientY: number,
+): Lane | null {
+  const box = scroller.getBoundingClientRect();
+  if (clientX < box.left || clientX >= box.right || clientY < Math.max(box.top, headBottom) || clientY >= box.bottom)
+    return null;
+  for (const row of scroller.querySelectorAll<HTMLElement>('[data-lane]')) {
+    const r = row.getBoundingClientRect();
+    if (clientY >= r.top && clientY < r.bottom) return (row.dataset.lane as Lane | undefined) ?? null;
   }
   return null;
 }

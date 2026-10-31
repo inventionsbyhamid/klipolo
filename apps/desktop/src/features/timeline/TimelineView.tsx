@@ -13,7 +13,7 @@ import { BlockMenu } from './blocks/BlockMenu';
 import { blockPressHandlers } from './drag/blockPress';
 import { cancelDrag, useDragged } from './drag/controller';
 import { DropIndicator } from './DropIndicator';
-import { registerDropTarget, timelineTargetAt } from './dropTarget';
+import { registerDropTarget, timelineLaneAt, timelineTargetAt } from './dropTarget';
 import { useRovingFocus } from './keys/useRovingFocus';
 import { cancelRangeDrag, RangeSelection, rangeDragJustEnded, startRangeDrag } from './lanes/RangeSelection';
 import { BLOCK_HINT_ID, CLIP_INNER_PX, HEADER_PX, MAIN_LANE_MIN_PX, TAIL_US } from './layout';
@@ -121,10 +121,11 @@ export function TimelineView() {
     });
     const offGestures = zoomGestures(scroller);
     // Media dragged from the library or Finder lands where the pointer is over the lanes (below the ruler).
+    const headBottom = () => headRef.current?.getBoundingClientRect().bottom ?? 0;
     registerDropTarget(
-      (x, y, kind) =>
-        timelineTargetAt(scroller, headRef.current?.getBoundingClientRect().bottom ?? 0, x, y, kind),
+      (x, y, kind) => timelineTargetAt(scroller, headBottom(), x, y, kind),
       scroller,
+      (x, y) => timelineLaneAt(scroller, headBottom(), x, y),
     );
     return () => {
       offGestures();

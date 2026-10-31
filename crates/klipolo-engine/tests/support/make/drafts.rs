@@ -114,6 +114,7 @@ pub fn video_project() -> Project {
         rotation: Some(0),
         has_audio: false,
         audio_lead_us: None,
+        made_with: None,
     }];
     p.timeline.main = vec![Clip::new(
         ClipSource::Asset { id: "clip".into() },
