@@ -91,6 +91,7 @@ mod tests {
             rotation: None,
             has_audio: true,
             audio_lead_us: None,
+            made_with: None,
         }];
         let mut clip = Clip::new(ClipSource::Asset { id: "talk".into() }, 0, 30_000_000);
         clip.id = "t".into();

@@ -304,13 +304,29 @@ fn layer<'a>(p: &'a Project, id: &str) -> &'a Item {
         .unwrap()
 }
 
+/// The new primary's own place becomes the rect; the old primary's rect stays as its place, though 16:9 is no longer
+/// listed, so adding 16:9 back finds every layer where it was.
 #[test]
-fn new_primary_adopts_its_override_and_forgets_removed_formats() {
-    let next = apply_ops(&two_formats(), &[set_formats(Portrait, &[Portrait])]).unwrap();
+fn new_primary_adopts_its_override_and_keeps_the_old_primarys_place() {
+    let p = two_formats();
+    let next = apply_ops(&p, &[set_formats(Portrait, &[Portrait])]).unwrap();
     let t = &layer(&next, "t").layout;
     assert_eq!(t.rect, PORTRAIT_TITLE);
-    assert!(t.overrides.is_empty(), "{:?}", t.overrides);
-    assert!(layer(&next, "v").layout.overrides.is_empty());
+    assert_eq!(
+        t.overrides
+            .iter()
+            .map(|(f, r)| (*f, *r))
+            .collect::<Vec<_>>(),
+        vec![(Landscape, layer(&p, "t").layout.rect)]
+    );
+    let back = apply_ops(&next, &[set_formats(Landscape, &[Landscape, Portrait])]).unwrap();
+    for id in ["t", "v"] {
+        assert_eq!(
+            layer(&back, id).layout.rect,
+            layer(&p, id).layout.rect,
+            "{id}"
+        );
+    }
 }
 
 #[test]
@@ -341,8 +357,10 @@ fn switching_primary_keeps_both_formats_looking_the_same() {
     }
 }
 
+/// A format taken off the list keeps every layer's place for it in the file: listed again, the layers are where they
+/// were placed.
 #[test]
-fn removing_a_secondary_format_drops_its_overrides() {
+fn removing_a_secondary_format_keeps_its_overrides_for_when_it_comes_back() {
     let mut p = two_formats();
     p.settings.formats.push(Square);
     let square = BoxN {
@@ -358,13 +376,15 @@ fn removing_a_secondary_format_drops_its_overrides() {
     let next = apply_ops(&p, &[set_formats(Landscape, &[Landscape, Square])]).unwrap();
     let (before, after) = (&layer(&p, "t").layout, &layer(&next, "t").layout);
     assert_eq!(after.rect, before.rect);
+    assert_eq!(after.overrides, before.overrides);
+    let back = apply_ops(
+        &next,
+        &[set_formats(Landscape, &[Landscape, Square, Portrait])],
+    )
+    .unwrap();
     assert_eq!(
-        after
-            .overrides
-            .iter()
-            .map(|(f, r)| (*f, *r))
-            .collect::<Vec<_>>(),
-        vec![(Square, square)]
+        resolve_rect(&layer(&back, "t").layout, Landscape, Portrait),
+        PORTRAIT_TITLE
     );
 }
 

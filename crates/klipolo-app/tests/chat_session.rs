@@ -96,6 +96,7 @@ fn talk() -> Project {
         rotation: None,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
     }];
     let mut clip = Clip::new(ClipSource::Asset { id: "talk".into() }, 0, secs(30.0));
     clip.id = "t".into();
@@ -1197,6 +1198,7 @@ fn titled() -> Project {
         rotation: None,
         has_audio: false,
         audio_lead_us: None,
+        made_with: None,
     });
     let mut track =
         klipolo_model::timeline::Track::new(klipolo_model::timeline::TrackKind::Overlay, "Words");
@@ -1564,6 +1566,7 @@ async fn the_projects_own_pictures_are_in_the_library_the_model_reads() {
         rotation: None,
         has_audio: false,
         audio_lead_us: None,
+        made_with: None,
     });
     let logo = answer(
         "",

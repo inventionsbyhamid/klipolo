@@ -12,6 +12,8 @@
   --color-bay-raised: #19213D;   /* cards, inputs, other-person surfaces inside a panel */
   --color-bay-hover: #222B4D;    /* hover on rows, cards and ghost controls */
   --color-bay-press: #2B3660;    /* pressed and selected rows */
+  --color-checker: #1E2746;      /* the checkerboard behind a picture that may be see-through, */
+  --color-checker-alt: #27315A;  /* and its other squares */
   --color-dialog: #141B33;       /* dialogs, menus, popovers, toasts */
   --color-scrim: rgb(3 5 12 / 0.72);
   --color-line: #252E4C;         /* hairlines and dividers (decorative only) */

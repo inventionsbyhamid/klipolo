@@ -194,6 +194,10 @@ export const useProject = create<ProjectStore>((set, get) => {
         return next;
       }).finally(end);
     },
+    send: (task, built) => {
+      if (readOnly()) return Promise.resolve(false);
+      return sendFrom(built ?? capture(get().snapshot), task);
+    },
     // A toolbar change still settling commits first (it queues ahead), so undo takes back exactly that change.
     undo: () => step(() => bridge.undo()).then(() => undefined),
     undoIf: (latest) =>

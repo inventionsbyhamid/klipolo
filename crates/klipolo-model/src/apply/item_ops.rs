@@ -137,7 +137,7 @@ fn place(p: &mut Project, t: usize, item: Item, places: &mut Places) -> (usize, 
         (t, insert_sorted(&mut p.timeline.tracks[t], item))
     } else {
         let (outside, tracks) = split_tracks(p);
-        place_above(tracks, t, item, &|id| outside.contains(id), settled)
+        place_above(tracks, t, item, &|id| outside.contains(id), settled, true)
     };
     let tracks = &p.timeline.tracks;
     places.put_item(tracks, &tracks[at.0].items[at.1].id, at);
@@ -146,16 +146,20 @@ fn place(p: &mut Project, t: usize, item: Item, places: &mut Places) -> (usize, 
 
 /// The lowest unlocked, visible track of the item's kind above every track of that kind with a
 /// layer it overlaps in time (so nothing already there hides it), else a new track on top whose id
-/// is derived from the item's (`{item}-track`, numbered if taken).
+/// is derived from the item's (`{item}-track`, numbered if taken). A sound effect leaves tracks that hold music out.
 fn auto_track(p: &mut Project, item: &Item, settled: bool) -> usize {
     let kind = item.content.track_kind();
     let (start, end) = (item.start_us, item.end_us());
     let tracks = &p.timeline.tracks;
+    // A sound effect keeps off the tracks that hold music, room or not: the Music lane holds only music.
+    let sound = kind == TrackKind::Audio && !crate::media::music::is_music(item);
+    let open_to =
+        |t: &Track| t.kind == kind && !(sound && t.items.iter().any(crate::media::music::is_music));
     let above = tracks
         .iter()
-        .rposition(|t| t.kind == kind && !fits_on(t, start, end, None, settled))
+        .rposition(|t| open_to(t) && !fits_on(t, start, end, None, settled))
         .map_or(0, |t| t.saturating_add(1));
-    let usable = |t: &Track| t.kind == kind && !t.locked && !t.hidden;
+    let usable = |t: &Track| open_to(t) && !t.locked && !t.hidden;
     if let Some(t) = (above..tracks.len()).find(|&t| usable(&tracks[t])) {
         return t;
     }
@@ -197,6 +201,12 @@ pub(super) fn add_item(
     }
     let mut item = item.clone();
     item.attach = attach_at(p, item.start_us, attach);
+    // The primary format's place is the layout's rect. An override for the primary (`Layout::full_frame` sets one for
+    // every format) would win over the rect there (`resolve_rect`), hiding every later move made to the rect: it
+    // becomes the rect instead.
+    if let Some(rect) = item.layout.overrides.remove(&p.settings.primary_format) {
+        item.layout.rect = rect;
+    }
     // A layer added this way (a paste, a duplicate) is a copy placed by hand, never a source's own.
     item.content.set_tie(None);
     add(p, target, item, places).map(|_| ())

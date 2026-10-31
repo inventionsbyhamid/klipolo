@@ -740,8 +740,9 @@ fn only_a_clips_own_pieces_keep_its_footage() {
     assert_eq!(cut.removals.ranges, vec![range(22.0, 25.0)]);
 }
 
-/// Dropping a format is a removal only when something loses work stored for it: a title placed by hand for portrait.
-/// The camera's portrait mode stays in the file (it comes back with the format), so it alone isn't.
+/// Dropping a format is a removal only when something loses work stored for it: the captions' place for portrait.
+/// The camera's portrait mode and a title placed by hand for portrait stay in the file (they come back with the
+/// format), so they aren't.
 #[test]
 fn dropping_a_format_is_a_removal_only_with_work_stored_for_it() {
     let mut p = fixture();
@@ -776,6 +777,13 @@ fn dropping_a_format_is_a_removal_only_with_work_stored_for_it() {
             h: 0.1,
         },
     );
+    let r = chat(vec![landscape_only.clone()]).review(&placed).unwrap();
+    assert!(
+        r.removals.is_empty() && r.risk == OpRisk::Additive,
+        "{:?}",
+        r.removals
+    );
+    placed.captions.place.insert(FormatKind::Portrait, 0.8);
     let r = chat(vec![landscape_only]).review(&placed).unwrap();
     assert_eq!(
         (r.risk, r.removals),

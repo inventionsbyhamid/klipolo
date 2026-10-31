@@ -39,6 +39,12 @@ export interface ProjectStore {
    * when it couldn't be (the project was fetched again instead, or that failed).
    */
   adopt: (change: SnapshotPatch) => Promise<boolean>;
+  /**
+   * An edit Rust builds from the project as it is (a media command: music that fits the video, a title template): sent
+   * with the copy's base like `apply` (`built`: where it was asked for, else now), its change merged the same way. False
+   * when it was refused or the project is read-only.
+   */
+  send: (task: () => Promise<SnapshotPatch>, built?: Built) => Promise<boolean>;
   undo: () => Promise<void>;
   /**
    * Undo, only if the history still says `latest` at its turn (after a change still settling went in): the import

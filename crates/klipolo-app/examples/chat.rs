@@ -350,6 +350,7 @@ fn asset(path: &Path) -> Result<Asset, String> {
         rotation: (kind == AssetKind::Video).then_some(info.rotation),
         has_audio: info.has_audio,
         audio_lead_us: (kind == AssetKind::Video).then_some(info.audio_lead_us),
+        made_with: None,
     })
 }
 

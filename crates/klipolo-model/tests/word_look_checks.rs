@@ -39,6 +39,7 @@ fn project() -> Project {
             rotation: None,
             has_audio: true,
             audio_lead_us: None,
+            made_with: None,
         })
         .to_vec();
     p

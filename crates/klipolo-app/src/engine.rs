@@ -294,6 +294,15 @@ pub fn engine_preview_clear(state: State<'_, EngineState>) {
     }
 }
 
+/// While a title is typed on the canvas the page draws it there: the preview leaves out text layer `item` until this
+/// is called with null, once the edit has landed (nothing flashes). Export never sees it.
+#[tauri::command]
+pub fn engine_set_editing(state: State<'_, EngineState>, item: Option<String>) {
+    if let Some(engine) = state.slot.running() {
+        engine.set_editing(item);
+    }
+}
+
 /// Plays from `from_us` at `rate`: the J/K/L shuttle's -2, -1, 1 or 2 (1 when left out). Forward it starts over at the
 /// end; backward it ends at 0. Sound plays at 1x only. `seq` names the run (its frames carry it, as a seek's do).
 /// Errors are codes the UI words (`engine.play.noVideo`).
@@ -408,6 +417,7 @@ mod tests {
             rotation: Some(0),
             has_audio: false,
             audio_lead_us: Some(0),
+            made_with: None,
         }];
         project.timeline.main = vec![Clip::new(
             ClipSource::Asset { id: "v".into() },

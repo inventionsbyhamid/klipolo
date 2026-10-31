@@ -120,6 +120,22 @@ const PATHS = {
       <path d="M12 11v5.5M12 7.7v.1" />
     </>
   ),
+  x: <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />,
+  image: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+      <circle cx="9" cy="10" r="1.8" />
+      <path d="m4 18 5-5 4 4 2.5-2.5L20 19" />
+    </>
+  ),
+  text: <path d="M5 7V5h14v2M12 5v14M9.5 19h5" />,
+  more: (
+    <>
+      <circle className="ico-fill" cx="6" cy="12" r="1.5" />
+      <circle className="ico-fill" cx="12" cy="12" r="1.5" />
+      <circle className="ico-fill" cx="18" cy="12" r="1.5" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof PATHS;
