@@ -42,10 +42,19 @@ function opened(name: string, opening: number): Snapshot {
 
 /**
  * `snapshot` once take `recordingId` landed in it: its recording (the fixture's, under that id) and its clip `clipId`,
- * `seconds` long, last on the main track, one step later; with its auto zoom's step on top when `zooms`.
+ * `seconds` long, last on the main track, one step later; with its auto zoom's step on top when `zooms`, a zoom on the
+ * first overlay track attached to the take.
  */
 function withTake(snapshot: Snapshot, clipId: string, seconds: number, recordingId = 'rec', zooms = false): Snapshot {
   const { project, history } = snapshot;
+  const [overlay, ...others] = project.timeline.tracks;
+  const zoom = {
+    ...overlay.items[0],
+    id: `zoom-${clipId}`,
+    attach: { clipId, source: { type: 'recording' as const, id: recordingId }, sourceUs: 0 },
+    content: { type: 'zoom' as const, target: { type: 'auto' as const }, scale: 2 },
+  };
+  const tracks = zooms ? [{ ...overlay, items: [...overlay.items, zoom] }, ...others] : project.timeline.tracks;
   const recordings = project.recordings.some((r) => r.id === recordingId)
     ? project.recordings
     : [...project.recordings, { ...project.recordings[0], id: recordingId }];
@@ -58,7 +67,7 @@ function withTake(snapshot: Snapshot, clipId: string, seconds: number, recording
   };
   return {
     ...snapshot,
-    project: { ...project, recordings, timeline: { ...project.timeline, main: [...project.timeline.main, clip] } },
+    project: { ...project, recordings, timeline: { ...project.timeline, tracks, main: [...project.timeline.main, clip] } },
     history: {
       ...history,
       revision: history.revision + (zooms ? 2 : 1),
@@ -263,6 +272,21 @@ describe('a take that lands', () => {
       expect(texts()).toContain("Klipolo can't remove them now. Delete them on the timeline."),
     );
     expect(undos).toEqual(['undo.autoZoom']);
+  });
+
+  it('remove_zooms_after_an_undo_says_the_zooms_are_already_gone', async () => {
+    const landed = withTake(fixtureSnapshot(), 'take-clip', 40, 'rec', true);
+    fake.land(takeImport(landed, 'take-clip', { recordingId: 'rec', zooms: 2 }));
+    await vi.waitFor(() => expect(toasts()[0]?.actions).toHaveLength(1));
+    // The person pressed Undo themselves: the zooms went, and "Add recording" is on top.
+    const undone = withTake(fixtureSnapshot(), 'take-clip', 40, 'rec');
+    useProject.setState({
+      snapshot: { ...undone, history: { ...undone.history, canRedo: true, redoLabel: 'undo.autoZoom' } },
+    });
+    act(() => toasts()[0].actions![0].run());
+    await vi.waitFor(() => expect(texts()).toContain('The zooms are already gone.'));
+    expect(texts()).not.toContain("Klipolo can't remove them now. Delete them on the timeline.");
+    expect(undos).toEqual([]);
   });
 
   it('remove_zooms_never_undoes_in_another_project', async () => {

@@ -312,7 +312,7 @@ export function landedToast(landed: TakeImport): void {
         });
     const remove = {
       label: t({ id: 'recorder.removeZooms', message: 'Remove zooms' }),
-      run: () => void removeZooms(project.id),
+      run: () => void removeZooms(project.id, landed.recordingId),
     };
     toast.info(text, { key: LANDED_TOAST, done: true, actions: zooms ? [remove] : undefined });
   }
@@ -322,14 +322,37 @@ export function landedToast(landed: TakeImport): void {
   }
 }
 
+/** Whether `project` still has a zoom attached to recording `recordingId` (its auto zoom's, or one added since). */
+function hasZoomsOn(project: Project, recordingId: string): boolean {
+  return project.timeline.tracks.some((track) =>
+    track.items.some(
+      (item) =>
+        item.content.type === 'zoom' &&
+        item.attach?.source.type === 'recording' &&
+        item.attach.source.id === recordingId,
+    ),
+  );
+}
+
 /**
- * Remove zooms: the take's auto zoom step is undone while it is still the last change in its project, and only then.
- * After an edit on top, nothing is undone, and the person is told to delete them on the timeline.
+ * Remove zooms: take `recordingId`'s auto zoom step is undone while it is still the last change in its project, and
+ * only then. When its zooms are gone already (an Undo took them back, or they were deleted), it says so; after an edit
+ * on top, nothing is undone, and the person is told to delete them on the timeline.
  */
-export async function removeZooms(projectId: string): Promise<void> {
+export async function removeZooms(projectId: string, recordingId: string): Promise<void> {
   const ours = () => useProject.getState().snapshot?.project.id === projectId;
   const undone = await useProject.getState().undoIf((history) => history.undoLabel === AUTO_ZOOM && ours());
-  if (!undone)
+  if (undone) return;
+  const project = useProject.getState().snapshot?.project;
+  if (project?.id === projectId && !hasZoomsOn(project, recordingId))
+    toast.info(
+      t({
+        id: 'recorder.zoomsGone',
+        message: 'The zooms are already gone.',
+        comment: "Remove zooms on a recording's toast, after its zooms were undone or deleted",
+      }),
+    );
+  else
     toast.info(
       t({
         id: 'recorder.zoomsKept',
