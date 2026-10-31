@@ -5,17 +5,17 @@ import { Toggle } from '../../design/Toggle';
 import { sayRefusal, useMediaJobs } from '../../state/mediaJobs';
 import { useUi } from '../../state/ui';
 
-/** The popover's heading. */
+/** The heading over the switch, in the popover and in Settings. */
 export const COPIES_TITLE = msg({ id: 'mediaJobs.title', message: 'Editing copies' });
 
-/** What editing copies are, under the popover's heading. */
+/** What editing copies are, under that heading. */
 export const ABOUT_COPIES = msg({
   id: 'mediaJobs.about',
   message:
     'Klipolo makes lighter copies of videos that would play slowly on this Mac, so the preview plays smoothly. Exports always use your full-quality files.',
 });
 
-/** "Make editing copies automatically": the popover's switch (kept on this Mac). */
+/** "Make editing copies automatically": one switch, in the popover and in Settings (kept on this Mac). */
 export function AutoCopiesSwitch() {
   const { t } = useLingui();
   const id = useId();
