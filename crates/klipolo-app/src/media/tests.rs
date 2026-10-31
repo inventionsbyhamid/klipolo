@@ -191,3 +191,101 @@ fn import_keeps_rotation_and_rate() {
         ntsc.duration_us
     );
 }
+
+/// An SVG is named with what to do instead; nothing else in the drop changes.
+#[test]
+fn svg_is_refused_with_a_plain_reason() {
+    let probe = |path: &Path| Ok(asset_from_info(path, info(MediaKind::Image, 512, 512, 0.0)));
+    let result = probe_each(
+        ["/art/logo.svg", "/art/logo.png", "/art/Badge.SVG"]
+            .map(PathBuf::from)
+            .to_vec(),
+        probe,
+    );
+    assert_eq!(result.assets.len(), 1);
+    assert_eq!(
+        result.skipped,
+        vec![
+            SkippedFile {
+                name: "logo.svg".into(),
+                reason: "SVG isn't supported yet. Export it as PNG.".into()
+            },
+            SkippedFile {
+                name: "Badge.SVG".into(),
+                reason: "SVG isn't supported yet. Export it as PNG.".into()
+            },
+        ]
+    );
+}
+
+/// Sounds and pictures of every type Klipolo imports come in as what they are (the page puts them in the library, never
+/// on the main track); a GIF plays as a video.
+#[test]
+fn sounds_and_pictures_import_as_their_kinds() {
+    for name in ["a.mp3", "a.wav", "a.m4a", "a.aac", "a.flac", "a.ogg"] {
+        assert!(supported(Path::new(name)), "{name}");
+    }
+    for name in [
+        "a.png", "a.jpg", "a.jpeg", "a.webp", "a.heic", "a.avif", "a.tif", "a.TIFF", "a.gif",
+    ] {
+        assert!(supported(Path::new(name)), "{name}");
+    }
+    let audio = asset_from_info(Path::new("/m/song.wav"), info(MediaKind::Audio, 0, 0, 0.0));
+    assert_eq!(
+        (audio.kind, audio.rotation, audio.audio_lead_us),
+        (AssetKind::Audio, None, None)
+    );
+}
+
+/// An MP3 with its cover picture (an ID3 `APIC` frame, which FFmpeg shows as a picture stream) is a sound, not a video.
+#[test]
+fn mp3_with_cover_art_is_audio() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("song.mp3");
+    let mut cover = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new(&mut cover)
+        .encode(
+            &[200u8; 16 * 16 * 3],
+            16,
+            16,
+            image::ExtendedColorType::Rgb8,
+        )
+        .unwrap();
+    // ID3v2.3: one APIC frame (Latin-1, image/jpeg, front cover, no description).
+    let mut apic = vec![0u8];
+    apic.extend(b"image/jpeg\0");
+    apic.extend([3u8, 0]);
+    apic.extend(&cover);
+    let mut frame = b"APIC".to_vec();
+    frame.extend((apic.len() as u32).to_be_bytes());
+    frame.extend([0, 0]);
+    frame.extend(&apic);
+    let syncsafe = |n: usize| {
+        [
+            (n >> 21) as u8 & 0x7F,
+            (n >> 14) as u8 & 0x7F,
+            (n >> 7) as u8 & 0x7F,
+            n as u8 & 0x7F,
+        ]
+    };
+    let mut file = b"ID3\x03\x00\x00".to_vec();
+    file.extend(syncsafe(frame.len()));
+    file.extend(&frame);
+    // 60 silent MPEG-1 Layer III frames: 128 kb/s at 44.1 kHz, 417 bytes each, zero side info (1.6 s).
+    for _ in 0..60 {
+        let mut mp3 = vec![0xFF, 0xFB, 0x90, 0x00];
+        mp3.resize(417, 0);
+        file.extend(mp3);
+    }
+    std::fs::write(&path, file).unwrap();
+    let result = probe_each(vec![path], probe_asset);
+    assert!(result.skipped.is_empty(), "{:?}", result.skipped);
+    let song = &result.assets[0];
+    assert_eq!(song.kind, AssetKind::Audio);
+    assert!(song.has_audio);
+    assert!(
+        (1_000_000..2_500_000).contains(&song.duration_us),
+        "{}",
+        song.duration_us
+    );
+}

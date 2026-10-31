@@ -7,20 +7,23 @@ use klipolo_engine::render::probe::{MediaInfo, MediaKind, probe_media};
 use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::time::secs_to_us;
 use serde::Serialize;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 use ts_rs::TS;
 
-/// File types Klipolo imports.
+/// File types Klipolo imports: videos (a GIF plays as one), sounds and pictures. Sounds and pictures go to the library,
+/// never the main track (the page places what comes in).
 pub(crate) const MEDIA_EXTENSIONS: &[&str] = &[
-    "mp4", "mov", "m4v", "mkv", "webm", "avi", "mp3", "wav", "m4a", "aac", "flac", "ogg", "png",
-    "jpg", "jpeg", "webp", "gif",
+    "mp4", "mov", "m4v", "mkv", "webm", "avi", "gif", "mp3", "wav", "m4a", "aac", "flac", "ogg",
+    "png", "jpg", "jpeg", "webp", "heic", "avif", "tif", "tiff",
 ];
 
 const MAX_FILES: usize = 100;
 const TOO_MANY: &str = "Only 100 files can be added at once.";
 const UNSUPPORTED: &str = "This file type isn't supported.";
 const UNREADABLE: &str = "This file couldn't be read.";
+/// A vector drawing: nothing draws one yet, so it is named with what to do instead.
+const SVG: &str = "SVG isn't supported yet. Export it as PNG.";
 
 /// The file's canonical path, if it is a regular local file.
 fn local_file(path: &Path) -> Result<PathBuf, String> {
@@ -110,6 +113,12 @@ pub(crate) fn supported(path: &Path) -> bool {
         .is_some_and(|ext| MEDIA_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
 }
 
+fn is_svg(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("svg") || ext.eq_ignore_ascii_case("svgz"))
+}
+
 /// Probes each file on its own, in the order given, so one bad file never stops the rest.
 pub(crate) fn probe_each(
     paths: Vec<PathBuf>,
@@ -122,6 +131,8 @@ pub(crate) fn probe_each(
     for (index, path) in paths.iter().enumerate() {
         if index >= MAX_FILES {
             result.skipped.push(skipped(path, TOO_MANY));
+        } else if is_svg(path) {
+            result.skipped.push(skipped(path, SVG));
         } else if !supported(path) {
             result.skipped.push(skipped(path, UNSUPPORTED));
         } else {
@@ -137,8 +148,8 @@ pub(crate) fn probe_each(
     result
 }
 
-/// Probes `paths` (dropped from Finder), or the files the person picks when `paths` is null. The UI may then read the
-/// imported files through the asset protocol.
+/// Probes `paths` (dropped from Finder), or the files the person picks when `paths` is null. Nothing is granted to the
+/// page here: it reads a file only once the open project uses it (`media_cache`, `media_picture`).
 #[tauri::command]
 pub async fn media_import(
     app: AppHandle,
@@ -164,24 +175,9 @@ pub async fn media_import(
             .collect()
         }
     };
-    let probed = tauri::async_runtime::spawn_blocking(move || probe_each(chosen, probe_asset))
+    tauri::async_runtime::spawn_blocking(move || probe_each(chosen, probe_asset))
         .await
-        .map_err(|e| e.to_string())?;
-    let scope = app.asset_protocol_scope();
-    let mut result = MediaImport {
-        assets: Vec::with_capacity(probed.assets.len()),
-        skipped: probed.skipped,
-    };
-    for asset in probed.assets {
-        if scope.allow_file(&asset.path).is_ok() {
-            result.assets.push(asset);
-        } else {
-            result
-                .skipped
-                .push(skipped(Path::new(&asset.path), UNREADABLE));
-        }
-    }
-    Ok(result)
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
