@@ -68,6 +68,27 @@
   background: var(--color-bay-hover);
 }
 
+/* Opening: pressed, with a spinner over its picture. Meta text is soft on the press colour. */
+.start-card.is-busy {
+  background: var(--color-bay-press);
+}
+
+.start-card.is-busy .start-meta {
+  color: var(--color-ink-soft);
+}
+
+.start-busy {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: auto;
+  border-radius: 50%;
+  background: var(--color-scrim);
+}
+
 .start-pic {
   position: relative;
   display: grid;

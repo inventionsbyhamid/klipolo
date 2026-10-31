@@ -58,6 +58,7 @@ export function StartScreen({ onRecord = noop }: StartScreenProps) {
   const titleId = useId();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  const [opening, setOpening] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -82,7 +83,12 @@ export function StartScreen({ onRecord = noop }: StartScreenProps) {
   // One project at a time: a second press while one is opening (or being made) would open twice; the first one wins.
   const busy = () => useProject.getState().pending > 0;
   const openProject = (path: string) => {
-    if (!busy()) void useProject.getState().open(path);
+    if (busy()) return;
+    setOpening(path);
+    void useProject
+      .getState()
+      .open(path)
+      .finally(() => setOpening(null));
   };
   const newProject = () => {
     if (!busy()) void useProject.getState().create(NEW_PROJECT.name, [...NEW_PROJECT.formats]);
@@ -143,7 +149,13 @@ export function StartScreen({ onRecord = noop }: StartScreenProps) {
           // WebKit drops the list role of a list drawn without bullets: it is said again.
           <ul className="start-grid" role="list">
             {load.rows.map((row) => (
-              <ProjectCard key={row.path} row={row} nowMs={nowMs} onOpen={openProject} />
+              <ProjectCard
+                key={row.path}
+                row={row}
+                nowMs={nowMs}
+                busy={opening === row.path}
+                onOpen={openProject}
+              />
             ))}
           </ul>
         )}

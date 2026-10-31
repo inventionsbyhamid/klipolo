@@ -191,6 +191,11 @@ describe('StartScreen', () => {
     renderWithProviders(<StartScreen />);
     await waitFor(() => expect(cards()).toHaveLength(3));
     await userEvent.click(card('Kiln vlog'));
+    // The press took: the card is busy while it opens.
+    expect(card('Kiln vlog')).toHaveAttribute('aria-busy', 'true');
+    expect(card('Kiln vlog')).toHaveClass('is-busy');
+    expect(card('Kiln vlog').querySelector('.start-busy .spinner')).not.toBeNull();
+    expect(card('Studio tour')).not.toHaveAttribute('aria-busy');
     // A second press while the first is opening does nothing, nor does New project.
     await userEvent.click(card('Studio tour'));
     await userEvent.click(screen.getByRole('button', { name: 'New project' }));
@@ -204,6 +209,7 @@ describe('StartScreen', () => {
     expect(bridge.openProject).toHaveBeenCalledTimes(1);
     expect(bridge.openProject).toHaveBeenCalledWith('/Users/me/Movies/Klipolo/Kiln vlog.klipolo');
     expect(bridge.createProject).not.toHaveBeenCalled();
+    await waitFor(() => expect(card('Kiln vlog')).not.toHaveAttribute('aria-busy'));
   });
 
   it('new_project_creates_untitled_with_three_formats', async () => {

@@ -3,6 +3,7 @@ import { useId, type CSSProperties } from 'react';
 import type { ProjectRow } from '../../bindings/ProjectRow';
 import type { ThumbTile } from '../../bindings/ThumbTile';
 import { mediaUrl } from '../../bridge/commands';
+import { cn } from '../../design/cn';
 import { Icon } from '../../layout/Icon';
 import { openedLabel } from '../../lib/relativeTime';
 import { formatDuration } from '../../lib/time';
@@ -30,6 +31,8 @@ interface ProjectCardProps {
   row: ProjectRow;
   /** Now, for "Opened 2 hours ago". */
   nowMs: number;
+  /** It is opening: the press took. */
+  busy: boolean;
   onOpen: (path: string) => void;
 }
 
@@ -38,7 +41,7 @@ interface ProjectCardProps {
  * 2 hours ago, 4:12" (just the length when the time it was opened isn't known). A click or Enter opens it. Named by
  * its name and described by that line.
  */
-export function ProjectCard({ row, nowMs, onOpen }: ProjectCardProps) {
+export function ProjectCard({ row, nowMs, busy, onOpen }: ProjectCardProps) {
   const { t } = useLingui();
   const nameId = useId();
   const metaId = useId();
@@ -50,15 +53,21 @@ export function ProjectCard({ row, nowMs, onOpen }: ProjectCardProps) {
         type="button"
         // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
         tabIndex={0}
-        className="start-card"
+        className={cn('start-card', busy && 'is-busy')}
         aria-labelledby={nameId}
         aria-describedby={metaId}
+        aria-busy={busy || undefined}
         onClick={() => onOpen(row.path)}
       >
         <span className="start-pic" aria-hidden>
           {/* The clip art is under the tile: a picture that doesn't load leaves it showing. */}
           <Icon name="film" />
           {row.thumb && <span className="start-tile" style={tileStyle(row.thumb)} />}
+          {busy && (
+            <span className="start-busy">
+              <span className="spinner" />
+            </span>
+          )}
         </span>
         <span className="start-name" id={nameId} title={row.name}>
           {row.name}
