@@ -287,6 +287,31 @@ def test_the_prompt_asks_for_format_and_captions_before_the_cut():
     assert prompt.index(first) < prompt.index("Cuts, such as keepOnly, are only proposed")
 
 
+def test_the_reply_prints_with_no_em_or_en_dash(tmp_path):
+    # The reply is what the video shows: a dash between words reads as a comma, one in a range as a hyphen.
+    said = (
+        "Done — it's vertical with karaoke captions — and the cut waits for your Apply.\n"
+        "I kept 61.2–91.0 s—the best moment – as the teaser, — nothing else.\n"
+        "— Captions are karaoke."
+    )
+    meta = Meta(response(message(said)))
+    command, _ = klipolo(tmp_path)
+    code, out, err = run(meta, command)
+    assert (code, err) == (0, "")
+    assert out == (
+        "Done, it's vertical with karaoke captions, and the cut waits for your Apply.\n"
+        "I kept 61.2-91.0 s, the best moment, as the teaser, nothing else.\n"
+        "Captions are karaoke.\n"
+        "\n"
+        "Cost: $0.002\n"
+    )
+
+
+def test_the_prompt_asks_for_no_em_or_en_dash():
+    assert "Never use em or en dashes, in your answer or in text you add." in agent.SYSTEM_PROMPT
+    assert not any(dash in agent.SYSTEM_PROMPT for dash in "–—")
+
+
 def test_cost_is_priced_from_usage_with_cached_input_at_the_cached_price():
     usage = agent.usage_of({"input_tokens": 1_000_000, "input_tokens_details": {"cached_tokens": 400_000}, "output_tokens": 1_000_000})
     assert usage == agent.Usage(input_tokens=1_000_000, cached_tokens=400_000, output_tokens=1_000_000)

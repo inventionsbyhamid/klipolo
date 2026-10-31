@@ -3,7 +3,8 @@
 
 It starts Klipolo's stdio bridge (`klipolo-app --mcp`), lists Klipolo's tools and offers each to Muse Spark as a strict
 function tool on Meta's Responses API, then makes the calls Muse Spark asks for and sends each result back, for at most
-8 model turns. It prints each call on one line, then Muse Spark's reply, then what Muse Spark's tokens cost. Pictures
+8 model turns. It prints each call on one line, then Muse Spark's reply (with no em or en dash), then what Muse Spark's
+tokens cost. Pictures
 (makeSticker, makeTitleCard) are paid by Klipolo, about $0.01 each, and aren't in that total: it says how many it
 started.
 
@@ -113,7 +114,8 @@ SYSTEM_PROMPT = (
     "You may put your own short title on screen with addText. "
     "Never say a cut was made unless getProposal says it was applied. "
     "When a tool refuses, read why, then fix the call or tell the person. "
-    "Answer in two or three short sentences."
+    "Answer in two or three short sentences. "
+    "Never use em or en dashes, in your answer or in text you add."
 )
 
 # Keywords that let an object take keys it doesn't list: strict mode can't say that.
@@ -379,6 +381,20 @@ def _plain(text: str) -> str:
     """Server text without em or en dashes."""
     text = re.sub("\\s+[\u2013\u2014]\\s+", ", ", text)
     return text.replace("\u2013", "-").replace("\u2014", "-")
+
+
+def plain_reply(text: str) -> str:
+    """Muse Spark's reply as it is printed, with no em or en dash: one between digits (a range) becomes a hyphen, one
+    opening a line goes, and any other becomes a comma (an aside's pair, two)."""
+    lines = []
+    for line in text.splitlines():
+        line = re.sub("^\\s*[\u2013\u2014]+\\s*", "", line)
+        line = re.sub("(?<=\\d)\\s*[\u2013\u2014]\\s*(?=\\d)", "-", line)
+        line = re.sub("\\s*[\u2013\u2014]+\\s*", ", ", line)
+        # A comma the dash left before other punctuation goes.
+        line = re.sub(",\\s*(?=[,.;:!?])", "", line)
+        lines.append(line.rstrip())
+    return "\n".join(lines)
 
 
 def sentence(text: str | None, fallback: str) -> str:
@@ -771,7 +787,7 @@ async def converse(
             if not answer.calls:
                 if console.printed:
                     console.say()
-                console.say(answer.text or "Muse Spark gave no reply.")
+                console.say(plain_reply(answer.text or "") or "Muse Spark gave no reply.")
                 return 0
             if turn == max_turns:
                 console.fail(f"Stopped after {max_turns} model turns without a final reply.")
