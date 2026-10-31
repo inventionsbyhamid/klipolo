@@ -75,6 +75,9 @@ pub const OVER_SHARE: &str = "Your changes fill the undo history Klipolo keeps f
 continue in Klipolo.";
 /// The app's own newest step, undone.
 pub const UNDONE: &str = "Undone in Klipolo. The person can redo it there.";
+/// An undo that dropped the app's own waiting proposal.
+pub const UNDO_DROPPED: &str = "The undo also dropped your proposal that was waiting. Call getProposal to see it, then \
+propose again if you still want it.";
 pub const NOT_YOURS: &str = "The last change in Klipolo isn't yours. Only the person can undo it.";
 pub const NOTHING_TO_UNDO: &str = "There is nothing of yours to undo.";
 /// Too many calls from one app, or from all apps together.

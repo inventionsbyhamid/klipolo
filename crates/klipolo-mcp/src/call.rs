@@ -121,10 +121,17 @@ fn undo(host: &dyn Host, client: &str) -> Value {
         return refused(&waiting_other(&who));
     }
     match host.undo_own(client) {
-        Ok(undone) => answer(
-            &[words::UNDONE.to_owned()],
-            json!({"outcome": "done", "revision": undone.revision}),
-        ),
+        Ok(undone) => {
+            let mut said = vec![words::UNDONE.to_owned()];
+            // The undo changed the project, so the app's own proposal waiting on it went too.
+            if undone.dropped.is_some() {
+                said.push(words::UNDO_DROPPED.to_owned());
+            }
+            answer(
+                &said,
+                json!({"outcome": "done", "revision": undone.revision}),
+            )
+        }
         Err(e) => refused(&host_error(host, client, e)),
     }
 }

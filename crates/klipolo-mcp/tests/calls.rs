@@ -19,7 +19,7 @@ use klipolo_mcp::rpc::Mcp;
 use klipolo_mcp::words::{
     DECIDED, DONE, KLIPOLO_CHAT, MOVED, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS, NOTHING_TO_UNDO,
     OVER_SHARE, OWN_CHANGED, OWN_MOVED, OWN_WAITING, PROPOSED_NO_FOOTAGE, PUSHES_OUT, READ_FIRST,
-    STALE, UNCHANGED, UNDONE, WAITING_OTHER, fill,
+    STALE, UNCHANGED, UNDO_DROPPED, UNDONE, WAITING_OTHER, fill,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -531,6 +531,7 @@ fn agent_words_are_exact() {
         OWN_CHANGED,
         OWN_WAITING,
         DECIDED,
+        UNDO_DROPPED,
         UNDONE,
         STARTED,
         REMOVES,
@@ -1097,4 +1098,21 @@ fn a_proposal_the_person_discards_mid_call_stays_discarded() {
         outcome["structuredContent"],
         json!({"status": "discarded", "id": id})
     );
+}
+
+#[test]
+fn an_undo_that_drops_the_apps_proposal_says_so() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    agent.call("setCaptions", captions(false));
+    agent.cut(0.0, 13.0);
+    let undone = agent.call("undo", json!({}));
+    assert_eq!(undone["isError"], false, "{undone}");
+    assert_eq!(text(&undone), format!("{UNDONE} {UNDO_DROPPED}"));
+    assert!(host.state().slot.is_none());
+    // With nothing waiting, an undo says only that.
+    agent.call("setCaptions", captions(false));
+    assert_eq!(text(&agent.call("undo", json!({}))), UNDONE);
 }
