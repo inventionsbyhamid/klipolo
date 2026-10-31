@@ -1,7 +1,7 @@
 //! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
 //! context was built from, out as edits.
 //! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer, and the
-//!   media: `addMusic`, `addSound`, `addImage` and `makeTitleCard`'s title) are one `Transaction` the app
+//!   media: `addMusic`, `addSound`, `addText`, `addImage` and `makeTitleCard`'s title) are one `Transaction` the app
 //!   applies at once: one undo step. An addition is judged by what its part does, not by its tool: one that takes
 //!   something away (the model's own `removals`, as a format dropped with what was placed in it) is compiled again with
 //!   the removals and proposed.
@@ -11,9 +11,8 @@
 //! - `findMoments` gives moments, `followSubject` and `blurObjects` jobs for their runners, `makeSticker` and
 //!   `makeTitleCard`'s background jobs for a picture to be drawn (never an op until it exists), `askUser` questions,
 //!   `undo` a flag. `cannotDo` is a refusal shown to the person, as is a tool that needs an analysis the clip doesn't
-//!   have yet (`STILL_LISTENING`, `ANALYZE_FIRST`), a removal with nothing to remove (`NO_FILLERS`, no pause that
-//!   long) and, until its presets are built, `addText` (`TEXT_COMING_SOON`); every other refusal goes back to the model
-//!   with its reason.
+//!   have yet (`STILL_LISTENING`, `ANALYZE_FIRST`) and a removal with nothing to remove (`NO_FILLERS`, no pause that
+//!   long); every other refusal goes back to the model with its reason.
 //!
 //! All calls compile on one working copy, in two phases: the additions in call order (the edits first, then the media
 //! layers on what the edits made, so a trim later in the answer never shortens a picture placed before it), then the
@@ -56,10 +55,7 @@ use crate::library::Library;
 use crate::sanitize;
 use crate::tools::{Moment, PictureSize, Position, ToolCall};
 use map::Map;
-pub use media::{
-    PICTURE_MARGIN, SOUND_VOLUME, TEXT_COMING_SOON, TITLE_CARD, picture_layout, picture_ops,
-    sticker_placement,
-};
+pub use media::{sticker_ops, sticker_placement};
 use trim::Trim;
 
 /// What the person is told when a tool needs a clip's analysis and Klipolo is still making it.
@@ -115,6 +111,8 @@ pub struct Compiled {
     pub refusals: Vec<Refusal>,
     /// The model asked to undo the last change.
     pub undo: bool,
+    /// The additions that went through but changed nothing (a format the video already has), by call index.
+    pub unchanged: Vec<usize>,
 }
 
 /// Removals for the person to approve.
@@ -153,7 +151,7 @@ pub enum Job {
 }
 
 /// A sticker of `prompt` to draw, cut out of its background, and show for `duration_us` at `size` and `position`
-/// (`picture_ops`) over the footage `anchor` names: a clip and a moment of its source, as an attached layer holds its
+/// (`sticker_ops`) over the footage `anchor` names: a clip and a moment of its source, as an attached layer holds its
 /// place (`query::anchor_at`), so it moves with that footage while the picture is drawn. `at_us` is where that footage
 /// played on the project as the message's additions left it, and the start to use when `anchor` is None (past the main
 /// track's end). When the picture comes, `sticker_placement` says where and how long on the project as it is then, or
@@ -269,7 +267,10 @@ struct Phase {
     /// `work` as the batch would end here (transitions refitted, validated): the phase's result.
     done: Project,
     ops: Vec<Op>,
-    labels: Vec<CodedError>,
+    /// Each kept edit's label, with its call's index in the answer.
+    labels: Vec<(usize, CodedError)>,
+    /// The calls whose edits held no ops: they went through and changed nothing.
+    unchanged: Vec<usize>,
 }
 
 impl Phase {
@@ -279,6 +280,7 @@ impl Phase {
             done: start,
             ops: Vec::new(),
             labels: Vec::new(),
+            unchanged: Vec::new(),
         }
     }
 
@@ -304,27 +306,33 @@ impl Phase {
         })
     }
 
-    /// Makes a tried edit part of the batch. An edit with no ops (a format the video already has) adds nothing.
-    fn keep(&mut self, tried: Tried) {
+    /// Makes the tried edit of call `call` part of the batch. An edit with no ops (a format the video already has) adds
+    /// nothing, and the call is noted as having changed nothing.
+    fn keep(&mut self, tried: Tried, call: usize) {
         let Some((work, done)) = tried.after else {
+            self.unchanged.push(call);
             return;
         };
         self.work = work;
         self.done = done;
         self.ops.extend(tried.edit.ops);
-        self.labels.push(tried.edit.label);
+        self.labels.push((call, tried.edit.label));
     }
 
     /// `try_edit`, then `keep`.
-    fn add(&mut self, edit: Edit) -> Result<(), ModelError> {
+    fn add(&mut self, edit: Edit, call: usize) -> Result<(), ModelError> {
         let tried = self.try_edit(edit)?;
-        self.keep(tried);
+        self.keep(tried, call);
         Ok(())
     }
 
-    /// The phase's ops as one chat transaction, labelled for its first call and how many more.
+    /// The phase's ops as one chat transaction, labelled for the first of its calls in the answer (the order the
+    /// person asked in, whatever order they were placed in) and how many more.
     fn transaction(&self) -> Option<Transaction> {
-        let (label, params) = match self.labels.as_slice() {
+        let mut labels = self.labels.clone();
+        labels.sort_by_key(|(call, _)| *call);
+        let labels: Vec<CodedError> = labels.into_iter().map(|(_, label)| label).collect();
+        let (label, params) = match labels.as_slice() {
             [] => return None,
             [one] => (one.code.clone(), one.params.clone()),
             [first, rest @ ..] => (
@@ -489,7 +497,7 @@ impl Compiler<'_> {
                     format_proposed |= matches!(call, ToolCall::SetFormat { .. });
                     waiting.push((i, if_it_removes));
                 }
-                Ok(tried) => adding.keep(tried),
+                Ok(tried) => adding.keep(tried, i),
                 Err(r) => refuse(&mut out, i, r),
             }
         }
@@ -516,7 +524,7 @@ impl Compiler<'_> {
                 // A layer takes nothing away; if one ever did, it would be proposed like any other.
                 Ok((tried, _)) if tried.removes => waiting.push((i, Removal::Moved(call))),
                 Ok((tried, title_id)) => {
-                    adding.keep(tried);
+                    adding.keep(tried, i);
                     // The title is in: its background is drawn for it.
                     if let (Some(title_id), ToolCall::MakeTitleCard { prompt, .. }) =
                         (title_id, call)
@@ -572,7 +580,7 @@ impl Compiler<'_> {
                 Removal::Longer(t) => ("trimClip", trim::lengthen(self, work, &t)),
             };
             let added = edit.and_then(|edit| {
-                (removing.add(edit)).map_err(|e| to_model(format!("{call_name}: {e}")))
+                (removing.add(edit, i)).map_err(|e| to_model(format!("{call_name}: {e}")))
             });
             match added {
                 Ok(()) => out.proposed_calls.push(i),
@@ -581,6 +589,8 @@ impl Compiler<'_> {
         }
 
         out.additions = adding.transaction();
+        out.unchanged = adding.unchanged.clone();
+        out.unchanged.sort_unstable();
         match removing.transaction() {
             Some(tx) => {
                 let review = tx.review_applied(&adding.done, removing.done);
@@ -618,7 +628,12 @@ impl Compiler<'_> {
                 at_us,
             } => media::add_music(self, work, file, (*volume, *duck), *at_us),
             ToolCall::AddSound { name, at_us } => media::add_sound(self, work, name, at_us),
-            ToolCall::AddText { .. } => media::add_text(),
+            ToolCall::AddText {
+                text,
+                preset,
+                at_us,
+                duration_us,
+            } => media::add_text(self, work, text, *preset, (*at_us, *duration_us)),
             ToolCall::AddImage {
                 file,
                 size,
