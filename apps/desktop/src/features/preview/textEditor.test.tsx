@@ -167,6 +167,31 @@ describe('on-canvas text', () => {
     expect(layout.rect.x + layout.rect.w / 2).toBeCloseTo(0.5, 9);
   });
 
+  it('a title finished and a new one begun at once: the first one’s hand-back never takes the new box’s focus', async () => {
+    const add = { current: null as null | (() => Promise<void>) };
+    function Adder() {
+      add.current = useAddText();
+      return null;
+    }
+    renderWithProviders(
+      <>
+        <Stage />
+        <Adder />
+      </>,
+    );
+    await userEvent.dblClick(layer());
+    await userEvent.type(editor(), ' now');
+    await userEvent.keyboard('{Escape}');
+    // Before the first edit has handed the focus back to its layer (no frames come in tests: it waits its cap).
+    await act(() => add.current!());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 300)));
+    expect(editor()).toHaveFocus();
+    await userEvent.keyboard('Rosa{Escape}');
+    await waitFor(() => expect(heard.applied).toHaveLength(2));
+    expect(heard.applied[1].label).toBe('text.add');
+    expect(JSON.stringify(heard.applied[1].ops[0])).toContain('Rosa');
+  });
+
   it('Add title, Text, opens the new box with the cursor in it, as the menu closes', async () => {
     renderWithProviders(
       <>

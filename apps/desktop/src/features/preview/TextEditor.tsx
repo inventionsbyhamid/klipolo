@@ -153,7 +153,10 @@ export function TextEditor({ item, editable, canvas, format, primary }: TextEdit
                 void useTextEdit
                   .getState()
                   .finish()
-                  .then(() => focusLayer(item.id));
+                  .then(() => {
+                    // A title begun while this one handed over (Add title, Text right after) keeps the focus.
+                    if (!useTextEdit.getState().session) focusLayer(item.id);
+                  });
               }
             }}
             onBlur={(e) => {
