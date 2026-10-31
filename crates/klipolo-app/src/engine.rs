@@ -165,8 +165,8 @@ async fn start_engine(
 }
 
 /// What the UI hears: every engine event except the crash guard's (Klipolo has no agent-made effects). Editing copies
-/// hear them too (`copies`: when the video plays, a copy the preview couldn't open, a scan that may have ended). The log
-/// notes playback's starts and stops, with the frames the native layer presented.
+/// hear them too (`copies`: when the video plays, a copy the preview couldn't open, a scan that may have ended). The
+/// log notes playback's starts and stops, with the frames the native layer presented.
 fn event_sink(events: Channel<EngineEvent>, copies: Option<MediaJobs>) -> EventSink {
     let presented = AtomicU64::new(0);
     Arc::new(move |event: EngineEvent| {

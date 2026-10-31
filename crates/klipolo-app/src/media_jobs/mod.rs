@@ -67,9 +67,9 @@ const SETTLE: Duration = Duration::from_secs(2);
 const COMMAND_WAIT: Duration = Duration::from_secs(10);
 /// Probed facts kept (by copy key) before the cache starts over.
 const FACTS_KEPT: usize = 1024;
-/// Files that weren't there are looked at again (a stat each, off the driver) this often while any is absent, on a timer
-/// of their own, and at once when Klipolo comes to the front: a drive plugged back in, or a file put back, gets its
-/// copies without an edit or reopening the project. No timer runs while nothing is absent.
+/// Files that weren't there are looked at again (a stat each, off the driver) this often while any is absent, on a
+/// timer of their own, and at once when Klipolo comes to the front: a drive plugged back in, or a file put back, gets
+/// its copies without an edit or reopening the project. No timer runs while nothing is absent.
 const ABSENT_EVERY: Duration = Duration::from_secs(5);
 /// The refusal for a path the open project's list doesn't have: a stop or retry never reaches another project's copy.
 pub const NOT_IN_PROJECT: &str = code!("copies.refused.notInProject");

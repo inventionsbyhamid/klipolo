@@ -1019,8 +1019,8 @@ fn a_source_put_back_is_picked_up_without_an_edit() {
     });
 }
 
-/// A take holds copies from arming until it has landed: the copy being made pauses (its finished segments kept), its row
-/// says why, nothing else starts meanwhile, and it is made on from its job once the take ends.
+/// A take holds copies from arming until it has landed: the copy being made pauses (its finished segments kept), its
+/// row says why, nothing else starts meanwhile, and it is made on from its job once the take ends.
 #[test]
 fn a_take_pauses_the_copy_being_made_until_it_ends() {
     tauri::async_runtime::block_on(async {

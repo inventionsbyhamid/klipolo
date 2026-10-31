@@ -16,7 +16,9 @@ import './mediaJobs.css';
 const R = 5.5;
 const LENGTH = 2 * Math.PI * R;
 
-/** A 14 px progress ring (decorative: the pill's name says the percentage). Paper on the progress track. */
+/**
+ * A 14 px progress ring (decorative: the pill's name says the percentage). Paper on the progress track.
+ */
 function Ring({ percent }: { percent: number }) {
   return (
     <svg width={14} height={14} viewBox="0 0 14 14" aria-hidden className="copies-ring">
@@ -38,10 +40,10 @@ const focusLost = () => !document.activeElement || document.activeElement === do
 
 /**
  * A quiet pill in the top bar, there only while editing copies are being made, wait their turn or are paused
- * ("Preparing 2 files"), or while a copy that failed hasn't been tried again or dismissed ("Copy failed", with no ring).
- * Copies the person stopped never keep it. It opens the list of files. It subscribes to three numbers, so progress that
- * moves less than a percent draws nothing; with nothing to show it renders nothing at all. Kept while its popover is
- * open, so stopping the last copy leaves the person where they were.
+ * ("Preparing 2 files"), or while a copy that failed hasn't been tried again or dismissed ("Copy failed", with no
+ * ring). Copies the person stopped never keep it. It opens the list of files. It subscribes to three numbers, so
+ * progress that moves less than a percent draws nothing; with nothing to show it renders nothing at all. Kept while its
+ * popover is open, so stopping the last copy leaves the person where they were.
  *
  * When it goes while it, or its popover, had the keyboard focus, the focus moves to `focusAfter` (the top bar's next
  * control), never to the page.

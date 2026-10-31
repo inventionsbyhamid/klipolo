@@ -1,7 +1,7 @@
 //! The app's own codes for editing copies (`copies.*`) and their English: Rust never sends English for the page to
 //! show. `code!` refuses to compile a code `APP` doesn't have. The page words them from
-//! `apps/desktop/src/bindings/appCodes.json`, which `export_bindings_app_codes` writes (`pnpm bindings`); logs and tests
-//! read them with `klipolo_model::coded::english`.
+//! `apps/desktop/src/bindings/appCodes.json`, which `export_bindings_app_codes` writes (`pnpm bindings`); logs and
+//! tests read them with `klipolo_model::coded::english`.
 //!
 //! Parameters: `name` is a file's name.
 

@@ -3,11 +3,12 @@
 //! English for the page to show). `MediaJobs` (`mod.rs`) owns one and does what `next` says.
 //!
 //! One copy runs at a time, and only while nothing else wants the computer: it pauses while the person plays the video
-//! (`playing`), exports (`exporting`) or records a take (`recording`), while they asked it to (`user_paused`, or automatic
-//! copies are off), and it never starts while a thumbnails-only scan runs (`scanning`): one background job at a time. A copy that
-//! paused itself because the disk is almost full, the computer runs hot or the encoder is busy holds the whole queue:
-//! the next copy would meet the same. So does a copy whose worker stopped without a word (crashed or killed): it is
-//! started again by itself after `RESTART_WAITS`, from its finished segments, and fails after that many restarts.
+//! (`playing`), exports (`exporting`) or records a take (`recording`), while they asked it to (`user_paused`, or
+//! automatic copies are off), and it never starts while a thumbnails-only scan runs (`scanning`): one background job at
+//! a time. A copy that paused itself because the disk is almost full, the computer runs hot or the encoder is busy
+//! holds the whole queue: the next copy would meet the same. So does a copy whose worker stopped without a word
+//! (crashed or killed): it is started again by itself after `RESTART_WAITS`, from its finished segments, and fails
+//! after that many restarts.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -502,7 +503,8 @@ impl ScheduleState {
     }
 
     /// How long until job `i` is tried again by itself: a hot computer after `THERMAL_WAIT`, a busy encoder after its
-    /// backoff (30 s, doubling), a stopped worker after its restart's wait (5 s, then 30 s). None for every other state.
+    /// backoff (30 s, doubling), a stopped worker after its restart's wait (5 s, then 30 s). None for every other
+    /// state.
     pub fn retry_in(&self, i: usize) -> Option<Duration> {
         let job = self.jobs.get(i)?;
         match job.state {

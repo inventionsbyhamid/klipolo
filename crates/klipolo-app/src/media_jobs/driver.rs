@@ -305,9 +305,9 @@ impl Driver {
         }
     }
 
-    /// When files of the open project that aren't there are looked at again by themselves: every
-    /// `ABSENT_EVERY` while any is absent, without waiting for an edit or for Klipolo to come to the front (which look at
-    /// once). None, so no timer, while none is absent or no project is open.
+    /// When files of the open project that aren't there are looked at again by themselves: every `ABSENT_EVERY` while
+    /// any is absent, without waiting for an edit or for Klipolo to come to the front (which look at once). None, so no
+    /// timer, while none is absent or no project is open.
     fn look_due(&mut self) -> Option<Instant> {
         let absent = self.project.is_some()
             && (!self.absent.is_empty() || self.state().jobs.iter().any(is_missing));
@@ -390,9 +390,9 @@ impl Driver {
         }
     }
 
-    /// Every mapped copy is checked against its source on a thread of its own: those of a file that is there but changed
-    /// come back as `Stale` (deleted, made again), those whose file can't be looked at now as `Unreachable` (unmapped,
-    /// kept).
+    /// Every mapped copy is checked against its source on a thread of its own: those of a file that is there but
+    /// changed come back as `Stale` (deleted, made again), those whose file can't be looked at now as `Unreachable`
+    /// (unmapped, kept).
     fn recheck(&mut self) {
         let done: Vec<(Arc<str>, Arc<str>)> = self
             .state()
@@ -458,9 +458,9 @@ impl Driver {
         }
     }
 
-    /// These sources can't be looked at now (an ejected drive, a share that dropped): their copies leave the preview but
-    /// stay on disk, and the files are looked at again (`look_again`) until they are back; one back unchanged is mapped
-    /// again at once (its record still matches), one back changed gets a new copy.
+    /// These sources can't be looked at now (an ejected drive, a share that dropped): their copies leave the preview
+    /// but stay on disk, and the files are looked at again (`look_again`) until they are back; one back unchanged is
+    /// mapped again at once (its record still matches), one back changed gets a new copy.
     fn on_unreachable(&mut self, paths: Vec<Arc<str>>) {
         let running = self.run.as_ref().map(|r| r.path.clone());
         let mut s = lock(&self.inner.state);
@@ -969,8 +969,8 @@ impl Driver {
         self.changed();
     }
 
-    /// The preview couldn't open `path`'s copy (purged, or damaged) and reads the source file: the copy is forgotten and
-    /// made again (a damaged one is deleted first, so it isn't found again).
+    /// The preview couldn't open `path`'s copy (purged, or damaged) and reads the source file: the copy is forgotten
+    /// and made again (a damaged one is deleted first, so it isn't found again).
     fn on_unusable(&mut self, path: &str) {
         let mut s = lock(&self.inner.state);
         let Some(i) = s.index_of(path) else {

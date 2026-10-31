@@ -50,7 +50,8 @@ const WHY: Record<string, CopyWhy> = {
   'copies.paused.workerStopped': 'workerStopped',
   [MISSING_CODE]: 'missing',
 };
-/** Every other failure (unreadable, unknown length, a read-only disk, a busy encoder) is a copy that couldn't be made. */
+/** Every other failure (unreadable, unknown length, a read-only disk, a busy encoder) is a copy that couldn't be made.
+/** */
 const FAILED = 'copies.failed.';
 
 const REFUSED: Record<string, RefusalKind> = {
