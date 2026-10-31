@@ -308,6 +308,15 @@ describe('the clip card', () => {
     );
   });
 
+  it('a_recording_clip_s_card_is_titled_as_its_toast_names_it', async () => {
+    // Clip a plays the project's first recording: "Recording 1", as its landing toast said, never its screen file.
+    useSelection.setState({ selectedId: 'a' });
+    renderWithProviders(<Inspector format="landscape" />);
+    expect(screen.getByRole('heading', { name: 'Recording 1' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'Recording 1 settings' })).toBeInTheDocument();
+    expect(await screen.findByRole('radio', { name: 'Fit' })).toHaveAttribute('aria-checked', 'true');
+  });
+
   it('a muted clip unmutes; a clip without sound has no volume', async () => {
     useProject.setState({ snapshot: withB({ muted: true }) });
     const { unmount } = renderWithProviders(<Inspector format="landscape" />);

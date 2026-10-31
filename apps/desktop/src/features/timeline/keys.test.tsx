@@ -63,7 +63,7 @@ describe('the timeline from the keyboard', () => {
     fireEvent.keyDown(a, { key: 'ArrowRight' });
     await frames();
     // The cut between the clips first: a stop that selects nothing when it has no transition.
-    const cut = screen.getByRole('button', { name: /^Cut between screen\.mp4 and broll\.mp4/ });
+    const cut = screen.getByRole('button', { name: /^Cut between Recording 1 and broll\.mp4/ });
     expect(cut).toHaveFocus();
     expect(useSelection.getState().selectedId).toBeNull();
     fireEvent.keyDown(cut, { key: 'ArrowRight' });
