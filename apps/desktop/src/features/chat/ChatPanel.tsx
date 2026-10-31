@@ -5,6 +5,7 @@ import { Icon } from '../../layout/Icon';
 import { openProposal } from '../../state/chatMessages';
 import { useChat } from '../../state/chat';
 import { useChatPanel } from '../../state/chatPanel';
+import { startSpeechFeed } from '../../state/speech';
 import { useUi } from '../../state/ui';
 import { Announcer } from './Announcer';
 import { Composer } from './Composer';
@@ -47,6 +48,8 @@ export function ChatPanel() {
       focusComposer();
     }
   });
+  // Words timed again drop an open proposal (`useChat`): the panel follows `speech-changed`.
+  useEffect(() => startSpeechFeed(), []);
   const expand = () => {
     wantFocus.current = true;
     useChatPanel.getState().setCollapsed(false);
