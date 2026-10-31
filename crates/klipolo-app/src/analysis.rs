@@ -316,6 +316,10 @@ struct Inner {
     entries: HashMap<String, Entry>,
     /// The contents a `start` took on, until their analysis ends: another start leaves them alone.
     claimed: HashSet<String>,
+    /// With an access code: each running content's estimate less what its calls have cost so far, by content key. The
+    /// relay charges a call only once it is answered, so this is credit already promised: a start or an estimate
+    /// counts it as spent.
+    reserved: HashMap<String, f64>,
     /// What the engine has: the open project's speech, by asset id.
     speech: Speech,
     /// The runs started, while any of their clips is still going (`cancel` stops them all).
@@ -429,7 +433,8 @@ impl AnalysisState {
         let relay = meta.is_some_and(|m| m.client().is_relay());
         if relay && !estimate.clips.is_empty() {
             let status = self.credentials.status().await;
-            (estimate.credit_left_usd, estimate.refusal) = credit(&status, estimate.usd);
+            let reserved = lock(&self.inner).reserved.values().sum();
+            (estimate.credit_left_usd, estimate.refusal) = credit(&status, estimate.usd, reserved);
         }
         estimate
     }
@@ -483,7 +488,9 @@ impl AnalysisState {
     }
 
     /// The adapter that pays for `paid`, or why there is none: no key or code, a code whose device can't register now
-    /// (its sentence, never the ask for a key), or an estimate over an access code's credit.
+    /// (its sentence, never the ask for a key), or an estimate over an access code's credit left after what the runs
+    /// going have promised. With an access code, each content's estimate is promised now, with the check (so two
+    /// starts at once can't both take the same credit), and released as its calls cost or when it ends.
     async fn payer(&self, paid: &[Content]) -> (Option<Meta>, Option<String>) {
         let ready = self.credentials.ready().await;
         let Some(meta) = ready.meta else {
@@ -493,14 +500,18 @@ impl AnalysisState {
             );
         };
         if meta.client().is_relay() {
-            let usd = paid
+            let prices: Vec<(String, f64)> = paid
                 .iter()
-                .map(|content| price(&meta, &content.clip, &content.cached))
-                .sum();
-            let (_, refusal) = credit(&self.credentials.status().await, usd);
+                .map(|c| (c.key.clone(), price(&meta, &c.clip, &c.cached)))
+                .collect();
+            let usd = prices.iter().map(|(_, usd)| usd).sum();
+            let status = self.credentials.status().await;
+            let mut inner = lock(&self.inner);
+            let (_, refusal) = credit(&status, usd, inner.reserved.values().sum());
             if refusal.is_some() {
                 return (None, refusal);
             }
+            inner.reserved.extend(prices);
         }
         (Some(meta), None)
     }
@@ -641,6 +652,7 @@ impl AnalysisState {
         };
         inner.entry(key).state = state.clone();
         inner.claimed.remove(key);
+        inner.reserved.remove(key);
         for id in inner.ids_of(key) {
             let stopped = AnalysisEvent::Stopped(AnalysisStopped {
                 asset_id: id.clone(),
@@ -710,9 +722,12 @@ impl AnalysisState {
         Self::edit(&mut inner, key, |a| a.scenes = Some(Arc::new(log)));
     }
 
-    /// Calls for content `key` cost `usd`.
+    /// Calls for content `key` cost `usd` (charged now: no longer only promised).
     fn spend(&self, key: &str, usd: f64) {
         let mut inner = lock(&self.inner);
+        if let Some(promised) = inner.reserved.get_mut(key) {
+            *promised = (*promised - usd).max(0.0);
+        }
         Self::edit(&mut inner, key, |a| a.spent_usd += usd);
     }
 }
@@ -761,14 +776,14 @@ fn price(meta: &Meta, clip: &Clip, cached: &Cached) -> f64 {
     usd
 }
 
-/// With an access code: the credit left (when the relay said), and why `usd` of analysis is refused (a code turned
-/// off, or more than is left).
-fn credit(status: &AiStatus, usd: f64) -> (Option<f64>, Option<String>) {
+/// With an access code: the credit left (when the relay said), less what the runs going have `reserved`, and why `usd`
+/// of analysis is refused (a code turned off, or more than is left).
+fn credit(status: &AiStatus, usd: f64, reserved: f64) -> (Option<f64>, Option<String>) {
     if status.mode != AiMode::Relay {
         return (None, None);
     }
     let left = match (status.budget_usd, status.spent_usd) {
-        (Some(budget), Some(spent)) => Some((budget - spent).max(0.0)),
+        (Some(budget), Some(spent)) => Some((budget - spent - reserved).max(0.0)),
         _ => None,
     };
     if status.active == Some(false) {
@@ -810,12 +825,20 @@ mod tests {
             active: Some(true),
             ..AiStatus::default()
         };
-        assert_eq!(credit(&relay(2.0, 0.5), 0.07), (Some(1.5), None));
-        let (left, refusal) = credit(&relay(2.0, 1.995), 0.004);
+        assert_eq!(credit(&relay(2.0, 0.5), 0.07, 0.0), (Some(1.5), None));
+        // What runs going have promised counts as spent.
+        let (left, refusal) = credit(&relay(2.0, 1.9), 0.07, 0.07);
+        assert!((left.unwrap() - 0.03).abs() < 1e-9);
+        assert!(
+            refusal
+                .unwrap()
+                .starts_with("Your access code has $0.03 left")
+        );
+        let (left, refusal) = credit(&relay(2.0, 1.995), 0.004, 0.0);
         assert!((left.unwrap() - 0.005).abs() < 1e-12);
         assert_eq!(refusal, None);
         assert_eq!(
-            credit(&relay(2.0, 2.4), 0.004).1.as_deref(),
+            credit(&relay(2.0, 2.4), 0.004, 0.0).1.as_deref(),
             Some(
                 "Your access code has $0.00 left, and this needs less than $0.01. Trim the clips first, or add \
                  your own Meta key in Settings."
@@ -827,7 +850,7 @@ mod tests {
             ..relay(2.0, 0.0)
         };
         assert_eq!(
-            credit(&off, 0.0).1.as_deref(),
+            credit(&off, 0.0, 0.0).1.as_deref(),
             Some("This access code is no longer active.")
         );
         // The relay didn't say: nothing to refuse on.
@@ -835,11 +858,11 @@ mod tests {
             budget_usd: None,
             ..relay(2.0, 0.0)
         };
-        assert_eq!(credit(&unknown, 9.0), (None, None));
+        assert_eq!(credit(&unknown, 9.0, 0.0), (None, None));
         let key = AiStatus {
             mode: AiMode::Key,
             ..AiStatus::default()
         };
-        assert_eq!(credit(&key, 9.0), (None, None));
+        assert_eq!(credit(&key, 9.0, 0.0), (None, None));
     }
 }

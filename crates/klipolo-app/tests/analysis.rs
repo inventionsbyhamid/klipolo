@@ -1217,3 +1217,61 @@ async fn one_file_imported_twice_is_analysed_and_priced_once() {
     }
     server.verify().await;
 }
+
+/// With an access code, a run going has promised its estimate: a second start whose estimate fits the credit the relay
+/// reports, but not what is left after the first, is refused with the plain sentence. Once the first ends, its promise
+/// is released.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_second_start_counts_the_credit_the_first_promised() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/devices/me"))
+        .respond_with(device(2.0, 1.9))
+        .mount(&server)
+        .await;
+    let h = harness(&server, code_store(), FakeMedia::whole(SECONDS));
+    Mock::given(method("POST"))
+        .and(path("/meta/v1/asr/transcribe"))
+        .respond_with(asr_answer().set_delay(Duration::from_millis(300)))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(align_answer())
+        .mount(&server)
+        .await;
+    mount_scenes(
+        &server,
+        "/meta/v1",
+        ResponseTemplate::new(200).set_body_json(spark_answer()),
+    )
+    .await;
+    nothing_else(&server).await;
+    let first = asset("first", AssetKind::Video, &h.clip("a.mov", 1), 155.04);
+    let second = asset("second", AssetKind::Video, &h.clip("b.mov", 2), 155.04);
+    let each = asr_usd(155.04) + scene_usd(155.04);
+    assert!(each < 0.1 && 2.0 * each > 0.1, "{each}");
+
+    let started = h.state.start(std::slice::from_ref(&first)).await;
+    assert_eq!(started.refused, None);
+    let refusal = "Your access code has $0.03 left, and this needs about $0.07. Trim the clips first, or add your own \
+                   Meta key in Settings.";
+    let estimate = h.state.estimate(std::slice::from_ref(&second)).await;
+    assert_eq!(estimate.refusal.as_deref(), Some(refusal));
+    let refused = h.state.start(std::slice::from_ref(&second)).await;
+    assert_eq!(refused.refused.as_deref(), Some(refusal));
+    refused.finished().await;
+    started.finished().await;
+
+    assert_eq!(
+        h.state.state_of("first"),
+        AssetState::Done { approximate: false }
+    );
+    assert_eq!(h.state.state_of("second"), AssetState::None);
+    // The first's promise is released: the second fits again (the mock's spend doesn't move).
+    let estimate = h.state.estimate(std::slice::from_ref(&second)).await;
+    assert_eq!(estimate.refusal, None);
+    assert!((estimate.credit_left_usd.unwrap() - 0.1).abs() < 1e-9);
+    server.verify().await;
+}
