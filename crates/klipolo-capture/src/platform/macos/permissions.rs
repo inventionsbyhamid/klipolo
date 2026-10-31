@@ -9,8 +9,10 @@ use objc2_core_graphics::CGPreflightScreenCaptureAccess;
 
 use crate::backend::{Permission, Permissions};
 
+/// All three, in an autorelease pool of their own: the Record dialog's previews read them ten times a second on their
+/// ticker's thread, which has no run loop to drain one.
 pub(super) fn read() -> Permissions {
-    Permissions {
+    objc::ar_pool(|| Permissions {
         screen: if CGPreflightScreenCaptureAccess() {
             Permission::Granted
         } else {
@@ -18,7 +20,7 @@ pub(super) fn read() -> Permissions {
         },
         camera: status(av::MediaType::video()),
         mic: status(av::MediaType::audio()),
-    }
+    })
 }
 
 /// The microphone's state alone, in an autorelease pool of its own: the Record dialog's meter reads it once a second on
