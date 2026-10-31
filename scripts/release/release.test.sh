@@ -20,6 +20,21 @@ mkdir -p "$repo/scripts/release" "$repo/apps/desktop/dist"
 cp "$here"/*.sh "$repo/scripts/release/"
 echo '<!doctype html><title>Klipolo</title>' > "$repo/apps/desktop/dist/index.html"
 check=$repo/scripts/release/check-bundle.sh
+# The checkout's files the Cap MIT check reads: the app's own Cap-MIT.txt (a bundle's copy must have its licence text)
+# and the capture crate's four files from Cap's MIT crates, which that copy's first line names.
+source_file() {  # source_file <path in the test's tree> <header line>...
+  local f=$repo/$1
+  shift
+  mkdir -p "$(dirname "$f")"
+  printf '%s\n' "$@" 'pub fn f() {}' > "$f"
+}
+mkdir -p "$repo/crates/klipolo-app/licenses"
+cp "$app_crate/licenses/Cap-MIT.txt" "$repo/crates/klipolo-app/licenses/"
+capture=crates/klipolo-capture/src
+cap_mit="// MIT (Cap's \`scap-screencapturekit\`), Copyright (c) 2023-present Cap Software, Inc."
+for f in vendor/cap/sck/capture.rs vendor/cap/sck/config.rs vendor/cap/sck/mod.rs platform/macos/camera.rs; do
+  source_file "$capture/$f" '// SPDX-License-Identifier: MIT' "$cap_mit"
+done
 
 # The two Mach-O files, built once; the dylib's install name is @rpath/libfoo.1.dylib.
 build=$work/build
@@ -144,23 +159,12 @@ app=$(case_app camera-false)
 expect "a signature with the camera entitlement false fails" fail \
   "the app's entitlements don't grant com.apple.security.device.camera" "$check" "$app" "$arch"
 
-# Cap's MIT licence ships, and its first line names every file in the checkout vendored from Cap's MIT crates: each
-# starts with the SPDX MIT line and names Cap Software, Inc. in its header. The test's tree gets the capture crate's
-# four, which the app's Cap-MIT.txt names, plus an AGPL file from Cap and another author's MIT file, which it needn't.
+# Cap's MIT licence ships with the checkout's copy's licence text, and its first line names exactly the checkout's files
+# from Cap's MIT crates: each starts with the SPDX MIT line and names Cap Software, Inc. in its header. Besides the
+# capture crate's four, the tree gets an AGPL file from Cap and another author's MIT file, which it needn't name.
 app=$(case_app no-cap-mit)
 rm "$app/Contents/Resources/licenses/Cap-MIT.txt"
 expect "no Cap MIT licence fails" fail "licenses/Cap-MIT.txt isn't in the app" "$check" "$app" "$arch"
-source_file() {  # source_file <path in the test's tree> <header line>...
-  local f=$repo/$1
-  shift
-  mkdir -p "$(dirname "$f")"
-  printf '%s\n' "$@" 'pub fn f() {}' > "$f"
-}
-capture=crates/klipolo-capture/src
-cap_mit="// MIT (Cap's \`scap-screencapturekit\`), Copyright (c) 2023-present Cap Software, Inc."
-for f in vendor/cap/sck/capture.rs vendor/cap/sck/config.rs vendor/cap/sck/mod.rs platform/macos/camera.rs; do
-  source_file "$capture/$f" '// SPDX-License-Identifier: MIT' "$cap_mit"
-done
 source_file "$capture/hosttime.rs" '// Vendored from Cap (https://github.com/CapSoftware/Cap)' \
   '// Copyright (c) 2023-present Cap Software, Inc. Used by Klipolo under the AGPL-3.0.'
 source_file crates/klipolo-other/src/lib.rs '// SPDX-License-Identifier: MIT' '// Copyright (c) 2026 Someone Else'
@@ -173,11 +177,39 @@ echo "Also $capture/vendor/cap/sck/stream.rs." >> "$app/Contents/Resources/licen
 expect "a Cap MIT file named below the first line fails" fail \
   "Cap-MIT.txt's first line doesn't name $capture/vendor/cap/sck/stream.rs" "$check" "$app" "$arch"
 rm "$repo/$capture/vendor/cap/sck/stream.rs"
+# A name left over from a file renamed or gone fails, and so does a near miss, which names no file.
+app=$(case_app cap-mit-stale)
+sed -i '' "1s|\$| Also $capture/vendor/cap/sck/old.rs.|" "$app/Contents/Resources/licenses/Cap-MIT.txt"
+expect "a name on Cap-MIT.txt's first line that isn't a Cap MIT file fails" fail \
+  "first line names $capture/vendor/cap/sck/old.rs, which isn't a file from Cap's MIT crates" "$check" "$app" "$arch"
+app=$(case_app cap-mit-near-miss)
+sed -i '' '1s|/sck/mod\.rs |/sck/mod.rs.bak |' "$app/Contents/Resources/licenses/Cap-MIT.txt"
+expect "mod.rs.bak on the first line doesn't name mod.rs" fail \
+  "Cap-MIT.txt's first line doesn't name $capture/vendor/cap/sck/mod.rs " "$check" "$app" "$arch"
+# The licence text below the first line is the checkout's copy's, all of it.
 app=$(case_app cap-mit-first-line-only)
 head -n 1 "$app_crate/licenses/Cap-MIT.txt" > "$app/Contents/Resources/licenses/Cap-MIT.txt"
-expect "a Cap-MIT.txt without the licence text fails" fail "licenses/Cap-MIT.txt isn't Cap's MIT licence" \
-  "$check" "$app" "$arch"
-rm -r "$repo/crates"
+expect "a Cap-MIT.txt without the licence text fails" fail \
+  "licenses/Cap-MIT.txt's licence text (below its first line) isn't the checkout's" "$check" "$app" "$arch"
+app=$(case_app cap-mit-truncated)
+sed -i '' '/^THE SOFTWARE IS PROVIDED/,$d' "$app/Contents/Resources/licenses/Cap-MIT.txt"
+expect "a Cap-MIT.txt without the licence's disclaimer fails" fail \
+  "licenses/Cap-MIT.txt's licence text (below its first line) isn't the checkout's" "$check" "$app" "$arch"
+# A source file that can't be read fails rather than be skipped.
+app=$(case_app cap-mit-unreadable)
+chmod 000 "$repo/$capture/hosttime.rs"
+expect "an unreadable source file fails the Cap MIT check" fail \
+  "couldn't read every source file under crates/ to look for files from Cap's MIT crates" "$check" "$app" "$arch"
+chmod 644 "$repo/$capture/hosttime.rs"
+# The Linux gate's form (scripts/ci-linux.sh): the checkout's own copy against its files.
+own_cap_checked() { (. "$repo/scripts/release/lib.sh" && cap_mit_check "$repo" "$repo/$1" "$1"); }
+expect "the Linux gate's Cap MIT check passes the checkout's copy" pass \
+  own_cap_checked crates/klipolo-app/licenses/Cap-MIT.txt
+source_file "$capture/vendor/cap/sck/stream.rs" '// SPDX-License-Identifier: MIT' "$cap_mit"
+expect "the Linux gate's Cap MIT check fails a file its copy doesn't name" fail \
+  "crates/klipolo-app/licenses/Cap-MIT.txt's first line doesn't name $capture/vendor/cap/sck/stream.rs" \
+  own_cap_checked crates/klipolo-app/licenses/Cap-MIT.txt
+rm "$repo/$capture/vendor/cap/sck/stream.rs"
 
 # NOTICE.txt's source code line: a placeholder left fails, and so does a notice without the address or the full commit.
 app=$(case_app source-placeholder)

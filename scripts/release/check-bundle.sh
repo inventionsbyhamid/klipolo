@@ -7,8 +7,8 @@
 # @executable_path/, @loader_path/, /usr/lib/ or /System/Library/, and every LC_RPATH is relative (@executable_path/ or
 # @loader_path/), never a machine path such as the dev FFmpeg prefix's.
 # The recorder's needs: Info.plist gives the screen, microphone and camera usage strings, and the app's signature grants
-# the camera and microphone entitlements (an unsigned app fails). Cap-MIT.txt's first line names every file in the
-# checkout vendored from Cap's MIT crates (lib.sh's cap_mit_files).
+# the camera and microphone entitlements (an unsigned app fails). Cap-MIT.txt has the checkout's copy's licence text,
+# and its first line names exactly the checkout's files vendored from Cap's MIT crates (lib.sh's cap_mit_check).
 # The app must also find its libraries: the main executable's LC_RPATHs include @executable_path/../Frameworks, and
 # every @rpath/<name> that any Mach-O in the bundle loads is a file at Contents/Frameworks/<name>. And no file under
 # Contents names the builder's home folder or user name, nor does the page build it was made from: the main
@@ -66,22 +66,26 @@ if [ -f "$licences/NOTICE.txt" ]; then
   fi
 fi
 
-# Cap's MIT licence, for the recorder's files from Cap's MIT crates: Cap's text, and a first line that names each such
-# file in the checkout, so a file vendored later can't ship without it.
+# Cap's MIT licence, for the recorder's files from Cap's MIT crates: below its first line, the checkout's own copy's
+# text, word for word; its first line names exactly the checkout's files from Cap's MIT crates (lib.sh's cap_mit_check,
+# which the Linux gate runs on the checkout's copy too), so a file vendored later can't ship without it, and a name
+# left over from a file renamed or gone fails as well.
 cap=$licences/Cap-MIT.txt
+own_cap=$repo/crates/klipolo-app/licenses/Cap-MIT.txt
 if [ -s "$cap" ]; then
-  grep -qF 'Permission is hereby granted, free of charge' "$cap" \
-    && grep -qF 'Copyright (c) 2023 Cap Software, Inc.' "$cap" \
-    || fail "licenses/Cap-MIT.txt isn't Cap's MIT licence (its text and Cap Software, Inc.'s copyright line)"
-  cap_named=$(head -n 1 "$cap" | tr -s ' ,;()' '\n' | sed 's/[.:]*$//')
-  if cap_files=$(cap_mit_files "$repo"); then
-    while IFS= read -r f; do
-      [ -z "$f" ] || grep -qxF -- "$f" <<< "$cap_named" \
-        || fail "licenses/Cap-MIT.txt's first line doesn't name $f (from Cap's MIT crates)"
-    done <<< "$cap_files"
+  if [ ! -f "$own_cap" ]; then
+    fail "the checkout has no crates/klipolo-app/licenses/Cap-MIT.txt to compare licenses/Cap-MIT.txt with"
   else
-    fail "couldn't read every source file under crates/ to look for files from Cap's MIT crates"
+    tail -n +2 "$cap" > "$tmp/cap-text"
+    tail -n +2 "$own_cap" > "$tmp/own-cap-text"
+    cmp -s "$tmp/cap-text" "$tmp/own-cap-text" \
+      || fail "licenses/Cap-MIT.txt's licence text (below its first line) isn't the checkout's" \
+        "crates/klipolo-app/licenses/Cap-MIT.txt's"
   fi
+  cap_problems=$(cap_mit_check "$repo" "$cap" licenses/Cap-MIT.txt) || true
+  while IFS= read -r problem; do
+    [ -z "$problem" ] || fail "$problem"
+  done <<< "$cap_problems"
 fi
 
 # The permission prompts' words (crates/klipolo-app/Info.plist, which tauri.conf.json's bundle.macOS.infoPlist merges

@@ -75,6 +75,30 @@ cap_mit_files() {
   return "$rc"
 }
 
+# Whether the first line of <notice>, a Cap-MIT.txt, names exactly the checkout <repo>'s files from Cap's MIT crates
+# (cap_mit_files): each of them, and no other crates/...rs path. Names are whole words of the line (spaces, commas,
+# semicolons and brackets part them, and a word's last . or : is dropped), so `mod.rs.bak` doesn't name `mod.rs`.
+# Prints one line per problem, calling the file <label>, and returns 1 when there is any:
+#   cap_mit_check <repo> <notice> <label>
+cap_mit_check() {
+  local repo=$1 notice=$2 label=$3 named files f rc=0
+  named=$(head -n 1 "$notice" | tr -s ' ,;()' '\n' | sed 's/[.:]*$//' | grep -E '^crates/.+\.rs$' || true)
+  if ! files=$(cap_mit_files "$repo"); then
+    echo "couldn't read every source file under crates/ to look for files from Cap's MIT crates"
+    rc=1
+  fi
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    grep -qxF -- "$f" <<< "$named" || { echo "$label's first line doesn't name $f (from Cap's MIT crates)"; rc=1; }
+  done <<< "$files"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    grep -qxF -- "$f" <<< "$files" \
+      || { echo "$label's first line names $f, which isn't a file from Cap's MIT crates in the checkout"; rc=1; }
+  done <<< "$named"
+  return "$rc"
+}
+
 # The public address of Klipolo's source code, as NOTICE.txt gives it: https://, a host, and a path of plain URL
 # characters (no spaces, quotes, & or \).
 is_source_url() {
