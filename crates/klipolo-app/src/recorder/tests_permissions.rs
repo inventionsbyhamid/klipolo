@@ -129,6 +129,30 @@ fn reopen_is_refused_during_a_take_and_flushes_first() {
     assert_eq!(*steps.lock().unwrap(), ["flush", "restart"]);
 }
 
+/// Klipolo run from its disk image, or from the copy macOS translocated it to, may not open again once it quits: Reopen
+/// Klipolo says to move it to Applications first, and doesn't save, quit or remember a reopen. Takes still arm.
+#[test]
+fn reopen_from_a_disk_image_asks_to_move_klipolo_first() {
+    let rec = fixture_changed(Script::default(), |parts| parts.must_move = true);
+    let refused = rec.state.reopen(
+        &|| false,
+        || panic!("never saves"),
+        || panic!("never quits"),
+    );
+    assert_eq!(
+        code_of(&refused.unwrap_err()),
+        "capture.permission.reopenMoveFirst"
+    );
+    assert_eq!(
+        klipolo_capture::english::english(&klipolo_model::coded::CodedError::new(
+            "capture.permission.reopenMoveFirst"
+        )),
+        "Move Klipolo to your Applications folder, then open it again."
+    );
+    assert!(!rec.files.dir.join("screen-reopen.json").exists());
+    rec.arm(options_screen()).unwrap();
+}
+
 /// A Record press that lands while Reopen Klipolo saves the project is refused: the restart would cut the take off
 /// armed. Once the reopen doesn't go ahead, takes arm again.
 #[test]

@@ -499,6 +499,19 @@ describe('permission steps', () => {
     expect(recordButton()).toHaveAccessibleDescription('Allow screen recording first');
   });
 
+  it('reopen_from_a_disk_image_says_to_move_klipolo_first', async () => {
+    // Run from its disk image, or from the copy macOS made of it where it was downloaded, Klipolo couldn't open again.
+    const dialog = await openOn(recorderSetup({ permissions: { screen: 'notAsked' } }));
+    fake.script.reopen = () => refusal('capture.permission.reopenMoveFirst');
+    await userEvent.click(screen.getByRole('button', { name: 'Allow screen recording' }));
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + REOPEN_GRACE_MS * 10);
+    await userEvent.click(screen.getByRole('button', { name: 'Reopen Klipolo' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      'Move Klipolo to your Applications folder, then open it again.',
+    );
+    expect(fake.calls).toEqual(['setup', 'allowScreen', 'reopen']);
+  });
+
   it('a_refused_permission_press_is_said_in_the_step', async () => {
     const dialog = await openOn(recorderSetup({ permissions: { screen: 'notAsked' } }));
     fake.script.allowScreen = () => refusal('capture.busy', { place: { code: 'capture.place.menuBar', params: {} } });

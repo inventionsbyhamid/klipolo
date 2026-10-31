@@ -155,6 +155,9 @@ pub const ENGLISH: Messages = &[
     ("capture.permission.settingsDidntOpen", "System Settings didn't open. Open it from the Apple menu, then choose Privacy & Security."),
     // Reopen Klipolo while an export runs: the restart would end it.
     ("capture.permission.reopenExporting", "An export is running. Reopen Klipolo when it's done."),
+    // Reopen Klipolo while Klipolo runs from its disk image, or from the copy macOS runs an app from where it was
+    // downloaded: it couldn't open again from there.
+    ("capture.permission.reopenMoveFirst", "Move Klipolo to your Applications folder, then open it again."),
     ("capture.permission.camera", "Allow Klipolo to use your camera in your computer's privacy settings, then try again."),
     ("capture.permission.mic", "Allow Klipolo to use your microphone in your computer's privacy settings, then try again."),
     // The recorder's live view: its one quiet line when it can't run (any failure but Screen Recording's,

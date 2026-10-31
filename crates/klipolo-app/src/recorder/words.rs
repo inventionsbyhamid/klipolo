@@ -83,3 +83,8 @@ pub(super) fn settings_didnt_open(error: &std::io::Error) -> CodedError {
 pub(super) fn reopen_exporting() -> CodedError {
     CodedError::new("capture.permission.reopenExporting")
 }
+
+/// "Move Klipolo to your Applications folder, then open it again."
+pub(super) fn reopen_move_first() -> CodedError {
+    CodedError::new("capture.permission.reopenMoveFirst")
+}

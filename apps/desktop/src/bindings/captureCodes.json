@@ -432,6 +432,11 @@
     "params": []
   },
   {
+    "code": "capture.permission.reopenMoveFirst",
+    "message": "Move Klipolo to your Applications folder, then open it again.",
+    "params": []
+  },
+  {
     "code": "capture.permission.camera",
     "message": "Allow Klipolo to use your camera in your computer's privacy settings, then try again.",
     "params": []

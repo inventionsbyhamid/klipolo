@@ -56,6 +56,9 @@ pub(super) struct Parts {
     pub(super) open_project: Box<dyn Fn() -> Option<Opened> + Send + Sync>,
     /// A thread ticks the supervisor (the app); tests tick it themselves.
     pub(super) ticker: bool,
+    /// Klipolo runs from its disk image or from a copy macOS translocated, which may be gone once it quits: Reopen
+    /// Klipolo asks to move it to Applications first.
+    pub(super) must_move: bool,
 }
 
 /// The project open when a take is armed: the take lands there.
@@ -86,6 +89,8 @@ struct On {
     files: Option<Files>,
     root: Option<PathBuf>,
     open_project: Box<dyn Fn() -> Option<Opened> + Send + Sync>,
+    /// Reopen Klipolo asks to move Klipolo to Applications first (`Parts::must_move`).
+    must_move: bool,
     /// What the Record dialog was opened with: arming plans from it rather than listing the devices again.
     last_setup: Mutex<Option<Shown>>,
     /// One encoder probe at a time.
@@ -157,6 +162,7 @@ impl RecorderState {
                 files: parts.files,
                 root: parts.root,
                 open_project: parts.open_project,
+                must_move: parts.must_move,
                 last_setup: Mutex::new(None),
                 probing: Mutex::new(()),
                 probe_failed: AtomicBool::new(false),
@@ -288,9 +294,9 @@ impl RecorderState {
         permissions::open_privacy(page, open)
     }
 
-    /// "Reopen Klipolo": refused while an export runs (`exporting`, before and after the save) or during a take; else
-    /// the project is saved (`flush`), then Klipolo quits (`restart`) to open again (`relaunch`). No take arms
-    /// meanwhile.
+    /// "Reopen Klipolo": refused when Klipolo runs from its disk image or a translocated copy, while an export runs
+    /// (`exporting`, before and after the save) or during a take; else the project is saved (`flush`), then Klipolo
+    /// quits (`restart`) to open again (`relaunch`). No take arms meanwhile.
     pub(super) fn reopen(
         &self,
         exporting: &dyn Fn() -> bool,
@@ -303,6 +309,7 @@ impl RecorderState {
             &on.recorder,
             on.files.as_ref(),
             project.as_deref(),
+            on.must_move,
             exporting,
             flush,
             restart,
@@ -406,6 +413,9 @@ fn app_parts(app: &AppHandle) -> Parts {
             Arc::new(NoLaunch)
         }
     };
+    let must_move = exe
+        .as_ref()
+        .is_ok_and(|exe| klipolo_app::mcp_config::needs_move(exe));
     let probe_exe = exe.ok();
     let projects = app.clone();
     let sink = AppSink::new(app.clone(), files.clone());
@@ -432,6 +442,7 @@ fn app_parts(app: &AppHandle) -> Parts {
             .ok()
         }),
         ticker: true,
+        must_move,
     }
 }
 

@@ -80,8 +80,9 @@ pub async fn recorder_allow_screen(app: AppHandle) -> Result<(), Said> {
 /// "Reopen Klipolo": the project is saved, then Klipolo quits with Reopen's exit code, and opens again once it has
 /// gone (`relaunch`): from LaunchServices, in front, as an app with its own permissions. `capture.busy` during a take,
 /// and `capture.permission.reopenExporting` while an export runs, before or after the save (one that starts in between
-/// asks first, as at any quit); a save that fails keeps Klipolo open and says why. A second press while it is under way
-/// does nothing more.
+/// asks first, as at any quit); a save that fails keeps Klipolo open and says why. Run from its disk image or a
+/// translocated copy, `capture.permission.reopenMoveFirst`, and Klipolo stays open. A second press while it is under
+/// way does nothing more.
 #[tauri::command]
 pub async fn recorder_reopen(app: AppHandle) -> Result<(), Said> {
     blocking(app, |app, state| {

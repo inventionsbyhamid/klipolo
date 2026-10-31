@@ -166,6 +166,7 @@ pub(super) fn world(dir: &Path, script: Script) -> (Parts, World) {
         root: Some(world.root.clone()),
         open_project: Box::new(move || project.lock().unwrap().clone()),
         ticker: false,
+        must_move: false,
     };
     (parts, world)
 }
