@@ -5,19 +5,24 @@ import type { FormatKind } from '../../bindings/FormatKind';
 import type { Framing } from '../../bindings/Framing';
 import type { FramingMode } from '../../bindings/FramingMode';
 import { Segmented } from '../../design/Segmented';
-import { editClip } from '../../state/latest';
+import { clipOp } from '../../lib/ops';
+import { clipNow, editClip } from '../../state/latest';
 import { framingPatch } from './clipOps';
 import { Field } from './fields';
+import { ToolSlider } from './ToolSlider';
 import { useClipFraming } from './useClipFraming';
 
 /** What a framing change starts from before Rust has answered (the centre). */
 const CENTRE: Framing = { mode: 'fill', focusX: 0.5, focusY: 0.5 };
+const percent = (v: number) => `${Math.round(v * 100)}%`;
 
 /**
  * A main clip's framing in the format shown: Fit or Fill as Rust frames it (`useClipFraming`: its own, else the
- * model's default). Each change is one undo step built at its turn on the clip's framing as the project has it then,
- * so another format's change still on its way stays; without a framing of its own in this format, Rust's. A mode
- * change keeps the rest, follow too (Fit ignores it; Fill follows again).
+ * model's default), and while Fill crops from a focus of its own (not following the cursor), the Fill focus: Across
+ * and Down, which part of the video stays in view (0.5 is the centre). Each change is one undo step built at its turn
+ * on the clip's framing as the project has it then, so another format's change still on its way stays; without a
+ * framing of its own in this format, Rust's. A mode change keeps the rest, follow too (Fit ignores it; Fill follows
+ * again). A focus drag is dry-run in the preview and commits once on release.
  */
 export function FramingField({ clip, format }: { clip: Clip; format: FormatKind }) {
   const { t } = useLingui();
@@ -32,7 +37,13 @@ export function FramingField({ clip, format }: { clip: Clip; format: FormatKind 
     void editClip(mode === 'fit' ? 'clip.framing.fit.undo' : 'clip.framing.fill.undo', clip, (now) =>
       framingPatch(now, format, { ...base(now), mode }),
     );
+  const focusOps = (axis: 'focusX' | 'focusY') => (value: number) => {
+    const now = clipNow(clip.id) ?? clip;
+    return [clipOp(clip, framingPatch(now, format, { ...base(now), [axis]: value }))];
+  };
   const label = t({ id: 'clip.framing', message: 'Framing' });
+  const across = t({ id: 'clip.focus.across', message: 'Across', comment: 'The Fill focus, left to right' });
+  const down = t({ id: 'clip.focus.down', message: 'Down', comment: 'The Fill focus, top to bottom' });
   return (
     <>
       <Field label={label}>
@@ -55,6 +66,37 @@ export function FramingField({ clip, format }: { clip: Clip; format: FormatKind 
           onChange={setMode}
         />
       </Field>
+      {framing?.mode === 'fill' && !framing.follow && (
+        <Field
+          label={t({ id: 'clip.focus', message: 'Fill focus', comment: 'Which part of a filled video stays in view' })}
+          stack
+        >
+          <Field label={across}>
+            <ToolSlider
+              label={t({ id: 'clip.focus.across.named', message: 'Focus across' })}
+              commitLabel="clip.framing.focus.undo"
+              value={framing.focusX}
+              min={0}
+              max={1}
+              step={0.01}
+              format={percent}
+              ops={focusOps('focusX')}
+            />
+          </Field>
+          <Field label={down}>
+            <ToolSlider
+              label={t({ id: 'clip.focus.down.named', message: 'Focus down' })}
+              commitLabel="clip.framing.focus.undo"
+              value={framing.focusY}
+              min={0}
+              max={1}
+              step={0.01}
+              format={percent}
+              ops={focusOps('focusY')}
+            />
+          </Field>
+        </Field>
+      )}
     </>
   );
 }

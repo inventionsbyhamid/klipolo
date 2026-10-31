@@ -10,7 +10,8 @@ import { renderWithProviders } from '../../test/render';
 
 /*
  * The clip card: the docked inspector for a selected main-track clip. Fit or Fill in the format shown, as Rust frames
- * it (`clip_framing`); each change is one labelled step, built at its turn through the commit queue.
+ * it (`clip_framing`), and the Fill focus while Fill crops; each change is one labelled step, built at its turn through
+ * the commit queue.
  */
 
 const apply = vi.fn<(label: string, ops: Op[], params?: LabelParams) => Promise<boolean>>(() =>
@@ -35,6 +36,7 @@ const FRAMING: Record<string, ClipFraming> = {
 vi.mock('../../bridge/framing', () => ({
   clipFraming: vi.fn((clipId: string) => Promise.resolve(FRAMING[clipId])),
 }));
+const { engine } = await import('../../bridge/engine');
 const { clipFraming } = await import('../../bridge/framing');
 const { useProject } = await import('../../state/project');
 const { useSelection } = await import('../../state/selection');
@@ -50,6 +52,18 @@ function withB(patch: Partial<Clip>) {
   const main = snapshot.project.timeline.main;
   main[1] = { ...main[1], ...patch };
   return snapshot;
+}
+
+/** jsdom has no layout or pointer capture: `slider`'s track is 100 px wide, and captured for the press. */
+function track(slider: HTMLElement) {
+  const root = slider.parentElement!.parentElement!;
+  root.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 20 }) as DOMRect;
+  Object.assign(Element.prototype, {
+    setPointerCapture: () => undefined,
+    releasePointerCapture: () => undefined,
+    hasPointerCapture: () => true,
+  });
+  return root;
 }
 
 beforeEach(() => {
@@ -98,10 +112,12 @@ describe('the clip card', () => {
     );
   });
 
-  it('a recording that follows the cursor keeps following when it fills again', async () => {
+  it('a recording that follows the cursor keeps following when it fills again, and has no focus to set', async () => {
     useSelection.setState({ selectedId: 'a' });
     renderWithProviders(<Inspector format="portrait" />);
     expect(await screen.findByRole('radio', { name: 'Fill' })).toHaveAttribute('aria-checked', 'true');
+    // The crop follows the cursor, so there is no focus to set.
+    expect(screen.queryByRole('slider', { name: 'Focus across' })).toBeNull();
     await userEvent.click(screen.getByRole('radio', { name: 'Fit' }));
     await waitFor(() =>
       expect(apply).toHaveBeenCalledWith(
@@ -111,6 +127,43 @@ describe('the clip card', () => {
         queued,
       ),
     );
+  });
+
+  it('the Fill focus shows only with Fill; a drag dry-runs in the engine and commits once on release', async () => {
+    useProject.setState({
+      snapshot: withB({ framing: { square: { mode: 'fit', focusX: 0.5, focusY: 0.5 } } }),
+    });
+    const { unmount } = renderWithProviders(<Inspector format="square" />);
+    expect(await screen.findByRole('radio', { name: 'Fit', checked: true })).toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: 'Focus across' })).toBeNull();
+    unmount();
+    renderWithProviders(<Inspector format="portrait" />);
+    await screen.findByRole('radio', { name: 'Fill', checked: true });
+    expect(screen.getByRole('slider', { name: 'Focus down' })).toHaveAttribute('aria-valuetext', '50%');
+    const across = screen.getByRole('slider', { name: 'Focus across' });
+    const root = track(across);
+    fireEvent.pointerDown(root, { button: 0, pointerId: 1, clientX: 60 });
+    fireEvent.pointerMove(root, { pointerId: 1, clientX: 30 });
+    expect(across).toHaveAttribute('aria-valuetext', '30%');
+    await waitFor(() => expect(engine.preview).toHaveBeenCalled());
+    expect(apply).not.toHaveBeenCalled();
+    fireEvent.pointerUp(root, { pointerId: 1, clientX: 30 });
+    expect(apply).toHaveBeenCalledTimes(1);
+    const [label, ops] = apply.mock.calls[0];
+    expect(label).toBe('clip.framing.focus.undo');
+    expect(ops).toEqual([
+      {
+        type: 'updateClip',
+        id: 'b',
+        patch: {
+          framing: {
+            square: { mode: 'fit', focusX: 0.5, focusY: 0.5 },
+            portrait: { mode: 'fill', focusX: 0.3, focusY: 0.5 },
+          },
+        },
+      },
+    ]);
+    expect(vi.mocked(engine.preview).mock.calls.at(-1)).toEqual(['project', 3, ops]);
   });
 
   it('its more menu duplicates or deletes the clip, and has no layer order; Close lets it go', async () => {

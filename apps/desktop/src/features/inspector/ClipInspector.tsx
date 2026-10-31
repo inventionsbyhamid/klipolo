@@ -13,8 +13,8 @@ import { FramingField } from './FramingField';
 /**
  * The clip card: the inspector for a selected main-track clip, in the left column like the others. Its header has the
  * film icon and the clip's file name, a more menu (Duplicate, Delete: the timeline's own commands; a main clip has no
- * layer order) and a close button. Its fields: Fit or Fill in the format shown (`FramingField`). Each change is one
- * undo step.
+ * layer order) and a close button. Its fields: Fit or Fill in the format shown, and the Fill focus while Fill crops
+ * (`FramingField`). Each change is one undo step.
  */
 export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind }) {
   const { t } = useLingui();
