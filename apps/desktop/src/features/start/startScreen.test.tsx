@@ -171,16 +171,23 @@ describe('StartScreen', () => {
     renderWithProviders(<StartScreen />);
     await waitFor(() => expect(cards()).toHaveLength(3));
 
-    await userEvent.click(card('Kiln vlog'));
-    expect(bridge.openProject).toHaveBeenCalledWith('/Users/me/Movies/Klipolo/Kiln vlog.klipolo');
+    // From the keyboard: Tab goes to New project, Record your screen, then the first card; Enter opens it.
+    await userEvent.tab();
+    expect(screen.getByRole('button', { name: 'New project' })).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByRole('button', { name: 'Record your screen' })).toHaveFocus();
+    await userEvent.tab();
+    expect(card('Studio tour')).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    expect(bridge.openProject).toHaveBeenCalledWith('/Users/me/Movies/Klipolo/Studio tour.klipolo');
     await waitFor(() => expect(useProject.getState().pending).toBe(0));
     expect(useProject.getState().snapshot).not.toBeNull();
 
-    // From the keyboard: Tab to a card, Enter opens it.
-    card('Studio tour').focus();
-    await userEvent.keyboard('{Enter}');
-    expect(bridge.openProject).toHaveBeenLastCalledWith('/Users/me/Movies/Klipolo/Studio tour.klipolo');
+    // A click opens one too.
+    await userEvent.click(card('Kiln vlog'));
+    expect(bridge.openProject).toHaveBeenLastCalledWith('/Users/me/Movies/Klipolo/Kiln vlog.klipolo');
     expect(bridge.openProject).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(useProject.getState().pending).toBe(0));
   });
 
   it('opens one project at a time', async () => {
@@ -243,20 +250,13 @@ describe('StartScreen', () => {
   it('record_opens_the_recorder', async () => {
     recentAnswers(ROWS);
     const onRecord = vi.fn();
-    const { unmount } = renderWithProviders(<StartScreen onRecord={onRecord} />);
+    renderWithProviders(<StartScreen onRecord={onRecord} />);
     await waitFor(() => expect(cards()).toHaveLength(3));
     const record = screen.getByRole('button', { name: 'Record your screen' });
     // The record glyph, in the button's own ink.
     expect(record.querySelector('svg.ico')).not.toBeNull();
     await userEvent.click(record);
     expect(onRecord).toHaveBeenCalledTimes(1);
-    expect(bridge.createProject).not.toHaveBeenCalled();
-    unmount();
-
-    // Until the recorder is wired, the button does nothing (and doesn't throw).
-    recentAnswers([]);
-    renderWithProviders(<StartScreen />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Record your screen' }));
     expect(bridge.createProject).not.toHaveBeenCalled();
   });
 
