@@ -82,34 +82,36 @@ export function separateCamera(clipId: string) {
 }
 
 /**
- * Mute or Unmute on sound layer `id`: its own switch (the inspector's Mute), so its volume stays for when it plays
- * again. A song laid in pieces back to back (`musicRunOf`) is muted or unmuted whole, in one step, as the piece pressed
- * says: no piece plays on where the others went quiet. Another kind of layer is left alone.
+ * Mute or Unmute on sound or video layer `id`: its own switch (the inspector's Mute), so its volume stays for when it
+ * plays again. A song laid in pieces back to back (`musicRunOf`) is muted or unmuted whole, in one step, as the piece
+ * pressed says: no piece plays on where the others went quiet. Another kind of layer is left alone.
  */
 export function toggleSoundMute(id: string) {
   keyBurst.after(() => {
     const project = editable();
     const item = project ? findItem(project, id)?.item : undefined;
     const content = item?.content;
-    if (!project || !item || content?.type !== 'audio') return;
+    if (!project || !item || (content?.type !== 'audio' && content?.type !== 'video')) return;
     const muted = !content.muted;
     const label = itemLabel(project, item);
     const said = muted
       ? t({
           id: 'timeline.key.soundMuted',
           message: `Muted ${label}`,
-          comment: 'Screen-reader note; {label} is a sound layer’s name',
+          comment: 'Screen-reader note; {label} is a sound or video layer’s name',
         })
       : t({
           id: 'timeline.key.soundUnmuted',
           message: `Unmuted ${label}`,
-          comment: 'Screen-reader note; {label} is a sound layer’s name',
+          comment: 'Screen-reader note; {label} is a sound or video layer’s name',
         });
-    const pieces = musicRunOf(project.timeline.tracks, id) ?? [item];
-    const ops = pieces.flatMap((piece) =>
-      piece.content.type === 'audio' ? [itemOp(piece, { content: { ...piece.content, muted } })] : [],
-    );
-    commit(muteLabel(muted, 'sound'), ops, said, () => {
+    const ops =
+      content.type === 'video'
+        ? [itemOp(item, { content: { ...content, muted } })]
+        : (musicRunOf(project.timeline.tracks, id) ?? [item]).flatMap((piece) =>
+            piece.content.type === 'audio' ? [itemOp(piece, { content: { ...piece.content, muted } })] : [],
+          );
+    commit(muteLabel(muted, content.type === 'video' ? 'video' : 'sound'), ops, said, () => {
       if (!muted) noteMutedTrack(id);
     });
   });
