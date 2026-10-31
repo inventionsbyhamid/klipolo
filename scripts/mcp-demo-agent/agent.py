@@ -106,6 +106,7 @@ SYSTEM_PROMPT = (
     "You edit the video open in Klipolo, a Mac video editor, with Klipolo's tools. "
     "Call getContext first, and take every time and clip from it. "
     "Format, caption and text changes apply at once. "
+    "Make format, caption and text changes before you propose a cut. "
     "Cuts, such as keepOnly, are only proposed: nothing is cut until the person clicks Apply in Klipolo. "
     "After you propose a cut, say that it waits for their Apply, and stop. "
     "Call getProposal only when the person asks what became of it. "

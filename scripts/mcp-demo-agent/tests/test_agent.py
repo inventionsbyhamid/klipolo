@@ -279,6 +279,14 @@ def test_requests_are_sent_as_klipolos_meta_adapter_sends_them(tmp_path):
     ]
 
 
+def test_the_prompt_asks_for_format_and_captions_before_the_cut():
+    # A change made after the cut answers as a proposal (the proposal waits again on top of it), which reads wrong.
+    prompt = agent.SYSTEM_PROMPT
+    first = "Make format, caption and text changes before you propose a cut."
+    assert first in prompt
+    assert prompt.index(first) < prompt.index("Cuts, such as keepOnly, are only proposed")
+
+
 def test_cost_is_priced_from_usage_with_cached_input_at_the_cached_price():
     usage = agent.usage_of({"input_tokens": 1_000_000, "input_tokens_details": {"cached_tokens": 400_000}, "output_tokens": 1_000_000})
     assert usage == agent.Usage(input_tokens=1_000_000, cached_tokens=400_000, output_tokens=1_000_000)
