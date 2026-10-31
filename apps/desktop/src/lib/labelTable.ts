@@ -41,6 +41,11 @@ export const TABLE = {
     comment: 'Command and undo history entry',
   }),
   'undo.cut': msg({ id: 'undo.cut', message: 'Cut', comment: 'Command and undo history entry' }),
+  'undo.cut.note': msg({
+    id: 'undo.cut.note',
+    message: 'Cut. {note}',
+    comment: 'Undo history entry; {note} says what it did to transitions, e.g. “A transition is removed.”',
+  }),
   'undo.paste': msg({ id: 'undo.paste', message: 'Paste', comment: 'Command and undo history entry' }),
   'undo.duplicate': msg({
     id: 'undo.duplicate',
