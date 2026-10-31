@@ -477,9 +477,10 @@ fn every_model_error_is_one_plain_sentence_and_changes_nothing() {
     let i = inputs(&p, speech);
     let cases = [
         (ModelError::Busy, ChatErrorKind::Busy),
-        (ModelError::Unavailable, ChatErrorKind::Unavailable),
+        (ModelError::Unavailable(None), ChatErrorKind::Unavailable),
         (ModelError::Network, ChatErrorKind::Network),
         (ModelError::Refused, ChatErrorKind::Refused),
+        (ModelError::Declined(String::new()), ChatErrorKind::Declined),
         (
             ModelError::other("400: unsupported field"),
             ChatErrorKind::Other,
@@ -499,8 +500,33 @@ fn every_model_error_is_one_plain_sentence_and_changes_nothing() {
     }
     sentences.sort();
     sentences.dedup();
-    assert_eq!(sentences.len(), 5, "one sentence for each: {sentences:?}");
+    assert_eq!(sentences.len(), 6, "one sentence for each: {sentences:?}");
     assert_eq!(p, before);
+}
+
+#[test]
+fn a_providers_own_sentence_is_shown_without_dashes() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let cases = [
+        (
+            ModelError::Unavailable(Some(
+                "Klipolo's server is busy right now \u{2014} try again.".into(),
+            )),
+            ChatErrorKind::Unavailable,
+            "Klipolo's server is busy right now, try again.",
+        ),
+        (
+            ModelError::Declined("Meta turned this down under its content policy.".into()),
+            ChatErrorKind::Declined,
+            "Meta turned this down under its content policy.",
+        ),
+    ];
+    for (error, kind, said) in cases {
+        let model = Fake::new(vec![Err(error)]);
+        let e = send(&model, &[], "make it square", &i, &p).unwrap_err();
+        assert_eq!((e.kind, e.message.as_str()), (kind, said));
+    }
 }
 
 #[test]

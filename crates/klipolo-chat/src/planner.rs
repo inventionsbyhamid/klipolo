@@ -59,6 +59,8 @@ pub const NO_CONNECTION: &str =
 pub const NOT_ACCEPTED: &str =
     "Your API key or access code was not accepted. Check it in Settings.";
 pub const FAILED: &str = "Something went wrong with that message. Try again.";
+/// Said when the provider declined the request under its content policy and gave no sentence of its own.
+pub const DECLINED: &str = "The AI turned this down. Try wording it differently.";
 
 /// One exchange: what the person wrote, the reply, and a one-line note of what came of it.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -114,7 +116,10 @@ pub enum ChatErrorKind {
     Busy,
     Unavailable,
     Network,
+    /// The key, token or access code was refused.
     Refused,
+    /// Turned down under the provider's content policy: asking in other words may work.
+    Declined,
     Other,
 }
 
@@ -143,20 +148,22 @@ impl std::error::Error for ChatError {}
 impl ChatError {
     fn from_model(e: ModelError, usage_usd: f64, model_calls: usize) -> Self {
         let detail = e.to_string();
-        let (kind, message) = match e {
-            ModelError::Budget(said) => {
-                let said = sanitize::reply(said.trim());
-                let said = if said.is_empty() {
-                    OUT_OF_CREDIT.to_owned()
-                } else {
-                    said
-                };
-                (ChatErrorKind::Budget, said)
+        // The provider's own sentence without dashes, or ours when it gave none.
+        let said = |said: Option<String>, ours: &str| {
+            let said = sanitize::reply(said.as_deref().unwrap_or_default().trim());
+            if said.is_empty() {
+                ours.to_owned()
+            } else {
+                said
             }
+        };
+        let (kind, message) = match e {
+            ModelError::Budget(s) => (ChatErrorKind::Budget, said(Some(s), OUT_OF_CREDIT)),
             ModelError::Busy => (ChatErrorKind::Busy, BUSY.to_owned()),
-            ModelError::Unavailable => (ChatErrorKind::Unavailable, UNAVAILABLE.to_owned()),
+            ModelError::Unavailable(s) => (ChatErrorKind::Unavailable, said(s, UNAVAILABLE)),
             ModelError::Network => (ChatErrorKind::Network, NO_CONNECTION.to_owned()),
             ModelError::Refused => (ChatErrorKind::Refused, NOT_ACCEPTED.to_owned()),
+            ModelError::Declined(s) => (ChatErrorKind::Declined, said(Some(s), DECLINED)),
             ModelError::Other { .. } => (ChatErrorKind::Other, FAILED.to_owned()),
         };
         Self {

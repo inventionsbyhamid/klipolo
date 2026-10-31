@@ -619,15 +619,103 @@ async fn a_used_up_quota_is_out_of_credit_not_busy() {
 }
 
 #[tokio::test]
-async fn server_and_network_failures_map_to_neutral_errors() {
+async fn a_timeout_says_who_gave_up() {
+    let relay_timeout = |body: Option<Value>| {
+        let r = ResponseTemplate::new(504);
+        match body {
+            Some(b) => r.set_body_json(b),
+            None => r.set_body_raw("Gateway Timeout", "text/plain"),
+        }
+    };
+    // Through the relay, a bare 504 is the relay or Traefik in front of it giving up: Klipolo's server, as Settings
+    // says it. With its own sentence, that sentence.
     let cases = [
         (
-            ResponseTemplate::new(503).set_body_json(
-                json!({"error": "not_configured", "message": "Relay not configured."}),
-            ),
-            ModelError::Unavailable,
+            relay_timeout(None),
+            "Klipolo's server is busy right now. Try again in a moment.",
         ),
-        (ResponseTemplate::new(502), ModelError::Unavailable),
+        (
+            relay_timeout(Some(
+                json!({"error": "meta_timeout", "message": "Meta took too long to answer this request."}),
+            )),
+            "Meta took too long to answer this request.",
+        ),
+        (
+            ResponseTemplate::new(408),
+            "Klipolo's server is busy right now. Try again in a moment.",
+        ),
+    ];
+    for (response, said) in cases {
+        let server = MockServer::start().await;
+        answer_once(&server, response).await;
+        let e = chat(&server).respond(&neutral_request()).await.unwrap_err();
+        assert_eq!(e, ModelError::Unavailable(Some(said.into())));
+    }
+    // With the person's own key, a bare 504 is Meta's.
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/responses"))
+        .respond_with(ResponseTemplate::new(504))
+        .mount(&server)
+        .await;
+    let direct = MetaChat::new(
+        MetaClient::direct(SecretString::from("sk-direct-key"))
+            .with_meta_base(server.uri())
+            .with_ledger(None),
+    );
+    let e = direct.respond(&neutral_request()).await.unwrap_err();
+    assert_eq!(
+        e,
+        ModelError::Unavailable(Some("Meta took too long to answer. Try again.".into()))
+    );
+}
+
+#[tokio::test]
+async fn a_relay_without_a_meta_key_says_so() {
+    let server = MockServer::start().await;
+    answer_once(
+        &server,
+        ResponseTemplate::new(503)
+            .set_body_json(json!({"error": "not_configured", "message": "Relay not configured."})),
+    )
+    .await;
+    let e = chat(&server).respond(&neutral_request()).await.unwrap_err();
+    assert_eq!(
+        e,
+        ModelError::Unavailable(Some(
+            "Klipolo's AI service isn't set up yet. Try again later or add your own Meta key in Settings."
+                .into()
+        ))
+    );
+}
+
+#[tokio::test]
+async fn a_content_policy_refusal_is_declined_not_a_refused_key() {
+    // From Meta (its error object) and passed on by the relay (its flat shape).
+    let bodies_sent = [
+        json!({"error": {"code": "content_policy_violation", "message": "This request was declined."}}),
+        json!({"error": "content_policy_violation", "message": "This request was declined."}),
+    ];
+    for body in bodies_sent {
+        let server = MockServer::start().await;
+        answer_once(&server, ResponseTemplate::new(400).set_body_json(body)).await;
+        let e = chat(&server).respond(&neutral_request()).await.unwrap_err();
+        assert_eq!(
+            e,
+            ModelError::Declined(
+                "Meta turned this down under its content policy. Try wording it differently."
+                    .into()
+            )
+        );
+        assert_eq!(bodies(&server).await.len(), 1);
+    }
+}
+
+#[tokio::test]
+async fn server_and_network_failures_map_to_neutral_errors() {
+    let cases = [
+        (ResponseTemplate::new(503), ModelError::Unavailable(None)),
+        (ResponseTemplate::new(502), ModelError::Unavailable(None)),
         (ResponseTemplate::new(401), ModelError::Refused),
         (
             ResponseTemplate::new(403).set_body_json(

@@ -75,12 +75,15 @@ pub enum ModelError {
     Budget(String),
     /// Too many requests right now, still so after the adapter waited and asked again.
     Busy,
-    /// The service is down or not set up.
-    Unavailable,
+    /// The service is down, not set up, or gave no answer in time: the provider's sentence for the person when it has
+    /// one (who gave up, what to do).
+    Unavailable(Option<String>),
     /// The request never got an answer.
     Network,
     /// The key, token or access code was refused.
     Refused,
+    /// The provider turned this request down under its content policy: its sentence for the person.
+    Declined(String),
     /// Anything else: a request refused as sent, an answer that can't be read, or one that came back failed or cut
     /// off (at its output cap), which is billed (`usage_usd`). `detail` is for logs, never shown.
     Other { detail: String, usage_usd: f64 },
@@ -109,9 +112,11 @@ impl fmt::Display for ModelError {
         match self {
             ModelError::Budget(said) => write!(f, "out of credit: {said}"),
             ModelError::Busy => f.write_str("busy"),
-            ModelError::Unavailable => f.write_str("unavailable"),
+            ModelError::Unavailable(None) => f.write_str("unavailable"),
+            ModelError::Unavailable(Some(said)) => write!(f, "unavailable: {said}"),
             ModelError::Network => f.write_str("no answer"),
             ModelError::Refused => f.write_str("not allowed"),
+            ModelError::Declined(said) => write!(f, "declined: {said}"),
             ModelError::Other { detail, .. } => write!(f, "failed: {detail}"),
         }
     }

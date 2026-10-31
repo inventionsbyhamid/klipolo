@@ -97,7 +97,7 @@ impl LanguageModel for MetaChat {
                             tokio::time::sleep(wait).await;
                             retries += 1;
                         }
-                        _ => return Err(model_error(e)),
+                        _ => return Err(model_error(e, self.client.is_relay())),
                     },
                 }
             }
@@ -188,6 +188,10 @@ fn answer(out: ResponseOut) -> Result<ModelResponse, ModelError> {
     })
 }
 
+/// What the person is told when the relay, or Traefik in front of it, gave up waiting and said nothing (a bare 504 or
+/// 408): Klipolo's server, as Settings says it, not Meta.
+pub const SERVER_BUSY: &str = "Klipolo's server is busy right now. Try again in a moment.";
+
 /// The codes of a 429 that means the key's credit or quota is used up, not a busy moment: out of credit, never asked
 /// again.
 pub const QUOTA_CODES: [&str; 3] = [
@@ -196,10 +200,12 @@ pub const QUOTA_CODES: [&str; 3] = [
     "billing_hard_limit_reached",
 ];
 
-/// A Meta client error in chat's terms. A 402, or a 429 whose code says the quota is used up (`QUOTA_CODES`, a direct
-/// key's), keeps the relay's or Meta's sentence (which credit, what to do); a request refused as sent or an unreadable
-/// answer keeps its (redacted) text for logs only.
-pub fn model_error(e: MetaError) -> ModelError {
+/// A Meta client error in chat's terms, `relay` saying whether the call went through the relay. A 402, or a 429 whose
+/// code says the quota is used up (`QUOTA_CODES`, a direct key's), keeps the relay's or Meta's sentence (which credit,
+/// what to do). A timeout keeps its sentence, or says who gave up when there is none (`SERVER_BUSY` through the relay,
+/// Meta's otherwise); a relay with no Meta key and a content-policy refusal say so in their own sentence. A request
+/// refused as sent or an unreadable answer keeps its (redacted) text for logs only.
+pub fn model_error(e: MetaError, relay: bool) -> ModelError {
     match e {
         MetaError::Budget { .. } => ModelError::Budget(e.user_message()),
         MetaError::RateLimited {
@@ -211,15 +217,19 @@ pub fn model_error(e: MetaError) -> ModelError {
             ModelError::Budget(MetaError::Budget { message }.user_message())
         }
         MetaError::RateLimited { .. } => ModelError::Busy,
-        MetaError::Overloaded { .. } | MetaError::TimedOut { .. } | MetaError::NotConfigured => {
-            ModelError::Unavailable
+        MetaError::Overloaded { .. } => ModelError::Unavailable(None),
+        MetaError::TimedOut { message: None, .. } if relay => {
+            ModelError::Unavailable(Some(SERVER_BUSY.to_owned()))
         }
+        MetaError::TimedOut { .. } | MetaError::NotConfigured => {
+            ModelError::Unavailable(Some(e.user_message()))
+        }
+        MetaError::Refused { .. } => ModelError::Declined(e.user_message()),
         MetaError::Network(_) => ModelError::Network,
         MetaError::Unauthorized | MetaError::NotAllowed { .. } => ModelError::Refused,
         MetaError::BadRequest { .. }
         | MetaError::Decode(_)
         | MetaError::AlignUnavailable
-        | MetaError::LocalFile { .. }
-        | MetaError::Refused { .. } => ModelError::other(e.to_string()),
+        | MetaError::LocalFile { .. } => ModelError::other(e.to_string()),
     }
 }
