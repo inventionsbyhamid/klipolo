@@ -146,6 +146,14 @@ describe('the previews in the Record dialog', () => {
     expect(pic()).toHaveAttribute('data-stale');
   });
 
+  it('a_grey_picture_hides_what_is_under_it', async () => {
+    // The card's icon and the box's clip art are under the pictures: a grey one is darkened, never see-through.
+    const css = readFileSync(resolve(__dirname, 'record.css'), 'utf8');
+    const rule = css.match(/\[data-stale\] > \.live-pic \{[^}]*\}/)?.[0] ?? '';
+    expect(rule).toMatch(/filter: grayscale\(1\)/);
+    expect(rule).not.toMatch(/opacity/);
+  });
+
   it('live_preview_follows_the_chosen_card', async () => {
     await openOn(
       recorderSetup({ displays: [display('main'), display('studio')], apps: [app('com.apple.Safari', 'Safari')] }),

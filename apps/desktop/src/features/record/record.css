@@ -215,10 +215,10 @@
   visibility: hidden;
 }
 
-/* A picture whose frames stopped coming: grey and dimmed, so a frozen one never looks live. */
+/* A picture whose frames stopped coming: grey and darkened (never see-through, so the icon or clip art under it stays
+   hidden), so a frozen one never looks live. */
 [data-stale] > .live-pic {
-  filter: grayscale(1);
-  opacity: 0.5;
+  filter: grayscale(1) brightness(0.5);
 }
 
 /* The live picture of what is chosen, fitted over the box's black. */
