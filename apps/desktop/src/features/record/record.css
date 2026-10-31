@@ -227,6 +227,27 @@
   inset: 0;
 }
 
+/* The camera bubble: a 96 px circle over the preview's bottom right, 12 px in, under what is said in the box. */
+.record-bubble {
+  position: absolute;
+  right: var(--space-5);
+  bottom: var(--space-5);
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--color-bay-press);
+  box-shadow: var(--shadow-1);
+}
+
+.record-bubble .live-pic img {
+  object-fit: cover;
+}
+
+.record-bubble[data-mirror] .live-pic {
+  transform: scaleX(-1);
+}
+
 /* ---------- Cards ---------- */
 
 .record-section .seg {
@@ -308,12 +329,6 @@
   color: var(--color-ink);
   font-size: var(--text-sm);
   line-height: var(--lh-sm);
-}
-
-.record-hint {
-  color: var(--color-ink-faint);
-  font-size: var(--text-xs);
-  line-height: var(--lh-xs);
 }
 
 /* ---------- Notes ---------- */

@@ -518,12 +518,22 @@ describe('permission steps', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
-  it('a_mic_not_asked_yet_says_macos_asks_at_record', async () => {
-    const line = 'macOS asks to use your microphone when you press Record.';
+  it('a_mic_not_asked_yet_offers_allow_microphone_in_place_of_the_hint', async () => {
+    const hint = 'macOS asks to use your microphone when you press Record.';
     const dialog = await openOn(recorderSetup({ permissions: { mic: 'notAsked' } }));
-    expect(dialog).toHaveTextContent(line);
+    expect(dialog).not.toHaveTextContent(hint);
+    expect(screen.getByRole('button', { name: 'Allow microphone' })).toHaveClass('btn-secondary');
     await choose('Microphone: mic-1', 'No microphone');
-    expect(dialog).not.toHaveTextContent(line);
+    expect(screen.queryByRole('button', { name: 'Allow microphone' })).toBeNull();
+  });
+
+  it('a_take_refused_the_microphone_leaves_neither_the_hint_nor_allow', async () => {
+    const dialog = await pressRecord(recorderSetup({ permissions: { mic: 'notAsked' } }));
+    emit('take-1', failed('capture.permission.mic'));
+    // macOS remembers the no: neither would come true. The preview's note says what to do, with its page.
+    expect(dialog).not.toHaveTextContent('macOS asks to use your microphone when you press Record.');
+    expect(screen.queryByRole('button', { name: 'Allow microphone' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Open privacy settings' })).toHaveLength(1);
   });
 
   it('without_privacy_pages_there_is_no_open_privacy_settings', async () => {

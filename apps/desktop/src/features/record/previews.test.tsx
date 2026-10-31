@@ -1,5 +1,7 @@
 import { act, screen, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CaptureEvent } from '../../bindings/CaptureEvent';
 import type { PreviewId } from '../../bindings/PreviewId';
@@ -67,6 +69,7 @@ function emit(id: PreviewId | string, event: CaptureEvent) {
   act(() => fake.emit(id, event));
 }
 const failed = (code: string): CaptureEvent => ({ ev: 'failed', error: { code, params: {} } });
+const level = (peakDbfs: number) => emit('preview-mic', { ev: 'meter', source: 'mic', peakDbfs });
 
 /** Picks `choice` in the select named `name` ("Microphone: mic-1"). */
 async function choose(name: string, choice: string) {
@@ -77,6 +80,7 @@ async function choose(name: string, choice: string) {
 
 const card = (name: string) => screen.getByRole('radio', { name });
 const live = () => screen.queryByRole('img', { name: /^Live view of / });
+const bubble = () => screen.queryByRole('img', { name: 'Your camera' });
 const recordButton = () => screen.getByRole('button', { name: 'Record' });
 const calls = () => fake.previewed.filter((w) => w !== 'off');
 
@@ -175,7 +179,73 @@ describe('the previews in the Record dialog', () => {
     expect(await frameIn(live())).toBe('live safari');
   });
 
+  it('camera_bubble_is_round_and_mirrors_with_the_toggle', async () => {
+    await openOn(recorderSetup({ cameras: [device('FaceTime HD Camera'), device('Desk View')] }));
+    expect(fake.previewed).toEqual([want()]);
+    await choose('Camera: No camera', 'FaceTime HD Camera');
+    expect(fake.previewed.at(-1)).toEqual(want({ camera: 'FaceTime HD Camera' }));
+    expect(bubble()).toBeNull();
+    await sendFrame(fake, 'camera', 'FaceTime HD Camera', 'face 1');
+    const round = bubble();
+    expect(round).toHaveClass('record-bubble');
+    expect(round?.closest('.record-preview')).not.toBeNull();
+    expect(await frameIn(round)).toBe('face 1');
+    // Mirrored while "Mirror my camera" is on, which it is at first.
+    expect(round).toHaveAttribute('data-mirror');
+    await userEvent.click(screen.getByRole('switch', { name: 'Mirror my camera' }));
+    expect(round).not.toHaveAttribute('data-mirror');
+    // Mirroring is the page's: the camera's preview isn't asked for again.
+    expect(fake.previewed.at(-1)).toEqual(want({ camera: 'FaceTime HD Camera' }));
+    // A 96 px circle over the preview's bottom right, 12 px in.
+    const css = readFileSync(resolve(__dirname, 'record.css'), 'utf8');
+    const rule = css.match(/\.record-bubble \{[^}]*\}/)?.[0] ?? '';
+    for (const line of [
+      /width: 96px/,
+      /height: 96px/,
+      /border-radius: 50%/,
+      /right: var\(--space-5\)/,
+      /bottom: var\(--space-5\)/,
+      /box-shadow: var\(--shadow-1\)/,
+    ])
+      expect(rule).toMatch(line);
+    expect(css).toMatch(/\.record-bubble\[data-mirror\] \.live-pic \{[^}]*transform: scaleX\(-1\)/);
+    // Another camera: the last one's picture goes, and a frame of it on its way is never shown.
+    await choose('Camera: FaceTime HD Camera', 'Desk View');
+    expect(bubble()).toBeNull();
+    await sendFrame(fake, 'camera', 'FaceTime HD Camera', 'face 2');
+    expect(bubble()).toBeNull();
+    await choose('Camera: Desk View', 'No camera');
+    expect(fake.previewed.at(-1)).toEqual(want());
+  });
 
+  it('meter_width_follows_dbfs', async () => {
+    await openOn();
+    // Nothing until the first level: the meter never shows a level it hasn't heard.
+    expect(screen.queryByRole('meter')).toBeNull();
+    level(-80);
+    const meter = screen.getByRole('meter', { name: 'Microphone level' });
+    // Under the Microphone select.
+    expect(meter.closest('.record-field')).toContainElement(screen.getByRole('button', { name: 'Microphone: mic-1' }));
+    const width = () => [meter.style.getPropertyValue('--p'), meter.getAttribute('aria-valuenow')];
+    expect(width()).toEqual(['0%', '0']);
+    level(-60);
+    expect(width()).toEqual(['0%', '0']);
+    level(-6);
+    expect(width()).toEqual(['90%', '90']);
+    level(0);
+    expect(width()).toEqual(['100%', '100']);
+    expect(screen.getAllByRole('meter')).toHaveLength(1);
+    // A level of another take is the take's, not the preview's.
+    act(() => fake.emit('take-0', { ev: 'meter', source: 'mic', peakDbfs: -60 }));
+    expect(width()).toEqual(['100%', '100']);
+    // The meter's preview stopped by itself: its level goes, never left frozen.
+    emit('preview-mic', failed('capture.error.os'));
+    expect(screen.queryByRole('meter')).toBeNull();
+    level(-6);
+    await choose('Microphone: mic-1', 'No microphone');
+    expect(screen.queryByRole('meter')).toBeNull();
+    expect(fake.previewed.at(-1)).toEqual(want({ mic: null }));
+  });
 
   it('previews_stop_on_close_record_and_blur', async () => {
     await openOn();
@@ -223,8 +293,72 @@ describe('the previews in the Record dialog', () => {
     expect(previews().thumbs).toEqual({});
   });
 
+  it('allow_camera_asks_through_the_preview', async () => {
+    await openOn(
+      recorderSetup({ cameras: [device('FaceTime HD Camera')], permissions: { camera: 'notAsked', mic: 'notAsked' } }),
+    );
+    // Opening asks nothing.
+    expect(screen.queryByRole('button', { name: 'Allow camera' })).toBeNull();
+    await choose('Camera: No camera', 'FaceTime HD Camera');
+    const allow = screen.getByRole('button', { name: 'Allow camera' });
+    expect(allow).toHaveClass('btn-secondary');
+    expect(allow.closest('.record-field')).toContainElement(
+      screen.getByRole('button', { name: 'Camera: FaceTime HD Camera' }),
+    );
+    expect(fake.previewed.every((w) => w === 'off' || w.ask === null)).toBe(true);
+    // The press is when macOS asks: the preview starts with it.
+    await userEvent.click(allow);
+    await flush();
+    expect(fake.previewed.at(-1)).toEqual(want({ camera: 'FaceTime HD Camera', ask: 'camera' }));
+    // Asked: the button goes and the keyboard stays in its row.
+    expect(screen.queryByRole('button', { name: 'Allow camera' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Camera: FaceTime HD Camera' })).toHaveFocus();
+    await sendFrame(fake, 'camera', 'FaceTime HD Camera', 'face');
+    expect(bubble()).not.toBeNull();
+    // Only that call asks: never one for a change of choice, nor for coming back in front.
+    await userEvent.click(screen.getByRole('radio', { name: 'One app' }));
+    await flush();
+    await windowFocus('blur');
+    await windowFocus('focus');
+    expect(calls().filter((w) => w.ask !== null)).toHaveLength(1);
+    expect(fake.previewed.at(-1)).toEqual(want({ live: null, camera: 'FaceTime HD Camera' }));
+  });
 
+  it('allow_microphone_turns_into_the_meter', async () => {
+    const dialog = await openOn(recorderSetup({ permissions: { mic: 'notAsked' } }));
+    const allow = screen.getByRole('button', { name: 'Allow microphone' });
+    expect(allow).toHaveClass('btn-secondary');
+    expect(dialog).not.toHaveTextContent('macOS asks to use your microphone when you press Record.');
+    await userEvent.click(allow);
+    await flush();
+    expect(fake.previewed.at(-1)).toEqual(want({ ask: 'mic' }));
+    expect(screen.getByRole('button', { name: 'Microphone: mic-1' })).toHaveFocus();
+    level(-6);
+    expect(screen.getByRole('meter', { name: 'Microphone level' })).toHaveAttribute('aria-valuenow', '90');
+  });
 
+  it('a_device_refused_in_macos_s_question_says_so_in_its_row', async () => {
+    const dialog = await openOn(
+      recorderSetup({ cameras: [device('FaceTime HD Camera')], permissions: { camera: 'notAsked', mic: 'notAsked' } }),
+    );
+    await choose('Camera: No camera', 'FaceTime HD Camera');
+    await userEvent.click(screen.getByRole('button', { name: 'Allow camera' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Allow microphone' }));
+    await flush();
+    await sendFrame(fake, 'camera', 'FaceTime HD Camera', 'face');
+    emit('preview-camera', failed('capture.permission.camera'));
+    emit('preview-mic', failed('capture.permission.mic'));
+    expect(bubble()).toBeNull();
+    expect(dialog).toHaveTextContent("Klipolo can't use your camera. Allow it in Privacy & Security, then try again.");
+    expect(dialog).toHaveTextContent(
+      "Klipolo can't use your microphone. Allow it in Privacy & Security, then try again.",
+    );
+    expect(screen.queryByRole('button', { name: /^Allow / })).toBeNull();
+    const settings = screen.getAllByRole('button', { name: 'Open privacy settings' });
+    expect(settings).toHaveLength(2);
+    await userEvent.click(settings[0]);
+    expect(fake.calls).toContain('openPrivacy:mic');
+  });
 
   it('blob_urls_are_revoked', async () => {
     await openOn(recorderSetup({ cameras: [device('cam')] }));
@@ -338,4 +472,24 @@ describe('the previews and Screen Recording', () => {
     expect(calls().at(-1)).toEqual(want());
   });
 
+  it('the_preview_states_have_no_red_and_no_em_or_en_dash', async () => {
+    const css = readFileSync(resolve(__dirname, 'record.css'), 'utf8');
+    expect(css).not.toMatch(/--color-cut/);
+    expect(css).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
+    const dialog = await openOn(
+      recorderSetup({ cameras: [device('FaceTime HD Camera')], permissions: { camera: 'notAsked', mic: 'notAsked' } }),
+    );
+    await choose('Camera: No camera', 'FaceTime HD Camera');
+    const said = [dialog.textContent ?? ''];
+    await userEvent.click(screen.getByRole('button', { name: 'Allow camera' }));
+    await sendFrame(fake, 'camera', 'FaceTime HD Camera', 'face');
+    await sendFrame(fake, 'live', 'display:main', 'live');
+    level(-12);
+    said.push(dialog.textContent ?? '', bubble()?.getAttribute('aria-label') ?? '', live()?.getAttribute('aria-label') ?? '');
+    emit('preview-camera', failed('capture.permission.camera'));
+    emit('preview-mic', failed('capture.permission.mic'));
+    said.push(dialog.textContent ?? '');
+    const dashes = new RegExp(`[${String.fromCharCode(0x2013, 0x2014)}]`);
+    for (const text of said) expect(text).not.toMatch(dashes);
+  });
 });

@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { Previews } from '../../bindings/Previews';
 import type { RecorderSetup } from '../../bindings/RecorderSetup';
 import { codedMessage } from '../../bridge/call';
@@ -10,13 +10,22 @@ import type { Picks } from '../../lib/recorder/choices';
 import { deviceDenied, screenStep } from '../../lib/recorder/permission';
 import { phaseOf, type RecorderPhase } from '../../lib/recorder/phase';
 import { useRecorder } from '../../state/recorder';
-import { previewsFor, startPreviews, stopPreviews, useRecorderPreviews } from '../../state/recorderPreviews';
+import {
+  allowPreview,
+  type AskedDevice,
+  previewsFor,
+  startPreviews,
+  stopPreviews,
+  useRecorderPreviews,
+} from '../../state/recorderPreviews';
+import { CameraBubble } from './CameraBubble';
 import { DeviceSelect } from './DeviceSelect';
 import { RecordIcon } from './icons';
 import { Countdown, CountdownNumber, startsIn } from './Countdown';
 import { LivePreview } from './LivePreview';
+import { MicMeter } from './MicMeter';
 import { cameraNote, notesBefore, notReady, refusedPage } from './notes';
-import { DeniedNote, MicAskedAtRecord, ScreenStep, STEP_BUTTON_ID } from './PermissionStep';
+import { DeniedNote, ScreenStep, STEP_BUTTON_ID } from './PermissionStep';
 import { CARDS_ID, WhatToRecord } from './WhatToRecord';
 import './record.css';
 
@@ -271,8 +280,9 @@ function chosenName(setup: RecorderSetup | null, picks: Picks): string {
 }
 
 /**
- * The preview box: 16:9 over the full width, black behind. The live picture of what is chosen; the clip art until a
- * picture comes. What is said in it (the Screen Recording step, why a press didn't go, the countdown) sits over it.
+ * The preview box: 16:9 over the full width, black behind. The live picture of what is chosen, with the camera's
+ * bubble over its bottom right; the clip art until a picture comes. What is said in it (the Screen Recording step, why
+ * a press didn't go, the countdown) sits over both.
  */
 function Preview({ children }: { children?: ReactNode }) {
   const name = useRecorder((s) => chosenName(s.setup, s.picks));
@@ -282,6 +292,7 @@ function Preview({ children }: { children?: ReactNode }) {
         <Icon name="film" />
       </span>
       <LivePreview name={name} />
+      <CameraBubble />
       {children}
     </div>
   );
@@ -337,21 +348,18 @@ function Said({ text, setup }: { text: string; setup: RecorderSetup }) {
 }
 
 /**
- * The microphone and the camera. A refused one says so under its select while it is chosen; a microphone not asked
- * for yet says macOS asks at the Record press; a camera shows why it won't be recorded at the take's quality, if it
- * won't, and its two toggles.
+ * The microphone and the camera: under each select what can be done about it (`DeviceState`); under the camera, why
+ * it won't be recorded at the take's quality, if it won't, and its two toggles.
  */
 function Devices({ setup }: { setup: RecorderSetup }) {
   const picks = useRecorder((s) => s.picks);
   const pick = useRecorder((s) => s.pick);
-  const pages = setup.privacySettings;
   const fit = cameraNote(setup, picks);
   const fitText = fit === null ? '' : codedMessage(fit);
   return (
     <div className="record-devices">
       <DeviceSelect kind="mic" devices={setup.devices.mics} value={picks.mic} onPick={(mic) => pick({ mic })}>
-        {deviceDenied(setup, 'mic', picks) && <DeniedNote kind="mic" pages={pages} />}
-        {setup.permissions.mic === 'notAsked' && picks.mic !== null && <MicAskedAtRecord />}
+        <DeviceState kind="mic" setup={setup} />
       </DeviceSelect>
       <DeviceSelect
         kind="camera"
@@ -359,7 +367,7 @@ function Devices({ setup }: { setup: RecorderSetup }) {
         value={picks.camera}
         onPick={(camera) => pick({ camera })}
       >
-        {deviceDenied(setup, 'camera', picks) && <DeniedNote kind="camera" pages={pages} />}
+        <DeviceState kind="camera" setup={setup} />
         {fitText !== '' && (
           <p className="record-note">
             <Icon name="info" />
@@ -384,6 +392,42 @@ function Devices({ setup }: { setup: RecorderSetup }) {
         )}
       </DeviceSelect>
     </div>
+  );
+}
+
+const ALLOW: Record<AskedDevice, string> = { camera: 'Allow camera', mic: 'Allow microphone' };
+
+/**
+ * Under a chosen microphone or camera: macOS refused it (the sentence and "Open privacy settings"), as the setup read
+ * or in the question an Allow press raised; not asked yet, "Allow microphone" or "Allow camera", whose press starts
+ * its preview, which is when macOS asks (the mic's then turns into the meter, the camera's into the bubble); the mic's
+ * level while it comes. Nothing once a take was refused it: the preview's note says so, with its page.
+ */
+function DeviceState({ kind, setup }: { kind: AskedDevice; setup: RecorderSetup }) {
+  const chosen = useRecorder((s) => s.picks[kind] !== null);
+  const denied = useRecorder((s) => deviceDenied(setup, kind, s.picks));
+  const takeRefused = useRecorder((s) => s.errorFrom === 'take' && s.errorCode === `capture.permission.${kind}`);
+  const asked = useRecorderPreviews((s) => s.asked[kind]);
+  const refused = useRecorderPreviews((s) => s.refused[kind]);
+  const dbfs = useRecorderPreviews((s) => (kind === 'mic' ? s.meterDbfs : null));
+  if (!chosen) return null;
+  if (denied || refused) return <DeniedNote kind={kind} pages={setup.privacySettings} />;
+  if (takeRefused) return null;
+  if (dbfs !== null) return <MicMeter dbfs={dbfs} />;
+  if (setup.permissions[kind] === 'notAsked' && !asked) return <AllowDevice kind={kind} />;
+  return null;
+}
+
+function AllowDevice({ kind }: { kind: AskedDevice }) {
+  const allow = (e: MouseEvent<HTMLButtonElement>) => {
+    // The button goes with the press: the keyboard stays in its row, on the device's select.
+    e.currentTarget.closest('.record-field')?.querySelector<HTMLElement>('.select')?.focus();
+    allowPreview(kind);
+  };
+  return (
+    <Button variant="secondary" size="sm" onClick={allow}>
+      {ALLOW[kind]}
+    </Button>
   );
 }
 

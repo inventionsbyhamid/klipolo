@@ -101,8 +101,3 @@ export function DeniedNote({ kind, pages }: { kind: 'mic' | 'camera'; pages: boo
     </div>
   );
 }
-
-/** The microphone isn't asked for yet: macOS asks when the take opens it, at the Record press. */
-export function MicAskedAtRecord() {
-  return <p className="record-hint">macOS asks to use your microphone when you press Record.</p>;
-}

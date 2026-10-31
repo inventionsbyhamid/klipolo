@@ -1,14 +1,9 @@
-import { type CSSProperties, useId } from 'react';
+import { useId } from 'react';
 import { Button } from '../../design/Button';
 import { Icon } from '../../layout/Icon';
 import { useRecorder } from '../../state/recorder';
+import { MicMeter } from './MicMeter';
 import { gateSentence } from './notes';
-
-/** The meter's share of a peak: empty at -60 dBFS or below, full at 0 dBFS. */
-export function meterShare(dbfs: number | null): number {
-  if (dbfs === null || !Number.isFinite(dbfs)) return 0;
-  return Math.min(1, Math.max(0, (dbfs + 60) / 60));
-}
 
 /** "Recording starts in 3 s.", as the countdown says it (and announces it, once). */
 export const startsIn = (left: number) => `Recording starts in ${left} s.`;
@@ -68,23 +63,10 @@ export function Countdown() {
   );
 }
 
-/** The microphone's level during the countdown: a 6 px track, its paper fill following the peaks. */
+/** The microphone's level during the countdown, as the take's worker hears it. */
 function Meter() {
   const dbfs = useRecorder((s) => s.meterDbfs);
-  const share = meterShare(dbfs);
-  return (
-    <div
-      className="record-meter"
-      role="meter"
-      aria-label="Microphone level"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={Math.round(share * 100)}
-      style={{ '--p': `${share * 100}%` } as CSSProperties}
-    >
-      <i />
-    </div>
-  );
+  return <MicMeter dbfs={dbfs} />;
 }
 
 /**
