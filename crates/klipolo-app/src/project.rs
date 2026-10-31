@@ -28,7 +28,7 @@ use apply::apply_and_commit;
 pub(crate) use apply::{
     ApplyError, apply_transaction, build_and_apply, build_named_and_apply, step, with_open,
 };
-pub(crate) use create::{create_in, new_project, open_in, snapshot_now};
+pub(crate) use create::{create_file_in, create_in, new_project, open_in, snapshot_now};
 pub(crate) use disk::{SaveError, save};
 use klipolo_engine::session::{FeedRx, ProjectFeed};
 use klipolo_model::Transaction;
@@ -233,7 +233,12 @@ pub fn project_reveal(state: State<'_, ProjectSessionState>) -> Result<(), Said>
 /// Closes the open project once its edits are saved; its analysis stops.
 #[tauri::command(async)]
 pub fn project_close(state: State<'_, ProjectSessionState>) -> Result<(), Said> {
-    set_open(&state, None).map(|_| ())
+    close_in(&state)
+}
+
+/// Closes the open project once its edits are saved (it stays open when they can't be).
+pub(crate) fn close_in(state: &ProjectSessionState) -> Result<(), Said> {
+    set_open(state, None).map(|_| ())
 }
 
 /// A hand edit. `project_id` and `base_revision` are the UI copy's: a batch for another project, or for a revision the

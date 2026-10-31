@@ -6,7 +6,7 @@
 //! 2. `recording_from` makes the recording, each run's file probed (`probe`) and a one-sided mic centred from the
 //!    manifest's peaks. A take with nothing to edit stops here, with no project made, opened or changed.
 //! 3. The project is opened (`destination`). The recording's id is the take's, so a take already in it isn't added
-//!    again.
+//!    again. A project made for the take goes again when the step is refused.
 //! 4. The clip is the whole take, last on the main track, its camera mirrored as "Mirror my camera" was (`clip_for`).
 //! 5. `Imported { project }` goes to the take's journal and its `imported` mark is written.
 //!
@@ -80,14 +80,15 @@ pub(super) fn import_take(
     let (imported, notes) = recording_from(&manifest, dir, &manifest_peaks, probe)
         .map_err(|e| ImportError::Said(Said::Coded(e)))?;
     let recording = imported.recording;
-    let project = destination::open_for(sessions, dir, to)?;
-    let (clip_id, added) = add(
-        sessions,
-        &project,
-        imported.assets,
-        &recording,
-        mirror_of(dir),
-    )?;
+    let target = destination::open_for(sessions, dir, to)?;
+    let project = target.id;
+    let mirror = mirror_of(dir);
+    let (clip_id, added) = add(sessions, &project, imported.assets, &recording, mirror)
+        .inspect_err(|_| {
+            if let Some(file) = &target.made {
+                destination::unmake(sessions, file);
+            }
+        })?;
     imported_in(dir, &project);
     tracing::info!(
         take = recording.id,

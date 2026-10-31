@@ -302,6 +302,42 @@ fn cancelled_take_from_the_start_screen_makes_no_project() {
     assert!(sessions.open_file().is_none());
 }
 
+/// A take from the start screen whose step the new project refuses leaves no empty "Recording, {Mon D}" behind: the
+/// project made for it is closed and its file goes. The take's files stay.
+#[test]
+fn a_start_screen_take_that_is_refused_leaves_no_project() {
+    let sessions = Sessions::start_screen();
+    let take = TakeFixture::saved(Recorded::default(), ImportTarget::New);
+    let library = tempfile::tempdir().unwrap();
+    let path = library.path().to_path_buf();
+    let library_dir =
+        move || -> Result<std::path::PathBuf, klipolo_model::coded::Said> { Ok(path.clone()) };
+    // Every run's asset gets the same id, so the project refuses the step.
+    let mut probe = |path: &std::path::Path, _key: &str| {
+        crate::media::probe_asset(path).map(|asset| klipolo_model::project::Asset {
+            id: "same".into(),
+            ..asset
+        })
+    };
+    let landing = super::import::Landing {
+        library: &library_dir,
+        today: OCT_31,
+        files: None,
+        probe: &mut probe,
+    };
+    let refused =
+        super::import::land(&sessions.state, &take.done(false, None), landing).unwrap_err();
+    assert_eq!(refused.code, "capture.import.notAdded");
+    let left: Vec<_> = std::fs::read_dir(library.path())
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name())
+        .collect();
+    assert!(left.is_empty(), "no project left behind: {left:?}");
+    assert!(sessions.open_file().is_none(), "still the start screen");
+    assert!(take.dir.root.join("mic").is_dir(), "its files stay");
+}
+
 /// The take lands in the project it was armed in. Should another be open by then, that project opens again (the open
 /// one saved first) and the take lands there; the page's snapshot is that project's.
 #[test]
