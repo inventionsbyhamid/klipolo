@@ -1,12 +1,19 @@
 //! The Record dialog's stills of each screen and app in their worker, with the fake backend and a test clock: each
 //! target once a second, in turn, at most 8 of them; a still that fails is tried again on its next turn, and one that
 //! runs late moves the next turn back; the worker ends on the app's Stop or its stdin's end; without Screen Recording
-//! it takes no still. Nothing captures.
+//! it takes no still; and the Mac's stills read the permission first and never ask. Nothing captures.
 #![cfg(feature = "synthetic")]
 
 #[path = "common/preview_io.rs"]
 #[allow(dead_code, reason = "the stills keep time by the test's own clock")]
 mod preview_io;
+// Only the source helpers, for the stills' consent scan.
+#[path = "common/scan.rs"]
+#[allow(
+    dead_code,
+    reason = "the stills' scan needs two of the shared source helpers"
+)]
+mod scan;
 
 use std::io::{BufRead, BufReader, Cursor, Read};
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -25,6 +32,7 @@ use klipolo_capture::run::{Clock, PreviewIo};
 use klipolo_capture::shell::Shell;
 use klipolo_capture::synthetic::{FAKE_DISPLAY, FakeBackend, Script};
 use preview_io::{Late, SharedOut, sent_after};
+use scan::{code_of, read};
 
 /// Time as the test says it: each wait ends at once, at the time it waits for, until `end`, when the worker's run
 /// is over. Every wait is kept. Only the waits and a slow still (`SlowFirst`) move it.
@@ -330,5 +338,50 @@ fn thumbs_refuse_without_screen_recording() {
         assert_eq!(run.code, 1);
         assert!(run.stills.is_empty());
         assert_eq!(failed(&run.events), ["capture.permission.screen"]);
+    }
+}
+
+/// The Mac's stills read Screen Recording's preflight (which never prompts) before the content list (which can show
+/// macOS's prompt) and the screenshot, and their worker reads the permission before it asks for a still. Neither
+/// requests a permission, opens a camera or a mic, captures sound or writes a file.
+#[test]
+fn the_stills_read_the_permission_first_and_never_ask_or_open_a_camera_or_a_mic() {
+    let mac = code_of(&read("platform/macos/thumbs.rs"));
+    let guard = mac.find("assert_real_capture_allowed(");
+    let preflight = mac.find("CGPreflightScreenCaptureAccess()");
+    let content = mac.find("filter::content()").expect("the content list");
+    let shot = mac.find("ScreenshotManager::").expect("the screenshot");
+    assert!(
+        guard.is_some_and(|g| preflight.is_some_and(|p| g < p)),
+        "the guard comes first"
+    );
+    assert!(
+        preflight.is_some_and(|p| p < content && content < shot),
+        "the preflight comes before the content list, and the content list before the screenshot"
+    );
+    let worker = code_of(&read("run/thumbs.rs"));
+    let permission = worker.find(".permissions()");
+    let still = worker.find(".still(").expect("a still asked for");
+    assert!(
+        permission.is_some_and(|p| p < still),
+        "the worker reads the permission before it asks for a still"
+    );
+    for (file, code) in [("Mac's stills", &mac), ("stills' worker", &worker)] {
+        for banned in [
+            "CGRequestScreenCaptureAccess",
+            "request_screen_permission",
+            "request_access",
+            "requestAccess",
+            "CaptureSession",
+            "CaptureDevice",
+            "AudioSpec",
+            "cpal",
+            "set_captures_audio",
+            "SessionDir",
+            "std::fs",
+            "File::",
+        ] {
+            assert!(!code.contains(banned), "the {file} names {banned}");
+        }
     }
 }

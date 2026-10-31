@@ -1,7 +1,7 @@
 //! Capture begins only when the person presses Record or Check camera: never in tests, builds or device inspection.
-//! The one exception, the recorder's live view, is a capture file
-//! of its own (`captures`). These checks read source text only, every OS's on every OS, so a
-//! Linux run checks the macOS and Windows code too, and each later task's files are checked as they land.
+//! The exceptions, the recorder's live view and the Record dialog's stills, are capture files of their own
+//! (`captures`). These checks read source text only, every OS's on every OS, so a Linux run checks the macOS and
+//! Windows code too, and each later task's files are checked as they land.
 
 // Only the source helpers, not `common`: a source scan links nothing else (no FFmpeg).
 #[path = "common/scan.rs"]
@@ -54,10 +54,11 @@ fn listing_code_never_opens_a_device() {
 /// Calls that start capture, open a capture device or ask the person for permission, by the names each OS's crates
 /// give them. Only a capture file (`captures`) may name one, and it runs only after Record or Check camera.
 const CAPTURE_APIS: &[&str] = &[
-    // macOS: ScreenCaptureKit's content list (the monthly prompt) and stream, AVFoundation's session and device
-    // inputs, the permission requests, Core Audio's I/O.
+    // macOS: ScreenCaptureKit's content list (the monthly prompt), stream and screenshots, AVFoundation's session and
+    // device inputs, the permission requests, Core Audio's I/O.
     "ShareableContent",
     "sc::Stream",
+    "ScreenshotManager",
     "CaptureSession",
     "startRunning",
     "CaptureDeviceInput",
@@ -125,6 +126,10 @@ fn captures(file: &str) -> bool {
         // It runs only while the recorder is open and in front and screen recording is already allowed
         // (its `start` reads the preflight before the content list), and never opens the camera or the mic.
         "platform/macos/live_view.rs",
+        // The Record dialog's stills of each screen and app, under the live view's rule: only while the dialog is
+        // open and in front and screen recording is already allowed (each still reads the preflight before the content
+        // list), never the camera or the mic.
+        "platform/macos/thumbs.rs",
         "platform/windows/wgc.rs",
         "platform/windows/dda.rs",
         "platform/windows/screen.rs",

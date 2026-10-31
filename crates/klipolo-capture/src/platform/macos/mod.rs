@@ -17,14 +17,16 @@
 //! - the camera bubble (`bubble`), fed by the take's own camera session;
 //! - the recorder's live view of the chosen screen or window (`live_view`), with the take's own
 //!   filter and Check camera's JPEG (`jpeg`);
+//! - the Record dialog's stills of each screen and app (`thumbs`), one screenshot each with the take's own filter and
+//!   the same JPEG;
 //! - the cursor as its own layer (`cursor`: the mouse-only monitor, the shapes, the self-check and its
 //!   sampled fallback), with the system cursor left out of the frames and put back live (`screen`).
 //!
 //! Nothing in the listing files opens a device or asks for a permission. ScreenCaptureKit's content list, which shows
-//! macOS's monthly screen-recording prompt, is read only by the capture pipes' `start`, after Record, and by
-//! the live view's, only once Screen Recording's preflight says it is allowed (the one exception to capture only after
-//! a press). The one request Klipolo makes itself, Screen Recording's (`screen_permission`), runs only on the person's
-//! press of "Allow screen recording".
+//! macOS's monthly screen-recording prompt, is read only by the capture pipes' `start`, after Record, and by the live
+//! view's and the stills', only once Screen Recording's preflight says it is allowed (the Record dialog's previews, the
+//! exceptions to capture only after a press). The one request Klipolo makes itself, Screen Recording's
+//! (`screen_permission`), runs only on the person's press of "Allow screen recording".
 
 mod apps;
 mod bubble;
@@ -63,6 +65,7 @@ mod screen_permission;
 mod shell;
 mod shell_loop;
 mod sound;
+mod thumbs;
 
 pub use crate::platform::common::camera::{FormatFacts, pick_format};
 pub use crate::platform::common::sck::{interleave, pipe_event_for, queue_depth};
@@ -86,7 +89,8 @@ use std::time::Duration;
 
 use crate::backend::{
     AppAudioApi, AudioSpec, Backend, CaptureCaps, DeviceInfo, Devices, HotkeyApi, IndicatorPlace,
-    Permissions, PickerKind, PreviewPipe, ProbeReport, ScreenApi, Target, VideoPipes, VideoSpec,
+    Permissions, PickerKind, PreviewFrame, PreviewPipe, ProbeReport, ScreenApi, Target, VideoPipes,
+    VideoSpec,
 };
 use crate::cursor::CursorSource;
 use crate::media::StreamInfo;
@@ -105,6 +109,8 @@ pub(super) struct OsBackend {
     display: Arc<AtomicU32>,
     /// The camera bubble's live layer, from the camera's pipe to the shell.
     bubble: Arc<bubble::BubbleFeed>,
+    /// The Record dialog's stills: their JPEG maker, made at the first one.
+    stills: thumbs::Stills,
 }
 
 impl OsBackend {
@@ -112,6 +118,7 @@ impl OsBackend {
         Self {
             display: Arc::default(),
             bubble: Arc::default(),
+            stills: thumbs::Stills::default(),
         }
     }
 }
@@ -208,6 +215,11 @@ impl Backend for OsBackend {
     /// The recorder's live view: building it opens nothing, and its start reads the preflight first (`live_view`).
     fn live_view(&self, target: &Target) -> Result<Box<dyn PreviewPipe>, PipeError> {
         Ok(Box::new(MacLiveView::new(target)?))
+    }
+
+    /// The Record dialog's stills: the preflight first, then one screenshot (`thumbs`).
+    fn still(&self, target: &Target, width: u32) -> Result<PreviewFrame, PipeError> {
+        self.stills.take(target, width)
     }
 
     /// Generated frames only, never capture.
