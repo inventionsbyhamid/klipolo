@@ -18,6 +18,7 @@ mod env;
 mod events;
 mod launch;
 mod outcomes;
+mod send;
 mod setup;
 mod state;
 mod supervise;
@@ -34,6 +35,8 @@ mod test_support;
 mod tests;
 #[cfg(test)]
 mod tests_plan;
+#[cfg(test)]
+mod tests_stop;
 #[cfg(test)]
 mod tests_supervise;
 
