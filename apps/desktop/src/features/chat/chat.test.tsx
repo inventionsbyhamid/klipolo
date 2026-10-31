@@ -638,4 +638,38 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     expect(message()).toBeEnabled();
     expect(useAi.getState().status).toEqual({ mode: 'none' });
   });
+
+  it('a Retry keeps the revision it was made on; a keep-only refused for a moved project says so, with no Retry', async () => {
+    let n = 0;
+    const fake = chat({
+      reply: (r) => {
+        n += 1;
+        if (n === 1)
+          return reply(r.id, 'Two moments.', {
+            moments: [
+              { startUs: 3 * S, endUs: 5 * S, label: 'The first firing' },
+              { startUs: 21 * S, endUs: 24 * S, label: 'The cracked bowl' },
+            ],
+          });
+        if (n === 2) return { type: 'failed', kind: 'network', message: 'No connection.' };
+        throw new Error('The video changed. Try again.', { cause: code('project.moved') });
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'find the kiln{Enter}');
+    await userEvent.click(await screen.findByRole('button', { name: 'Keep only these' }));
+    await screen.findByText('No connection.');
+    // The project moves on before Retry: the request still says the revision its moments' times are on.
+    act(() =>
+      useProject.setState({
+        snapshot: { ...useProject.getState().snapshot!, history: changed(4, code('clip.split')).history },
+      }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(fake.requests).toHaveLength(3));
+    expect(fake.requests[2]).toMatchObject({ baseRevision: 3, keepOnly: [{ start: 3 * S, end: 5 * S }, { start: 21 * S, end: 24 * S }] });
+    expect(await screen.findByText('The video changed. Ask again.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+
 });

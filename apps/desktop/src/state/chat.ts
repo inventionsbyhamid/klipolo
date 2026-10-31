@@ -1,7 +1,9 @@
+import { t } from '@lingui/core/macro';
 import { create } from 'zustand';
 import type { AiStatus } from '../bindings/AiStatus';
 import type { ChatRequest } from '../bindings/ChatRequest';
 import { useAi } from '../ai/aiStatus';
+import { isCode } from '../bridge/call';
 import { chatBridge } from '../bridge/chat';
 import { errorMessage } from '../lib/errors';
 import { findItem } from '../lib/timeline';
@@ -42,9 +44,15 @@ export function useCanChat(): boolean {
 
 /**
  * What "this" and "here" mean as a message goes: the time range or the overlay selected, the playhead, the format,
- * and the revision those times are on (Rust refuses times on a project that moved on since).
+ * and the revision those times are on (Rust refuses times on a project that moved on since): `baseRevision` when
+ * given (a Retry sends the one it was first sent on), else the one now.
  */
-function requestFor(id: string, text: string, keepOnly: { start: number; end: number }[]): ChatRequest {
+function requestFor(
+  id: string,
+  text: string,
+  keepOnly: { start: number; end: number }[],
+  baseRevision?: number,
+): ChatRequest {
   const snapshot = useProject.getState().snapshot;
   const project = snapshot?.project;
   const range = useRange.getState().range;
@@ -58,7 +66,7 @@ function requestFor(id: string, text: string, keepOnly: { start: number; end: nu
     playheadUs: usePlayback.getState().playheadUs,
     format: useUi.getState().previewFormat ?? project?.settings.primaryFormat ?? null,
     keepOnly,
-    baseRevision: snapshot?.history.revision ?? 0,
+    baseRevision: baseRevision ?? snapshot?.history.revision ?? 0,
   };
 }
 
@@ -105,10 +113,12 @@ export const useChat = create<ChatStore>((set, get) => {
       const keepOnly = options?.keepOnly ?? [];
       set({ pending: { id } });
       if (options?.echo !== false) push({ id: `${id}:you`, from: 'person', text: trimmed });
+      const request = requestFor(id, trimmed, keepOnly, options?.baseRevision);
+      const again = { text: trimmed, keepOnly, baseRevision: request.baseRevision };
       const failed = (message: string, failure: Extract<Message, { kind: 'failed' }>['failure']) =>
-        push({ id, from: 'klipolo', kind: 'failed', text: message, failure, retry: { text: trimmed, keepOnly } });
+        push({ id, from: 'klipolo', kind: 'failed', text: message, failure, retry: again });
       try {
-        const outcome = await chatBridge().send(requestFor(id, trimmed, keepOnly));
+        const outcome = await chatBridge().send(request);
         if (!live()) return;
         if (outcome.type === 'failed') {
           // Declined under the provider's policy: the same words would be declined again, so they go back into the
@@ -153,7 +163,18 @@ export const useChat = create<ChatStore>((set, get) => {
           proposal,
         });
       } catch (error) {
-        if (live()) failed(errorMessage(error), 'other');
+        if (!live()) return;
+        // Its times were on a revision the project left: sent again it would be refused again, so it says to ask anew.
+        if (isCode(error, 'project.moved'))
+          push({
+            id,
+            from: 'klipolo',
+            kind: 'failed',
+            text: t({ id: 'chatPanel.moved', message: 'The video changed. Ask again.' }),
+            failure: 'other',
+            retry: null,
+          });
+        else failed(errorMessage(error), 'other');
       } finally {
         set((s) => (s.pending?.id === id ? { pending: null } : {}));
       }
@@ -162,9 +183,10 @@ export const useChat = create<ChatStore>((set, get) => {
     retry: async (messageId) => {
       const m = get().messages.find((x) => x.id === messageId);
       // Checked before the failure goes: a Retry that can't send leaves it as it was.
-      if (!m || m.from !== 'klipolo' || m.kind !== 'failed' || !ready()) return;
+      if (!m || m.from !== 'klipolo' || m.kind !== 'failed' || !m.retry || !ready()) return;
+      const { text, keepOnly, baseRevision } = m.retry;
       set((s) => withMessages(s.messages.filter((x) => x !== m)));
-      await get().send(m.retry.text, { keepOnly: m.retry.keepOnly, echo: false });
+      await get().send(text, { keepOnly, echo: false, baseRevision });
     },
 
     ...proposalActions(set, get),

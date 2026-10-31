@@ -50,8 +50,11 @@ export type Message =
       kind: 'failed';
       text: string;
       failure: ChatFailureKind;
-      /** What to send again on Retry. */
-      retry: { text: string; keepOnly: { start: number; end: number }[] };
+      /**
+       * What Retry sends again, on the revision it was first sent on (its selection's and moments' times are on it);
+       * null when sending it again can't help (it was refused because the project moved).
+       */
+      retry: { text: string; keepOnly: { start: number; end: number }[]; baseRevision: number } | null;
     };
 
 export type ReplyMessage = Extract<Message, { kind: 'reply' }>;
@@ -74,8 +77,14 @@ export interface ChatStore {
   setDraft: (draft: string) => void;
   /** Another project (or none), or New chat: the conversation starts over, and a reply under way is dropped. */
   reset: (projectId: string | null) => void;
-  /** The person's message ("this" is the selection). `keepOnly`: "Keep only these" under moments. */
-  send: (text: string, options?: { keepOnly?: { start: number; end: number }[]; echo?: boolean }) => Promise<void>;
+  /**
+   * The person's message ("this" is the selection). `keepOnly`: "Keep only these" under moments. `baseRevision`: the
+   * revision its times are on, when not the one now (a Retry).
+   */
+  send: (
+    text: string,
+    options?: { keepOnly?: { start: number; end: number }[]; echo?: boolean; baseRevision?: number },
+  ) => Promise<void>;
   /** Sends a failed message again, in its place. */
   retry: (messageId: string) => Promise<void>;
   /** New chat: Rust forgets the conversation too. */
