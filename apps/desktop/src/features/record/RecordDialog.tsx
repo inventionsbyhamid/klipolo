@@ -50,11 +50,11 @@ export function RecordDialog() {
   return open && phase !== 'recording' && phase !== 'saving' ? <Dialog phase={phase} /> : null;
 }
 
-/** Klipolo's window is in front: focused and shown. It starts so, as the dialog opens from a press in it. */
+/** Klipolo's window is in front: focused and shown, as the window says when the dialog opens, then as it changes. */
 function useInFront(): boolean {
-  const [front, setFront] = useState(() => document.visibilityState !== 'hidden');
+  const [front, setFront] = useState(() => document.hasFocus() && document.visibilityState !== 'hidden');
   useEffect(() => {
-    let focused = true;
+    let focused = document.hasFocus();
     const update = () => setFront(focused && document.visibilityState !== 'hidden');
     const blur = () => {
       focused = false;

@@ -30,6 +30,8 @@ let fake: FakeRecorder;
 
 beforeEach(async () => {
   fake = await installFakeRecorder();
+  // Klipolo's window is in front as the dialog opens, unless a test says otherwise.
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -258,6 +260,15 @@ describe('the previews in the Record dialog', () => {
     level(-6);
     expect(screen.getByRole('meter', { name: 'Microphone level' })).toBe(meter);
     expect(meter).toHaveAttribute('aria-valuenow', '90');
+  });
+
+  it('a_dialog_opened_while_klipolo_is_behind_waits_for_it_to_be_in_front', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    await openOn();
+    // The app would start nothing while Klipolo is behind: the dialog asks once it is in front.
+    expect(fake.previewed).toEqual([]);
+    await windowFocus('focus');
+    expect(fake.previewed).toEqual([want()]);
   });
 
   it('previews_stop_on_close_record_and_blur', async () => {
