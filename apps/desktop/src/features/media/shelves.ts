@@ -52,8 +52,18 @@ export function shelves(project: Project) {
   const own = project.assets.filter((a) => !a.id.startsWith('klipolo-pack-'));
   const used = uses(project);
   const audio = own.filter((a) => a.kind === 'audio');
+  // Clips in the order the video plays them (first use), then those not on it yet, as imported.
+  const order = new Map<string, number>();
+  project.timeline.main.forEach((clip, i) => {
+    if (clip.source.type === 'asset' && !order.has(clip.source.id)) order.set(clip.source.id, i);
+  });
+  const place = (a: Asset) => order.get(a.id) ?? Infinity;
   return {
-    clips: own.filter((a) => a.kind === 'video'),
+    clips: own
+      .filter((a) => a.kind === 'video')
+      .map((a, i) => [a, i] as const)
+      .sort(([a, i], [b, j]) => place(a) - place(b) || i - j)
+      .map(([a]) => a),
     music: audio.filter((a) => used.music.has(a.id) || (!used.sounds.has(a.id) && a.durationUs >= MUSIC_MIN_US)),
     sounds: audio.filter((a) => used.sounds.has(a.id) || (!used.music.has(a.id) && a.durationUs < MUSIC_MIN_US)),
     images: own.filter((a) => a.kind === 'image' && !madeWith(a)),

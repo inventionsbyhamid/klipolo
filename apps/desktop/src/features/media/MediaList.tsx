@@ -16,9 +16,10 @@ import { loadPack, packAsset, packAssetId, shelves, usePack, usePicture, uses } 
 /** On a Mac, Control-click is a right-click: it doesn't start a drag. */
 const MAC = typeof navigator !== 'undefined' && /^Mac/.test(navigator.platform);
 
-function Group({ title, note }: { title: string; note?: string }) {
+/** A group's heading; `id` names the list under it (`aria-labelledby`). */
+function Group({ title, note, id }: { title: string; note?: string; id?: string }) {
   return (
-    <p className="group-title">
+    <p className="group-title" id={id}>
       {title}
       {note && <span>{note}</span>}
     </p>
@@ -70,8 +71,14 @@ function Picture({
   );
 }
 
+/** What a music row's "+" says: music goes under the whole video. */
+function musicAddLabel(t: ReturnType<typeof useLingui>['t'], name: string): string {
+  return t({ id: 'library.add.music', message: `Add ${name} under the whole video`, comment: '{name} is a song’s name' });
+}
+
 /** The pack's items of one kind, as rows or pictures. */
 function PackItems({ items, project }: { items: PackItem[]; project: Project }) {
+  const { t } = useLingui();
   const used = uses(project).any;
   return items.map((item) =>
     item.category === 'sticker' ? (
@@ -91,6 +98,7 @@ function PackItems({ items, project }: { items: PackItem[]; project: Project }) 
         title={item.name}
         used={used.has(packAssetId(item.id))}
         onAdd={() => void addPackItem(item)}
+        addLabel={item.category === 'music' ? musicAddLabel(t, item.name) : undefined}
         onDrop={(target) => void dropPackItem(item, target)}
       />
     ),
@@ -122,6 +130,7 @@ export function MediaList({ tab }: { tab: LibraryTab }) {
       title={asset.name}
       used={used.has(asset.id)}
       onAdd={add}
+      addLabel={art === 'music' ? musicAddLabel(t, asset.name) : undefined}
       onDrop={(target) => addMedia(asset.id, target)}
     />
   );
@@ -166,8 +175,11 @@ export function MediaList({ tab }: { tab: LibraryTab }) {
       <>
         {mine.length > 0 && (
           <>
-            <Group title={music ? t({ id: 'library.music.yours', message: 'Your music' }) : t({ id: 'library.sounds.yours', message: 'Your sounds' })} />
-            <ul className="lib-list">
+            <Group
+              id={`lib-${tab}-yours`}
+              title={music ? t({ id: 'library.music.yours', message: 'Your music' }) : t({ id: 'library.sounds.yours', message: 'Your sounds' })}
+            />
+            <ul className="lib-list" aria-labelledby={`lib-${tab}-yours`}>
               {mine.map((asset) =>
                 row(asset, music ? 'music' : 'sound', () =>
                   void (music ? addMusic : addSound)({ type: 'asset', id: asset.id }),
@@ -178,8 +190,8 @@ export function MediaList({ tab }: { tab: LibraryTab }) {
         )}
         {packed.length > 0 && (
           <>
-            <Group title={builtIn} note={free} />
-            <ul className="lib-list">
+            <Group id={`lib-${tab}-pack`} title={builtIn} note={free} />
+            <ul className="lib-list" aria-labelledby={`lib-${tab}-pack`}>
               <PackItems items={packed} project={project} />
             </ul>
           </>
@@ -211,20 +223,24 @@ export function MediaList({ tab }: { tab: LibraryTab }) {
     <>
       {own.images.length > 0 && (
         <>
-          <Group title={t({ id: 'library.images.yours', message: 'Your images' })} />
-          <ul className="image-grid">{own.images.map(picture)}</ul>
+          <Group id="lib-images-yours" title={t({ id: 'library.images.yours', message: 'Your images' })} />
+          <ul className="image-grid" aria-labelledby="lib-images-yours">
+            {own.images.map(picture)}
+          </ul>
         </>
       )}
       {own.made.length > 0 && (
         <>
-          <Group title={t({ id: 'library.images.made', message: 'Made with Muse Image' })} />
-          <ul className="image-grid">{own.made.map(picture)}</ul>
+          <Group id="lib-images-made" title={t({ id: 'library.images.made', message: 'Made with Muse Image' })} />
+          <ul className="image-grid" aria-labelledby="lib-images-made">
+            {own.made.map(picture)}
+          </ul>
         </>
       )}
       {stickers.length > 0 && (
         <>
-          <Group title={builtIn} note={free} />
-          <ul className="image-grid">
+          <Group id="lib-images-pack" title={builtIn} note={free} />
+          <ul className="image-grid" aria-labelledby="lib-images-pack">
             <PackItems items={stickers} project={project} />
           </ul>
         </>

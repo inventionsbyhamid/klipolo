@@ -46,8 +46,9 @@ export function AssetRow({ asset, art, title, used, onAdd, onDrop, menu, addLabe
     e.currentTarget.setPointerCapture?.(e.pointerId);
     beginMediaDrag(e, asset, onDrop);
   };
-  // A short sound to the tenth ("0:00.4"), anything longer to the second.
-  const length = asset.durationUs < 10_000_000 ? formatPrecise(asset.durationUs) : formatTime(asset.durationUs);
+  // A short sound to the tenth ("0:00.4", never under "0:00.1"), anything longer to the second.
+  const length =
+    asset.durationUs < 10_000_000 ? formatPrecise(Math.max(100_000, asset.durationUs)) : formatTime(asset.durationUs);
   return (
     <li
       data-asset-id={asset.id}
