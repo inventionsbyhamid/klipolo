@@ -221,6 +221,7 @@ async fn exports_h264_mp4_for_portrait() {
     assert_eq!((codec.as_str(), width, height), ("h264", 1080, 1920));
     assert!((duration - 4.0).abs() < 0.1, "the clip's 4 s: {duration}");
     assert_eq!(jobs_in(dir.path()), 0, "no job left");
+    assert!(!dir.path().join(".jobs").exists(), "nor an empty .jobs");
     assert!(events.contains(&ExportEvent::FileReady {
         index: 0,
         path: file.display().to_string()
@@ -282,5 +283,6 @@ async fn cancel_removes_partial_output() {
         files_in(dir.path())
     );
     assert_eq!(jobs_left(dir.path()).await, 0, "no job or part of one left");
+    assert!(!dir.path().join(".jobs").exists(), "nor an empty .jobs");
     assert!(state.files().is_empty());
 }
