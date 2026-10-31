@@ -5,6 +5,7 @@ import { openSettings } from '../ai/aiStatus';
 import { projects } from '../bridge/projects';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../design/Menu';
 import { ExportButton } from '../features/export/ExportButton';
+import { MediaJobsPill } from '../features/media-jobs/MediaJobsPill';
 import { errorMessage } from '../lib/errors';
 import { historyAction } from '../lib/history';
 import { AiChip } from '../settings/AiChip';
@@ -121,10 +122,13 @@ function ProjectMenu({ name }: { name: string }) {
 
 /**
  * The top bar: the window's drag region. With a project open: its name (the project menu), whether it is saved, undo
- * and redo, and Export. On the start screen only the app icon, the AI chip and Settings.
+ * and redo, the editing copies' pill while copies are made, and Export. On the start screen only the app icon, the AI
+ * chip and Settings.
  */
 export function TopBar() {
   const snapshot = useProject((s) => s.snapshot);
+  /** Where the focus goes when the editing copies' pill goes while it had it. */
+  const settings = useRef<HTMLButtonElement>(null);
   const saving = useSaving();
   const state = saveStateOf(snapshot, saving);
   const history = snapshot?.history;
@@ -161,8 +165,15 @@ export function TopBar() {
         </>
       )}
       <div className="topbar-right" data-tauri-drag-region>
+        {snapshot && <MediaJobsPill focusAfter={settings} />}
         <AiChip />
-        <button className="icon-btn" aria-label="Settings" title="Settings (Command ,)" onClick={openSettings}>
+        <button
+          ref={settings}
+          className="icon-btn"
+          aria-label="Settings"
+          title="Settings (Command ,)"
+          onClick={openSettings}
+        >
           <Icon name="settings" />
         </button>
         {snapshot && <ExportButton />}

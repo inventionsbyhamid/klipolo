@@ -1,0 +1,182 @@
+/* Editing copies: the top bar's pill and its popover. Values from tokens.css only. */
+
+/* ---------- The pill ---------- */
+
+.copies-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 32px;
+  padding: 0 var(--space-5) 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--color-bay);
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.copies-pill:hover,
+.copies-pill[data-state="open"] {
+  background: var(--color-bay-hover);
+  color: var(--color-ink);
+}
+
+/* Only failed copies left: no ring, quieter. */
+.copies-pill.is-quiet {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-line);
+}
+
+.copies-pill .ico {
+  width: 16px;
+  height: 16px;
+}
+
+.copies-ring {
+  flex: none;
+  transform: rotate(-90deg);
+}
+
+.copies-ring-track,
+.copies-ring-fill {
+  fill: none;
+  stroke-width: 2;
+}
+
+.copies-ring-track {
+  stroke: var(--color-bay-press);
+}
+
+.copies-ring-fill {
+  stroke: var(--color-paper);
+  transition: stroke-dashoffset var(--dur-base) var(--ease-out);
+}
+
+/* ---------- The popover ---------- */
+
+.copies-popover {
+  width: 360px;
+}
+
+.copies-pop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.copies-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.copies-head h2 {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+}
+
+.copies-head p,
+.copies-none,
+.copies-note {
+  margin: 0;
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  line-height: 16px;
+}
+
+.copies-auto {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  font-size: var(--text-sm);
+}
+
+.copies-rows {
+  max-height: 288px;
+  margin: 0;
+  padding: var(--space-2) 0 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--color-line);
+  list-style: none;
+}
+
+.copies-none {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-line);
+}
+
+.copies-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+}
+
+.copies-row-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.copies-row-name {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.copies-row-state {
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+}
+
+.copies-row-why {
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+}
+
+/* The mini bar: a pill track with a paper fill; a paused copy's fill is soft, it isn't moving. */
+.copies-bar {
+  height: 4px;
+  margin-top: var(--space-1);
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--color-bay-press);
+}
+
+.copies-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-paper);
+  transition: width var(--dur-base) var(--ease-out);
+}
+
+.copies-bar-fill.is-paused {
+  background: var(--color-ink-soft);
+}
+
+.copies-stop {
+  width: 30px;
+  padding: 0;
+}
+
+.copies-stop .ico {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.copies-foot {
+  display: flex;
+  justify-content: flex-end;
+}
