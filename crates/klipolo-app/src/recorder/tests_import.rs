@@ -437,6 +437,30 @@ fn a_take_that_fell_back_to_another_encoder_lets_the_probe_report_go() {
     }
 }
 
+/// A take recorded on a fallback encoder lets the probe's report go even when it can't land (here: no picture).
+#[test]
+fn a_fallback_take_that_cannot_land_lets_the_probe_report_go_too() {
+    let kept = tempfile::tempdir().unwrap();
+    let files = Files {
+        dir: kept.path().to_path_buf(),
+    };
+    std::fs::write(files.probe(), b"{}").unwrap();
+    let sessions = Sessions::with_project();
+    let recorded = Recorded {
+        picture: false,
+        ..Recorded::default()
+    };
+    let take = TakeFixture::saved(recorded, armed_in(&sessions));
+    let mut manifest = read_manifest(&take.dir).unwrap();
+    manifest.notes.push(CodedError::new(FALLBACK_NOTE));
+    write_manifest(&take.dir, &manifest).unwrap();
+    let refused = sessions
+        .land(&take.done(false, sessions.open_file()), Some(&files))
+        .unwrap_err();
+    assert_eq!(refused.code, "capture.import.noVideo");
+    assert!(!files.probe().exists(), "the report goes");
+}
+
 #[test]
 fn a_new_project_is_named_for_the_day_the_take_lands() {
     assert_eq!(

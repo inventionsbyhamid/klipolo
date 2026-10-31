@@ -223,7 +223,7 @@ pub(super) struct Landing<'a> {
 /// `recorder-imported`, or the note it hears instead, a `capture.*` code (the take's files stay in its folder either
 /// way). Its snapshot is the take's project, open again should it have closed meanwhile (`snapshot_after`). A take that
 /// landed but whose zooms the project refused is still landed, with none. A take recorded on a fallback encoder lets
-/// the probe's report go, so the next opening of the Record dialog measures again.
+/// the probe's report go, landed or not, so the next opening of the Record dialog measures again.
 pub(super) fn land(
     sessions: &ProjectSessionState,
     done: &Done,
@@ -235,7 +235,11 @@ pub(super) fn land(
         library: with.library,
         today: with.today,
     };
-    let landed = import_take(sessions, &done.dir, &to, with.probe).map_err(|error| {
+    let landed = import_take(sessions, &done.dir, &to, with.probe);
+    if let Some(files) = with.files {
+        forget_stale_probe(files, &done.dir, &landed);
+    }
+    let landed = landed.map_err(|error| {
         tracing::warn!(take = done.id, ?error, "recorder: the take didn't land");
         not_landed(error)
     })?;
@@ -252,9 +256,6 @@ pub(super) fn land(
     } else {
         0
     };
-    if let Some(files) = with.files {
-        setup::forget_stale_probe(files, &landed.notes);
-    }
     let snapshot = snapshot_after(sessions, &landed)?;
     let mut notes: Vec<CodedError> = done.note.iter().cloned().collect();
     notes.extend(landed.notes);
@@ -294,6 +295,19 @@ pub(super) fn snapshot_after(
         );
         CodedError::new("capture.import.addedNotOpened")
     })
+}
+
+/// The probe's report goes after a take recorded on a fallback encoder: from its notes when it landed, else from its
+/// manifest's when there is one.
+fn forget_stale_probe(files: &Files, dir: &SessionDir, landed: &Result<Landed, ImportError>) {
+    match landed {
+        Ok(landed) => setup::forget_stale_probe(files, &landed.notes),
+        Err(_) => {
+            if let Ok(manifest) = read_manifest(dir) {
+                setup::forget_stale_probe(files, &manifest.notes);
+            }
+        }
+    }
 }
 
 /// What the person is told when a take didn't land: the recorder's own words (a take with no picture, one that couldn't
