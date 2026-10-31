@@ -27,6 +27,7 @@ const { inspectedTransition } = await import('./TransitionInspector');
 const DISSOLVE = 'klipolo.builtin/transition.dissolve';
 const WIPE = 'klipolo.builtin/transition.wipe';
 const DIP = 'klipolo.builtin/transition.dip';
+const PUSH = 'klipolo.builtin/transition.push';
 
 /** The fixture with "b" starting 2 s into its file (2 s of footage before it) and `transition` from "a" into "b". */
 function withTransition(transition: Transition) {
@@ -161,5 +162,33 @@ describe('the transition card', () => {
     renderWithProviders(<Inspector format="landscape" />);
     expect(screen.getByRole('button', { name: 'Type: Missing transition' })).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: 'Length' })).toHaveAttribute('aria-valuenow', '1');
+  });
+
+  it("a push's directions are worded through the i18n layer, as the card's other copy is", async () => {
+    const { i18n } = await import('@lingui/core');
+    const words = vi.spyOn(i18n, '_');
+    useProject.setState({ snapshot: withTransition({ effect: PUSH, durationUs: 1_000_000, params: {} }) });
+    renderWithProviders(<Inspector format="landscape" />);
+    const direction = screen.getByRole('radiogroup', { name: 'Direction' });
+    expect(within(direction).getAllByRole('radio').map((radio) => radio.textContent)).toEqual([
+      'Left',
+      'Right',
+      'Up',
+      'Down',
+    ]);
+    // `_` is called with a descriptor (`t({ id, message })`) or an id.
+    const ids = words.mock.calls.map(([said]) => {
+      const worded = said as string | { id: string };
+      return typeof worded === 'string' ? worded : worded.id;
+    });
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'transition.direction.left',
+        'transition.direction.right',
+        'transition.direction.up',
+        'transition.direction.down',
+      ]),
+    );
+    words.mockRestore();
   });
 });

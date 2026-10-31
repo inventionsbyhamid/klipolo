@@ -50,8 +50,8 @@ export function useInspectedTransition(): InspectedTransition | null {
 }
 
 const percent = (v: number) => `${Math.round(v * 100)}%`;
-/** A choice's stored key ("left") as it reads ("Left"). */
-const choiceLabel = (option: string) => {
+/** A choice's stored key ("top-left") as it reads ("Top left"), for a key `useChoiceLabel` doesn't word. */
+const keyLabel = (option: string) => {
   const words = option.replace(/[-_]/g, ' ');
   return words.charAt(0).toUpperCase() + words.slice(1);
 };
@@ -164,6 +164,18 @@ function useSettingLabel(spec: ParamSpec): string {
   return spec.label;
 }
 
+/** A choice's name in the language shown: the directions the transitions have, else its key as it reads. */
+function useChoiceLabel(): (option: string) => string {
+  const { t } = useLingui();
+  const words: Record<string, string> = {
+    left: t({ id: 'transition.direction.left', message: 'Left', comment: 'A push or wipe moving to the left' }),
+    right: t({ id: 'transition.direction.right', message: 'Right', comment: 'A push or wipe moving to the right' }),
+    up: t({ id: 'transition.direction.up', message: 'Up', comment: 'A push or wipe moving up' }),
+    down: t({ id: 'transition.direction.down', message: 'Down', comment: 'A push or wipe moving down' }),
+  };
+  return (option) => words[option] ?? keyLabel(option);
+}
+
 /**
  * One of a transition's settings, by its schema's type: a slider for a number (dry-run while it moves, one change per
  * drag), swatches for a colour, a segmented control (or a select, past four choices) for a choice, On and Off for a
@@ -180,6 +192,7 @@ function Setting({
 }) {
   const { t } = useLingui();
   const label = useSettingLabel(spec);
+  const choiceLabel = useChoiceLabel();
   const pick = (next: ParamValue) => void commitLatest('transition.change.undo', () => ops(next));
   switch (spec.type) {
     case 'float':
