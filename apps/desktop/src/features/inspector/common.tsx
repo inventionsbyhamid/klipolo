@@ -1,4 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
+import type { KeyboardEvent } from 'react';
 import type { Anchor } from '../../bindings/Anchor';
 import type { FormatKind } from '../../bindings/FormatKind';
 import type { Item } from '../../bindings/Item';
@@ -15,6 +16,22 @@ import {
   type OutChoice,
 } from './inspectorOps';
 import { commitLatest, editLayout } from '../../state/latest';
+
+/**
+ * A card's Escape (its `aside`'s key handler): `close` the card, for an Escape pressed in the card itself. Not one a
+ * field keeps (a text or time field puts its value back), not one already handled, and not one from a menu the card
+ * opened: menus open in a portal, outside the card's own elements, and React still passes their keys up to it, so
+ * Escape there closes the menu alone.
+ */
+export function cardEscape(close: () => void) {
+  return (e: KeyboardEvent<HTMLElement>) => {
+    if (e.key !== 'Escape' || e.defaultPrevented || !(e.target instanceof Node)) return;
+    if (!e.currentTarget.contains(e.target)) return;
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    e.stopPropagation();
+    close();
+  };
+}
 
 /** The shortest a layer can be made in the inspector (the model's least is 10 ms). */
 const MIN_LENGTH_US = 100_000;

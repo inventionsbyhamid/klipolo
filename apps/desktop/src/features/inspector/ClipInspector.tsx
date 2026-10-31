@@ -10,6 +10,7 @@ import { clipNow, editClip } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
 import { deleteBlock, duplicate } from '../timeline/commands';
+import { cardEscape } from './common';
 import { FramingField } from './FramingField';
 import { SpeedField } from './SpeedField';
 import { VolumeControls } from './VolumeControls';
@@ -31,13 +32,7 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
     <aside
       className="inspector"
       aria-label={t({ id: 'inspector.label', message: `${title} settings`, comment: '{title}: Title, Image, Music' })}
-      onKeyDown={(e) => {
-        // Escape in a field puts its value back (the field handles it); elsewhere it closes the inspector.
-        if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
-          e.stopPropagation();
-          close();
-        }
-      }}
+      onKeyDown={cardEscape(close)}
     >
       <div className="insp-head">
         <h3 title={title}>
