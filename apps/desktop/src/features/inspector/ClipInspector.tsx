@@ -3,9 +3,7 @@ import type { Clip } from '../../bindings/Clip';
 import type { FormatKind } from '../../bindings/FormatKind';
 import { IconButton } from '../../design/IconButton';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../../design/Menu';
-import { activeIntlLocale } from '../../i18n';
 import { Icon } from '../../layout/Icon';
-import { formatNumber } from '../../lib/format';
 import { clipOp } from '../../lib/ops';
 import { sourceLabel } from '../../lib/timeline';
 import { commitToggle } from '../../state/commit';
@@ -14,14 +12,13 @@ import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
 import { muteLabel } from '../preview';
 import { deleteBlock, duplicate } from '../timeline/commands';
-import { clipHasSound, speedChoices } from './clipOps';
-import { Field, Select } from './fields';
+import { clipHasSound } from './clipOps';
+import { Field } from './fields';
 import { FramingField } from './FramingField';
+import { SpeedField } from './SpeedField';
 import { ToolSlider } from './ToolSlider';
 
 const percent = (v: number) => `${Math.round(v * 100)}%`;
-/** "1.25×". */
-const speedText = (speed: number) => `${formatNumber(activeIntlLocale(), speed)}×`;
 
 /**
  * The clip card: the inspector for a selected main-track clip, in the left column like the others. Its header has the
@@ -78,26 +75,10 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
       </div>
       <div className="insp-body">
         <FramingField clip={clip} format={format} />
-        <SpeedField clip={clip} />
+        <SpeedField speed={clip.speed} onPick={(speed) => void editClip('speed.undo', clip, { speed })} />
         {clipHasSound(project, clip) && <VolumeField clip={clip} />}
       </div>
     </aside>
-  );
-}
-
-/** Speed: a select of 0.5x to 2x (and the clip's own when it is another), one undo step. */
-function SpeedField({ clip }: { clip: Clip }) {
-  const { t } = useLingui();
-  const label = t({ id: 'speed.label', message: 'Speed' });
-  return (
-    <Field label={label}>
-      <Select
-        label={label}
-        value={String(clip.speed)}
-        choices={speedChoices(clip.speed).map((speed) => ({ value: String(speed), label: speedText(speed) }))}
-        onPick={(v) => void editClip('speed.undo', clip, { speed: Number(v) })}
-      />
-    </Field>
   );
 }
 
