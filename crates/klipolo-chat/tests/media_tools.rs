@@ -22,6 +22,7 @@ use klipolo_model::media::music::is_music;
 use klipolo_model::ops::Op;
 use klipolo_model::params::ParamValue;
 use klipolo_model::project::{Asset, FormatKind};
+use klipolo_model::query::video_duration;
 use klipolo_model::speech::{Speech, Transcript, Word, WordKind};
 use klipolo_model::time::Us;
 use klipolo_model::timeline::{Clip, ClipSource, Item, ItemContent, TrackKind};
@@ -725,6 +726,87 @@ fn add_image_by_name_places_it_by_size_and_position() {
         )],
     );
     assert!(refused_to_model(&out, 0).starts_with("addImage: no picture in Library is called"));
+}
+
+#[test]
+fn nothing_is_placed_at_or_past_the_videos_end() {
+    let p = project();
+    let i = inputs(&p, "add these at the end");
+    let at_end = [
+        call(
+            "addMusic",
+            json!({"file": "lofi", "volume": null, "duck": null, "atSec": 30.0}),
+        ),
+        call("addSound", json!({"name": "whoosh", "atSec": [30.0]})),
+        call(
+            "addImage",
+            json!({"file": "logo", "size": null, "position": null, "atSec": 30.0, "durationSec": null}),
+        ),
+        call(
+            "makeSticker",
+            json!({"prompt": "plane", "position": null, "atSec": 30.0, "durationSec": null}),
+        ),
+    ];
+    for c in at_end {
+        let out = compile(&p, &i, std::slice::from_ref(&c));
+        assert_eq!((&out.additions, out.jobs.len()), (&None, 0), "{c:?}");
+        let reason = refused_to_model(&out, 0);
+        let field = if matches!(c, ToolCall::AddSound { .. }) {
+            "atSec[0]"
+        } else {
+            "atSec"
+        };
+        assert_eq!(
+            reason,
+            format!(
+                "{}: {field} 30.0 is at or past the video's end, where nothing can be added.",
+                c.name()
+            )
+        );
+    }
+    // The playhead at the end, no time given: the same.
+    let mut end = inputs(&p, "a title card saying the end");
+    end.view.playhead_us = secs(30.0);
+    let out = compile(
+        &p,
+        &end,
+        &[call(
+            "makeTitleCard",
+            json!({"title": "the end", "prompt": "sunset", "atSec": null, "durationSec": null}),
+        )],
+    );
+    assert_eq!(
+        refused_to_model(&out, 0),
+        "makeTitleCard: the playhead (30.0 s) is at or past the video's end, where nothing can be added."
+    );
+    // Near the end, a layer is cut where the video ends: the video stays 30 s long.
+    let near = inputs(
+        &p,
+        "the logo at 28 s and a title card saying the end at 28 s",
+    );
+    let out = compile(
+        &p,
+        &near,
+        &[
+            call(
+                "addImage",
+                json!({"file": "logo", "size": null, "position": null, "atSec": 28.0, "durationSec": null}),
+            ),
+            call(
+                "makeTitleCard",
+                json!({"title": "the end", "prompt": "sunset", "atSec": 28.0, "durationSec": null}),
+            ),
+        ],
+    );
+    let after = applied(&p, &out);
+    let overlays = layers(&after, TrackKind::Overlay);
+    assert_eq!(
+        (overlays.iter())
+            .map(|l| (l.start_us, l.duration_us))
+            .collect::<Vec<_>>(),
+        vec![(secs(28.0), secs(2.0)), (secs(28.0), secs(2.0))]
+    );
+    assert_eq!(video_duration(&after.timeline), secs(30.0));
 }
 
 #[test]

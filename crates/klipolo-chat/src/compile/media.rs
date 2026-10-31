@@ -15,7 +15,9 @@
 //!   `Job::MakeTitleBackground` for the picture to go under it. No title of theirs: refused back, for the model to ask.
 //!
 //! A time from the model stands on the evidence like any other (`Evidence::moment`: a change of shot or topic first),
-//! and is then mapped into the working copy. A file from the pack comes in with the ops that first place it.
+//! and is then mapped into the working copy. Nothing is placed at the video's end or past it, and a layer that would
+//! play past the end is cut there, so no media call makes the video longer. A file from the pack comes in with the ops
+//! that first place it.
 
 use std::collections::BTreeMap;
 
@@ -204,8 +206,8 @@ fn music<'l>(c: &'l Compiler, asked: &str) -> Result<&'l LibraryItem, Refused> {
 }
 
 /// Where a media call's time plays in `work`: the playhead when the model gave none, else its time standing on the
-/// evidence (`Evidence::moment`) or refused, naming `field`. A time at the main track's end or past it is the working
-/// copy's main track end.
+/// evidence (`Evidence::moment`) or refused, naming `field`. A time past the main track's end keeps its distance from
+/// it. Nothing starts at the video's end or past it (refused, so no layer ever makes the video longer).
 fn start(
     c: &Compiler,
     work: &Project,
@@ -213,43 +215,40 @@ fn start(
     field: &str,
     at: Option<Us>,
 ) -> Result<Us, Refused> {
-    let at = match at {
+    let said = match at {
         None => within_video(c.snapshot, &c.inputs.view).0,
         Some(t) => (c.evidence.moment(t)).ok_or_else(|| to_model(unfounded(tool, field, t)))?,
     };
-    let past_the_clips = at >= main_track_duration(&c.snapshot.timeline.main);
-    match c.map.time(work, at) {
-        Some(now) => Ok(now),
-        None if past_the_clips => Ok(main_track_duration(&work.timeline.main)),
-        None => Err(to_model(format!(
-            "{tool}: {field} {} s was taken out by an earlier change in this answer.",
-            secs(at)
-        ))),
-    }
-}
-
-/// How long a layer from `start` shows in `work`: `wanted` (None: `default_secs`), cut where the video ends when it
-/// starts before that. Refused when no time is left.
-fn length(
-    work: &Project,
-    tool: &str,
-    start: Us,
-    wanted: Option<Us>,
-    default_secs: f64,
-) -> Result<Us, Refused> {
-    let wanted = wanted.unwrap_or_else(|| secs_to_us(default_secs));
-    let end = video_duration(&work.timeline);
-    let got = if start < end {
-        wanted.min(end - start)
-    } else {
-        wanted
+    let snapshot_end = main_track_duration(&c.snapshot.timeline.main);
+    let now = match c.map.time(work, said) {
+        Some(now) => now,
+        None if said >= snapshot_end => {
+            main_track_duration(&work.timeline.main).saturating_add(said - snapshot_end)
+        }
+        None => {
+            return Err(to_model(format!(
+                "{tool}: {field} {} s was taken out by an earlier change in this answer.",
+                secs(said)
+            )));
+        }
     };
-    if got < MIN_DURATION_US {
+    if video_duration(&work.timeline).saturating_sub(now) < MIN_DURATION_US {
+        let what = match at {
+            Some(_) => format!("{field} {}", secs(said)),
+            None => format!("the playhead ({} s)", secs(said)),
+        };
         return Err(to_model(format!(
-            "{tool}: it would start as the video ends, with no time left to show it."
+            "{tool}: {what} is at or past the video's end, where nothing can be added."
         )));
     }
-    Ok(got)
+    Ok(now)
+}
+
+/// How long a layer from `start` (before the video's end, as `start` gives it) shows in `work`: `wanted` (None:
+/// `default_secs`), cut where the video ends.
+fn length(work: &Project, start: Us, wanted: Option<Us>, default_secs: f64) -> Us {
+    let wanted = wanted.unwrap_or_else(|| secs_to_us(default_secs));
+    wanted.min(video_duration(&work.timeline).saturating_sub(start))
 }
 
 /// A word of a message with where it sits, compared as `bare`.
@@ -329,7 +328,7 @@ fn title_ops(
         };
         params.insert(spec.key.clone(), ParamValue::Text(value));
     }
-    let duration = length(work, tool, start, duration, TEMPLATE_SECS)?;
+    let duration = length(work, start, duration, TEMPLATE_SECS);
     let id = new_id();
     let ops = vec![Op::AddItem {
         track: TrackTarget::Auto,
@@ -397,12 +396,6 @@ pub(super) fn add_sound(
     for (k, &t) in times.iter().enumerate() {
         let field = format!("atSec[{k}]");
         let at = start(c, work, "addSound", &field, Some(t))?;
-        if video_end.saturating_sub(at) < MIN_DURATION_US {
-            return Err(to_model(format!(
-                "addSound: {field} {} s is where the video ends, so the sound would not be heard.",
-                secs(t)
-            )));
-        }
         if !starts.contains(&at) {
             starts.push(at);
         }
@@ -476,7 +469,7 @@ pub(super) fn add_image(
         )));
     }
     let start = start(c, work, "addImage", "atSec", at)?;
-    let duration = length(work, "addImage", start, duration, PICTURE_SECS)?;
+    let duration = length(work, start, duration, PICTURE_SECS);
     Ok(Edit {
         ops: picture_ops(
             work,
@@ -501,7 +494,7 @@ pub(super) fn make_sticker(
     (at, duration): (Option<Us>, Option<Us>),
 ) -> Result<Job, Refused> {
     let start = start(c, work, "makeSticker", "atSec", at)?;
-    let duration = length(work, "makeSticker", start, duration, PICTURE_SECS)?;
+    let duration = length(work, start, duration, PICTURE_SECS);
     Ok(Job::MakeSticker {
         prompt: sanitize::reply(prompt),
         at_us: start,
