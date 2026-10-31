@@ -114,6 +114,8 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
   let recorded: string | null = null;
   /** Record presses so far: a sentence about an earlier take is never put on a later press. */
   let presses = 0;
+  /** Takes whose worker said it has gone (`state: idle`): nothing of them runs any more. */
+  const departed = new Set<string>();
 
   function leave(id: string) {
     leaving?.gone();
@@ -123,6 +125,7 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
   }
 
   function gone(id: string) {
+    departed.add(id);
     if (leaving?.id !== id) return;
     leaving.gone();
     leaving = null;
@@ -142,7 +145,8 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
    * Tells take `id` to end with `command`. A take that has gone already needs nothing more. Any other refusal falls back
    * to "Stop the running recording", which never starts capture; only if that fails too is it said, and never once a
    * later Record was pressed. Once a later take is the dialog's, the app runs that one (one take at a time), so `id` has
-   * gone and nothing is stopped.
+   * gone and nothing is stopped. Nor once `id`'s worker said it has gone: what runs then is a later take, perhaps
+   * still arming.
    */
   async function tell(id: string, command: 'cancel' | 'disarm' | 'stop') {
     const mine = presses;
@@ -151,7 +155,7 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
     } catch (error) {
       if (isCode(error, STALE)) return gone(id);
       const now = get().take;
-      if (now !== null && now !== id) return;
+      if ((now !== null && now !== id) || departed.has(id)) return;
       try {
         await recorder.stopRunning();
       } catch (stopError) {
@@ -380,6 +384,7 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
       leaving?.gone();
       leaving = null;
       held.length = 0;
+      departed.clear();
       gateFrom = null;
       noteCritical = false;
     },

@@ -573,7 +573,39 @@ describe('the take', () => {
     expect([rec().error, rec().errorCode, rec().errorFrom]).toEqual([null, null, null]);
   });
 
+  it('a_late_refused_cancel_never_stops_the_next_take_while_it_arms', async () => {
+    const take = await pressed();
+    fake.emit(take, countdown(3));
+    const answer = deferred<void>();
+    fake.script.send = (_take, command) => (command.cmd === 'cancel' ? answer.promise : undefined);
+    const cancelling = rec().cancel();
+    // Its worker goes anyway, and the person presses Record again: the next take is still arming.
+    fake.emit(take, state('idle'));
+    const arming = deferred<ArmedTake>();
+    fake.script.arm = () => arming.promise;
+    const pressing = rec().record();
+    await vi.waitFor(() => expect(fake.calls).toContain('arm'));
+    expect(rec().take).toBeNull();
+    answer.reject(refusal('capture.error.unsupported'));
+    await cancelling;
+    // The cancelled take said it had gone: "Stop the running recording" would only reach the next one.
+    expect(fake.calls).not.toContain('stopRunning');
+    arming.resolve({ id: 'take-2', countdownS: 3 });
+    await pressing;
+    expect(rec().take).toBe('take-2');
+    expect(rec().error).toBeNull();
+  });
 
+  it('a_refused_cancel_still_stops_a_take_that_may_still_run', async () => {
+    const take = await pressed();
+    fake.emit(take, countdown(3));
+    fake.script.idle = false;
+    fake.script.send = (_take, command) =>
+      command.cmd === 'cancel' ? refusal('capture.error.unsupported') : undefined;
+    // Its worker hasn't said it has gone: the fallback still stops whatever runs.
+    await rec().cancel();
+    expect(fake.calls.slice(-2)).toEqual(['send:cancel', 'stopRunning']);
+  });
 
   it('a_take_that_fails_before_arming_answers_never_starts', async () => {
     await opened();
