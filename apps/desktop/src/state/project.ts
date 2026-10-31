@@ -192,6 +192,7 @@ export const useProject = create<ProjectStore>((set, get) => {
         return snapshot;
       }).finally(end);
     },
+    switchToOpened: (snapshot) => switchTo(async () => snapshot),
     close: async () => {
       await switchTo(async () => {
         await bridge.closeProject();

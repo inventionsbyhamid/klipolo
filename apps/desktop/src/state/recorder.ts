@@ -1,16 +1,29 @@
+import { t } from '@lingui/core/macro';
 import { create } from 'zustand';
 import type { PrivacyPage } from '../bindings/PrivacyPage';
+import type { Project } from '../bindings/Project';
 import type { RecorderSetup } from '../bindings/RecorderSetup';
 import type { WorkerState } from '../bindings/WorkerState';
+import { codedMessage } from '../bridge/call';
 import { recorder, type TakeImport, type UnlistenFn } from '../bridge/recorder';
 import { errorMessage } from '../lib/errors';
 import { defaultPicks, NO_PICKS, type Picks } from '../lib/recorder/choices';
-import { clipStarts } from '../lib/timeline';
+import { formatDuration } from '../lib/time';
+import { clipDurationUs, clipStarts } from '../lib/timeline';
 import { usePlayback } from './playback';
 import { useProject } from './project';
 import { forgetPreviews, hearPreview, resetPreviews } from './recorderPreviews';
-import { NO_ERROR, NO_TAKE, refused, takeSlice, type ErrorFrom, type TakeSlice } from './recorderTake';
+import {
+  NO_ERROR,
+  NO_TAKE,
+  refused,
+  saidOnReturn,
+  takeSlice,
+  type ErrorFrom,
+  type TakeSlice,
+} from './recorderTake';
 import { useSelection } from './selection';
+import { toast } from './toasts';
 
 /** The Record dialog and its take (`phaseOf` says which of its views shows). */
 export interface RecorderState {
@@ -238,12 +251,23 @@ export function forgetRecorder() {
   useRecorder.setState(INITIAL);
 }
 
+/** The undo step a take's auto zoom is: "Add auto zoom". */
+export const AUTO_ZOOM = 'undo.autoZoom';
+/** The toast that says a take landed: a later take's takes its place. */
+const LANDED_TOAST = 'recorder-landed';
+
 /**
- * A take went into a project: the page takes the project as the app has it now (the open one, or the new one made
- * for a take from the start screen), selects the take's clip with the playhead at its start, and says so.
+ * A take went into a project: the page takes the project as the app has it now, selects the take's clip with the
+ * playhead at its start, and says so. The project the page shows takes it as a change from elsewhere; another one (the
+ * one the take was armed in, opened again; a new one made for a take from the start screen), or the same one opened
+ * again, takes the page's place as any switch does, the edits made in the one shown going in first.
  */
 export async function onImported(landed: TakeImport): Promise<void> {
-  if (!(await useProject.getState().load(landed.snapshot))) return;
+  const project = useProject.getState();
+  const shown = project.snapshot;
+  const next = landed.snapshot;
+  const same = shown !== null && shown.project.id === next.project.id && shown.opening === next.opening;
+  if (!(await (same ? project.load(next) : project.switchToOpened(next)))) return;
   const main = useProject.getState().snapshot?.project.timeline.main ?? [];
   const index = main.findIndex((clip) => clip.id === landed.clipId);
   if (index >= 0) {
@@ -253,5 +277,62 @@ export async function onImported(landed: TakeImport): Promise<void> {
   landedToast(landed);
 }
 
-/** What the person hears once a take has landed. It says nothing yet: its words come with the dialog's wiring. */
-export function landedToast(_landed: TakeImport): void {}
+/** The recording's name, as its export's notes give it: "Recording 2" for the project's second. */
+function recordingName(project: Project, recordingId: string): string {
+  const number = project.recordings.findIndex((r) => r.id === recordingId) + 1;
+  return (
+    codedMessage({ code: 'name.recording', params: { number: Math.max(number, 1) } }) ||
+    t({ id: 'layer.recording', message: 'Recording', comment: 'A clip recorded in Klipolo' })
+  );
+}
+
+/**
+ * What the person hears once a take has landed: "Added Recording 1, 0:40.", and with its zooms, "Zooms follow your
+ * clicks." with Remove zooms. Then what the take's notes say, each once, but for those said already as Klipolo came back.
+ */
+export function landedToast(landed: TakeImport): void {
+  const project = landed.snapshot.project;
+  const clip = project.timeline.main.find((c) => c.id === landed.clipId);
+  if (clip) {
+    const name = recordingName(project, landed.recordingId);
+    const duration = formatDuration(clipDurationUs(clip));
+    const zooms = landed.zooms > 0;
+    const text = zooms
+      ? t({
+          id: 'recorder.landed.zooms',
+          message: `Added ${name}, ${duration}. Zooms follow your clicks.`,
+          comment: 'A recording was added to the project, with zooms on its clicks: {name} is Recording 1',
+        })
+      : t({
+          id: 'recorder.landed',
+          message: `Added ${name}, ${duration}.`,
+          comment: 'A recording was added to the project: {name} is Recording 1, {duration} 0:40',
+        });
+    const remove = {
+      label: t({ id: 'recorder.removeZooms', message: 'Remove zooms' }),
+      run: () => void removeZooms(project.id),
+    };
+    toast.info(text, { key: LANDED_TOAST, done: true, actions: zooms ? [remove] : undefined });
+  }
+  for (const note of landed.notes) {
+    const text = codedMessage(note);
+    if (text && !saidOnReturn(note.code)) toast.info(text);
+  }
+}
+
+/**
+ * Remove zooms: the take's auto zoom step is undone while it is still the last change in its project, and only then.
+ * After an edit on top, nothing is undone, and the person is told to delete them on the timeline.
+ */
+export async function removeZooms(projectId: string): Promise<void> {
+  const ours = () => useProject.getState().snapshot?.project.id === projectId;
+  const undone = await useProject.getState().undoIf((history) => history.undoLabel === AUTO_ZOOM && ours());
+  if (!undone)
+    toast.info(
+      t({
+        id: 'recorder.zoomsKept',
+        message: "Klipolo can't remove them now. Delete them on the timeline.",
+        comment: "Remove zooms on a recording's toast, after a later change",
+      }),
+    );
+}

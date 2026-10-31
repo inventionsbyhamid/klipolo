@@ -60,6 +60,11 @@ const NOTE_TOAST = 'recorder-note';
  */
 const KEPT_NOTES: ReadonlySet<string> = new Set(['capture.note.cameraDropped']);
 
+/** A note of this kind is said as Klipolo comes back from a take, so a landed take's own notes leave it out. */
+export function saidOnReturn(code: string): boolean {
+  return KEPT_NOTES.has(code);
+}
+
 /** One Record press, from the press until its Start has been sent. */
 interface Press {
   /** Cancel, Esc or closing the dialog came first: it never starts. */

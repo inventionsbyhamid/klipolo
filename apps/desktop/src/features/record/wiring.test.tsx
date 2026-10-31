@@ -1,10 +1,18 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- the mocked backend's IPC arguments */
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CaptureEvent } from '../../bindings/CaptureEvent';
 import type { Snapshot } from '../../bindings/Snapshot';
-import { fixtureSnapshot } from '../../test/fixtures';
+import type { WorkerState } from '../../bindings/WorkerState';
+import { wordLabel } from '../../lib/labels';
+import { beginCommit } from '../../state/commitQueue';
+import { useProject } from '../../state/project';
+import { useSelection } from '../../state/selection';
+import { useToasts } from '../../state/toasts';
+import { fixtureSnapshot, revisionPatch } from '../../test/fixtures';
+import { type FakeRecorder, installFakeRecorder, takeImport } from '../../test/recorderBridge';
 
 // The editor's panels stand in for themselves: these tests are about the recorder's place in the window.
 vi.mock('../../layout/Library', () => ({ Library: () => <aside aria-label="Library" /> }));
@@ -13,11 +21,46 @@ vi.mock('../../features/timeline/Timeline', () => ({ Timeline: () => <section ar
 vi.mock('../../layout/Chat', () => ({ Chat: () => <aside aria-label="Chat" /> }));
 vi.mock('../../player/PlayerBar', () => ({ PlayerBar: () => <footer aria-label="Player" /> }));
 
+const S = 1_000_000;
+
+// The worker's events, as the app forwards them.
+const state = (s: WorkerState): CaptureEvent => ({ ev: 'state', state: s, elapsedUs: 0 });
 /** A project as Rust opens it: the fixture, under its own id and name. */
 function opened(name: string, opening: number): Snapshot {
   const snapshot = fixtureSnapshot();
   return { ...snapshot, project: { ...snapshot.project, id: `id ${name}`, name }, opening };
 }
+
+/**
+ * `snapshot` once take `recordingId` landed in it: its recording (the fixture's, under that id) and its clip `clipId`,
+ * `seconds` long, last on the main track, one step later; with its auto zoom's step on top when `zooms`.
+ */
+function withTake(snapshot: Snapshot, clipId: string, seconds: number, recordingId = 'rec', zooms = false): Snapshot {
+  const { project, history } = snapshot;
+  const recordings = project.recordings.some((r) => r.id === recordingId)
+    ? project.recordings
+    : [...project.recordings, { ...project.recordings[0], id: recordingId }];
+  const clip = {
+    ...project.timeline.main[0],
+    id: clipId,
+    source: { type: 'recording' as const, id: recordingId },
+    sourceInUs: 0,
+    sourceOutUs: seconds * S,
+  };
+  return {
+    ...snapshot,
+    project: { ...project, recordings, timeline: { ...project.timeline, main: [...project.timeline.main, clip] } },
+    history: {
+      ...history,
+      revision: history.revision + (zooms ? 2 : 1),
+      undoLabel: zooms ? 'undo.autoZoom' : 'undo.record',
+      canUndo: true,
+    },
+  };
+}
+
+const toasts = () => useToasts.getState().toasts;
+const texts = () => toasts().map((t) => t.text);
 
 describe('in the window', () => {
   /** Rust as the window sees it: the project open now (none at launch), and every command heard. */
@@ -108,5 +151,157 @@ describe('in the window', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull());
     await pressShiftCommandR();
     expect(await screen.findByRole('dialog', { name: 'Record' })).toBeInTheDocument();
+  });
+
+  it('record_from_the_start_screen_lands_and_opens_the_new_project', async () => {
+    const { fake, bridge, useProject, useRecorder, useToasts } = await launch();
+    await userEvent.click(await screen.findByRole('button', { name: 'Record your screen' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Record' });
+    await waitFor(() => expect(useRecorder.getState().setup).not.toBeNull());
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Record' }));
+    await waitFor(() => expect(fake.calls).toContain('send:start'));
+    act(() => fake.emit('take-1', state('recording')));
+    // Klipolo's window hides for the take: so does the dialog.
+    expect(recordDialog()).toBeNull();
+    act(() => {
+      fake.emit('take-1', state('stopping'));
+      fake.emit('take-1', { ev: 'finished', session: 'take-1' });
+    });
+    // It lands in a new project that Rust made and opened: the editor shows it, the take's clip selected.
+    const made = withTake(opened('Recording, Oct 31', 1), 'take-clip', 40, 'rec', true);
+    act(() => fake.land(bridge.takeImport(made, 'take-clip', { recordingId: 'rec', zooms: 2 })));
+    expect(await screen.findByRole('main', { name: 'Preview' })).toBeInTheDocument();
+    expect(screen.queryByRole('main', { name: 'Your projects' })).toBeNull();
+    expect(useProject.getState().snapshot?.project.name).toBe('Recording, Oct 31');
+    const header = document.querySelector<HTMLElement>('header.topbar')!;
+    expect(within(header).getByRole('button', { name: 'Recording, Oct 31' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(useToasts.getState().toasts.map((t) => t.text)).toContain(
+        'Added Recording 1, 0:40. Zooms follow your clicks.',
+      ),
+    );
+    act(() => fake.emit('take-1', state('idle')));
+    expect(useRecorder.getState().open).toBe(false);
+    // Rust made and opened the project: the page asked for nothing of the kind.
+    expect(rust.heard.filter((cmd) => cmd === 'project_create' || cmd === 'project_open')).toEqual([]);
+  });
+});
+
+describe('a take that lands', () => {
+  let fake: FakeRecorder;
+  /** The project's undo calls, and what each found on top. */
+  let undos: (string | null)[];
+
+  beforeEach(async () => {
+    undos = [];
+    mockIPC((cmd) => {
+      if (cmd === 'project_undo') {
+        const now = useProject.getState().snapshot!;
+        undos.push(now.history.undoLabel);
+        return revisionPatch(now.history.revision + 1);
+      }
+      return null;
+    });
+    fake = await installFakeRecorder();
+    useToasts.setState({ toasts: [] });
+    useSelection.setState({ selectedId: null });
+    useProject.setState({ snapshot: fixtureSnapshot() });
+  });
+
+  afterEach(() => {
+    clearMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('landing_toast_names_the_recording', async () => {
+    const first = withTake(fixtureSnapshot(), 'take-clip', 40);
+    fake.land(takeImport(first, 'take-clip', { recordingId: 'rec' }));
+    await vi.waitFor(() => expect(texts()).toEqual(['Added Recording 1, 0:40.']));
+    expect(toasts()[0]).toMatchObject({ kind: 'info', done: true });
+    expect(toasts()[0].actions).toBeUndefined();
+    expect(useSelection.getState().selectedId).toBe('take-clip');
+    // The project's second recording, with zooms: its toast takes the first one's place, with Remove zooms.
+    const second = withTake(first, 'take-2', 61.4, 'rec-2', true);
+    fake.land(takeImport(second, 'take-2', { recordingId: 'rec-2', zooms: 3 }));
+    await vi.waitFor(() => expect(texts()).toEqual(['Added Recording 2, 1:01. Zooms follow your clicks.']));
+    expect(toasts()[0].actions?.map((a) => a.label)).toEqual(['Remove zooms']);
+  });
+
+  it('remove_zooms_undoes_only_the_zoom_step', async () => {
+    const landed = withTake(fixtureSnapshot(), 'take-clip', 40, 'rec', true);
+    fake.land(takeImport(landed, 'take-clip', { recordingId: 'rec', zooms: 2 }));
+    await vi.waitFor(() => expect(toasts()[0]?.actions).toHaveLength(1));
+    const remove = toasts()[0].actions![0];
+    act(() => remove.run());
+    await vi.waitFor(() => expect(undos).toEqual(['undo.autoZoom']));
+    // A hand edit on top: Remove zooms takes nothing back, and says how to remove them.
+    const now = useProject.getState().snapshot!;
+    useProject.setState({ snapshot: { ...now, history: { ...now.history, undoLabel: 'undo.split.clip' } } });
+    act(() => remove.run());
+    await vi.waitFor(() =>
+      expect(texts()).toContain("Klipolo can't remove them now. Delete them on the timeline."),
+    );
+    expect(undos).toEqual(['undo.autoZoom']);
+  });
+
+  it('remove_zooms_never_undoes_in_another_project', async () => {
+    const landed = withTake(fixtureSnapshot(), 'take-clip', 40, 'rec', true);
+    fake.land(takeImport(landed, 'take-clip', { recordingId: 'rec', zooms: 2 }));
+    await vi.waitFor(() => expect(toasts()[0]?.actions).toHaveLength(1));
+    // Another project is open now, its own last change an auto zoom too.
+    const other = withTake(opened('Other', 2), 'other-clip', 10, 'rec', true);
+    useProject.setState({ snapshot: other });
+    act(() => toasts()[0].actions![0].run());
+    await vi.waitFor(() =>
+      expect(texts()).toContain("Klipolo can't remove them now. Delete them on the timeline."),
+    );
+    expect(undos).toEqual([]);
+  });
+
+  it('undo_label_reads_add_auto_zoom', () => {
+    expect(wordLabel('undo.autoZoom')).toBe('Add auto zoom');
+    expect(wordLabel('undo.record')).toBe('Add recording');
+  });
+
+  it('a_take_landing_in_another_opening_lands_the_shown_project_s_edits_first', async () => {
+    for (const [name, opening] of [
+      ['Armed', 2],
+      ['Billing tutorial', 7],
+    ] as const) {
+      // Another project (the one the take was armed in, opened again), or the one shown opened again.
+      const shown = { ...fixtureSnapshot(), opening: 1 };
+      useProject.setState({ snapshot: shown });
+      const base = name === 'Armed' ? opened(name, opening) : { ...fixtureSnapshot(), opening };
+      const arrived = withTake(base, 'take-clip', 40);
+      // A hand edit is still on its way to Rust.
+      const sent = beginCommit();
+      fake.land(takeImport(arrived, 'take-clip', { recordingId: 'rec' }));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(useProject.getState().snapshot).toBe(shown);
+      sent();
+      await vi.waitFor(() => expect(useProject.getState().snapshot?.opening).toBe(opening));
+      expect(useProject.getState().snapshot?.project.id).toBe(arrived.project.id);
+      await vi.waitFor(() => expect(useSelection.getState().selectedId).toBe('take-clip'));
+    }
+  });
+
+  it('a_landed_take_s_notes_are_said_once', async () => {
+    const landed = withTake(fixtureSnapshot(), 'take-clip', 40);
+    fake.land(
+      takeImport(landed, 'take-clip', {
+        recordingId: 'rec',
+        notes: [
+          { code: 'capture.note.savedFromFiles', params: {} },
+          // Said already as Klipolo came back from the take.
+          { code: 'capture.note.cameraDropped', params: {} },
+        ],
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(texts()).toEqual([
+        'Added Recording 1, 0:40.',
+        'The recorder stopped while saving, so Klipolo finished the recording from its files.',
+      ]),
+    );
   });
 });
