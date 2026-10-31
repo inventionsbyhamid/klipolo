@@ -153,18 +153,27 @@ export const useProject = create<ProjectStore>((set, get) => {
     await commitsDone();
   }
 
+  /**
+   * A create, open or close: `switching` from the press until it has landed or failed, so the project menu runs one at
+   * a time, the open project's edits landing first. With no project open (the start screen) it is sent at once, so a
+   * second press already finds it pending too.
+   */
+  async function switchTo(task: () => Promise<Snapshot | null>): Promise<boolean> {
+    set({ switching: true });
+    try {
+      if (get().snapshot) await landEdits();
+      return await run(task, true);
+    } finally {
+      set({ switching: false });
+    }
+  }
+
   return {
     snapshot: null,
     pending: 0,
-    // With no project open (the start screen) it goes at once, so a second press already finds it pending.
-    create: async (name, formats) => {
-      if (get().snapshot) await landEdits();
-      return run(() => bridge.createProject(name, formats), true);
-    },
-    open: async (path) => {
-      if (get().snapshot) await landEdits();
-      return run(() => bridge.openProject(path), true);
-    },
+    switching: false,
+    create: (name, formats) => switchTo(() => bridge.createProject(name, formats)),
+    open: (path) => switchTo(() => bridge.openProject(path)),
     load: (snapshot) => {
       if (get().snapshot?.project.id !== snapshot.project.id) return run(async () => snapshot, true);
       // As `adopt`: what is still settling goes first (Rust refuses it: it was built on the copy before), and it holds
@@ -182,11 +191,10 @@ export const useProject = create<ProjectStore>((set, get) => {
       }).finally(end);
     },
     close: async () => {
-      await landEdits();
-      await run(async () => {
+      await switchTo(async () => {
         await bridge.closeProject();
         return null;
-      }, true);
+      });
     },
     apply: (label, ops, params, built, opts) => {
       if (readOnly()) return Promise.resolve(false);

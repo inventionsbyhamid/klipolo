@@ -36,7 +36,7 @@ async function openMenu(name: string) {
 }
 
 beforeEach(() => {
-  useProject.setState({ snapshot: null, pending: 0 });
+  useProject.setState({ snapshot: null, pending: 0, switching: false });
   useSaving.setState({ failing: null, saved: null });
   useToasts.setState({ toasts: [] });
   vi.mocked(bridge.createProject).mockReset();
@@ -120,6 +120,37 @@ describe('TopBar', () => {
     await waitFor(() => expect(useProject.getState().snapshot?.project.id).toBe('new'));
     expect(screen.getByRole('button', { name: 'Untitled project' })).toBeInTheDocument();
     expect(bridge.closeProject).not.toHaveBeenCalled();
+  });
+
+  it('the project menu runs one switch at a time', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    const made = emptySnapshot();
+    made.project = { ...made.project, id: 'new', name: 'Untitled project' };
+    let land!: (snapshot: Snapshot) => void;
+    vi.mocked(bridge.createProject).mockImplementation(() => new Promise((resolve) => (land = resolve)));
+    render(<TopBar />);
+    await userEvent.click(within(await openMenu('Billing tutorial')).getByRole('menuitem', { name: 'New project' }));
+    expect(bridge.createProject).toHaveBeenCalledTimes(1);
+
+    // While the new project is made, the menu's items are off: another New project or All projects would overlap it.
+    const menu = await openMenu('Billing tutorial');
+    const items = within(menu).getAllByRole('menuitem');
+    expect(items.map((item) => item.getAttribute('aria-disabled'))).toEqual(['true', 'true', 'true']);
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'New project' }));
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'All projects' }));
+    expect(bridge.createProject).toHaveBeenCalledTimes(1);
+    expect(bridge.closeProject).not.toHaveBeenCalled();
+    await userEvent.keyboard('{Escape}');
+
+    land({ ...made, opening: 2 });
+    await waitFor(() => expect(useProject.getState().snapshot?.project.id).toBe('new'));
+    // Once it has opened, the menu works again.
+    const after = await openMenu('Untitled project');
+    expect(within(after).getAllByRole('menuitem').map((item) => item.getAttribute('aria-disabled'))).toEqual([
+      null,
+      null,
+      null,
+    ]);
   });
 
   it('all projects closes the project', async () => {

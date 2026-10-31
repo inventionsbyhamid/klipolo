@@ -132,7 +132,10 @@ export function StartScreen({ onRecord }: StartScreenProps) {
   };
 
   // One project at a time: a second press while one is opening (or being made) would open twice; the first one wins.
-  const busy = () => useProject.getState().pending > 0;
+  const busy = () => {
+    const { pending, switching } = useProject.getState();
+    return pending > 0 || switching;
+  };
   const openProject = (path: string) => {
     if (busy()) return;
     setOpening(path);

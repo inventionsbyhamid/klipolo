@@ -10,6 +10,8 @@ import type { Built } from './editBase';
 export interface ProjectStore {
   snapshot: Snapshot | null;
   pending: number;
+  /** A create, open or close is under way, from the press until it lands or fails: another waits for it. */
+  switching: boolean;
   /** A new project, opened: every edit made in the open one goes in first (`commitsDone`), and it is saved and closed. */
   create: (name: string, formats: FormatKind[]) => Promise<boolean>;
   /** The project file at `path`: every edit made in the open one goes in first, and it is saved and closed. */

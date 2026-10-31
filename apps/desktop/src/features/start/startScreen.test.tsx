@@ -65,7 +65,7 @@ const card = (name: string) => cards().find((c) => c.textContent?.includes(name)
 
 beforeEach(() => {
   vi.spyOn(Date, 'now').mockReturnValue(NOW);
-  useProject.setState({ snapshot: null, pending: 0 });
+  useProject.setState({ snapshot: null, pending: 0, switching: false });
   useToasts.setState({ toasts: [] });
   vi.mocked(bridge.createProject).mockResolvedValue(fixtureSnapshot());
   vi.mocked(bridge.openProject).mockResolvedValue(fixtureSnapshot());

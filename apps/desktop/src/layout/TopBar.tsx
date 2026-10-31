@@ -14,10 +14,16 @@ import { Icon } from './Icon';
 
 /**
  * The project menu, opened from the project's name: New project, All projects (closes the project once
- * its edits are saved, back to the start screen) and Show in Finder (its file, selected).
+ * its edits are saved, back to the start screen) and Show in Finder (its file, selected). One at a time: while a new
+ * project is made or the project closes, its items are off.
  */
 function ProjectMenu({ name }: { name: string }) {
   const { t } = useLingui();
+  const switching = useProject((s) => s.switching);
+  /** Runs `action` unless a switch is under way (a press that reached the item before it turned off). */
+  const once = (action: () => void) => () => {
+    if (!useProject.getState().switching) action();
+  };
   const showInFinder = () => void projects.reveal().catch((error: unknown) => toast.error(errorMessage(error)));
   return (
     <Menu>
@@ -28,10 +34,10 @@ function ProjectMenu({ name }: { name: string }) {
         </button>
       </MenuTrigger>
       <MenuContent>
-        <MenuItem onSelect={() => void newProject()}>
+        <MenuItem onSelect={once(() => void newProject())} disabled={switching}>
           {t({ id: 'project.menu.new', message: 'New project', comment: 'Project menu item' })}
         </MenuItem>
-        <MenuItem onSelect={() => void useProject.getState().close()}>
+        <MenuItem onSelect={once(() => void useProject.getState().close())} disabled={switching}>
           {t({
             id: 'project.menu.all',
             message: 'All projects',
@@ -39,7 +45,7 @@ function ProjectMenu({ name }: { name: string }) {
           })}
         </MenuItem>
         <MenuSeparator />
-        <MenuItem onSelect={showInFinder}>
+        <MenuItem onSelect={once(showInFinder)} disabled={switching}>
           {t({ id: 'project.menu.finder', message: 'Show in Finder', comment: 'Project menu item' })}
         </MenuItem>
       </MenuContent>
