@@ -563,10 +563,10 @@ impl ChatSession {
                 }
             }
         }
-        // A proposal made on a revision the project left can never apply.
+        // A proposal made on a revision the project left can never apply: dropped, and its turn says so.
         let mut talk = lock(&self.talk);
-        if talk.open.as_ref().is_some_and(|p| p.at != at) {
-            talk.open = None;
+        if let Some(old) = talk.open.take_if(|p| p.at != at) {
+            talk.noted(&old.id, DROPPED_NOTE);
         }
         drop(talk);
         landed

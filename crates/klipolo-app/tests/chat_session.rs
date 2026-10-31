@@ -1803,3 +1803,21 @@ async fn every_picture_paid_for_stays_in_the_muse_image_folder() {
     }
     assert_eq!(s.chat.session.spend().pictures, 4);
 }
+
+#[tokio::test]
+async fn a_proposal_a_later_message_moved_past_is_dropped_with_a_note() {
+    let chat = chat(vec![
+        answer("", vec![fillers()]),
+        answer("", vertical_karaoke()),
+    ]);
+    let id = proposal_id(&chat.session.send(request("cut the ums")).await.unwrap());
+    chat.session.send(request("vertical")).await.unwrap();
+    assert_eq!(chat.session.apply(&id).unwrap_err(), CommitError::Moved);
+    let note = &chat.session.turns()[0].note;
+    assert!(
+        note.ends_with(
+            "The proposal was dropped: the project changed before the person applied it."
+        ),
+        "{note}"
+    );
+}
