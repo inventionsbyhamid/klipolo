@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
+import { create } from 'zustand';
 import type { TextStyle } from '../bindings/TextStyle';
 import { fonts } from '../bridge/fonts';
 
@@ -14,30 +15,56 @@ const listeners = new Set<() => void>();
 
 /**
  * The bundled face of `face` in the page: its bytes from Rust (`fonts_face`, the file the engine draws with), added as
- * a `FontFace` at the weight and style asked, so CSS matches it exactly. Once per face; resolves true once it is there
- * (false where the page has no `FontFace`, as in tests, or the font isn't one of Klipolo's).
+ * a `FontFace` at the weight and style asked, so CSS matches it exactly. Once per face once it is there; resolves true
+ * then (false where the page has no `FontFace`, as in tests, or the face couldn't be had: a later ask tries again).
  */
 export function ensureFace(face: FaceKey): Promise<boolean> {
+  if (typeof FontFace === 'undefined' || typeof document === 'undefined' || !document.fonts)
+    return Promise.resolve(false);
   const key = keyOf(face);
   let done = loading.get(key);
   if (done) return done;
-  done =
-    typeof FontFace === 'undefined' || typeof document === 'undefined' || !document.fonts
-      ? Promise.resolve(false)
-      : fonts
-          .face(face.font.family, face.weight, face.italic)
-          .then(async (bytes) => {
-            const loaded = await new FontFace(pageFamily(face.font.family), bytes, {
-              weight: String(face.weight),
-              style: face.italic ? 'italic' : 'normal',
-            }).load();
-            document.fonts.add(loaded);
-            for (const heard of listeners) heard();
-            return true;
-          })
-          .catch(() => false);
+  done = fonts
+    .face(face.font.family, face.weight, face.italic)
+    .then(async (bytes) => {
+      const loaded = await new FontFace(pageFamily(face.font.family), bytes, {
+        weight: String(face.weight),
+        style: face.italic ? 'italic' : 'normal',
+      }).load();
+      document.fonts.add(loaded);
+      for (const heard of listeners) heard();
+      return true;
+    })
+    .catch(() => {
+      // Not kept as failed: the next text in this face asks again.
+      loading.delete(key);
+      return false;
+    });
   loading.set(key, done);
   return done;
+}
+
+/** The bundled families in the Font menu's order, from Rust (`fonts_bundled`); null until they are here. */
+const useFamilies = create<{ families: string[] | null }>(() => ({ families: null }));
+let familiesAsked = false;
+
+function loadFamilies() {
+  if (familiesAsked) return;
+  familiesAsked = true;
+  void fonts
+    .bundled()
+    .then((faces) => useFamilies.setState({ families: [...new Set(faces.map((f) => f.family))] }))
+    .catch(() => {
+      // Asked again by the next Font menu.
+      familiesAsked = false;
+    });
+}
+
+/** The families the Font menu offers: Rust's bundled ones, `fallback` until they are known. */
+export function useBundledFamilies(fallback: string[]): string[] {
+  const families = useFamilies((s) => s.families);
+  useEffect(loadFamilies, []);
+  return families && families.length > 0 ? families : fallback;
 }
 
 /** Hears every face that joins the page (text measured in it is measured again). */
