@@ -1,0 +1,131 @@
+import { act, fireEvent, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fixtureSnapshot } from '../test/fixtures';
+import { renderWithProviders } from '../test/render';
+
+/*
+ * The card docks beside the frame while a clip, a layer or a transition is selected, and the frame gives it room. A
+ * press on the timeline selects at once, so the dock waits for the release: the frame never changes size under the
+ * edge frame a trim shows, or under the pointer of a move.
+ */
+
+vi.mock('../bridge/commands', () => ({ bridge: { apply: vi.fn() }, mediaUrl: (p: string) => p }));
+vi.mock('../bridge/engine', () => ({
+  engine: {
+    preview: vi.fn().mockResolvedValue(undefined),
+    previewClear: vi.fn().mockResolvedValue(undefined),
+    seek: vi.fn().mockResolvedValue(undefined),
+    play: vi.fn().mockResolvedValue(undefined),
+    pause: vi.fn().mockResolvedValue(0),
+  },
+}));
+vi.mock('../bridge/framing', () => ({
+  clipFraming: vi.fn(() => new Promise(() => undefined)),
+}));
+const { bridge } = await import('../bridge/commands');
+const { releaseDock } = await import('../state/dockHold');
+const { useProject } = await import('../state/project');
+const { usePlayback } = await import('../state/playback');
+const { useSelection } = await import('../state/selection');
+const { useTimelineFocus } = await import('../state/timelineFocus');
+const { useUi } = await import('../state/ui');
+const { Preview } = await import('./Preview');
+const { Timeline } = await import('../features/timeline/Timeline');
+
+const frames = () => act(() => new Promise((r) => setTimeout(r, 40)));
+const block = (name: RegExp) => screen.getByRole('button', { name });
+const edge = (el: HTMLElement, which: 'start' | 'end') => el.querySelector<HTMLElement>(`[data-trim="${which}"]`)!;
+const docked = () => document.querySelector('.stage-body')!.classList.contains('has-inspector');
+
+const press = (el: HTMLElement, x: number) =>
+  fireEvent.pointerDown(el, { pointerId: 1, button: 0, clientX: x, clientY: 10 });
+const move = (el: HTMLElement, x: number) => fireEvent.pointerMove(el, { pointerId: 1, clientX: x, clientY: 10 });
+const release = (el: HTMLElement, x: number) =>
+  fireEvent.pointerUp(el, { pointerId: 1, clientX: x, clientY: 10 });
+
+function Editor() {
+  return (
+    <>
+      <Preview />
+      <Timeline />
+    </>
+  );
+}
+
+beforeEach(() => {
+  releaseDock();
+  useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
+  useSelection.setState({ selectedId: null });
+  useTimelineFocus.setState({ activeId: null, pending: false });
+  usePlayback.setState({ playheadUs: 25_000_000, playing: false });
+  useUi.setState({ timelineExpanded: false, pxPerSecond: 40, snapping: true, previewFormat: null });
+  vi.mocked(bridge.apply)
+    .mockReset()
+    .mockImplementation(async () => {
+      const s = useProject.getState().snapshot!;
+      return {
+        baseRevision: s.history.revision,
+        history: { ...s.history, revision: s.history.revision + 1 },
+        patch: { clips: [], items: [] },
+      };
+    });
+});
+
+describe('the dock holds still through a timeline press', () => {
+  it("a trim on a clip that wasn't selected keeps the frame's size until the release, then docks the card", async () => {
+    renderWithProviders(<Editor />);
+    expect(docked()).toBe(false);
+    const a = block(/^screen\.mp4/);
+    press(edge(a, 'end'), 799);
+    // The press selects the clip at once, but the frame keeps its size under the edge frame the trim shows.
+    expect(useSelection.getState().selectedId).toBe('a');
+    expect(docked()).toBe(false);
+    move(a, 759);
+    await frames();
+    move(a, 719);
+    await frames();
+    expect(docked()).toBe(false);
+    expect(screen.queryByRole('complementary', { name: 'screen.mp4 settings' })).toBeNull();
+    release(a, 719);
+    await frames();
+    expect(docked()).toBe(true);
+    expect(screen.getByRole('complementary', { name: 'screen.mp4 settings' })).toBeInTheDocument();
+  });
+
+  it('a move press keeps the dock as it was until the release; a plain click docks once it lets go', async () => {
+    renderWithProviders(<Editor />);
+    const b = block(/^broll\.mp4/);
+    press(b, 1000);
+    expect(useSelection.getState().selectedId).toBe('b');
+    expect(docked()).toBe(false);
+    move(b, 1100);
+    await frames();
+    expect(docked()).toBe(false);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    release(b, 1100);
+    await frames();
+    expect(docked()).toBe(true);
+    // A still click: the card docks at the release.
+    act(() => useSelection.getState().select(null));
+    expect(docked()).toBe(false);
+    const a = block(/^screen\.mp4/);
+    press(a, 100);
+    expect(docked()).toBe(false);
+    release(a, 100);
+    expect(docked()).toBe(true);
+  });
+
+  it('a trim on another clip while a card is docked keeps the frame docked throughout', async () => {
+    useSelection.setState({ selectedId: 'b' });
+    renderWithProviders(<Editor />);
+    expect(docked()).toBe(true);
+    const a = block(/^screen\.mp4/);
+    press(edge(a, 'end'), 799);
+    move(a, 759);
+    await frames();
+    expect(docked()).toBe(true);
+    release(a, 759);
+    await frames();
+    expect(docked()).toBe(true);
+  });
+});

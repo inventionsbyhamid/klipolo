@@ -1,6 +1,7 @@
 import type { PointerEvent, RefObject } from 'react';
 import type { Edge } from '../../../bindings/Edge';
 import { findItem, itemEndUs, itemLabel, showItemAtUs, sourceLabel } from '../../../lib/timeline';
+import { holdDock } from '../../../state/dockHold';
 import { usePlayback } from '../../../state/playback';
 import { keyBurst } from '../../../state/keyBurst';
 import { useProject } from '../../../state/project';
@@ -59,6 +60,8 @@ export function blockPressHandlers(
     e.currentTarget.focus({ preventScroll: true });
     // The move snaps to the playhead where the user had it, not where this pick puts it (the block's own start).
     const playheadUs = usePlayback.getState().playheadUs;
+    // The preview docks the picked block's card once the press is over, not under the pointer.
+    holdDock();
     pickBlock(id);
     const found = findItem(project, id);
     const { main } = project.timeline;
@@ -91,6 +94,7 @@ export function blockPressHandlers(
     keyBurst.flush();
     e.preventDefault();
     block.focus({ preventScroll: true });
+    holdDock();
     useSelection.getState().select(id);
     pressTrim(e, block, gesture, timelineDragView(scroller, null, guideRefs, tipRef));
   };

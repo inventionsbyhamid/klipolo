@@ -1,4 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
+import { useState } from 'react';
 import { AnalysisBanner } from '../features/analysis/AnalysisBanner';
 import { RoughCaptionsNote } from '../features/analysis/RoughCaptionsNote';
 import { FormatPills } from '../features/editor/FormatPills';
@@ -9,6 +10,7 @@ import { useImportMedia } from '../features/media/useImportMedia';
 import { AddTitleMenu } from '../features/preview/AddTitleMenu';
 import { Stage } from '../features/preview/Stage';
 import { Icon } from '../layout/Icon';
+import { useDockHold } from '../state/dockHold';
 import { useEngine } from '../state/engine';
 import { useProject } from '../state/project';
 import { useUi } from '../state/ui';
@@ -44,11 +46,22 @@ function DropZone({ over }: { over: boolean }) {
 }
 
 /**
+ * Whether the card docks: `wanted`, except while a timeline press or drag holds the dock (`state/dockHold`); then what
+ * it was before, so the frame never changes size under the pointer. It follows `wanted` again once the hold ends.
+ */
+function useSteadyDock(wanted: boolean): boolean {
+  const held = useDockHold((s) => s.press);
+  const [shown, setShown] = useState(wanted);
+  if (!held && shown !== wanted) setShown(wanted);
+  return held ? shown : wanted;
+}
+
+/**
  * The preview panel: the format pills, Add title, the safe area menu (9:16 only), Full screen (F; it
  * it works), and the engine's frames fitted to the panel in the chosen format with the layers there selectable and
  * editable (`Stage`), under the analysis banner; the inspector docks at the right under the banner while a main clip, a
- * transition or a layer it has fields for is selected, and the frame moves left for it. With no clip yet, the drop
- * zone.
+ * transition or a layer it has fields for is selected, and the frame moves left for it (never mid-press on the
+ * timeline: `useSteadyDock`). With no clip yet, the drop zone.
  * `filesOver`: files from Finder are held over the window.
  */
 export function Preview({ filesOver = false }: { filesOver?: boolean }) {
@@ -63,7 +76,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
   const inspected = useInspected();
   const transition = useInspectedTransition();
   const native = useEngine((s) => s.presenter === 'native' && !!s.info);
-  const docked = hasVideo && (inspected !== null || transition !== null);
+  const docked = useSteadyDock(inspected !== null || transition !== null) && hasVideo;
   return (
     <main className={native && hasVideo ? 'panel stage has-hole' : 'panel stage'} aria-label="Preview">
       <div className="stage-head">
