@@ -104,7 +104,10 @@ grep -qxF '@executable_path/../Frameworks' <<< "$main_rpaths" \
 searched=("$app/Contents")
 if [ -f "$page/index.html" ]; then searched+=("$page"); else fail "no page build at $page to search (pnpm build)"; fi
 set +e
-named=$(naming_files "$home" "$(id -un)" "${searched[@]}")
+# The source code address NOTICE.txt gives (read above) may name the code's account, the builder's user name too.
+allow=()
+[ -z "${source_url:-}" ] || allow=(--allow "$source_url")
+named=$(naming_files "$home" "$(id -un)" "${allow[@]+"${allow[@]}"}" "${searched[@]}")
 status=$?
 set -e
 # grep says 2 when it couldn't read a file, also when it found others: both are failures, and both are told.
