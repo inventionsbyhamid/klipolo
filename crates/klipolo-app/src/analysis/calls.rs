@@ -209,6 +209,9 @@ impl Transcriber for Calls {
             // Kept for one more try only where a new token can help.
             let again = relay.then(|| wav.clone());
             let mut answer = meta.transcribe(wav, keywords).await;
+            // The rule for a 401: relay-bound calls recover, Meta-bound calls in key mode don't. With an access code
+            // this call went to the relay with the device's token (register again once, then ask again); with the
+            // person's own key it went to Meta, and a refused key is a wrong key.
             if unauthorized(&answer) {
                 answer = match again {
                     Some(wav) => match self.recovered().await {
@@ -230,8 +233,9 @@ impl Aligner for Calls {
         self.first.limits()
     }
 
-    /// Free, and always on the relay: never held back by a used-up credit, and a refused token is renewed in either
-    /// mode.
+    /// Free, and always on the relay: never held back by a used-up credit. Word timing always goes to the relay with
+    /// the device's token, in key mode too, so a 401 here registers the device again once and asks again in either
+    /// mode (relay-bound calls recover; Meta-bound calls in key mode don't).
     fn align<'a>(
         &'a self,
         wav: Vec<u8>,
@@ -242,6 +246,7 @@ impl Aligner for Calls {
             let meta = self.adapter()?;
             let again = wav.clone();
             let mut answer = meta.align(wav, turns).await;
+            // Relay-bound in every mode: a refused token is renewed, even with the person's own key.
             if unauthorized(&answer) {
                 answer = match self.recovered().await {
                     Ok(meta) => meta.align(again, turns).await,
@@ -281,6 +286,7 @@ impl SceneLogger for Calls {
             let meta = self.adapter().map_err(|e| self.paid_failure(e, false))?;
             let relay = meta.client().is_relay();
             let mut answer = meta.watch(video, fps).await;
+            // Relay-bound (an access code) recovers; Meta-bound with the person's own key is a wrong key.
             if unauthorized(&answer) {
                 answer = if relay {
                     match self.recovered().await {
