@@ -644,11 +644,7 @@ async fn a_token_the_relay_refused_is_renewed_once_and_the_message_sent_again() 
     assert!(reply(&out)["proposal"].is_object());
     assert_eq!(paying.recovered.load(Ordering::SeqCst), 1);
 
-    assert_eq!(
-        chat.session.spend().messages,
-        2,
-        "both tries reached the model"
-    );
+    assert_eq!(chat.session.spend().messages, 1, "one message, sent twice");
 
     // A renewal that fails: the refusal is said, its cost counted once.
     let model = Script::new(vec![Err(ModelError::Refused)]);

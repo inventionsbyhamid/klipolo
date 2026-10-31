@@ -247,7 +247,8 @@ impl ChatSession {
             && self.models.recover().await
             && let Readiness::Ready { model } = self.models.ready().await
         {
-            self.spend.message(refused.usage_usd, refused.model_calls);
+            // Its cost counts; the message counts once, with the try that answers.
+            self.spend.message(refused.usage_usd, 0);
             planned = ask(model).await;
         }
         Ok(match planned {
