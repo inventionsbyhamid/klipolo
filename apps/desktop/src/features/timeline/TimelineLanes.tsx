@@ -68,7 +68,14 @@ export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_IN
           width={width}
           onSeek={onSeek}
         >
-          <MainLane main={main} assets={assets} recordings={recordings} innerPx={clipPx} {...view} />
+          <MainLane
+            main={main}
+            assets={assets}
+            recordings={recordings}
+            fps={project.settings.fps}
+            innerPx={clipPx}
+            {...view}
+          />
         </LaneRow>
         <LaneRow
           lane="sounds"

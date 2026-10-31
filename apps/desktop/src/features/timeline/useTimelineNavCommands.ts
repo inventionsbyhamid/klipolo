@@ -3,16 +3,17 @@ import { useMemo } from 'react';
 import type { Project } from '../../bindings/Project';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
-import { useSelection } from '../../state/selection';
+import { transitionClipId, useSelection } from '../../state/selection';
 import { useUi } from '../../state/ui';
 import { searchWords, type Command } from '../command-palette/command';
 import { focusIdOf, LANE_KEYS, laneOrder, placeOf, type LaneKey } from './keys/laneOrder';
 import { moveFocusTo, seekEdit, selectionStep } from './keys/timelineActions';
+import { pickTransition } from './keys/transitionActions';
 import { pickBlock } from './drag/blockPress';
 import { videoDurationUs } from '../../lib/timeline';
 import { fitTimeline, zoomTimeline } from './zoomControl';
 
-/** Whether selection `id` is one the timeline draws (a clip or a layer). */
+/** Whether selection `id` is one the timeline draws (a clip, a layer or a transition). */
 const laneHas = (project: Project, id: string, expanded: boolean) =>
   placeOf(laneOrder(project, expanded), focusIdOf(id)) !== null;
 
@@ -85,7 +86,9 @@ export function useTimelineNavCommands(): Command[] {
         }),
         enabled: selectedId !== null && laneHas(project, selectedId, expanded),
         run: () => {
-          if (selectedId) pickBlock(selectedId);
+          const transition = transitionClipId(selectedId);
+          if (transition !== null) pickTransition(transition);
+          else if (selectedId) pickBlock(selectedId);
         },
       },
       {

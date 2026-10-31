@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Klipolo's demo agent: Muse Spark edits the video open in Klipolo through Klipolo's MCP server.
 
-It starts Klipolo's stdio bridge (`klipolo-app --mcp`), lists Klipolo's tools and offers each to Muse Spark as a strict
-function tool on Meta's Responses API, then makes the calls Muse Spark asks for and sends each result back, for at most
-8 model turns. It prints each call on one line, then Muse Spark's reply, then what Muse Spark's tokens cost. Pictures
-(makeSticker, makeTitleCard) are paid by Klipolo, about $0.01 each, and aren't in that total: it says how many it
-started.
+It starts Klipolo's stdio bridge (`klipolo-app --mcp`), lists Klipolo's tools, and reads the project in short
+(getSummary, which costs nothing), so with Klipolo off or no project open it stops before Muse Spark is asked. Then it
+offers each tool to Muse Spark as a strict function tool on Meta's Responses API, makes the calls Muse Spark asks for
+and sends each result back, for at most 8 model turns. It prints each call on one line, then Muse Spark's reply (with
+no em or en dash), then what Muse Spark's tokens cost. Pictures (makeSticker, makeTitleCard) are paid by Klipolo, about
+$0.01 each, and aren't in that total: it says how many it started.
 
 Run it on the Mac with Klipolo open on an analyzed project and "Let other apps edit with Klipolo" on in Settings:
 
@@ -94,6 +95,8 @@ NOT_AN_OBJECT = "The arguments were not a JSON object. Call the tool again with 
 NOT_A_BRIDGE = "{exe} did not answer as Klipolo's MCP bridge. Pass --klipolo with a Klipolo that has it."
 STOPPED_ANSWERING = "Klipolo stopped answering. Check that it's open, then run the agent again."
 PROPOSAL_TOOL = "getProposal"
+# Klipolo's read that costs nothing, made before Muse Spark is asked: it fails while Klipolo is off or has no project.
+READ_TOOL = "getSummary"
 # What a getProposal hears in the run that proposed (Klipolo's own texts say to ask it while the person decides).
 WAITS_FOR_APPLY = (
     "The person hasn't decided yet, and this run can't wait for them. Tell them the cut waits for their Apply in "
@@ -113,7 +116,8 @@ SYSTEM_PROMPT = (
     "You may put your own short title on screen with addText. "
     "Never say a cut was made unless getProposal says it was applied. "
     "When a tool refuses, read why, then fix the call or tell the person. "
-    "Answer in two or three short sentences."
+    "Answer in two or three short sentences. "
+    "Never use em or en dashes, in your answer or in text you add."
 )
 
 # Keywords that let an object take keys it doesn't list: strict mode can't say that.
@@ -381,6 +385,20 @@ def _plain(text: str) -> str:
     return text.replace("\u2013", "-").replace("\u2014", "-")
 
 
+def plain_reply(text: str) -> str:
+    """Muse Spark's reply as it is printed, with no em or en dash: one between digits (a range) becomes a hyphen, one
+    opening a line goes, and any other becomes a comma (an aside's pair, two)."""
+    lines = []
+    for line in text.splitlines():
+        line = re.sub("^\\s*[\u2013\u2014]+\\s*", "", line)
+        line = re.sub("(?<=\\d)\\s*[\u2013\u2014]\\s*(?=\\d)", "-", line)
+        line = re.sub("\\s*[\u2013\u2014]+\\s*", ", ", line)
+        # A comma the dash left before other punctuation goes.
+        line = re.sub(",\\s*(?=[,.;:!?])", "", line)
+        lines.append(line.rstrip())
+    return "\n".join(lines)
+
+
 def sentence(text: str | None, fallback: str) -> str:
     """`text` as plain copy ending in a full stop, or `fallback` when it is blank."""
     text = _plain(text or "").strip()
@@ -616,6 +634,27 @@ async def run_call(
     return Called(text, stop=bool(result.isError) and text.startswith(KLIPOLO_OFF), outcome=kind)
 
 
+async def klipolo_ready(session: Any, schemas: dict[str, Any], console: Console) -> bool:
+    """Whether Klipolo can take this run's calls: its free read (`READ_TOOL`) answers, so a run with Klipolo off or no
+    project open stops before Muse Spark is asked, at no cost. Klipolo's own sentence says why. Nothing is printed when
+    it answers, and a Klipolo that lists no such read isn't asked."""
+    if READ_TOOL not in schemas:
+        return True
+    try:
+        result = await session.call_tool(READ_TOOL, {})
+    except McpError as e:
+        console.fail(STOPPED_ANSWERING if gone(e) else (e.error.message or "Klipolo refused the call."))
+        return False
+    except CLOSED:
+        console.fail(STOPPED_ANSWERING)
+        return False
+    if result.isError:
+        text = "\n".join(part.text for part in result.content if getattr(part, "type", None) == "text")
+        console.fail(text.strip() or "Klipolo refused the call.")
+        return False
+    return True
+
+
 def klipolo_env() -> dict[str, str]:
     """The environment Klipolo's bridge starts with: the SDK's short safe list (HOME, PATH, USER...), and Klipolo's
     support folder when set. Never the Meta key."""
@@ -733,7 +772,7 @@ async def converse(
     max_usd: float,
     hello_timeout: float,
 ) -> int:
-    """The bridge's hello and tool list, then the model's turns and calls. The exit status."""
+    """The bridge's hello and tool list, Klipolo's free read, then the model's turns and calls. The exit status."""
     try:
         with anyio.fail_after(hello_timeout):
             hello = await session.initialize()
@@ -744,6 +783,8 @@ async def converse(
     tally.said_hello = True
     tools = [function_tool(t.name, t.description, t.inputSchema) for t in listed.tools]
     schemas = {t.name: t.inputSchema for t in listed.tools}
+    if not await klipolo_ready(session, schemas, console):
+        return 1
     instructions = instructions_for(hello.instructions)
     inputs = [user_message(request)]
     # A call of this run left a proposal waiting for the person.
@@ -771,7 +812,7 @@ async def converse(
             if not answer.calls:
                 if console.printed:
                     console.say()
-                console.say(answer.text or "Muse Spark gave no reply.")
+                console.say(plain_reply(answer.text or "") or "Muse Spark gave no reply.")
                 return 0
             if turn == max_turns:
                 console.fail(f"Stopped after {max_turns} model turns without a final reply.")

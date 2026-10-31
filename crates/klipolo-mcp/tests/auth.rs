@@ -447,6 +447,59 @@ async fn a_file_another_server_wrote_stays_on_stop() {
     assert_eq!(connection::read(temp.path()), Some(other));
 }
 
+/// Another Klipolo on the Mac serving the support folder's file (a dev build beside the installed app): a second
+/// server is refused, the file stays the first's byte for byte, so the apps keep reaching it, and the first's stop
+/// still deletes it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn start_leaves_a_live_servers_file() {
+    let temp = tempfile::tempdir().unwrap();
+    let mcp = Arc::new(Mcp::new(FakeHost::two_clips()));
+    let first = McpServer::start(&Handle::current(), Arc::clone(&mcp), temp.path()).unwrap();
+    let path = temp.path().join(FILE);
+    let written = std::fs::read(&path).unwrap();
+    let file = connection::read(temp.path()).expect("a connection file");
+    assert_eq!(connection::served(temp.path()), Some(file.clone()));
+
+    let second = McpServer::start(&Handle::current(), Arc::clone(&mcp), temp.path());
+    let refused = second.err().expect("a second server is refused");
+    assert_eq!(refused.kind(), std::io::ErrorKind::AlreadyExists);
+    assert_eq!(std::fs::read(&path).unwrap(), written);
+    let mut agent = Client::new(file.port, &file.token);
+    agent.initialize("Agent").await;
+    first.stop();
+    assert!(!path.exists());
+}
+
+/// A file no server answers for is no one's, and the next start replaces it: its process is gone (a crash), or alive
+/// but its port is closed, or answers to another token (the process id and the port went to other programs).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn start_replaces_a_file_no_server_answers_for() {
+    let temp = tempfile::tempdir().unwrap();
+    let mcp = Arc::new(Mcp::new(FakeHost::two_clips()));
+    let other = McpServer::start(&Handle::current(), Arc::clone(&mcp), temp.path()).unwrap();
+    let mut gone = std::process::Command::new("true").spawn().unwrap();
+    let dead = gone.id();
+    gone.wait().unwrap();
+    for (pid, port) in [(dead, other.port()), (1, 9), (1, other.port())] {
+        let left = ConnectionFile {
+            port,
+            token: new_token(),
+            pid,
+            version: VERSION,
+        };
+        connection::write(temp.path(), &left).unwrap();
+        assert_eq!(connection::served(temp.path()), None, "{left:?}");
+        let server = McpServer::start(&Handle::current(), Arc::clone(&mcp), temp.path())
+            .unwrap_or_else(|e| panic!("{left:?}: {e}"));
+        let file = connection::read(temp.path()).expect("a connection file");
+        assert_eq!((file.pid, file.port), (std::process::id(), server.port()));
+        assert_ne!(file.token, left.token);
+        server.stop();
+        assert_eq!(connection::read(temp.path()), None);
+    }
+    other.stop();
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn oversized_body_is_413() {
     let (server, host) = serve();

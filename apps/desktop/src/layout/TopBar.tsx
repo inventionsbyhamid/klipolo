@@ -16,12 +16,14 @@ import { Icon } from './Icon';
 /**
  * The project's name as a field, from the project menu's Rename: Return, or leaving the field, renames the project in
  * one undo step ("Rename project"; its exports take the new name); Escape, or a name left empty or as it was, keeps the
- * name. Return and Escape put the focus back on the name.
+ * name. Return and Escape put the focus back on the name. The window going to the background leaves it as typed.
  */
 function RenameField({ name, onDone }: { name: string; onDone: (refocus: boolean) => void }) {
   const { t } = useLingui();
   const [value, setValue] = useState(name);
   const finished = useRef(false);
+  /** Its first focus selects the name; the focus the window gives back keeps what was typed, and where. */
+  const selected = useRef(false);
   const finish = (rename: boolean, refocus: boolean) => {
     if (finished.current) return;
     finished.current = true;
@@ -38,7 +40,11 @@ function RenameField({ name, onDone }: { name: string; onDone: (refocus: boolean
       // The model's limit for a project's name.
       maxLength={200}
       autoFocus
-      onFocus={(e) => e.currentTarget.select()}
+      onFocus={(e) => {
+        if (selected.current) return;
+        selected.current = true;
+        e.currentTarget.select();
+      }}
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={(e) => {
         if (e.key === 'Enter') {
@@ -50,7 +56,8 @@ function RenameField({ name, onDone }: { name: string; onDone: (refocus: boolean
           finish(false, true);
         }
       }}
-      onBlur={() => finish(true, false)}
+      // Not when the window goes to the background (⌘Tab): the field stays as typed and gets the focus back with it.
+      onBlur={() => document.hasFocus() && finish(true, false)}
     />
   );
 }

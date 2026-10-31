@@ -14,6 +14,7 @@ import { blockPressHandlers } from './drag/blockPress';
 import { cancelDrag, useDragged } from './drag/controller';
 import { DropIndicator } from './DropIndicator';
 import { registerDropTarget, timelineLaneAt, timelineTargetAt } from './dropTarget';
+import { forgetGoneTransition } from './keys/transitionActions';
 import { useRovingFocus } from './keys/useRovingFocus';
 import { cancelRangeDrag, RangeSelection, rangeDragJustEnded, startRangeDrag } from './lanes/RangeSelection';
 import { BLOCK_HINT_ID, CLIP_INNER_PX, HEADER_PX, MAIN_LANE_MIN_PX, TAIL_US } from './layout';
@@ -133,18 +134,28 @@ export function TimelineView() {
       registerDropTarget(null);
     };
   }, []);
-  // The whole video in view as a project opens, or as an empty one gets its first clips (`fitOwed`), once its lanes
-  // are laid out: what was just added isn't off to the right. After the person zooms, nothing is owed.
+  // The whole video in view as a project opens (one with only layers too: to their end), or as an empty one gets its
+  // first clips (`fitOwed`), once its lanes are laid out: what was just added isn't off to the right. A layer added to
+  // an empty project leaves the fit owed to its clips; the project's id runs it for each project opened, even when an
+  // empty one before it left the fit owed. After the person zooms, nothing is owed.
   const fitOwed = useUi((s) => s.fitOwed);
   const hasClips = project.timeline.main.length > 0;
   useLayoutEffect(() => {
-    if (fitOwed && hasClips) fitTimeline();
-  }, [fitOwed, hasClips]);
+    if (fitOwed && (hasClips || videoDurationUs(project.timeline) > 0)) fitTimeline();
+  }, [fitOwed, hasClips, project.id]);
   // One selection at a time: a block picked clears the time range (making a range clears the block's).
   useEffect(
     () =>
       useSelection.subscribe((s) => {
         if (s.selectedId !== null && useRange.getState().range) useRange.getState().clear();
+      }),
+    [],
+  );
+  // A selected transition that goes (removed, its add undone) is no longer selected.
+  useEffect(
+    () =>
+      useProject.subscribe((s, prev) => {
+        if (s.snapshot?.project !== prev.snapshot?.project) forgetGoneTransition(s.snapshot?.project);
       }),
     [],
   );

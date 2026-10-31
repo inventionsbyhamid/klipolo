@@ -293,6 +293,11 @@ export const TABLE = {
     message: 'Fill video',
     comment: 'Undo history entry',
   }),
+  'clip.framing.focus.undo': msg({
+    id: 'clip.framing.focus.undo',
+    message: 'Change fill focus',
+    comment: 'Undo history entry: which part of a filled video stays in view',
+  }),
   // The cursor layer: its look, and following it in a vertical or square version.
   'undo.cursorStyle': msg({
     id: 'undo.cursorStyle',

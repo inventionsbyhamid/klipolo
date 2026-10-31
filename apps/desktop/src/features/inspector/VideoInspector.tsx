@@ -3,15 +3,14 @@ import type { FormatKind } from '../../bindings/FormatKind';
 import type { Item } from '../../bindings/Item';
 import type { ItemContent } from '../../bindings/ItemContent';
 import { Segmented } from '../../design/Segmented';
-import { useIntlLocale } from '../../i18n/react';
-import { formatNumber } from '../../lib/format';
 import { hasOwnSound } from '../../lib/timeline';
 import { contentNow, contentOps, editClip, editContent } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { PositionField, TimingField } from './common';
-import { Field, Select } from './fields';
+import { Field } from './fields';
 import { PictureFields } from './ImageInspector';
-import { cameraClipOf, mirrorLabel, speedChoices } from './videoOps';
+import { SpeedField } from './SpeedField';
+import { cameraClipOf, mirrorLabel } from './videoOps';
 import { VolumeControls } from './VolumeControls';
 
 export type VideoContent = Extract<ItemContent, { type: 'video' }>;
@@ -35,16 +34,13 @@ export function VideoInspector({
   primary: FormatKind;
 }) {
   const { t } = useLingui();
-  const locale = useIntlLocale();
   const hasAudio = useProject((s) => !!s.snapshot && hasOwnSound(s.snapshot.project, item));
   const cameraClip = useProject((s) => (s.snapshot ? cameraClipOf(s.snapshot.project, item) : null));
   const speed = cameraClip ? cameraClip.speed : content.speed;
-  const speedText = (value: number) => `${formatNumber(locale, value)}×`;
   const setSpeed = (value: number) =>
     void (cameraClip
       ? editClip('speed.undo', cameraClip, { speed: value })
       : editContent('speed.undo', item, content, { speed: value }));
-  const speedLabel = t({ id: 'speed.label', message: 'Speed' });
   const mirror = t({ id: 'camera.mirror', message: 'Mirror' });
   return (
     <>
@@ -62,14 +58,7 @@ export function VideoInspector({
           }}
         />
       )}
-      <Field label={speedLabel}>
-        <Select
-          label={speedLabel}
-          value={String(speed)}
-          choices={speedChoices(speed).map((value) => ({ value: String(value), label: speedText(value) }))}
-          onPick={(value) => setSpeed(Number(value))}
-        />
-      </Field>
+      <SpeedField speed={speed} onPick={setSpeed} />
       {cameraClip && (
         <p className="field-note">
           {t({

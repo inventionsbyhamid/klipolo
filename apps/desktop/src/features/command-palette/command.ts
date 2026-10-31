@@ -32,23 +32,15 @@ export interface RunOptions {
   target?: DropTarget;
   /** The files `import` brings in (a Finder drop) instead of asking with the file picker. */
   paths?: string[];
-  /**
-   * The effect `effect-add` puts on the block (a contribution id: `klipolo.builtin/effect.blur`), or a transition's
-   * type (`add-transition`, `transition-set`: `klipolo.builtin/transition.wipe`).
-   */
+  /** The effect `effect-add` puts on the block (a contribution id: `klipolo.builtin/effect.blur`). */
   effect?: ContribId;
   /** Which effect of the block's stack an effect command acts on (its id in the stack: an effect row). */
   effectId?: string;
   /** The state `effect-toggle` ends in (an effect's switch); without one it switches to the other state. */
   enabled?: boolean;
-  /**
-   * Settings `effect-set` and `transition-set` set (and `effect-add` starts with), by key, and the keys they take back
-   * to their defaults.
-   */
+  /** Settings `effect-set` sets (and `effect-add` starts with), by key, and the keys it takes back to their defaults. */
   params?: Record<string, ParamValue>;
   reset?: string[];
-  /** A transition's length (`add-transition`, `transition-set`), held to the footage on the frame grid. */
-  durationUs?: number;
   /** The state Solo track ends in (a header's toggle); without one it switches to the other state. */
   solo?: boolean;
 }

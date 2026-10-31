@@ -20,9 +20,10 @@ const OPTIONAL = new Set(['copy', 'cut', 'paste', 'duplicate', 'paste-effects'])
  * Editor keyboard shortcuts, with ⌘ on a Mac and Ctrl on Windows and Linux; ⌃ alone on a Mac (the field's
  * own keys, such as ⌃K) and the Windows or Super key alone run none (`otherAlone`). ⌘K puts the cursor in the chat;
  * ⌘↩ applies the proposal chat has open;
- * ⌘Z undo; ⇧⌘Z redo; ⌘O add files; ⌘E export; S split; Space play/pause; J / L play backward / forward (pressed
- * again while playing that way: double speed); K pause; with K held, J / L one frame; Delete or Backspace delete (the
- * selected time range, else the selected clip or layer); I / O the time range's start or end at the playhead; ← / →
+ * ⌘Z undo; ⇧⌘Z redo; ⌘O add files; ⌘E export; ⌘T add a transition (after the selected clip, at a focused cut, else
+ * at the cut nearest the playhead); S split; Space play/pause; J / L play backward / forward (pressed again while
+ * playing that way: double speed); K pause; with K held, J / L one frame; Delete or Backspace delete (the selected
+ * time range, else the selected transition, clip or layer); I / O the time range's start or end at the playhead; ← / →
  * one frame (⇧ one second); ↑ / ↓ the previous or next edit; Home / End the start or end; ⌘= / ⌘− timeline zoom; ⇧Z
  * fit the timeline; 1 / 2 / 3 the format the preview shows; N snapping on or off; Escape clears the selection. With a
  * clip or layer selected: Q / W trim its start or end to the playhead; , and . move it a frame (⇧ ten) or a clip a
@@ -88,6 +89,7 @@ export function useEditorShortcuts() {
       x: 'cut',
       v: 'paste',
       d: 'duplicate',
+      t: 'add-transition',
     };
     if (mod) {
       const id = withMod[key];

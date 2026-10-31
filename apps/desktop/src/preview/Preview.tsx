@@ -4,6 +4,7 @@ import { RoughCaptionsNote } from '../features/analysis/RoughCaptionsNote';
 import { FormatPills } from '../features/editor/FormatPills';
 import { useShownFormat } from '../features/editor/formats';
 import { Inspector, useInspected } from '../features/inspector/Inspector';
+import { useInspectedTransition } from '../features/inspector/TransitionInspector';
 import { useImportMedia } from '../features/media/useImportMedia';
 import { AddTitleMenu } from '../features/preview/AddTitleMenu';
 import { Stage } from '../features/preview/Stage';
@@ -45,8 +46,9 @@ function DropZone({ over }: { over: boolean }) {
 /**
  * The preview panel: the format pills, Add title, the safe area menu (9:16 only), Full screen (F; it
  * it works), and the engine's frames fitted to the panel in the chosen format with the layers there selectable and
- * editable (`Stage`), under the analysis banner; the inspector docks at the right under the banner while a layer it has
- * fields for is selected, and the frame moves left for it. With no clip yet, the drop zone.
+ * editable (`Stage`), under the analysis banner; the inspector docks at the right under the banner while a main clip, a
+ * transition or a layer it has fields for is selected, and the frame moves left for it. With no clip yet, the drop
+ * zone.
  * `filesOver`: files from Finder are held over the window.
  */
 export function Preview({ filesOver = false }: { filesOver?: boolean }) {
@@ -59,8 +61,9 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
   const safeArea = useUi((s) => s.safeArea);
   const setSafeArea = useUi((s) => s.setSafeArea);
   const inspected = useInspected();
+  const transition = useInspectedTransition();
   const native = useEngine((s) => s.presenter === 'native' && !!s.info);
-  const docked = hasVideo && inspected !== null;
+  const docked = hasVideo && (inspected !== null || transition !== null);
   return (
     <main className={native && hasVideo ? 'panel stage has-hole' : 'panel stage'} aria-label="Preview">
       <div className="stage-head">
@@ -78,7 +81,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
               ? t({ id: 'preview.safeArea.tip', message: 'Safe area: where the apps leave a 9:16 video clear' })
               : t({ id: 'preview.safeArea.off', message: 'Shows in 9:16' })
           }
-          aria-pressed={safeArea !== 'off'}
+          aria-pressed={portrait && safeArea !== 'off'}
           aria-disabled={!portrait || undefined}
           onClick={() => portrait && setSafeArea(safeArea === 'off' ? 'all' : 'off')}
         >

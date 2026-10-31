@@ -41,6 +41,13 @@ const PATHS = {
     </>
   ),
   trash: <path d="M4 7h16M10 7V4.5h4V7M6.5 7l1 12.5h9l1-12.5" />,
+  /** A transition: two clips' circles overlapping where they blend. */
+  blend: (
+    <>
+      <circle cx="9" cy="12" r="6" />
+      <circle cx="15" cy="12" r="6" />
+    </>
+  ),
   start: <path d="M6 5v14M18 6.2v11.6L9.5 12z" />,
   back: <path d="M11.5 6.5v11L4 12zM20 6.5v11L12.5 12z" />,
   fwd: <path d="M12.5 6.5v11L20 12zM4 6.5v11L11.5 12z" />,

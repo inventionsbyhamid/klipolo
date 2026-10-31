@@ -56,6 +56,8 @@ pub(crate) const REPLY_EVENT: &str = "mcp-reply";
 pub(crate) const APPS_EVENT: &str = "mcp-apps";
 /// What Settings says when the server couldn't start listening.
 pub(crate) const START_FAILED: &str = "Klipolo couldn't start listening for other apps. Try again.";
+/// What Settings says when another Klipolo on this Mac already lets other apps in (it serves the connection file).
+pub(crate) const ANOTHER_LISTENS: &str = "Another Klipolo on this Mac is already letting other apps in. Quit it, then turn this on again.";
 /// The most characters of an app's picture prompt passed on to the picture maker (chat's tools ask for a short
 /// phrase).
 pub(crate) const PROMPT_CHARS: usize = 200;
@@ -458,6 +460,9 @@ pub struct McpStatus {
     /// Klipolo runs from its disk image or a translocated copy: it has to move to Applications before the config can
     /// name it.
     pub needs_move: bool,
+    /// Off because another Klipolo on this Mac lets other apps in now (it serves the connection file, a dev build
+    /// beside the installed app): this one can't until that one quits.
+    pub another_listens: bool,
 }
 
 /// The MCP server for the app's run: one `Mcp` (its paces, its allowance for jobs and an app's waiting proposal last
@@ -480,13 +485,20 @@ impl McpState {
         }
     }
 
-    /// At launch: listening again when the person left other apps' access on; else no connection file is left behind
-    /// (a Klipolo that crashed), unless another Klipolo running now wrote it (a dev build beside the installed app).
+    /// At launch: listening again when the person left other apps' access on, unless another Klipolo lets them in
+    /// now (it stays off for this run, and Settings says why); else no connection file is left behind (a Klipolo that
+    /// crashed), unless another Klipolo running now wrote it (a dev build beside the installed app).
     pub(crate) fn at_launch(&self) {
         let Some(dir) = &self.dir else { return };
         if prefs::load(dir).mcp_enabled {
-            if let Err(error) = self.start() {
-                tracing::warn!(%error, "the MCP server couldn't start at launch");
+            match self.start() {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                    tracing::info!(
+                        "another Klipolo lets other apps in: this one stays off for this run"
+                    );
+                }
+                Err(error) => tracing::warn!(%error, "the MCP server couldn't start at launch"),
             }
         } else {
             remove_left(dir);
@@ -494,13 +506,18 @@ impl McpState {
     }
 
     /// The switch: on starts listening then saves it, off stops (the connection file goes) then saves it. A server
-    /// that can't start leaves access off, with what Settings says.
+    /// that can't start leaves access off and the saved switch as it was, with what Settings says: another Klipolo on
+    /// this Mac letting apps in is said as such.
     pub(crate) fn set_enabled(&self, on: bool) -> Result<McpStatus, String> {
         let Some(dir) = self.dir.clone() else {
             return Err(START_FAILED.to_owned());
         };
         if on {
             self.start().map_err(|error| {
+                if error.kind() == io::ErrorKind::AlreadyExists {
+                    tracing::info!("another Klipolo lets other apps in: this one stays off");
+                    return ANOTHER_LISTENS.to_owned();
+                }
                 tracing::warn!(%error, "the MCP server couldn't start");
                 START_FAILED.to_owned()
             })?;
@@ -513,7 +530,7 @@ impl McpState {
         Ok(self.status())
     }
 
-    /// Listens, unless it already does.
+    /// Listens, unless it already does; `AlreadyExists` while another Klipolo serves the connection file.
     fn start(&self) -> io::Result<()> {
         let dir = (self.dir.as_deref()).ok_or_else(|| io::Error::other("no support folder"))?;
         let mut server = lock(&self.server);
@@ -532,12 +549,16 @@ impl McpState {
 
     pub(crate) fn status(&self) -> McpStatus {
         let connected = lock(&self.server).as_ref().map(McpServer::connected);
+        // Asked only while this one doesn't listen, with the lock let go.
+        let another_listens = connected.is_none()
+            && (self.dir.as_deref()).is_some_and(|dir| connection::served(dir).is_some());
         let exe = std::env::current_exe().unwrap_or_default();
         McpStatus {
             enabled: connected.is_some(),
             connected: connected.unwrap_or_default(),
             config: config_json(&exe),
             needs_move: needs_move(&exe),
+            another_listens,
         }
     }
 

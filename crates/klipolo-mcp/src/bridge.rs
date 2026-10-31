@@ -353,8 +353,9 @@ impl Inner {
     /// Klipolo's connection file while Klipolo listens: one in Klipolo's format, with a token as Klipolo makes them,
     /// whose process is alive (another user's too).
     fn listening(&self) -> Option<ConnectionFile> {
-        connection::read(&self.dir)
-            .filter(|f| is_token(&f.token) && klipolo_platform::process::is_alive(f.pid))
+        connection::read(&self.dir).filter(|f| {
+            connection::is_token(&f.token) && klipolo_platform::process::is_alive(f.pid)
+        })
     }
 
     /// Klipolo's reply to request `msg`, whose id is `id`. A session Klipolo forgot opens again once; a refused token
@@ -574,14 +575,6 @@ fn answering(reply: Value, id: &Value) -> Result<Value, Failed> {
     } else {
         Err(Failed::Unanswered)
     }
-}
-
-/// A token as Klipolo makes them: 64 lowercase hex digits.
-fn is_token(token: &str) -> bool {
-    token.len() == 64
-        && token
-            .bytes()
-            .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 /// What a request that won't reach Klipolo hears: a tool call, a result an agent reads (`isError`); any other request,
