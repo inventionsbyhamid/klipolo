@@ -392,9 +392,13 @@ function Foot({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving'>
   );
 }
 
+/** Record's tooltip while it can record: what a press does. */
+const READY = 'Recording starts after a 3 s countdown.';
+
 /**
  * Record: the only control that starts a take. Off while it can't (a take runs, the setup blocks it, Screen Recording
- * isn't allowed yet, nothing is chosen), still focusable so its tooltip says why.
+ * isn't allowed yet, nothing is chosen), still focusable so its tooltip says why. Always the same element, so the
+ * keyboard stays on it as it turns on and off.
  */
 function RecordButton() {
   const setup = useRecorder((s) => s.setup);
@@ -402,26 +406,21 @@ function RecordButton() {
   const screenRefused = useRecorder((s) => s.screenRefused);
   if (setup === null) return null;
   const waiting = notReady(setup, picks, screenRefused);
-  const button = (
-    <Button
-      variant="primary"
-      aria-disabled={waiting !== null || undefined}
-      onClick={() => {
-        // While the Screen Recording step shows, a press goes to its button: macOS's own prompt is never the only
-        // explanation.
-        if (waiting?.why === 'screen') document.getElementById(STEP_BUTTON_ID)?.focus();
-        else if (waiting === null) void useRecorder.getState().record();
-      }}
-    >
-      <RecordIcon name="record" />
-      Record
-    </Button>
-  );
-  return waiting === null ? (
-    button
-  ) : (
-    <Tooltip label={waiting.text} side="top" describes>
-      {button}
+  return (
+    <Tooltip label={waiting?.text ?? READY} side="top" describes={waiting !== null}>
+      <Button
+        variant="primary"
+        aria-disabled={waiting !== null || undefined}
+        onClick={() => {
+          // While the Screen Recording step shows, a press goes to its button: macOS's own prompt is never the only
+          // explanation.
+          if (waiting?.why === 'screen') document.getElementById(STEP_BUTTON_ID)?.focus();
+          else if (waiting === null) void useRecorder.getState().record();
+        }}
+      >
+        <RecordIcon name="record" />
+        Record
+      </Button>
     </Tooltip>
   );
 }

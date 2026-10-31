@@ -680,6 +680,18 @@ describe('countdown, saving and failure', () => {
   });
 
 
+  it('record_is_one_element_as_it_turns_off_and_on', async () => {
+    await openOn(recorderSetup({ apps: [app('com.apple.Safari', 'Safari')] }));
+    const record = recordButton();
+    record.focus();
+    await userEvent.click(screen.getByRole('radio', { name: 'One app' }));
+    expect(recordButton()).toBe(record);
+    expect(record).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(screen.getByRole('radio', { name: 'Safari' }));
+    expect(recordButton()).toBe(record);
+    expect(record).not.toHaveAttribute('aria-disabled');
+    expect(record).not.toHaveAccessibleDescription('Choose an app first');
+  });
 
   it('arming_that_waits_still_says_getting_ready_and_cancels', async () => {
     await openOn();
