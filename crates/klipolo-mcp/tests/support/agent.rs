@@ -74,6 +74,20 @@ pub fn outcome(result: &Value) -> &str {
         .unwrap_or_else(|| panic!("an outcome: {result}"))
 }
 
+/// Whether `said` is Klipolo pacing `client`, with how long to wait.
+pub fn says_paced(said: &str, client: &str) -> bool {
+    said.starts_with(&format!("Klipolo is pacing calls from {client}. Wait "))
+        && said.ends_with(", then try again.")
+        && (said.contains(" second") || said.contains(" minute"))
+}
+
+/// A call held back by `client`'s pace: an error, saying how long to wait.
+pub fn assert_paced(result: &Value, client: &str) {
+    assert_eq!(result["isError"], true, "{result}");
+    assert_eq!(outcome(result), "refused", "{result}");
+    assert!(says_paced(text(result), client), "{result}");
+}
+
 /// A refused call: an error, with this text.
 pub fn assert_refused(result: &Value, said: &str) {
     assert_eq!(result["isError"], true, "{result}");

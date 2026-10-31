@@ -9,12 +9,12 @@ mod fake_host;
 
 use std::time::{Duration, Instant};
 
-use agent::{Agent, assert_refused, outcome, text};
+use agent::{Agent, assert_paced, assert_refused, outcome, text};
 use fake_host::FakeHost;
 use klipolo_chat::Job;
 use klipolo_mcp::limits::{Limits, PAID_JOBS_PER_WINDOW, PAID_RUN_CAP_USD, PAID_WINDOW, Paced};
 use klipolo_mcp::rpc::Mcp;
-use klipolo_mcp::words::{NO_CREDIT, OVER_CAP, PACED, fill};
+use klipolo_mcp::words::{NO_CREDIT, OVER_CAP};
 use serde_json::{Value, json};
 
 fn sticker() -> Value {
@@ -91,7 +91,10 @@ fn paid_jobs_past_10_in_10_minutes_are_paced() {
     for k in 0..10 {
         assert_eq!(limits.paid("Agent", t0, 0.001), Ok(()), "{k}");
     }
-    assert_eq!(limits.paid("Agent", t0, 0.001), Err(Paced::Wait));
+    assert_eq!(
+        limits.paid("Agent", t0, 0.001),
+        Err(Paced::Wait(Duration::from_secs(600)))
+    );
     assert_eq!(limits.paid("Other app", t0, 0.001), Ok(()));
     assert_eq!(
         limits.paid("Agent", t0 + Duration::from_secs(600), 0.001),
@@ -106,10 +109,7 @@ fn paid_jobs_past_10_in_10_minutes_are_paced() {
     for k in 0..10 {
         assert_eq!(outcome(&a.call("makeSticker", sticker())), "started", "{k}");
     }
-    assert_refused(
-        &a.call("makeSticker", sticker()),
-        &fill(PACED, &[("client", "Agent")]),
-    );
+    assert_paced(&a.call("makeSticker", sticker()), "Agent");
     assert_eq!(outcome(&b.call("makeSticker", sticker())), "started");
     assert_eq!(host.state().started.len(), 11);
 }

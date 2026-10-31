@@ -8,14 +8,14 @@ mod fake_host;
 
 use std::time::{Duration, Instant};
 
-use agent::{Agent, assert_refused, outcome, request};
+use agent::{Agent, assert_paced, outcome, request, says_paced};
 use fake_host::FakeHost;
 use klipolo_mcp::limits::{
     APPLIED_ALL_PER_WINDOW, APPLIED_PER_WINDOW, CALLS_PER_MINUTE, Limits, OPENED_ALL_PER_MINUTE,
     OPENED_PER_MINUTE, PACE_WINDOW, Paced, undo_shares,
 };
 use klipolo_mcp::rpc::{Handled, Mcp};
-use klipolo_mcp::words::{PACED, fill};
+use klipolo_mcp::words::{OVER_CAP, paced};
 use klipolo_model::history::{HistoryLimits, Whose};
 use serde_json::json;
 
@@ -31,12 +31,19 @@ fn calls_past_60_a_minute_are_paced() {
     for k in 0..60 {
         assert_eq!(limits.call("Agent", at(t0, k as f64 * 0.5)), Ok(()), "{k}");
     }
-    assert_eq!(limits.call("Agent", at(t0, 30.0)), Err(Paced::Wait));
+    // The oldest call leaves the minute at 60 s: 30 s to wait.
+    assert_eq!(
+        limits.call("Agent", at(t0, 30.0)),
+        Err(Paced::Wait(Duration::from_secs(30)))
+    );
     // Each app has its own pace.
     assert_eq!(limits.call("Other app", at(t0, 30.0)), Ok(()));
     // A minute after the first call there is room for one more.
     assert_eq!(limits.call("Agent", at(t0, 60.0)), Ok(()));
-    assert_eq!(limits.call("Agent", at(t0, 60.0)), Err(Paced::Wait));
+    assert_eq!(
+        limits.call("Agent", at(t0, 60.0)),
+        Err(Paced::Wait(Duration::from_millis(500)))
+    );
 
     // Through the server: the 61st edit call within a minute is answered with the pace, and nothing is done.
     let host = FakeHost::two_clips();
@@ -48,22 +55,15 @@ fn calls_past_60_a_minute_are_paced() {
     }
     let before = host.revision();
     let square = json!({"format": "square", "keepOthers": true});
-    assert_refused(
-        &agent.call("setFormat", square.clone()),
-        &fill(PACED, &[("client", "Agent")]),
-    );
-    assert_eq!(
-        fill(PACED, &[("client", "Agent")]),
-        "Klipolo is pacing calls from Agent. Wait a minute, then try again."
-    );
+    assert_paced(&agent.call("setFormat", square.clone()), "Agent");
     assert_eq!(host.revision(), before);
     // Reads share the pace, as tools and as resources.
-    assert_refused(
-        &agent.call("getContext", json!({})),
-        &fill(PACED, &[("client", "Agent")]),
-    );
+    assert_paced(&agent.call("getContext", json!({})), "Agent");
     let context = read(&agent, "klipolo://context");
-    assert_eq!(context["text"], fill(PACED, &[("client", "Agent")]));
+    assert!(
+        says_paced(context["text"].as_str().unwrap_or_default(), "Agent"),
+        "{context}"
+    );
     // What became of a proposal is never paced: an app polls it while the person decides.
     let proposal = agent.call("getProposal", json!({}));
     assert_eq!(proposal["isError"], false, "{proposal}");
@@ -89,10 +89,7 @@ fn calls_past_60_a_minute_are_paced() {
         };
         assert_eq!(read["isError"], false, "{k}");
     }
-    assert_refused(
-        &reader.call("setFormat", square),
-        &fill(PACED, &[("client", "Reader")]),
-    );
+    assert_paced(&reader.call("setFormat", square), "Reader");
 }
 
 /// The reply to `msg` in `agent`'s session.
@@ -124,7 +121,10 @@ fn applied_past_30_in_5_minutes_are_paced() {
             "{k}"
         );
     }
-    assert_eq!(limits.applied("Agent", at(t0, 299.0)), Err(Paced::Wait));
+    assert_eq!(
+        limits.applied("Agent", at(t0, 299.0)),
+        Err(Paced::Wait(Duration::from_secs(1)))
+    );
     assert_eq!(limits.applied("Agent", at(t0, 300.0)), Ok(()));
 
     // Through the server: the 31st batch the app applies within 5 minutes waits, and nothing changes.
@@ -139,9 +139,9 @@ fn applied_past_30_in_5_minutes_are_paced() {
     assert_eq!(host.revision(), before + 30);
     // The captions are on: turning them off would be the 31st batch.
     assert!(host.project().captions.enabled);
-    assert_refused(
+    assert_paced(
         &agent.call("setCaptions", json!({"on": false, "style": null})),
-        &fill(PACED, &[("client", "Agent")]),
+        "Agent",
     );
     assert_eq!(host.revision(), before + 30);
     // A removal is never applied here: it is still proposed for the person.
@@ -160,8 +160,9 @@ fn all_apps_share_60() {
         }
     }
     // A new name doesn't start over: all apps together reached theirs.
-    assert_eq!(limits.applied("Third app", t0), Err(Paced::Wait));
-    assert_eq!(limits.applied("Agent", t0), Err(Paced::Wait));
+    let five_minutes = Paced::Wait(Duration::from_secs(300));
+    assert_eq!(limits.applied("Third app", t0), Err(five_minutes));
+    assert_eq!(limits.applied("Agent", t0), Err(five_minutes));
     assert_eq!(limits.applied("Third app", at(t0, 300.0)), Ok(()));
 }
 
@@ -173,13 +174,14 @@ fn initialize_past_10_a_minute_is_paced() {
     for _ in 0..10 {
         assert_eq!(limits.opened("Agent", t0), Ok(()));
     }
-    assert_eq!(limits.opened("Agent", t0), Err(Paced::Wait));
+    let minute = Paced::Wait(Duration::from_secs(60));
+    assert_eq!(limits.opened("Agent", t0), Err(minute));
     // Names an app picks itself: all apps together open at most 20 a minute, so new names can't push out the
     // sessions of apps already connected.
     for k in 0..10 {
         assert_eq!(limits.opened(&format!("App {k}"), t0), Ok(()), "{k}");
     }
-    assert_eq!(limits.opened("Yet another app", t0), Err(Paced::Wait));
+    assert_eq!(limits.opened("Yet another app", t0), Err(minute));
     assert_eq!(limits.opened("Yet another app", at(t0, 60.0)), Ok(()));
 
     // Through the server: the 11th `initialize` of one app within a minute is paced and opens nothing.
@@ -213,4 +215,32 @@ fn undo_shares_are_a_quarter_and_a_half() {
     let [app, apps] = undo_shares("Agent", HistoryLimits::under_pressure());
     assert_eq!((app.steps, app.bytes), (12, 4 << 20));
     assert_eq!((apps.steps, apps.bytes), (25, 8 << 20));
+}
+
+#[test]
+fn paced_says_how_long_to_wait() {
+    let said = |wait: Duration| paced("Agent", Paced::Wait(wait));
+    assert_eq!(
+        said(Duration::from_secs(30)),
+        "Klipolo is pacing calls from Agent. Wait 30 seconds, then try again."
+    );
+    // Rounded up, never "0 seconds".
+    assert_eq!(
+        said(Duration::from_millis(200)),
+        "Klipolo is pacing calls from Agent. Wait 1 second, then try again."
+    );
+    assert_eq!(
+        said(Duration::from_millis(59_200)),
+        "Klipolo is pacing calls from Agent. Wait 1 minute, then try again."
+    );
+    assert_eq!(
+        said(Duration::from_secs(241)),
+        "Klipolo is pacing calls from Agent. Wait 5 minutes, then try again."
+    );
+    assert_eq!(
+        said(Duration::from_secs(600)),
+        "Klipolo is pacing calls from Agent. Wait 10 minutes, then try again."
+    );
+    // The run's allowance is used: no wait helps.
+    assert_eq!(paced("Agent", Paced::OverCap), OVER_CAP);
 }

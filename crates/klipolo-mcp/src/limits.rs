@@ -49,8 +49,9 @@ const APPS_KEPT: usize = 64;
 /// Why a call waits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Paced {
-    /// The app, or all apps together, reached a pace: it waits a little and tries again.
-    Wait,
+    /// The app, or all apps together, reached a pace: it waits this long, until the oldest event that holds it back
+    /// leaves the window, and tries again.
+    Wait(Duration),
     /// Apps spent what they may on jobs in this run (`PAID_RUN_CAP_USD`).
     OverCap,
 }
@@ -70,6 +71,18 @@ fn recent(times: &mut VecDeque<Instant>, now: Instant, window: Duration) -> usiz
     times.len()
 }
 
+/// How long until `times` hold fewer than `limit` within `window` of the clock, when they hold `limit` or more at
+/// `now`: until the one that must leave for room does.
+fn full(
+    times: &mut VecDeque<Instant>,
+    now: Instant,
+    window: Duration,
+    limit: usize,
+) -> Option<Duration> {
+    let held = recent(times, now, window);
+    (held >= limit).then(|| (times[held - limit] + window).saturating_duration_since(now))
+}
+
 impl Pace {
     /// One more event for `client` at `now`, unless it had `each` within `window`, or all apps `all` (when given).
     /// Nothing is recorded when it waits. O(apps) when a new app comes past `APPS_KEPT`, else O(1) amortized.
@@ -84,13 +97,12 @@ impl Pace {
             self.apps.retain(|_, times| recent(times, now, window) > 0);
         }
         let mine = self.apps.entry(client.to_owned()).or_default();
-        if recent(mine, now, window) >= each {
-            return Err(Paced::Wait);
+        let wait = full(mine, now, window, each)
+            .max(all.and_then(|all| full(&mut self.all, now, window, all)));
+        if let Some(wait) = wait {
+            return Err(Paced::Wait(wait));
         }
-        if let Some(all) = all {
-            if recent(&mut self.all, now, window) >= all {
-                return Err(Paced::Wait);
-            }
+        if all.is_some() {
             self.all.push_back(now);
         }
         mine.push_back(now);

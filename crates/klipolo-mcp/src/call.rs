@@ -36,7 +36,6 @@ use klipolo_model::time::{RangeUs, Us};
 use serde_json::{Value, json};
 
 use crate::host::{Host, HostError, OpenProposal, Snapshot};
-use crate::limits::Paced;
 use crate::rpc::Mcp;
 use crate::session::{Seen, Session};
 use crate::words::{self, fill};
@@ -209,8 +208,8 @@ fn edit(
         if tx.needs_review(Some(&snap.project)) {
             return refused(words::REMOVES);
         }
-        if mcp.limits().applied(client, Instant::now()).is_err() {
-            return refused(&words::paced(client));
+        if let Err(paced) = mcp.limits().applied(client, Instant::now()) {
+            return refused(&words::paced(client, paced));
         }
         match host.apply(client, snap.revision, &tx) {
             Ok(applied) => (revision, dropped) = (applied.revision, applied.dropped),
@@ -337,8 +336,7 @@ fn start(mcp: &Mcp, client: &str, job: &Job) -> Result<(), String> {
     let usd = host.estimate_usd(job);
     match mcp.limits().paid(client, Instant::now(), usd) {
         Ok(()) => {}
-        Err(Paced::OverCap) => return Err(words::OVER_CAP.to_owned()),
-        Err(Paced::Wait) => return Err(words::paced(client)),
+        Err(paced) => return Err(words::paced(client, paced)),
     }
     host.start_paid(client, job).map_err(|e| {
         // Nothing was spent.

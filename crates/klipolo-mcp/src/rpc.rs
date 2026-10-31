@@ -113,8 +113,10 @@ impl Mcp {
                     .and_then(Value::as_str)
                     .unwrap_or_default();
                 // Reads share the app's pace, but what became of a proposal: an app polls it while the person decides.
-                if resources::known(uri) && uri != resources::PROPOSAL && self.paced(&session) {
-                    let text = words::paced(&session.client);
+                if resources::known(uri)
+                    && uri != resources::PROPOSAL
+                    && let Some(text) = self.paced(&session)
+                {
                     return reply(ok(
                         id,
                         json!({"contents": [{"uri": uri, "mimeType": "text/plain", "text": text}]}),
@@ -175,9 +177,10 @@ impl Mcp {
         }
     }
 
-    /// Whether `session`'s app is past its pace of calls now; else the call counts toward it.
-    fn paced(&self, session: &Session) -> bool {
-        self.limits.call(&session.client, Instant::now()).is_err()
+    /// What `session`'s app reads when it is past its pace of calls now; else None, and the call counts toward it.
+    fn paced(&self, session: &Session) -> Option<String> {
+        let paced = self.limits.call(&session.client, Instant::now()).err()?;
+        Some(words::paced(&session.client, paced))
     }
 
     /// Tells the host the apps connected, when they changed since it was last told.
@@ -202,9 +205,9 @@ impl Mcp {
         // Every call shares the app's pace, reads too, but `getProposal`: an app polls it while the person decides.
         if (tools::is_read(name) || tools::is_edit(name))
             && name != "getProposal"
-            && self.paced(session)
+            && let Some(text) = self.paced(session)
         {
-            return ok(id, call::refused(&words::paced(&session.client)));
+            return ok(id, call::refused(&text));
         }
         let host = self.host();
         let read = match name {

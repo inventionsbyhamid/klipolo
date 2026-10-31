@@ -498,7 +498,7 @@ fn agent_words_are_exact() {
     assert_eq!(NOTHING_TO_UNDO, "There is nothing of yours to undo.");
     assert_eq!(
         PACED,
-        "Klipolo is pacing calls from {client}. Wait a minute, then try again."
+        "Klipolo is pacing calls from {client}. Wait {wait}, then try again."
     );
     assert_eq!(
         NO_CREDIT,
@@ -549,8 +549,8 @@ fn agent_words_are_exact() {
     }
     // A value is filled in once: an app named like a key fills nothing else.
     assert_eq!(
-        fill(PACED, &[("client", "{client}")]),
-        "Klipolo is pacing calls from {client}. Wait a minute, then try again."
+        fill(PACED, &[("client", "{wait}"), ("wait", "30 seconds")]),
+        "Klipolo is pacing calls from {wait}. Wait 30 seconds, then try again."
     );
     assert_eq!(
         fill("{a} and {b} and {c", &[("a", "{b}"), ("b", "2")]),

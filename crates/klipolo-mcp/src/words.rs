@@ -1,6 +1,10 @@
 //! What agents read from Klipolo: plain English, one idea a sentence, no em or en dashes (agents relay it to their
 //! person). The person's own words live in the app.
 
+use std::time::Duration;
+
+use crate::limits::Paced;
+
 /// How to edit through Klipolo, given with `initialize`.
 pub const INSTRUCTIONS: &str = "Edit the video open in Klipolo, a Mac video editor. Call getContext first: it is what \
 Klipolo's own chat model reads (clips c1, c2 and so on, the transcript and the scenes, all in timeline seconds like \
@@ -84,7 +88,7 @@ propose again if you still want it.";
 pub const NOT_YOURS: &str = "The last change in Klipolo isn't yours. Only the person can undo it.";
 pub const NOTHING_TO_UNDO: &str = "There is nothing of yours to undo.";
 /// Too many calls from one app (reads too, but `getProposal`), or too many of one kind from all apps together.
-pub const PACED: &str = "Klipolo is pacing calls from {client}. Wait a minute, then try again.";
+pub const PACED: &str = "Klipolo is pacing calls from {client}. Wait {wait}, then try again.";
 pub const NO_CREDIT: &str = "This needs AI credit, and Klipolo has no Meta key or access code. The person can add one \
 in Klipolo's Settings.";
 /// Paid jobs past what apps may spend in one run of Klipolo, all apps together.
@@ -92,9 +96,27 @@ pub const OVER_CAP: &str = "Other apps have used this session's AI allowance in 
 Klipolo's own chat.";
 pub const READ_ONLY: &str = "This project was made by a newer Klipolo, so it can't be edited here.";
 
-/// `PACED` for `client`.
-pub fn paced(client: &str) -> String {
-    fill(PACED, &[("client", client)])
+/// What `client` reads when `paced` holds its call back: how long to wait, or that the run's allowance is used.
+pub fn paced(client: &str, paced: Paced) -> String {
+    match paced {
+        Paced::Wait(wait) => fill(PACED, &[("client", client), ("wait", &how_long(wait))]),
+        Paced::OverCap => OVER_CAP.to_owned(),
+    }
+}
+
+/// `wait` as an agent reads it, rounded up: "1 second", "30 seconds", from a minute on "1 minute", "5 minutes".
+fn how_long(wait: Duration) -> String {
+    let secs = (wait.as_secs_f64().ceil() as u64).max(1);
+    let (n, unit) = if secs < 60 {
+        (secs, "second")
+    } else {
+        (secs.div_ceil(60), "minute")
+    };
+    if n == 1 {
+        format!("1 {unit}")
+    } else {
+        format!("{n} {unit}s")
+    }
 }
 
 /// `template` with each `{key}` of `values` filled in, in one pass: a value is never read for keys itself, so an app's
