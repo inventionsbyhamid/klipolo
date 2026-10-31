@@ -4,7 +4,8 @@
 //!
 //! Its rules, as the app keeps them: an app's batch commits with `commit_tx_keeping` as a step the app made, within
 //! the apps' shares of the history; any change to the project drops a waiting proposal; a proposal is set only on the
-//! revision and slot the caller saw; an app undoes only its own newest step.
+//! revision and slot the caller saw; an app undoes only its own newest step; while a proposal that isn't the app's own
+//! waits, its batches and undos are refused (checked under the same lock as the commit).
 
 #![allow(dead_code)]
 
@@ -222,6 +223,13 @@ impl State {
         id
     }
 
+    /// Whether a proposal waits that isn't `client`'s own: Klipolo's chat's or another app's.
+    fn others_waiting(&self, client: &str) -> bool {
+        self.slot
+            .as_ref()
+            .is_some_and(|slot| slot.from.as_deref() != Some(client))
+    }
+
     /// A change to the project drops the waiting proposal: its removals were judged on the project before it.
     fn drop_waiting(&mut self, why: &str) {
         if let Some(slot) = self.slot.take()
@@ -278,6 +286,9 @@ impl Host for FakeHost {
     fn apply(&self, client: &str, base: u64, tx: &Transaction) -> Result<Applied, HostError> {
         let mut s = self.state();
         s.counts.applies += 1;
+        if s.others_waiting(client) {
+            return Err(HostError::Moved);
+        }
         let limits = s.limits;
         let doc = s.doc.as_mut().ok_or(HostError::NoProject)?;
         if doc.revision() != base {
@@ -357,6 +368,9 @@ impl Host for FakeHost {
     fn undo_own(&self, client: &str) -> Result<Applied, HostError> {
         let mut s = self.state();
         s.counts.undos += 1;
+        if s.others_waiting(client) {
+            return Err(HostError::Moved);
+        }
         let doc = s.doc.as_mut().ok_or(HostError::NoProject)?;
         let mine = Maker::App(client.to_owned());
         match doc.undo_view().last().map(|step| step.maker == &mine) {

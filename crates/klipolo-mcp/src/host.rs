@@ -94,10 +94,13 @@ pub trait Host: Send + Sync + 'static {
     /// The proposal waiting in the chat panel, if any.
     fn open_proposal(&self) -> Option<OpenProposal>;
 
-    /// Commits `tx` as one undo step made by `client`, when the project is still at `base` (else `Moved`).
-    /// Implementations commit with `Document::commit_tx_keeping(tx, next, &ByApp { app: client, shares, after_point:
-    /// false })`, `shares` the apps' shares of the history limits, so an app's step never pushes out the person's
-    /// steps (`PushesOut`) or holds more than its share (`OverShare`).
+    /// Commits `tx` as one undo step made by `client`. Refused with `Moved`, nothing committed, when the project isn't
+    /// at `base`, or when a proposal waits that isn't `client`'s own (Klipolo's chat's or another app's): both checked
+    /// under the host's own lock, in one step with the commit, so a proposal that appeared after the caller looked
+    /// still wins. Implementations commit with `Document::commit_tx_keeping(tx, next, &ByApp { app: client, shares,
+    /// after_point: false })`, `shares` the apps' shares of the history limits, so an app's step never pushes out the
+    /// person's steps (`PushesOut`) or holds more than its share (`OverShare`). A commit changes the revision, so it
+    /// drops the open proposal (then `client`'s own), as any revision change does.
     fn apply(&self, client: &str, base: u64, tx: &Transaction) -> Result<Applied, HostError>;
 
     /// Puts `proposal` (what `calls` compiled to on `base`) in the chat panel for the person to apply or discard, as
@@ -117,7 +120,9 @@ pub trait Host: Send + Sync + 'static {
     fn outcome(&self, client: &str) -> ProposalOutcome;
 
     /// Undoes the newest undo step, only when `client` made it (its maker is `Maker::App(client)`): `NotYours` when
-    /// someone else did, `NothingToUndo` when there is none.
+    /// someone else did, `NothingToUndo` when there is none. Refused with `Moved`, nothing undone, when a proposal
+    /// waits that isn't `client`'s own, checked under the host's own lock in one step with the undo. An undo changes
+    /// the revision, so it drops the open proposal (then `client`'s own), as any revision change does.
     fn undo_own(&self, client: &str) -> Result<Applied, HostError>;
 
     /// Points the person at `moments` (timeline ranges), as `client` found them.
