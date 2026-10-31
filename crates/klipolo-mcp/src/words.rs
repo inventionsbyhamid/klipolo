@@ -51,6 +51,10 @@ pub const MOVED: &str =
 /// Additions applied, and the removals of the same call not proposed: the project moved between the two.
 pub const NOT_PROPOSED: &str = "The removals were not proposed, because the project changed while this call ran. Call \
 getContext again, then retry them.";
+/// The app's own proposal waits, and the app's own additions moved the main track's clips since its calls were made:
+/// they would name other footage now.
+pub const OWN_MOVED: &str = "Your proposal is waiting for the person in Klipolo, and your own change moved the clips \
+since. Wait until they apply or discard it (call getProposal), then try again.";
 /// A call of the app's waiting proposal that no longer compiles, left out of the proposal that takes its place.
 pub const LEFT_OUT: &str = "Left out of your proposal: {reason}";
 /// Additions that, checked again before they apply, take something away. Never expected: the compiler proposes those.

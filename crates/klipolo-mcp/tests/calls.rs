@@ -18,7 +18,8 @@ use klipolo_mcp::call::from_app;
 use klipolo_mcp::rpc::Mcp;
 use klipolo_mcp::words::{
     DONE, KLIPOLO_CHAT, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS, NOTHING_TO_UNDO, OVER_SHARE,
-    PROPOSED_NO_FOOTAGE, PUSHES_OUT, READ_FIRST, STALE, UNCHANGED, UNDONE, WAITING_OTHER, fill,
+    OWN_MOVED, PROPOSED_NO_FOOTAGE, PUSHES_OUT, READ_FIRST, STALE, UNCHANGED, UNDONE,
+    WAITING_OTHER, fill,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -526,6 +527,7 @@ fn agent_words_are_exact() {
         WAITING_OTHER,
         MOVED,
         NOT_PROPOSED,
+        OWN_MOVED,
         LEFT_OUT,
         UNDONE,
         STARTED,
@@ -1004,4 +1006,41 @@ fn a_proposal_that_appears_mid_call_is_waited_on() {
     host.state().chat_before_commit = Some(proposal);
     assert_refused(&agent.call("undo", json!({})), &chats);
     assert!(!host.project().captions.enabled);
+}
+
+/// `trimClip` of `clip`'s end to `to` timeline seconds.
+fn trim_end(clip: &str, to: f64) -> Value {
+    json!({"clip": clip, "edge": "end", "toSec": to})
+}
+
+#[test]
+fn own_proposal_is_never_read_again_once_the_apps_change_moved_the_clips() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    // c2 (13 to 144.04 s) ends at 140.5 s instead: 3.54 s would go.
+    let trimmed = agent.call("trimClip", trim_end("c2", 140.5));
+    assert_eq!(outcome(&trimmed), "proposed", "{trimmed}");
+    let before = host.state().slot.clone().expect("a proposal waits");
+    // A split at 5 s applies; the trim waits again on top of it, still taking the same footage.
+    let split = agent.call("splitAt", json!({"atSec": 5}));
+    assert_eq!(outcome(&split), "proposed", "{split}");
+    let after_split = host.state().slot.clone().expect("a proposal waits");
+    assert_eq!(after_split.calls, before.calls);
+    assert_eq!(after_split.proposal.ranges, before.proposal.ranges);
+    // Now "c2" is the piece from 5 to 13 s: the waiting trim's ref names other footage, so no call joins it.
+    agent.read();
+    let revision = host.revision();
+    assert_refused(
+        &agent.call("setCaptions", json!({"on": false, "style": null})),
+        OWN_MOVED,
+    );
+    assert_refused(&agent.cut(0.0, 5.0), OWN_MOVED);
+    let slot = host.state().slot.clone().expect("still waiting");
+    assert_eq!(
+        (slot.id, slot.proposal),
+        (after_split.id, after_split.proposal)
+    );
+    assert_eq!(host.revision(), revision);
 }

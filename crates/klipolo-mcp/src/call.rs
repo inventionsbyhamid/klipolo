@@ -45,13 +45,17 @@ use crate::words::{self, fill};
 /// The most ranges a result names; the rest are counted (`getProposal` lists them all).
 const RANGES_SAID: usize = 10;
 
-/// An app's waiting proposal as Klipolo made it, so the app's next call joins it: whose, its id and the calls in it.
-/// One proposal waits at a time, so one is remembered; it holds only while a proposal with its id waits.
+/// An app's waiting proposal as Klipolo made it, so the app's next call joins it: whose, its id, the calls in it and
+/// where the main track's clips were when those calls were made (`timeline_key`). Clip refs and times name clips by
+/// where they are, so the calls are read again only while the clips stay there: once the app's own additions move them
+/// (a split), the proposal waits for the person. One proposal waits at a time, so one is remembered; it holds only
+/// while a proposal with its id waits.
 #[derive(Clone, Debug)]
 pub(crate) struct Own {
     client: String,
     id: String,
     calls: Vec<ToolCall>,
+    key: u64,
 }
 
 /// What `call` did, as a tool result.
@@ -90,10 +94,9 @@ pub fn run(mcp: &Mcp, session: &mut Session, call: &FunctionCall) -> Value {
     }
     let (own, mut calls) = match open {
         None => (None, Vec::new()),
-        Some(open) => match joined(mcp, client, &open, snap.revision) {
-            Some(calls) => (Some(open), calls),
-            // What it holds isn't known here (the server started again since): it waits for the person like any other.
-            None => return refused(&waiting_other(client)),
+        Some(open) => match joined(mcp, client, &open, &snap) {
+            Ok(calls) => (Some(open), calls),
+            Err(why) => return refused(&why),
         },
     };
     calls.push(new);
@@ -120,12 +123,27 @@ fn undo(host: &dyn Host, client: &str) -> Value {
     }
 }
 
-/// The calls in `open`, `client`'s own waiting proposal, when Klipolo remembers making it, on `revision`.
-fn joined(mcp: &Mcp, client: &str, open: &OpenProposal, revision: u64) -> Option<Vec<ToolCall>> {
+/// The calls in `open`, `client`'s own waiting proposal, to compile again before the app's new call on `snap`; else
+/// why the call waits for the person.
+fn joined(
+    mcp: &Mcp,
+    client: &str,
+    open: &OpenProposal,
+    snap: &Snapshot,
+) -> Result<Vec<ToolCall>, String> {
     let own = mcp.own();
-    let own = own.as_ref()?;
-    (own.id == open.id && own.client == client && open.base_revision == revision)
-        .then(|| own.calls.clone())
+    let Some(own) = own
+        .as_ref()
+        .filter(|o| o.id == open.id && o.client == client && open.base_revision == snap.revision)
+    else {
+        // What it holds isn't known here (the server started again since): it waits for the person like any other.
+        return Err(waiting_other(client));
+    };
+    // The app's own change moved the clips its calls name: read again, they would name other footage.
+    if own.key != timeline_key(&snap.project) {
+        return Err(words::OWN_MOVED.to_owned());
+    }
+    Ok(own.calls.clone())
 }
 
 /// Whether what the app last read (`seen`) is the project's main track as it is now; else what to read.
@@ -233,10 +251,12 @@ fn edit(
                 } else {
                     fill(words::PROPOSED_NO_FOOTAGE, &[("tools", &tools)])
                 });
+                // The calls were made on the snapshot's clips, even when they wait on top of additions now.
                 *mcp.own() = Some(Own {
                     client: client.to_owned(),
                     id: id.clone(),
                     calls: proposed,
+                    key: timeline_key(&snap.project),
                 });
                 proposed_as = Some((id, removed_us));
             }
