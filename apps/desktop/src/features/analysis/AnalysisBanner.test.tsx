@@ -157,4 +157,18 @@ describe('the analysis banner', () => {
     rerender(<RoughCaptionsNote />);
     expect(screen.getByText('Rough captions until words are timed')).toBeInTheDocument();
   });
+
+  it('offers the clips again after Cancel', async () => {
+    bridge.estimate.mockResolvedValue(offer());
+    showProject(CLIPS);
+    useAnalysis.setState({
+      states: { a: { state: 'running', step: 'words', pct: 10 }, b: { state: 'running', step: 'audio', pct: 0 } },
+    });
+    renderWithProviders(<AnalysisBanner />);
+    expect(bridge.estimate).not.toHaveBeenCalled();
+
+    act(() => useAnalysis.setState({ states: { a: { state: 'none' }, b: { state: 'none' } } }));
+    expect(await screen.findByText('Analyze 2 clips for about $0.04')).toBeInTheDocument();
+    expect(bridge.estimate).toHaveBeenCalledWith(['a', 'b']);
+  });
 });

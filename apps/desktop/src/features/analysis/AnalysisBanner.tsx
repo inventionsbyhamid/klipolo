@@ -55,12 +55,17 @@ function useClips(): Asset[] {
 }
 
 /**
- * Asks for the offer whenever the clips change (an import, another project) or the way to pay does (a key added, a
- * code's credit known).
+ * Asks for the offer whenever the clips not analysed change (an import, another project, a Cancel) or the way to pay
+ * does (a key added, a code's credit known).
  */
 function useOffer(clips: Asset[]) {
   const mode = useAi((s) => s.status?.mode);
-  const ids = clips.map((c) => c.id).join(' ');
+  const ids = useAnalysis((s) =>
+    clips
+      .filter((c) => stateOf(s.states, c.id).state === 'none')
+      .map((c) => c.id)
+      .join(' '),
+  );
   useEffect(() => {
     if (ids) void offerFor(ids.split(' '));
   }, [ids, mode]);
