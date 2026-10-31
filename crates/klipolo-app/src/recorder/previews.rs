@@ -24,7 +24,8 @@
 //! - Nothing restarts by itself after it ended, but a stills worker held back by its pace (below).
 //!
 //! **Stopping:** every preview stops when Klipolo's main window goes behind another app or is hidden or minimised
-//! (nothing starts again until it is in front and the page asks), and on `recorder_previews_off`. When a take arms, every
+//! (nothing starts again until it is in front and the page asks), when the page loads again (reloaded, or after its
+//! process ended: none runs for a page that can't show it), and on `recorder_previews_off`. When a take arms, every
 //! preview worker is killed at once, before the take's worker is launched (previews write nothing, and none captures
 //! beside the take on this Mac's one encoder engine), and none starts while the take is the recorder's: its worker
 //! owns the screen and the devices. When Klipolo exits they are killed too. In a test run there are none.
@@ -727,6 +728,14 @@ impl RecorderState {
         }
     }
 
+    /// Klipolo's page loads again: every preview stops. In a test run there are none.
+    pub(super) fn page_loads(&self) {
+        if let Ok(previews) = self.preview_workers() {
+            tracing::info!("recorder: the page loads, so the previews stop");
+            previews.off();
+        }
+    }
+
     /// Klipolo's main window came to the front, or went behind (every preview stops).
     pub(super) fn window_in_front(&self, front: bool) {
         if let Ok(previews) = self.preview_workers() {
@@ -739,6 +748,14 @@ impl RecorderState {
         if let Ok(previews) = self.preview_workers() {
             previews.exit();
         }
+    }
+}
+
+/// Klipolo's main window's page starts loading (a reload, or after its process ended and it was loaded again): every
+/// preview stops, so no camera, mic or screen stays open for a page that can't show it. The page asks again.
+pub fn page_loads(app: &AppHandle) {
+    if let Some(state) = app.try_state::<RecorderState>() {
+        state.page_loads();
     }
 }
 

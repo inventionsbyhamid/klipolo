@@ -15,6 +15,7 @@ use std::sync::Arc;
 use klipolo_engine::render::fonts::{self, FontDirs};
 use klipolo_engine::render::mode::RenderMode;
 use klipolo_engine::render::warm::Warmup;
+use tauri::webview::PageLoadEvent;
 use tauri::{Emitter, Manager, RunEvent};
 
 use crate::project::{ProjectSessionState, SaveStatus};
@@ -46,6 +47,12 @@ fn main() {
     let warm = Warmup::start(RenderMode::Interactive);
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // A page that loads again (reloaded, or after its process ended) leaves no preview running.
+        .on_page_load(|webview, page| {
+            if webview.label() == "main" && page.event() == PageLoadEvent::Started {
+                recorder::page_loads(webview.app_handle());
+            }
+        })
         .setup(move |app| {
             let cache = app.path().app_cache_dir().ok();
             app.manage(EngineState::new(Some(warm), cache));

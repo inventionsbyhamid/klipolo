@@ -69,5 +69,5 @@ mod tests_supervise;
 )]
 pub use active::active;
 pub use active::release_on_exit;
-pub use previews::follow_window;
+pub use previews::{follow_window, page_loads};
 pub use state::RecorderState;

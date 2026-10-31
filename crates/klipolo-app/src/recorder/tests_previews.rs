@@ -395,3 +395,17 @@ fn frames_wait_for_the_page_to_draw_them() {
     p.says(camera, frame());
     assert_eq!(count(PreviewKind::Camera), 3);
 }
+
+#[test]
+fn a_page_that_loads_again_stops_every_preview() {
+    let p = previewing(all_allowed());
+    p.set(everything()).unwrap();
+    let workers = [THUMBS, LIVE, CAMERA, METER].map(|flag| p.worker(flag));
+    // Reloaded, or loaded again after its process ended: no camera, mic or screen stays open for it.
+    p.state.page_loads();
+    for worker in workers {
+        assert_eq!(p.told(worker), [Command::Stop], "worker {worker}");
+    }
+    p.says(workers[2], frame());
+    assert!(p.frames().is_empty());
+}
