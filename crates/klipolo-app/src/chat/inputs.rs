@@ -5,7 +5,8 @@
 use std::collections::HashMap;
 
 use klipolo_chat::{
-    AnalysisState as ChatAnalysis, ChatContext, Inputs, SceneLog, SpeakerTurn, View, build_context,
+    AnalysisState as ChatAnalysis, ChatContext, Inputs, Library, SceneLog, SpeakerTurn, View,
+    build_context,
 };
 use klipolo_model::Project;
 use klipolo_model::project::AssetKind;
@@ -48,7 +49,9 @@ pub(crate) fn gather(
             scenes.insert(id.clone(), scene_entries(log));
         }
     }
-    let context = build_context(project, &speech, &turns, &scenes, &view);
+    // The media the tools may name: none until the app has a library of its own.
+    let library = Library::default();
+    let context = build_context(project, &speech, &turns, &scenes, &view, &library);
     let inputs = Inputs {
         message: message.to_owned(),
         view,
@@ -56,6 +59,7 @@ pub(crate) fn gather(
         speech,
         scenes,
         analysis,
+        library,
     };
     (context, inputs)
 }

@@ -15,6 +15,7 @@
 mod describe;
 mod inputs;
 mod jobs;
+mod media_jobs;
 pub mod pictures;
 pub mod project;
 mod reply;

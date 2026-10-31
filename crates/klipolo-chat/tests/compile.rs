@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use klipolo_chat::evidence::typed_times;
 use klipolo_chat::{
-    ANALYZE_FIRST, AnalysisState, Audience, FunctionCall, Inputs, Job, Moment, Refs, Refusal,
-    STILL_LISTENING, SceneEntry, SceneLog, ToolCall, View, compile,
+    ANALYZE_FIRST, AnalysisState, Audience, FunctionCall, Inputs, Job, Library, Moment, Refs,
+    Refusal, STILL_LISTENING, SceneEntry, SceneLog, ToolCall, View, compile,
 };
 use klipolo_model::captions::styles::BuiltinCaptionStyle;
 use klipolo_model::coded::ErrorParam;
@@ -101,6 +101,7 @@ fn inputs(project: &Project, speech: Speech, message: &str) -> Inputs {
         analysis: (project.assets.iter())
             .map(|a| (a.id.clone(), AnalysisState::Done))
             .collect(),
+        library: Library::default(),
     }
 }
 

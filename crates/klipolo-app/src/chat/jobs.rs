@@ -6,6 +6,7 @@
 
 use klipolo_chat::{Compiled, Job};
 
+use super::media_jobs;
 use super::pictures::PictureAsk;
 
 /// Said for `followSubject`.
@@ -41,6 +42,17 @@ pub(crate) fn start(compiled: &Compiled) -> Started {
         let (said, tool) = match job {
             Job::Follow { .. } => (FOLLOW_COMING, "followSubject"),
             Job::Blur { .. } => (BLUR_COMING, "blurObjects"),
+            Job::MakeSticker(sticker) => {
+                started.pictures.push(media_jobs::sticker(sticker));
+                continue;
+            }
+            Job::MakeTitleBackground {
+                prompt, title_id, ..
+            } => {
+                let ask = media_jobs::title_background(prompt, title_id);
+                started.pictures.push(ask);
+                continue;
+            }
         };
         if !started.coming.contains(&said) {
             started.coming.push(said);

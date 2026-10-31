@@ -1,19 +1,23 @@
 //! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
 //! context was built from, out as edits.
-//! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer) are one
-//!   `Transaction` the app applies at once: one undo step. An addition is judged by what its part does, not by its
-//!   tool: one that takes something away (the model's own `removals`, as a format dropped with what was placed in it)
-//!   is compiled again with the removals and proposed.
+//! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer, and the
+//!   media: `addMusic`, `addSound`, `addImage` and `makeTitleCard`'s title) are one `Transaction` the app
+//!   applies at once: one undo step. An addition is judged by what its part does, not by its tool: one that takes
+//!   something away (the model's own `removals`, as a format dropped with what was placed in it) is compiled again with
+//!   the removals and proposed.
 //! - Removals (`cutRange`, `keepOnly`, `removeSilences`, `removeFillers`, a trim that makes a clip shorter) are one
 //!   `Proposal`: a `Transaction` for the project as the additions leave it, judged by the model's own review (what it
 //!   takes away, on the timeline), applied as one undo step when the person says so.
-//! - `findMoments` gives moments, `followSubject` and `blurObjects` jobs for their runners, `askUser` questions, `undo`
-//!   a flag. `cannotDo` is a refusal shown to the person, as is a tool that needs an analysis the clip doesn't have yet
-//!   (`STILL_LISTENING`, `ANALYZE_FIRST`) and a removal with nothing to remove (`NO_FILLERS`, no pause that long);
-//!   every other refusal goes back to the model with its reason.
+//! - `findMoments` gives moments, `followSubject` and `blurObjects` jobs for their runners, `makeSticker` and
+//!   `makeTitleCard`'s background jobs for a picture to be drawn (never an op until it exists), `askUser` questions,
+//!   `undo` a flag. `cannotDo` is a refusal shown to the person, as is a tool that needs an analysis the clip doesn't
+//!   have yet (`STILL_LISTENING`, `ANALYZE_FIRST`), a removal with nothing to remove (`NO_FILLERS`, no pause that
+//!   long) and, until its presets are built, `addText` (`TEXT_COMING_SOON`); every other refusal goes back to the model
+//!   with its reason.
 //!
-//! All calls compile on one working copy, in two phases: the additions in call order, then the removals in call order
-//! on what the additions made, as the app applies them. Each call's ops are one part of its phase's batch
+//! All calls compile on one working copy, in two phases: the additions in call order (the edits first, then the media
+//! layers on what the edits made, so a trim later in the answer never shortens a picture placed before it), then the
+//! removals in call order on what the additions made, as the app applies them. Each call's ops are one part of its phase's batch
 //! (`apply_part`), tried on a copy and checked as the batch would end there (`finish_parts`): a call that fails is a
 //! `Refusal` with its index, and the others still compile. The removals' working copy ends as `apply_ops` of the
 //! proposal on the additions' result, so the review takes it as it is (`review_applied`) rather than applying again.
@@ -26,29 +30,36 @@
 //!
 //! Undo labels are message ids with values, worded by the UI: `chat.<tool>` (`chat.cutRange {startUs, endUs}`), and
 //! `chat.andMore {first, more}` for a step of several calls. Splitting by concern: `additions`, `removals`, `trim`
-//! (both), `map`.
+//! (both), `media` (the library's music, sounds, words and pictures, and the pictures to draw), `map`.
 
 mod additions;
 mod map;
+mod media;
 mod removals;
 mod trim;
 
 use std::collections::HashMap;
 
 use klipolo_model::coded::{CodedError, ErrorParam};
+use klipolo_model::ids::Id;
 use klipolo_model::ops::{Op, Origin, Transaction};
-use klipolo_model::project::AssetKind;
+use klipolo_model::project::{AssetKind, FormatKind};
 use klipolo_model::risk::{Review, removals};
 use klipolo_model::speech::{Speech, run_spans};
 use klipolo_model::time::{RangeUs, Us};
-use klipolo_model::timeline::ClipSource;
+use klipolo_model::timeline::{Attach, ClipSource};
 use klipolo_model::{ModelError, Project, finish_parts};
 
 use crate::context::{Refs, SceneLog, View, secs};
 use crate::evidence::{Evidence, Unfounded};
+use crate::library::Library;
 use crate::sanitize;
-use crate::tools::{Moment, ToolCall};
+use crate::tools::{Moment, PictureSize, Position, ToolCall};
 use map::Map;
+pub use media::{
+    PICTURE_MARGIN, SOUND_VOLUME, TEXT_COMING_SOON, TITLE_CARD, picture_layout, picture_ops,
+    sticker_placement,
+};
 use trim::Trim;
 
 /// What the person is told when a tool needs a clip's analysis and Klipolo is still making it.
@@ -82,6 +93,8 @@ pub struct Inputs {
     pub scenes: HashMap<String, SceneLog>,
     /// Each file's analysis, by asset id.
     pub analysis: HashMap<String, AnalysisState>,
+    /// What the media tools name: the project's music, sounds and pictures and Klipolo's pack.
+    pub library: Library,
 }
 
 /// What one message's calls compiled to.
@@ -116,11 +129,43 @@ pub struct Proposal {
     pub ranges: Vec<RangeUs>,
 }
 
-/// Work for a runner that tracks or blurs (Plan 5), named by one short noun phrase.
+/// Work for a runner: tracking or blurring what one short noun phrase names, or a picture for an image maker to draw
+/// (Muse Image in the app). A picture's job is never an op until the picture exists: the app places it when it comes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Job {
-    Follow { description: String },
-    Blur { description: String },
+    Follow {
+        description: String,
+    },
+    Blur {
+        description: String,
+    },
+    /// A sticker to draw and place over its footage (`sticker_placement`).
+    MakeSticker(MakeSticker),
+    /// A background about `prompt`, with no lettering, to go under the title layer `title_id`, where that layer is
+    /// when the picture comes (it moves with its clip); dropped if the layer is gone. `format` is the shape to draw:
+    /// the primary format as the message's additions leave it. A format change still waiting for approval isn't in
+    /// it, so the app reads the project's primary format again when it starts drawing.
+    MakeTitleBackground {
+        prompt: String,
+        format: FormatKind,
+        title_id: Id,
+    },
+}
+
+/// A sticker of `prompt` to draw, cut out of its background, and show for `duration_us` at `size` and `position`
+/// (`picture_ops`) over the footage `anchor` names: a clip and a moment of its source, as an attached layer holds its
+/// place (`query::anchor_at`), so it moves with that footage while the picture is drawn. `at_us` is where that footage
+/// played on the project as the message's additions left it, and the start to use when `anchor` is None (past the main
+/// track's end). When the picture comes, `sticker_placement` says where and how long on the project as it is then, or
+/// None to drop the job (that footage was cut, or the start is now at the video's end).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MakeSticker {
+    pub prompt: String,
+    pub at_us: Us,
+    pub duration_us: Us,
+    pub position: Position,
+    pub size: PictureSize,
+    pub anchor: Option<Attach>,
 }
 
 /// A call that compiled to nothing, and why, in one plain sentence on one line.
@@ -337,10 +382,16 @@ impl Compiler<'_> {
             undo: calls.iter().any(|c| matches!(c, ToolCall::Undo)),
             ..Compiled::default()
         };
-        // In call order: the additions compile now; removals and moments wait for the project the additions make.
+        // In call order: the edits that are additions compile now; media layers go on the project they make, then
+        // removals, moments and pictures to draw wait for the project all the additions make, so nothing later in the
+        // answer moves or shortens what came before it.
         let mut adding = Phase::new(self.snapshot.clone());
         let mut waiting: Vec<(usize, Removal)> = Vec::new();
         let mut moments: Vec<(usize, &[Moment])> = Vec::new();
+        let mut layers: Vec<(usize, &ToolCall)> = Vec::new();
+        let mut jobs: Vec<(usize, Job)> = Vec::new();
+        let mut stickers: Vec<(usize, &ToolCall)> = Vec::new();
+        let mut titles: Vec<(usize, &str, Id)> = Vec::new();
         // Once a format change is proposed, the later ones in the answer follow it there, so they apply in call order.
         let mut format_proposed = false;
         for (i, call) in calls.iter().enumerate() {
@@ -376,19 +427,29 @@ impl Compiler<'_> {
                     continue;
                 }
                 ToolCall::FollowSubject { description } => {
-                    out.jobs.push(Job::Follow {
-                        description: description.clone(),
-                    });
+                    let description = description.clone();
+                    jobs.push((i, Job::Follow { description }));
                     continue;
                 }
                 ToolCall::BlurObjects { description } => {
-                    out.jobs.push(Job::Blur {
-                        description: description.clone(),
-                    });
+                    let description = description.clone();
+                    jobs.push((i, Job::Blur { description }));
                     continue;
                 }
                 ToolCall::FindMoments { moments: found, .. } => {
                     moments.push((i, found));
+                    continue;
+                }
+                ToolCall::MakeSticker { .. } => {
+                    stickers.push((i, call));
+                    continue;
+                }
+                ToolCall::AddMusic { .. }
+                | ToolCall::AddSound { .. }
+                | ToolCall::AddText { .. }
+                | ToolCall::AddImage { .. }
+                | ToolCall::MakeTitleCard { .. } => {
+                    layers.push((i, call));
                     continue;
                 }
                 ToolCall::CutRange { .. }
@@ -433,6 +494,41 @@ impl Compiler<'_> {
             }
         }
 
+        // The media layers, in call order, on the project the other additions make: where one starts and how long it
+        // plays (cut at the video's end) don't depend on whether a trim or a split came before it or after it.
+        for (i, call) in layers {
+            let tried = match call {
+                ToolCall::MakeTitleCard {
+                    title,
+                    at_us,
+                    duration_us,
+                    ..
+                } => media::make_title_card(self, &adding.work, title, (*at_us, *duration_us))
+                    .map(|(edit, title_id)| (edit, Some(title_id))),
+                _ => self.addition(&adding.work, call).map(|edit| (edit, None)),
+            }
+            .and_then(|(edit, title_id)| {
+                let tried = (adding.try_edit(edit))
+                    .map_err(|e| to_model(format!("{}: {e}", call.name())))?;
+                Ok((tried, title_id))
+            });
+            match tried {
+                // A layer takes nothing away; if one ever did, it would be proposed like any other.
+                Ok((tried, _)) if tried.removes => waiting.push((i, Removal::Moved(call))),
+                Ok((tried, title_id)) => {
+                    adding.keep(tried);
+                    // The title is in: its background is drawn for it.
+                    if let (Some(title_id), ToolCall::MakeTitleCard { prompt, .. }) =
+                        (title_id, call)
+                    {
+                        titles.push((i, prompt.as_str(), title_id));
+                    }
+                }
+                Err(r) => refuse(&mut out, i, r),
+            }
+        }
+        waiting.sort_by_key(|(i, _)| *i);
+
         // The project as the additions leave it: what the app applies them to, and what the proposal starts from.
         let with_additions = adding.done.clone();
         for (i, found) in moments {
@@ -441,6 +537,30 @@ impl Compiler<'_> {
                 Err(r) => refuse(&mut out, i, r),
             }
         }
+        for (i, call) in stickers {
+            let ToolCall::MakeSticker {
+                prompt,
+                position,
+                at_us,
+                duration_us,
+            } = call
+            else {
+                continue;
+            };
+            let times = (*at_us, *duration_us);
+            match media::make_sticker(self, &with_additions, prompt, *position, times) {
+                Ok(job) => jobs.push((i, job)),
+                Err(r) => refuse(&mut out, i, r),
+            }
+        }
+        for (i, prompt, title_id) in titles {
+            jobs.push((
+                i,
+                media::title_background(prompt, &with_additions, title_id),
+            ));
+        }
+        jobs.sort_by_key(|(i, _)| *i);
+        out.jobs = jobs.into_iter().map(|(_, job)| job).collect();
         // The removals in call order, on top.
         let mut removing = Phase::new(with_additions);
         for (i, removal) in waiting {
@@ -491,6 +611,21 @@ impl Compiler<'_> {
             ToolCall::FixCaptionWords { find, replace } => {
                 additions::fix_caption_words(self, work, find, replace)
             }
+            ToolCall::AddMusic {
+                file,
+                volume,
+                duck,
+                at_us,
+            } => media::add_music(self, work, file, (*volume, *duck), *at_us),
+            ToolCall::AddSound { name, at_us } => media::add_sound(self, work, name, at_us),
+            ToolCall::AddText { .. } => media::add_text(),
+            ToolCall::AddImage {
+                file,
+                size,
+                position,
+                at_us,
+                duration_us,
+            } => media::add_image(self, work, file, (*size, *position), (*at_us, *duration_us)),
             other => Err(to_model(format!("{}: not an addition.", other.name()))),
         }
     }
