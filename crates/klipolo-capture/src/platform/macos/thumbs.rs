@@ -10,8 +10,9 @@
 //! "no" to it comes back as `PermissionDenied`, which ends the stills).
 //!
 //! **Its cost:** the content list (a round trip to the system's capture service, which lists every window) is read
-//! once a round (`ROUND`, the stills' `THUMB_EVERY`) and kept with the filters picked from it, so it is at most a
-//! round old, as the cards are. Each still runs inside its own autorelease pool, so the system's objects it makes
+//! once a round (`ROUND`, the stills' `THUMB_EVERY`, counted from the read's end) and kept with the filters picked from
+//! it, so it is at most a round old, as the cards are; a read that failed is kept as long, so a service that fails at
+//! once isn't asked again at every still (`common::stills_service`). Each still runs inside its own autorelease pool, so the system's objects it makes
 //! (the screenshot, Core Image's image and its JPEG) are freed with it, on a thread that has no run loop to drain them.
 //! The screenshot comes as a sample buffer, whose BGRA pixel buffer `jpeg` encodes as it does the live view's frames.
 //! Memory: one round's content list and filters, one BGRA buffer at most 320 pixels wide (about 400 KB for a 16:10
@@ -30,6 +31,7 @@ use crate::backend::{PreviewFrame, Target};
 use crate::guard::assert_real_capture_allowed;
 use crate::pipe::PipeError;
 use crate::platform::common::sck::USER_DECLINED;
+use crate::platform::common::stills_service::RoundCache;
 use crate::run::thumbs::THUMB_EVERY;
 use crate::vendor::cap::sck::StreamCfgBuilder;
 
@@ -39,15 +41,22 @@ const SHOT_WAIT: Duration = Duration::from_secs(2);
 const ROUND: Duration = THUMB_EVERY;
 
 /// The stills' JPEG maker, made at the first still and kept, and the round's content list.
-#[derive(Default)]
 pub(super) struct Stills {
     jpeg: Mutex<Option<Jpeg>>,
-    round: Mutex<Option<Round>>,
+    round: Mutex<RoundCache<Round>>,
 }
 
-/// One round's content list, read at `at`, and the filters picked from it so far.
+impl Default for Stills {
+    fn default() -> Self {
+        Self {
+            jpeg: Mutex::default(),
+            round: Mutex::new(RoundCache::new(ROUND)),
+        }
+    }
+}
+
+/// One round's content list and the filters picked from it so far.
 struct Round {
-    at: Instant,
     content: arc::R<sc::ShareableContent>,
     picked: Vec<(Target, Picked)>,
 }
@@ -98,15 +107,12 @@ impl Stills {
         with: impl FnOnce(&Picked) -> Result<R, PipeError>,
     ) -> Result<R, PipeError> {
         let mut round = self.round.lock().unwrap_or_else(PoisonError::into_inner);
-        if round.as_ref().is_none_or(|r| r.at.elapsed() >= ROUND) {
-            *round = None;
-            *round = Some(Round {
-                at: Instant::now(),
+        let round = round.get(&Instant::now, || {
+            Ok(Round {
                 content: filter::content()?,
                 picked: vec![],
-            });
-        }
-        let round = round.as_mut().expect("a round was read above");
+            })
+        })?;
         let at = match round.picked.iter().position(|(t, _)| t == target) {
             Some(at) => at,
             None => {
