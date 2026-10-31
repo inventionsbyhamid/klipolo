@@ -209,6 +209,55 @@ fn followed(follows: &Follows, rec: &Recording, base: BoxN, closer: f64, source_
     follow_crop(base, centre, closer)
 }
 
+/// Which part of `clip`'s main footage (source-normalised) its Fill shows from the centre in `format`, as
+/// `main_layers` frames it: narrower than the footage where Fill crops across, shorter where it crops down, all of it
+/// where the footage fits its area exactly. None when the clip has no video to draw. The clip card offers the Fill
+/// focus only the way Fill crops (`cover_crop` moves the crop along that axis alone).
+pub fn fill_crop(p: &Project, clip: &Clip, format: FormatKind) -> Option<BoxN> {
+    let content = content_box(p.background.padding, format);
+    let (footage, area) = match &clip.source {
+        ClipSource::Asset { id } => (p.asset(id)?, content),
+        ClipSource::Recording { id } => {
+            let rec = p.recording(id)?;
+            match first_video(p, rec.screen()) {
+                Some(screen) => (screen, screen_area(p, clip, rec, format)),
+                // Camera-only recording: the camera is the main footage, in the whole content box.
+                None => (first_video(p, rec.primary_source())?, content),
+            }
+        }
+    };
+    if footage.kind != AssetKind::Video {
+        return None;
+    }
+    let target = area_aspect(area, format);
+    let aspect = aspect_of(footage.width, footage.height, target);
+    Some(cover_crop(aspect, target, 0.5, 0.5))
+}
+
+/// The video file of a recording source's first run, if it has one.
+fn first_video<'a>(p: &'a Project, source: Option<&RecordingSource>) -> Option<&'a Asset> {
+    let run = source?.runs.first()?;
+    p.asset(&run.asset_id)
+        .filter(|a| a.kind == AssetKind::Video)
+}
+
+/// Where `clip`'s screen (playing `rec`) is framed in `format`, as `main_layers` frames it: the split's top pane while
+/// a camera with video is split below it, else the content box.
+fn screen_area(p: &Project, clip: &Clip, rec: &Recording, format: FormatKind) -> BoxN {
+    let camera = (rec.camera().into_iter().flat_map(|c| &c.runs)).any(|r| {
+        p.asset(&r.asset_id)
+            .is_some_and(|a| a.kind == AssetKind::Video)
+    });
+    let split = camera
+        && (clip.camera.as_ref()).is_some_and(|l| l.mode_for(format) == CameraMode::SplitBottom);
+    let content = content_box(p.background.padding, format);
+    if split {
+        split_panes(content).0
+    } else {
+        content
+    }
+}
+
 /// The follow path `clip` (playing `rec`) crops with in `format`, as its crop key (`follow_crop_key`), when its
 /// effective framing follows: what the take's loader builds (`media::cursor::wanted`) and a frame finds. The crop is
 /// the screen's Fill crop in its area (the split's top pane, else the content box), as `main_layers` frames it.
@@ -222,22 +271,8 @@ pub fn follow_crop_for(
     let follow = framing
         .follow
         .filter(|_| framing.mode == FramingMode::Fill)?;
-    let screen = (rec.screen()?.runs.first())
-        .and_then(|r| p.asset(&r.asset_id))
-        .filter(|a| a.kind == AssetKind::Video)?;
-    let camera = (rec.camera().into_iter().flat_map(|c| &c.runs)).any(|r| {
-        p.asset(&r.asset_id)
-            .is_some_and(|a| a.kind == AssetKind::Video)
-    });
-    let split = camera
-        && (clip.camera.as_ref()).is_some_and(|l| l.mode_for(format) == CameraMode::SplitBottom);
-    let content = content_box(p.background.padding, format);
-    let area = if split {
-        split_panes(content).0
-    } else {
-        content
-    };
-    let target = area_aspect(area, format);
+    let screen = first_video(p, rec.screen())?;
+    let target = area_aspect(screen_area(p, clip, rec, format), format);
     let base = cover_crop(
         aspect_of(screen.width, screen.height, target),
         target,
