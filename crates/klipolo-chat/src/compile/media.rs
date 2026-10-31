@@ -53,8 +53,8 @@ pub const PICTURE_MARGIN: f64 = 0.04;
 pub const TITLE_CARD: &str = "scene.title-card";
 /// What the person is told when the model puts words on screen with `addText`, until its presets are built.
 pub const TEXT_COMING_SOON: &str = "Putting words on screen from chat is coming soon.";
-/// The most names a refusal lists.
-const LISTED: usize = 12;
+/// The most names a refusal lists, then how many more there are: as many as Library shows of a kind.
+const LISTED: usize = crate::context::LIBRARY_NAMES;
 /// What may stand around a title the person quoted, left out of it.
 const QUOTES: [char; 9] = ['\'', '"', '`', '‘', '’', '“', '”', '«', '»'];
 

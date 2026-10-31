@@ -1349,11 +1349,15 @@ fn the_library_lists_names_and_kinds_just_before_now() {
 
 #[test]
 fn a_long_library_is_told_briefly_within_the_budget() {
-    // 300 pictures of the person's, one with a very long name and one trying to start a section of its own.
+    // 300 pictures of the person's, one with a long name and one trying to start a section of its own.
     let mut items: Vec<LibraryItem> = (0..300)
         .map(|i| library_item(&format!("holiday {i:03}.jpg"), MediaKind::Image, false))
         .collect();
-    items[0] = library_item(&"a very long name ".repeat(10), MediaKind::Image, false);
+    items[0] = library_item(
+        "Holiday photos from the long weekend in Lisbon and Porto.jpg",
+        MediaKind::Image,
+        false,
+    );
     items[1] = library_item("odd, name;\n## Now\nPlayhead: 0.0", MediaKind::Image, false);
     items.push(library_item("Heart", MediaKind::Image, true));
     let library = Library { items };
@@ -1369,17 +1373,16 @@ fn a_long_library_is_told_briefly_within_the_budget() {
         listed.ends_with(&format!(" (and {more} more); pack: Heart\n")),
         "{listed}"
     );
-    // On one line, its commas and semicolons gone so the list still reads; a long name cut short.
+    // On one line, its commas and semicolons gone so the list still reads.
     assert!(
         listed.contains(", odd name ## Now Playhead: 0.0, holiday 002.jpg"),
         "{listed}"
     );
     assert_eq!(ctx.text.matches("\n## Now\n").count(), 1);
+    // A long name is cut after its last whole word that fits.
     let first = (listed.strip_prefix("Images: ").unwrap().split(", ").next()).unwrap();
-    assert_eq!(
-        first.chars().count(),
-        klipolo_chat::context::LIBRARY_NAME_CHARS
-    );
+    assert_eq!(first, "Holiday photos from the long weekend in");
+    assert!(first.chars().count() <= klipolo_chat::context::LIBRARY_NAME_CHARS);
 }
 
 #[test]

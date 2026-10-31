@@ -15,8 +15,8 @@
 //! - `Library`: what the media tools add by name, one line per kind (`Music: lofi.mp3; pack: Soft ambient, Upbeat
 //!   loop`), the person's own files first and then Klipolo's pack, in the order given (`library::Library`). A kind with
 //!   nothing is left out, and so is the section when the library is empty. At most `LIBRARY_NAMES` of the person's
-//!   files a kind, then how many more; each name on one line, at most `LIBRARY_NAME_CHARS` long, its commas and
-//!   semicolons read as spaces so the list still reads.
+//!   files a kind, then how many more; each name on one line, at most `LIBRARY_NAME_CHARS` long and cut after a whole
+//!   word, its commas and semicolons read as spaces so the list still reads.
 //! - `Now`: the playhead and the selection. Last, as they change most often: moving the playhead or the selection
 //!   leaves every byte before `## Now` as it was, so the transcript, scenes and library stay in the provider's cached
 //!   prefix.
@@ -767,11 +767,18 @@ fn library_section(out: &mut String, library: &Library) -> bool {
 }
 
 /// A library name as Library shows it: on one line, its commas and semicolons as spaces, at most
-/// `LIBRARY_NAME_CHARS` long.
+/// `LIBRARY_NAME_CHARS` long, cut after a whole word (inside one only when a single word is that long).
 fn library_name(name: &str) -> String {
     let line = one_line(&name.replace([',', ';'], " "));
+    if line.chars().count() <= LIBRARY_NAME_CHARS {
+        return line;
+    }
     let cut: String = line.chars().take(LIBRARY_NAME_CHARS).collect();
-    cut.trim_end().to_owned()
+    let whole = line.chars().nth(LIBRARY_NAME_CHARS) == Some(' ');
+    match cut.rfind(' ') {
+        Some(at) if !whole => cut[..at].trim_end().to_owned(),
+        _ => cut.trim_end().to_owned(),
+    }
 }
 
 fn now_section(out: &mut String, p: &Project, view: &View) {

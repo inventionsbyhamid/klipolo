@@ -4,8 +4,9 @@
 //!
 //! A name is found leniently but never guessed (`Library::find`): case, a file's extension and punctuation don't count
 //! ("soft-ambient" is "Soft ambient", "lofi" is "lofi.mp3"), then a name holding the words asked for, or held in them
-//! ("lofi" is "lofi-beat.mp3"), when only one does. "The song" and the like (`is_generic`) are the person's one music
-//! file, when they have exactly one.
+//! ("lofi" is "lofi-beat.mp3"), when only one does. The last word asked for may be cut short, as Library shows a long
+//! name, when at least `MIN_PREFIX` of its characters are left ("holiday in lis" is "Holiday in Lisbon.jpg"). "The
+//! song" and the like (`is_generic`) are the person's one music file, when they have exactly one.
 
 use klipolo_model::project::Asset;
 
@@ -59,6 +60,9 @@ pub(crate) enum Found<'a> {
     Several(Vec<&'a LibraryItem>),
 }
 
+/// The fewest characters a word cut short may keep and still be read as the start of a name's word.
+pub const MIN_PREFIX: usize = 3;
+
 /// Words that point at a song without naming one: "the song", "my music", "the track".
 const GENERIC: [&str; 9] = [
     "song",
@@ -104,6 +108,25 @@ pub(crate) fn is_generic(asked: &str) -> bool {
     !words.is_empty() && words.iter().all(|w| GENERIC.contains(w))
 }
 
+/// Whether the words of `name` (`plain`) hold those of `want` in a row; with `cut_short`, the last of them may be the
+/// start of the name's word, at least `MIN_PREFIX` characters of it.
+fn holds(name: &str, want: &str, cut_short: bool) -> bool {
+    let have: Vec<&str> = name.split(' ').collect();
+    let words: Vec<&str> = want.split(' ').collect();
+    let Some((last, rest)) = words.split_last() else {
+        return false;
+    };
+    if name.is_empty() || want.is_empty() || words.len() > have.len() {
+        return false;
+    }
+    (0..=have.len() - words.len()).any(|i| {
+        let word = have[i + rest.len()];
+        have[i..i + rest.len()] == *rest
+            && (word == *last
+                || (cut_short && last.chars().count() >= MIN_PREFIX && word.starts_with(last)))
+    })
+}
+
 impl Library {
     /// The items of `kind` as listed, or only the person's own.
     pub(crate) fn of_kind(&self, kind: MediaKind, own_only: bool) -> Vec<&LibraryItem> {
@@ -119,7 +142,6 @@ impl Library {
         if want.is_empty() {
             return Found::None;
         }
-        let words = |s: &str| format!(" {s} ");
         for &kind in kinds {
             let items = self.of_kind(kind, false);
             let same: Vec<&LibraryItem> = (items.iter().copied())
@@ -134,9 +156,7 @@ impl Library {
             let near: Vec<&LibraryItem> = (items.iter().copied())
                 .filter(|i| {
                     let name = plain(&i.name);
-                    !name.is_empty()
-                        && (words(&name).contains(&words(&want))
-                            || words(&want).contains(&words(&name)))
+                    holds(&name, &want, true) || holds(&want, &name, false)
                 })
                 .collect();
             match near.as_slice() {
@@ -163,5 +183,47 @@ mod tests {
         assert_eq!(plain("notes.longextension"), "notes longextension");
         assert!(is_generic("the song") && is_generic("My Music") && is_generic("song"));
         assert!(!is_generic("the lofi song") && !is_generic("the") && !is_generic(""));
+    }
+
+    fn item(name: &str) -> LibraryItem {
+        let asset = serde_json::from_value(serde_json::json!({
+            "id": name, "kind": "image", "path": "/x.png", "name": name, "durationUs": 5_000_000,
+            "width": 1, "height": 1, "fps": 0.0, "hasAudio": false,
+        }))
+        .unwrap();
+        LibraryItem {
+            name: name.into(),
+            kind: MediaKind::Image,
+            asset,
+            pack: false,
+        }
+    }
+
+    #[test]
+    fn a_name_cut_short_as_library_shows_it_is_found() {
+        let library = Library {
+            items: vec![
+                item("Holiday photos from the long weekend in Lisbon.jpg"),
+                item("logo.png"),
+            ],
+        };
+        let found = |asked: &str| match library.find(asked, &[MediaKind::Image]) {
+            Found::One(i) => Some(i.name.as_str()),
+            _ => None,
+        };
+        let holiday = Some("Holiday photos from the long weekend in Lisbon.jpg");
+        // Cut at a word, or inside one with enough of it left.
+        assert_eq!(found("Holiday photos from the long weekend in"), holiday);
+        assert_eq!(
+            found("holiday photos from the long weekend in lis"),
+            holiday
+        );
+        assert_eq!(found("log"), Some("logo.png"));
+        // Too little of a word, or a word that doesn't start the name's: none.
+        assert_eq!(found("lo"), None);
+        assert_eq!(found("holiday photos from the lung"), None);
+        // The name held in what was asked takes whole words only.
+        assert_eq!(found("our logo please"), Some("logo.png"));
+        assert_eq!(found("our logos"), None);
     }
 }
