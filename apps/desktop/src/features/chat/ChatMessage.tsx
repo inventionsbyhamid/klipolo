@@ -13,8 +13,9 @@ const SETTINGS = new Set(['budget', 'refused', 'needsKey']);
 /**
  * One message: the person's in a paper bubble on the right; Klipolo's as plain text (already without em
  * en dashes: Rust cleaned it), then what couldn't be done, its questions, the Undo chip under additions it applied,
- * its proposal card and its moments. A failure says what happened, with Retry or Open Settings; the project is
- * untouched.
+ * its proposal card and its moments. A failure says what happened, with Retry (busy, network, a server error, this Mac
+ * not registered) or Open Settings (credit, a refused key or code); a message too long for chat, or one the AI declined
+ * (its words are back in the box to reword), offers neither. The project is untouched.
  */
 export const ChatMessage = memo(function ChatMessage({ message: m }: { message: Message }) {
   const { t } = useLingui();
@@ -28,7 +29,7 @@ export const ChatMessage = memo(function ChatMessage({ message: m }: { message: 
             <button type="button" className="chip chip-outline" onClick={openSettings}>
               {t({ id: 'chatPanel.openSettings', message: 'Open Settings' })}
             </button>
-          ) : m.failure === 'tooLong' ? null : (
+          ) : m.failure === 'tooLong' || m.failure === 'declined' ? null : (
             <button type="button" className="chip chip-outline" onClick={() => void useChat.getState().retry(m.id)}>
               <SpriteIcon name="retry" />
               {t({ id: 'chatPanel.retry', message: 'Retry' })}

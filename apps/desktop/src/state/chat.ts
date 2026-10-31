@@ -85,7 +85,12 @@ export const useChat = create<ChatStore>((set, get) => {
       try {
         const outcome = await chatBridge().send(requestFor(id, trimmed, keepOnly));
         if (!live()) return;
-        if (outcome.type === 'failed') return failed(outcome.message, outcome.kind);
+        if (outcome.type === 'failed') {
+          // Declined under the provider's policy: the same words would be declined again, so they go back into the
+          // box to be reworded (unless the person typed something new meanwhile).
+          if (outcome.kind === 'declined' && get().draft.trim() === '') set({ draft: trimmed });
+          return failed(outcome.message, outcome.kind);
+        }
         // The additions first, as one undo step, then what the model's undo changed: the proposal was made on the
         // project they leave.
         let applied = null;

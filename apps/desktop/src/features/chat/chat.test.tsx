@@ -312,6 +312,21 @@ describe('chat', () => {
     expect(screen.queryByText(/busy right now/)).toBeNull();
   });
 
+  it('a message the AI declines says so and goes back into the box to reword, with no Retry', async () => {
+    const fake = chat({
+      reply: () => ({ type: 'failed', kind: 'declined', message: 'The AI turned this down. Try wording it differently.' }),
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'blur the faces{Enter}');
+    expect(await screen.findByText('The AI turned this down. Try wording it differently.')).toBeInTheDocument();
+    // The same text would be declined again: no one-tap Retry, the text is back in the box.
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(message()).toHaveValue('blur the faces');
+    await userEvent.clear(message());
+    await userEvent.type(message(), 'make the faces hard to recognize{Enter}');
+    await waitFor(() => expect(fake.requests).toHaveLength(2));
+  });
+
   it('a budget refusal offers Settings', async () => {
     chat({
       reply: () => ({ type: 'failed', kind: 'budget', message: 'Your access code has $0.03 left, and this needs about $0.04.' }),
