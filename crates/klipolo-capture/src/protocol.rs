@@ -4,7 +4,10 @@
 //!
 //! Exit codes of `klipolo --record-worker` (`worker::main`): 0 the take is finished (`Finished` came first); 1 it failed,
 //! and what reached the disk is recovered on the next launch; 2 the arguments or the build are wrong; 3 there is no take
-//! (stopped or cancelled before the start gate, nothing written).
+//! (stopped or cancelled before the start gate, nothing written). The preview forms (Check camera, the live view, the
+//! Record dialog's stills and mic meter): 0 stopped (the stills also when given no target); 1 after a `Failed` that
+//! says why; 2 the arguments or the build are wrong (no `real-capture`). In a test run (`KLIPOLO_TEST`), a build with
+//! `real-capture` panics at the consent guard in every form but the probe, before any capture (exit 101).
 
 use klipolo_model::coded::CodedError;
 use klipolo_model::time::Us;
