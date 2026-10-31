@@ -1,10 +1,20 @@
 import { useLingui } from '@lingui/react/macro';
-import { useId, useState, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import type { Anchor } from '../../bindings/Anchor';
 import { cn } from '../../design/cn';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '../../design/Menu';
 import { Popover, PopoverContent, PopoverTrigger } from '../../design/Popover';
 import { Icon } from '../../layout/Icon';
+import { registerBurst, SETTLE_MS } from '../../state/bursts';
 
 /**
  * A row of the inspector: its label on the left (66 px, faint), the control on the right; `stack` puts
@@ -42,11 +52,52 @@ export interface Swatch {
   name: string;
 }
 
+/**
+ * A radio group's arrow keys as one change: each press moves the checked choice at once (`shown`), and the last one is
+ * picked `SETTLE_MS` after the run (or as focus leaves the group, it unmounts, an undo or the close comes), so a run of
+ * presses is one undo step. A click picks at once.
+ */
+function useKeyedPick<T>(value: T, onPick: (value: T) => void) {
+  const [keyed, setKeyed] = useState<{ value: T } | null>(null);
+  const pending = useRef<{ value: T } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const latest = useRef({ value, onPick });
+  latest.current = { value, onPick };
+  const settle = useCallback(() => {
+    clearTimeout(timer.current);
+    const run = pending.current;
+    pending.current = null;
+    setKeyed(null);
+    if (run && run.value !== latest.current.value) latest.current.onPick(run.value);
+    return run !== null;
+  }, []);
+  useEffect(() => registerBurst(() => settle()), [settle]);
+  // Unmounted mid-run (the selection moved on): the run is kept.
+  useEffect(() => () => void settle(), [settle]);
+  const key = (next: T) => {
+    pending.current = { value: next };
+    setKeyed({ value: next });
+    clearTimeout(timer.current);
+    timer.current = setTimeout(settle, SETTLE_MS);
+  };
+  const pick = (next: T) => {
+    clearTimeout(timer.current);
+    pending.current = null;
+    setKeyed(null);
+    onPick(next);
+  };
+  /** Focus left the group: the run is picked now. */
+  const onBlur = (e: FocusEvent<HTMLElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) settle();
+  };
+  return { shown: keyed ? keyed.value : value, key, pick, onBlur };
+}
+
 const HEX = /^#?([0-9a-f]{6})$/i;
 
 /**
  * Colour swatches: 20 px circles, the checked one ringed in paper; the last, "+", opens the color
- * any colour as hex. A radio group: the arrow keys move.
+ * any colour as hex. A radio group: the arrow keys move, a run of them one change (`useKeyedPick`).
  */
 export function Swatches({
   label,
@@ -62,24 +113,25 @@ export function Swatches({
   const { t } = useLingui();
   const [open, setOpen] = useState(false);
   const [hex, setHex] = useState('');
-  const current = value.slice(0, 7).toUpperCase();
+  const keys = useKeyedPick(value, onPick);
+  const current = keys.shown.slice(0, 7).toUpperCase();
   const checked = swatches.findIndex((s) => s.value.toUpperCase() === current);
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
-    if (!step) return;
+    if (!step || !(e.target as HTMLElement).dataset.swatch) return;
     e.preventDefault();
     const next = swatches[(Math.max(0, checked) + step + swatches.length) % swatches.length];
-    onPick(next.value);
+    keys.key(next.value);
     e.currentTarget.querySelector<HTMLElement>(`[data-swatch="${next.value}"]`)?.focus();
   };
   const custom = () => {
     const match = HEX.exec(hex.trim());
     if (!match) return;
-    onPick(`#${match[1].toUpperCase()}`);
+    keys.pick(`#${match[1].toUpperCase()}`);
     setOpen(false);
   };
   return (
-    <div className="swatches" role="radiogroup" aria-label={label} onKeyDown={onKeyDown}>
+    <div className="swatches" role="radiogroup" aria-label={label} onKeyDown={onKeyDown} onBlur={keys.onBlur}>
       {swatches.map((s, i) => (
         <button
           key={s.value}
@@ -91,7 +143,7 @@ export function Swatches({
           tabIndex={i === checked || (checked < 0 && i === 0) ? 0 : -1}
           className="swatch"
           style={{ ['--c' as string]: s.value }}
-          onClick={() => onPick(s.value)}
+          onClick={() => keys.pick(s.value)}
         />
       ))}
       <Popover open={open} onOpenChange={setOpen}>
@@ -144,7 +196,10 @@ const CELLS: Anchor[] = [
   'bottomRight',
 ];
 
-/** The 3 x 3 position grid: the checked cell is paper with a navy dot. The arrow keys move. */
+/**
+ * The 3 x 3 position grid: the checked cell is paper with an on-paper dot. The arrow keys move, a run of them
+ * one change (`useKeyedPick`).
+ */
 export function PositionGrid({
   label,
   value,
@@ -156,7 +211,9 @@ export function PositionGrid({
   onPick: (anchor: Anchor) => void;
   names: Record<Anchor, string>;
 }) {
-  const at = CELLS.indexOf(value);
+  const keys = useKeyedPick(value, onPick);
+  const shown = keys.shown;
+  const at = CELLS.indexOf(shown);
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const move: Record<string, [number, number]> = {
       ArrowLeft: [-1, 0],
@@ -170,22 +227,22 @@ export function PositionGrid({
     const col = Math.min(2, Math.max(0, (at % 3) + d[0]));
     const row = Math.min(2, Math.max(0, Math.floor(at / 3) + d[1]));
     const next = CELLS[row * 3 + col];
-    if (next !== value) onPick(next);
+    if (next !== shown) keys.key(next);
     e.currentTarget.querySelector<HTMLElement>(`[data-cell="${next}"]`)?.focus();
   };
   return (
-    <div className="pos-grid" role="radiogroup" aria-label={label} onKeyDown={onKeyDown}>
+    <div className="pos-grid" role="radiogroup" aria-label={label} onKeyDown={onKeyDown} onBlur={keys.onBlur}>
       {CELLS.map((cell) => (
         <button
           key={cell}
           type="button"
           role="radio"
           data-cell={cell}
-          aria-checked={cell === value}
+          aria-checked={cell === shown}
           aria-label={names[cell]}
-          tabIndex={cell === value ? 0 : -1}
-          className={cell === value ? 'on' : undefined}
-          onClick={() => onPick(cell)}
+          tabIndex={cell === shown ? 0 : -1}
+          className={cell === shown ? 'on' : undefined}
+          onClick={() => keys.pick(cell)}
         />
       ))}
     </div>

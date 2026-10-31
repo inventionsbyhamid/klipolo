@@ -5,6 +5,7 @@ import type { ItemContent } from '../../bindings/ItemContent';
 import type { TextStyle } from '../../bindings/TextStyle';
 import { Segmented } from '../../design/Segmented';
 import type { Label } from '../../lib/labels';
+import { useBundledFamilies } from '../../lib/fonts';
 import { scaledStyle } from '../../lib/textLook';
 import { itemOp } from '../preview';
 import { AnimationField, PositionField, TimingField } from './common';
@@ -16,7 +17,14 @@ import { ToolSlider } from './ToolSlider';
 
 type TextContent = Extract<ItemContent, { type: 'text' }>;
 
-/** The 12 bundled families a text can use, in the Font menu's order (`klipolo_fonts::bundled::BUNDLED`). */
+/** The size slider's range: up to the largest size the model takes (`model.text.size`, 4 to 400); under 8 none reads. */
+export const MIN_TEXT_SIZE = 8;
+export const MAX_TEXT_SIZE = 400;
+
+/**
+ * The 12 bundled families a text can use, in the Font menu's order (`klipolo_fonts::bundled::BUNDLED`): the menu shows
+ * these until Rust's own list (`fonts_bundled`) is in.
+ */
 export const FAMILIES = [
   'Inter',
   'TikTok Sans',
@@ -75,6 +83,7 @@ export function TextInspector({
     { value: 'shadow', label: t({ id: 'text.background.shadow', message: 'Shadow' }) },
   ];
   const sizeLabel = t({ id: 'text.size', message: 'Size' });
+  const families = useBundledFamilies(FAMILIES);
   const colorLabel = t({ id: 'text.color', message: 'Text colour' });
   return (
     <>
@@ -83,7 +92,7 @@ export function TextInspector({
         <Select
           label={t({ id: 'text.font', message: 'Font' })}
           value={style.font.family}
-          choices={(FAMILIES.includes(style.font.family) ? FAMILIES : [style.font.family, ...FAMILIES]).map(
+          choices={(families.includes(style.font.family) ? families : [style.font.family, ...families]).map(
             (family) => ({ value: family, label: family }),
           )}
           onPick={(family) =>
@@ -96,8 +105,8 @@ export function TextInspector({
           label={sizeLabel}
           commitLabel="text.size.undo"
           value={style.size}
-          min={12}
-          max={240}
+          min={MIN_TEXT_SIZE}
+          max={MAX_TEXT_SIZE}
           step={1}
           format={(v) => String(Math.round(v))}
           ops={(size) => styleOps((now) => scaledStyle(now, size))}

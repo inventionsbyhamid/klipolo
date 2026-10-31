@@ -13,6 +13,10 @@ export type AudioContent = Extract<ItemContent, { type: 'audio' }>;
 /** Music's ducking when it is turned on (the model's `MUSIC_DUCK_DB`), and the deepest it goes. */
 const DUCK_DB = -12;
 const DEEPEST_DB = -30;
+/** The shallowest ducking the depth slider sets: at 0 dB ducking is off, which the switch says (the slider would go). */
+const SHALLOWEST_DB = 1;
+/** How deep each music layer ducked when its ducking was turned off, so turning it back on comes back there. */
+const lastDepth = new Map<string, number>();
 /** Fade lengths offered (µs), each kept to half the layer so the two always fit. */
 const FADES = [0, 500_000, 1_000_000, 2_000_000];
 const percent = (v: number) => `${Math.round(v * 100)}%`;
@@ -30,7 +34,8 @@ export function fadeChoices(durationUs: number, currentUs: number): number[] {
 
 /**
  * A sound layer's fields: its Volume (committed on release; sound isn't dry-run), its fades, and for music its ducking
- * under speech (on or off, and how deep). Turning ducking off keeps the layer music (0 dB, never none). Each change sets
+ * under speech (on or off, and how deep, 1 to 30 dB). Turning ducking off keeps the layer music (0 dB, never none), and
+ * turning it back on goes back to the depth it had. Each change sets
  * the whole content, built at its turn from the layer as the project has it then, so a quick second change keeps the
  * first.
  */
@@ -77,7 +82,10 @@ export function AudioInspector({ item, content }: { item: Item; content: AudioCo
                 { value: 'off', label: t({ id: 'music.duck.off', message: 'Off' }) },
               ]}
               fill
-              onChange={(on) => set('music.duck.undo', { duck: on === 'on' ? DUCK_DB : 0 })}
+              onChange={(on) => {
+                if (on === 'off' && ducking) lastDepth.set(item.id, content.duck!);
+                set('music.duck.undo', { duck: on === 'on' ? (lastDepth.get(item.id) ?? DUCK_DB) : 0 });
+              }}
             />
           </Field>
           {ducking && (
@@ -86,7 +94,7 @@ export function AudioInspector({ item, content }: { item: Item; content: AudioCo
                 label={depth}
                 commitLabel="music.duck.undo"
                 value={-(content.duck ?? DUCK_DB)}
-                min={0}
+                min={SHALLOWEST_DB}
                 max={-DEEPEST_DB}
                 step={1}
                 format={(db) => `${Math.round(db)} dB`}
