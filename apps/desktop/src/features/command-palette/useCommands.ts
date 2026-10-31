@@ -5,6 +5,8 @@ import { historyAction } from '../../lib/history';
 import { FORMAT_SHORT } from '../../lib/layout';
 import { labelText } from '../../lib/labels';
 import { findClip, findItem, videoDurationUs } from '../../lib/timeline';
+import { useChat } from '../../state/chat';
+import { openProposal } from '../../state/chatMessages';
 import { useProject } from '../../state/project';
 import { useExport } from '../../state/export';
 import { useRange } from '../../state/range';
@@ -32,6 +34,8 @@ export function useCommands(): Command[] {
   const snapshot = useProject((s) => s.snapshot);
   const selectedId = useSelection((s) => s.selectedId);
   const range = useRange((s) => s.range);
+  /** The message whose proposal chat has open, if any (Command Enter applies it). */
+  const proposalOpen = useChat((s) => openProposal(s.messages)?.message.id ?? null);
   const timeline = useTimelineCommands();
   const transport = useTransportCommands();
 
@@ -56,6 +60,21 @@ export function useCommands(): Command[] {
         shortcut: '⌘K',
         enabled: true,
         run: () => useUi.getState().focusChat(),
+      },
+      {
+        id: 'apply-proposal',
+        action: 'applyProposal',
+        group: 'edit',
+        label: t({
+          id: 'command.applyProposal',
+          message: 'Apply the proposal',
+          comment: 'Command: apply the change chat proposed and is waiting on',
+        }),
+        shortcut: '⌘↩',
+        enabled: proposalOpen !== null,
+        run: () => {
+          if (proposalOpen) void useChat.getState().apply(proposalOpen);
+        },
       },
       {
         id: 'undo',
@@ -126,7 +145,7 @@ export function useCommands(): Command[] {
       },
     ];
     return { head, remove, view, projectCommands };
-  }, [t, snapshot, selectedId, range]);
+  }, [t, snapshot, selectedId, range, proposalOpen]);
 
   return useMemo(
     () => (own ? [...own.head, own.remove, ...transport, ...own.view, ...own.projectCommands, ...timeline] : []),

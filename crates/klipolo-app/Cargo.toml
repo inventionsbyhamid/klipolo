@@ -25,7 +25,8 @@ klipolo-model = { path = "../klipolo-model" }
 klipolo-analysis = { path = "../klipolo-analysis" }
 # The Meta client: key checks, the relay's device registration and status.
 klipolo-meta = { path = "../klipolo-meta" }
-# The neutral scene items and speaker turns chat reads; the app turns the analysis results into them.
+# The neutral scene items and speaker turns chat reads (the app turns the analysis results into them), and a chat
+# reply's text made fit to show (`sanitize::reply`).
 klipolo-chat = { path = "../klipolo-chat" }
 # The OS's logs folder for the app's log; the analysis thread's QoS.
 klipolo-platform = { path = "../klipolo-platform" }
