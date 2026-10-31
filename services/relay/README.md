@@ -105,7 +105,7 @@ When `compose.yml` changes, paste it into the service's compose in Coolify (or s
 4. Pin the image, so the server's image cleanup keeps it even while the service is stopped:
 
    ```sh
-   ssh <server> "docker create --name keep-klipolo-relay-$TAG --label purpose=pin-image --network none klipolo-relay:$TAG true"
+   ssh <you>@<server> "docker create --name keep-klipolo-relay-$TAG --label purpose=pin-image --network none klipolo-relay:$TAG true"
    ```
 
    Keep the previous tag's pin until the new one has run for a day, then remove it with `docker rm keep-klipolo-relay-<old tag>` and `docker rmi klipolo-relay:<old tag>`.
