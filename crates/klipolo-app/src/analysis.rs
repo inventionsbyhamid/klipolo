@@ -223,6 +223,14 @@ pub struct AssetAnalysis {
     pub spent_usd: f64,
 }
 
+/// Who asked for a `start`: the person (Analyze, Retry), or the page on its own (loading cached clips as a project
+/// opens). Rough words are timed again for the person every time, for the page at most once per content per app run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Asked {
+    Person,
+    Page,
+}
+
 /// What a `start` set going.
 pub struct Started {
     tasks: Vec<JoinHandle<()>>,
@@ -328,6 +336,10 @@ struct Inner {
     /// relay charges a call only once it is answered, so this is credit already promised: a start or an estimate
     /// counts it as spent.
     reserved: HashMap<String, f64>,
+    /// The contents whose rough words were timed again, or whose word timing the person stopped, in this app run: a
+    /// start the page makes on its own (loading cached clips) doesn't time them again; only the person's Analyze or
+    /// Retry does.
+    timed_again: HashSet<String>,
     /// What the engine has: the open project's speech, by asset id.
     speech: Speech,
     /// The runs started, while any of their clips is still going (`cancel` stops them all).
@@ -458,8 +470,14 @@ impl AnalysisState {
     /// asset on it. A content another start took on is left to it (the assets asked for now hear it too). Cached
     /// contents load whatever else happens; the others start only when something can pay for them and, with an access
     /// code, their estimate is within the credit left (`Started::refused` says why not; what of them is cached shows
-    /// all the same).
+    /// all the same). Asked by the person (`start_as` tells the page's own starts apart).
     pub async fn start(self: &Arc<Self>, assets: &[Asset]) -> Started {
+        self.start_as(assets, Asked::Person).await
+    }
+
+    /// `start`, asked by `asked`: cached words timed roughly are timed again when the person asks, and when the page
+    /// asks only for a content not timed again (nor stopped by the person) in this app run.
+    pub async fn start_as(self: &Arc<Self>, assets: &[Asset], asked: Asked) -> Started {
         let contents: Vec<Content> = {
             let looked = self.contents(assets).await;
             let mut inner = lock(&self.inner);
@@ -485,19 +503,28 @@ impl AnalysisState {
             }
         }
         // Cached words timed roughly because word timing failed or stopped are timed again: free, so with whatever
-        // adapter there is, whatever the credit.
-        let retime = ready
-            .iter()
-            .any(|c| c.cached.transcript.as_ref().is_some_and(run::timed_again));
-        let timer = match (&first, retime) {
-            (_, false) => None,
-            (Some(meta), true) => Some(meta.clone()),
-            (None, true) => self.credentials.ready().await.meta,
+        // adapter there is, whatever the credit; for the page's own starts, once per content per app run.
+        let retime: HashSet<String> = {
+            let mut inner = lock(&self.inner);
+            ready
+                .iter()
+                .filter(|c| c.cached.transcript.as_ref().is_some_and(run::timed_again))
+                .filter(|c| inner.timed_again.insert(c.key.clone()) || asked == Asked::Person)
+                .map(|c| c.key.clone())
+                .collect()
+        };
+        let timer = match (&first, retime.is_empty()) {
+            (_, true) => None,
+            (Some(meta), false) => Some(meta.clone()),
+            (None, false) => self.credentials.ready().await.meta,
         };
         let run = self.run_now();
         let starting = ready
             .into_iter()
-            .map(|content| (content, timer.clone()))
+            .map(|content| {
+                let meta = timer.clone().filter(|_| retime.contains(&content.key));
+                (content, meta)
+            })
             .chain(
                 paid.into_iter()
                     .filter(|_| first.is_some())

@@ -292,11 +292,12 @@ impl AnalysisState {
                 match heard? {
                     Heard::All(out) => out,
                     Heard::Stopped(mut out) => {
-                        // Paid for already: kept, its words timed again on the next run.
+                        // Paid for already: kept, and the clip is analysed with what was timed (its words are timed
+                        // again when the person asks).
                         out.transcript.key = key.to_owned();
                         self.store(dir, "transcript", &out, &model).await;
                         self.found_transcript(key, &out);
-                        return Err(Outcome::Stopped);
+                        return Err(self.timing_stopped(key, &out));
                     }
                 }
             } else {
@@ -396,7 +397,7 @@ impl AnalysisState {
             dir,
         } = *job;
         if run.cancelled() {
-            return Err(Outcome::Stopped);
+            return Err(self.timing_stopped(key, &found));
         }
         self.progress(key, AnalysisStep::Audio, 0);
         let wav = work.join("sound.wav");
@@ -427,7 +428,7 @@ impl AnalysisState {
         let aligned = |t: &TranscriptOut| t.turns.iter().filter(|t| t.aligned).count();
         if aligned(&timed) <= aligned(&found) {
             return if run.cancelled() {
-                Err(Outcome::Stopped)
+                Err(self.timing_stopped(key, &found))
             } else {
                 Ok(found)
             };
@@ -440,7 +441,7 @@ impl AnalysisState {
             .await;
         self.found_transcript(key, &timed);
         if run.cancelled() {
-            return Err(Outcome::Stopped);
+            return Err(self.timing_stopped(key, &timed));
         }
         Ok(timed)
     }
@@ -495,6 +496,15 @@ impl AnalysisState {
         self.store(dir, "scenes", &log, &log.model).await;
         self.found_scenes(key, log);
         Ok(())
+    }
+
+    /// The person stopped content `key`'s word timing with `kept` cached: it is analysed as far as it got (its words
+    /// timed roughly where they weren't timed), and only the person's Analyze or Retry times them again.
+    fn timing_stopped(&self, key: &str, kept: &TranscriptOut) -> Outcome {
+        lock(&self.inner).timed_again.insert(key.to_owned());
+        Outcome::Done {
+            approximate: kept.approximate,
+        }
     }
 
     /// How a failed step ends the clip: back to not analysed after Cancel, else failed with the step's sentence.

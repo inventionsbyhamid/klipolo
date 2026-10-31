@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use klipolo_app::analysis::{
-    AnalysisEvent, AnalysisState, AssetAnalysisState, EngineMedia, Estimate,
+    AnalysisEvent, AnalysisState, Asked, AssetAnalysisState, EngineMedia, Estimate,
 };
 use klipolo_engine::audio::pcm::PcmStore;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -68,15 +68,22 @@ pub(crate) async fn analysis_estimate(
 }
 
 /// Analyses these clips: cached ones load at once; the others start, or the error says why they can't (no key or code,
-/// the device not registered, more than the credit left).
+/// the device not registered, more than the credit left). `by_page`: the page asked on its own (loading cached clips),
+/// not the person, so rough words are timed again at most once per clip per app run.
 #[tauri::command]
 pub(crate) async fn analysis_start(
     analysis: State<'_, AnalysisHandle>,
     projects: State<'_, ProjectSessionState>,
     asset_ids: Vec<String>,
+    by_page: Option<bool>,
 ) -> Result<(), String> {
     let assets = projects.assets(&asset_ids);
-    match analysis.start(&assets).await.refused {
+    let asked = if by_page == Some(true) {
+        Asked::Page
+    } else {
+        Asked::Person
+    };
+    match analysis.start_as(&assets, asked).await.refused {
         Some(reason) => Err(reason),
         None => Ok(()),
     }

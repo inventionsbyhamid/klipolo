@@ -21,7 +21,7 @@ use klipolo_app::analysis::chat::{scene_entries, speaker_turns};
 use klipolo_app::analysis::media::{EngineMedia, Media};
 use klipolo_app::analysis::{
     AnalysisDone, AnalysisEvent, AnalysisFailed, AnalysisState, AnalysisStep, AnalysisStopped,
-    AssetState, NEEDS_KEY,
+    Asked, AssetState, NEEDS_KEY,
 };
 use klipolo_app::credentials::{
     Credentials, Endpoints, META_API_KEY, MemoryStore, RELAY_CODE, RELAY_TOKEN, SecretStore,
@@ -1410,8 +1410,8 @@ async fn rough_words_are_timed_again_for_free_once_word_timing_is_back() {
     server.verify().await;
 }
 
-/// Cancel while words are being timed: what was heard is cached (it is paid for), so the next run sends no
-/// transcription.
+/// Cancel while words are being timed: what was heard is cached (it is paid for), the clip is analysed as far as it
+/// got, and the next run sends no transcription.
 #[tokio::test(flavor = "multi_thread")]
 async fn cancel_during_word_timing_keeps_what_was_heard() {
     let server = MockServer::start().await;
@@ -1442,7 +1442,11 @@ async fn cancel_during_word_timing_keeps_what_was_heard() {
     }
     h.state.cancel();
     started.finished().await;
-    assert_eq!(h.state.state_of("talk"), AssetState::None);
+    // The request in flight finished: its words are timed.
+    assert_eq!(
+        h.state.state_of("talk"),
+        AssetState::Done { approximate: false }
+    );
     assert!(
         h.cache_dir(&file)
             .load::<TranscriptOut>("transcript")
@@ -1494,5 +1498,139 @@ async fn cached_levels_need_no_decode() {
         "read from the cache"
     );
     assert_eq!(h.last_speech().levels["talk"].db.len(), 60);
+    server.verify().await;
+}
+
+/// Cancel stops word timing for good in this app run: the clip ends analysed with its words timed roughly, and the
+/// page's own start (loading cached clips as the project opens) neither decodes it again nor sends an align request.
+/// Only the person's Analyze times its words again.
+#[tokio::test(flavor = "multi_thread")]
+async fn cancelled_word_timing_does_not_start_again_by_itself() {
+    let server = MockServer::start().await;
+    let media = FakeMedia::whole(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(asr_answer())
+        .expect(1)
+        .mount(&server)
+        .await;
+    // The first align request is told to wait a second (busy); Cancel lands meanwhile, so its second try never goes.
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(Counted {
+            count: h.aligns.clone(),
+            template: ResponseTemplate::new(429)
+                .insert_header("retry-after", "1")
+                .set_body_json(json!({"error": "busy", "message": "Busy."})),
+        })
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(Counted {
+            count: h.aligns.clone(),
+            template: align_answer(),
+        })
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 2), SECONDS);
+
+    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while h.aligns.load(Ordering::SeqCst) == 0 {
+        assert!(Instant::now() < deadline, "word timing never started");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    h.state.cancel();
+    started.finished().await;
+    assert_eq!(
+        h.state.state_of("talk"),
+        AssetState::Done { approximate: true }
+    );
+    assert_eq!(
+        (
+            h.aligns.load(Ordering::SeqCst),
+            media.sounds.load(Ordering::SeqCst)
+        ),
+        (1, 1)
+    );
+
+    // The page loads the project's cached clips on its own: nothing is timed again.
+    h.state
+        .start_as(std::slice::from_ref(&clip), Asked::Page)
+        .await
+        .finished()
+        .await;
+    assert_eq!(
+        h.state.state_of("talk"),
+        AssetState::Done { approximate: true }
+    );
+    assert_eq!(
+        (
+            h.aligns.load(Ordering::SeqCst),
+            media.sounds.load(Ordering::SeqCst)
+        ),
+        (1, 1),
+        "no align request and no decode"
+    );
+
+    // The person asks: the words are timed again.
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+    assert_eq!(
+        h.state.state_of("talk"),
+        AssetState::Done { approximate: false }
+    );
+    assert_eq!(h.aligns.load(Ordering::SeqCst), 2);
+    server.verify().await;
+}
+
+/// Rough words in the cache are timed again by the page's own start once per app run, not on every opening.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_page_times_rough_words_again_once_per_app_run() {
+    let server = MockServer::start().await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(Counted {
+            count: h.aligns.clone(),
+            template: ResponseTemplate::new(503),
+        })
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let file = h.clip("talk.m4a", 2);
+    let mut rough = finish(
+        "muse-voice-transcribe-1.0",
+        us(SECONDS),
+        cached_transcript().turns,
+        None,
+        0.0003,
+    );
+    rough.approximate_reason = Some("Word timing is not available right now.".into());
+    h.cache_dir(&file).store("transcript", &rough).unwrap();
+    let clip = asset("talk", AssetKind::Audio, &file, SECONDS);
+
+    for _ in 0..3 {
+        h.state
+            .start_as(std::slice::from_ref(&clip), Asked::Page)
+            .await
+            .finished()
+            .await;
+    }
+
+    assert_eq!(h.aligns.load(Ordering::SeqCst), 1, "once, not every time");
+    assert_eq!(
+        h.state.state_of("talk"),
+        AssetState::Done { approximate: true }
+    );
     server.verify().await;
 }
