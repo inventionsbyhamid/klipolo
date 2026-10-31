@@ -29,8 +29,8 @@
 //! job started). `isError` is true exactly when nothing was done; when part was, the text says what wasn't.
 
 use klipolo_chat::{
-    ANALYZE_FIRST, Audience, Compiled, FunctionCall, Job, Moment, Refusal, ToolCall,
-    compile_for_app, timeline_key,
+    ANALYZE_FIRST, Audience, Compiled, FunctionCall, Job, Moment, ROUGH_FILLERS, Refusal,
+    STILL_LISTENING, STILL_WATCHING, ToolCall, compile_for_app, timeline_key,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -441,16 +441,27 @@ const CHAT_ASK: &str = " with askUser";
 
 /// A refusal's reason, as a sentence an app can act on. Chat words some for its own model and the person in its panel;
 /// an app reads them in its own terms:
-/// - a clip not analyzed yet is the person's to analyze (`NOT_ANALYZED`);
+/// - a clip not analyzed yet is the person's to analyze (`NOT_ANALYZED`); one still being analyzed is for later
+///   (`LISTENING`, `WATCHING`); roughly timed words are the person's to time again (`ROUGH_WORDS`): chat's own say
+///   "ask me again" to the person;
 /// - a time must stand on the reads an app has, never its own words (`TIMES_FROM`);
 /// - it asks its own person, not through `askUser`.
 ///
-/// One for the person names the clip it is about: "Klipolo is still listening to this clip (c2)."
+/// One for the person names the clip it is about: "Klipolo is still listening to this clip (c2). Try again ..."
 fn reason(r: &Refusal) -> String {
-    if r.audience == Audience::Person && r.reason == ANALYZE_FIRST {
+    let own = match r.reason.as_str() {
+        ANALYZE_FIRST => Some(words::NOT_ANALYZED),
+        STILL_LISTENING => Some(words::LISTENING),
+        STILL_WATCHING => Some(words::WATCHING),
+        ROUGH_FILLERS => Some(words::ROUGH_WORDS),
+        _ => None,
+    };
+    if r.audience == Audience::Person
+        && let Some(own) = own
+    {
         return match &r.clip {
-            Some(clip) => fill(words::NOT_ANALYZED, &[("clip", clip)]),
-            None => words::NOT_ANALYZED.replace(" ({clip})", ""),
+            Some(clip) => fill(own, &[("clip", clip)]),
+            None => own.replace(" ({clip})", ""),
         };
     }
     let said = (r.reason)

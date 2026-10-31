@@ -415,7 +415,7 @@ fn still_listening_refusal_names_the_clip() {
     for (state, said) in [
         (
             AnalysisState::Transcribing,
-            "Klipolo is still listening to this clip (c1).",
+            "Klipolo is still listening to this clip (c1). Try again in a minute, once its analysis is done.",
         ),
         (
             AnalysisState::NotStarted,
@@ -564,6 +564,9 @@ fn agent_words_are_exact() {
         OVER_CAP,
         READ_ONLY,
         NOT_ANALYZED,
+        LISTENING,
+        WATCHING,
+        ROUGH_WORDS,
         TIMES_FROM,
         OFF,
         UNANSWERED,

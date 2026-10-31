@@ -18,7 +18,8 @@ pub mod tools;
 
 pub use compile::{
     ANALYZE_FIRST, AnalysisState, Audience, Compiled, Inputs, Job, MakeSticker, NO_FILLERS,
-    Proposal, Refusal, STILL_LISTENING, compile, compile_for_app, sticker_ops, sticker_placement,
+    Proposal, ROUGH_FILLERS, Refusal, STILL_LISTENING, STILL_WATCHING, compile, compile_for_app,
+    sticker_ops, sticker_placement,
 };
 pub use context::{
     ChatContext, FullTranscript, MAX_CONTEXT_TOKENS, Refs, SceneEntry, SceneLog, SpeakerTurn,

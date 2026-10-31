@@ -73,6 +73,15 @@ again. Call getProposal to see what the person did.";
 /// A clip Klipolo hasn't analyzed, which the call needs: only the person can start that, in Klipolo.
 pub const NOT_ANALYZED: &str = "Klipolo hasn't analyzed this clip yet ({clip}). Ask the person to analyze it in \
 Klipolo, then try again.";
+/// A clip whose words Klipolo is still hearing or timing, which the call needs.
+pub const LISTENING: &str = "Klipolo is still listening to this clip ({clip}). Try again in a minute, once its \
+analysis is done.";
+/// A clip whose scene log Klipolo is still making, which the call needs.
+pub const WATCHING: &str = "Klipolo is still watching this clip ({clip}). Try again in a minute, once its analysis is \
+done.";
+/// Filler words in a clip whose words are only roughly timed: a cut would take real words.
+pub const ROUGH_WORDS: &str = "Some words in this clip ({clip}) are only roughly timed, so Klipolo can't cut filler \
+words exactly. Ask the person to time the words again in Klipolo's Captions panel, then try again.";
 /// What a time must stand on, after "a word, a pause, a scene, a clip's start or end": an app's own words never count.
 pub const TIMES_FROM: &str = ", the person's selection or playhead in Klipolo, or the video's start or end. Use a \
 time from getContext or getTranscript.";
