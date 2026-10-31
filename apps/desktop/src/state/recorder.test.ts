@@ -132,6 +132,24 @@ describe('opening', () => {
     expect(fake.calls).toEqual(['setup', 'setup']);
   });
 
+  it('a_second_opening_while_loading_resolves_once_the_setup_is_read', async () => {
+    const read = deferred<ReturnType<typeof recorderSetup>>();
+    fake.script.setup = () => read.promise;
+    const first = rec().openRecorder();
+    let done = false;
+    const second = rec()
+      .openRecorder()
+      .then(() => {
+        done = true;
+      });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(done).toBe(false);
+    read.resolve(recorderSetup());
+    await Promise.all([first, second]);
+    expect(phase()).toBe('choosing');
+    expect(fake.calls).toEqual(['setup']);
+  });
+
   it('two_displays_offer_both', async () => {
     await opened(recorderSetup({ displays: [display('built-in'), display('studio')] }));
     expect(rec().setup?.devices.displays.map((d) => d.id)).toEqual(['built-in', 'studio']);
