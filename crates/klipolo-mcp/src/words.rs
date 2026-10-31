@@ -206,7 +206,8 @@ getContext to see the project as it is now before trying again.";
 /// A request past the most the stdio bridge forwards at once.
 pub const BUSY: &str = "Too many requests at once. Try again in a moment.";
 /// An answer larger than the stdio bridge passes on.
-pub const REPLY_TOO_LARGE: &str = "Klipolo's answer was too large to pass on.";
+pub const REPLY_TOO_LARGE: &str = "Klipolo's answer was too large to pass on. Ask for a smaller part, such as the \
+transcript between two times.";
 
 /// `getSummary`.
 pub const SUMMARY_TOOL: &str = "The project in short: its revision, name, formats, length, captions and clips (c1, c2 \

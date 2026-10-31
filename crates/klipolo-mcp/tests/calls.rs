@@ -565,9 +565,25 @@ fn agent_words_are_exact() {
         READ_ONLY,
         NOT_ANALYZED,
         TIMES_FROM,
+        OFF,
+        UNANSWERED,
+        MAY_BE_MADE,
+        BUSY,
+        REPLY_TOO_LARGE,
+        VERSION_UNKNOWN,
     ] {
         assert!(!said.contains(['\u{2013}', '\u{2014}']), "{said}");
     }
+    // What the stdio bridge says ends in what to do next.
+    assert_eq!(
+        REPLY_TOO_LARGE,
+        "Klipolo's answer was too large to pass on. Ask for a smaller part, such as the transcript between two times."
+    );
+    assert_eq!(
+        MAY_BE_MADE,
+        "No answer came back from Klipolo, but a change you asked for may already be made. Call getContext to see \
+         the project as it is now before trying again."
+    );
     // A value is filled in once: an app named like a key fills nothing else.
     assert_eq!(
         fill(PACED, &[("client", "{wait}"), ("wait", "30 seconds")]),
