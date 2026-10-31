@@ -34,6 +34,8 @@ tracing = "0.1"
 [dev-dependencies]
 # A client of the server, over HTTP.
 reqwest = { version = "0.12.28", default-features = false, features = ["json"] }
+# The official Rust MCP SDK, as a client over Streamable HTTP: the server speaks the protocol as a real client reads it.
+rmcp = { version = "=3.5.1", default-features = false, features = ["client", "transport-streamable-http-client-reqwest"] }
 # Connection files in a folder of their own.
 tempfile = "3"
 # Tests on a runtime of their own, some with its clock paused.
