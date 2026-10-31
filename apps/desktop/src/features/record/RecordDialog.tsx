@@ -420,7 +420,8 @@ function DeviceState({ kind, setup }: { kind: AskedDevice; setup: RecorderSetup 
   const asked = useRecorderPreviews((s) => s.asked[kind]);
   const refused = useRecorderPreviews((s) => s.refused[kind]);
   const dbfs = useRecorderPreviews((s) => (kind === 'mic' ? s.meterDbfs : null));
-  const stopped = useRecorderPreviews((s) => s.micStopped);
+  const mic = useRecorder((s) => s.picks.mic);
+  const stopped = useRecorderPreviews((s) => s.micStopped !== null && s.micStopped === mic);
   if (!chosen) return null;
   if (denied || refused) return <DeniedNote kind={kind} pages={setup.privacySettings} />;
   if (takeRefused) return null;

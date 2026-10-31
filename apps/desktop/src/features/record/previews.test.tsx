@@ -305,6 +305,32 @@ describe('the previews in the Record dialog', () => {
     expect(fake.previewed).toEqual([want()]);
   });
 
+  it('a_mic_whose_level_stopped_stays_unseen_until_the_setup_is_read_again', async () => {
+    const setup = recorderSetup({ displays: [display('main'), display('studio')], mics: [device('usb'), device('built-in')] });
+    await openOn(setup);
+    level(-12);
+    // Its worker failed (unplugged): the app holds that mic until the setup is read again.
+    emit('preview-mic', failed('capture.error.os'));
+    expect(screen.queryByRole('meter')).toBeNull();
+    // Another choice, and Klipolo behind and back: still no level to show, so no empty meter that reads as silence.
+    await userEvent.click(card('Display studio'));
+    await flush();
+    await windowFocus('blur');
+    await windowFocus('focus');
+    expect(screen.queryByRole('meter')).toBeNull();
+    expect(document.querySelector('.record-meter[data-off]')).not.toBeNull();
+    // Another mic has its own level.
+    await choose('Microphone: usb', 'built-in');
+    expect(screen.getByRole('meter', { name: 'Microphone level' })).toBeInTheDocument();
+    // Back on the failed one: unseen again. Reopening reads the setup again: it shows.
+    await choose('Microphone: built-in', 'usb');
+    expect(screen.queryByRole('meter')).toBeNull();
+    act(() => rec().close());
+    await act(() => rec().openRecorder());
+    await flush();
+    expect(screen.getByRole('meter', { name: 'Microphone level' })).toBeInTheDocument();
+  });
+
   it('previews_stop_on_close_record_and_blur', async () => {
     await openOn();
     expect(fake.previewed).toEqual([want()]);
