@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # The app bundle's check before anything is signed (build-mac.sh runs it; it works on a signed app too):
 #   scripts/release/check-bundle.sh <Klipolo.app> <x86_64|arm64> [<page build folder>]
-# Fails unless the licences (the third-party notices too, none of them empty) and the fonts are in Resources, every
-# Mach-O is built for <arch> only and for macOS 15.0 or older, every load path is @rpath/, @executable_path/,
-# @loader_path/, /usr/lib/ or /System/Library/, and every LC_RPATH is relative (@executable_path/ or @loader_path/),
-# never a machine path such as the dev FFmpeg prefix's.
+# Fails unless the licences (the third-party notices too, none of them empty), the fonts and the bundled pack (its
+# library/manifest.json) are in Resources, every Mach-O is built for <arch> only and for macOS 15.0 or older, every
+# load path is @rpath/, @executable_path/, @loader_path/, /usr/lib/ or /System/Library/, and every LC_RPATH is relative
+# (@executable_path/ or @loader_path/), never a machine path such as the dev FFmpeg prefix's.
 # The app must also find its libraries: the main executable's LC_RPATHs include @executable_path/../Frameworks, and
 # every @rpath/<name> that any Mach-O in the bundle loads is a file at Contents/Frameworks/<name>. And no file under
 # Contents names the builder's home folder or user name, nor does the page build it was made from: the main
@@ -42,6 +42,10 @@ if [ -s "$notices" ] && [ "$(head -n 1 "$notices")" != "Klipolo: third-party not
   fail "licenses/THIRD-PARTY-NOTICES.txt doesn't start 'Klipolo: third-party notices' (scripts/release/third-party.sh)"
 fi
 [ -d "$app/Contents/Resources/fonts" ] || fail "the fonts aren't in the app"
+# The bundled pack (music, sounds and pictures, assets/library): without its manifest the library shows no pack and
+# chat can't add its music.
+[ -f "$app/Contents/Resources/library/manifest.json" ] \
+  || fail "the bundled pack isn't in the app: no Resources/library/manifest.json"
 # NOTICE.txt gives the public address of the source code and the commit built (the AGPL's source offer for this
 # version). build-mac.sh fills its {{SOURCE_URL}} and {{SOURCE_COMMIT}} placeholders from KLIPOLO_SOURCE_URL and the
 # checkout; a bundle that still has either can't ship.
