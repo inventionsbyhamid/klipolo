@@ -55,8 +55,11 @@ getContext again, then retry them.";
 /// they would name other footage now.
 pub const OWN_MOVED: &str = "Your proposal is waiting for the person in Klipolo, and your own change moved the clips \
 since. Wait until they apply or discard it (call getProposal), then try again.";
-/// A call of the app's waiting proposal that no longer compiles, left out of the proposal that takes its place.
-pub const LEFT_OUT: &str = "Left out of your proposal: {reason}";
+/// The app's own proposal waits, and its calls would remove something else now: the person's selection or playhead
+/// they stood on moved, or this call changes what they remove.
+pub const OWN_CHANGED: &str = "Your proposal waiting in Klipolo would not read the same now: the person's selection or \
+playhead moved since you made it, or this call changes what it removes. Wait until they apply or discard it (call \
+getProposal), then try again.";
 /// Additions that, checked again before they apply, take something away. Never expected: the compiler proposes those.
 pub const REMOVES: &str = "Klipolo found this would take something out of the edit, so it was not applied. Nothing \
 changed.";

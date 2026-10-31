@@ -18,7 +18,7 @@ use klipolo_mcp::call::from_app;
 use klipolo_mcp::rpc::Mcp;
 use klipolo_mcp::words::{
     DONE, KLIPOLO_CHAT, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS, NOTHING_TO_UNDO, OVER_SHARE,
-    OWN_MOVED, PROPOSED_NO_FOOTAGE, PUSHES_OUT, READ_FIRST, STALE, UNCHANGED, UNDONE,
+    OWN_CHANGED, OWN_MOVED, PROPOSED_NO_FOOTAGE, PUSHES_OUT, READ_FIRST, STALE, UNCHANGED, UNDONE,
     WAITING_OTHER, fill,
 };
 use klipolo_model::Transaction;
@@ -528,7 +528,7 @@ fn agent_words_are_exact() {
         MOVED,
         NOT_PROPOSED,
         OWN_MOVED,
-        LEFT_OUT,
+        OWN_CHANGED,
         UNDONE,
         STARTED,
         REMOVES,
@@ -804,29 +804,34 @@ fn find_moments_never_touches_the_clients_own_proposal() {
 }
 
 #[test]
-fn an_earlier_call_that_no_longer_stands_is_left_out_and_said() {
+fn a_remembered_call_that_reads_differently_now_is_refused() {
     let host = FakeHost::two_clips();
     select(&host, Some(span(49.5, 50.5)));
     let mcp = Mcp::new(host.clone());
     let agent = Agent::open(&mcp, "Agent");
     agent.read();
     agent.cut(49.5, 50.5);
-    // The person selects nothing now: the earlier cut stood on their selection.
+    let waiting = host.state().slot.clone().expect("a proposal waits");
+    // The person selects a little further on: the earlier cut stood on their selection, and would snap to the new one.
+    select(&host, Some(span(49.6, 50.6)));
+    assert_refused(&agent.cut(0.0, 13.0), OWN_CHANGED);
+    assert_refused(
+        &agent.call("setCaptions", json!({"on": false, "style": null})),
+        OWN_CHANGED,
+    );
+    // Selecting nothing, the earlier cut stands on nothing: refused the same way, never left out quietly.
     select(&host, None);
-    let result = agent.cut(0.0, 13.0);
-    assert_eq!(outcome(&result), "proposed", "{result}");
-    let said = text(&result);
-    assert!(
-        said.starts_with("Proposed in Klipolo (cutRange): 13 s of footage would go (0 to 13 s)."),
-        "{said}"
-    );
-    assert!(
-        said.contains(" Left out of your proposal: cutRange: startSec 49.5 is not within 0.3 s of"),
-        "{said}"
-    );
+    assert_refused(&agent.cut(0.0, 13.0), OWN_CHANGED);
+    // The proposal the person sees is the one the app made; nothing applied.
+    let slot = host.state().slot.clone().expect("still waiting");
+    assert_eq!((slot.id, slot.calls), (waiting.id, waiting.calls));
+    assert_eq!(host.state().counts.applies, 0);
+    // With the person's selection back where it was, the call joins.
+    select(&host, Some(span(49.5, 50.5)));
+    assert_eq!(outcome(&agent.cut(0.0, 13.0)), "proposed");
     assert_eq!(
         host.state().slot.as_ref().unwrap().calls,
-        [cut_call(0.0, 13.0)]
+        [cut_call(49.5, 50.5), cut_call(0.0, 13.0)]
     );
 }
 

@@ -32,7 +32,7 @@ use klipolo_chat::{
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
-use klipolo_model::ops::Origin;
+use klipolo_model::ops::{Op, Origin};
 use klipolo_model::time::{RangeUs, Us};
 use serde_json::{Value, json};
 
@@ -45,17 +45,19 @@ use crate::words::{self, fill};
 /// The most ranges a result names; the rest are counted (`getProposal` lists them all).
 const RANGES_SAID: usize = 10;
 
-/// An app's waiting proposal as Klipolo made it, so the app's next call joins it: whose, its id, the calls in it and
-/// where the main track's clips were when those calls were made (`timeline_key`). Clip refs and times name clips by
-/// where they are, so the calls are read again only while the clips stay there: once the app's own additions move them
-/// (a split), the proposal waits for the person. One proposal waits at a time, so one is remembered; it holds only
-/// while a proposal with its id waits.
+/// An app's waiting proposal as Klipolo made it, so the app's next call joins it: whose, its id, the calls in it,
+/// where the main track's clips were when those calls were made (`timeline_key`) and the ops they were proposed as.
+/// Clip refs and times name clips by where they are, so the calls are read again only while the clips stay there: once
+/// the app's own additions move them (a split), the proposal waits for the person. And they must still remove exactly
+/// what was proposed: a time that stood on the person's selection or playhead, moved since, would snap elsewhere. One
+/// proposal waits at a time, so one is remembered; it holds only while a proposal with its id waits.
 #[derive(Clone, Debug)]
 pub(crate) struct Own {
     client: String,
     id: String,
     calls: Vec<ToolCall>,
     key: u64,
+    ops: Vec<Op>,
 }
 
 /// What `call` did, as a tool result.
@@ -106,6 +108,10 @@ pub fn run(mcp: &Mcp, session: &mut Session, call: &FunctionCall) -> Value {
     if !mine.is_empty() {
         return refused(&reasons(mine));
     }
+    // With this call after them, the waiting calls would remove something else: the proposal waits as it is.
+    if out.refusals.iter().any(|r| r.call_index < at) {
+        return refused(words::OWN_CHANGED);
+    }
     edit(mcp, client, &snap, &calls, out, own.as_ref())
 }
 
@@ -142,6 +148,11 @@ fn joined(
     // The app's own change moved the clips its calls name: read again, they would name other footage.
     if own.key != timeline_key(&snap.project) {
         return Err(words::OWN_MOVED.to_owned());
+    }
+    // Read again now, the calls must remove what they did when proposed. One more compile, of the waiting calls alone.
+    let again = compile(&snap.project, &snap.inputs, &own.calls);
+    if !again.refusals.is_empty() || again.proposal.is_none_or(|p| p.tx.ops != own.ops) {
+        return Err(words::OWN_CHANGED.to_owned());
     }
     Ok(own.calls.clone())
 }
@@ -214,22 +225,13 @@ fn edit(
     // dropped it).
     let proposal =
         (out.proposal).filter(|_| own.is_none() || changed || out.proposed_calls.contains(&at));
-    // An earlier call of its proposal that no longer compiles (it stood on a selection gone since) is left out of what
-    // takes the proposal's place: the app hears which, and why.
-    let mut left_out: Vec<String> = if own.is_some() && (changed || proposal.is_some()) {
-        (out.refusals.iter())
-            .filter(|r| r.call_index < at)
-            .map(|r| fill(words::LEFT_OUT, &[("reason", &reason(r))]))
-            .collect()
-    } else {
-        Vec::new()
-    };
     let mut proposed_as: Option<(String, Us)> = None;
     if let Some(proposal) = proposal {
         let proposed: Vec<ToolCall> = (out.proposed_calls.iter())
             .map(|&i| calls[i].clone())
             .collect();
         let (removed_us, ranges) = (proposal.removed_us, proposal.ranges.clone());
+        let ops = proposal.tx.ops.clone();
         // A commit drops the open proposal; until one, the new proposal takes its place.
         let replacing = if changed {
             None
@@ -257,18 +259,15 @@ fn edit(
                     id: id.clone(),
                     calls: proposed,
                     key: timeline_key(&snap.project),
+                    ops,
                 });
                 proposed_as = Some((id, removed_us));
             }
             // The additions are in: the answer says so, and that the removals weren't proposed.
-            Err(_) if changed => {
-                said.push(words::NOT_PROPOSED.to_owned());
-                left_out.clear();
-            }
+            Err(_) if changed => said.push(words::NOT_PROPOSED.to_owned()),
             Err(e) => return refused(&host_error(host, client, e)),
         }
     }
-    said.extend(left_out);
 
     let mut started = false;
     let mut not_started: Vec<String> = Vec::new();
