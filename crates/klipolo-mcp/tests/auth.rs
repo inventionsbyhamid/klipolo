@@ -163,6 +163,24 @@ fn connection_file_reads_only_as_a_file_of_its_own() {
     );
 }
 
+/// A connection file others may read is none of Klipolo's: `write` makes it 0600, so one in Klipolo's format that
+/// anyone else could read (or write) was put there by someone else, and the bridge never sends an app's calls to it.
+#[test]
+fn a_connection_file_others_may_read_reads_as_none() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let file = ConnectionFile {
+        port: 51234,
+        token: new_token(),
+        pid: std::process::id(),
+        version: VERSION,
+    };
+    let path = connection::write(temp.path(), &file).unwrap();
+    assert_eq!(connection::read(temp.path()), Some(file));
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert_eq!(connection::read(temp.path()), None);
+}
+
 #[test]
 fn support_dir_is_the_variable_else_application_support() {
     let os = |s: &str| Some(OsString::from(s));

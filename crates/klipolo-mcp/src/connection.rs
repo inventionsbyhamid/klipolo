@@ -91,7 +91,7 @@ pub fn write(dir: &Path, f: &ConnectionFile) -> io::Result<PathBuf> {
 
 /// The file in `dir`, when there is one Klipolo wrote in this format. It is read only as a file of its own
 /// (`klipolo_platform::file::read_private`): a link, a folder, or a FIFO that would never answer, put at its name,
-/// reads as none at once.
+/// reads as none at once, and so does a file another user owns or others may read (Klipolo writes it 0600).
 pub fn read(dir: &Path) -> Option<ConnectionFile> {
     let bytes = klipolo_platform::file::read_private(&dir.join(FILE), MOST).ok()?;
     serde_json::from_slice::<ConnectionFile>(&bytes)
