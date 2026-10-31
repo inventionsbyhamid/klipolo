@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Estimate } from '../../bindings/Estimate';
 
-vi.mock('../../ai/aiStatus', () => ({ refreshAiStatus: vi.fn() }));
+vi.mock('../../ai/aiStatus', async (real) => ({ ...(await real<object>()), refreshAiStatus: vi.fn() }));
 vi.mock('../../bridge/analysis', () => ({
   analysisBridge: {
     estimate: vi.fn(),
@@ -13,7 +13,7 @@ vi.mock('../../bridge/analysis', () => ({
   },
 }));
 const { analysisBridge } = await import('../../bridge/analysis');
-const { refreshAiStatus } = await import('../../ai/aiStatus');
+const { refreshAiStatus, useAi } = await import('../../ai/aiStatus');
 const {
   analyze,
   applyEvent,
@@ -21,10 +21,13 @@ const {
   followAnalysis,
   forgetRemovedClips,
   notNow,
+  offerAgain,
+  offerAgainOnAiModeChange,
   offerFor,
   retry,
   stateOf,
   useAnalysis,
+  whyNoWords,
 } = await import('../../state/analysis');
 const { useProject } = await import('../../state/project');
 const { about, howLong, offerText, offerTitle, progressTitle, spokenProgress, stepDots } = await import('./analysis');
@@ -32,7 +35,7 @@ const { about, howLong, offerText, offerTitle, progressTitle, spokenProgress, st
 const bridge = vi.mocked(analysisBridge);
 
 function estimate(over: Partial<Estimate> = {}): Estimate {
-  return { usd: 0.04, seconds: 130, cached: [], clips: ['a', 'b'], ...over };
+  return { usd: 0.04, seconds: 130, cached: [], clips: ['a', 'b'], missing: [], ...over };
 }
 
 beforeEach(() => {
@@ -60,8 +63,8 @@ describe('the offer', () => {
 
   it('gives the refusal instead of the credit', () => {
     const refusal =
-      'Your access code has $0.02 left, and this needs about $0.07. Trim the clips first, or add your own Meta key in ' +
-      'Settings.';
+      'Your access code has $0.02 left, and this needs about $0.07. Analyze fewer or shorter files, or add your own ' +
+      'Meta key in Settings.';
     const text = offerText(estimate({ creditLeftUsd: 0.02, refusal }), true);
     expect(text.endsWith(refusal)).toBe(true);
     expect(text).not.toContain('You have');
@@ -107,6 +110,24 @@ describe('the store', () => {
     expect(stateOf(useAnalysis.getState().states, 'a')).toEqual({ state: 'running', step: 'transcript', pct: 40 });
     applyEvent({ kind: 'done', payload: { assetId: 'a', approximate: true } });
     expect(stateOf(useAnalysis.getState().states, 'a')).toEqual({ state: 'done', approximate: true });
+    // Why words are rough (and whether timing them again helps), or why there are none, come with it.
+    const stopped = 'Word timing stopped before it finished.';
+    applyEvent({
+      kind: 'done',
+      payload: { assetId: 'c', approximate: true, approximateReason: stopped, timeAgain: true },
+    });
+    expect(stateOf(useAnalysis.getState().states, 'c')).toEqual({
+      state: 'done',
+      approximate: true,
+      approximateReason: stopped,
+      timeAgain: true,
+    });
+    applyEvent({ kind: 'done', payload: { assetId: 'q', approximate: false, emptyReason: 'No speech found.' } });
+    expect(stateOf(useAnalysis.getState().states, 'q')).toEqual({
+      state: 'done',
+      approximate: false,
+      emptyReason: 'No speech found.',
+    });
     applyEvent({ kind: 'failed', payload: { assetId: 'b', reason: 'This device has used its Klipolo credit.' } });
     expect(stateOf(useAnalysis.getState().states, 'b').state).toBe('failed');
     applyEvent({ kind: 'stopped', payload: { assetId: 'b' } });
@@ -206,6 +227,44 @@ describe('the store', () => {
     await analyze();
     expect(useAnalysis.getState().error).toBeNull();
     expect(useAnalysis.getState().estimate).toBeNull();
+  });
+
+  it('offers the clips again after Not now once the way to pay changes', () => {
+    const stop = offerAgainOnAiModeChange();
+    useAi.setState({ status: { mode: 'none' } });
+    useAnalysis.setState({ dismissed: ['a', 'b'] });
+    useAi.setState({ status: { mode: 'none' } });
+    expect(useAnalysis.getState().dismissed).toEqual(['a', 'b']);
+    // An access code added in the top bar.
+    useAi.setState({ status: { mode: 'relay', budgetUsd: 2, spentUsd: 0, active: true } });
+    expect(useAnalysis.getState().dismissed).toEqual([]);
+    stop();
+  });
+
+  it('Analyze from outside the banner forgets Not now and offers the project’s clips again', async () => {
+    bridge.estimate.mockResolvedValue(estimate());
+    const assets = [
+      { id: 'a', kind: 'video' },
+      { id: 'b', kind: 'audio' },
+      { id: 'logo', kind: 'image' },
+    ];
+    useProject.setState({ snapshot: { project: { id: 'one', assets }, opening: 1 } as never });
+    useAnalysis.setState({ dismissed: ['a', 'b'] });
+    await offerAgain();
+    expect(useAnalysis.getState().dismissed).toEqual([]);
+    expect(bridge.estimate).toHaveBeenCalledWith(['a', 'b']);
+    expect(useAnalysis.getState().estimate?.clips).toEqual(['a', 'b']);
+  });
+
+  it('says why a project has no caption words', () => {
+    const silent = { state: 'done', approximate: false, emptyReason: 'No speech found.' } as const;
+    const timed = { state: 'done', approximate: false } as const;
+    expect(whyNoWords({ a: silent }, ['a', 'b'])).toBe('notAnalysed');
+    expect(whyNoWords({ a: silent, b: { state: 'running', step: 'words', pct: 4 } }, ['a', 'b'])).toBeNull();
+    expect(whyNoWords({ a: silent, b: timed }, ['a', 'b'])).toBe('noSpeechOne');
+    expect(whyNoWords({ a: silent, b: silent }, ['a', 'b'])).toBe('noSpeechMany');
+    expect(whyNoWords({ a: timed }, ['a'])).toBeNull();
+    expect(whyNoWords({}, [])).toBeNull();
   });
 
   it('retries a failed clip, and puts the offer off with Not now', async () => {

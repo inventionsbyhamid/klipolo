@@ -119,7 +119,8 @@ impl Meta {
         call: impl Future<Output = Result<T, MetaError>>,
     ) -> Result<T, ProviderError> {
         let _slot = self.calls.acquire().await;
-        call.await.map_err(provider_error)
+        call.await
+            .map_err(|e| provider_error(e, self.client.is_relay()))
     }
 }
 
@@ -175,10 +176,11 @@ impl Aligner for Meta {
                 .collect();
             let aligned = {
                 let _slot = self.aligns.acquire().await;
+                // Word timing runs on Klipolo's relay in both modes.
                 self.client
                     .align(wav, &turns)
                     .await
-                    .map_err(provider_error)?
+                    .map_err(|e| provider_error(e, true))?
             };
             Ok(Alignment {
                 words: aligned
@@ -232,7 +234,7 @@ impl SceneLogger for Meta {
             let body = scene_request(upload.id(), fps);
             let answer = retry_busy(|| self.call(self.client.respond(body.clone()))).await;
             upload.delete().await;
-            scene_answer(answer?)
+            scene_answer(answer?, self.client.is_relay())
         })
     }
 }
@@ -378,8 +380,8 @@ struct WireMoment {
 /// The longest text kept from one field.
 const MAX_FIELD_CHARS: usize = 400;
 
-/// Spark's answer as moments, priced by its usage.
-fn scene_answer(out: ResponseOut) -> Result<SceneAnswer, ProviderError> {
+/// Spark's answer as moments, priced by its usage; `relay` when it came through Klipolo's relay.
+fn scene_answer(out: ResponseOut, relay: bool) -> Result<SceneAnswer, ProviderError> {
     let text = out.output_text.as_deref().unwrap_or_default();
     let log: WireLog = serde_json::from_str(text).map_err(|e| {
         if out.status.as_deref() == Some("incomplete") {
@@ -391,7 +393,7 @@ fn scene_answer(out: ResponseOut) -> Result<SceneAnswer, ProviderError> {
                 )
             }
         } else {
-            provider_error(MetaError::Decode(format!("scene log: {e}")))
+            provider_error(MetaError::Decode(format!("scene log: {e}")), relay)
         }
     })?;
     let moments = log
@@ -457,11 +459,11 @@ fn transcription(heard: AsrResult) -> Transcription {
     }
 }
 
-/// A Meta client error in Klipolo's terms: its sentence for the person, its `Display` (already redacted) for logs.
-/// A 429 is `Busy` when the relay says `busy` or gives no code at all (Traefik's rate limit; wait and try again); any
-/// other (the relay's daily `align_quota`, Meta's own rate limit) is `RateLimited`, a stop. A 401 is `Unauthorized`, a
-/// 403 `NotAllowed`.
-pub fn provider_error(e: MetaError) -> ProviderError {
+/// A Meta client error in Klipolo's terms: its sentence for the person (naming Klipolo's server, not Meta, for a call
+/// that went through the relay: `relay`), its `Display` (already redacted) for logs. A 429 is `Busy` when the relay
+/// says `busy` or gives no code at all (Traefik's rate limit; wait and try again); any other (the relay's daily
+/// `align_quota`, Meta's own rate limit) is `RateLimited`, a stop. A 401 is `Unauthorized`, a 403 `NotAllowed`.
+pub fn provider_error(e: MetaError, relay: bool) -> ProviderError {
     let (kind, retry_after_s) = match &e {
         MetaError::Budget { .. } => (ProviderErrorKind::Budget, None),
         MetaError::RateLimited { retry_after, .. } if e.is_busy() => {
@@ -483,9 +485,14 @@ pub fn provider_error(e: MetaError) -> ProviderError {
             (ProviderErrorKind::Unavailable, None)
         }
     };
+    let message = if relay {
+        e.relay_user_message()
+    } else {
+        e.user_message()
+    };
     ProviderError {
         kind,
-        message: e.user_message(),
+        message,
         detail: e.to_string(),
         retry_after_s,
     }
@@ -596,17 +603,27 @@ mod tests {
             ),
         ];
         for (meta, kind, stop) in cases {
-            let e = provider_error(meta.clone());
+            let e = provider_error(meta.clone(), false);
             assert_eq!(e.kind, kind, "{meta:?}");
             assert_eq!(e.is_stop(), stop, "{meta:?}");
             assert_eq!(e.user_message(), meta.user_message(), "{meta:?}");
             assert_eq!(e.detail, meta.to_string(), "{meta:?}");
+            let through_relay = provider_error(meta.clone(), true);
+            assert_eq!(through_relay.kind, kind, "{meta:?}");
+            assert_eq!(
+                through_relay.user_message(),
+                meta.relay_user_message(),
+                "{meta:?}"
+            );
         }
-        let limited = provider_error(MetaError::RateLimited {
-            retry_after: Some(50_400),
-            code: Some("align_quota".into()),
-            message: Some(quota.into()),
-        });
+        let limited = provider_error(
+            MetaError::RateLimited {
+                retry_after: Some(50_400),
+                code: Some("align_quota".into()),
+                message: Some(quota.into()),
+            },
+            true,
+        );
         assert_eq!(limited.retry_after_s, Some(50_400));
         assert_eq!(limited.user_message(), quota);
     }

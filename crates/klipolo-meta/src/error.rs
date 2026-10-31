@@ -34,7 +34,8 @@ pub enum MetaError {
     /// now, with the server's reason when it gave one.
     #[error("Meta or the relay is overloaded or unavailable (5xx){}", detail(.message.as_ref()))]
     Overloaded { message: Option<String> },
-    /// Any other refused request (400, 404, 413, 422...), with the server's reason.
+    /// Any other refused request (400, 404, 413, 422...), with the server's reason (for the log only: the person
+    /// reads a plain sentence).
     #[error("bad request{}", detail(Some(.message)))]
     BadRequest { message: String },
     /// The request never got an answer (connection, timeout, cut off body).
@@ -156,11 +157,34 @@ impl MetaError {
         }
     }
 
-    /// A short plain sentence for the person using the app. Never contains
-    /// the key or a token, and no em or en dashes.
+    /// A short plain sentence for the person using the app, about a call
+    /// that went to Meta with the person's own key. Never contains the key or
+    /// a token, and no em or en dashes.
     pub fn user_message(&self) -> String {
+        self.message_about(Service::Meta)
+    }
+
+    /// [`Self::user_message`] for a call that went through Klipolo's relay
+    /// (an access code, and word timing with either): a network or server
+    /// failure, or a used-up credit the relay didn't explain, names Klipolo's
+    /// server, not Meta. The relay's own sentences are kept as they are.
+    pub fn relay_user_message(&self) -> String {
+        self.message_about(Service::Relay)
+    }
+
+    fn message_about(&self, service: Service) -> String {
+        let relay = service == Service::Relay;
+        // Who failed to answer: the person's own key talks to Meta, an access code to Klipolo's server.
+        let who = if relay { "Klipolo's server" } else { "Meta" };
         match self {
-            Self::Budget { message } => sentence(message, "Your Meta credit has run out."),
+            Self::Budget { message } => sentence(
+                message,
+                if relay {
+                    "This device has used its Klipolo credit."
+                } else {
+                    "Your Meta credit has run out."
+                },
+            ),
             Self::NotAllowed { message } => sentence(
                 message.as_deref().unwrap_or_default(),
                 "Your Meta API key or access code does not allow this. Check it in Settings.",
@@ -181,18 +205,19 @@ impl MetaError {
             ),
             Self::Overloaded { message } => sentence(
                 message.as_deref().unwrap_or_default(),
-                "Meta is busy right now. Try again in a moment.",
+                &format!("{who} is busy right now. Try again in a moment."),
             ),
-            Self::BadRequest { message } => match sentence(message, "") {
-                reason if reason.is_empty() => "Meta could not process this request.".into(),
-                reason => format!("Meta could not process this request. {reason}"),
-            },
+            // The server's own text (often about fields the person never sees) is for the log: `Display` has it.
+            Self::BadRequest { .. } => format!("{who} could not process this request. Try again."),
             Self::Network(_) => {
-                "Could not reach Meta. Check your internet connection and try again.".into()
+                format!("Could not reach {who}. Check your internet connection and try again.")
             }
             Self::AlignUnavailable => {
                 "Exact word timing is not available right now, so captions use approximate timing."
                     .into()
+            }
+            Self::Decode(_) if relay => {
+                "Klipolo's server sent an answer the app could not read. Try again.".into()
             }
             Self::Decode(_) => "Meta sent an answer Klipolo could not read. Try again.".into(),
             Self::LocalFile { name } => format!("Klipolo could not read {name}."),
@@ -201,11 +226,18 @@ impl MetaError {
             }
             Self::TimedOut { message, .. } => sentence(
                 message.as_deref().unwrap_or_default(),
-                "Meta took too long to answer. Try again.",
+                &format!("{who} took too long to answer. Try again."),
             ),
             Self::NotConfigured => "Klipolo's AI service isn't set up yet. Try again later or add your own Meta key in Settings.".into(),
         }
     }
+}
+
+/// Where a call went: Meta itself, or Klipolo's relay in front of it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Service {
+    Meta,
+    Relay,
 }
 
 /// When to try again, for a person: seconds up to 90, then minutes up to 90,

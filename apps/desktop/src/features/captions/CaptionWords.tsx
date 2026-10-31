@@ -1,5 +1,6 @@
 import { useLingui } from '@lingui/react/macro';
 import { memo, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import type { Asset } from '../../bindings/Asset';
 import type { FormatKind } from '../../bindings/FormatKind';
 import type { PageView } from '../../bindings/PageView';
 import type { WordView } from '../../bindings/WordView';
@@ -8,6 +9,7 @@ import { cn } from '../../design/cn';
 import { SpriteIcon } from '../../design/SpriteIcon';
 import { formatPrecise } from '../../lib/time';
 import { useStableCallback } from '../../lib/useStableCallback';
+import { offerAgain, useAnalysis, whyNoWords } from '../../state/analysis';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { pageAt, useAllCaptionPages } from './useCaptionPages';
@@ -19,6 +21,18 @@ import { WordEditor } from './WordEditor';
 export const chipId = (prefix: string, key: string) => `${prefix}-${key.replace(/[^\w-]/g, '_')}`;
 
 const seek = (w: WordView) => usePlayback.getState().seek(w.startUs);
+
+const NO_ASSETS: Asset[] = [];
+
+/** Why the open project has no caption words (`whyNoWords`), from its videos' and sounds' analysis. */
+function useWhyNoWords() {
+  const assets = useProject((s) => s.snapshot?.project.assets ?? NO_ASSETS);
+  const clips = useMemo(
+    () => assets.filter((a) => a.kind === 'video' || a.kind === 'audio').map((a) => a.id),
+    [assets],
+  );
+  return useAnalysis((s) => whyNoWords(s.states, clips));
+}
 
 /** The word being fixed in place, as it was when the field opened, and the places it shows ("Fix all"). */
 interface Edit {
@@ -159,6 +173,7 @@ export function CaptionWords({ format }: { format: FormatKind }) {
   const enabled = useProject((s) => s.snapshot?.project.captions.enabled ?? false);
   const { view, fresh, of } = useAllCaptionPages(format);
   const total = view?.total ?? 0;
+  const noWords = useWhyNoWords();
   const { sel, picked, heldPick, listed, nav, words, selected, pending, find, pick, clear } = useWordSelection(
     format,
     view,
@@ -354,6 +369,10 @@ export function CaptionWords({ format }: { format: FormatKind }) {
       message: 'Pick a style to turn captions on. Then you can fix any word here.',
     });
   else if (view === null) hint = t({ id: 'captions.words.loading', message: 'Getting the words…' });
+  else if (total === 0 && noWords === 'noSpeechOne')
+    hint = t({ id: 'captions.words.noSpeech', message: 'No speech found in this clip.' });
+  else if (total === 0 && noWords === 'noSpeechMany')
+    hint = t({ id: 'captions.words.noSpeechAll', message: 'No speech found in these clips.' });
   else if (total === 0)
     hint = t({
       id: 'captions.words.none',
@@ -377,6 +396,12 @@ export function CaptionWords({ format }: { format: FormatKind }) {
         </label>
       </div>
       {hint && <p className="words-hint">{hint}</p>}
+      {enabled && view !== null && total === 0 && noWords === 'notAnalysed' && (
+        // The offer comes back in the analysis banner, with its price, even after "Not now".
+        <button type="button" className="btn btn-secondary btn-sm words-analyze" onClick={() => void offerAgain()}>
+          {t({ id: 'captions.words.analyze', message: 'Analyze' })}
+        </button>
+      )}
       <p role="status" className="words-note">
         {busy
           ? t({ id: 'captions.words.updating', message: 'Updating…' })

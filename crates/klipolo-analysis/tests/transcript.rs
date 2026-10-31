@@ -772,7 +772,7 @@ async fn a_daily_limit_stops_aligning_and_keeps_its_sentence() {
 /// One request refused as sent spreads only its own turns; the others are timed.
 #[tokio::test]
 async fn a_refused_align_request_spreads_only_its_own_turns() {
-    let refused = "Meta could not process this request. Turn 0 is not valid.";
+    let refused = "Meta could not process this request. Try again.";
     let transcriber = FakeAsr::new(600, |_| {
         Ok(heard(vec![
             turn(500, 6_000, "first turn"),
