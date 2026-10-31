@@ -83,14 +83,19 @@ pub const UNDO_DROPPED: &str = "The undo also dropped your proposal that was wai
 propose again if you still want it.";
 pub const NOT_YOURS: &str = "The last change in Klipolo isn't yours. Only the person can undo it.";
 pub const NOTHING_TO_UNDO: &str = "There is nothing of yours to undo.";
-/// Too many calls from one app, or from all apps together.
-pub const PACED: &str = "Klipolo is pacing changes from {client}. Wait a minute, then try again.";
+/// Too many calls from one app (reads too, but `getProposal`), or too many of one kind from all apps together.
+pub const PACED: &str = "Klipolo is pacing calls from {client}. Wait a minute, then try again.";
 pub const NO_CREDIT: &str = "This needs AI credit, and Klipolo has no Meta key or access code. The person can add one \
 in Klipolo's Settings.";
 /// Paid jobs past what apps may spend in one run of Klipolo, all apps together.
 pub const OVER_CAP: &str = "Other apps have used this session's AI allowance in Klipolo. The person can do this in \
 Klipolo's own chat.";
 pub const READ_ONLY: &str = "This project was made by a newer Klipolo, so it can't be edited here.";
+
+/// `PACED` for `client`.
+pub fn paced(client: &str) -> String {
+    fill(PACED, &[("client", client)])
+}
 
 /// `template` with each `{key}` of `values` filled in, in one pass: a value is never read for keys itself, so an app's
 /// name can't fill in another key. A `{` that starts no known key stays as it is.
@@ -143,7 +148,8 @@ pub const FROM_SEC: &str = "Where to start, timeline seconds. Null for the start
 pub const TO_SEC: &str = "Where to stop, timeline seconds. Null for the end.";
 /// `getProposal`.
 pub const PROPOSAL_TOOL: &str = "Whether the removals you proposed still wait for the person, or were applied, \
-discarded or dropped. While a proposal from someone else waits, it says so.";
+discarded or dropped. While a proposal from someone else waits, it says so. While you wait for the person, call it \
+every few seconds.";
 
 /// The resources' titles.
 pub const SUMMARY_TITLE: &str = "Project summary";

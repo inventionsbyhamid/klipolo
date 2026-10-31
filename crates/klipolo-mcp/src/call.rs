@@ -1,6 +1,5 @@
 //! An edit tool's call from an app: chat's own tool, read, checked and compiled as chat's are, then applied, proposed
 //! or refused. In order:
-//! 0. The app's pace of calls (`Limits::call`): `PACED` past it.
 //! 1. `ToolCall::parse`: a call that doesn't fit its tool is refused with the parse error's sentence. `undo` undoes the
 //!    app's own newest step and nothing else (`Host::undo_own`), once no one else's proposal waits.
 //! 2. The open project (`NO_PROJECT` without one). A call naming times or clip refs needs the app to have read the
@@ -64,9 +63,6 @@ pub(crate) struct Own {
 pub fn run(mcp: &Mcp, session: &mut Session, call: &FunctionCall) -> Value {
     let client = session.client.as_str();
     let host = mcp.host();
-    if mcp.limits().call(client, Instant::now()).is_err() {
-        return refused(&paced(client));
-    }
     let new = match ToolCall::parse(call) {
         Ok(new) => new,
         Err(e) => return refused(&e.to_string()),
@@ -214,7 +210,7 @@ fn edit(
             return refused(words::REMOVES);
         }
         if mcp.limits().applied(client, Instant::now()).is_err() {
-            return refused(&paced(client));
+            return refused(&words::paced(client));
         }
         match host.apply(client, snap.revision, &tx) {
             Ok(applied) => (revision, dropped) = (applied.revision, applied.dropped),
@@ -342,7 +338,7 @@ fn start(mcp: &Mcp, client: &str, job: &Job) -> Result<(), String> {
     match mcp.limits().paid(client, Instant::now(), usd) {
         Ok(()) => {}
         Err(Paced::OverCap) => return Err(words::OVER_CAP.to_owned()),
-        Err(Paced::Wait) => return Err(paced(client)),
+        Err(Paced::Wait) => return Err(words::paced(client)),
     }
     host.start_paid(client, job).map_err(|e| {
         // Nothing was spent.
@@ -381,10 +377,6 @@ fn someone_else(open: Option<&OpenProposal>, client: &str) -> Option<String> {
         Some(app) => Some(app.to_owned()),
         None => Some(words::KLIPOLO_CHAT.to_owned()),
     }
-}
-
-fn paced(client: &str) -> String {
-    fill(words::PACED, &[("client", client)])
 }
 
 fn waiting_other(who: &str) -> String {
@@ -499,7 +491,7 @@ fn answer(said: &[String], structured: Value) -> Value {
 }
 
 /// A result nothing was done in, and why.
-fn refused(why: &str) -> Value {
+pub(crate) fn refused(why: &str) -> Value {
     json!({
         "content": [{"type": "text", "text": why}],
         "isError": true,

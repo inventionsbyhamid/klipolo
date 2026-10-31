@@ -69,6 +69,11 @@ impl Read {
     }
 }
 
+/// Whether `uri` names a resource Klipolo has (a transcript page's times are read later).
+pub fn known(uri: &str) -> bool {
+    matches!(uri, SUMMARY | CONTEXT | TRANSCRIPT | PROPOSAL) || uri.starts_with(TEMPLATE)
+}
+
 /// Resource `uri` for `session`: its MIME type and text; None when there is no such resource.
 pub fn read(host: &dyn Host, session: &mut Session, uri: &str) -> Option<(&'static str, String)> {
     let read = match uri {

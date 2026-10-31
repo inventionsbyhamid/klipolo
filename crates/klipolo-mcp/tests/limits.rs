@@ -54,14 +54,59 @@ fn calls_past_60_a_minute_are_paced() {
     );
     assert_eq!(
         fill(PACED, &[("client", "Agent")]),
-        "Klipolo is pacing changes from Agent. Wait a minute, then try again."
+        "Klipolo is pacing calls from Agent. Wait a minute, then try again."
     );
     assert_eq!(host.revision(), before);
-    // Reads aren't edits: they still answer.
-    let read = agent.call("getContext", json!({}));
-    assert_eq!(read["isError"], false);
+    // Reads share the pace, as tools and as resources.
+    assert_refused(
+        &agent.call("getContext", json!({})),
+        &fill(PACED, &[("client", "Agent")]),
+    );
+    let context = read(&agent, "klipolo://context");
+    assert_eq!(context["text"], fill(PACED, &[("client", "Agent")]));
+    // What became of a proposal is never paced: an app polls it while the person decides.
+    let proposal = agent.call("getProposal", json!({}));
+    assert_eq!(proposal["isError"], false, "{proposal}");
+    assert_eq!(proposal["structuredContent"]["status"], "none");
+    let polled = read(&agent, "klipolo://proposal");
+    assert_eq!(polled["mimeType"], "application/json");
+    // A resource Klipolo doesn't have is still said to be none, paced or not.
+    let unknown = body(
+        &agent,
+        request(9, "resources/read", json!({"uri": "klipolo://nothing"})),
+    );
+    assert_eq!(unknown["error"]["code"], -32002);
     let other = Agent::open(&mcp, "Other app");
-    assert_eq!(outcome(&other.call("setFormat", square)), "done");
+    assert_eq!(outcome(&other.call("setFormat", square.clone())), "done");
+
+    // Reads count toward the pace like edits: 60 reads leave no room for an edit within the minute.
+    let reader = Agent::open(&mcp, "Reader");
+    for k in 0..60 {
+        let read = if k % 2 == 0 {
+            reader.call("getSummary", json!({}))
+        } else {
+            reader.call("getTranscript", json!({"fromSec": null, "toSec": null}))
+        };
+        assert_eq!(read["isError"], false, "{k}");
+    }
+    assert_refused(
+        &reader.call("setFormat", square),
+        &fill(PACED, &[("client", "Reader")]),
+    );
+}
+
+/// The reply to `msg` in `agent`'s session.
+fn body(agent: &Agent, msg: serde_json::Value) -> serde_json::Value {
+    match agent.mcp.handle(Some(&agent.session), msg) {
+        Handled::Reply { body, .. } => body,
+        other => panic!("expected a reply, got {other:?}"),
+    }
+}
+
+/// Resource `uri` as `agent` reads it: its one content.
+fn read(agent: &Agent, uri: &str) -> serde_json::Value {
+    let reply = body(agent, request(9, "resources/read", json!({"uri": uri})));
+    reply["result"]["contents"][0].clone()
 }
 
 #[test]

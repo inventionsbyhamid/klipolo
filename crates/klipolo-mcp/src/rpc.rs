@@ -1,8 +1,9 @@
 //! MCP over JSON-RPC 2.0: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`,
 //! `resources/templates/list` and `resources/read`, one message in and at most one reply out. `initialize` opens a
 //! session, unless the app or all apps together opened too many in the last minute (`Handled::Paced`); every other
-//! message needs one (`Handled::NoSession` otherwise). An edit tool's call goes to `call::run`, which paces the app's
-//! calls itself; a read is answered here. Refusals an agent can act on are tool results with `isError`; JSON-RPC
+//! message needs one (`Handled::NoSession` otherwise). Tool calls and resource reads share the app's pace (`PACED`
+//! past it), but what became of a proposal, which an app polls. An edit tool's call goes to `call::run`; a read is
+//! answered here. Refusals an agent can act on are tool results with `isError`; JSON-RPC
 //! errors are only for a message that isn't one object or a request without a method (-32600), an unknown method
 //! (-32601), an unknown tool (-32602) and an unknown resource (-32002). Bad JSON (-32700) is the server's, before a
 //! message reaches here. Nothing here trusts the client.
@@ -111,6 +112,14 @@ impl Mcp {
                     .get("uri")
                     .and_then(Value::as_str)
                     .unwrap_or_default();
+                // Reads share the app's pace, but what became of a proposal: an app polls it while the person decides.
+                if resources::known(uri) && uri != resources::PROPOSAL && self.paced(&session) {
+                    let text = words::paced(&session.client);
+                    return reply(ok(
+                        id,
+                        json!({"contents": [{"uri": uri, "mimeType": "text/plain", "text": text}]}),
+                    ));
+                }
                 match resources::read(self.host(), &mut session, uri) {
                     Some((mime, text)) => ok(
                         id,
@@ -166,6 +175,11 @@ impl Mcp {
         }
     }
 
+    /// Whether `session`'s app is past its pace of calls now; else the call counts toward it.
+    fn paced(&self, session: &Session) -> bool {
+        self.limits.call(&session.client, Instant::now()).is_err()
+    }
+
     /// Tells the host the apps connected, when they changed since it was last told.
     fn tell_connected(&self) {
         let mut told = locked(&self.told);
@@ -185,6 +199,13 @@ impl Mcp {
             None | Some(Value::Null) => json!({}),
             Some(args) => args.clone(),
         };
+        // Every call shares the app's pace, reads too, but `getProposal`: an app polls it while the person decides.
+        if (tools::is_read(name) || tools::is_edit(name))
+            && name != "getProposal"
+            && self.paced(session)
+        {
+            return ok(id, call::refused(&words::paced(&session.client)));
+        }
         let host = self.host();
         let read = match name {
             "getSummary" => resources::summary(host, session),
