@@ -9,7 +9,8 @@
 //!   takes away, on the timeline), applied as one undo step when the person says so.
 //! - `findMoments` gives moments, `followSubject` and `blurObjects` jobs for their runners, `askUser` questions, `undo`
 //!   a flag. `cannotDo` is a refusal shown to the person, as is a tool that needs an analysis the clip doesn't have yet
-//!   (`STILL_LISTENING`, `ANALYZE_FIRST`); every other refusal goes back to the model with its reason.
+//!   (`STILL_LISTENING`, `ANALYZE_FIRST`) and a removal with nothing to remove (`NO_FILLERS`, no pause that long);
+//!   every other refusal goes back to the model with its reason.
 //!
 //! All calls compile on one working copy, in two phases: the additions in call order, then the removals in call order
 //! on what the additions made, as the app applies them. Each call's ops are one part of its phase's batch
@@ -54,6 +55,8 @@ use trim::Trim;
 pub const STILL_LISTENING: &str = "Klipolo is still listening to this clip";
 /// What the person is told when a tool needs a clip's analysis and none was started.
 pub const ANALYZE_FIRST: &str = "Analyze this clip first";
+/// What the person is told when `removeFillers` finds no filler word.
+pub const NO_FILLERS: &str = "There are no filler words to remove.";
 
 /// How far a file's analysis (transcript, loudness, scene log) is. A file missing from `Inputs::analysis` counts as
 /// not started.
@@ -88,6 +91,8 @@ pub struct Compiled {
     pub additions: Option<Transaction>,
     /// Shown for the person to apply (one undo step) or discard, against the project once `additions` are applied.
     pub proposal: Option<Proposal>,
+    /// The calls whose edits are in `proposal`, by call index, in call order. Every other call not refused is done.
+    pub proposed_calls: Vec<usize>,
     /// Timeline ranges to point the person at, on the project once `additions` are applied.
     pub moments: Vec<Moment>,
     pub jobs: Vec<Job>,
@@ -184,6 +189,15 @@ fn to_model(reason: String) -> Refused {
     Refused {
         reason,
         audience: Audience::Model,
+        clip: None,
+    }
+}
+
+/// A sentence for the person: a fact about the project the model couldn't change by trying again.
+fn to_person(reason: String) -> Refused {
+    Refused {
+        reason,
+        audience: Audience::Person,
         clip: None,
     }
 }
@@ -440,21 +454,26 @@ impl Compiler<'_> {
             let added = edit.and_then(|edit| {
                 (removing.add(edit)).map_err(|e| to_model(format!("{call_name}: {e}")))
             });
-            if let Err(r) = added {
-                refuse(&mut out, i, r);
+            match added {
+                Ok(()) => out.proposed_calls.push(i),
+                Err(r) => refuse(&mut out, i, r),
             }
         }
 
         out.additions = adding.transaction();
-        if let Some(tx) = removing.transaction() {
-            let review = tx.review_applied(&adding.done, removing.done);
-            let ranges = review.removals.ranges.clone();
-            out.proposal = Some(Proposal {
-                removed_us: ranges.iter().map(RangeUs::len).sum(),
-                ranges,
-                tx,
-                review,
-            });
+        match removing.transaction() {
+            Some(tx) => {
+                let review = tx.review_applied(&adding.done, removing.done);
+                let ranges = review.removals.ranges.clone();
+                out.proposal = Some(Proposal {
+                    removed_us: ranges.iter().map(RangeUs::len).sum(),
+                    ranges,
+                    tx,
+                    review,
+                });
+            }
+            // Removals whose edits held no ops propose nothing.
+            None => out.proposed_calls.clear(),
         }
         out.refusals.sort_by_key(|r| r.call_index);
         out

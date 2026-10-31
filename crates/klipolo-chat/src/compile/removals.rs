@@ -7,8 +7,9 @@
 //!   asked, `PAUSE_US` when none was.
 //! - `removeFillers`: every filler word, each cut as `word_cut` pads it.
 //!
-//! The pauses and fillers are found on the working copy itself, so they need no mapping. Nothing to remove is said back
-//! to the model.
+//! The pauses and fillers are found on the working copy itself, so they need no mapping. Nothing to remove is told to
+//! the person (`NO_FILLERS`, "There are no pauses longer than 1.0 s to remove."): asking the model again could not
+//! change it.
 
 use klipolo_model::Project;
 use klipolo_model::coded::ErrorParam;
@@ -18,7 +19,7 @@ use klipolo_model::speech::silence::timeline_pauses;
 use klipolo_model::speech::{PAUSE_US, WordKind, spoken, word_cut};
 use klipolo_model::time::{RangeUs, Us, kept_parts, merge_ranges};
 
-use super::{Compiler, Edit, Refused, label, to_model, us};
+use super::{Compiler, Edit, NO_FILLERS, Refused, label, to_model, to_person, us};
 use crate::context::secs;
 use crate::tools::ToolCall;
 
@@ -98,8 +99,8 @@ fn keep_only(c: &Compiler, work: &Project, ranges: &[RangeUs]) -> Result<Edit, R
 fn remove_silences(c: &Compiler, work: &Project, min_pause_us: Us) -> Result<Edit, Refused> {
     let pauses = timeline_pauses(work, &c.inputs.speech, min_pause_us, None);
     if pauses.is_empty() {
-        return Err(to_model(format!(
-            "removeSilences: no pause is longer than {} s.",
+        return Err(to_person(format!(
+            "There are no pauses longer than {} s to remove.",
             secs(min_pause_us)
         )));
     }
@@ -124,9 +125,7 @@ fn remove_fillers(c: &Compiler, work: &Project) -> Result<Edit, Refused> {
         .map(|(i, _)| word_cut(&words, i, i, fps))
         .collect();
     if cuts.is_empty() {
-        return Err(to_model(
-            "removeFillers: there are no filler words.".to_owned(),
-        ));
+        return Err(to_person(NO_FILLERS.to_owned()));
     }
     let count = cuts.len();
     Ok(Edit {
