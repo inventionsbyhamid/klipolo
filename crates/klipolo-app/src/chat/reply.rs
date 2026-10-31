@@ -320,6 +320,10 @@ impl ChatProposal {
         }
     }
 
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
     pub fn title(&self) -> &str {
         &self.title
     }

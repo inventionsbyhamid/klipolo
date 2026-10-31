@@ -2,7 +2,8 @@
 //! project. The planner (`klipolo_chat`) reads the project and compiles the model's calls; this applies them.
 //!
 //! - `session`: one message at a time, its additions applied at once, its removals kept as a proposal for Apply or
-//!   Discard, the conversation remembered, the spend counted.
+//!   Discard, the conversation remembered, the spend counted. The proposal slot is shared with other apps (MCP): an
+//!   app's proposal waits in it as chat's do (`SlotGuard`), and what the person did with it is kept for the app.
 //! - `project`: the open project as chat reads and edits it (`Projects`), which the app's project session implements;
 //!   `commit_reviewed`, the one way chat's edits enter the history; `MemoryProjects` for tools and tests.
 //! - `sources`: the language model as the saved credentials allow it (`Models`) and what the analysis found
@@ -36,6 +37,6 @@ pub use reply::{
     ChatApplied, ChatFailure, ChatFailureKind, ChatMoment, ChatOutcome, ChatProposal, ChatReply,
     ChatRequest, ExternalReply, ProposalTag,
 };
-pub use session::ChatSession;
+pub use session::{ChatSession, Decided, Gone, SlotGuard, Waiting};
 pub use sources::{Findings, MetaModels, Models, Readiness};
 pub use spend::{ChatSpend, SpendCounter};
