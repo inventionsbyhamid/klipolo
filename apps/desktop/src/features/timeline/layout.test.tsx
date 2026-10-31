@@ -85,6 +85,18 @@ describe('the lanes in a 1100 x 700 window', () => {
     // The ruler (and the playhead's head on it) stays at the top while they scroll, over the lanes passing under it.
     expect(appCss).toMatch(/\.tl-head \{[^}]*position: sticky;[^}]*top: 0;[^}]*background: var\(--color-bay\)/s);
   });
+
+  it('the marks run to the Music lane\'s foot while the lanes scroll: their box grows with the lanes', () => {
+    // The playhead, range, cut hatch, snap guide and drop ghosts are laid over `.tl-content` from top to bottom. At
+    // `height: 100%` it stayed the scroller's height while three overlay rows overflowed it, so they stopped short of
+    // the Music lane's foot; at least that height, it takes the lanes' own.
+    const content = /\.tl-content \{([^}]*)\}/.exec(appCss)![1];
+    expect(content).toMatch(/min-height: 100%;/);
+    expect(content).not.toMatch(/(^|[^-])height: 100%/);
+    // The Video lane grows from nothing into what the others leave, so it still gives way (two overlay rows) down to
+    // its floor rather than holding the content at its own height.
+    expect(appCss).toMatch(/\.tl-row\.is-grow \{[^}]*flex: 1 1 0;/s);
+  });
 });
 
 describe('the ruler row over the lanes', () => {
