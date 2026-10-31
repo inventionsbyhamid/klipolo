@@ -2357,6 +2357,7 @@ name = "klipolo-analysis"
 version = "0.1.0"
 dependencies = [
  "futures",
+ "klipolo-chat",
  "klipolo-engine",
  "klipolo-meta",
  "klipolo-model",
