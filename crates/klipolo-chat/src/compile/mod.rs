@@ -66,8 +66,12 @@ pub use media::{
 };
 use trim::Trim;
 
-/// What the person is told when a tool needs a clip's analysis and Klipolo is still making it.
+/// What the person is told when a tool needs a clip's words and Klipolo is still hearing or timing them.
 pub const STILL_LISTENING: &str = "Klipolo is still listening to this clip";
+/// What the person is told when finding moments needs a clip's scene log and Klipolo is still making it (its words
+/// are in, so cuts work already).
+pub const STILL_WATCHING: &str =
+    "Klipolo is still watching this clip. Ask me again when its analysis is done.";
 /// What the person is told when a tool needs a clip's analysis and none was started.
 pub const ANALYZE_FIRST: &str = "Analyze this clip first";
 /// What the person is told when `removeFillers` finds no filler word.
@@ -78,7 +82,10 @@ pub const NO_FILLERS: &str = "There are no filler words to remove.";
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AnalysisState {
     NotStarted,
+    /// Its words are being heard or timed.
     Transcribing,
+    /// Its words are in (heard and timed); its scene log is still being made.
+    Watching,
     Done,
 }
 
@@ -638,9 +645,10 @@ impl Compiler<'_> {
         }
     }
 
-    /// The person's refusal when `call` needs an analysis some clip on the main track lacks: its voice files' for
-    /// removing fillers and pauses, and its picture's too for finding moments. Not started anywhere wins over still
-    /// being made, since analyzing is something the person can do; the refusal names the first clip it is about.
+    /// The person's refusal when `call` needs an analysis some clip on the main track lacks: its voice files' words for
+    /// removing fillers and pauses (a scene log still being made doesn't hold them up), and its picture's scene log too
+    /// for finding moments. Not started anywhere wins over still being made, since analyzing is something the person
+    /// can do, and words still to come over a scene log; the refusal names the first clip it is about.
     fn missing_analysis(&self, call: &ToolCall) -> Option<Refused> {
         let pictures = match call {
             ToolCall::RemoveFillers | ToolCall::RemoveSilences { .. } => false,
@@ -658,8 +666,9 @@ impl Compiler<'_> {
         }
         let state =
             |id: &str| (self.inputs.analysis.get(id).copied()).unwrap_or(AnalysisState::NotStarted);
-        // The first clip, in timeline order, with a file never analyzed, and the first with one still being made.
-        let (mut not_started, mut transcribing) = (None, None);
+        // The first clip, in timeline order, with a file never analyzed, the first whose words are still to come, and
+        // the first whose scene log is.
+        let (mut not_started, mut transcribing, mut watching) = (None, None, None);
         for clip in &p.timeline.main {
             let mut files = voices.get(clip.id.as_str()).cloned().unwrap_or_default();
             if pictures
@@ -672,14 +681,16 @@ impl Compiler<'_> {
                 match state(file) {
                     AnalysisState::NotStarted => not_started = not_started.or(Some(&clip.id)),
                     AnalysisState::Transcribing => transcribing = transcribing.or(Some(&clip.id)),
-                    AnalysisState::Done => {}
+                    AnalysisState::Watching if pictures => watching = watching.or(Some(&clip.id)),
+                    AnalysisState::Watching | AnalysisState::Done => {}
                 }
             }
         }
-        let (said, clip) = match (not_started, transcribing) {
-            (Some(clip), _) => (ANALYZE_FIRST, clip),
-            (None, Some(clip)) => (STILL_LISTENING, clip),
-            (None, None) => return None,
+        let (said, clip) = match (not_started, transcribing, watching) {
+            (Some(clip), ..) => (ANALYZE_FIRST, clip),
+            (None, Some(clip), _) => (STILL_LISTENING, clip),
+            (None, None, Some(clip)) => (STILL_WATCHING, clip),
+            (None, None, None) => return None,
         };
         Some(Refused {
             reason: said.to_owned(),

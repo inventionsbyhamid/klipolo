@@ -2300,3 +2300,53 @@ async fn assets_read_for_an_opening_left_behind_start_nothing() {
     assert_eq!(media.sounds.load(Ordering::SeqCst), 0);
     server.verify().await;
 }
+
+/// The scene log comes last: while it is made the clip's words are in, so chat reads it as being watched (its voice
+/// tools work, finding moments waits), not as being listened to.
+#[tokio::test(flavor = "multi_thread")]
+async fn chat_reads_a_clip_whose_scene_log_is_being_made_as_watched() {
+    let server = MockServer::start().await;
+    let watched = Arc::new(AtomicUsize::new(0));
+    mount_scenes(
+        &server,
+        "/v1",
+        Counted {
+            count: watched.clone(),
+            template: ResponseTemplate::new(200)
+                .set_body_json(spark_answer())
+                .set_delay(Duration::from_millis(500)),
+        },
+    )
+    .await;
+    nothing_else(&server).await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    let file = h.clip("a.mp4", 1);
+    h.cache_dir(&file)
+        .store("transcript", &cached_transcript())
+        .unwrap();
+    let clip = asset("clip-a", AssetKind::Video, &file, SECONDS);
+
+    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while watched.load(Ordering::SeqCst) == 0 {
+        assert!(Instant::now() < deadline, "the scene log never started");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert!(matches!(
+        h.state.state_of("clip-a"),
+        AssetState::Running {
+            step: AnalysisStep::Scenes,
+            ..
+        }
+    ));
+    assert_eq!(
+        h.state.chat_state("clip-a"),
+        klipolo_chat::AnalysisState::Watching
+    );
+    started.finished().await;
+    assert_eq!(
+        h.state.chat_state("clip-a"),
+        klipolo_chat::AnalysisState::Done
+    );
+    server.verify().await;
+}

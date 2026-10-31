@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use klipolo_chat::compile::STILL_WATCHING;
 use klipolo_chat::evidence::typed_times;
 use klipolo_chat::{
     ANALYZE_FIRST, AnalysisState, Audience, FunctionCall, Inputs, Job, Library, Moment, Refs,
@@ -1522,6 +1523,70 @@ fn nothing_to_remove_is_told_to_the_person() {
             audience: Audience::Person,
             clip: None,
         }]
+    );
+}
+
+#[test]
+fn voice_tools_work_while_the_scene_log_is_made() {
+    // Its words are in and only the scene log is still being made: cutting fillers and pauses goes on, finding moments
+    // waits for what is seen.
+    assert_eq!(
+        STILL_WATCHING,
+        "Klipolo is still watching this clip. Ask me again when its analysis is done."
+    );
+    let (p, mut speech) = talk();
+    speech.levels.insert("talk".into(), levels());
+    let mut i = inputs(
+        &p,
+        speech,
+        "remove the ums and the pauses, and find the module",
+    );
+    i.analysis.insert("talk".into(), AnalysisState::Watching);
+    let out = compile(
+        &p,
+        &i,
+        &[
+            call("removeFillers", "{}"),
+            call("removeSilences", r#"{"minPauseSec": null}"#),
+            call("findMoments", r#"{"query": "the module", "ranges": []}"#),
+        ],
+    );
+    assert_eq!(out.proposed_calls, vec![0, 1]);
+    assert!(out.proposal.is_some());
+    assert_eq!(
+        out.refusals,
+        vec![Refusal {
+            call_index: 2,
+            reason: STILL_WATCHING.into(),
+            audience: Audience::Person,
+            clip: Some("c1".into()),
+        }]
+    );
+    // Words still to come anywhere come first.
+    let two = project(
+        vec![file("talk", 30.0, true), file("more", 10.0, true)],
+        vec![clip("t", "talk", 0.0, 30.0), clip("m", "more", 0.0, 10.0)],
+    );
+    let (_, speech) = talk();
+    let mut i = inputs(&two, speech, "find the module");
+    i.analysis = HashMap::from([
+        ("talk".into(), AnalysisState::Watching),
+        ("more".into(), AnalysisState::Transcribing),
+    ]);
+    let out = compile(
+        &two,
+        &i,
+        &[call(
+            "findMoments",
+            r#"{"query": "the module", "ranges": []}"#,
+        )],
+    );
+    assert_eq!(
+        (
+            out.refusals[0].reason.as_str(),
+            out.refusals[0].clip.as_deref()
+        ),
+        (STILL_LISTENING, Some("c2"))
     );
 }
 

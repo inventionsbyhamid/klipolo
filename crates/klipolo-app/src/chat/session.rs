@@ -666,7 +666,8 @@ fn without_proposed(note: &str) -> String {
         .to_owned()
 }
 
-/// A refusal about a clip that isn't analyzed yet names it: "Analyze this clip first (interview.mov)."
+/// A refusal about one clip (not analyzed yet, its fillers roughly timed) names it after "this clip": "Analyze this clip
+/// (interview.mov) first."
 fn name_clips(out: &mut PlanOut, project: &Project, inputs: &Inputs) {
     for r in &out.compiled.refusals {
         if r.audience != Audience::Person {
@@ -681,18 +682,45 @@ fn name_clips(out: &mut PlanOut, project: &Project, inputs: &Inputs) {
             })
             .filter(|name| !name.trim().is_empty())
             .unwrap_or_else(|| short.clone());
-        let reason = r.reason.trim().trim_end_matches('.');
-        let said = format!("{reason}.");
-        let named = format!("{reason} ({}).", name.trim());
+        let said = format!("{}.", r.reason.trim().trim_end_matches('.'));
+        let named = named_in(&said, name.trim());
         if out.reply.contains(&said) && !out.reply.contains(&named) {
             out.reply = out.reply.replacen(&said, &named, 1);
         }
     }
 }
 
+/// `said` with the clip's `name` after "this clip", or before its last full stop when it doesn't say "this clip".
+fn named_in(said: &str, name: &str) -> String {
+    const THIS: &str = "this clip";
+    match said.find(THIS) {
+        Some(at) => {
+            let (before, after) = said.split_at(at + THIS.len());
+            format!("{before} ({name}){after}")
+        }
+        None => format!("{} ({name}).", said.trim_end_matches('.')),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::without_proposed;
+    use super::{named_in, without_proposed};
+
+    #[test]
+    fn a_clip_is_named_after_this_clip() {
+        assert_eq!(
+            named_in("Analyze this clip first.", "talk.mov"),
+            "Analyze this clip (talk.mov) first."
+        );
+        assert_eq!(
+            named_in(
+                "Klipolo is still watching this clip. Ask me again when its analysis is done.",
+                "talk.mov"
+            ),
+            "Klipolo is still watching this clip (talk.mov). Ask me again when its analysis is done."
+        );
+        assert_eq!(named_in("Not yet.", "talk.mov"), "Not yet (talk.mov).");
+    }
 
     #[test]
     fn a_note_drops_what_it_says_was_proposed() {

@@ -117,25 +117,27 @@ fn transcript() -> Arc<Transcript> {
     })
 }
 
-/// What the analysis found: "talk.mov"'s words, or nothing yet (`state`).
+/// What the analysis found: "talk.mov"'s words once they are in (done, or the scene log still being made), or nothing
+/// yet (`state`).
 struct Found {
     state: Mutex<AnalysisState>,
     levels: HashMap<String, Arc<Levels>>,
 }
 
 impl Found {
-    fn done() -> Arc<Self> {
+    fn at(state: AnalysisState) -> Arc<Self> {
         Arc::new(Self {
-            state: Mutex::new(AnalysisState::Done),
+            state: Mutex::new(state),
             levels: HashMap::new(),
         })
     }
 
+    fn done() -> Arc<Self> {
+        Self::at(AnalysisState::Done)
+    }
+
     fn not_started() -> Arc<Self> {
-        Arc::new(Self {
-            state: Mutex::new(AnalysisState::NotStarted),
-            levels: HashMap::new(),
-        })
+        Self::at(AnalysisState::NotStarted)
     }
 
     /// Done, with "talk.mov"'s loudness: quiet from 10.0 to 10.8 s and from 15.0 to 17.0 s.
@@ -159,7 +161,9 @@ impl Found {
 
 impl Findings for Found {
     fn found(&self, asset_id: &str) -> Option<Arc<AssetAnalysis>> {
-        (asset_id == "talk" && *self.state.lock().unwrap() == AnalysisState::Done).then(|| {
+        let state = *self.state.lock().unwrap();
+        let heard = matches!(state, AnalysisState::Done | AnalysisState::Watching);
+        (asset_id == "talk" && heard).then(|| {
             Arc::new(AssetAnalysis {
                 transcript: Some(transcript()),
                 ..AssetAnalysis::default()
@@ -706,7 +710,7 @@ async fn a_clip_not_analyzed_yet_is_named() {
     let model = Script::new(vec![answer("Removing them now.", vec![fillers()])]);
     let chat = chat_with(model.clone(), Found::not_started(), Paying::key(model));
     let r = reply(&chat.session.send(request("cut the ums")).await.unwrap());
-    assert_eq!(r["text"], "Analyze this clip first (talk.mov).");
+    assert_eq!(r["text"], "Analyze this clip (talk.mov) first.");
     assert!(r["proposal"].is_null());
 }
 
@@ -2300,5 +2304,33 @@ async fn chats_cuts_fit_the_music_to_the_new_end() {
     assert_eq!(
         music_end(&project.project()),
         (secs(30.0), MUSIC_FADE_OUT_US)
+    );
+}
+
+#[tokio::test]
+async fn ums_are_cut_while_the_scene_log_is_made_and_moments_wait() {
+    let model = Script::new(vec![
+        answer("", vec![fillers()]),
+        answer(
+            "",
+            vec![fc(
+                "f",
+                "findMoments",
+                r#"{"query": "the module", "ranges": []}"#,
+            )],
+        ),
+    ]);
+    let chat = chat_with(
+        model.clone(),
+        Found::at(AnalysisState::Watching),
+        Paying::key(model),
+    );
+    let out = chat.session.send(request("cut the ums")).await.unwrap();
+    let ranges = &reply(&out)["proposal"]["removals"]["ranges"];
+    assert_eq!(ranges.as_array().unwrap().len(), 2, "both fillers");
+    let r = reply(&chat.session.send(request("find the module")).await.unwrap());
+    assert_eq!(
+        r["text"],
+        "Klipolo is still watching this clip (talk.mov). Ask me again when its analysis is done."
     );
 }
