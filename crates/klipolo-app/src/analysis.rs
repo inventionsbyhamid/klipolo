@@ -29,7 +29,7 @@ pub mod chat;
 pub mod media;
 mod run;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 
@@ -293,6 +293,8 @@ struct Entry {
 #[derive(Default)]
 struct Inner {
     assets: HashMap<String, Entry>,
+    /// The clips a `start` took on, until their analysis ends: another start leaves them alone.
+    claimed: HashSet<String>,
     speech: Speech,
     /// The runs started, while any of their clips is still going (`cancel` stops them all).
     runs: Vec<Weak<Run>>,
@@ -370,20 +372,15 @@ impl AnalysisState {
         estimate
     }
 
-    /// Starts analysing `assets` (see the module notes). A clip already running is left to its run. Cached clips load
+    /// Starts analysing `assets` (see the module notes). A clip another start took on is left to it. Cached clips load
     /// whatever else happens; the others start only when something can pay for them and, with an access code, their
     /// estimate is within the credit left (`Started::refused` says why not).
     pub async fn start(self: &Arc<Self>, assets: &[Asset]) -> Started {
         let clips: Vec<Clip> = {
-            let inner = lock(&self.inner);
+            let mut inner = lock(&self.inner);
             clips_of(assets)
                 .into_iter()
-                .filter(|clip| {
-                    !matches!(
-                        inner.assets.get(&clip.id).map(|e| &e.state),
-                        Some(AssetState::Running { .. })
-                    )
-                })
+                .filter(|clip| inner.claimed.insert(clip.id.clone()))
                 .collect()
         };
         let mut ready = Vec::new();
@@ -403,6 +400,10 @@ impl AnalysisState {
         };
         if let Some(reason) = &refused {
             tracing::info!(%reason, clips = paid.len(), "analysis: refused");
+            let mut inner = lock(&self.inner);
+            for (clip, _) in &paid {
+                inner.claimed.remove(&clip.id);
+            }
         }
         let run = self.run_now();
         let starting = ready
@@ -560,6 +561,7 @@ impl AnalysisState {
             ),
         };
         inner.assets.entry(asset_id.to_owned()).or_default().state = state;
+        inner.claimed.remove(asset_id);
         (self.events)(event);
     }
 

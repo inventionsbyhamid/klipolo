@@ -1101,3 +1101,37 @@ fn chat_reads_scene_items_and_turns_in_its_own_types() {
         (500_000, 4_000_000, Some("A"))
     );
 }
+
+/// Two starts for one clip at once (a double click, the page and a retry) analyse it once.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_clip_started_twice_at_once_is_analysed_once() {
+    let server = MockServer::start().await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(asr_answer().set_delay(Duration::from_millis(200)))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(align_answer())
+        .expect(1)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 2), SECONDS);
+
+    let (first, second) = tokio::join!(
+        h.state.start(std::slice::from_ref(&clip)),
+        h.state.start(std::slice::from_ref(&clip))
+    );
+    first.finished().await;
+    second.finished().await;
+
+    assert_eq!(
+        h.state.state_of("talk"),
+        AssetState::Done { approximate: false }
+    );
+    server.verify().await;
+}
