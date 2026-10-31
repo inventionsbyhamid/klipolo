@@ -31,6 +31,10 @@ pub struct ChatRequest {
     /// the model (they are Klipolo's own moments). Empty for a message the person typed.
     #[serde(default)]
     pub keep_only: Vec<RangeUs>,
+    /// The revision of the page's copy the request was made on. The selection and `keep_only` are times on it: when the
+    /// project moved on since, a request with either is refused with `project.moved` before anything is compiled.
+    #[ts(type = "number")]
+    pub base_revision: u64,
 }
 
 /// What a message came to: a reply, or why nothing happened (the project untouched).

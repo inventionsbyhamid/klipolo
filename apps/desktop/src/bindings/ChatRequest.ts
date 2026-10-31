@@ -26,4 +26,9 @@ format: FormatKind | null,
  * "Keep only these" under moments: keep only these timeline ranges and remove the rest, proposed without asking
  * the model (they are Klipolo's own moments). Empty for a message the person typed.
  */
-keepOnly: Array<RangeUs>, };
+keepOnly: Array<RangeUs>, 
+/**
+ * The revision of the page's copy the request was made on. The selection and `keep_only` are times on it: when the
+ * project moved on since, a request with either is refused with `project.moved` before anything is compiled.
+ */
+baseRevision: number, };

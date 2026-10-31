@@ -56,13 +56,14 @@ pub(crate) fn load(
     ))
 }
 
-/// One message (or "Keep only these"): the reply, or why nothing happened, the project untouched.
+/// One message (or "Keep only these"): the reply, or why nothing happened, the project untouched. `project.moved` when
+/// its selection or moments were made on a revision the project left.
 #[tauri::command]
 pub(crate) async fn chat_send(
     chat: State<'_, ChatHandle>,
     request: ChatRequest,
-) -> Result<ChatOutcome, String> {
-    Ok(chat.send(request).await)
+) -> Result<ChatOutcome, Said> {
+    chat.send(request).await.map_err(|e| e.said())
 }
 
 /// Applies proposal `id` as one undo step; `project.moved` when the project changed since it was made (it is dropped).

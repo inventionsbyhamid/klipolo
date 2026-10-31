@@ -3,11 +3,15 @@
 //! - **One message at a time.** A message waits for the one before it to land before anything is read (`queue`), so
 //!   its context and its compiler inputs are built from the project as it is then (`inputs::gather`), and its calls
 //!   compile against that same snapshot.
+//! - **Times the request names** (the selection, "Keep only these" ranges) are on the revision the page made it on
+//!   (`ChatRequest::base_revision`): a project that moved on since refuses the request with `project.moved` before
+//!   anything is compiled. A message that names no time is read on the project as it is when its turn comes.
 //! - **Additions** apply at once as one undo step (`origin: Chat`), on the revision the message was sent on; the reply
 //!   carries what changed. **Removals** are a proposal, kept by id with the revision it applies to (the one after the
-//!   additions). Apply records the project its review made (`commit_reviewed`): one undo step. A project that moved on
-//!   from that revision (a hand edit, an undo) refuses it with `project.moved`, and it is dropped. Discard changes
-//!   nothing. The model's `undo` takes back the top step, on the revision it saw.
+//!   additions). One proposal is open at a time: a newer one replaces it, so red always means "will be cut". Apply
+//!   records the project its review made (`commit_reviewed`): one undo step. A proposal replaced, or one whose project
+//!   moved on from its revision (a hand edit, an undo), refuses Apply with `project.moved` and is dropped. Discard
+//!   changes nothing. The model's `undo` takes back the top step, on the revision it saw.
 //! - **The project moved while the model answered** (a hand edit meanwhile): nothing of the answer is applied or
 //!   proposed, and the reply says so.
 //! - **Errors** never touch the project: each is one plain sentence (`ChatFailure`). No key or code is `NeedsKey`; a
@@ -42,8 +46,6 @@ use super::spend::{ChatSpend, SpendCounter};
 
 /// The exchanges kept for the model: the planner's own `KEPT_TURNS`.
 pub const KEPT_EXCHANGES: usize = klipolo_chat::KEPT_TURNS;
-/// Proposals kept for Apply at once (each holds the project it would make); the oldest goes first.
-pub const KEPT_PROPOSALS: usize = 4;
 
 /// Said when no project is open.
 pub const NO_PROJECT: &str = "Open a project first.";
@@ -76,6 +78,7 @@ const MOVED_NOTE: &str = "Nothing was applied: the person changed the project me
 const NOT_APPLIED_NOTE: &str = "Nothing was applied: the changes no longer fit the project.";
 const APPLIED_NOTE: &str = "The person applied the proposal.";
 const DISCARDED_NOTE: &str = "The person discarded the proposal.";
+const REPLACED_NOTE: &str = "Replaced by a newer proposal.";
 const DROPPED_NOTE: &str =
     "The proposal was dropped: the project changed before the person applied it.";
 
@@ -97,8 +100,8 @@ struct Talk {
     owner: Option<At>,
     /// Oldest first, at most `KEPT_EXCHANGES`.
     exchanges: Vec<Exchange>,
-    /// Oldest first, at most `KEPT_PROPOSALS`.
-    proposals: Vec<Stored>,
+    /// The one proposal waiting for Apply or Discard.
+    open: Option<Stored>,
     /// Where the project stood right after chat's last change: `undo_last` takes it back only from there.
     last_change: Option<At>,
 }
@@ -177,24 +180,30 @@ impl ChatSession {
     }
 
     /// One message: the model's answer, its additions applied, its removals proposed; or why nothing happened, the
-    /// project untouched. A message waits for the one before it.
-    pub async fn send(&self, request: ChatRequest) -> ChatOutcome {
+    /// project untouched. A message waits for the one before it. A request whose selection or "Keep only these" ranges
+    /// were made on a revision the project left is refused with `CommitError::Moved`.
+    pub async fn send(&self, request: ChatRequest) -> Result<ChatOutcome, CommitError> {
         let text = request.text.trim().to_owned();
         // Which project the person sent it to, before it waits its turn.
         let asked = self.projects.now().map(|p| p.at);
         let _turn = self.queue.lock().await;
         let Some(now) = self.projects.now() else {
-            return failed(ChatFailureKind::Other, NO_PROJECT);
+            return Ok(failed(ChatFailureKind::Other, NO_PROJECT));
         };
         if asked.is_some_and(|a| !a.same_project(&now.at)) {
-            return failed(ChatFailureKind::Other, OTHER_PROJECT);
+            return Ok(failed(ChatFailureKind::Other, OTHER_PROJECT));
         }
         self.follow(&now.at);
+        // "This" and the moments are times on the page's copy: stale once the project moved on.
+        let names_times = request.selection.is_some() || !request.keep_only.is_empty();
+        if names_times && request.base_revision != now.at.revision {
+            return Err(CommitError::Moved);
+        }
         if now.read_only {
-            return failed(ChatFailureKind::Other, READ_ONLY);
+            return Ok(failed(ChatFailureKind::Other, READ_ONLY));
         }
         if text.is_empty() && request.keep_only.is_empty() {
-            return failed(ChatFailureKind::Other, EMPTY);
+            return Ok(failed(ChatFailureKind::Other, EMPTY));
         }
         let view = View {
             playhead_us: request.playhead_us,
@@ -203,13 +212,15 @@ impl ChatSession {
         if !request.keep_only.is_empty() {
             let (_, inputs) = gather(&now.project, &*self.findings, &text, view);
             let out = keep_only(&now.project, &inputs, request.keep_only.clone());
-            return self.land(&request.id, &text, &now, &inputs, out);
+            return Ok(self.land(&request.id, &text, &now, &inputs, out));
         }
 
         let (model, relay) = match self.models.ready().await {
             Readiness::Ready { model, relay } => (model, relay),
-            Readiness::Problem(problem) => return failed(ChatFailureKind::Registration, &problem),
-            Readiness::NeedsKey => return failed(ChatFailureKind::NeedsKey, NEEDS_KEY),
+            Readiness::Problem(problem) => {
+                return Ok(failed(ChatFailureKind::Registration, &problem));
+            }
+            Readiness::NeedsKey => return Ok(failed(ChatFailureKind::NeedsKey, NEEDS_KEY)),
         };
         let (context, inputs) = gather(&now.project, &*self.findings, &text, view);
         let history = self.turns();
@@ -229,7 +240,7 @@ impl ChatSession {
             self.spend.message(refused.usage_usd, refused.model_calls);
             planned = ask(model).await;
         }
-        match planned {
+        Ok(match planned {
             Err(error) => {
                 self.spend.message(error.usage_usd, error.model_calls);
                 tracing::info!(kind = ?error.kind, detail = %error.detail, "chat: the message failed");
@@ -239,16 +250,16 @@ impl ChatSession {
                 self.spend.message(out.usage_usd, out.answers.len());
                 self.land(&request.id, &text, &now, &inputs, out)
             }
-        }
+        })
     }
 
     /// Applies proposal `id` as one undo step. Refused with `project.moved` (and dropped) when the project moved on from
-    /// the revision it was made for, or when it is gone (discarded, dropped, another project).
+    /// the revision it was made for, or when it is gone (replaced, discarded, dropped, another project).
     pub fn apply(&self, id: &str) -> Result<ChatApplied, CommitError> {
         let stored = {
             let mut talk = lock(&self.talk);
-            let at = talk.proposals.iter().position(|p| p.id == id);
-            at.map(|at| talk.proposals.remove(at))
+            let open = talk.open.as_ref().is_some_and(|p| p.id == id);
+            open.then(|| talk.open.take()).flatten()
         };
         let Some(stored) = stored else {
             return Err(CommitError::Moved);
@@ -276,9 +287,8 @@ impl ChatSession {
     /// Drops proposal `id`: nothing changes.
     pub fn discard(&self, id: &str) {
         let mut talk = lock(&self.talk);
-        let before = talk.proposals.len();
-        talk.proposals.retain(|p| p.id != id);
-        if talk.proposals.len() < before {
+        if talk.open.as_ref().is_some_and(|p| p.id == id) {
+            talk.open = None;
             talk.noted(id, DISCARDED_NOTE);
         }
     }
@@ -296,7 +306,7 @@ impl ChatSession {
     pub fn reset(&self) {
         let mut talk = lock(&self.talk);
         talk.exchanges.clear();
-        talk.proposals.clear();
+        talk.open = None;
     }
 
     /// Another project opened, or the project closed: everything about the old one is forgotten.
@@ -477,8 +487,12 @@ impl ChatSession {
                 }
             }
         }
-        // Proposals made on a revision the project left can never apply.
-        lock(&self.talk).proposals.retain(|p| p.at == at);
+        // A proposal made on a revision the project left can never apply.
+        let mut talk = lock(&self.talk);
+        if talk.open.as_ref().is_some_and(|p| p.at != at) {
+            talk.open = None;
+        }
+        drop(talk);
         landed
     }
 }
@@ -490,10 +504,11 @@ impl Talk {
         self.exchanges.drain(..over);
     }
 
+    /// `stored` is the open proposal now; the one open before is replaced.
     fn keep(&mut self, stored: Stored) {
-        self.proposals.push(stored);
-        let over = self.proposals.len().saturating_sub(KEPT_PROPOSALS);
-        self.proposals.drain(..over);
+        if let Some(old) = self.open.replace(stored) {
+            self.noted(&old.id, REPLACED_NOTE);
+        }
     }
 
     /// What became of proposal `id`, added to the note of the exchange that made it.

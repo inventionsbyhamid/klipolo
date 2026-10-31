@@ -270,6 +270,7 @@ fn request(text: &str) -> ChatRequest {
         "item": null,
         "playheadUs": 0,
         "format": null,
+        "baseRevision": 0,
     }))
     .unwrap()
 }
@@ -350,7 +351,8 @@ async fn additions_apply_at_once_as_one_undo_step_from_chat() {
     let out = chat
         .session
         .send(request("make it vertical with karaoke captions"))
-        .await;
+        .await
+        .unwrap();
     let r = reply(&out);
     assert_eq!(r["applied"]["change"]["baseRevision"], 0);
     assert_eq!(r["applied"]["change"]["history"]["revision"], 1);
@@ -371,7 +373,7 @@ async fn additions_apply_at_once_as_one_undo_step_from_chat() {
 async fn apply_is_one_undo_step() {
     let chat = chat(vec![answer("These are the fillers.", vec![fillers()])]);
     let before = chat.project.project();
-    let out = chat.session.send(request("cut the ums")).await;
+    let out = chat.session.send(request("cut the ums")).await.unwrap();
     let r = reply(&out);
     assert!(r["applied"].is_null(), "removals wait for Apply");
     assert_eq!(chat.project.revision(), 0, "nothing changed yet");
@@ -412,7 +414,7 @@ async fn apply_is_one_undo_step() {
 #[tokio::test]
 async fn stale_proposal_is_dropped_after_a_hand_edit() {
     let chat = chat(vec![answer("", vec![fillers()])]);
-    let out = chat.session.send(request("cut the ums")).await;
+    let out = chat.session.send(request("cut the ums")).await.unwrap();
     let id = proposal_id(&out);
     chat.project.hand_edit(&rename("Edited by hand")).unwrap();
     assert_eq!(chat.session.apply(&id).unwrap_err(), CommitError::Moved);
@@ -435,7 +437,7 @@ async fn stale_proposal_is_dropped_after_a_hand_edit() {
 #[tokio::test]
 async fn discard_changes_nothing() {
     let chat = chat(vec![answer("", vec![fillers()])]);
-    let out = chat.session.send(request("cut the ums")).await;
+    let out = chat.session.send(request("cut the ums")).await.unwrap();
     let id = proposal_id(&out);
     chat.session.discard(&id);
     assert_eq!(chat.project.revision(), 0);
@@ -456,7 +458,8 @@ async fn additions_and_removals_of_one_answer_apply_and_propose_on_the_revision_
     let out = chat
         .session
         .send(request("vertical, karaoke, and cut the ums"))
-        .await;
+        .await
+        .unwrap();
     let r = reply(&out);
     assert_eq!(r["applied"]["change"]["history"]["revision"], 1);
     assert_eq!(
@@ -486,12 +489,12 @@ async fn a_second_message_waits_and_reads_the_project_the_first_left() {
     let chat = chat_with(model.clone(), Found::done(), Paying::key(model.clone()));
     let first = tokio::spawn({
         let session = chat.session.clone();
-        async move { session.send(request("vertical karaoke")).await }
+        async move { session.send(request("vertical karaoke")).await.unwrap() }
     });
     model.arrived.notified().await;
     let second = tokio::spawn({
         let session = chat.session.clone();
-        async move { session.send(request("cut the ums")).await }
+        async move { session.send(request("cut the ums")).await.unwrap() }
     });
     // The second waits its turn: nothing of it is read, let alone sent, while the first is out.
     tokio::task::yield_now().await;
@@ -525,7 +528,7 @@ async fn a_hand_edit_while_the_model_answers_leaves_the_answer_unapplied() {
     let chat = chat_with(model.clone(), Found::done(), Paying::key(model.clone()));
     let sent = tokio::spawn({
         let session = chat.session.clone();
-        async move { session.send(request("vertical karaoke")).await }
+        async move { session.send(request("vertical karaoke")).await.unwrap() }
     });
     model.arrived.notified().await;
     chat.project.hand_edit(&rename("Mine")).unwrap();
@@ -569,7 +572,7 @@ async fn errors_say_one_sentence_and_never_touch_the_project() {
     ];
     for (error, kind, message) in cases {
         let chat = chat(vec![Err(error)]);
-        let out = chat.session.send(request("cut the ums")).await;
+        let out = chat.session.send(request("cut the ums")).await.unwrap();
         let v = json(&out);
         assert_eq!(v["type"], "failed", "{v:#}");
         assert_eq!(v["kind"], kind);
@@ -586,7 +589,7 @@ async fn no_key_and_no_code_asks_for_one_and_a_registration_problem_says_why() {
         Found::done(),
         Paying::with(Readiness::NeedsKey),
     );
-    let v = json(&chat.session.send(request("cut the ums")).await);
+    let v = json(&chat.session.send(request("cut the ums")).await.unwrap());
     assert_eq!(
         (v["kind"].as_str(), v["message"].as_str()),
         (Some("needsKey"), Some(NEEDS_KEY))
@@ -599,7 +602,7 @@ async fn no_key_and_no_code_asks_for_one_and_a_registration_problem_says_why() {
         Found::done(),
         Paying::with(Readiness::Problem(problem.into())),
     );
-    let v = json(&chat.session.send(request("cut the ums")).await);
+    let v = json(&chat.session.send(request("cut the ums")).await.unwrap());
     assert_eq!(
         (v["kind"].as_str(), v["message"].as_str()),
         (Some("registration"), Some(problem))
@@ -612,7 +615,7 @@ async fn a_token_the_relay_refused_is_renewed_once_and_the_message_sent_again() 
     let model = Script::new(vec![Err(ModelError::Refused), answer("", vec![fillers()])]);
     let paying = Paying::relay(model.clone());
     let chat = chat_with(model.clone(), Found::done(), paying.clone());
-    let out = chat.session.send(request("cut the ums")).await;
+    let out = chat.session.send(request("cut the ums")).await.unwrap();
     assert!(reply(&out)["proposal"].is_object());
     assert_eq!(paying.recovered.load(Ordering::SeqCst), 1);
 
@@ -627,7 +630,7 @@ async fn a_token_the_relay_refused_is_renewed_once_and_the_message_sent_again() 
     let paying = Paying::relay(model.clone());
     paying.renews.store(false, Ordering::SeqCst);
     let chat = chat_with(model.clone(), Found::done(), paying.clone());
-    let v = json(&chat.session.send(request("cut the ums")).await);
+    let v = json(&chat.session.send(request("cut the ums")).await.unwrap());
     assert_eq!(v["kind"], "refused");
     assert_eq!(chat.session.spend().messages, 1);
     assert_eq!(model.seen().len(), 1);
@@ -636,7 +639,7 @@ async fn a_token_the_relay_refused_is_renewed_once_and_the_message_sent_again() 
     let model = Script::new(vec![Err(ModelError::Refused)]);
     let paying = Paying::key(model.clone());
     let chat = chat_with(model.clone(), Found::done(), paying.clone());
-    let v = json(&chat.session.send(request("cut the ums")).await);
+    let v = json(&chat.session.send(request("cut the ums")).await.unwrap());
     assert_eq!(v["kind"], "refused");
     assert_eq!(paying.recovered.load(Ordering::SeqCst), 0);
     assert_eq!(model.seen().len(), 1);
@@ -645,7 +648,7 @@ async fn a_token_the_relay_refused_is_renewed_once_and_the_message_sent_again() 
 #[tokio::test]
 async fn an_empty_message_is_not_sent() {
     let chat = chat(vec![]);
-    let v = json(&chat.session.send(request("  ")).await);
+    let v = json(&chat.session.send(request("  ")).await.unwrap());
     assert_eq!(v["kind"], "other");
     assert!(chat.model.seen().is_empty());
 }
@@ -654,7 +657,7 @@ async fn an_empty_message_is_not_sent() {
 async fn a_clip_not_analyzed_yet_is_named() {
     let model = Script::new(vec![answer("Removing them now.", vec![fillers()])]);
     let chat = chat_with(model.clone(), Found::not_started(), Paying::key(model));
-    let r = reply(&chat.session.send(request("cut the ums")).await);
+    let r = reply(&chat.session.send(request("cut the ums")).await.unwrap());
     assert_eq!(r["text"], "Analyze this clip first (talk.mov).");
     assert!(r["proposal"].is_null());
 }
@@ -669,7 +672,10 @@ async fn the_conversation_keeps_six_exchanges_and_starts_over_on_another_project
     });
     let chat = chat(answers.collect());
     for n in 0..7 {
-        chat.session.send(request(&format!("message {n}"))).await;
+        chat.session
+            .send(request(&format!("message {n}")))
+            .await
+            .unwrap();
     }
     let turns = chat.session.turns();
     assert_eq!(turns.len(), 6);
@@ -679,7 +685,7 @@ async fn the_conversation_keeps_six_exchanges_and_starts_over_on_another_project
         "{}",
         turns[5].note
     );
-    chat.session.send(request("message 7")).await;
+    chat.session.send(request("message 7")).await.unwrap();
     let users: Vec<String> = (model_input(&chat.model.seen()[7]).into_iter())
         .filter_map(|item| match item {
             Item::User { text } => Some(text),
@@ -694,7 +700,7 @@ async fn the_conversation_keeps_six_exchanges_and_starts_over_on_another_project
 
     chat.project.switch(Some(talk())).unwrap();
     let model_calls = chat.model.seen().len();
-    chat.session.send(request("hello again")).await;
+    chat.session.send(request("hello again")).await.unwrap();
     let users = (model_input(&chat.model.seen()[model_calls]).into_iter())
         .filter(|item| matches!(item, Item::User { .. }))
         .count();
@@ -708,7 +714,7 @@ fn model_input(request: &ModelRequest) -> Vec<Item> {
 #[tokio::test]
 async fn another_project_drops_its_proposals() {
     let chat = chat(vec![answer("", vec![fillers()])]);
-    let id = proposal_id(&chat.session.send(request("cut the ums")).await);
+    let id = proposal_id(&chat.session.send(request("cut the ums")).await.unwrap());
     chat.project.switch(Some(talk())).unwrap();
     assert_eq!(chat.session.apply(&id).unwrap_err(), CommitError::Moved);
     chat.session.project_changed();
@@ -725,12 +731,12 @@ async fn a_message_sent_to_a_project_that_closed_while_it_waited_is_not_sent() {
     let chat = chat_with(model.clone(), Found::done(), Paying::key(model.clone()));
     let first = tokio::spawn({
         let session = chat.session.clone();
-        async move { session.send(request("vertical")).await }
+        async move { session.send(request("vertical")).await.unwrap() }
     });
     model.arrived.notified().await;
     let second = tokio::spawn({
         let session = chat.session.clone();
-        async move { session.send(request("cut the ums")).await }
+        async move { session.send(request("cut the ums")).await.unwrap() }
     });
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     chat.project.switch(Some(talk())).unwrap();
@@ -751,7 +757,13 @@ async fn follow_and_blur_say_they_are_coming() {
             r#"{"description": "license plate"}"#,
         )],
     )]);
-    let r = reply(&chat.session.send(request("blur the license plate")).await);
+    let r = reply(
+        &chat
+            .session
+            .send(request("blur the license plate"))
+            .await
+            .unwrap(),
+    );
     assert_eq!(r["text"], BLUR_COMING, "the model's words don't claim it");
     assert_eq!(chat.project.revision(), 0);
 
@@ -762,7 +774,13 @@ async fn follow_and_blur_say_they_are_coming() {
         r#"{"description": "the speaker"}"#,
     ));
     let chat = self::chat(vec![answer("Done.", calls)]);
-    let r = reply(&chat.session.send(request("vertical and follow her")).await);
+    let r = reply(
+        &chat
+            .session
+            .send(request("vertical and follow her"))
+            .await
+            .unwrap(),
+    );
     assert_eq!(r["text"], "Done.");
     assert_eq!(r["notes"], serde_json::json!([FOLLOW_COMING]));
     assert!(r["applied"].is_object());
@@ -782,8 +800,8 @@ async fn spend_counts_every_model_call() {
             usage_usd: 0.003,
         }),
     ]);
-    chat.session.send(request("vertical")).await;
-    chat.session.send(request("again")).await;
+    chat.session.send(request("vertical")).await.unwrap();
+    chat.session.send(request("again")).await.unwrap();
     let spend = chat.session.spend();
     assert_eq!(spend.messages, 2);
     assert!((spend.chat_usd - 0.008).abs() < 1e-9, "{spend:?}");
@@ -799,7 +817,7 @@ async fn keep_only_these_proposes_without_the_model() {
         }],
         ..request("Keep only these")
     };
-    let r = reply(&chat.session.send(keep).await);
+    let r = reply(&chat.session.send(keep).await.unwrap());
     assert_eq!(r["text"], KEEP_ONLY_READY);
     assert!(
         r["proposal"]["title"]
@@ -825,7 +843,8 @@ async fn the_selection_is_this() {
                 end: secs(18.0),
             },
         ))
-        .await;
+        .await
+        .unwrap();
     let context = match &chat.model.seen()[0].input[0] {
         Item::Context { text } => text.clone(),
         _ => unreachable!(),
@@ -845,7 +864,7 @@ async fn undo_last_takes_back_chats_change_only_while_it_is_the_last() {
         answer("", vertical_karaoke()),
         answer("", vertical_karaoke()),
     ]);
-    chat.session.send(request("vertical")).await;
+    chat.session.send(request("vertical")).await.unwrap();
     chat.session.undo_last().unwrap();
     assert_eq!(
         chat.project.project().settings.primary_format,
@@ -859,7 +878,7 @@ async fn undo_last_takes_back_chats_change_only_while_it_is_the_last() {
 
     chat.project.step(true).unwrap();
     chat.project.step(false).unwrap();
-    chat.session.send(request("vertical again")).await;
+    chat.session.send(request("vertical again")).await.unwrap();
     chat.project.hand_edit(&rename("Mine")).unwrap();
     assert_eq!(chat.session.undo_last().unwrap_err(), CommitError::Moved);
     assert_eq!(chat.project.project().name, "Mine");
@@ -869,7 +888,7 @@ async fn undo_last_takes_back_chats_change_only_while_it_is_the_last() {
 async fn the_models_undo_takes_back_the_top_step() {
     let chat = chat(vec![answer("Undone.", vec![fc("u", "undo", "{}")])]);
     chat.project.hand_edit(&rename("Mine")).unwrap();
-    let r = reply(&chat.session.send(request("undo that")).await);
+    let r = reply(&chat.session.send(request("undo that")).await.unwrap());
     assert_eq!(r["undone"]["baseRevision"], 1);
     assert_eq!(chat.project.project().name, "Talk");
 }
@@ -900,4 +919,81 @@ fn chat_edits_are_the_persons_with_the_chat_origin() {
         project.commit(&now.at, &tx, None).unwrap_err(),
         CommitError::Moved
     );
+}
+
+#[tokio::test]
+async fn a_new_proposal_replaces_the_open_one() {
+    let chat = chat(vec![
+        answer("", vec![fillers()]),
+        answer(
+            "",
+            vec![fc("c", "cutRange", r#"{"startSec": 12.0, "endSec": 18.0}"#)],
+        ),
+    ]);
+    let first = proposal_id(&chat.session.send(request("cut the ums")).await.unwrap());
+    let second = chat
+        .session
+        .send(selecting(
+            "cut this",
+            RangeUs {
+                start: secs(12.0),
+                end: secs(18.0),
+            },
+        ))
+        .await
+        .unwrap();
+    // Red always means "will be cut": only the newest proposal can apply.
+    assert_eq!(chat.session.apply(&first).unwrap_err(), CommitError::Moved);
+    assert_eq!(chat.project.revision(), 0);
+    chat.session.apply(&proposal_id(&second)).unwrap();
+    assert!(plays(&chat.project.project(), 0.6), "the ums stay");
+    assert!(
+        !plays(&chat.project.project(), 15.0),
+        "the selection is cut"
+    );
+    assert!(
+        chat.session.turns()[0]
+            .note
+            .ends_with("Replaced by a newer proposal.")
+    );
+}
+
+#[tokio::test]
+async fn keep_only_on_a_revision_the_project_left_is_refused() {
+    let chat = chat(vec![]);
+    chat.project.hand_edit(&rename("Mine")).unwrap();
+    let stale = ChatRequest {
+        keep_only: vec![RangeUs {
+            start: secs(0.9),
+            end: secs(4.6),
+        }],
+        ..request("Keep only these")
+    };
+    assert_eq!(
+        chat.session.send(stale.clone()).await.unwrap_err(),
+        CommitError::Moved
+    );
+    assert_eq!(chat.project.revision(), 1, "only the hand edit");
+    // Made on the revision it is now, the moments stand.
+    let fresh = ChatRequest {
+        base_revision: 1,
+        ..stale
+    };
+    assert!(reply(&chat.session.send(fresh).await.unwrap())["proposal"].is_object());
+}
+
+#[tokio::test]
+async fn a_selection_made_on_a_revision_the_project_left_is_refused() {
+    let chat = chat(vec![answer("", vec![fillers()])]);
+    chat.project.hand_edit(&rename("Mine")).unwrap();
+    let range = RangeUs {
+        start: secs(12.0),
+        end: secs(18.0),
+    };
+    let refused = chat.session.send(selecting("cut this", range)).await;
+    assert_eq!(refused.unwrap_err(), CommitError::Moved);
+    assert!(chat.model.seen().is_empty(), "nothing was sent");
+    // Without a selection, "this" names nothing stale: the message is read on the project as it is when its turn comes.
+    let out = chat.session.send(request("cut the ums")).await.unwrap();
+    assert_eq!(reply(&out)["proposal"]["baseRevision"], 1);
 }

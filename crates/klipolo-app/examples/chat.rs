@@ -118,9 +118,13 @@ async fn run() -> Result<(), String> {
             "item": null,
             "playheadUs": 0,
             "format": null,
+            "baseRevision": project.revision(),
         }))
         .map_err(|e| e.to_string())?;
-        let outcome = chat.send(request).await;
+        let outcome = chat
+            .send(request)
+            .await
+            .map_err(|e| format!("{:?}", e.said()))?;
         let proposal = show_outcome(&outcome);
         show_project("project", &project.project());
         if let (true, Some(id)) = (args.apply, proposal) {
