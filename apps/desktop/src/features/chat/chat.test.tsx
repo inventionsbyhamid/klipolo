@@ -7,7 +7,7 @@ import type { CodedError } from '../../bindings/CodedError';
 import { useAi } from '../../ai/aiStatus';
 import { installChatBridge } from '../../bridge/chat';
 import { fakeChat, proposal, reply, type FakeChatScript } from '../../bridge/chatFake';
-import { useChat } from '../../state/chat';
+import { useChat, useChatStandIn } from '../../state/chat';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { useProposal } from '../../state/proposal';
@@ -85,6 +85,7 @@ beforeEach(() => {
   usePlayback.setState({ playheadUs: 0, playing: false });
   useAi.setState({ status: { mode: 'key', keyHint: '6789' } });
   useChat.getState().reset(fixtureSnapshot().project.id);
+  useChatStandIn.setState({ on: false });
 });
 
 describe('chat', () => {
@@ -445,5 +446,16 @@ describe('chat', () => {
     expect(applied).toBe(false);
     expect(calls.project_apply[0]).toMatchObject({ baseRevision: 3, projectId: 'project' });
     expect(useProject.getState().snapshot!.history.revision).toBe(9);
+  });
+});
+
+describe('chat: one proposal at a time, moments of their revision, and the keys', () => {
+  it('the development stand-in lets chat run without a key written into the AI status', () => {
+    useAi.setState({ status: { mode: 'none' } });
+    renderWithProviders(<ChatPanel />);
+    expect(message()).toBeDisabled();
+    act(() => useChatStandIn.setState({ on: true }));
+    expect(message()).toBeEnabled();
+    expect(useAi.getState().status).toEqual({ mode: 'none' });
   });
 });

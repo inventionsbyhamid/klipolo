@@ -1,8 +1,7 @@
 import { useLingui } from '@lingui/react/macro';
 import { Fragment, useLayoutEffect, useRef } from 'react';
 import { NeedsKey } from '../../ai/NeedsKey';
-import { useAi } from '../../ai/aiStatus';
-import { chatAllowed, useChat } from '../../state/chat';
+import { useCanChat, useChat } from '../../state/chat';
 import { useChatPanel } from '../../state/chatPanel';
 import { ChatMessage } from './ChatMessage';
 
@@ -18,7 +17,7 @@ const SUGGESTIONS = [
 /** "Ask for an edit", its suggestions (greyed while chat can't run), and the NeedsKey card when there is no key or code. */
 function EmptyChat() {
   const { t } = useLingui();
-  const allowed = useAi((s) => chatAllowed(s.status));
+  const allowed = useCanChat();
   return (
     <div className="chat-empty">
       <h3>{t({ id: 'chatPanel.empty.title', message: 'Ask for an edit' })}</h3>
@@ -28,7 +27,7 @@ function EmptyChat() {
           message: 'Type it like a message. Klipolo asks before it cuts anything.',
         })}
       </p>
-      <NeedsKey />
+      {!allowed && <NeedsKey />}
       {allowed ? (
         <div className="suggestions">
           {SUGGESTIONS.map((s) => (

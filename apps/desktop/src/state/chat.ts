@@ -25,6 +25,22 @@ export function chatAllowed(status: AiStatus | null): boolean {
 }
 
 /**
+ * Development builds only (`dev/devChat`): the stand-in chat is on, which needs no key or code. The AI status stays
+ * what Rust said.
+ */
+export const useChatStandIn = create<{ on: boolean }>(() => ({ on: false }));
+
+/** Whether chat can run now: the AI status allows it, or the development stand-in is on. */
+export const canChat = (): boolean => useChatStandIn.getState().on || chatAllowed(useAi.getState().status);
+
+/** `canChat`, followed. */
+export function useCanChat(): boolean {
+  const standIn = useChatStandIn((s) => s.on);
+  const allowed = useAi((s) => chatAllowed(s.status));
+  return standIn || allowed;
+}
+
+/**
  * What "this" and "here" mean as a message goes: the time range or the overlay selected, the playhead, the format,
  * and the revision those times are on (Rust refuses times on a project that moved on since).
  */
@@ -78,7 +94,7 @@ export const useChat = create<ChatStore>((set, get) => {
       const snapshot = useProject.getState().snapshot;
       const trimmed = text.trim();
       if (!snapshot || !trimmed || get().pending || snapshot.readOnly != null) return;
-      if (!chatAllowed(useAi.getState().status)) return;
+      if (!canChat()) return;
       const mine = session.now();
       const live = () => session.now() === mine && get().projectId === snapshot.project.id;
       const id = crypto.randomUUID();

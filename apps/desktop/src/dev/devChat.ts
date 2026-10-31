@@ -6,9 +6,9 @@ import { installChatBridge, tauriChat } from '../bridge/chat';
 import { fakeChat, proposal, reply } from '../bridge/chatFake';
 import { bridge } from '../bridge/commands';
 import { speech } from '../bridge/speech';
-import { refreshAiStatus, useAi } from '../ai/aiStatus';
 import { mainIndex } from '../features/timeline/model/index';
 import { errorMessage } from '../lib/errors';
+import { useChatStandIn } from '../state/chat';
 import { useProject } from '../state/project';
 import { toast } from '../state/toasts';
 
@@ -16,7 +16,7 @@ import { toast } from '../state/toasts';
  * Development builds only, until the planner's commands are in the app and analysis has run on a clip: Control Shift P
  * turns a stand-in chat on or off, which answers a few requests the way the planner does (a proposal of ums and pauses,
  * captions turned on, moments, keep only these) through the app's own project commands, so the panel, the red ranges,
- * Apply and Undo can be checked by hand (while it is on, chat counts as having a key). Control Shift W gives the open
+ * Apply and Undo can be checked by hand (while it is on, chat runs without a key or code). Control Shift W gives the open
  * project's clips sample words.
  */
 
@@ -137,9 +137,8 @@ export function listenForDevKeys(): () => void {
       e.preventDefault();
       on = !on;
       installChatBridge(on ? devChat : tauriChat);
-      // The stand-in needs no key or code: the panel takes chat as available while it is on.
-      if (on) useAi.setState((s) => ({ status: { ...s.status, mode: 'key', keyHint: 'stand-in' } }));
-      else void refreshAiStatus();
+      // The stand-in needs no key or code: chat runs while it is on, the AI status left as Rust said.
+      useChatStandIn.setState({ on });
       toast.info(on ? 'Stand-in chat is on.' : 'Stand-in chat is off.');
     } else if (e.code === 'KeyW') {
       e.preventDefault();

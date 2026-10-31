@@ -4,7 +4,7 @@ import { useAi } from '../../ai/aiStatus';
 import { codedMessage } from '../../bridge/call';
 import { cn } from '../../design/cn';
 import { Icon } from '../../layout/Icon';
-import { chatAllowed, useChat } from '../../state/chat';
+import { useCanChat, useChat } from '../../state/chat';
 import { useProject } from '../../state/project';
 import { SelectionChip } from './SelectionChip';
 
@@ -25,8 +25,8 @@ export function Composer() {
   const text = useChat((s) => s.draft);
   const setText = useChat((s) => s.setDraft);
   const pending = useChat((s) => s.pending !== null);
-  const allowed = useAi((s) => chatAllowed(s.status));
-  const none = useAi((s) => s.status?.mode === 'none');
+  const allowed = useCanChat();
+  const none = useAi((s) => s.status?.mode === 'none') && !allowed;
   const readOnly = useProject((s) => s.snapshot?.readOnly ?? null);
   const open = useProject((s) => s.snapshot !== null);
   const field = useRef<HTMLTextAreaElement>(null);
