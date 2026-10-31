@@ -70,7 +70,8 @@ impl Mcp {
         &self.limits
     }
 
-    /// The waiting proposal an app made here, if Klipolo still holds it: locked briefly, never across a host call.
+    /// The waiting proposal an app made here, if Klipolo still holds it: locked briefly, across at most one quick host
+    /// read (`open_proposal`, which never calls back into the server).
     pub(crate) fn own(&self) -> MutexGuard<'_, Option<call::Own>> {
         locked(&self.own)
     }

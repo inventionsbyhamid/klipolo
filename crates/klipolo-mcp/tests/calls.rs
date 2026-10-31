@@ -17,9 +17,9 @@ use klipolo_mcp::Host;
 use klipolo_mcp::call::from_app;
 use klipolo_mcp::rpc::Mcp;
 use klipolo_mcp::words::{
-    DONE, KLIPOLO_CHAT, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS, NOTHING_TO_UNDO, OVER_SHARE,
-    OWN_CHANGED, OWN_MOVED, PROPOSED_NO_FOOTAGE, PUSHES_OUT, READ_FIRST, STALE, UNCHANGED, UNDONE,
-    WAITING_OTHER, fill,
+    DONE, KLIPOLO_CHAT, MOVED, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS, NOTHING_TO_UNDO, OVER_SHARE,
+    OWN_CHANGED, OWN_MOVED, OWN_WAITING, PROPOSED_NO_FOOTAGE, PUSHES_OUT, READ_FIRST, STALE,
+    UNCHANGED, UNDONE, WAITING_OTHER, fill,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -529,6 +529,7 @@ fn agent_words_are_exact() {
         NOT_PROPOSED,
         OWN_MOVED,
         OWN_CHANGED,
+        OWN_WAITING,
         UNDONE,
         STARTED,
         REMOVES,
@@ -846,11 +847,10 @@ fn a_proposal_klipolo_no_longer_remembers_is_waited_on() {
     let again = Mcp::new(host.clone());
     let agent = Agent::open(&again, "Agent");
     agent.read();
-    let waiting = fill(WAITING_OTHER, &[("who", "Agent")]);
-    assert_refused(&agent.cut(0.0, 13.0), &waiting);
+    assert_refused(&agent.cut(0.0, 13.0), OWN_WAITING);
     assert_refused(
         &agent.call("setCaptions", json!({"on": false, "style": null})),
-        &waiting,
+        OWN_WAITING,
     );
     assert_eq!(host.state().counts.applies, 0);
     assert!(host.open_proposal().is_some());
@@ -1048,4 +1048,21 @@ fn own_proposal_is_never_read_again_once_the_apps_change_moved_the_clips() {
         (after_split.id, after_split.proposal)
     );
     assert_eq!(host.revision(), revision);
+}
+
+#[test]
+fn a_join_on_another_revision_says_to_retry() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    agent.cut(0.0, 13.0);
+    // The waiting proposal was made on a revision the call didn't read (another session of this app moved it on):
+    // trying again reads it as it is.
+    host.change_project(|_| {});
+    assert_refused(
+        &agent.call("setCaptions", json!({"on": false, "style": null})),
+        MOVED,
+    );
+    assert_eq!(host.state().counts.applies, 0);
 }

@@ -138,13 +138,14 @@ fn joined(
     snap: &Snapshot,
 ) -> Result<Vec<ToolCall>, String> {
     let own = mcp.own();
-    let Some(own) = own
-        .as_ref()
-        .filter(|o| o.id == open.id && o.client == client && open.base_revision == snap.revision)
-    else {
-        // What it holds isn't known here (the server started again since): it waits for the person like any other.
-        return Err(waiting_other(client));
+    let Some(own) = (own.as_ref()).filter(|o| o.id == open.id && o.client == client) else {
+        // What it holds isn't known here (the server started again since): it waits for the person.
+        return Err(words::OWN_WAITING.to_owned());
     };
+    // Made on a revision this call didn't read (another session of the app moved it on): trying again reads it.
+    if open.base_revision != snap.revision {
+        return Err(words::MOVED.to_owned());
+    }
     // The app's own change moved the clips its calls name: read again, they would name other footage.
     if own.key != timeline_key(&snap.project) {
         return Err(words::OWN_MOVED.to_owned());
@@ -253,14 +254,20 @@ fn edit(
                 } else {
                     fill(words::PROPOSED_NO_FOOTAGE, &[("tools", &tools)])
                 });
-                // The calls were made on the snapshot's clips, even when they wait on top of additions now.
-                *mcp.own() = Some(Own {
-                    client: client.to_owned(),
-                    id: id.clone(),
-                    calls: proposed,
-                    key: timeline_key(&snap.project),
-                    ops,
-                });
+                // Remembered only while the slot holds this proposal: another session of the app may have put its own
+                // in its place since, and that one's calls are what its next call joins. The calls were made on the
+                // snapshot's clips, even when they wait on top of additions now.
+                let mut own = mcp.own();
+                if host.open_proposal().is_some_and(|p| p.id == id) {
+                    *own = Some(Own {
+                        client: client.to_owned(),
+                        id: id.clone(),
+                        calls: proposed,
+                        key: timeline_key(&snap.project),
+                        ops,
+                    });
+                }
+                drop(own);
                 proposed_as = Some((id, removed_us));
             }
             // The additions are in: the answer says so, and that the removals weren't proposed.
