@@ -6,38 +6,55 @@
 //!
 //! **Never a prompt:** the guard first, then Screen Recording's preflight (`CGPreflightScreenCaptureAccess`, which never
 //! asks); a refusal calls nothing more. Only then is the content list read and the screenshot taken (macOS's own
-//! periodic "continue to allow" confirmation may appear then: macOS's own reminder, not a request Klipolo makes).
+//! periodic "continue to allow" confirmation may appear then: macOS's own reminder, not a request Klipolo makes; a
+//! "no" to it comes back as `PermissionDenied`, which ends the stills).
 //!
+//! **Its cost:** the content list (a round trip to the system's capture service, which lists every window) is read
+//! once a round (`ROUND`, the stills' `THUMB_EVERY`) and kept with the filters picked from it, so it is at most a
+//! round old, as the cards are. Each still runs inside its own autorelease pool, so the system's objects it makes
+//! (the screenshot, Core Image's image and its JPEG) are freed with it, on a thread that has no run loop to drain them.
 //! The screenshot comes as a sample buffer, whose BGRA pixel buffer `jpeg` encodes as it does the live view's frames.
-//! Each still runs inside its own autorelease pool, so the system's objects it makes (the content list, the screenshot,
-//! Core Image's image and its JPEG) are freed with it, on a thread that has no run loop to drain them. Each still reads
-//! the content list again, so a window that opened or an app that quit since the last one shows as it is now. Memory:
-//! one BGRA buffer of at most 320 pixels wide (about 400 KB for a 16:10 display), one Core Image context kept for the
-//! worker's life, and one JPEG.
+//! Memory: one round's content list and filters, one BGRA buffer at most 320 pixels wide (about 400 KB for a 16:10
+//! display), one Core Image context kept for the worker's life, and one JPEG.
 
 use std::sync::mpsc::sync_channel;
 use std::sync::{Mutex, PoisonError};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use cidre::{arc, blocks, cg, cm, cv, ns, objc, sc};
 use objc2_core_graphics::CGPreflightScreenCaptureAccess;
 
-use super::filter;
+use super::filter::{self, Picked};
 use super::jpeg::Jpeg;
 use crate::backend::{PreviewFrame, Target};
 use crate::guard::assert_real_capture_allowed;
 use crate::pipe::PipeError;
 use crate::platform::common::sck::USER_DECLINED;
+use crate::run::thumbs::THUMB_EVERY;
 use crate::vendor::cap::sck::StreamCfgBuilder;
 
 /// How long a screenshot may take before its turn is given up.
 const SHOT_WAIT: Duration = Duration::from_secs(2);
+/// How long one content list, and the filters picked from it, serve: one round of the stills.
+const ROUND: Duration = THUMB_EVERY;
 
-/// The stills' JPEG maker, made at the first still and kept.
+/// The stills' JPEG maker, made at the first still and kept, and the round's content list.
 #[derive(Default)]
 pub(super) struct Stills {
     jpeg: Mutex<Option<Jpeg>>,
+    round: Mutex<Option<Round>>,
 }
+
+/// One round's content list, read at `at`, and the filters picked from it so far.
+struct Round {
+    at: Instant,
+    content: arc::R<sc::ShareableContent>,
+    picked: Vec<(Target, Picked)>,
+}
+
+// SAFETY: the content list and the content filters are immutable once made (cidre marks the list `Send`), and they
+// are used only under `Stills::round`'s lock, one still at a time.
+unsafe impl Send for Round {}
 
 impl Stills {
     /// A still of `target` `width` pixels wide (a narrower target keeps its own width), as a JPEG. Only while Screen
@@ -51,11 +68,10 @@ impl Stills {
             return Err(PipeError::PermissionDenied);
         }
         objc::ar_pool(|| {
-            let content = filter::content()?;
-            let picked = filter::pick(&content, target)?;
-            drop(content);
-            let size = still_size(picked.pixels, width);
-            let shot = shoot(&picked.filter, &still_config(size, picked.window))?;
+            let shot = self.through(target, |picked| {
+                let size = still_size(picked.pixels, width);
+                shoot(&picked.filter, &still_config(size, picked.window))
+            })?;
             let image = shot
                 .image_buf()
                 .ok_or_else(|| PipeError::Os("the still has no picture".into()))?;
@@ -73,6 +89,33 @@ impl Stills {
                 height: image.height() as u32,
             })
         })
+    }
+
+    /// `with` `target`'s filter, picked from this round's content list, which is read again once the round is over.
+    fn through<R>(
+        &self,
+        target: &Target,
+        with: impl FnOnce(&Picked) -> Result<R, PipeError>,
+    ) -> Result<R, PipeError> {
+        let mut round = self.round.lock().unwrap_or_else(PoisonError::into_inner);
+        if round.as_ref().is_none_or(|r| r.at.elapsed() >= ROUND) {
+            *round = None;
+            *round = Some(Round {
+                at: Instant::now(),
+                content: filter::content()?,
+                picked: vec![],
+            });
+        }
+        let round = round.as_mut().expect("a round was read above");
+        let at = match round.picked.iter().position(|(t, _)| t == target) {
+            Some(at) => at,
+            None => {
+                let picked = filter::pick(&round.content, target)?;
+                round.picked.push((target.clone(), picked));
+                round.picked.len() - 1
+            }
+        };
+        with(&round.picked[at].1)
     }
 }
 
