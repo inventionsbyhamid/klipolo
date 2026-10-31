@@ -36,7 +36,7 @@ impl FakeBackend {
             block_ms: 10,
             drift_ppm: 0.0,
             signal: self.script.sound.clone(),
-            blip_every_ms: Some(1_000),
+            blip_every_ms: self.script.sync_blips.then_some(1_000),
         };
         let mut pipe = FakeAudioPipe::new(spec, self.epoch_ns);
         pipe.starts = Some(self.starts.clone());

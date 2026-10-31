@@ -2,8 +2,8 @@
 //! start, the preview pipe starts unless the person stopped first, and each frame it paces (`pace::PreviewPacer`, before
 //! the JPEG is made) goes to the app as a `Preview` event, until the Stop or the pipe's own end. The live view's view
 //! size, as the app last said it, goes to the pipe between frames, and again every `RESIZE_AGAIN` until
-//! the stream takes it. Nothing is written and nothing is re-encoded here. The Record dialog's stills (`thumbs`) read
-//! the app's word and send their events the same way, through `PreviewIo`.
+//! the stream takes it. Nothing is written and nothing is re-encoded here. The Record dialog's stills and mic meter
+//! (`thumbs`, `meter`) read the app's word and send their events the same way, through `PreviewIo`.
 
 use std::io::{BufRead, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,7 +26,8 @@ const RESIZE_AGAIN: Duration = Duration::from_millis(500);
 /// How often a wait on the real clock looks at the app's Stop.
 const STOP_LOOK: Duration = Duration::from_millis(50);
 
-/// A preview worker's ends (the stills'): the app's lines in, its events out, and the clock it keeps time by.
+/// A preview worker's ends (the stills', the mic meter's): the app's lines in, its events out, and the clock it keeps
+/// time by.
 pub struct PreviewIo {
     pub input: Box<dyn BufRead + Send>,
     pub output: Box<dyn Write + Send>,
@@ -117,6 +118,11 @@ pub(super) struct AppWord {
 impl AppWord {
     pub(super) fn stopped(&self) -> bool {
         self.stop.load(Ordering::Acquire)
+    }
+
+    /// The Stop as a pipe's `start` reads it, right before it opens its device.
+    pub(super) fn stop_flag(&self) -> StopFlag {
+        StopFlag::new(self.stop.clone())
     }
 
     /// The view size the app said since the last call, if it said one.

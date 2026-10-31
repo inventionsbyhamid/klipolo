@@ -8,6 +8,8 @@
 //!   JSON), else the small one;
 //! - `--record-worker --thumbs <targets>`: the Record dialog's stills of each screen and app, about once a second each
 //!   (`run::thumbs`); `targets` is a JSON list of `[key, target]` pairs, each target a `backend::Target`;
+//! - `--record-worker --meter <mic id>`: the Record dialog's mic meter, ten peaks a second of that mic alone
+//!   (`run::meter`);
 //! - `--record-worker --probe <out.json>`: the encoder probe, on generated frames only (so without the consent guard,
 //!   `platform::backend_for_probe`), its report written atomically.
 //!
@@ -29,6 +31,7 @@ use crate::live_view_size::ViewPixels;
 use crate::run::PreviewIo;
 use crate::run::check::run_check_camera;
 use crate::run::live_view::run_live_view;
+use crate::run::meter::run_meter;
 use crate::run::threads::run_session;
 use crate::run::thumbs::run_thumbs;
 use crate::session::SessionDir;
@@ -70,6 +73,10 @@ pub fn main(args: &[String]) -> i32 {
                 }
             }
         }
+        ["--meter", mic] => {
+            log::to_stderr();
+            with_backend(|b| run_meter(&*b, mic, PreviewIo::std()))
+        }
         ["--probe", out] => {
             log::to_stderr();
             match probe_backend() {
@@ -77,8 +84,8 @@ pub fn main(args: &[String]) -> i32 {
                 None => no_backend(),
             }
         }
-        // A flag is never a folder: `--probe`, `--check-camera`, `--live-view` or `--thumbs` without its argument is a
-        // usage error, not a take.
+        // A flag is never a folder: `--probe`, `--check-camera`, `--live-view`, `--thumbs` or `--meter` without its
+        // argument is a usage error, not a take.
         [folder] | [folder, "--resume"] if !folder.starts_with("--") => {
             let dir = SessionDir::at(Path::new(folder));
             log::to_file(&dir.diagnostics());
@@ -95,7 +102,7 @@ pub fn main(args: &[String]) -> i32 {
             eprintln!(
                 "usage: --record-worker <session folder> [--resume] | --record-worker --check-camera <camera id> | \
                  --record-worker --live-view <target JSON> [<view JSON>] | --record-worker --thumbs <targets JSON> | \
-                 --record-worker --probe <out.json>"
+                 --record-worker --meter <mic id> | --record-worker --probe <out.json>"
             );
             2
         }
@@ -168,6 +175,7 @@ mod tests {
         let not_a_view = args(&["klipolo", "--record-worker", "--live-view", screen, "{}"]);
         assert_eq!(main(&not_a_view), 2);
         assert_eq!(main(&args(&["klipolo", "--record-worker", "--thumbs"])), 2);
+        assert_eq!(main(&args(&["klipolo", "--record-worker", "--meter"])), 2);
         let not_targets = args(&["klipolo", "--record-worker", "--thumbs", screen]);
         assert_eq!(main(&not_targets), 2);
         if !cfg!(feature = "real-capture") {
@@ -183,6 +191,8 @@ mod tests {
             let screens = format!(r#"[["display-1",{screen}]]"#);
             let thumbs = args(&["klipolo", "--record-worker", "--thumbs", &screens]);
             assert_eq!(main(&thumbs), 2);
+            let meter = args(&["klipolo", "--record-worker", "--meter", "mic-1"]);
+            assert_eq!(main(&meter), 2);
         }
     }
 }

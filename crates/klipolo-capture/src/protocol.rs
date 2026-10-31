@@ -69,7 +69,8 @@ pub enum Event {
     Gate {
         missing: Vec<SourceId>,
     },
-    /// A source's peak over the last 100 ms, during the countdown (the mic meter).
+    /// A source's peak over the last 100 ms: during the countdown (the mic meter), and from the Record dialog's mic meter
+    /// before a take (`run::meter`).
     Meter {
         source: SourceId,
         peak_dbfs: f32,

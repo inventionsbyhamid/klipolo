@@ -4,8 +4,8 @@
 //! on with a take after the worker crashed; `threads`, the core on threads with a backend, the writer and the shell
 //! (`prepare`, `driver`, `stopping`, `feeds`, `pipes`, `controller`, `own_mic`); `finish`, Stop's last steps on the files; `check`,
 //! Check camera's preview, and `live_view`, the recorder's live view of the chosen screen, both over the
-//! previews' shared loop (`preview_loop`); `thumbs`, the Record dialog's stills of each screen and app, through the
-//! same app word and events (`PreviewIo`).
+//! previews' shared loop (`preview_loop`); `thumbs` and `meter`, the Record dialog's stills of each screen and app and
+//! its mic meter, through the same app word and events (`PreviewIo`).
 
 mod admit;
 pub mod check;
@@ -21,6 +21,7 @@ mod heals;
 mod inputs;
 pub mod live_view;
 mod media_in;
+pub mod meter;
 mod mic_swap;
 mod outcomes;
 mod own_mic;

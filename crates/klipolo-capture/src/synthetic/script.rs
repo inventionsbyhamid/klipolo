@@ -63,6 +63,8 @@ pub struct Script {
     pub live_view_refuses: u32,
     /// A target's first stills that fail (`Backend::still`), as one whose screenshot didn't come.
     pub still_fails: Vec<(Target, u32)>,
+    /// The sound pipes add the sync blips to `sound` (default true; off for a pure tone, as the mic meter's test reads).
+    pub sync_blips: bool,
 }
 
 impl Default for Script {
@@ -102,6 +104,7 @@ impl Default for Script {
             live_switch: true,
             live_view_refuses: 0,
             still_fails: vec![],
+            sync_blips: true,
             caps: CaptureCaps {
                 screen: ScreenApi::ScreenCaptureKit,
                 app_audio: AppAudioApi::ScreenCaptureKit,
