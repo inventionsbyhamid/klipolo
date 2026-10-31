@@ -43,8 +43,10 @@ export function nearestCut(main: Clip[], atUs: number): number {
 }
 
 /**
- * The ops that put `asset` at `target` (one undo step): the same builders the Import button uses (`lib/placement`),
- * so the media panel's drag and menu, a Finder drop and chat ("add the b-roll after the intro") all agree.
+ * The ops that put `asset` at `target` (one undo step): the same builders the Import button uses (`lib/placement`).
+ * The library and Finder drops send videos here (a clip of the main track, or a video layer); sounds and pictures go in
+ * through Rust as the library's "+" places them (`features/media/place`). Its sound and picture layers are built as
+ * before, for its own tests.
  *
  * - A video on the main track is a clip inserted at that cut.
  * - Anywhere else a video is a full-canvas video layer (the engine contains it) and an image a 5 s layer, both
