@@ -506,8 +506,11 @@ function Foot({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving'>
   );
 }
 
+/** Every take's countdown, in seconds: the app fixes it (a take's `ArmedTake.countdownS` says it again). */
+const COUNTDOWN_S = 3;
+
 /** Record's tooltip while it can record: what a press does. */
-const READY = 'Recording starts after a 3 s countdown.';
+const READY = `Recording starts after a ${COUNTDOWN_S} s countdown.`;
 
 /**
  * Record, and a failed take's Try again: the only controls that start a take. Off while Record can't (a take runs, the
