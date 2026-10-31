@@ -22,7 +22,8 @@ export const ChatMessage = memo(function ChatMessage({ message: m }: { message: 
   if (m.from === 'person') return <p className="msg-you">{m.text}</p>;
   if (m.kind === 'failed')
     return (
-      <div className="msg-k" role="alert">
+      // Said by the announcer, outside the part that folds.
+      <div className="msg-k">
         <p>{m.text}</p>
         <div className="msg-row">
           {SETTINGS.has(m.failure) ? (

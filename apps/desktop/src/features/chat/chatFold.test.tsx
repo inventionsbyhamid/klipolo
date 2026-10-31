@@ -118,6 +118,18 @@ describe('chat folds to a strip', () => {
     expect(said.closest('[inert], [hidden]')).toBeNull();
   });
 
+  it('a failure is announced while chat is folded, outside the hidden part', async () => {
+    let answer!: (o: { type: 'failed'; kind: 'busy'; message: string }) => void;
+    installChatBridge(fakeChat({ reply: () => new Promise((r) => (answer = r)) }));
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(composer(), 'cut the intro{Enter}');
+    act(() => useChatPanel.getState().setCollapsed(true));
+    await act(async () => answer({ type: 'failed', kind: 'busy', message: 'Meta’s servers are busy right now.' }));
+    const said = screen.getByText('Klipolo: Meta’s servers are busy right now.');
+    expect(said.closest('[aria-live]')).not.toBeNull();
+    expect(said.closest('[inert], [hidden]')).toBeNull();
+  });
+
   it('a message not sent yet stays in the box across a fold', async () => {
     renderWithProviders(<ChatPanel />);
     await userEvent.type(composer(), 'make the intro shorter');

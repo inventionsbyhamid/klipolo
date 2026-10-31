@@ -360,7 +360,9 @@ describe('chat', () => {
     });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'cut the ums{Enter}');
-    expect(await screen.findByText(/couldn’t reach Klipolo to use your access code/)).toBeInTheDocument();
+    expect(
+      await screen.findByText('This Mac couldn’t reach Klipolo to use your access code. Check your connection, then retry.'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
     expect(screen.queryByText('Add your Meta API key or access code in Settings')).toBeNull();
   });
