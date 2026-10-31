@@ -156,7 +156,7 @@ export function Gizmo({
         handlers.onPointerDown(e);
       }}
     >
-      {selected && !playing && !fixed && <GizmoHandles sides={target.label === 'text'} compact={compact} />}
+      {selected && !playing && !fixed && <GizmoHandles compact={compact} />}
     </button>
   );
 }
