@@ -2,15 +2,22 @@
 # A release build of Klipolo for one Mac architecture (both build on an Intel Mac; aarch64 is cross-compiled):
 #   scripts/release/build-mac.sh <x86_64|aarch64> <version>
 # writes dist/Klipolo-<version>-<arch>.dmg: Developer ID signed with the hardened runtime, notarized and stapled.
-# 1. Checks: a clean checkout (a release builds a commit), 8 GB free, rustup's cargo with the target installed, and the
-#    LGPL FFmpeg prefix for the arch in .build/ffmpeg-9.0 (scripts/link-ffmpeg.sh), checked by
-#    scripts/verify-ffmpeg-prefix.sh: exactly the prefix that ships.
-# 2. The licences into .build/release/<arch>/licenses: Klipolo's notice and AGPL text, FFmpeg's LGPL notice with the
-#    configure line of this arch's prefix (arm64 adds the cross-compile flags), the LGPL text, Archivo's OFL.
-# 3. `pnpm tauri build --target <triple> --bundles app` (its beforeBuildCommand runs `pnpm build`), signed ad hoc with
-#    the hardened runtime. FFMPEG_DIR, PKG_CONFIG_LIBDIR and KLIPOLO_FFMPEG_PREFIX point at this arch's prefix, and
-#    --config lists its dylibs (by install name) as the bundle's frameworks and adds the licences. Source paths are
-#    remapped, so the binary names no home folder. Apple's notary variables are unset: notarization is notarize.sh's.
+# KLIPOLO_SOURCE_URL must be the public https:// address of Klipolo's source code: NOTICE.txt gives it with the commit
+# built (the AGPL's source offer for this version), and check-bundle.sh fails a bundle whose NOTICE.txt still has the
+# {{SOURCE_URL}} or {{SOURCE_COMMIT}} placeholder. That commit must be pushed there, tagged v<version>, before the disk
+# image is shared.
+# 1. Checks: the source code address, a clean checkout (a release builds a commit), 8 GB free, rustup's cargo with the
+#    target installed, and the LGPL FFmpeg prefix for the arch in .build/ffmpeg-9.0 (scripts/link-ffmpeg.sh), checked
+#    by scripts/verify-ffmpeg-prefix.sh: exactly the prefix that ships.
+# 2. The licences into .build/release/<arch>/licenses: Klipolo's notice (with the source code address) and AGPL text,
+#    the third-party notices (scripts/release/third-party.sh), FFmpeg's LGPL notice with the configure line of this
+#    arch's prefix (arm64 adds the cross-compile flags), the LGPL text, Archivo's OFL.
+# 3. scripts/release/third-party.sh --check after `pnpm install`: the notices that ship list this checkout's crates and
+#    the page's packages. Then `pnpm tauri build --target <triple> --bundles app` (its beforeBuildCommand runs
+#    `pnpm build`), signed ad hoc with the hardened runtime. FFMPEG_DIR, PKG_CONFIG_LIBDIR and KLIPOLO_FFMPEG_PREFIX
+#    point at this arch's prefix, and --config lists its dylibs (by install name) as the bundle's frameworks and adds
+#    the licences. Source paths are remapped, so the binary names no home folder. Apple's notary variables are unset:
+#    notarization is notarize.sh's.
 # 4. The bundle is checked before anything is signed: its version and minimum macOS here, then check-bundle.sh (the
 #    licences and fonts, every Mach-O built for this arch only, load paths and rpaths).
 # 5. sign.sh, notarize.sh (the app, then the disk image), then check-dmg.sh mounts the disk image read-only and
@@ -29,6 +36,10 @@ case "$arch" in
   *) usage ;;
 esac
 is_version "$version" || { echo "refused: not a version: $version" >&2; exit 2; }
+is_source_url "${KLIPOLO_SOURCE_URL:-}" || {
+  echo "refused: set KLIPOLO_SOURCE_URL to the public https:// address of Klipolo's source code (NOTICE.txt gives it)" >&2
+  exit 2
+}
 cd "$repo"
 started=$(date +%s)
 
@@ -53,6 +64,8 @@ stage=$repo/.build/release/$arch
 rm -rf "$stage"
 mkdir -p "$stage/licenses"
 cp crates/klipolo-app/licenses/* "$stage/licenses/"
+# The clean checkout (step 1) is the source: NOTICE.txt names its commit.
+fill_source "$stage/licenses/NOTICE.txt" "$KLIPOLO_SOURCE_URL" "$(git rev-parse HEAD)"
 cp LICENSE "$stage/licenses/LICENSE.txt"
 cp apps/desktop/src/styles/fonts/OFL.txt "$stage/licenses/Archivo-OFL.txt"
 ffversion=$(sed -n 's/^VERSION=//p' scripts/ffmpeg-common.sh)
@@ -97,6 +110,7 @@ CARGO_ENCODED_RUSTFLAGS+=$'\x1f'"--remap-path-prefix=$repo=."
 export CARGO_ENCODED_RUSTFLAGS
 export CFLAGS="${CFLAGS:+$CFLAGS }-ffile-prefix-map=$home=~ -ffile-prefix-map=$repo=."
 pnpm install --frozen-lockfile
+"$here/third-party.sh" --check
 built=$(date +%s)
 (cd apps/desktop && env -u APPLE_ID -u APPLE_PASSWORD -u APPLE_TEAM_ID -u APPLE_API_KEY -u APPLE_API_ISSUER \
   -u APPLE_API_KEY_PATH -u APPLE_CERTIFICATE -u APPLE_CERTIFICATE_PASSWORD -u APPLE_SIGNING_IDENTITY \

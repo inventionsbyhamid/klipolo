@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The Linux gate: format, compile, lint and test the workspace's crates on Linux (with the engine's fixture tests),
-# check that the page's committed bindings are current, typecheck and test the page, and run the engine's GPU tests on
-# Mesa lavapipe. Run inside ci/linux.Dockerfile's image, from the repository root:
+# check that the page's committed bindings and the app's third-party notices are current, typecheck and test the page,
+# and run the engine's GPU tests on Mesa lavapipe. Run inside ci/linux.Dockerfile's image, from the repository root:
 #   docker build -f ci/linux.Dockerfile -t klipolo-ci ci
 #   docker run --rm --name klipolo-gate --cpus 16 --memory 24g -v "$PWD":/src -w /src klipolo-ci scripts/ci-linux.sh
 # The image runs as uid 1000, so the checkout must be owned by uid 1000. After an rsync, chown everything except
@@ -79,6 +79,9 @@ run "test app fixtures" cargo test -p klipolo-app --locked -- --ignored
 run "bindings are current" scripts/check-bindings.sh "$generated"
 # The page: its packages (pnpm's store kept in .build, as the Rust builds are in target/), typecheck and tests (jsdom).
 run "pnpm install" pnpm install --frozen-lockfile --store-dir .build/pnpm-store
+# The third-party notices the app ships list what Cargo.lock and the page's build hold: after a dependency change, run
+# scripts/release/third-party.sh and commit its file (a few seconds: crates are fetched, not built).
+run "third-party notices are current" scripts/release/third-party.sh --check
 run "page typecheck" pnpm -C apps/desktop typecheck
 run "page tests" pnpm -C apps/desktop test
 # What the engine's probe reads for sync (the sound lead, creation time and audio format), on the fixtures.
