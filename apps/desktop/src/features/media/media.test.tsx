@@ -431,6 +431,29 @@ describe('where a drop lands on the timeline', () => {
     expect(bridge.undo).toHaveBeenCalledTimes(2);
   });
 
+  it('the toast’s Undo knows each step by its own answer, not by what the copy shows when it settles', async () => {
+    vi.mocked(bridge.importMedia).mockResolvedValue({ assets: [sound()], skipped: [] });
+    vi.mocked(library.place).mockResolvedValue({ patch: after(4, 'media.sound.add'), unplaced: [] });
+    // The copy hasn't taken the answer in yet when the step settles (it still shows revision 3, "Add text").
+    const send = useProject.getState().send;
+    useProject.setState({
+      send: async (task) => {
+        await task();
+        return true;
+      },
+    });
+    try {
+      await importFiles(['/pop.wav'], { lane: 'sound', trackId: null, atUs: 2_000_000, row: 'sounds' });
+      await vi.waitFor(() => expect(useToasts.getState().toasts).toHaveLength(1));
+    } finally {
+      useProject.setState({ send });
+    }
+    useProject.setState({ snapshot: { ...fixtureSnapshot(), history: after(4, 'media.sound.add').history } });
+    vi.mocked(bridge.undo).mockResolvedValue(after(5, 'text.add'));
+    useToasts.getState().toasts[0].actions![0].run();
+    await vi.waitFor(() => expect(bridge.undo).toHaveBeenCalledTimes(1));
+  });
+
   it('files that got no layer are named with why; a refused step stops the rest; nothing added says nothing', async () => {
     const late = { ...sound(), id: 'late', name: 'late.wav' };
     vi.mocked(bridge.importMedia).mockResolvedValue({ assets: [sound(), late], skipped: [] });

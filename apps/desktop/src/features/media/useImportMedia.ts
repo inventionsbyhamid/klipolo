@@ -82,9 +82,13 @@ interface Made {
   label: string | null;
 }
 
-/** What one step of an import did: whether it went in, and the files that came in with no layer (and why). */
+/**
+ * What one step of an import did: whether it went in, the step it made (from its own answer, so a change merged right
+ * behind it is never taken for it), and the files that came in with no layer (and why).
+ */
 interface Stepped {
   ok: boolean;
+  made: Made | null;
   unplaced: UnplacedFile[];
 }
 
@@ -201,14 +205,24 @@ function placeSteps(
   target: DropTarget | null,
   music: { song: Asset; target: DropTarget } | null,
 ): (() => Promise<Stepped>)[] {
-  const send = (task: () => Promise<SnapshotPatch>) => async (): Promise<Stepped> => ({
-    ok: await useProject.getState().send(task),
-    unplaced: [],
-  });
-  const apply = (ops: Op[]) => async (): Promise<Stepped> => ({
-    ok: await useProject.getState().apply('media.import', ops),
-    unplaced: [],
-  });
+  /** `task`'s change sent in turn, with the step it made and the files it left without a layer. */
+  type Answer = { patch: SnapshotPatch; unplaced: UnplacedFile[] };
+  const sent = (task: () => Promise<Answer>) => async (): Promise<Stepped> => {
+    const got: { answer?: Answer } = {};
+    const ok = await useProject.getState().send(async () => {
+      got.answer = await task();
+      return got.answer.patch;
+    });
+    const history = got.answer?.patch.history;
+    return {
+      ok,
+      made: ok && history ? { revision: history.revision, label: history.undoLabel } : null,
+      unplaced: ok ? (got.answer?.unplaced ?? []) : [],
+    };
+  };
+  const send = (task: () => Promise<SnapshotPatch>) =>
+    sent(async () => ({ patch: await task(), unplaced: [] }));
+  const apply = (ops: Op[]) => send(() => bridge.apply({ label: 'media.import', ops }));
   const steps: (() => Promise<Stepped>)[] = [];
   if (music) {
     const from = dropUs(project, music.target);
@@ -227,19 +241,15 @@ function placeSteps(
   if (others.length > 0) {
     const at = dropUs(project, target);
     const onto = dropOnto(target);
-    steps.push(async () => {
-      let unplaced: UnplacedFile[] = [];
-      const ok = await useProject.getState().send(async () => {
-        const answer = await library.place(
+    steps.push(
+      sent(() =>
+        library.place(
           others.map((asset) => ({ type: 'file', asset })),
           at,
           onto,
-        );
-        unplaced = answer.unplaced;
-        return answer.patch;
-      });
-      return { ok, unplaced };
-    });
+        ),
+      ),
+    );
   }
   return steps;
 }
@@ -304,10 +314,9 @@ export async function importFiles(paths: string[] | null, target: DropTarget | n
           const made: Made[] = [];
           const unplaced: UnplacedFile[] = [];
           for (const step of steps) {
-            const done = await step().catch((): Stepped => ({ ok: false, unplaced: [] }));
+            const done = await step().catch((): Stepped => ({ ok: false, made: null, unplaced: [] }));
             if (!done.ok) return made.length > 0 && sayPartly(made);
-            const history = useProject.getState().snapshot?.history;
-            if (history) made.push({ revision: history.revision, label: history.undoLabel });
+            if (done.made) made.push(done.made);
             unplaced.push(...done.unplaced);
           }
           if (song) sayMusicAdded(song, rest, made);
