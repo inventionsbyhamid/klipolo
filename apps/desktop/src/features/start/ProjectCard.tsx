@@ -1,5 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
-import type { CSSProperties } from 'react';
+import { useId, type CSSProperties } from 'react';
 import type { ProjectRow } from '../../bindings/ProjectRow';
 import type { ThumbTile } from '../../bindings/ThumbTile';
 import { mediaUrl } from '../../bridge/commands';
@@ -35,12 +35,15 @@ interface ProjectCardProps {
 
 /**
  * One project on the start screen: its first clip's picture (else the clip art), its name and "Opened
- * 2 hours ago, 4:12". A click or Enter opens it.
+ * 2 hours ago, 4:12" (just the length when the time it was opened isn't known). A click or Enter opens it. Named by
+ * its name and described by that line.
  */
 export function ProjectCard({ row, nowMs, onOpen }: ProjectCardProps) {
   const { t } = useLingui();
-  const opened = openedLabel(row.openedMs, nowMs);
+  const nameId = useId();
+  const metaId = useId();
   const length = formatDuration(row.durationUs);
+  const opened = row.openedMs > 0 ? openedLabel(row.openedMs, nowMs) : null;
   return (
     <li>
       <button
@@ -48,20 +51,26 @@ export function ProjectCard({ row, nowMs, onOpen }: ProjectCardProps) {
         // WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable.
         tabIndex={0}
         className="start-card"
+        aria-labelledby={nameId}
+        aria-describedby={metaId}
         onClick={() => onOpen(row.path)}
       >
         <span className="start-pic" aria-hidden>
-          {row.thumb ? <span className="start-tile" style={tileStyle(row.thumb)} /> : <Icon name="film" />}
+          {/* The clip art is under the tile: a picture that doesn't load leaves it showing. */}
+          <Icon name="film" />
+          {row.thumb && <span className="start-tile" style={tileStyle(row.thumb)} />}
         </span>
-        <span className="start-name" title={row.name}>
+        <span className="start-name" id={nameId} title={row.name}>
           {row.name}
         </span>
-        <span className="start-meta">
-          {t({
-            id: 'start.card.meta',
-            message: `${opened}, ${length}`,
-            comment: '{opened} is when it was last opened ("Opened 2 hours ago"), {length} its length ("4:12")',
-          })}
+        <span className="start-meta" id={metaId}>
+          {opened === null
+            ? length
+            : t({
+                id: 'start.card.meta',
+                message: `${opened}, ${length}`,
+                comment: '{opened} is when it was last opened ("Opened 2 hours ago"), {length} its length ("4:12")',
+              })}
         </span>
       </button>
     </li>

@@ -107,12 +107,31 @@ describe('StartScreen', () => {
     // The header's two actions.
     expect(within(main).getByRole('button', { name: 'New project' })).toBeInTheDocument();
     expect(within(main).getByRole('button', { name: 'Record your screen' })).toBeInTheDocument();
+    // A card is named by its name and described by its line.
+    expect(screen.getByRole('button', { name: 'Studio tour' })).toHaveAccessibleDescription(
+      'Opened 2 hours ago, 4:12',
+    );
+  });
+
+  it('unknown_open_time_shows_only_the_length', async () => {
+    recentAnswers([{ ...ROWS[2], openedMs: 0 }]);
+    renderWithProviders(<StartScreen />);
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    expect(card('Kiln vlog').querySelector('.start-meta')).toHaveTextContent(/^1:01$/);
+    expect(screen.getByRole('button', { name: 'Kiln vlog' })).toHaveAccessibleDescription('1:01');
   });
 
   it('card_draws_its_tile_or_the_clip_art', async () => {
-    recentAnswers(ROWS);
+    const wide: ProjectRow = {
+      ...ROWS[1],
+      path: '/Users/me/Movies/Klipolo/Banner.klipolo',
+      name: 'Banner',
+      // A 4:1 picture: a tile wider than the card's 16:9.
+      thumb: { sprite: '/cache/media/thumbs/banner/c-00000.k.jpg', tileW: 288, tileH: 72, cols: 8 },
+    };
+    recentAnswers([...ROWS, wide]);
     renderWithProviders(<StartScreen />);
-    await waitFor(() => expect(cards()).toHaveLength(3));
+    await waitFor(() => expect(cards()).toHaveLength(4));
 
     // Tile 0 of the sprite: the sheet is 8 tiles wide, so it is drawn 8 times the tile's width, from its top left.
     const tile = card('Studio tour').querySelector<HTMLElement>('.start-tile')!;
@@ -121,13 +140,23 @@ describe('StartScreen', () => {
     expect(tile.style.backgroundSize).toMatch(/^800%( auto)?$/);
     expect(tile.style.backgroundPosition).toBe('0px 0px');
     expect([tile.style.width, tile.style.height]).toEqual(['100%', '100%']);
-    expect(card('Studio tour').querySelector('.start-pic svg')).toBeNull();
+    // The clip art is drawn first, under the tile: a picture that doesn't load leaves it showing.
+    const pic = card('Studio tour').querySelector('.start-pic')!;
+    expect([...pic.children].map((el) => (el.tagName.toLowerCase() === 'svg' ? 'art' : el.className))).toEqual([
+      'art',
+      'start-tile',
+    ]);
 
     // A tall tile keeps its shape: the full height, 40/72 of 9/16 of the width.
     const tall = card('Kiln vlog').querySelector<HTMLElement>('.start-tile')!;
     expect(tall.style.backgroundImage).toBe('url("asset://localhost/cache/media/thumbs/kiln/c-00000.k.jpg")');
     expect(tall.style.height).toBe('100%');
     expect(parseFloat(tall.style.width)).toBeCloseTo(31.25, 2);
+
+    // A wide tile is letterboxed: the full width, 16/9 of 72/288 of the height.
+    const banner = card('Banner').querySelector<HTMLElement>('.start-tile')!;
+    expect(banner.style.width).toBe('100%');
+    expect(parseFloat(banner.style.height)).toBeCloseTo(44.44, 2);
 
     // No thumbnail yet (an empty project, or a clip not scanned): the film clip art.
     const art = card('Untitled project');
