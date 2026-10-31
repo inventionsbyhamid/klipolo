@@ -399,7 +399,7 @@ fn the_stills_read_the_permission_first_and_never_ask_or_open_a_camera_or_a_mic(
     let mac = code_of(&read("platform/macos/thumbs.rs"));
     let guard = mac.find("assert_real_capture_allowed(");
     let preflight = mac.find("CGPreflightScreenCaptureAccess()");
-    let content = mac.find("filter::content()").expect("the content list");
+    let content = mac.find("filter::content").expect("the content list");
     let shot = mac.find("ScreenshotManager::").expect("the screenshot");
     assert!(
         guard.is_some_and(|g| preflight.is_some_and(|p| g < p)),

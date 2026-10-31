@@ -1,11 +1,59 @@
 //! How the Mac's stills (`platform::macos::thumbs`) spare the system's capture service, apart so it is tested on every
 //! OS:
+//! - `InFlight`: one request at a time. A request the stills stopped waiting for still runs in the service, so no new
+//!   one is sent until it has answered: a stalled service gets no queue of screenshots and content lists to finish in
+//!   a burst when it recovers.
 //! - `RoundCache`: one content list a round, counted from the end of its read, a failed read included, so a service
 //!   that fails at once isn't asked again at every still.
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::pipe::PipeError;
+
+/// One request to the service in flight at a time.
+#[derive(Clone, Debug, Default)]
+pub struct InFlight(Arc<AtomicBool>);
+
+impl InFlight {
+    /// A new request's `Answered`, for its completion handler; `Os` while the last one hasn't answered (the caller's
+    /// turn fails as a still that didn't come, and is tried again after its rest).
+    pub fn begin(&self) -> Result<Answered, PipeError> {
+        if self.0.swap(true, Ordering::AcqRel) {
+            return Err(PipeError::Os(
+                "the capture service hasn't answered the last request yet".into(),
+            ));
+        }
+        Ok(Answered {
+            service: self.0.clone(),
+            done: false,
+        })
+    }
+}
+
+/// A request's completion handler holds it: `answer` as the answer comes, before it is passed on. A handler the
+/// service lets go of without calling it ends the request too; one let go of after it answered changes nothing (the
+/// next request may be in flight by then).
+#[derive(Debug)]
+pub struct Answered {
+    service: Arc<AtomicBool>,
+    done: bool,
+}
+
+impl Answered {
+    pub fn answer(&mut self) {
+        if !std::mem::replace(&mut self.done, true) {
+            self.service.store(false, Ordering::Release);
+        }
+    }
+}
+
+impl Drop for Answered {
+    fn drop(&mut self) {
+        self.answer();
+    }
+}
 
 /// One value a round: read again once `round` has passed since its last read ended, and a failed read's error kept as
 /// long.
@@ -43,8 +91,42 @@ impl<T> RoundCache<T> {
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
+    use std::sync::mpsc::channel;
 
     use super::*;
+
+    #[test]
+    fn one_request_is_in_flight_until_it_answers() {
+        let service = InFlight::default();
+        let mut first = service.begin().expect("nothing in flight");
+        assert!(service.begin().is_err(), "a second while the first runs");
+        first.answer();
+        let second = service.begin().expect("the first answered");
+        // The first's handler let go of after it answered: the second is still in flight.
+        drop(first);
+        assert!(service.begin().is_err(), "the second still runs");
+        // A handler the service lets go of without calling it ends its request.
+        drop(second);
+        let mut third = service.begin().expect("the second was let go");
+        // One the stills stopped waiting for answers later, on the service's queue: nothing is sent meanwhile.
+        let (answered_tx, answered_rx) = channel();
+        let late = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            third.answer();
+            answered_tx.send(()).unwrap();
+            third
+        });
+        assert!(
+            service.begin().is_err(),
+            "the abandoned one hasn't answered"
+        );
+        answered_rx.recv().unwrap();
+        let held = late.join().unwrap();
+        let fourth = service.begin().expect("it answered");
+        drop(held);
+        assert!(service.begin().is_err(), "the fourth still runs");
+        drop(fourth);
+    }
 
     /// A clock the test moves.
     fn clock() -> (Instant, Cell<Duration>) {

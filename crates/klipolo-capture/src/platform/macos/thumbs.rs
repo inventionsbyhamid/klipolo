@@ -12,8 +12,11 @@
 //! **Its cost:** the content list (a round trip to the system's capture service, which lists every window) is read
 //! once a round (`ROUND`, the stills' `THUMB_EVERY`, counted from the read's end) and kept with the filters picked from
 //! it, so it is at most a round old, as the cards are; a read that failed is kept as long, so a service that fails at
-//! once isn't asked again at every still (`common::stills_service`). Each still runs inside its own autorelease pool, so the system's objects it makes
-//! (the screenshot, Core Image's image and its JPEG) are freed with it, on a thread that has no run loop to drain them.
+//! once isn't asked again at every still (`common::stills_service`). One request to the service is in flight at a
+//! time: a screenshot or a content read the stills stopped waiting for still runs there, so until it answers no new one
+//! is sent, and that turn fails as `Os` (tried again after the worker's rest). Each still runs inside its own
+//! autorelease pool, so the system's objects it makes (the screenshot, Core Image's image and its JPEG) are freed with
+//! it, on a thread that has no run loop to drain them.
 //! The screenshot comes as a sample buffer, whose BGRA pixel buffer `jpeg` encodes as it does the live view's frames.
 //! Memory: one round's content list and filters, one BGRA buffer at most 320 pixels wide (about 400 KB for a 16:10
 //! display), one Core Image context kept for the worker's life, and one JPEG.
@@ -31,7 +34,7 @@ use crate::backend::{PreviewFrame, Target};
 use crate::guard::assert_real_capture_allowed;
 use crate::pipe::PipeError;
 use crate::platform::common::sck::USER_DECLINED;
-use crate::platform::common::stills_service::RoundCache;
+use crate::platform::common::stills_service::{InFlight, RoundCache};
 use crate::run::thumbs::THUMB_EVERY;
 use crate::vendor::cap::sck::StreamCfgBuilder;
 
@@ -40,10 +43,11 @@ const SHOT_WAIT: Duration = Duration::from_secs(2);
 /// How long one content list, and the filters picked from it, serve: one round of the stills.
 const ROUND: Duration = THUMB_EVERY;
 
-/// The stills' JPEG maker, made at the first still and kept, and the round's content list.
+/// The stills' JPEG maker, made at the first still and kept, the round's content list, and the request in flight.
 pub(super) struct Stills {
     jpeg: Mutex<Option<Jpeg>>,
     round: Mutex<RoundCache<Round>>,
+    service: InFlight,
 }
 
 impl Default for Stills {
@@ -51,6 +55,7 @@ impl Default for Stills {
         Self {
             jpeg: Mutex::default(),
             round: Mutex::new(RoundCache::new(ROUND)),
+            service: InFlight::default(),
         }
     }
 }
@@ -79,7 +84,11 @@ impl Stills {
         objc::ar_pool(|| {
             let shot = self.through(target, |picked| {
                 let size = still_size(picked.pixels, width);
-                shoot(&picked.filter, &still_config(size, picked.window))
+                shoot(
+                    &picked.filter,
+                    &still_config(size, picked.window),
+                    &self.service,
+                )
             })?;
             let image = shot
                 .image_buf()
@@ -108,8 +117,9 @@ impl Stills {
     ) -> Result<R, PipeError> {
         let mut round = self.round.lock().unwrap_or_else(PoisonError::into_inner);
         let round = round.get(&Instant::now, || {
+            let content = filter::content_answering(self.service.begin()?)?;
             Ok(Round {
-                content: filter::content()?,
+                content,
                 picked: vec![],
             })
         })?;
@@ -149,14 +159,18 @@ fn still_config(size: (u32, u32), window: bool) -> arc::R<sc::StreamCfg> {
     c.build()
 }
 
-/// ScreenCaptureKit's screenshot of `filter`, waited for at most `SHOT_WAIT`.
+/// ScreenCaptureKit's screenshot of `filter`, waited for at most `SHOT_WAIT`; `Os` at once while `service` has a
+/// request that hasn't answered.
 fn shoot(
     filter: &sc::ContentFilter,
     cfg: &sc::StreamCfg,
+    service: &InFlight,
 ) -> Result<arc::R<cm::SampleBuf>, PipeError> {
+    let mut answered = service.begin()?;
     let (tx, rx) = sync_channel(1);
     let mut done = blocks::ResultCh::<cm::SampleBuf>::new2(
         move |shot: Option<&cm::SampleBuf>, error: Option<&ns::Error>| {
+            answered.answer();
             let answer = match (shot, error) {
                 (Some(shot), _) => Ok(shot.retained()),
                 (None, Some(e)) if e.code() == USER_DECLINED => Err(PipeError::PermissionDenied),
