@@ -136,9 +136,9 @@ mod tests {
     use super::*;
 
     /// An index beside its copy that doesn't read (another build's magic, outside or inside)
-    /// is made again from the copy's sample table and written over, so the next open loads it as it is and no decoder demuxes the copy
-    /// whole. A `.keys` that isn't this copy's (someone's own file, or one for another version of the copy) is left as
-    /// it is.
+    /// is made again from the copy's sample table and written over, so the next open loads it as it is and no decoder
+    /// demuxes the copy whole. A `.keys` that isn't this copy's (someone's own file, or one for another version of the
+    /// copy) is left as it is.
     #[test]
     fn an_index_beside_its_copy_that_doesnt_read_is_made_again_once_and_others_are_left_alone() {
         let _ = ffmpeg::init();
