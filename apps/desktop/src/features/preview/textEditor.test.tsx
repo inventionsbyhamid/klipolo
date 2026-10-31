@@ -221,9 +221,36 @@ describe('on-canvas text', () => {
     await userEvent.type(field, '!');
     expect(editor()).toHaveValue('Set up billing there!');
     expect(heard.applied).toHaveLength(0);
-    await userEvent.keyboard('{Escape}');
+    // Return in the field finishes the shared edit, keeping the words: one commit.
+    await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(heard.applied).toHaveLength(1));
     expect(heard.applied[0].ops[0]).toMatchObject({ patch: { content: { text: 'Set up billing there!' } } });
+  });
+
+  it('Escape keeps the words typed on the canvas, and puts the saved words back from the inspector’s field', async () => {
+    useSelection.setState({ selectedId: 'title' });
+    renderWithProviders(
+      <>
+        <Stage />
+        <Inspector format="landscape" />
+      </>,
+    );
+    // From the inspector's field, while the canvas types the same words: they go back, nothing is committed.
+    await userEvent.dblClick(layer());
+    await userEvent.type(editor(), ' there');
+    const field = screen.getByRole('textbox', { name: 'Text' });
+    await userEvent.click(field);
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(useTextEdit.getState().closing).toBeNull());
+    expect(useTextEdit.getState().session).toBeNull();
+    expect(heard.applied).toHaveLength(0);
+    expect(screen.getByRole('textbox', { name: 'Text' })).toHaveValue('Set up billing');
+    // On the canvas: the words typed stay, one commit.
+    await userEvent.dblClick(layer());
+    await userEvent.type(editor(), ' now');
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(heard.applied).toHaveLength(1));
+    expect(heard.applied[0].ops[0]).toMatchObject({ patch: { content: { text: 'Set up billing now' } } });
   });
 
   it('an inspector press that finishes the edit builds on the new words, never putting the old ones back', async () => {

@@ -80,12 +80,15 @@ function WordsField({
         }}
         onBlur={finish}
         onKeyDown={(e) => {
-          // Typing here never reaches the editor's shortcuts.
+          // Typing here never reaches the editor's shortcuts, and the input method owns Return and Escape while a
+          // composition is on.
           e.stopPropagation();
+          if (e.nativeEvent.isComposing || e.keyCode === 229) return;
           if (e.key === 'Enter') {
             e.preventDefault();
             e.currentTarget.blur();
           } else if (e.key === 'Escape') {
+            // The saved words back, in the field and the preview: nothing is committed as it lets go.
             e.preventDefault();
             setDraft(null);
             clearPreview();

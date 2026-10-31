@@ -232,4 +232,51 @@ describe('the inspector', () => {
     expect(apply.mock.calls[3][1]).toEqual([{ type: 'moveItem', id: 'title', trackId: null, startUs: 5_500_000 }]);
     expect(apply.mock.calls[4][1]).toEqual([{ type: 'updateItem', id: 'title', patch: { durationUs: 2_000_000 } }]);
   });
+
+  it('Escape in the text field puts the saved words back and commits nothing; the input method keeps Return', async () => {
+    useSelection.setState({ selectedId: 'title' });
+    renderWithProviders(<Inspector format="landscape" />);
+    const field = screen.getByRole('textbox', { name: 'Text' });
+    await userEvent.type(field, ' today');
+    // Return that ends a composition (WebKit's keyCode 229) is the input method's: nothing is saved.
+    fireEvent.keyDown(field, { key: 'Enter', keyCode: 229 });
+    fireEvent.keyDown(field, { key: 'Enter', isComposing: true });
+    expect(field).toHaveFocus();
+    expect(apply).not.toHaveBeenCalled();
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect(field).toHaveValue('Set up billing');
+    expect(field).not.toHaveFocus();
+    await act(() => Promise.resolve());
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it('Escape in a title template’s words puts them back, in the field and the preview, and commits nothing', async () => {
+    const snapshot = fixtureSnapshot();
+    snapshot.project.timeline.tracks[0].items.push({
+      ...titleItem,
+      id: 'card',
+      startUs: 10_000_000,
+      attach: null,
+      content: {
+        type: 'generator',
+        source: 'klipolo.builtin/scene.lower-third',
+        params: { title: 'Rosa Diaz', role: 'Potter' },
+      },
+    } as unknown as (typeof snapshot.project.timeline.tracks)[0]['items'][0]);
+    useProject.setState({ snapshot });
+    useSelection.setState({ selectedId: 'card' });
+    renderWithProviders(<Inspector format="landscape" />);
+    const name = screen.getByRole('textbox', { name: 'Name' });
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Teo');
+    expect(engine.preview).toHaveBeenCalled();
+    fireEvent.keyDown(name, { key: 'Enter', isComposing: true });
+    expect(name).toHaveValue('Teo');
+    fireEvent.keyDown(name, { key: 'Escape' });
+    expect(name).toHaveValue('Rosa Diaz');
+    expect(engine.previewClear).toHaveBeenCalled();
+    fireEvent.blur(name);
+    await act(() => Promise.resolve());
+    expect(apply).not.toHaveBeenCalled();
+  });
 });

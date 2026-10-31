@@ -18,9 +18,10 @@ interface TextFieldProps {
 
 /**
  * The selected title's words, at the top of the inspector. Enter or leaving the field saves ("Edit text" in history),
- * Shift Enter starts a new line and Escape puts the saved words back. Remount it (via `key`) whenever the saved text
- * changes. While the same words are typed on the canvas it edits that one draft instead: it shows and changes the
- * canvas's words, and Enter or Escape finishes the shared edit, keeping them; the edit commits once.
+ * Shift Enter starts a new line and Escape puts the saved words back (as every inspector field does; on the canvas
+ * Escape keeps the words typed). Remount it (via `key`) whenever the saved text changes. While the same words are typed
+ * on the canvas it edits that one draft instead: it shows and changes the canvas's words; Enter finishes the shared
+ * edit, keeping them (it commits once), and Escape finishes it with the saved words back, committing nothing.
  *
  * Words typed here and not yet saved go in as the project closes (or the app quits), in their turn after any change
  * on its way, built on the title as the project has it then.
@@ -101,15 +102,22 @@ export function TextField({ id, content, locked }: TextFieldProps) {
         onKeyDown={(e) => {
           // Typing here never reaches the editor's shortcuts.
           e.stopPropagation();
+          // The input method owns Return and Escape while a composition is on.
           const composing = e.nativeEvent.isComposing || e.keyCode === 229;
+          if (composing) return;
           if (session) {
-            if (!composing && (e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey))) {
+            if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               void useTextEdit.getState().finish();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              const edit = useTextEdit.getState();
+              edit.setText(session.startText);
+              void edit.finish();
             }
             return;
           }
-          if (e.key === 'Enter' && !e.shiftKey && !composing) {
+          if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             e.currentTarget.blur();
           }
