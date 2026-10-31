@@ -3,6 +3,7 @@ import type { AiStatus } from '../bindings/AiStatus';
 import { closeSettings, openSettings, refreshAiStatus, useAi } from '../ai/aiStatus';
 import { AiIcon } from '../ai/icons';
 import { Icon } from '../layout/Icon';
+import { FieldError, Note } from './FieldNotes';
 import {
   type BudgetView,
   type PayChoice,
@@ -394,24 +395,6 @@ function SessionSpend({ status }: { status: AiStatus | null }) {
       <dd>{view.total}</dd>
       <dd className="session-kinds">{view.kinds.join(', ')}</dd>
     </dl>
-  );
-}
-
-function FieldError({ id, text }: { id: string; text: string }) {
-  return (
-    <p className="field-error" id={id} role="alert">
-      <Icon name="info" />
-      {text}
-    </p>
-  );
-}
-
-function Note({ text }: { text: string }) {
-  return (
-    <p className="field-note" role="status">
-      <Icon name="info" />
-      {text}
-    </p>
   );
 }
 
