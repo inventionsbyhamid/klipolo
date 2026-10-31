@@ -6,8 +6,8 @@
 //! - the title card's settings bind: the project keeps them, the plan hands them over, and its nodes show them;
 //! - drawn (lavapipe in CI): the lower third's title area shows its name in the preview and in an exported file, and
 //!   the title card its title and accent; in 16:9, 9:16 and 1:1 both keep their shape (their heights are 1080p pixels,
-//!   not shares of the frame) and the lower third stays above 9:16's bottom 20 %; an empty role or subtitle shows
-//!   nothing. `PRESET_STILLS=<folder>` keeps a still of each.
+//!   not shares of the frame) and in 9:16 everything either draws stays inside the area the apps keep clear
+//!   (`PORTRAIT_CLEAR`); an empty role or subtitle shows nothing. `PRESET_STILLS=<folder>` keeps a still of each.
 
 mod support;
 
@@ -22,6 +22,7 @@ use klipolo_engine::registry::Registry;
 use klipolo_engine::registry::pack::{check_definition, names_clean, setting_text_clean};
 use klipolo_model::contrib::{ContribId, ContribKind};
 use klipolo_model::layout::Layout;
+use klipolo_model::media::text::PORTRAIT_CLEAR;
 use klipolo_model::params::{ParamKind, ParamValue};
 use klipolo_model::project::{FormatKind, Project};
 use klipolo_model::scene::Scene;
@@ -480,7 +481,9 @@ fn bounds_where(img: &image::RgbaImage, keep: impl Fn([u8; 3]) -> bool) -> Optio
 
 /// The templates in every format, as full-frame layers. The lower third's name shows in its box, nothing of it reaches
 /// the frame's edge, and in 9:16 all of it stays above the bottom 20 % the platforms cover. The
-/// title card's title and accent mark stay centred, and the mark keeps its shape: the same aspect in every format.
+/// title card's title and accent mark stay centred, and the mark keeps its shape: the same aspect in every format. In
+/// 9:16 the ink of both (their words, rules and plates, not the title card's dim scrim) stays inside the area the apps'
+/// buttons and captions leave clear (`PORTRAIT_CLEAR`).
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]
 async fn templates_keep_their_shape_in_every_format() {
@@ -523,6 +526,7 @@ async fn templates_keep_their_shape_in_every_format() {
                 "9:16: above the bottom 20 %, not down to {:.3} of the height",
                 drawn.y1 / tall
             );
+            inside_the_clear_area("the lower third", drawn, size);
         }
 
         let (img, notes) = scene_frame_in(&mut h, &titled, 2.0, size, format).await;
@@ -543,11 +547,34 @@ async fn templates_keep_their_shape_in_every_format() {
             );
         }
         aspects.push((name, (mark.x1 - mark.x0) / mark.height()));
+        if format == FormatKind::Portrait {
+            // Its title, the longest in the shrink-to-fit width, with the mark and the subtitle.
+            let card = bounds_where(&img, |p| p.iter().any(|&c| c > 40))
+                .unwrap_or_else(|| panic!("{name}: no title card"));
+            inside_the_clear_area("the title card", card, size);
+        }
     }
     let wide = aspects[0].1;
     assert!(
         aspects.iter().all(|(_, a)| (a / wide - 1.0).abs() <= 0.2),
         "the mark keeps its shape in every format: {aspects:?}"
+    );
+}
+
+/// `ink` (pixels of a frame `size`) is inside 9:16's clear area (`PORTRAIT_CLEAR`), where no app's buttons, tabs or
+/// captions cover it.
+fn inside_the_clear_area(what: &str, ink: Bounds, size: (u32, u32)) {
+    let (w, h) = (f64::from(size.0), f64::from(size.1));
+    let c = PORTRAIT_CLEAR;
+    let clear = Bounds {
+        x0: c.x * w,
+        y0: c.y * h,
+        x1: (c.x + c.w) * w,
+        y1: (c.y + c.h) * h,
+    };
+    assert!(
+        ink.within(clear),
+        "9:16: {what} stays inside the clear area {clear:?}, not {ink:?}"
     );
 }
 
