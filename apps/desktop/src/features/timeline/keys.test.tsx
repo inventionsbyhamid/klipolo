@@ -60,8 +60,13 @@ describe('the timeline from the keyboard', () => {
     // Anchored: the title's name ends "moves with screen.mp4".
     const a = screen.getByRole('button', { name: /^screen\.mp4/ });
     act(() => a.focus());
-    // Straight to the next clip: Klipolo's cuts are no stops of their own (it draws no transitions).
     fireEvent.keyDown(a, { key: 'ArrowRight' });
+    await frames();
+    // The cut between the clips first: a stop that selects nothing when it has no transition.
+    const cut = screen.getByRole('button', { name: /^Cut between screen\.mp4 and broll\.mp4/ });
+    expect(cut).toHaveFocus();
+    expect(useSelection.getState().selectedId).toBeNull();
+    fireEvent.keyDown(cut, { key: 'ArrowRight' });
     await frames();
     const b = screen.getByRole('button', { name: /^broll\.mp4/ });
     expect(b).toHaveFocus();
@@ -165,8 +170,13 @@ describe('the timeline from the keyboard', () => {
     expect(document.querySelector('[data-block-id="b"]')).toBeNull();
     const a = screen.getByRole('button', { name: /^screen\.mp4/ });
     act(() => a.focus());
-    // b at 20 s is outside the window: focus on it draws it.
+    // The cut at 20 s is outside the window too: focus on it draws it.
     fireEvent.keyDown(a, { key: 'ArrowRight' });
+    await frames();
+    const cut = document.querySelector<HTMLElement>('[data-block-id="cut:a"]')!;
+    expect(cut).toHaveFocus();
+    // So does focus on b.
+    fireEvent.keyDown(cut, { key: 'ArrowRight' });
     await frames();
     expect(screen.getByRole('button', { name: /^broll\.mp4/ })).toHaveFocus();
     unmount();

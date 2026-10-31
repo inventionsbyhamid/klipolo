@@ -138,10 +138,19 @@ describe('a 1-hour, 300-layer project', () => {
     renderCounts.clear();
     fireEvent.keyDown(c5, { key: 'ArrowRight' });
     await act(() => new Promise((r) => setTimeout(r, 40)));
-    // c5 leaves the Tab order, c6 enters it and is selected. The lanes re-render (their kept set changed); no other
-    // block does.
-    expect(document.activeElement).toBe(document.querySelector('[data-block-id="c6"]'));
+    // The cut after c5 first: c5 leaves the Tab order, the cut enters it. The lanes re-render (their kept set
+    // changed); no other block or cut does.
+    const cut = document.querySelector('[data-block-id="cut:c5"]');
+    expect(document.activeElement).toBe(cut);
     expect(renderCounts.get('c5')).toBe(1);
+    expect(renderCounts.get('cut:c5')).toBe(1);
+    expect(rendered()).toBe(2);
+    renderCounts.clear();
+    fireEvent.keyDown(cut!, { key: 'ArrowRight' });
+    await act(() => new Promise((r) => setTimeout(r, 40)));
+    // c6 enters the Tab order and is selected.
+    expect(document.activeElement).toBe(document.querySelector('[data-block-id="c6"]'));
+    expect(renderCounts.get('cut:c5')).toBe(1);
     expect(renderCounts.get('c6')).toBe(1);
     expect(rendered()).toBe(2);
   });
