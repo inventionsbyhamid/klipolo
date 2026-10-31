@@ -123,6 +123,17 @@ describe('importing media', () => {
     ]);
   });
 
+  it('keeps a reason that starts with a word in capitals as Rust wrote it: SVG, not sVG', async () => {
+    vi.mocked(bridge.importMedia).mockResolvedValueOnce({
+      assets: [],
+      skipped: [{ name: 'logo.svg', reason: "SVG isn't supported yet. Export it as PNG." }],
+    });
+    await importFiles(['/logo.svg']);
+    expect(useToasts.getState().toasts.map((t) => [t.kind, t.text])).toEqual([
+      ['error', "Skipped logo.svg: SVG isn't supported yet. Export it as PNG."],
+    ]);
+  });
+
   it('names skipped files as they are, a # in a name included', async () => {
     const unsupported = "This file type isn't supported.";
     vi.mocked(bridge.importMedia).mockResolvedValueOnce({

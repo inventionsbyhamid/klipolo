@@ -51,8 +51,18 @@ function listNames(names: string[]): string {
 }
 
 /**
+ * `reason` read as the rest of a sentence: its first letter lowercased ("this file type isn't supported."), unless its
+ * first word is written in capitals, a name such as SVG, which stays as Rust wrote it.
+ */
+function asRestOfSentence(reason: string): string {
+  const word = reason.split(/\s/, 1)[0];
+  if (word.length > 1 && word === word.toUpperCase() && word !== word.toLowerCase()) return reason;
+  return `${reason.charAt(0).toLowerCase()}${reason.slice(1)}`;
+}
+
+/**
  * One line naming every skipped file with Rust's reason, e.g. "Skipped 2 files. a.heic, b.pdf: this file type isn't
- * supported." Each reason reads as the rest of its sentence (first letter lowercased).
+ * supported." Each reason reads as the rest of its sentence (`asRestOfSentence`).
  */
 function skippedMessage(skipped: SkippedFile[]): string {
   const byReason = new Map<string, string[]>();
@@ -60,7 +70,7 @@ function skippedMessage(skipped: SkippedFile[]): string {
   const parts = [...byReason]
     .map(([reason, names]) => {
       const files = listNames(names);
-      const why = `${reason.charAt(0).toLowerCase()}${reason.slice(1)}`;
+      const why = asRestOfSentence(reason);
       return t({
         id: 'media.skipped.part',
         message: `${files}: ${why}`,
