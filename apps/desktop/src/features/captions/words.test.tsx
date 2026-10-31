@@ -229,6 +229,23 @@ describe('caption words', () => {
     focus.mockRestore();
   });
 
+  it('Enter before the count is in waits for it, and says so', async () => {
+    let answer!: (v: unknown) => void;
+    findReply = () => new Promise((r) => (answer = r));
+    const user = userEvent.setup();
+    renderWithProviders(<CaptionWords format="portrait" />);
+    await user.click(within(await list()).getByRole('option', { name: 'TEO' }));
+    await user.clear(fixField());
+    await user.type(fixField(), 'Theo{Enter}');
+    expect(screen.getByRole('group', { name: 'Fix word' })).toHaveTextContent('Still counting…');
+    expect(txs).toHaveLength(0);
+    expect(fixField()).toBeInTheDocument();
+    await act(async () => answer([PAGES[1].words[1], PAGES[2].words[0]]));
+    await waitFor(() => expect(txs).toHaveLength(1));
+    expect(txs[0].label).toBe('captions.fixAll.undo');
+    expect(txs[0].ops).toHaveLength(2);
+  });
+
   it('typing then Escape lets the word go unchanged', async () => {
     const user = userEvent.setup();
     renderWithProviders(<CaptionWords format="portrait" />);

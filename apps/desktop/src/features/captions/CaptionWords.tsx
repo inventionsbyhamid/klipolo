@@ -180,15 +180,21 @@ export function CaptionWords({ format }: { format: FormatKind }) {
   const list = nav?.list ?? listed;
   const focus = sel && nav ? nav.at.get(sel.focus) : undefined;
 
-  /** Opens `w` for fixing, and asks where else it shows. */
+  /**
+   * Opens `w` for fixing, and asks where else it shows. When that can't be asked, the word counts as showing here
+   * only: its fix bar fixes just this one (never waits for a count that won't come).
+   */
   const open = (w: WordView) => {
     const started = { word: w, matches: null };
     setEdit(started);
     if (!projectId) return;
     void captions
       .find(projectId, format, w.said ?? w.text)
-      .then((matches) => setEdit((e) => (e?.word === w ? { ...e, matches: matches ?? null } : e)))
-      .catch(() => undefined);
+      .then(
+        (matches) => matches ?? [w],
+        () => [w],
+      )
+      .then((matches) => setEdit((e) => (e?.word === w ? { ...e, matches } : e)));
   };
   const toggleHidden = () => {
     if (words.length === 0) return;

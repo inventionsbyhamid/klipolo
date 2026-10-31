@@ -64,7 +64,8 @@ type Spell = (words: WordView[], text: string, from: string, closing?: boolean, 
 /**
  * A word being fixed in place: the chip becomes a field with the word as said (never the style's
  * capitals), and the fix bar opens in the flow under its line: "Change Teo to Theo. It appears 4 times.", with Fix
- * all, Just this one and Hide. Enter fixes all (or just this one, when it shows once); Escape lets go without a change.
+ * all, Just this one and Hide. Enter fixes all (or just this one, when it shows once), waiting for the count when it
+ * isn't in yet ("Still counting…"); Escape lets go without a change.
  * Leaving the field for anything but the bar saves the change for just this word, as does the project closing with it
  * open (the close waits for it) or the field going with the focus in it; a text saved already sends nothing twice. A
  * fix while the words are being updated waits for them (`usePressQueue`); "Fix all" waits for them to settle.
@@ -144,6 +145,21 @@ export function WordEditor({
     if (ops.length > 0 && fixAll(label, ops)) done();
   };
   const canFixAll = many && !busy && fixAllOps(word, matches ?? [], text).length > 0;
+  /** Enter: fix all where the word shows more than once, else just this one; nothing changed, let go. */
+  const enter = () => {
+    if (!changed) done();
+    else if (canFixAll) all();
+    else if (!many) justThis();
+  };
+  /** Enter came before the count: it waits for it (never fixing just one by itself), and the bar says so. */
+  const [waiting, setWaiting] = useState(false);
+  const latestEnter = useRef(enter);
+  latestEnter.current = enter;
+  useEffect(() => {
+    if (!waiting || matches === null) return;
+    setWaiting(false);
+    latestEnter.current();
+  }, [waiting, matches]);
   /** The bar's buttons keep the focus in the field, so pressing one never reads as leaving it. */
   const keep = (e: MouseEvent) => e.preventDefault();
   return (
@@ -173,9 +189,8 @@ export function WordEditor({
             e.stopPropagation();
             if (e.key === 'Enter') {
               e.preventDefault();
-              if (!changed) done();
-              else if (canFixAll) all();
-              else if (!many) justThis();
+              if (changed && matches === null) setWaiting(true);
+              else enter();
             } else if (e.key === 'Escape') {
               e.preventDefault();
               done();
@@ -197,6 +212,9 @@ export function WordEditor({
           )}
           {/* "It": a sentence never starts with the word as said, lower case ("studio appears 7 times."). */}
           {many && ` ${t({ id: 'captions.fix.count', message: `It appears ${count} times.` })}`}
+          {changed &&
+            matches === null &&
+            ` ${t({ id: 'captions.fix.counting', message: 'Still counting…', comment: 'The places the word shows' })}`}
         </p>
         <div className="actions">
           {changed && many && (
