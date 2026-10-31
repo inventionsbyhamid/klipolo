@@ -486,6 +486,22 @@ describe('where a drop lands on the timeline', () => {
     expect(useToasts.getState().toasts.map((t) => t.text).filter((text) => text.startsWith('Added'))).toEqual([]);
   });
 
+  it('the toast counts only what went in: a file too short to place is left out, on the Music lane and elsewhere', async () => {
+    const broll = fixtureSnapshot().project.assets[5];
+    const blip: Asset = { ...broll, id: 'b', path: '/b.mp4', name: 'b.mp4', durationUs: 5_000 };
+    vi.mocked(bridge.importMedia).mockResolvedValue({ assets: [blip, sound()], skipped: [] });
+    vi.mocked(library.place).mockResolvedValue({ patch: after(4, 'media.sound.add'), unplaced: [] });
+    await importFiles(['/b.mp4', '/pop.wav'], { lane: 'picture', trackId: null, atUs: 2_000_000 });
+    await vi.waitFor(() => expect(useToasts.getState().toasts.map((t) => t.text)).toEqual(['Added 1 file']));
+    useToasts.setState({ toasts: [] });
+    const song: Asset = { ...sound(), id: 'lofi', path: '/lofi.mp3', name: 'lofi.mp3', durationUs: 60_000_000 };
+    const tick: Asset = { ...sound(), id: 'tick', path: '/tick.wav', name: 'tick.wav', durationUs: 5_000 };
+    vi.mocked(bridge.importMedia).mockResolvedValue({ assets: [song, tick], skipped: [] });
+    vi.mocked(library.addMusic).mockResolvedValue(after(5, 'media.music.add'));
+    await importFiles(['/lofi.mp3', '/tick.wav'], { lane: 'sound', trackId: null, atUs: 0, row: 'music' });
+    await vi.waitFor(() => expect(useToasts.getState().toasts.map((t) => t.text)).toEqual(['Added lofi.mp3 as music']));
+  });
+
   it('a read-only project gives no lane refusal: nothing goes in anywhere', () => {
     useUi.setState({ pxPerSecond: 10, snapping: false });
     useProject.setState({ snapshot: { ...fixtureSnapshot(), readOnly: 'From a newer Klipolo' } as never });

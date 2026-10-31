@@ -10,7 +10,7 @@ import { bridge } from '../../bridge/commands';
 import { codedMessage } from '../../bridge/call';
 import { library } from '../../bridge/library';
 import { errorMessage } from '../../lib/errors';
-import { placementOps } from '../../lib/placement';
+import { placeable, placementOps } from '../../lib/placement';
 import { flushBursts } from '../../state/bursts';
 import { afterCommits, beginCommit, keepAtClose } from '../../state/commitQueue';
 import { useProject } from '../../state/project';
@@ -319,15 +319,21 @@ export async function importFiles(paths: string[] | null, target: DropTarget | n
             if (done.made) made.push(done.made);
             unplaced.push(...done.unplaced);
           }
-          if (song) sayMusicAdded(song, rest, made);
-          else
+          // Said as what went in: a file too short to place never did (sounds and pictures let go on a lane come in
+          // even without a layer, named in `unplaced`).
+          const went = (files: Asset[], onLane: boolean) =>
+            files.filter((a) => (onLane && a.kind !== 'video') || placeable(a));
+          if (song) sayMusicAdded(song, went(rest, false), made);
+          else {
+            const placed = went(assets, lane !== null);
             sayAdded(
-              assets.length,
-              assets.every((a) => a.kind === 'video'),
-              !target && assets.every((a) => a.kind !== 'video'),
+              placed.length,
+              placed.every((a) => a.kind === 'video'),
+              !target && placed.every((a) => a.kind !== 'video'),
               made,
               unplaced,
             );
+          }
         })().finally(() => {
           end();
           hold?.release();
