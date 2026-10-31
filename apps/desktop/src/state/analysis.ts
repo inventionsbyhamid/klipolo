@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { AssetState } from '../bindings/AssetState';
 import type { Estimate } from '../bindings/Estimate';
+import { refreshAiStatus } from '../ai/aiStatus';
 import { analysisBridge, type AnalysisEvent, type UnlistenFn } from '../bridge/analysis';
 
 interface AnalysisStore {
@@ -33,7 +34,10 @@ export function stateOf(states: Record<string, AssetState>, assetId: string): As
   return states[assetId] ?? { state: 'none' };
 }
 
-/** One event from Rust, into the store. */
+/**
+ * One event from Rust, into the store. A clip done or failed spent credit: the AI status (the top bar's credit) is read
+ * again.
+ */
 export function applyEvent(event: AnalysisEvent) {
   const { assetId } = event.payload;
   let next: AssetState;
@@ -52,6 +56,7 @@ export function applyEvent(event: AnalysisEvent) {
       break;
   }
   useAnalysis.setState((s) => ({ states: { ...s.states, [assetId]: next } }));
+  if (event.kind === 'done' || event.kind === 'failed') void refreshAiStatus();
 }
 
 /** Reads every clip's state once and follows every change after it. */

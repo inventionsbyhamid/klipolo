@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Estimate } from '../../bindings/Estimate';
 
+vi.mock('../../ai/aiStatus', () => ({ refreshAiStatus: vi.fn() }));
 vi.mock('../../bridge/analysis', () => ({
   analysisBridge: {
     estimate: vi.fn(),
@@ -11,6 +12,7 @@ vi.mock('../../bridge/analysis', () => ({
   },
 }));
 const { analysisBridge } = await import('../../bridge/analysis');
+const { refreshAiStatus } = await import('../../ai/aiStatus');
 const { analyze, applyEvent, followAnalysis, notNow, offerFor, retry, stateOf, useAnalysis } = await import(
   '../../state/analysis'
 );
@@ -99,6 +101,14 @@ describe('the store', () => {
     applyEvent({ kind: 'stopped', payload: { assetId: 'b' } });
     expect(stateOf(useAnalysis.getState().states, 'b')).toEqual({ state: 'none' });
     expect(stateOf(useAnalysis.getState().states, 'never')).toEqual({ state: 'none' });
+  });
+
+  it('reads the credit again when a clip is done or failed (it was spent)', () => {
+    applyEvent({ kind: 'progress', payload: { assetId: 'a', step: 'scenes', pct: 90 } });
+    expect(refreshAiStatus).not.toHaveBeenCalled();
+    applyEvent({ kind: 'done', payload: { assetId: 'a', approximate: false } });
+    applyEvent({ kind: 'failed', payload: { assetId: 'b', reason: 'Meta is busy right now. Try again in a moment.' } });
+    expect(refreshAiStatus).toHaveBeenCalledTimes(2);
   });
 
   it('reads what Rust knows once, and an event that came meanwhile wins', async () => {
