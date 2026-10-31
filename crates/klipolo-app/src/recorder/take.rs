@@ -65,9 +65,13 @@ impl Recorder {
         })
     }
 
-    /// `active` follows the slot's take; called wherever the take is placed or let go, under the lock.
+    /// `active` follows the slot's take, and the engine's background media work waits while there is one; called
+    /// wherever the take is placed or let go, under the lock, so a hold and its release never cross.
     pub(super) fn sync_active(&self, slot: &Slot) {
-        self.active.store(slot.take.is_some(), Ordering::SeqCst);
+        let active = slot.take.is_some();
+        if self.active.swap(active, Ordering::SeqCst) != active {
+            self.env.sink.hold_media(active);
+        }
     }
 
     /// The slot, locked. A command that panicked must not leave the recorder locked for the rest of the session.

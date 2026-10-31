@@ -17,9 +17,12 @@ use super::window::Window;
 pub trait Sink: Send + Sync {
     /// A worker's event, or the recorder's own, for the page (`recorder-event`), with the take it belongs to.
     fn event(&self, take: &str, ev: &Event);
-    /// The take is complete in its folder (`recover`: finish it from its files first). Runs on the worker's reader
-    /// thread, while the take is still the recorder's: no other take arms until it returns.
+    /// The take is complete in its folder (`recover`: finish it from its files first): it lands. Runs on the worker's
+    /// reader thread, while the take is still the recorder's: no other take arms, and quitting waits, until it returns.
     fn finished(&self, done: &Done);
+    /// A take is the recorder's (`held`, from arming until it has landed or ended) or none is: the engine's background
+    /// media work waits meanwhile (`Hold::Recording`), so it never competes with the take.
+    fn hold_media(&self, held: bool);
 }
 
 /// A take to land.

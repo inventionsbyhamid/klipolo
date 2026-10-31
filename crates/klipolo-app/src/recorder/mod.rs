@@ -7,9 +7,10 @@
 //!   starts it. While it records, Klipolo's window hides (`window`); when it is saved, failed or over, the window shows
 //!   again. A take whose screen's encoder gives up mid-take is stopped and saved; one whose camera's does records on
 //!   without the camera (`outcomes`). When Klipolo exits, a take that hasn't started is disarmed (`active`).
-//! - **The landing** (`import`, `destination`): a saved take lands in the project open when it was armed (opened again
-//!   should another be open by then), or a new "Recording, {Mon D}" for a take from the start screen, as one undo
-//!   step.
+//! - **The landing** (`sink`, `import`, `destination`): a saved take lands in the project open when it was armed (opened
+//!   again should another be open by then), or a new "Recording, {Mon D}" for a take from the start screen, as one
+//!   undo step, and the page hears `recorder-imported`. The engine's background media work waits from arming until the
+//!   take has landed.
 //! - **Setup** (`setup`, `config`): the Record dialog's data from the backend without capture or prompts, and a take's
 //!   config from the person's options and the app's fixed choices.
 //! - **The permission steps** (`permissions`, `screen_reopen`): Allow screen recording, Reopen Klipolo and Open privacy
@@ -30,6 +31,7 @@ mod permissions;
 mod screen_reopen;
 mod send;
 mod setup;
+mod sink;
 mod state;
 mod supervise;
 mod take;
@@ -46,6 +48,8 @@ mod test_support;
 mod test_takes;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_end;
 #[cfg(test)]
 mod tests_import;
 #[cfg(test)]

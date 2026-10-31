@@ -44,6 +44,8 @@ pub(super) struct FakeSink {
     /// Each event with its take's id.
     pub(super) events: Mutex<Vec<(String, Event)>>,
     pub(super) finished: Mutex<Vec<Done>>,
+    /// Each hold and release of the engine's background media work, in order.
+    pub(super) holds: Mutex<Vec<bool>>,
     /// Lands each finished take, when the test says how.
     pub(super) lands: Mutex<Option<Lands>>,
 }
@@ -58,6 +60,9 @@ impl Sink for FakeSink {
             land(done);
         }
         self.finished.lock().unwrap().push(done.clone());
+    }
+    fn hold_media(&self, held: bool) {
+        self.holds.lock().unwrap().push(held);
     }
 }
 

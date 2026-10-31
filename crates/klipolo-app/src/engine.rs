@@ -144,6 +144,8 @@ async fn start_engine(state: &EngineState, feed: FeedRx) -> Result<Engine, Strin
                     .map(|dir| klipolo_engine::export::jobs::jobs_root(&dir)),
             );
     }
+    // A take holds its background media work from the start (`EngineState::hold_for_recording`).
+    state.set_thumbs(backend.thumbs());
     let options = EngineOptions {
         allowed_origins: allowed_origins(),
         max_preview_pixels: backend.max_preview_pixels(),

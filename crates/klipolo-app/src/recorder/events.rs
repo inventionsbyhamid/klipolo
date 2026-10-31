@@ -11,7 +11,9 @@ use klipolo_capture::run::remove_empty_take;
 use klipolo_capture::shell::WorkerState;
 use klipolo_model::coded::CodedError;
 
-use super::outcomes::{Effect, done, give_up, idle, journal_says_stopped, take_event};
+use super::outcomes::{
+    Effect, done, give_up, idle, journal_says_stopped, saved_from_files, take_event,
+};
 use super::supervise::SupervisorAction;
 use super::take::{Recorder, Slot, Take};
 
@@ -173,9 +175,10 @@ impl Recorder {
                 *finishing = Some(recovered.id.clone());
                 give_up(recovered)
             }
+            // The crash loop's end says why itself (`give_up`); this one is said with the landed take.
             SupervisorAction::Recover => {
                 *finishing = Some(recovered.id.clone());
-                vec![Effect::Finish(recovered)]
+                vec![Effect::Finish(saved_from_files(recovered))]
             }
             // Every take ends with one `Idle` once it is freed. No take (Cancel or Disarm before the gate; a worker
             // that ended before it): `Idle` alone, after `Failed` only when the worker didn't say why, and a folder

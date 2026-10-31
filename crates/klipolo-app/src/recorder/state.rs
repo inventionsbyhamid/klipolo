@@ -10,18 +10,19 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use klipolo_capture::backend::{Backend, Permission};
 use klipolo_capture::preflight::RecorderSetup;
-use klipolo_capture::protocol::{Command, Event};
+use klipolo_capture::protocol::Command;
 use klipolo_capture::session::ImportTarget;
 use klipolo_model::coded::{CodedError, Said};
 use klipolo_platform::clock::{Clock, HostClock};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
-use super::env::{Done, Env, Sink};
+use super::env::{Env, Sink};
 use super::launch::{Launch, ProcessLaunch, WorkerIo};
 use super::permissions::{self, Open};
 use super::setup::{self, Files, Probing, Shown};
+use super::sink::AppSink;
 use super::take::Recorder;
-use super::types::{ArmOptions, ArmedTake, PrivacyPage, RecorderEvent, StoppedTake};
+use super::types::{ArmOptions, ArmedTake, PrivacyPage, StoppedTake};
 use super::window::{MainWindow, Window};
 use super::words;
 use crate::project::{ProjectSessionState, with_open};
@@ -272,6 +273,7 @@ fn app_parts(app: &AppHandle) -> Parts {
     };
     let probe_exe = exe.ok();
     let projects = app.clone();
+    let sink = AppSink::new(app.clone(), files.clone());
     Parts {
         backend: Box::new(|| Arc::from(klipolo_capture::platform::backend())),
         launch,
@@ -280,7 +282,7 @@ fn app_parts(app: &AppHandle) -> Parts {
             None => tracing::warn!("recorder: no binary to run the encoder probe"),
         }),
         clock: Arc::new(HostClock),
-        sink: Arc::new(AppSink(app.clone())),
+        sink: Arc::new(sink),
         window: Arc::new(MainWindow(app.clone())),
         files,
         root: klipolo_platform::paths::recordings_root(),
@@ -349,31 +351,5 @@ struct NoLaunch;
 impl Launch for NoLaunch {
     fn spawn(&self, _args: &[String]) -> std::io::Result<WorkerIo> {
         Err(std::io::ErrorKind::NotFound.into())
-    }
-}
-
-/// The page hears the recorder's events as `recorder-event`.
-struct AppSink(AppHandle);
-
-impl Sink for AppSink {
-    fn event(&self, take: &str, ev: &Event) {
-        let payload = RecorderEvent {
-            take: take.to_owned(),
-            event: ev.clone(),
-        };
-        if let Err(error) = self.0.emit("recorder-event", payload) {
-            tracing::warn!(%error, "recorder: an event didn't reach the page");
-        }
-    }
-
-    fn finished(&self, done: &Done) {
-        // Landing it in a project comes with the import; until then it stays in its folder.
-        tracing::info!(
-            take = done.id,
-            recover = done.recover,
-            target = ?done.target,
-            folder = %done.dir.root.display(),
-            "recorder: the take is complete in its folder"
-        );
     }
 }

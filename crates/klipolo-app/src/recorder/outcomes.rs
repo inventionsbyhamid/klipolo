@@ -154,6 +154,13 @@ pub(super) fn done(take: &Take, recover: bool) -> Done {
     }
 }
 
+/// The worker stopped while it saved, and the take is finished from its files: the person is told so with the landed
+/// take, "The recorder stopped while saving, so Klipolo finished the recording from its files."
+pub(super) fn saved_from_files(mut done: Done) -> Done {
+    done.note = Some(CodedError::new("capture.note.savedFromFiles"));
+    done
+}
+
 /// The take's journal ends with the person's Stop, `Finalized` or `Recovered`.
 pub(super) fn journal_says_stopped(take: &Take) -> bool {
     let end = recover::ending(&take.dir);
