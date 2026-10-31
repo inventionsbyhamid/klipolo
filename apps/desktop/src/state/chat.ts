@@ -6,7 +6,7 @@ import { chatBridge } from '../bridge/chat';
 import { errorMessage } from '../lib/errors';
 import { findItem } from '../lib/timeline';
 import { session, withMessages, type ChatStore, type Message } from './chatMessages';
-import { dropStale, proposalActions, showOpenProposal } from './chatProposals';
+import { dropStale, proposalActions, replaceOpen, showOpenProposal } from './chatProposals';
 import { usePlayback } from './playback';
 import { useProject } from './project';
 import { useRange } from './range';
@@ -126,6 +126,15 @@ export const useChat = create<ChatStore>((set, get) => {
           proposal: outcome.proposal,
           state: outcome.proposal.baseRevision === revision ? ('open' as const) : ('dropped' as const),
         };
+        // One open proposal per project: a newer one replaces the one waiting, which Rust forgets.
+        if (proposal?.state === 'open') {
+          const { messages, replaced } = replaceOpen(get().messages);
+          set(withMessages(messages));
+          for (const old of replaced)
+            void chatBridge()
+              .discard(old)
+              .catch(() => undefined);
+        }
         push({
           id,
           from: 'klipolo',

@@ -66,6 +66,20 @@ export function proposalActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'ap
   };
 }
 
+/**
+ * `messages` with every open proposal marked replaced, as a newer one comes (one open proposal per project: red always
+ * means "will be cut"), and the ids of those it replaced, for Rust to forget.
+ */
+export function replaceOpen(messages: Message[]): { messages: Message[]; replaced: string[] } {
+  const replaced: string[] = [];
+  const next = messages.map((m) => {
+    if (m.from !== 'klipolo' || m.kind !== 'reply' || m.proposal?.state !== 'open') return m;
+    replaced.push(m.proposal.proposal.id);
+    return { ...m, proposal: { ...m.proposal, state: 'replaced' as const } };
+  });
+  return { messages: replaced.length > 0 ? next : messages, replaced };
+}
+
 /** `messages` with every open proposal not made on `revision` dropped (a hand edit, an undo, another project). */
 export function dropStale(messages: Message[], revision: number | null): Message[] | null {
   let changed = false;

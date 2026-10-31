@@ -4,8 +4,11 @@ import type { ChatMoment } from '../bindings/ChatMoment';
 import type { ChatProposal } from '../bindings/ChatProposal';
 import type { CodedError } from '../bindings/CodedError';
 
-/** Where a proposal stands: waiting, being applied, applied, discarded, dropped (the project changed), refused. */
-export type ProposalState = 'open' | 'applying' | 'applied' | 'discarded' | 'dropped' | 'refused';
+/**
+ * Where a proposal stands: waiting, being applied, applied, discarded, dropped (the project changed), replaced (a newer
+ * one came: a project has one open proposal at a time), refused.
+ */
+export type ProposalState = 'open' | 'applying' | 'applied' | 'discarded' | 'dropped' | 'replaced' | 'refused';
 
 /** A proposal in a reply, and what came of it. */
 export interface ProposalPart {

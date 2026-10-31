@@ -158,7 +158,8 @@ function CutList({ proposal }: { proposal: ChatProposal }) {
  * after (or, for a removal that isn't footage, what goes), the list of cuts, and Apply and Discard. It never takes the
  * keyboard from the chat box (Enter there always sends): the person reaches it with Tab; Enter on the card applies and
  * Escape discards. Applied, it collapses to the applied row with its Undo chip; discarded, to "Discarded."; dropped
- * (the project changed while it was open), to a sentence that says so. When it collapses with the keyboard in it, the
+ * (the project changed while it was open), or replaced (a newer proposal came: one is open at a time), to a sentence
+ * that says so. When it collapses with the keyboard in it, the
  * keyboard goes back to the chat box.
  */
 export function ProposalCard({ message: m }: { message: ReplyMessage }) {
@@ -194,6 +195,12 @@ export function ProposalCard({ message: m }: { message: ReplyMessage }) {
           id: 'chatPanel.proposal.dropped',
           message: 'This proposal was dropped because the project changed. Ask again to get a new one.',
         })}
+      </p>
+    );
+  if (state === 'replaced')
+    return (
+      <p className="muted faint">
+        {t({ id: 'chatPanel.proposal.replaced', message: 'Replaced by the newer proposal below.' })}
       </p>
     );
   if (state === 'refused') return <p className="muted">{part.reason}</p>;

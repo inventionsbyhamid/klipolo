@@ -453,6 +453,27 @@ describe('chat', () => {
 });
 
 describe('chat: one proposal at a time, moments of their revision, and the keys', () => {
+  it('a newer proposal replaces the open one: one card stays open, the old one says so and Rust forgets it', async () => {
+    let n = 0;
+    const fake = chat({
+      reply: (r) => {
+        n += 1;
+        return reply(r.id, `Proposal ${n}.`, { proposal: proposal(`p${n}`, 3, { ...cuts(), id: `p${n}`, title: `Cut ${n}` }) });
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'cut the pauses{Enter}');
+    await screen.findByRole('group', { name: 'Cut 1' });
+    await userEvent.type(message(), 'cut more{Enter}');
+    await screen.findByRole('group', { name: 'Cut 2' });
+    expect(screen.queryByRole('group', { name: 'Cut 1' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Apply' })).toHaveLength(1);
+    expect(screen.getByText('Replaced by the newer proposal below.')).toBeInTheDocument();
+    expect(fake.discarded).toEqual(['p1']);
+    // Red is the open one's cuts only.
+    expect(useProposal.getState().proposal?.id).toBe('p2');
+  });
+
   it('an empty chat says when the clips aren’t analysed yet, and while they are', () => {
     useAnalysis.setState({ states: {} });
     renderWithProviders(<ChatPanel />);
