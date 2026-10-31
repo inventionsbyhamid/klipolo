@@ -81,7 +81,9 @@ describe("a video layer's card", () => {
   it('shows Size, Opacity, Corners, Volume and Mute, Speed, Mirror, Position and Timing', () => {
     withVideo('v1');
     renderWithProviders(<Inspector format="landscape" />);
-    expect(screen.getByRole('complementary', { name: 'Video settings' })).toBeInTheDocument();
+    // Named apart from the Video lane, whose clips have cards of their own.
+    const card = screen.getByRole('complementary', { name: 'Video layer settings' });
+    expect(within(card).getByRole('heading', { name: 'Video layer' })).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: 'Size' })).toHaveAttribute('aria-valuetext', '40%');
     expect(screen.getByRole('slider', { name: 'Opacity' })).toHaveAttribute('aria-valuetext', '100%');
     expect(screen.getByRole('slider', { name: 'Corner radius' })).toBeInTheDocument();
