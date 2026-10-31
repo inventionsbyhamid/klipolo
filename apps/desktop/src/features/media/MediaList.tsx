@@ -1,5 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
-import { useEffect, type PointerEvent } from 'react';
+import { useEffect, useRef, type PointerEvent } from 'react';
 import type { Asset } from '../../bindings/Asset';
 import type { PackItem } from '../../bindings/PackItem';
 import type { Project } from '../../bindings/Project';
@@ -11,7 +11,7 @@ import { addMedia } from './addMedia';
 import { AssetMenu } from './AssetMenu';
 import { AssetRow } from './AssetRow';
 import { addImage, addMusic, addPackItem, addSound, dropPackItem } from './place';
-import { loadPack, packAsset, packAssetId, shelves, usePack, usePicture, uses } from './shelves';
+import { loadPack, packAsset, packAssetId, shelves, useNearView, usePack, usePicture, uses } from './shelves';
 
 /** On a Mac, Control-click is a right-click: it doesn't start a drag. */
 const MAC = typeof navigator !== 'undefined' && /^Mac/.test(navigator.platform);
@@ -41,7 +41,8 @@ function Picture({
   onDrop: Parameters<typeof beginMediaDrag>[2];
 }) {
   const { t } = useLingui();
-  const url = usePicture(from);
+  const tile = useRef<HTMLLIElement>(null);
+  const url = usePicture(from, useNearView(tile));
   const onPointerDown = (e: PointerEvent<HTMLElement>) => {
     if (e.button !== 0 || (MAC && e.ctrlKey) || (e.target as Element).closest('button')) return;
     e.preventDefault();
@@ -49,7 +50,13 @@ function Picture({
     beginMediaDrag(e, asset, onDrop);
   };
   return (
-    <li className="picture" data-asset-id={asset.id} onPointerDown={onPointerDown} onDragStart={(e) => e.preventDefault()}>
+    <li
+      ref={tile}
+      className="picture"
+      data-asset-id={asset.id}
+      onPointerDown={onPointerDown}
+      onDragStart={(e) => e.preventDefault()}
+    >
       <span className="picture-art checker">{url && <img src={url} alt="" draggable={false} />}</span>
       <span className="picture-name" title={title}>
         {title}

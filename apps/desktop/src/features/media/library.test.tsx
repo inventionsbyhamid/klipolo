@@ -38,7 +38,7 @@ const { usePlayback } = await import('../../state/playback');
 const { useUi } = await import('../../state/ui');
 const { useSelection } = await import('../../state/selection');
 const { useAnnouncer } = await import('../timeline/announce');
-const { usePack } = await import('./shelves');
+const { usePack, loadPack, forgetPictures } = await import('./shelves');
 const { addMedia } = await import('./addMedia');
 const { Library } = await import('../../layout/Library');
 
@@ -72,6 +72,7 @@ beforeEach(() => {
   usePlayback.setState({ playheadUs: 2_000_000, playing: false });
   useUi.setState({ libraryTab: 'clips' });
   usePack.setState({ items: [], asked: false });
+  forgetPictures();
 });
 
 describe('the Library', () => {
@@ -222,5 +223,51 @@ describe('the Library', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add kiln-door.wav at the playhead' }));
     await waitFor(() => expect(useAnnouncer.getState().message).toBe('Added kiln-door.wav as a sound at 0:02'));
     expect(useSelection.getState().selectedId).toBe('k1');
+  });
+
+  it('pictures are asked for near the view, a failed one again later, and let go as another project opens', async () => {
+    useUi.setState({ libraryTab: 'images' });
+    // jsdom has no blob URLs.
+    const urls = { create: vi.fn(() => 'blob:logo'), revoke: vi.fn() };
+    const had = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+    Object.assign(URL, { createObjectURL: urls.create, revokeObjectURL: urls.revoke });
+    // Tiles off screen ask for nothing until they come near it.
+    let seen: (entries: { isIntersecting: boolean }[]) => void = () => undefined;
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(heard: typeof seen) {
+          seen = heard;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    vi.mocked(library.picture).mockRejectedValueOnce(new Error('busy')).mockResolvedValue(new ArrayBuffer(4));
+    const first = renderWithProviders(<Library />);
+    expect(library.picture).not.toHaveBeenCalled();
+    act(() => seen([{ isIntersecting: true }]));
+    await waitFor(() => expect(library.picture).toHaveBeenCalledTimes(1));
+    first.unmount();
+    vi.unstubAllGlobals();
+    // The failed one isn't kept: the next tile asks again, and gets it.
+    renderWithProviders(<Library />);
+    await waitFor(() => expect(screen.getByText('logo.png').closest('li')!.querySelector('img')).toHaveAttribute('src', 'blob:logo'));
+    expect(library.picture).toHaveBeenCalledWith({ path: '/media/logo' });
+    // Another project opens: the pictures go (their URLs revoked).
+    const other = structuredClone(useProject.getState().snapshot!);
+    other.project.id = 'other';
+    act(() => useProject.setState({ snapshot: other }));
+    await waitFor(() => expect(urls.revoke).toHaveBeenCalledWith('blob:logo'));
+    Object.assign(URL, { createObjectURL: had.create, revokeObjectURL: had.revoke });
+  });
+
+  it('the pack is read again when it couldn’t be', async () => {
+    vi.mocked(library.pack).mockRejectedValueOnce(new Error('busy'));
+    loadPack();
+    await waitFor(() => expect(usePack.getState().asked).toBe(false));
+    loadPack();
+    await waitFor(() => expect(usePack.getState().items).toHaveLength(3));
+    expect(library.pack).toHaveBeenCalledTimes(2);
   });
 });

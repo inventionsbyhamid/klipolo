@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 import { create } from 'zustand';
 import type { Asset } from '../../bindings/Asset';
 import type { PackItem } from '../../bindings/PackItem';
 import type { Project } from '../../bindings/Project';
 import { library } from '../../bridge/library';
 import { IMAGE_US } from '../../lib/placement';
+import { useProject } from '../../state/project';
 import { MUSIC_MIN_US } from './useImportMedia';
 
 /** The id a pack item's asset has in a project (`crates/klipolo-app/src/pack.rs`). */
@@ -86,7 +87,7 @@ export function packAsset(item: PackItem): Asset {
   };
 }
 
-/** Klipolo's pack, read once per page (empty until Rust answers, and where it can't). */
+/** Klipolo's pack, read once per page (empty until Rust answers; asked again by the next library tab where it can't). */
 export const usePack = create<{ items: PackItem[]; asked: boolean }>(() => ({ items: [], asked: false }));
 
 export function loadPack() {
@@ -95,26 +96,77 @@ export function loadPack() {
   void library
     .pack()
     .then((items) => usePack.setState({ items }))
-    .catch(() => undefined);
+    .catch(() => usePack.setState({ asked: false }));
 }
 
+/** The pictures asked for, by key: a blob URL once it is here. A picture that couldn't be had isn't kept. */
 const pictures = new Map<string, Promise<string | null>>();
+/** Bumped as the pictures are let go, so tiles showing one ask again. */
+const usePictures = create<{ epoch: number }>(() => ({ epoch: 0 }));
+
+/** Lets every picture go (their blob URLs revoked): another project opened, so its tiles ask for theirs. */
+export function forgetPictures() {
+  for (const asked of pictures.values()) void asked.then((url) => url && URL.revokeObjectURL(url));
+  pictures.clear();
+  usePictures.setState((s) => ({ epoch: s.epoch + 1 }));
+}
+
+/** Which opening of which project the copy holds. */
+const opening = (p: { snapshot: { project: { id: string }; opening?: number } | null }) =>
+  p.snapshot ? `${p.snapshot.project.id}:${p.snapshot.opening ?? ''}` : '';
+useProject.subscribe((s, prev) => {
+  if (opening(s) !== opening(prev)) forgetPictures();
+});
 
 /**
- * A picture for the Images tab, as a blob URL: a pack sticker (`packId`) or a picture the project uses (`path`). Asked
- * once per picture; null until it is here, and where it can't be read.
+ * Whether the element in `ref` is on screen or near it (within 200 px): a tile asks for its picture only then, so a
+ * long grid reads the pictures it shows. Stays true once it was.
  */
-export function usePicture(from: { packId: string } | { path: string }): string | null {
+export function useNearView(ref: RefObject<Element | null>): boolean {
+  const [near, setNear] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || near) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setNear(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        setNear(true);
+        observer.disconnect();
+      },
+      { rootMargin: '200px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, near]);
+  return near;
+}
+
+/**
+ * A picture for the Images tab, as a blob URL of its thumbnail (Rust sends one at most 512 px on its long side): a
+ * pack sticker (`packId`) or a picture the project uses (`path`). Asked once `near` (its tile is near the view), once
+ * per picture while it is had; null until it is here, and where it can't be read (a later tile asks again).
+ */
+export function usePicture(from: { packId: string } | { path: string }, near = true): string | null {
   const key = 'packId' in from ? `pack:${from.packId}` : from.path;
+  const epoch = usePictures((s) => s.epoch);
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
+    setUrl(null);
+    if (!near) return;
     let live = true;
     let asked = pictures.get(key);
     if (!asked) {
       asked = library
         .picture(from)
-        .then((bytes) => URL.createObjectURL(new Blob([bytes])))
-        .catch(() => null);
+        .then((bytes) => URL.createObjectURL(new Blob([bytes], { type: 'image/png' })))
+        .catch(() => {
+          pictures.delete(key);
+          return null;
+        });
       pictures.set(key, asked);
     }
     void asked.then((found) => {
@@ -124,6 +176,6 @@ export function usePicture(from: { packId: string } | { path: string }): string 
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the key names the picture
-  }, [key]);
+  }, [key, near, epoch]);
   return url;
 }
