@@ -1,6 +1,6 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fixtureSnapshot } from '../../test/fixtures';
+import { fixtureSnapshot, revisionPatch } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 
 vi.mock('../../bridge/commands', () => ({ bridge: { apply: vi.fn() }, mediaUrl: (p: string) => p }));
@@ -196,3 +196,49 @@ describe("a trim shows its edge's frame", () => {
     expect(engine.seek).not.toHaveBeenCalled();
   });
 });
+
+describe('a trim ended from elsewhere goes back to the playhead', () => {
+  it('a change from elsewhere merged mid-trim', async () => {
+    renderWithProviders(<Timeline />);
+    const a = block(/^screen\.mp4/);
+    press(edge(a, 'end'), 799);
+    move(a, 759);
+    await shows(18_966_667);
+    // Chat's change (3 to 4) merges mid-trim: the trim stops where it is.
+    await act(() => useProject.getState().adopt(revisionPatch(4)));
+    await shows(PLAYHEAD);
+    // It draws and shows no more.
+    move(a, 719);
+    await frames();
+    expect(seeks().at(-1)?.[0]).toBe(PLAYHEAD);
+    release(a, 719);
+    await frames();
+  });
+
+  it('a zoom mid-trim', async () => {
+    renderWithProviders(<Timeline />);
+    const a = block(/^screen\.mp4/);
+    press(edge(a, 'end'), 799);
+    move(a, 759);
+    await shows(18_966_667);
+    act(() => useUi.setState({ pxPerSecond: 80 }));
+    await shows(PLAYHEAD);
+    release(a, 759);
+    await frames();
+    expect(bridge.apply).not.toHaveBeenCalled();
+  });
+
+  it('the pointer capture lost mid-trim', async () => {
+    renderWithProviders(<Timeline />);
+    const a = block(/^screen\.mp4/);
+    press(edge(a, 'end'), 799);
+    move(a, 759);
+    await shows(18_966_667);
+    fireEvent.lostPointerCapture(a, { pointerId: 1 });
+    await shows(PLAYHEAD);
+    release(a, 759);
+    await frames();
+    expect(bridge.apply).not.toHaveBeenCalled();
+  });
+});
+
