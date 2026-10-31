@@ -50,7 +50,16 @@ impl SessionCore {
             let left = hours_minutes(u64::from(minutes));
             lines.push(self.words.word(&msg!("capture.menu.space", left = left)));
         }
-        if self.orphan {
+        // Klipolo is gone and the take goes on (an armed take that isn't a game's was disarmed instead): stop it here.
+        let goes_on = matches!(
+            self.state,
+            WorkerState::Armed
+                | WorkerState::Starting
+                | WorkerState::Countdown
+                | WorkerState::Recording
+                | WorkerState::Paused
+        );
+        if self.orphan && goes_on {
             lines.push(self.words.word(&msg!("capture.orphan")));
         }
         if self.disk == DiskLevel::Warn || self.slow {

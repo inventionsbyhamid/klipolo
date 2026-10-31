@@ -175,7 +175,7 @@ pub const ENGLISH: Messages = &[
     ("capture.busy", "A recording is already running. Stop it from {place}."),
     // Arming while v1 dictation listens to the mic: the mic is the dictation's until it ends.
     ("capture.busyDictating", "Finish dictating first, then record."),
-    ("capture.orphan", "Klipolo closed. Still recording."),
+    ("capture.orphan", "Klipolo closed. The recording goes on until you stop it here."),
     ("capture.quit.ask", "A recording is running. Stop and save it, then quit?"),
     ("capture.import.noVideo", "This take has no picture to edit. Its sound files are in the recording's folder."),
     ("capture.import.videoUnreadable", "This take's picture couldn't be read, so there's nothing to edit. Its files are kept in the take's folder."),
