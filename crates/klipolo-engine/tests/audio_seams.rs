@@ -1,7 +1,7 @@
 //! Music laid back to back (`media::music`: a song shorter than the video plays again and again, in pieces of the same
 //! file): where a piece plays the file to its end and the next starts it again, the mix plays straight through, as the
 //! file loops cleanly. The plan marks those seams (`audio::plan::Seam`, `audio::plan::layers`) and the mixer leaves
-//! edge ramps there.
+//! out its edge ramps there.
 mod support;
 use std::sync::Arc;
 
