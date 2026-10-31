@@ -2,7 +2,7 @@ import { useLingui } from '@lingui/react/macro';
 import { useMemo } from 'react';
 import type { Clip } from '../../bindings/Clip';
 import { labelText } from '../../lib/labels';
-import { findItem } from '../../lib/timeline';
+import { assetById, findItem } from '../../lib/timeline';
 import { useClipboard } from '../../state/clipboard';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
@@ -21,7 +21,7 @@ const NO_CLIPS: Clip[] = [];
 
 /**
  * The timeline's commands: split, trims to the playhead, nudges, the clipboard, track moves, attaching
- * and a sound layer's mute, plus `useTimelineNavCommands`' (selection steps, edit points, zoom, snapping). Each has a
+ * and a sound or video layer's mute, plus `useTimelineNavCommands`' (selection steps, edit points, zoom, snapping). Each has a
  * stable id, is `enabled` only when it can act on the selection, and runs the same code from its shortcut, the player
  * bar and the block menu. `useCommands` merges them.
  */
@@ -45,6 +45,9 @@ export function useTimelineCommands(): Command[] {
     // A layer on a locked track can be copied, nothing more.
     const layer = found && !found.track.locked ? found : null;
     const sound = layer?.item.content.type === 'audio' ? layer.item.content : null;
+    // A video layer whose file has sound mutes as a sound layer does: its own switch.
+    const content = layer?.item.content;
+    const video = content?.type === 'video' && assetById(project, content.assetId)?.hasAudio ? content : null;
     const ours = clipboard.projectId === project.id;
     // The commands' names are their undo labels, in the language shown.
     const label = {
@@ -53,7 +56,7 @@ export function useTimelineCommands(): Command[] {
       up: labelText('undo.trackUp'),
       down: labelText('undo.trackDown'),
       attach: labelText(found?.item.attach ? 'undo.attach.free' : 'undo.attach.keep'),
-      mute: labelText(muteLabel(!sound?.muted, 'sound')),
+      mute: labelText(muteLabel(!(sound ?? video)?.muted, video ? 'video' : 'sound')),
     };
 
     const edits: Command[] = [
@@ -206,8 +209,8 @@ export function useTimelineCommands(): Command[] {
             comment: 'Comma-separated search words for Mute sound and Unmute sound',
           }),
         ),
-        // A sound layer's own switch, as the inspector's Mute: its volume stays for when it plays again.
-        enabled: sound !== null,
+        // A sound or video layer's own switch, as the inspector's Mute: its volume stays for when it plays again.
+        enabled: sound !== null || video !== null,
         run: () => toggleSoundMute(id),
       },
     ];
