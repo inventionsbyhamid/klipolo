@@ -2,7 +2,7 @@ import { t } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react/macro';
 import { Fragment } from 'react';
 import { ContextMenuItem, ContextMenuSeparator } from '../../../design/ContextMenu';
-import { assetById, findClip, findItem, itemLabel, sourceLabel } from '../../../lib/timeline';
+import { findClip, findItem, hasOwnSound, itemLabel, sourceLabel } from '../../../lib/timeline';
 import { useProject } from '../../../state/project';
 import { useSelection } from '../../../state/selection';
 import type { Command } from '../../command-palette/command';
@@ -35,10 +35,7 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const byId = new Map(commands.map((c) => [c.id, c]));
   const found = project ? findItem(project, blockId) : null;
   // A sound layer, or a video layer whose file has sound, has Mute.
-  const content = found?.item.content;
-  const mutes =
-    content?.type === 'audio' ||
-    (content?.type === 'video' && !!project && !!assetById(project, content.assetId)?.hasAudio);
+  const mutes = !!project && !!found && hasOwnSound(project, found.item);
 
   const split = { id: 'split', label: t({ id: 'timeline.menu.split', message: 'Split at playhead' }) };
   // The layer order (⌥↑ / ⌥↓): a picture layer is brought forward or sent back, over or under the others; a sound or

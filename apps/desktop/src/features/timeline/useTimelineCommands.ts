@@ -2,7 +2,7 @@ import { useLingui } from '@lingui/react/macro';
 import { useMemo } from 'react';
 import type { Clip } from '../../bindings/Clip';
 import { labelText } from '../../lib/labels';
-import { assetById, findItem } from '../../lib/timeline';
+import { findItem, hasOwnSound } from '../../lib/timeline';
 import { useClipboard } from '../../state/clipboard';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
@@ -48,11 +48,9 @@ export function useTimelineCommands(): Command[] {
     // locked track, where it is off.
     const content = found?.item.content;
     const mutable =
-      content?.type === 'audio'
+      found && hasOwnSound(project, found.item) && (content?.type === 'audio' || content?.type === 'video')
         ? content
-        : content?.type === 'video' && assetById(project, content.assetId)?.hasAudio
-          ? content
-          : null;
+        : null;
     const ours = clipboard.projectId === project.id;
     // The commands' names are their undo labels, in the language shown.
     const label = {

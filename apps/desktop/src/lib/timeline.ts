@@ -155,6 +155,15 @@ export function assetById(project: Pick<Project, 'assets'>, id: string | null | 
 }
 
 /**
+ * Whether layer `item` plays sound of its own, which its Mute silences: a sound layer, or a video layer whose file has
+ * sound. The card, the block menu and the palette offer Mute only then.
+ */
+export function hasOwnSound(project: Pick<Project, 'assets'>, item: Item): boolean {
+  const content = item.content;
+  return content.type === 'audio' || (content.type === 'video' && !!assetById(project, content.assetId)?.hasAudio);
+}
+
+/**
  * The names below are in the active language: a component that shows them re-renders on a language switch only if it
  * reads the language itself (`useLingui`, `useLocale`).
  */

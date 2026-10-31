@@ -5,7 +5,7 @@ import type { ItemContent } from '../../bindings/ItemContent';
 import { Segmented } from '../../design/Segmented';
 import { useIntlLocale } from '../../i18n/react';
 import { formatNumber } from '../../lib/format';
-import { assetById } from '../../lib/timeline';
+import { hasOwnSound } from '../../lib/timeline';
 import { contentNow, contentOps, editClip, editContent } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { PositionField, TimingField } from './common';
@@ -36,7 +36,7 @@ export function VideoInspector({
 }) {
   const { t } = useLingui();
   const locale = useIntlLocale();
-  const hasAudio = useProject((s) => !!s.snapshot && !!assetById(s.snapshot.project, content.assetId)?.hasAudio);
+  const hasAudio = useProject((s) => !!s.snapshot && hasOwnSound(s.snapshot.project, item));
   const cameraClip = useProject((s) => (s.snapshot ? cameraClipOf(s.snapshot.project, item) : null));
   const speed = cameraClip ? cameraClip.speed : content.speed;
   const speedText = (value: number) => `${formatNumber(locale, value)}×`;
