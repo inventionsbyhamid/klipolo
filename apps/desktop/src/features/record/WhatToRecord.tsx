@@ -3,6 +3,7 @@ import type { RecorderSetup } from '../../bindings/RecorderSetup';
 import { Segmented } from '../../design/Segmented';
 import type { Picks } from '../../lib/recorder/choices';
 import { useRecorder } from '../../state/recorder';
+import { useRecorderPreviews } from '../../state/recorderPreviews';
 import { NO_SCREEN } from './notes';
 import { ThumbCard } from './ThumbCard';
 
@@ -14,6 +15,8 @@ const STEPS: Record<string, number> = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 
 
 interface Card {
   value: string;
+  /** Its stills' key (`display:<id>`, `app:<appId>`). */
+  key: string;
   name: string;
   meta: string | null;
 }
@@ -21,9 +24,14 @@ interface Card {
 /** The cards for the kind chosen: each display with its size, or each app with windows. */
 function cardsOf(setup: RecorderSetup, picks: Picks): Card[] {
   return picks.kind === 'screen'
-    ? setup.devices.displays.map((d) => ({ value: d.id, name: d.name, meta: `${d.width} x ${d.height}` }))
+    ? setup.devices.displays.map((d) => ({
+        value: d.id,
+        key: `display:${d.id}`,
+        name: d.name,
+        meta: `${d.width} x ${d.height}`,
+      }))
     : // The setup doesn't count an app's windows: its card has no meta line.
-      setup.devices.apps.map((a) => ({ value: a.appId, name: a.name, meta: null }));
+      setup.devices.apps.map((a) => ({ value: a.appId, key: `app:${a.appId}`, name: a.name, meta: null }));
 }
 
 /**
@@ -33,6 +41,8 @@ function cardsOf(setup: RecorderSetup, picks: Picks): Card[] {
 export function WhatToRecord({ setup }: { setup: RecorderSetup }) {
   const picks = useRecorder((s) => s.picks);
   const pick = useRecorder((s) => s.pick);
+  const stills = useRecorderPreviews((s) => s.thumbs);
+  const stillsAt = useRecorderPreviews((s) => s.thumbsAt);
   const headingId = useId();
   const captionId = useId();
   const screens = picks.kind === 'screen';
@@ -94,7 +104,8 @@ export function WhatToRecord({ setup }: { setup: RecorderSetup }) {
             value={card.value}
             name={card.name}
             meta={card.meta}
-            picture={null}
+            picture={stills[card.key] ?? null}
+            pictureAt={stillsAt[card.key] ?? null}
             kind={picks.kind}
             checked={card.value === chosen}
             tabbable={card.value === stop}

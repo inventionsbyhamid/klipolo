@@ -8,6 +8,7 @@ import type { RecorderSetup } from '../../bindings/RecorderSetup';
 import { useRecorder } from '../../state/recorder';
 import { useRecorderPreviews } from '../../state/recorderPreviews';
 import {
+  app,
   device,
   display,
   type FakeRecorder,
@@ -15,8 +16,9 @@ import {
   recorderSetup,
   refusal,
 } from '../../test/recorderBridge';
-import { nameAt, sendFrame, shownIn } from '../../test/recorderPreviews';
+import { frameIn, nameAt, sendFrame, shownIn } from '../../test/recorderPreviews';
 import { renderWithProviders } from '../../test/render';
+import { STALE_MS } from './LivePreview';
 import { RecordDialog } from './RecordDialog';
 
 const rec = () => useRecorder.getState();
@@ -92,8 +94,86 @@ async function visibility(state: DocumentVisibilityState) {
 }
 
 describe('the previews in the Record dialog', () => {
+  it('cards_show_thumbnails_as_they_arrive', async () => {
+    await openOn(
+      recorderSetup({
+        displays: [display('main', { name: 'Built-in Retina Display' }), display('studio', { name: 'Studio Display' })],
+        apps: [app('com.apple.Safari', 'Safari')],
+      }),
+    );
+    expect(fake.previewed).toEqual([want()]);
+    // Until a still arrives, a card shows its icon.
+    expect(shownIn(card('Built-in Retina Display'))).toBeNull();
+    expect(card('Built-in Retina Display').querySelector('.ico')).not.toBeNull();
+    await sendFrame(fake, 'thumb', 'display:main', 'main 1');
+    expect(await frameIn(card('Built-in Retina Display'))).toBe('main 1');
+    expect(shownIn(card('Studio Display'))).toBeNull();
+    await sendFrame(fake, 'thumb', 'display:studio', 'studio 1');
+    await sendFrame(fake, 'thumb', 'display:main', 'main 2');
+    expect(await frameIn(card('Built-in Retina Display'))).toBe('main 2');
+    expect(await frameIn(card('Studio Display'))).toBe('studio 1');
+    // An app's stills are on its card.
+    await sendFrame(fake, 'thumb', 'app:com.apple.Safari', 'safari 1');
+    await userEvent.click(screen.getByRole('radio', { name: 'One app' }));
+    expect(await frameIn(card('Safari'))).toBe('safari 1');
+  });
 
+  it('a_card_whose_still_stops_coming_turns_grey', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    await openOn();
+    const pic = () => card('Display main').querySelector('.record-pic');
+    await sendFrame(fake, 'thumb', 'display:main', 'main 1');
+    await sendFrame(fake, 'live', 'display:main', 'live 1');
+    expect(pic()).not.toHaveAttribute('data-stale');
+    expect(live()).not.toHaveAttribute('data-stale');
+    act(() => void vi.advanceTimersByTime(STALE_MS - 1));
+    expect(pic()).not.toHaveAttribute('data-stale');
+    // A few seconds without a new one: a frozen picture never looks live.
+    act(() => void vi.advanceTimersByTime(1));
+    expect(pic()).toHaveAttribute('data-stale');
+    expect(live()).toHaveAttribute('data-stale');
+    await sendFrame(fake, 'thumb', 'display:main', 'main 2');
+    expect(pic()).not.toHaveAttribute('data-stale');
+    // One that was already old when the app got it is grey at once.
+    await sendFrame(fake, 'thumb', 'display:main', 'main 3', Date.now() - STALE_MS);
+    expect(pic()).toHaveAttribute('data-stale');
+  });
 
+  it('live_preview_follows_the_chosen_card', async () => {
+    await openOn(
+      recorderSetup({ displays: [display('main'), display('studio')], apps: [app('com.apple.Safari', 'Safari')] }),
+    );
+    expect(live()).toBeNull();
+    await sendFrame(fake, 'live', 'display:main', 'live main 1');
+    expect(live()).toHaveAccessibleName('Live view of Display main');
+    expect(live()?.closest('.record-preview')).not.toBeNull();
+    expect(await frameIn(live())).toBe('live main 1');
+
+    await userEvent.click(card('Display studio'));
+    await flush();
+    expect(fake.previewed.at(-1)).toEqual(want({ live: { kind: 'screen', display: 'studio' } }));
+    // The last choice's picture goes at once, and one of it still on its way is never shown.
+    expect(live()).toBeNull();
+    await sendFrame(fake, 'live', 'display:main', 'live main 2');
+    expect(live()).toBeNull();
+    await sendFrame(fake, 'live', 'display:studio', 'live studio 1');
+    expect(live()).toHaveAccessibleName('Live view of Display studio');
+    expect(await frameIn(live())).toBe('live studio 1');
+
+    // One app: nothing live until an app is chosen, then its windows on the screen chosen.
+    await userEvent.click(screen.getByRole('radio', { name: 'One app' }));
+    await flush();
+    expect(fake.previewed.at(-1)).toEqual(want({ live: null }));
+    expect(live()).toBeNull();
+    await userEvent.click(card('Safari'));
+    await flush();
+    expect(fake.previewed.at(-1)).toEqual(
+      want({ live: { kind: 'app', appId: 'com.apple.Safari', display: 'studio' } }),
+    );
+    await sendFrame(fake, 'live', 'app:com.apple.Safari', 'live safari');
+    expect(live()).toHaveAccessibleName('Live view of Safari');
+    expect(await frameIn(live())).toBe('live safari');
+  });
 
 
 
@@ -213,6 +293,16 @@ describe('the previews in the Record dialog', () => {
 });
 
 describe('the previews and Screen Recording', () => {
+  it('with_screen_recording_not_allowed_the_step_shows_and_cards_keep_their_icons', async () => {
+    const dialog = await openOn(recorderSetup({ permissions: { screen: 'notAsked' } }));
+    // No screen picture is asked for; the camera and the mic still are.
+    expect(fake.previewed).toEqual([want({ thumbs: false, live: null })]);
+    expect(dialog).toHaveTextContent('Klipolo needs your permission to record your screen.');
+    await sendFrame(fake, 'thumb', 'display:main', 'main 1');
+    await sendFrame(fake, 'live', 'display:main', 'live 1');
+    expect(shownIn(card('Display main'))).toBeNull();
+    expect(live()).toBeNull();
+  });
 
   it('screen_pictures_the_system_refuses_leave_the_icons_and_are_not_asked_for_again', async () => {
     await openOn(recorderSetup({ displays: [display('main'), display('studio')] }));

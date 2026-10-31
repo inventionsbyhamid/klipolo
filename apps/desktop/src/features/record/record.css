@@ -176,7 +176,7 @@
 
 /* ---------- Preview ---------- */
 
-/* 16:9 over the full width, on the darkest surface; the clip art until the live preview. */
+/* 16:9 over the full width, on the darkest surface; the clip art until the live picture's first frame. */
 .record-preview {
   position: relative;
   display: grid;
@@ -198,6 +198,33 @@
 .record-art .ico {
   width: 40px;
   height: 40px;
+}
+
+/* A picture that changes many times a second: two pictures take turns, the one in front shown (inline). */
+.live-pic {
+  position: absolute;
+  inset: 0;
+}
+
+.live-pic img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  visibility: hidden;
+}
+
+/* A picture whose frames stopped coming: grey and dimmed, so a frozen one never looks live. */
+[data-stale] > .live-pic {
+  filter: grayscale(1);
+  opacity: 0.5;
+}
+
+/* The live picture of what is chosen, fitted over the box's black. */
+.record-live {
+  position: absolute;
+  inset: 0;
 }
 
 /* ---------- Cards ---------- */
@@ -231,7 +258,7 @@
   box-shadow: inset 0 0 0 2px var(--color-paper);
 }
 
-/* Until a still arrives: the screen or app icon, soft, on the pressed surface. */
+/* Until a still is drawn: the screen or app icon, soft, on the pressed surface. */
 .record-pic {
   position: relative;
   display: grid;
@@ -247,14 +274,6 @@
 .record-pic .ico {
   width: 28px;
   height: 28px;
-}
-
-.record-pic img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
 }
 
 .record-name {

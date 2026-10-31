@@ -6,6 +6,7 @@ import { Button } from '../../design/Button';
 import { Toggle } from '../../design/Toggle';
 import { Tooltip } from '../../design/Tooltip';
 import { Icon } from '../../layout/Icon';
+import type { Picks } from '../../lib/recorder/choices';
 import { deviceDenied, screenStep } from '../../lib/recorder/permission';
 import { phaseOf, type RecorderPhase } from '../../lib/recorder/phase';
 import { useRecorder } from '../../state/recorder';
@@ -13,6 +14,7 @@ import { previewsFor, startPreviews, stopPreviews, useRecorderPreviews } from '.
 import { DeviceSelect } from './DeviceSelect';
 import { RecordIcon } from './icons';
 import { Countdown, CountdownNumber, startsIn } from './Countdown';
+import { LivePreview } from './LivePreview';
 import { cameraNote, notesBefore, notReady, refusedPage } from './notes';
 import { DeniedNote, MicAskedAtRecord, ScreenStep, STEP_BUTTON_ID } from './PermissionStep';
 import { CARDS_ID, WhatToRecord } from './WhatToRecord';
@@ -258,13 +260,28 @@ function Unavailable() {
   );
 }
 
-/** The preview box: 16:9 over the full width. Until the live preview, it shows the clip art. */
+/** The name of what is chosen, as its card says it; '' while nothing is. */
+function chosenName(setup: RecorderSetup | null, picks: Picks): string {
+  const { displays = [], apps = [] } = setup?.devices ?? {};
+  const named =
+    picks.kind === 'screen'
+      ? displays.find((d) => d.id === picks.display)
+      : apps.find((a) => a.appId === picks.appId);
+  return named?.name ?? '';
+}
+
+/**
+ * The preview box: 16:9 over the full width, black behind. The live picture of what is chosen; the clip art until a
+ * picture comes. What is said in it (the Screen Recording step, why a press didn't go, the countdown) sits over it.
+ */
 function Preview({ children }: { children?: ReactNode }) {
+  const name = useRecorder((s) => chosenName(s.setup, s.picks));
   return (
     <div className="record-preview">
       <span className="record-art" aria-hidden>
         <Icon name="film" />
       </span>
+      <LivePreview name={name} />
       {children}
     </div>
   );
