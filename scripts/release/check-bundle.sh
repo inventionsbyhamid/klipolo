@@ -9,7 +9,7 @@
 # every @rpath/<name> that any Mach-O in the bundle loads is a file at Contents/Frameworks/<name>. And no file under
 # Contents names the builder's home folder or user name, nor does the page as built in apps/desktop/dist: the main
 # executable holds the page brotli-compressed, so searching the binary can't see into it. NOTICE.txt must give the
-# source code's https:// address, its {{SOURCE_URL}} placeholder filled in.
+# source code's https:// address and the full commit built, its {{SOURCE_URL}} and {{SOURCE_COMMIT}} filled in.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 repo=$(cd "$here/../.." && pwd -P)
@@ -34,16 +34,21 @@ for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt NOTICE.txt THIRD-PARTY-NOT
   fi
 done
 [ -d "$app/Contents/Resources/fonts" ] || fail "the fonts aren't in the app"
-# NOTICE.txt gives the public address of the source code (the AGPL's source offer). build-mac.sh fills its
-# {{SOURCE_URL}} placeholder from KLIPOLO_SOURCE_URL; a bundle that still has the placeholder can't ship.
+# NOTICE.txt gives the public address of the source code and the commit built (the AGPL's source offer for this
+# version). build-mac.sh fills its {{SOURCE_URL}} and {{SOURCE_COMMIT}} placeholders from KLIPOLO_SOURCE_URL and the
+# checkout; a bundle that still has either can't ship.
 licences=$app/Contents/Resources/licenses
 if [ -f "$licences/NOTICE.txt" ]; then
-  if grep -rqF '{{SOURCE_URL}}' "$licences"; then
-    fail "licenses/NOTICE.txt still has the {{SOURCE_URL}} placeholder: build with KLIPOLO_SOURCE_URL set"
-  elif source_url=$(sed -n 's/^Source code: //p' "$licences/NOTICE.txt") && is_source_url "$source_url"; then
-    echo "-- source code: $source_url"
+  source_line=$(grep '^Source code: ' "$licences/NOTICE.txt" || true)
+  source_re='^Source code: ([^ ]+) \(commit ([^ ]+)\)$'
+  source_url="" source_commit=""
+  if [[ "$source_line" =~ $source_re ]]; then source_url=${BASH_REMATCH[1]} source_commit=${BASH_REMATCH[2]}; fi
+  if grep -rqF -e '{{SOURCE_URL}}' -e '{{SOURCE_COMMIT}}' "$licences"; then
+    fail "licenses/NOTICE.txt still has a {{SOURCE_URL}} or {{SOURCE_COMMIT}} placeholder: build with build-mac.sh"
+  elif is_source_url "$source_url" && is_commit "$source_commit"; then
+    echo "-- source code: $source_url at commit $source_commit"
   else
-    fail "licenses/NOTICE.txt gives no https:// address for the source code (one 'Source code: ' line)"
+    fail "licenses/NOTICE.txt gives no source code line 'Source code: <https:// address> (commit <40 hex digits>)'"
   fi
 fi
 

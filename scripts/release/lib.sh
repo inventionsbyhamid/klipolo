@@ -60,14 +60,22 @@ is_source_url() {
   [[ "$1" =~ $re ]]
 }
 
-# <notice> with its {{SOURCE_URL}} placeholder replaced by <url>, in place: fill_source_url <notice> <url>. The
+# A full git commit id: 40 lowercase hex digits, as `git rev-parse HEAD` prints it.
+is_commit() {
+  [[ "$1" =~ ^[0-9a-f]{40}$ ]]
+}
+
+# <notice>'s source code line filled in, in place: {{SOURCE_URL}} becomes <url> and {{SOURCE_COMMIT}} <commit>, the
+# commit the app is built from: fill_source <notice> <url> <commit>. Nothing changes unless both are good. Each
 # replacement is quoted in an assignment, so bash 5.2's patsub_replacement never reads a & in it, and bash 3.2 (which
 # keeps quotes in a replacement inside "${...}") takes it as plain text too.
-fill_source_url() {
-  local placeholder='{{SOURCE_URL}}' text
+fill_source() {
+  local url_placeholder='{{SOURCE_URL}}' commit_placeholder='{{SOURCE_COMMIT}}' text
   is_source_url "$2" || { echo "refused: not an https:// source code address: $2" >&2; return 1; }
+  is_commit "$3" || { echo "refused: not a full commit id: $3" >&2; return 1; }
   text=$(< "$1")
-  text=${text//"$placeholder"/"$2"}
+  text=${text//"$url_placeholder"/"$2"}
+  text=${text//"$commit_placeholder"/"$3"}
   printf '%s\n' "$text" > "$1"
 }
 

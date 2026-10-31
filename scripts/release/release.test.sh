@@ -11,6 +11,7 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/klipolo-release-test.XXXXXX")
 work=$(cd "$work" && pwd -P)
 trap 'chmod -R u+rwX "$work" 2> /dev/null; rm -rf "$work"' EXIT
 arch=$(uname -m)
+commit=0123456789abcdef0123456789abcdef01234567
 
 repo=$work/repo
 mkdir -p "$repo/scripts/release" "$repo/apps/desktop/dist"
@@ -44,7 +45,8 @@ EOF
   for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt THIRD-PARTY-NOTICES.txt; do
     echo "$f" > "$c/Resources/licenses/$f"
   done
-  printf 'Klipolo\nSource code: https://github.com/owner/klipolo\n' > "$c/Resources/licenses/NOTICE.txt"
+  printf 'Klipolo\nSource code: https://github.com/owner/klipolo (commit %s)\n' "$commit" \
+    > "$c/Resources/licenses/NOTICE.txt"
   echo 'OFL' > "$c/Resources/fonts/OFL.txt"
 }
 
@@ -85,17 +87,24 @@ app=$(case_app empty-third-party)
 : > "$app/Contents/Resources/licenses/THIRD-PARTY-NOTICES.txt"
 expect "empty third-party notices fail" fail "licenses/THIRD-PARTY-NOTICES.txt is empty" "$check" "$app" "$arch"
 
-# NOTICE.txt's source code address: the placeholder fails, and so does a notice without the address.
+# NOTICE.txt's source code line: a placeholder left fails, and so does a notice without the address or the full commit.
 app=$(case_app source-placeholder)
-cp "$here/../../crates/klipolo-app/licenses/NOTICE.txt" "$app/Contents/Resources/licenses/NOTICE.txt"
-expect "NOTICE.txt with the {{SOURCE_URL}} placeholder fails" fail "still has the {{SOURCE_URL}} placeholder" \
+notice_in_app=$app/Contents/Resources/licenses/NOTICE.txt
+cp "$here/../../crates/klipolo-app/licenses/NOTICE.txt" "$notice_in_app"
+expect "NOTICE.txt with the placeholders fails" fail "still has a {{SOURCE_URL}} or {{SOURCE_COMMIT}} placeholder" \
   "$check" "$app" "$arch"
-(. "$repo/scripts/release/lib.sh" && fill_source_url "$app/Contents/Resources/licenses/NOTICE.txt" https://github.com/owner/klipolo)
-expect "NOTICE.txt with the address filled in passes" pass "$check" "$app" "$arch"
+sed -i '' 's|{{SOURCE_URL}}|https://github.com/owner/klipolo|' "$notice_in_app"
+expect "NOTICE.txt with the commit placeholder left fails" fail "still has a {{SOURCE_URL}} or {{SOURCE_COMMIT}}" \
+  "$check" "$app" "$arch"
+cp "$here/../../crates/klipolo-app/licenses/NOTICE.txt" "$notice_in_app"
+(. "$repo/scripts/release/lib.sh" && fill_source "$notice_in_app" https://github.com/owner/klipolo "$commit")
+expect "NOTICE.txt with the address and commit filled in passes" pass "$check" "$app" "$arch"
+sed -i '' "s|$commit|${commit:0:7}|" "$notice_in_app"
+expect "NOTICE.txt with a short commit fails" fail "gives no source code line" "$check" "$app" "$arch"
 
 app=$(case_app no-source-line)
 echo 'Klipolo' > "$app/Contents/Resources/licenses/NOTICE.txt"
-expect "NOTICE.txt without the address fails" fail "gives no https:// address for the source code" "$check" "$app" "$arch"
+expect "NOTICE.txt without the source code line fails" fail "gives no source code line" "$check" "$app" "$arch"
 
 app=$(case_app no-rpath)
 install_name_tool -delete_rpath @executable_path/../Frameworks "$app/Contents/MacOS/klipolo-app" 2> /dev/null
@@ -176,18 +185,19 @@ for u in "" http://klipolo.app/source "https://" "https://klipolo.app/a b" "http
   expect "source address \"$u\" is refused" pass url_refused "$u"
 done
 notice=$work/NOTICE.txt
-filled() {  # filled <url>: the checkout's NOTICE.txt with its placeholder filled holds the address once, and no placeholder
+filled() {  # filled <url>: the checkout's NOTICE.txt, filled in, has one source code line with the address and commit
   cp "$here/../../crates/klipolo-app/licenses/NOTICE.txt" "$notice"
-  (. "$repo/scripts/release/lib.sh" && fill_source_url "$notice" "$1") || return 1
-  [ "$(grep -c "^Source code: $1\$" "$notice")" = 1 ] && ! grep -qF '{{SOURCE_URL}}' "$notice"
+  (. "$repo/scripts/release/lib.sh" && fill_source "$notice" "$1" "$commit") || return 1
+  [ "$(grep -c "^Source code: $1 (commit $commit)\$" "$notice")" = 1 ] && ! grep -qF '{{SOURCE_' "$notice"
 }
-expect "NOTICE.txt gets the source address" pass filled https://github.com/owner/klipolo
-unchanged() {  # unchanged <url>: a refused address leaves NOTICE.txt's placeholder as it was
+expect "NOTICE.txt gets the source address and commit" pass filled https://github.com/owner/klipolo
+unchanged() {  # unchanged <url> <commit>: a refused address or commit leaves NOTICE.txt as it was
   cp "$here/../../crates/klipolo-app/licenses/NOTICE.txt" "$notice"
-  ! (. "$repo/scripts/release/lib.sh" && fill_source_url "$notice" "$1" 2> /dev/null) \
+  ! (. "$repo/scripts/release/lib.sh" && fill_source "$notice" "$1" "$2" 2> /dev/null) \
     && cmp -s "$notice" "$here/../../crates/klipolo-app/licenses/NOTICE.txt"
 }
-expect "a refused address leaves NOTICE.txt alone" pass unchanged "https://klipolo.app/?a=1&b=2"
+expect "a refused address leaves NOTICE.txt alone" pass unchanged "https://klipolo.app/?a=1&b=2" "$commit"
+expect "a short commit leaves NOTICE.txt alone" pass unchanged https://github.com/owner/klipolo "${commit:0:7}"
 # build-mac.sh refuses to start without the address (the copy in the test's tree, which has no FFmpeg to build with).
 refused_build() {  # refused_build <KLIPOLO_SOURCE_URL or "unset">
   local out rc
