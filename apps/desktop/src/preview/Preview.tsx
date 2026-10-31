@@ -2,19 +2,14 @@ import { useEffect, useRef, type RefObject } from 'react';
 import type { EngineInfo } from '../bindings/EngineInfo';
 import type { FormatKind } from '../bindings/FormatKind';
 import { engine } from '../bridge/engine';
+import { FormatPills } from '../features/editor/FormatPills';
+import { useShownFormat } from '../features/editor/formats';
 import { useImportMedia } from '../features/media/useImportMedia';
 import { Icon } from '../layout/Icon';
 import { useEngine } from '../state/engine';
 import { useProject } from '../state/project';
-import { useUi } from '../state/ui';
 import { SocketCanvas } from './SocketCanvas';
 import { ASPECT, holeRect, previewPixels } from './viewSize';
-
-const FORMATS: [FormatKind, string][] = [
-  ['landscape', '16:9'],
-  ['portrait', '9:16'],
-  ['square', '1:1'],
-];
 
 /** `--color-night` as 0xRRGGBB: the window shows it around the native layer for a frame or two while it resizes. */
 const NIGHT = 0x070a14;
@@ -97,12 +92,8 @@ function useNativeHole(frame: RefObject<HTMLDivElement | null>, on: boolean) {
   }, [frame, on]);
 }
 
-/** The format the preview shows: the one picked, else the project's primary one. */
-export function useShownFormat(): FormatKind {
-  const picked = useUi((s) => s.previewFormat);
-  const primary = useProject((s) => s.snapshot?.project.settings.primaryFormat ?? 'landscape');
-  return picked ?? primary;
-}
+/** The format the preview shows (it lives with the format switch). */
+export { useShownFormat };
 
 /**
  * An empty project's drop zone: drop videos anywhere on the window, or choose them (the one red), or
@@ -140,10 +131,8 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
   const native = useEngine((s) => s.presenter === 'native' && !!s.info);
   const status = useEngine((s) => s.status);
   const message = useEngine((s) => s.message);
-  const formats = useProject((s) => s.snapshot?.project.settings.formats);
   const hasVideo = useProject((s) => (s.snapshot?.project.timeline.main.length ?? 0) > 0);
   const format = useShownFormat();
-  const setFormat = useUi((s) => s.setPreviewFormat);
   const frame = useRef<HTMLDivElement>(null);
   useViewSync(frame, info, format, hasVideo);
   useNativeHole(frame, native && hasVideo);
@@ -152,13 +141,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
   return (
     <main className={native && hasVideo ? 'panel stage has-hole' : 'panel stage'} aria-label="Preview">
       <div className="stage-head">
-        <div className="seg" role="radiogroup" aria-label="Format">
-          {FORMATS.filter(([kind]) => !formats || formats.includes(kind)).map(([kind, label]) => (
-            <button key={kind} role="radio" aria-checked={format === kind} onClick={() => setFormat(kind)}>
-              {label}
-            </button>
-          ))}
-        </div>
+        <FormatPills />
         <span className="spacer" />
         {status !== 'unavailable' && message && <span className="stage-status">{message}</span>}
         <button className="icon-btn" aria-label="Show safe area" title="Safe area" disabled>
