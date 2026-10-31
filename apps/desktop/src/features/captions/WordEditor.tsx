@@ -90,10 +90,12 @@ export function WordEditor({
   const latest = useRef(save);
   latest.current = save;
   useEffect(() => registerBurst((closing) => closing && latest.current(true)), []);
-  // Focused, its text selected, as it opens: the person asked for it.
+  // Focused, its text selected, as it opens: the person asked for it. Its bar is brought into view under the line
+  // (the click that opened it is over, so nothing moves under the pointer mid-click).
   useEffect(() => {
-    field.current?.focus();
+    field.current?.focus({ preventScroll: true });
     field.current?.select();
+    bar.current?.scrollIntoView?.({ block: 'nearest' });
   }, []);
   // React sends no blur while it takes nodes off the page: a field going with the focus in it saves for itself.
   useLayoutEffect(() => {

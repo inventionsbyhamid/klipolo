@@ -210,4 +210,18 @@ describe('caption words', () => {
     expect(scroll.mock.contexts).toContain(lines[0]);
     scroll.mockRestore();
   });
+
+  it("brings a word's fix bar into view as it opens, without scrolling to the field first", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CaptionWords format="portrait" />);
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    await user.click(within(await list()).getByRole('option', { name: 'BYE' }));
+    const bar = screen.getByRole('group', { name: 'Fix word' });
+    expect(scroll.mock.contexts).toContain(bar);
+    const fieldFocus = focus.mock.calls[focus.mock.contexts.indexOf(fixField())];
+    expect(fieldFocus).toEqual([{ preventScroll: true }]);
+    scroll.mockRestore();
+    focus.mockRestore();
+  });
 });
