@@ -530,7 +530,7 @@ describe('the cut markers and the clips around them', () => {
     expect(bridge.apply).not.toHaveBeenCalled();
     expect(useToasts.getState().toasts.at(-1)?.text).toBe(needsTwo);
     // Its menu lists Add transition after, off, with the same note as its tooltip and description.
-    const a = screen.getByRole('button', { name: /^screen\.mp4/ });
+    const a = screen.getByRole('button', { name: /^Recording 1/ });
     act(() => a.focus());
     fireEvent.keyDown(a, { key: 'F10', shiftKey: true });
     const item = await screen.findByRole('menuitem', { name: /^Add transition after/ });
