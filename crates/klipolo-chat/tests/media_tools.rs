@@ -1279,6 +1279,80 @@ fn make_title_card_writes_the_persons_title_over_a_background_job() {
 }
 
 #[test]
+fn an_answer_draws_at_most_three_pictures_and_says_so_for_the_rest() {
+    // `compile::TOO_MANY_PICTURES`, for each picture past `compile::MAX_PICTURES` (3).
+    const TOO_MANY_PICTURES: &str =
+        "I draw up to 3 pictures per message, so I left out the rest. Ask me again for them.";
+    let p = project();
+    let i = inputs(
+        &p,
+        "a title card that says Day 1 at the start, and stickers of a plane, a heart, a star and a cloud at 12 s",
+    );
+    let sticker = |prompt: &str| {
+        call(
+            "makeSticker",
+            json!({"prompt": prompt, "position": null, "atSec": 12.0, "durationSec": null}),
+        )
+    };
+    let calls = [
+        call(
+            "makeTitleCard",
+            json!({"title": "Day 1", "prompt": "a sunrise", "atSec": 0.0, "durationSec": null}),
+        ),
+        sticker("plane"),
+        sticker("heart"),
+        sticker("star"),
+        sticker("cloud"),
+    ];
+    let out = compile(&p, &i, &calls);
+    // The first three are drawn: the title card's background and two stickers.
+    let drawn: Vec<&str> = out
+        .jobs
+        .iter()
+        .map(|job| match job {
+            Job::MakeSticker(s) => s.prompt.as_str(),
+            Job::MakeTitleBackground { prompt, .. } => prompt.as_str(),
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(drawn, ["a sunrise", "plane", "heart"]);
+    // The rest are refused to the person, in a plain sentence with what to do next.
+    let refused: Vec<(usize, &str, Audience)> = out
+        .refusals
+        .iter()
+        .map(|r| (r.call_index, r.reason.as_str(), r.audience))
+        .collect();
+    assert_eq!(
+        refused,
+        [
+            (3, TOO_MANY_PICTURES, Audience::Person),
+            (4, TOO_MANY_PICTURES, Audience::Person)
+        ]
+    );
+    // A fourth title card goes with its picture: no title is added without its background.
+    let titles =
+        [("One", "a"), ("Two", "b"), ("Three", "c"), ("Four", "d")].map(|(title, prompt)| {
+            call(
+                "makeTitleCard",
+                json!({"title": title, "prompt": prompt, "atSec": 0.0, "durationSec": null}),
+            )
+        });
+    let i = inputs(&p, "title cards that say One, Two, Three and Four");
+    let out = compile(&p, &i, &titles);
+    assert_eq!(out.jobs.len(), 3);
+    assert_eq!(
+        out.refusals
+            .iter()
+            .map(|r| r.call_index)
+            .collect::<Vec<_>>(),
+        [3]
+    );
+    let with_titles = apply_ops(&p, &out.additions.as_ref().expect("the titles").ops).unwrap();
+    let added = layers(&with_titles, TrackKind::Overlay);
+    assert_eq!(added.len(), 3, "the fourth title isn't added");
+}
+
+#[test]
 fn the_title_card_lasts_as_long_as_its_template() {
     // The default length is the template's own `duration`, its words coming in and going out included.
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
