@@ -131,7 +131,7 @@
 
 .analysis-job-step {
   display: grid;
-  gap: 6px;
+  gap: var(--space-3);
   color: var(--color-ink-soft);
   font-size: var(--text-xs);
 }
@@ -152,7 +152,7 @@
 
 .analysis-steps {
   display: flex;
-  gap: 4px;
+  gap: var(--space-2);
 }
 
 .analysis-steps i {
