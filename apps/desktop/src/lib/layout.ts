@@ -18,7 +18,8 @@ export const FORMAT_SHORT: Record<FormatKind, string> = {
   square: '1:1',
 };
 
-const FULL: BoxN = { x: 0, y: 0, w: 1, h: 1 };
+/** The whole frame, a new object each time (a layout is changed in place by drags). */
+const full = (): BoxN => ({ x: 0, y: 0, w: 1, h: 1 });
 
 /**
  * A layer that fills the frame in every format (a title template): the whole canvas as its rect and as its own rect in
@@ -28,11 +29,11 @@ const FULL: BoxN = { x: 0, y: 0, w: 1, h: 1 };
 export function fullFrame(): Layout {
   return {
     anchor: 'topLeft',
-    rect: FULL,
+    rect: full(),
     rotation: 0,
     opacity: 1,
     radius: 0,
-    overrides: { landscape: FULL, portrait: FULL, square: FULL },
+    overrides: { landscape: full(), portrait: full(), square: full() },
   };
 }
 

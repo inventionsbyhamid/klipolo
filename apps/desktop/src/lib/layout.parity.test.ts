@@ -60,7 +60,10 @@ describe('layout parity with the engine', () => {
   });
 
   it('fills the frame in every format exactly like Rust (title templates)', () => {
-    expect(fullFrame()).toEqual(fixture.fullFrame);
+    const layout = fullFrame();
+    expect(layout).toEqual(fixture.fullFrame);
+    // Each box its own: a drag that changes one in place leaves the others.
+    expect(new Set([layout.rect, ...Object.values(layout.overrides)]).size).toBe(4);
   });
 
   it('keeps 9:16 text where the apps leave clear, the safe area the preview draws', () => {
