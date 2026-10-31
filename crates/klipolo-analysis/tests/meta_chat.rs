@@ -621,6 +621,36 @@ async fn a_used_up_quota_is_out_of_credit_not_busy() {
     }
 }
 
+/// A 402 with no sentence of its own says which credit ran out: through the relay, the device's Klipolo credit; with the
+/// person's own key, their Meta credit.
+#[tokio::test]
+async fn a_bare_402_names_the_credit_that_ran_out() {
+    let server = MockServer::start().await;
+    answer_once(&server, ResponseTemplate::new(402)).await;
+    let e = chat(&server).respond(&neutral_request()).await.unwrap_err();
+    assert_eq!(
+        e,
+        ModelError::Budget("This device has used its Klipolo credit.".into())
+    );
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/responses"))
+        .respond_with(ResponseTemplate::new(402))
+        .mount(&server)
+        .await;
+    let direct = MetaChat::new(
+        MetaClient::direct(SecretString::from("sk-direct-key"))
+            .with_meta_base(server.uri())
+            .with_ledger(None),
+    );
+    let e = direct.respond(&neutral_request()).await.unwrap_err();
+    assert_eq!(
+        e,
+        ModelError::Budget("Your Meta credit has run out.".into())
+    );
+}
+
 #[tokio::test]
 async fn a_timeout_says_who_gave_up() {
     let relay_timeout = |body: Option<Value>| {

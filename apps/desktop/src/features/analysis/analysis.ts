@@ -12,6 +12,9 @@ export const STEP_LABELS: Record<AnalysisStep, string> = {
   scenes: 'Watching the footage',
 };
 
+/** What a clip whose file was moved or deleted needs, as Rust says it when such a clip is started (`FILE_MISSING`). */
+export const FILE_MISSING = "Klipolo can't find this clip's file. Put it back or import it again.";
+
 /** "1 clip", "2 clips". */
 export function clipCount(n: number): string {
   return n === 1 ? '1 clip' : `${n} clips`;
@@ -43,7 +46,8 @@ export function howLong(seconds: number): string {
 
 /**
  * The offer's sentence: what Analyze does and how long it takes, what clips analyzed before cost, and with an access
- * code the credit left, or why Analyze is refused (Rust's sentence, which suggests trimming first).
+ * code the credit left, or why Analyze is refused (Rust's sentence, which suggests fewer or shorter files: analysis
+ * covers each file whole, however its clip is trimmed).
  */
 export function offerText(estimate: Estimate, videos: boolean): string {
   const them = estimate.clips.length === 1 ? 'it' : 'them';
@@ -59,6 +63,11 @@ export function offerText(estimate: Estimate, videos: boolean): string {
   else if (estimate.creditLeftUsd != null)
     parts.push(`You have ${dollars(estimate.creditLeftUsd)} left on your access code.`);
   return parts.join(' ');
+}
+
+/** The title over clips whose file is gone, when nothing else is offered: "Klipolo can't find 2 clips". */
+export function missingTitle(n: number): string {
+  return `Klipolo can't find ${clipCount(n)}`;
 }
 
 /** The progress banner's title. */
