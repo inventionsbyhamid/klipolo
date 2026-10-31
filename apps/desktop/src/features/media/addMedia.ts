@@ -90,8 +90,3 @@ export function addToMain(assetId: string) {
 export function addLayerAtPlayhead(assetId: string) {
   addMedia(assetId, () => ({ lane: 'picture', trackId: null, atUs: usePlayback.getState().playheadUs }));
 }
-
-/** Add sound at playhead: a sound, free of the clips. */
-export function addSoundAtPlayhead(assetId: string) {
-  addMedia(assetId, () => ({ lane: 'sound', trackId: null, atUs: usePlayback.getState().playheadUs }));
-}
