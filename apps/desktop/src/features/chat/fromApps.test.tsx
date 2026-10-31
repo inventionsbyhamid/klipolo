@@ -275,6 +275,19 @@ describe('another app in chat', () => {
     expect(await screen.findByRole('button', { name: 'Undo add the paper plane sticker' })).toBeInTheDocument();
   });
 
+  it('an_apps_own_undo_says_what_it_took_back', async () => {
+    chat();
+    renderWithProviders(<ChatPanel />);
+    const log = screen.getByRole('log');
+    const back = (revision: number, label: CodedError) =>
+      changed(revision, null, { canRedo: true, redoLabel: label.code, redoParams: label.params });
+    await tell(external('Example Client', { undone: back(4, vertical()), revision: 4 }));
+    expect(await within(log).findByText('Undid make it vertical.')).toBeInTheDocument();
+    // Its step folded from earlier ones names the app in its own words.
+    await tell(external('Example Client', { undone: back(5, code('mcp.fromEarlier', { client: 'Example Client' })), revision: 5 }));
+    expect(await within(log).findByText('Undid earlier changes from Example Client.')).toBeInTheDocument();
+  });
+
   it('a_reply_about_another_opening_is_ignored', async () => {
     chat();
     useProject.setState({ snapshot: { ...fixtureSnapshot(), opening: 2 } });

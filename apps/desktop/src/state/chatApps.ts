@@ -4,6 +4,7 @@ import type { ExternalReply } from '../bindings/ExternalReply';
 import type { SnapshotPatch } from '../bindings/SnapshotPatch';
 import { inSentence } from '../lib/history';
 import { wordLabel, type LabelParams } from '../lib/labels';
+import { MCP_LABELS } from '../lib/labelTable';
 import {
   openProposal,
   session,
@@ -28,11 +29,15 @@ export function fromThisOpening(external: ExternalReply): boolean {
   return open === undefined || external.opening === open;
 }
 
-/** `params` without the app's name: the message's header names the app already. */
-function withoutClient(params: LabelParams): LabelParams {
-  const rest = { ...params };
+/**
+ * `label` in words without the app's name, which the message's header gives already: "Make it vertical". A label of
+ * other apps' own (`mcp.fromEarlier`) keeps it, as its words need it: "Earlier changes from Example Client".
+ */
+function withoutApp(label: CodedError): string {
+  if (Object.hasOwn(MCP_LABELS, label.code)) return wordLabel(label.code, label.params);
+  const rest: LabelParams = { ...label.params };
   delete rest.client;
-  return rest;
+  return wordLabel(label.code, rest);
 }
 
 /** The label of the step an app's own undo took back, as its history says after it (the step to redo). */
@@ -47,9 +52,9 @@ function undoneLabel(undone: SnapshotPatch | null): CodedError | null {
  * the message shows it already (a proposal, moments, a picture).
  */
 export function appLine(m: ReplyMessage): string {
-  if (m.applied) return wordLabel(m.applied.undo.code, withoutClient(m.applied.undo.params));
+  if (m.applied) return withoutApp(m.applied.undo);
   if (m.undid) {
-    const label = inSentence(wordLabel(m.undid.code, withoutClient(m.undid.params)));
+    const label = inSentence(withoutApp(m.undid));
     if (label)
       return t({ id: 'mcp.undid', message: `Undid ${label}.`, comment: '{label} is the change taken back' });
   }
