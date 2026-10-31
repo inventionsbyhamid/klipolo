@@ -18,7 +18,7 @@ use klipolo_model::timeline::{Clip, ClipSource};
 use klipolo_platform::durable::{Durability, Os};
 
 use super::*;
-use crate::project::{ProjectSessionState, lock, open_in, save};
+use crate::project::{ProjectSessionState, create_in, lock, new_project, open_in, save};
 
 /// The library, the stamps file and the thumbnails' folder in `dir`, as the app has them: the library made, the
 /// others not yet.
@@ -360,4 +360,53 @@ fn listing_never_opens_a_project() {
     assert_eq!(rows[1].path, other.to_string_lossy());
     assert_eq!((session(&state), on_disk()), before);
     assert!(!root.exists(), "nothing was scanned");
+}
+
+/// `recent.json` as it is on the disk.
+fn on_disk(stamps: &Path) -> BTreeMap<String, u64> {
+    serde_json::from_slice(&fs::read(stamps).unwrap()).unwrap()
+}
+
+fn key(file: &Path) -> String {
+    file.to_string_lossy().into_owned()
+}
+
+/// Every new project and every open is stamped in `recent.json` beside the last-project memo, so it lists first;
+/// the file keeps the 50 latest, and stamping a file again moves it rather than adding it twice.
+#[test]
+fn opening_or_creating_stamps_recent_json_and_keeps_50() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    let earlier = saved(&library, &Project::new("Made earlier"), 1_000);
+    let state = ProjectSessionState::default();
+    state.remember_last_in(stamps.with_file_name("last-project"));
+    let start = now_ms();
+    create_in(&state, &library, new_project("Made now", vec![])).unwrap();
+    let made = library.join("Made now.klipolo");
+    open_in(&state, &earlier).unwrap();
+
+    let opened = on_disk(&stamps);
+    assert_eq!(opened.len(), 2);
+    let (made_ms, earlier_ms) = (opened[&key(&made)], opened[&key(&earlier)]);
+    assert!(start <= made_ms && made_ms <= earlier_ms && earlier_ms <= now_ms());
+    assert_eq!(
+        names(&recent_in(&library, &stamps, None, RECENT_LIMIT)),
+        [("Made earlier", earlier_ms), ("Made now", made_ms)]
+    );
+
+    // Sixty opens long ago, a millisecond apart: the two above are newer, so 48 of these stay.
+    let old = |n: u64| library.join(format!("Old {n:02}.klipolo"));
+    for n in 0..60 {
+        stamp(&stamps, &old(n), 100 + n).unwrap();
+    }
+    let kept = on_disk(&stamps);
+    assert_eq!(kept.len(), 50);
+    let mut expected: Vec<String> = (12..60).map(|n| key(&old(n))).collect();
+    expected.extend([key(&made), key(&earlier)]);
+    expected.sort();
+    assert_eq!(kept.keys().cloned().collect::<Vec<_>>(), expected);
+
+    stamp(&stamps, &old(12), 5_000).unwrap();
+    let again = on_disk(&stamps);
+    assert_eq!((again.len(), again[&key(&old(12))]), (50, 5_000));
 }

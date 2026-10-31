@@ -140,12 +140,14 @@ impl ProjectSessionState {
         self.saver.flush(FLUSH_TIMEOUT)
     }
 
-    /// The last project opened is named in `memo` (a small text file), and opens again at the next launch.
+    /// The last project opened is named in `memo` (a small text file), and opens again at the next launch. Every
+    /// project opened is also stamped in `recent.json` beside it, for the start screen (`recent::stamp`).
     pub(crate) fn remember_last_in(&self, memo: PathBuf) {
         *self.last.lock().unwrap_or_else(PoisonError::into_inner) = Some(memo);
     }
 
-    /// `file` is the project open now: named in the memo, best effort.
+    /// `file` is the project open now: named in the memo and stamped as opened now in `recent.json` beside it, best
+    /// effort.
     pub(super) fn remember_last(&self, file: &Path) {
         let memo = self
             .last
@@ -159,6 +161,10 @@ impl ProjectSessionState {
             .and_then(|()| std::fs::write(&memo, file.to_string_lossy().as_bytes()));
         if let Err(error) = written {
             tracing::warn!(%error, "the last project couldn't be remembered");
+        }
+        let stamps = memo.with_file_name(recent::RECENT_FILE);
+        if let Err(error) = recent::stamp(&stamps, file, recent::now_ms()) {
+            tracing::warn!(%error, "the project couldn't be stamped as opened");
         }
     }
 

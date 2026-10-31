@@ -14,6 +14,7 @@ use klipolo_model::project::Project;
 use klipolo_model::query::main_track_duration;
 use klipolo_model::time::Us;
 use klipolo_model::timeline::ClipSource;
+use klipolo_platform::durable::{Durability, write_atomic};
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -80,6 +81,37 @@ pub(crate) fn recent_in(
         })
         .take(limit)
         .collect()
+}
+
+/// How many opened projects `recent.json` remembers.
+const STAMPS_KEPT: usize = 50;
+
+/// Stamps `file` in `stamps` as opened at `now_ms` (again, if it was), keeping the `STAMPS_KEPT` latest; written
+/// atomically. A file that didn't read starts over.
+pub(super) fn stamp(stamps: &Path, file: &Path, now_ms: u64) -> io::Result<()> {
+    let mut opened = read_stamps(stamps);
+    opened.insert(file.to_string_lossy().into_owned(), now_ms);
+    if opened.len() > STAMPS_KEPT {
+        let mut oldest_first: Vec<(u64, String)> = opened
+            .iter()
+            .map(|(file, &ms)| (ms, file.clone()))
+            .collect();
+        oldest_first.sort_unstable();
+        let over = opened.len() - STAMPS_KEPT;
+        for (_, file) in oldest_first.into_iter().take(over) {
+            opened.remove(&file);
+        }
+    }
+    let json = serde_json::to_vec(&opened).map_err(io::Error::other)?;
+    if let Some(dir) = stamps.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    write_atomic(stamps, &json, Durability::Ordered)
+}
+
+/// Now, in ms since the Unix epoch.
+pub(super) fn now_ms() -> u64 {
+    ms_since_epoch(SystemTime::now())
 }
 
 /// A project file in the library and when it was opened here (`stamped`), else last saved.
