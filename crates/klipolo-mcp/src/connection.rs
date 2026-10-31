@@ -1,18 +1,22 @@
 //! The connection file, `<support>/mcp.json`: the port the server listens on and the token it takes, so the stdio
 //! bridge, and any app the person points at it, can reach Klipolo. Only this user can read it (mode 0600). It is
-//! written once the server listens, and deleted when the server stops (`McpServer`).
+//! written once the server listens, and deleted when the server stops (`McpServer`). Another Klipolo on the Mac (a dev
+//! build beside the installed app) shares the support folder: a server starts only while no other serves the file
+//! (`served`), and deletes it only while it is its own, so the apps keep reaching the Klipolo that lets them in.
 
 use std::ffi::OsString;
 use std::fmt;
-use std::io;
+use std::io::{self, Read, Write};
+use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Handle;
 
 use crate::rpc::Mcp;
-use crate::server::{self, Running};
+use crate::server::{self, PATH, Running};
 
 /// The file's name in the support folder.
 pub const FILE: &str = "mcp.json";
@@ -22,6 +26,10 @@ pub const VERSION: u32 = 1;
 pub const SUPPORT_DIR_VAR: &str = "KLIPOLO_SUPPORT_DIR";
 /// The most of the file read: it is a few dozen bytes.
 const MOST: u64 = 4096;
+/// How long asking whether a server answers on the file's port may take to connect, and then to hear back.
+const ASK_TIMEOUT: Duration = Duration::from_secs(1);
+/// How Klipolo's server answers `GET /mcp` with its token: it offers no stream (a wrong token is 401).
+const ANSWER: &[u8; 12] = b"HTTP/1.1 405";
 
 /// What the file holds: `{"port": 51234, "token": "…", "pid": 4321, "version": 1}`.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,6 +73,14 @@ pub fn support_dir_from(set: Option<OsString>, home: Option<OsString>) -> Option
     })
 }
 
+/// A token as Klipolo makes them: 64 lowercase hex digits.
+pub fn is_token(token: &str) -> bool {
+    token.len() == 64
+        && token
+            .bytes()
+            .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
 /// A new bearer token: 64 hex digits from two random `u128`s.
 pub fn new_token() -> String {
     format!(
@@ -99,6 +115,36 @@ pub fn read(dir: &Path) -> Option<ConnectionFile> {
         .filter(|f| f.version == VERSION)
 }
 
+/// The file in `dir` while a server serves it: the process that wrote it is alive, and its port answers to its token
+/// as Klipolo's server does. A file a crash left is no one's, also once its process id or its port went to another
+/// program. Asking takes a moment only while the process lives: at most `ASK_TIMEOUT` to connect, and as long again
+/// for the answer.
+pub fn served(dir: &Path) -> Option<ConnectionFile> {
+    read(dir).filter(|f| klipolo_platform::process::is_alive(f.pid) && answers(f))
+}
+
+/// Whether Klipolo's server answers on `f.port` to `f.token`: `GET /mcp` with it is 405, as `server` answers it once
+/// the token is taken. Only to 127.0.0.1, and only a token as Klipolo makes them.
+fn answers(f: &ConnectionFile) -> bool {
+    if !is_token(&f.token) {
+        return false;
+    }
+    let to = SocketAddr::from((Ipv4Addr::LOCALHOST, f.port));
+    let Ok(mut stream) = TcpStream::connect_timeout(&to, ASK_TIMEOUT) else {
+        return false;
+    };
+    let ask = format!(
+        "GET {PATH} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nAuthorization: Bearer {}\r\nConnection: close\r\n\r\n",
+        f.port, f.token
+    );
+    let mut head = [0; ANSWER.len()];
+    stream.set_read_timeout(Some(ASK_TIMEOUT)).is_ok()
+        && stream.set_write_timeout(Some(ASK_TIMEOUT)).is_ok()
+        && stream.write_all(ask.as_bytes()).is_ok()
+        && stream.read_exact(&mut head).is_ok()
+        && head == *ANSWER
+}
+
 /// Deletes `<dir>/mcp.json`; none there is fine.
 pub fn remove(dir: &Path) {
     match std::fs::remove_file(dir.join(FILE)) {
@@ -120,7 +166,15 @@ impl McpServer {
     /// Listens on 127.0.0.1 with a new token, serving `mcp` on `rt`, then writes `<dir>/mcp.json`. A file that can't
     /// be written stops the server again. The app keeps one `Mcp` for its whole run and starts it here each time the
     /// person turns the server on, so the paces, the allowance for jobs and an app's waiting proposal carry over.
+    /// Refused (`AlreadyExists`) while another server serves the file (`served`): another Klipolo on the Mac lets apps
+    /// in, and keeps its file.
     pub fn start(rt: &Handle, mcp: Arc<Mcp>, dir: &Path) -> io::Result<McpServer> {
+        if served(dir).is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "another Klipolo serves the MCP connection file",
+            ));
+        }
         let token = new_token();
         let running = server::serve(rt, mcp, token.clone())?;
         let file = ConnectionFile {
@@ -137,7 +191,8 @@ impl McpServer {
         })
     }
 
-    /// Stops the server (`server::Running::stop`) and deletes the connection file, while it is still this server's.
+    /// Stops the server (`server::Running::stop`) and deletes the connection file, while it is still this server's
+    /// (this process's, with this run's token).
     pub fn stop(self) {
         drop(self);
     }
@@ -154,7 +209,7 @@ impl McpServer {
 
 impl Drop for McpServer {
     fn drop(&mut self) {
-        if read(&self.dir).is_some_and(|f| f.token == self.token) {
+        if read(&self.dir).is_some_and(|f| f.pid == std::process::id() && f.token == self.token) {
             remove(&self.dir);
         }
     }

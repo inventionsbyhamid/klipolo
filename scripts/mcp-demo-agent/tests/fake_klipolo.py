@@ -3,12 +3,13 @@
 of Klipolo's real tools (`fixtures/tools_list.json`) with Klipolo's real instructions and answers calls as Klipolo
 words them.
 
-    fake_klipolo.py --mcp [--mode on|off|silent|crash|slow] [--log <file>]
+    fake_klipolo.py --mcp [--mode on|off|no-project|silent|crash|slow] [--after <n>] [--log <file>]
 
-`--mode off` answers every call as the bridge does while Klipolo isn't running. `silent` never answers at all (a
-program that isn't the bridge), `crash` dies on the first call, and `slow` takes 30 s over each call. `--log` appends
-one JSON line when it starts (its argv, and whether MODEL_API_KEY reached it) and one per call (the tool and its
-arguments).
+`--mode off` answers every call as the bridge does while Klipolo isn't running, and `no-project` as Klipolo does with
+no project open. `silent` never answers at all (a program that isn't the bridge), `crash` dies on a call, and `slow`
+takes 30 s over each call. `--after n` answers the first n calls as `on` does, then as the mode says (Klipolo turned off
+or quit mid-run). `--log` appends one JSON line when it starts (its argv, and whether MODEL_API_KEY reached it) and one
+per call (the tool and its arguments).
 """
 
 import argparse
@@ -42,6 +43,8 @@ OFF = (
     'Klipolo isn\'t running, or "Let other apps edit with Klipolo" is off. Ask the person to open Klipolo and turn it '
     "on in Settings."
 )
+# What Klipolo answers with no project open (`words::NO_PROJECT`).
+NO_PROJECT = "No project is open in Klipolo. Ask the person to open one."
 CONTEXT = """Revision 3
 
 Project "Launch talk", landscape 16:9, 182.4 s, captions off.
@@ -69,6 +72,8 @@ def text(said: str) -> list[types.TextContent]:
 def answer(name: str, arguments: dict, mode: str) -> types.CallToolResult:
     if mode == "off":
         return types.CallToolResult(content=text(OFF), isError=True)
+    if mode == "no-project":
+        return types.CallToolResult(content=text(NO_PROJECT), isError=True)
     if name == "getContext":
         return types.CallToolResult(content=text(CONTEXT), isError=False)
     if name == "getSummary":
@@ -103,9 +108,11 @@ def answer(name: str, arguments: dict, mode: str) -> types.CallToolResult:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mcp", action="store_true")
-    parser.add_argument("--mode", choices=("on", "off", "silent", "crash", "slow"), default="on")
+    parser.add_argument("--mode", choices=("on", "off", "no-project", "silent", "crash", "slow"), default="on")
+    parser.add_argument("--after", type=int, default=0)
     parser.add_argument("--log")
     args = parser.parse_args()
+    calls = 0
 
     def log(entry: dict) -> None:
         if args.log:
@@ -125,12 +132,15 @@ def main() -> None:
 
     @server.call_tool()
     async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
+        nonlocal calls
         log({"call": name, "arguments": arguments})
-        if args.mode == "crash":
+        calls += 1
+        mode = "on" if calls <= args.after else args.mode
+        if mode == "crash":
             os._exit(3)
-        if args.mode == "slow":
+        if mode == "slow":
             await anyio.sleep(30)
-        return answer(name, arguments, args.mode)
+        return answer(name, arguments, mode)
 
     async def serve() -> None:
         async with stdio_server() as (read, write):

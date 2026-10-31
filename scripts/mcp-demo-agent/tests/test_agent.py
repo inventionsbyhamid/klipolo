@@ -122,10 +122,11 @@ def demo_meta():
     )
 
 
-def klipolo(tmp_path, mode="on"):
-    """The fake Klipolo's command, and the file it logs to."""
+def klipolo(tmp_path, mode="on", after=0):
+    """The fake Klipolo's command, and the file it logs to. `after` calls are answered as `on` before `mode` starts."""
     log = tmp_path / "klipolo.jsonl"
-    return [sys.executable, str(HERE / "fake_klipolo.py"), "--mcp", "--mode", mode, "--log", str(log)], log
+    command = [sys.executable, str(HERE / "fake_klipolo.py"), "--mcp", "--mode", mode, "--after", str(after)]
+    return [*command, "--log", str(log)], log
 
 
 def installed(tmp_path):
@@ -188,6 +189,8 @@ def test_the_demo_prints_each_call_the_reply_and_the_cost(tmp_path):
         "Cost: $0.035\n"
     )
     assert calls_made(log) == [
+        # Read before Muse Spark is asked, and not printed: Klipolo is on with a project open.
+        {"call": "getSummary", "arguments": {}},
         {"call": "getContext", "arguments": {}},
         {"call": "setFormat", "arguments": {"format": "portrait", "keepOthers": True}},
         {"call": "setCaptions", "arguments": {"on": True, "style": "karaoke"}},
@@ -287,6 +290,31 @@ def test_the_prompt_asks_for_format_and_captions_before_the_cut():
     assert prompt.index(first) < prompt.index("Cuts, such as keepOnly, are only proposed")
 
 
+def test_the_reply_prints_with_no_em_or_en_dash(tmp_path):
+    # The reply is what the video shows: a dash between words reads as a comma, one in a range as a hyphen.
+    said = (
+        "Done \u2014 it's vertical with karaoke captions \u2014 and the cut waits for your Apply.\n"
+        "I kept 61.2\u201391.0 s\u2014the best moment \u2013 as the teaser, \u2014 nothing else.\n"
+        "\u2014 Captions are karaoke."
+    )
+    meta = Meta(response(message(said)))
+    command, _ = klipolo(tmp_path)
+    code, out, err = run(meta, command)
+    assert (code, err) == (0, "")
+    assert out == (
+        "Done, it's vertical with karaoke captions, and the cut waits for your Apply.\n"
+        "I kept 61.2-91.0 s, the best moment, as the teaser, nothing else.\n"
+        "Captions are karaoke.\n"
+        "\n"
+        "Cost: $0.002\n"
+    )
+
+
+def test_the_prompt_asks_for_no_em_or_en_dash():
+    assert "Never use em or en dashes, in your answer or in text you add." in agent.SYSTEM_PROMPT
+    assert not any(dash in agent.SYSTEM_PROMPT for dash in "\u2013\u2014")
+
+
 def test_cost_is_priced_from_usage_with_cached_input_at_the_cached_price():
     usage = agent.usage_of({"input_tokens": 1_000_000, "input_tokens_details": {"cached_tokens": 400_000}, "output_tokens": 1_000_000})
     assert usage == agent.Usage(input_tokens=1_000_000, cached_tokens=400_000, output_tokens=1_000_000)
@@ -345,7 +373,7 @@ def test_after_proposing_the_run_answers_getproposal_itself(tmp_path):
     command, log = klipolo(tmp_path)
     code, out, err = run(meta, command)
     assert (code, err) == (0, "")
-    assert [entry["call"] for entry in calls_made(log)] == ["keepOnly"], "no getProposal reached Klipolo"
+    assert [entry["call"] for entry in calls_made(log)] == ["getSummary", "keepOnly"], "no getProposal reached Klipolo"
     assert out == (
         '→ keepOnly {"ranges": [{"startSec": 61.2, "endSec": 91.0}]}\n'
         "← proposed, waits for Apply (152.6 s would go)\n"
@@ -383,9 +411,9 @@ def test_pictures_klipolo_draws_are_said_to_be_outside_the_cost(tmp_path):
     ]
 
 
-def test_klipolo_not_running_ends_the_run_with_the_bridges_own_sentence(tmp_path):
+def test_klipolo_turned_off_mid_run_ends_it_with_the_bridges_own_sentence(tmp_path):
     meta = Meta(response(call("getContext", {}, "call_1"), usage=(6000, 0, 40)))
-    command, log = klipolo(tmp_path, mode="off")
+    command, log = klipolo(tmp_path, mode="off", after=1)
     code, out, err = run(meta, command)
     assert code == 1
     assert out == f"→ getContext {{}}\n← {fake_klipolo.OFF}\n\nCost: $0.008\n"
@@ -395,6 +423,28 @@ def test_klipolo_not_running_ends_the_run_with_the_bridges_own_sentence(tmp_path
 
 STOPPED_ANSWERING = "Klipolo stopped answering. Check that it's open, then run the agent again."
 MAY_BE_LOW = "The total may be low: Meta may have billed an answer that didn't come back whole."
+
+
+@pytest.mark.parametrize(
+    "mode, said",
+    [("off", fake_klipolo.OFF), ("no-project", fake_klipolo.NO_PROJECT), ("crash", STOPPED_ANSWERING)],
+)
+def test_klipolo_off_or_without_a_project_stops_the_run_before_muse_spark_is_asked(tmp_path, mode, said):
+    # Klipolo's free read goes first: a run that can't edit costs nothing.
+    meta = Meta(response(call("getContext", {}, "call_1"), usage=(6000, 0, 40)))
+    command, log = klipolo(tmp_path, mode=mode)
+    code, out, err = run(meta, command)
+    assert (code, out, err) == (1, "Cost: $0.000\n", said + "\n")
+    assert meta.requests == []
+    assert calls_made(log) == [{"call": "getSummary", "arguments": {}}]
+
+
+def test_the_read_before_the_first_turn_is_skipped_when_klipolo_lists_no_getsummary():
+    session = Session(None)
+    console = agent.Console(io.StringIO(), io.StringIO())
+    assert asyncio.run(agent.klipolo_ready(session, {"getContext": {}}, console))
+    assert session.calls == []
+    assert (console.out.getvalue(), console.err.getvalue()) == ("", "")
 
 
 def test_a_program_that_never_answers_as_the_bridge_ends_the_run(tmp_path):
@@ -437,7 +487,7 @@ def test_a_pipe_that_breaks_under_the_sdk_ends_the_run_with_one_sentence(tmp_pat
 
 def test_klipolo_stopping_mid_run_ends_it_without_asking_meta_again(tmp_path):
     meta = Meta(response(call("getContext", {}, "call_1"), usage=(6000, 0, 40)), response(message("Never asked for.")))
-    command, log = klipolo(tmp_path, mode="crash")
+    command, log = klipolo(tmp_path, mode="crash", after=1)
     code, out, err = run(meta, command)
     assert (code, err) == (1, "")
     assert out == f"→ getContext {{}}\n← {STOPPED_ANSWERING}\n\nCost: $0.008\n"
@@ -446,8 +496,9 @@ def test_klipolo_stopping_mid_run_ends_it_without_asking_meta_again(tmp_path):
 
 def test_a_call_klipolo_never_answers_ends_the_run_at_the_time_limit(tmp_path):
     meta = Meta(response(call("getContext", {}, "call_1"), usage=(6000, 0, 40)), response(message("Never asked for.")))
-    command, _ = klipolo(tmp_path, mode="slow")
-    code, out, err = run(meta, command, call_timeout=1)
+    command, _ = klipolo(tmp_path, mode="slow", after=1)
+    # The limit is each request's, the hello's too: long enough for the fake to start, far short of its 30 s.
+    code, out, err = run(meta, command, call_timeout=3)
     assert (code, err) == (1, "")
     assert out == f"→ getContext {{}}\n← {STOPPED_ANSWERING}\n\nCost: $0.008\n"
     assert len(meta.requests) == 1
@@ -459,7 +510,8 @@ def test_the_run_stops_after_8_model_turns(tmp_path):
     code, out, err = run(meta, command)
     assert code == 1
     assert len(meta.requests) == 8
-    assert [entry["call"] for entry in calls_made(log)] == ["getSummary"] * 7, "the 8th turn's calls are not made"
+    # The read before the first turn, then turns 1 to 7's calls.
+    assert [entry["call"] for entry in calls_made(log)] == ["getSummary"] * 8, "the 8th turn's calls are not made"
     assert err == "Stopped after 8 model turns without a final reply.\n"
     assert out.endswith("\n\nCost: $0.010\n")
 
@@ -485,7 +537,7 @@ def test_the_run_stops_before_the_next_model_call_once_it_reaches_the_spend_limi
         "Cost: $0.109\n"
     )
     made = [entry["call"] for entry in calls_made(log)]
-    assert made == ["getContext", "setFormat"], "the calls already asked for are still made"
+    assert made == ["getSummary", "getContext", "setFormat"], "the calls already asked for are still made"
 
 
 def test_an_answer_cut_off_is_an_error_and_still_costs(tmp_path):
@@ -502,7 +554,7 @@ def test_an_answer_cut_off_is_an_error_and_still_costs(tmp_path):
     assert code == 1
     assert err == "Meta's answer was cut off (max_output_tokens).\n"
     assert out == "Cost: $0.040\n"
-    assert calls_made(log) == [], "a cut off answer's calls may be partial: none is made"
+    assert [entry["call"] for entry in calls_made(log)] == ["getSummary"], "a cut off answer's calls may be partial"
 
 
 @pytest.mark.parametrize(
@@ -545,7 +597,7 @@ def test_meta_errors_say_what_happened_and_never_show_the_key(tmp_path, reply, s
     sent = sent or (isinstance(reply, httpx.Response) and reply.status_code == 200)
     assert out == "Cost: $0.000\n" + (MAY_BE_LOW + "\n" if sent else "")
     assert KEY not in out + err
-    assert calls_made(log) == []
+    assert [entry["call"] for entry in calls_made(log)] == ["getSummary"], "only the read before the first turn"
 
 
 def test_a_billed_answer_that_cant_be_read_still_counts(tmp_path):

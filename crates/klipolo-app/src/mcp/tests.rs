@@ -893,3 +893,121 @@ fn at_launch_listens_or_clears_what_a_crash_left() {
     state.stop();
     assert!(connection::read(dir.path()).is_none());
 }
+
+/// An app's `initialize`, as `name`.
+fn hello(name: &str) -> String {
+    json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": name, "version": "1"}}})
+    .to_string()
+}
+
+/// The switch of a Klipolo over `r`'s host, with its support folder at `dir`, and the runtime it serves on: keep it.
+fn klipolo(r: Rig, dir: &Path) -> (McpState, tokio::runtime::Runtime) {
+    let Rig { host, rt, .. } = r;
+    let state = McpState::new(
+        Arc::new(Mcp::new(Arc::new(host))),
+        Some(dir.to_owned()),
+        rt.handle().clone(),
+    );
+    (state, rt)
+}
+
+/// Two Klipolos on one Mac share the support folder (a dev build beside the installed app). With the first letting
+/// apps in, the second, turned on or launched with the switch saved on, leaves the first's connection file as it is,
+/// stays off for this run and says why; the switch's saved state is unchanged, and the apps keep reaching the first.
+#[test]
+fn a_second_klipolo_doesnt_take_over() {
+    let dir = tempfile::tempdir().unwrap();
+    let (first, _a) = klipolo(Rig::new(), dir.path());
+    let (second, _b) = klipolo(Rig::new(), dir.path());
+    assert!(first.set_enabled(true).unwrap().enabled);
+    let file = dir.path().join(connection::FILE);
+    let written = std::fs::read(&file).unwrap();
+    let saved = std::fs::read(dir.path().join(prefs::FILE)).unwrap();
+
+    assert_eq!(second.set_enabled(true), Err(ANOTHER_LISTENS.to_owned()));
+    assert!(!second.status().enabled);
+    assert!(second.status().another_listens, "Settings says why");
+    second.at_launch();
+    assert!(!second.status().enabled, "off for this run");
+    assert_eq!(std::fs::read(&file).unwrap(), written);
+    assert_eq!(std::fs::read(dir.path().join(prefs::FILE)).unwrap(), saved);
+
+    let on = first.status();
+    assert!(on.enabled && !on.another_listens);
+    let token = connection::read(dir.path()).unwrap().token;
+    let bearer = format!("Bearer {token}");
+    let port = first.port().unwrap();
+    assert_eq!(
+        post(port, &[("Authorization", &bearer)], &hello("Example Client")),
+        200
+    );
+    assert_eq!(first.status().connected, ["Example Client"]);
+}
+
+/// The second Klipolo switched off, then quitting, leaves the first's file: the apps still reach the first. Once the
+/// first stops, the second's Settings no longer says another Klipolo lets apps in, and it can turn on.
+#[test]
+fn quitting_the_second_leaves_the_firsts_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let (first, _a) = klipolo(Rig::new(), dir.path());
+    let (second, _b) = klipolo(Rig::new(), dir.path());
+    first.set_enabled(true).unwrap();
+    let file = dir.path().join(connection::FILE);
+    let written = std::fs::read(&file).unwrap();
+    assert!(second.set_enabled(true).is_err());
+
+    assert!(!second.set_enabled(false).unwrap().enabled);
+    second.stop();
+    drop(second);
+    assert_eq!(std::fs::read(&file).unwrap(), written);
+    let token = connection::read(dir.path()).unwrap().token;
+    let bearer = format!("Bearer {token}");
+    let port = first.port().unwrap();
+    assert_eq!(
+        post(port, &[("Authorization", &bearer)], &hello("Example Client")),
+        200
+    );
+
+    first.stop();
+    assert!(!file.exists());
+    let (third, _c) = klipolo(Rig::new(), dir.path());
+    assert!(!third.status().another_listens);
+    assert!(third.set_enabled(true).unwrap().enabled);
+    assert_eq!(
+        connection::read(dir.path()).unwrap().port,
+        third.port().unwrap()
+    );
+    third.stop();
+}
+
+/// A connection file no Klipolo serves is replaced when the switch turns on: its process is gone (a crash), or its
+/// process id went to another program and nothing answers on its port.
+#[test]
+fn a_stale_file_whose_pid_is_gone_is_replaced() {
+    let dir = tempfile::tempdir().unwrap();
+    let (state, _rt) = klipolo(Rig::new(), dir.path());
+    let mut gone = std::process::Command::new("true").spawn().unwrap();
+    let dead = gone.id();
+    gone.wait().unwrap();
+    for pid in [dead, 1] {
+        let left = connection::ConnectionFile {
+            port: 9,
+            token: connection::new_token(),
+            pid,
+            version: connection::VERSION,
+        };
+        connection::write(dir.path(), &left).unwrap();
+        let off = state.status();
+        assert!(!off.enabled && !off.another_listens, "{left:?}");
+        assert!(state.set_enabled(true).unwrap().enabled, "{left:?}");
+        let file = connection::read(dir.path()).unwrap();
+        assert_eq!(
+            (file.pid, file.port),
+            (std::process::id(), state.port().unwrap())
+        );
+        assert_ne!(file.token, left.token);
+        state.set_enabled(false).unwrap();
+        assert!(connection::read(dir.path()).is_none());
+    }
+}
