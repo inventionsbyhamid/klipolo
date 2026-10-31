@@ -1584,6 +1584,16 @@ fn the_undo_step_is_named_for_the_answers_first_call() {
         other => panic!("{other:?}"),
     }
     assert_eq!(params["more"], ErrorParam::from(1usize));
+    // A format the video already has changes nothing, and is noted so.
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "setFormat",
+            json!({"format": "landscape", "keepOthers": true}),
+        )],
+    );
+    assert_eq!((out.additions, out.unchanged), (None, vec![0]));
 }
 
 #[test]

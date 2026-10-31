@@ -1048,6 +1048,26 @@ fn a_part_refused_for_the_person_is_not_claimed_by_the_models_text() {
     )]);
     let out = send(&model, &[], "lofi music", &i, &p).unwrap();
     assert_eq!(out.reply, "Added the lofi music.");
+    // A format the video already has changed nothing: it isn't said as done.
+    let model = Fake::new(vec![answer(
+        "Made it landscape, cut the pauses and added the music.",
+        vec![
+            fc(
+                "call_1",
+                "setFormat",
+                r#"{"format": "landscape", "keepOthers": true}"#,
+            ),
+            fc("call_2", "removeSilences", r#"{"minPauseSec": 1}"#),
+            music("call_3"),
+        ],
+        0.002,
+    )]);
+    let out = send(&model, &[], "landscape, no pauses, lofi", &i, &p).unwrap();
+    assert_eq!(out.compiled.unchanged, vec![0]);
+    assert_eq!(
+        out.reply,
+        "The music is in. There are no pauses longer than 1.0 s to remove."
+    );
 }
 
 #[test]

@@ -511,7 +511,8 @@ fn done_sentences(calls: &[ToolCall], compiled: &Compiled) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for (i, call) in calls.iter().enumerate() {
         let refused = compiled.refusals.iter().any(|r| r.call_index == i);
-        if refused || compiled.proposed_calls.contains(&i) {
+        // Proposed, or through but changing nothing (a format the video already has): not said as done.
+        if refused || compiled.proposed_calls.contains(&i) || compiled.unchanged.contains(&i) {
             continue;
         }
         if let Some(said) = done(call).filter(|said| !out.iter().any(|o| o == said)) {

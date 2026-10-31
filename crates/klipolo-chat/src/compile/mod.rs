@@ -111,6 +111,8 @@ pub struct Compiled {
     pub refusals: Vec<Refusal>,
     /// The model asked to undo the last change.
     pub undo: bool,
+    /// The additions that went through but changed nothing (a format the video already has), by call index.
+    pub unchanged: Vec<usize>,
 }
 
 /// Removals for the person to approve.
@@ -267,6 +269,8 @@ struct Phase {
     ops: Vec<Op>,
     /// Each kept edit's label, with its call's index in the answer.
     labels: Vec<(usize, CodedError)>,
+    /// The calls whose edits held no ops: they went through and changed nothing.
+    unchanged: Vec<usize>,
 }
 
 impl Phase {
@@ -276,6 +280,7 @@ impl Phase {
             done: start,
             ops: Vec::new(),
             labels: Vec::new(),
+            unchanged: Vec::new(),
         }
     }
 
@@ -302,9 +307,10 @@ impl Phase {
     }
 
     /// Makes the tried edit of call `call` part of the batch. An edit with no ops (a format the video already has) adds
-    /// nothing.
+    /// nothing, and the call is noted as having changed nothing.
     fn keep(&mut self, tried: Tried, call: usize) {
         let Some((work, done)) = tried.after else {
+            self.unchanged.push(call);
             return;
         };
         self.work = work;
@@ -583,6 +589,8 @@ impl Compiler<'_> {
         }
 
         out.additions = adding.transaction();
+        out.unchanged = adding.unchanged.clone();
+        out.unchanged.sort_unstable();
         match removing.transaction() {
             Some(tx) => {
                 let review = tx.review_applied(&adding.done, removing.done);
