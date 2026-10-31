@@ -59,6 +59,9 @@ run "clippy app" cargo clippy -p klipolo-app --all-targets --locked -- -D warnin
 # What only trial builds compile (the slow-disk hook `render::pool::slow_stats`, the decoders' measurement counters),
 # linted too so it can't rot.
 run "clippy engine (trial)" cargo clippy -p klipolo-engine --all-targets --features trial --locked -- -D warnings
+# The recorder's real backends as Linux builds them (the stub, with tray-icon and global-hotkey), compiled so they
+# can't rot before the app depends on them; nothing here runs them.
+run "check capture (real-capture)" cargo check -p klipolo-capture --features real-capture --locked
 # The Meta client's tests answer from a local mock server; nothing here reaches Meta. The recorder's tests use
 # its synthetic sources and fake backend (the kill sweep included); nothing here captures.
 run "test model, cursor, platform, fonts, speech-wire, meta, analysis, chat, capture" cargo test \
