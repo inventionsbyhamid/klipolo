@@ -89,8 +89,8 @@ use std::time::Duration;
 
 use crate::backend::{
     AppAudioApi, AudioSpec, Backend, CaptureCaps, DeviceInfo, Devices, HotkeyApi, IndicatorPlace,
-    Permissions, PickerKind, PreviewFrame, PreviewPipe, ProbeReport, ScreenApi, Target, VideoPipes,
-    VideoSpec,
+    Permission, Permissions, PickerKind, PreviewFrame, PreviewPipe, ProbeReport, ScreenApi, Target,
+    VideoPipes, VideoSpec,
 };
 use crate::cursor::CursorSource;
 use crate::media::StreamInfo;
@@ -162,6 +162,11 @@ impl Backend for OsBackend {
 
     fn permissions(&self) -> Permissions {
         permissions::read()
+    }
+
+    /// AVFoundation's microphone status alone, in its own autorelease pool.
+    fn mic_permission(&self) -> Permission {
+        permissions::mic()
     }
 
     /// A display, an app or game, or a window, with its sound when asked for; or the camera, its own file. Opens

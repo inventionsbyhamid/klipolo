@@ -34,6 +34,11 @@ pub trait Backend: Send + Sync {
     }
     /// No prompt.
     fn permissions(&self) -> Permissions;
+    /// The mic's permission alone, read as `permissions` reads it (no prompt): the Record dialog's meter reads it again
+    /// once a second while it runs. Default: `permissions().mic`.
+    fn mic_permission(&self) -> Permission {
+        self.permissions().mic
+    }
     /// Builds the pipes without starting them; `start` (on its own thread, holding no lock) may wait for a system
     /// picker (`pipe`'s "Starting").
     fn video(&self, spec: &VideoSpec) -> Result<VideoPipes, PipeError>;

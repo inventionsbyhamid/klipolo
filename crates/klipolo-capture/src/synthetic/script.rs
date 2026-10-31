@@ -55,7 +55,7 @@ pub struct Script {
     /// Screen Recording as `permissions()` reads it (default Granted; the camera is always Granted).
     pub screen_permission: Permission,
     /// The mic's permission as `permissions()` first reads it (default Granted); a test changes it while a worker runs
-    /// through `FakeBackend::mic_permission`.
+    /// through `FakeBackend::mic_switch`.
     pub mic_permission: Permission,
     /// A screen's cursor source (`Backend::cursor_source`); None: the screen's video pipe sends the cursor itself.
     pub cursor: Option<CursorScript>,

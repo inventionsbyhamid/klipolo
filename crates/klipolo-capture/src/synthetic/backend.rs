@@ -100,7 +100,7 @@ impl FakeBackend {
 
     /// The mic's permission as `permissions()` reads it: a test sets it while a worker runs (the person refusing the mic
     /// in the system's settings).
-    pub fn mic_permission(&self) -> Arc<Mutex<Permission>> {
+    pub fn mic_switch(&self) -> Arc<Mutex<Permission>> {
         self.mic_permission.clone()
     }
 

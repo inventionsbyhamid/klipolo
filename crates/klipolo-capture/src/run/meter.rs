@@ -3,7 +3,7 @@
 //! camera, no other mic), and no orphan mode: it stops on the app's Stop or its stdin's end, and the mic closes then.
 //!
 //! - **Consent:** the guard first, so a test run stops there before any call to the backend. Then the mic's
-//!   permission, read without a prompt (`Backend::permissions`): a mic the person refused is never opened; one they
+//!   permission, read without a prompt (`Backend::mic_permission`): a mic the person refused is never opened; one they
 //!   haven't answered for opens only with `ask` (the person's own "Allow microphone" press, when macOS asks), so the
 //!   meter never makes the dialog ask by itself. Either refusal is `Failed` with `capture.permission.mic`, and nothing
 //!   opens.
@@ -56,7 +56,7 @@ pub fn meter_with(backend: &dyn Backend, mic: &str, ask: bool, io: PreviewIo) ->
     } = io;
     let mut events = Events::new(output);
     let word = the_app_s_word(input);
-    let permission = backend.permissions().mic;
+    let permission = backend.mic_permission();
     if permission == Permission::Denied || (!ask && permission != Permission::Granted) {
         tracing::info!(
             ?permission,
@@ -106,7 +106,7 @@ pub fn meter_with(backend: &dyn Backend, mic: &str, ask: bool, io: PreviewIo) ->
             break;
         }
         if clock.now() >= look_again {
-            if backend.permissions().mic == Permission::Denied {
+            if backend.mic_permission() == Permission::Denied {
                 ended = Some(msg!("capture.permission.mic"));
                 break;
             }

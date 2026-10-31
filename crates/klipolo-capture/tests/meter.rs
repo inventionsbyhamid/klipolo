@@ -152,7 +152,7 @@ fn the_meter_ends_when_the_mic_is_refused_while_it_runs() {
     // error): within about a second the meter ends with the microphone's step, and the mic closes.
     assert_eq!(PERMISSION_EVERY, Duration::from_secs(1));
     let backend = FakeBackend::new(sine());
-    let permission = backend.mic_permission();
+    let permission = backend.mic_switch();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(300));
         *permission.lock().unwrap() = Permission::Denied;
@@ -168,6 +168,49 @@ fn the_meter_ends_when_the_mic_is_refused_while_it_runs() {
     assert!(!peaks(&events).is_empty(), "{events:?}");
     assert_eq!(failed(&events), ["capture.permission.mic"]);
     assert!(matches!(events.last(), Some(Event::Failed { .. })));
+}
+
+/// The fake backend, whose permissions all at once the meter must never read: it reads the mic's alone.
+struct MicOnly(FakeBackend);
+
+impl Backend for MicOnly {
+    fn caps(&self) -> CaptureCaps {
+        self.0.caps()
+    }
+    fn devices(&self) -> Devices {
+        self.0.devices()
+    }
+    fn permissions(&self) -> Permissions {
+        panic!("the meter reads every permission, not the mic's alone")
+    }
+    fn mic_permission(&self) -> Permission {
+        Backend::mic_permission(&self.0)
+    }
+    fn video(&self, spec: &VideoSpec) -> Result<VideoPipes, PipeError> {
+        self.0.video(spec)
+    }
+    fn audio(&self, spec: &AudioSpec) -> Result<Box<dyn AudioPipe>, PipeError> {
+        self.0.audio(spec)
+    }
+    fn preview(&self, camera: &str) -> Result<Box<dyn PreviewPipe>, PipeError> {
+        self.0.preview(camera)
+    }
+    fn probe(&self, budget: Duration) -> ProbeReport {
+        self.0.probe(budget)
+    }
+    fn shell(&self) -> Box<dyn Shell> {
+        self.0.shell()
+    }
+}
+
+#[test]
+fn the_meter_reads_the_mic_s_permission_alone() {
+    // At its start and again a second later (on the Mac, AVFoundation's mic status alone, in its own pool).
+    let backend = MicOnly(FakeBackend::new(sine()));
+    let out = SharedOut::default();
+    let io = PreviewIo::new(sent_after(&Command::Stop, 1_300), Box::new(out.clone()));
+    assert_eq!(meter_with(&backend, "mic-1", false, io), 0);
+    assert!(!peaks(&out.events()).is_empty());
 }
 
 #[test]
@@ -253,6 +296,9 @@ impl Backend for Counted {
     }
     fn permissions(&self) -> Permissions {
         self.call().permissions()
+    }
+    fn mic_permission(&self) -> Permission {
+        Backend::mic_permission(self.call())
     }
     fn video(&self, spec: &VideoSpec) -> Result<VideoPipes, PipeError> {
         self.call().video(spec)
