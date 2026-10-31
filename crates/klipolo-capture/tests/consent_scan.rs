@@ -180,7 +180,8 @@ fn only_the_capture_files_name_a_capture_api_and_none_lists_through_cpal() {
 }
 
 /// Screen Recording's request runs only on the person's press of "Allow screen recording": nothing in this
-/// crate calls `Backend::request_screen_permission`, and in the app only the recorder's permission commands do.
+/// crate calls `Backend::request_screen_permission`, and in the app only the recorder's permission commands do (none
+/// before the app has a recorder).
 #[test]
 fn only_the_allow_screen_press_requests_screen_recording() {
     let calls = |text: &str| code_of(text).contains(".request_screen_permission(");
@@ -189,12 +190,17 @@ fn only_the_allow_screen_press_requests_screen_recording() {
         .map(|(f, _)| f)
         .collect();
     assert!(here.is_empty(), "called in src/: {here:?}");
-    let app = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../src-tauri/src");
+    let app = Path::new(env!("CARGO_MANIFEST_DIR")).join("../klipolo-app/src");
     let callers: Vec<String> = (rs_files(&app).into_iter())
         .filter(|(_, t)| calls(t))
         .map(|(f, _)| f)
         .collect();
-    assert_eq!(callers, ["recorder/permissions.rs"]);
+    let expected: &[&str] = if app.join("recorder").is_dir() {
+        &["recorder/permissions.rs"]
+    } else {
+        &[]
+    };
+    assert_eq!(callers, expected);
 }
 
 /// Every real pipe asks the consent guard, which panics under `KLIPOLO_TEST` (the test commands and CI all
@@ -277,7 +283,8 @@ fn only_the_shell_view_begins_the_take_s_activity() {
         .collect();
     assert_eq!(named, ["shell_view.rs"]);
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut dirs = vec![workspace.join("src-tauri/src")];
+    // The app is one of the crates.
+    let mut dirs = vec![];
     for entry in std::fs::read_dir(workspace.join("crates")).unwrap() {
         let path = entry.unwrap().path();
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
