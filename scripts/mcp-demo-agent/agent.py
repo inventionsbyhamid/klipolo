@@ -89,6 +89,7 @@ KLIPOLO_OFF = "Klipolo isn't running"
 UNREACHABLE = "Could not reach Meta. Check your internet connection and try again."
 TOO_SLOW = "Meta took too long to answer. Try again."
 UNREADABLE = "Meta sent an answer the agent could not read. Try again."
+MAY_BE_LOW = "The total may be low: Meta may have billed an answer that didn't come back whole."
 NOT_AN_OBJECT = "The arguments were not a JSON object. Call the tool again with a JSON object."
 NOT_A_BRIDGE = "{exe} did not answer as Klipolo's MCP bridge. Pass --klipolo with a Klipolo that has it."
 STOPPED_ANSWERING = "Klipolo stopped answering. Check that it's open, then run the agent again."
@@ -246,11 +247,14 @@ def function_tool(name: str, description: str | None, input_schema: dict[str, An
 
 
 class MetaError(Exception):
-    """A Meta call that gave no usable answer: one plain sentence, with the key already taken out."""
+    """A Meta call that gave no usable answer: one plain sentence, with the key already taken out. `usage` is what Meta
+    billed for it when the answer said; `maybe_billed` means it reached Meta and may be billed, with no usage to say."""
 
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, usage: Usage | None = None, maybe_billed: bool = False) -> None:
         super().__init__(message)
         self.message = message
+        self.usage = usage
+        self.maybe_billed = maybe_billed
 
 
 @dataclass
@@ -465,9 +469,15 @@ def user_message(text: str) -> dict[str, Any]:
 
 
 async def respond(http: httpx.AsyncClient, base: str, key: str, body: dict[str, Any]) -> Answer:
-    """`POST {base}/responses` with the key as a bearer token; the answer, or a `MetaError`. Redirects are refused."""
+    """`POST {base}/responses` with the key as a bearer token; the answer, or a `MetaError`. Redirects are refused. An
+    answer Meta billed that can't be read carries its usage; one that broke off or came back without usage may be
+    billed all the same."""
     try:
         reply = await http.post(f"{base}/responses", json=body, headers={"Authorization": f"Bearer {key}"})
+    except (httpx.ReadTimeout, httpx.ReadError, httpx.RemoteProtocolError) as e:
+        # Sent, and the answer broke off.
+        said = TOO_SLOW if isinstance(e, httpx.TimeoutException) else UNREACHABLE
+        raise MetaError(said, maybe_billed=True) from None
     except httpx.TimeoutException:
         raise MetaError(TOO_SLOW) from None
     except httpx.HTTPError:
@@ -475,9 +485,17 @@ async def respond(http: httpx.AsyncClient, base: str, key: str, body: dict[str, 
     if not reply.is_success:
         raise MetaError(from_status(reply.status_code, reply.content, key))
     raw = _json(reply.content)
-    if raw is None:
-        raise MetaError(UNREADABLE)
-    return parse_answer(raw)
+    billed = raw.get("usage") if isinstance(raw, dict) else None
+    try:
+        if raw is None:
+            raise MetaError(UNREADABLE)
+        return parse_answer(raw)
+    except MetaError as e:
+        if isinstance(billed, dict):
+            e.usage = usage_of(billed)
+        else:
+            e.maybe_billed = True
+        raise
 
 
 def meta_base(environ: Any) -> str:
@@ -668,6 +686,8 @@ async def run(
         if tally.pictures:
             pictures = "1 picture" if tally.pictures == 1 else f"{tally.pictures} pictures"
             console.say(f"Not in this total: {pictures} billed in Klipolo, about ${PICTURE_USD:.2f} each.")
+        if tally.maybe_low:
+            console.say(MAY_BE_LOW)
     return 1 if code is None else code
 
 
@@ -681,6 +701,8 @@ class Tally:
     said_hello: bool = False
     # Pictures started in Klipolo, which bills them itself.
     pictures: int = 0
+    # Meta may have billed an answer that gave no usage.
+    maybe_low: bool = False
 
 
 def _leaves(error: BaseException) -> list[BaseException]:
@@ -735,6 +757,9 @@ async def converse(
             try:
                 answer = await respond(http, meta_base, key, request_body(model, instructions, tools, inputs))
             except MetaError as e:
+                if e.usage:
+                    tally.cost += spark_usd(e.usage)
+                tally.maybe_low = tally.maybe_low or e.maybe_billed
                 console.fail(e.message)
                 return 1
             tally.cost += spark_usd(answer.usage)

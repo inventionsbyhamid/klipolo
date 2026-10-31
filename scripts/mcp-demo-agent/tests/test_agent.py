@@ -378,6 +378,7 @@ def test_klipolo_not_running_ends_the_run_with_the_bridges_own_sentence(tmp_path
 
 
 STOPPED_ANSWERING = "Klipolo stopped answering. Check that it's open, then run the agent again."
+MAY_BE_LOW = "The total may be low: Meta may have billed an answer that didn't come back whole."
 
 
 def test_a_program_that_never_answers_as_the_bridge_ends_the_run(tmp_path):
@@ -513,6 +514,8 @@ def test_an_answer_cut_off_is_an_error_and_still_costs(tmp_path):
         (httpx.Response(200, json={"output": [{"type": "function_call"}]}), "Meta sent an answer the agent could not read. Try again."),
         (httpx.ConnectError(f"could not connect with {KEY}"), "Could not reach Meta. Check your internet connection and try again."),
         (httpx.ReadTimeout(f"read timed out with {KEY}"), "Meta took too long to answer. Try again."),
+        (httpx.ConnectTimeout("connect timed out"), "Meta took too long to answer. Try again."),
+        (httpx.ReadError("connection reset"), "Could not reach Meta. Check your internet connection and try again."),
     ],
 )
 def test_meta_errors_say_what_happened_and_never_show_the_key(tmp_path, reply, said):
@@ -521,9 +524,22 @@ def test_meta_errors_say_what_happened_and_never_show_the_key(tmp_path, reply, s
     code, out, err = run(meta, command)
     assert code == 1
     assert err == said + "\n"
-    assert out == "Cost: $0.000\n"
+    # The request reached Meta and its answer came back without usage, or not at all: Meta may have billed it.
+    sent = isinstance(reply, (httpx.ReadTimeout, httpx.ReadError))
+    sent = sent or (isinstance(reply, httpx.Response) and reply.status_code == 200)
+    assert out == "Cost: $0.000\n" + (MAY_BE_LOW + "\n" if sent else "")
     assert KEY not in out + err
     assert calls_made(log) == []
+
+
+def test_a_billed_answer_that_cant_be_read_still_counts(tmp_path):
+    unreadable = response(usage=(6000, 0, 40))
+    unreadable["output"] = [{"type": "function_call"}]
+    command, log = klipolo(tmp_path)
+    code, out, err = run(Meta(unreadable), command)
+    assert code == 1
+    assert err == "Meta sent an answer the agent could not read. Try again.\n"
+    assert out == "Cost: $0.008\n"
 
 
 def test_a_meta_error_never_holds_the_key():
