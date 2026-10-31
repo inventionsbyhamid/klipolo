@@ -46,9 +46,9 @@ function DropZone({ over }: { over: boolean }) {
 }
 
 /**
- * Whether the card docks: `wanted`, except while a timeline press or drag, or a keyboard walk along the lanes, holds the
- * dock (`state/dockHold`); then what it was before, so the frame never changes size under the pointer or at every bare
- * cut. It follows `wanted` again once the hold ends.
+ * Whether the card docks: `wanted`, except while a timeline press or drag, or a keyboard walk along the lanes, holds
+ * the dock (`state/dockHold`); then what it was before, so the frame never changes size under the pointer or at every
+ * bare cut. It follows `wanted` again once the hold ends.
  */
 function useSteadyDock(wanted: boolean): boolean {
   const held = useDockHold((s) => s.press || s.walk);

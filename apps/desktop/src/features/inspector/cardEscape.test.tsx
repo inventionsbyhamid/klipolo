@@ -54,7 +54,13 @@ beforeEach(() => {
 
 describe('Escape in a card’s menu closes only the menu', () => {
   it.each([
-    { menu: "the clip card's More", snapshot: fixtureSnapshot, selected: 'b', card: 'broll.mp4 settings', button: 'More' },
+    {
+      menu: "the clip card's More",
+      snapshot: fixtureSnapshot,
+      selected: 'b',
+      card: 'broll.mp4 settings',
+      button: 'More',
+    },
     {
       menu: "the clip card's Speed",
       snapshot: fixtureSnapshot,
@@ -62,7 +68,13 @@ describe('Escape in a card’s menu closes only the menu', () => {
       card: 'broll.mp4 settings',
       button: 'Speed: 1×',
     },
-    { menu: "the video layer's Speed", snapshot: withVideoLayer, selected: 'v1', card: 'Video settings', button: 'Speed: 1×' },
+    {
+      menu: "the video layer's Speed",
+      snapshot: withVideoLayer,
+      selected: 'v1',
+      card: 'Video settings',
+      button: 'Speed: 1×',
+    },
     {
       menu: "the transition's Type",
       snapshot: withDissolve,

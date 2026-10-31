@@ -43,7 +43,11 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
           message: `Changed the speed of ${title} to ${shown}. ${note}`,
           comment: 'Screen-reader note; {shown} is e.g. 2×; {note} says what it did to transitions',
         })
-      : t({ id: 'clip.speed.said', message: `Changed the speed of ${title} to ${shown}`, comment: '{shown} is e.g. 2×' });
+      : t({
+          id: 'clip.speed.said',
+          message: `Changed the speed of ${title} to ${shown}`,
+          comment: 'Screen-reader note; {shown} is e.g. 2×',
+        });
     void editClip(note ? { id: 'speed.undo.note', params: { note } } : 'speed.undo', clip, { speed }).then(
       (ok) => ok && announce(said),
     );

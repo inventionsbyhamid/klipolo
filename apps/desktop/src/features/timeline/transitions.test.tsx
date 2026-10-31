@@ -580,7 +580,10 @@ describe('the cut markers and the clips around them', () => {
     act(() => useSelection.getState().select('b'));
     fireEvent.keyDown(window, { key: 'Delete' });
     await frames();
-    expect(bridge.apply).toHaveBeenLastCalledWith({ label: 'undo.delete.clip', ops: [{ type: 'removeClip', id: 'b' }] });
+    expect(bridge.apply).toHaveBeenLastCalledWith({
+      label: 'undo.delete.clip',
+      ops: [{ type: 'removeClip', id: 'b' }],
+    });
     expect(screen.getByRole('status')).toHaveTextContent(/^Deleted broll\.mp4$/);
   });
 
