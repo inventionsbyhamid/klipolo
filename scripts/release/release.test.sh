@@ -101,6 +101,13 @@ app=$(case_app home-in-resources)
 echo "built in $HOME/klipolo" > "$app/Contents/Resources/fonts/note.txt"
 expect "a resource naming the home folder fails" fail "Resources/fonts/note.txt" "$check" "$app" "$arch"
 
+# A file grep can't read fails the check, and doesn't hide a file that names the home folder.
+app=$(case_app unreadable)
+chmod 000 "$app/Contents/Resources/licenses/NOTICE.txt"
+expect "an unreadable file fails" fail "couldn't read every file" "$check" "$app" "$arch"
+echo "built in $HOME/klipolo" > "$app/Contents/Resources/fonts/note.txt"
+expect "an unreadable file doesn't hide one naming the home folder" fail "Resources/fonts/note.txt" "$check" "$app" "$arch"
+
 user=$(id -un)
 app=$(case_app user-as-path-part)
 echo "/Volumes/$user/klipolo" > "$app/Contents/Resources/fonts/note.txt"

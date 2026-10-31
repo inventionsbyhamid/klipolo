@@ -67,11 +67,9 @@ set +e
 named=$(naming_files "$home" "$(id -un)" "$app/Contents")
 status=$?
 set -e
-case $status in
-  0) fail "these files name the builder's home folder or user name: $(tr '\n' ' ' <<< "$named")" ;;
-  1) ;;
-  *) fail "couldn't read every file under Contents to look for the home folder" ;;
-esac
+# grep says 2 when it couldn't read a file, also when it found others: both are failures, and both are told.
+[ -z "$named" ] || fail "these files name the builder's home folder or user name: $(tr '\n' ' ' <<< "$named")"
+[ "$status" -le 1 ] || fail "couldn't read every file under Contents to look for the home folder"
 
 [ $rc -eq 0 ] || { echo "RESULT: FAIL" >&2; exit 1; }
 echo "bundle check: $count Mach-O files, $arch only, relative rpaths only, every @rpath library in Frameworks," \
