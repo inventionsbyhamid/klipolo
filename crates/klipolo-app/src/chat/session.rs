@@ -352,10 +352,11 @@ impl ChatSession {
             .await
     }
 
-    /// Use: places picture `id` in the open project as one undo step. A sentence when it can't be placed (its moment
-    /// or its title is gone).
-    pub fn place_picture(&self, id: &str) -> Result<ChatApplied, CommitError> {
-        let (applied, at) = self.pictures.place(id, &*self.projects)?;
+    /// Use: places picture `id`'s drawing at `drawing` (its path: the one the card shows, though a newer one may have
+    /// landed) in the open project as one undo step. A sentence when it can't be placed (its moment or its title is
+    /// gone, or that drawing isn't there).
+    pub fn place_picture(&self, id: &str, drawing: &str) -> Result<ChatApplied, CommitError> {
+        let (applied, at) = self.pictures.place(id, drawing, &*self.projects)?;
         lock(&self.talk).last_change = Some(at);
         Ok(applied)
     }
@@ -385,8 +386,8 @@ impl ChatSession {
         let mut jobs = jobs::start(&out.compiled);
         name_clips(&mut out, &now.project, inputs);
         // The moments are times on the snapshot the answer was compiled on, the additions in: none survive the project
-        // moving on (a hand edit, another project) while the answer came, nor the model's own undo, which they were found
-        // before.
+        // moving on (a hand edit, another project) while the answer came, nor the model's own undo, which they were
+        // found before.
         let current = self.projects.now().map(|n| n.at);
         let same_project = current.as_ref().is_some_and(|c| c.same_project(&landed.at));
         let moved = current.as_ref() != Some(&landed.at);

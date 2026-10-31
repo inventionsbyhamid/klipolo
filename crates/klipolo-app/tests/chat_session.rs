@@ -15,7 +15,8 @@ use klipolo_analysis::providers::images::{
 };
 use klipolo_app::analysis::AssetAnalysis;
 use klipolo_app::chat::pictures::{
-    ChatPictureKind, MOMENT_CUT, PICTURE_GONE, PictureAsk, StickerPlacement, TITLE_GONE,
+    ChatPictureKind, DRAWING_GONE, MOMENT_CUT, PICTURE_GONE, PictureAsk, StickerPlacement,
+    TITLE_GONE,
 };
 use klipolo_app::chat::session::{
     KEEP_ONLY_READY, MOMENTS_MOVED, MOMENTS_UNDONE, MOVED, NEEDS_KEY, OTHER_PROJECT,
@@ -1176,7 +1177,7 @@ fn studio_with(
 fn sticker(spot: Option<(Us, Us)>) -> PictureAsk {
     PictureAsk::Sticker {
         prompt: "paper plane".into(),
-        place: "Goes in the middle at 2.0 s for 3.0 s.".into(),
+        place: "Goes in the middle, over the moment it was asked for.".into(),
         placement: Arc::new(Spot(spot)),
     }
 }
@@ -1244,7 +1245,11 @@ async fn a_sticker_is_drawn_then_placed_as_one_undo_step() {
     assert_eq!((spend.pictures, spend.pictures_usd), (1, 0.01));
     assert_eq!(s.chat.project.revision(), 0, "drawn, not placed");
 
-    let placed = s.chat.session.place_picture(&card.id).unwrap();
+    let placed = s
+        .chat
+        .session
+        .place_picture(&card.id, &picture.path)
+        .unwrap();
     assert_eq!(placed.undo.code, "chat.makeSticker");
     assert_eq!(s.chat.project.undo_steps(), 1, "one undo step");
     let p = s.chat.project.project();
@@ -1254,7 +1259,11 @@ async fn a_sticker_is_drawn_then_placed_as_one_undo_step() {
     assert_eq!((item.start_us, item.duration_us), (secs(2.0), secs(3.0)));
     assert!(p.assets.iter().any(|a| a.path == picture.path));
     // Used once: it is gone from the chat.
-    let again = s.chat.session.place_picture(&card.id).unwrap_err();
+    let again = s
+        .chat
+        .session
+        .place_picture(&card.id, &picture.path)
+        .unwrap_err();
     assert_eq!(sentence(again), PICTURE_GONE);
 }
 
@@ -1262,8 +1271,12 @@ async fn a_sticker_is_drawn_then_placed_as_one_undo_step() {
 async fn a_sticker_whose_moment_was_cut_while_drawing_is_not_placed() {
     let s = studio(talk(), Painter::new(vec![drawn()]));
     let card = s.chat.session.ask_picture(sticker(None));
-    s.chat.session.draw_picture(&card.id).await.unwrap();
-    let refused = s.chat.session.place_picture(&card.id).unwrap_err();
+    let drawn = s.chat.session.draw_picture(&card.id).await.unwrap();
+    let refused = s
+        .chat
+        .session
+        .place_picture(&card.id, &drawn.path)
+        .unwrap_err();
     assert_eq!(sentence(refused), MOMENT_CUT);
     assert_eq!(s.chat.project.revision(), 0, "nothing placed");
 }
@@ -1289,10 +1302,10 @@ async fn a_title_background_is_drawn_in_the_format_then_and_goes_under_its_title
         ..Default::default()
     };
     s.chat.project.hand_edit(&portrait).unwrap();
-    s.chat.session.draw_picture(&card.id).await.unwrap();
+    let drawn = s.chat.session.draw_picture(&card.id).await.unwrap();
     assert_eq!(*s.painter.asked.lock().unwrap(), [ImageSize::Portrait]);
 
-    s.chat.session.place_picture(&card.id).unwrap();
+    s.chat.session.place_picture(&card.id, &drawn.path).unwrap();
     let p = s.chat.project.project();
     let tracks: Vec<&str> = p.timeline.tracks.iter().map(|t| t.id.as_str()).collect();
     let title_track = tracks.iter().position(|t| *t == "words").unwrap();
@@ -1333,7 +1346,7 @@ async fn a_title_background_whose_title_is_gone_is_dropped() {
         "nothing was drawn"
     );
     assert_eq!(
-        sentence(s.chat.session.place_picture(&card.id).unwrap_err()),
+        sentence(s.chat.session.place_picture(&card.id, "").unwrap_err()),
         PICTURE_GONE
     );
 }
@@ -1358,8 +1371,8 @@ async fn a_failed_drawing_says_why_and_try_again_draws_again() {
     assert_eq!(s.chat.session.spend().pictures, 0);
     assert_eq!(s.chat.project.revision(), 0);
     // Try again.
-    s.chat.session.draw_picture(&card.id).await.unwrap();
-    s.chat.session.place_picture(&card.id).unwrap();
+    let drawn = s.chat.session.draw_picture(&card.id).await.unwrap();
+    s.chat.session.place_picture(&card.id, &drawn.path).unwrap();
     assert_eq!(s.chat.project.undo_steps(), 1);
 }
 
@@ -1437,7 +1450,7 @@ async fn a_sticker_the_model_asks_for_follows_its_footage_while_it_is_drawn() {
     assert_eq!(r["pictures"][0]["prompt"], "paper plane");
     assert_eq!(
         r["pictures"][0]["place"],
-        "Goes in the middle at 12.0 s for 3.0 s."
+        "Goes in the middle, over the moment it was asked for."
     );
     assert_eq!(
         s.chat.project.revision(),
@@ -1448,8 +1461,8 @@ async fn a_sticker_the_model_asks_for_follows_its_footage_while_it_is_drawn() {
 
     // Four seconds before it are cut while it is drawn: it shows over the same footage, now at 8 s.
     s.chat.project.hand_edit(&cut(0.0, 4.0)).unwrap();
-    s.chat.session.draw_picture(&id).await.unwrap();
-    let placed = s.chat.session.place_picture(&id).unwrap();
+    let drawn = s.chat.session.draw_picture(&id).await.unwrap();
+    let placed = s.chat.session.place_picture(&id, &drawn.path).unwrap();
     assert_eq!(placed.undo.code, "chat.makeSticker");
     assert_eq!(
         pictures_on(&s.chat.project.project()),
@@ -1472,9 +1485,9 @@ async fn a_sticker_whose_footage_was_cut_while_it_was_drawn_is_left_out() {
         .unwrap()
         .to_owned();
     s.chat.project.hand_edit(&cut(10.0, 16.0)).unwrap();
-    s.chat.session.draw_picture(&id).await.unwrap();
+    let drawn = s.chat.session.draw_picture(&id).await.unwrap();
     assert_eq!(
-        sentence(s.chat.session.place_picture(&id).unwrap_err()),
+        sentence(s.chat.session.place_picture(&id, &drawn.path).unwrap_err()),
         MOMENT_CUT
     );
     assert!(pictures_on(&s.chat.project.project()).is_empty());
@@ -1516,9 +1529,9 @@ async fn a_title_card_s_background_goes_under_the_title_the_answer_added() {
         })
         .expect("the title layer");
 
-    s.chat.session.draw_picture(&id).await.unwrap();
+    let drawn = s.chat.session.draw_picture(&id).await.unwrap();
     assert_eq!(*s.painter.asked.lock().unwrap(), [ImageSize::Landscape]);
-    s.chat.session.place_picture(&id).unwrap();
+    s.chat.session.place_picture(&id, &drawn.path).unwrap();
     let p = s.chat.project.project();
     assert_eq!(
         pictures_on(&p),
@@ -1761,7 +1774,10 @@ async fn every_picture_paid_for_stays_in_the_muse_image_folder() {
         "both pictures are kept"
     );
     // Its moment cut: nothing placed, the pictures kept.
-    s.chat.session.place_picture(&card.id).unwrap_err();
+    s.chat
+        .session
+        .place_picture(&card.id, &second.path)
+        .unwrap_err();
     // New chat and another project forget the cards, not the pictures.
     let card = s
         .chat
@@ -1937,8 +1953,8 @@ async fn a_title_background_moves_with_its_attached_title() {
         prompt: "a calm sea".into(),
         title_id: "title".into(),
     });
-    s.chat.session.draw_picture(&card.id).await.unwrap();
-    s.chat.session.place_picture(&card.id).unwrap();
+    let drawn = s.chat.session.draw_picture(&card.id).await.unwrap();
+    s.chat.session.place_picture(&card.id, &drawn.path).unwrap();
     let p = s.chat.project.project();
     let background = (p.timeline.tracks.iter())
         .flat_map(|t| &t.items)
@@ -2074,4 +2090,41 @@ fn a_picture_that_cant_be_placed_says_what_to_do_next() {
     for said in [MOMENT_CUT, TITLE_GONE] {
         assert!(said.ends_with("Ask me for it again."), "{said}");
     }
+}
+
+#[tokio::test]
+async fn use_places_the_drawing_the_card_shows_though_a_newer_one_landed() {
+    let s = studio(talk(), Painter::new(vec![drawn(), drawn()]));
+    let card = s
+        .chat
+        .session
+        .ask_picture(sticker(Some((secs(2.0), secs(3.0)))));
+    let first = s.chat.session.draw_picture(&card.id).await.unwrap();
+    // Try again lands before Use goes: the card still showed the first.
+    let second = s.chat.session.draw_picture(&card.id).await.unwrap();
+    assert_ne!(first.path, second.path);
+    s.chat.session.place_picture(&card.id, &first.path).unwrap();
+    let p = s.chat.project.project();
+    assert!(
+        p.assets.iter().any(|a| a.path == first.path),
+        "the one the card showed"
+    );
+    assert!(!p.assets.iter().any(|a| a.path == second.path));
+}
+
+#[tokio::test]
+async fn use_of_a_drawing_that_isnt_there_says_so() {
+    let s = studio(talk(), Painter::new(vec![drawn()]));
+    let card = s
+        .chat
+        .session
+        .ask_picture(sticker(Some((secs(2.0), secs(3.0)))));
+    s.chat.session.draw_picture(&card.id).await.unwrap();
+    let refused = s
+        .chat
+        .session
+        .place_picture(&card.id, "/elsewhere/other.png")
+        .unwrap_err();
+    assert_eq!(sentence(refused), DRAWING_GONE);
+    assert_eq!(s.chat.project.revision(), 0);
 }

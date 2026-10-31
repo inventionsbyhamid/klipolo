@@ -2,9 +2,9 @@
 //! title. A picture is never an op until it exists, and everything comes back from commands:
 //! - a reply names each picture it asked for (`ChatPicture`);
 //! - `draw` draws it (about 35 s) into the project's media folder, not into the project, for its card; Try again draws
-//!   it again. Every picture drawn stays in that folder (Muse Image's), paid for, whatever becomes of its card. A title
-//!   card's background is drawn in the video's primary format as it is when the drawing starts, and not at all once its
-//!   title is gone;
+//!   it again, and every drawing stays usable: Use names the one its card shows. Every picture drawn stays in that
+//!   folder (Muse Image's), paid for, whatever becomes of its card. A title card's background is drawn in the video's
+//!   primary format as it is when the drawing starts, and not at all once its title is gone;
 //! - `place` (Use) puts it in the project as one undo step from chat: a sticker where its job says once the picture is
 //!   there (`StickerPlacement`; nowhere when the moment it was for was cut meanwhile, said plainly), a background on a
 //!   new track just under its title's, for as long as the title shows.
@@ -35,6 +35,8 @@ use crate::media::generated::{MadeAsset, MakeError, make_sticker, make_title_car
 
 /// Said when a picture is no longer there to draw or use: used already, or another project opened.
 pub const PICTURE_GONE: &str = "That picture is gone. Ask me for it again.";
+/// Said when Use names a drawing the picture doesn't have.
+pub const DRAWING_GONE: &str = "That picture isn't there any more. Ask me for it again.";
 /// Said when Use comes before the picture was drawn.
 pub const NOT_DRAWN: &str = "That picture isn't ready yet.";
 /// Said when the part of the video a sticker was for was cut while it was drawn: nothing is placed.
@@ -60,7 +62,8 @@ pub trait StickerPlacement: Send + Sync {
 pub enum PictureAsk {
     Sticker {
         prompt: String,
-        /// Where it goes, in one sentence for its card: "Goes in the top right corner at 12.0 s for 3.0 s."
+        /// Where it goes, in one sentence for its card: "Goes in the top right corner, over the moment it was asked
+        /// for." No time: it follows its footage.
         place: String,
         placement: Arc<dyn StickerPlacement>,
     },
@@ -85,7 +88,7 @@ pub struct ChatPicture {
     pub kind: ChatPictureKind,
     /// What it shows, as asked, without dashes.
     pub prompt: String,
-    /// Where it goes, in one sentence: "Goes in the top right corner at 12.0 s for 3.0 s."
+    /// Where it goes, in one sentence: "Goes in the top right corner, over the moment it was asked for."
     pub place: String,
 }
 
@@ -123,7 +126,8 @@ struct Waiting {
     /// The project it was asked for (its revision aside).
     owner: Option<At>,
     ask: PictureAsk,
-    drawn: Option<MadeAsset>,
+    /// Every drawing made for it, oldest first: Use names the one its card shows.
+    drawn: Vec<MadeAsset>,
 }
 
 fn said(text: &str) -> CommitError {
@@ -153,7 +157,7 @@ impl Pictures {
             id: card.id.clone(),
             owner,
             ask,
-            drawn: None,
+            drawn: Vec::new(),
         });
         card
     }
@@ -220,9 +224,9 @@ impl Pictures {
         };
         let mut waiting = self.lock();
         match waiting.iter_mut().find(|w| w.id == id) {
-            // Try again: the card shows the new picture; the one before stays in the folder, paid for.
+            // Try again: the card shows the new picture; the ones before stay, in the folder and for Use.
             Some(w) => {
-                w.drawn = Some(made);
+                w.drawn.push(made);
                 Ok(drawn)
             }
             // Forgotten while it was drawn (another project, New chat).
@@ -230,11 +234,12 @@ impl Pictures {
         }
     }
 
-    /// Picture `id`, drawn, placed in the open project as one undo step from chat; what changed and where the project
-    /// stands now.
+    /// Picture `id`'s drawing at `path` (the one its card shows, whatever was drawn since), placed in the open project
+    /// as one undo step from chat; what changed and where the project stands now.
     pub(crate) fn place(
         &self,
         id: &str,
+        path: &str,
         projects: &dyn Projects,
     ) -> Result<(ChatApplied, At), CommitError> {
         let found = (self.lock().iter())
@@ -243,8 +248,11 @@ impl Pictures {
         let Some((ask, owner, drawn)) = found else {
             return Err(said(PICTURE_GONE));
         };
-        let Some(made) = drawn else {
+        if drawn.is_empty() {
             return Err(said(NOT_DRAWN));
+        }
+        let Some(made) = drawn.into_iter().find(|d| d.asset.path == path) else {
+            return Err(said(DRAWING_GONE));
         };
         let ours = |at: &At| owner.as_ref().is_some_and(|o| o.same_project(at));
         let Some(now) = projects.now().filter(|now| ours(&now.at)) else {

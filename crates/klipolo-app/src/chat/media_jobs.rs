@@ -12,7 +12,6 @@ use klipolo_model::ops::Op;
 use klipolo_model::project::Asset;
 use klipolo_model::time::Us;
 
-use super::describe::seconds;
 use super::pictures::{PictureAsk, StickerPlacement};
 
 /// A `makeSticker` job, read again on the project as it is when its picture comes.
@@ -45,11 +44,10 @@ pub(super) fn sticker(job: &MakeSticker) -> PictureAsk {
         Position::BottomRight => "in the bottom right corner",
         Position::Center => "in the middle",
     };
-    let at = seconds(job.at_us);
-    let length = seconds(job.duration_us);
+    // No time: the sticker follows its footage, so a time said now could be wrong by the time it is placed.
     PictureAsk::Sticker {
         prompt: job.prompt.clone(),
-        place: format!("Goes {corner} at {at} for {length}."),
+        place: format!("Goes {corner}, over the moment it was asked for."),
         placement: Arc::new(Sticker(job.clone())),
     }
 }

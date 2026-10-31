@@ -10,6 +10,6 @@ export type ChatPicture = { id: string, kind: ChatPictureKind,
  */
 prompt: string, 
 /**
- * Where it goes, in one sentence: "Goes in the top right corner at 12.0 s for 3.0 s."
+ * Where it goes, in one sentence: "Goes in the top right corner, over the moment it was asked for."
  */
 place: string, };

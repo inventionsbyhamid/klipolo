@@ -115,12 +115,13 @@ pub(crate) async fn chat_draw_picture(
     Ok(drawn)
 }
 
-/// Use: places picture `id` in the open project as one undo step; a plain sentence when its moment or its title is
-/// gone.
+/// Use: places picture `id`'s drawing at `path` (the one its card shows) in the open project as one undo step; a plain
+/// sentence when its moment or its title is gone, or that drawing isn't there.
 #[tauri::command(async)]
 pub(crate) fn chat_use_picture(
     chat: State<'_, ChatHandle>,
     id: String,
+    path: String,
 ) -> Result<ChatApplied, Said> {
-    chat.place_picture(&id).map_err(|e| e.said())
+    chat.place_picture(&id, &path).map_err(|e| e.said())
 }
