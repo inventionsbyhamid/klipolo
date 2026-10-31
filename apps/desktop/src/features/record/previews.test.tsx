@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CaptureEvent } from '../../bindings/CaptureEvent';
+import type { PreviewFrame } from '../../bindings/PreviewFrame';
 import type { PreviewId } from '../../bindings/PreviewId';
 import type { Previews } from '../../bindings/Previews';
 import type { RecorderSetup } from '../../bindings/RecorderSetup';
@@ -18,7 +19,7 @@ import {
   recorderSetup,
   refusal,
 } from '../../test/recorderBridge';
-import { frameIn, nameAt, sendFrame, shownIn } from '../../test/recorderPreviews';
+import { frameIn, frameMessage, nameAt, sendFrame, shownIn } from '../../test/recorderPreviews';
 import { renderWithProviders } from '../../test/render';
 import { STALE_MS } from './LivePreview';
 import { RecordDialog } from './RecordDialog';
@@ -470,6 +471,19 @@ describe('the previews in the Record dialog', () => {
     await sendFrame(fake, 'live', 'display:elsewhere', 'live 2');
     expect(await nameAt(previews().live)).toBe('live 1');
     expect(fake.acks).toEqual(['thumb', 'live', 'camera', 'thumb', 'live']);
+  });
+
+  it('a_frame_that_does_not_read_is_acked_once_too', async () => {
+    await openOn();
+    const send = (message: ArrayBuffer) => act(async () => fake.frames?.(message));
+    // A header without its time, and a header with no picture after it: neither is drawn, each is acked.
+    await send(frameMessage({ kind: 'live', key: 'display:main' } as PreviewFrame, 'live 1'));
+    await send(frameMessage({ kind: 'thumb', key: 'display:main', atMs: Date.now() }, ''));
+    expect(fake.acks).toEqual(['live', 'thumb']);
+    expect(previews()).toMatchObject({ live: null, thumbs: {} });
+    // Nothing can be acked for a header that doesn't read at all.
+    await send(new Uint8Array([0, 2, 0x7b, 0x7b, 0xff]).buffer);
+    expect(fake.acks).toEqual(['live', 'thumb']);
   });
 
   it('nothing_starts_in_a_test_run', async () => {

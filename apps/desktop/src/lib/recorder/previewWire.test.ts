@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { frameMessage } from '../../test/recorderPreviews';
-import { previewFrame } from './previewWire';
+import type { PreviewFrame } from '../../bindings/PreviewFrame';
+import { previewFrame, previewKind } from './previewWire';
 
 describe('previewFrame', () => {
   it('reads_the_header_then_the_jpeg_s_own_bytes_as_a_blob', async () => {
@@ -31,5 +32,13 @@ describe('previewFrame', () => {
     // A header that isn't JSON, or not a frame's.
     expect(previewFrame(new Uint8Array([0, 2, 0x7b, 0x7b, 0xff]).buffer)).toBeNull();
     expect(previewFrame(frameMessage({ kind: 'screen' as 'thumb', key: 'display:1', atMs: 1 }, 'x'))).toBeNull();
+  });
+
+  it('names_the_kind_of_a_frame_that_does_not_read_when_its_header_does', () => {
+    expect(previewKind(frameMessage({ kind: 'camera', key: 'cam' } as PreviewFrame, 'x'))).toBe('camera');
+    expect(previewKind(frameMessage({ kind: 'thumb', key: 'display:1', atMs: 1 }, ''))).toBe('thumb');
+    expect(previewKind(frameMessage({ kind: 'screen', key: 'display:1', atMs: 1 } as unknown as PreviewFrame, 'x'))).toBeNull();
+    expect(previewKind(new Uint8Array([0, 2, 0x7b, 0x7b, 0xff]).buffer)).toBeNull();
+    expect(previewKind(new ArrayBuffer(1))).toBeNull();
   });
 });

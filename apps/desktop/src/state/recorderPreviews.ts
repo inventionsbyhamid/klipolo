@@ -8,7 +8,7 @@ import type { WhatToRecord } from '../bindings/WhatToRecord';
 import { isCode, saidOf } from '../bridge/call';
 import { recorder } from '../bridge/recorder';
 import { type Picks, whatToRecord } from '../lib/recorder/choices';
-import { previewFrame } from '../lib/recorder/previewWire';
+import { previewFrame, previewKind } from '../lib/recorder/previewWire';
 
 /** A device whose preview waits for the person's Allow press the first time: macOS asks at that press. */
 export type AskedDevice = 'camera' | 'mic';
@@ -150,13 +150,15 @@ function dropAll() {
   set(NO_PICTURES);
 }
 
-/** One frame: drawn when it is of what is wanted now, else dropped. Either way it is acked once, so the app goes on. */
+/**
+ * One frame: drawn when it is of what is wanted now, else dropped. Either way it is acked once, so the app goes on;
+ * one that doesn't read is acked by the kind its header names, if it names one.
+ */
 function onFrame(message: ArrayBuffer) {
   const read = previewFrame(message);
-  if (read === null) return;
-  const { frame, jpeg } = read;
-  if (running && wanted !== null) draw(frame, jpeg, wanted);
-  void recorder.previewAck(frame.kind).catch(() => undefined);
+  if (read !== null && running && wanted !== null) draw(read.frame, read.jpeg, wanted);
+  const kind = read?.frame.kind ?? previewKind(message);
+  if (kind !== null) void recorder.previewAck(kind).catch(() => undefined);
 }
 
 function draw({ kind, key, atMs }: PreviewFrame, jpeg: Blob, want: Previews) {
