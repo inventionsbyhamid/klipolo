@@ -429,3 +429,24 @@ fn a_library_that_cant_be_listed_fails() {
             .is_empty()
     );
 }
+
+/// A link to a project isn't listed: its first save would replace the link with a file and leave what it pointed at
+/// behind.
+#[cfg(unix)]
+#[test]
+fn links_are_not_listed() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    let target = saved(
+        &dir.path().join("Elsewhere"),
+        &Project::new("Linked"),
+        2_000,
+    );
+    std::os::unix::fs::symlink(&target, library.join("Linked.klipolo")).unwrap();
+    saved(&library, &Project::new("Here"), 1_000);
+
+    assert_eq!(
+        names(&recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap()),
+        [("Here", 1_000)]
+    );
+}

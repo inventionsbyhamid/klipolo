@@ -60,8 +60,8 @@ pub(crate) const RECENT_FILE: &str = "recent.json";
 
 /// The newest `limit` projects in `library` (its top-level project files) as the start screen lists them: the ones
 /// stamped in `stamps` first, by when they were opened, then the rest by their last save, which is then their
-/// `opened_ms`. A file that doesn't read as a project is left out (and logged). `thumbs` is the engine's thumbnail
-/// folder; None lists no pictures. Fails only when the library itself can't be listed.
+/// `opened_ms`. A file that doesn't read as a project is left out (and logged), and so is a link. `thumbs` is the
+/// engine's thumbnail folder; None lists no pictures. Fails only when the library itself can't be listed.
 pub(crate) fn recent_in(
     library: &Path,
     stamps: &Path,
@@ -122,16 +122,17 @@ struct Found {
 }
 
 /// The top-level project files in `library`, in list order: stamped first, then newest first (by file name on a tie).
-/// Fails when `library` can't be listed.
+/// Links are left out: a save replaces a link with a file, leaving what it pointed at behind. Fails when `library` can't
+/// be listed.
 fn project_files(library: &Path, stamps: &BTreeMap<String, u64>) -> io::Result<Vec<Found>> {
     let mut found: Vec<Found> = fs::read_dir(library)?
         .flatten()
         .filter_map(|entry| {
             let file = entry.path();
-            if file.extension()? != PROJECT_EXTENSION {
+            if file.extension()? != PROJECT_EXTENSION || !entry.file_type().ok()?.is_file() {
                 return None;
             }
-            let meta = fs::metadata(&file).ok().filter(fs::Metadata::is_file)?;
+            let meta = entry.metadata().ok()?;
             let stamp = stamps.get(file.to_string_lossy().as_ref()).copied();
             Some(Found {
                 stamped: stamp.is_some(),
