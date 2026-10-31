@@ -221,7 +221,12 @@ function Options({ folder }: { folder: string | null }) {
           <ExportIcon name="folder" />
           {folder ?? 'Movies / Klipolo'}
         </span>
-        <Button variant="ghost" size="sm" onClick={() => void useExport.getState().pickFolder()}>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label="Change folder"
+          onClick={() => void useExport.getState().pickFolder()}
+        >
           Change
         </Button>
       </dd>

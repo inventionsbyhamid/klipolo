@@ -147,7 +147,7 @@ describe('export dialog', () => {
     vi.mocked(exporter.plan).mockImplementation((formats) =>
       Promise.resolve({ files: [], bytes: 140_000_000 * formats.length, seconds: 30, folder: 'Desktop / Clips' }),
     );
-    await userEvent.click(screen.getByRole('button', { name: 'Change' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Change folder' }));
     expect(exporter.pickFolder).toHaveBeenCalled();
     expect(await within(dialog()).findByText('Desktop / Clips')).toBeInTheDocument();
   });
