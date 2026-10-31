@@ -1,4 +1,5 @@
 import type { StoreApi } from 'zustand';
+import { refreshAiStatus, useAi } from '../ai/aiStatus';
 import type { ChatFailureKind } from '../bindings/ChatFailureKind';
 import type { ChatMoment } from '../bindings/ChatMoment';
 import type { ChatPicture } from '../bindings/ChatPicture';
@@ -25,9 +26,9 @@ export interface ProposalPart {
 }
 
 /**
- * Where a picture a reply asked for stands: being drawn, drawn (its card shows it with Use and Try again), being placed,
- * placed (its Undo chip), failed to draw (why, with Try again), or gone (it can't be placed any more: why, and nothing
- * to press).
+ * Where a picture a reply asked for stands: being drawn, drawn (its card shows it with Use and Try again), being
+ * placed, placed (its Undo chip), failed to draw (why, with Try again), or gone (it can't be placed any more: why, and
+ * nothing to press).
  */
 export type PictureState = 'drawing' | 'drawn' | 'placing' | 'placed' | 'failed' | 'gone';
 
@@ -41,6 +42,16 @@ export interface PicturePart {
   reason?: string;
   /** Placed: its undo label, and the revision Use made (its Undo chip works while that is the latest change). */
   applied?: { undo: CodedError; revision: number };
+  /** Try again is drawing a new picture; the one drawn before stays, with Use. */
+  again?: boolean;
+  /** Placed, but the page couldn't take the change in: no Undo chip, and it says so. */
+  unshown?: boolean;
+}
+
+/** A sentence about chat that isn't a message, to say aloud: `seq` tells one saying from the next of the same words. */
+export interface Notice {
+  text: string;
+  seq: number;
 }
 
 /**
@@ -99,9 +110,12 @@ export interface ChatStore {
   /** What the person has typed in the chat box and not sent: kept while chat is folded. */
   draft: string;
   setDraft: (draft: string) => void;
-  /** A sentence about chat that isn't a message (an Undo chip refused), said aloud until the next message goes. */
-  notice: string | null;
-  /** Says `text` aloud (the Announcer). */
+  /**
+   * A sentence about chat that isn't a message (an Undo chip refused, a picture ready or placed), said aloud until a
+   * message is sent or Klipolo's next one comes.
+   */
+  notice: Notice | null;
+  /** Says `text` aloud (the Announcer), again even when it is the same words. */
   say: (text: string) => void;
   /** Another project (or none), or New chat: the conversation starts over, and a reply under way is dropped. */
   reset: (projectId: string | null) => void;
@@ -137,7 +151,8 @@ export function withMessages(messages: Message[]) {
 export function openProposal(messages: Message[]): { message: ReplyMessage; part: ProposalPart } | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (m.from === 'klipolo' && m.kind === 'reply' && m.proposal?.state === 'open') return { message: m, part: m.proposal };
+    if (m.from === 'klipolo' && m.kind === 'reply' && m.proposal?.state === 'open')
+      return { message: m, part: m.proposal };
   }
   return null;
 }
@@ -155,6 +170,14 @@ export function staleMoments(messages: Message[], revision: number): Message[] |
     return { ...m, momentsStale: true };
   });
   return changed ? next : null;
+}
+
+/**
+ * With an access code, the credit the top bar shows moved once a message or a picture was paid for: asked again. A
+ * key's status has no credit to ask about.
+ */
+export function creditMoved() {
+  if (useAi.getState().status?.mode === 'relay') void refreshAiStatus();
 }
 
 /** Each reset starts a new session: a reply or an apply that resolves after it belongs to the one before. */

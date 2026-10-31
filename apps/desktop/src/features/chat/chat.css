@@ -121,7 +121,9 @@
 .moment:focus-visible,
 .p-cut:focus-visible,
 .p-list-toggle:focus-visible,
-.card.proposal:focus-visible {
+.card.proposal:focus-visible,
+.card.gen:focus-visible,
+.gen-why:focus-visible {
   outline: 2px solid var(--color-paper);
   outline-offset: 2px;
 }
@@ -363,14 +365,35 @@
     0 0 / 14px 14px;
 }
 
-.gen-art .spinner {
+.gen-art .spinner,
+.gen-drawing .spinner {
   width: 18px;
   height: 18px;
+  flex: none;
   border-radius: 50%;
   border: 2px solid var(--color-paper-track);
   border-top-color: var(--color-paper);
   animation: chat-spin 0.9s linear infinite;
 }
+
+.gen-drawing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.gen-drawing .spinner {
+  width: 12px;
+  height: 12px;
+}
+
+/* No picture yet and none on its way: a still placeholder. */
+.gen-art .ico {
+  width: 24px;
+  height: 24px;
+  color: var(--color-ink-faint);
+}
+
 
 @keyframes chat-spin {
   to {
@@ -379,7 +402,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gen-art .spinner {
+  .gen-art .spinner,
+  .gen-drawing .spinner {
     animation: none;
   }
 }

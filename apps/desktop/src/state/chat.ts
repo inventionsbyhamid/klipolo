@@ -7,7 +7,14 @@ import { isCode } from '../bridge/call';
 import { chatBridge } from '../bridge/chat';
 import { errorMessage } from '../lib/errors';
 import { findItem } from '../lib/timeline';
-import { session, staleMoments, withMessages, type ChatStore, type Message } from './chatMessages';
+import {
+  creditMoved,
+  session,
+  staleMoments,
+  withMessages,
+  type ChatStore,
+  type Message,
+} from './chatMessages';
 import { pictureActions } from './chatPictures';
 import { dropStale, proposalActions, replaceOpen, showOpenProposal } from './chatProposals';
 import { usePlayback } from './playback';
@@ -73,11 +80,16 @@ function requestFor(
 
 /**
  * The chat panel's conversation: one message at a time, the replies as Rust sent them (their words
- * clean), the additions merged as one undo step, the proposal cards (`chatProposals`), whose open one the timeline shows
- * red (`useProposal`).
+ * already clean), the additions merged as one undo step, the proposal cards (`chatProposals`), whose open one the
+ * timeline shows red (`useProposal`).
  */
+/** Each saying of a notice, so the same words said again are said again. */
+let sayings = 0;
+
 export const useChat = create<ChatStore>((set, get) => {
-  const push = (m: Message) => set((s) => withMessages([...s.messages, m]));
+  /** A message in; Klipolo's own makes a notice still being said give way. */
+  const push = (m: Message) =>
+    set((s) => ({ ...withMessages([...s.messages, m]), ...(m.from === 'klipolo' ? { notice: null } : {}) }));
   /** A message can go now: a project open and editable, chat allowed, and none under way. */
   const ready = () => {
     const snapshot = useProject.getState().snapshot;
@@ -91,7 +103,7 @@ export const useChat = create<ChatStore>((set, get) => {
     draft: '',
     setDraft: (draft) => set({ draft }),
     notice: null,
-    say: (notice) => set({ notice }),
+    say: (text) => set({ notice: { text, seq: ++sayings } }),
 
     reset: (projectId) => {
       session.next();
@@ -112,6 +124,11 @@ export const useChat = create<ChatStore>((set, get) => {
       if (!snapshot || !trimmed || !ready()) return;
       const mine = session.now();
       const live = () => session.now() === mine && get().projectId === snapshot.project.id;
+      /** The project it was sent to is still open (New chat or not): Rust's changes to it are the page's too. */
+      const sameProject = () => {
+        const now = useProject.getState().snapshot;
+        return now?.project.id === snapshot.project.id && now.opening === snapshot.opening;
+      };
       const id = crypto.randomUUID();
       const keepOnly = options?.keepOnly ?? [];
       set({ pending: { id }, notice: null });
@@ -122,6 +139,16 @@ export const useChat = create<ChatStore>((set, get) => {
         push({ id, from: 'klipolo', kind: 'failed', text: message, failure, retry: again });
       try {
         const outcome = await chatBridge().send(request);
+        // The additions first, as one undo step, then what the model's undo changed: the proposal was made on the
+        // project they leave. Merged whenever the project it was sent to is open, even after New chat: Rust made them.
+        let applied = null;
+        if (outcome.type === 'reply' && sameProject()) {
+          if (outcome.applied) {
+            await useProject.getState().adopt(outcome.applied.change);
+            applied = { undo: outcome.applied.undo, revision: outcome.applied.change.history.revision };
+          }
+          if (outcome.undone) await useProject.getState().adopt(outcome.undone);
+        }
         if (!live()) return;
         if (outcome.type === 'failed') {
           // Declined under the provider's policy: the same words would be declined again, so they go back into the
@@ -129,15 +156,6 @@ export const useChat = create<ChatStore>((set, get) => {
           if (outcome.kind === 'declined' && get().draft.trim() === '') set({ draft: trimmed });
           return failed(outcome.message, outcome.kind);
         }
-        // The additions first, as one undo step, then what the model's undo changed: the proposal was made on the
-        // project they leave.
-        let applied = null;
-        if (outcome.applied) {
-          await useProject.getState().adopt(outcome.applied.change);
-          applied = { undo: outcome.applied.undo, revision: outcome.applied.change.history.revision };
-        }
-        if (outcome.undone) await useProject.getState().adopt(outcome.undone);
-        if (!live()) return;
         const revision = useProject.getState().snapshot?.history.revision;
         const proposal = outcome.proposal && {
           proposal: outcome.proposal,
@@ -187,6 +205,7 @@ export const useChat = create<ChatStore>((set, get) => {
         } else failed(errorMessage(error), 'other');
       } finally {
         set((s) => (s.pending?.id === id ? { pending: null } : {}));
+        creditMoved();
       }
     },
 

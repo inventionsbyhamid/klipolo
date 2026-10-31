@@ -11,8 +11,9 @@ export function Announcer() {
   const pending = useChat((s) => s.pending !== null);
   const notice = useChat((s) => s.notice);
   let text = '';
+  let key = 0;
   if (pending) text = t({ id: 'chatPanel.announce.thinking', message: 'Klipolo is thinking.' });
-  else if (notice) text = notice;
+  else if (notice) [text, key] = [notice.text, notice.seq];
   else if (last?.from === 'klipolo' && last.kind === 'failed')
     text = t({ id: 'chatPanel.announce.says', message: `Klipolo: ${last.text}` });
   else if (last?.from === 'klipolo' && last.kind === 'reply') {
@@ -23,7 +24,8 @@ export function Announcer() {
   }
   return (
     <p aria-live="polite" className="sr-only">
-      {text}
+      {/* A new node for each notice, so the same words said again are announced again. */}
+      <span key={key}>{text}</span>
     </p>
   );
 }

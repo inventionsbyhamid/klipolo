@@ -845,6 +845,19 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     await waitFor(() => expect(live).toHaveTextContent('This change can’t be undone from chat any more.'));
   });
 
+  it('a reply that lands after New chat still brings its change to the timeline', async () => {
+    const undo = code('chat.setCaptions', { on: 'on' });
+    let answer: (o: ChatOutcome) => void = () => undefined;
+    chat({ reply: () => new Promise<ChatOutcome>((done) => (answer = done)) });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add captions{Enter}');
+    act(() => useChat.getState().newChat());
+    await act(async () => answer(reply('m', 'Captions are on.', { applied: { change: changed(4, undo), undo } })));
+    // Rust made the change: the timeline has it, though the conversation it belonged to is gone.
+    await waitFor(() => expect(useProject.getState().snapshot!.history.revision).toBe(4));
+    expect(screen.queryByText('Captions are on.')).toBeNull();
+  });
+
   it('the Undo chip names the change chat made', async () => {
     const undo = code('chat.andMore', { first: code('chat.setFormat', { format: 'portrait', others: 'kept' }), more: 1 });
     chat({ reply: (r) => reply(r.id, 'Done.', { applied: { change: changed(4, undo), undo } }) });
