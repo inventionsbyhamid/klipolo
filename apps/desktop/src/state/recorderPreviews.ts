@@ -31,6 +31,8 @@ export interface RecorderPreviews {
   cameraAt: number | null;
   /** The chosen mic's newest peak in dBFS; null until one comes (and once its preview stops). */
   meterDbfs: number | null;
+  /** The mic's preview stopped by itself (its `Failed`): no level is shown until it starts again. */
+  micStopped: boolean;
   /** "Allow camera" or "Allow microphone" was pressed in this opening: it isn't offered again. */
   asked: Record<AskedDevice, boolean>;
   /** macOS said no to the camera or the mic in the question an Allow press raised (its preview's `Failed`). */
@@ -50,6 +52,7 @@ const NO_PICTURES = {
   camera: null,
   cameraAt: null,
   meterDbfs: null,
+  micStopped: false,
 } satisfies Partial<RecorderPreviews>;
 
 const FRESH: RecorderPreviews = {
@@ -213,8 +216,11 @@ function refusedStart(mine: number, opening: number, error: unknown) {
     busyTimer = setTimeout(() => {
       if (mine === starts && running) startPreviews(again);
     }, BUSY_RETRY_MS);
+  } else {
+    // Anything else (`capture.error.testRun` in a test run): nothing shows, not even an empty level, and nothing is
+    // asked again.
+    set({ micStopped: true });
   }
-  // Anything else (`capture.error.testRun` in a test run): nothing shows, and nothing is asked again.
 }
 
 function screenPicturesRefused() {
@@ -232,6 +238,8 @@ export function startPreviews(want: Previews): void {
   const opening = openings;
   clearTimeout(busyTimer);
   dropUnwanted(want);
+  // The app starts a preview that stopped by itself again.
+  if (get().micStopped) set({ micStopped: false });
   running = true;
   started = true;
   wanted = want;
@@ -324,7 +332,7 @@ function stopped(id: PreviewId, code: string) {
       return set({ camera: null, cameraAt: null });
     case 'preview-mic':
       if (code === 'capture.permission.mic') return deviceRefused('mic');
-      return set({ meterDbfs: null });
+      return set({ meterDbfs: null, micStopped: true });
   }
 }
 

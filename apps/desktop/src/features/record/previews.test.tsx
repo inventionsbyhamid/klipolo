@@ -220,10 +220,10 @@ describe('the previews in the Record dialog', () => {
 
   it('meter_width_follows_dbfs', async () => {
     await openOn();
-    // Nothing until the first level: the meter never shows a level it hasn't heard.
-    expect(screen.queryByRole('meter')).toBeNull();
-    level(-80);
+    // Its place is kept from the start: empty until the first level.
     const meter = screen.getByRole('meter', { name: 'Microphone level' });
+    expect(meter).toHaveAttribute('aria-valuenow', '0');
+    level(-80);
     // Under the Microphone select.
     expect(meter.closest('.record-field')).toContainElement(screen.getByRole('button', { name: 'Microphone: mic-1' }));
     const width = () => [meter.style.getPropertyValue('--p'), meter.getAttribute('aria-valuenow')];
@@ -238,13 +238,26 @@ describe('the previews in the Record dialog', () => {
     // A level of another take is the take's, not the preview's.
     act(() => fake.emit('take-0', { ev: 'meter', source: 'mic', peakDbfs: -60 }));
     expect(width()).toEqual(['100%', '100']);
-    // The meter's preview stopped by itself: its level goes, never left frozen.
+    // The meter's preview stopped by itself: its level goes, never left frozen, and its place stays.
     emit('preview-mic', failed('capture.error.os'));
     expect(screen.queryByRole('meter')).toBeNull();
+    expect(document.querySelector('.record-meter[data-off]')).not.toBeNull();
     level(-6);
     await choose('Microphone: mic-1', 'No microphone');
     expect(screen.queryByRole('meter')).toBeNull();
     expect(fake.previewed.at(-1)).toEqual(want({ mic: null }));
+  });
+
+  it('the_meter_s_place_never_moves_the_dialog', async () => {
+    await openOn();
+    const meter = screen.getByRole('meter', { name: 'Microphone level' });
+    await windowFocus('blur');
+    expect(screen.getByRole('meter', { name: 'Microphone level' })).toBe(meter);
+    expect(meter).toHaveAttribute('aria-valuenow', '0');
+    await windowFocus('focus');
+    level(-6);
+    expect(screen.getByRole('meter', { name: 'Microphone level' })).toBe(meter);
+    expect(meter).toHaveAttribute('aria-valuenow', '90');
   });
 
   it('previews_stop_on_close_record_and_blur', async () => {

@@ -462,6 +462,10 @@
   background: var(--color-bay-press);
 }
 
+.record-meter[data-off] {
+  visibility: hidden;
+}
+
 .record-meter i {
   display: block;
   width: var(--p);

@@ -413,11 +413,15 @@ function DeviceState({ kind, setup }: { kind: AskedDevice; setup: RecorderSetup 
   const asked = useRecorderPreviews((s) => s.asked[kind]);
   const refused = useRecorderPreviews((s) => s.refused[kind]);
   const dbfs = useRecorderPreviews((s) => (kind === 'mic' ? s.meterDbfs : null));
+  const stopped = useRecorderPreviews((s) => s.micStopped);
   if (!chosen) return null;
   if (denied || refused) return <DeniedNote kind={kind} pages={setup.privacySettings} />;
   if (takeRefused) return null;
-  if (dbfs !== null) return <MicMeter dbfs={dbfs} />;
   if (setup.permissions[kind] === 'notAsked' && !asked) return <AllowDevice kind={kind} />;
+  // The meter's place is kept while the mic is allowed, empty until a level comes, so neither its first level nor
+  // Klipolo going behind and back moves the dialog.
+  if (kind === 'mic' && (setup.permissions.mic === 'granted' || asked || dbfs !== null))
+    return <MicMeter dbfs={dbfs} off={stopped && dbfs === null} />;
   return null;
 }
 
