@@ -99,6 +99,26 @@ struct Job<'a> {
     dir: &'a Dir,
 }
 
+/// Why a clip's analysis ended without its steps saying how (its task panicked, or was dropped part-way).
+pub(crate) const BROKE: &str = "Klipolo's analysis stopped unexpectedly. Try again.";
+
+/// Ends a content's analysis as failed if its task goes before it ends (a panic, or the task dropped): its claim and
+/// its promised credit are let go, and its assets told, so it can be analysed again.
+struct Ending {
+    state: Arc<AnalysisState>,
+    key: String,
+    ended: bool,
+}
+
+impl Drop for Ending {
+    fn drop(&mut self) {
+        if !self.ended {
+            tracing::warn!("analysis: a clip's task ended part-way");
+            self.state.end(&self.key, Outcome::Failed(BROKE.into()));
+        }
+    }
+}
+
 /// A clip's working folder (its WAV, its small copy), removed when dropped.
 struct WorkDir(PathBuf);
 
@@ -163,7 +183,13 @@ impl AnalysisState {
         first: Option<Meta>,
     ) {
         let Content { key, clip, cached } = content;
+        let mut ending = Ending {
+            state: self.clone(),
+            key: key.clone(),
+            ended: false,
+        };
         let outcome = self.steps(&key, &clip, cached, &run, first).await;
+        ending.ended = true;
         self.end(&key, outcome);
     }
 

@@ -218,6 +218,16 @@ struct Harness {
 }
 
 fn harness(server: &MockServer, store: MemoryStore, media: Arc<dyn Media>) -> Harness {
+    harness_with(server, store, media, None)
+}
+
+/// `harness`, its events sink panicking the first time a step `panic_at` starts (a fault inside a clip's task).
+fn harness_with(
+    server: &MockServer,
+    store: MemoryStore,
+    media: Arc<dyn Media>,
+    panic_at: Option<AnalysisStep>,
+) -> Harness {
     let dir = tempfile::tempdir().unwrap();
     let (cache_root, work, clips) = (
         dir.path().join("analysis"),
@@ -244,7 +254,16 @@ fn harness(server: &MockServer, store: MemoryStore, media: Arc<dyn Media>) -> Ha
         work,
         {
             let events = events.clone();
-            Arc::new(move |event| events.lock().unwrap().push(event))
+            let armed = AtomicBool::new(panic_at.is_some());
+            Arc::new(move |event| {
+                if let AnalysisEvent::Progress(p) = &event
+                    && Some(p.step) == panic_at
+                    && armed.swap(false, Ordering::SeqCst)
+                {
+                    panic!("a fault while telling the page");
+                }
+                events.lock().unwrap().push(event)
+            })
         },
         {
             let (speech, aligns) = (speech.clone(), aligns.clone());
@@ -1686,5 +1705,54 @@ async fn a_start_the_project_switch_overtook_does_nothing() {
     let next = asset("new", AssetKind::Video, &h.clip("new.mov", 2), 155.04);
     let estimate = h.state.estimate(std::slice::from_ref(&next)).await;
     assert!((estimate.credit_left_usd.unwrap() - 2.0).abs() < 1e-9);
+    server.verify().await;
+}
+
+/// A clip's task that panics part-way still ends: its clip fails with a plain sentence, its claim and its promised
+/// credit are let go, and it can be analysed again.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_task_that_panics_still_ends_and_lets_go() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/devices/me"))
+        .respond_with(device(2.0, 0.0))
+        .mount(&server)
+        .await;
+    let h = harness_with(
+        &server,
+        code_store(),
+        FakeMedia::whole(SECONDS),
+        Some(AnalysisStep::Words),
+    );
+    mount_speech(&server, "/meta/v1", &h.aligns, Duration::ZERO).await;
+    nothing_else(&server).await;
+    let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 2), SECONDS);
+
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+
+    assert_eq!(
+        h.state.state_of("talk"),
+        AssetState::Failed {
+            reason: "Klipolo's analysis stopped unexpectedly. Try again.".into()
+        }
+    );
+    let estimate = h.state.estimate(std::slice::from_ref(&clip)).await;
+    assert!(
+        (estimate.credit_left_usd.unwrap() - 2.0).abs() < 1e-9,
+        "nothing stays promised"
+    );
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+    assert_eq!(
+        h.state.state_of("talk"),
+        AssetState::Done { approximate: false }
+    );
     server.verify().await;
 }
