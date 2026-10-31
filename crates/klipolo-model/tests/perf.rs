@@ -27,6 +27,7 @@ fn media(id: &str, kind: AssetKind, has_audio: bool) -> Asset {
         fps: 30.0,
         has_audio,
         audio_lead_us: None,
+        made_with: None,
         rotation: None,
     }
 }

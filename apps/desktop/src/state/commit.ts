@@ -1,4 +1,5 @@
 import type { Op } from '../bindings/Op';
+import type { SnapshotPatch } from '../bindings/SnapshotPatch';
 import { labelParts, type Label } from '../lib/labels';
 import { afterCommits, beginCommit, keepAtClose } from './commitQueue';
 import type { Built } from './editBase';
@@ -94,6 +95,25 @@ export function commitLatest(
 ): Promise<boolean> {
   const keep = opts?.keep !== false && typeof label !== 'function' ? label : undefined;
   return queueCommit(label, build, undefined, { keep }).landed;
+}
+
+/**
+ * One undo step Rust builds (a media command), sent at its turn in the commit queue: after every commit on its way, so
+ * it builds on them, holding the queue until it lands. Its base is taken now, when it is asked for. Resolves with
+ * whether it went in; a refusal shows its own toast.
+ */
+export function queueCommand(task: () => Promise<SnapshotPatch>): Promise<boolean> {
+  const built = captureBase();
+  return new Promise((resolve) => {
+    afterCommits(() => {
+      const end = beginCommit();
+      void useProject
+        .getState()
+        .send(task, built)
+        .then(resolve, () => resolve(false))
+        .finally(end);
+    });
+  });
 }
 
 /** Each switch's presses kept at close that haven't landed, by its target and two labels: what the next will do. */

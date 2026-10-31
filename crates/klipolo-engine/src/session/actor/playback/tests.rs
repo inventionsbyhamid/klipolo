@@ -36,6 +36,7 @@ fn timeline(
             fps: 30.0,
             has_audio: false,
             audio_lead_us: None,
+            made_with: None,
             rotation: None,
         })
         .into();

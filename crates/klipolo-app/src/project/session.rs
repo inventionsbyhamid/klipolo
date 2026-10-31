@@ -3,6 +3,7 @@
 
 use klipolo_engine::registry::Registry;
 use klipolo_model::speech::Speech;
+use klipolo_model::time::RangeUs;
 
 use super::*;
 
@@ -18,6 +19,8 @@ pub struct ProjectSessionState {
     last: Mutex<Option<PathBuf>>,
     /// What was said in the clips (analysis), sent with every publish.
     speech: Mutex<Arc<Speech>>,
+    /// Klipolo's pack where this install has it: a project's pack files are pointed here as it opens.
+    pack: Mutex<Arc<Pack>>,
     /// Told when the open project is about to change (another opens, a new one, or it closes), once the change is sure:
     /// the old project is saved and the new one read. Analysis stops and forgets the old project's clips here.
     on_switch: Mutex<Option<SwitchHook>>,
@@ -41,8 +44,22 @@ impl ProjectSessionState {
             saver,
             last: Mutex::default(),
             speech: Mutex::default(),
+            pack: Mutex::default(),
             on_switch: Mutex::default(),
         }
+    }
+
+    /// Klipolo's pack for this install (read from the app's resources at launch).
+    pub(crate) fn set_pack(&self, pack: Pack) {
+        *self.pack.lock().unwrap_or_else(PoisonError::into_inner) = Arc::new(pack);
+    }
+
+    /// Klipolo's pack: empty until `set_pack`.
+    pub(crate) fn pack(&self) -> Arc<Pack> {
+        self.pack
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     /// `hook` is called whenever the open project changes, after the old one is saved and before the new one is
@@ -96,6 +113,21 @@ impl ProjectSessionState {
     /// The engine's side of the feed.
     pub fn subscribe(&self) -> FeedRx {
         self.feed.subscribe()
+    }
+
+    /// Where someone speaks on the open project's timeline, as the engine's mix ducks music under it
+    /// (`ducking_speech`, from the speech the feed carries): empty when nothing ducks, nobody is heard yet, or no
+    /// project is open.
+    pub(crate) fn ducking_speech(&self) -> Vec<RangeUs> {
+        // Taken out of the feed first: the ranges are worked out without holding it, so a publish never waits on them.
+        let feed = self
+            .feed
+            .borrow()
+            .as_ref()
+            .map(|feed| (feed.project.clone(), feed.speech.clone()));
+        feed.map_or_else(Vec::new, |(project, speech)| {
+            klipolo_engine::audio::plan::ducking_speech(&project, &speech).to_vec()
+        })
     }
 
     /// Where save failures (and the save that works again) are told.

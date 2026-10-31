@@ -119,6 +119,7 @@ pub fn stripes_under(p: &mut Project, dir: &std::path::Path) {
         fps: 0.0,
         has_audio: false,
         audio_lead_us: None,
+        made_with: None,
         rotation: None,
     });
     let under = item(
@@ -150,6 +151,7 @@ pub fn video_under(p: &mut Project) {
         fps: 29.97,
         has_audio: false,
         audio_lead_us: None,
+        made_with: None,
         rotation: None,
     });
     let clip = Clip::new(ClipSource::Asset { id: "luma".into() }, 0, secs(10.0));

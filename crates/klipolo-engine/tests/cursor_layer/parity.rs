@@ -70,6 +70,7 @@ fn a_transition_between_two_takes_plans_two_cursor_layers() {
             fps: 30.0,
             has_audio: false,
             audio_lead_us: None,
+            made_with: None,
             rotation: None,
         });
     }

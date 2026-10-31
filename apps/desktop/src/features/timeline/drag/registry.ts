@@ -3,6 +3,8 @@
  * drag never re-renders React; `clearShifts` puts every touched block back once the new revision has drawn.
  */
 const blocks = new Map<string, HTMLElement>();
+/** What is drawn beside a block and goes with it (music's ducking tag), by the block's id. */
+const followers = new Map<string, HTMLElement>();
 const touched = new Set<string>();
 
 /**
@@ -17,6 +19,17 @@ export function registerBlock(id: string, el: HTMLElement | null): () => void {
   };
 }
 
+/**
+ * Records `el` as drawn beside block `id` (a ref callback, as `registerBlock`): a move of the block moves it too, and
+ * while the block's edges are dragged it hides, since it was placed for the block's old length.
+ */
+export function registerFollower(id: string, el: HTMLElement | null): () => void {
+  if (el) followers.set(id, el);
+  return () => {
+    if (el && followers.get(id) === el) followers.delete(id);
+  };
+}
+
 export function blockElement(id: string): HTMLElement | null {
   return blocks.get(id) ?? null;
 }
@@ -25,6 +38,8 @@ export function shiftBlock(id: string, dx: number, dy = 0) {
   const el = blocks.get(id);
   if (!el) return;
   el.style.transform = dx || dy ? `translate3d(${dx}px, ${dy}px, 0)` : '';
+  const follower = followers.get(id);
+  if (follower) follower.style.transform = el.style.transform;
   touched.add(id);
 }
 
@@ -39,11 +54,18 @@ export function sizeBlock(id: string, leftPx: number, widthPx: number) {
   el.style.width = `${Math.max(1, widthPx)}px`;
   el.style.setProperty('--trim-dx', `${leftPx - Number(el.dataset.left ?? leftPx)}px`);
   el.dataset.trimming = 'true';
+  const follower = followers.get(id);
+  if (follower) follower.style.visibility = 'hidden';
   touched.add(id);
 }
 
 export function clearShifts() {
   for (const id of touched) {
+    const follower = followers.get(id);
+    if (follower) {
+      follower.style.transform = '';
+      follower.style.visibility = '';
+    }
     const el = blocks.get(id);
     if (!el) continue;
     el.style.transform = '';

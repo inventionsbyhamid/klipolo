@@ -131,6 +131,7 @@ async fn a_sticker_is_cut_out_and_saved_in_the_projects_media_folder() {
     assert_eq!(made.asset.duration_us, 5_000_000);
     assert!(!made.asset.has_audio);
     assert_eq!(made.made_with, "Muse Image");
+    assert_eq!(made.asset.made_with.as_deref(), Some("Muse Image"));
     assert_eq!(made.note, None);
     assert_eq!(
         made.revised_prompt.as_deref(),

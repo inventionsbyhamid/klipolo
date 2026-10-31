@@ -127,6 +127,7 @@ fn asset(id: &str, kind: AssetKind, path: &str) -> Asset {
         rotation: Some(0),
         has_audio: false,
         audio_lead_us: None,
+        made_with: None,
     }
 }
 

@@ -808,7 +808,9 @@
   flex-direction: column;
   gap: var(--lane-gap);
   min-width: 100%;
-  height: 100%;
+  /* At least the scroller's height, and the lanes' own when they overflow it: the marks laid over it (the playhead,
+     the range, cut hatching, the snap guide, drop ghosts) then reach the Music lane's foot as the lanes scroll. */
+  min-height: 100%;
 }
 
 /* The ruler and the playhead's head stay at the top of the lanes' scroller when the lanes scroll (three overlay rows in
@@ -918,8 +920,10 @@
   min-height: 0;
 }
 
+/* The Video lane grows from nothing into the height the other lanes leave, down to its floor (two overlay rows in a
+   short window); past that the lanes scroll. */
 .tl-row.is-grow {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 24px;
 }
 
@@ -1148,7 +1152,8 @@
   will-change: transform;
 }
 
-.tl-item.is-dimmed > :not(.tl-trim) {
+.tl-item.is-dimmed > :not(.tl-trim),
+.tl-duck-band.is-dimmed {
   opacity: 0.5;
 }
 
@@ -1237,6 +1242,57 @@
 
 .tl-item.is-music.is-selected {
   box-shadow: inset 0 0 0 2px var(--color-paper);
+}
+
+/* The music's volume line: green, 2 px, dipping where it ducks under speech. Its grip is a wider
+   invisible stroke, so the line is easy to take; the rest of the block still moves the music. */
+.tl-volume {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.tl-volume-line {
+  fill: none;
+  stroke: var(--color-lane-music);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.tl-volume-grip {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 10;
+  pointer-events: stroke;
+  cursor: ns-resize;
+}
+
+/* The tag rides the music piece's right edge, or the lanes' visible right while the piece runs past it. The band is
+   the block's sibling (sticky inside a button doesn't stick), placed over the piece by its inline left, width and top;
+   above the blocks (z-index 1 to 3) and never in the way of a press. */
+.tl-duck-band {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+
+.tl-duck-tag {
+  position: sticky;
+  right: 12px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-bay) 90%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-bay) 90%, transparent);
+  color: var(--color-lane-music);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  line-height: 15px;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* "+N" more layers than the Overlays lane's rows hold. */
@@ -1807,4 +1863,719 @@
 .toast:focus-visible {
   outline: 2px solid var(--color-paper);
   outline-offset: 2px;
+}
+
+/* ---------- Library tabs ---------- */
+
+/* The filter pills scroll sideways in a narrow panel, with a 16 px fade at the right edge (no wrapping). */
+.lib-pills {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+}
+
+.lib-pills::-webkit-scrollbar {
+  display: none;
+}
+
+/* Below 1280 wide the panel is 256 px: smaller pills fit all four, Images included. */
+@media (max-width: 1279px) {
+  .lib-pills {
+    gap: var(--space-2);
+    padding-left: var(--space-5);
+  }
+
+  .lib-pills .pill {
+    padding: 0 var(--space-4);
+  }
+}
+
+.pill:focus-visible {
+  outline: 2px solid var(--color-paper);
+  outline-offset: 2px;
+}
+
+.lib-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-4) var(--space-3);
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+}
+
+.group-title:first-child {
+  padding-top: var(--space-2);
+}
+
+.group-title span {
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-body);
+}
+
+.lib-row {
+  position: relative;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.lib-row:hover {
+  background: var(--color-bay-hover);
+}
+
+.lib-row .row-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* The row's "+" (and a clip's more menu), over its right end, shown on hover and focus so titles get the width. */
+.row-actions {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  display: flex;
+  gap: var(--space-1);
+  transform: translateY(-50%);
+}
+
+.row-action {
+  background: var(--color-bay-hover);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.lib-row:hover .row-action,
+.lib-row:focus-within .row-action,
+.picture:hover .row-action,
+.picture:focus-within .row-action,
+.row-action[data-state="open"] {
+  opacity: 1;
+}
+
+.art-tile {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+}
+
+.art-tile.is-music {
+  background: color-mix(in srgb, var(--color-lane-music) 18%, transparent);
+  color: var(--color-lane-music);
+}
+
+.art-tile.is-sound {
+  background: color-mix(in srgb, var(--color-lane-sfx) 16%, transparent);
+  color: var(--color-lane-sfx);
+}
+
+.art-tile .ico {
+  width: 22px;
+  height: 22px;
+}
+
+.lib-foot {
+  padding: var(--space-5) var(--space-4) 0;
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+/* Images: a 3-column grid of pictures on a checkerboard (they may be see-through), each named under it. */
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0 var(--space-4);
+  list-style: none;
+}
+
+.picture {
+  position: relative;
+  display: grid;
+  gap: var(--space-2);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.picture-art {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 12%;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+}
+
+.picture-art img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.picture-name {
+  overflow: hidden;
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.picture .row-action {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+}
+
+.checker {
+  background: conic-gradient(
+      var(--color-checker) 25%,
+      var(--color-checker-alt) 0 50%,
+      var(--color-checker) 0 75%,
+      var(--color-checker-alt) 0
+    )
+    0 0 / 14px 14px;
+}
+
+/* ---------- Overlays on the canvas ---------- */
+
+/* The stage: the frame and, over it, the same box unclipped for the layers' boxes and handles. */
+.screen > .frame,
+.frame-handles {
+  grid-area: 1 / 1;
+}
+
+.frame-handles {
+  position: relative;
+  pointer-events: none;
+}
+
+.frame-handles[data-settling] {
+  opacity: 0;
+}
+
+.frame-handles[data-settling] * {
+  pointer-events: none;
+}
+
+.gizmo {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: auto;
+  touch-action: none;
+  outline: none;
+}
+
+.gizmo.is-movable {
+  cursor: move;
+}
+
+.gizmo:not(.is-selected):hover {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-paper) 60%, transparent);
+}
+
+/* Selected: a 1.5 px paper outline 5 px outside its box; keyboard focus adds a second ring. */
+.gizmo.is-selected {
+  outline: 1.5px solid var(--color-paper);
+  outline-offset: 5px;
+}
+
+.gizmo.is-selected:focus-visible {
+  box-shadow: 0 0 0 9px color-mix(in srgb, var(--color-paper) 35%, transparent);
+}
+
+.gizmo.is-fixed {
+  cursor: not-allowed;
+}
+
+.gizmo.is-dragging {
+  will-change: transform;
+}
+
+/* Eight 10 px paper handles with a navy edge, centred on the outline's corners and edges. */
+.gizmo-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--color-paper);
+  box-shadow: 0 0 0 1.5px var(--color-navy);
+}
+
+/* Each handle can be taken 4 px past what it draws. */
+.gizmo-handle::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+
+.gizmo-handle.is-nw { left: -10px; top: -10px; cursor: nwse-resize; }
+.gizmo-handle.is-ne { right: -10px; top: -10px; cursor: nesw-resize; }
+.gizmo-handle.is-sw { left: -10px; bottom: -10px; cursor: nesw-resize; }
+.gizmo-handle.is-se { right: -10px; bottom: -10px; cursor: nwse-resize; }
+.gizmo-handle.is-n { left: calc(50% - 5px); top: -10px; cursor: ns-resize; }
+.gizmo-handle.is-s { left: calc(50% - 5px); bottom: -10px; cursor: ns-resize; }
+.gizmo-handle.is-w { left: -10px; top: calc(50% - 5px); cursor: ew-resize; }
+.gizmo-handle.is-e { right: -10px; top: calc(50% - 5px); cursor: ew-resize; }
+
+/* A small layer: its handles stay outside it, so its body can still be moved. */
+.gizmo-handle.is-out::after {
+  inset: 0;
+}
+
+/* The line a moving layer snapped to: dashed paper, across the canvas. */
+.snap-guide {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.snap-guide.is-x {
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed color-mix(in srgb, var(--color-paper) 70%, transparent);
+}
+
+.snap-guide.is-y {
+  left: 0;
+  right: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--color-paper) 70%, transparent);
+}
+
+.safe-area {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.safe-area-shapes {
+  fill: color-mix(in srgb, var(--color-night) 60%, transparent);
+}
+
+.safe-area-clear {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-paper) 60%, transparent);
+}
+
+/* A title typed on the canvas: its box with the outline, the look behind a transparent-background textarea. */
+.text-edit {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.text-edit.is-editing {
+  pointer-events: auto;
+  outline: 1.5px solid var(--color-paper);
+  outline-offset: 5px;
+}
+
+.text-edit-cell {
+  display: grid;
+  flex: none;
+}
+
+.text-edit-look,
+.text-edit-area {
+  grid-area: 1 / 1;
+  min-width: 0;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.text-edit-look {
+  pointer-events: none;
+}
+
+.text-edit-area {
+  overflow: hidden;
+  resize: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+}
+
+/* ---------- Inspector ---------- */
+
+/* What sits under the analysis banner: the frame, and the inspector docked at its right. */
+.stage-main {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.stage-body.has-inspector .screen {
+  margin-right: calc(var(--inspector-w) + var(--space-6));
+}
+
+.inspector {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: var(--inspector-w);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+}
+
+.insp-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-3) var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.insp-head h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0 auto 0 0;
+  overflow: hidden;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.insp-head h3 .ico {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--color-ink-soft);
+}
+
+/* The body scrolls, with a 20 px fade at the bottom. */
+.insp-body {
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 20px), transparent);
+  mask-image: linear-gradient(#000 calc(100% - 20px), transparent);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-5) var(--space-8);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-bay-press) transparent;
+}
+
+.insp-locked {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-4);
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.field-label {
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+}
+
+.field-col {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+/* Below 1280 wide the inspector is 236 px: Background's label goes above its choices. */
+@media (max-width: 1279px) {
+  .field-narrow-col {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+}
+
+.field-note {
+  margin: 0;
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+.input {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 40px;
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink);
+  font: inherit;
+  font-size: var(--text-md);
+  outline: none;
+}
+
+.input:hover {
+  box-shadow: inset 0 0 0 1px var(--color-ink-soft);
+}
+
+.input:focus,
+.input:focus-within {
+  box-shadow: inset 0 0 0 2px var(--color-paper);
+}
+
+.input-sm {
+  height: 30px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--color-bay);
+  font-size: var(--text-sm);
+}
+
+.textarea {
+  height: auto;
+  min-height: 40px;
+  padding: var(--space-3) var(--space-4);
+  line-height: var(--lh-sm);
+  resize: none;
+}
+
+.text-field {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 var(--space-2) 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--color-bay);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.select:hover {
+  box-shadow: inset 0 0 0 1px var(--color-ink-soft);
+}
+
+.select-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.select .ico {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--color-ink-faint);
+}
+
+.two {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+/* A typed time or length: its label inside the field, faint, before the value. */
+.value-field {
+  gap: var(--space-2);
+}
+
+.value-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.slider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.slider-root {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 20px;
+  touch-action: none;
+  user-select: none;
+}
+
+.slider-track {
+  position: relative;
+  flex: 1;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-bay-press);
+}
+
+.slider-range {
+  position: absolute;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-paper);
+}
+
+.slider-thumb {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-paper);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.5);
+}
+
+.slider-thumb:focus-visible {
+  outline: 2px solid var(--color-paper);
+  outline-offset: 2px;
+}
+
+.slider-val {
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.2);
+}
+
+.swatch[aria-checked="true"] {
+  box-shadow: 0 0 0 2px var(--color-bay-raised), 0 0 0 4px var(--color-paper);
+}
+
+.swatch.add {
+  display: grid;
+  place-items: center;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink-soft);
+}
+
+.swatch.add .ico {
+  width: 12px;
+  height: 12px;
+}
+
+.hex-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 132px;
+  color: var(--color-ink-faint);
+  font-size: var(--text-sm);
+}
+
+.pos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 18px);
+  gap: 3px;
+  width: max-content;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bay);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+}
+
+.pos-grid button {
+  display: grid;
+  place-items: center;
+  height: 14px;
+  padding: 0;
+  border-radius: 3px;
+}
+
+.pos-grid button::after {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-ink-faint);
+}
+
+.pos-grid button:hover {
+  background: var(--color-bay-hover);
+}
+
+.pos-grid button.on {
+  background: var(--color-paper);
+}
+
+.pos-grid button.on::after {
+  background: var(--color-navy);
+}
+
+.seg-sm button {
+  height: 24px;
+  padding: 0 var(--space-4);
+  font-size: var(--text-xs);
+}
+
+.seg-fill {
+  display: flex;
+}
+
+.seg-fill button {
+  flex: 1;
 }
