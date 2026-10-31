@@ -55,7 +55,8 @@ export const STYLE_NAMES: Partial<Record<BuiltinCaptionStyle, MessageDescriptor>
  */
 export const STYLE_TIPS: Partial<Record<BuiltinCaptionStyle, MessageDescriptor>> = {
   clean: msg({ id: 'captions.style.clean.tip', message: 'Calm subtitles, a sentence at a time' }),
-  bold: msg({ id: 'captions.style.bold.tip', message: 'Big words that pop in a few at a time. No word lights up.' }),
+  // As chat's tool says it (`klipolo-chat`'s styles): up to three words a page, each popping in as it is said.
+  bold: msg({ id: 'captions.style.bold.tip', message: 'Up to three big words that pop in one by one. No word lights up.' }),
   karaoke: msg({ id: 'captions.style.karaoke.tip', message: 'A line where each word lights up as it is said' }),
   highlight: msg({
     id: 'captions.style.highlight.tip',
