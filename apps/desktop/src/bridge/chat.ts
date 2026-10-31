@@ -1,5 +1,6 @@
 import type { ChatApplied } from '../bindings/ChatApplied';
 import type { ChatOutcome } from '../bindings/ChatOutcome';
+import type { ChatPictureDrawn } from '../bindings/ChatPictureDrawn';
 import type { ChatRequest } from '../bindings/ChatRequest';
 import type { SnapshotPatch } from '../bindings/SnapshotPatch';
 import { call } from './call';
@@ -31,6 +32,17 @@ export interface ChatBridge {
    * Rejects with `project.moved` once that change is no longer chat's last.
    */
   undoLast(revision: number): Promise<SnapshotPatch>;
+  /**
+   * Draws the picture a reply asked for (`ChatReply.pictures`), or draws it again (Try again): about 35 s, into the
+   * project's media folder, not into the project. Rejects with a plain sentence when it can't be drawn.
+   */
+  drawPicture(pictureId: string): Promise<ChatPictureDrawn>;
+  /**
+   * Use: places the drawing at `path` (the one the card shows: a newer one may have landed) in the project as one undo
+   * step. Rejects with a plain sentence when it can't be placed any more (the moment it was for was cut, its title is
+   * gone, that drawing isn't there), or with `project.moved`.
+   */
+  usePicture(pictureId: string, path: string): Promise<ChatApplied>;
 }
 
 /** The planner's commands in the app. */
@@ -40,6 +52,8 @@ export const tauriChat: ChatBridge = {
   discard: (proposalId) => call<void>('chat_discard_proposal', { id: proposalId }),
   reset: () => call<void>('chat_reset'),
   undoLast: (revision) => call<SnapshotPatch>('chat_undo_last', { revision }),
+  drawPicture: (pictureId) => call<ChatPictureDrawn>('chat_draw_picture', { id: pictureId }),
+  usePicture: (pictureId, path) => call<ChatApplied>('chat_use_picture', { id: pictureId, path }),
 };
 
 let current: ChatBridge = tauriChat;

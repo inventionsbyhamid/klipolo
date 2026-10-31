@@ -740,6 +740,13 @@ impl AnalysisState {
             .filter(|a| a.transcript.is_some() || a.scenes.is_some())
     }
 
+    /// What this session's analysis calls cost, in US dollars: every file analysed since the app started, each once
+    /// (what came from the cache cost nothing).
+    pub fn spent_usd(&self) -> f64 {
+        let inner = lock(&self.inner);
+        inner.entries.values().map(|e| e.analysis.spent_usd).sum()
+    }
+
     /// The speech found so far, as the engine has it.
     pub fn speech(&self) -> Arc<Speech> {
         Arc::new(lock(&self.inner).speech.clone())

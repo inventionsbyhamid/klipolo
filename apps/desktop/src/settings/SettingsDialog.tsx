@@ -11,6 +11,7 @@ import {
   removePayment,
   saveCode,
   saveKey,
+  sessionView,
   usd,
 } from './settings';
 import './settings.css';
@@ -249,6 +250,7 @@ function CodeSection({ status }: { status: AiStatus | null }) {
         )}
       </div>
       {budget && <Budget view={budget} />}
+      <SessionSpend status={saved} />
       <p className="fine">{FINE_PRINT}</p>
     </>
   );
@@ -338,6 +340,7 @@ function KeySection({ status }: { status: AiStatus | null }) {
             : "Klipolo checks it with Meta first, then keeps it in your Mac's Keychain. Get a key at dev.meta.ai."}
         </span>
       )}
+      <SessionSpend status={saved} />
     </div>
   );
 }
@@ -378,6 +381,19 @@ function Budget({ view }: { view: BudgetView }) {
         <dd>{usd(view.spent)}</dd>
       </dl>
     </div>
+  );
+}
+
+/** What AI cost since Klipolo opened (analysis, chat, pictures): nothing before anything was spent. */
+function SessionSpend({ status }: { status: AiStatus | null }) {
+  const view = sessionView(status);
+  if (!view) return null;
+  return (
+    <dl className="session-spend" role="group" aria-label="This session">
+      <dt>This session</dt>
+      <dd>{view.total}</dd>
+      <dd className="session-kinds">{view.kinds.join(', ')}</dd>
+    </dl>
   );
 }
 

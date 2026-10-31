@@ -8,6 +8,7 @@
 //! the caller built it on (never rebased). Every command fails with a code the UI words, or a plain sentence (`Said`).
 
 mod apply;
+mod chat;
 mod create;
 mod disk;
 mod library;
