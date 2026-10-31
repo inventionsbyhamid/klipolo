@@ -111,12 +111,13 @@ function useNativeHole(frame: RefObject<HTMLDivElement | null>, on: boolean) {
 type Pressed = 'video' | 'stage' | null;
 
 /**
- * What a press began on: the bare video, the stage around it, or something with its own click (a layer). Judged at
- * press time, so a drag that ends off its layer never reads as a click on what lies under the pointer.
+ * What a press began on: the bare video, the stage around it, or something with its own click (a layer, the failure
+ * note's Try again). Judged at press time, so a drag that ends off its layer never reads as a click on what lies under
+ * the pointer.
  */
 function pressedOn(target: EventTarget, stage: Element, video: Element | null): Pressed {
   if (target === stage) return 'stage';
-  if (!(target instanceof Element) || !video?.contains(target) || target.closest('[data-layer]')) return null;
+  if (!(target instanceof Element) || !video?.contains(target) || target.closest('[data-layer], button')) return null;
   return 'video';
 }
 
@@ -178,7 +179,19 @@ export function Stage() {
         className={`frame frame-${format}${native ? '' : ' is-socket'}`}
       >
         {info && !native && <SocketCanvas info={info} aspect={ASPECT[format]} />}
-        {note && <div className="preview-note">{note}</div>}
+        {note && (
+          // The way back without closing the project: the engine is attached again.
+          <div className="preview-note">
+            <p>{note}</p>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => useEngine.getState().retry()}
+            >
+              Try again
+            </button>
+          </div>
+        )}
       </div>
       {/* The same box, unclipped, so a selection at the canvas's edge keeps its handles. Hidden (never `visibility:
           hidden`, which would take focus off a layer or the title editor) and out of reach while the size settles: the
