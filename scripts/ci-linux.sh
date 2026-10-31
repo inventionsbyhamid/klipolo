@@ -82,6 +82,10 @@ run "pnpm install" pnpm install --frozen-lockfile --store-dir .build/pnpm-store
 # The third-party notices the app ships list what Cargo.lock and the page's build hold: after a dependency change, run
 # scripts/release/third-party.sh and commit its file (a few seconds: crates are fetched, not built).
 run "third-party notices are current" scripts/release/third-party.sh --check
+# Cap-MIT.txt's first line names exactly the files from Cap's MIT crates (scripts/release/lib.sh's cap_mit_check): a
+# file vendored, renamed or removed without it fails here, not at a release build's bundle check.
+run "Cap's MIT licence names its files" \
+  bash -c '. scripts/release/lib.sh && cap_mit_check . "$1" "$1"' _ crates/klipolo-app/licenses/Cap-MIT.txt
 run "page typecheck" pnpm -C apps/desktop typecheck
 run "page tests" pnpm -C apps/desktop test
 # What the engine's probe reads for sync (the sound lead, creation time and audio format), on the fixtures.
