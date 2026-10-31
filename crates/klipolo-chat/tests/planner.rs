@@ -12,9 +12,10 @@ use std::task::{Context, Poll, Waker};
 
 use klipolo_chat::{
     AnalysisState, Audience, BoxFuture, ChatContext, ChatError, ChatErrorKind, FunctionCall,
-    Inputs, Item, KEPT_TURNS, LanguageModel, Library, MAX_CONTEXT_TOKENS, ModelError, ModelRequest,
-    ModelResponse, PROPOSED_OUTPUT, PlanOut, Refs, STILL_LISTENING, TOLD_PERSON, TOO_LONG,
-    ToolCall, Turn, View, build_context, plan, remember, sanitize, system_prompt, tools,
+    Inputs, Item, KEPT_TURNS, LanguageModel, Library, LibraryItem, MAX_CONTEXT_TOKENS, MediaKind,
+    ModelError, ModelRequest, ModelResponse, PROPOSED_OUTPUT, PlanOut, Refs, STILL_LISTENING,
+    TOLD_PERSON, TOO_LONG, ToolCall, Turn, View, build_context, plan, remember, sanitize,
+    system_prompt, tools,
 };
 use klipolo_model::Project;
 use klipolo_model::project::{Asset, AssetKind};
@@ -997,6 +998,63 @@ fn following_or_blurring_alone_is_said_to_be_on_its_way() {
         let out = send(&model, &[], "keep it on her face", &i, &p).unwrap();
         assert_eq!(out.reply, "On it.", "{kind}");
     }
+}
+
+#[test]
+fn a_part_still_to_come_is_not_claimed_by_the_models_text() {
+    // Words on screen are still to come, the music goes in: the model's sentence claims both, so it is left out and
+    // what went through is said plainly, then what is still to come.
+    let (p, speech) = talk();
+    let mut i = inputs(&p, speech);
+    let lofi = serde_json::from_value(serde_json::json!({
+        "id": "lofi", "kind": "audio", "path": "/media/lofi.mp3", "name": "lofi.mp3", "durationUs": 60_000_000,
+        "width": 0, "height": 0, "fps": 0.0, "hasAudio": true,
+    }))
+    .unwrap();
+    i.library.items.push(LibraryItem {
+        name: "lofi.mp3".into(),
+        kind: MediaKind::Music,
+        asset: lofi,
+        pack: false,
+    });
+    let model = Fake::new(vec![answer(
+        "Added your title and the lofi music.",
+        vec![
+            fc(
+                "call_1",
+                "addText",
+                r#"{"text": "Day 1", "preset": "title", "atSec": 0, "durationSec": null}"#,
+            ),
+            fc(
+                "call_2",
+                "addMusic",
+                r#"{"file": "lofi", "volume": null, "duck": null, "atSec": 0}"#,
+            ),
+        ],
+        0.002,
+    )]);
+    let out = send(&model, &[], "a title Day 1 and lofi music", &i, &p).unwrap();
+    assert_eq!(model.seen().len(), 1);
+    assert!(out.compiled.additions.is_some());
+    assert_eq!(
+        out.reply,
+        format!(
+            "The music is in. {}",
+            klipolo_chat::compile::TEXT_COMING_SOON
+        )
+    );
+    // With nothing refused for the person, the model's own words stay.
+    let model = Fake::new(vec![answer(
+        "Added the lofi music.",
+        vec![fc(
+            "call_1",
+            "addMusic",
+            r#"{"file": "lofi", "volume": null, "duck": null, "atSec": 0}"#,
+        )],
+        0.002,
+    )]);
+    let out = send(&model, &[], "lofi music", &i, &p).unwrap();
+    assert_eq!(out.reply, "Added the lofi music.");
 }
 
 #[test]
