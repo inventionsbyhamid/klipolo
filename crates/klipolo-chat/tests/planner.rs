@@ -1002,9 +1002,9 @@ fn following_or_blurring_alone_is_said_to_be_on_its_way() {
 }
 
 #[test]
-fn a_part_still_to_come_is_not_claimed_by_the_models_text() {
-    // Words on screen are still to come, the music goes in: the model's sentence claims both, so it is left out and
-    // what went through is said plainly, then what is still to come.
+fn a_part_refused_for_the_person_is_not_claimed_by_the_models_text() {
+    // There is no pause to remove (no loudness), the music goes in: the model's sentence claims both, so it is left
+    // out and what went through is said plainly, then why the rest wasn't done.
     let (p, speech) = talk();
     let mut i = inputs(&p, speech);
     let lofi = serde_json::from_value(serde_json::json!({
@@ -1018,40 +1018,32 @@ fn a_part_still_to_come_is_not_claimed_by_the_models_text() {
         asset: lofi,
         pack: false,
     });
+    let music = |id: &str| {
+        fc(
+            id,
+            "addMusic",
+            r#"{"file": "lofi", "volume": null, "duck": null, "atSec": 0}"#,
+        )
+    };
     let model = Fake::new(vec![answer(
-        "Added your title and the lofi music.",
+        "Removed the long pauses and added the lofi music.",
         vec![
-            fc(
-                "call_1",
-                "addText",
-                r#"{"text": "Day 1", "preset": "title", "atSec": 0, "durationSec": null}"#,
-            ),
-            fc(
-                "call_2",
-                "addMusic",
-                r#"{"file": "lofi", "volume": null, "duck": null, "atSec": 0}"#,
-            ),
+            fc("call_1", "removeSilences", r#"{"minPauseSec": 1}"#),
+            music("call_2"),
         ],
         0.002,
     )]);
-    let out = send(&model, &[], "a title Day 1 and lofi music", &i, &p).unwrap();
+    let out = send(&model, &[], "cut the pauses and add lofi", &i, &p).unwrap();
     assert_eq!(model.seen().len(), 1);
     assert!(out.compiled.additions.is_some());
     assert_eq!(
         out.reply,
-        format!(
-            "The music is in. {}",
-            klipolo_chat::compile::TEXT_COMING_SOON
-        )
+        "The music is in. There are no pauses longer than 1.0 s to remove."
     );
     // With nothing refused for the person, the model's own words stay.
     let model = Fake::new(vec![answer(
         "Added the lofi music.",
-        vec![fc(
-            "call_1",
-            "addMusic",
-            r#"{"file": "lofi", "volume": null, "duck": null, "atSec": 0}"#,
-        )],
+        vec![music("call_1")],
         0.002,
     )]);
     let out = send(&model, &[], "lofi music", &i, &p).unwrap();

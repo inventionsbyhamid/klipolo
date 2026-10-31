@@ -9,17 +9,20 @@
 
 use std::collections::HashMap;
 
-use klipolo_chat::compile::{TEXT_COMING_SOON, TITLE_CARD};
+use klipolo_chat::compile::TITLE_CARD;
 use klipolo_chat::tools::{PictureSize, Position, TextPreset};
 use klipolo_chat::{
     AnalysisState, Audience, Compiled, FunctionCall, Inputs, Job, Library, LibraryItem,
-    MakeSticker, MediaKind, Problem, Refs, Refusal, SceneEntry, SceneLog, ToolCall, View, compile,
+    MakeSticker, MediaKind, Problem, Refs, SceneEntry, SceneLog, ToolCall, View, compile,
     picture_ops, sticker_placement,
 };
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::contrib::ContribId;
-use klipolo_model::layout::{Anchor, Layout};
+use klipolo_model::layout::{Anchor, Layout, resolve_rect};
 use klipolo_model::media::music::is_music;
+use klipolo_model::media::text::{
+    PORTRAIT_CLEAR, TextPreset as ModelPreset, preset_rect, text_item,
+};
 use klipolo_model::ops::Op;
 use klipolo_model::params::ParamValue;
 use klipolo_model::project::{Asset, FormatKind};
@@ -612,8 +615,14 @@ fn words_on(item: &Item) -> &str {
     }
 }
 
+/// The one overlay layer of `p` once `out`'s additions are applied.
+fn the_layer(p: &Project, out: &Compiled) -> Item {
+    let overlays = layers(&applied(p, out), TrackKind::Overlay);
+    assert_eq!(overlays.len(), 1, "{overlays:#?}");
+    overlays[0].clone()
+}
+
 #[test]
-#[ignore = "addText is a stub until its four presets are built on the model's text layers"]
 fn add_text_title_at_start_is_three_seconds() {
     let p = project();
     let i = inputs(
@@ -630,17 +639,25 @@ fn add_text_title_at_start_is_three_seconds() {
             )],
         );
         assert_eq!(out.additions.as_ref().unwrap().label, "chat.addText");
-        let titles = layers(&applied(&p, &out), TrackKind::Overlay);
-        assert_eq!(titles.len(), 1);
-        let title = &titles[0];
+        let title = the_layer(&p, &out);
         assert_eq!((title.start_us, title.duration_us), (0, secs(3.0)));
-        assert_eq!(words_on(title), "Day 1 in Lisbon");
+        assert_eq!(words_on(&title), "Day 1 in Lisbon");
+        // Exactly the layer the canvas's Add title makes.
+        let made = text_item(
+            ModelPreset::Title,
+            "Day 1 in Lisbon",
+            FormatKind::Landscape,
+            0,
+        );
+        assert_eq!(
+            (&title.content, &title.layout),
+            (&made.content, &made.layout)
+        );
     }
 }
 
 #[test]
-#[ignore = "addText is a stub until its four presets are built on the model's text layers"]
-fn text_keeps_the_persons_own_words_and_the_models_have_no_dashes() {
+fn add_text_takes_the_persons_own_words_or_asks() {
     let p = project();
     // The person's spelling wins over the model's.
     let i = inputs(&p, "lower third saying day 1 in LISBON please");
@@ -652,46 +669,86 @@ fn text_keeps_the_persons_own_words_and_the_models_have_no_dashes() {
             json!({"text": "Day 1 in Lisbon", "preset": "lower-third", "atSec": 0.0, "durationSec": null}),
         )],
     );
-    let layer = &layers(&applied(&p, &out), TrackKind::Overlay)[0];
-    assert_eq!(words_on(layer), "day 1 in LISBON");
-    // Words the model wrote itself (a name from the transcript) never show a dash.
+    assert_eq!(words_on(&the_layer(&p, &out)), "day 1 in LISBON");
+    // Words of the model's own are refused back, for it to ask: nothing is added.
     let i = inputs(&p, "put her name on screen");
     let out = compile(
         &p,
         &i,
         &[call(
             "addText",
-            json!({"text": "Sunita \u{2014} commander", "preset": "lower-third", "atSec": 0.0, "durationSec": null}),
+            json!({"text": "Sunita Williams", "preset": "lower-third", "atSec": 0.0, "durationSec": null}),
         )],
     );
-    let layer = &layers(&applied(&p, &out), TrackKind::Overlay)[0];
-    assert_eq!(words_on(layer), "Sunita, commander");
+    assert_eq!(out.additions, None);
+    let reason = refused_to_model(&out, 0);
+    assert!(
+        reason.starts_with("addText: the words must be the person's own")
+            && reason.contains("askUser"),
+        "{reason}"
+    );
 }
 
 #[test]
-fn add_text_is_coming_soon() {
-    // Offered with its four presets, but placing them comes later: the person is told plainly, nothing is added, and
-    // the model is not sent back to try the title card instead.
-    let p = project();
-    let i = inputs(&p, "put a title 'Day 1 in Lisbon' at the start");
-    let out = compile(
-        &p,
-        &i,
-        &[call(
-            "addText",
-            json!({"text": "Day 1 in Lisbon", "preset": "title", "atSec": 0.0, "durationSec": null}),
-        )],
-    );
-    assert_eq!((&out.additions, out.jobs.len()), (&None, 0));
-    assert_eq!(
-        out.refusals,
-        vec![Refusal {
-            call_index: 0,
-            reason: TEXT_COMING_SOON.to_owned(),
-            audience: Audience::Person,
-            clip: None,
-        }]
-    );
+fn every_text_preset_lands_where_the_canvas_puts_it_in_every_format() {
+    // Each of the four presets, with each format the main one: the layer the model's `text_item` makes, in each
+    // format's own place, inside the area 9:16 keeps clear.
+    let formats = [
+        FormatKind::Landscape,
+        FormatKind::Portrait,
+        FormatKind::Square,
+    ];
+    let presets = [
+        ("title", ModelPreset::Title),
+        ("lower-third", ModelPreset::LowerThird),
+        ("plain", ModelPreset::Plain),
+        ("caption", ModelPreset::Caption),
+    ];
+    for primary in formats {
+        let mut p = project();
+        p.settings.formats = formats.to_vec();
+        p.settings.primary_format = primary;
+        let i = inputs(&p, "words on screen saying a day at the studio, at 2 s");
+        for (word, preset) in presets {
+            let out = compile(
+                &p,
+                &i,
+                &[call(
+                    "addText",
+                    json!({"text": "A day at the studio", "preset": word, "atSec": 2.0, "durationSec": null}),
+                )],
+            );
+            let layer = the_layer(&p, &out);
+            let made = text_item(preset, "a day at the studio", primary, secs(2.0));
+            assert_eq!(
+                (
+                    &layer.content,
+                    &layer.layout,
+                    layer.start_us,
+                    layer.duration_us
+                ),
+                (&made.content, &made.layout, secs(2.0), secs(3.0)),
+                "{word} in {primary:?}"
+            );
+            assert!(layer.attach.is_some(), "{word}: moves with its clip");
+            for format in formats {
+                let r = resolve_rect(&layer.layout, primary, format);
+                assert_eq!(
+                    r,
+                    preset_rect(preset, format),
+                    "{word} in {primary:?}, {format:?}"
+                );
+                if format == FormatKind::Portrait {
+                    let c = PORTRAIT_CLEAR;
+                    let inside = r.x >= c.x - 1e-9
+                        && r.y >= c.y - 1e-9
+                        && r.x + r.w <= c.x + c.w + 1e-9
+                        && r.y + r.h <= c.y + c.h + 1e-9;
+                    assert!(inside, "{word} in {primary:?}: {r:?}");
+                }
+            }
+        }
+    }
 }
 
 #[test]

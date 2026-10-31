@@ -7,20 +7,22 @@
 
 use std::ops::RangeInclusive;
 
+use klipolo_model::media::image::IMAGE_US;
 use klipolo_model::media::music::MUSIC_VOLUME;
+use klipolo_model::media::text::{TEMPLATE_US, TEXT_US};
 
 use super::schema::{
     Word, list, nullable_boolean, nullable_number, nullable_words, seconds, string, words,
 };
 use super::{Tool, ToolCall};
 
-/// How long words show when the person gave no length.
-pub const TEXT_SECS: f64 = 3.0;
-/// How long a picture shows when the person gave no length.
-pub const PICTURE_SECS: f64 = 5.0;
+/// How long words show when the person gave no length: the model's text preset length (`media::text::TEXT_US`).
+pub const TEXT_SECS: f64 = TEXT_US as f64 / 1e6;
+/// How long a picture shows when the person gave no length (`media::image::IMAGE_US`).
+pub const PICTURE_SECS: f64 = IMAGE_US as f64 / 1e6;
 /// How long the title card template shows when the person gave no length: its scene's own length, its words coming
-/// in and going out included.
-pub const TEMPLATE_SECS: f64 = 4.0;
+/// in and going out included (`media::text::TEMPLATE_US`).
+pub const TEMPLATE_SECS: f64 = TEMPLATE_US as f64 / 1e6;
 /// The lengths a word or picture layer takes, in seconds.
 pub const OVERLAY_SECS: RangeInclusive<f64> = 0.5..=600.0;
 /// The volumes music takes: 1 is the file as it is.
@@ -41,6 +43,17 @@ pub enum TextPreset {
 }
 
 impl TextPreset {
+    /// The model's preset it is: the one the canvas's Add title and the library's text presets place.
+    pub fn preset(self) -> klipolo_model::media::text::TextPreset {
+        use klipolo_model::media::text::TextPreset as Model;
+        match self {
+            TextPreset::Title => Model::Title,
+            TextPreset::LowerThird => Model::LowerThird,
+            TextPreset::Plain => Model::Plain,
+            TextPreset::Caption => Model::Caption,
+        }
+    }
+
     /// The tool's word for it ("lower-third").
     pub fn key(self) -> &'static str {
         match self {
