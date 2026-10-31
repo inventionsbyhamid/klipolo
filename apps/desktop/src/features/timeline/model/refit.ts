@@ -47,6 +47,20 @@ export function trimRefit(project: Project, i: number, trimmed: Clip): Refit {
 }
 
 /**
+ * What taking clip `i` out does to transitions: its own goes with it, and the one into it goes on into the clip after
+ * it, with that clip's footage before it (after the last clip, nowhere).
+ */
+export function removeRefit(project: Project, i: number): Refit {
+  const main = project.timeline.main;
+  const own = main[i]?.transitionOut && i + 1 < main.length ? 1 : 0;
+  if (i < 1 || !main[i - 1].transitionOut) return { removed: own, shortened: 0 };
+  const rest = main.slice();
+  rest.splice(i, 1);
+  const into = compare(project, rest, i - 1, i);
+  return { removed: into.removed + own, shortened: into.shortened };
+}
+
+/**
  * What an edit does to transitions, as a sentence of its own ("A transition is removed.", "2 transitions are removed
  * and one is shortened."); empty when nothing changes. Edits say it after what they did, as a second sentence.
  */

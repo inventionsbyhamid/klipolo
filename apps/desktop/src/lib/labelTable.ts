@@ -25,6 +25,11 @@ export const TABLE = {
     message: 'Delete clip',
     comment: 'Command and undo history entry',
   }),
+  'undo.delete.clip.note': msg({
+    id: 'undo.delete.clip.note',
+    message: 'Delete clip. {note}',
+    comment: 'Undo history entry; {note} says what it did to transitions, e.g. “A transition is removed.”',
+  }),
   'undo.delete.range': msg({
     id: 'undo.delete.range',
     message: 'Delete selection',

@@ -29,7 +29,7 @@ import { dragging } from '../drag/controller';
 import { editPoints, nextEdit, previousEdit } from '../model/editPoints';
 import { clipIndexAt, mainIndex } from '../model/index';
 import { deleteRangeOps } from '../model/rangeOps';
-import { refitNote, trimRefit } from '../model/refit';
+import { refitNote, removeRefit, trimRefit } from '../model/refit';
 import { deleteOps, trimToPlayheadOps } from './keyOps';
 import { focusIdOf, focusSelection, laneOrder, stepFrom, type LaneKey } from './laneOrder';
 import { isMarker } from './markers';
@@ -215,7 +215,17 @@ export function deleteBlock(id: string, undo: LabelId) {
     const project = editable();
     if (!project) return;
     const label = blockLabel(project, id);
-    commit(undo, deleteOps(project, id), t({ id: 'timeline.key.deleted', message: `Deleted ${label}` }));
+    // The model refits the transitions around a clip taken out: the delete says when it loses or shortens one.
+    const i = project.timeline.main.findIndex((clip) => clip.id === id);
+    const note = i < 0 ? '' : refitNote(removeRefit(project, i));
+    if (!note)
+      return commit(undo, deleteOps(project, id), t({ id: 'timeline.key.deleted', message: `Deleted ${label}` }));
+    const said = t({
+      id: 'timeline.key.deletedNote',
+      message: `Deleted ${label}. ${note}`,
+      comment: 'Screen-reader note; {note} is a sentence on what it does to transitions, e.g. “A transition is removed.”',
+    });
+    commit({ id: 'undo.delete.clip.note', params: { note } }, deleteOps(project, id), said);
   });
 }
 
