@@ -87,13 +87,13 @@ lockf -k /tmp/klipolo-mac-build.lock nice -n 10 scripts/release/build-mac.sh aar
 ```
 
 Each writes `dist/Klipolo-<version>-<arch>.dmg`. `build-mac.sh` refuses to
-start without `KLIPOLO_SOURCE_URL`, which goes into the app's `NOTICE.txt`. It
-then runs these steps in order and stops at the first failure. Each also runs
-on its own:
+start without `KLIPOLO_SOURCE_URL`. The app's `NOTICE.txt` gives that address
+and the commit built, as the source code of this version. It then runs these
+steps in order and stops at the first failure. Each also runs on its own:
 
 - `scripts/release/check-bundle.sh <app> <x86_64|arm64>` checks the bundle
-  before anything is signed: the licences (with the third-party notices and the
-  source address), one arch, macOS 15.0, load paths and rpaths, and no file
+  before anything is signed: the licences (with the third-party notices, the
+  source address and the commit), one arch, macOS 15.0, load paths and rpaths, and no file
   naming your home folder.
 - `scripts/release/sign.sh <app>` signs with the Developer ID in your
   keychain, from the inside out. `--list` prints the order and signs nothing.
@@ -102,6 +102,15 @@ on its own:
   notarytool keychain profile.
 - `scripts/release/check-dmg.sh <dmg>` mounts the disk image read-only.
   Gatekeeper must accept the app as Notarized Developer ID.
+
+Before anyone downloads the disk images, the owner tags the commit they were
+built from and pushes the tag to the repository at `KLIPOLO_SOURCE_URL`, so
+the source that `NOTICE.txt` names is there. Pushing is a manual step:
+
+```sh
+git tag v0.1.0 <commit>
+git push origin v0.1.0
+```
 
 Before a release:
 
