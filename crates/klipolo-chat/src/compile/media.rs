@@ -11,8 +11,8 @@
 //! - `addImage`: the picture as the library's + puts one (`media::image::add_image_ops_at`), at a size and in a corner of
 //!   each format's own area (in 9:16 the area the apps keep clear) when one was asked for.
 //! - `makeSticker`: a `Job::MakeSticker` only, on the project as the message's additions leave it, anchored to the
-//!   footage it shows over as a layer attaches (`Attach`); once the picture is drawn the app asks `sticker_placement`
-//!   where and how long, on the project as it is then, and places it with `picture_ops`. A job's prompt names the
+//!   footage it shows over as a layer attaches (`Attach`); once the picture is drawn the app places it with
+//!   `sticker_ops` (where and how long `sticker_placement` says, on the project as it is then). A job's prompt names the
 //!   picture in the library too, so it has no dashes either.
 //! - `makeTitleCard`: the title card template as the canvas adds one (`media::text::add_template_ops`, filling the frame
 //!   in every format) with the person's exact title (`persons_words`) and its other words left empty so only the
@@ -30,20 +30,18 @@ use std::collections::BTreeMap;
 
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::contrib::Catalog;
-use klipolo_model::ids::{Id, new_id};
-use klipolo_model::layout::{Anchor, BoxN, Layout};
+use klipolo_model::ids::Id;
 use klipolo_model::media::image::{IMAGE_US, add_image_ops_at};
 use klipolo_model::media::music::{MusicOpts, add_music_ops};
 use klipolo_model::media::sound::add_sound_ops;
 use klipolo_model::media::text::{
     TEMPLATE_US, TEXT_US, TitleTemplate, add_template_ops, add_text_ops,
 };
-use klipolo_model::ops::{Op, TrackTarget};
+use klipolo_model::ops::Op;
 use klipolo_model::params::{ParamKind, ParamValue};
-use klipolo_model::project::{Asset, AssetKind, FormatKind};
+use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::query::{anchor_at, main_track_duration, resolve_attach, video_duration};
 use klipolo_model::time::{MIN_DURATION_US, Us};
-use klipolo_model::timeline::{Item, ItemContent};
 use klipolo_model::{Project, apply_ops};
 
 use super::{Compiler, Edit, Job, MakeSticker, Refused, label, to_model, unfounded};
@@ -53,97 +51,10 @@ use crate::library::{Found, LibraryItem, MediaKind, is_generic};
 use crate::sanitize;
 use crate::tools::{PictureSize, Position, TextPreset};
 
-/// Kept clear between a picture and the frame's edges: a share of the frame's shorter side.
-pub const PICTURE_MARGIN: f64 = 0.04;
 /// The most names a refusal lists, then how many more there are: as many as Library shows of a kind.
 const LISTED: usize = crate::context::LIBRARY_NAMES;
 /// What may stand around a title the person quoted, left out of it.
 const QUOTES: [char; 9] = ['\'', '"', '`', '‘', '’', '“', '”', '«', '»'];
-
-/// The canvas of `format` in pixels.
-fn canvas(format: FormatKind) -> (f64, f64) {
-    let (w, h) = format.size();
-    (f64::from(w), f64::from(h))
-}
-
-/// Where a `width` x `height` picture goes in `format`: `size`'s share of the frame's width with its shape kept (at
-/// most as tall as the frame less the margins), at `position`: a corner `PICTURE_MARGIN` of the shorter side in from
-/// its edges, or the middle. Other formats derive their place from its anchor (`resolve_rect`). An unknown size is
-/// square.
-pub fn picture_layout(
-    width: u32,
-    height: u32,
-    size: PictureSize,
-    position: Position,
-    format: FormatKind,
-) -> Layout {
-    let (cw, ch) = canvas(format);
-    let aspect = if width == 0 || height == 0 {
-        1.0
-    } else {
-        f64::from(width) / f64::from(height)
-    };
-    let margin = PICTURE_MARGIN * cw.min(ch);
-    let (mx, my) = (margin / cw, margin / ch);
-    let mut w = size.share();
-    let mut h = w * cw / aspect / ch;
-    let tallest = 1.0 - 2.0 * my;
-    if h > tallest {
-        h = tallest;
-        w = h * ch * aspect / cw;
-    }
-    let (x, y, anchor) = match position {
-        Position::TopLeft => (mx, my, Anchor::TopLeft),
-        Position::TopRight => (1.0 - mx - w, my, Anchor::TopRight),
-        Position::BottomLeft => (mx, 1.0 - my - h, Anchor::BottomLeft),
-        Position::BottomRight => (1.0 - mx - w, 1.0 - my - h, Anchor::BottomRight),
-        Position::Center => ((1.0 - w) / 2.0, (1.0 - h) / 2.0, Anchor::Center),
-    };
-    Layout::new(anchor, BoxN { x, y, w, h })
-}
-
-/// The ops that show picture `asset` from `start_us` for `duration_us`, at `size` and `position` in the primary format
-/// (`picture_layout`), on the first overlay track with room, attached to the clip under it (none past the main track's
-/// end). The file comes in with it when the project doesn't have it yet. Also for a sticker once it is drawn
-/// (`Job::MakeSticker`).
-pub fn picture_ops(
-    p: &Project,
-    asset: &Asset,
-    start_us: Us,
-    duration_us: Us,
-    size: PictureSize,
-    position: Position,
-) -> Vec<Op> {
-    let mut ops = Vec::new();
-    if p.asset(&asset.id).is_none() {
-        ops.push(Op::AddAssets {
-            assets: vec![asset.clone()],
-        });
-    }
-    let layout = picture_layout(
-        asset.width,
-        asset.height,
-        size,
-        position,
-        p.settings.primary_format,
-    );
-    ops.push(Op::AddItem {
-        track: TrackTarget::Auto,
-        attach: start_us < main_track_duration(&p.timeline.main),
-        item: Item {
-            id: new_id(),
-            start_us,
-            duration_us,
-            attach: None,
-            layout,
-            content: ItemContent::Image {
-                asset_id: asset.id.clone(),
-            },
-            effects: Vec::new(),
-        },
-    });
-    ops
-}
 
 /// Up to `LISTED` names, quoted, and how many more.
 fn names(items: &[&LibraryItem]) -> String {
@@ -510,6 +421,16 @@ pub fn sticker_placement(p: &Project, job: &MakeSticker) -> Option<(Us, Us)> {
     };
     let room = video_duration(&p.timeline).saturating_sub(start);
     (room >= MIN_DURATION_US).then(|| (start, job.duration_us.min(room)))
+}
+
+/// The ops that place drawn sticker `asset` for `job` on `p`, the project as it is when the picture comes: where and for
+/// how long `sticker_placement` says, at the job's size and in its corner as the library places a picture
+/// (`media::image::add_image_ops_at`). None when there is nowhere to place it: the footage it was for was cut, or its
+/// start is now at the video's end (or the file isn't a picture, which a drawing always is).
+pub fn sticker_ops(p: &Project, job: &MakeSticker, asset: &Asset) -> Option<Vec<Op>> {
+    let (start, duration) = sticker_placement(p, job)?;
+    let ops = add_image_ops_at(p, asset, start, job.size.share(), job.position.spot()).ok()?;
+    Some(lasting(ops, duration))
 }
 
 /// `makeSticker`'s job, on the project as the message's additions leave it (`with_additions`), whatever came before it

@@ -55,7 +55,7 @@ use crate::library::Library;
 use crate::sanitize;
 use crate::tools::{Moment, PictureSize, Position, ToolCall};
 use map::Map;
-pub use media::{PICTURE_MARGIN, picture_layout, picture_ops, sticker_placement};
+pub use media::{sticker_ops, sticker_placement};
 use trim::Trim;
 
 /// What the person is told when a tool needs a clip's analysis and Klipolo is still making it.
@@ -149,7 +149,7 @@ pub enum Job {
 }
 
 /// A sticker of `prompt` to draw, cut out of its background, and show for `duration_us` at `size` and `position`
-/// (`picture_ops`) over the footage `anchor` names: a clip and a moment of its source, as an attached layer holds its
+/// (`sticker_ops`) over the footage `anchor` names: a clip and a moment of its source, as an attached layer holds its
 /// place (`query::anchor_at`), so it moves with that footage while the picture is drawn. `at_us` is where that footage
 /// played on the project as the message's additions left it, and the start to use when `anchor` is None (past the main
 /// track's end). When the picture comes, `sticker_placement` says where and how long on the project as it is then, or

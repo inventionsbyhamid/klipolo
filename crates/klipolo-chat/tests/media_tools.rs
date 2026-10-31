@@ -13,12 +13,12 @@ use klipolo_chat::tools::{PictureSize, Position, TextPreset};
 use klipolo_chat::{
     AnalysisState, Audience, Compiled, FunctionCall, Inputs, Job, Library, LibraryItem,
     MakeSticker, MediaKind, Problem, Refs, SceneEntry, SceneLog, ToolCall, View, compile,
-    sticker_placement,
+    sticker_ops, sticker_placement,
 };
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::contrib::ContribId;
 use klipolo_model::layout::{Anchor, Layout, resolve_rect};
-use klipolo_model::media::image::{Spot, add_image_ops, image_layout};
+use klipolo_model::media::image::{Spot, add_image_ops, add_image_ops_at, image_layout};
 use klipolo_model::media::music::is_music;
 use klipolo_model::media::sound::add_sound_ops;
 use klipolo_model::media::text::{
@@ -1045,6 +1045,43 @@ fn make_sticker_becomes_a_job_not_an_op() {
     );
     assert!(out.jobs.is_empty());
     assert!(refused_to_model(&out, 0).starts_with("makeSticker: atSec 25.5 is not within 0.3 s"));
+}
+
+#[test]
+fn a_drawn_sticker_is_placed_where_its_job_says_as_a_picture_is() {
+    // A 5 s sticker at 12 s, top right; the drawing comes back as a picture not in the project yet.
+    let p = project();
+    let mut job = sticker_job(&p, 12.0);
+    job.position = Position::TopRight;
+    let drawn = asset(
+        "drawn",
+        "image",
+        "paper plane sticker.png",
+        5.0,
+        (1024, 1024),
+        false,
+    );
+    let ops = sticker_ops(&p, &job, &drawn).expect("a place");
+    // The same ops the library's picture makes there, for the job's length.
+    let mut plus = add_image_ops_at(&p, &drawn, secs(12.0), 0.35, Spot::TopRight).unwrap();
+    for op in &mut plus {
+        if let Op::AddItem { item, .. } = op {
+            item.duration_us = secs(5.0);
+        }
+    }
+    assert_eq!(layers_of(&ops), layers_of(&plus));
+    assert_eq!(assets_added(&ops), ["drawn"]);
+    let after = apply_ops(&p, &ops).unwrap();
+    let sticker = &layers(&after, TrackKind::Overlay)[0];
+    assert_eq!(
+        (sticker.start_us, sticker.duration_us),
+        (secs(12.0), secs(5.0))
+    );
+    // Its moment cut while it was drawn: nowhere to go.
+    assert_eq!(
+        sticker_ops(&cut_out(&p, &[(11.0, 13.0)]), &job, &drawn),
+        None
+    );
 }
 
 #[test]
