@@ -3,7 +3,9 @@ import type { PreviewKind } from "./PreviewKind";
 
 /**
  * A preview frame's header. Each frame reaches the page over `recorder_previews`'s channel as raw bytes: the header's
- * length in two bytes (big-endian), the header as UTF-8 JSON, then the JPEG's own bytes (`frames::frame_message`).
+ * length in two bytes (big-endian), the header as UTF-8 JSON, then the JPEG's own bytes (`frames::frame_message`). The
+ * page acknowledges each one it draws, or drops, with `recorder_preview_ack(kind)`: at most two of a kind are on their
+ * way at once, and newer ones are dropped meanwhile.
  */
 export type PreviewFrame = { kind: PreviewKind, 
 /**

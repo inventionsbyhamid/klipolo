@@ -8,7 +8,10 @@
 //! - **the mic's meter** (`--record-worker --meter`): ten peaks a second, as `recorder-event`s of `PreviewId::Mic`.
 //!
 //! Frames go to the page as raw bytes (`frames`), each with when the app got it, so a card whose stills have stopped
-//! coming can be shown as such. The workers' stderr goes into the app's log (`launch::ProcessLaunch`).
+//! coming can be shown as such. The page acknowledges each frame it draws (`recorder_preview_ack`): at most
+//! `IN_FLIGHT` frames of a kind are on their way at once, and a frame beyond that is dropped, never queued, so a slow
+//! page never piles frames up in memory and always gets the latest. The workers' stderr goes into the app's log
+//! (`launch::ProcessLaunch`).
 //!
 //! **Consent** (whatever the page asks):
 //! - The stills and the live picture start only while Screen Recording is allowed (read without a prompt): otherwise
@@ -57,6 +60,8 @@ const TICK: Duration = Duration::from_millis(100);
 const MAX_LINE: u64 = 4 << 20;
 /// Klipolo's main window (`tauri.conf.json`'s `main`).
 const MAIN: &str = "main";
+/// The most frames of a kind on their way to the page, not yet drawn.
+const IN_FLIGHT: u8 = 2;
 
 /// The four previews.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -118,6 +123,8 @@ struct Running {
     generations: u64,
     /// Where frames and events go: the page of the last `recorder_previews`.
     out: Option<Arc<dyn PreviewOut>>,
+    /// Frames of each kind (`PreviewKind`'s order) sent to the page and not yet drawn.
+    in_flight: [u8; 3],
     /// The stills' targets: the displays and apps of the dialog's last setup.
     targets: Vec<(String, Target)>,
     /// The stills are wanted and allowed.
@@ -221,6 +228,7 @@ impl PreviewWorkers {
             return Ok(());
         }
         run.out = Some(out);
+        run.in_flight = [0; 3];
         let screen = allowed.screen == Permission::Granted && !run.screen_refused;
         run.want_thumbs = want.thumbs && screen;
         self.set_thumbs(&mut run, now);
@@ -320,6 +328,7 @@ impl PreviewWorkers {
         run.want_thumbs = false;
         run.thumbs_due = false;
         run.out = None;
+        run.in_flight = [0; 3];
         self.start_ticker(run);
         stopped
     }
@@ -543,12 +552,25 @@ impl PreviewWorkers {
         if run.kind_of(generation).is_none() {
             return;
         }
+        // The page hasn't drawn the last ones yet: this one is dropped, and a later one goes once it has.
+        let in_flight = &mut run.in_flight[kind as usize];
+        if *in_flight >= IN_FLIGHT {
+            return;
+        }
+        *in_flight += 1;
         if let Some(out) = run.out.clone()
             && !out.frame(message)
         {
             tracing::info!("recorder: the page's preview channel has gone");
             run.out = None;
         }
+    }
+
+    /// The page drew a frame of `kind`: one more of that kind may go.
+    pub(super) fn drawn(&self, kind: PreviewKind) {
+        let mut run = self.lock();
+        let in_flight = &mut run.in_flight[kind as usize];
+        *in_flight = in_flight.saturating_sub(1);
     }
 
     /// Preview worker `generation` ended with `code`. One that ended by itself (not told to) is forgotten, and the page
@@ -676,6 +698,13 @@ impl RecorderState {
         out: Arc<dyn PreviewOut>,
     ) -> Result<(), CodedError> {
         self.preview_workers()?.set(want, out)
+    }
+
+    /// The page drew a frame of `kind` (`PreviewWorkers::drawn`). In a test run there are none.
+    pub(super) fn preview_drawn(&self, kind: PreviewKind) {
+        if let Ok(previews) = self.preview_workers() {
+            previews.drawn(kind);
+        }
     }
 
     /// Every preview stops. In a test run there are none.

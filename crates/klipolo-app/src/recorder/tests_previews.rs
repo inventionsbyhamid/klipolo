@@ -357,3 +357,38 @@ fn the_mic_s_peaks_reach_the_page_as_its_events() {
     );
     assert!(p.frames().is_empty());
 }
+
+#[test]
+fn frames_wait_for_the_page_to_draw_them() {
+    let p = previewing(all_allowed());
+    let want = Previews {
+        live: Some(screen()),
+        camera: Some("camera-1".into()),
+        ..nothing()
+    };
+    p.set(want.clone()).unwrap();
+    let (live, camera) = (p.worker(LIVE), p.worker(CAMERA));
+    let count = |kind| p.frames().iter().filter(|(h, _)| h.kind == kind).count();
+    // The page draws nothing: two of each kind are on their way, and the rest are dropped.
+    for _ in 0..3 {
+        p.says(live, frame());
+        p.says(camera, frame());
+    }
+    assert_eq!(
+        (count(PreviewKind::Live), count(PreviewKind::Camera)),
+        (2, 2)
+    );
+    // It drew a live frame: the next live one goes, the one after waits again, and the camera's still wait.
+    p.state.preview_drawn(PreviewKind::Live);
+    p.says(live, frame());
+    p.says(live, frame());
+    p.says(camera, frame());
+    assert_eq!(
+        (count(PreviewKind::Live), count(PreviewKind::Camera)),
+        (3, 2)
+    );
+    // A new channel starts afresh.
+    p.set(want).unwrap();
+    p.says(camera, frame());
+    assert_eq!(count(PreviewKind::Camera), 3);
+}

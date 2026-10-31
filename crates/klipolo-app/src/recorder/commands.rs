@@ -17,7 +17,7 @@ use tauri::{AppHandle, Manager};
 use super::frames::{AppOut, PreviewOut};
 use super::permissions::open_url;
 use super::state::RecorderState;
-use super::types::{ArmOptions, ArmedTake, Previews, PrivacyPage, StoppedTake};
+use super::types::{ArmOptions, ArmedTake, PreviewKind, Previews, PrivacyPage, StoppedTake};
 use super::words;
 use crate::project::ProjectSessionState;
 
@@ -112,6 +112,17 @@ pub async fn recorder_previews(
     let out: Arc<dyn PreviewOut> = Arc::new(AppOut::new(app.clone(), frames));
     blocking(app, move |_, state| {
         state.previews(&want, out).map_err(Said::Coded)
+    })
+    .await
+}
+
+/// The page drew a preview frame of `kind`: one more of that kind may come. At most two of a kind are on their way at
+/// once, and the others are dropped, so the page acknowledges each frame it draws (or drops).
+#[tauri::command]
+pub async fn recorder_preview_ack(app: AppHandle, kind: PreviewKind) -> Result<(), Said> {
+    blocking(app, move |_, state| {
+        state.preview_drawn(kind);
+        Ok(())
     })
     .await
 }
