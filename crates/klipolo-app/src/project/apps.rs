@@ -8,6 +8,7 @@ use klipolo_mcp::limits::undo_shares;
 use klipolo_model::apply_ops;
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::history::{ByApp, LabelParams, Maker, Refused};
+use klipolo_model::risk::OpRisk;
 
 use super::apply::history_limits;
 use super::chat::at_of;
@@ -45,9 +46,9 @@ fn from_earlier(client: &str) -> (String, Option<LabelParams>) {
 
 /// Commits `tx`, app `client`'s batch, as one undo step the app made, when the open project stands where `stands` says
 /// the app read it; what changed and where the project stands now. Checked here, under the project's lock, in one step
-/// with the commit: the project's place, that it isn't read-only, that the batch takes nothing away (`needs_review`,
-/// again), and that no redo step of someone else's would go. The commit makes room only from the app's own steps,
-/// within its share of the history and all apps' (`undo_shares`).
+/// with the commit: the project's place, that it isn't read-only, that the batch takes nothing away (judged again from
+/// its ops on the project as it is, whatever origin it carries), and that no redo step of someone else's would go. The
+/// commit makes room only from the app's own steps, within its share of the history and all apps' (`undo_shares`).
 pub(crate) fn commit_by_app(
     state: &ProjectSessionState,
     client: &str,
@@ -62,7 +63,7 @@ pub(crate) fn commit_by_app(
             return Ok(Err(AppRefused::ReadOnly));
         }
         let document = &mut open.document;
-        if tx.needs_review(Some(document.project())) {
+        if tx.risk_against(document.project()) == OpRisk::Removal {
             return Ok(Err(AppRefused::Removes));
         }
         let mine = Maker::App(client.to_owned());

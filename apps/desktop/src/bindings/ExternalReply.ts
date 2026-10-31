@@ -6,4 +6,9 @@ import type { ChatReply } from "./ChatReply";
  * reply built as chat's are: the change it applied with its undo label (which names the app), the step of its own it
  * undid, the proposal it made, the moments it pointed at, or the picture it asked for.
  */
-export type ExternalReply = { client: string, reply: ChatReply, };
+export type ExternalReply = { client: string, 
+/**
+ * Which opening of the project it is about (`At::opening`): revisions start at 0 again with each opening, so the
+ * page matches the reply's change by the opening and the revision.
+ */
+opening: number, reply: ChatReply, };

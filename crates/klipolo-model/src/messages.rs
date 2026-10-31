@@ -19,12 +19,11 @@ pub const MESSAGES: Messages = &[
     ("model.newerVersion", "This project was made with a newer version of Klipolo. Update Klipolo to open it."),
     ("model.unreadable", "The project file couldn't be read."),
     ("model.readOnly", "This project is read-only because it was made with a newer version of Klipolo."),
-    // Home's rows (`summary::problem`) beyond the two versions above: a file that can't be opened or read (its next
-    // step differs from `model.unreadable`'s, which is about its content), one that doesn't hold a valid project, and
-    // one Home couldn't start reading.
+    // The start screen's rows (`summary::problem`) beyond the two versions above: a file that can't be opened or read
+    // (its next step differs from `model.unreadable`'s, which is about its content), and one that doesn't hold a valid
+    // project.
     ("project.cantOpen", "Klipolo can't open this project's file. Check that it's still there and that Klipolo may open it."),
     ("project.damaged", "This project's file is damaged, so it can't be opened."),
-    ("project.notRead", "Klipolo couldn't read this project just now. Go back to Home to try again."),
     ("model.notFound.clip", "That clip no longer exists."),
     ("model.notFound.layer", "That layer no longer exists."),
     ("model.notFound.track", "That track no longer exists."),

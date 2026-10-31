@@ -21,8 +21,9 @@
 //! with no proxy, no redirect, a new connection each time (Klipolo closes idle ones), and never an `Origin`. Only a
 //! whole reply to the request, at most `REPLY_LIMIT`, is passed on; a request that got none hears so, never silence:
 //! one that went to Klipolo may have been carried out (`words::MAY_BE_MADE`: read the project before trying again), and
-//! is never sent twice; one Klipolo never took in can be tried again (`words::UNANSWERED`). The bridge logs nothing, so the token and the headers show nowhere. When its
-//! input ends, it waits for the requests in flight, ends its session and returns.
+//! is never sent twice; one Klipolo never took in can be tried again (`words::UNANSWERED`). The bridge logs nothing, so
+//! the token and the headers show nowhere. When its input ends, it waits for the requests in flight, ends its session
+//! and returns.
 
 use std::io::{self, BufRead, Read, Write};
 use std::path::PathBuf;

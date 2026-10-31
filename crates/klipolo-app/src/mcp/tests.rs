@@ -281,6 +281,8 @@ fn host_commits_through_the_one_apply_path_and_publishes() {
     );
     assert_eq!(reply["applied"]["change"]["baseRevision"], 0);
     assert_eq!(reply["revision"], 1);
+    // The page matches the change by the opening and the revision: revisions restart with each opening.
+    assert_eq!(told[0]["reply"]["opening"], 1);
     assert_eq!(reply["proposal"], serde_json::Value::Null);
 
     // A base the project moved on from, or nothing to change: refused, or nothing told.
@@ -310,6 +312,15 @@ fn host_commits_through_the_one_apply_path_and_publishes() {
         r.host.apply("Example Client", r.base(), &cuts),
         Err(HostError::Refused(REMOVES.to_owned()))
     );
+    // Judged by what its ops take away, never by its origin: one with none is refused all the same.
+    let plain = Transaction {
+        origin: None,
+        ..cuts.clone()
+    };
+    assert_eq!(
+        r.host.apply("Example Client", r.base(), &plain),
+        Err(HostError::Refused(REMOVES.to_owned()))
+    );
     assert_eq!(r.project().timeline.main.len(), 2);
 }
 
@@ -332,19 +343,20 @@ fn host_proposal_fills_the_chat_slot_and_names_the_client() {
         (waiting.id.as_str(), waiting.from.as_deref()),
         (id.as_str(), Some("Example Client"))
     );
-    assert_eq!(waiting.title, "Keep only the parts you chose");
+    // The person chose nothing: the card says the parts were suggested (the page names who under it).
+    assert_eq!(waiting.title, "Keep only the suggested parts");
     let told = r.told();
     assert_eq!(told.len(), 1, "{told:#?}");
     assert_eq!(told[0]["reply"]["client"], "Example Client");
     let card = &told[0]["reply"]["reply"]["proposal"];
     assert_eq!(card["id"], id.as_str());
-    assert_eq!(card["title"], "Keep only the parts you chose");
+    assert_eq!(card["title"], "Keep only the suggested parts");
     assert_eq!(card["removedUs"], 1_000_000);
     assert_eq!(told[0]["reply"]["reply"]["revision"], 0);
     let expected = ProposalOutcome::Waiting {
         id: id.clone(),
         from: "Example Client".into(),
-        title: "Keep only the parts you chose".into(),
+        title: "Keep only the suggested parts".into(),
         removed_sec: 1.0,
         ranges: vec![[0.0, 1.0]],
     };
@@ -517,7 +529,11 @@ fn another_opening_drops_the_proposal_and_its_revisions() {
         r.base() > old,
         "the new opening reads above every old revision"
     );
+    r.told();
     assert!(r.host.apply("Example Client", r.base(), &tx).is_ok());
+    let told = r.told();
+    assert_eq!(told[0]["reply"]["opening"], 2, "the new opening's");
+    assert_eq!(told[0]["reply"]["reply"]["revision"], 1);
 }
 
 #[test]
@@ -713,12 +729,16 @@ fn the_persons_own_proposal_wins() {
         ChatOutcome::Reply(reply) => reply,
         other => panic!("a reply: {other:?}"),
     };
-    let id = reply.proposal_ref().expect("a proposal").id().to_owned();
+    let card = reply.proposal_ref().expect("a proposal");
+    let id = card.id().to_owned();
+    // The person chose these parts themselves: chat's own title stays as it was.
+    assert_eq!(card.title(), "Keep only the parts you chose");
     assert_eq!(r.host.open_proposal().unwrap().id, id);
     assert_eq!(r.host.open_proposal().unwrap().from, None);
     assert!(matches!(
         r.host.outcome("Example Client"),
-        ProposalOutcome::Waiting { from, .. } if from == KLIPOLO_CHAT
+        ProposalOutcome::Waiting { from, title, .. }
+            if from == KLIPOLO_CHAT && title == "Keep only the parts you chose"
     ));
     let tx = from_app(&rename("Day one"), "Example Client");
     assert_eq!(r.host.apply("Example Client", r.base(), &tx), Err(HostError::Moved));

@@ -83,6 +83,10 @@ pub struct ChatReply {
 #[ts(export)]
 pub struct ExternalReply {
     pub client: String,
+    /// Which opening of the project it is about (`At::opening`): revisions start at 0 again with each opening, so the
+    /// page matches the reply's change by the opening and the revision.
+    #[ts(type = "number")]
+    pub opening: u64,
     pub reply: ChatReply,
 }
 

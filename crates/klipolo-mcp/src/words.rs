@@ -122,7 +122,8 @@ pub const NO_PROMPT: &str = "Say what the picture shows, in a few words.";
 /// new chat, or another project opened.
 pub const DROPPED_CHANGED: &str =
     "The project changed in Klipolo before the person decided, so it can no longer apply.";
-pub const DROPPED_RETIMED: &str = "The clip's words were timed again in Klipolo before the person decided, so it can no longer apply.";
+pub const DROPPED_RETIMED: &str = "The clip's words were timed again in Klipolo before the person decided, so it can \
+no longer apply.";
 pub const DROPPED_REPLACED: &str =
     "The person asked Klipolo's chat for another change in its place.";
 pub const DROPPED_NEW_CHAT: &str = "The person started a new chat in Klipolo.";

@@ -20,13 +20,15 @@ export function ExportButton() {
     : finishing
       ? 'Finishing'
       : `Exporting ${formatPercent(locale, percent / 100)}`;
+  const off = !hasVideo && !running;
   return (
     <button
       type="button"
       className="btn btn-primary export-btn"
-      disabled={!hasVideo && !running}
-      title={hasVideo || running ? 'Export (Command E)' : 'Add a video first'}
-      onClick={() => useExport.getState().setOpen(true)}
+      // Off but not `disabled`: WebKit shows no tooltip on a disabled button, and this one says why.
+      aria-disabled={off || undefined}
+      title={off ? 'Add a video first' : 'Export (Command E)'}
+      onClick={() => !off && useExport.getState().setOpen(true)}
     >
       <Icon name="export" />
       <span className="ex-tabular">{text}</span>
