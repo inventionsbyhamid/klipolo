@@ -3,7 +3,7 @@
 //! it, so callers never mix these with cursor-based reads and writes on the same file.
 //!
 //! Also the read-ahead hint for a mapped file (`will_need`), a file's identity (`identity`), and a small secret only
-//! this user can read (`write_private`).
+//! this user can read (`write_private`), read back only as a file of its own (`read_private`).
 
 use std::fs::File;
 use std::io;
@@ -26,6 +26,32 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
         options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
     }
     io::Write::write_all(&mut options.open(path)?, bytes)
+}
+
+/// Reads at most `most` bytes of a small file `write_private` made, only as a regular file of its own: never through a
+/// symbolic link, and never waiting on a FIFO or a device put at its name. Anything but a regular file is
+/// `InvalidInput`.
+/// - macOS and Linux: `O_NOFOLLOW | O_NONBLOCK` (a FIFO opens at once instead of waiting for a writer), then the open
+///   file must be a regular file;
+/// - Windows: the open file must be a regular file.
+pub fn read_private(path: &Path, most: u64) -> io::Result<Vec<u8>> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = options.open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "not a regular file",
+        ));
+    }
+    let mut bytes = Vec::new();
+    io::Read::read_to_end(&mut io::Read::take(file, most), &mut bytes)?;
+    Ok(bytes)
 }
 
 /// Tells the OS that `bytes`, part of a memory-mapped file, will be read soon, so it pages them in ahead of the reader
@@ -172,6 +198,38 @@ mod tests {
         std::os::unix::fs::symlink(dir.path().join("created"), &dangling).unwrap();
         assert!(write_private(&dangling, b"secret").is_err());
         assert!(!dir.path().join("created").exists());
+    }
+
+    /// A private file reads back, at most `most` bytes of it. A link, a folder or a FIFO put in its place is refused,
+    /// a FIFO at once rather than waiting for a writer that never comes.
+    #[cfg(unix)]
+    #[test]
+    fn a_private_file_reads_only_as_a_file_of_its_own() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("key");
+        write_private(&path, b"secret").unwrap();
+        assert_eq!(read_private(&path, 64).unwrap(), b"secret");
+        assert_eq!(read_private(&path, 3).unwrap(), b"sec");
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&path, &link).unwrap();
+        assert!(read_private(&link, 64).is_err(), "a link");
+        let folder = dir.path().join("folder");
+        std::fs::create_dir(&folder).unwrap();
+        assert!(read_private(&folder, 64).is_err(), "a folder");
+        let fifo = dir.path().join("fifo");
+        let made = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap();
+        assert!(made.success());
+        // On a thread, so a read that waits fails the test instead of hanging it.
+        let (said, heard) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = said.send(read_private(&fifo, 64).is_err());
+        });
+        let refused = heard.recv_timeout(std::time::Duration::from_secs(2));
+        assert_eq!(refused, Ok(true), "a FIFO, refused at once");
+        assert!(read_private(&dir.path().join("gone"), 64).is_err());
     }
 
     #[test]
