@@ -55,6 +55,8 @@ const APP_CODES: Record<string, string> = {
   'project.createFailed': "Couldn't create the project.",
   'project.noVideosFolder': "Klipolo couldn't find your Movies folder.",
   'project.libraryFailed': "Klipolo couldn't make its projects folder. Check the disk, then try again.",
+  'project.revealGone': "This project's file isn't there any more.",
+  'project.revealFailed': "Klipolo couldn't open Finder. Try again.",
 };
 
 /**
