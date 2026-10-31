@@ -259,7 +259,8 @@ fn main() {
         // The Record dialog's previews stop when the window goes behind, hides or minimises, and none outlives Klipolo.
         recorder::follow_window(app, &event);
         // Reopen Klipolo's exit, once it goes ahead (neither guard held it), starts the waiter that opens Klipolo again
-        // when this one has gone. One a guard held leaves nothing armed.
+        // when this one has gone. One a guard held leaves nothing armed. Any exit remembers a Screen Recording refused
+        // while the person chose what to record, for macOS's own Quit & Reopen.
         recorder::relaunch_on_exit(app, &event, asks || waits);
         match event {
             RunEvent::Exit => {

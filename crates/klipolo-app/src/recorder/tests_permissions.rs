@@ -381,7 +381,102 @@ fn a_launch_long_after_reopen_klipolo_is_not_its_reopen() {
     let tour = std::path::Path::new("/p/Tour.klipolo");
     remember(&files, 1_000, Some(tour)).unwrap();
     let back = back_from(&files, 1_000 + 120_000).unwrap();
-    assert_eq!(back.project.as_deref(), Some("/p/Tour.klipolo"));
+    assert_eq!(back.to.project.as_deref(), Some("/p/Tour.klipolo"));
+    assert!(!back.once_allowed);
     assert_eq!(back_from(&files, 1_000 + 120_001), None);
     assert!(refused_after_reopen(&files, Permission::Denied));
+}
+
+/// macOS's own alert: once Klipolo is turned on in Screen Recording's list, its "Quit & Reopen" quits Klipolo with no
+/// word beforehand, then opens it again. A run that found Screen Recording refused while the person chose what to
+/// record (the Record dialog's step showed, or they pressed Allow) comes back at the next launch to the project open
+/// then, with the Record dialog, once Screen Recording is allowed. Once only: the launch after is an ordinary one.
+#[test]
+fn quit_and_reopen_from_macos_comes_back_to_the_project_once_allowed() {
+    use super::types::BackFromReopen;
+    let dir = tempfile::tempdir().unwrap();
+    let launch = |screen| {
+        let script = Script {
+            screen_permission: screen,
+            ..Script::default()
+        };
+        let (parts, world) = world(dir.path(), script);
+        (super::state::RecorderState::build(false, || parts), world)
+    };
+    // The Record dialog's step shows; the person turns Klipolo on in System Settings and picks macOS's Quit & Reopen.
+    let (state, world) = launch(Permission::NotAsked);
+    state.setup().unwrap();
+    state.exits();
+    let file = world.project.lock().unwrap().clone().unwrap().file;
+    let project = Some(file.to_string_lossy().into_owned());
+    let (back, _) = launch(Permission::Granted);
+    assert_eq!(back.back_from_reopen(), Some(BackFromReopen { project }));
+    assert_eq!(back.back_from_reopen(), None, "once");
+    back.setup().unwrap();
+    back.exits();
+    let (ordinary, _) = launch(Permission::Granted);
+    assert_eq!(ordinary.back_from_reopen(), None, "the launch after");
+    // From the start screen: Allow pressed, then Quit & Reopen.
+    let (state, world) = launch(Permission::NotAsked);
+    *world.project.lock().unwrap() = None;
+    state.allow_screen(&|_| Ok(())).unwrap();
+    state.exits();
+    let (back, _) = launch(Permission::Granted);
+    assert_eq!(
+        back.back_from_reopen(),
+        Some(BackFromReopen { project: None })
+    );
+    // Record refused for it (no setup read since it was allowed): the same.
+    let (state, _) = launch(Permission::Denied);
+    assert!(state.arm(&options_screen()).is_err());
+    state.exits();
+    let (back, _) = launch(Permission::Granted);
+    assert!(back.back_from_reopen().is_some());
+}
+
+/// A launch is back from a quit only when that quit's run found Screen Recording refused, and it is allowed now: never
+/// when the dialog never asked, when it read Screen Recording allowed, or when it is still refused (and the memory goes
+/// with that launch). It never makes the step say Screen Recording is still refused after Reopen Klipolo.
+#[test]
+fn any_other_quit_is_followed_by_an_ordinary_launch() {
+    use super::screen_reopen::{back_from, refused_after_reopen, remember_asked};
+    let dir = tempfile::tempdir().unwrap();
+    let launch = |screen| {
+        let script = Script {
+            screen_permission: screen,
+            ..Script::default()
+        };
+        let (parts, world) = world(dir.path(), script);
+        (super::state::RecorderState::build(false, || parts), world)
+    };
+    // The Record dialog never opened.
+    let (state, _) = launch(Permission::NotAsked);
+    state.exits();
+    assert_eq!(launch(Permission::Granted).0.back_from_reopen(), None);
+    // It opened with Screen Recording allowed: no step.
+    let (state, _) = launch(Permission::Granted);
+    state.setup().unwrap();
+    state.exits();
+    assert_eq!(launch(Permission::Granted).0.back_from_reopen(), None);
+    // The step showed, and Screen Recording is still refused at the next launch: an ordinary one, as is the one after.
+    let (state, _) = launch(Permission::NotAsked);
+    state.setup().unwrap();
+    state.exits();
+    let (still, _) = launch(Permission::Denied);
+    assert_eq!(still.back_from_reopen(), None);
+    assert!(!still.setup().unwrap().screen_refused_after_reopen);
+    assert_eq!(launch(Permission::Granted).0.back_from_reopen(), None);
+    // Long after the quit: not back.
+    let files = super::setup::Files {
+        dir: dir.path().join("recorder"),
+    };
+    let tour = std::path::Path::new("/p/Tour.klipolo");
+    remember_asked(&files, 1_000, Some(tour)).unwrap();
+    assert_eq!(back_from(&files, 1_000 + 120_001), None);
+    assert_eq!(back_from(&files, 1_000), None, "taken by the launch before");
+    remember_asked(&files, 1_000, Some(tour)).unwrap();
+    assert!(!refused_after_reopen(&files, Permission::Denied));
+    let back = back_from(&files, 1_000 + 120_000).unwrap();
+    assert_eq!(back.to.project.as_deref(), Some("/p/Tour.klipolo"));
+    assert!(back.once_allowed);
 }

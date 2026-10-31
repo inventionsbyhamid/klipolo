@@ -94,8 +94,9 @@ pub async fn recorder_reopen(app: AppHandle) -> Result<(), Said> {
     .await
 }
 
-/// Klipolo opened just after Reopen Klipolo: the project open then, so the page opens it again with the Record dialog,
-/// where the person was. Once per run; None otherwise, and in a test run.
+/// Klipolo opened just after Reopen Klipolo, or just after macOS's own "Quit & Reopen" (it quit with Screen Recording
+/// refused while the person chose what to record, and it is allowed now): the project open then, so the page opens it
+/// again with the Record dialog, where the person was. Once per run; None otherwise, and in a test run.
 #[tauri::command]
 pub async fn recorder_back_from_reopen(app: AppHandle) -> Result<Option<BackFromReopen>, Said> {
     blocking(app, |_, state| Ok(state.back_from_reopen())).await

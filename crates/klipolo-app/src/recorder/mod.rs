@@ -17,7 +17,8 @@
 //!   config from the person's options and the app's fixed choices.
 //! - **The permission steps** (`permissions`, `screen_reopen`, `relaunch`): Allow screen recording, Reopen Klipolo
 //!   and Open privacy settings, each on the person's own press. Reopen Klipolo quits, and a waiter outside Klipolo
-//!   opens it again once it has gone.
+//!   opens it again once it has gone. Back from it, or from macOS's own "Quit & Reopen" with Screen Recording now
+//!   allowed, Klipolo opens the project again with the Record dialog.
 //! - **The Record dialog's previews** (`previews`, `live_view`, `check`, `frames`): stills of each screen and app, the
 //!   live picture of the choice, the camera and the mic's level, each in a worker of its own while the dialog is open
 //!   and Klipolo is in front, within the consent rules, and stopped before a take arms.

@@ -21,7 +21,7 @@ use super::launch::{Launch, ProcessLaunch, WorkerIo};
 use super::permissions::{self, Open};
 use super::previews::PreviewWorkers;
 use super::relaunch::{REOPEN_EXIT_CODE, Relaunch};
-use super::screen_reopen;
+use super::screen_reopen::{self, Back};
 use super::setup::{self, Files, Probing, Shown};
 use super::sink::AppSink;
 use super::take::Recorder;
@@ -94,8 +94,17 @@ struct On {
     probe_failed: AtomicBool,
     /// The Record dialog's previews.
     previews: Arc<PreviewWorkers>,
-    /// Klipolo opened just after Reopen Klipolo: what the page opens again, given once.
-    back: Mutex<Option<BackFromReopen>>,
+    /// Klipolo opened just after it quit to apply Screen Recording: what the page opens again, given once.
+    back: Mutex<Option<Back>>,
+    /// Screen Recording was refused in this run while the person chose what to record: remembered as Klipolo exits.
+    screen_refused: Mutex<Option<ScreenRefused>>,
+}
+
+/// Screen Recording was refused while the person chose what to record (the Record dialog's step showed, Allow was
+/// pressed, or Record was refused for it).
+struct ScreenRefused {
+    /// The project open then; None on the start screen.
+    project: Option<PathBuf>,
 }
 
 pub struct RecorderState {
@@ -153,6 +162,7 @@ impl RecorderState {
                 probe_failed: AtomicBool::new(false),
                 previews,
                 back: Mutex::new(back),
+                screen_refused: Mutex::new(None),
             }),
             relaunch: Relaunch::default(),
         }
@@ -217,6 +227,8 @@ impl RecorderState {
         on.previews.setup_read(&shown.setup.devices);
         let setup = shown.setup.clone();
         *lock(&on.last_setup) = Some(shown);
+        // The dialog shows its Screen Recording step while it isn't allowed: every take records the screen.
+        on.note_screen(setup.permissions.screen != Permission::Granted);
         Ok(setup)
     }
 
@@ -230,6 +242,7 @@ impl RecorderState {
         let files = on.files.as_ref().ok_or_else(words::no_settings_folder)?;
         let backend = on.backend.get();
         if backend.permissions().screen != Permission::Granted {
+            on.note_screen(true);
             return Err(words::not_allowed());
         }
         let shown = lock(&on.last_setup).clone();
@@ -264,6 +277,7 @@ impl RecorderState {
     /// "Allow screen recording": the request, then the settings page with `open`.
     pub(super) fn allow_screen(&self, open: Open<'_>) -> Result<(), CodedError> {
         let on = self.on()?;
+        on.note_screen(true);
         permissions::allow_screen(&*on.backend.get(), open);
         Ok(())
     }
@@ -295,10 +309,38 @@ impl RecorderState {
         )
     }
 
-    /// Klipolo opened just after Reopen Klipolo: the project open then, for the page to open again with the Record
-    /// dialog. Once per run; None otherwise, and in a test run.
+    /// Klipolo opened just after Reopen Klipolo, or just after it quit with Screen Recording refused while the person
+    /// chose what to record and Screen Recording is allowed now (macOS's own "Quit & Reopen"): the project open then,
+    /// for the page to open again with the Record dialog. Once per run; None otherwise, and in a test run.
     pub(super) fn back_from_reopen(&self) -> Option<BackFromReopen> {
-        self.on.as_ref().and_then(|on| lock(&on.back).take())
+        let on = self.on.as_ref()?;
+        let back = lock(&on.back).take()?;
+        if back.once_allowed {
+            if on.backend.get().permissions().screen != Permission::Granted {
+                tracing::info!(
+                    "recorder: Klipolo quit with Screen Recording off, and it still is: an ordinary launch"
+                );
+                return None;
+            }
+            tracing::info!("recorder: Klipolo is back with Screen Recording allowed");
+        }
+        Some(back.to)
+    }
+
+    /// Klipolo exits: a Screen Recording refused in this run while the person chose what to record is remembered with
+    /// the project open then (`screen_reopen::remember_asked`), so a launch soon after with it allowed comes back there.
+    /// On the main thread: one small file, and no lock that file work holds.
+    pub(super) fn exits(&self) {
+        let Some(on) = &self.on else {
+            return;
+        };
+        let refused = lock(&on.screen_refused).take();
+        if let (Some(refused), Some(files)) = (refused, &on.files)
+            && let Err(error) =
+                screen_reopen::remember_asked(files, now_ms(), refused.project.as_deref())
+        {
+            tracing::warn!(%error, "recorder: the refused Screen Recording wasn't remembered");
+        }
     }
 
     /// The Record dialog's previews (`previews`); `capture.error.testRun` in a test run.
@@ -325,6 +367,17 @@ impl RecorderState {
         self.on
             .as_ref()
             .is_some_and(|on| on.recorder.disarm_unstarted())
+    }
+}
+
+impl On {
+    /// Whether Screen Recording is `refused` as the person chooses what to record: remembered with the open project, or
+    /// forgotten once it is allowed.
+    fn note_screen(&self, refused: bool) {
+        let refused = refused.then(|| ScreenRefused {
+            project: (self.open_project)().map(|opened| opened.file),
+        });
+        *lock(&self.screen_refused) = refused;
     }
 }
 

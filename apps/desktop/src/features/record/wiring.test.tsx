@@ -191,6 +191,20 @@ describe('in the window', () => {
     expect(fake.calls.filter((call) => call === 'backFromReopen')).toHaveLength(1);
   });
 
+  it('macos_quit_and_reopen_comes_back_to_the_project_with_record_ready', async () => {
+    // macOS's own alert reopened Klipolo once it was turned on in Screen Recording's list. The app says so as after
+    // Reopen Klipolo, and Screen Recording is allowed now: the person's project, with Record ready and no step.
+    const file = '/Users/me/Movies/Klipolo/Studio tour.klipolo';
+    const { fake, useProject } = await launch({ backFromReopen: () => ({ project: file }) });
+    const dialog = await screen.findByRole('dialog', { name: 'Record' });
+    expect(useProject.getState().snapshot?.project.name).toBe('Studio tour');
+    const record = await within(dialog).findByRole('button', { name: 'Record' });
+    expect(record).not.toHaveAttribute('aria-disabled', 'true');
+    expect(dialog).not.toHaveTextContent('Klipolo needs your permission to record your screen.');
+    expect(within(dialog).queryByRole('button', { name: 'Allow screen recording' })).toBeNull();
+    expect(fake.calls.filter((call) => call === 'backFromReopen')).toHaveLength(1);
+  });
+
   it('reopen_klipolo_from_the_start_screen_comes_back_to_the_record_dialog_there', async () => {
     await launch({ backFromReopen: () => ({ project: null }) });
     expect(await screen.findByRole('dialog', { name: 'Record' })).toBeInTheDocument();

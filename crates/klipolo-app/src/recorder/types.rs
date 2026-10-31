@@ -59,13 +59,13 @@ pub struct ArmedTake {
     pub notes: Option<Vec<CodedError>>,
 }
 
-/// Klipolo opened again just now through Reopen Klipolo (`recorder_back_from_reopen`): the person was choosing what to
-/// record, so the page opens the project they had open, then the Record dialog.
+/// Klipolo opened again just now through Reopen Klipolo or macOS's own "Quit & Reopen" (`recorder_back_from_reopen`):
+/// the person was choosing what to record, so the page opens the project they had open, then the Record dialog.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct BackFromReopen {
-    /// The project open as Reopen Klipolo was pressed, by its file; None on the start screen.
+    /// The project open then, by its file; None on the start screen.
     pub project: Option<String>,
 }
 

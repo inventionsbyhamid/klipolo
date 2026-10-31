@@ -48,14 +48,21 @@ impl Relaunch {
 }
 
 /// Follows the app's exit: an exit asked with Reopen Klipolo's code that goes ahead (no quit guard `held` it) starts
-/// the waiter as the app exits. One a guard held leaves nothing armed (`RecorderState::exit_requested`).
+/// the waiter as the app exits. One a guard held leaves nothing armed (`RecorderState::exit_requested`). As the app
+/// exits, however it quits, a Screen Recording refused in this run is remembered first (`RecorderState::exits`), for
+/// macOS's own "Quit & Reopen".
 pub fn relaunch_on_exit(app: &AppHandle, event: &RunEvent, held: bool) {
     let Some(state) = app.try_state::<RecorderState>() else {
         return;
     };
     match event {
         RunEvent::ExitRequested { code, .. } => state.exit_requested(*code, held),
-        RunEvent::Exit if state.relaunch().due() => start(),
+        RunEvent::Exit => {
+            state.exits();
+            if state.relaunch().due() {
+                start();
+            }
+        }
         _ => {}
     }
 }

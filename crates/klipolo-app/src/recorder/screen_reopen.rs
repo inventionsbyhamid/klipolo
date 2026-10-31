@@ -10,6 +10,13 @@
 //!
 //! The memory also names the project that was open. A launch soon after (`back_from`) is that reopen's, and the page
 //! opens the project again with the Record dialog, where the person was.
+//!
+//! macOS's own alert offers the same relaunch: once Klipolo is turned on in the list, "Quit & Reopen" quits it with no
+//! word beforehand and opens it again. So a run that found Screen Recording refused while the person chose what to
+//! record (the Record dialog's step showed, or they pressed Allow) remembers that as it exits, with the project open
+//! then (`remember_asked`, a file of its own). The next launch takes that memory, once: when it comes soon after the
+//! exit and Screen Recording is allowed now (`Back::once_allowed`), it is back too, whichever button reopened Klipolo.
+//! Any other launch is an ordinary one.
 
 use std::path::{Path, PathBuf};
 
@@ -40,28 +47,86 @@ fn path(files: &Files) -> PathBuf {
     files.dir.join("screen-reopen.json")
 }
 
+/// `<app data>/recorder/screen-asked.json`: Klipolo quit with Screen Recording refused while the person chose what to
+/// record.
+fn asked_path(files: &Files) -> PathBuf {
+    files.dir.join("screen-asked.json")
+}
+
 /// Reopen Klipolo goes ahead, at `at_ms` (ms since 1970), with `project` open: remembered for the next opening.
 pub(super) fn remember(files: &Files, at_ms: u64, project: Option<&Path>) -> std::io::Result<()> {
+    write(&path(files), files, at_ms, project)
+}
+
+/// Klipolo exits at `at_ms` (ms since 1970), and in this run Screen Recording was refused while the person chose what
+/// to record, with `project` open: remembered for the next opening, should macOS's own "Quit & Reopen" be what quit it.
+pub(super) fn remember_asked(
+    files: &Files,
+    at_ms: u64,
+    project: Option<&Path>,
+) -> std::io::Result<()> {
+    write(&asked_path(files), files, at_ms, project)
+}
+
+fn write(path: &Path, files: &Files, at_ms: u64, project: Option<&Path>) -> std::io::Result<()> {
     std::fs::create_dir_all(&files.dir)?;
     let reopened = Reopened {
         at_ms,
         project: project.map(Path::to_path_buf),
     };
     let bytes = serde_json::to_vec(&reopened)?;
-    write_atomic(&path(files), &bytes, Durability::Ordered)
+    write_atomic(path, &bytes, Durability::Ordered)
 }
 
-/// Klipolo opens at `now_ms` (ms since 1970): when Reopen Klipolo went ahead just before, the project open then. The
-/// memory stays, for the setup's `refused_after_reopen`.
-pub(super) fn back_from(files: &Files, now_ms: u64) -> Option<BackFromReopen> {
-    let reopened = read_json::<Reopened>(&path(files))?;
-    if now_ms.saturating_sub(reopened.at_ms) > BACK_WITHIN_MS {
-        return None;
+/// Klipolo opened soon after it quit to apply Screen Recording: where the person was.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct Back {
+    pub(super) to: BackFromReopen,
+    /// Klipolo quit with Screen Recording refused (perhaps by macOS's "Quit & Reopen"): this launch is back only if
+    /// Screen Recording is allowed now. False after Reopen Klipolo, which is back either way.
+    pub(super) once_allowed: bool,
+}
+
+/// Klipolo opens at `now_ms` (ms since 1970): when Reopen Klipolo went ahead just before, the project open then; else,
+/// when Klipolo quit just before with Screen Recording refused, the project open then, once Screen Recording is
+/// allowed. The quit's memory is taken now, so it counts for this launch only; Reopen Klipolo's stays, for the setup's
+/// `refused_after_reopen`.
+pub(super) fn back_from(files: &Files, now_ms: u64) -> Option<Back> {
+    let asked = read_once(&asked_path(files));
+    let soon = |memory: &Reopened| now_ms.saturating_sub(memory.at_ms) <= BACK_WITHIN_MS;
+    if let Some(reopened) = read_json::<Reopened>(&path(files)).filter(soon) {
+        tracing::info!("recorder: Klipolo is back from Reopen Klipolo");
+        return Some(Back {
+            to: reopened.into(),
+            once_allowed: false,
+        });
     }
-    tracing::info!("recorder: Klipolo is back from Reopen Klipolo");
-    Some(BackFromReopen {
-        project: (reopened.project).map(|file| file.to_string_lossy().into_owned()),
+    let asked = asked.filter(soon)?;
+    Some(Back {
+        to: asked.into(),
+        once_allowed: true,
     })
+}
+
+/// The memory at `path`, which goes as it is read.
+fn read_once(path: &Path) -> Option<Reopened> {
+    let memory = read_json::<Reopened>(path);
+    match std::fs::remove_file(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            tracing::warn!(%error, "recorder: the Screen Recording memory wasn't removed")
+        }
+    }
+    memory
+}
+
+impl From<Reopened> for BackFromReopen {
+    fn from(memory: Reopened) -> Self {
+        Self {
+            project: (memory.project).map(|file| file.to_string_lossy().into_owned()),
+        }
+    }
 }
 
 /// Whether macOS still refuses Screen Recording (`screen`, as the setup reads it) after Reopen Klipolo. Once it is
