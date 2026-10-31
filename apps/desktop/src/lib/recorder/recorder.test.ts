@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkerState } from '../../bindings/WorkerState';
+import { codedMessage } from '../../bridge/call';
 import { app, device, display, recorderSetup } from '../../test/recorderBridge';
 import { armOptions, defaultPicks, NO_PICKS, type Picks, whatToRecord } from './choices';
 import { deviceDenied, screenStage, screenStep } from './permission';
 import { phaseOf, type RecorderPhase } from './phase';
+import { RECORDER_WORDS } from './words';
 
 const picks = (over: Partial<Picks> = {}): Picks => ({ ...NO_PICKS, display: 'main', ...over });
 
@@ -98,6 +100,24 @@ describe('permissions', () => {
     const notAsked = recorderSetup({ permissions: { mic: 'notAsked', camera: 'granted' } });
     expect(deviceDenied(notAsked, 'mic', picks({ mic: 'usb' }))).toBe(false);
     expect(deviceDenied(notAsked, 'camera', picks({ camera: 'facetime' }))).toBe(false);
+  });
+});
+
+describe('words', () => {
+  it('recorder_notes_offer_only_what_klipolo_has', () => {
+    const said = (code: string) => codedMessage({ code, params: {} });
+    expect(said('capture.health.dropping')).toBe('Some frames are being dropped. Quitting other busy apps may help.');
+    expect(said('capture.preflight.diskShort')).toBe(
+      'Less than 30 minutes of space left. Free up space to record longer.',
+    );
+    expect(said('capture.startOver.kept')).toBe(
+      "Started over. The last take couldn't be moved to the Trash, so it stays in Movies / Klipolo / Recordings.",
+    );
+    expect(said('capture.startOver.undoFailed')).toBe("The last take couldn't be put back. Look for it in the Trash.");
+    // No quality list, no Home, no long dashes.
+    for (const code of Object.keys(RECORDER_WORDS)) expect(said(code)).not.toMatch(/Light|Home|[\u2013\u2014]/);
+    // The rest are the recorder's own.
+    expect(said('capture.error.encoder')).toBe('The video encoder stopped.');
   });
 });
 
