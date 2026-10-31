@@ -54,4 +54,30 @@ describe('the empty chat’s analysis note', () => {
     expect(screen.getByText(/still listening/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Analyze' })).toBeNull();
   });
+
+  it('says cuts work while the clips are only being watched (their words are in)', () => {
+    const done = { state: 'done', approximate: false } as const;
+    useAnalysis.setState({
+      states: { screen: { state: 'running', step: 'scenes', pct: 60 }, camera: done, mic: done, music: done, broll: done },
+    });
+    renderWithProviders(<MessageList />);
+    expect(
+      screen.getByText(
+        'Klipolo is still watching these clips. Cutting ums and pauses works now. Moments work when analysis is done.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/still listening/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Analyze' })).toBeNull();
+  });
+
+  it('says it is still listening while any clip’s words are still to come', () => {
+    useAnalysis.setState({
+      states: {
+        screen: { state: 'running', step: 'scenes', pct: 60 },
+        camera: { state: 'running', step: 'transcript', pct: 10 },
+      },
+    });
+    renderWithProviders(<MessageList />);
+    expect(screen.getByText(/still listening/)).toBeInTheDocument();
+  });
 });

@@ -21,17 +21,19 @@ const SUGGESTIONS = [
 const NO_ASSETS: Asset[] = [];
 
 /**
- * Where the project's clips are with analysis, for the empty chat's note: some still being analysed, some not analysed
- * (never, failed or stopped), or every one done (or no clips).
+ * Where the project's clips are with analysis, for the empty chat's note: some still being heard (their words still to
+ * come), some only being watched (the scene log, last: their words are in, so cuts work), some not analysed (never,
+ * failed or stopped), or every one done (or no clips).
  */
-function useAnalysisNote(): 'running' | 'missing' | null {
+function useAnalysisNote(): 'listening' | 'watching' | 'missing' | null {
   const assets = useProject((s) => s.snapshot?.project.assets ?? NO_ASSETS);
   return useAnalysis((s) => {
     const states = assets
       .filter((a) => a.kind === 'video' || a.kind === 'audio')
-      .map((a) => stateOf(s.states, a.id).state);
-    if (states.includes('running')) return 'running';
-    if (states.some((state) => state !== 'done')) return 'missing';
+      .map((a) => stateOf(s.states, a.id));
+    if (states.some((a) => a.state === 'running' && a.step !== 'scenes')) return 'listening';
+    if (states.some((a) => a.state === 'running')) return 'watching';
+    if (states.some((a) => a.state !== 'done')) return 'missing';
     return null;
   });
 }
@@ -76,16 +78,22 @@ function EmptyChat() {
         <p className="note">
           <Icon name="info" />
           <span>
-            {analysis === 'running'
+            {analysis === 'listening'
               ? t({
                   id: 'chatPanel.empty.analysing',
                   message: 'Klipolo is still listening to these clips. Cuts and moments work when analysis is done.',
                 })
-              : t({
-                  id: 'chatPanel.empty.notAnalysed',
-                  message:
-                    'Analyze the clips first to cut pauses, find moments and add captions. Format and music work now.',
-                })}
+              : analysis === 'watching'
+                ? t({
+                    id: 'chatPanel.empty.watching',
+                    message:
+                      'Klipolo is still watching these clips. Cutting ums and pauses works now. Moments work when analysis is done.',
+                  })
+                : t({
+                    id: 'chatPanel.empty.notAnalysed',
+                    message:
+                      'Analyze the clips first to cut pauses, find moments and add captions. Format and music work now.',
+                  })}
           </span>
           {analysis === 'missing' && offerable && (
             // The offer comes back in the analysis banner, with its price, even after "Not now".
