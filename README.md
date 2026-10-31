@@ -91,10 +91,12 @@ start without `KLIPOLO_SOURCE_URL`. The app's `NOTICE.txt` gives that address
 and the commit built, as the source code of this version. It then runs these
 steps in order and stops at the first failure. Each also runs on its own:
 
-- `scripts/release/check-bundle.sh <app> <x86_64|arm64>` checks the bundle
-  before anything is signed: the licences (with the third-party notices, the
-  source address and the commit), one arch, macOS 15.0, load paths and rpaths, and no file
-  naming your home folder.
+- `scripts/release/check-bundle.sh <app> <x86_64|arm64> [<page build>]`
+  checks the bundle before anything is signed: the licences (with the
+  third-party notices, the source address and the commit), one arch, macOS
+  15.0, load paths and rpaths, and no file naming your home folder, in the app
+  or in the page build. That is `apps/desktop/dist` unless you give one, which
+  only matches the app right after the build that made it.
 - `scripts/release/sign.sh <app>` signs with the Developer ID in your
   keychain, from the inside out. `--list` prints the order and signs nothing.
 - `scripts/release/notarize.sh <app> <out.dmg>` notarizes and staples the app,
