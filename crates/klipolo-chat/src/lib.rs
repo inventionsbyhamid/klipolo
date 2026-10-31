@@ -21,8 +21,8 @@ pub use compile::{
     Proposal, Refusal, STILL_LISTENING, compile, picture_layout, picture_ops, sticker_placement,
 };
 pub use context::{
-    ChatContext, MAX_CONTEXT_TOKENS, Refs, SceneEntry, SceneLog, SpeakerTurn, View, build_context,
-    estimate_tokens,
+    ChatContext, FullTranscript, MAX_CONTEXT_TOKENS, Refs, SceneEntry, SceneLog, SpeakerTurn,
+    TranscriptLine, View, build_context, estimate_tokens, full_transcript,
 };
 pub use library::{Library, LibraryItem, MediaKind};
 pub use model::{BoxFuture, Item, LanguageModel, ModelError, ModelRequest, ModelResponse};
