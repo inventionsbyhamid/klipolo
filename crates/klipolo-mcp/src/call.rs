@@ -144,8 +144,11 @@ fn joined(
     open: &OpenProposal,
     snap: &Snapshot,
 ) -> Result<Vec<ToolCall>, String> {
-    let own = mcp.own();
-    let Some(own) = (own.as_ref()).filter(|o| o.id == open.id && o.client == client) else {
+    // A copy, so the lock isn't held across the compile below: other apps' calls take it too.
+    let own = (mcp.own().as_ref())
+        .filter(|o| o.id == open.id && o.client == client)
+        .cloned();
+    let Some(own) = own else {
         // What it holds isn't known here (the server started again since): it waits for the person.
         return Err(words::OWN_WAITING.to_owned());
     };
@@ -162,7 +165,7 @@ fn joined(
     if !again.refusals.is_empty() || again.proposal.is_none_or(|p| p.tx.ops != own.ops) {
         return Err(words::OWN_CHANGED.to_owned());
     }
-    Ok(own.calls.clone())
+    Ok(own.calls)
 }
 
 /// Whether what the app last read (`seen`) is the project's main track as it is now; else what to read.
