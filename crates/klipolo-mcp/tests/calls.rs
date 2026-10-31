@@ -19,7 +19,7 @@ use klipolo_mcp::rpc::Mcp;
 use klipolo_mcp::words::{
     DECIDED, DONE, KLIPOLO_CHAT, MOVED, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS, NOTHING_TO_UNDO,
     OVER_SHARE, OWN_CHANGED, OWN_MOVED, OWN_WAITING, PROPOSED_NO_FOOTAGE, PUSHES_OUT, READ_FIRST,
-    REDO_WAITS, STALE, UNCHANGED, UNDO_DROPPED, UNDONE, WAITING_OTHER, fill,
+    REDO_WAITS, STALE, TITLE_CARD_WORDS, UNCHANGED, UNDO_DROPPED, UNDONE, WAITING_OTHER, fill,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -545,6 +545,7 @@ fn agent_words_are_exact() {
         LOW_CREDIT,
         OVER_CAP,
         READ_ONLY,
+        TITLE_CARD_WORDS,
     ] {
         assert!(!said.contains(['\u{2013}', '\u{2014}']), "{said}");
     }
@@ -1155,4 +1156,30 @@ fn removals_that_cant_reopen_because_another_proposal_waits_say_so() {
     );
     assert_eq!(host.revision(), before + 1);
     assert_eq!(host.open_proposal().map(|p| p.from), Some(None));
+}
+
+#[test]
+fn a_title_card_needs_the_persons_own_words() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    let before = host.revision();
+    let result = agent.call(
+        "makeTitleCard",
+        json!({"title": "Welcome aboard", "prompt": "a sunrise over the station", "atSec": null, "durationSec": null}),
+    );
+    // An app's words are never the person's: it is told where the person makes one, and nothing about askUser.
+    assert_refused(&result, TITLE_CARD_WORDS);
+    assert_eq!(
+        TITLE_CARD_WORDS,
+        "makeTitleCard: a title card needs the person's own words, typed in Klipolo's chat. Ask the person to make it \
+         there."
+    );
+    assert!(!text(&result).contains("askUser"));
+    assert_eq!(host.revision(), before);
+    let counts = host.state().counts;
+    assert_eq!(
+        (counts.applies, counts.estimates, counts.paid_asked),
+        (0, 0, 0)
+    );
 }

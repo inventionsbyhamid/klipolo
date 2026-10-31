@@ -413,9 +413,15 @@ fn reasons<'a>(refusals: impl IntoIterator<Item = &'a Refusal>) -> String {
     said.join(" ")
 }
 
-/// A refusal's reason, as a sentence. One for the person names the clip it is about: "Klipolo is still listening to
-/// this clip (c2)."
+/// How chat refuses a title card whose words the person didn't type: an app's words never are.
+const CHAT_TITLE_WORDS: &str = "makeTitleCard: the title must be the person's own words";
+
+/// A refusal's reason, as a sentence an app can act on. One for the person names the clip it is about: "Klipolo is
+/// still listening to this clip (c2)." A title card, which needs the person's own words, is for Klipolo's chat.
 fn reason(r: &Refusal) -> String {
+    if r.reason.starts_with(CHAT_TITLE_WORDS) {
+        return words::TITLE_CARD_WORDS.to_owned();
+    }
     match (r.audience, &r.clip) {
         (Audience::Person, Some(clip)) => format!("{} ({clip}).", r.reason.trim_end_matches('.')),
         (Audience::Person, None) if !r.reason.ends_with(['.', '?', '!']) => {

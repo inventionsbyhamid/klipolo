@@ -70,6 +70,9 @@ pub const OWN_WAITING: &str = "Your proposal is waiting for the person in Klipol
 /// The app's own proposal went while its call ran (the person decided on it), so its removals aren't proposed again.
 pub const DECIDED: &str = "Your earlier proposal was decided in Klipolo while this call ran, so it was not proposed \
 again. Call getProposal to see what the person did.";
+/// `makeTitleCard` from an app: a title card's words are the person's own, typed in Klipolo's chat, never an app's.
+pub const TITLE_CARD_WORDS: &str = "makeTitleCard: a title card needs the person's own words, typed in Klipolo's chat. \
+Ask the person to make it there.";
 /// Additions that, checked again before they apply, take something away. Never expected: the compiler proposes those.
 pub const REMOVES: &str = "Klipolo found this would take something out of the edit, so it was not applied. Nothing \
 changed.";
