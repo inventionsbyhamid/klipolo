@@ -118,9 +118,10 @@ fn transcript() -> Arc<Transcript> {
 }
 
 /// What the analysis found: "talk.mov"'s words once they are in (done, or the scene log still being made), or nothing
-/// yet (`state`).
+/// yet (`state`). Its words are one transcript until they are timed again (`retime`), as the analysis keeps them.
 struct Found {
     state: Mutex<AnalysisState>,
+    analysis: Mutex<Arc<AssetAnalysis>>,
     levels: HashMap<String, Arc<Levels>>,
 }
 
@@ -128,6 +129,10 @@ impl Found {
     fn at(state: AnalysisState) -> Arc<Self> {
         Arc::new(Self {
             state: Mutex::new(state),
+            analysis: Mutex::new(Arc::new(AssetAnalysis {
+                transcript: Some(transcript()),
+                ..AssetAnalysis::default()
+            })),
             levels: HashMap::new(),
         })
     }
@@ -157,18 +162,21 @@ impl Found {
             .insert("talk".into(), Arc::new(Levels { db: db.into() }));
         Arc::new(found)
     }
+
+    /// The words timed again: the same words, a new transcript.
+    fn retime(&self) {
+        *self.analysis.lock().unwrap() = Arc::new(AssetAnalysis {
+            transcript: Some(transcript()),
+            ..AssetAnalysis::default()
+        });
+    }
 }
 
 impl Findings for Found {
     fn found(&self, asset_id: &str) -> Option<Arc<AssetAnalysis>> {
         let state = *self.state.lock().unwrap();
         let heard = matches!(state, AnalysisState::Done | AnalysisState::Watching);
-        (asset_id == "talk" && heard).then(|| {
-            Arc::new(AssetAnalysis {
-                transcript: Some(transcript()),
-                ..AssetAnalysis::default()
-            })
-        })
+        (asset_id == "talk" && heard).then(|| self.analysis.lock().unwrap().clone())
     }
 
     fn state(&self, _asset_id: &str) -> AnalysisState {
@@ -2332,5 +2340,28 @@ async fn ums_are_cut_while_the_scene_log_is_made_and_moments_wait() {
     assert_eq!(
         r["text"],
         "Klipolo is still watching this clip (talk.mov). Ask me again when its analysis is done."
+    );
+}
+
+#[tokio::test]
+async fn a_proposal_made_before_the_words_were_timed_again_is_dropped() {
+    let found = Found::done();
+    let model = Script::new(vec![answer("", vec![fillers()])]);
+    let chat = chat_with(model.clone(), found.clone(), Paying::key(model));
+    let out = chat.session.send(request("cut the ums")).await.unwrap();
+    let id = proposal_id(&out);
+    // "Time the words again" in Captions: new words at new times, the revision the same.
+    found.retime();
+    assert_eq!(chat.session.apply(&id).unwrap_err(), CommitError::Moved);
+    assert_eq!(chat.project.revision(), 0, "nothing was cut");
+    assert!(plays(&chat.project.project(), 0.6));
+    // Dropped for good.
+    assert_eq!(chat.session.apply(&id).unwrap_err(), CommitError::Moved);
+    let note = &chat.session.turns()[0].note;
+    assert!(
+        note.ends_with(
+            "The proposal was dropped: the clip's words were timed again before the person applied it."
+        ),
+        "{note}"
     );
 }

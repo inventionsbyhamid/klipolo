@@ -10,8 +10,9 @@
 //!   carries what changed. **Removals** are a proposal, kept by id with the revision it applies to (the one after the
 //!   additions). One proposal is open at a time: a newer one replaces it, so red always means "will be cut". Apply
 //!   records the project its review made (`commit_reviewed`): one undo step. A proposal replaced, or one whose project
-//!   moved on from its revision (a hand edit, an undo), refuses Apply with `project.moved` and is dropped. Discard
-//!   changes nothing. The model's `undo` takes back the top step, on the revision it saw.
+//!   moved on from its revision (a hand edit, an undo), or whose words were timed again since (Captions' "Time the
+//!   words again": new words at new times, the revision the same), refuses Apply with `project.moved` and is dropped.
+//!   Discard changes nothing. The model's `undo` takes back the top step, on the revision it saw.
 //! - **The project moved while the model answered** (a hand edit meanwhile): nothing of the answer is applied or
 //!   proposed, and the reply says so.
 //! - **Errors** never touch the project: each is one plain sentence (`ChatFailure`). No key or code is `NeedsKey`; a
@@ -28,6 +29,7 @@
 //! - **Spend:** every model call's cost goes into the session's AI spend (`SpendCounter`); nothing is shown per
 //!   message.
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use klipolo_chat::{
@@ -35,6 +37,7 @@ use klipolo_chat::{
 };
 use klipolo_model::coded::CodedError;
 use klipolo_model::history::SnapshotPatch;
+use klipolo_model::speech::Transcript;
 use klipolo_model::time::RangeUs;
 use klipolo_model::timeline::ClipSource;
 use klipolo_model::{Project, Transaction};
@@ -93,6 +96,8 @@ const DISCARDED_NOTE: &str = "The person discarded the proposal.";
 const REPLACED_NOTE: &str = "Replaced by a newer proposal.";
 const DROPPED_NOTE: &str =
     "The proposal was dropped: the project changed before the person applied it.";
+const RETIMED_NOTE: &str =
+    "The proposal was dropped: the clip's words were timed again before the person applied it.";
 
 /// The app's chat.
 pub struct ChatSession {
@@ -133,6 +138,35 @@ struct Stored {
     tx: Transaction,
     /// What applying it makes (its review), recorded as it is.
     after: Project,
+    /// The words it was made on (`Words::read`).
+    words: Words,
+}
+
+/// Each file's transcript as a message read it, by asset id (None: it had none yet). Words timed again since are a new
+/// transcript (`Findings::found`), even when the revision stayed: a proposal made on the old ones would cut where they
+/// were.
+struct Words(HashMap<String, Option<Arc<Transcript>>>);
+
+impl Words {
+    fn read(inputs: &Inputs) -> Self {
+        Self(
+            (inputs.analysis.keys())
+                .map(|id| (id.clone(), inputs.speech.transcripts.get(id).cloned()))
+                .collect(),
+        )
+    }
+
+    /// Whether every file's words are still the ones read.
+    fn still(&self, findings: &dyn Findings) -> bool {
+        self.0.iter().all(|(id, read)| {
+            let now = findings.found(id).and_then(|f| f.transcript.clone());
+            match (read, &now) {
+                (Some(read), Some(now)) => Arc::ptr_eq(read, now),
+                (None, None) => true,
+                _ => false,
+            }
+        })
+    }
 }
 
 /// What came of committing a message's edits.
@@ -292,6 +326,10 @@ impl ChatSession {
         let Some(stored) = stored else {
             return Err(CommitError::Moved);
         };
+        if !stored.words.still(&*self.findings) {
+            lock(&self.talk).noted(id, RETIMED_NOTE);
+            return Err(CommitError::Moved);
+        }
         let committed = (self.projects).commit(&stored.at, &stored.tx, Some(stored.after.clone()));
         let mut talk = lock(&self.talk);
         match committed {
@@ -584,6 +622,7 @@ impl ChatSession {
                         at: at.clone(),
                         tx: p.tx.clone(),
                         after: review.after,
+                        words: Words::read(inputs),
                     });
                 }
                 // Nothing to remove once the additions are in.
