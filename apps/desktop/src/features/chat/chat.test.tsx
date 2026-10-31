@@ -672,4 +672,28 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
 
+  it('an Apply Rust made that the page couldn’t show closes the card with why, no red and no Retry', async () => {
+    const undo = code('chat.removeFillers');
+    chat({
+      reply: (r) => reply(r.id, 'I found 3.', { proposal: cuts() }),
+      // Made on a revision this copy doesn't have: the page asks for the whole project, which fails.
+      apply: () => ({ change: { ...changed(4, undo), baseRevision: 99 }, undo }),
+    });
+    backend({
+      project_snapshot: () => {
+        throw new Error('The project file can’t be read.');
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'cut the pauses{Enter}');
+    const card = await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    await userEvent.click(within(card).getByRole('button', { name: 'Apply' }));
+    expect(
+      await screen.findByText('Applied, but the timeline didn’t update. Reopen the project.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Cut 2 pauses and 1 um' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^(Retry|Apply)$/ })).toBeNull();
+    expect(useProposal.getState().proposal).toBeNull();
+  });
+
 });

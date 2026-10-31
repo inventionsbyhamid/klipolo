@@ -204,7 +204,8 @@ function CutList({ proposal }: { proposal: ChatProposal }) {
  * keyboard from the chat box (Enter there always sends): the person reaches it with Tab; Enter on the card applies and
  * Escape discards. Applied, it collapses to the applied row with its Undo chip; discarded, to "Discarded."; dropped
  * (the project changed while it was open), or replaced (a newer proposal came: one is open at a time), to a sentence
- * that says so. An Apply refused for another reason leaves it open, saying why, its Apply now Retry. When it collapses with the keyboard in it, the
+ * that says so. An Apply refused for another reason leaves it open, saying why, its Apply now Retry. An Apply Rust made
+ * that the page couldn't take in closes it with a sentence that says to reopen the project. When it collapses with the keyboard in it, the
  * keyboard goes back to the chat box.
  */
 export function ProposalCard({ message: m }: { message: ReplyMessage }) {
@@ -239,6 +240,15 @@ export function ProposalCard({ message: m }: { message: ReplyMessage }) {
         {t({
           id: 'chatPanel.proposal.dropped',
           message: 'This proposal was dropped because the project changed. Ask again to get a new one.',
+        })}
+      </p>
+    );
+  if (state === 'unshown')
+    return (
+      <p className="muted">
+        {t({
+          id: 'chatPanel.proposal.unshown',
+          message: 'Applied, but the timeline didn’t update. Reopen the project.',
         })}
       </p>
     );

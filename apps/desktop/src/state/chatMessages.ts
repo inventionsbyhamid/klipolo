@@ -6,9 +6,10 @@ import type { CodedError } from '../bindings/CodedError';
 
 /**
  * Where a proposal stands: waiting, being applied, applied, discarded, dropped (the project changed), replaced (a newer
- * one came: a project has one open proposal at a time).
+ * one came: a project has one open proposal at a time), or unshown (Rust applied it but the page couldn't take the
+ * change in: never offered again).
  */
-export type ProposalState = 'open' | 'applying' | 'applied' | 'discarded' | 'dropped' | 'replaced';
+export type ProposalState = 'open' | 'applying' | 'applied' | 'discarded' | 'dropped' | 'replaced' | 'unshown';
 
 /** A proposal in a reply, and what came of it. */
 export interface ProposalPart {

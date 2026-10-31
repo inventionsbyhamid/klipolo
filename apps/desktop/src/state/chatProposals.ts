@@ -1,3 +1,4 @@
+import type { ChatApplied } from '../bindings/ChatApplied';
 import { isCode } from '../bridge/call';
 import { chatBridge } from '../bridge/chat';
 import { errorMessage } from '../lib/errors';
@@ -41,19 +42,28 @@ export function proposalActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'ap
       if (!m || m.proposal?.state !== 'open') return;
       const mine = session.now();
       update(id, () => ({ state: 'applying', reason: undefined }));
+      let applied: ChatApplied;
       try {
-        const applied = await chatBridge().apply(m.proposal.proposal.id);
-        if (session.now() !== mine) return;
-        await useProject.getState().adopt(applied.change);
-        if (session.now() !== mine) return;
-        update(id, () => ({ state: 'applied', undo: applied.undo, revision: applied.change.history.revision }));
+        applied = await chatBridge().apply(m.proposal.proposal.id);
       } catch (error) {
         if (session.now() !== mine) return;
         // The project changed since it was made (`project.moved`): dropped, as a hand edit drops it. Refused for any
         // other reason, it waits again, saying why, to be tried again or discarded.
         if (isCode(error, 'project.moved')) update(id, () => ({ state: 'dropped' }));
         else update(id, () => ({ state: 'open', reason: errorMessage(error) }));
+        return;
       }
+      if (session.now() !== mine) return;
+      // Rust made the change, so the card never opens again. When the page can't take it in (the project couldn't be
+      // read again), it says so rather than offer to apply it twice.
+      const shown = await useProject
+        .getState()
+        .adopt(applied.change)
+        .catch(() => false);
+      if (session.now() !== mine) return;
+      if (shown)
+        update(id, () => ({ state: 'applied', undo: applied.undo, revision: applied.change.history.revision }));
+      else update(id, () => ({ state: 'unshown' }));
     },
 
     discard: (id) => {
