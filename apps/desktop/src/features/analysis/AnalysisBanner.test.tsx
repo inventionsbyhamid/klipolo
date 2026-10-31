@@ -171,4 +171,20 @@ describe('the analysis banner', () => {
     expect(await screen.findByText('Analyze 2 clips for about $0.04')).toBeInTheDocument();
     expect(bridge.estimate).toHaveBeenCalledWith(['a', 'b']);
   });
+
+  it('says when the words of a clip ended up timed roughly', () => {
+    useAnalysis.setState({ states: { a: { state: 'done', approximate: false } } });
+    const { rerender } = renderWithProviders(<RoughCaptionsNote />);
+    expect(screen.queryByText(/timed roughly/)).toBeNull();
+    act(() => useAnalysis.setState({ states: { a: { state: 'done', approximate: true } } }));
+    rerender(<RoughCaptionsNote />);
+    expect(screen.getByText('Some captions are timed roughly')).toBeInTheDocument();
+    act(() =>
+      useAnalysis.setState({
+        states: { a: { state: 'done', approximate: true }, b: { state: 'running', step: 'words', pct: 5 } },
+      }),
+    );
+    rerender(<RoughCaptionsNote />);
+    expect(screen.getByText('Rough captions until words are timed')).toBeInTheDocument();
+  });
 });
