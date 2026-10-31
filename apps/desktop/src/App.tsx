@@ -21,7 +21,7 @@ import { clearProposalOnProjectSwitch } from './state/proposal';
 import { clearRangeOnProjectSwitch } from './state/range';
 import { followSaves } from './state/saving';
 import { toast } from './state/toasts';
-import { keepPlayheadInVideo } from './state/transport';
+import { keepPlayheadInVideo, keepPlayheadOnReload, restorePlayhead } from './state/transport';
 
 /** The name and formats a first launch's project gets: all three formats, 16:9 first. */
 const NEW_PROJECT = { name: 'Untitled project', formats: ['landscape', 'portrait', 'square'] as const };
@@ -32,6 +32,8 @@ let started = false;
 async function openProject() {
   try {
     await useProject.getState().load(await bridge.snapshot());
+    // A reload of the page (development, a WebKit restart) keeps the playhead where it was.
+    restorePlayhead();
   } catch (error) {
     if (!isCode(error, 'project.none')) return toast.error(errorMessage(error));
     await useProject.getState().create(NEW_PROJECT.name, [...NEW_PROJECT.formats]);
@@ -48,6 +50,7 @@ export function App() {
     void followSaves();
     void followAiStatus();
     keepPlayheadInVideo();
+    keepPlayheadOnReload();
     clearRangeOnProjectSwitch();
     clearProposalOnProjectSwitch();
     // The Music lane's dips: where someone speaks, asked again as the project changes.
