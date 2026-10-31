@@ -78,18 +78,16 @@ function requestFor(
   };
 }
 
-/**
- * The chat panel's conversation: one message at a time, the replies as Rust sent them (their words
- * already clean), the additions merged as one undo step, the proposal cards (`chatProposals`), whose open one the
- * timeline shows red (`useProposal`).
- */
 /** Each saying of a notice, so the same words said again are said again. */
 let sayings = 0;
 
+/**
+ * The chat panel's conversation: one message at a time, the replies as Rust sent them (their words
+ * already clean), the additions merged as one undo step, the proposal cards (`chatProposals`), whose open one the
+ * timeline shows red (`useProposal`), and the picture cards (`chatPictures`).
+ */
 export const useChat = create<ChatStore>((set, get) => {
-  /** A message in; Klipolo's own makes a notice still being said give way. */
-  const push = (m: Message) =>
-    set((s) => ({ ...withMessages([...s.messages, m]), ...(m.from === 'klipolo' ? { notice: null } : {}) }));
+  const push = (m: Message) => set((s) => withMessages([...s.messages, m]));
   /** A message can go now: a project open and editable, chat allowed, and none under way. */
   const ready = () => {
     const snapshot = useProject.getState().snapshot;
@@ -131,7 +129,7 @@ export const useChat = create<ChatStore>((set, get) => {
       };
       const id = crypto.randomUUID();
       const keepOnly = options?.keepOnly ?? [];
-      set({ pending: { id }, notice: null });
+      set({ pending: { id } });
       if (options?.echo !== false) push({ id: `${id}:you`, from: 'person', text: trimmed });
       const request = requestFor(id, trimmed, keepOnly, options?.baseRevision);
       const again = { text: trimmed, keepOnly, baseRevision: request.baseRevision };

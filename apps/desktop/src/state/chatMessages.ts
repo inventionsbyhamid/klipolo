@@ -111,8 +111,8 @@ export interface ChatStore {
   draft: string;
   setDraft: (draft: string) => void;
   /**
-   * A sentence about chat that isn't a message (an Undo chip refused, a picture ready or placed), said aloud until a
-   * message is sent or Klipolo's next one comes.
+   * A sentence about chat that isn't a message (an Undo chip refused, a picture ready or placed), said aloud in its own
+   * place beside the messages', so neither a thinking message nor its reply keeps it from being heard.
    */
   notice: Notice | null;
   /** Says `text` aloud (the Announcer), again even when it is the same words. */

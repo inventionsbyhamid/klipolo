@@ -2,8 +2,10 @@ import { useLingui } from '@lingui/react/macro';
 import { useChat } from '../../state/chat';
 
 /**
- * Says politely what chat answered, once, a failure too, what waits for the person, and a sentence chat said outside a
- * message (an Undo chip refused: `notice`). Outside the part that folds, so it speaks while chat is folded.
+ * Says politely what chat answered, once, a failure too, and what waits for the person. Beside it, in a place of its
+ * own, what chat says outside a message (`notice`: an Undo chip refused, a picture ready or placed), so a message
+ * thinking or its reply never keeps a notice from being heard. Outside the part that folds, so it speaks while chat is
+ * folded.
  */
 export function Announcer() {
   const { t } = useLingui();
@@ -11,9 +13,7 @@ export function Announcer() {
   const pending = useChat((s) => s.pending !== null);
   const notice = useChat((s) => s.notice);
   let text = '';
-  let key = 0;
   if (pending) text = t({ id: 'chatPanel.announce.thinking', message: 'Klipolo is thinking.' });
-  else if (notice) [text, key] = [notice.text, notice.seq];
   else if (last?.from === 'klipolo' && last.kind === 'failed')
     text = t({ id: 'chatPanel.announce.says', message: `Klipolo: ${last.text}` });
   else if (last?.from === 'klipolo' && last.kind === 'reply') {
@@ -23,9 +23,14 @@ export function Announcer() {
     } else text = t({ id: 'chatPanel.announce.says', message: `Klipolo: ${last.text}` });
   }
   return (
-    <p aria-live="polite" className="sr-only">
-      {/* A new node for each notice, so the same words said again are announced again. */}
-      <span key={key}>{text}</span>
-    </p>
+    <>
+      <p aria-live="polite" className="sr-only">
+        {text}
+      </p>
+      <p aria-live="polite" className="sr-only" data-chat-notices>
+        {/* A new node for each notice, so the same words said again are announced again. */}
+        {notice && <span key={notice.seq}>{notice.text}</span>}
+      </p>
+    </>
   );
 }

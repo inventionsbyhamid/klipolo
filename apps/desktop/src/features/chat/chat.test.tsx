@@ -12,6 +12,7 @@ import { installChatBridge } from '../../bridge/chat';
 import { fakeChat, proposal, reply, type FakeChatScript } from '../../bridge/chatFake';
 import { useChat, useChatStandIn } from '../../state/chat';
 import { beginCommit } from '../../state/commitQueue';
+import { historySteps } from '../../state/project';
 import { useToasts } from '../../state/toasts';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
@@ -841,7 +842,7 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     await userEvent.type(message(), 'add a title{Enter}');
     await screen.findByText('Added the title.');
     await userEvent.click(screen.getByRole('button', { name: 'Undo add the title Step 3' }));
-    const live = document.querySelector('[aria-live="polite"]');
+    const live = document.querySelector('[data-chat-notices]');
     await waitFor(() => expect(live).toHaveTextContent('This change can’t be undone from chat any more.'));
   });
 
@@ -864,5 +865,49 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'vertical with karaoke captions{Enter}');
     expect(await screen.findByRole('button', { name: 'Undo make it vertical, and 1 more' })).toBeInTheDocument();
+  });
+
+  it('Apply waits behind a change still on its way, and is no undo step; the chip’s undo is one', async () => {
+    const title = code('chat.removeFillers');
+    const fake = chat({
+      reply: (r) => reply(r.id, 'I found 3.', { proposal: cuts() }),
+      apply: () => ({ change: changed(4, title), undo: title }),
+      undoLast: (revision) => changed(revision + 1, null, { canRedo: true, redoLabel: 'chat.removeFillers' }),
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'cut the pauses{Enter}');
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    const steps = historySteps();
+    const end = beginCommit();
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fake.applied).toEqual([]);
+    act(() => end());
+    await waitFor(() => expect(fake.applied).toEqual(['p1']));
+    await waitFor(() => expect(useProject.getState().snapshot!.history.revision).toBe(4));
+    expect(historySteps()).toBe(steps);
+    // Its Undo chip is a real undo.
+    await userEvent.click(await screen.findByRole('button', { name: 'Undo cut the filler words' }));
+    await waitFor(() => expect(fake.undone).toEqual([4]));
+    expect(historySteps()).toBe(steps + 1);
+  });
+
+  it('an Apply that lands after New chat still brings its change to the timeline', async () => {
+    const title = code('chat.removeFillers');
+    let land: () => void = () => undefined;
+    chat({
+      reply: (r) => reply(r.id, 'I found 3.', { proposal: cuts() }),
+      apply: async () => {
+        await new Promise<void>((done) => (land = done));
+        return { change: changed(4, title), undo: title };
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'cut the pauses{Enter}');
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    act(() => useChat.getState().newChat());
+    act(() => land());
+    await waitFor(() => expect(useProject.getState().snapshot!.history.revision).toBe(4));
   });
 });
