@@ -411,6 +411,51 @@ fn a_take_from_the_start_screen_gets_its_zooms_too() {
     assert!(!sessions.history().can_undo);
 }
 
+/// Should the person close the take's project, or open another, right after its step and before its zooms, the project
+/// opens again first and the zooms land there: never lost.
+#[test]
+fn zooms_land_even_when_the_project_closes_right_after_the_take() {
+    for close in [true, false] {
+        let sessions = Sessions::with_project();
+        let take = take(armed_in(&sessions), true);
+        let done = take.done(false, sessions.open_file());
+        let library = || -> Result<std::path::PathBuf, klipolo_model::coded::Said> {
+            Err(klipolo_model::coded::Said::code("project.noVideosFolder"))
+        };
+        let mut probe = |path: &std::path::Path, _key: &str| crate::media::probe_asset(path);
+        let to = super::destination::Destination {
+            target: &done.target,
+            file: done.project_file.as_deref(),
+            library: &library,
+            today: OCT_31,
+        };
+        let landed =
+            super::import::import_take(&sessions.state, &take.dir, &to, &mut probe).unwrap();
+        if close {
+            crate::project::close_in(&sessions.state).unwrap();
+        } else {
+            sessions.open_new("Other");
+        }
+        let import = super::import::after_landing(&sessions.state, &done, landed).unwrap();
+        assert_eq!(import.zooms, 2, "closed: {close}");
+        assert_eq!(
+            zoom_items(&import.snapshot.project).len(),
+            2,
+            "in its snapshot"
+        );
+        assert_eq!(
+            import.snapshot.history.undo_label.as_deref(),
+            Some("undo.autoZoom")
+        );
+        assert_eq!(
+            sessions.project().id,
+            import.snapshot.project.id,
+            "open again"
+        );
+        assert_eq!(zoom_items(&sessions.project()).len(), 2);
+    }
+}
+
 /// (x, y) inside `w`'s safe zone: 15 % of its width in from each side, a side on the frame's edge reaching it.
 fn in_safe_zone(w: BoxN, x: f64, y: f64) -> bool {
     let (m, e) = (0.15 * w.w, 1e-6);

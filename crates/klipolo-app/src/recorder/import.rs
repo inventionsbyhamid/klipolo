@@ -219,11 +219,10 @@ pub(super) struct Landing<'a> {
     pub(super) probe: &'a mut dyn FnMut(&Path, &str) -> Result<Asset, String>,
 }
 
-/// Lands `done` (`import_take`), then adds its auto zoom (`zoom_take`) when it was added now: what the page hears as
-/// `recorder-imported`, or the note it hears instead, a `capture.*` code (the take's files stay in its folder either
-/// way). Its snapshot is the take's project, open again should it have closed meanwhile (`snapshot_after`). A take that
-/// landed but whose zooms the project refused is still landed, with none. A take recorded on a fallback encoder lets
-/// the probe's report go, landed or not, so the next opening of the Record dialog measures again.
+/// Lands `done` (`import_take`), then adds its auto zoom (`after_landing`): what the page hears as `recorder-imported`,
+/// or the note it hears instead, a `capture.*` code (the take's files stay in its folder either way). A take recorded on
+/// a fallback encoder lets the probe's report go, landed or not, so the next opening of the Record dialog measures
+/// again.
 pub(super) fn land(
     sessions: &ProjectSessionState,
     done: &Done,
@@ -243,6 +242,19 @@ pub(super) fn land(
         tracing::warn!(take = done.id, ?error, "recorder: the take didn't land");
         not_landed(error)
     })?;
+    after_landing(sessions, done, landed)
+}
+
+/// After a take's step: its project open first, again should the person have closed it, or opened another, since the
+/// step (`snapshot_after`), so its auto zoom goes there and is never lost; then the zoom step (`zoom_take`) when the
+/// take was added now; then the page's `TakeImport`, its snapshot the take's project, zooms and all. A take that
+/// landed but whose zooms the project refused is still landed, with none.
+pub(super) fn after_landing(
+    sessions: &ProjectSessionState,
+    done: &Done,
+    landed: Landed,
+) -> Result<TakeImport, CodedError> {
+    let opened = snapshot_after(sessions, &landed)?;
     let zooms = if landed.added {
         let (project, take, clip) = (&landed.project, &landed.recording_id, &landed.clip_id);
         zoom_take(sessions, project, take, clip).unwrap_or_else(|said| {
@@ -256,7 +268,11 @@ pub(super) fn land(
     } else {
         0
     };
-    let snapshot = snapshot_after(sessions, &landed)?;
+    let snapshot = if zooms > 0 {
+        snapshot_after(sessions, &landed)?
+    } else {
+        opened
+    };
     let mut notes: Vec<CodedError> = done.note.iter().cloned().collect();
     notes.extend(landed.notes);
     Ok(TakeImport {
