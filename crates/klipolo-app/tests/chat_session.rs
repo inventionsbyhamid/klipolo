@@ -29,11 +29,13 @@ use klipolo_chat::{
     AnalysisState, BoxFuture, FunctionCall, Item, LanguageModel, LibraryItem, MediaKind,
     ModelError, ModelRequest, ModelResponse,
 };
+use klipolo_model::media::music::{MUSIC_FADE_OUT_US, is_music};
 use klipolo_model::ops::{Op, Origin};
 use klipolo_model::project::{Asset, AssetKind, FormatKind};
+use klipolo_model::query::video_duration;
 use klipolo_model::speech::{Levels, Transcript, Word, WordKind};
 use klipolo_model::time::{RangeUs, Us};
-use klipolo_model::timeline::{Clip, ClipSource};
+use klipolo_model::timeline::{Clip, ClipSource, ItemContent};
 use klipolo_model::{Project, Transaction};
 use serde_json::Value;
 use tokio::sync::Notify;
@@ -118,19 +120,40 @@ fn transcript() -> Arc<Transcript> {
 /// What the analysis found: "talk.mov"'s words, or nothing yet (`state`).
 struct Found {
     state: Mutex<AnalysisState>,
+    levels: HashMap<String, Arc<Levels>>,
 }
 
 impl Found {
     fn done() -> Arc<Self> {
         Arc::new(Self {
             state: Mutex::new(AnalysisState::Done),
+            levels: HashMap::new(),
         })
     }
 
     fn not_started() -> Arc<Self> {
         Arc::new(Self {
             state: Mutex::new(AnalysisState::NotStarted),
+            levels: HashMap::new(),
         })
+    }
+
+    /// Done, with "talk.mov"'s loudness: quiet from 10.0 to 10.8 s and from 15.0 to 17.0 s.
+    fn with_pauses() -> Arc<Self> {
+        let db: Vec<f32> = (0..300)
+            .map(|w| {
+                if (100..108).contains(&w) || (150..170).contains(&w) {
+                    -70.0
+                } else {
+                    -20.0
+                }
+            })
+            .collect();
+        let mut found = Arc::into_inner(Self::done()).unwrap();
+        found
+            .levels
+            .insert("talk".into(), Arc::new(Levels { db: db.into() }));
+        Arc::new(found)
     }
 }
 
@@ -149,7 +172,7 @@ impl Findings for Found {
     }
 
     fn levels(&self) -> HashMap<String, Arc<Levels>> {
-        HashMap::new()
+        self.levels.clone()
     }
 }
 
@@ -2214,5 +2237,68 @@ async fn chats_media_tools_find_the_projects_music_and_sounds_and_the_pack() {
             .project()
             .asset("klipolo-pack-soft-ambient")
             .is_some()
+    );
+}
+
+/// Where the music on `p` ends, and its last piece's fade-out.
+fn music_end(p: &Project) -> (Us, Us) {
+    let last = (p.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .filter(|i| is_music(i))
+        .max_by_key(|i| i.end_us())
+        .expect("music");
+    let ItemContent::Audio { fade_out_us, .. } = &last.content else {
+        unreachable!()
+    };
+    (last.end_us(), *fade_out_us)
+}
+
+#[tokio::test]
+async fn chats_cuts_fit_the_music_to_the_new_end() {
+    // "Add my song", then "cut the long pauses", then Apply: the song ends at the video's new end, fading out there.
+    let mut p = talk();
+    p.assets.push(sound_file("song", "song.mp3", 60.0));
+    let model = Script::new(vec![
+        answer(
+            "",
+            vec![fc(
+                "m",
+                "addMusic",
+                r#"{"file": "song", "volume": null, "duck": null, "atSec": 0.0}"#,
+            )],
+        ),
+        answer(
+            "",
+            vec![fc("s", "removeSilences", r#"{"minPauseSec": null}"#)],
+        ),
+    ]);
+    let project = Arc::new(MemoryProjects::open(p, PathBuf::from("/tmp/talk.klipolo")).unwrap());
+    let session = ChatSession::new(project.clone(), Found::with_pauses(), Paying::key(model));
+    reply(&session.send(request("add my song")).await.unwrap());
+    assert_eq!(
+        music_end(&project.project()),
+        (secs(30.0), MUSIC_FADE_OUT_US)
+    );
+    let out = session.send(request("cut the long pauses")).await.unwrap();
+    // The card says the song is shortened, beside the 2.2 s of footage.
+    let r = reply(&out);
+    assert_eq!(r["proposal"]["removedUs"], secs(2.2));
+    assert_eq!(
+        r["proposal"]["removals"]["shortened"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "{r:#}"
+    );
+    session.apply(&proposal_id(&out)).unwrap();
+    let after = project.project();
+    assert_eq!(video_duration(&after.timeline), secs(27.8));
+    assert_eq!(music_end(&after), (secs(27.8), MUSIC_FADE_OUT_US));
+    // One undo takes back the cut and the song's new end together.
+    project.step(false).unwrap();
+    assert_eq!(
+        music_end(&project.project()),
+        (secs(30.0), MUSIC_FADE_OUT_US)
     );
 }

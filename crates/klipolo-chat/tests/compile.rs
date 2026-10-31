@@ -15,12 +15,13 @@ use klipolo_chat::{
 };
 use klipolo_model::captions::styles::BuiltinCaptionStyle;
 use klipolo_model::coded::ErrorParam;
+use klipolo_model::media::music::{MUSIC_FADE_OUT_US, MusicOpts, add_music_ops, is_music};
 use klipolo_model::ops::{Edge, Op, Origin};
 use klipolo_model::project::{Asset, AssetKind, CaptionSettings, FormatKind, Settings};
-use klipolo_model::query::main_track_duration;
+use klipolo_model::query::{main_track_duration, video_duration};
 use klipolo_model::speech::{Levels, Speech, Transcript, Word, WordKind, spoken, word_cut};
 use klipolo_model::time::{RangeUs, Us};
-use klipolo_model::timeline::{Clip, ClipSource};
+use klipolo_model::timeline::{Clip, ClipSource, ItemContent};
 use klipolo_model::{Document, Project, apply_ops};
 
 fn secs(s: f64) -> Us {
@@ -1522,4 +1523,82 @@ fn nothing_to_remove_is_told_to_the_person() {
             clip: None,
         }]
     );
+}
+
+/// A 60 s song, as the person's own music file.
+fn song() -> Asset {
+    Asset {
+        id: "song".into(),
+        kind: AssetKind::Audio,
+        path: "/media/song.mp3".into(),
+        name: "song.mp3".into(),
+        duration_us: secs(60.0),
+        width: 0,
+        height: 0,
+        fps: 0.0,
+        rotation: None,
+        has_audio: true,
+        audio_lead_us: None,
+        made_with: None,
+    }
+}
+
+/// `p` with the song laid as a music bed from the start to the video's end, fading out there (as "add some music"
+/// lays it).
+fn with_music(p: &Project) -> Project {
+    let mut p = p.clone();
+    p.assets.push(song());
+    let ops = add_music_ops(&p, &song(), MusicOpts::default()).unwrap();
+    apply_ops(&p, &ops).unwrap()
+}
+
+/// Where the music ends on `p`, and its last piece's fade-out.
+fn music_end(p: &Project) -> (Us, Us) {
+    let last = (p.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .filter(|i| is_music(i))
+        .max_by_key(|i| i.end_us())
+        .expect("music");
+    let ItemContent::Audio { fade_out_us, .. } = &last.content else {
+        unreachable!()
+    };
+    (last.end_us(), *fade_out_us)
+}
+
+#[test]
+fn a_cut_fits_the_music_to_the_new_end_in_the_same_step() {
+    let (p, mut speech) = talk();
+    let p = with_music(&p);
+    assert_eq!(music_end(&p), (secs(30.0), MUSIC_FADE_OUT_US));
+    speech.levels.insert("talk".into(), levels());
+    let i = inputs(&p, speech, "remove the pauses");
+    let out = compile(
+        &p,
+        &i,
+        &[call("removeSilences", r#"{"minPauseSec": null}"#)],
+    );
+    let proposal = out.proposal.expect("a proposal");
+    // 2.2 s of pauses go, so the video ends at 27.8 s: the music ends there too, fading out, in Apply's one step.
+    assert_eq!(
+        proposal.ranges,
+        vec![span(10.15, 10.65), span(15.15, 16.85)]
+    );
+    let after = apply_ops(&p, &proposal.tx.ops).unwrap();
+    assert_eq!(video_duration(&after.timeline), secs(27.8));
+    assert_eq!(music_end(&after), (secs(27.8), MUSIC_FADE_OUT_US));
+    // The review is what Apply records, and it says the song is shortened ("Shortens 1 layer" on the card).
+    assert_eq!(proposal.review.after, after);
+    assert_eq!(proposal.review.removals.shortened.len(), 1);
+    assert_eq!(proposal.removed_us, secs(2.2));
+}
+
+#[test]
+fn a_longer_clip_plays_the_music_on_to_the_new_end() {
+    let p = with_music(&three_clips());
+    let i = inputs(&p, Speech::default(), "end c3 at 33");
+    let out = compile(&p, &i, &[trim("c3", "end", 33.0)]);
+    assert_eq!(out.refusals, vec![]);
+    let after = apply_ops(&p, &out.additions.expect("applied at once").ops).unwrap();
+    assert_eq!(video_duration(&after.timeline), secs(33.0));
+    assert_eq!(music_end(&after), (secs(33.0), MUSIC_FADE_OUT_US));
 }

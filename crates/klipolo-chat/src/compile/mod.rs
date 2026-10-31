@@ -21,6 +21,9 @@
 //! (`apply_part`), tried on a copy and checked as the batch would end there (`finish_parts`): a call that fails is a
 //! `Refusal` with its index, and the others still compile. The removals' working copy ends as `apply_ops` of the
 //! proposal on the additions' result, so the review takes it as it is (`review_applied`) rather than applying again.
+//! Each phase ends with the music's refit as one more part (`Phase::refit_music`, as `with_music_refit` folds it into a
+//! hand edit): music that reached the video's end is cut or played on to the phase's new end, fading out there, in the
+//! same undo step, and the proposal's review shows the song shortened.
 //!
 //! The model's times are the snapshot's timeline, as its context showed them. A range must stand on the context or the
 //! message (`evidence`), else it is refused; it snaps to what it stands on, and is then mapped into the working copy by
@@ -42,6 +45,7 @@ use std::collections::HashMap;
 
 use klipolo_model::coded::{CodedError, ErrorParam};
 use klipolo_model::ids::Id;
+use klipolo_model::media::music::refit_music_ops;
 use klipolo_model::ops::{Op, Origin, Transaction};
 use klipolo_model::project::{AssetKind, FormatKind};
 use klipolo_model::risk::{Review, removals};
@@ -528,6 +532,8 @@ impl Compiler<'_> {
             }
         }
         waiting.sort_by_key(|(i, _)| *i);
+        // A longer video plays the music that reached its end on to the new end.
+        adding.refit_music(self.snapshot);
 
         // The project as the additions leave it: what the app applies them to, and what the proposal starts from.
         let with_additions = adding.done.clone();
@@ -579,6 +585,8 @@ impl Compiler<'_> {
                 Err(r) => refuse(&mut out, i, r),
             }
         }
+        // A shorter video cuts the music that reached its end there, fading out: Apply takes both in one step.
+        removing.refit_music(&adding.done);
 
         out.additions = adding.transaction();
         match removing.transaction() {
@@ -740,4 +748,28 @@ fn is_edit(call: &ToolCall) -> bool {
             | ToolCall::CannotDo { .. }
             | ToolCall::FindMoments { .. }
     )
+}
+
+impl Phase {
+    /// Fits the music that reached the video's end before the phase (`before`) to where the phase leaves it
+    /// (`refit_music_ops`): one more part of the batch, so the phase's one undo step takes back both and its result
+    /// is what `apply_ops` makes of all its ops. A refit the batch refuses (a bug) is left out, as `with_music_refit`
+    /// leaves it, so the edits still go through.
+    fn refit_music(&mut self, before: &Project) {
+        let refit = refit_music_ops(before, &self.done);
+        if refit.is_empty() {
+            return;
+        }
+        let mut work = self.work.clone();
+        if klipolo_model::apply_part(&mut work, &refit).is_err() {
+            return;
+        }
+        let mut done = work.clone();
+        if finish_parts(&mut done).is_err() {
+            return;
+        }
+        self.work = work;
+        self.done = done;
+        self.ops.extend(refit);
+    }
 }
