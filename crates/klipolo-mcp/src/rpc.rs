@@ -14,6 +14,7 @@ use klipolo_model::text_safety::clean;
 use serde_json::{Value, json};
 
 use crate::host::Host;
+use crate::limits::Limits;
 use crate::resources;
 use crate::session::{NAME_CHARS, Session, Sessions, client_name, locked};
 use crate::{call, tools, words};
@@ -33,7 +34,7 @@ pub enum Handled {
     Accepted,
     /// No session, or one Klipolo doesn't know (it restarted, or the session went idle): the client opens a new one.
     NoSession,
-    /// Too many messages from this client: it waits and tries again.
+    /// Too many sessions opened by this client, or by all clients together, lately: it waits and tries again.
     Paced,
 }
 
@@ -45,6 +46,8 @@ pub struct Mcp {
     told: Mutex<Vec<String>>,
     /// The waiting proposal an app made here, which its next call joins.
     own: Mutex<Option<call::Own>>,
+    /// The apps' paces in this run.
+    limits: Limits,
 }
 
 impl Mcp {
@@ -54,11 +57,16 @@ impl Mcp {
             sessions: Mutex::new(Sessions::default()),
             told: Mutex::new(Vec::new()),
             own: Mutex::new(None),
+            limits: Limits::default(),
         }
     }
 
     pub fn host(&self) -> &dyn Host {
         &*self.host
+    }
+
+    pub(crate) fn limits(&self) -> &Limits {
+        &self.limits
     }
 
     /// The waiting proposal an app made here, if Klipolo still holds it: locked briefly, never across a host call.
@@ -138,8 +146,12 @@ impl Mcp {
         Some(session)
     }
 
+    /// Opens a session for the app `params` name, unless it, or all apps together, opened too many lately.
     fn initialize(&self, id: &Value, params: &Value) -> Handled {
         let client = client_name(params);
+        if self.limits.opened(&client, Instant::now()).is_err() {
+            return Handled::Paced;
+        }
         let asked = params
             .get("protocolVersion")
             .and_then(Value::as_str)

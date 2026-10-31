@@ -1,5 +1,6 @@
 //! An edit tool's call from an app: chat's own tool, read, checked and compiled as chat's are, then applied, proposed
 //! or refused. In order:
+//! 0. The app's pace of calls (`Limits::call`): `PACED` past it.
 //! 1. `ToolCall::parse`: a call that doesn't fit its tool is refused with the parse error's sentence. `undo` undoes the
 //!    app's own newest step and nothing else (`Host::undo_own`), once no one else's proposal waits.
 //! 2. The open project (`NO_PROJECT` without one). A call naming times or clip refs needs the app to have read the
@@ -10,7 +11,8 @@
 //!    (`Own`), on the revision the proposal was made on.
 //! 5. `compile`, with no typed message: an app's words are never the person's times. A refusal of the call is the
 //!    tool's error, with its reason, and nothing changes.
-//! 6. Additions apply at once as one undo step the app made (`from_app`), checked again first to take nothing away.
+//! 6. Additions apply at once as one undo step the app made (`from_app`), checked again first to take nothing away,
+//!    within the app's pace of applied batches (`Limits::applied`).
 //!    Removals become a proposal for the person, never applied here: in place of the app's own, or, once additions
 //!    applied (which drops it, as any change does), on top of them.
 //!
@@ -19,6 +21,8 @@
 //!
 //! A result is one text and `structuredContent`: `{"outcome": "done" | "proposed" | "shown" | "refused", "revision"?,
 //! "proposalId"?, "removedSec"?}`. `isError` is true exactly when nothing was done.
+
+use std::time::Instant;
 
 use klipolo_chat::{
     Audience, Compiled, FunctionCall, Moment, Refusal, ToolCall, compile, timeline_key,
@@ -50,6 +54,9 @@ pub(crate) struct Own {
 pub fn run(mcp: &Mcp, session: &mut Session, call: &FunctionCall) -> Value {
     let client = session.client.as_str();
     let host = mcp.host();
+    if mcp.limits().call(client, Instant::now()).is_err() {
+        return refused(&paced(client));
+    }
     let new = match ToolCall::parse(call) {
         Ok(new) => new,
         Err(e) => return refused(&e.to_string()),
@@ -161,6 +168,9 @@ fn edit(
         let tx = from_app(additions, client);
         if tx.needs_review(Some(&snap.project)) {
             return refused(words::REMOVES);
+        }
+        if mcp.limits().applied(client, Instant::now()).is_err() {
+            return refused(&paced(client));
         }
         match host.apply(client, snap.revision, &tx) {
             Ok(applied) => revision = applied.revision,
@@ -280,6 +290,10 @@ fn someone_else(open: Option<&OpenProposal>, client: &str) -> Option<String> {
         Some(app) => Some(app.to_owned()),
         None => Some(words::KLIPOLO_CHAT.to_owned()),
     }
+}
+
+fn paced(client: &str) -> String {
+    fill(words::PACED, &[("client", client)])
 }
 
 fn waiting_other(who: &str) -> String {
