@@ -56,7 +56,7 @@ export function MediaJobsPopover() {
     !pausedByPerson &&
     jobs.some((job) => job.state === 'working' || (job.state === 'waiting' && auto) || pausedForAWhile(job));
   // Resume all once the person paused, or a copy waits for them (a full disk; heat and a busy encoder are also tried
-  // again by themselves). A copy held only by chat's pause isn't theirs to resume: Resume all wouldn't start it.
+  // again by themselves). A copy held only by another app's pause isn't theirs to resume: Resume all wouldn't start it.
   const canResume =
     pausedByPerson ||
     jobs.some(
@@ -110,9 +110,9 @@ export function MediaJobsPopover() {
         <p className="copies-note">
           {t({
             id: 'mediaJobs.pausedByAction',
-            message: 'Paused by chat. Ask chat to resume editing copies.',
+            message: 'Another app paused editing copies. They go on when that app resumes them.',
             comment:
-              "Chat (or an app connected to Klipolo) paused copies; Resume all here doesn't undo a pause chat asked for",
+              "An app connected to Klipolo paused copies; Resume all here doesn't undo a pause that app asked for",
           })}
         </p>
       )}

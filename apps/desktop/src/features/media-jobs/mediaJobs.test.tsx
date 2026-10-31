@@ -127,7 +127,7 @@ describe('the editing copies pill', () => {
     expect(screen.getByRole('progressbar', { name: 'intro.mp4' })).toHaveAttribute('aria-valuenow', '40');
     vi.useFakeTimers({ toFake: ['Date'] });
     await userEvent.click(screen.getByRole('button', { name: 'Pause all' }));
-    // The person's own pause: an action's (chat) is separate, and neither undoes the other.
+    // The person's own pause: an action's (another app's) is separate, and neither undoes the other.
     expect(mediaJobs.pause).toHaveBeenCalledWith('person');
     // The same button now resumes: a press at once is the tail of a double click, and does nothing.
     const resume = await screen.findByRole('button', { name: 'Resume all' });
@@ -330,15 +330,15 @@ describe('the editing copies pill', () => {
     expect(screen.queryByRole('button', { name: /Copy failed|Preparing|Editing copies/ })).toBeNull();
   });
 
-  it('offers Resume all only for what the person can resume, never a copy only chat’s pause holds', async () => {
+  it('offers Resume all only for what the person can resume, never a copy only another app’s pause holds', async () => {
     useMediaJobs.setState({
       jobs: [{ ...paused, reason: coded('copies.paused.held') }],
       pausedByAction: true,
     });
     renderWithProviders(pill());
     await userEvent.click(screen.getByRole('button', { name: /Preparing/ }));
-    expect(screen.getByText('Paused by chat. Ask chat to resume editing copies.')).toBeInTheDocument();
-    expect(screen.getByText('Paused by chat')).toBeInTheDocument();
+    expect(screen.getByText('Another app paused editing copies. They go on when that app resumes them.')).toBeInTheDocument();
+    expect(screen.getByText('Paused by another app')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Resume all' })).toBeNull();
     // Paused for heat (tried again by itself) while others wait: Pause all can still hold the retry off.
     act(() =>
@@ -369,10 +369,10 @@ describe('the editing copies pill', () => {
     expect(screen.getAllByText('Paused by you')).toHaveLength(2);
     await userEvent.click(screen.getByRole('button', { name: 'Resume all' }));
     expect(mediaJobs.resume).toHaveBeenCalledWith('person');
-    // Rust says the person's pause is lifted and chat's holds: chat's, which Resume all can't lift.
+    // Rust says the person's pause is lifted and another app's holds: one Resume all can't lift.
     act(() => useMediaJobs.getState().receive([held, waiting], ['action']));
-    expect(screen.getAllByText('Paused by chat')).toHaveLength(2);
-    expect(screen.getByText('Paused by chat. Ask chat to resume editing copies.')).toBeInTheDocument();
+    expect(screen.getAllByText('Paused by another app')).toHaveLength(2);
+    expect(screen.getByText('Another app paused editing copies. They go on when that app resumes them.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Resume all' })).toBeNull();
   });
 

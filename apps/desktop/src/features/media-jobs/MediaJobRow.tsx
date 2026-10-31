@@ -10,7 +10,10 @@ import { becauseText, failedText, pausedText, reasonText } from '../../state/med
 import { sayRefusal, useMediaJobs, wholePercent } from '../../state/mediaJobs';
 import { usePressGuard } from './usePressGuard';
 
-/** Who holds every copy (the list's `held`): the person's pause, an action's, or neither (null). */
+/**
+ * Who holds every copy (the list's `held`): the person's pause, an action's (an app connected to Klipolo, through
+ * `media_jobs_pause` with `by: "action"`; nothing in Klipolo itself pauses copies so), or neither (null).
+ */
 export type HoldBy = 'person' | 'action' | null;
 
 /**
@@ -47,8 +50,8 @@ function Row({ job, hold }: RowProps) {
     if (heldBy === 'action')
       return t({
         id: 'mediaJobs.held.action',
-        message: 'Paused by chat',
-        comment: 'Chat (or an app connected to Klipolo) paused editing copies; only it resumes them',
+        message: 'Paused by another app',
+        comment: 'An app connected to Klipolo paused editing copies (`by: "action"`); only it resumes them',
       });
     if (state === 'waiting')
       return t({
