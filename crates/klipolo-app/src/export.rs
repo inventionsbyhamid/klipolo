@@ -16,6 +16,10 @@ mod captions;
 mod estimate;
 mod fonts;
 mod naming;
+mod run;
+mod start;
+#[cfg(test)]
+mod start_tests;
 mod state;
 
 use std::io;
@@ -37,6 +41,8 @@ pub use captions::export_speech;
 pub use estimate::{Estimate, apple_silicon, estimate};
 pub use fonts::{missing_fonts, refuse_missing};
 pub use naming::{format_word, plan_files};
+pub use run::{run, said};
+pub use start::{StartSteps, Started, create_job, start_on_slot};
 pub use state::{ExportState, Releases};
 
 /// What an export will write, and what it costs (an honest estimate before it starts).
