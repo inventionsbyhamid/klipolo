@@ -5,8 +5,9 @@
 # 1. Checks: a clean checkout (a release builds a commit), 8 GB free, rustup's cargo with the target installed, and the
 #    LGPL FFmpeg prefix for the arch in .build/ffmpeg-9.0 (scripts/link-ffmpeg.sh), checked by
 #    scripts/verify-ffmpeg-prefix.sh: exactly the prefix that ships.
-# 2. The licences into .build/release/<arch>/licenses: Klipolo's notice and AGPL text, FFmpeg's LGPL notice with the
-#    configure line of this arch's prefix (arm64 adds the cross-compile flags), the LGPL text, Archivo's OFL.
+# 2. The licences into .build/release/<arch>/licenses: Klipolo's notice and AGPL text, the third-party notices
+#    (scripts/release/third-party.sh), FFmpeg's LGPL notice with the configure line of this arch's prefix (arm64 adds
+#    the cross-compile flags), the LGPL text, Archivo's OFL.
 # 3. `pnpm tauri build --target <triple> --bundles app` (its beforeBuildCommand runs `pnpm build`), signed ad hoc with
 #    the hardened runtime. FFMPEG_DIR, PKG_CONFIG_LIBDIR and KLIPOLO_FFMPEG_PREFIX point at this arch's prefix, and
 #    --config lists its dylibs (by install name) as the bundle's frameworks and adds the licences. Source paths are
