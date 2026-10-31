@@ -110,7 +110,7 @@ export function WordEditor({
   const done = () => {
     saved.current = text;
     close();
-    list.current?.focus();
+    list.current?.focus({ preventScroll: true });
   };
   const justThis = () => {
     if (save(false, true)) done();
@@ -203,7 +203,7 @@ export function WordEditor({
               saved.current = text;
               hide();
               close();
-              list.current?.focus();
+              list.current?.focus({ preventScroll: true });
             }}
           >
             {t({ id: 'captions.fix.hide', message: 'Hide' })}

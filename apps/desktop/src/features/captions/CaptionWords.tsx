@@ -104,7 +104,7 @@ const Line = memo(function Line({
               onMouseDown={(e) => {
                 // The list keeps the focus, so the keys that follow go on from this word.
                 e.preventDefault();
-                editor.list.current?.focus();
+                editor.list.current?.focus({ preventScroll: true });
               }}
               onClick={() => onPress(w)}
               className={cn(
