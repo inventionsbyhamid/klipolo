@@ -66,6 +66,23 @@ describe('caption style cards', () => {
     );
   });
 
+  it('a style click keeps where the captions sit and the ad-safe area', async () => {
+    backend();
+    const snap = snapshot(true);
+    snap.project.captions = { ...snap.project.captions, place: { portrait: 0.4, landscape: 0.9 }, adSafe: true };
+    useProject.setState({ snapshot: snap });
+    renderWithProviders(<StyleCards />);
+    await userEvent.click(screen.getByRole('radio', { name: 'Karaoke' }));
+    const tx = (await landed()).at(-1);
+    expect(tx.ops[0].captions).toEqual(
+      expect.objectContaining({
+        style: 'klipolo.builtin/caption.karaoke',
+        place: { portrait: 0.4, landscape: 0.9 },
+        adSafe: true,
+      }),
+    );
+  });
+
   it('leaves the chosen style as it is: no preview, no change', async () => {
     backend();
     const snap = snapshot(true);
