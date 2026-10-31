@@ -28,7 +28,11 @@ export function fakeChat(script: FakeChatScript): FakeChat {
     resets: 0,
     send: async (request) => {
       fake.requests.push(request);
-      return script.reply(request);
+      const outcome = await script.reply(request);
+      // A reply that doesn't say its revision gets the one Rust would: after what it applied, else the request's.
+      if (outcome.type !== 'reply' || outcome.revision >= 0) return outcome;
+      const after = outcome.undone ?? outcome.applied?.change;
+      return { ...outcome, revision: after?.history.revision ?? request.baseRevision };
     },
     apply: async (proposalId) => {
       fake.applied.push(proposalId);
@@ -45,7 +49,10 @@ export function fakeChat(script: FakeChatScript): FakeChat {
   return fake;
 }
 
-/** A reply as Rust builds it (its text already clean), with `parts` over an empty one. */
+/**
+ * A reply as Rust builds it (its text already clean), with `parts` over an empty one. Its `revision` is -1 unless
+ * given: `fakeChat` fills it in as Rust would.
+ */
 export function reply(id: string, text: string, parts: Partial<ChatReply> = {}): ChatOutcome {
   return {
     type: 'reply',
@@ -57,6 +64,7 @@ export function reply(id: string, text: string, parts: Partial<ChatReply> = {}):
     undone: null,
     proposal: null,
     moments: [],
+    revision: -1,
     ...parts,
   };
 }

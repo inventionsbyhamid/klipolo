@@ -24,4 +24,9 @@ questions: Array<string>, applied: ChatApplied | null,
 /**
  * The model took back the last change: what that undo changed, for the page to merge.
  */
-undone: SnapshotPatch | null, proposal: ChatProposal | null, moments: Array<ChatMoment>, };
+undone: SnapshotPatch | null, proposal: ChatProposal | null, moments: Array<ChatMoment>, 
+/**
+ * The revision after its commits (what it applied, what the model's undo changed): the one its moments' times
+ * are on, which "Keep only these" sends back.
+ */
+revision: number, };

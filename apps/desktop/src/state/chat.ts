@@ -157,7 +157,7 @@ export const useChat = create<ChatStore>((set, get) => {
           notes: outcome.notes,
           questions: outcome.questions,
           moments: outcome.moments,
-          revision: revision ?? null,
+          revision: outcome.revision,
           momentsStale: false,
           applied,
           proposal,

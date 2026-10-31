@@ -37,8 +37,8 @@ export type Message =
       notes: string[];
       questions: string[];
       moments: ChatMoment[];
-      /** The revision the reply landed on (its additions in): the one its moments' times are on. */
-      revision: number | null;
+      /** The revision the reply landed on, as Rust says (its additions in): the one its moments' times are on. */
+      revision: number;
       /** The project changed since it landed: its moments still seek, but can't be kept only (their times moved). */
       momentsStale: boolean;
       /** Additions applied at once: their undo label and the revision they made (the Undo chip). */

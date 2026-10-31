@@ -57,20 +57,24 @@ fn every_text_the_model_wrote_is_cleaned_of_dashes() {
 
 #[test]
 fn serializes_as_the_page_reads_it() {
-    let reply = ChatReply::new("r1", "I found 2 pauses.").proposal(ChatProposal::new(
-        "p1",
-        7,
-        "Cut 2 pauses",
-        Removals::default(),
-        0,
-        [],
-    ));
+    let reply = ChatReply::new("r1", "I found 2 pauses.")
+        .proposal(ChatProposal::new(
+            "p1",
+            7,
+            "Cut 2 pauses",
+            Removals::default(),
+            0,
+            [],
+        ))
+        .at(7);
     let json = serde_json::to_value(ChatOutcome::Reply(Box::new(reply))).unwrap();
     assert_eq!(json["type"], "reply");
     assert_eq!(json["id"], "r1");
     assert_eq!(json["text"], "I found 2 pauses.");
     assert_eq!(json["proposal"]["baseRevision"], 7);
     assert_eq!(json["proposal"]["removedUs"], 0);
+    // The revision its commits left, which its moments' times are on.
+    assert_eq!(json["revision"], 7);
     assert!(json["applied"].is_null() && json["undone"].is_null());
     let failed = serde_json::to_value(ChatOutcome::Failed(ChatFailure::new(
         ChatFailureKind::Registration,

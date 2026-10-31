@@ -64,6 +64,10 @@ pub struct ChatReply {
     undone: Option<SnapshotPatch>,
     proposal: Option<ChatProposal>,
     moments: Vec<ChatMoment>,
+    /// The revision after its commits (what it applied, what the model's undo changed): the one its moments' times
+    /// are on, which "Keep only these" sends back.
+    #[ts(type = "number")]
+    revision: u64,
 }
 
 /// Additions applied at once, as one undo step: what changed, and its undo label.
@@ -183,6 +187,12 @@ impl ChatReply {
 
     pub fn applied(mut self, change: SnapshotPatch, undo: CodedError) -> Self {
         self.applied = Some(ChatApplied { change, undo });
+        self
+    }
+
+    /// The revision the project is at once its commits are in.
+    pub fn at(mut self, revision: u64) -> Self {
+        self.revision = revision;
         self
     }
 

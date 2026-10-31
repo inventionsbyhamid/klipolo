@@ -696,4 +696,27 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     expect(useProposal.getState().proposal).toBeNull();
   });
 
+  it('Keep only these sends the revision its reply says it landed on', async () => {
+    let n = 0;
+    const fake = chat({
+      reply: (r) => {
+        n += 1;
+        return n === 1
+          ? reply(r.id, 'Two moments.', {
+              revision: 7,
+              moments: [
+                { startUs: 3 * S, endUs: 5 * S, label: 'The first firing' },
+                { startUs: 21 * S, endUs: 24 * S, label: 'The cracked bowl' },
+              ],
+            })
+          : reply(r.id, 'Done.');
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'find the kiln{Enter}');
+    await userEvent.click(await screen.findByRole('button', { name: 'Keep only these' }));
+    await waitFor(() => expect(fake.requests).toHaveLength(2));
+    expect(fake.requests[1].baseRevision).toBe(7);
+  });
+
 });
