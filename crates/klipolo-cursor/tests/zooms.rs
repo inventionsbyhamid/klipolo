@@ -97,6 +97,8 @@ fn rules_default_are_the_spec_values() {
     assert_eq!(r.safe, 0.15);
     assert_eq!(r.hold_us, 1_200_000);
     assert_eq!(r.out_gap_us, 2_500_000);
+    // The engine plans an Auto item with its scale as the most it zooms.
+    assert_eq!(AUTO_SCALE, r.max_scale);
 }
 
 #[test]
@@ -180,6 +182,42 @@ fn a_click_right_at_the_start_still_zooms() {
     let pieces = cut(&planned(&[(100_000, 0.30, 0.40)], SPAN));
     assert_eq!(pieces.len(), 1, "{pieces:?}");
     assert!((0..=100_000).contains(&pieces[0].0), "{pieces:?}");
+}
+
+#[test]
+fn a_click_at_the_very_start_still_zooms() {
+    // No time to arrive before it: the whole frame shows it as it happens, and the zoom arrives as soon as it can.
+    let p = planned(&[(0, 0.30, 0.40)], SPAN);
+    let pieces = cut(&p);
+    assert_eq!(pieces.len(), 1, "{pieces:?}");
+    assert_eq!(pieces[0].0, 0);
+    assert_eq!(p.view_at(0), View::FULL);
+    assert!(
+        p.view_at(1_200_000).scale > 1.0,
+        "{:?}",
+        p.view_at(1_200_000)
+    );
+}
+
+#[test]
+fn a_take_shorter_than_one_move_gets_no_zoom() {
+    let f = clicks(&[(100_000, 0.30, 0.40)]);
+    let spans = spans_of(&f, (0, 300_000));
+    assert_eq!(spans, vec![]);
+    let mut mint = || -> String { unreachable!("no item, no id") };
+    assert_eq!(auto_zoom_ops(&spans, AUTO_SCALE, CLICKS, &mut mint), vec![]);
+}
+
+#[test]
+fn a_click_outside_the_frame_zooms_at_its_edge() {
+    // Off the top right corner (another display, or outside the window in one app's recording): framed against the
+    // corner it is nearest, at the full 2x.
+    let p = planned(&[(2 * S, 1.2, -0.1)], SPAN);
+    assert_eq!(cut(&p).len(), 1, "{:?}", cut(&p));
+    let v = p.view_at(2 * S);
+    assert_eq!(v.scale, 2.0, "{v:?}");
+    let r = v.rect();
+    assert!((r.x + r.w - 1.0).abs() < 1e-6 && r.y.abs() < 1e-6, "{r:?}");
 }
 
 #[test]
