@@ -70,8 +70,9 @@ export interface RecorderState {
 
 export interface RecorderStore extends RecorderState {
   /**
-   * Opens the dialog and reads the setup: nothing is armed, asked or captured. Open already, it resolves once the setup
-   * on its way is read, and reads it again only when it couldn't be (Try again). While a take runs it does nothing.
+   * Opens the dialog and reads the setup: nothing is armed, asked or captured, and playback pauses (its sound would
+   * reach the countdown and the mic). Open already, it resolves once the setup on its way is read, and reads it again
+   * only when it couldn't be (Try again). While a take runs it does nothing.
    */
   openRecorder: () => Promise<void>;
   /**
@@ -160,6 +161,7 @@ export const useRecorder = create<RecorderStore>((set, get) => {
       const s = get();
       // A take runs (its dialog hidden, or closed while it records): nothing new opens and nothing changes.
       if (s.take !== null) return;
+      usePlayback.getState().pause();
       // Open already: done once the setup on its way is read.
       if (s.open && s.setupError === null)
         return reading?.then(

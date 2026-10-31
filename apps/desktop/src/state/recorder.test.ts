@@ -151,6 +151,14 @@ describe('opening', () => {
     expect(fake.calls).toEqual(['setup']);
   });
 
+  it('opening_record_pauses_playback', async () => {
+    // A clip plays: its sound would run through the countdown and into the first moment of the mic.
+    usePlayback.setState({ playing: true });
+    await opened();
+    expect(usePlayback.getState().playing).toBe(false);
+    expect(rec().open).toBe(true);
+  });
+
   it('two_displays_offer_both', async () => {
     await opened(recorderSetup({ displays: [display('built-in'), display('studio')] }));
     expect(rec().setup?.devices.displays.map((d) => d.id)).toEqual(['built-in', 'studio']);
