@@ -1,15 +1,5 @@
 /* The start screen: one panel under the top bar, holding a column of your projects. Tokens only. */
 
-/* Until a project opens, the panel takes the workspace's and the player bar's place: one row under the top bar. */
-.app.is-start {
-  grid-template-rows: var(--topbar-h) minmax(0, 1fr);
-}
-
-/* Toasts sit as high over the panel's foot as they sit over the player bar in the editor. */
-.app.is-start .toasts {
-  bottom: calc(var(--gutter) + var(--space-6));
-}
-
 .start-panel {
   margin: 0 var(--gutter) var(--gutter);
   overflow-y: auto;

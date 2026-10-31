@@ -131,6 +131,11 @@
   height: 100vh;
 }
 
+/* Until a project opens, the start screen's panel takes the workspace's and the player bar's place. */
+.app.is-start {
+  grid-template-rows: var(--topbar-h) minmax(0, 1fr);
+}
+
 .workspace {
   display: grid;
   grid-template-columns: var(--library-w) minmax(0, 1fr) var(--chat-w);
@@ -1841,6 +1846,11 @@
   padding: 0;
   list-style: none;
   outline: none;
+}
+
+/* On the start screen they sit as high over its panel's foot as they sit over the player bar in the editor. */
+.app.is-start .toasts {
+  bottom: calc(var(--gutter) + var(--space-6));
 }
 
 .toast {
