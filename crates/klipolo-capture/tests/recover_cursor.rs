@@ -79,6 +79,7 @@ fn recovery_trusts_the_cursor_file_to_its_durable_length_and_a_missing_png_is_ke
             rotation: None,
             has_audio: false,
             audio_lead_us: None,
+            made_with: None,
         })
     };
     let (imported, _) = recording_from(&m, &dir, &manifest_peaks, &mut probe).unwrap();

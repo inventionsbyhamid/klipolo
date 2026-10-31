@@ -108,6 +108,7 @@ pub fn probe_ok() -> impl FnMut(&Path, &str) -> Result<Asset, String> {
             rotation: None,
             has_audio: !video,
             audio_lead_us: None,
+            made_with: None,
         })
     }
 }
