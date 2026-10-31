@@ -112,6 +112,27 @@ fn mixed_import_keeps_good_files_and_names_the_rest() {
     );
 }
 
+/// A drop of more than 100 files brings in the first 100 and names each of the rest with why.
+#[test]
+fn a_drop_over_100_files_takes_the_first_100_and_names_the_rest() {
+    let probe = |path: &Path| Ok(asset_from_info(path, info(MediaKind::Audio, 0, 0, 0.0)));
+    let paths: Vec<PathBuf> = (0..103)
+        .map(|n| PathBuf::from(format!("/sounds/s{n}.wav")))
+        .collect();
+    let result = probe_each(paths, probe);
+    assert_eq!(result.assets.len(), 100);
+    assert_eq!(result.assets[99].path, "/sounds/s99.wav");
+    assert_eq!(
+        result.skipped,
+        (100..103)
+            .map(|n| SkippedFile {
+                name: format!("s{n}.wav"),
+                reason: "Only 100 files can be added at once.".into(),
+            })
+            .collect::<Vec<_>>()
+    );
+}
+
 /// Files the probe can't read are each named with the reason, in the order given, and nothing else is skipped: a
 /// damaged MP4, an empty one, a text file and one that isn't there. The good file around them still comes in.
 #[test]
