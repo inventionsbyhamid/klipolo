@@ -25,7 +25,7 @@ const CONFIG = JSON.stringify(
   null,
   2,
 );
-const off: McpStatus = { enabled: false, connected: [], config: CONFIG, needsMove: false };
+const off: McpStatus = { enabled: false, connected: [], config: CONFIG, needsMove: false, anotherListens: false };
 const on: McpStatus = { ...off, enabled: true };
 
 /** What `mcp-apps` would tell, once the section listens. */
@@ -93,6 +93,27 @@ describe('Settings: Other apps', () => {
     await userEvent.click(toggle());
     expect(within(section).queryByRole('alert')).toBeNull();
     expect(toggle()).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('another_klipolo_letting_apps_in_says_to_quit_it_first', async () => {
+    const section = await openOn({ ...off, anotherListens: true });
+    const line = () => section.querySelector('.apps-status');
+    expect(toggle()).toHaveAttribute('aria-checked', 'false');
+    expect(line()).toHaveTextContent(
+      /^Off\. Another Klipolo on this Mac is already letting other apps in\. Quit it, then turn this on\.$/,
+    );
+    // Turned on anyway: Rust's sentence says it once, and the line says only Off.
+    const refused = 'Another Klipolo on this Mac is already letting other apps in. Quit it, then turn this on again.';
+    vi.mocked(mcp.setMcpEnabled).mockRejectedValueOnce(new Error(refused));
+    await userEvent.click(toggle());
+    expect(within(section).getByRole('alert')).toHaveTextContent(refused);
+    expect(line()).toHaveTextContent(/^Off\.$/);
+    expect(toggle()).toHaveAttribute('aria-checked', 'false');
+    // That one quit: this one turns on.
+    vi.mocked(mcp.setMcpEnabled).mockResolvedValueOnce(on);
+    await userEvent.click(toggle());
+    expect(within(section).queryByRole('alert')).toBeNull();
+    expect(line()).toHaveTextContent('On. No app connected yet.');
   });
 
   it('a_status_that_cant_be_read_says_so', async () => {

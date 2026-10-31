@@ -17,7 +17,8 @@ function names(apps: string[]): string {
  * Klipolo listens and which apps used it recently (an app that quit can stay listed about 10 minutes, so "recently"),
  * and Copy config, which puts on the clipboard what an app needs to start Klipolo's bridge. A copy of Klipolo still on
  * its disk image (or one macOS moved aside) can't be named in a config: it says to move it to Applications first.
- * Cuts an app asks for wait for the person's Apply in chat.
+ * While another Klipolo on this Mac lets apps in (a dev build beside the installed app), this one stays off and says to
+ * quit that one first. Cuts an app asks for wait for the person's Apply in chat.
  */
 export function OtherApps() {
   const { t } = useLingui();
@@ -72,7 +73,13 @@ export function OtherApps() {
   const said = !status
     ? ''
     : !status.enabled
-      ? t({ id: 'otherApps.status.off', message: 'Off.' })
+      ? // Once turning it on was refused, the error says why: the line doesn't say it twice.
+        status.anotherListens && !error
+        ? t({
+            id: 'otherApps.status.another',
+            message: 'Off. Another Klipolo on this Mac is already letting other apps in. Quit it, then turn this on.',
+          })
+        : t({ id: 'otherApps.status.off', message: 'Off.' })
       : status.connected.length === 0
         ? t({ id: 'otherApps.status.none', message: 'On. No app connected yet.' })
         : t({
