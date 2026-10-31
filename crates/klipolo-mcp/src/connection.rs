@@ -4,7 +4,7 @@
 
 use std::ffi::OsString;
 use std::fmt;
-use std::io::{self, Read};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -89,14 +89,12 @@ pub fn write(dir: &Path, f: &ConnectionFile) -> io::Result<PathBuf> {
     Ok(path)
 }
 
-/// The file in `dir`, when there is one Klipolo wrote in this format.
+/// The file in `dir`, when there is one Klipolo wrote in this format. It is read only as a file of its own
+/// (`klipolo_platform::file::read_private`): a link, a folder, or a FIFO that would never answer, put at its name,
+/// reads as none at once.
 pub fn read(dir: &Path) -> Option<ConnectionFile> {
-    let mut text = String::new();
-    (std::fs::File::open(dir.join(FILE)).ok()?)
-        .take(MOST)
-        .read_to_string(&mut text)
-        .ok()?;
-    serde_json::from_str::<ConnectionFile>(&text)
+    let bytes = klipolo_platform::file::read_private(&dir.join(FILE), MOST).ok()?;
+    serde_json::from_slice::<ConnectionFile>(&bytes)
         .ok()
         .filter(|f| f.version == VERSION)
 }

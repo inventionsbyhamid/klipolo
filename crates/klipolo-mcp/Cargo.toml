@@ -16,7 +16,8 @@ hyper-util = { version = "0.1", features = ["tokio"] }
 klipolo-chat = { path = "../klipolo-chat" }
 # The project, its transactions and history, the time helpers and the cleaning of app names.
 klipolo-model = { path = "../klipolo-model" }
-# The connection file, written so only this user can read it (`file::write_private`).
+# The connection file, written so only this user can read it, and read only as a file of its own
+# (`file::write_private`, `file::read_private`).
 klipolo-platform = { path = "../klipolo-platform" }
 # Session ids and the token of each run.
 rand = "0.9"

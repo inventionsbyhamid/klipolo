@@ -120,6 +120,45 @@ fn connection_file_is_never_written_through_a_link() {
     assert!(meta.file_type().is_file());
 }
 
+/// The connection file is read only as a file of its own: a link to a good file, a folder or a FIFO at its name reads
+/// as none, and a FIFO at once (a read that waited on it would hang the bridge, and the switch-off).
+#[test]
+fn connection_file_reads_only_as_a_file_of_its_own() {
+    let temp = tempfile::tempdir().unwrap();
+    let elsewhere = temp.path().join("elsewhere");
+    let file = ConnectionFile {
+        port: 51234,
+        token: new_token(),
+        pid: std::process::id(),
+        version: VERSION,
+    };
+    let good = connection::write(&elsewhere, &file).unwrap();
+    assert_eq!(connection::read(&elsewhere), Some(file));
+    let dir = temp.path().join("Klipolo");
+    std::fs::create_dir(&dir).unwrap();
+    std::os::unix::fs::symlink(&good, dir.join(FILE)).unwrap();
+    assert_eq!(connection::read(&dir), None, "a link");
+    std::fs::remove_file(dir.join(FILE)).unwrap();
+    std::fs::create_dir(dir.join(FILE)).unwrap();
+    assert_eq!(connection::read(&dir), None, "a folder");
+    std::fs::remove_dir(dir.join(FILE)).unwrap();
+    let made = std::process::Command::new("mkfifo")
+        .arg(dir.join(FILE))
+        .status()
+        .unwrap();
+    assert!(made.success());
+    // On a thread, so a read that waits fails the test instead of hanging it.
+    let (said, heard) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = said.send(connection::read(&dir));
+    });
+    assert_eq!(
+        heard.recv_timeout(Duration::from_secs(2)),
+        Ok(None),
+        "a FIFO, at once"
+    );
+}
+
 #[test]
 fn support_dir_is_the_variable_else_application_support() {
     let os = |s: &str| Some(OsString::from(s));
