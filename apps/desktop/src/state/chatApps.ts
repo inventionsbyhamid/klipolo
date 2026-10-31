@@ -46,6 +46,28 @@ function undoneLabel(undone: SnapshotPatch | null): CodedError | null {
   return history?.redoLabel ? { code: history.redoLabel, params: history.redoParams ?? {} } : null;
 }
 
+/** Once a project that is opening or closing has landed (the page's copy is the one Rust has open), or at once. */
+function switchLanded(): Promise<void> {
+  if (!useProject.getState().switching) return Promise.resolve();
+  return new Promise((resolve) => {
+    const stop = useProject.subscribe((s) => {
+      if (s.switching) return;
+      stop();
+      resolve();
+    });
+  });
+}
+
+/**
+ * Merges an app's `change` unless the copy has it already: a project that opened after the app made it holds it (the
+ * same opening, at its revision or a newer one).
+ */
+async function adoptNew(change: SnapshotPatch) {
+  const now = useProject.getState().snapshot;
+  if (now && now.history.revision >= change.history.revision) return;
+  await useProject.getState().adopt(change);
+}
+
 /**
  * What another app did, in one line for its message (its reply has no words of its own): the change it made, in the
  * words its Undo uses ("Make it vertical"), or the step of its own it took back ("Undid make it vertical."). Empty when
@@ -67,22 +89,24 @@ export function appLine(m: ReplyMessage): string {
  * chat's, red on the timeline, for the person's Apply; its moments and pictures show as chat's. Its pictures are drawn
  * here (nothing else draws them) and wait for the person's Use, as the app was told: never placed by themselves.
  * Replies are taken one at a time, in the order Rust told them, so a proposal is checked on the project the app's
- * change before it left. Nothing shows while no project is open or one is opening or closing, or for another opening.
+ * change before it left. One told while a project opens waits for it; nothing shows with no project open, or for another
+ * opening.
  */
 export function appActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'receive'> {
   let queue: Promise<void> = Promise.resolve();
   const push = (m: Message) => set((s) => withMessages([...s.messages, m]));
   const take = async (external: ExternalReply) => {
     const { client, reply: r } = external;
-    const project = useProject.getState();
-    if (!project.snapshot || project.switching || !fromThisOpening(external)) return;
+    // A project opening or closing: it waits until the page has it, then goes by the opening and the revision.
+    await switchLanded();
+    if (!useProject.getState().snapshot || !fromThisOpening(external)) return;
     const mine = session.now();
     let applied: ReplyMessage['applied'] = null;
     if (r.applied) {
-      await useProject.getState().adopt(r.applied.change);
+      await adoptNew(r.applied.change);
       applied = { undo: r.applied.undo, revision: r.applied.change.history.revision };
     }
-    if (r.undone) await useProject.getState().adopt(r.undone);
+    if (r.undone) await adoptNew(r.undone);
     // New chat or another project meanwhile: the change is merged (Rust made it), but the conversation it was for is
     // gone.
     if (session.now() !== mine) return;

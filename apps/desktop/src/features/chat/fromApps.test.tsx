@@ -304,6 +304,35 @@ describe('another app in chat', () => {
     expect(within(screen.getByRole('log')).getByText('From Example Client')).toBeInTheDocument();
   });
 
+  it('a_reply_while_the_project_opens_waits_for_it', async () => {
+    chat();
+    // Rust has opened the project and an app changed it before the page has it: the page is still opening it.
+    useProject.setState({ snapshot: null, switching: true });
+    renderWithProviders(<ChatPanel />);
+    const undo = vertical();
+    await tell(external('Example Client', { applied: { change: changed(4, undo), undo }, revision: 4 }));
+    expect(useChat.getState().messages).toEqual([]);
+    // The opening lands, as Rust opened it (before the app's change): the change goes in on it.
+    act(() => useProject.setState({ snapshot: opened(), switching: false }));
+    await waitFor(() => expect(useProject.getState().snapshot!.history.revision).toBe(4));
+    expect(within(screen.getByRole('log')).getByText('From Example Client')).toBeInTheDocument();
+    expect(calls.project_snapshot).toBeUndefined();
+  });
+
+  it('a_change_the_opened_project_has_already_goes_in_once', async () => {
+    chat();
+    useProject.setState({ snapshot: null, switching: true });
+    renderWithProviders(<ChatPanel />);
+    const undo = vertical();
+    await tell(external('Example Client', { applied: { change: changed(4, undo), undo }, revision: 4 }));
+    // The project as Rust opened it already holds the app's change (revision 4): nothing to merge or fetch again.
+    const withIt = { ...opened(), history: changed(4, undo).history };
+    act(() => useProject.setState({ snapshot: withIt, switching: false }));
+    expect(await within(screen.getByRole('log')).findByText('From Example Client')).toBeInTheDocument();
+    expect(useProject.getState().snapshot).toBe(withIt);
+    expect(calls.project_snapshot).toBeUndefined();
+  });
+
   it('nothing_shows_with_no_project_open', async () => {
     chat();
     renderWithProviders(<ChatPanel />);
