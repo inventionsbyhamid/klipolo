@@ -3,8 +3,8 @@
 //! can read it as it arrives.
 //!
 //! - **Picture:** the source decoded on the activity pass's hardware path (`platform::activity`: VideoToolbox) on Apple
-//!   silicon when the codec has one, else in software on every core (FFmpeg's frame threads; on an Intel Mac that is
-//!   the faster way, `HARDWARE_FIRST`). Should the hardware not start (FFmpeg then falls back to software by itself, on
+//!   silicon when the codec has one, else in software with FFmpeg's frame threads (on every core, or as many as
+//!   `SmallCopy::threads` allows; on an Intel Mac software is the faster way, `HARDWARE_FIRST`). Should the hardware not start (FFmpeg then falls back to software by itself, on
 //!   one thread) or fail part-way, the copy is made again in software. Each frame is scaled the way the person sees it
 //!   (anamorphic pixels widened, a phone's quarter turn applied) to fit `SmallCopy::fit`, at most `max_fps` frames a
 //!   second (frames dropped evenly, never repeated), and encoded by the platform's H.264 encoder (`platform::encode`:
@@ -69,6 +69,15 @@ pub struct SmallCopy {
     pub video_bps: u32,
     /// The sound's bitrate; 0 leaves the sound out.
     pub audio_bps: u32,
+    /// The software decoder's frame threads at most; 0 lets FFmpeg choose (one a core, up to 16).
+    /// `background_threads` keeps a copy made while someone edits to half the cores.
+    pub threads: usize,
+}
+
+/// Frame threads for a copy made in the background (`SmallCopy::threads`): half of `cores`, at least one, so the
+/// editor keeps the rest.
+pub fn background_threads(cores: usize) -> usize {
+    (cores / 2).max(1)
 }
 
 /// A caller that sees every decoded frame of the source over the range, to measure frames one by one: from the
@@ -353,7 +362,8 @@ impl Writer<'_> {
             stream_start(&stream),
         );
         let seconds = f64::from(tb);
-        let (mut decoder, hardware) = open_decoder(&params, tb, hardware_decode)?;
+        let (mut decoder, hardware) =
+            open_decoder(&params, tb, hardware_decode, self.spec.threads)?;
         // Whether a frame has come out yet: the first tells whether the hardware decoder started.
         let mut decoded = false;
         set_discards(&mut input, Some(index), None);
@@ -566,18 +576,23 @@ fn write_packet(
 }
 
 /// The source's decoder: the platform's hardware one when asked for and the codec has one there (`Hardware`), else
-/// software with FFmpeg's frame threads, on every core. Threads are set before the decoder opens, so the hardware try
-/// goes without them; should the hardware not start, the first frame says so and `write` makes the copy again here.
+/// software with FFmpeg's frame threads, `threads` of them at most (0: on every core). Threads are set before the
+/// decoder opens, so the hardware try goes without them; should the hardware not start, the first frame says so and
+/// `write` makes the copy again here.
 fn open_decoder(
     params: &ffmpeg::codec::Parameters,
     tb: Rational,
     hardware: bool,
+    threads: usize,
 ) -> Result<(ffmpeg::decoder::Video, Option<Hardware>), SmallCopyError> {
-    let open = |threads: bool| {
+    let open = |threaded: bool| {
         let mut context = ffmpeg::codec::Context::from_parameters(params.clone())
             .map_err(|e| failed("decoder", e))?;
-        if threads {
-            context.set_threading(threading::Config::kind(threading::Type::Frame));
+        if threaded {
+            context.set_threading(threading::Config {
+                count: threads,
+                ..threading::Config::kind(threading::Type::Frame)
+            });
         }
         let mut decoder = context
             .decoder()
@@ -766,6 +781,15 @@ fn turn<const PX: usize>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_background_copy_leaves_half_the_cores() {
+        assert_eq!(background_threads(8), 4);
+        assert_eq!(background_threads(16), 8);
+        assert_eq!(background_threads(3), 1);
+        assert_eq!(background_threads(1), 1);
+        assert_eq!(background_threads(0), 1);
+    }
 
     #[test]
     fn a_picture_fits_its_box_turned_its_way_and_is_never_enlarged() {
