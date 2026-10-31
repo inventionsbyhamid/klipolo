@@ -119,8 +119,14 @@ impl ProjectSessionState {
     /// (`ducking_speech`, from the speech the feed carries): empty when nothing ducks, nobody is heard yet, or no
     /// project is open.
     pub(crate) fn ducking_speech(&self) -> Vec<RangeUs> {
-        self.feed.borrow().as_ref().map_or_else(Vec::new, |feed| {
-            klipolo_engine::audio::plan::ducking_speech(&feed.project, &feed.speech).to_vec()
+        // Taken out of the feed first: the ranges are worked out without holding it, so a publish never waits on them.
+        let feed = self
+            .feed
+            .borrow()
+            .as_ref()
+            .map(|feed| (feed.project.clone(), feed.speech.clone()));
+        feed.map_or_else(Vec::new, |(project, speech)| {
+            klipolo_engine::audio::plan::ducking_speech(&project, &speech).to_vec()
         })
     }
 
