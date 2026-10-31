@@ -61,15 +61,15 @@ pub(crate) const RECENT_FILE: &str = "recent.json";
 /// The newest `limit` projects in `library` (its top-level project files) as the start screen lists them: the ones
 /// stamped in `stamps` first, by when they were opened, then the rest by their last save, which is then their
 /// `opened_ms`. A file that doesn't read as a project is left out (and logged). `thumbs` is the engine's thumbnail
-/// folder; None lists no pictures.
+/// folder; None lists no pictures. Fails only when the library itself can't be listed.
 pub(crate) fn recent_in(
     library: &Path,
     stamps: &Path,
     thumbs: Option<&Path>,
     limit: usize,
-) -> Vec<ProjectRow> {
+) -> io::Result<Vec<ProjectRow>> {
     let stamps = read_stamps(stamps);
-    project_files(library, &stamps)
+    Ok(project_files(library, &stamps)?
         .into_iter()
         .filter_map(|found| match read(&found.file) {
             Ok(project) => Some(row(&found.file, found.at_ms, &project, thumbs)),
@@ -80,7 +80,7 @@ pub(crate) fn recent_in(
             }
         })
         .take(limit)
-        .collect()
+        .collect())
 }
 
 /// How many opened projects `recent.json` remembers.
@@ -122,15 +122,9 @@ struct Found {
 }
 
 /// The top-level project files in `library`, in list order: stamped first, then newest first (by file name on a tie).
-fn project_files(library: &Path, stamps: &BTreeMap<String, u64>) -> Vec<Found> {
-    let entries = match fs::read_dir(library) {
-        Ok(entries) => entries,
-        Err(error) => {
-            tracing::warn!(%error, "the projects folder couldn't be read");
-            return Vec::new();
-        }
-    };
-    let mut found: Vec<Found> = entries
+/// Fails when `library` can't be listed.
+fn project_files(library: &Path, stamps: &BTreeMap<String, u64>) -> io::Result<Vec<Found>> {
+    let mut found: Vec<Found> = fs::read_dir(library)?
         .flatten()
         .filter_map(|entry| {
             let file = entry.path();
@@ -147,7 +141,7 @@ fn project_files(library: &Path, stamps: &BTreeMap<String, u64>) -> Vec<Found> {
         })
         .collect();
     found.sort_by(|a, b| list_order(a).cmp(&list_order(b)));
-    found
+    Ok(found)
 }
 
 /// Stamped first, then newest first, then by file name.

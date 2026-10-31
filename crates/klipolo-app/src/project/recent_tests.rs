@@ -121,7 +121,7 @@ fn opened_projects_come_first_newest_first() {
     let gone = dir.path().join("Elsewhere").join("Gone.klipolo");
     stamped(&stamps, &[(&older, 2_000), (&newer, 3_000), (&gone, 4_000)]);
 
-    let rows = recent_in(&library, &stamps, None, RECENT_LIMIT);
+    let rows = recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap();
     assert_eq!(
         names(&rows),
         [
@@ -147,7 +147,7 @@ fn never_opened_files_follow_by_last_save() {
     fs::create_dir_all(library.join("A folder.klipolo")).unwrap();
     saved(&library.join("Recordings"), &Project::new("Nested"), 4_000);
 
-    let rows = recent_in(&library, &stamps, None, RECENT_LIMIT);
+    let rows = recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap();
     assert_eq!(
         names(&rows),
         [("Third", 3_000), ("Second", 2_000), ("First", 1_000)]
@@ -171,11 +171,11 @@ fn unreadable_files_are_skipped() {
     fs::write(&stamps, "{ not json").unwrap();
 
     assert_eq!(
-        names(&recent_in(&library, &stamps, None, RECENT_LIMIT)),
+        names(&recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap()),
         [("Good", 1_000)]
     );
     assert_eq!(
-        names(&recent_in(&library, &stamps, None, 1)),
+        names(&recent_in(&library, &stamps, None, 1).unwrap()),
         [("Good", 1_000)],
         "skipped files don't use up the limit"
     );
@@ -195,7 +195,7 @@ fn at_most_30_rows() {
         );
     }
 
-    let rows = recent_in(&library, &stamps, None, RECENT_LIMIT);
+    let rows = recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap();
     assert_eq!(rows.len(), 30);
     assert_eq!(rows.first().unwrap().name, "Project 35");
     assert_eq!(rows.last().unwrap().name, "Project 06");
@@ -222,7 +222,7 @@ fn thumb_is_the_first_clips_cached_tile_or_none() {
     ];
     saved(&library, &project, 2_000);
     saved(&library, &Project::new("No clips"), 1_000);
-    let row = |thumbs: Option<&Path>| recent_in(&library, &stamps, thumbs, RECENT_LIMIT);
+    let row = |thumbs: Option<&Path>| recent_in(&library, &stamps, thumbs, RECENT_LIMIT).unwrap();
 
     let rows = row(None);
     assert_eq!(
@@ -307,7 +307,7 @@ fn a_recording_project_uses_its_screen_file_for_the_thumb() {
     cache_chunk(&root, &camera, 0, (20, 10));
     let sprite = cache_chunk(&root, &screen, 0, (16, 10));
 
-    let rows = recent_in(&library, &stamps, Some(&root), RECENT_LIMIT);
+    let rows = recent_in(&library, &stamps, Some(&root), RECENT_LIMIT).unwrap();
     assert_eq!((rows[0].duration_us, rows[0].clips), (6_000_000, 1));
     assert_eq!(
         rows[0].thumb,
@@ -355,7 +355,7 @@ fn listing_never_opens_a_project() {
     };
     let before = (session(&state), on_disk());
 
-    let rows = recent_in(&library, &stamps, Some(&root), RECENT_LIMIT);
+    let rows = recent_in(&library, &stamps, Some(&root), RECENT_LIMIT).unwrap();
     assert_eq!(names(&rows), [("Open now", 3_000), ("Another", 1_000)]);
     assert_eq!(rows[1].path, other.to_string_lossy());
     assert_eq!((session(&state), on_disk()), before);
@@ -390,7 +390,7 @@ fn opening_or_creating_stamps_recent_json_and_keeps_50() {
     let (made_ms, earlier_ms) = (opened[&key(&made)], opened[&key(&earlier)]);
     assert!(start <= made_ms && made_ms <= earlier_ms && earlier_ms <= now_ms());
     assert_eq!(
-        names(&recent_in(&library, &stamps, None, RECENT_LIMIT)),
+        names(&recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap()),
         [("Made earlier", earlier_ms), ("Made now", made_ms)]
     );
 
@@ -409,4 +409,23 @@ fn opening_or_creating_stamps_recent_json_and_keeps_50() {
     stamp(&stamps, &old(12), 5_000).unwrap();
     let again = on_disk(&stamps);
     assert_eq!((again.len(), again[&key(&old(12))]), (50, 5_000));
+}
+
+/// A projects folder that can't be listed (here, a file where the folder should be) fails, so the start screen says so
+/// instead of showing an empty library; an empty folder is an empty list.
+#[test]
+fn a_library_that_cant_be_listed_fails() {
+    let dir = tempfile::tempdir().unwrap();
+    let stamps = dir.path().join("recent.json");
+    let not_a_folder = dir.path().join("Klipolo");
+    fs::write(&not_a_folder, "a file").unwrap();
+    assert!(recent_in(&not_a_folder, &stamps, None, RECENT_LIMIT).is_err());
+
+    let empty = dir.path().join("Empty");
+    fs::create_dir_all(&empty).unwrap();
+    assert!(
+        recent_in(&empty, &stamps, None, RECENT_LIMIT)
+            .unwrap()
+            .is_empty()
+    );
 }

@@ -160,6 +160,7 @@ pub fn project_open(state: State<'_, ProjectSessionState>, path: String) -> Resu
 
 /// The start screen's recent projects (`recent::recent_in`): the library's project files, last opened first. Nothing is
 /// opened. Each card's thumbnail sprite is let through the asset protocol (the cache folder's scope holds it already).
+/// A projects folder that can't be listed fails as `project.libraryFailed`, never as an empty library.
 #[tauri::command(async)]
 #[expect(dead_code, reason = "registered with the start screen")]
 pub fn projects_recent(
@@ -173,7 +174,11 @@ pub fn projects_recent(
         .map(|dir| dir.join(RECENT_FILE))
         .unwrap_or_default();
     let thumbs = engine.caches().map(|caches| caches.thumbs());
-    let rows = recent_in(&library_dir()?, &stamps, thumbs.as_deref(), RECENT_LIMIT);
+    let rows =
+        recent_in(&library_dir()?, &stamps, thumbs.as_deref(), RECENT_LIMIT).map_err(|error| {
+            tracing::warn!(%error, "the projects folder couldn't be listed");
+            Said::code("project.libraryFailed")
+        })?;
     let scope = app.asset_protocol_scope();
     for tile in rows.iter().filter_map(|row| row.thumb.as_ref()) {
         // A sprite that can't be allowed shows the clip art instead.
