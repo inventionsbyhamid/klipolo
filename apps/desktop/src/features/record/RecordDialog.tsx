@@ -417,7 +417,9 @@ function DeviceState({ kind, setup }: { kind: AskedDevice; setup: RecorderSetup 
   if (!chosen) return null;
   if (denied || refused) return <DeniedNote kind={kind} pages={setup.privacySettings} />;
   if (takeRefused) return null;
-  if (setup.permissions[kind] === 'notAsked' && !asked) return <AllowDevice kind={kind} />;
+  // Not asked yet, or macOS can't say: the press is when it asks (it never asks for a device it refused).
+  if ((setup.permissions[kind] === 'notAsked' || setup.permissions[kind] === 'unknown') && !asked)
+    return <AllowDevice kind={kind} />;
   // The meter's place is kept while the mic is allowed, empty until a level comes, so neither its first level nor
   // Klipolo going behind and back moves the dialog.
   if (kind === 'mic' && (setup.permissions.mic === 'granted' || asked || dbfs !== null))

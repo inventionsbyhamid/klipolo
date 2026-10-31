@@ -372,6 +372,17 @@ describe('the previews in the Record dialog', () => {
     expect(screen.getByRole('meter', { name: 'Microphone level' })).toHaveAttribute('aria-valuenow', '90');
   });
 
+  it('a_device_whose_permission_reads_unknown_offers_allow_too', async () => {
+    await openOn(
+      recorderSetup({ cameras: [device('FaceTime HD Camera')], permissions: { camera: 'unknown', mic: 'unknown' } }),
+    );
+    await choose('Camera: No camera', 'FaceTime HD Camera');
+    expect(screen.getByRole('button', { name: 'Allow microphone' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Allow camera' }));
+    await flush();
+    expect(fake.previewed.at(-1)).toEqual(want({ camera: 'FaceTime HD Camera', ask: 'camera' }));
+  });
+
   it('a_device_refused_in_macos_s_question_says_so_in_its_row', async () => {
     const dialog = await openOn(
       recorderSetup({ cameras: [device('FaceTime HD Camera')], permissions: { camera: 'notAsked', mic: 'notAsked' } }),
