@@ -6,8 +6,8 @@
 //!   while the mic is allowed already, or on the person's own "Allow microphone" press, when macOS may ask.
 //! - **The mic:** the take's own pipe for it (`Backend::audio`: cpal on macOS), started only if the app's Stop didn't
 //!   come first, and stopped with it.
-//! - **The level:** each block's loudest sample, the loudest of them over `METER_EVERY`, as the take's countdown meter
-//!   reads them, sent as a `Meter` event for "mic" in dBFS (−120 for silence).
+//! - **The level:** each `METER_EVERY` of the mic's own time (its blocks' host times), the loudest sample in it, in
+//!   dBFS as the take's countdown meter shows it (`health::dbfs`: −120 for silence), sent as a `Meter` event for "mic".
 //! - **Its end:** a mic that goes away or stops by itself ends the meter with `Failed` (why), so the dialog never keeps
 //!   its last level as live.
 
@@ -20,18 +20,17 @@ use super::preview_loop::{Events, PreviewIo, the_app_s_word};
 use crate::backend::{AudioSpec, Backend};
 use crate::english::msg;
 use crate::guard::assert_real_capture_allowed;
+use crate::health::{dbfs, peak_of};
 use crate::media::PcmBlock;
 use crate::pipe::{AudioOut, EVENT_CHANNEL, PCM_CHANNEL, PipeError, PipeEvent};
 use crate::protocol::Event;
 
-/// A peak goes to the app this often.
+/// A peak goes to the app for each this much of the mic's time.
 pub const METER_EVERY: Duration = Duration::from_millis(100);
 /// The meter's source, as the take's countdown names a mic's.
 const MIC: &str = "mic";
 /// How long a wait for the mic's next block lasts before the app's Stop is looked at again.
 const LOOK: Duration = Duration::from_millis(50);
-/// The level of a block with nothing in it.
-const SILENCE_DBFS: f32 = -120.0;
 
 /// The guard first, then `meter_with`: the worker's form.
 pub fn run_meter(backend: &dyn Backend, mic: &str, io: PreviewIo) -> i32 {
@@ -42,10 +41,11 @@ pub fn run_meter(backend: &dyn Backend, mic: &str, io: PreviewIo) -> i32 {
 /// The peaks of the mic `mic` (its id from `Devices::mics`) to `io`'s output until the app's Stop or its stdin's end.
 /// 0 when stopped; 1 when the mic didn't start, or went away or stopped by itself (`Failed` says why).
 pub fn meter_with(backend: &dyn Backend, mic: &str, io: PreviewIo) -> i32 {
+    // The meter keeps the mic's own time (its blocks' host times), not the clock's.
     let PreviewIo {
         input,
         output,
-        clock,
+        clock: _,
     } = io;
     let mut events = Events::new(output);
     let word = the_app_s_word(input);
@@ -78,7 +78,7 @@ pub fn meter_with(backend: &dyn Backend, mic: &str, io: PreviewIo) -> i32 {
             return 1;
         }
     };
-    let mut window = Window::at(clock.now());
+    let mut window = Window::default();
     let mut ended = None;
     while !word.stopped() {
         if let Some(why) = said_rx.try_iter().find_map(|e| ended_by(&e)) {
@@ -87,7 +87,7 @@ pub fn meter_with(backend: &dyn Backend, mic: &str, io: PreviewIo) -> i32 {
         }
         match blocks_rx.recv_timeout(LOOK) {
             Ok(block) => {
-                if let Some(peak_dbfs) = window.feed(&block, clock.now()) {
+                if let Some(peak_dbfs) = window.feed(&block) {
                     events.send(&Event::Meter {
                         source: MIC.into(),
                         peak_dbfs,
@@ -111,34 +111,28 @@ pub fn meter_with(backend: &dyn Backend, mic: &str, io: PreviewIo) -> i32 {
     1
 }
 
-/// The loudest sample since the window began, sent once `METER_EVERY` has passed.
+/// `METER_EVERY` of the mic's time: when it began (its first block's host time) and its loudest sample so far.
+#[derive(Default)]
 struct Window {
-    from: Duration,
+    from_ns: Option<u64>,
     peak: f32,
 }
 
 impl Window {
-    fn at(now: Duration) -> Self {
-        Self {
-            from: now,
-            peak: 0.0,
+    /// `block`, the mic's next: the window's peak in dBFS once a block starts `METER_EVERY` or more after the window
+    /// began (that block begins the next one).
+    fn feed(&mut self, block: &PcmBlock) -> Option<f32> {
+        let from = *self.from_ns.get_or_insert(block.host_ns);
+        let mut done = None;
+        if block.host_ns.saturating_sub(from) >= METER_EVERY.as_nanos() as u64 {
+            done = Some(dbfs(self.peak));
+            *self = Self {
+                from_ns: Some(block.host_ns),
+                peak: 0.0,
+            };
         }
-    }
-
-    /// `block`, which came at `now`: the window's peak in dBFS once it is `METER_EVERY` long (a new one begins).
-    fn feed(&mut self, block: &PcmBlock, now: Duration) -> Option<f32> {
-        let peak = block.samples.iter().fold(0.0f32, |m, s| m.max(s.abs()));
-        self.peak = self.peak.max(peak.min(1.0));
-        if now.saturating_sub(self.from) < METER_EVERY {
-            return None;
-        }
-        let dbfs = if self.peak > 0.0 {
-            20.0 * self.peak.log10()
-        } else {
-            SILENCE_DBFS
-        };
-        *self = Self::at(now);
-        Some(dbfs)
+        self.peak = self.peak.max(peak_of(block));
+        done
     }
 }
 

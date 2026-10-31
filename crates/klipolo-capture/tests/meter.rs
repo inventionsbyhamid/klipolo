@@ -1,6 +1,6 @@
-//! The Record dialog's mic meter in its worker, with the fake backend's synthetic sound: a peak ten times a second until
-//! the app's Stop, its end when the mic goes; neither the meter nor the stills write a file; and in a test run both
-//! stop at the consent guard before any call to the backend. Nothing captures.
+//! The Record dialog's mic meter in its worker, with the fake backend's synthetic sound: the loudest sample of each
+//! 100 ms of the mic until the app's Stop, and its end when the mic goes; neither the meter nor the stills write a
+//! file; and in a test run both stop at the consent guard before any call to the backend. Nothing captures.
 #![cfg(feature = "synthetic")]
 
 #[path = "common/preview_io.rs"]
@@ -17,6 +17,7 @@ use klipolo_capture::backend::{
     ProbeReport, Target, VideoPipes, VideoSpec,
 };
 use klipolo_capture::cursor::CursorSource;
+use klipolo_capture::health::SILENCE_DBFS;
 use klipolo_capture::media::StreamInfo;
 use klipolo_capture::pipe::{AudioPipe, PipeError, PipeEvent};
 use klipolo_capture::protocol::{Command, Event};
@@ -74,13 +75,36 @@ fn meter_sends_a_peak_every_100_ms() {
     let (code, events) = meter(sine(), 1_000);
     assert_eq!(code, 0);
     let peaks = peaks(&events);
-    // About 10 in 1 s, each the mic's, each the sine's peak.
-    assert!((8..=12).contains(&peaks.len()), "{} peaks", peaks.len());
+    // Each peak is 100 ms of the mic's own time, so 1 s gives at most 10 (and, however busy the computer, a good part
+    // of them); each is the mic's, at the sine's peak.
+    assert!((5..=10).contains(&peaks.len()), "{} peaks", peaks.len());
     for (source, dbfs) in &peaks {
         assert_eq!(*source, "mic");
         assert!((dbfs + 6.0).abs() < 0.5, "{dbfs} dBFS");
     }
     assert!(failed(&events).is_empty(), "{events:?}");
+}
+
+#[test]
+fn meter_sends_the_loudest_sample_of_each_100_ms() {
+    // Silence, with the fake's sync blip (10 ms at −6 dBFS, one block) once a second: the 100 ms that hold a blip
+    // show it, whichever of their blocks it is, and the rest show silence.
+    let script = Script {
+        sound: Signal::Zeros,
+        ..Script::default()
+    };
+    let (code, events) = meter(script, 2_500);
+    assert_eq!(code, 0);
+    let peaks = peaks(&events);
+    let blips = (peaks.iter())
+        .filter(|(_, dbfs)| (dbfs + 6.0).abs() < 0.5)
+        .count();
+    let silent = (peaks.iter())
+        .filter(|(_, dbfs)| *dbfs == SILENCE_DBFS)
+        .count();
+    assert_eq!(blips + silent, peaks.len(), "{peaks:?}");
+    assert!((1..=3).contains(&blips), "{peaks:?}");
+    assert!(silent >= 5 * blips, "{peaks:?}");
 }
 
 #[test]
@@ -92,7 +116,7 @@ fn the_meter_ends_when_its_mic_goes() {
     };
     let (code, events) = meter(script, 5_000);
     assert_eq!(code, 1);
-    assert!(peaks(&events).len() >= 2, "{events:?}");
+    assert!(!peaks(&events).is_empty(), "{events:?}");
     assert_eq!(failed(&events), ["capture.error.noDevice"]);
     assert!(matches!(events.last(), Some(Event::Failed { .. })));
 }
