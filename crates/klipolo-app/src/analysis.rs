@@ -239,6 +239,14 @@ pub struct Started {
 }
 
 impl Started {
+    /// Nothing started, nothing refused.
+    fn none() -> Self {
+        Self {
+            tasks: Vec::new(),
+            refused: None,
+        }
+    }
+
     /// Waits until every clip it started has finished, failed or stopped.
     pub async fn finished(self) {
         for task in self.tasks {
@@ -340,6 +348,9 @@ struct Inner {
     /// start the page makes on its own (loading cached clips) doesn't time them again; only the person's Analyze or
     /// Retry does.
     timed_again: HashSet<String>,
+    /// Bumped by every project switch (`project_changed`). A `start` or `estimate` remembers it on entry and does
+    /// nothing more once it has moved on: its assets belong to a project no longer open.
+    generation: u64,
     /// What the engine has: the open project's speech, by asset id.
     speech: Speech,
     /// The runs started, while any of their clips is still going (`cancel` stops them all).
@@ -411,14 +422,21 @@ impl AnalysisState {
         })
     }
 
+    /// The project switch count now (`Inner::generation`).
+    fn generation(&self) -> u64 {
+        lock(&self.inner).generation
+    }
+
     /// `assets` as contents: each analysable clip's cache read, its asset put on its content (`on_content`), and the
-    /// clips on one content grouped, in the order asked.
-    async fn contents(&self, assets: &[Asset]) -> Vec<(Content, Vec<String>)> {
+    /// clips on one content grouped, in the order asked. None once the project changed since `generation`.
+    async fn contents(&self, assets: &[Asset], generation: u64) -> Vec<(Content, Vec<String>)> {
         let mut contents: Vec<(Content, Vec<String>)> = Vec::new();
         for clip in clips_of(assets) {
             let cached = self.look(&clip).await;
             let key = key_of(&clip, &cached);
-            self.on_content(&clip.id, &key);
+            if !self.on_content(&clip.id, &key, generation) {
+                return Vec::new();
+            }
             match contents.iter_mut().find(|(c, _)| c.key == key) {
                 Some((_, ids)) => ids.push(clip.id),
                 None => {
@@ -437,10 +455,12 @@ impl AnalysisState {
     /// each file's two ends for its cache key and shows what its cache holds (`show_cached`). When some need paying
     /// for, gets the adapter as a start would (`Credentials::ready`, which registers the device the first time; why it
     /// can't is `Estimate::problem`) and, with an access code, asks the relay for the credit left.
+    /// An estimate the project switch overtook is empty.
     pub async fn estimate(&self, assets: &[Asset]) -> Estimate {
+        let generation = self.generation();
         let mut estimate = Estimate::default();
         let mut paid = Vec::new();
-        for (content, ids) in self.contents(assets).await {
+        for (content, ids) in self.contents(assets, generation).await {
             if content.cached.complete(&content.clip) {
                 estimate.cached.extend(ids);
             } else {
@@ -463,6 +483,9 @@ impl AnalysisState {
             let reserved = lock(&self.inner).reserved.values().sum();
             (estimate.credit_left_usd, estimate.refusal) = credit(&status, estimate.usd, reserved);
         }
+        if self.generation() != generation {
+            return Estimate::default();
+        }
         estimate
     }
 
@@ -477,10 +500,16 @@ impl AnalysisState {
 
     /// `start`, asked by `asked`: cached words timed roughly are timed again when the person asks, and when the page
     /// asks only for a content not timed again (nor stopped by the person) in this app run.
+    /// A start the project switch overtook (its assets belong to the project no longer open) does nothing and
+    /// promises no credit.
     pub async fn start_as(self: &Arc<Self>, assets: &[Asset], asked: Asked) -> Started {
+        let generation = self.generation();
         let contents: Vec<Content> = {
-            let looked = self.contents(assets).await;
+            let looked = self.contents(assets, generation).await;
             let mut inner = lock(&self.inner);
+            if inner.generation != generation {
+                return Started::none();
+            }
             looked
                 .into_iter()
                 .map(|(content, _)| content)
@@ -493,7 +522,7 @@ impl AnalysisState {
         let (first, refused) = if paid.is_empty() {
             (None, None)
         } else {
-            self.payer(&paid).await
+            self.payer(&paid, generation).await
         };
         if let Some(reason) = &refused {
             tracing::info!(%reason, clips = paid.len(), "analysis: refused");
@@ -518,7 +547,15 @@ impl AnalysisState {
             (Some(meta), false) => Some(meta.clone()),
             (None, false) => self.credentials.ready().await.meta,
         };
-        let run = self.run_now();
+        let Some(run) = self.run_now(generation) else {
+            // The project changed meanwhile: what this start took on is let go.
+            let mut inner = lock(&self.inner);
+            for content in ready.iter().chain(&paid) {
+                inner.claimed.remove(&content.key);
+                inner.reserved.remove(&content.key);
+            }
+            return Started::none();
+        };
         let starting = ready
             .into_iter()
             .map(|content| {
@@ -546,7 +583,7 @@ impl AnalysisState {
     /// (its sentence, never the ask for a key), or an estimate over an access code's credit left after what the runs
     /// going have promised. With an access code, each content's estimate is promised now, with the check (so two
     /// starts at once can't both take the same credit), and released as its calls cost or when it ends.
-    async fn payer(&self, paid: &[Content]) -> (Option<Meta>, Option<String>) {
+    async fn payer(&self, paid: &[Content], generation: u64) -> (Option<Meta>, Option<String>) {
         let ready = self.credentials.ready().await;
         let Some(meta) = ready.meta else {
             return (
@@ -562,6 +599,10 @@ impl AnalysisState {
             let usd = prices.iter().map(|(_, usd)| usd).sum();
             let status = self.credentials.status().await;
             let mut inner = lock(&self.inner);
+            if inner.generation != generation {
+                // Another project opened meanwhile: nothing is promised for this one's clips.
+                return (None, None);
+            }
             let (_, refusal) = credit(&status, usd, inner.reserved.values().sum());
             if refusal.is_some() {
                 return (None, refusal);
@@ -571,18 +612,22 @@ impl AnalysisState {
         (Some(meta), None)
     }
 
-    /// The run new clips join: the last one, unless it was cancelled or stopped paying.
-    fn run_now(&self) -> Arc<Run> {
+    /// The run new clips join: the last one, unless it was cancelled or stopped paying. None once the project changed
+    /// since `generation`.
+    fn run_now(&self, generation: u64) -> Option<Arc<Run>> {
         let mut inner = lock(&self.inner);
+        if inner.generation != generation {
+            return None;
+        }
         inner.runs.retain(|run| run.strong_count() > 0);
         if let Some(run) = inner.runs.last().and_then(Weak::upgrade)
             && run.open()
         {
-            return run;
+            return Some(run);
         }
         let run = Arc::new(Run::default());
         inner.runs.push(Arc::downgrade(&run));
-        run
+        Some(run)
     }
 
     /// Sends nothing more for the runs going: the requests in flight finish, and their clips go back to not analysed.
@@ -600,6 +645,7 @@ impl AnalysisState {
     pub fn project_changed(&self) {
         self.cancel();
         let mut inner = lock(&self.inner);
+        inner.generation += 1;
         inner.keys.clear();
         inner.speech = Speech::default();
         (self.speech_sink)(Arc::new(inner.speech.clone()));
@@ -657,11 +703,15 @@ impl AnalysisState {
     }
 
     /// Asset `asset_id` is on content `key`: it gets what the content has found (speech for the engine), and hears
-    /// where its analysis is when it is under way or over.
-    fn on_content(&self, asset_id: &str, key: &str) {
+    /// where its analysis is when it is under way or over. False (and nothing done) once the project changed since
+    /// `generation`.
+    fn on_content(&self, asset_id: &str, key: &str, generation: u64) -> bool {
         let mut inner = lock(&self.inner);
+        if inner.generation != generation {
+            return false;
+        }
         if inner.keys.get(asset_id).is_some_and(|k| k == key) {
-            return;
+            return true;
         }
         inner.keys.insert(asset_id.to_owned(), key.to_owned());
         let entry = inner.entry(key);
@@ -688,6 +738,7 @@ impl AnalysisState {
         if let Some(event) = event_for(asset_id, &state) {
             (self.events)(event);
         }
+        true
     }
 
     /// Content `key`'s `step` is `pct` of the way: told to each of its assets when it changed.

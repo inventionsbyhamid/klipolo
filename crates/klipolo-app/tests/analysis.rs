@@ -1634,3 +1634,57 @@ async fn the_page_times_rough_words_again_once_per_app_run() {
     );
     server.verify().await;
 }
+
+/// A start still waiting for the relay's credit when another project opens: it does nothing (no request, no state,
+/// no event for the old project's clip) and promises no credit; an estimate overtaken the same way is empty.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_start_the_project_switch_overtook_does_nothing() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/devices/me"))
+        .respond_with(device(2.0, 0.0).set_delay(Duration::from_millis(400)))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/meta/v1/asr/transcribe"))
+        .respond_with(asr_answer())
+        .expect(0)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let h = harness(&server, code_store(), FakeMedia::whole(SECONDS));
+    let clip = asset("old", AssetKind::Video, &h.clip("old.mov", 1), 155.04);
+
+    let starting = {
+        let (state, clip) = (h.state.clone(), clip.clone());
+        tokio::spawn(async move { state.start(std::slice::from_ref(&clip)).await })
+    };
+    let estimating = {
+        let (state, clip) = (h.state.clone(), clip.clone());
+        tokio::spawn(async move { state.estimate(std::slice::from_ref(&clip)).await })
+    };
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    h.state.project_changed();
+    let told = h.events.lock().unwrap().len();
+    let started = starting.await.unwrap();
+    assert_eq!(started.refused, None);
+    started.finished().await;
+    let estimate = estimating.await.unwrap();
+
+    assert!(
+        estimate.clips.is_empty() && estimate.usd == 0.0,
+        "{estimate:?}"
+    );
+    assert_eq!(h.state.state_of("old"), AssetState::None);
+    assert!(h.state.states().is_empty());
+    assert_eq!(
+        h.events.lock().unwrap().len(),
+        told,
+        "nothing told after the switch"
+    );
+    // Nothing was promised: the next project's estimate has the whole credit.
+    let next = asset("new", AssetKind::Video, &h.clip("new.mov", 2), 155.04);
+    let estimate = h.state.estimate(std::slice::from_ref(&next)).await;
+    assert!((estimate.credit_left_usd.unwrap() - 2.0).abs() < 1e-9);
+    server.verify().await;
+}
