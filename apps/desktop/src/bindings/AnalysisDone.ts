@@ -7,4 +7,16 @@ export type AnalysisDone = { assetId: string,
 /**
  * Some words are timed roughly (spread across their turn).
  */
-approximate: boolean, };
+approximate: boolean, 
+/**
+ * Why, as `AssetState::Done` says it.
+ */
+approximateReason?: string, 
+/**
+ * Why the clip has no words.
+ */
+emptyReason?: string, 
+/**
+ * Timing the words again can time the rough ones.
+ */
+timeAgain?: boolean, };

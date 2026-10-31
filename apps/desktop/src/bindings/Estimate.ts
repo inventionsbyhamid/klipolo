@@ -22,6 +22,11 @@ cached: Array<string>,
  */
 clips: Array<string>, 
 /**
+ * The clips asked for whose file Klipolo can't find or open (moved, deleted): neither priced nor offered
+ * (`FILE_MISSING` says what to do).
+ */
+missing: Array<string>, 
+/**
  * With an access code: the credit left, when Klipolo's relay said.
  */
 creditLeftUsd?: number, 

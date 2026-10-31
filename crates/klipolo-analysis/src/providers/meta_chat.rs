@@ -204,15 +204,24 @@ pub const QUOTA_CODES: [&str; 3] = [
 /// code says the quota is used up (`QUOTA_CODES`, a direct key's), keeps the relay's or Meta's sentence (which credit,
 /// what to do). A timeout keeps its sentence, or says who gave up when there is none (`SERVER_BUSY` through the relay,
 /// Meta's otherwise); a relay with no Meta key and a content-policy refusal say so in their own sentence. A request
-/// refused as sent or an unreadable answer keeps its (redacted) text for logs only.
+/// refused as sent or an unreadable answer keeps its (redacted) text for logs only. Through the relay, a sentence the
+/// server didn't give names Klipolo's (`MetaError::relay_user_message`): a bare 402 is the device's Klipolo credit.
 pub fn model_error(e: MetaError, relay: bool) -> ModelError {
+    let said = |e: &MetaError| {
+        if relay {
+            e.relay_user_message()
+        } else {
+            e.user_message()
+        }
+    };
     match e {
-        MetaError::Budget { .. } => ModelError::Budget(e.user_message()),
+        MetaError::Budget { .. } => ModelError::Budget(said(&e)),
         MetaError::RateLimited {
             code: Some(code),
             message,
             ..
         } if QUOTA_CODES.contains(&code.as_str()) => {
+            // A direct key's quota: Meta's credit.
             let message = message.unwrap_or_default();
             ModelError::Budget(MetaError::Budget { message }.user_message())
         }
@@ -222,9 +231,9 @@ pub fn model_error(e: MetaError, relay: bool) -> ModelError {
             ModelError::Unavailable(Some(SERVER_BUSY.to_owned()))
         }
         MetaError::TimedOut { .. } | MetaError::NotConfigured => {
-            ModelError::Unavailable(Some(e.user_message()))
+            ModelError::Unavailable(Some(said(&e)))
         }
-        MetaError::Refused { .. } => ModelError::Declined(e.user_message()),
+        MetaError::Refused { .. } => ModelError::Declined(said(&e)),
         MetaError::Network(_) => ModelError::Network,
         MetaError::Unauthorized | MetaError::NotAllowed { .. } => ModelError::Refused,
         MetaError::BadRequest { .. }

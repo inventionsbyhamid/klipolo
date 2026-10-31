@@ -162,6 +162,11 @@
   line-height: var(--lh-sm);
 }
 
+/* Analyze, under "No caption words yet" while clips aren't analysed. */
+.words-analyze {
+  margin-bottom: var(--space-4);
+}
+
 .words-note {
   color: var(--color-ink-soft);
   font-size: var(--text-xs);
