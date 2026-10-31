@@ -5,6 +5,7 @@
 //! Event: `recorder-event` (`RecorderEvent`: the worker's `CaptureEvent`s and the recorder's own `Failed`, notes and
 //! `State Idle`, each with its take's id).
 
+use klipolo_app::export::ExportState;
 use klipolo_capture::preflight::RecorderSetup;
 use klipolo_capture::protocol::Command;
 use klipolo_model::coded::Said;
@@ -69,14 +70,16 @@ pub async fn recorder_allow_screen(app: AppHandle) -> Result<(), Said> {
     .await
 }
 
-/// "Reopen Klipolo": the project is saved, then Klipolo starts again. `capture.busy` during a take; a save that fails
-/// keeps Klipolo open and says why.
+/// "Reopen Klipolo": the project is saved, then Klipolo starts again. `capture.busy` during a take, and
+/// `capture.permission.reopenExporting` while an export runs (Tauri's restart can't be held by the export's quit
+/// question); a save that fails keeps Klipolo open and says why.
 #[tauri::command]
 pub async fn recorder_reopen(app: AppHandle) -> Result<(), Said> {
     blocking(app, |app, state| {
         let flush =
             || (app.state::<ProjectSessionState>().flush()).map_err(|e| Said::Text(e.to_string()));
-        state.reopen(flush, || app.request_restart())
+        let exporting = (app.try_state::<ExportState>()).is_some_and(|export| export.is_running());
+        state.reopen(exporting, flush, || app.request_restart())
     })
     .await
 }

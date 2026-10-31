@@ -284,6 +284,7 @@ fn test_run_never_makes_a_backend_or_worker() {
     );
     let flushed = AtomicBool::new(false);
     let refused = state.reopen(
+        false,
         || {
             flushed.store(true, Ordering::SeqCst);
             Ok(())
