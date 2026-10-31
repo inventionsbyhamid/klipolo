@@ -1,5 +1,6 @@
 //! The recorder's live view never asks for a permission and never opens the camera or the mic (the one exception
-//! to capture only after a press): the source scan for its two files, apart from `consent_scan.rs`. They are read as text on every OS.
+//! to capture only after a press): the source scan for its two files, apart from `consent_scan.rs`. They are read as
+//! text on every OS.
 
 // Only the source helpers, not `common`: a source scan links nothing else (no FFmpeg).
 #[path = "common/scan.rs"]

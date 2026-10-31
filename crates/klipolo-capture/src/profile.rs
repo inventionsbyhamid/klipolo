@@ -48,8 +48,9 @@ pub struct GameProfile {
     pub name: String,
     pub capture: CaptureMode,
     /// The quality the person picked for this game. None: "Best for this computer", the probe's choice
-    /// (`probe::Choices::screen`), so a new profile never asks for more than this computer can do. The preflight checks a
-    /// stored preset against `Choices::available` (it may be stale after an eGPU is unplugged) and falls back to None.
+    /// (`probe::Choices::screen`), so a new profile never asks for more than this computer can do. The preflight checks
+    /// a stored preset against `Choices::available` (it may be stale after an eGPU is unplugged) and falls back to
+    /// None.
     pub preset: Option<PresetId>,
     /// Record the game's sound.
     pub sound: bool,

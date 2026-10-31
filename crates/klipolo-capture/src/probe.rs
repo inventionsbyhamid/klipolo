@@ -235,8 +235,8 @@ fn fit_camera<'a>(
 }
 
 /// Whether `encoder` keeps `screen` and `camera` together, with a 5 % margin: the camera on the screen's engine (one of
-/// its ids, or another). `decide` fits its defaults with it; the preflight asks it again for a preset the person picks while
-/// the camera is on.
+/// its ids, or another). `decide` fits its defaults with it; the preflight asks it again for a preset the person picks
+/// while the camera is on.
 pub fn keeps_both(encoder: &EncoderResult, screen: &Preset, camera: &Preset) -> bool {
     let rate = |p: &Preset| f64::from(p.width) * f64::from(p.height) * f64::from(p.fps);
     capacity(encoder) >= HEADROOM * (rate(screen) + rate(camera))

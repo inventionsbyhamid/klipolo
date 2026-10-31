@@ -1,6 +1,6 @@
-//! The recorder's live view (the one exception to capture only after a press): a live picture of the take's target (the chosen
-//! display, window or game) while the recorder is open, in its own worker (`worker --live-view <target>`), as Check
-//! camera's preview is: no mic, no sound, nothing written, and no orphan mode (it stops on the app's Stop or its
+//! The recorder's live view (the one exception to capture only after a press): a live picture of the take's target (the
+//! chosen display, window or game) while the recorder is open, in its own worker (`worker --live-view <target>`), as
+//! Check camera's preview is: no mic, no sound, nothing written, and no orphan mode (it stops on the app's Stop or its
 //! stdin's end).
 //!
 //! - **Never a prompt:** Screen Recording is read first, without a prompt (`Backend::permissions`). When it isn't

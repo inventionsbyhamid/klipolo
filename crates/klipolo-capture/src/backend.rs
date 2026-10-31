@@ -45,8 +45,8 @@ pub trait Backend: Send + Sync {
     }
     /// Check camera: frames for the framing preview, no mic, nothing written.
     fn preview(&self, camera: &str) -> Result<Box<dyn PreviewPipe>, PipeError>;
-    /// The recorder's live view of `target` (the one exception to capture only after a press): a small, slow picture of a
-    /// screen, window or game, no sound, nothing written. Building it opens nothing, and its `start` never asks for a
+    /// The recorder's live view of `target` (the one exception to capture only after a press): a small, slow picture of
+    /// a screen, window or game, no sound, nothing written. Building it opens nothing, and its `start` never asks for a
     /// permission: it runs only while screen recording is allowed already. Default: Unsupported (Windows' capture tasks
     /// add it; Linux's ScreenCast portal would ask at every opening).
     fn live_view(&self, _target: &Target) -> Result<Box<dyn PreviewPipe>, PipeError> {
