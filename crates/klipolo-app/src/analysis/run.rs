@@ -16,7 +16,9 @@ use klipolo_platform::qos::{self, Qos};
 use serde::Serialize;
 
 use super::calls::{Calls, Meter};
-use super::{AnalysisState, AnalysisStep, Cached, Clip, Media, NEEDS_KEY, UNREADABLE, lock};
+use super::{
+    AnalysisState, AnalysisStep, Cached, Clip, Content, Media, NEEDS_KEY, UNREADABLE, lock,
+};
 
 /// The clips started together. Cancel stops every request not sent yet; a used-up credit (or a refused key, or no way
 /// to pay) stops every paid request not sent yet, with the first such reason.
@@ -64,6 +66,19 @@ pub(crate) enum Outcome {
     Stopped,
 }
 
+/// What one content's steps work with.
+struct Job<'a> {
+    /// The content key its results fan out under.
+    key: &'a str,
+    clip: &'a Clip,
+    calls: &'a Calls,
+    run: &'a Arc<Run>,
+    /// Its working folder.
+    work: &'a Path,
+    /// Its cache folder.
+    dir: &'a Dir,
+}
+
 /// A clip's working folder (its WAV, its small copy), removed when dropped.
 struct WorkDir(PathBuf);
 
@@ -109,34 +124,37 @@ impl AnalysisState {
             .unwrap_or_default()
     }
 
-    /// Analyses `clip` (its cache read as `cached`) in `run`, through `first` (the adapter when it started; None when
-    /// everything is cached), and says how it ended.
+    /// Analyses `content` in `run`, through `first` (the adapter when it started; None when everything is cached), and
+    /// tells each asset on it how it ended.
     pub(crate) async fn analyse(
         self: Arc<Self>,
-        clip: Clip,
-        cached: Cached,
+        content: Content,
         run: Arc<Run>,
         first: Option<Meta>,
     ) {
-        let outcome = self.steps(&clip, cached, &run, first).await;
-        self.end(&clip.id, outcome);
+        let Content { key, clip, cached } = content;
+        let outcome = self.steps(&key, &clip, cached, &run, first).await;
+        self.end(&key, outcome);
     }
 
     async fn steps(
         self: &Arc<Self>,
+        key: &str,
         clip: &Clip,
         cached: Cached,
         run: &Arc<Run>,
         first: Option<Meta>,
     ) -> Outcome {
-        let Some(key) = cached.key.clone() else {
-            return Outcome::Failed(UNREADABLE.into());
-        };
-        let Ok(dir) = Dir::new(&self.cache_root, &key) else {
+        // A file that couldn't be read has no content key, and so no cache folder.
+        let Some(dir) = cached
+            .key
+            .as_deref()
+            .and_then(|k| Dir::new(&self.cache_root, k).ok())
+        else {
             return Outcome::Failed(UNREADABLE.into());
         };
         // What the cache holds shows at once (unless the estimate showed it already).
-        self.show_cached(&clip.id, &cached);
+        self.show_cached(key, &cached);
         let scenes_cached = cached.scenes.is_some();
         if clip.has_audio {
             let (src, run) = (clip.path.clone(), run.clone());
@@ -144,7 +162,7 @@ impl AnalysisState {
                 .local(move |media| media.levels(&src, &run.cancel))
                 .await
             {
-                self.found_levels(&clip.id, levels);
+                self.found_levels(key, levels);
             }
         }
         let needs_scenes = clip.video && !scenes_cached;
@@ -157,8 +175,8 @@ impl AnalysisState {
             return Outcome::Failed(NEEDS_KEY.into());
         };
         let meter = {
-            let (state, id) = (self.clone(), clip.id.clone());
-            Meter::new(move |step, pct| state.progress(&id, step, pct))
+            let (state, key) = (self.clone(), key.to_owned());
+            Meter::new(move |step, pct| state.progress(&key, step, pct))
         };
         let calls = Calls::new(
             self.credentials.clone(),
@@ -171,12 +189,17 @@ impl AnalysisState {
             Ok(work) => work,
             Err(outcome) => return outcome,
         };
+        let job = Job {
+            key,
+            clip,
+            calls: &calls,
+            run,
+            work: &work.0,
+            dir: &dir,
+        };
         let transcript = match cached.transcript {
             Some(found) => found,
-            None => match self
-                .transcribe(clip, &calls, run, &work.0, &dir, &key)
-                .await
-            {
+            None => match self.transcribe(&job).await {
                 Ok(made) => made,
                 Err(outcome) => return outcome,
             },
@@ -185,17 +208,7 @@ impl AnalysisState {
             if run.cancelled() {
                 return Outcome::Stopped;
             }
-            if let Err(outcome) = self
-                .log_scenes(
-                    clip,
-                    &calls,
-                    run,
-                    &work.0,
-                    &dir,
-                    &transcript.transcript.words,
-                )
-                .await
-            {
+            if let Err(outcome) = self.log_scenes(&job, &transcript.transcript.words).await {
                 return outcome;
             }
         }
@@ -206,21 +219,21 @@ impl AnalysisState {
 
     /// The clip's transcript: its sound, its turns (published at once as turn-level captions), its words timed;
     /// cached once timed. A clip with no sound, or only silence, makes no request and has no words.
-    async fn transcribe(
-        self: &Arc<Self>,
-        clip: &Clip,
-        calls: &Calls,
-        run: &Arc<Run>,
-        work: &Path,
-        dir: &Dir,
-        key: &str,
-    ) -> Result<TranscriptOut, Outcome> {
+    async fn transcribe(self: &Arc<Self>, job: &Job<'_>) -> Result<TranscriptOut, Outcome> {
+        let Job {
+            key,
+            clip,
+            calls,
+            run,
+            work,
+            dir,
+        } = *job;
         if run.cancelled() {
             return Err(Outcome::Stopped);
         }
         let model = Transcriber::model(calls).to_owned();
         let mut out = if clip.has_audio {
-            self.progress(&clip.id, AnalysisStep::Audio, 0);
+            self.progress(key, AnalysisStep::Audio, 0);
             let wav = work.join("sound.wav");
             let made = {
                 let (src, wav) = (clip.path.clone(), wav.clone());
@@ -229,11 +242,9 @@ impl AnalysisState {
             let info = made
                 .map_err(Outcome::Failed)?
                 .map_err(|e| self.failure(AnalysisError::from(e), run))?;
-            self.progress(&clip.id, AnalysisStep::Audio, 100);
+            self.progress(key, AnalysisStep::Audio, 100);
             if info.has_audio {
-                let out = self
-                    .hear_and_time(clip, calls, run, &wav, key, &model)
-                    .await;
+                let out = self.hear_and_time(job, &wav, &model).await;
                 let _ = std::fs::remove_file(&wav);
                 out?
             } else {
@@ -244,7 +255,7 @@ impl AnalysisState {
         };
         out.transcript.key = key.to_owned();
         self.store(dir, "transcript", &out, &model).await;
-        self.found_transcript(&clip.id, &out);
+        self.found_transcript(key, &out);
         Ok(out)
     }
 
@@ -252,13 +263,13 @@ impl AnalysisState {
     /// timing words: what was timed is shown, and nothing is cached.
     async fn hear_and_time(
         self: &Arc<Self>,
-        clip: &Clip,
-        calls: &Calls,
-        run: &Arc<Run>,
+        job: &Job<'_>,
         wav: &Path,
-        key: &str,
         model: &str,
     ) -> Result<TranscriptOut, Outcome> {
+        let Job {
+            key, calls, run, ..
+        } = *job;
         if run.cancelled() {
             return Err(Outcome::Stopped);
         }
@@ -274,7 +285,7 @@ impl AnalysisState {
         let heard = hear(calls, &sound, &[])
             .await
             .map_err(|e| self.failure(e, run))?;
-        self.spend(&clip.id, heard.cost_usd);
+        self.spend(key, heard.cost_usd);
         if heard.turns.is_empty() {
             return Ok(TranscriptOut::no_speech(
                 model,
@@ -290,7 +301,7 @@ impl AnalysisState {
             heard.cost_usd,
         );
         rough.transcript.key = key.to_owned();
-        self.found_transcript(&clip.id, &rough);
+        self.found_transcript(key, &rough);
         calls
             .meter
             .begin(AnalysisStep::Words, heard.turns.len(), 0, 100);
@@ -304,7 +315,7 @@ impl AnalysisState {
         );
         if run.cancelled() {
             out.transcript.key = key.to_owned();
-            self.found_transcript(&clip.id, &out);
+            self.found_transcript(key, &out);
             return Err(Outcome::Stopped);
         }
         Ok(out)
@@ -312,21 +323,21 @@ impl AnalysisState {
 
     /// The clip's scene log from its small copy, snapped to `words` (its transcript's), cached once logged. A clip
     /// with no picture after all has none.
-    async fn log_scenes(
-        self: &Arc<Self>,
-        clip: &Clip,
-        calls: &Calls,
-        run: &Arc<Run>,
-        work: &Path,
-        dir: &Dir,
-        words: &[Word],
-    ) -> Result<(), Outcome> {
+    async fn log_scenes(self: &Arc<Self>, job: &Job<'_>, words: &[Word]) -> Result<(), Outcome> {
+        let Job {
+            key,
+            clip,
+            calls,
+            run,
+            work,
+            dir,
+        } = *job;
         // The copy is the step's first half, by how far into the clip its frames have got.
         calls.meter.begin(AnalysisStep::Scenes, 0, 0, 50);
         let made = {
-            let (state, id, src, out, run) = (
+            let (state, key, src, out, run) = (
                 self.clone(),
-                clip.id.clone(),
+                key.to_owned(),
                 clip.path.clone(),
                 work.join("copy"),
                 run.clone(),
@@ -338,7 +349,7 @@ impl AnalysisState {
                     if at > furthest {
                         furthest = at.min(duration);
                         let pct = (furthest as f64 / duration as f64 * 50.0).floor() as u8;
-                        state.progress(&id, AnalysisStep::Scenes, pct);
+                        state.progress(&key, AnalysisStep::Scenes, pct);
                     }
                 })
             })
@@ -356,9 +367,9 @@ impl AnalysisState {
         let log = scenes::log(calls, &copy, words)
             .await
             .map_err(|e| self.failure(e, run))?;
-        self.spend(&clip.id, log.cost_usd);
+        self.spend(key, log.cost_usd);
         self.store(dir, "scenes", &log, &log.model).await;
-        self.found_scenes(&clip.id, log);
+        self.found_scenes(key, log);
         Ok(())
     }
 

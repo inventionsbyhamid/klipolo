@@ -1160,3 +1160,60 @@ async fn a_cached_transcript_shows_before_the_rest_is_analysed() {
     assert_eq!(h.state.state_of("clip-a"), AssetState::None);
     server.verify().await;
 }
+
+/// The same file imported twice (two assets on one content): it is priced once and analysed once, and both assets hear
+/// every step and get its words.
+#[tokio::test(flavor = "multi_thread")]
+async fn one_file_imported_twice_is_analysed_and_priced_once() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(asr_answer())
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(align_answer())
+        .expect(1)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    let file = h.clip("talk.m4a", 2);
+    let first = asset("first", AssetKind::Audio, &file, SECONDS);
+    let second = asset("second", AssetKind::Audio, &file, SECONDS);
+
+    let estimate = h.state.estimate(&[first.clone(), second.clone()]).await;
+    assert_eq!(estimate.clips, ["first", "second"]);
+    assert!(
+        (estimate.usd - asr_usd(SECONDS)).abs() < 1e-12,
+        "{}",
+        estimate.usd
+    );
+    assert!((estimate.seconds - SECONDS).abs() < 1e-9);
+
+    h.state.start(&[first, second]).await.finished().await;
+
+    let speech = h.last_speech();
+    for id in ["first", "second"] {
+        assert_eq!(
+            h.state.state_of(id),
+            AssetState::Done { approximate: false }
+        );
+        assert_eq!(
+            h.events_for(id).last(),
+            Some(&AnalysisEvent::Done(AnalysisDone {
+                asset_id: id.into(),
+                approximate: false
+            }))
+        );
+        assert!(
+            h.events_for(id)
+                .iter()
+                .any(|e| matches!(e, AnalysisEvent::Progress(p) if p.step == AnalysisStep::Words))
+        );
+        assert_eq!(speech.transcripts[id].words.len(), 3);
+    }
+    server.verify().await;
+}

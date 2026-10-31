@@ -202,7 +202,7 @@ pub struct Estimate {
 }
 
 /// What a clip's analysis found so far: what chat reads (Plan 4), in the clip's own times (words and turns in its sound
-/// time, the scene log in its file time).
+/// time, the scene log in its file time). Assets on one file share it.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct AssetAnalysis {
     /// Its words, as the captions read them.
@@ -213,7 +213,7 @@ pub struct AssetAnalysis {
     pub scenes: Option<Arc<SceneLog>>,
     /// Some words are timed roughly.
     pub approximate: bool,
-    /// What this session's calls for it cost, in US dollars (nothing for what came from the cache).
+    /// What this session's calls for its file cost, in US dollars (nothing for what came from the cache).
     pub spent_usd: f64,
 }
 
@@ -269,7 +269,7 @@ impl Clip {
     }
 }
 
-/// A clip's cached results.
+/// A clip's cached results, and the content key they are kept under (None when its file couldn't be read).
 #[derive(Default)]
 pub(crate) struct Cached {
     pub key: Option<String>,
@@ -284,23 +284,63 @@ impl Cached {
     }
 }
 
+/// One content (a file, by its content key) to analyse: the first of its assets asked for, and its cache.
+pub(crate) struct Content {
+    pub key: String,
+    pub clip: Clip,
+    pub cached: Cached,
+}
+
+/// The key a clip is tracked under: its content key, or its own id when its file can't be read.
+fn key_of(clip: &Clip, cached: &Cached) -> String {
+    cached
+        .key
+        .clone()
+        .unwrap_or_else(|| format!("unread:{}", clip.id))
+}
+
+/// One content's analysis: where it is and what it found. Every asset on that content (the same file imported twice)
+/// shares it, and hears each change.
 #[derive(Default)]
 struct Entry {
     state: AssetState,
     analysis: Arc<AssetAnalysis>,
+    levels: Option<Arc<Levels>>,
 }
 
 #[derive(Default)]
 struct Inner {
-    assets: HashMap<String, Entry>,
-    /// The clips a `start` took on, until their analysis ends: another start leaves them alone.
+    /// The open project's assets analysis has seen, and the content key each is on.
+    keys: HashMap<String, String>,
+    /// By content key.
+    entries: HashMap<String, Entry>,
+    /// The contents a `start` took on, until their analysis ends: another start leaves them alone.
     claimed: HashSet<String>,
+    /// What the engine has: the open project's speech, by asset id.
     speech: Speech,
     /// The runs started, while any of their clips is still going (`cancel` stops them all).
     runs: Vec<Weak<Run>>,
 }
 
-/// The app's analysis: each clip's state and results, and the runs going. Make one per app.
+impl Inner {
+    /// The assets on content `key`, in id order.
+    fn ids_of(&self, key: &str) -> Vec<String> {
+        let mut ids: Vec<String> = self
+            .keys
+            .iter()
+            .filter(|(_, k)| *k == key)
+            .map(|(id, _)| id.clone())
+            .collect();
+        ids.sort();
+        ids
+    }
+
+    fn entry(&mut self, key: &str) -> &mut Entry {
+        self.entries.entry(key.to_owned()).or_default()
+    }
+}
+
+/// The app's analysis: each content's state and results, the assets on it, and the runs going. Make one per app.
 pub struct AnalysisState {
     credentials: Arc<Credentials>,
     media: Arc<dyn Media>,
@@ -347,23 +387,44 @@ impl AnalysisState {
         })
     }
 
-    /// What analysing `assets` costs (see the module notes). Reads each file's two ends for its cache key and shows
-    /// what its cache holds (`show_cached`); asks the relay for the credit left with an access code.
+    /// `assets` as contents: each analysable clip's cache read, its asset put on its content (`on_content`), and the
+    /// clips on one content grouped, in the order asked.
+    async fn contents(&self, assets: &[Asset]) -> Vec<(Content, Vec<String>)> {
+        let mut contents: Vec<(Content, Vec<String>)> = Vec::new();
+        for clip in clips_of(assets) {
+            let cached = self.look(&clip).await;
+            let key = key_of(&clip, &cached);
+            self.on_content(&clip.id, &key);
+            match contents.iter_mut().find(|(c, _)| c.key == key) {
+                Some((_, ids)) => ids.push(clip.id),
+                None => {
+                    let id = clip.id.clone();
+                    contents.push((Content { key, clip, cached }, vec![id]));
+                }
+            }
+        }
+        for (content, _) in &contents {
+            self.show_cached(&content.key, &content.cached);
+        }
+        contents
+    }
+
+    /// What analysing `assets` costs (see the module notes): each content once, however many assets are on it. Reads
+    /// each file's two ends for its cache key and shows what its cache holds (`show_cached`); asks the relay for the
+    /// credit left with an access code.
     pub async fn estimate(&self, assets: &[Asset]) -> Estimate {
         let meta = self.credentials.meta();
         let mut estimate = Estimate::default();
-        for clip in clips_of(assets) {
-            let cached = self.look(&clip).await;
-            self.show_cached(&clip.id, &cached);
-            if cached.complete(&clip) {
-                estimate.cached.push(clip.id);
+        for (content, ids) in self.contents(assets).await {
+            if content.cached.complete(&content.clip) {
+                estimate.cached.extend(ids);
                 continue;
             }
-            estimate.seconds += clip.duration_us as f64 / 1e6;
+            estimate.seconds += content.clip.duration_us as f64 / 1e6;
             if let Some(meta) = &meta {
-                estimate.usd += price(meta, &clip, &cached);
+                estimate.usd += price(meta, &content.clip, &content.cached);
             }
-            estimate.clips.push(clip.id);
+            estimate.clips.extend(ids);
         }
         let relay = meta.is_some_and(|m| m.client().is_relay());
         if relay && !estimate.clips.is_empty() {
@@ -373,27 +434,24 @@ impl AnalysisState {
         estimate
     }
 
-    /// Starts analysing `assets` (see the module notes). A clip another start took on is left to it. Cached clips load
-    /// whatever else happens; the others start only when something can pay for them and, with an access code, their
-    /// estimate is within the credit left (`Started::refused` says why not; what of them is cached shows all the same).
+    /// Starts analysing `assets` (see the module notes): one pipeline per content, whose state and results reach every
+    /// asset on it. A content another start took on is left to it (the assets asked for now hear it too). Cached
+    /// contents load whatever else happens; the others start only when something can pay for them and, with an access
+    /// code, their estimate is within the credit left (`Started::refused` says why not; what of them is cached shows
+    /// all the same).
     pub async fn start(self: &Arc<Self>, assets: &[Asset]) -> Started {
-        let clips: Vec<Clip> = {
+        let contents: Vec<Content> = {
+            let looked = self.contents(assets).await;
             let mut inner = lock(&self.inner);
-            clips_of(assets)
+            looked
                 .into_iter()
-                .filter(|clip| inner.claimed.insert(clip.id.clone()))
+                .map(|(content, _)| content)
+                .filter(|content| inner.claimed.insert(content.key.clone()))
                 .collect()
         };
-        let mut ready = Vec::new();
-        let mut paid = Vec::new();
-        for clip in clips {
-            let cached = self.look(&clip).await;
-            if cached.complete(&clip) {
-                ready.push((clip, cached));
-            } else {
-                paid.push((clip, cached));
-            }
-        }
+        let (ready, paid): (Vec<Content>, Vec<Content>) = contents
+            .into_iter()
+            .partition(|content| content.cached.complete(&content.clip));
         let (first, refused) = if paid.is_empty() {
             (None, None)
         } else {
@@ -401,29 +459,22 @@ impl AnalysisState {
         };
         if let Some(reason) = &refused {
             tracing::info!(%reason, clips = paid.len(), "analysis: refused");
-            for (clip, cached) in &paid {
-                self.show_cached(&clip.id, cached);
-            }
             let mut inner = lock(&self.inner);
-            for (clip, _) in &paid {
-                inner.claimed.remove(&clip.id);
+            for content in &paid {
+                inner.claimed.remove(&content.key);
             }
         }
         let run = self.run_now();
-        let starting = ready
-            .into_iter()
-            .map(|(clip, cached)| (clip, cached, None))
-            .chain(
-                paid.into_iter()
-                    .filter(|_| first.is_some())
-                    .map(|(clip, cached)| (clip, cached, first.clone())),
-            );
+        let starting = ready.into_iter().map(|content| (content, None)).chain(
+            paid.into_iter()
+                .filter(|_| first.is_some())
+                .map(|content| (content, first.clone())),
+        );
         let mut tasks = Vec::new();
-        for (clip, cached, meta) in starting {
-            self.progress(&clip.id, AnalysisStep::Audio, 0);
+        for (content, meta) in starting {
+            self.progress(&content.key, AnalysisStep::Audio, 0);
             tasks.push(tokio::spawn(self.clone().analyse(
-                clip,
-                cached,
+                content,
                 run.clone(),
                 meta,
             )));
@@ -433,7 +484,7 @@ impl AnalysisState {
 
     /// The adapter that pays for `paid`, or why there is none: no key or code, a code whose device can't register now
     /// (its sentence, never the ask for a key), or an estimate over an access code's credit.
-    async fn payer(&self, paid: &[(Clip, Cached)]) -> (Option<Meta>, Option<String>) {
+    async fn payer(&self, paid: &[Content]) -> (Option<Meta>, Option<String>) {
         let ready = self.credentials.ready().await;
         let Some(meta) = ready.meta else {
             return (
@@ -444,7 +495,7 @@ impl AnalysisState {
         if meta.client().is_relay() {
             let usd = paid
                 .iter()
-                .map(|(clip, cached)| price(&meta, clip, cached))
+                .map(|content| price(&meta, &content.clip, &content.cached))
                 .sum();
             let (_, refusal) = credit(&self.credentials.status().await, usd);
             if refusal.is_some() {
@@ -478,22 +529,28 @@ impl AnalysisState {
 
     /// Where `asset_id`'s analysis is.
     pub fn state_of(&self, asset_id: &str) -> AssetState {
-        lock(&self.inner)
-            .assets
+        let inner = lock(&self.inner);
+        inner
+            .keys
             .get(asset_id)
+            .and_then(|key| inner.entries.get(key))
             .map(|e| e.state.clone())
             .unwrap_or_default()
     }
 
-    /// Every clip analysis knows of, and where it is.
+    /// Every asset analysis knows of in the open project, and where it is.
     pub fn states(&self) -> Vec<AssetAnalysisState> {
         let inner = lock(&self.inner);
         let mut states: Vec<AssetAnalysisState> = inner
-            .assets
+            .keys
             .iter()
-            .map(|(id, e)| AssetAnalysisState {
+            .map(|(id, key)| AssetAnalysisState {
                 asset_id: id.clone(),
-                state: e.state.clone(),
+                state: inner
+                    .entries
+                    .get(key)
+                    .map(|e| e.state.clone())
+                    .unwrap_or_default(),
             })
             .collect();
         states.sort_by(|a, b| a.asset_id.cmp(&b.asset_id));
@@ -502,9 +559,11 @@ impl AnalysisState {
 
     /// What `asset_id`'s analysis found so far, if anything.
     pub fn analysis_for(&self, asset_id: &str) -> Option<Arc<AssetAnalysis>> {
-        lock(&self.inner)
-            .assets
+        let inner = lock(&self.inner);
+        inner
+            .keys
             .get(asset_id)
+            .and_then(|key| inner.entries.get(key))
             .map(|e| e.analysis.clone())
             .filter(|a| a.transcript.is_some() || a.scenes.is_some())
     }
@@ -519,60 +578,82 @@ impl AnalysisState {
         &self.cache_root
     }
 
-    /// `asset_id`'s `step` is `pct` of the way: told when it changed.
-    fn progress(&self, asset_id: &str, step: AnalysisStep, pct: u8) {
+    /// Asset `asset_id` is on content `key`: it gets what the content has found (speech for the engine), and hears
+    /// where its analysis is when it is under way or over.
+    fn on_content(&self, asset_id: &str, key: &str) {
+        let mut inner = lock(&self.inner);
+        if inner.keys.get(asset_id).is_some_and(|k| k == key) {
+            return;
+        }
+        inner.keys.insert(asset_id.to_owned(), key.to_owned());
+        let entry = inner.entry(key);
+        let (transcript, levels, state) = (
+            entry.analysis.transcript.clone(),
+            entry.levels.clone(),
+            entry.state.clone(),
+        );
+        let mut published = false;
+        if let Some(transcript) = transcript {
+            inner
+                .speech
+                .transcripts
+                .insert(asset_id.to_owned(), transcript);
+            published = true;
+        }
+        if let Some(levels) = levels {
+            inner.speech.levels.insert(asset_id.to_owned(), levels);
+            published = true;
+        }
+        if published {
+            (self.speech_sink)(Arc::new(inner.speech.clone()));
+        }
+        if let Some(event) = event_for(asset_id, &state) {
+            (self.events)(event);
+        }
+    }
+
+    /// Content `key`'s `step` is `pct` of the way: told to each of its assets when it changed.
+    fn progress(&self, key: &str, step: AnalysisStep, pct: u8) {
         let mut inner = lock(&self.inner);
         let state = AssetState::Running {
             step,
             pct: pct.min(100),
         };
-        let entry = inner.assets.entry(asset_id.to_owned()).or_default();
+        let entry = inner.entry(key);
         if entry.state == state {
             return;
         }
-        entry.state = state;
-        (self.events)(AnalysisEvent::Progress(AnalysisProgress {
-            asset_id: asset_id.to_owned(),
-            step,
-            pct: pct.min(100),
-        }));
+        entry.state = state.clone();
+        for id in inner.ids_of(key) {
+            if let Some(event) = event_for(&id, &state) {
+                (self.events)(event);
+            }
+        }
     }
 
-    /// How `asset_id`'s analysis ended, kept and told.
-    fn end(&self, asset_id: &str, outcome: Outcome) {
+    /// How content `key`'s analysis ended, kept and told to each of its assets.
+    fn end(&self, key: &str, outcome: Outcome) {
         let mut inner = lock(&self.inner);
-        let id = asset_id.to_owned();
-        let (state, event) = match outcome {
-            Outcome::Done { approximate } => (
-                AssetState::Done { approximate },
-                AnalysisEvent::Done(AnalysisDone {
-                    asset_id: id,
-                    approximate,
-                }),
-            ),
-            Outcome::Failed(reason) => (
-                AssetState::Failed {
-                    reason: reason.clone(),
-                },
-                AnalysisEvent::Failed(AnalysisFailed {
-                    asset_id: id,
-                    reason,
-                }),
-            ),
-            Outcome::Stopped => (
-                AssetState::None,
-                AnalysisEvent::Stopped(AnalysisStopped { asset_id: id }),
-            ),
+        let state = match outcome {
+            Outcome::Done { approximate } => AssetState::Done { approximate },
+            Outcome::Failed(reason) => AssetState::Failed { reason },
+            Outcome::Stopped => AssetState::None,
         };
-        inner.assets.entry(asset_id.to_owned()).or_default().state = state;
-        inner.claimed.remove(asset_id);
-        (self.events)(event);
+        inner.entry(key).state = state.clone();
+        inner.claimed.remove(key);
+        for id in inner.ids_of(key) {
+            let stopped = AnalysisEvent::Stopped(AnalysisStopped {
+                asset_id: id.clone(),
+            });
+            let event = event_for(&id, &state).unwrap_or(stopped);
+            (self.events)(event);
+        }
     }
 
-    /// What the cache holds for `asset_id`, for the engine and chat at once, where they have none of it yet: a clip
+    /// What the cache holds for content `key`, for the engine and chat at once, where they have none of it yet: a clip
     /// analysed before shows its captions as soon as it is seen, whatever is left to do.
-    fn show_cached(&self, asset_id: &str, cached: &Cached) {
-        let (transcript, scenes) = match lock(&self.inner).assets.get(asset_id) {
+    fn show_cached(&self, key: &str, cached: &Cached) {
+        let (transcript, scenes) = match lock(&self.inner).entries.get(key) {
             Some(entry) => (
                 entry.analysis.transcript.is_none(),
                 entry.analysis.scenes.is_none(),
@@ -580,30 +661,30 @@ impl AnalysisState {
             None => (true, true),
         };
         if let Some(found) = cached.transcript.as_ref().filter(|_| transcript) {
-            self.found_transcript(asset_id, found);
+            self.found_transcript(key, found);
         }
         if let Some(found) = cached.scenes.as_ref().filter(|_| scenes) {
-            self.found_scenes(asset_id, found.clone());
+            self.found_scenes(key, found.clone());
         }
     }
 
-    /// `asset_id`'s analysis, changed by `edit`.
-    fn edit(inner: &mut Inner, asset_id: &str, edit: impl FnOnce(&mut AssetAnalysis)) {
-        let entry = inner.assets.entry(asset_id.to_owned()).or_default();
+    /// Content `key`'s analysis, changed by `edit`.
+    fn edit(inner: &mut Inner, key: &str, edit: impl FnOnce(&mut AssetAnalysis)) {
+        let entry = inner.entry(key);
         let mut analysis = (*entry.analysis).clone();
         edit(&mut analysis);
         entry.analysis = Arc::new(analysis);
     }
 
-    /// A transcript for `asset_id` (turn-level, timed, or cached): kept, and published to the engine.
-    fn found_transcript(&self, asset_id: &str, out: &TranscriptOut) {
+    /// A transcript for content `key` (turn-level, timed, or cached): kept, and published to the engine for each of
+    /// its assets.
+    fn found_transcript(&self, key: &str, out: &TranscriptOut) {
         let mut inner = lock(&self.inner);
         let transcript = Arc::new(out.transcript.clone());
-        inner
-            .speech
-            .transcripts
-            .insert(asset_id.to_owned(), transcript.clone());
-        Self::edit(&mut inner, asset_id, |a| {
+        for id in inner.ids_of(key) {
+            inner.speech.transcripts.insert(id, transcript.clone());
+        }
+        Self::edit(&mut inner, key, |a| {
             a.transcript = Some(transcript);
             a.turns = out.turns.clone();
             a.approximate = out.approximate;
@@ -612,27 +693,49 @@ impl AnalysisState {
         (self.speech_sink)(Arc::new(inner.speech.clone()));
     }
 
-    /// `asset_id`'s sound levels: kept, and published to the engine.
-    fn found_levels(&self, asset_id: &str, levels: Levels) {
+    /// Content `key`'s sound levels: kept, and published to the engine for each of its assets.
+    fn found_levels(&self, key: &str, levels: Levels) {
         let mut inner = lock(&self.inner);
-        inner
-            .speech
-            .levels
-            .insert(asset_id.to_owned(), Arc::new(levels));
+        let levels = Arc::new(levels);
+        for id in inner.ids_of(key) {
+            inner.speech.levels.insert(id, levels.clone());
+        }
+        inner.entry(key).levels = Some(levels);
         (self.speech_sink)(Arc::new(inner.speech.clone()));
     }
 
-    /// `asset_id`'s scene log: kept for chat.
-    fn found_scenes(&self, asset_id: &str, log: SceneLog) {
+    /// Content `key`'s scene log: kept for chat.
+    fn found_scenes(&self, key: &str, log: SceneLog) {
         let mut inner = lock(&self.inner);
-        Self::edit(&mut inner, asset_id, |a| a.scenes = Some(Arc::new(log)));
+        Self::edit(&mut inner, key, |a| a.scenes = Some(Arc::new(log)));
     }
 
-    /// Calls for `asset_id` cost `usd`.
-    fn spend(&self, asset_id: &str, usd: f64) {
+    /// Calls for content `key` cost `usd`.
+    fn spend(&self, key: &str, usd: f64) {
         let mut inner = lock(&self.inner);
-        Self::edit(&mut inner, asset_id, |a| a.spent_usd += usd);
+        Self::edit(&mut inner, key, |a| a.spent_usd += usd);
     }
+}
+
+/// The event that tells asset `asset_id` its analysis is at `state`; none for not analysed.
+fn event_for(asset_id: &str, state: &AssetState) -> Option<AnalysisEvent> {
+    let asset_id = asset_id.to_owned();
+    Some(match state {
+        AssetState::None => return None,
+        AssetState::Running { step, pct } => AnalysisEvent::Progress(AnalysisProgress {
+            asset_id,
+            step: *step,
+            pct: *pct,
+        }),
+        AssetState::Done { approximate } => AnalysisEvent::Done(AnalysisDone {
+            asset_id,
+            approximate: *approximate,
+        }),
+        AssetState::Failed { reason } => AnalysisEvent::Failed(AnalysisFailed {
+            asset_id,
+            reason: reason.clone(),
+        }),
+    })
 }
 
 /// The analysable clips among `assets`, each once, in order.
