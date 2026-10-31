@@ -114,6 +114,20 @@ Settings.";
 pub const OVER_CAP: &str = "Other apps have used this session's AI allowance in Klipolo. The person can do this in \
 Klipolo's own chat.";
 pub const READ_ONLY: &str = "This project was made by a newer Klipolo, so it can't be edited here.";
+/// A picture's prompt with nothing left once cleaned.
+pub const NO_PROMPT: &str = "Say what the picture shows, in a few words.";
+
+/// Why a proposal was dropped before the person decided (`ProposalOutcome::Dropped::why`): the project changed under
+/// it, its clip's words were timed again, Klipolo's chat proposed something else in its place, the person started a
+/// new chat, or another project opened.
+pub const DROPPED_CHANGED: &str =
+    "The project changed in Klipolo before the person decided, so it can no longer apply.";
+pub const DROPPED_RETIMED: &str = "The clip's words were timed again in Klipolo before the person decided, so it can no longer apply.";
+pub const DROPPED_REPLACED: &str =
+    "The person asked Klipolo's chat for another change in its place.";
+pub const DROPPED_NEW_CHAT: &str = "The person started a new chat in Klipolo.";
+pub const DROPPED_CLOSED: &str =
+    "The person opened another project in Klipolo, or closed this one.";
 
 /// What `client` reads when `paced` holds its call back: how long to wait, or that the run's allowance is used.
 pub fn paced(client: &str, paced: Paced) -> String {
