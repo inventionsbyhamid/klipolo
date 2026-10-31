@@ -752,7 +752,11 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     refuse = true;
     await userEvent.click(screen.getByRole('button', { name: 'Undo add the title Step 3' }));
     expect(fake.undone).toEqual([4]);
-    expect(await screen.findByText('This change can’t be undone from chat any more.', { selector: 'p.muted' })).toBeInTheDocument();
+    expect(
+      await screen.findByText('This change can’t be undone from chat any more. Use Undo in the top bar.', {
+        selector: 'p.muted',
+      }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Undo add the title|Retry/ })).toBeNull();
     refuse = false;
     act(() => useChat.getState().newChat());
@@ -799,7 +803,7 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
       expect(useToasts.getState().toasts.map((t) => t.text)).toContain("Klipolo couldn't save this change. Try again."),
     );
     expect(screen.getByRole('button', { name: 'Undo add the title Step 3' })).toBeInTheDocument();
-    expect(screen.queryByText('This change can’t be undone from chat any more.')).toBeNull();
+    expect(screen.queryByText('This change can’t be undone from chat any more. Use Undo in the top bar.')).toBeNull();
     expect(useProject.getState().snapshot!.history.revision).toBe(4);
   });
 
@@ -847,7 +851,9 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     await screen.findByText('Added the title.');
     await userEvent.click(screen.getByRole('button', { name: 'Undo add the title Step 3' }));
     const live = document.querySelector('[data-chat-notices]');
-    await waitFor(() => expect(live).toHaveTextContent('This change can’t be undone from chat any more.'));
+    await waitFor(() =>
+      expect(live).toHaveTextContent('This change can’t be undone from chat any more. Use Undo in the top bar.'),
+    );
   });
 
   it('a reply that lands after New chat still brings its change to the timeline', async () => {

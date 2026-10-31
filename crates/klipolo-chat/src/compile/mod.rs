@@ -67,7 +67,8 @@ pub use media::{
 use trim::Trim;
 
 /// What the person is told when a tool needs a clip's words and Klipolo is still hearing or timing them.
-pub const STILL_LISTENING: &str = "Klipolo is still listening to this clip";
+pub const STILL_LISTENING: &str =
+    "Klipolo is still listening to this clip. Ask me again when its analysis is done.";
 /// What the person is told when finding moments needs a clip's scene log and Klipolo is still making it (its words
 /// are in, so cuts work already).
 pub const STILL_WATCHING: &str =

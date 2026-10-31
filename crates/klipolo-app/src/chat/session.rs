@@ -70,7 +70,8 @@ pub const NEEDS_KEY: &str = "Add your Meta API key or an access code in Settings
 pub const MOVED: &str =
     "The project changed while I was answering, so I left it as it was. Ask me again.";
 /// Said when the answer's changes couldn't be applied (they don't fit the project any more).
-pub const NOT_APPLIED: &str = "I couldn't make those changes, so I left the project as it was.";
+pub const NOT_APPLIED: &str =
+    "I couldn't make those changes, so I left the project as it was. Ask me again.";
 /// Said beside the additions applied when the removals of the same answer couldn't be proposed.
 pub const NOT_PROPOSED: &str = "I couldn't get the removals ready, so I left them out.";
 /// Said beside the additions applied when the project changed before the removals could be proposed.

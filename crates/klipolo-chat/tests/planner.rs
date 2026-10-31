@@ -332,8 +332,11 @@ fn stops_after_two_model_calls() {
         out.compiled.refusals
     );
     assert_plain(&out.reply);
-    assert!(out.reply.contains("couldn't"), "{}", out.reply);
-    assert!(out.reply.contains("the cut"), "{}", out.reply);
+    // What it couldn't find, and what to do next.
+    assert_eq!(
+        out.reply,
+        "I couldn't find that part, so I left the video as it was. Select it on the timeline and ask again."
+    );
     // The model's claim that it is cutting is not repeated when nothing came of it.
     assert!(!out.reply.contains("Cutting it now"), "{}", out.reply);
     assert!((out.usage_usd - 0.008).abs() < 1e-12);
@@ -729,8 +732,11 @@ fn a_part_still_refused_is_named_beside_what_was_done() {
         "{}",
         out.reply
     );
+    // The square format went in, so the video wasn't left as it was: only the part is.
     assert!(
-        out.reply.contains("I couldn't make the cut"),
+        out.reply.ends_with(
+            "I couldn't find that part, so I left it out. Select it on the timeline and ask again."
+        ),
         "{}",
         out.reply
     );
@@ -828,7 +834,8 @@ fn a_refused_call_the_second_answer_lets_go_is_named() {
     let out = send(&model, &[], "square, and cut the boring bit", &i, &p).unwrap();
     assert!(out.compiled.additions.is_some());
     assert!(
-        out.reply.contains("I couldn't make the cut"),
+        out.reply
+            .contains("I couldn't find that part, so I left it out."),
         "{}",
         out.reply
     );
@@ -847,7 +854,9 @@ fn a_refused_call_the_second_answer_lets_go_is_named() {
         out.reply
     );
     assert!(
-        out.reply.contains("I couldn't make the cut"),
+        out.reply.contains(
+            "I couldn't find that part, so I left the video as it was. Select it on the timeline"
+        ),
         "{}",
         out.reply
     );
@@ -884,7 +893,7 @@ fn each_refused_call_is_tracked_not_just_its_tool() {
     assert_eq!(out.calls, vec![parsed(&done)]);
     assert!(out.compiled.proposal.is_some());
     assert!(
-        out.reply.contains("I couldn't make the cut"),
+        out.reply.contains("I couldn't find that part"),
         "{}",
         out.reply
     );
@@ -1071,7 +1080,7 @@ fn a_media_call_refused_twice_is_named_by_what_it_does() {
     let out = send(&model, &[], "a whoosh at the start", &i, &p).unwrap();
     assert_eq!(
         out.reply,
-        "I couldn't add the sound, so I left that unchanged."
+        "I couldn't add the sound, so I left the video as it was. Try asking in other words."
     );
     let seen = model.seen();
     let output = output_for(&seen[1], "call_1");

@@ -616,7 +616,10 @@ fn format_changes_stay_in_order_when_one_is_proposed() {
 
 #[test]
 fn no_analysis_gives_a_friendly_refusal() {
-    assert_eq!(STILL_LISTENING, "Klipolo is still listening to this clip");
+    assert_eq!(
+        STILL_LISTENING,
+        "Klipolo is still listening to this clip. Ask me again when its analysis is done."
+    );
     assert_eq!(ANALYZE_FIRST, "Analyze this clip first");
     let (p, speech) = talk();
     let calls = [
