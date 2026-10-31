@@ -147,6 +147,7 @@ const hasWord = (page: PageView, query: string) =>
  * and an ink time) until the person scrolls it, and again once playback starts. A click on a word moves the playhead
  * to it and opens it for fixing (`WordEditor`); a click on a hidden word shows it again. The list is one listbox with
  * one tab stop: the arrow keys move the active word, Enter fixes it, H hides it (or shows it again), Escape lets go.
+ * Find a word shows only the lines with it (or says none has it), and the keys move through those lines alone.
  * The word picked lasts through refetches (`useWordSelection`); a fix or a hide made while its words are being updated
  * waits for them (`usePressQueue`), and "Updating…" says so.
  */
@@ -176,9 +177,23 @@ export function CaptionWords({ format }: { format: FormatKind }) {
   /** A hidden word clicked: shown again once it is the word picked. */
   const [showing, setShowing] = useState<string | null>(null);
 
-  // The keys move through the answer that holds the active word.
-  const list = nav?.list ?? listed;
-  const focus = sel && nav ? nav.at.get(sel.focus) : undefined;
+  // The word being fixed where the answer has it now (its key and page can change with an edit before it), found in
+  // this render, so its field never leaves the page while the selection catches up.
+  const editKey = edit && words.length === 1 ? wordKey(words[0]) : null;
+  const editRow = editKey === null ? -1 : (listed.find((l) => l.key === editKey)?.row ?? -1);
+  const q = query.trim().toLowerCase();
+  const pages = view?.pages ?? [];
+  /** The lines a search shows (every line without one): those with the word, and the one being fixed. */
+  const shownRows = useMemo(
+    () => (q ? new Set(pages.flatMap((page, i) => (hasWord(page, q) || i === editRow ? [i] : []))) : null),
+    [pages, q, editRow],
+  );
+
+  // The keys move through the answer that holds the active word, and only through the lines a search shows.
+  const all = nav?.list ?? listed;
+  const list = shownRows ? all.filter((l) => shownRows.has(l.row)) : all;
+  const at = sel && shownRows ? list.findIndex((l) => l.key === sel.focus) : -1;
+  const focus = shownRows ? (at < 0 ? undefined : at) : sel && nav ? nav.at.get(sel.focus) : undefined;
 
   /**
    * Asks where else `w`, being fixed, shows. When that can't be asked, the word counts as showing here only: its fix
@@ -322,13 +337,9 @@ export function CaptionWords({ format }: { format: FormatKind }) {
     for (const l of listed) if (selected.has(l.key)) (out.get(l.row) ?? out.set(l.row, []).get(l.row)!).push(l.key);
     return out;
   }, [listed, selected]);
-  // The word being fixed where the answer has it now (its key and page can change with an edit before it), found in
-  // this render, so its field never leaves the page while the selection catches up.
-  const editKey = edit && words.length === 1 ? wordKey(words[0]) : null;
-  const editRow = editKey === null ? -1 : (listed.find((l) => l.key === editKey)?.row ?? -1);
   const active = sel ? sel.focus : null;
-  const q = query.trim().toLowerCase();
-  const pages = view?.pages ?? [];
+  /** The active word's chip is on screen: a search may have filtered its line out. */
+  const activeShown = active !== null && (!shownRows || (sel !== null && shownRows.has(sel.focusRow)));
 
   let hint: string | null = null;
   if (!enabled)
@@ -363,6 +374,9 @@ export function CaptionWords({ format }: { format: FormatKind }) {
       <p role="status" className="words-note">
         {busy ? t({ id: 'captions.words.updating', message: 'Updating…' }) : note}
       </p>
+      {shownRows && shownRows.size === 0 && total > 0 && (
+        <p className="words-hint">{t({ id: 'captions.words.noMatch', message: 'No word matches.' })}</p>
+      )}
       <div
         ref={listRef}
         role={total > 0 ? 'listbox' : undefined}
@@ -377,14 +391,14 @@ export function CaptionWords({ format }: { format: FormatKind }) {
               })
             : undefined
         }
-        aria-activedescendant={total > 0 && active && !edit ? chipId(idPrefix, active) : undefined}
+        aria-activedescendant={total > 0 && active && activeShown && !edit ? chipId(idPrefix, active) : undefined}
         // A list that is part of the panel, not a popup: Command Z and Shift Command Z still reach the editor from it.
         data-editor-keys
         onKeyDown={onKey}
         className="word-lines"
       >
         {pages.map((page, i) =>
-          q && !hasWord(page, q) && i !== editRow ? null : (
+          shownRows && !shownRows.has(i) ? null : (
             <Line
               key={page.index}
               page={page}

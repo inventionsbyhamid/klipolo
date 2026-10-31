@@ -271,4 +271,27 @@ describe('caption words', () => {
     expect(within(await list()).getByRole('option', { name: 'FREE' })).toBeInTheDocument();
   });
 
+  it('a search keeps the keys on the lines it shows, and says when nothing matches', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CaptionWords format="portrait" />);
+    const box = await list();
+    await user.click(within(box).getByRole('option', { name: 'FREE' }));
+    await user.keyboard('{Escape}');
+    await user.type(screen.getByRole('searchbox', { name: 'Find a word' }), 'teo');
+    // FREE's line is filtered out: the list names no word it doesn't show.
+    expect(box).not.toHaveAttribute('aria-activedescendant');
+    act(() => box.focus());
+    await user.keyboard('{Home}');
+    expect(within(box).getByRole('option', { selected: true })).toHaveTextContent('UM,');
+    await user.keyboard('{ArrowLeft}');
+    expect(within(box).getByRole('option', { selected: true })).toHaveTextContent('UM,');
+    await user.keyboard('{End}');
+    expect(within(box).getByRole('option', { selected: true })).toHaveTextContent('BYE');
+    await user.keyboard('{ArrowUp}');
+    expect(within(box).getByRole('option', { selected: true })).toHaveTextContent('UM,');
+    expect(box).toHaveAttribute('aria-activedescendant', within(box).getByRole('option', { name: 'UM,' }).id);
+    await user.clear(screen.getByRole('searchbox', { name: 'Find a word' }));
+    await user.type(screen.getByRole('searchbox', { name: 'Find a word' }), 'zebra');
+    expect(screen.getByText('No word matches.')).toBeInTheDocument();
+  });
 });
