@@ -1,6 +1,7 @@
 //! The export dialog's commands, thin layers over `klipolo_app::export`: plan the files with what they
-//! cost, start an export on the one slot (its progress on a Channel), cancel it, open or show its files, and pick the
-//! folder they go to. Errors are codes the page words (`bridge/call.ts`).
+//! cost, start an export on the one slot (its progress on a Channel), cancel it, open or show its files, pick the
+//! folder they go to; and the quit guard, which asks before a running export is stopped by quitting. Errors are codes
+//! the page words (`bridge/call.ts`).
 
 use std::future::Future;
 use std::path::PathBuf;
@@ -17,14 +18,16 @@ use klipolo_engine::render::fonts;
 use klipolo_engine::session::ProjectFeed;
 use klipolo_model::coded::Said;
 use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager, State};
-use tauri_plugin_dialog::DialogExt;
+use tauri::{AppHandle, Manager, RunEvent, State, WindowEvent};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
 use crate::project::ProjectSessionState;
 
 /// How long a start waits for this Mac's fonts to be read before checking them: past it nothing is called missing,
 /// and the worker still stops on a frame it would draw with a stand-in.
 const FONTS_WAIT: Duration = Duration::from_secs(2);
+/// How long Quit waits for a stopped export to delete its job before the app goes anyway.
+const STOP_WAIT: Duration = Duration::from_secs(10);
 
 /// The open project as the engine sees it (the latest edit in), with what was said and its text's language.
 fn open_feed(session: &ProjectSessionState) -> Result<ProjectFeed, Said> {
@@ -300,4 +303,66 @@ fn opener(reveal: bool, files: &[PathBuf]) -> std::process::Command {
     let mut command = std::process::Command::new("xdg-open");
     command.arg(shown);
     command
+}
+
+/// The quit guard: quitting (Command Q, or closing the window) while an export runs asks first. Keep exporting goes
+/// back to it; Quit stops it (its job and parts deleted, as Cancel does), then quits.
+pub(crate) fn guard_quit(app: &AppHandle, event: &RunEvent) {
+    match event {
+        RunEvent::ExitRequested { api, code, .. } => {
+            if asks_first(app, code.unwrap_or(0)) {
+                api.prevent_exit();
+            }
+        }
+        RunEvent::WindowEvent {
+            event: WindowEvent::CloseRequested { api, .. },
+            ..
+        } => {
+            if asks_first(app, 0) {
+                api.prevent_close();
+            }
+        }
+        _ => {}
+    }
+}
+
+/// True while an export runs and the person is being asked; its Quit exits with `exit_code`.
+fn asks_first(app: &AppHandle, exit_code: i32) -> bool {
+    let Some(state) = app.try_state::<ExportState>() else {
+        return false;
+    };
+    if !state.is_running() || state.quitting() {
+        return false;
+    }
+    if state.asking(true) {
+        return true;
+    }
+    let handle = app.clone();
+    app.dialog()
+        .message("Quitting stops it, and the video being exported isn't saved.")
+        .title("An export is running")
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Quit".into(),
+            "Keep exporting".into(),
+        ))
+        .show(move |quit| {
+            let state = handle.state::<ExportState>();
+            state.asking(false);
+            if quit {
+                state.set_quitting();
+                tauri::async_runtime::spawn(stop_then_exit(handle.clone(), exit_code));
+            }
+        });
+    true
+}
+
+/// Stops the running export, waits (briefly) for its run to delete its job and let go of the slot, then quits.
+async fn stop_then_exit(app: AppHandle, exit_code: i32) {
+    let ended = app.state::<ExportState>().stop_for_quit();
+    if let Some(mut ended) = ended {
+        // The run releases its slot (dropping the sender) once its job is deleted.
+        let released = async { while ended.changed().await.is_ok() {} };
+        let _ = tokio::time::timeout(STOP_WAIT, released).await;
+    }
+    app.exit(exit_code);
 }
