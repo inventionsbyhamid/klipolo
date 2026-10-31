@@ -180,8 +180,8 @@ fn only_the_capture_files_name_a_capture_api_and_none_lists_through_cpal() {
 }
 
 /// Screen Recording's request runs only on the person's press of "Allow screen recording": nothing in this
-/// crate calls `Backend::request_screen_permission`, and in the app only the recorder's permission commands do (none
-/// before the app has a recorder).
+/// crate calls `Backend::request_screen_permission`, and in every other crate only the app recorder's permission
+/// commands do (none before the app has a recorder).
 #[test]
 fn only_the_allow_screen_press_requests_screen_recording() {
     let calls = |text: &str| code_of(text).contains(".request_screen_permission(");
@@ -190,17 +190,30 @@ fn only_the_allow_screen_press_requests_screen_recording() {
         .map(|(f, _)| f)
         .collect();
     assert!(here.is_empty(), "called in src/: {here:?}");
-    let app = Path::new(env!("CARGO_MANIFEST_DIR")).join("../klipolo-app/src");
-    let callers: Vec<String> = (rs_files(&app).into_iter())
-        .filter(|(_, t)| calls(t))
-        .map(|(f, _)| f)
-        .collect();
-    let expected: &[&str] = if app.join("recorder").is_dir() {
-        &["recorder/permissions.rs"]
+    // Every other crate's `src/`, the app's included, as the begin_capture scan reads them.
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let (mut read, mut callers) = (0, vec![]);
+    for entry in std::fs::read_dir(&crates).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        if name == "klipolo-capture" || !path.join("src").is_dir() {
+            continue;
+        }
+        for (file, text) in rs_files(&path.join("src")) {
+            read += 1;
+            if calls(&text) {
+                callers.push(format!("{name}/src/{file}"));
+            }
+        }
+    }
+    callers.sort();
+    let expected: &[&str] = if crates.join("klipolo-app/src/recorder").is_dir() {
+        &["klipolo-app/src/recorder/permissions.rs"]
     } else {
         &[]
     };
     assert_eq!(callers, expected);
+    assert!(read >= 100, "only {read} files of the other crates read");
 }
 
 /// Every real pipe asks the consent guard, which panics under `KLIPOLO_TEST` (the test commands and CI all
