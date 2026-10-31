@@ -1,12 +1,15 @@
 //! How a main-track clip is framed in each format, as the engine draws it: its own framing, else the model's default
 //! (`klipolo_model::framing::effective_framing`, the rule the engine and chat's tools read), and whether it can follow
-//! the cursor at all (`framing::can_follow`). The clip card's Fit and Fill show this answer, never a copy of either
-//! rule. Read-only: it changes nothing.
+//! the cursor at all (`framing::can_follow`), with which part of the footage Fill shows from the centre in each format
+//! (`klipolo_engine::plan::fill_crop`). The clip card's Fit, Fill and Fill focus show this answer, never a copy of
+//! these rules. Read-only: it changes nothing.
 
 use std::collections::BTreeMap;
 
+use klipolo_engine::plan::fill_crop;
 use klipolo_model::coded::Said;
 use klipolo_model::framing::{can_follow, effective_framing};
+use klipolo_model::layout::BoxN;
 use klipolo_model::project::FormatKind;
 use klipolo_model::timeline::Framing;
 use serde::Serialize;
@@ -24,6 +27,9 @@ pub struct ClipFraming {
     pub framing: BTreeMap<FormatKind, Framing>,
     /// It can follow the cursor in a vertical or square version: a screen take with a cursor track.
     pub follows: bool,
+    /// Every format's Fill crop from the centre (source-normalised): narrower than the footage where Fill crops
+    /// across, shorter where it crops down, all of it where nothing is cropped; empty for a clip with no video.
+    pub fill_crop: BTreeMap<FormatKind, BoxN>,
 }
 
 /// The open project's clip `clip_id`'s framing in every format.
@@ -54,6 +60,10 @@ pub(crate) fn framing_of(state: &ProjectSessionState, clip_id: &str) -> Result<C
                 .map(|f| (f, effective_framing(p, clip, f)))
                 .collect(),
             follows: can_follow(p, clip),
+            fill_crop: formats
+                .into_iter()
+                .filter_map(|f| Some((f, fill_crop(p, clip, f)?)))
+                .collect(),
         })
     })
 }
@@ -179,6 +189,12 @@ mod tests {
                 (FramingMode::Fill, 0.5, 0.5, None)
             );
         }
+        // Fill crops a 16:9 video across in 9:16 and 1:1 and not at all in 16:9; the screen take is 16:9 too.
+        let crop = framing_of(&state, "c1").unwrap().fill_crop;
+        assert_eq!(crop[&Landscape], BoxN::FULL);
+        assert!(crop[&Portrait].w < 0.32 && crop[&Portrait].h == 1.0);
+        assert!((crop[&Square].w - 0.5625).abs() < 1e-9 && crop[&Square].h == 1.0);
+        assert_eq!(framing_of(&state, "c2").unwrap().fill_crop, crop);
         assert_eq!(
             framing_of(&state, "gone").unwrap_err(),
             Said::code("model.notFound.clip")
