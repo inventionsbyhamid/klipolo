@@ -11,7 +11,7 @@ It runs on Apple Silicon and Intel Macs and is free while in beta.
 ```
 apps/desktop/    The app's page (React, Vite)
 crates/          The Rust crates; klipolo-app is the Tauri app
-scripts/         FFmpeg, Linux gate and release scripts
+scripts/         FFmpeg, Linux gate and release scripts, and the MCP demo agent
 site/            Landing page (static, hand-written, no build step)
   index.html     The whole page
   styles.css     All styles, light and dark mode

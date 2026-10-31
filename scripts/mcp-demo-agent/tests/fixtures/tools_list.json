@@ -1,0 +1,698 @@
+{
+  "tools": [
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Remove the footage from startSec to endSec. Removals are proposed: the person approves them first.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "endSec": {
+            "description": "Where the cut ends, timeline seconds from the context.",
+            "type": "number"
+          },
+          "startSec": {
+            "description": "Where the cut starts, timeline seconds from the context.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "startSec",
+          "endSec"
+        ],
+        "type": "object"
+      },
+      "name": "cutRange"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Keep only these parts, for a highlight or a short version, and remove everything else. Removals are proposed: the person approves them first.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "ranges": {
+            "description": "The parts to keep, in time order, with times from the context.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "endSec": {
+                  "description": "End of a part to keep, timeline seconds.",
+                  "type": "number"
+                },
+                "startSec": {
+                  "description": "Start of a part to keep, timeline seconds.",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "startSec",
+                "endSec"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "ranges"
+        ],
+        "type": "object"
+      },
+      "name": "keepOnly"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Remove the pauses in speech longer than minPauseSec. Removals are proposed: the person approves them first.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "minPauseSec": {
+            "description": "Pauses longer than this many seconds go, from 0.3 to 10. Null when the person gave no length.",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "minPauseSec"
+        ],
+        "type": "object"
+      },
+      "name": "removeSilences"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Remove filler sounds such as um and uh. Removals are proposed: the person approves them first.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "removeFillers"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Move the start or the end of one clip to a new time. Shortening a clip is proposed like other removals; lengthening it shows more of its file, at most into the clip next to it. The first clip's start can't move earlier.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "clip": {
+            "description": "The clip's ref from the context, such as c2.",
+            "type": "string"
+          },
+          "edge": {
+            "description": "Which end of the clip moves.",
+            "enum": [
+              "start",
+              "end"
+            ],
+            "type": "string"
+          },
+          "toSec": {
+            "description": "Where that end moves to, in timeline seconds as the video plays now.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "clip",
+          "edge",
+          "toSec"
+        ],
+        "type": "object"
+      },
+      "name": "trimClip"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Split the clip playing at this time into two clips.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "atSec": {
+            "description": "Where to split, timeline seconds.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "atSec"
+        ],
+        "type": "object"
+      },
+      "name": "splitAt"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Set the video's shape. It becomes the main format.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "description": "landscape is 16:9, portrait is 9:16 (vertical: TikTok, Reels, Shorts), square is 1:1.",
+            "enum": [
+              "landscape",
+              "portrait",
+              "square"
+            ],
+            "type": "string"
+          },
+          "keepOthers": {
+            "description": "True keeps the other formats as well. Use true unless the person asks for only this format (only vertical, just square, drop the landscape version); then false.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "format",
+          "keepOthers"
+        ],
+        "type": "object"
+      },
+      "name": "setFormat"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Turn captions on or off, or change their style.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "description": "True shows captions, false hides them.",
+            "type": "boolean"
+          },
+          "style": {
+            "description": "clean: calm subtitles, a sentence at a time. bold: up to three big uppercase words that pop in one by one; no word lights up. karaoke: a line of words where each word lights up as it is said, word by word. highlight: up to four big uppercase words where a coloured box lights up each word as it is said, word by word. boxed: sentences on rounded boxes. Null keeps the current style.",
+            "enum": [
+              "clean",
+              "bold",
+              "karaoke",
+              "highlight",
+              "boxed",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "on",
+          "style"
+        ],
+        "type": "object"
+      },
+      "name": "setCaptions"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Correct how a word or name reads in the captions and the transcript, everywhere it is said. The recording does not change.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "find": {
+            "description": "The word or words as the transcript has them.",
+            "type": "string"
+          },
+          "replace": {
+            "description": "How they should read.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "find",
+          "replace"
+        ],
+        "type": "object"
+      },
+      "name": "fixCaptionWords"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Show the person the moments that match what they are looking for, from the transcript and the scenes. Nothing in the edit changes.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "description": "What the person is looking for, in a few words.",
+            "type": "string"
+          },
+          "ranges": {
+            "description": "Each moment that matches, in time order. Empty when none does.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "endSec": {
+                  "description": "Where the moment ends, timeline seconds.",
+                  "type": "number"
+                },
+                "label": {
+                  "description": "A few words on what happens.",
+                  "type": "string"
+                },
+                "startSec": {
+                  "description": "Where the moment starts, timeline seconds.",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "startSec",
+                "endSec",
+                "label"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "query",
+          "ranges"
+        ],
+        "type": "object"
+      },
+      "name": "findMoments"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Keep the crop on one person or thing as it moves, for portrait or square.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "description": "One short noun phrase naming who or what to follow, such as woman astronaut.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "type": "object"
+      },
+      "name": "followSubject"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Blur one kind of thing wherever it shows in the video. Call it once for each kind of thing.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "description": "One short noun phrase naming what to blur, such as face or license plate.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "type": "object"
+      },
+      "name": "blurObjects"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Play music from Library to the video's end, fading in and out.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "atSec": {
+            "description": "Start. Null for 0.0, as background music.",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "duck": {
+            "description": "Quieter while people speak; false keeps it level. Null for true.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "file": {
+            "description": "The music's name in Library.",
+            "type": "string"
+          },
+          "volume": {
+            "description": "0 to 1. Null for 0.3.",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "file",
+          "volume",
+          "duck",
+          "atSec"
+        ],
+        "type": "object"
+      },
+      "name": "addMusic"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Play a sound effect from Library at each time given.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "atSec": {
+            "description": "Every time it plays, from the context.",
+            "items": {
+              "description": "A time it plays, timeline seconds.",
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "The sound's name in Library.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "atSec"
+        ],
+        "type": "object"
+      },
+      "name": "addSound"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Show words over the video in a text preset, at once and free: a title, a name, a caption. For a full-screen title card, use makeTitleCard.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "atSec": {
+            "description": "Start. Null for the playhead.",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "durationSec": {
+            "description": "Length. Null for 3 s.",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "preset": {
+            "description": "title: big, at the top. lower-third: a name or label at the bottom left. plain: in the middle. caption: at the bottom.",
+            "enum": [
+              "title",
+              "lower-third",
+              "plain",
+              "caption"
+            ],
+            "type": "string"
+          },
+          "text": {
+            "description": "The words to show, as you want them on screen.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "preset",
+          "atSec",
+          "durationSec"
+        ],
+        "type": "object"
+      },
+      "name": "addText"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Show a picture from Library over the video: the person's images or a pack sticker.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "atSec": {
+            "description": "Start. Null for the playhead.",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "durationSec": {
+            "description": "Length. Null for 5 s.",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "file": {
+            "description": "The picture's name in Library.",
+            "type": "string"
+          },
+          "position": {
+            "description": "Where in the frame. Null for center.",
+            "enum": [
+              "top-left",
+              "top-right",
+              "bottom-left",
+              "bottom-right",
+              "center",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "size": {
+            "description": "A share of the frame's width. Null for medium.",
+            "enum": [
+              "small",
+              "medium",
+              "large",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "file",
+          "size",
+          "position",
+          "atSec",
+          "durationSec"
+        ],
+        "type": "object"
+      },
+      "name": "addImage"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Have Muse Image draw a new sticker when no picture in Library fits. It is placed once drawn.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "atSec": {
+            "description": "Start. Null for the playhead.",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "durationSec": {
+            "description": "Length. Null for 5 s.",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "position": {
+            "description": "Where in the frame. Null for center.",
+            "enum": [
+              "top-left",
+              "top-right",
+              "bottom-left",
+              "bottom-right",
+              "center",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prompt": {
+            "description": "What it shows, a short noun phrase such as paper plane.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt",
+          "position",
+          "atSec",
+          "durationSec"
+        ],
+        "type": "object"
+      },
+      "name": "makeSticker"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "A full-screen title card: your title over a background Muse Image draws, with no lettering in the picture. Use it when a title card or a picture behind the title is wanted; for words over the video, use addText.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "atSec": {
+            "description": "Start. Null for the playhead.",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "durationSec": {
+            "description": "Length. Null for 4 s.",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "prompt": {
+            "description": "What the background shows, a short phrase. If the person named no background, choose one that fits the title and the video; never ask for it.",
+            "type": "string"
+          },
+          "title": {
+            "description": "The title to show, in your own words.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "prompt",
+          "atSec",
+          "durationSec"
+        ],
+        "type": "object"
+      },
+      "name": "makeTitleCard"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Undo the last change.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "undo"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "The project in short: its revision, name, formats, length, captions and clips (c1, c2 and so on, in timeline seconds), then the person's playhead and selection.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "getSummary"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "What Klipolo's own chat model reads: the project and its clips, the transcript and the scenes in timeline seconds, the library and the person's playhead and selection. Read it before a call that names times or clips, and again once the timeline changes.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "getContext"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Every line of what is said, in timeline seconds, never shortened. A long transcript comes in pages: call it with both times null for the list of pages, then with a page's fromSec and toSec.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "fromSec": {
+            "description": "Where to start, timeline seconds. Null for the start.",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "toSec": {
+            "description": "Where to stop, timeline seconds. Null for the end.",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "fromSec",
+          "toSec"
+        ],
+        "type": "object"
+      },
+      "name": "getTranscript"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Whether the removals you proposed still wait for the person, or were applied, discarded or dropped. While a proposal from someone else waits, it says so. While you wait for the person, call it every few seconds.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "getProposal"
+    }
+  ]
+}
