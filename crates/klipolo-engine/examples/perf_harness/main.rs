@@ -8,9 +8,10 @@
 //! open with and without the GPU warm-up (`warm.rs`);
 //! `… -- export [<worker binary>]` runs the export worker scenario (`export.rs`); `… -- fontstart [<faces>]` what an
 //! export worker's fonts cost before frame 0, scanned or from its job's record (`fontstart.rs`);
-//! `… -- reverse [<file>]` what shuttle playback costs, backward and at 2× (`reverse.rs`); `… -- --export-worker
-//! <job.json>` is the export worker itself (as
-//! the app runs it), and `… -- --proxy-worker <proxy.json>` the editing-copy worker.
+//! `… -- reverse [<file>]` what shuttle playback costs, backward and at 2× (`reverse.rs`); `… -- copy <file> [<copy>]`
+//! what an editing copy saves while the preview plays, with and without a picture-in-picture layer (`copy.rs`);
+//! `… -- --export-worker <job.json>` is the export worker itself (as the app runs it), and `… -- --proxy-worker
+//! <proxy.json>` the editing-copy worker.
 //!
 //! Reports per scenario: wall ms per frame (p50/p95/max), Rust heap allocations and bytes per frame (whole process,
 //! so the actor's planning and publishing count too), process CPU ms per frame, our peak `phys_footprint`, and the
@@ -30,6 +31,7 @@ use klipolo_model::project::FormatKind;
 use klipolo_model::time::Us;
 use tokio::sync::{mpsc, watch};
 
+mod copy;
 mod effects;
 mod export;
 #[path = "../../tests/support/fixture_set.rs"]
@@ -163,6 +165,7 @@ async fn harness() {
     match args.first().map(String::as_str) {
         Some("export") => return export::run(&args[1..]),
         Some("reverse") => return reverse::run(&args[1..]).await,
+        Some("copy") => return copy::run(&args[1..]).await,
         Some("export-job") => return export::write_job(&args[1..]),
         Some("vt-memory") => return vt_memory::run(&args[1..]).await,
         Some("fontstart") => return fontstart::run(&args[1..]),
