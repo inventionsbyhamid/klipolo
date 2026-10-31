@@ -43,7 +43,7 @@ use klipolo_model::ops::Op;
 use klipolo_model::params::{ParamKind, ParamValue};
 use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::query::{anchor_at, main_track_duration, resolve_attach, video_duration};
-use klipolo_model::text_safety::clean;
+use klipolo_model::text_safety::clean_shown;
 use klipolo_model::time::{MIN_DURATION_US, Us};
 use klipolo_model::validate::MAX_TEXT;
 use klipolo_model::{Project, apply_ops};
@@ -231,9 +231,10 @@ pub(crate) fn persons_words(message: &str, text: &str) -> Option<String> {
     (!span.is_empty()).then(|| span.to_owned())
 }
 
-/// Words another app gives for the screen, as it gave them: control, invisible and bidirectional characters dropped
-/// and runs of spaces one space (`text_safety::clean`). Refused when they are longer than a text layer holds
-/// (`MAX_TEXT`) or nothing is left, said for `tool`'s `field` with what to do.
+/// Words another app gives for the screen, as it gave them: control, invisible and bidirectional characters dropped,
+/// but what real text needs kept (joiners, variation selectors, and line breaks, which a text layer draws), and runs of
+/// spaces one space (`text_safety::clean_shown`). Refused when they are longer than a text layer holds (`MAX_TEXT`) or
+/// nothing is left, said for `tool`'s `field` with what to do.
 fn apps_words((tool, field): (&str, &str), text: &str) -> Result<String, Refused> {
     let n = text.chars().count();
     if n > MAX_TEXT {
@@ -241,7 +242,7 @@ fn apps_words((tool, field): (&str, &str), text: &str) -> Result<String, Refused
             "{tool}: {field} is {n} characters; words on screen hold at most {MAX_TEXT}. Use fewer words."
         )));
     }
-    let words = clean(text, MAX_TEXT);
+    let words = clean_shown(text, MAX_TEXT);
     if words.is_empty() {
         return Err(to_model(format!(
             "{tool}: {field} has no words to show. Give the words to put on screen."
