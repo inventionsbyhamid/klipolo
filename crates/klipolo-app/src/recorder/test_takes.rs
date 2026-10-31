@@ -181,6 +181,8 @@ pub(super) struct Recorded {
     pub(super) picture: bool,
     /// The cursor file, with the clicks as events.
     pub(super) cursor: bool,
+    /// How long it ran.
+    pub(super) length_us: i64,
 }
 
 impl Default for Recorded {
@@ -189,6 +191,7 @@ impl Default for Recorded {
             camera: None,
             picture: true,
             cursor: false,
+            length_us: TAKE_US,
         }
     }
 }
@@ -263,8 +266,8 @@ pub(super) fn write_saved(dir: &SessionDir, recorded: Recorded) {
         let key = run_key(source.role, &source.id);
         match source.role {
             SourceRole::Screen if !recorded.picture => continue,
-            role if role.is_video() => write_picture(&dir.path(&key), true),
-            _ => write_sound(&dir.path(&key), true),
+            role if role.is_video() => write_picture(&dir.path(&key), true, recorded.length_us),
+            _ => write_sound(&dir.path(&key), true, recorded.length_us),
         }
         let peaks = (!source.role.is_video()).then(|| vec![0.25]);
         sources.push(ManifestSource {
@@ -274,7 +277,7 @@ pub(super) fn write_saved(dir: &SessionDir, recorded: Recorded) {
             runs: vec![ManifestRun {
                 file: key,
                 offset_us: 0,
-                duration_us: TAKE_US,
+                duration_us: recorded.length_us,
                 drift_ppm: 0.0,
                 approximate: false,
                 channel_peaks: peaks,
@@ -292,7 +295,7 @@ pub(super) fn write_saved(dir: &SessionDir, recorded: Recorded) {
     let manifest = Manifest {
         session: cfg.id.clone(),
         kind: cfg.kind,
-        duration_us: TAKE_US,
+        duration_us: recorded.length_us,
         sources,
         markers: Vec::new(),
         cursor,
@@ -305,7 +308,7 @@ pub(super) fn write_saved(dir: &SessionDir, recorded: Recorded) {
     append(
         dir,
         &Entry::Finalized {
-            duration_us: TAKE_US,
+            duration_us: recorded.length_us,
         },
     );
 }
@@ -317,9 +320,9 @@ pub(super) fn write_cut_off(dir: &SessionDir) {
     for source in &cfg.sources {
         let key = run_key(source.role, &source.id);
         if source.role.is_video() {
-            write_picture(&dir.path(&key), false);
+            write_picture(&dir.path(&key), false, TAKE_US);
         } else {
-            write_sound(&dir.path(&key), false);
+            write_sound(&dir.path(&key), false, TAKE_US);
         }
     }
 }
@@ -330,15 +333,15 @@ pub(super) fn append(dir: &SessionDir, entry: &Entry) {
     journal.write_all(&journal::line(entry)).unwrap();
 }
 
-/// The fixture's H.264 frames for the take's length at 30 fps, fragmented as the recorder writes them; `finished`:
-/// then soft-remuxed into a regular MP4, as a saved run is.
-fn write_picture(path: &Path, finished: bool) {
+/// The fixture's H.264 frames for `length_us` at 30 fps, fragmented as the recorder writes them; `finished`: then
+/// soft-remuxed into a regular MP4, as a saved run is.
+fn write_picture(path: &Path, finished: bool, length_us: i64) {
     const FPS: u32 = 30;
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     let video = FixtureVideo::load(&fixtures().join("gop-h264.mp4"));
     let mut mux = Fmp4Writer::at_rate(&video.info, FPS);
     let mut bytes = mux.head();
-    let frames = u64::from(FPS) * TAKE_US as u64 / 1_000_000;
+    let frames = u64::from(FPS) * length_us as u64 / 1_000_000;
     for (i, packet) in video.packets(frames, 0, FPS).iter().enumerate() {
         let pts = (i as u64 * 1_000_000 / u64::from(FPS)) as i64;
         if let Some(fragment) = mux.push(pts, packet) {
@@ -360,14 +363,14 @@ fn write_picture(path: &Path, finished: bool) {
     finalize::flip(&OsIo, &file, path, &plan).unwrap();
 }
 
-/// A mono 440 Hz tone at -12 dBFS for the take's length as a CAF; `finished`: with its size written, as a saved run is.
-fn write_sound(path: &Path, finished: bool) {
+/// A mono 440 Hz tone at -12 dBFS for `length_us` as a CAF; `finished`: with its size written, as a saved run is.
+fn write_sound(path: &Path, finished: bool, length_us: i64) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     let format = AudioFormat {
         rate: 48_000,
         channels: 1,
     };
-    let frames = u64::from(format.rate) * TAKE_US as u64 / 1_000_000;
+    let frames = u64::from(format.rate) * length_us as u64 / 1_000_000;
     let samples: Vec<f32> = (0..frames)
         .map(|i| 0.25 * (i as f32 * 440.0 * std::f32::consts::TAU / 48_000.0).sin())
         .collect();
