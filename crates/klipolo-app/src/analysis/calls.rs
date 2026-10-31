@@ -155,7 +155,7 @@ impl Calls {
     /// key or token, or no way to pay stops every paid call after it, with this sentence.
     fn paid_failure(&self, e: ProviderError, relay: bool) -> ProviderError {
         let message = match e.kind {
-            ProviderErrorKind::Budget if relay => format!("{} {ADD_KEY}", e.message),
+            ProviderErrorKind::Budget if relay => with_way_on(&e.message),
             ProviderErrorKind::Budget
             | ProviderErrorKind::Unauthorized
             | ProviderErrorKind::NotAllowed => e.message.clone(),
@@ -163,6 +163,19 @@ impl Calls {
         };
         self.run.stop_paying(e.kind, &message);
         ProviderError { message, ..e }
+    }
+}
+
+/// The relay's sentence for a used-up credit with the way on (`ADD_KEY`), unless it gives one already: its own
+/// sentences end "Add your own Meta key in Settings.", and the advice is said once.
+fn with_way_on(message: &str) -> String {
+    let names_a_key = message
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|word| word.eq_ignore_ascii_case("key"));
+    match message.trim() {
+        "" => ADD_KEY.to_owned(),
+        said if names_a_key => said.to_owned(),
+        said => format!("{said} {ADD_KEY}"),
     }
 }
 
@@ -301,5 +314,29 @@ impl SceneLogger for Calls {
             self.meter.advance(1);
             Ok(seen)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The relay's 402 sentences as `services/relay/relay/proxy.py` sends them: each gives the way on already.
+    const RELAY_402: [&str; 3] = [
+        "This device has used its Klipolo credit. Add your own Meta key in Settings.",
+        "This device does not have enough Klipolo credit left for this request. Add your own Meta key in Settings.",
+        "Klipolo's shared AI credit is used up for now. Add your own Meta key in Settings.",
+    ];
+
+    #[test]
+    fn the_way_on_is_said_once() {
+        for said in RELAY_402 {
+            assert_eq!(with_way_on(said), said);
+        }
+        assert_eq!(
+            with_way_on("This device has used its Klipolo credit."),
+            format!("This device has used its Klipolo credit. {ADD_KEY}")
+        );
+        assert_eq!(with_way_on("  "), ADD_KEY);
     }
 }

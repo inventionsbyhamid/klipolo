@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use klipolo_analysis::cache::{Dir, content_key};
 use klipolo_analysis::providers::meta::Meta;
 use klipolo_analysis::providers::{ProviderErrorKind, Transcriber};
-use klipolo_analysis::scenes;
+use klipolo_analysis::scenes::{self, SceneLog};
 use klipolo_analysis::transcript::{ROUGH_WORDS, Sound, TranscriptOut, align, finish, hear};
 use klipolo_analysis::{AnalysisError, VideoError};
 use klipolo_model::speech::Levels;
@@ -18,7 +18,8 @@ use serde::{Deserialize, Serialize};
 
 use super::calls::{Calls, Meter};
 use super::{
-    AnalysisState, AnalysisStep, Cached, Clip, Content, Media, NEEDS_KEY, UNREADABLE, lock,
+    AnalysisState, AnalysisStep, AssetState, Cached, Clip, Content, Media, NEEDS_KEY, UNREADABLE,
+    lock,
 };
 
 /// The clips started together. Cancel stops every request not sent yet; a used-up credit (or a refused key, or no way
@@ -59,6 +60,9 @@ impl Run {
 
 /// Why a transcript cached when Cancel stopped its word timing is approximate (it is timed again on the next run).
 pub(crate) const WORDS_STOPPED: &str = "Word timing stopped before it finished.";
+/// Why the turn-level transcript cached before its words are timed is approximate. The timed one replaces it; one left
+/// by a quit or a crash is timed again on the next run.
+pub(crate) const WORDS_UNFINISHED: &str = "Word timing didn't finish last time.";
 
 /// Whether `found`'s words are timed roughly for a reason another try may fix (word timing failed, stopped or was
 /// unreachable), rather than because its turns don't match their sound (`transcript::ROUGH_WORDS`).
@@ -78,12 +82,43 @@ enum Heard {
 
 /// How a clip's analysis ended.
 pub(crate) enum Outcome {
-    Done {
-        approximate: bool,
-    },
+    Done(Words),
     Failed(String),
     /// Cancelled: back to not analysed.
     Stopped,
+}
+
+/// How a finished clip's words came out: timed, timed roughly (why, and whether timing them again can help), or none
+/// (why).
+pub(crate) struct Words {
+    approximate: bool,
+    approximate_reason: Option<String>,
+    empty_reason: Option<String>,
+    time_again: bool,
+}
+
+impl Words {
+    fn of(found: &TranscriptOut) -> Self {
+        Self {
+            approximate: found.approximate,
+            approximate_reason: found
+                .approximate_reason
+                .clone()
+                .filter(|_| found.approximate),
+            empty_reason: found.empty_reason.clone(),
+            time_again: timed_again(found),
+        }
+    }
+
+    /// The clip's state, done.
+    pub(crate) fn state(self) -> AssetState {
+        AssetState::Done {
+            approximate: self.approximate,
+            approximate_reason: self.approximate_reason,
+            empty_reason: self.empty_reason,
+            time_again: self.time_again,
+        }
+    }
 }
 
 /// What one content's steps work with.
@@ -233,9 +268,7 @@ impl AnalysisState {
         // aligner (free: no transcription).
         let retime = first.is_some() && cached.transcript.as_ref().is_some_and(timed_again);
         if let (Some(found), false, false) = (&cached.transcript, needs_scenes, retime) {
-            return Outcome::Done {
-                approximate: found.approximate,
-            };
+            return Outcome::Done(Words::of(found));
         }
         let Some(first) = first else {
             return Outcome::Failed(NEEDS_KEY.into());
@@ -283,13 +316,11 @@ impl AnalysisState {
                 return outcome;
             }
         }
-        Outcome::Done {
-            approximate: transcript.approximate,
-        }
+        Outcome::Done(Words::of(&transcript))
     }
 
-    /// The clip's transcript: its sound, its turns (published at once as turn-level captions), its words timed;
-    /// cached once timed. A clip with no sound, or only silence, makes no request and has no words.
+    /// The clip's transcript: its sound, its turns (published and cached at once as turn-level captions), its words
+    /// timed; cached again once timed. A clip with no sound, or only silence, makes no request and has no words.
     async fn transcribe(self: &Arc<Self>, job: &Job<'_>) -> Result<TranscriptOut, Outcome> {
         let Job {
             key,
@@ -322,8 +353,9 @@ impl AnalysisState {
                 match heard? {
                     Heard::All(out) => out,
                     Heard::Stopped(mut out) => {
-                        // Paid for already: kept, and the clip is analysed with what was timed (its words are timed
-                        // again when the person asks).
+                        // Paid for already: kept, and the clip is analysed with what was timed. Its rough words are
+                        // timed again by the person's Analyze, Retry or "Time words again" (never by the page's own
+                        // start in this app run: `timing_stopped`).
                         out.transcript.key = key.to_owned();
                         self.store(dir, "transcript", &out, &model).await;
                         self.found_transcript(key, &out);
@@ -342,9 +374,9 @@ impl AnalysisState {
         Ok(out)
     }
 
-    /// The words of the clip's WAV: `hear`, the turn-level transcript published, `align`, `finish`. Cancelled while
-    /// timing words: what was heard (and timed so far) is given as `Heard::Stopped`, to cache: its transcription is
-    /// paid for, and its words can be timed again for free.
+    /// The words of the clip's WAV: `hear`, the turn-level transcript published and cached, `align`, `finish`.
+    /// Cancelled while timing words: what was heard (and timed so far) is given as `Heard::Stopped`, to cache: its
+    /// transcription is paid for, and its words can be timed again for free.
     async fn hear_and_time(
         self: &Arc<Self>,
         job: &Job<'_>,
@@ -390,6 +422,10 @@ impl AnalysisState {
         );
         rough.transcript.key = key.to_owned();
         self.found_transcript(key, &rough);
+        // Paid for already: cached now, so a quit or a crash while words are timed doesn't lose it. Its reason isn't
+        // `ROUGH_WORDS`, so the next run times its words again (`timed_again`); the timed transcript replaces it.
+        rough.approximate_reason = Some(WORDS_UNFINISHED.to_owned());
+        self.store(job.dir, "transcript", &rough, model).await;
         calls
             .meter
             .begin(AnalysisStep::Words, heard.turns.len(), 0, 100);
@@ -411,8 +447,8 @@ impl AnalysisState {
     }
 
     /// `found`'s words timed again (no transcription: free), from the clip's WAV made again; cached and shown when
-    /// more of its turns are timed than before. A WAV that can't be made, or an aligner that still fails, keeps
-    /// `found` as it is.
+    /// more of its turns are timed than before. A WAV that can't be made keeps `found` as it is; an aligner that still
+    /// fails keeps its words with that try's reason (`why_now`).
     async fn time_again(
         self: &Arc<Self>,
         job: &Job<'_>,
@@ -458,10 +494,11 @@ impl AnalysisState {
         );
         let aligned = |t: &TranscriptOut| t.turns.iter().filter(|t| t.aligned).count();
         if aligned(&timed) <= aligned(&found) {
+            let kept = self.why_now(job, found, timed).await;
             return if run.cancelled() {
-                Err(self.timing_stopped(job, &found))
+                Err(self.timing_stopped(job, &kept))
             } else {
-                Ok(found)
+                Ok(kept)
             };
         }
         timed.transcript.key = key.to_owned();
@@ -477,8 +514,30 @@ impl AnalysisState {
         Ok(timed)
     }
 
+    /// `found`'s words, kept after a try (`tried`) that timed no more of them, with why that try didn't (the relay
+    /// busy, the day's word timing used up and when it resets, or stopped), so the note says the current cause; cached
+    /// so when it changed. Words that only don't match their sound (`ROUGH_WORDS`) keep the reason they had.
+    async fn why_now(
+        &self,
+        job: &Job<'_>,
+        mut found: TranscriptOut,
+        tried: TranscriptOut,
+    ) -> TranscriptOut {
+        let now = if job.run.cancelled() {
+            Some(WORDS_STOPPED.to_owned())
+        } else {
+            tried.approximate_reason.filter(|r| r != ROUGH_WORDS)
+        };
+        if let Some(now) = now.filter(|now| found.approximate_reason.as_ref() != Some(now)) {
+            found.approximate_reason = Some(now);
+            self.store(job.dir, "transcript", &found, &found.transcript.model)
+                .await;
+        }
+        found
+    }
+
     /// The clip's scene log from its small copy, snapped to `words` (its transcript's), cached once logged. A clip
-    /// with no picture after all has none.
+    /// with no picture after all has an empty one, made with no request.
     async fn log_scenes(self: &Arc<Self>, job: &Job<'_>, words: &[Word]) -> Result<(), Outcome> {
         let Job {
             key,
@@ -515,7 +574,20 @@ impl AnalysisState {
         };
         let copy = match made {
             Ok(copy) => copy,
-            Err(VideoError::NoVideo) => return Ok(()),
+            Err(VideoError::NoVideo) => {
+                // No picture after all: an empty log, cached, so the clip is never offered again at a scene log's
+                // price.
+                let log = SceneLog {
+                    model: String::new(),
+                    fps: 0.0,
+                    items: Vec::new(),
+                    cuts: Vec::new(),
+                    cost_usd: 0.0,
+                };
+                self.store(dir, "scenes", &log, "").await;
+                self.found_scenes(key, log);
+                return Ok(());
+            }
             Err(e) => return Err(self.failure(AnalysisError::from(e), run)),
         };
         calls
@@ -530,18 +602,16 @@ impl AnalysisState {
         Ok(())
     }
 
-    /// The person stopped the job's word timing with `kept` cached: only the person's Analyze or Retry times its words
-    /// again. A clip with nothing else to do is analysed as far as it got (its words timed roughly where they weren't
-    /// timed); a video whose scene log is still to do goes back to not analysed, as a Cancel during its scene log does
-    /// (the page offers it again; it never starts an unfinished video on its own).
+    /// The person stopped the job's word timing with `kept` cached: only the person's Analyze, Retry or "Time words
+    /// again" times its words again. A clip with nothing else to do is analysed as far as it got (its words timed
+    /// roughly where they weren't timed); a video whose scene log is still to do goes back to not analysed, as a Cancel
+    /// during its scene log does (the page offers it again; it never starts an unfinished video on its own).
     fn timing_stopped(&self, job: &Job<'_>, kept: &TranscriptOut) -> Outcome {
         lock(&self.inner).timed_again.insert(job.key.to_owned());
         if job.needs_scenes {
             return Outcome::Stopped;
         }
-        Outcome::Done {
-            approximate: kept.approximate,
-        }
+        Outcome::Done(Words::of(kept))
     }
 
     /// How a failed step ends the clip: back to not analysed after Cancel, else failed with the step's sentence.
