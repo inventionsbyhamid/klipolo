@@ -10,7 +10,7 @@ Klipolo's own licence, and the licences of FFmpeg and the fonts, are in NOTICE.t
 
 This file is written by scripts/release/third-party.sh from Cargo.lock and the page's build. Don't edit it by hand.
 
-425 Rust crates and 81 JavaScript packages, under these licences:
+427 Rust crates and 81 JavaScript packages, under these licences:
   0BSD                        1
   Apache-2.0                 11
   BSD-2-Clause                1
@@ -18,7 +18,7 @@ This file is written by scripts/release/third-party.sh from Cargo.lock and the p
   CC0-1.0                     1
   CDLA-Permissive-2.0         1
   ISC                         5
-  MIT                       458
+  MIT                       460
   MPL-2.0                     5
   Unicode-3.0                17
   WTFPL                       2
@@ -417,7 +417,7 @@ Permission to use, copy, modify, and/or distribute this software for any purpose
 THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ----------------------------------------------------------------------------------------------------
-MIT (458)
+MIT (460)
 ----------------------------------------------------------------------------------------------------
 
 Rust crates
@@ -664,6 +664,8 @@ Rust crates
       Copyright (c) 2014 The Rust Project Developers
   glob 0.3.4 (MIT OR Apache-2.0)  https://github.com/rust-lang/glob
       Copyright (c) 2014 The Rust Project Developers
+  global-hotkey 0.7.0 (Apache-2.0 OR MIT)  https://github.com/amrbashir/global-hotkey
+      Copyright (c) 2022-2022 Tauri Programme within The Commons Conservancy
   glow 0.16.0 (MIT OR Apache-2.0 OR Zlib)  https://github.com/grovesNL/glow
       Authors: Joshua Groves <josh@joshgroves.com>, Dzmitry Malyshau <kvarkus@gmail.com>
   glyphon 0.9.0 (MIT OR Apache-2.0 OR Zlib)  https://github.com/grovesNL/glyphon
@@ -749,6 +751,8 @@ Rust crates
   jsonptr 0.7.1 (MIT OR Apache-2.0)  https://github.com/chanced/jsonptr
       Copyright 2024 Chance Dinkins
       Copyright (c) 2022 Chance Dinkins
+  keyboard-types 0.7.0 (MIT OR Apache-2.0)  https://github.com/pyfisch/keyboard-types
+      Copyright (c) 2017 Pyfisch
   keyboard-types 0.8.3 (MIT OR Apache-2.0)  https://github.com/rust-windowing/keyboard-types
       Copyright (c) 2017 Pyfisch
   khronos-egl 6.0.0 (MIT/Apache-2.0)  https://github.com/timothee-haudebourg/khronos-egl
