@@ -2,11 +2,13 @@
 # The release checks' own tests, on a small app bundle made here (macOS with the Command Line Tools' clang; nothing is
 # signed, nothing reaches the network, and it takes seconds):
 #   scripts/release/release.test.sh
-# The bundle is an executable that loads one dylib through @rpath, with the licences and a fonts folder: check-bundle.sh
-# must pass it. Then each broken copy must fail with its own message. check-bundle.sh runs from a copy of this folder
-# in a checkout-shaped tree, so the test owns the page's build output it also searches.
+# The bundle is an executable that loads one dylib through @rpath, with the licences, a fonts folder, the app's own
+# Info.plist keys and, through a stand-in for codesign, the app's own entitlements: check-bundle.sh must pass it. Then
+# each broken copy must fail with its own message. check-bundle.sh runs from a copy of this folder in a checkout-shaped
+# tree, so the test owns the page's build output and the source files it also searches.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
+app_crate=$(cd "$here/../../crates/klipolo-app" && pwd -P)
 work=$(mktemp -d "${TMPDIR:-/tmp}/klipolo-release-test.XXXXXX")
 work=$(cd "$work" && pwd -P)
 trap 'chmod -R u+rwX "$work" 2> /dev/null; rm -rf "$work"' EXIT
@@ -18,6 +20,21 @@ mkdir -p "$repo/scripts/release" "$repo/apps/desktop/dist"
 cp "$here"/*.sh "$repo/scripts/release/"
 echo '<!doctype html><title>Klipolo</title>' > "$repo/apps/desktop/dist/index.html"
 check=$repo/scripts/release/check-bundle.sh
+# The checkout's files the Cap MIT check reads: the app's own Cap-MIT.txt (a bundle's copy must have its licence text)
+# and the capture crate's four files from Cap's MIT crates, which that copy's first line names.
+source_file() {  # source_file <path in the test's tree> <header line>...
+  local f=$repo/$1
+  shift
+  mkdir -p "$(dirname "$f")"
+  printf '%s\n' "$@" 'pub fn f() {}' > "$f"
+}
+mkdir -p "$repo/crates/klipolo-app/licenses"
+cp "$app_crate/licenses/Cap-MIT.txt" "$repo/crates/klipolo-app/licenses/"
+capture=crates/klipolo-capture/src
+cap_mit="// MIT (Cap's \`scap-screencapturekit\`), Copyright (c) 2023-present Cap Software, Inc."
+for f in vendor/cap/sck/capture.rs vendor/cap/sck/config.rs vendor/cap/sck/mod.rs platform/macos/camera.rs; do
+  source_file "$capture/$f" '// SPDX-License-Identifier: MIT' "$cap_mit"
+done
 
 # The two Mach-O files, built once; the dylib's install name is @rpath/libfoo.1.dylib.
 build=$work/build
@@ -28,23 +45,38 @@ cc=(xcrun clang -arch "$arch" -mmacosx-version-min=15.0 -Wl,-headerpad_max_insta
 (cd "$build" && "${cc[@]}" -dynamiclib -install_name @rpath/libfoo.1.dylib -o libfoo.1.dylib foo.c)
 (cd "$build" && "${cc[@]}" -o klipolo-app main.c libfoo.1.dylib -Wl,-rpath,@executable_path/../Frameworks)
 
-# A bundle that passes, at <dir>/Klipolo.app.
+# codesign as the bundle check calls it, so no case signs anything:
+# `codesign -d --entitlements - --xml <dir>/Klipolo.app` prints <dir>/signature.plist, the entitlements the case's
+# bundle is taken to be signed with, and fails as codesign does for an unsigned app when there is none. Any other call
+# fails.
+fakes=$work/fakes
+mkdir -p "$fakes"
+cat > "$fakes/codesign" << 'EOF'
+#!/usr/bin/env bash
+[ $# -eq 5 ] && [ "$1 $2 $3 $4" = "-d --entitlements - --xml" ] \
+  || { echo "fake codesign: unexpected call: $*" >&2; exit 64; }
+signature=$(dirname "$5")/signature.plist
+[ -f "$signature" ] || { echo "$5: code object is not signed at all" >&2; exit 1; }
+cat "$signature"
+EOF
+chmod +x "$fakes/codesign"
+PATH=$fakes:$PATH
+
+# A bundle that passes, at <dir>/Klipolo.app, signed (see the fake codesign) with the app's entitlements.
 make_app() {
   local c=$1/Klipolo.app/Contents
   mkdir -p "$c/MacOS" "$c/Frameworks" "$c/Resources/licenses" "$c/Resources/fonts"
-  cat > "$c/Info.plist" << 'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>CFBundleExecutable</key><string>klipolo-app</string>
-<key>CFBundleIdentifier</key><string>com.klipolo.app</string>
-</dict></plist>
-EOF
+  # The app's own Info.plist keys (the permission strings), and the two the build adds that the checks read.
+  cp "$app_crate/Info.plist" "$c/Info.plist"
+  /usr/libexec/PlistBuddy -c 'Add :CFBundleExecutable string klipolo-app' \
+    -c 'Add :CFBundleIdentifier string com.klipolo.app' "$c/Info.plist" > /dev/null
+  cp "$app_crate/entitlements.plist" "$1/signature.plist"
   cp "$build/klipolo-app" "$c/MacOS/"
   cp "$build/libfoo.1.dylib" "$c/Frameworks/"
   for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt Archivo-OFL.txt; do
     echo "$f" > "$c/Resources/licenses/$f"
   done
+  cp "$app_crate/licenses/Cap-MIT.txt" "$c/Resources/licenses/"
   printf 'Klipolo: third-party notices\n\nMIT\n' > "$c/Resources/licenses/THIRD-PARTY-NOTICES.txt"
   printf 'Klipolo\nSource code: https://github.com/owner/klipolo (commit %s)\n' "$commit" \
     > "$c/Resources/licenses/NOTICE.txt"
@@ -95,6 +127,89 @@ expect "1-byte third-party notices fail" fail "doesn't start 'Klipolo: third-par
 app=$(case_app no-archivo)
 rm "$app/Contents/Resources/licenses/Archivo-OFL.txt"
 expect "no Archivo licence fails" fail "licenses/Archivo-OFL.txt isn't in the app" "$check" "$app" "$arch"
+
+# The permission prompts' words: the good bundle has crates/klipolo-app/Info.plist's three, and a bundle without one, or
+# with one empty, fails naming it.
+for key in NSScreenCaptureUsageDescription NSMicrophoneUsageDescription NSCameraUsageDescription; do
+  app=$(case_app "no-$key")
+  /usr/libexec/PlistBuddy -c "Delete :$key" "$app/Contents/Info.plist"
+  expect "a bundle without $key fails" fail "Info.plist has no $key" "$check" "$app" "$arch"
+done
+app=$(case_app empty-camera-words)
+plutil -replace NSCameraUsageDescription -string '' "$app/Contents/Info.plist"
+expect "an empty NSCameraUsageDescription fails" fail "Info.plist has no NSCameraUsageDescription" "$check" "$app" "$arch"
+
+# The camera and microphone entitlements, read from the bundle's signature (the fake codesign): the good bundle is
+# signed with crates/klipolo-app/entitlements.plist. An unsigned bundle fails, and so does a signature without either
+# key, or with one false.
+app=$(case_app unsigned)
+rm "$work/unsigned/signature.plist"
+expect "an unsigned bundle fails with codesign's words" fail "codesign says: $app: code object is not signed at all" \
+  "$check" "$app" "$arch"
+app=$(case_app no-entitlements)
+: > "$work/no-entitlements/signature.plist"
+expect "a signature with no entitlements fails" fail "the app's signature has no entitlements" "$check" "$app" "$arch"
+for key in com.apple.security.device.camera com.apple.security.device.audio-input; do
+  app=$(case_app "no-$key")
+  /usr/libexec/PlistBuddy -c "Delete :$key" "$work/no-$key/signature.plist"
+  expect "a signature without $key fails" fail "the app's entitlements don't grant $key" "$check" "$app" "$arch"
+done
+app=$(case_app camera-false)
+/usr/libexec/PlistBuddy -c 'Set :com.apple.security.device.camera false' "$work/camera-false/signature.plist"
+expect "a signature with the camera entitlement false fails" fail \
+  "the app's entitlements don't grant com.apple.security.device.camera" "$check" "$app" "$arch"
+
+# Cap's MIT licence ships with the checkout's copy's licence text, and its first line names exactly the checkout's files
+# from Cap's MIT crates: each starts with the SPDX MIT line and names Cap Software, Inc. in its header. Besides the
+# capture crate's four, the tree gets an AGPL file from Cap and another author's MIT file, which it needn't name.
+app=$(case_app no-cap-mit)
+rm "$app/Contents/Resources/licenses/Cap-MIT.txt"
+expect "no Cap MIT licence fails" fail "licenses/Cap-MIT.txt isn't in the app" "$check" "$app" "$arch"
+source_file "$capture/hosttime.rs" '// Vendored from Cap (https://github.com/CapSoftware/Cap)' \
+  '// Copyright (c) 2023-present Cap Software, Inc. Used by Klipolo under the AGPL-3.0.'
+source_file crates/klipolo-other/src/lib.rs '// SPDX-License-Identifier: MIT' '// Copyright (c) 2026 Someone Else'
+app=$(case_app cap-mit)
+expect "the app's Cap-MIT.txt names the capture crate's MIT files" pass "$check" "$app" "$arch"
+source_file "$capture/vendor/cap/sck/stream.rs" '// SPDX-License-Identifier: MIT' "$cap_mit"
+expect "a Cap MIT file Cap-MIT.txt doesn't name fails" fail \
+  "Cap-MIT.txt's first line doesn't name $capture/vendor/cap/sck/stream.rs" "$check" "$app" "$arch"
+echo "Also $capture/vendor/cap/sck/stream.rs." >> "$app/Contents/Resources/licenses/Cap-MIT.txt"
+expect "a Cap MIT file named below the first line fails" fail \
+  "Cap-MIT.txt's first line doesn't name $capture/vendor/cap/sck/stream.rs" "$check" "$app" "$arch"
+rm "$repo/$capture/vendor/cap/sck/stream.rs"
+# A name left over from a file renamed or gone fails, and so does a near miss, which names no file.
+app=$(case_app cap-mit-stale)
+sed -i '' "1s|\$| Also $capture/vendor/cap/sck/old.rs.|" "$app/Contents/Resources/licenses/Cap-MIT.txt"
+expect "a name on Cap-MIT.txt's first line that isn't a Cap MIT file fails" fail \
+  "first line names $capture/vendor/cap/sck/old.rs, which isn't a file from Cap's MIT crates" "$check" "$app" "$arch"
+app=$(case_app cap-mit-near-miss)
+sed -i '' '1s|/sck/mod\.rs |/sck/mod.rs.bak |' "$app/Contents/Resources/licenses/Cap-MIT.txt"
+expect "mod.rs.bak on the first line doesn't name mod.rs" fail \
+  "Cap-MIT.txt's first line doesn't name $capture/vendor/cap/sck/mod.rs " "$check" "$app" "$arch"
+# The licence text below the first line is the checkout's copy's, all of it.
+app=$(case_app cap-mit-first-line-only)
+head -n 1 "$app_crate/licenses/Cap-MIT.txt" > "$app/Contents/Resources/licenses/Cap-MIT.txt"
+expect "a Cap-MIT.txt without the licence text fails" fail \
+  "licenses/Cap-MIT.txt's licence text (below its first line) isn't the checkout's" "$check" "$app" "$arch"
+app=$(case_app cap-mit-truncated)
+sed -i '' '/^THE SOFTWARE IS PROVIDED/,$d' "$app/Contents/Resources/licenses/Cap-MIT.txt"
+expect "a Cap-MIT.txt without the licence's disclaimer fails" fail \
+  "licenses/Cap-MIT.txt's licence text (below its first line) isn't the checkout's" "$check" "$app" "$arch"
+# A source file that can't be read fails rather than be skipped.
+app=$(case_app cap-mit-unreadable)
+chmod 000 "$repo/$capture/hosttime.rs"
+expect "an unreadable source file fails the Cap MIT check" fail \
+  "couldn't read every source file under crates/ to look for files from Cap's MIT crates" "$check" "$app" "$arch"
+chmod 644 "$repo/$capture/hosttime.rs"
+# The Linux gate's form (scripts/ci-linux.sh): the checkout's own copy against its files.
+own_cap_checked() { (. "$repo/scripts/release/lib.sh" && cap_mit_check "$repo" "$repo/$1" "$1"); }
+expect "the Linux gate's Cap MIT check passes the checkout's copy" pass \
+  own_cap_checked crates/klipolo-app/licenses/Cap-MIT.txt
+source_file "$capture/vendor/cap/sck/stream.rs" '// SPDX-License-Identifier: MIT' "$cap_mit"
+expect "the Linux gate's Cap MIT check fails a file its copy doesn't name" fail \
+  "crates/klipolo-app/licenses/Cap-MIT.txt's first line doesn't name $capture/vendor/cap/sck/stream.rs" \
+  own_cap_checked crates/klipolo-app/licenses/Cap-MIT.txt
+rm "$repo/$capture/vendor/cap/sck/stream.rs"
 
 # NOTICE.txt's source code line: a placeholder left fails, and so does a notice without the address or the full commit.
 app=$(case_app source-placeholder)

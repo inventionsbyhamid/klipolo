@@ -1,0 +1,23 @@
+Covers the code Klipolo's recorder takes from Cap's MIT-licensed crates (Cap commit d327051c175aa092c06ad9fc6684298b1b5fed6b; crates/klipolo-capture/NOTICE): crates/klipolo-capture/src/vendor/cap/sck/capture.rs, crates/klipolo-capture/src/vendor/cap/sck/config.rs and crates/klipolo-capture/src/vendor/cap/sck/mod.rs (from scap-screencapturekit), and crates/klipolo-capture/src/platform/macos/camera.rs (from cap-camera-avfoundation and cap-camera).
+
+MIT License
+
+Copyright (c) 2023 Cap Software, Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
