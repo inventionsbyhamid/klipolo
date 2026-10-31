@@ -2,6 +2,7 @@
 //! captures: arming launches a worker that waits, and only the person's Record press (`send(Start)`) starts it.
 
 use std::io::{self, BufRead, Write};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
@@ -23,6 +24,8 @@ pub(super) struct Worker {
 pub(super) struct Take {
     pub(super) dir: SessionDir,
     pub(super) cfg: SessionConfig,
+    /// The file of the project open when it was armed (its `cfg.target`), where it lands.
+    pub(super) project_file: Option<PathBuf>,
     /// None between a worker's end and its resume, and while the take is finished from its files.
     pub(super) worker: Option<Worker>,
     pub(super) sup: Supervisor,
@@ -111,12 +114,14 @@ impl Recorder {
     }
 
     /// Arms take `cfg.id`: its folder, its config and its worker, which waits for the person's Record. `notes`: what
-    /// the person is told about it before Record. Refused while a take is the recorder's or Klipolo reopens
-    /// (`capture.busy`), checked again under the lock the take is placed under.
+    /// the person is told about it before Record; `project_file`: the file of the project it lands in (`cfg.target`).
+    /// Refused while a take is the recorder's or Klipolo reopens (`capture.busy`), checked again under the lock the
+    /// take is placed under.
     pub fn arm(
         self: &Arc<Self>,
         cfg: SessionConfig,
         notes: Vec<CodedError>,
+        project_file: Option<PathBuf>,
     ) -> Result<ArmedTake, CodedError> {
         let mut slot = self.lock();
         self.refuse_while_busy_in(&slot)?;
@@ -125,7 +130,7 @@ impl Recorder {
             countdown_s: cfg.countdown_s,
             notes: (!notes.is_empty()).then_some(notes),
         };
-        let reader = self.place(&mut slot, cfg)?;
+        let reader = self.place(&mut slot, cfg, project_file)?;
         self.sync_active(&slot);
         self.start_ticker(&mut slot);
         drop(slot);
@@ -136,7 +141,12 @@ impl Recorder {
 
     /// Take `cfg.id`'s folder, config and worker, waiting for the person's Record: the slot's take from now. Its
     /// events are read once the caller starts the returned reader.
-    fn place(&self, slot: &mut Slot, cfg: SessionConfig) -> Result<Reader, CodedError> {
+    fn place(
+        &self,
+        slot: &mut Slot,
+        cfg: SessionConfig,
+        project_file: Option<PathBuf>,
+    ) -> Result<Reader, CodedError> {
         let root = (self.env.root.clone()).ok_or_else(|| {
             words::set_up_failed(&io::Error::new(
                 io::ErrorKind::NotFound,
@@ -160,6 +170,7 @@ impl Recorder {
         slot.take = Some(Take {
             dir,
             cfg,
+            project_file,
             worker: Some(worker),
             sup: Supervisor::new(self.now_ms()),
             stopped_by_app: false,

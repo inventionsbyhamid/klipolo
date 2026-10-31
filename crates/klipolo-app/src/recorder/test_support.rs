@@ -18,7 +18,7 @@ use klipolo_platform::clock::Clock;
 
 use super::env::{Done, Sink};
 use super::setup::Files;
-use super::state::{Parts, RecorderState};
+use super::state::{Opened, Parts, RecorderState};
 use super::take::Recorder;
 use super::types::{ArmOptions, ArmedTake, WhatToRecord};
 use super::window::Window;
@@ -35,12 +35,17 @@ impl Clock for FakeClock {
     }
 }
 
+/// What lands a take in a test: a real landing into a test's project session (`test_takes`).
+pub(super) type Lands = Box<dyn Fn(&Done) + Send + Sync>;
+
 /// What reached the page and the import.
 #[derive(Default)]
 pub(super) struct FakeSink {
     /// Each event with its take's id.
     pub(super) events: Mutex<Vec<(String, Event)>>,
     pub(super) finished: Mutex<Vec<Done>>,
+    /// Lands each finished take, when the test says how.
+    pub(super) lands: Mutex<Option<Lands>>,
 }
 
 impl Sink for FakeSink {
@@ -49,6 +54,9 @@ impl Sink for FakeSink {
         events.push((take.to_owned(), ev.clone()));
     }
     fn finished(&self, done: &Done) {
+        if let Some(land) = self.lands.lock().unwrap().as_ref() {
+            land(done);
+        }
         self.finished.lock().unwrap().push(done.clone());
     }
 }
@@ -86,8 +94,8 @@ pub(super) struct World {
     pub(super) probes: Arc<AtomicU64>,
     /// What the fake probe writes; None: nothing, as a probe that hung or crashed.
     pub(super) probe_writes: Arc<Mutex<Option<ProbeReport>>>,
-    /// The open project's id; None: the start screen.
-    pub(super) project: Arc<Mutex<Option<String>>>,
+    /// The open project; None: the start screen.
+    pub(super) project: Arc<Mutex<Option<Opened>>>,
     pub(super) root: PathBuf,
     pub(super) files: Files,
 }
@@ -110,7 +118,10 @@ pub(super) fn world(dir: &Path, script: Script) -> (Parts, World) {
         screen_requests,
         probes: Arc::default(),
         probe_writes: Arc::new(Mutex::new(Some(probe_report()))),
-        project: Arc::new(Mutex::new(Some("project-1".into()))),
+        project: Arc::new(Mutex::new(Some(Opened {
+            id: "project-1".into(),
+            file: dir.join("project-1.klipolo"),
+        }))),
         root: dir.join("Recordings"),
         files: Files {
             dir: dir.join("recorder"),

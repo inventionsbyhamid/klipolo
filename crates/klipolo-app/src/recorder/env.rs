@@ -7,6 +7,7 @@ use std::sync::Arc;
 use klipolo_capture::backend::IndicatorPlace;
 use klipolo_capture::protocol::Event;
 use klipolo_capture::session::{ImportTarget, SessionDir};
+use klipolo_model::coded::CodedError;
 use klipolo_platform::clock::Clock;
 
 use super::launch::Launch;
@@ -28,8 +29,14 @@ pub struct Done {
     pub dir: SessionDir,
     /// The open project when it was armed, or a new one (`ImportTarget::New`).
     pub target: ImportTarget,
+    /// That project's file, as it was open when the take was armed: the take lands there even when another project is
+    /// open by then.
+    pub project_file: Option<PathBuf>,
     /// The worker didn't finish it: repair it from its files first.
     pub recover: bool,
+    /// What the person is told about how it ended, with the landed take (`capture.note.savedFromFiles` when the worker
+    /// stopped while saving), when nothing has said it already.
+    pub note: Option<CodedError>,
 }
 
 /// What the recorder works with.

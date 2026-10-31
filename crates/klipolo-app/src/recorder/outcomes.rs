@@ -148,7 +148,9 @@ pub(super) fn done(take: &Take, recover: bool) -> Done {
         id: take.cfg.id.clone(),
         dir: take.dir.clone(),
         target: take.cfg.target.clone(),
+        project_file: take.project_file.clone(),
         recover,
+        note: None,
     }
 }
 

@@ -50,6 +50,10 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 ts-rs = "12"
 uuid = { version = "1", features = ["v4"] }
 
+[target.'cfg(unix)'.dependencies]
+# The local date a take's new project is named for ("Recording, Oct 31": `localtime_r`).
+libc = "0.2"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 # The Keychain (generic passwords) for the Meta key and the relay token; the version the lockfile already has.
 security-framework = "3.7"

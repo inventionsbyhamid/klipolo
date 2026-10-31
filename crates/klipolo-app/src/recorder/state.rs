@@ -48,10 +48,18 @@ pub(super) struct Parts {
     pub(super) files: Option<Files>,
     /// Where takes are made; None: no videos folder.
     pub(super) root: Option<PathBuf>,
-    /// The open project's id; None on the start screen.
-    pub(super) open_project: Box<dyn Fn() -> Option<String> + Send + Sync>,
+    /// The open project; None on the start screen.
+    pub(super) open_project: Box<dyn Fn() -> Option<Opened> + Send + Sync>,
     /// A thread ticks the supervisor (the app); tests tick it themselves.
     pub(super) ticker: bool,
+}
+
+/// The project open when a take is armed: the take lands there.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Opened {
+    pub(super) id: String,
+    /// Where it is saved, so the take can open it again should another be open by the time it lands.
+    pub(super) file: PathBuf,
 }
 
 /// The OS's capture backend, made on first use.
@@ -73,7 +81,7 @@ struct On {
     probe: Box<dyn Fn(&Path) + Send + Sync>,
     files: Option<Files>,
     root: Option<PathBuf>,
-    open_project: Box<dyn Fn() -> Option<String> + Send + Sync>,
+    open_project: Box<dyn Fn() -> Option<Opened> + Send + Sync>,
     /// What the Record dialog was opened with: arming plans from it rather than listing the devices again.
     last_setup: Mutex<Option<Shown>>,
     /// One encoder probe at a time.
@@ -184,16 +192,16 @@ impl RecorderState {
         let shown = shown.unwrap_or_else(|| {
             setup::recorder_setup(&*backend, files, Probing::Kept, None, false, false)
         });
-        let target = match (on.open_project)() {
-            Some(id) => ImportTarget::Project { id },
-            None => ImportTarget::New,
+        let (target, project_file) = match (on.open_project)() {
+            Some(Opened { id, file }) => (ImportTarget::Project { id }, Some(file)),
+            None => (ImportTarget::New, None),
         };
         let created_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_millis() as u64);
         let id = klipolo_model::ids::new_id();
         let (cfg, notes) = setup::plan(&shown, options, &id, target, created_ms)?;
-        on.recorder.arm(cfg, notes)
+        on.recorder.arm(cfg, notes, project_file)
     }
 
     /// One command to take `take`'s worker.
@@ -278,7 +286,13 @@ fn app_parts(app: &AppHandle) -> Parts {
         root: klipolo_platform::paths::recordings_root(),
         open_project: Box::new(move || {
             let state = projects.try_state::<ProjectSessionState>()?;
-            with_open(&state, |open| Ok(open.document.project().id.clone())).ok()
+            with_open(&state, |open| {
+                Ok(Opened {
+                    id: open.document.project().id.clone(),
+                    file: open.file.clone(),
+                })
+            })
+            .ok()
         }),
         ticker: true,
     }

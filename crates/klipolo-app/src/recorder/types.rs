@@ -4,6 +4,7 @@
 
 use klipolo_capture::protocol::Event;
 use klipolo_model::coded::CodedError;
+use klipolo_model::history::Snapshot;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -78,6 +79,27 @@ pub struct StoppedTake {
 pub struct RecorderEvent {
     pub take: String,
     pub event: Event,
+}
+
+/// The `recorder-imported` payload: take `take` landed as one undo step ("Add recording", `undo.record`), its clip
+/// last on the main track. Sent once the take is saved, before its `State Idle`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TakeImport {
+    /// The take's id (`ArmedTake.id`), which is also the recording's.
+    pub take: String,
+    pub recording_id: String,
+    /// The take's clip on the main track.
+    pub clip_id: String,
+    /// The project it landed in, open now: the one open when the take was armed (opened again when another was open by
+    /// then), or a new one ("Recording, Oct 31") for a take from the start screen.
+    pub snapshot: Snapshot,
+    /// What the person is told about the take: how it ended when that wasn't said already, the recorder's notes, then
+    /// the import's own.
+    pub notes: Vec<CodedError>,
+    /// Auto zoom items added after it, as a step of their own.
+    pub zooms: u32,
 }
 
 /// A privacy settings page of macOS's, which the recorder's permission steps open ("Open privacy settings").

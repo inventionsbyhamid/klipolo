@@ -19,6 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 
 use klipolo_capture::backend::{Backend, PresetId, ProbeReport};
+use klipolo_capture::encoder_pick::FALLBACK_NOTE;
 use klipolo_capture::preflight::{Fitted, RecorderSetup, check_folder, setup_with};
 use klipolo_capture::probe::{CameraChoice, ScreenChoice, camera_encoders_for, encoders_for};
 use klipolo_capture::session::{ImportTarget, SessionConfig};
@@ -148,6 +149,17 @@ fn kept(files: &Files) -> Option<ProbeReport> {
         return None;
     }
     Some(report)
+}
+
+/// A take recorded on another encoder than the one the probe chose (`capture.note.encoderFallback` among its notes):
+/// the probe's report is let go, so the next opening of the Record dialog measures again.
+pub(super) fn forget_stale_probe(files: &Files, notes: &[CodedError]) {
+    if notes.iter().any(|note| note.code == FALLBACK_NOTE) {
+        tracing::info!(
+            "recorder: a take fell back to another encoder, so the probe measures again"
+        );
+        forget(&files.probe());
+    }
 }
 
 /// Removes a file of the recorder's, if it is there.
