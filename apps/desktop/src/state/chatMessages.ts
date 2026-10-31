@@ -1,6 +1,8 @@
 import type { StoreApi } from 'zustand';
 import type { ChatFailureKind } from '../bindings/ChatFailureKind';
 import type { ChatMoment } from '../bindings/ChatMoment';
+import type { ChatPicture } from '../bindings/ChatPicture';
+import type { ChatPictureDrawn } from '../bindings/ChatPictureDrawn';
 import type { ChatProposal } from '../bindings/ChatProposal';
 import type { CodedError } from '../bindings/CodedError';
 
@@ -20,6 +22,25 @@ export interface ProposalPart {
   revision?: number;
   /** Open again after Apply was refused (not because the project moved): why, in one sentence, with Retry. */
   reason?: string;
+}
+
+/**
+ * Where a picture a reply asked for stands: being drawn, drawn (its card shows it with Use and Try again), being placed,
+ * placed (its Undo chip), failed to draw (why, with Try again), or gone (it can't be placed any more: why, and nothing
+ * to press).
+ */
+export type PictureState = 'drawing' | 'drawn' | 'placing' | 'placed' | 'failed' | 'gone';
+
+/** A picture in a reply, and what came of it. */
+export interface PicturePart {
+  picture: ChatPicture;
+  state: PictureState;
+  /** The latest picture drawn (Try again draws another). */
+  drawn?: ChatPictureDrawn;
+  /** Why it failed or is gone, or why Use was refused, in one sentence. */
+  reason?: string;
+  /** Placed: its undo label, and the revision Use made (its Undo chip works while that is the latest change). */
+  applied?: { undo: CodedError; revision: number };
 }
 
 /**
@@ -44,6 +65,8 @@ export type Message =
       /** Additions applied at once: their undo label and the revision they made (the Undo chip). */
       applied: { undo: CodedError; revision: number } | null;
       proposal: ProposalPart | null;
+      /** The pictures it asked for (stickers, title card backgrounds). */
+      pictures: PicturePart[];
     }
   | {
       id: string;
@@ -92,6 +115,10 @@ export interface ChatStore {
   newChat: () => void;
   apply: (messageId: string) => Promise<void>;
   discard: (messageId: string) => void;
+  /** Draws picture `pictureId` of reply `messageId` (again, for Try again). */
+  drawPicture: (messageId: string, pictureId: string) => Promise<void>;
+  /** Use: places the picture drawn, as one undo step. */
+  usePicture: (messageId: string, pictureId: string) => Promise<void>;
 }
 
 export type ChatSet = StoreApi<ChatStore>['setState'];

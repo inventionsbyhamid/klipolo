@@ -8,6 +8,7 @@ import { chatBridge } from '../bridge/chat';
 import { errorMessage } from '../lib/errors';
 import { findItem } from '../lib/timeline';
 import { session, staleMoments, withMessages, type ChatStore, type Message } from './chatMessages';
+import { pictureActions } from './chatPictures';
 import { dropStale, proposalActions, replaceOpen, showOpenProposal } from './chatProposals';
 import { usePlayback } from './playback';
 import { useProject } from './project';
@@ -161,7 +162,10 @@ export const useChat = create<ChatStore>((set, get) => {
           momentsStale: false,
           applied,
           proposal,
+          pictures: outcome.pictures.map((picture) => ({ picture, state: 'drawing' as const })),
         });
+        // Each picture it asked for is drawn now, for its card.
+        for (const picture of outcome.pictures) void get().drawPicture(id, picture.id);
       } catch (error) {
         if (!live()) return;
         // Its times were on a revision the project left: sent again it would be refused again, so it says to ask anew.
@@ -190,6 +194,7 @@ export const useChat = create<ChatStore>((set, get) => {
     },
 
     ...proposalActions(set, get),
+    ...pictureActions(set, get),
   };
 });
 

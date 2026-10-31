@@ -4,6 +4,7 @@ import { openSettings } from '../../ai/aiStatus';
 import { SpriteIcon } from '../../design/SpriteIcon';
 import { useChat, type Message } from '../../state/chat';
 import { Moments } from './Moments';
+import { PictureCard } from './PictureCard';
 import { ProposalCard } from './ProposalCard';
 import { UndoChip } from './UndoChip';
 
@@ -13,7 +14,7 @@ const SETTINGS = new Set(['budget', 'refused', 'needsKey']);
 /**
  * One message: the person's in a paper bubble on the right; Klipolo's as plain text (already without em
  * en dashes: Rust cleaned it), then what couldn't be done, its questions, the Undo chip under additions it applied,
- * its proposal card and its moments. A failure says what happened, with Retry (busy, network, a server error, this Mac
+ * its proposal card, the pictures it asked for and its moments. A failure says what happened, with Retry (busy, network, a server error, this Mac
  * not registered) or Open Settings (credit, a refused key or code); a message too long for chat, one the AI declined
  * (its words are back in the box to reword), or one whose times the project left (it says to ask again), offers
  * neither. The project is untouched.
@@ -53,6 +54,9 @@ export const ChatMessage = memo(function ChatMessage({ message: m }: { message: 
       ))}
       {m.applied && <UndoChip undo={m.applied.undo} revision={m.applied.revision} />}
       {m.proposal && <ProposalCard message={m} />}
+      {m.pictures.map((part) => (
+        <PictureCard key={part.picture.id} messageId={m.id} part={part} />
+      ))}
       <Moments moments={m.moments} revision={m.revision} stale={m.momentsStale} />
     </div>
   );

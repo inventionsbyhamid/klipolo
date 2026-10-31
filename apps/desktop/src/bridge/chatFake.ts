@@ -1,5 +1,6 @@
 import type { ChatApplied } from '../bindings/ChatApplied';
 import type { ChatOutcome } from '../bindings/ChatOutcome';
+import type { ChatPictureDrawn } from '../bindings/ChatPictureDrawn';
 import type { ChatProposal } from '../bindings/ChatProposal';
 import type { ChatReply } from '../bindings/ChatReply';
 import type { ChatRequest } from '../bindings/ChatRequest';
@@ -16,6 +17,9 @@ export interface FakeChatScript {
   reply: (request: ChatRequest) => ChatOutcome | Promise<ChatOutcome>;
   apply?: (proposalId: string) => ChatApplied | Promise<ChatApplied>;
   undoLast?: (revision: number) => SnapshotPatch | Promise<SnapshotPatch>;
+  /** Drawing a picture (else it is gone); Use (else it is gone). */
+  drawPicture?: (pictureId: string) => ChatPictureDrawn | Promise<ChatPictureDrawn>;
+  usePicture?: (pictureId: string) => ChatApplied | Promise<ChatApplied>;
 }
 
 /** A fake chat bridge and what it was asked. */
@@ -26,7 +30,13 @@ export type FakeChat = ChatBridge & {
   resets: number;
   /** The revisions the Undo chip asked to take back. */
   undone: number[];
+  /** The pictures asked to be drawn, and used, in order. */
+  drawn: string[];
+  used: string[];
 };
+
+/** Said for a picture the fake has no answer for. */
+const PICTURE_GONE = 'That picture is gone. Ask me for it again.';
 
 /** A chat bridge that answers from `script` (tests; a development build's fake chat). */
 export function fakeChat(script: FakeChatScript): FakeChat {
@@ -36,6 +46,8 @@ export function fakeChat(script: FakeChatScript): FakeChat {
     discarded: [],
     resets: 0,
     undone: [],
+    drawn: [],
+    used: [],
     send: async (request) => {
       fake.requests.push(request);
       const outcome = await script.reply(request);
@@ -61,6 +73,16 @@ export function fakeChat(script: FakeChatScript): FakeChat {
       if (useProject.getState().snapshot?.history.revision !== revision)
         throw new Error('That change is no longer the last one.', { cause: { code: 'project.moved', params: {} } });
       return bridge.undo();
+    },
+    drawPicture: async (pictureId) => {
+      fake.drawn.push(pictureId);
+      if (!script.drawPicture) throw new Error(PICTURE_GONE, { cause: PICTURE_GONE });
+      return script.drawPicture(pictureId);
+    },
+    usePicture: async (pictureId) => {
+      fake.used.push(pictureId);
+      if (!script.usePicture) throw new Error(PICTURE_GONE, { cause: PICTURE_GONE });
+      return script.usePicture(pictureId);
     },
   };
   return fake;
