@@ -154,8 +154,8 @@ impl Recorder {
             error
         };
         session::write_config(&dir, &cfg).map_err(|e| undo(words::set_up_failed(&e)))?;
-        let (worker, stdout, wait) = (self.spawn(slot, &args))
-            .map_err(|e| undo(words::worker_didnt_start(&e)))?;
+        let (worker, stdout, wait) =
+            (self.spawn(slot, &args)).map_err(|e| undo(words::worker_didnt_start(&e)))?;
         let generation = worker.generation;
         slot.take = Some(Take {
             dir,

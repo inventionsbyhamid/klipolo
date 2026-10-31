@@ -78,9 +78,11 @@ fn reopen_is_refused_during_a_take_and_flushes_first() {
         )
     };
     // An export runs: the restart would end it.
-    let exporting = rec
-        .state
-        .reopen(&|| true, || panic!("never saves"), || panic!("never restarts"));
+    let exporting = rec.state.reopen(
+        &|| true,
+        || panic!("never saves"),
+        || panic!("never restarts"),
+    );
     assert_eq!(
         code_of(&exporting.unwrap_err()),
         "capture.permission.reopenExporting"

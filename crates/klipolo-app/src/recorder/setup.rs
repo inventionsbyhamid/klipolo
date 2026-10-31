@@ -141,7 +141,9 @@ fn probe_report(files: &Files, probing: Probing<'_>) -> Option<ProbeReport> {
 fn kept(files: &Files) -> Option<ProbeReport> {
     let report = read_json::<ProbeReport>(&files.probe())?;
     if every_encoder_refused(&report) {
-        tracing::warn!("recorder: a kept probe report in which every encoder refused is measured again");
+        tracing::warn!(
+            "recorder: a kept probe report in which every encoder refused is measured again"
+        );
         forget(&files.probe());
         return None;
     }
@@ -153,7 +155,9 @@ fn forget(path: &Path) {
     match std::fs::remove_file(path) {
         Ok(()) => {}
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => tracing::warn!(%error, file = ?path.file_name(), "recorder: a file of its own wasn't removed"),
+        Err(error) => {
+            tracing::warn!(%error, file = ?path.file_name(), "recorder: a file of its own wasn't removed")
+        }
     }
 }
 

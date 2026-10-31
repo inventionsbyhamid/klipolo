@@ -173,7 +173,10 @@ fn a_kept_refused_report_is_measured_again_and_one_without_encoders_is_kept() {
     }
     std::fs::create_dir_all(&rec.files.dir).unwrap();
     std::fs::write(rec.files.probe(), serde_json::to_vec(&refused).unwrap()).unwrap();
-    assert!(!rec.state.setup().unwrap().offers.is_empty(), "measured now");
+    assert!(
+        !rec.state.setup().unwrap().offers.is_empty(),
+        "measured now"
+    );
     assert_eq!(rec.probes.load(Ordering::SeqCst), 1);
 
     let rec = fixture();
