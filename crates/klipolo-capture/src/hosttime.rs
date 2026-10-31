@@ -14,8 +14,7 @@
 //! (`klipolo_platform::clock::host_ns`): the session clock places samples by it, drift fitting reads it, and the core
 //! cuts runs where it shows frames were lost. Sound devices report their own instants: CoreAudio's `mHostTime` (macOS)
 //! and WASAPI's QPC positions (Windows) are on the host clock already, but a device whose clock sits more than 5 s from
-//! the host's (a driver's bogus epoch) is re-based onto it (`Rebase`), so a stamp is never far in the past or the future
-//!.
+//! the host's (a driver's bogus epoch) is re-based onto it (`Rebase`), so a stamp is never far in the past or the future.
 
 use std::time::Duration;
 

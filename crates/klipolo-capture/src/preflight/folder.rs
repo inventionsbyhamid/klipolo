@@ -73,7 +73,8 @@ fn measure(root: &Path, path: &Path) -> io::Result<FolderCheck> {
 
 impl RecorderSetup {
     /// The recordings folder can't hold a take's lock (`FolderCheck::locks`: some SMB shares): refused up front with
-    /// `capture.preflight.networkFolder`, among the drive's notes (network drives aren't supported).
+    /// `capture.preflight.networkFolder`, among the drive's notes (network drives aren't
+    /// supported).
     pub fn refuse_folder(&mut self) {
         let note = msg!("capture.preflight.networkFolder");
         if !self.notes.contains(&note) {

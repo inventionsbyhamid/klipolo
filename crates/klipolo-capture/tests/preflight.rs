@@ -246,7 +246,6 @@ fn preflight_notes_come_in_order_and_a_network_folder_is_refused() {
 }
 
 /// The person's own mic is picked while it is connected; one that isn't is named, never replaced silently.
-/// wired by the app later).
 #[test]
 fn the_person_s_saved_mic_is_picked_and_a_missing_one_is_named() {
     let mic = |id: &str, name: &str| DeviceInfo {

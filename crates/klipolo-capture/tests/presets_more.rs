@@ -1,5 +1,4 @@
-//! The camera on the screen's encoder, launchers and a profile's
-//! preset.
+//! The presets' finer rules: the camera on the screen's encoder, launchers and a profile's preset.
 
 use klipolo_capture::backend::{EncoderResult, PresetId, ProbeReport};
 use klipolo_capture::games::{AppFacts, looks_like_game};

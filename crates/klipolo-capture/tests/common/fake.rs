@@ -1,4 +1,4 @@
-//! The fakes: a finished take's folder and manifest (`manifest_with`), the app's media probe (`probe_ok`), a
+//! The import tests' fakes: a finished take's folder and manifest (`manifest_with`), the app's media probe (`probe_ok`), a
 //! T2 Mac's probe (`t2_report`), and a backend that counts every call that could capture (`FakeCounting`).
 
 use std::path::{Path, PathBuf};

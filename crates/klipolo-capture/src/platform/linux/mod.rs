@@ -1,5 +1,4 @@
-//! The Linux backend. It can't record yet; its tasks fill it in (compiled and fake-tested in CI, verified on a Linux
-//! desktop at L):
+//! The Linux backend. It can't record yet (compiled and fake-tested in CI). What it needs:
 //! - the worker shell (StatusNotifierItem tray, GlobalShortcuts portal or X11 keys, power, focus, the parent
 //!   watch), game detection, preflight and mic listing from the PipeWire registry;
 //! - the ScreenCast portal and PipeWire video, and the X11 fallback;

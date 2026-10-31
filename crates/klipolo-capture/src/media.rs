@@ -78,7 +78,7 @@ pub struct PartialBlock {
 }
 
 impl PartialBlock {
-    /// `capture.note.soundBlock` ("A moment of sound was dropped."; milder than `capture.error.os`), with
+    /// `capture.note.soundBlock` ("A moment of sound was dropped.", milder than `capture.error.os`), with
     /// the block's shape for the log.
     pub fn coded(&self) -> klipolo_model::coded::CodedError {
         crate::english::msg!(

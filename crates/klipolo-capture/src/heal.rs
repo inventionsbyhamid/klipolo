@@ -19,7 +19,7 @@
 //! (`mic::Presence`, in the run controller's look, `run::own_mic`), and at most once per 30 s, so a flapping USB mic
 //! churns runs: the take stays on the fallback until it settles, with one mild `capture.note.micFlapping`. A mic back
 //! before any fallback (a blip) restarts at once. With nothing to fall back to, it restarts on every return, however
-//! however often it drops (`mic_dropping`: lost voice is worse than extra runs).
+//! often it drops (`mic_dropping`: lost voice is worse than extra runs).
 //!
 //! Waits are polled: `device_still_missing` and `still_blank` once a second. Notes the policy can't word itself are
 //! the session's: `capture.health.appQuit` (the app's name), `capture.health.micFallback` (both mics' names),
@@ -72,8 +72,8 @@ pub enum HealAction {
     WaitForDevice,
     /// Switch the mic to the built-in one, as a new run (the session notes `capture.health.micFallback`).
     FallbackMic,
-    /// The person's own mic is back after `FallbackMic`: switch to it again, as a new run (since
-    /// a gamer's USB mic is better than the built-in one; the session notes `capture.health.micBack`).
+    /// The person's own mic is back after `FallbackMic`: switch to it again, as a new run (a gamer's
+    /// USB mic is better than the built-in one; the session notes `capture.health.micBack`).
     SwitchBack,
     /// Flush and rebuild the same encoder, as a new run.
     RebuildEncoder,

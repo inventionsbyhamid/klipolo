@@ -180,7 +180,7 @@ fn a_restart_queued_behind_a_stop_from_the_menu_opens_nothing() {
     // The mic blips at 1 s and is back at 1.1 s: the heal restarts it, and its controller first closes the old stream,
     // which takes 600 ms here (a slow device teardown). The menu's Stop and Save comes at 1.4 s, meanwhile. The
     // restart queued ahead of that Stop must not open the mic again (the Stops the command
-    // never sees set the flag too).
+    // reader never sees set the flag too).
     let root = tempfile::tempdir().unwrap();
     let dir = common::harness::session(root.path(), &[Src::Screen, Src::Mic]);
     let fixture =

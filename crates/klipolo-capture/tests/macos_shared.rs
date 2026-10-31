@@ -238,7 +238,7 @@ fn the_picture_fits_the_captured_area_s_shape_inside_the_preset() {
 }
 
 /// A still screen still gets a keyframe a second, and a still cursor is sampled four times a second (at least
-/// carry: at least 2 Hz). Its re-feeds are `still`'s schedule (`tests/still_screen.rs`).
+/// 2 Hz). Its re-feeds are `still`'s schedule (`tests/still_screen.rs`).
 #[test]
 fn a_still_screen_gets_keyframes_and_a_still_cursor_beats() {
     const { assert!(CURSOR_BEAT_NS <= 500_000_000, "at least 2 Hz") };

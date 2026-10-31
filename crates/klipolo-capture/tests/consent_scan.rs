@@ -118,8 +118,8 @@ fn captures(file: &str) -> bool {
         "platform/macos/camera.rs",
         "platform/macos/preview.rs",
         // Screen Recording's own request (`CGRequestScreenCaptureAccess`): it runs only on the person's press of "Allow
-        // screen recording", through `Backend::request_screen_permission` (the app's caller is pinned
-        // below).
+        // screen recording", through `Backend::request_screen_permission` (the app's caller is
+        // pinned below).
         "platform/macos/screen_permission.rs",
         // The recorder's live view of the chosen screen or window: the one exception to capture only after a press.
         // It runs only while the recorder is open and in front and screen recording is already allowed

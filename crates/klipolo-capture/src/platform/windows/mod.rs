@@ -1,4 +1,4 @@
-//! The Windows backend. It can't record yet; its tasks fill it in (compiled in CI, verified on a Windows device at W):
+//! The Windows backend. It can't record yet (compiled in CI). What it needs:
 //! - the worker shell (notification-area item, HUD, `RegisterHotKey`, power, focus, the parent watch), the
 //!   picker, game detection, the privacy preflight and mic listing through `IMMDeviceEnumerator`;
 //! - Windows Graphics Capture, DXGI desktop duplication and NV12 on the GPU;

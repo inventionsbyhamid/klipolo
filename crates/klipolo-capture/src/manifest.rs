@@ -5,7 +5,7 @@
 //! - **Runs** come from `RunStarted` (each source's runs in run order). A run's duration is its file's measured length;
 //!   a run whose file has no measured length holds nothing and is left out, and so is a source with no runs.
 //! - **Placement.** Video carries its own times: a video run starts at its `RunStarted` offset, with no drift. A sound
-//!   run with at least 10 anchors is placed by its own drift line (`drift::fit`, one line per run: the session ends a
+//!   run with at least 10 anchors is placed by its own drift line (`drift::fit`, one line per run: the session ends a run
 //!   at an outage of 1 s or more). With fewer, or a line that fails the checks below, it starts at its first sample's
 //!   time with no drift and is `approximate`.
 //! - **A line that isn't one.** If a run's anchors lie on two lines (an outage the run wasn't split at), one line

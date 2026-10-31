@@ -34,7 +34,7 @@ pub const MAX_INPUT_LATENCY_NS: u64 = 500_000_000;
 /// its safety offset and the largest input stream's latency) at `rate` Hz: at most `MAX_INPUT_LATENCY_NS`, and 0 at a
 /// rate that isn't known. cpal stamps a block when the HAL had it (`mHostTime`), so the stamps move back by this.
 /// The safety offset is in the sum, as Cap's design has it; whether Core Audio's stamp already sits after it is
-/// for the clap check.
+/// for a clap test on a real Mac to show.
 pub fn latency_ns(device: u32, safety: u32, stream: u32, rate: f64) -> u64 {
     if !(rate.is_finite() && rate > 0.0) {
         return 0;
@@ -93,7 +93,7 @@ fn same_headset(mic: &DeviceInfo, output: &DeviceInfo) -> bool {
 }
 
 /// The person's own mic, back after a fallback, must stay listed this long before the take switches back to it, so
-/// fixes: a flapping USB mic never churns runs). A mic back before any fallback restarts at once (a blip).
+/// a flapping USB mic never churns runs. A mic back before any fallback restarts at once (a blip).
 pub const PRESENT_NS: u64 = 3_000_000_000;
 /// The take switches back from a fallback to the person's own mic at most this often.
 pub const SWITCH_BACK_EVERY_NS: u64 = 30_000_000_000;

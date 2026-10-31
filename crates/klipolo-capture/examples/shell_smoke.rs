@@ -1,11 +1,11 @@
-//! The smoke run on a Mac: the real worker shell (menu-bar item, HUD, shortcuts while armed, the take's power
+//! The worker shell's smoke run on a Mac: the real worker shell (menu-bar item, HUD, shortcuts while armed, the take's power
 //! activity), driven by a scripted session, with no capture and no prompt. It prints technical facts only: this
 //! process's own windows (count, level, size, on screen), whether the take's power assertion is held, timings and
 //! memory; never another app's window, a name, or anything on screen. The shortcuts are registered for about two
 //! seconds, while "armed". Run by hand, never in tests (the consent guard refuses under `KLIPOLO_TEST`):
 //! `cargo run -p klipolo-capture --features real-capture --example shell_smoke`.
 //!
-//! `-- quit` instead asks AppKit to terminate mid-take, as the system's quit event does (logout, Activity Monitor;
+//! `-- quit` instead asks AppKit to terminate mid-take, as the system's quit event does (logout, Activity
 //! Monitor): the session should get the menu's Stop, and the process should end with the session's own code
 //! (3 here, never AppKit's 0). `-- quit-stuck`: a session that never ends; the process ends with 1 after 10 s.
 

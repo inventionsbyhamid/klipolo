@@ -13,7 +13,7 @@
 //! second whether the device is listed again (by name: the OS's registry, which opens nothing) and sends `DeviceBack`
 //! the first time it is. The session then restarts the pipe on the person's own mic, so a USB blip doesn't move the
 //! take to another mic, and a computer with no other mic gets its voice back. (The 3 s presence wait is only for
-//! switching back from a fallback, which the run controller looks after: `run::own_mic`.)
+//! switching back from a fallback, which the pipe's controller looks after: `run::own_mic`.)
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};

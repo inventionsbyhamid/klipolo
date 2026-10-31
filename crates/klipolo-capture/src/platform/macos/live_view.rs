@@ -16,8 +16,8 @@
 //!
 //! **A new view size** (`resize`) is applied to the running stream (`updateConfiguration:`), never by opening another:
 //! a smaller picture's lower rate at once, a bigger one's higher rate once the stream has taken it. One the stream
-//! didn't answer in time leaves its picture unknown, so the worker's next try always applies it
-//! never left big while the view is small). The big pictures' pixels a second are this computer's
+//! didn't answer in time leaves its picture unknown, so the worker's next try always applies it (never
+//! left big while the view is small). The big pictures' pixels a second are this computer's
 //! (`live_view_size::this_computer_s_pixel_rate`: about 720p at 15 on an Intel Mac).
 //!
 //! **Its end:** a stream that stops by itself, or whose target goes, drops the frames' sender (shared through an

@@ -1,7 +1,6 @@
 #![cfg(feature = "synthetic")]
-//! More recovery cases: progress and cancel, one bad run never
-//! stopping the take, a head checked against the journal's stream, and a crashed sound run's levels (read only after
-//! The last tick).
+//! Recovery's finer rules: progress and cancel, one bad run never stopping the take, a head checked against the
+//! journal's stream, and a crashed sound run's levels (read only after the last tick).
 // No test in this file may spawn a process (klipolo-platform's SPAWN; see recover_rules.rs).
 mod common;
 

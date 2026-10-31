@@ -13,7 +13,7 @@
 //! - `sck`: ScreenCaptureKit's pacing, stop codes, picture size, sound, cursor and still-screen rules;
 //! - `shared_stream`: a screen's stream start as the sound that shares it waits on it;
 //! - `sleep`: how long the computer slept, by the wall clock;
-//! - `still`: the screen encoder thread's schedule: re-feeds, nudges, a pipe-sourced cursor's heartbeat);
+//! - `still`: the screen encoder thread's schedule: re-feeds, nudges, a pipe-sourced cursor's heartbeat;
 //! - `vt_ids`: which VideoToolbox encoders run apart from the GPU, and on which engine.
 
 pub mod camera;

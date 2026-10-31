@@ -4,7 +4,7 @@
 //! probe saw refuse (0 fps) comes last but is still tried: the probe may have run at a bad moment. So a take records
 //! video while any encoder works.
 //!
-//! The camera's list (`camera_encoders_for`) follows the same rule for the camera preset, with the rule that
+//! The camera's list (`camera_encoders_for`) follows the same rule for the camera preset, given that
 //! a shared encoder is one physical engine: an encoder on the screen's engine holds the camera only if it holds both
 //! together (`keeps_both`, as `decide` fits them), and one on another engine comes first, as `decide` prefers.
 

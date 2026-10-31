@@ -1,4 +1,4 @@
-//! The macOS backend. Its tasks fill it in:
+//! The macOS backend:
 //! - what this Mac can record and may record, with no capture and no prompts: `displays`, `devices`
 //!   (cameras by AVFoundation's discovery, mics and the output from Core Audio), `apps` (the app picker and game
 //!   detection) and `permissions`;
@@ -15,7 +15,7 @@
 //!   `camera`, each buffer through `camera_feed`, its notices in `camera_notices`) and Check camera's preview
 //!   (`preview`);
 //! - the camera bubble (`bubble`), fed by the take's own camera session;
-//! - live view (here): the recorder's view of the chosen screen or window (`live_view`), with the take's own
+//! - the recorder's live view of the chosen screen or window (`live_view`), with the take's own
 //!   filter and Check camera's JPEG (`jpeg`);
 //! - the cursor as its own layer (`cursor`: the mouse-only monitor, the shapes, the self-check and its
 //!   sampled fallback), with the system cursor left out of the frames and put back live (`screen`).

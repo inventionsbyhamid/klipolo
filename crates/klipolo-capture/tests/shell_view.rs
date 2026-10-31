@@ -124,7 +124,7 @@ fn the_menu_lists_the_sources_then_what_the_person_can_do() {
     assert_eq!(menu_lines(&view(WorkerState::Armed), &w)[2..], ["Cancel"]);
     assert_eq!(menu_actions(WorkerState::Armed), [MenuAction::Stop]);
     assert_eq!(menu_actions(WorkerState::Countdown), [MenuAction::Stop]);
-    // Saving: nothing to press.
+    // Saving: nothing to press, Start over included.
     assert!(menu_actions(WorkerState::Stopping).is_empty());
     assert!(menu_actions(WorkerState::Ready).is_empty());
 }
