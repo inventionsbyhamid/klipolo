@@ -205,8 +205,8 @@ function CutList({ proposal }: { proposal: ChatProposal }) {
  * Escape discards. Applied, it collapses to the applied row with its Undo chip; discarded, to "Discarded."; dropped
  * (the project changed while it was open), or replaced (a newer proposal came: one is open at a time), to a sentence
  * that says so. An Apply refused for another reason leaves it open, saying why, its Apply now Retry. An Apply Rust made
- * that the page couldn't take in closes it with a sentence that says to reopen the project. When it collapses with the keyboard in it, the
- * keyboard goes back to the chat box.
+ * that the page couldn't take in closes it with a sentence that says to reopen the project. When it collapses with the
+ * keyboard in it, the keyboard goes back to the chat box.
  */
 export function ProposalCard({ message: m }: { message: ReplyMessage }) {
   const { t } = useLingui();
