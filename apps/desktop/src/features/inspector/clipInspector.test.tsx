@@ -212,6 +212,23 @@ describe('the clip card', () => {
     expect(vi.mocked(engine.preview).mock.calls.at(-1)).toEqual(['project', 3, ops]);
   });
 
+  it('Escape during a Fill focus drag closes the card: nothing is committed and the frame goes back', async () => {
+    renderWithProviders(<Inspector format="portrait" />);
+    const across = await screen.findByRole('slider', { name: 'Focus across' });
+    const root = track(across);
+    fireEvent.pointerDown(root, { button: 0, pointerId: 1, clientX: 60 });
+    fireEvent.pointerMove(root, { pointerId: 1, clientX: 30 });
+    await waitFor(() => expect(engine.preview).toHaveBeenCalled());
+    fireEvent.keyDown(across, { key: 'Escape' });
+    expect(useSelection.getState().selectedId).toBeNull();
+    expect(screen.queryByRole('slider', { name: 'Focus across' })).toBeNull();
+    // The dry run is cleared, and the release that comes later commits nothing.
+    expect(engine.previewClear).toHaveBeenCalled();
+    fireEvent.pointerUp(document.body, { pointerId: 1, clientX: 30 });
+    await act(() => new Promise((r) => setTimeout(r, 40)));
+    expect(apply).not.toHaveBeenCalled();
+  });
+
   it('a video taller than the frame moves its Fill focus down', async () => {
     const snapshot = fixtureSnapshot();
     snapshot.project.timeline.main.push({ ...snapshot.project.timeline.main[1], id: 'tall' });
