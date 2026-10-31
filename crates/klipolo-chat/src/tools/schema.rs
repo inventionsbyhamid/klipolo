@@ -43,6 +43,15 @@ pub(super) fn nullable_seconds(description: &str) -> Value {
     json!({"type": ["number", "null"], "description": description})
 }
 
+/// A number that isn't seconds (a volume), or null.
+pub(super) fn nullable_number(description: &str) -> Value {
+    json!({"type": ["number", "null"], "description": description})
+}
+
+pub(super) fn nullable_boolean(description: &str) -> Value {
+    json!({"type": ["boolean", "null"], "description": description})
+}
+
 pub(super) fn string(description: &str) -> Value {
     json!({"type": "string", "description": description})
 }

@@ -41,6 +41,8 @@ pub enum Problem {
     Empty,
     /// A number of seconds outside `min..=max`.
     OutOfRange { min: f64, max: f64, got: f64 },
+    /// A number that isn't seconds (a volume) outside `min..=max`.
+    NotWithin { min: f64, max: f64, got: f64 },
     /// An end at or before its start: the start's field and both values as given.
     NotAfter {
         start_field: String,
@@ -80,6 +82,13 @@ impl fmt::Display for ToolError {
             Problem::OutOfRange { min, max, got } => write!(
                 f,
                 "{tool}: {field} must be between {} and {} seconds{}.",
+                said_secs(*min),
+                said_secs(*max),
+                given(*got)
+            ),
+            Problem::NotWithin { min, max, got } => write!(
+                f,
+                "{tool}: {field} must be between {} and {}{}.",
                 said_secs(*min),
                 said_secs(*max),
                 given(*got)

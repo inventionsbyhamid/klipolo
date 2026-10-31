@@ -485,6 +485,61 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
         ToolCall::FollowSubject { description } | ToolCall::BlurObjects { description } => {
             json!({"description": description})
         }
+        ToolCall::AddMusic {
+            file,
+            volume,
+            duck,
+            at_us,
+        } => json!({"file": file, "volume": volume, "duck": duck, "atSec": at_us.map(s)}),
+        ToolCall::AddSound { name, at_us } => {
+            json!({"name": name, "atSec": at_us.iter().map(|&t| s(t)).collect::<Vec<_>>()})
+        }
+        ToolCall::AddText {
+            text,
+            preset,
+            at_us,
+            duration_us,
+        } => json!({
+            "text": text,
+            "preset": preset.key(),
+            "atSec": at_us.map(s),
+            "durationSec": duration_us.map(s),
+        }),
+        ToolCall::AddImage {
+            file,
+            size,
+            position,
+            at_us,
+            duration_us,
+        } => json!({
+            "file": file,
+            "size": size.map(|x| x.key()),
+            "position": position.map(|x| x.key()),
+            "atSec": at_us.map(s),
+            "durationSec": duration_us.map(s),
+        }),
+        ToolCall::MakeSticker {
+            prompt,
+            position,
+            at_us,
+            duration_us,
+        } => json!({
+            "prompt": prompt,
+            "position": position.map(|x| x.key()),
+            "atSec": at_us.map(s),
+            "durationSec": duration_us.map(s),
+        }),
+        ToolCall::MakeTitleCard {
+            title,
+            prompt,
+            at_us,
+            duration_us,
+        } => json!({
+            "title": title,
+            "prompt": prompt,
+            "atSec": at_us.map(s),
+            "durationSec": duration_us.map(s),
+        }),
         ToolCall::AskUser { question } => json!({"question": question}),
         ToolCall::CannotDo { reason } => json!({"reason": reason}),
     };
@@ -627,6 +682,27 @@ mod tests {
             ),
             ("setCaptions", json!({"on": true, "style": "karaoke"})),
             ("followSubject", json!({"description": "woman astronaut"})),
+            (
+                "addMusic",
+                json!({"file": "lofi", "volume": null, "duck": true, "atSec": 0.0}),
+            ),
+            ("addSound", json!({"name": "whoosh", "atSec": [12.8, 23.0]})),
+            (
+                "addText",
+                json!({"text": "Day 1", "preset": "title-card", "atSec": 0.0, "durationSec": 3.0}),
+            ),
+            (
+                "addImage",
+                json!({"file": "logo", "size": "small", "position": "top-right", "atSec": null, "durationSec": null}),
+            ),
+            (
+                "makeSticker",
+                json!({"prompt": "paper plane", "position": null, "atSec": 67.0, "durationSec": 5.0}),
+            ),
+            (
+                "makeTitleCard",
+                json!({"title": "Day 1", "prompt": "trams", "atSec": 0.0, "durationSec": null}),
+            ),
         ];
         for (name, args) in written {
             let call = ToolCall::parse(&FunctionCall {

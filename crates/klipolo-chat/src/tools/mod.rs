@@ -15,13 +15,14 @@
 //! the model. Where the meaning is clear it reads leniently: no arguments at all for a tool that takes none, a nullable
 //! value left out, text with stray spaces.
 //!
-//! Adding a tool (the media tools later) is one `ToolCall` variant and one entry in `TOOLS`, where its name,
-//! description, parameters and reader sit together; the tests check every schema is strict and every reader reads
-//! the fields its schema lists. Splitting by concern: `schema` (the pieces of a schema, and the words a tool takes),
-//! `args` (a call's arguments read field by field), `error` (why a call couldn't be read).
+//! Adding a tool is one `ToolCall` variant and one entry in `TOOLS`, where its name, description, parameters and reader
+//! sit together; the tests check every schema is strict and every reader reads the fields its schema lists. Splitting
+//! by concern: `schema` (the pieces of a schema, and the words a tool takes), `args` (a call's arguments read field by
+//! field), `error` (why a call couldn't be read), `media` (the media tools and their words).
 
 mod args;
 mod error;
+pub mod media;
 mod schema;
 
 use std::ops::RangeInclusive;
@@ -35,6 +36,7 @@ use serde_json::{Map, Value, json};
 
 use args::{Args, kind};
 pub use error::{Problem, ToolError};
+pub use media::{PictureSize, Position, TitlePreset};
 use schema::{boolean, list, nullable_seconds, nullable_words, object, seconds, string, words};
 
 /// One tool call as the model made it, whichever provider ran the model: its adapter maps the provider's call into
@@ -94,6 +96,45 @@ pub enum ToolCall {
     FollowSubject { description: String },
     /// Blur the one kind of thing `description` names (a short noun phrase) wherever it shows.
     BlurObjects { description: String },
+    /// Play the library's music `file` (a name, not yet resolved) from `at_us` (None: the playhead) to the video's
+    /// end; `volume` None is the default, `duck` None is on.
+    AddMusic {
+        file: String,
+        volume: Option<f64>,
+        duck: Option<bool>,
+        at_us: Option<Us>,
+    },
+    /// Play the library's sound `name` at each of `at_us` (at least one).
+    AddSound { name: String, at_us: Vec<Us> },
+    /// Show `text` in title template `preset` from `at_us` (None: the playhead) for `duration_us` (None: the default).
+    AddText {
+        text: String,
+        preset: TitlePreset,
+        at_us: Option<Us>,
+        duration_us: Option<Us>,
+    },
+    /// Show the library's picture `file`; None for what the person left unsaid.
+    AddImage {
+        file: String,
+        size: Option<PictureSize>,
+        position: Option<Position>,
+        at_us: Option<Us>,
+        duration_us: Option<Us>,
+    },
+    /// Have a sticker of `prompt` drawn, to place once it exists.
+    MakeSticker {
+        prompt: String,
+        position: Option<Position>,
+        at_us: Option<Us>,
+        duration_us: Option<Us>,
+    },
+    /// Show `title` in the title card template, over a background of `prompt` drawn for it.
+    MakeTitleCard {
+        title: String,
+        prompt: String,
+        at_us: Option<Us>,
+        duration_us: Option<Us>,
+    },
     /// Undo the last change.
     Undo,
     /// Ask the person `question` before doing anything more.
@@ -154,6 +195,12 @@ impl ToolCall {
             ToolCall::FindMoments { .. } => "findMoments",
             ToolCall::FollowSubject { .. } => "followSubject",
             ToolCall::BlurObjects { .. } => "blurObjects",
+            ToolCall::AddMusic { .. } => "addMusic",
+            ToolCall::AddSound { .. } => "addSound",
+            ToolCall::AddText { .. } => "addText",
+            ToolCall::AddImage { .. } => "addImage",
+            ToolCall::MakeSticker { .. } => "makeSticker",
+            ToolCall::MakeTitleCard { .. } => "makeTitleCard",
             ToolCall::Undo => "undo",
             ToolCall::AskUser { .. } => "askUser",
             ToolCall::CannotDo { .. } => "cannotDo",
@@ -465,6 +512,12 @@ const TOOLS: &[Tool] = &[
             })
         },
     },
+    media::ADD_MUSIC,
+    media::ADD_SOUND,
+    media::ADD_TEXT,
+    media::ADD_IMAGE,
+    media::MAKE_STICKER,
+    media::MAKE_TITLE_CARD,
     Tool {
         name: "undo",
         description: "Undo the last change.",

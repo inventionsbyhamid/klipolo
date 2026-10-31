@@ -414,7 +414,13 @@ impl Compiler<'_> {
                 ToolCall::SplitAt { .. }
                 | ToolCall::SetFormat { .. }
                 | ToolCall::SetCaptions { .. }
-                | ToolCall::FixCaptionWords { .. } => {
+                | ToolCall::FixCaptionWords { .. }
+                | ToolCall::AddMusic { .. }
+                | ToolCall::AddSound { .. }
+                | ToolCall::AddText { .. }
+                | ToolCall::AddImage { .. }
+                | ToolCall::MakeSticker { .. }
+                | ToolCall::MakeTitleCard { .. } => {
                     (self.addition(&adding.work, call), Removal::Moved(call))
                 }
             };

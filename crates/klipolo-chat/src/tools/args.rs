@@ -123,6 +123,93 @@ impl Args {
         })
     }
 
+    /// A timeline time, or None when it is null or left out.
+    pub(super) fn nullable_time(&mut self, key: &str) -> Result<Option<Us>, ToolError> {
+        match self.map.get(key) {
+            None | Some(Value::Null) => {
+                self.map.remove(key);
+                Ok(None)
+            }
+            Some(_) => self.time(key).map(Some),
+        }
+    }
+
+    /// A length in seconds within `bounds`, or None when it is null or left out.
+    pub(super) fn nullable_length(
+        &mut self,
+        key: &str,
+        bounds: &RangeInclusive<f64>,
+    ) -> Result<Option<Us>, ToolError> {
+        let Some(value) = self.take_nullable(key) else {
+            return Ok(None);
+        };
+        let secs = self.number(key, &value, "a number of seconds or null")?;
+        self.within(key, secs, bounds).map(Some)
+    }
+
+    /// A number within `bounds` that isn't seconds (a volume), or None when it is null or left out.
+    pub(super) fn nullable_number(
+        &mut self,
+        key: &str,
+        bounds: &RangeInclusive<f64>,
+    ) -> Result<Option<f64>, ToolError> {
+        let Some(value) = self.take_nullable(key) else {
+            return Ok(None);
+        };
+        let n = self.number(key, &value, "a number or null")?;
+        if bounds.contains(&n) {
+            Ok(Some(n))
+        } else {
+            Err(self.error(
+                key,
+                Problem::NotWithin {
+                    min: *bounds.start(),
+                    max: *bounds.end(),
+                    got: n,
+                },
+            ))
+        }
+    }
+
+    /// True or false, or None when it is null or left out.
+    pub(super) fn nullable_flag(&mut self, key: &str) -> Result<Option<bool>, ToolError> {
+        match self.take_nullable(key) {
+            None => Ok(None),
+            Some(Value::Bool(b)) => Ok(Some(b)),
+            Some(other) => Err(self.error(
+                key,
+                Problem::WrongType {
+                    expected: "true, false or null",
+                    got: kind(&other),
+                },
+            )),
+        }
+    }
+
+    /// A list of timeline times, at least one, each named by its place (`atSec[1]`) when it is wrong.
+    pub(super) fn times(&mut self, key: &str) -> Result<Vec<Us>, ToolError> {
+        let value = self.take(key)?;
+        let Value::Array(items) = value else {
+            return Err(self.error(
+                key,
+                Problem::WrongType {
+                    expected: "a list",
+                    got: kind(&value),
+                },
+            ));
+        };
+        if items.is_empty() {
+            return Err(self.error(key, Problem::Empty));
+        }
+        let mut out = Vec::with_capacity(items.len());
+        for (i, item) in items.into_iter().enumerate() {
+            let at = format!("{key}[{i}]");
+            self.map.insert(at.clone(), item);
+            out.push(self.time(&at)?);
+        }
+        Ok(out)
+    }
+
     /// `removeSilences`' pause length: null, or seconds within `PAUSE_SECS`.
     pub(super) fn nullable_pause(&mut self, key: &str) -> Result<Option<Us>, ToolError> {
         let Some(value) = self.take_nullable(key) else {

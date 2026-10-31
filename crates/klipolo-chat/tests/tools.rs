@@ -5,11 +5,14 @@
 //! before `startSec`), `{}` for a tool without arguments, two calls in one answer. The spike's 12 requests come first,
 //! in this tool set's names and words (its `removeFillerWords` is `removeFillers`, `setCaptionStyle` with
 //! `karaoke_highlight` is `setCaptions` with `karaoke`, `setFormat` `9:16` is `portrait`); the rest cover the tools the
-//! spike did not have, with times from the clip A context fixture.
+//! spike did not have, the media tools last, with times from the clip A context fixture.
 
 use std::collections::BTreeSet;
 
-use klipolo_chat::tools::{CHAT_CAPTION_STYLES, FunctionCall, Moment, Problem, ToolCall, tools};
+use klipolo_chat::tools::{
+    CHAT_CAPTION_STYLES, FunctionCall, Moment, PictureSize, Position, Problem, TitlePreset,
+    ToolCall, tools,
+};
 use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
 use klipolo_model::ops::Edge;
 use klipolo_model::project::FormatKind;
@@ -192,6 +195,12 @@ fn every_tool_schema_is_strict() {
             "findMoments",
             "followSubject",
             "blurObjects",
+            "addMusic",
+            "addSound",
+            "addText",
+            "addImage",
+            "makeSticker",
+            "makeTitleCard",
             "undo",
             "askUser",
             "cannotDo",
@@ -216,7 +225,24 @@ fn every_tool_schema_is_strict() {
         .collect();
     assert_eq!(
         nullable,
-        ["removeSilences.minPauseSec", "setCaptions.style"]
+        [
+            "removeSilences.minPauseSec",
+            "setCaptions.style",
+            "addMusic.atSec",
+            "addMusic.duck",
+            "addMusic.volume",
+            "addText.atSec",
+            "addText.durationSec",
+            "addImage.atSec",
+            "addImage.durationSec",
+            "addImage.position",
+            "addImage.size",
+            "makeSticker.atSec",
+            "makeSticker.durationSec",
+            "makeSticker.position",
+            "makeTitleCard.atSec",
+            "makeTitleCard.durationSec",
+        ]
     );
 }
 
@@ -384,6 +410,58 @@ fn parses_each_tool_from_spike_shaped_calls() {
             vec![SetFormat {
                 format: FormatKind::Portrait,
                 keep_others: false,
+            }],
+        ),
+        (
+            "add lofi as background music, quieter when I talk",
+            vec![AddMusic {
+                file: "lofi-beat.mp3".into(),
+                volume: None,
+                duck: Some(true),
+                at_us: Some(0),
+            }],
+        ),
+        (
+            "a whoosh at every topic change, and a title 'Day 1' for 3 seconds at the start",
+            vec![
+                AddSound {
+                    name: "Whoosh".into(),
+                    at_us: vec![secs_to_us(12.8), secs_to_us(23.0), secs_to_us(51.5)],
+                },
+                AddText {
+                    text: "Day 1".into(),
+                    preset: TitlePreset::TitleCard,
+                    at_us: Some(0),
+                    duration_us: Some(secs_to_us(3.0)),
+                },
+            ],
+        ),
+        (
+            "put the logo small in the top right",
+            vec![AddImage {
+                file: "logo.png".into(),
+                size: Some(PictureSize::Small),
+                position: Some(Position::TopRight),
+                at_us: None,
+                duration_us: None,
+            }],
+        ),
+        (
+            "add a sticker of a paper plane in the top right when she mentions flying",
+            vec![MakeSticker {
+                prompt: "paper plane".into(),
+                position: Some(Position::TopRight),
+                at_us: Some(secs_to_us(56.0)),
+                duration_us: None,
+            }],
+        ),
+        (
+            "make a title card saying Day 1 in Lisbon with trams behind it",
+            vec![MakeTitleCard {
+                title: "Day 1 in Lisbon".into(),
+                prompt: "Lisbon trams".into(),
+                at_us: None,
+                duration_us: None,
             }],
         ),
     ];
@@ -992,6 +1070,9 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "Not transcribed yet",
         "Still transcribing",
         "No scene log yet",
+        // The library: what the media tools add by name, the person's own and then the pack's.
+        "## Library",
+        "pack:",
     ] {
         assert!(prompt.contains(needle), "the prompt explains {needle:?}");
     }
@@ -1018,6 +1099,15 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "call blurObjects twice",
         "are proposals",
         "cannotDo",
+        // The media tools: names from the library, the song, music under the whole video, topic changes, the
+        // person's own words on screen, and Muse Image only for a picture the library lacks.
+        "a name from Library",
+        "\"The song\"",
+        "Background music starts at 0.0",
+        "topic and shot items",
+        "exact words",
+        "Muse Image",
+        "a null atSec is the playhead",
         "one or two short, plain, friendly sentences",
         "No markdown",
         "Never use em dashes or en dashes",
@@ -1088,6 +1178,6 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let prompt_tokens = klipolo_chat::estimate_tokens(prompt);
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
-    assert!(prompt_tokens <= 800, "prompt {prompt_tokens} tokens");
-    assert!(tools_tokens <= 1_800, "tools {tools_tokens} tokens");
+    assert!(prompt_tokens <= 900, "prompt {prompt_tokens} tokens");
+    assert!(tools_tokens <= 2_700, "tools {tools_tokens} tokens");
 }
