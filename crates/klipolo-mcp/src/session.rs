@@ -32,7 +32,7 @@ pub struct Session {
     pub id: String,
     /// The name its `initialize` gave (`client_name`).
     pub client: String,
-    /// Set by reading the summary, the context or the transcript; None until then.
+    /// Set by reading the context or the transcript; None until then.
     pub seen: Option<Seen>,
     /// When it was last used.
     pub used: Instant,
