@@ -6,8 +6,8 @@
 //!   folder (Muse Image's), paid for, whatever becomes of its card. A title card's background is drawn in the video's
 //!   primary format as it is when the drawing starts, and not at all once its title is gone;
 //! - `place` (Use) puts it in the project as one undo step from chat: a sticker where its job says once the picture is
-//!   there (`StickerPlacement`; nowhere when the moment it was for was cut meanwhile, said plainly), a background on a
-//!   new track just under its title's, for as long as the title shows.
+//!   there (`StickerPlacement`, the chat crate's `sticker_ops`: nowhere when the moment it was for was cut meanwhile,
+//!   said plainly), a background on a new track just under its title's, for as long as the title shows.
 //!
 //! A picture belongs to the project it was asked for: another project (or New chat) forgets it. Each one that comes
 //! back is counted into the session's spend, saved or not (one that can't be read or saved was still paid for).
@@ -21,7 +21,6 @@ use klipolo_model::layout::Layout;
 use klipolo_model::ops::{Op, Origin, TrackTarget};
 use klipolo_model::project::Asset;
 use klipolo_model::query::find_item;
-use klipolo_model::time::Us;
 use klipolo_model::timeline::{Item, ItemContent, TrackKind};
 use klipolo_model::{Project, Transaction};
 use serde::Serialize;
@@ -50,11 +49,10 @@ pub const BEHIND_THE_TITLE: &str = "Goes behind the title, for as long as it sho
 
 /// Where a sticker goes once it is drawn: the compiler's job, read again on the project as it is then.
 pub trait StickerPlacement: Send + Sync {
-    /// Its start and length on `project`; None when the moment it was for was cut while it was drawn.
-    fn placement(&self, project: &Project) -> Option<(Us, Us)>;
-
-    /// The ops that show `asset` from `start_us` for `duration_us`, at the job's size and place in the frame.
-    fn ops(&self, project: &Project, asset: &Asset, start_us: Us, duration_us: Us) -> Vec<Op>;
+    /// The ops that show `asset` on `project` where the job says, for as long, at its size and place in the frame, all
+    /// worked out on that one project; None when the moment it was for was cut while it was drawn (or is now at the
+    /// video's end).
+    fn ops(&self, project: &Project, asset: &Asset) -> Option<Vec<Op>>;
 }
 
 /// A picture a message asked for.
@@ -261,10 +259,8 @@ impl Pictures {
         };
         let p = &now.project;
         let (ops, tool) = match &ask {
-            PictureAsk::Sticker { placement, .. } => match placement.placement(p) {
-                Some((start, length)) => {
-                    (placement.ops(p, &made.asset, start, length), "makeSticker")
-                }
+            PictureAsk::Sticker { placement, .. } => match placement.ops(p, &made.asset) {
+                Some(ops) => (ops, "makeSticker"),
                 None => {
                     self.forget(id);
                     return Err(said(MOMENT_CUT));

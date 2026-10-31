@@ -5,7 +5,10 @@ use std::collections::BTreeMap;
 
 use common::*;
 use klipolo_model::layout::{resolve_rect, BoxN, Layout};
-use klipolo_model::media::image::{add_image_ops, image_rect, IMAGE_SIZE, IMAGE_US};
+use klipolo_model::media::image::{
+    add_image_ops, add_image_ops_at, corner_rect, image_rect, Spot, IMAGE_MARGIN, IMAGE_SIZE,
+    IMAGE_US,
+};
 use klipolo_model::media::music::{add_music_ops, is_music, MusicOpts};
 use klipolo_model::media::sound::add_sound_ops;
 use klipolo_model::media::text::{
@@ -164,6 +167,72 @@ fn an_image_is_medium_centred_for_5_s_and_attached() {
     let tall = image_rect(500, 4000, Landscape);
     assert!(tall.y >= 0.04 - 1e-9 && tall.h <= 0.92 + 1e-9);
     assert!(add_image_ops(&p, &whoosh(), 0).is_err());
+}
+
+#[test]
+fn a_picture_in_a_corner_keeps_to_each_formats_own_corner() {
+    // A 2:1 logo at a fifth of the width in the top right, placed in each primary in turn.
+    let mut p = fixture();
+    let logo = Asset {
+        width: 800,
+        height: 400,
+        ..p.asset("logo").unwrap().clone()
+    };
+    p.assets.retain(|a| a.id != "logo");
+    p.assets.push(logo.clone());
+    for primary in [Landscape, Portrait, Square] {
+        p.settings = Settings {
+            formats: vec![Landscape, Portrait, Square],
+            primary_format: primary,
+            ..p.settings.clone()
+        };
+        let ops = add_image_ops_at(&p, &logo, secs(1.0), 0.2, Spot::TopRight).unwrap();
+        let after = apply_ops(&p, &ops).unwrap();
+        let layout = &layer(&after, &added(&ops)).layout;
+        for format in [Landscape, Portrait, Square] {
+            let r = resolve_rect(layout, primary, format);
+            assert_eq!(
+                r,
+                corner_rect(800, 400, 0.2, Spot::TopRight, format),
+                "{primary:?} {format:?}"
+            );
+            let (cw, ch) = match format {
+                Landscape => (1920.0, 1080.0),
+                Portrait => (1080.0, 1920.0),
+                Square => (1080.0, 1080.0),
+            };
+            let area = if format == Portrait {
+                PORTRAIT_CLEAR
+            } else {
+                BoxN::FULL
+            };
+            let margin = IMAGE_MARGIN * 1080.0;
+            // A fifth of this format's width, 2:1, the margin in from the area's top and right.
+            assert!((r.w * cw - 0.2 * cw).abs() < 1e-6, "{format:?}: {r:?}");
+            assert!(
+                (r.w * cw - 2.0 * r.h * ch).abs() < 1e-6,
+                "{format:?}: {r:?}"
+            );
+            assert!(
+                ((area.x + area.w - r.x - r.w) * cw - margin).abs() < 1e-6,
+                "{format:?}: {r:?}"
+            );
+            assert!(
+                ((r.y - area.y) * ch - margin).abs() < 1e-6,
+                "{format:?}: {r:?}"
+            );
+            assert!(inside(r, area), "{format:?}: {r:?}");
+        }
+    }
+    // The middle is still as the library places it: only the primary's rect, the others derived.
+    let centre = add_image_ops_at(&p, &logo, 0, IMAGE_SIZE, Spot::Center).unwrap();
+    let after = apply_ops(&p, &centre).unwrap();
+    let layout = &layer(&after, &added(&centre)).layout;
+    assert!(layout.overrides.is_empty());
+    assert_eq!(layout.rect, image_rect(800, 400, p.settings.primary_format));
+    // A picture too tall for its corner is as tall as the area less the margins.
+    let tall = corner_rect(500, 4000, 0.35, Spot::BottomLeft, Portrait);
+    assert!(inside(tall, PORTRAIT_CLEAR), "{tall:?}");
 }
 
 #[test]

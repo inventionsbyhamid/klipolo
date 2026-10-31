@@ -433,8 +433,8 @@ fn finish(
         || !compiled.jobs.is_empty()
         || !compiled.questions.is_empty()
         || compiled.undo;
-    // An edit refused for the person (nothing to remove, a clip not analyzed yet, words on screen still to come): the
-    // text was written before it, and may say it was done. It is left out; what else was done is said plainly instead.
+    // An edit refused for the person (nothing to remove, a clip not analyzed yet): the text was written before it, and
+    // may say it was done. It is left out; what else was done is said plainly instead.
     let told_undone = (compiled.refusals.iter()).any(|r| {
         r.audience == Audience::Person && !matches!(calls[r.call_index], ToolCall::CannotDo { .. })
     });
@@ -491,6 +491,7 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         ToolCall::AddMusic { .. } => "The music is in.",
         ToolCall::AddSound { .. } => "The sound is in.",
         ToolCall::AddImage { .. } => "The picture is in.",
+        ToolCall::AddText { .. } => "The words are on screen.",
         ToolCall::MakeTitleCard { .. } => "The title is in.",
         ToolCall::MakeSticker { .. } => "The sticker is being drawn.",
         ToolCall::FollowSubject { .. } | ToolCall::BlurObjects { .. } => "Working on it.",
@@ -500,7 +501,7 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         ToolCall::SplitAt { .. } => "The clip is split.",
         ToolCall::TrimClip { .. } => "The clip is longer.",
         ToolCall::Undo => "Undone.",
-        // Shown on their own (moments, questions), or proposed, or never done (text still to come).
+        // Shown on their own (moments, questions), or proposed.
         _ => return None,
     })
 }
@@ -510,7 +511,8 @@ fn done_sentences(calls: &[ToolCall], compiled: &Compiled) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for (i, call) in calls.iter().enumerate() {
         let refused = compiled.refusals.iter().any(|r| r.call_index == i);
-        if refused || compiled.proposed_calls.contains(&i) {
+        // Proposed, or through but changing nothing (a format the video already has): not said as done.
+        if refused || compiled.proposed_calls.contains(&i) || compiled.unchanged.contains(&i) {
             continue;
         }
         if let Some(said) = done(call).filter(|said| !out.iter().any(|o| o == said)) {

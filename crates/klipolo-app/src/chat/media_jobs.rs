@@ -1,16 +1,16 @@
-//! The compiler's picture jobs as pictures to draw (`PictureAsk`): a sticker placed where `sticker_placement` says once
-//! it is drawn, with `picture_ops` at the job's size and place in the frame; a title card's background under its title
-//! layer (`pictures::background_ops`). This is the one place that reads the jobs' fields.
+//! The compiler's picture jobs as pictures to draw (`PictureAsk`): a sticker placed by `sticker_ops` once it is drawn
+//! (where `sticker_placement` says, at the job's size and place in the frame, as the library places a picture); a title
+//! card's background under its title layer (`pictures::background_ops`). This is the one place that reads the jobs'
+//! fields.
 
 use std::sync::Arc;
 
 use klipolo_chat::tools::Position;
-use klipolo_chat::{MakeSticker, picture_ops, sticker_placement};
+use klipolo_chat::{MakeSticker, sticker_ops};
 use klipolo_model::Project;
 use klipolo_model::ids::Id;
 use klipolo_model::ops::Op;
 use klipolo_model::project::Asset;
-use klipolo_model::time::Us;
 
 use super::pictures::{PictureAsk, StickerPlacement};
 
@@ -18,20 +18,8 @@ use super::pictures::{PictureAsk, StickerPlacement};
 struct Sticker(MakeSticker);
 
 impl StickerPlacement for Sticker {
-    fn placement(&self, project: &Project) -> Option<(Us, Us)> {
-        sticker_placement(project, &self.0)
-    }
-
-    fn ops(&self, project: &Project, asset: &Asset, start_us: Us, duration_us: Us) -> Vec<Op> {
-        let job = &self.0;
-        picture_ops(
-            project,
-            asset,
-            start_us,
-            duration_us,
-            job.size,
-            job.position,
-        )
+    fn ops(&self, project: &Project, asset: &Asset) -> Option<Vec<Op>> {
+        sticker_ops(project, &self.0, asset)
     }
 }
 
