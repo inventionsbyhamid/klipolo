@@ -1243,6 +1243,47 @@
   box-shadow: inset 0 0 0 2px var(--color-paper);
 }
 
+/* The music's volume line: green, 2 px, dipping where it ducks under speech. Its grip is a wider
+   invisible stroke, so the line is easy to take; the rest of the block still moves the music. */
+.tl-volume {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.tl-volume-line {
+  fill: none;
+  stroke: var(--color-lane-music);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.tl-volume-grip {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 10;
+  pointer-events: stroke;
+  cursor: ns-resize;
+}
+
+.tl-duck-tag {
+  position: absolute;
+  top: 3px;
+  right: 6px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-bay) 90%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-bay) 90%, transparent);
+  color: var(--color-lane-music);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  line-height: 15px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* "+N" more layers than the Overlays lane's rows hold. */
 .tl-more {
   position: sticky;

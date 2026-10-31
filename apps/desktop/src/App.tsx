@@ -6,6 +6,7 @@ import { Toaster } from './design/Toaster';
 import { TooltipProvider } from './design/Tooltip';
 import { useEditorShortcuts } from './features/command-palette/useEditorShortcuts';
 import { useFinderDrop } from './features/media/useFinderDrop';
+import { followSpeech } from './features/timeline/media/speech';
 import { useEngineSession } from './features/preview/useEngineSession';
 import { Timeline } from './features/timeline/Timeline';
 import { Chat } from './layout/Chat';
@@ -49,6 +50,8 @@ export function App() {
     keepPlayheadInVideo();
     clearRangeOnProjectSwitch();
     clearProposalOnProjectSwitch();
+    // The Music lane's dips: where someone speaks, asked again as the project changes.
+    followSpeech();
     // Until chat proposes cuts: Control Shift P shows a sample proposal (development builds only).
     if (import.meta.env.DEV) void import('./dev/sampleProposal').then((dev) => dev.listenForSampleProposal());
     void openProject();

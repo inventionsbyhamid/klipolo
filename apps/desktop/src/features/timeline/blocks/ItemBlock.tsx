@@ -23,6 +23,7 @@ import { BlockMedia } from '../media/BlockMedia';
 import type { BlockFiles } from '../media/blockFiles';
 import { usToPx } from '../scale';
 import { TrimHandles } from './TrimHandles';
+import { VolumeLine } from './VolumeLine';
 
 /** The icon before an overlay's name (T for text, the picture for an image). */
 const ICON: Partial<Record<LayerKind, LucideIcon>> = { text: Type, image: Image, video: Film, audio: Music };
@@ -206,6 +207,18 @@ export const ItemBlock = memo(function ItemBlock({
           pps={pps}
           height={height}
           waveToken={look === 'music' ? '--color-lane-music' : undefined}
+        />
+      )}
+      {/* Music's volume line, its dips under speech and the tag on the piece that reaches the video's end. */}
+      {!tiny && look === 'music' && content.type === 'audio' && (
+        <VolumeLine
+          id={id}
+          startUs={startUs}
+          durationUs={durationUs}
+          content={content}
+          pps={pps}
+          height={height}
+          tag={content.fadeOutUs > 0}
         />
       )}
       {!tiny && (
