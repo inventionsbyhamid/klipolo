@@ -513,6 +513,24 @@ describe('the take', () => {
     expect(rec().error).toBeNull();
   });
 
+  it('a_late_refused_cancel_never_stops_the_next_take', async () => {
+    const take = await pressed();
+    fake.emit(take, countdown(3));
+    const answer = deferred<void>();
+    fake.script.send = (_take, command) => (command.cmd === 'cancel' ? answer.promise : undefined);
+    const cancelling = rec().cancel();
+    // Its worker goes anyway, and the person presses Record again: the app runs the next take now.
+    fake.emit(take, state('idle'));
+    await rec().record();
+    expect(rec().take).toBe('take-2');
+    answer.reject(refusal('capture.error.unsupported'));
+    await cancelling;
+    // "Stop the running recording" would stop the next take: the cancelled one has gone already.
+    expect(fake.calls).not.toContain('stopRunning');
+    expect(rec().take).toBe('take-2');
+    expect(rec().error).toBeNull();
+  });
+
   it('a_take_that_fails_before_arming_answers_never_starts', async () => {
     await opened();
     const arming = deferred<ArmedTake>();

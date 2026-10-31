@@ -129,7 +129,8 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
   /**
    * Tells take `id` to end with `command`. A take that has gone already needs nothing more. Any other refusal falls back
    * to "Stop the running recording", which never starts capture; only if that fails too is it said, and never once a
-   * later Record was pressed.
+   * later Record was pressed. Once a later take is the dialog's, the app runs that one (one take at a time), so `id` has
+   * gone and nothing is stopped.
    */
   async function tell(id: string, command: 'cancel' | 'disarm' | 'stop') {
     const mine = presses;
@@ -137,6 +138,8 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
       await recorder.send(id, { cmd: command });
     } catch (error) {
       if (isCode(error, STALE)) return gone(id);
+      const now = get().take;
+      if (now !== null && now !== id) return;
       try {
         await recorder.stopRunning();
       } catch (stopError) {
