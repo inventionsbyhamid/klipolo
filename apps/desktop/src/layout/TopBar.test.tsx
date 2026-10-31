@@ -1,6 +1,6 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { Snapshot } from '../bindings/Snapshot';
 import { fixturePatch, fixtureSnapshot } from '../test/fixtures';
 
@@ -142,6 +142,40 @@ describe('TopBar', () => {
     await userEvent.keyboard('{Enter}');
     expect(await screen.findByRole('button', { name: 'Launch video' })).toBeInTheDocument();
     expect(bridge.apply).toHaveBeenCalledTimes(1);
+  });
+
+  it('a rename stays as typed while the window is in the background; a click elsewhere then renames', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    const renamed = fixtureSnapshot();
+    renamed.project.name = 'Launch video';
+    renamed.history = { ...renamed.history, revision: 4, undoLabel: 'editor.rename.undo' };
+    vi.mocked(bridge.apply).mockReset().mockResolvedValue({ ...fixturePatch(renamed), baseRevision: 3 });
+    // jsdom says the page has no focus during any blur; WebKit says so only while the window is in the background.
+    const pageFocused = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    onTestFinished(() => pageFocused.mockRestore());
+    render(<TopBar />);
+    await userEvent.click(within(await openMenu('Billing tutorial')).getByRole('menuitem', { name: 'Rename' }));
+    const field = await screen.findByRole('textbox', { name: 'Project name' });
+    await waitFor(() => expect(field).toHaveFocus());
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Launch vi');
+    // ⌘Tab: the window goes to the background and the field blurs. Back, WebKit gives it the focus again.
+    pageFocused.mockReturnValue(false);
+    act(() => field.blur());
+    pageFocused.mockReturnValue(true);
+    act(() => field.focus());
+    // The field is still there, and typing goes on where it was.
+    expect(field).toBeInTheDocument();
+    await userEvent.keyboard('deo');
+    expect(field).toHaveValue('Launch video');
+    expect(bridge.apply).not.toHaveBeenCalled();
+    await userEvent.click(document.body);
+    await waitFor(() => expect(bridge.apply).toHaveBeenCalledTimes(1));
+    expect(bridge.apply).toHaveBeenCalledWith({
+      label: 'editor.rename.undo',
+      ops: [{ type: 'rename', name: 'Launch video' }],
+    });
+    expect(await screen.findByRole('button', { name: 'Launch video' })).toBeInTheDocument();
   });
 
   it('project_menu_new_project_creates_and_opens_it', async () => {

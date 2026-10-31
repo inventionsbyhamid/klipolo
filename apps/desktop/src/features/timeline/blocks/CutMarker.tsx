@@ -69,7 +69,10 @@ let held: { down: PointerEvent<HTMLElement>; clipId: string; edge: Edge } | null
 /** The last press was passed to a trim: the click its release makes is not the marker's. */
 let handedOff = false;
 
-/** After a press passed to a trim, the click its release makes (on the lane, which would seek) does nothing. */
+/**
+ * After a press passed to a trim, the click its release makes (on the lane, which would seek) does nothing. A new
+ * press ends it too: a release that never reached the page (Mission Control mid-drag) can't eat a later click.
+ */
 function swallowNextClick() {
   const swallow = (e: Event) => {
     e.stopPropagation();
@@ -78,13 +81,17 @@ function swallowNextClick() {
   };
   const later = () => setTimeout(stop, 0);
   function stop() {
+    // The gesture is over: a later click on a cut (one with no press too, as VoiceOver's) is the cut's own.
+    handedOff = false;
     window.removeEventListener('click', swallow, true);
     window.removeEventListener('pointerup', later, true);
     window.removeEventListener('pointercancel', later, true);
+    window.removeEventListener('pointerdown', stop, true);
   }
   window.addEventListener('click', swallow, true);
   window.addEventListener('pointerup', later, true);
   window.addEventListener('pointercancel', later, true);
+  window.addEventListener('pointerdown', stop, true);
 }
 
 /**
@@ -148,6 +155,11 @@ export const CutMarker = memo(function CutMarker({
     },
     onPointerMove: (e: PointerEvent<HTMLElement>) => {
       if (handedOff) return onBlockPointerMove(e);
+      // No button down: a hold whose release the marker never heard (it went mid-hold) is over; a hover never trims.
+      if ((e.buttons & 1) === 0) {
+        held = null;
+        return;
+      }
       const press = held;
       if (!press || e.pointerId !== press.down.pointerId) return;
       if (Math.hypot(e.clientX - press.down.clientX, e.clientY - press.down.clientY) < DRAG_SLOP_PX) return;
