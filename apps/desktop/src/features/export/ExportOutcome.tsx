@@ -8,7 +8,7 @@ import { ExportIcon } from './icons';
 
 /**
  * The finished export: a paper check, "Exported 2 videos", where they were saved, one row per
- * file, then Done and Show in Finder (every file, selected together).
+ * file, then Done and Show in Finder (their folder, the first file selected).
  */
 export function ExportOutcome({ onClose }: { onClose: () => void }) {
   const count = useExport((s) => s.ready.length);

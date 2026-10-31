@@ -25,7 +25,7 @@ export const exporter = {
    * open project's export is stopped (another project's is refused by name).
    */
   cancel: (job?: string) => call<void>('export_cancel', job ? { job } : {}),
-  /** Shows file `index` of the last export in Finder, or all of them, selected together. */
+  /** Shows file `index` of the last export in Finder; without one, its folder with the first file selected. */
   reveal: (index?: number) => call<void>('export_reveal', index === undefined ? {} : { index }),
   /** Opens file `index` of the last export in its app. */
   open: (index: number) => call<void>('export_open', { index }),

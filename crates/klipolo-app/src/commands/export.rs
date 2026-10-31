@@ -213,14 +213,15 @@ fn exported(state: &ExportState, index: Option<usize>) -> Result<Vec<PathBuf>, S
     Ok(here)
 }
 
-/// Shows file `index` of the last export in Finder, or all of them (selected together) without one.
+/// Shows file `index` of the last export in Finder, selected; without one, its first file: every file of an export is
+/// in the same folder, and Finder selects only one of several it is asked to show.
 #[tauri::command(async)]
 pub(crate) fn export_reveal(
     state: State<'_, ExportState>,
     index: Option<usize>,
 ) -> Result<(), Said> {
     let files = exported(&state, index)?;
-    system_open(true, &files)
+    system_open(true, &files[..1])
 }
 
 /// Opens file `index` of the last export in its app (QuickTime Player for a video).
