@@ -1,10 +1,9 @@
-//! `lower`: the libc-only lowering every speech worker uses, whisper's through
-//! `klipolo_platform::process::lower_self` and klipolo-asr directly. Linux (the gate): the test re-runs itself as a child
-//! with `KLIPOLO_LOWER_CHILD=1`; the child lowers its test thread and prints that thread's nice and policy, so the
-//! parent's own priority is never changed.
+//! `lower`: the libc-only lowering, which `klipolo_platform::process::lower_self` calls. Linux (the gate): the test
+//! re-runs itself as a child with `KLIPOLO_LOWER_CHILD=1`; the child lowers its test thread and prints that thread's
+//! nice and policy, so the parent's own priority is never changed.
 #![cfg(target_os = "linux")]
 
-use klipolo_speech_wire::lower::{ceiling, lower, LOWERED_NICE};
+use klipolo_speech_wire::lower::{lower, LOWERED_NICE};
 
 /// The calling thread's `/proc/thread-self/stat` fields after the command's name (which may hold spaces): field 3 on,
 /// so nice (19) and policy (41) are 16 and 38.
@@ -20,7 +19,6 @@ fn fields() -> Vec<String> {
 fn a_lowered_worker_runs_at_nice_10_and_sched_batch() {
     if std::env::var_os("KLIPOLO_LOWER_CHILD").is_some() {
         let before: i32 = fields()[16].parse().unwrap();
-        ceiling();
         lower().unwrap();
         let after = fields();
         println!(
