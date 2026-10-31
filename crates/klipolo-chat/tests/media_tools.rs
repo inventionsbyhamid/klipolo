@@ -1244,6 +1244,28 @@ fn a_title_card_keeps_a_length_the_person_gave_and_its_template_holds_its_title(
 }
 
 #[test]
+fn a_title_cards_background_may_be_the_models_own_choice() {
+    // The person gave only the words: the background the model chose is drawn, and the title goes in at once.
+    let p = project();
+    let i = inputs(&p, "make a title card that says Day 1 in Lisbon");
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "makeTitleCard",
+            json!({"title": "Day 1 in Lisbon", "prompt": "Lisbon street at golden hour", "atSec": null, "durationSec": null}),
+        )],
+    );
+    assert_eq!(out.refusals, vec![]);
+    let title = the_layer(&p, &out);
+    assert!(matches!(
+        &out.jobs[..],
+        [Job::MakeTitleBackground { prompt, title_id, .. }]
+            if prompt == "Lisbon street at golden hour" && *title_id == title.id
+    ));
+}
+
+#[test]
 fn a_title_card_without_the_persons_title_is_refused_to_ask() {
     let p = project();
     let i = inputs(&p, "make a title card with trams behind it");

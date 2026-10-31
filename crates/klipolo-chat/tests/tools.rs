@@ -1035,6 +1035,26 @@ fn trim_clip_says_how_far_an_end_can_move() {
 }
 
 #[test]
+fn a_title_card_chooses_its_own_background_when_none_is_named() {
+    // Asked for a title card with only its words, the model picks the background: it asks only for missing words.
+    let card = parameters_of("makeTitleCard");
+    let prompt = card["properties"]["prompt"]["description"]
+        .as_str()
+        .unwrap();
+    assert!(
+        prompt.contains("If the person named none, choose one that fits the title and the video; never ask for it."),
+        "{prompt}"
+    );
+    let description = (tool_list().into_iter())
+        .find(|t| t["name"] == "makeTitleCard")
+        .unwrap()["description"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(!description.contains("Only when"), "{description}");
+}
+
+#[test]
 fn tools_are_the_same_bytes_every_time() {
     let first = serde_json::to_string(&tools()).unwrap();
     for _ in 0..3 {
@@ -1109,7 +1129,7 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "Background music starts at 0.0",
         "topic and shot items",
         "Muse Image draw a new picture",
-        "If the person gave no title words, ask",
+        "If the person gave no title words, ask for them",
         "one or two short, plain, friendly sentences",
         "No markdown",
         "Never use em dashes or en dashes",

@@ -229,6 +229,17 @@
         },
         {"calls": [{"name": "askUser"}], "outcome": {"asked": true}}
       ]
+    },
+    {
+      "id": "title-card-pick",
+      "message": "make a title card that says Day 1 in Lisbon",
+      "note": "no background is named: the model chooses one and never asks for it",
+      "expect": [
+        {
+          "calls": [{"name": "makeTitleCard", "args": {"title": "Day 1 in Lisbon"}}],
+          "outcome": {"applied": true, "jobs": true}
+        }
+      ]
     }
   ]
 }

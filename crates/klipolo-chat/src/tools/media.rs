@@ -319,14 +319,17 @@ pub(super) const MAKE_STICKER: Tool = Tool {
 
 pub(super) const MAKE_TITLE_CARD: Tool = Tool {
     name: "makeTitleCard",
-    description: "A title card over a background Muse Image draws, with no lettering in the picture. Only when the \
-                  person asks for a picture behind their title.",
+    description: "A full-screen title card: the person's title over a background Muse Image draws, with no lettering \
+                  in the picture.",
     parameters: || {
         vec![
             ("title", string("The title, the person's exact words.")),
             (
                 "prompt",
-                string("What the background shows, a short phrase."),
+                string(
+                    "What the background shows, a short phrase. If the person named none, choose one that fits the \
+                     title and the video; never ask for it.",
+                ),
             ),
             at_sec(),
             duration_sec(TEMPLATE_SECS),
