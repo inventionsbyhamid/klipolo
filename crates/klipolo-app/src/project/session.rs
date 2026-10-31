@@ -1,7 +1,8 @@
-//! The project session: the open project, the feed the engine sees, the saver, and the project to open again at the
-//! next launch.
+//! The project session: the open project, the feed the engine sees (with what analysis found said in the clips), the
+//! saver, and the project to open again at the next launch.
 
 use klipolo_engine::registry::Registry;
+use klipolo_model::speech::Speech;
 
 use super::*;
 
@@ -15,6 +16,8 @@ pub struct ProjectSessionState {
     pub(super) saver: Saver,
     /// The file that names the last project opened (in the app's data folder), when there is one.
     last: Mutex<Option<PathBuf>>,
+    /// What was said in the clips (analysis), sent with every publish.
+    speech: Mutex<Arc<Speech>>,
 }
 
 impl Default for ProjectSessionState {
@@ -31,7 +34,25 @@ impl ProjectSessionState {
             opens: AtomicU64::new(0),
             saver,
             last: Mutex::default(),
+            speech: Mutex::default(),
         }
+    }
+
+    /// New speech for the engine: a new `Arc<Speech>` on the revision it has (it builds its captions again), and with
+    /// every publish after, this project's or the next one's. Held while the feed is sent, so a publish never sends
+    /// older speech after newer.
+    // Only the sample words of a debug build set it until analysis does.
+    #[cfg_attr(not(debug_assertions), allow(dead_code))]
+    pub(crate) fn set_speech(&self, speech: Arc<Speech>) {
+        let mut held = self.speech.lock().unwrap_or_else(PoisonError::into_inner);
+        *held = speech.clone();
+        self.feed.send_if_modified(|current| match current {
+            Some(feed) if !Arc::ptr_eq(&feed.speech, &speech) => {
+                feed.speech = speech;
+                true
+            }
+            _ => false,
+        });
     }
 
     /// The engine's side of the feed.
@@ -100,6 +121,8 @@ impl ProjectSessionState {
             self.opens.load(Ordering::SeqCst)
         };
         let mut published = None;
+        // Held while the feed is sent (`set_speech`): the open lock, then this one, then the feed's.
+        let speech = self.speech.lock().unwrap_or_else(PoisonError::into_inner);
         self.feed.send_if_modified(|current| {
             let next = open.map(|o| {
                 (
@@ -124,7 +147,7 @@ impl ProjectSessionState {
                     opened,
                     text_language: Arc::from("en"),
                     project,
-                    speech: Arc::default(),
+                    speech: speech.clone(),
                     registry: Registry::builtin(),
                 }
             });
