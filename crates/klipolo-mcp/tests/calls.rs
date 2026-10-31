@@ -1137,6 +1137,34 @@ fn a_proposal_the_person_discards_mid_call_stays_discarded() {
 }
 
 #[test]
+fn a_proposal_the_person_discards_while_a_removal_joins_it_reads_decided() {
+    let host = FakeHost::two_clips();
+    select(&host, Some(span(49.5, 50.5)));
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    let first = agent.cut(0.0, 13.0);
+    let id = first["structuredContent"]["proposalId"].clone();
+    let before = host.revision();
+    // The person clicks Discard while the app's next removal compiles with it, just before it would take its place:
+    // nothing applies, and the app reads that the person decided, not that the project moved.
+    host.state().discard_before_propose = true;
+    assert_refused(&agent.cut(49.5, 50.5), DECIDED);
+    assert_eq!(host.revision(), before);
+    assert!(host.state().slot.is_none());
+    assert_eq!(host.state().counts.proposes, 2);
+    let decided = agent.call("getProposal", json!({}));
+    assert_eq!(
+        decided["structuredContent"],
+        json!({"status": "discarded", "id": id})
+    );
+    // The project moving under the same call still reads as moved.
+    assert_eq!(outcome(&agent.cut(0.0, 13.0)), "proposed");
+    host.state().move_before_propose = true;
+    assert_refused(&agent.cut(49.5, 50.5), MOVED);
+}
+
+#[test]
 fn an_undo_that_drops_the_apps_proposal_says_so() {
     let host = FakeHost::two_clips();
     let mcp = Mcp::new(host.clone());

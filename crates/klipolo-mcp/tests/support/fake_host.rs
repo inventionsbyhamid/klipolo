@@ -96,6 +96,8 @@ pub struct State {
     pub discard_before_commit: bool,
     /// Klipolo's chat proposes this just before the next `propose`.
     pub chat_before_propose: Option<Proposal>,
+    /// The person discards the waiting proposal just before the next `propose`.
+    pub discard_before_propose: bool,
 }
 
 pub struct FakeHost {
@@ -158,6 +160,7 @@ impl FakeHost {
                 chat_before_commit: None,
                 discard_before_commit: false,
                 chat_before_propose: None,
+                discard_before_propose: false,
             }),
         })
     }
@@ -274,15 +277,21 @@ impl State {
     /// What the person does while an app's call runs, just before its commit: discards the waiting proposal, or has
     /// Klipolo's chat propose one.
     fn person_cuts_in(&mut self) {
-        if std::mem::take(&mut self.discard_before_commit)
-            && let Some(slot) = self.slot.take()
+        if std::mem::take(&mut self.discard_before_commit) {
+            self.discard_now();
+        }
+        let chat = self.chat_before_commit.take();
+        self.chat_proposes_now(chat);
+    }
+
+    /// The person discards the waiting proposal, if one waits.
+    fn discard_now(&mut self) {
+        if let Some(slot) = self.slot.take()
             && let Some(client) = slot.from
         {
             self.outcomes
                 .insert(client, ProposalOutcome::Discarded { id: slot.id });
         }
-        let chat = self.chat_before_commit.take();
-        self.chat_proposes_now(chat);
     }
 
     /// Klipolo's chat proposes `proposal`, if any, on the current revision.
@@ -423,6 +432,9 @@ impl Host for FakeHost {
         s.counts.proposes += 1;
         if std::mem::take(&mut s.move_before_propose) {
             return Err(HostError::Moved);
+        }
+        if std::mem::take(&mut s.discard_before_propose) {
+            s.discard_now();
         }
         let chat = s.chat_before_propose.take();
         s.chat_proposes_now(chat);

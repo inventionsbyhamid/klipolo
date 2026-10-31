@@ -40,7 +40,7 @@ use klipolo_model::ops::{Op, Origin};
 use klipolo_model::time::{RangeUs, Us};
 use serde_json::{Value, json};
 
-use crate::host::{Host, HostError, OpenProposal, Snapshot};
+use crate::host::{Host, HostError, OpenProposal, ProposalOutcome, Snapshot};
 use crate::rpc::Mcp;
 use crate::session::{Seen, Session};
 use crate::words::{self, fill};
@@ -301,6 +301,10 @@ fn edit(
                     None => words::NOT_PROPOSED.to_owned(),
                 })
             }
+            // The person decided on the app's own proposal while this call ran (a Discard): their decision stands.
+            Err(HostError::Moved) if own.is_some_and(|o| decided_on(host, client, &o.id)) => {
+                return refused(words::DECIDED);
+            }
             Err(e) => return refused(&host_error(host, client, e)),
         }
     }
@@ -392,6 +396,16 @@ fn someone_else(open: Option<&OpenProposal>, client: &str) -> Option<String> {
 
 fn waiting_other(who: &str) -> String {
     fill(words::WAITING_OTHER, &[("who", who)])
+}
+
+/// Whether the person applied or discarded `client`'s proposal `id`.
+fn decided_on(host: &dyn Host, client: &str, id: &str) -> bool {
+    match host.outcome(client) {
+        ProposalOutcome::Applied { id: decided } | ProposalOutcome::Discarded { id: decided } => {
+            decided == id
+        }
+        _ => false,
+    }
 }
 
 /// What the agent reads when the host refused. A `Moved` while someone else's proposal now waits says so, so the
