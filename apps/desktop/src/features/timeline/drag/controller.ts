@@ -8,7 +8,7 @@ import {
   onCloseStart,
 } from '../../../state/commitQueue';
 import { keyBurst } from '../../../state/keyBurst';
-import { usePlayback } from '../../../state/playback';
+import { showFrameAt, usePlayback } from '../../../state/playback';
 import { useProject } from '../../../state/project';
 import { toast } from '../../../state/toasts';
 import { clearPreview, dropPendingPreview, previewOps } from '../../../state/livePreview';
@@ -125,6 +125,7 @@ function outdated(s: Session) {
   s.stale = true;
   if (s.sent) clearPreview();
   s.sent = null;
+  unshowEdge(s);
   lower(s, false);
 }
 
@@ -176,6 +177,26 @@ function frame() {
     previewOps(s.ops);
     s.sent = s.ops;
   }
+  showEdge(s);
+}
+
+/**
+ * A trim shows the frame at the edge it drags (`s.edgeUs`, in its dry run), not the playhead's; the playhead and the
+ * timecode stay where they are. Not while playing: the picture is playback's then.
+ */
+function showEdge(s: Session) {
+  if (usePlayback.getState().playing) s.shownUs = null;
+  else if (s.edgeUs !== null && s.edgeUs !== s.shownUs) {
+    s.shownUs = s.edgeUs;
+    showFrameAt(s.edgeUs);
+  }
+}
+
+/** The trim ended or stopped: the preview shows the playhead's frame again (playing, it already does). */
+function unshowEdge(s: Session) {
+  if (s.shownUs === null) return;
+  s.shownUs = null;
+  if (!usePlayback.getState().playing) showFrameAt(null);
 }
 
 /** Draws `s` from the project as it is now, and builds its ops. False: its block is gone. */
@@ -310,6 +331,7 @@ function finish() {
 /** The live gesture ends: no pointer, key or store event reaches it any more. */
 function detach(s: Session) {
   if (session === s) session = null;
+  unshowEdge(s);
   stopWatching?.();
   stopWatching = null;
   window.removeEventListener('keydown', onKey, true);
