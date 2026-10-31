@@ -4,6 +4,7 @@ import type { Asset } from '../../bindings/Asset';
 import type { PackItem } from '../../bindings/PackItem';
 import type { Project } from '../../bindings/Project';
 import { Icon } from '../../layout/Icon';
+import { assetName } from '../../lib/timeline';
 import { useProject } from '../../state/project';
 import type { LibraryTab } from '../../state/ui';
 import { beginMediaDrag } from '../timeline/drag/mediaDrag';
@@ -124,7 +125,15 @@ export function MediaList({ tab }: { tab: LibraryTab }) {
   const pack = usePack((s) => s.items);
   useEffect(loadPack, []);
   if (!project) return null;
-  const own = shelves(project);
+  // A recording's files are named by their recording ("Recording 1", "Camera of Recording 1"), as its clips are.
+  const named = (asset: Asset): Asset => ({ ...asset, name: assetName(project, asset) });
+  const shelved = shelves(project);
+  const own = {
+    ...shelved,
+    clips: shelved.clips.map(named),
+    music: shelved.music.map(named),
+    sounds: shelved.sounds.map(named),
+  };
   const used = uses(project).any;
   const builtIn = t({ id: 'library.builtIn', message: 'Built in' });
   const free = t({ id: 'library.builtIn.free', message: 'Free to use' });

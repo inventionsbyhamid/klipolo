@@ -8,7 +8,7 @@ import { useSelection } from '../../../state/selection';
 import type { Command } from '../../command-palette/command';
 import { useCommands } from '../../command-palette/useCommands';
 
-/** The menu's name for screen readers: "Actions for screen.mp4". */
+/** The menu's name for screen readers: "Actions for Recording 1". */
 export function blockMenuLabel(id: string): string | undefined {
   const project = useProject.getState().snapshot?.project;
   if (!project) return undefined;

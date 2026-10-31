@@ -9,7 +9,7 @@ import { recorder, type TakeImport, type UnlistenFn } from '../bridge/recorder';
 import { errorMessage } from '../lib/errors';
 import { defaultPicks, NO_PICKS, type Picks } from '../lib/recorder/choices';
 import { formatDuration } from '../lib/time';
-import { clipDurationUs, clipStarts } from '../lib/timeline';
+import { clipDurationUs, clipStarts, recordingName } from '../lib/timeline';
 import { usePlayback } from './playback';
 import { useProject } from './project';
 import { forgetPreviews, hearPreview, resetPreviews } from './recorderPreviews';
@@ -277,15 +277,6 @@ export async function onImported(landed: TakeImport): Promise<void> {
     usePlayback.getState().seek(clipStarts(main)[index]);
   }
   landedToast(landed);
-}
-
-/** The recording's name, as its export's notes give it: "Recording 2" for the project's second. */
-function recordingName(project: Project, recordingId: string): string {
-  const number = project.recordings.findIndex((r) => r.id === recordingId) + 1;
-  return (
-    codedMessage({ code: 'name.recording', params: { number: Math.max(number, 1) } }) ||
-    t({ id: 'layer.recording', message: 'Recording', comment: 'A clip recorded in Klipolo' })
-  );
 }
 
 /**

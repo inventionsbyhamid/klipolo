@@ -99,6 +99,20 @@ describe('the Library', () => {
     expect(useUi.getState().libraryTab).toBe('clips');
   });
 
+  it('a_recording_s_files_are_named_by_their_recording', () => {
+    // The fixture's recording: its screen is the main footage, with a camera and a mic beside it.
+    renderWithProviders(<Library />);
+    const clips = within(screen.getByRole('list', { name: 'Your clips' }));
+    expect(clips.getByText('Recording 1')).toBeInTheDocument();
+    expect(clips.getByText('Camera of Recording 1')).toBeInTheDocument();
+    expect(clips.queryByText('screen.mp4')).toBeNull();
+    expect(clips.queryByText('camera.mp4')).toBeNull();
+    expect(clips.getByRole('button', { name: 'Add Recording 1 to the end' })).toBeInTheDocument();
+    // Its mic, a minute long, is with the songs.
+    act(() => useUi.setState({ libraryTab: 'music' }));
+    expect(within(screen.getByRole('tabpanel')).getByText('Mic of Recording 1')).toBeInTheDocument();
+  });
+
   it('with no clips, the Clips tab says what shows there and where the best moments come from', () => {
     const snapshot = useProject.getState().snapshot!;
     snapshot.project.assets = snapshot.project.assets.filter((a) => a.kind !== 'video');

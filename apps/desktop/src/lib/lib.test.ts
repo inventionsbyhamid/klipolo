@@ -66,7 +66,7 @@ describe('timeline queries', () => {
     expect(visualItemsAt(p, 5 * S)).toEqual([]);
   });
   it('labels sources and items', () => {
-    expect(sourceLabel(p, p.timeline.main[0].source)).toBe('screen.mp4');
+    expect(sourceLabel(p, p.timeline.main[0].source)).toBe('Recording 1');
     expect(itemLabel(p, findItem(p, 'title')!.item)).toBe('Set up billing');
     expect(itemLabel(p, findItem(p, 'song')!.item)).toBe('music.mp3');
   });
