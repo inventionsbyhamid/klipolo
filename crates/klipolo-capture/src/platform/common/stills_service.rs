@@ -108,10 +108,12 @@ mod tests {
         // A handler the service lets go of without calling it ends its request.
         drop(second);
         let mut third = service.begin().expect("the second was let go");
-        // One the stills stopped waiting for answers later, on the service's queue: nothing is sent meanwhile.
+        // One the stills stopped waiting for answers later, on the service's queue: nothing is sent meanwhile. It
+        // answers only once this thread has seen that, whatever the machine's load.
+        let (go_tx, go_rx) = channel::<()>();
         let (answered_tx, answered_rx) = channel();
         let late = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(100));
+            go_rx.recv().unwrap();
             third.answer();
             answered_tx.send(()).unwrap();
             third
@@ -120,6 +122,7 @@ mod tests {
             service.begin().is_err(),
             "the abandoned one hasn't answered"
         );
+        go_tx.send(()).unwrap();
         answered_rx.recv().unwrap();
         let held = late.join().unwrap();
         let fourth = service.begin().expect("it answered");
