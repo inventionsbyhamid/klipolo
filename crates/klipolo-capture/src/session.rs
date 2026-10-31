@@ -262,6 +262,9 @@ pub enum ImportTarget {
     },
     /// Appended to this project's main track.
     Project { id: String },
+    /// A take started with no project open: a new project, which the app names and makes only when the take lands, so
+    /// a cancelled take leaves nothing behind.
+    New,
 }
 
 /// Writes `session.json` atomically and fully to the disk: a crash leaves no config or the whole one.

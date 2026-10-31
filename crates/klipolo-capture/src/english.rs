@@ -91,6 +91,8 @@ pub const ENGLISH: Messages = &[
     ("capture.stop.noSources", "Every source stopped, so the recording was saved."),
     ("capture.stop.crashLoop", "The recorder kept stopping, so the recording was saved."),
     ("capture.stop.slept", "Your computer slept for a long time, so the recording stopped and was saved."),
+    // The app stops a take once the worker gives a source up because its video encoder kept failing.
+    ("capture.stop.encoder", "The video encoder stopped, so the recording stopped and was saved."),
     // "Stop sharing" (the system's screen-sharing control) before the start gate: a start refused, so nothing was
     // recorded or saved.
     ("capture.stop.sharingBeforeStart", "Screen sharing was turned off before the recording started, so nothing was recorded."),
@@ -215,4 +217,6 @@ pub const ENGLISH: Messages = &[
     // A command or a close for a take (or Check camera's preview) that has already ended: nothing is done.
     ("capture.error.staleTake", "That recording has already ended."),
     ("capture.error.driveStuck", "The drive stopped answering, so the recording couldn't be finished. What reached it will be recovered when Klipolo opens."),
+    // A test run (`KLIPOLO_TEST`): the app's recorder makes no backend and launches no worker.
+    ("capture.error.testRun", "Recording is off in this test run."),
 ];

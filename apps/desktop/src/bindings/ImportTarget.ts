@@ -4,4 +4,4 @@ import type { FormatKind } from "./FormatKind";
 /**
  * Where the take goes after Stop.
  */
-export type ImportTarget = { "kind": "newProject", name: string, formats: Array<FormatKind>, } | { "kind": "project", id: string, };
+export type ImportTarget = { "kind": "newProject", name: string, formats: Array<FormatKind>, } | { "kind": "project", id: string, } | { "kind": "new" };

@@ -162,6 +162,11 @@
     "params": []
   },
   {
+    "code": "capture.stop.encoder",
+    "message": "The video encoder stopped, so the recording stopped and was saved.",
+    "params": []
+  },
+  {
     "code": "capture.stop.sharingBeforeStart",
     "message": "Screen sharing was turned off before the recording started, so nothing was recorded.",
     "params": []
@@ -701,6 +706,11 @@
   {
     "code": "capture.error.driveStuck",
     "message": "The drive stopped answering, so the recording couldn't be finished. What reached it will be recovered when Klipolo opens.",
+    "params": []
+  },
+  {
+    "code": "capture.error.testRun",
+    "message": "Recording is off in this test run.",
     "params": []
   }
 ]
