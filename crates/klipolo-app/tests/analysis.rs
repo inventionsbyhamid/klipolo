@@ -1999,8 +1999,78 @@ async fn the_page_times_rough_words_again_once_per_app_run() {
     assert_eq!(h.aligns.load(Ordering::SeqCst), 1, "once, not every time");
     assert_eq!(
         h.state.state_of("talk"),
-        timed_roughly("Word timing is not available right now.", true)
+        // That try's own reason: the relay couldn't answer.
+        timed_roughly(
+            "Klipolo's server is busy right now. Try again in a moment.",
+            true
+        )
     );
+    server.verify().await;
+}
+
+/// A re-time that times no more turns says why now: the attempt's own reason (the day's word timing used up, and when it
+/// resets) replaces the cached one, on the clip's state and in the cache. A later try whose words only don't match their
+/// sound leaves that reason as it is.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_retime_that_times_nothing_more_says_why_now() {
+    let server = MockServer::start().await;
+    let quota =
+        "This device has used today's 120 minutes of word timing. It resets at midnight UTC.";
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(
+            ResponseTemplate::new(429)
+                .set_body_json(json!({"error": "align_quota", "message": quota})),
+        )
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "words": [
+                {"text": "hello", "startMs": 250, "endMs": 1000, "score": 0.2, "turn": 0},
+                {"text": "there", "startMs": 1100, "endMs": 2000, "score": 0.2, "turn": 0},
+                {"text": "friends", "startMs": 2100, "endMs": 3700, "score": 0.2, "turn": 0}
+            ],
+            "skipped": []
+        })))
+        .expect(1)
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    let file = h.clip("talk.m4a", 2);
+    let mut rough = finish(
+        "muse-voice-transcribe-1.0",
+        us(SECONDS),
+        cached_transcript().turns,
+        None,
+        0.0003,
+    );
+    rough.approximate_reason = Some("Word timing didn't finish last time.".into());
+    h.cache_dir(&file).store("transcript", &rough).unwrap();
+    let clip = asset("talk", AssetKind::Audio, &file, SECONDS);
+
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+    assert_eq!(h.state.state_of("talk"), timed_roughly(quota, true));
+    let cached: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
+    assert_eq!(cached.approximate_reason.as_deref(), Some(quota));
+
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+    assert_eq!(h.state.state_of("talk"), timed_roughly(quota, true));
+    let cached: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
+    assert_eq!(cached.approximate_reason.as_deref(), Some(quota));
     server.verify().await;
 }
 

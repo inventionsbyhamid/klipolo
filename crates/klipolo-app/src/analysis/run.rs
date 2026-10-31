@@ -447,8 +447,8 @@ impl AnalysisState {
     }
 
     /// `found`'s words timed again (no transcription: free), from the clip's WAV made again; cached and shown when
-    /// more of its turns are timed than before. A WAV that can't be made, or an aligner that still fails, keeps
-    /// `found` as it is.
+    /// more of its turns are timed than before. A WAV that can't be made keeps `found` as it is; an aligner that still
+    /// fails keeps its words with that try's reason (`why_now`).
     async fn time_again(
         self: &Arc<Self>,
         job: &Job<'_>,
@@ -494,10 +494,11 @@ impl AnalysisState {
         );
         let aligned = |t: &TranscriptOut| t.turns.iter().filter(|t| t.aligned).count();
         if aligned(&timed) <= aligned(&found) {
+            let kept = self.why_now(job, found, timed).await;
             return if run.cancelled() {
-                Err(self.timing_stopped(job, &found))
+                Err(self.timing_stopped(job, &kept))
             } else {
-                Ok(found)
+                Ok(kept)
             };
         }
         timed.transcript.key = key.to_owned();
@@ -511,6 +512,28 @@ impl AnalysisState {
             return Err(self.timing_stopped(job, &timed));
         }
         Ok(timed)
+    }
+
+    /// `found`'s words, kept after a try (`tried`) that timed no more of them, with why that try didn't (the relay
+    /// busy, the day's word timing used up and when it resets, or stopped), so the note says the current cause; cached
+    /// so when it changed. Words that only don't match their sound (`ROUGH_WORDS`) keep the reason they had.
+    async fn why_now(
+        &self,
+        job: &Job<'_>,
+        mut found: TranscriptOut,
+        tried: TranscriptOut,
+    ) -> TranscriptOut {
+        let now = if job.run.cancelled() {
+            Some(WORDS_STOPPED.to_owned())
+        } else {
+            tried.approximate_reason.filter(|r| r != ROUGH_WORDS)
+        };
+        if let Some(now) = now.filter(|now| found.approximate_reason.as_ref() != Some(now)) {
+            found.approximate_reason = Some(now);
+            self.store(job.dir, "transcript", &found, &found.transcript.model)
+                .await;
+        }
+        found
     }
 
     /// The clip's scene log from its small copy, snapped to `words` (its transcript's), cached once logged. A clip
