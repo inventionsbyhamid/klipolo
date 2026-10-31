@@ -1,22 +1,25 @@
 #!/usr/bin/env bash
 # The app bundle's check before anything is signed (build-mac.sh runs it; it works on a signed app too):
-#   scripts/release/check-bundle.sh <Klipolo.app> <x86_64|arm64>
+#   scripts/release/check-bundle.sh <Klipolo.app> <x86_64|arm64> [<page build folder>]
 # Fails unless the licences (the third-party notices too, none of them empty) and the fonts are in Resources, every
 # Mach-O is built for <arch> only and for macOS 15.0 or older, every load path is @rpath/, @executable_path/,
 # @loader_path/, /usr/lib/ or /System/Library/, and every LC_RPATH is relative (@executable_path/ or @loader_path/),
 # never a machine path such as the dev FFmpeg prefix's.
 # The app must also find its libraries: the main executable's LC_RPATHs include @executable_path/../Frameworks, and
 # every @rpath/<name> that any Mach-O in the bundle loads is a file at Contents/Frameworks/<name>. And no file under
-# Contents names the builder's home folder or user name, nor does the page as built in apps/desktop/dist: the main
-# executable holds the page brotli-compressed, so searching the binary can't see into it. NOTICE.txt must give the
-# source code's https:// address and the full commit built, its {{SOURCE_URL}} and {{SOURCE_COMMIT}} filled in.
+# Contents names the builder's home folder or user name, nor does the page build it was made from: the main
+# executable holds the page brotli-compressed, so searching the binary can't see into it. That page build is
+# apps/desktop/dist unless a folder is given, which is the app's own page only right after the build that made it
+# (build-mac.sh checks then); for an app built earlier, give the page build kept from that build. NOTICE.txt must
+# give the source code's https:// address and the full commit built, its {{SOURCE_URL}} and {{SOURCE_COMMIT}} filled
+# in.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 repo=$(cd "$here/../.." && pwd -P)
 . "$here/lib.sh"
-usage() { echo "usage: $0 <Klipolo.app> <x86_64|arm64>" >&2; exit 2; }
-[ $# -eq 2 ] || usage
-app=${1%/} arch=$2
+usage() { echo "usage: $0 <Klipolo.app> <x86_64|arm64> [<page build folder>]" >&2; exit 2; }
+[ $# -eq 2 ] || [ $# -eq 3 ] || usage
+app=${1%/} arch=$2 page=${3:-$repo/apps/desktop/dist}
 case "$arch" in x86_64 | arm64) ;; aarch64) arch=arm64 ;; *) usage ;; esac
 [ -f "$app/Contents/Info.plist" ] || { echo "refused: not an app bundle: $app" >&2; exit 2; }
 main=$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")
@@ -92,9 +95,8 @@ grep -qxF '@executable_path/../Frameworks' <<< "$main_rpaths" \
   || fail "${main#"$app"/} has no @executable_path/../Frameworks LC_RPATH, so it can't find the libraries in Frameworks"
 
 # No file under Contents (binaries, resources) or in the page's build output names the builder's home folder or user
-# name (lib.sh's naming_files: the user name only as a whole path part). The page is the one `pnpm build` wrote for this
-# bundle (build-mac.sh checks right after building); without it the check fails rather than skip the page.
-page=$repo/apps/desktop/dist
+# name (lib.sh's naming_files: the user name only as a whole path part). The page build is the folder given, else
+# apps/desktop/dist (see the top); without one the check fails rather than skip the page.
 searched=("$app/Contents")
 if [ -f "$page/index.html" ]; then searched+=("$page"); else fail "no page build at $page to search (pnpm build)"; fi
 set +e

@@ -152,6 +152,15 @@ mv "$repo/apps/desktop/dist" "$repo/apps/desktop/dist.away"
 expect "no page build fails" fail "no page build at $repo/apps/desktop/dist" "$check" "$app" "$arch"
 mv "$repo/apps/desktop/dist.away" "$repo/apps/desktop/dist"
 expect "the page's build without the home folder passes" pass "$check" "$app" "$arch"
+# A page build kept elsewhere (an app built earlier) is given as the third argument.
+kept=$work/kept-page
+mkdir -p "$kept/assets"
+echo '<!doctype html>' > "$kept/index.html"
+echo "const at = '$HOME/klipolo/src/main.tsx';" > "$kept/assets/index.js"
+expect "a page build given that names the home folder fails" fail "kept-page/assets/index.js" "$check" "$app" "$arch" "$kept"
+rm "$kept/assets/index.js"
+expect "a page build given without the home folder passes" pass "$check" "$app" "$arch" "$kept"
+expect "a page build given that isn't there fails" fail "no page build at $work/nowhere" "$check" "$app" "$arch" "$work/nowhere"
 
 # A file grep can't read fails the check, and doesn't hide a file that names the home folder.
 app=$(case_app unreadable)
