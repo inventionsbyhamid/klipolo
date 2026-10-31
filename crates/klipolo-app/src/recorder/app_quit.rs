@@ -8,20 +8,22 @@ use super::active::active;
 use super::state::RecorderState;
 
 /// `RunEvent::ExitRequested` while a take is the recorder's: the exit is held, the take stopped, and Klipolo exits once
-/// it has landed or after 30 s.
-pub fn guard_quit(app: &AppHandle, event: &RunEvent) {
+/// it has landed or after 30 s. True when it held the exit.
+pub fn guard_quit(app: &AppHandle, event: &RunEvent) -> bool {
     let RunEvent::ExitRequested { api, code, .. } = event else {
-        return;
+        return false;
     };
     if !active(app) {
-        return;
+        return false;
     }
     let Some(state) = app.try_state::<RecorderState>() else {
-        return;
+        return false;
     };
     let handle = app.clone();
     let code = code.unwrap_or(0);
-    if state.hold_quit(Box::new(move || handle.exit(code))) {
+    let held = state.hold_quit(Box::new(move || handle.exit(code)));
+    if held {
         api.prevent_exit();
     }
+    held
 }

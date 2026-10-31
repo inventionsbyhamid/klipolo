@@ -202,7 +202,7 @@ fn the_relaunch_is_started_only_after_the_flush_succeeds() {
     use super::relaunch::REOPEN_EXIT_CODE;
     let rec = fixture();
     let relaunch = rec.state.relaunch();
-    let quit = || relaunch.exit_requested(Some(REOPEN_EXIT_CODE));
+    let quit = || rec.state.exit_requested(Some(REOPEN_EXIT_CODE), false);
     // An export runs.
     let _ = rec.state.reopen(&|| true, || panic!("never saves"), quit);
     assert!(!relaunch.due());
@@ -244,6 +244,39 @@ fn the_relaunch_is_started_only_after_the_flush_succeeds() {
         .unwrap();
     assert!(relaunch.due());
     assert!(!relaunch.due(), "once");
+}
+
+/// Reopen Klipolo's quit, held by a quit guard (an export started while the project saved, and asks first), leaves
+/// nothing armed: Reopen Klipolo and Record work again, and a later quit nothing asks before (the Dock's Quit, logging
+/// out) doesn't relaunch Klipolo. The export's Quit asks the exit again with the reopen's code, which then goes ahead and
+/// relaunches.
+#[test]
+fn a_held_reopen_leaves_nothing_armed() {
+    use super::relaunch::REOPEN_EXIT_CODE;
+    let held = |rec: &Fixture| rec.state.exit_requested(Some(REOPEN_EXIT_CODE), true);
+    let rec = fixture();
+    rec.state
+        .reopen(&|| false, || Ok(()), || held(&rec))
+        .unwrap();
+    assert!(
+        !rec.state.relaunch().due(),
+        "a later Dock Quit doesn't relaunch"
+    );
+    let restarts = Mutex::new(0);
+    let restart = || {
+        *restarts.lock().unwrap() += 1;
+        held(&rec);
+    };
+    rec.state.reopen(&|| false, || Ok(()), restart).unwrap();
+    assert_eq!(*restarts.lock().unwrap(), 1, "Reopen Klipolo works again");
+    rec.arm(options_screen()).unwrap();
+    // The person picks the export's Quit instead.
+    let rec = fixture();
+    rec.state
+        .reopen(&|| false, || Ok(()), || held(&rec))
+        .unwrap();
+    rec.state.exit_requested(Some(REOPEN_EXIT_CODE), false);
+    assert!(rec.state.relaunch().due());
 }
 
 #[test]

@@ -1,5 +1,5 @@
 //! Reopen Klipolo's relaunch: the waiter opens the bundle by its path once this Klipolo has gone (the binary outside a
-//! bundle), and only an exit asked with the reopen's code that goes ahead starts it.
+//! bundle), and only an exit asked with the reopen's code that goes ahead (no quit guard held it) starts it.
 
 use std::path::Path;
 use std::process::Command;
@@ -68,22 +68,29 @@ fn the_waiter_runs_its_command_only_once_the_process_has_gone() {
 }
 
 #[test]
-fn only_an_exit_asked_by_reopen_relaunches_and_only_once() {
+fn only_a_reopen_exit_that_goes_ahead_relaunches_and_only_once() {
     let relaunch = Relaunch::default();
-    // Reopen's exit, held by a quit guard (an export started meanwhile; the person kept exporting). Later they quit
-    // with Command Q, or close the window: Klipolo doesn't come back.
-    relaunch.exit_requested(Some(REOPEN_EXIT_CODE));
-    relaunch.exit_requested(Some(0));
+    // Reopen's exit, held by a quit guard (an export started meanwhile; the person kept exporting). Later Klipolo quits
+    // with nothing asked first (the Dock's Quit, logging out, macOS's own Quit & Reopen): it doesn't come back.
+    relaunch.exit_requested(Some(REOPEN_EXIT_CODE), true);
+    assert!(!relaunch.due(), "held: nothing armed");
+    // Nor after Command Q, or the window closed.
+    relaunch.exit_requested(Some(REOPEN_EXIT_CODE), true);
+    relaunch.exit_requested(Some(0), false);
     assert!(!relaunch.due());
-    relaunch.exit_requested(Some(REOPEN_EXIT_CODE));
-    relaunch.exit_requested(None);
+    relaunch.exit_requested(Some(REOPEN_EXIT_CODE), true);
+    relaunch.exit_requested(None, false);
     assert!(!relaunch.due());
     // Held, then let go with its own code (the export's Quit): it relaunches, once.
-    relaunch.exit_requested(Some(REOPEN_EXIT_CODE));
-    relaunch.exit_requested(Some(REOPEN_EXIT_CODE));
+    relaunch.exit_requested(Some(REOPEN_EXIT_CODE), true);
+    relaunch.exit_requested(Some(REOPEN_EXIT_CODE), false);
     assert!(relaunch.due());
     assert!(!relaunch.due(), "once");
+    // A reopen that went ahead, then asked again and held (a second quit while the first waits): nothing armed.
+    relaunch.exit_requested(Some(REOPEN_EXIT_CODE), false);
+    relaunch.exit_requested(Some(REOPEN_EXIT_CODE), true);
+    assert!(!relaunch.due());
     // An ordinary quit never relaunches.
-    relaunch.exit_requested(Some(0));
+    relaunch.exit_requested(Some(0), false);
     assert!(!relaunch.due());
 }

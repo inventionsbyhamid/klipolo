@@ -251,15 +251,16 @@ fn main() {
         .expect("Klipolo could not start");
     app.run(|app, event| {
         // Quitting while an export runs asks first.
-        commands::export::guard_quit(app, &event);
+        let asks = commands::export::guard_quit(app, &event);
         // Quitting during a take stops it and waits (30 s at most) for it to land in its project.
-        recorder::guard_quit(app, &event);
+        let waits = recorder::guard_quit(app, &event);
         // A take still armed at exit is disarmed: no worker outlives Klipolo waiting with its global key.
         recorder::release_on_exit(app, &event);
         // The Record dialog's previews stop when the window goes behind, hides or minimises, and none outlives Klipolo.
         recorder::follow_window(app, &event);
-        // Reopen Klipolo's exit, once it goes ahead, starts the waiter that opens Klipolo again when this one has gone.
-        recorder::relaunch_on_exit(app, &event);
+        // Reopen Klipolo's exit, once it goes ahead (neither guard held it), starts the waiter that opens Klipolo again
+        // when this one has gone. One a guard held leaves nothing armed.
+        recorder::relaunch_on_exit(app, &event, asks || waits);
         match event {
             RunEvent::Exit => {
                 // Other apps' access ends with the app: the server stops and its connection file goes.

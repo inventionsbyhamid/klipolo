@@ -20,7 +20,7 @@ use super::env::{Env, Sink};
 use super::launch::{Launch, ProcessLaunch, WorkerIo};
 use super::permissions::{self, Open};
 use super::previews::PreviewWorkers;
-use super::relaunch::Relaunch;
+use super::relaunch::{REOPEN_EXIT_CODE, Relaunch};
 use super::screen_reopen;
 use super::setup::{self, Files, Probing, Shown};
 use super::sink::AppSink;
@@ -161,6 +161,23 @@ impl RecorderState {
     /// Whether the exit under way is Reopen Klipolo's.
     pub(super) fn relaunch(&self) -> &Relaunch {
         &self.relaunch
+    }
+
+    /// Klipolo was asked to exit with `code`, and a quit guard `held` it or let it go (`relaunch`). Reopen Klipolo's
+    /// exit held (an export started meanwhile asks first) leaves nothing armed: the reopen ends, so takes arm again,
+    /// and Klipolo relaunches only should the person quit there (the guard asks the exit again with the reopen's code).
+    /// On the main thread, which never waits for the recorder's lock.
+    pub(super) fn exit_requested(&self, code: Option<i32>, held: bool) {
+        self.relaunch.exit_requested(code, held);
+        if held
+            && code == Some(REOPEN_EXIT_CODE)
+            && let Some(on) = &self.on
+        {
+            tracing::info!(
+                "recorder: a question holds Reopen Klipolo's quit, so takes arm again meanwhile"
+            );
+            on.recorder.end_reopen_soon();
+        }
     }
 
     fn on(&self) -> Result<&On, CodedError> {

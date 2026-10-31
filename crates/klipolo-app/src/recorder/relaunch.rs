@@ -9,8 +9,9 @@
 //! runs the binary.
 //!
 //! The quit is an ordinary one, so the quit guards may hold it (an export that started meanwhile asks first, and its
-//! Quit exits with the same code). Only an exit asked with the reopen's code that goes ahead relaunches: an exit asked
-//! any other way forgets it, so "Keep exporting" and a later Command Q never reopen Klipolo.
+//! Quit exits with the same code). Only an exit asked with the reopen's code that goes ahead relaunches. One a guard
+//! held leaves nothing armed: the reopen ends, so Record works again, and "Keep exporting" followed by any later quit
+//! (Command Q, the Dock's Quit, logging out) never reopens Klipolo. An exit asked any other way forgets it too.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -31,11 +32,13 @@ pub(super) struct Relaunch {
 }
 
 impl Relaunch {
-    /// An exit was asked with `code` (None: the last window closed): the reopen's code makes the exit relaunch
-    /// Klipolo once it goes ahead, and any other forgets an earlier reopen that a quit guard held.
-    pub(super) fn exit_requested(&self, code: Option<i32>) {
+    /// An exit was asked with `code` (None: the last window closed), and a quit guard `held` it (an export asks first,
+    /// a take lands first) or let it go. Only the reopen's code with an exit that goes ahead relaunches Klipolo: a held
+    /// one leaves nothing armed (should the person quit there, the guard asks the exit again with the same code), and
+    /// any other code forgets an earlier one.
+    pub(super) fn exit_requested(&self, code: Option<i32>, held: bool) {
         self.due
-            .store(code == Some(REOPEN_EXIT_CODE), Ordering::SeqCst);
+            .store(code == Some(REOPEN_EXIT_CODE) && !held, Ordering::SeqCst);
     }
 
     /// At exit: whether to relaunch, at most once.
@@ -44,13 +47,14 @@ impl Relaunch {
     }
 }
 
-/// Follows the app's exit: an exit asked with Reopen Klipolo's code, once it goes ahead, starts the waiter.
-pub fn relaunch_on_exit(app: &AppHandle, event: &RunEvent) {
+/// Follows the app's exit: an exit asked with Reopen Klipolo's code that goes ahead (no quit guard `held` it) starts
+/// the waiter as the app exits. One a guard held leaves nothing armed (`RecorderState::exit_requested`).
+pub fn relaunch_on_exit(app: &AppHandle, event: &RunEvent, held: bool) {
     let Some(state) = app.try_state::<RecorderState>() else {
         return;
     };
     match event {
-        RunEvent::ExitRequested { code, .. } => state.relaunch().exit_requested(*code),
+        RunEvent::ExitRequested { code, .. } => state.exit_requested(*code, held),
         RunEvent::Exit if state.relaunch().due() => start(),
         _ => {}
     }

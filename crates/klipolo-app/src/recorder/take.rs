@@ -4,7 +4,7 @@
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, TryLockError};
 
 use klipolo_capture::session::{self, SessionConfig, SessionDir};
 use klipolo_model::coded::CodedError;
@@ -124,6 +124,24 @@ impl Recorder {
     /// Reopen Klipolo didn't go ahead (the project couldn't be saved): takes arm again.
     pub(super) fn end_reopen(&self) {
         self.lock().reopening = false;
+    }
+
+    /// Reopen Klipolo's quit was held by a question: takes arm again. Called on the main thread, which never waits for
+    /// the slot's lock (it covers file work): while the lock is held, the reopen ends from a thread of its own.
+    pub(super) fn end_reopen_soon(self: &Arc<Self>) {
+        match self.slot.try_lock() {
+            Ok(mut slot) => slot.reopening = false,
+            Err(TryLockError::Poisoned(slot)) => slot.into_inner().reopening = false,
+            Err(TryLockError::WouldBlock) => {
+                let me = self.clone();
+                let ended = std::thread::Builder::new()
+                    .name("klipolo-reopen-end".into())
+                    .spawn(move || me.end_reopen());
+                if let Err(error) = ended {
+                    tracing::warn!(%error, "recorder: takes stay refused until Klipolo quits");
+                }
+            }
+        }
     }
 
     /// Arms take `cfg.id`: its folder, its config and its worker, which waits for the person's Record. `notes`: what

@@ -362,23 +362,27 @@ pub(crate) fn guard_menu_quit(_app: &tauri::App) -> tauri::Result<()> {
 
 /// The quit guard: quitting (Command Q, or closing the window) while an export runs asks first. Keep exporting goes
 /// back to it; Quit stops it (its job and parts deleted, as Cancel does), then quits. A quit that can't be asked about
-/// still stops it and deletes its job on the way out (`on_exit`).
-pub(crate) fn guard_quit(app: &AppHandle, event: &RunEvent) {
+/// still stops it and deletes its job on the way out (`on_exit`). True when it held the exit or the close.
+pub(crate) fn guard_quit(app: &AppHandle, event: &RunEvent) -> bool {
     match event {
         RunEvent::ExitRequested { api, code, .. } => {
-            if asks_first(app, code.unwrap_or(0)) {
+            let held = asks_first(app, code.unwrap_or(0));
+            if held {
                 api.prevent_exit();
             }
+            held
         }
         RunEvent::WindowEvent {
             event: WindowEvent::CloseRequested { api, .. },
             ..
         } => {
-            if asks_first(app, 0) {
+            let held = asks_first(app, 0);
+            if held {
                 api.prevent_close();
             }
+            held
         }
-        _ => {}
+        _ => false,
     }
 }
 
