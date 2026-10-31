@@ -66,6 +66,10 @@ pub struct ChatReply {
     undone: Option<SnapshotPatch>,
     proposal: Option<ChatProposal>,
     moments: Vec<ChatMoment>,
+    /// The revision the reply's moments and proposal are on: the project after this answer's edits. "Keep only these"
+    /// sends it back as its `base_revision`.
+    #[ts(type = "number")]
+    revision: u64,
     /// Pictures it asked for, to draw (`chat_draw_picture`) and show with Use and Try again.
     pictures: Vec<ChatPicture>,
 }
@@ -192,6 +196,12 @@ impl ChatReply {
 
     pub fn undone(mut self, change: SnapshotPatch) -> Self {
         self.undone = Some(change);
+        self
+    }
+
+    /// The revision the reply's moments and proposal are on.
+    pub fn on_revision(mut self, revision: u64) -> Self {
+        self.revision = revision;
         self
     }
 

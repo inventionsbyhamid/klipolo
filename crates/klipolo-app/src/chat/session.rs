@@ -70,6 +70,9 @@ pub const NOT_PROPOSED: &str = "I couldn't get the removals ready, so I left the
 /// Said beside the additions applied when the project changed before the removals could be proposed.
 pub const REMOVALS_MOVED: &str =
     "The project changed meanwhile, so I left the removals out. Ask me again.";
+/// Said beside what landed when the project changed before the moments found could be shown.
+pub const MOMENTS_MOVED: &str =
+    "The project changed meanwhile, so I left out the moments I found. Ask me again.";
 /// The reply to "Keep only these" when the moments still stand.
 pub const KEEP_ONLY_READY: &str = "Here is what I would remove. Apply it or discard it.";
 /// The reply to "Keep only these" when the moments no longer match the video.
@@ -127,8 +130,9 @@ struct Stored {
 }
 
 /// What came of committing a message's edits.
-#[derive(Default)]
 struct Landed {
+    /// Where the project stands after them (where it stood, when none landed).
+    at: At,
     undone: Option<SnapshotPatch>,
     applied: Option<ChatApplied>,
     /// The proposal made, with its id.
@@ -369,9 +373,27 @@ impl ChatSession {
         inputs: &Inputs,
         mut out: PlanOut,
     ) -> ChatOutcome {
-        let landed = self.commit(now, inputs, &out);
+        let mut landed = self.commit(now, inputs, &out);
         let mut jobs = jobs::start(&out.compiled);
         name_clips(&mut out, &now.project, inputs);
+        // The moments are times on the revision the edits left: none survive the project moving on (a hand edit, an
+        // undo, another project) while the answer came.
+        let current = self.projects.now().map(|n| n.at);
+        let same_project = current.as_ref().is_some_and(|c| c.same_project(&landed.at));
+        let moved = current.as_ref() != Some(&landed.at);
+        let mut notes: Vec<String> = Vec::new();
+        if !out.compiled.moments.is_empty() && (landed.lost.is_some() || moved) {
+            out.compiled.moments.clear();
+            let rest = landed.undone.is_some()
+                || landed.applied.is_some()
+                || landed.proposal.is_some()
+                || !out.compiled.questions.is_empty();
+            if landed.lost.is_none() && !rest {
+                landed.lost = Some(MOVED);
+            } else if landed.lost.is_none() {
+                notes.push(MOMENTS_MOVED.to_owned());
+            }
+        }
 
         let something = landed.undone.is_some()
             || landed.applied.is_some()
@@ -379,7 +401,6 @@ impl ChatSession {
             || !out.compiled.moments.is_empty()
             || !out.compiled.questions.is_empty();
         let mut note = out.note.clone();
-        let mut notes: Vec<String> = Vec::new();
         if let Some(dropped) = landed.dropped {
             notes.push(dropped.to_owned());
             note = format!(
@@ -406,7 +427,7 @@ impl ChatSession {
             }
             note = format!("{note} {}", jobs.note());
         }
-        let mut reply = ChatReply::from_plan(id, &out);
+        let mut reply = ChatReply::from_plan(id, &out).on_revision(landed.at.revision);
         for n in &notes {
             reply = reply.note(n);
         }
@@ -421,8 +442,9 @@ impl ChatSession {
             made = Some(proposal_id);
             reply = reply.proposal(proposal);
         }
-        // Pictures are asked for once the edits are in (a title card's title is one of them).
-        if landed.lost.is_none() {
+        // Pictures are asked for once the edits are in (a title card's title is one of them), for the project the
+        // message was sent to.
+        if landed.lost.is_none() && same_project {
             for ask in jobs.pictures.drain(..) {
                 reply = reply.picture(self.pictures.ask(Some(now.at.clone()), ask));
             }
@@ -443,7 +465,14 @@ impl ChatSession {
     /// that finds the project moved on stops the rest.
     fn commit(&self, now: &ProjectNow, inputs: &Inputs, out: &PlanOut) -> Landed {
         let compiled = &out.compiled;
-        let mut landed = Landed::default();
+        let mut landed = Landed {
+            at: now.at.clone(),
+            undone: None,
+            applied: None,
+            proposal: None,
+            lost: None,
+            dropped: None,
+        };
         let mut at = now.at.clone();
         let mut base = now.project.clone();
         let lost = |e: CommitError| match e {
@@ -458,6 +487,7 @@ impl ChatSession {
                 Ok(c) => {
                     landed.undone = Some(c.patch);
                     (at, base) = (c.at, c.project);
+                    landed.at = at.clone();
                 }
                 Err(e) => {
                     landed.lost = Some(lost(e));
@@ -473,6 +503,7 @@ impl ChatSession {
                         undo: undo_label(tx),
                     });
                     (at, base) = (c.at, c.project);
+                    landed.at = at.clone();
                     lock(&self.talk).last_change = Some(at.clone());
                 }
                 Err(e) => {

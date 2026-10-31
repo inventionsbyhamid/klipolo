@@ -27,6 +27,11 @@ questions: Array<string>, applied: ChatApplied | null,
  */
 undone: SnapshotPatch | null, proposal: ChatProposal | null, moments: Array<ChatMoment>, 
 /**
+ * The revision the reply's moments and proposal are on: the project after this answer's edits. "Keep only these"
+ * sends it back as its `base_revision`.
+ */
+revision: number, 
+/**
  * Pictures it asked for, to draw (`chat_draw_picture`) and show with Use and Try again.
  */
 pictures: Array<ChatPicture>, };

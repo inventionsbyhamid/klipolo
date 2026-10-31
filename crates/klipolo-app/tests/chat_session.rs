@@ -1597,3 +1597,69 @@ async fn an_apply_that_fails_for_another_reason_keeps_the_proposal_for_retry() {
             .ends_with("The person applied the proposal.")
     );
 }
+
+fn find_intro() -> FunctionCall {
+    fc(
+        "m",
+        "findMoments",
+        r#"{"query": "the intro", "ranges": [{"startSec": 0.5, "endSec": 4.0, "label": "intro"}]}"#,
+    )
+}
+
+#[tokio::test]
+async fn a_reply_names_the_revision_its_moments_are_on() {
+    let mut calls = vertical_karaoke();
+    calls.push(find_intro());
+    let chat = chat(vec![
+        answer("Here it is.", vec![find_intro()]),
+        answer("", calls),
+    ]);
+    let r = reply(&chat.session.send(request("find the intro")).await.unwrap());
+    assert_eq!(r["revision"], 0);
+    assert_eq!(r["moments"].as_array().unwrap().len(), 1);
+    // With additions, the moments are on the revision they leave.
+    let r = reply(
+        &chat
+            .session
+            .send(request("vertical, karaoke, and find the intro"))
+            .await
+            .unwrap(),
+    );
+    assert_eq!(r["revision"], 1);
+    assert_eq!(r["moments"].as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn moments_found_while_the_project_changed_are_left_out() {
+    let model = Script::new(vec![answer(
+        "The intro is at the start.",
+        vec![find_intro()],
+    )]);
+    let gate = model.hold();
+    let chat = chat_with(model.clone(), Found::done(), Paying::key(model.clone()));
+    let sent = tokio::spawn({
+        let session = chat.session.clone();
+        async move { session.send(request("find the intro")).await.unwrap() }
+    });
+    model.arrived.notified().await;
+    chat.project.hand_edit(&rename("Mine")).unwrap();
+    gate.notify_one();
+    let r = reply(&sent.await.unwrap());
+    assert_eq!(r["moments"], serde_json::json!([]), "{r:#}");
+    assert_eq!(r["text"], MOVED);
+    assert_eq!(r["revision"], 0);
+    // "Keep only these" echoing that revision is refused: the moments would be stale.
+    let keep = ChatRequest {
+        keep_only: vec![RangeUs {
+            start: secs(0.5),
+            end: secs(4.0),
+        }],
+        base_revision: r["revision"].as_u64().unwrap(),
+        ..request("Keep only these")
+    };
+    assert_eq!(
+        chat.session.send(keep).await.unwrap_err(),
+        CommitError::Moved
+    );
+    assert_eq!(chat.project.revision(), 1, "only the hand edit");
+}
