@@ -604,6 +604,14 @@ def test_max_usd_sets_the_spend_limit(tmp_path):
         assert meta.requests == []
 
 
+def test_max_usd_help_says_the_turn_that_reaches_it_can_pass_it(capsys):
+    with pytest.raises(SystemExit):
+        agent.main(["--help"])
+    said = " ".join(capsys.readouterr().out.split())
+    assert "the turn that reaches it can go past it" in said
+    assert "pictures Klipolo draws are billed in Klipolo and not counted" in said
+
+
 def test_an_unexpected_failure_is_one_line_without_the_key(tmp_path):
     exe, _ = installed(tmp_path)
     code, out, err = main(["--klipolo", str(exe), DEMO], Meta(RuntimeError(f"boom with {KEY}")), environ={"MODEL_API_KEY": KEY})

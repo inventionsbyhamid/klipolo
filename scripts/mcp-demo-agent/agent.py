@@ -791,8 +791,8 @@ def main(
         type=float,
         default=MAX_USD,
         help=(
-            "stop asking Muse Spark once its tokens have cost this many US dollars (default: %(default).2f); pictures "
-            "Klipolo draws are billed in Klipolo and not counted"
+            "stop asking Muse Spark once its tokens have cost this many US dollars (default: %(default).2f); the turn "
+            "that reaches it can go past it, and pictures Klipolo draws are billed in Klipolo and not counted"
         ),
     )
     args = parser.parse_args(argv)
