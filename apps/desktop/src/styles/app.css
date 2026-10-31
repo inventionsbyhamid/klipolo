@@ -2037,7 +2037,13 @@
 }
 
 .checker {
-  background: conic-gradient(#1e2746 25%, #27315a 0 50%, #1e2746 0 75%, #27315a 0) 0 0 / 14px 14px;
+  background: conic-gradient(
+      var(--color-checker) 25%,
+      var(--color-checker-alt) 0 50%,
+      var(--color-checker) 0 75%,
+      var(--color-checker-alt) 0
+    )
+    0 0 / 14px 14px;
 }
 
 /* ---------- Overlays on the canvas ---------- */
@@ -2156,7 +2162,7 @@
 }
 
 .safe-area-shapes {
-  fill: rgb(3 5 12 / 0.6);
+  fill: color-mix(in srgb, var(--color-night) 60%, transparent);
 }
 
 .safe-area-clear {
