@@ -46,8 +46,9 @@ function DropZone({ over }: { over: boolean }) {
 /**
  * The preview panel: the format pills, Add title, the safe area menu (9:16 only), Full screen (F; it
  * it works), and the engine's frames fitted to the panel in the chosen format with the layers there selectable and
- * editable (`Stage`), under the analysis banner; the inspector docks at the right under the banner while a layer it has
- * fields for is selected, and the frame moves left for it. With no clip yet, the drop zone.
+ * editable (`Stage`), under the analysis banner; the inspector docks at the right under the banner while a main clip, a
+ * transition or a layer it has fields for is selected, and the frame moves left for it. With no clip yet, the drop
+ * zone.
  * `filesOver`: files from Finder are held over the window.
  */
 export function Preview({ filesOver = false }: { filesOver?: boolean }) {
