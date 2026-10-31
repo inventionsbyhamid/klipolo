@@ -24,7 +24,7 @@ use klipolo_model::media::sound::add_sound_ops;
 use klipolo_model::media::text::{
     PORTRAIT_CLEAR, TextPreset as ModelPreset, TitleTemplate, preset_rect, text_item,
 };
-use klipolo_model::ops::Op;
+use klipolo_model::ops::{Op, TrackTarget};
 use klipolo_model::params::ParamValue;
 use klipolo_model::project::{Asset, FormatKind};
 use klipolo_model::query::video_duration;
@@ -658,6 +658,27 @@ fn add_text_title_at_start_is_three_seconds() {
 }
 
 #[test]
+fn an_invented_time_for_words_is_refused() {
+    // Nothing is said, shown or selected near 25.5 s.
+    let p = project();
+    let i = inputs(&p, "put Day 1 on screen at the good bit");
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "addText",
+            json!({"text": "Day 1", "preset": "title", "atSec": 25.5, "durationSec": null}),
+        )],
+    );
+    assert_eq!(out.additions, None);
+    let reason = refused_to_model(&out, 0);
+    assert!(
+        reason.starts_with("addText: atSec 25.5 is not within 0.3 s of a word"),
+        "{reason}"
+    );
+}
+
+#[test]
 fn add_text_takes_the_persons_own_words_or_asks() {
     let p = project();
     // The person's spelling wins over the model's.
@@ -950,21 +971,38 @@ fn nothing_is_placed_at_or_past_the_videos_end() {
     }
 }
 
-/// The layers `ops` add, without their ids (chat's and the library's are each new).
-fn layers_of(ops: &[Op]) -> Vec<Item> {
+/// A layer an `AddItem` adds, without its id (chat's and the library's are each new): the track it asks for, whether
+/// it attaches to the clip under it, and the layer.
+#[derive(Debug, PartialEq)]
+struct Added {
+    track: TrackTarget,
+    attach: bool,
+    item: Item,
+}
+
+/// The layers `ops` add.
+fn layers_of(ops: &[Op]) -> Vec<Added> {
     (ops.iter())
         .filter_map(|op| match op {
-            Op::AddItem { item, .. } => Some(Item {
-                id: String::new(),
-                ..item.clone()
+            Op::AddItem {
+                track,
+                item,
+                attach,
+            } => Some(Added {
+                track: track.clone(),
+                attach: *attach,
+                item: Item {
+                    id: String::new(),
+                    ..item.clone()
+                },
             }),
             _ => None,
         })
         .collect()
 }
 
-/// The layers `out`'s additions add, without their ids.
-fn added_layers(out: &Compiled) -> Vec<Item> {
+/// The layers `out`'s additions add.
+fn added_layers(out: &Compiled) -> Vec<Added> {
     layers_of(&out.additions.as_ref().expect("additions").ops)
 }
 
@@ -980,6 +1018,12 @@ fn chat_places_sounds_and_pictures_as_the_librarys_plus_does() {
     );
     let plus = add_sound_ops(&p, &whoosh(), secs(12.0)).unwrap();
     assert_eq!(added_layers(&out), layers_of(&plus));
+    // Attached to the clip under it, on the first track with room, as the library's.
+    assert!(
+        added_layers(&out)
+            .iter()
+            .all(|a| a.attach && a.track == TrackTarget::Auto)
+    );
     // A picture with no size or place given: the same, medium and in the middle, for its 5 s.
     let out = compile(
         &p,
@@ -1000,7 +1044,9 @@ fn chat_places_sounds_and_pictures_as_the_librarys_plus_does() {
             json!({"file": "logo", "size": "small", "position": "top-right", "atSec": 12.0, "durationSec": null}),
         )],
     );
-    let layout = &added_layers(&out)[0].layout;
+    let added = added_layers(&out);
+    assert!(added[0].attach, "moves with the clip under it");
+    let layout = &added[0].item.layout;
     assert_eq!(
         layout,
         &image_layout(800, 400, 0.2, Spot::TopRight, FormatKind::Landscape)
@@ -1094,6 +1140,10 @@ fn a_drawn_sticker_is_placed_where_its_job_says_as_a_picture_is() {
     assert_eq!(assets_added(&ops), ["drawn"]);
     let after = apply_ops(&p, &ops).unwrap();
     let sticker = &layers(&after, TrackKind::Overlay)[0];
+    assert!(
+        sticker.attach.is_some(),
+        "the sticker moves with its footage"
+    );
     assert_eq!(
         (sticker.start_us, sticker.duration_us),
         (secs(12.0), secs(5.0))
