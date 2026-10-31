@@ -2197,7 +2197,8 @@
 
 /* ---------- Inspector ---------- */
 
-.stage-body.has-inspector .screen {
+.stage-body.has-inspector .screen,
+.stage-body.has-inspector .analysis-banner {
   margin-right: calc(var(--inspector-w) + var(--space-6));
 }
 

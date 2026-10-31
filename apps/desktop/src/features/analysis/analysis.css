@@ -1,0 +1,203 @@
+/* The analysis banner, at the top of the preview: the offer and its progress, styled as `.banner`,
+   `.job` and `.steps`. Values from tokens.css only. Its classes carry the `analysis-` prefix, and the secondary button
+   and spinner are scoped here, until the shared design primitives carry them. */
+
+.analysis-banner {
+  /* Above the preview frame's bay shadow (it masks everything around the native preview's hole). */
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-5);
+  margin-bottom: var(--space-5);
+  padding: var(--space-5) var(--space-5) var(--space-5) var(--space-6);
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+}
+
+.analysis-ico {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-bay-hover);
+  color: var(--color-ink);
+}
+
+.analysis-title {
+  font-size: var(--text-lg);
+  line-height: var(--lh-lg);
+  font-weight: var(--weight-strong);
+}
+
+.analysis-text {
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+.analysis-actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.analysis-banner .btn-secondary {
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink);
+}
+
+.analysis-banner .btn-secondary:not(:disabled):hover {
+  box-shadow: inset 0 0 0 1px var(--color-ink);
+}
+
+.analysis-banner.is-progress {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-4) var(--space-5);
+}
+
+.analysis-banner.is-progress .analysis-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.analysis-banner .spinner {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--color-paper-track);
+  border-top-color: var(--color-paper);
+  animation: analysis-spin 0.9s linear infinite;
+}
+
+@keyframes analysis-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analysis-banner .spinner {
+    animation: none;
+  }
+}
+
+.analysis-banner.is-progress .analysis-error {
+  grid-column: 1 / -1;
+}
+
+.analysis-jobs {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.analysis-job {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1.1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-5);
+  font-size: var(--text-sm);
+}
+
+/* The clip's art: the design system's `.art-clip` frame (the library's), at the row's 56 px. */
+.analysis-job .art-clip {
+  width: 56px;
+}
+
+.analysis-job .art-clip.is-sound {
+  background: var(--color-bay-hover);
+  color: var(--color-ink-soft);
+}
+
+.analysis-job-name {
+  overflow: hidden;
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.analysis-job-step {
+  display: grid;
+  gap: var(--space-3);
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+}
+
+.analysis-job-reason {
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+.analysis-job-pct {
+  min-width: 40px;
+  text-align: right;
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-steps {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.analysis-steps i {
+  width: 18px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-bay-press);
+}
+
+.analysis-steps i.done {
+  background: var(--color-ink-soft);
+}
+
+.analysis-steps i.now {
+  background: linear-gradient(to right, var(--color-paper) var(--p), var(--color-bay-press) var(--p));
+}
+
+.analysis-banner .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* In the stage head after the format pills: it gives way to them and to the icons, its text ending in an ellipsis
+   (the stage status's own ellipsis can't reach text inside a flex box). */
+.analysis-rough {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.analysis-rough-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-rough .spinner {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--color-paper-track);
+  border-top-color: var(--color-paper);
+  animation: analysis-spin 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analysis-rough .spinner {
+    animation: none;
+  }
+}

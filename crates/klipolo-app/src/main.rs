@@ -55,7 +55,17 @@ fn main() {
             app.manage(projects);
             // How Klipolo pays for Meta's models (the Keychain), and this Mac's id with the relay (app support).
             let support = app.path().data_dir().ok().map(|dir| dir.join("Klipolo"));
-            app.manage(commands::settings::load(support.as_deref()));
+            let credentials = commands::settings::load(support.as_deref());
+            app.manage(credentials.clone());
+            // The clips' analysis, cached in app support, its levels from the sound cache the preview shares.
+            let sounds = app.state::<EngineState>().sounds.clone();
+            let analysis =
+                commands::analysis::load(app.handle(), support.as_deref(), credentials, sounds);
+            // Another project opening (or this one closing) stops analysis, once the switch is sure.
+            let stopping = analysis.clone();
+            app.state::<ProjectSessionState>()
+                .on_switch(Arc::new(move || stopping.project_changed()));
+            app.manage(analysis);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -81,6 +91,11 @@ fn main() {
             commands::settings::settings_set_key,
             commands::settings::settings_set_code,
             commands::settings::settings_clear,
+            commands::analysis::analysis_estimate,
+            commands::analysis::analysis_start,
+            commands::analysis::analysis_cancel,
+            commands::analysis::analysis_states,
+            commands::analysis::analysis_forget,
             media_cache::media_peaks_info,
             media_cache::media_peaks,
             media_cache::media_thumbs,

@@ -1,5 +1,7 @@
 import { useLingui } from '@lingui/react/macro';
 import type { FormatKind } from '../bindings/FormatKind';
+import { AnalysisBanner } from '../features/analysis/AnalysisBanner';
+import { RoughCaptionsNote } from '../features/analysis/RoughCaptionsNote';
 import { Inspector, useInspected } from '../features/inspector/Inspector';
 import { useImportMedia } from '../features/media/useImportMedia';
 import { AddTitleMenu } from '../features/preview/AddTitleMenu';
@@ -46,8 +48,9 @@ function DropZone({ over }: { over: boolean }) {
 
 /**
  * The preview panel: the format pills, Add title, the safe area switch, and the engine's frames fitted to
- * the panel in the chosen format with the layers there selectable and editable (`Stage`); the inspector docks at the
- * right while a layer it has fields for is selected, and the frame moves left for it. With no clip yet, the drop zone.
+ * the panel in the chosen format with the layers there selectable and editable (`Stage`), under the analysis banner;
+ * the inspector docks at the right while a layer it has fields for is selected, and the frame and banner move left for
+ * it. With no clip yet, the drop zone.
  * `filesOver`: files from Finder are held over the window.
  */
 export function Preview({ filesOver = false }: { filesOver?: boolean }) {
@@ -75,6 +78,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
         </div>
         <span className="spacer" />
         {status !== 'unavailable' && message && <span className="stage-status">{message}</span>}
+        <RoughCaptionsNote />
         <AddTitleMenu disabled={!hasVideo} />
         <button
           className="icon-btn"
@@ -90,6 +94,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
         </button>
       </div>
       <div className={docked ? 'stage-body has-inspector' : 'stage-body'}>
+        {hasVideo && <AnalysisBanner />}
         {hasVideo ? <Stage /> : <DropZone over={filesOver} />}
         {docked && <Inspector format={format} />}
       </div>

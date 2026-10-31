@@ -15,6 +15,7 @@ use std::fs::File;
 use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::ops::Range;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use klipolo_engine::audio::decode::{self, DecodeError};
 use klipolo_engine::render::probe::probe_media;
@@ -58,6 +59,9 @@ pub enum AudioError {
     NotWav,
     #[error("This WAV is not mono")]
     NotMono,
+    /// Stopped by its cancel flag (`extract_wav_16k_cancellable`).
+    #[error("Stopped")]
+    Stopped,
 }
 
 /// Writes `src`'s sound to `out` as a mono 16-bit PCM WAV at 16 kHz, its sample 0 the sound stream's first sample (sound
@@ -67,6 +71,16 @@ pub enum AudioError {
 /// have their own `out`: two writing one `out` from one process would share its temporary file. A process killed
 /// mid-write leaves the temporary file behind (extract into a temporary folder, or sweep `*.tmp`).
 pub fn extract_wav_16k(src: &Path, out: &Path) -> Result<AudioInfo, AudioError> {
+    extract_wav_16k_cancellable(src, out, &AtomicBool::new(false))
+}
+
+/// `extract_wav_16k`, stopped between decoded blocks (a few hundred milliseconds of work at most) once `cancel` is set:
+/// `AudioError::Stopped`, and no WAV (the temporary file is removed).
+pub fn extract_wav_16k_cancellable(
+    src: &Path,
+    out: &Path,
+    cancel: &AtomicBool,
+) -> Result<AudioInfo, AudioError> {
     if !probe_media(src).map_err(AudioError::Decode)?.has_audio {
         return Ok(AudioInfo {
             duration_us: 0,
@@ -81,7 +95,7 @@ pub fn extract_wav_16k(src: &Path, out: &Path) -> Result<AudioInfo, AudioError> 
             .max(1),
     );
     let tmp = durable::temp_path(out);
-    let written = write_wav(src, channels, &tmp).and_then(|info| {
+    let written = write_wav(src, channels, &tmp, cancel).and_then(|info| {
         std::fs::rename(&tmp, out)?;
         if let Some(dir) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
             durable::fsync_dir(dir)?;
@@ -94,8 +108,13 @@ pub fn extract_wav_16k(src: &Path, out: &Path) -> Result<AudioInfo, AudioError> 
     written
 }
 
-/// Decodes `src` into the WAV at `path` (the temporary file).
-fn write_wav(src: &Path, channels: usize, path: &Path) -> Result<AudioInfo, AudioError> {
+/// Decodes `src` into the WAV at `path` (the temporary file), until `cancel` is set.
+fn write_wav(
+    src: &Path,
+    channels: usize,
+    path: &Path,
+    cancel: &AtomicBool,
+) -> Result<AudioInfo, AudioError> {
     let mut sink = WavSink::create(path)?;
     let mut decimator = Decimator::new();
     let mut mono = Vec::new();
@@ -103,6 +122,9 @@ fn write_wav(src: &Path, channels: usize, path: &Path) -> Result<AudioInfo, Audi
     // The sink's error, kept here: the engine's `emit` can only pass a String back.
     let mut failed: Option<AudioError> = None;
     let mut emit = |_first: u64, samples: &[f32]| -> Result<bool, String> {
+        if cancel.load(Ordering::Relaxed) {
+            return Ok(false);
+        }
         mono.clear();
         if channels == 1 {
             mono.extend_from_slice(samples);
@@ -127,6 +149,9 @@ fn write_wav(src: &Path, channels: usize, path: &Path) -> Result<AudioInfo, Audi
     let decoded = decode::decode(src, 0, None, &mut emit);
     if let Some(e) = failed {
         return Err(e);
+    }
+    if cancel.load(Ordering::Relaxed) {
+        return Err(AudioError::Stopped);
     }
     decoded.map_err(|e| match e {
         DecodeError::Unreadable(e) | DecodeError::Failed(e) => AudioError::Decode(e),

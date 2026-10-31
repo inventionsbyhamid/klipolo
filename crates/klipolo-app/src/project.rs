@@ -112,6 +112,8 @@ fn set_open(state: &ProjectSessionState, open: Option<OpenProject>) -> Result<u6
     if guard.is_some() {
         state.flush().map_err(|e| Said::Text(e.to_string()))?;
     }
+    // The switch is sure now (the old project saved, the new one read): analysis lets the old project go.
+    state.switching();
     if let Some(open) = &open {
         state.remember_last(&open.file);
     }
@@ -130,7 +132,8 @@ pub(crate) fn servable(path: &str) -> bool {
     )
 }
 
-/// A new project named `name` (the first format is its primary), saved in the library and opened.
+/// A new project named `name` (the first format is its primary), saved in the library and opened. The open project's
+/// analysis stops once the switch is sure (`ProjectSessionState::on_switch`).
 #[tauri::command(async)]
 pub fn project_create(
     state: State<'_, ProjectSessionState>,
@@ -140,13 +143,13 @@ pub fn project_create(
     create_in(&state, &library_dir()?, new_project(&name, formats))
 }
 
-/// Opens the project file at `path` (the open one is saved and closed first).
+/// Opens the project file at `path` (the open one is saved and closed first, and its analysis stops).
 #[tauri::command(async)]
 pub fn project_open(state: State<'_, ProjectSessionState>, path: String) -> Result<Snapshot, Said> {
     open_in(&state, Path::new(&path))
 }
 
-/// Closes the open project once its edits are saved.
+/// Closes the open project once its edits are saved; its analysis stops.
 #[tauri::command(async)]
 pub fn project_close(state: State<'_, ProjectSessionState>) -> Result<(), Said> {
     set_open(&state, None).map(|_| ())

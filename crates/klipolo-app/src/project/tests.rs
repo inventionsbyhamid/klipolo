@@ -125,6 +125,113 @@ fn an_edits_label_params_reach_its_undo_and_redo_steps() {
     assert_eq!(undone.history.redo_params.as_ref(), Some(&params));
 }
 
+/// New speech (a transcript, levels) reaches the engine as a new `Arc<Speech>` on the revision it has, and stays with
+/// every later publish (an edit, another opening) until newer speech comes.
+#[test]
+fn speech_reaches_the_engine_on_the_same_revision_and_stays() {
+    use klipolo_model::speech::{Levels, Speech};
+
+    let dir = tempfile::tempdir().unwrap();
+    let (state, _) = session(&dir.path().join("Talk.klipolo"), "Talk");
+    let mut feed = state.subscribe();
+    let before = feed.borrow_and_update().clone().unwrap();
+    let mut speech = Speech::default();
+    speech.levels.insert(
+        "clip".into(),
+        Arc::new(Levels {
+            db: vec![-20.0; 3].into(),
+        }),
+    );
+    let speech = Arc::new(speech);
+
+    state.set_speech(speech.clone());
+    assert!(feed.has_changed().unwrap(), "the engine is told");
+    let now = feed.borrow_and_update().clone().unwrap();
+    assert_eq!(
+        (now.revision, now.opened, now.project_id.as_str()),
+        (before.revision, before.opened, before.project_id.as_str())
+    );
+    assert!(Arc::ptr_eq(&now.speech, &speech));
+    assert!(
+        Arc::ptr_eq(&now.project, &before.project),
+        "the same revision"
+    );
+
+    with_open(&state, |open| apply_and_commit(open, &rename("Edited"))).unwrap();
+    let edited = feed.borrow_and_update().clone().unwrap();
+    assert_eq!(edited.revision, before.revision + 1);
+    assert!(
+        Arc::ptr_eq(&edited.speech, &speech),
+        "an edit keeps the speech"
+    );
+
+    // Nothing open: kept for the next opening.
+    set_open(&state, None).unwrap();
+    let later = Arc::new(Speech::default());
+    state.set_speech(later.clone());
+    assert!(feed.borrow_and_update().is_none());
+    let (other, _) = (dir.path().join("Other.klipolo"), ());
+    set_open(
+        &state,
+        Some(OpenProject {
+            document: Document::new(Project::new("Other")).unwrap(),
+            file: other,
+            read_only: false,
+        }),
+    )
+    .unwrap();
+    assert!(Arc::ptr_eq(
+        &feed.borrow_and_update().clone().unwrap().speech,
+        &later
+    ));
+}
+
+/// The switch hook (analysis stopping and forgetting the old project) runs only once a create or open is sure: a file
+/// that can't be read leaves the open project, its feed and its speech as they were.
+#[test]
+fn only_a_switch_that_happens_tells_the_switch_hook() {
+    use std::sync::atomic::AtomicUsize;
+
+    use klipolo_model::speech::Speech;
+
+    let dir = tempfile::tempdir().unwrap();
+    let (state, _) = session(&dir.path().join("Talk.klipolo"), "Talk");
+    let told = Arc::new(AtomicUsize::new(0));
+    state.on_switch({
+        let told = told.clone();
+        Arc::new(move || {
+            told.fetch_add(1, Ordering::SeqCst);
+        })
+    });
+    let speech = Arc::new(Speech::default());
+    state.set_speech(speech.clone());
+    let mut feed = state.subscribe();
+    let before = feed.borrow_and_update().clone().unwrap();
+
+    assert!(open_in(&state, &dir.path().join("missing.klipolo")).is_err());
+    assert_eq!(
+        told.load(Ordering::SeqCst),
+        0,
+        "a failed open changes nothing"
+    );
+    let now = feed.borrow_and_update().clone().unwrap();
+    assert_eq!(
+        (now.project_id.as_str(), now.revision),
+        (before.project_id.as_str(), before.revision)
+    );
+    assert!(Arc::ptr_eq(&now.speech, &speech));
+
+    create_in(
+        &state,
+        dir.path(),
+        new_project("Other", vec![FormatKind::Landscape]),
+    )
+    .unwrap();
+    assert_eq!(told.load(Ordering::SeqCst), 1);
+    set_open(&state, None).unwrap();
+    assert_eq!(told.load(Ordering::SeqCst), 2);
+}
+
 #[test]
 fn edits_reach_the_engine_feed_before_the_command_returns() {
     let dir = tempfile::tempdir().unwrap();

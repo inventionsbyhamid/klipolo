@@ -169,6 +169,10 @@ impl Transcriber for FakeAsr {
         self.at_once
     }
 
+    fn estimate_usd(&self, seconds: f64) -> f64 {
+        seconds / 1000.0
+    }
+
     fn transcribe<'a>(
         &'a self,
         wav: Vec<u8>,
@@ -1331,6 +1335,10 @@ impl Transcriber for Eager {
 
     fn max_in_flight(&self) -> usize {
         8
+    }
+
+    fn estimate_usd(&self, seconds: f64) -> f64 {
+        self.0.estimate_usd(seconds)
     }
 
     fn transcribe<'a>(
