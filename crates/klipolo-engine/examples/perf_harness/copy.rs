@@ -1,10 +1,13 @@
-//! `cargo run -p klipolo-engine --release --example perf_harness -- copy <video file> [<its editing copy>]`: what an
-//! editing copy saves while the preview plays. With no copy given, one is made first, in this process, as the app's
-//! worker makes it (an Intel Mac's policy), in a folder that goes at the end. Then the real actor and GPU backend play
-//! 5 s at 1× four times, each on a fresh engine: the file as the main footage, then the same with the file again as a
-//! picture-in-picture layer (a quarter of the frame, 10 s further in), each reading the file itself and then its copy
-//! (handed to the preview with `Engine::set_media`, as the app does). Reported per run: frames drawn per second, render
-//! ms per frame (pixels read back and waited for, as the harness's playback does) and the VideoToolbox decoder
+//! `CARGO_BUILD_JOBS=2 nice -n 20 cargo run -p klipolo-engine --example perf_harness -- copy <video file> [<its editing
+//! copy>]`: what an editing copy saves while the preview plays. A dev build is enough (its dependencies build at -O2,
+//! the engine at -O1) and much lighter to make than `--release`; the comparison is file against copy on the same build.
+//! With no copy given, one is made first, in this process, as the app's worker makes it (an Intel Mac's policy), in a
+//! folder that goes at the end; it runs at the build's priority, not the worker's utility one, so pass a copy the app
+//! made (`~/Library/Caches/com.klipolo.app/media/proxies/<key>.mp4`) to skip that. Then the real actor and GPU backend
+//! play 5 s at 1× four times, each on a fresh engine: the file as the main footage, then the same with the file again
+//! as a picture-in-picture layer (a quarter of the frame, 10 s further in), each reading the file itself and then its
+//! copy (handed to the preview with `Engine::set_media`, as the app does). Reported per run: frames drawn per second,
+//! render ms per frame (pixels read back and waited for, as the harness's playback does) and the VideoToolbox decoder
 //! service's CPU per second of video. Nothing is captured and no sound device opens.
 
 use std::path::{Path, PathBuf};
