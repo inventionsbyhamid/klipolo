@@ -541,27 +541,46 @@ fn new_projects_get_their_own_file_in_the_library() {
     assert_eq!(untitled.settings.primary_format, FormatKind::Portrait);
 }
 
-/// The project open when the app quits opens again at the next launch.
+/// Klipolo opens on the start screen: launch opens no project, not even the one open when the app last quit, and the
+/// engine is given none. That project stays named in the memo, and a project opened from the start screen is named
+/// and stamped for the list as before.
 #[test]
-fn the_last_project_opens_again() {
+fn launch_opens_no_project_and_shows_the_start_screen() {
     let dir = tempfile::tempdir().unwrap();
-    let memo = dir.path().join("last-project");
+    let data = dir.path().join("data");
     let state = ProjectSessionState::default();
-    state.remember_last_in(memo.clone());
-    let made = create_in(&state, dir.path(), new_project("Again", vec![])).unwrap();
-    with_open(&state, |open| {
-        apply_and_commit(open, &rename("Again, renamed"))
-    })
-    .unwrap();
+    state.at_launch(&data);
+    let made = create_in(&state, dir.path(), new_project("Last time", vec![])).unwrap();
     state.flush().unwrap();
+    let file = dir.path().join("Last time.klipolo");
 
     let next = ProjectSessionState::default();
-    next.remember_last_in(memo);
-    let opened = next.open_last().expect("the last project opens");
+    next.at_launch(&data);
+    assert!(lock(&next).is_none(), "no project is open");
+    assert!(next.subscribe().borrow().is_none(), "the engine has none");
+    assert_eq!(snapshot_now(&next).unwrap_err(), Said::code("project.none"));
+    let memo = data.join("last-project");
     assert_eq!(
-        (opened.project.id, opened.project.name.as_str()),
-        (made.project.id, "Again, renamed")
+        std::fs::read_to_string(&memo).unwrap(),
+        file.to_string_lossy()
     );
+
+    let other = dir.path().join("Other.klipolo");
+    save(&other, &Project::new("Other"), Durability::Ordered).unwrap();
+    let opened = open_in(&next, &other).unwrap();
+    assert_eq!(opened.project.name, "Other");
+    assert_eq!(
+        std::fs::read_to_string(&memo).unwrap(),
+        other.to_string_lossy()
+    );
+    let stamps: std::collections::BTreeMap<String, u64> =
+        serde_json::from_slice(&std::fs::read(data.join("recent.json")).unwrap()).unwrap();
+    assert_eq!(
+        stamps.keys().cloned().collect::<Vec<_>>(),
+        [file.to_string_lossy(), other.to_string_lossy()],
+        "both are stamped: made, then opened"
+    );
+    assert_ne!(opened.project.id, made.project.id);
 }
 
 #[test]

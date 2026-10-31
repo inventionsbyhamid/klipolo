@@ -163,7 +163,6 @@ pub fn project_open(state: State<'_, ProjectSessionState>, path: String) -> Resu
 /// opened. Each card's thumbnail sprite is let through the asset protocol (the cache folder's scope holds it already).
 /// A projects folder that can't be listed fails as `project.libraryFailed`, never as an empty library.
 #[tauri::command(async)]
-#[expect(dead_code, reason = "registered with the start screen")]
 pub fn projects_recent(
     app: AppHandle,
     engine: State<'_, EngineState>,

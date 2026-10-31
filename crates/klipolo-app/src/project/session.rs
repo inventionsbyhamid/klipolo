@@ -1,11 +1,14 @@
 //! The project session: the open project, the feed the engine sees (with what analysis found said in the clips), the
-//! saver, and the project to open again at the next launch.
+//! saver, and where the projects opened are remembered for the start screen.
 
 use klipolo_engine::registry::Registry;
 use klipolo_model::speech::Speech;
 use klipolo_model::time::RangeUs;
 
 use super::*;
+
+/// The memo naming the last project opened, in the app's data folder.
+const LAST_PROJECT_FILE: &str = "last-project";
 
 pub struct ProjectSessionState {
     pub(super) open: Mutex<Option<OpenProject>>,
@@ -140,8 +143,14 @@ impl ProjectSessionState {
         self.saver.flush(FLUSH_TIMEOUT)
     }
 
-    /// The last project opened is named in `memo` (a small text file), and opens again at the next launch. Every
-    /// project opened is also stamped in `recent.json` beside it, for the start screen (`recent::stamp`).
+    /// What launch does with the app's data folder `data`: projects opened from now on are remembered there
+    /// (`remember_last_in`), and nothing is opened. Klipolo opens on the start screen.
+    pub(crate) fn at_launch(&self, data: &Path) {
+        self.remember_last_in(data.join(LAST_PROJECT_FILE));
+    }
+
+    /// The last project opened is named in `memo` (a small text file; launch doesn't open it). Every project opened is
+    /// also stamped in `recent.json` beside it, for the start screen (`recent::stamp`).
     pub(crate) fn remember_last_in(&self, memo: PathBuf) {
         *self.last.lock().unwrap_or_else(PoisonError::into_inner) = Some(memo);
     }
@@ -166,22 +175,6 @@ impl ProjectSessionState {
         if let Err(error) = recent::stamp(&stamps, file, recent::now_ms()) {
             tracing::warn!(%error, "the project couldn't be stamped as opened");
         }
-    }
-
-    /// Opens the project the memo names (the one open when the app last quit), if it is still there.
-    pub(crate) fn open_last(&self) -> Option<Snapshot> {
-        let memo = self
-            .last
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone()?;
-        let file = PathBuf::from(std::fs::read_to_string(memo).ok()?.trim());
-        if !file.is_file() {
-            return None;
-        }
-        open_in(self, &file)
-            .inspect_err(|error| tracing::warn!(?error, "the last project couldn't be opened"))
-            .ok()
     }
 
     /// Tells the engine what is open now, and returns what was published. An unchanged (project id, revision,
