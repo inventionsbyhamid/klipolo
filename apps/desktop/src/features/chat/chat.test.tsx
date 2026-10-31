@@ -19,6 +19,7 @@ import { useProject } from '../../state/project';
 import { useProposal } from '../../state/proposal';
 import { useRange } from '../../state/range';
 import { useSelection } from '../../state/selection';
+import { useSpeech } from '../../state/speech';
 import { fixturePatch, fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 import { ChatPanel } from './ChatPanel';
@@ -909,5 +910,22 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     act(() => useChat.getState().newChat());
     act(() => land());
     await waitFor(() => expect(useProject.getState().snapshot!.history.revision).toBe(4));
+  });
+});
+
+describe('chat: more on proposals and the panel', () => {
+  it('drops an open proposal when the words are timed again, though the revision is the same', async () => {
+    const fake = chat({ reply: (r) => reply(r.id, 'I found 3.', { proposal: cuts() }) });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'cut the ums{Enter}');
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    // Captions' "Time the words again" finished: Rust says the speech changed.
+    act(() => useSpeech.setState((s) => ({ pagesEpoch: s.pagesEpoch + 1 })));
+    expect(
+      await screen.findByText('This proposal was dropped because the project changed. Ask again to get a new one.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Apply' })).toBeNull();
+    expect(useProposal.getState().proposal).toBeNull();
+    expect(fake.applied).toEqual([]);
   });
 });
