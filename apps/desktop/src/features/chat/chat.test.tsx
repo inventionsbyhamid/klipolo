@@ -805,4 +805,24 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     expect(screen.getByRole('button', { name: 'Keep only these' })).toBeDisabled();
     expect(screen.getByText('The video changed since. Ask again to keep only these.')).toBeInTheDocument();
   });
+
+  it('a message whose Retry is refused because the video changed goes back into the box; Keep only does not', async () => {
+    let n = 0;
+    chat({
+      reply: () => {
+        n += 1;
+        if (n === 1) return { type: 'failed', kind: 'busy', message: 'Klipolo AI is busy right now. Try again in a moment.' };
+        throw new Error('The video changed. Try again.', { cause: code('project.moved') });
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'cut this{Enter}');
+    await userEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('The video changed. Ask again.')).toBeInTheDocument();
+    expect(message()).toHaveValue('cut this');
+    // Keep only's words are a label, not something typed: they don't go into the box.
+    act(() => useChat.getState().setDraft(''));
+    await act(() => useChat.getState().send('Keep only these', { keepOnly: [{ start: 0, end: S }], baseRevision: 1 }));
+    expect(message()).toHaveValue('');
+  });
 });

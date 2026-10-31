@@ -170,7 +170,10 @@ export const useChat = create<ChatStore>((set, get) => {
       } catch (error) {
         if (!live()) return;
         // Its times were on a revision the project left: sent again it would be refused again, so it says to ask anew.
-        if (isCode(error, 'project.moved'))
+        // A message the person typed goes back into the box to send again (unless they typed something new meanwhile);
+        // Keep only's words are a label, not theirs.
+        if (isCode(error, 'project.moved')) {
+          if (keepOnly.length === 0 && get().draft.trim() === '') set({ draft: trimmed });
           push({
             id,
             from: 'klipolo',
@@ -179,7 +182,7 @@ export const useChat = create<ChatStore>((set, get) => {
             failure: 'other',
             retry: null,
           });
-        else failed(errorMessage(error), 'other');
+        } else failed(errorMessage(error), 'other');
       } finally {
         set((s) => (s.pending?.id === id ? { pending: null } : {}));
       }
