@@ -15,12 +15,14 @@
 #    with the configure line of this arch's prefix (arm64 adds the cross-compile flags), Archivo's OFL.
 # 3. scripts/release/third-party.sh --check after `pnpm install`: the notices that ship list this checkout's crates and
 #    the page's packages. Then `pnpm tauri build --target <triple> --bundles app` (its beforeBuildCommand runs
-#    `pnpm build`), signed ad hoc with the hardened runtime. FFMPEG_DIR, PKG_CONFIG_LIBDIR and KLIPOLO_FFMPEG_PREFIX
-#    point at this arch's prefix, and --config lists its dylibs (by install name) as the bundle's frameworks and adds
-#    the licences. Source paths are remapped, so the binary names no home folder. Apple's notary variables are unset:
-#    notarization is notarize.sh's.
-# 4. The bundle is checked before anything is signed: its version and minimum macOS here, then check-bundle.sh (the
-#    licences and fonts, every Mach-O built for this arch only, load paths and rpaths).
+#    `pnpm build`), signed ad hoc with the hardened runtime and the app's entitlements (tauri.conf.json's
+#    bundle.macOS.entitlements). FFMPEG_DIR, PKG_CONFIG_LIBDIR and KLIPOLO_FFMPEG_PREFIX point at this arch's prefix,
+#    and --config lists its dylibs (by install name) as the bundle's frameworks and adds the licences. Source paths
+#    are remapped, so the binary names no home folder. Apple's notary variables are unset: notarization is
+#    notarize.sh's.
+# 4. The bundle is checked before it is signed with the Developer ID: its version and minimum macOS here, then
+#    check-bundle.sh (the licences and fonts, the permission strings, the ad hoc signature's camera and microphone
+#    entitlements, every Mach-O built for this arch only, load paths and rpaths).
 # 5. sign.sh, notarize.sh (the app, then the disk image), then check-dmg.sh mounts the disk image read-only and
 #    checks it: spctl must say `accepted` with `source=Notarized Developer ID`.
 # CARGO_BUILD_JOBS defaults to 4 here (the Mac is also someone's daily machine); run it under `nice -n 10`.
@@ -92,7 +94,7 @@ This copy of Klipolo is for $arch Macs ($ffarch). FFmpeg was configured with:
 $configure
 EOF
 
-# 3. The app, signed ad hoc with the hardened runtime.
+# 3. The app, signed ad hoc with the hardened runtime and the app's entitlements.
 frameworks=""
 for f in "$prefix"/lib/lib*.dylib; do
   [ -L "$f" ] && continue
@@ -120,11 +122,11 @@ echo "built in $(($(date +%s) - built)) s"
 app=$repo/target/$triple/release/bundle/macos/Klipolo.app
 [ -d "$app" ] || { echo "refused: no app at $app" >&2; exit 1; }
 
-# 4. The bundle, before anything is signed.
+# 4. The bundle, before it is signed with the Developer ID.
 plist=$app/Contents/Info.plist
 [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$version" ] || { echo "FAIL: the app isn't $version" >&2; exit 1; }
 [ "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$plist")" = 15.0 ] || { echo "FAIL: LSMinimumSystemVersion isn't 15.0" >&2; exit 1; }
-"$here/check-bundle.sh" "$app" "$ffarch" || { echo "the bundle check failed: nothing was signed" >&2; exit 1; }
+"$here/check-bundle.sh" "$app" "$ffarch" || { echo "the bundle check failed: nothing was signed with the Developer ID" >&2; exit 1; }
 
 # 5. Signed, notarized, stapled, then checked as a user's Mac would.
 "$here/sign.sh" "$app"

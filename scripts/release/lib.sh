@@ -53,6 +53,25 @@ naming_files() {
   LC_ALL=C grep -rlF "${patterns[@]}" "$@"
 }
 
+# The checkout <repo>'s source files vendored from Cap's MIT crates, as paths from <repo>, one a line, sorted: each .rs
+# file under crates/<crate>/src whose first line is `// SPDX-License-Identifier: MIT` and whose first four lines name
+# Cap Software, Inc. (crates/klipolo-capture/NOTICE lists them). Returns 1 when a folder or a file couldn't be read
+# (the files found are printed all the same).
+cap_mit_files() {
+  local repo=$1 list f found="" rc=0
+  [ -d "$repo/crates" ] || return 0
+  list=$(mktemp)
+  (cd "$repo" && find crates -path 'crates/*/src/*' -name '*.rs' -type f -print0) > "$list" || rc=1
+  while IFS= read -r -d '' f; do
+    if [ ! -r "$repo/$f" ]; then rc=1; continue; fi
+    [ "$(head -n 1 "$repo/$f")" = '// SPDX-License-Identifier: MIT' ] || continue
+    case "$(head -n 4 "$repo/$f")" in *'Cap Software, Inc.'*) found+="$f"$'\n' ;; esac
+  done < "$list"
+  rm -f "$list"
+  printf '%s' "$found" | LC_ALL=C sort
+  return "$rc"
+}
+
 # The public address of Klipolo's source code, as NOTICE.txt gives it: https://, a host, and a path of plain URL
 # characters (no spaces, quotes, & or \).
 is_source_url() {

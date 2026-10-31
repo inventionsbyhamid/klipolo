@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-# The app bundle's check before anything is signed (build-mac.sh runs it; it works on a signed app too):
+# The app bundle's check before it is signed with the Developer ID (build-mac.sh runs it on the build, which is signed
+# ad hoc; it works on a Developer ID signed app too):
 #   scripts/release/check-bundle.sh <Klipolo.app> <x86_64|arm64> [<page build folder>]
-# Fails unless the licences (the third-party notices too, none of them empty) and the fonts are in Resources, every
-# Mach-O is built for <arch> only and for macOS 15.0 or older, every load path is @rpath/, @executable_path/,
-# @loader_path/, /usr/lib/ or /System/Library/, and every LC_RPATH is relative (@executable_path/ or @loader_path/),
-# never a machine path such as the dev FFmpeg prefix's.
+# Fails unless the licences (the third-party notices and Cap's MIT licence too, none of them empty) and the fonts are
+# in Resources, every Mach-O is built for <arch> only and for macOS 15.0 or older, every load path is @rpath/,
+# @executable_path/, @loader_path/, /usr/lib/ or /System/Library/, and every LC_RPATH is relative (@executable_path/ or
+# @loader_path/), never a machine path such as the dev FFmpeg prefix's.
+# The recorder's needs: Info.plist gives the screen, microphone and camera usage strings, and the app's signature grants
+# the camera and microphone entitlements (an unsigned app fails). Cap-MIT.txt's first line names every file in the
+# checkout vendored from Cap's MIT crates (lib.sh's cap_mit_files).
 # The app must also find its libraries: the main executable's LC_RPATHs include @executable_path/../Frameworks, and
 # every @rpath/<name> that any Mach-O in the bundle loads is a file at Contents/Frameworks/<name>. And no file under
 # Contents names the builder's home folder or user name, nor does the page build it was made from: the main
@@ -27,9 +31,11 @@ main=$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable
 home=$(cd ~ && pwd -P)
 rc=0
 fail() { echo "FAIL: $*"; rc=1; }
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
 is_macho "$main" || fail "the main executable ${main#"$app"/} isn't a Mach-O file"
 
-for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt NOTICE.txt THIRD-PARTY-NOTICES.txt Archivo-OFL.txt; do
+for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt NOTICE.txt THIRD-PARTY-NOTICES.txt Archivo-OFL.txt Cap-MIT.txt; do
   if [ ! -f "$app/Contents/Resources/licenses/$f" ]; then
     fail "licenses/$f isn't in the app"
   elif [ ! -s "$app/Contents/Resources/licenses/$f" ]; then
@@ -60,8 +66,44 @@ if [ -f "$licences/NOTICE.txt" ]; then
   fi
 fi
 
-files=$(mktemp)
-trap 'rm -f "$files"' EXIT
+# Cap's MIT licence, for the recorder's files from Cap's MIT crates: Cap's text, and a first line that names each such
+# file in the checkout, so a file vendored later can't ship without it.
+cap=$licences/Cap-MIT.txt
+if [ -s "$cap" ]; then
+  grep -qF 'Permission is hereby granted, free of charge' "$cap" \
+    && grep -qF 'Copyright (c) 2023 Cap Software, Inc.' "$cap" \
+    || fail "licenses/Cap-MIT.txt isn't Cap's MIT licence (its text and Cap Software, Inc.'s copyright line)"
+  cap_named=$(head -n 1 "$cap" | tr -s ' ,;()' '\n' | sed 's/[.:]*$//')
+  if cap_files=$(cap_mit_files "$repo"); then
+    while IFS= read -r f; do
+      [ -z "$f" ] || grep -qxF -- "$f" <<< "$cap_named" \
+        || fail "licenses/Cap-MIT.txt's first line doesn't name $f (from Cap's MIT crates)"
+    done <<< "$cap_files"
+  else
+    fail "couldn't read every source file under crates/ to look for files from Cap's MIT crates"
+  fi
+fi
+
+# The permission prompts' words (crates/klipolo-app/Info.plist, which tauri.conf.json's bundle.macOS.infoPlist merges
+# in): macOS shows them when it asks, and ends an app that opens the camera or the microphone without its string.
+for key in NSScreenCaptureUsageDescription NSMicrophoneUsageDescription NSCameraUsageDescription; do
+  words=$(/usr/libexec/PlistBuddy -c "Print :$key" "$app/Contents/Info.plist" 2> /dev/null || true)
+  [ -n "$words" ] || fail "Info.plist has no $key, the words macOS shows when it asks for that permission"
+done
+# The camera and microphone entitlements, read from the app's signature: the build signs it ad hoc with
+# crates/klipolo-app/entitlements.plist (tauri.conf.json's bundle.macOS.entitlements), and sign.sh again with the
+# Developer ID. Without one, macOS silences that device and never asks. Screen Recording has no entitlement.
+entitlements=$tmp/entitlements.plist
+if ! codesign -d --entitlements - --xml "$app" > "$entitlements" 2> /dev/null; then
+  fail "the app isn't signed, so it has no entitlements (the build signs it ad hoc)"
+else
+  for key in com.apple.security.device.camera com.apple.security.device.audio-input; do
+    [ "$(/usr/libexec/PlistBuddy -c "Print :$key" "$entitlements" 2> /dev/null || true)" = true ] \
+      || fail "the app's entitlements don't grant $key, so macOS would silence that device without asking"
+  done
+fi
+
+files=$tmp/files
 find "$app/Contents" -type f -print0 > "$files"
 count=0
 while IFS= read -r -d '' f; do

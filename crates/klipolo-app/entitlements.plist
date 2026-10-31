@@ -2,8 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   The app's entitlements under the hardened runtime. The build signs with them ad hoc (tauri.conf.json's
-  bundle.macOS.entitlements), then scripts/release/sign.sh with the Developer ID. The recorder needs the camera and the
-  microphone: without these two keys, macOS silences them and never asks. Screen Recording is a privacy grant the person gives in System Settings, with no entitlement.
+  bundle.macOS.entitlements), then scripts/release/sign.sh with the Developer ID; check-bundle.sh fails a bundle whose
+  signature lacks either key. The recorder needs the camera and the microphone: without these two keys, macOS silences
+  them and never asks. Screen Recording is a privacy grant the person gives in System Settings, with no entitlement.
   Nothing needs JIT: the preview runs on Metal and WebKit's JavaScript runs in WebKit's own process. The FFmpeg dylibs
   are signed with the same Team ID, so library validation passes. Never get-task-allow: sign.sh refuses it.
 -->
