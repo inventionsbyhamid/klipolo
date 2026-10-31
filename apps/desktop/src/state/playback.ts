@@ -62,6 +62,16 @@ export function sendSeek(us: number) {
   });
 }
 
+/**
+ * Shows the frame at `us` in the preview without moving the playhead or the timecode (a trim shows the edge it drags),
+ * or the playhead's frame again (null). Each is a seek of its own, sent as the playhead's are: the newest once per
+ * animation frame, under a new sequence, so the engine stops reading toward a still an older one asked for.
+ */
+export function showFrameAt(us: number | null) {
+  usePlayback.setState((s) => ({ seq: s.seq + 1 }));
+  sendSeek(us ?? usePlayback.getState().playheadUs);
+}
+
 export const usePlayback = create<PlaybackStore>((set, get) => ({
   playheadUs: 0,
   playing: false,
