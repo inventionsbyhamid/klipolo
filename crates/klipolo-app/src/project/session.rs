@@ -258,15 +258,16 @@ mod tests {
     use super::*;
 
     fn file(id: &str, kind: AssetKind) -> Asset {
+        let video = kind == AssetKind::Video;
         Asset {
             id: id.into(),
             kind,
             path: format!("/media/{id}"),
             name: id.into(),
             duration_us: 16_000_000,
-            width: 0,
-            height: 0,
-            fps: 0.0,
+            width: if video { 1920 } else { 0 },
+            height: if video { 1080 } else { 0 },
+            fps: if video { 30.0 } else { 0.0 },
             rotation: None,
             has_audio: true,
             audio_lead_us: None,
