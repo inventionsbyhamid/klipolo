@@ -143,6 +143,12 @@ app=$(case_app no-dylib)
 rm "$app/Contents/Frameworks/libfoo.1.dylib"
 expect "a missing @rpath library fails" fail "Contents/Frameworks/libfoo.1.dylib isn't there" "$check" "$app" "$arch"
 
+# The source code address may name the builder's own account (github.com/<user>/klipolo): NOTICE.txt passes.
+app=$(case_app source-names-the-user)
+printf 'Klipolo\nSource code: https://github.com/%s/klipolo (commit %s)\n' "$(id -un)" "$commit" \
+  > "$app/Contents/Resources/licenses/NOTICE.txt"
+expect "a source address naming the builder's account passes" pass "$check" "$app" "$arch"
+
 app=$(case_app home-in-resources)
 echo "built in $HOME/klipolo" > "$app/Contents/Resources/fonts/note.txt"
 expect "a resource naming the home folder fails" fail "Resources/fonts/note.txt" "$check" "$app" "$arch"
@@ -192,6 +198,22 @@ expect "a long user name inside longer words isn't found" pass found klipolobuil
 expect "a user named test isn't found in words" pass found test "$names/plain" ""
 expect "a user named test is found as a path part" pass found test "$names/path" "$names/path/b.txt"
 expect "a user name under 4 characters isn't looked for" pass found lib "$names/path" ""
+# The source code address NOTICE.txt gives may name the account that owns the code (github.com/<user>/...) when it is
+# also the builder's user name: that address is allowed, the user name anywhere else still counts.
+mkdir -p "$names/notice" "$names/notice-and-path"
+echo 'Source code: https://github.com/klipolobuilder/klipolo (commit abc)' > "$names/notice/NOTICE.txt"
+printf 'Source code: https://github.com/klipolobuilder/klipolo (commit abc)\nbuilt in /Volumes/klipolobuilder/klipolo\n' \
+  > "$names/notice-and-path/NOTICE.txt"
+found_allowing() {  # found_allowing <user> <allowed text> <dir> <expected output>
+  local out rc
+  out=$(. "$repo/scripts/release/lib.sh" && naming_files /no/such/home "$1" --allow "$2" "$3") && rc=0 || rc=$?
+  [ "$out" = "$4" ] && [ "$rc" -eq "$([ -n "$4" ] && echo 0 || echo 1)" ]
+}
+expect "a user name only in the allowed source address isn't found" pass \
+  found_allowing klipolobuilder https://github.com/klipolobuilder/klipolo "$names/notice" ""
+expect "a user name outside the allowed source address is still found" pass \
+  found_allowing klipolobuilder https://github.com/klipolobuilder/klipolo "$names/notice-and-path" \
+  "$names/notice-and-path/NOTICE.txt"
 
 # The source code address build-mac.sh puts in NOTICE.txt: https:// with plain URL characters only.
 url_ok() { (. "$repo/scripts/release/lib.sh" && is_source_url "$1"); }
