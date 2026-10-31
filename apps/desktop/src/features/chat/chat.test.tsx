@@ -714,6 +714,9 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
           : reply(r.id, 'Done.');
       },
     });
+    // The page is on that revision too (a reply on another one has stale moments).
+    const at7 = fixtureSnapshot();
+    useProject.setState({ snapshot: { ...at7, history: { ...at7.history, revision: 7 } } });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'find the kiln{Enter}');
     await userEvent.click(await screen.findByRole('button', { name: 'Keep only these' }));
@@ -790,5 +793,16 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     expect(screen.getByRole('button', { name: 'Undo add text' })).toBeInTheDocument();
     expect(screen.queryByText('This change can’t be undone from chat any more.')).toBeNull();
     expect(useProject.getState().snapshot!.history.revision).toBe(4);
+  });
+
+  it('moments a reply found on another revision than the page has come stale', async () => {
+    const moments = [{ startUs: 2 * S, endUs: 6 * S, label: 'the kiln' }];
+    // The page is at 3; the reply landed on 2 (the project moved under it before the page heard).
+    chat({ reply: (r) => reply(r.id, 'Here it is.', { moments, revision: 2 }) });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'find the kiln{Enter}');
+    await screen.findByText('Here it is.');
+    expect(screen.getByRole('button', { name: 'Keep only these' })).toBeDisabled();
+    expect(screen.getByText('The video changed since. Ask again to keep only these.')).toBeInTheDocument();
   });
 });

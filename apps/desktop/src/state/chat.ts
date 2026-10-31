@@ -159,7 +159,8 @@ export const useChat = create<ChatStore>((set, get) => {
           questions: outcome.questions,
           moments: outcome.moments,
           revision: outcome.revision,
-          momentsStale: false,
+          // Moments found on another revision than the page has are stale as they come.
+          momentsStale: outcome.moments.length > 0 && outcome.revision !== revision,
           applied,
           proposal,
           pictures: outcome.pictures.map((picture) => ({ picture, state: 'drawing' as const })),
