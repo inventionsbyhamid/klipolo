@@ -385,6 +385,10 @@ impl ChatSession {
         let current = self.projects.now().map(|n| n.at);
         let same_project = current.as_ref().is_some_and(|c| c.same_project(&landed.at));
         let moved = current.as_ref() != Some(&landed.at);
+        // Another project opened (or this one closed) while the answer came: nothing of it is for the project open now.
+        if !same_project && landed.lost.is_none() {
+            landed.lost = Some(MOVED);
+        }
         let mut notes: Vec<String> = Vec::new();
         if !out.compiled.moments.is_empty() && (landed.lost.is_some() || moved) {
             out.compiled.moments.clear();

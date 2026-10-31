@@ -1862,6 +1862,44 @@ async fn an_apply_racing_a_message_lands_and_the_message_does_not() {
 }
 
 #[tokio::test]
+async fn a_project_switch_while_the_model_answers_leaves_the_new_project_alone() {
+    let mut calls = vertical_karaoke();
+    calls.push(fillers());
+    calls.push(fc(
+        "s",
+        "makeSticker",
+        r#"{"prompt": "paper plane", "position": null, "atSec": 12.0, "durationSec": 3.0}"#,
+    ));
+    for answered in [calls, vec![sticker_at_12().unwrap().calls[0].clone()]] {
+        let model = Script::new(vec![answer("Done, and drawing a plane.", answered)]);
+        let gate = model.hold();
+        let chat = chat_with(model.clone(), Found::done(), Paying::key(model.clone()));
+        let sent = tokio::spawn({
+            let session = chat.session.clone();
+            async move {
+                session
+                    .send(at_playhead("vertical, cut the ums, a plane here", 12.0))
+                    .await
+                    .unwrap()
+            }
+        });
+        model.arrived.notified().await;
+        chat.project.switch(Some(talk())).unwrap();
+        gate.notify_one();
+        let r = reply(&sent.await.unwrap());
+        assert_eq!(r["text"], MOVED, "{r:#}");
+        assert!(r["applied"].is_null() && r["proposal"].is_null());
+        assert_eq!(
+            r["pictures"],
+            serde_json::json!([]),
+            "no picture for a project that closed"
+        );
+        assert_eq!(chat.project.revision(), 0, "the new project is untouched");
+        assert_eq!(chat.project.undo_steps(), 0);
+    }
+}
+
+#[tokio::test]
 async fn a_title_background_moves_with_its_attached_title() {
     let mut p = titled();
     // The title is attached to the footage under it, as layers placed by chat are.
