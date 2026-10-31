@@ -56,7 +56,10 @@ order() {
 nested=$(order) || exit 1
 
 if [ "$list" = 1 ]; then
-  [ -z "$nested" ] || sed "s|^$app/||" <<< "$nested"
+  # Cut as text, not with sed: the app's path may hold |, [ or & .
+  while IFS= read -r f; do
+    [ -z "$f" ] || printf '%s\n' "${f#"$app"/}"
+  done <<< "$nested"
   exit 0
 fi
 
