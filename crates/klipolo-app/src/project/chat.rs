@@ -3,6 +3,9 @@
 //! revision) and an edit made on a revision the project left is refused, never rebased.
 
 use klipolo_app::chat::{At, CommitError, Committed, ProjectNow, Projects};
+use klipolo_chat::{LibraryItem, MediaKind};
+
+use crate::pack::PackCategory;
 
 use super::apply::commit_reviewed;
 use super::*;
@@ -62,6 +65,27 @@ impl Projects for ProjectSessionState {
 
     fn undo(&self, at: &At) -> Result<Committed, CommitError> {
         self.chat_at(at, |open| step(open, false))
+    }
+
+    /// The pack this install has, as the library lists it, each item as the asset a project adds.
+    fn pack(&self) -> Vec<LibraryItem> {
+        let pack = ProjectSessionState::pack(self);
+        (pack.items().into_iter())
+            .filter_map(|item| {
+                let asset = pack.asset(&item.id)?;
+                let kind = match item.category {
+                    PackCategory::Music => MediaKind::Music,
+                    PackCategory::Sound => MediaKind::Sound,
+                    PackCategory::Sticker => MediaKind::Image,
+                };
+                Some(LibraryItem {
+                    name: item.name,
+                    kind,
+                    asset,
+                    pack: true,
+                })
+            })
+            .collect()
     }
 }
 
@@ -205,5 +229,33 @@ mod tests {
             document: Document::new(project).unwrap(),
             read_only: false,
         })
+    }
+
+    #[test]
+    fn chat_names_the_pack_this_install_has() {
+        use klipolo_chat::MediaKind;
+        let state = opened(talk());
+        assert!(Projects::pack(&state).is_empty(), "no pack read yet");
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/library");
+        state.set_pack(crate::pack::Pack::read(&dir));
+        let pack = Projects::pack(&state);
+        let count = |kind| pack.iter().filter(|i| i.kind == kind).count();
+        assert_eq!(
+            (
+                count(MediaKind::Music),
+                count(MediaKind::Sound),
+                count(MediaKind::Image)
+            ),
+            (2, 8, 6)
+        );
+        for item in &pack {
+            assert!(item.pack);
+            assert!(
+                item.asset.id.starts_with("klipolo-pack-"),
+                "{}",
+                item.asset.id
+            );
+            assert!(Path::new(&item.asset.path).is_file(), "{}", item.asset.path);
+        }
     }
 }

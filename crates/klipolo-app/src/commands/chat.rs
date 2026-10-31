@@ -13,6 +13,7 @@ use klipolo_app::chat::{
     At, ChatApplied, ChatOutcome, ChatPictureDrawn, ChatRequest, ChatSession, CommitError,
     Committed, MetaModels, ProjectNow, Projects,
 };
+use klipolo_chat::LibraryItem;
 use klipolo_model::coded::Said;
 use klipolo_model::history::SnapshotPatch;
 use klipolo_model::{Project, Transaction};
@@ -43,6 +44,10 @@ impl Projects for OpenProjectOf {
 
     fn undo(&self, at: &At) -> Result<Committed, CommitError> {
         self.0.state::<ProjectSessionState>().undo(at)
+    }
+
+    fn pack(&self) -> Vec<LibraryItem> {
+        Projects::pack(&*self.0.state::<ProjectSessionState>())
     }
 }
 

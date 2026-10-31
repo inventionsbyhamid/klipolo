@@ -10,6 +10,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
+use klipolo_chat::LibraryItem;
 use klipolo_model::coded::Said;
 use klipolo_model::history::{Change, Document, SnapshotPatch};
 use klipolo_model::{ModelError, Project, Transaction};
@@ -89,6 +90,11 @@ pub trait Projects: Send + Sync {
 
     /// Takes back the top undo step when the open project still stands `at`.
     fn undo(&self, at: &At) -> Result<Committed, CommitError>;
+
+    /// Klipolo's own pack (sounds, music beds, stickers) as chat's media tools name it; none by default.
+    fn pack(&self) -> Vec<LibraryItem> {
+        Vec::new()
+    }
 }
 
 /// Records `tx` on `document` as one undo step (`Document::commit_tx`): `next` when given (a reviewed project, applied
@@ -109,6 +115,7 @@ pub fn commit_reviewed(
 /// A project held in memory, with its history: for tools and tests that run chat without the app.
 pub struct MemoryProjects {
     open: Mutex<Option<Held>>,
+    pack: Vec<LibraryItem>,
 }
 
 struct Held {
@@ -126,7 +133,14 @@ impl MemoryProjects {
                 file,
                 opening: 1,
             })),
+            pack: Vec::new(),
         })
+    }
+
+    /// With `pack` as Klipolo's own pack.
+    pub fn with_pack(mut self, pack: Vec<LibraryItem>) -> Self {
+        self.pack = pack;
+        self
     }
 
     fn held(&self) -> MutexGuard<'_, Option<Held>> {
@@ -240,6 +254,10 @@ impl Projects for MemoryProjects {
                 .map_err(|e| CommitError::Refused(Said::Coded(e.coded())))
         })?;
         Ok(Committed { patch, ..committed })
+    }
+
+    fn pack(&self) -> Vec<LibraryItem> {
+        self.pack.clone()
     }
 
     fn undo(&self, at: &At) -> Result<Committed, CommitError> {

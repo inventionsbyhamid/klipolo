@@ -26,8 +26,8 @@ use klipolo_app::chat::{
     MemoryProjects, Models, Projects, Readiness,
 };
 use klipolo_chat::{
-    AnalysisState, BoxFuture, FunctionCall, Item, LanguageModel, ModelError, ModelRequest,
-    ModelResponse,
+    AnalysisState, BoxFuture, FunctionCall, Item, LanguageModel, LibraryItem, MediaKind,
+    ModelError, ModelRequest, ModelResponse,
 };
 use klipolo_model::ops::{Op, Origin};
 use klipolo_model::project::{Asset, AssetKind, FormatKind};
@@ -2130,4 +2130,89 @@ async fn use_of_a_drawing_that_isnt_there_says_so() {
         .unwrap_err();
     assert_eq!(sentence(refused), DRAWING_GONE);
     assert_eq!(s.chat.project.revision(), 0);
+}
+
+fn sound_file(id: &str, name: &str, seconds: f64) -> Asset {
+    Asset {
+        id: id.into(),
+        kind: AssetKind::Audio,
+        path: format!("/media/{name}"),
+        name: name.into(),
+        duration_us: secs(seconds),
+        width: 0,
+        height: 0,
+        fps: 0.0,
+        rotation: None,
+        has_audio: true,
+        audio_lead_us: None,
+        made_with: None,
+    }
+}
+
+#[tokio::test]
+async fn chats_media_tools_find_the_projects_music_and_sounds_and_the_pack() {
+    let mut p = talk();
+    p.assets.push(sound_file("lofi", "lofi-beat.mp3", 60.0));
+    p.assets.push(sound_file("whoosh", "whoosh.wav", 1.0));
+    let soft = LibraryItem {
+        name: "Soft ambient".into(),
+        kind: MediaKind::Music,
+        asset: sound_file("klipolo-pack-soft-ambient", "soft-ambient.wav", 30.0),
+        pack: true,
+    };
+    let model = Script::new(vec![
+        answer(
+            "",
+            vec![
+                fc(
+                    "m",
+                    "addMusic",
+                    r#"{"file": "lofi", "volume": null, "duck": null, "atSec": 0.0}"#,
+                ),
+                fc("s", "addSound", r#"{"name": "whoosh", "atSec": [0.0]}"#),
+            ],
+        ),
+        answer(
+            "",
+            vec![fc(
+                "m",
+                "addMusic",
+                r#"{"file": "soft ambient", "volume": null, "duck": null, "atSec": 0.0}"#,
+            )],
+        ),
+    ]);
+    let project = Arc::new(
+        MemoryProjects::open(p, PathBuf::from("/tmp/talk.klipolo"))
+            .unwrap()
+            .with_pack(vec![soft]),
+    );
+    let session = ChatSession::new(project.clone(), Found::done(), Paying::key(model.clone()));
+    let r = reply(
+        &session
+            .send(request("add my lofi beat and a whoosh at the start"))
+            .await
+            .unwrap(),
+    );
+    assert!(r["applied"].is_object(), "{r:#}");
+    let context = match &model.seen()[0].input[0] {
+        Item::Context { text } => text.clone(),
+        _ => unreachable!(),
+    };
+    for name in ["lofi-beat.mp3", "whoosh.wav", "Soft ambient"] {
+        assert!(context.contains(name), "{name} in {context}");
+    }
+    // A song from the pack comes into the project with the music that plays it.
+    let r = reply(
+        &session
+            .send(request("use the soft ambient music instead"))
+            .await
+            .unwrap(),
+    );
+    assert!(r["applied"].is_object(), "{r:#}");
+    assert!(
+        project
+            .project()
+            .asset("klipolo-pack-soft-ambient")
+            .is_some()
+    );
 }

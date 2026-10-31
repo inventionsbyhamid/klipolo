@@ -225,7 +225,13 @@ impl ChatSession {
             selection: request.selection,
         };
         if !request.keep_only.is_empty() {
-            let (_, inputs) = gather(&now.project, &*self.findings, &text, view);
+            let (_, inputs) = gather(
+                &now.project,
+                &*self.findings,
+                &text,
+                view,
+                self.projects.pack(),
+            );
             let out = keep_only(&now.project, &inputs, request.keep_only.clone());
             return Ok(self.land(&request.id, &text, &now, &inputs, out));
         }
@@ -237,7 +243,13 @@ impl ChatSession {
             }
             Readiness::NeedsKey => return Ok(failed(ChatFailureKind::NeedsKey, NEEDS_KEY)),
         };
-        let (context, inputs) = gather(&now.project, &*self.findings, &text, view);
+        let (context, inputs) = gather(
+            &now.project,
+            &*self.findings,
+            &text,
+            view,
+            self.projects.pack(),
+        );
         let history = self.turns();
         let ask = |model: Arc<dyn klipolo_chat::LanguageModel>| {
             let (context, inputs, history, text, project) =
