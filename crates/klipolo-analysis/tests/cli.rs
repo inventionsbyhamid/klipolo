@@ -1,6 +1,7 @@
-//! The dev CLI `klipolo-analyze transcript <video>`, run as a process against a mock Meta and relay: it writes
-//! `transcript.json`, prints the cost, logs spend only when asked, and never prints the key or token. The test of a
-//! clip without sound needs `scripts/gen-engine-fixtures.sh` (the gate runs it with `--ignored`).
+//! The dev CLI `klipolo-analyze transcript <video>` and `scenes <video>`, run as a process against a mock Meta and
+//! relay: it writes `transcript.json` or `scenes.json`, prints the cost, logs spend only when asked, and never prints
+//! the key or token. The test of a clip without sound needs `scripts/gen-engine-fixtures.sh` (the gate runs it with
+//! `--ignored`).
 
 #[path = "../../klipolo-engine/tests/support/fixture_set.rs"]
 mod fixture_set;
@@ -75,6 +76,105 @@ async fn cli_needs_a_video_and_a_key_or_token() {
     let out = run(&[], &["transcript", "clip.mp4"]).await;
     assert_eq!(out.status.code(), Some(1));
     assert!(text(&out).contains("Set MODEL_API_KEY or KLIPOLO_RELAY_TOKEN."));
+
+    let out = run(&[], &["scenes"]).await;
+    assert_eq!(out.status.code(), Some(2));
+    assert!(text(&out).contains("klipolo-analyze scenes <video>"));
+    let out = run(&[], &["scenes", "clip.mp4"]).await;
+    assert_eq!(out.status.code(), Some(1));
+    assert!(text(&out).contains("Set MODEL_API_KEY or KLIPOLO_RELAY_TOKEN."));
+}
+
+/// `scenes` with a ready copy (Linux makes none): Spark's real answer for clip A through a mock Meta, snapped to the
+/// cuts found in the copy and to the words of a transcript file.
+#[tokio::test(flavor = "multi_thread")]
+async fn cli_logs_the_scenes_of_a_ready_copy_and_prints_the_cost() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let clip = fixtures.join("clip_a_360p.mp4");
+    let spark: Value =
+        serde_json::from_slice(&std::fs::read(fixtures.join("spark_moments_clip_a.json")).unwrap())
+            .unwrap();
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/files"))
+        .and(header("authorization", format!("Bearer {KEY}").as_str()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "file-cli"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(spark))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path("/v1/files/file-cli"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"deleted": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let dir = tempfile::tempdir().unwrap();
+    // A transcript with one word in it, as `transcript` writes it (only its words are read).
+    let transcript = dir.path().join("transcript.json");
+    std::fs::write(
+        &transcript,
+        json!({"transcript": {"words": [
+            {"text": "Hi", "startUs": 40_300_000, "endUs": 40_600_000, "confidence": 0.9, "kind": "word"}
+        ]}})
+        .to_string(),
+    )
+    .unwrap();
+    let ledger = dir.path().join("ledger.csv");
+    let folder = dir.path().join("out");
+    let env = [
+        ("MODEL_API_KEY", KEY.to_owned()),
+        ("KLIPOLO_META_BASE", format!("{}/v1", server.uri())),
+        ("KLIPOLO_SPEND_LEDGER", ledger.display().to_string()),
+    ];
+    let out = run(
+        &env,
+        &[
+            "scenes",
+            clip.to_str().unwrap(),
+            "--proxy",
+            clip.to_str().unwrap(),
+            "--transcript",
+            transcript.to_str().unwrap(),
+            "--out",
+            folder.to_str().unwrap(),
+        ],
+    )
+    .await;
+    let printed = text(&out);
+    assert!(out.status.success(), "{printed}");
+    server.verify().await;
+    assert!(printed.contains("estimate: $0.065073"), "{printed}");
+    assert!(printed.contains("cost: $0.064804"), "{printed}");
+    assert!(printed.contains("cuts: 7"), "{printed}");
+    assert!(printed.contains("items: 20"), "{printed}");
+    assert!(!printed.contains(KEY), "{printed}");
+    let saved: Value =
+        serde_json::from_slice(&std::fs::read(folder.join("scenes.json")).unwrap()).unwrap();
+    assert_eq!(saved["model"], "muse-spark-1.3");
+    assert_eq!(saved["fps"], 2.0);
+    assert_eq!(saved["cuts"].as_array().unwrap().len(), 7);
+    let items = saved["items"].as_array().unwrap();
+    assert_eq!(items.len(), 20);
+    // The arm raise starts at 40.5 s: the word at 40.3 s is the nearest edge within 1 s (no cut is near).
+    let arm = items
+        .iter()
+        .find(|i| i["text"].as_str().unwrap().starts_with("Raises arm"))
+        .unwrap();
+    assert_eq!(
+        (arm["startUs"].as_i64(), arm["kind"].as_str()),
+        (Some(40_300_000), Some("action"))
+    );
+    let rows = std::fs::read_to_string(&ledger).unwrap();
+    assert!(
+        rows.contains(",muse-spark-1.3,responses,42340,2795,"),
+        "{rows}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

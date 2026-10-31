@@ -210,6 +210,16 @@ const NAMES: Record<string, MessageDescriptor> = {
     message: 'Zoom',
     comment: 'An animation: the layer grows in or shrinks out',
   }),
+  'klipolo.builtin/scene.lower-third': msg({
+    id: 'contrib.scene.lower-third',
+    message: 'Lower third',
+    comment: 'A title template: a name and a role at the bottom left',
+  }),
+  'klipolo.builtin/scene.title-card': msg({
+    id: 'contrib.scene.title-card',
+    message: 'Title card',
+    comment: 'A title template: a big centred title with a subtitle',
+  }),
   'klipolo.builtin/transition.dip': msg({
     id: 'contrib.transition.dip',
     message: 'Dip to colour',

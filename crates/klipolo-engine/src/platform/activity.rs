@@ -10,7 +10,8 @@
 //!
 //! **Stopping:** a decoder checks `cancel` between packets, so a stop never waits for more than one packet's decode.
 
-mod ffmpeg;
+// `pub(crate)`: the small copy for clip analysis (`media::small_copy`) decodes on the same hardware path.
+pub(crate) mod ffmpeg;
 
 use std::fmt;
 use std::path::Path;

@@ -1,0 +1,120 @@
+{
+  "top_logprobs": 0,
+  "temperature": 1.0,
+  "top_p": 1.0,
+  "service_tier": "auto",
+  "model": "muse-spark-1.3",
+  "reasoning": {
+    "effort": "high"
+  },
+  "background": false,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "name": "moments",
+      "schema": {
+        "additionalProperties": false,
+        "required": [
+          "video_duration_sec",
+          "moments"
+        ],
+        "type": "object",
+        "properties": {
+          "moments": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "end_sec": {
+                  "type": "number"
+                },
+                "kind": {
+                  "enum": [
+                    "question",
+                    "answer",
+                    "gesture",
+                    "demonstration",
+                    "b_roll",
+                    "scene_cut",
+                    "laugh",
+                    "topic_change",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                "start_sec": {
+                  "type": "number"
+                },
+                "who": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "start_sec",
+                "end_sec",
+                "kind",
+                "who",
+                "description"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "video_duration_sec": {
+            "type": "number"
+          }
+        }
+      },
+      "strict": true
+    }
+  },
+  "tools": [],
+  "tool_choice": "auto",
+  "truncation": "disabled",
+  "id": "resp_6ae476fe09435de7afa94d69",
+  "object": "response",
+  "status": "completed",
+  "created_at": 1793357566.0,
+  "completed_at": 1793357566.0,
+  "error": null,
+  "incomplete_details": null,
+  "output": [
+    {
+      "type": "reasoning",
+      "id": "rs_6ae476fe09435de7afa94d69:rs_802db473-8ca8-4e51-bb3b-ece06bdd61c7",
+      "summary": [],
+      "status": "completed"
+    },
+    {
+      "type": "message",
+      "id": "msg_b9cdbc31-acb0-4070-9492-84531a9512c8",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "{\"moments\": [{\"description\": \"Overhead view of spacesuited astronauts training underwater with scuba divers around station mockup\", \"end_sec\": 12.8, \"kind\": \"b_roll\", \"start_sec\": 0.0, \"who\": \"divers and astronauts\"}, {\"description\": \"Voiceover about troubleshooting with ground team to keep station safe\", \"end_sec\": 12.5, \"kind\": \"answer\", \"start_sec\": 0.5, \"who\": \"female astronaut\"}, {\"description\": \"Cut from underwater pool to boy in library\", \"end_sec\": 13.5, \"kind\": \"scene_cut\", \"start_sec\": 12.8, \"who\": \"student Kaiden\"}, {\"description\": \"Asks how do you stay entertained on long-term and short-term trips\", \"end_sec\": 23.0, \"kind\": \"question\", \"start_sec\": 13.5, \"who\": \"student Kaiden\"}, {\"description\": \"Cut from library to two astronauts floating inside space station\", \"end_sec\": 24.5, \"kind\": \"scene_cut\", \"start_sec\": 23.0, \"who\": \"male astronaut\"}, {\"description\": \"Says living in space and floating in microgravity never gets tiring\", \"end_sec\": 51.5, \"kind\": \"answer\", \"start_sec\": 24.5, \"who\": \"male astronaut\"}, {\"description\": \"Raises arm overhead while describing floating\", \"end_sec\": 45.0, \"kind\": \"gesture\", \"start_sec\": 40.5, \"who\": \"male astronaut\"}, {\"description\": \"Extends arm out to side while listening\", \"end_sec\": 51.5, \"kind\": \"gesture\", \"start_sec\": 49.0, \"who\": \"female astronaut\"}, {\"description\": \"Cut from space station back to library for next student\", \"end_sec\": 52.5, \"kind\": \"scene_cut\", \"start_sec\": 51.5, \"who\": \"student Will\"}, {\"description\": \"Asks what skills developed in space surprised you\", \"end_sec\": 62.5, \"kind\": \"question\", \"start_sec\": 52.5, \"who\": \"student Will\"}, {\"description\": \"Cut from library to astronauts in station module\", \"end_sec\": 63.5, \"kind\": \"scene_cut\", \"start_sec\": 62.5, \"who\": \"female astronaut\"}, {\"description\": \"Says feet learn to hold on and do tasks you never think about on Earth\", \"end_sec\": 85.5, \"kind\": \"answer\", \"start_sec\": 63.5, \"who\": \"female astronaut\"}, {\"description\": \"Pushes off and floats sideways to demonstrate using feet in weightlessness\", \"end_sec\": 85.0, \"kind\": \"demonstration\", \"start_sec\": 67.0, \"who\": \"female astronaut\"}, {\"description\": \"Smiles while watching crewmate float and demonstrate\", \"end_sec\": 73.0, \"kind\": \"laugh\", \"start_sec\": 71.0, \"who\": \"male astronaut\"}, {\"description\": \"Cut from station to girl in pink shirt in library\", \"end_sec\": 86.5, \"kind\": \"scene_cut\", \"start_sec\": 85.5, \"who\": \"student Peyton\"}, {\"description\": \"Asks how do you deal with challenges during missions\", \"end_sec\": 95.5, \"kind\": \"question\", \"start_sec\": 86.5, \"who\": \"student Peyton\"}, {\"description\": \"Cut from library back to two astronauts in station\", \"end_sec\": 97.0, \"kind\": \"scene_cut\", \"start_sec\": 95.5, \"who\": \"male astronaut\"}, {\"description\": \"Says train for challenges and rely on team and ground specialists for help\", \"end_sec\": 149.5, \"kind\": \"answer\", \"start_sec\": 98.0, \"who\": \"male astronaut\"}, {\"description\": \"Cut from station to girl in pink hoodie in library\", \"end_sec\": 150.5, \"kind\": \"scene_cut\", \"start_sec\": 149.5, \"who\": \"student Noelle\"}, {\"description\": \"Asks are there any natural disasters on the other planets\", \"end_sec\": 154.5, \"kind\": \"question\", \"start_sec\": 150.5, \"who\": \"student Noelle\"}], \"video_duration_sec\": 154.5}",
+          "annotations": [],
+          "logprobs": []
+        }
+      ],
+      "status": "completed"
+    }
+  ],
+  "instructions": null,
+  "usage": {
+    "input_tokens": 42340,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 2795,
+    "output_tokens_details": {
+      "reasoning_tokens": 1815
+    },
+    "total_tokens": 45135
+  },
+  "parallel_tool_calls": true,
+  "store": true,
+  "max_output_tokens": 16000
+}

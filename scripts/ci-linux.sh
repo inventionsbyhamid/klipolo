@@ -45,6 +45,8 @@ run "engine fixtures" scripts/gen-engine-fixtures.sh
 
 # Formatting, every crate and module (rustfmt walks every module whatever its cfg).
 run "cargo fmt --all --check" cargo fmt --all --check
+# The bundled pack (assets/library): what scripts/gen-library.py writes, the same bytes every run, CC0 and small.
+run "bundled pack" scripts/gen-library.test.sh
 run "cargo check --workspace --all-targets" cargo check --workspace --all-targets --locked
 run "clippy model, cursor, platform, engine, fonts, speech-wire, meta, analysis, chat" \
   cargo clippy -p klipolo-model -p klipolo-cursor -p klipolo-platform -p klipolo-engine -p klipolo-fonts \
@@ -87,8 +89,9 @@ run "GPU smoke on lavapipe" env WGPU_BACKEND=vulkan KLIPOLO_REQUIRE_GPU=1 \
 # Every other GPU test on lavapipe: the compositor, video, image and text layers, effects and transitions, the cursor
 # pass, export's cursors against the preview's, each caption style's golden, agent WGSL's hardening, filter padding,
 # ABI v1.1's generators, the render worker, an export job's contributions, the guards, scene layers, paths, strokes,
-# stencils and text, and the shader presets' goldens. (text_atlas reads Metal's own objects and stays macOS-only; the
-# cursor's GPU time, export overhead and scene frame costs are measurements, run by hand.)
+# stencils and text, the shader presets' goldens, and the title templates in the preview and an export. (text_atlas
+# reads Metal's own objects and stays macOS-only; the cursor's GPU time, export overhead and scene frame costs are
+# measurements, run by hand.)
 run "GPU tests on lavapipe" env WGPU_BACKEND=vulkan KLIPOLO_REQUIRE_GPU=1 \
   cargo test -p klipolo-engine --locked --no-fail-fast --test gpu --test effects --test cursor_gpu --test export_cursor \
   --test caption_goldens \
@@ -98,7 +101,7 @@ run "GPU tests on lavapipe" env WGPU_BACKEND=vulkan KLIPOLO_REQUIRE_GPU=1 \
   --test scene_text_motion_gpu --test scene_text_cache_gpu --test scene_verified_gpu --test scene_text_gone_gpu \
   --test scene_layer_scale_gpu --test scene_groups_gpu --test scene_fx_gpu --test scene_groups_caps_gpu \
   --test scene_memory_gpu --test scene_order_gpu --test scene_bounds_gpu --test scene_root_gpu --test scene_geometry_gpu --test scene_part_gpu \
-  --test presets_gpu \
+  --test presets_gpu --test scene_presets \
   -- --ignored --skip black_layer_fades_what_is_below --skip cursor_pass_gpu_time --skip export_overhead_with_the \
   --skip preparing_a_2_hour_take --skip scene_frame_costs
 # A caption frame drawn through an export job and its worker's start-up matches the preview's, per style.
