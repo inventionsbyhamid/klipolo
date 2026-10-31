@@ -146,6 +146,29 @@ describe('the clip card', () => {
     );
   });
 
+  it('Fit and Fill wait for Rust’s framing, so a quick click keeps a recording following the cursor', async () => {
+    let answer!: (framing: ClipFraming) => void;
+    vi.mocked(clipFraming).mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    useSelection.setState({ selectedId: 'a' });
+    renderWithProviders(<Inspector format="portrait" />);
+    const fit = screen.getByRole('radio', { name: 'Fit' });
+    expect(fit).toBeDisabled();
+    expect(screen.getByRole('radio', { name: 'Fill' })).toBeDisabled();
+    fireEvent.click(fit);
+    await act(async () => answer(FRAMING.a));
+    expect(apply).not.toHaveBeenCalled();
+    expect(fit).toBeEnabled();
+    await userEvent.click(fit);
+    await waitFor(() =>
+      expect(apply).toHaveBeenCalledWith(
+        'clip.framing.fit.undo',
+        [{ type: 'updateClip', id: 'a', patch: { framing: { portrait: { ...follows, mode: 'fit' } } } }],
+        undefined,
+        queued,
+      ),
+    );
+  });
+
   it('the Fill focus shows only with Fill, the way it crops; a drag dry-runs and commits once on release', async () => {
     useProject.setState({
       snapshot: withB({ framing: { square: { mode: 'fit', focusX: 0.5, focusY: 0.5 } } }),

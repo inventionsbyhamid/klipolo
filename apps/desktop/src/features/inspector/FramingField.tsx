@@ -12,7 +12,7 @@ import { Field } from './fields';
 import { ToolSlider } from './ToolSlider';
 import { useClipFraming } from './useClipFraming';
 
-/** What a framing change starts from before Rust has answered (the centre). */
+/** What a framing change would start from before Rust has answered (the centre); Fit and Fill are off till then. */
 const CENTRE: Framing = { mode: 'fill', focusX: 0.5, focusY: 0.5 };
 const percent = (v: number) => `${Math.round(v * 100)}%`;
 /** A Fill crop at least this share of the footage on a side leaves nothing there for a focus to move. */
@@ -69,6 +69,9 @@ export function FramingField({ clip, format }: { clip: Clip; format: FormatKind 
             },
           ]}
           fill
+          // Off until it shows a framing (its own, or Rust's first answer): a change built before would start from the
+          // centre and drop a recording's cursor following.
+          disabled={framing === null}
           onChange={setMode}
         />
       </Field>
