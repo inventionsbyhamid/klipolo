@@ -312,6 +312,15 @@ fn host_commits_through_the_one_apply_path_and_publishes() {
         r.host.apply("Example Client", r.base(), &cuts),
         Err(HostError::Refused(REMOVES.to_owned()))
     );
+    // Judged by what its ops take away, never by its origin: one with none is refused all the same.
+    let plain = Transaction {
+        origin: None,
+        ..cuts.clone()
+    };
+    assert_eq!(
+        r.host.apply("Example Client", r.base(), &plain),
+        Err(HostError::Refused(REMOVES.to_owned()))
+    );
     assert_eq!(r.project().timeline.main.len(), 2);
 }
 
