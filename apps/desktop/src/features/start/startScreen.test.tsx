@@ -319,6 +319,17 @@ describe('StartScreen', () => {
     expect(record).toHaveFocus();
   });
 
+  it('an_empty_library_without_a_recorder_invites_a_project', async () => {
+    recentAnswers([]);
+    renderWithProviders(<StartScreen />);
+    const main = screen.getByRole('main', { name: 'Your projects' });
+    expect(await within(main).findByRole('heading', { name: 'No projects yet' })).toBeInTheDocument();
+    // Until there is a recorder, the invitation doesn't offer a recording.
+    expect(within(main).getByText('Start a project, then add your videos.')).toBeInTheDocument();
+    expect(main.textContent).not.toMatch(/record/i);
+    expect(within(main).getAllByRole('button').map((b) => b.textContent)).toEqual(['New project']);
+  });
+
   it('empty_library_invites_new_or_record', async () => {
     recentAnswers([]);
     const onRecord = vi.fn();

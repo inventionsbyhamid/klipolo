@@ -220,7 +220,11 @@ export function StartScreen({ onRecord, takeFocus = false }: StartScreenProps) {
         {empty && (
           <div className="start-empty">
             <h2 className="start-title">{t({ id: 'start.empty.title', message: 'No projects yet' })}</h2>
-            <p>{t({ id: 'start.empty.text', message: 'Start with a video or a recording of your screen.' })}</p>
+            <p>
+              {onRecord
+                ? t({ id: 'start.empty.text', message: 'Start with a video or a recording of your screen.' })
+                : t({ id: 'start.empty.textNoRecord', message: 'Start a project, then add your videos.' })}
+            </p>
             {actions}
           </div>
         )}
