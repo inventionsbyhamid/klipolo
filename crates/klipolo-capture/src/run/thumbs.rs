@@ -11,7 +11,12 @@
 //! - **The turns:** at most `MAX_THUMBS` targets, in the app's order, each once every `THUMB_EVERY`, their turns
 //!   spread evenly over it, each still `THUMB_WIDTH` pixels wide in its target's shape. A still that doesn't come (a
 //!   display gone, an app quit, a screenshot that timed out: `NoDevice`, `Os`) sends nothing and is tried again on its
-//!   target's next turn. One that runs late moves the next turn back: stills never bunch up to catch up.
+//!   target's next turn.
+//! - **Its pace:** after each still the worker rests at least as long as the still took, so it is never busy more than
+//!   half the time and slows down by itself on a slow computer; a late turn moves the turns after it back, so stills
+//!   never bunch up to catch up.
+//! - **Stopping:** the app's Stop is read between stills. A still in flight finishes first (up to the screenshot's
+//!   wait, longer while macOS shows its own question), and its `Thumb` may follow the Stop.
 //! - Each still is a `Thumb` event under the app's key for its target.
 
 use std::time::Duration;
@@ -72,6 +77,7 @@ pub fn thumbs_with(backend: &dyn Backend, targets: &[(String, Target)], io: Prev
     let mut failing = vec![false; targets.len()];
     while !word.stopped() {
         let (key, target) = &targets[next];
+        let before = clock.now();
         match backend.still(target, THUMB_WIDTH) {
             Ok(still) => {
                 failing[next] = false;
@@ -95,13 +101,14 @@ pub fn thumbs_with(backend: &dyn Backend, targets: &[(String, Target)], io: Prev
         if taken == turns {
             (round, taken) = (round + THUMB_EVERY, 0);
         }
-        let mut due = round + THUMB_EVERY * taken / turns;
+        let due = round + THUMB_EVERY * taken / turns;
+        // Rest at least as long as the still took; a turn that comes later than planned moves the round with it.
         let now = clock.now();
-        if now > due {
-            // Late: the next turn is now, and the round counts from it.
-            (round, taken, due) = (now, 0, now);
+        let rested = now + now.saturating_sub(before);
+        if rested > due {
+            (round, taken) = (rested, 0);
         }
-        if !clock.wait_until(due, &|| word.stopped()) {
+        if !clock.wait_until(due.max(rested), &|| word.stopped()) {
             break;
         }
     }

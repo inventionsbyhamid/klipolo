@@ -1,8 +1,8 @@
 //! The Record dialog's stills of each screen and app in their worker, with the fake backend and a test clock: each
-//! target once a second, in turn, at most 8 of them; a still that doesn't come is tried again on its next turn, a
-//! refused one ends the stills, and one that runs late moves the next turn back; the worker ends on the app's Stop or
-//! its stdin's end; without Screen Recording it takes no still; and the Mac's stills read the permission first and
-//! never ask. Nothing captures.
+//! target once a second, in turn, at most 8 of them; a still that doesn't come is tried again on its next turn, and a
+//! refused one ends the stills; after a slow still the worker rests as long as it took, and a late one moves the next
+//! turn back; the worker ends on the app's Stop or its stdin's end; without Screen Recording it takes no still; and the
+//! Mac's stills read the permission first and never ask. Nothing captures.
 #![cfg(feature = "synthetic")]
 
 #[path = "common/preview_io.rs"]
@@ -36,7 +36,7 @@ use preview_io::{Late, SharedOut, sent_after};
 use scan::{code_of, read};
 
 /// Time as the test says it: each wait ends at once, at the time it waits for, until `end`, when the worker's run
-/// is over. Every wait is kept. Only the waits and a slow still (`SlowFirst`) move it.
+/// is over. Every wait is kept. Only the waits and a slow still (`Slow`) move it.
 struct TestClock {
     now: Arc<Mutex<Duration>>,
     end: Duration,
@@ -262,15 +262,34 @@ fn a_refused_still_ends_the_stills() {
     assert_eq!(failed(&run.events), ["capture.error.unsupported"]);
 }
 
-/// The fake backend, its first still taking `.1` of the test clock's time; the clock's time at each still kept.
-struct SlowFirst(
+/// The fake backend, its stills taking `.1` of the test clock's time each, in turn (the last one for the rest); the
+/// clock's time at each still kept.
+struct Slow(
     FakeBackend,
-    Duration,
+    Vec<Duration>,
     Arc<Mutex<Duration>>,
     Mutex<Vec<Duration>>,
 );
 
-impl Backend for SlowFirst {
+impl Slow {
+    /// Each still's time on the test clock, in ms, after a run over `targets` for `secs`.
+    fn times(takes: &[u64], targets: &[(String, Target)], secs: u64) -> (Run, Vec<u64>) {
+        let now = Arc::default();
+        let slow = Slow(
+            FakeBackend::new(Script::default()),
+            takes.iter().map(|ms| Duration::from_millis(*ms)).collect(),
+            Arc::clone(&now),
+            Mutex::default(),
+        );
+        let run = over_on(&slow, &slow.0, now, targets, secs);
+        let at = (slow.3.lock().unwrap().iter())
+            .map(|t| t.as_millis() as u64)
+            .collect();
+        (run, at)
+    }
+}
+
+impl Backend for Slow {
     fn caps(&self) -> CaptureCaps {
         self.0.caps()
     }
@@ -292,10 +311,9 @@ impl Backend for SlowFirst {
     fn still(&self, target: &Target, width: u32) -> Result<PreviewFrame, PipeError> {
         let mut at = self.3.lock().unwrap();
         let mut now = self.2.lock().unwrap();
+        let takes = (self.1.get(at.len()).or(self.1.last())).copied();
         at.push(*now);
-        if at.len() == 1 {
-            *now += self.1;
-        }
+        *now += takes.unwrap_or_default();
         self.0.still(target, width)
     }
     fn probe(&self, budget: Duration) -> ProbeReport {
@@ -308,22 +326,24 @@ impl Backend for SlowFirst {
 
 #[test]
 fn a_late_still_moves_the_next_turn_back() {
-    // Two displays, a turn every half second; the first still takes 1.2 s. The next turn comes as it ends, and the
-    // turns after it follow from there, half a second apart: they never bunch up to catch up.
-    let now = Arc::default();
-    let slow = SlowFirst(
-        FakeBackend::new(Script::default()),
-        Duration::from_millis(1_200),
-        Arc::clone(&now),
-        Mutex::default(),
-    );
-    let run = over_on(&slow, &slow.0, now, &displays(2), 3);
+    // Two displays, a turn every half second; the first still takes 1.2 s. The worker rests as long again, then the
+    // turns follow from there, half a second apart: they never bunch up to catch up.
+    let (run, at) = Slow::times(&[1_200, 0], &displays(2), 3);
     assert_eq!(run.code, 0);
-    let at: Vec<u64> = (slow.3.lock().unwrap().iter())
-        .map(|t| t.as_millis() as u64)
-        .collect();
-    assert_eq!(at, [0, 1_200, 1_700, 2_200, 2_700]);
-    assert_eq!(thumb_keys(&run.events).len(), 5);
+    assert_eq!(at, [0, 2_400, 2_900]);
+    assert_eq!(thumb_keys(&run.events).len(), 3);
+}
+
+#[test]
+fn a_slow_still_rests_as_long_as_it_took() {
+    // Four displays, a turn every quarter second, but every still takes 300 ms: the worker rests 300 ms after each, so
+    // it is busy half the time at most, and the turns slow down to one every 600 ms.
+    let (run, at) = Slow::times(&[300], &displays(4), 3);
+    assert_eq!(run.code, 0);
+    assert_eq!(at, [0, 600, 1_200, 1_800, 2_400]);
+    // Still each in turn.
+    let keys: Vec<String> = (0..5).map(|k| format!("display-{}", k % 4 + 1)).collect();
+    assert_eq!(thumb_keys(&run.events), keys);
 }
 
 /// One display's stills on real time, the app's lines from `input`: the exit code, how long it ran, and the stills
