@@ -2,6 +2,7 @@ import { type CSSProperties, type FormEvent, type KeyboardEvent, useEffect, useR
 import type { AiStatus } from '../bindings/AiStatus';
 import { closeSettings, openSettings, refreshAiStatus, useAi } from '../ai/aiStatus';
 import { AiIcon } from '../ai/icons';
+import { CopiesSettings } from '../features/media-jobs/CopiesSettings';
 import { Icon } from '../layout/Icon';
 import { FieldError, Note } from './FieldNotes';
 import { OtherApps } from './OtherApps';
@@ -22,7 +23,8 @@ const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), [tabindex="0"]';
 
 /**
  * Settings: how Klipolo pays for Meta's models, an access code or the person's own key,
- * and whether other apps may edit the open project (`OtherApps`).
+ * whether other apps may edit the open project (`OtherApps`), and whether editing copies are made by themselves
+ * (`CopiesSettings`, the same switch as the top bar's pill).
  * Mounted once; opens from the top bar, NeedsKey or Command comma. Esc and the close button close it, and focus goes
  * back where it was. The key is sent to Rust and never shown again: only "Saved" and its last 4 characters.
  */
@@ -122,6 +124,7 @@ function Settings() {
         <PayChoices choice={choice} onPick={pick} onArrow={setChoice} />
         {choice === 'code' ? <CodeSection status={status} /> : <KeySection status={status} />}
         <OtherApps />
+        <CopiesSettings />
         <div className="dialog-foot">
           <span className="left">Audio and low-resolution video go to Meta's model API.</span>
           <button type="button" className="btn btn-primary" onClick={closeSettings}>

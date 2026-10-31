@@ -1092,6 +1092,104 @@ async fn a_clip_without_sound_still_gets_its_scene_log() {
     server.verify().await;
 }
 
+/// A clip's local work, seen from what waits for analysis to stop decoding: each call notes whether the hook was told
+/// analysis is decoding while it ran.
+struct Watched {
+    inner: Arc<FakeMedia>,
+    decoding: Arc<AtomicBool>,
+    outside: AtomicUsize,
+}
+
+impl Watched {
+    fn note(&self) {
+        if !self.decoding.load(Ordering::SeqCst) {
+            self.outside.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+}
+
+impl Media for Watched {
+    fn sound(&self, src: &Path, out: &Path, cancel: &AtomicBool) -> Result<AudioInfo, AudioError> {
+        self.note();
+        self.inner.sound(src, out, cancel)
+    }
+
+    fn levels(&self, src: &Path, cancel: &AtomicBool) -> Option<Levels> {
+        self.note();
+        self.inner.levels(src, cancel)
+    }
+
+    fn small_copy(
+        &self,
+        src: &Path,
+        dir: &Path,
+        cancel: &AtomicBool,
+        seen: &mut dyn FnMut(Us),
+    ) -> Result<ProxyInfo, VideoError> {
+        self.note();
+        self.inner.small_copy(src, dir, cancel, seen)
+    }
+}
+
+/// Editing copies wait while analysis decodes a clip on this Mac: `on_decoding` hears `true` before each local step
+/// (the sound, the levels, the small copy) and `false` once it has ended, never twice the same, and every local step
+/// runs inside.
+#[tokio::test(flavor = "multi_thread")]
+async fn whoever_waits_for_analysis_hears_when_it_decodes() {
+    let server = MockServer::start().await;
+    mount_scenes(
+        &server,
+        "/v1",
+        ResponseTemplate::new(200).set_body_json(spark_answer()),
+    )
+    .await;
+    nothing_else(&server).await;
+    let decoding = Arc::new(AtomicBool::new(false));
+    let media = Arc::new(Watched {
+        inner: FakeMedia::whole(SECONDS),
+        decoding: decoding.clone(),
+        outside: AtomicUsize::new(0),
+    });
+    let h = harness(&server, key_store(), media.clone());
+    let told = Arc::new(Mutex::new(Vec::new()));
+    {
+        let (told, decoding) = (told.clone(), decoding.clone());
+        h.state.on_decoding(move |on| {
+            decoding.store(on, Ordering::SeqCst);
+            told.lock().unwrap().push(on);
+        });
+    }
+    let mut clip = asset("quiet", AssetKind::Video, &h.clip("quiet.mp4", 4), SECONDS);
+    clip.has_audio = false;
+
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+
+    assert_eq!(
+        media.inner.copies.load(Ordering::SeqCst),
+        1,
+        "the small copy was made"
+    );
+    assert_eq!(
+        media.outside.load(Ordering::SeqCst),
+        0,
+        "every local step ran while told"
+    );
+    let told = told.lock().unwrap().clone();
+    assert!(!told.is_empty() && told.len() % 2 == 0, "{told:?}");
+    assert!(
+        told.chunks(2).all(|pair| pair == [true, false]),
+        "on, then off, each step: {told:?}"
+    );
+    assert!(
+        !decoding.load(Ordering::SeqCst),
+        "off once analysis is done"
+    );
+}
+
 /// With an access code every call goes through Klipolo's relay: a relay that can't answer is named as Klipolo's server,
 /// not Meta. With the person's own key, Meta is named.
 #[tokio::test(flavor = "multi_thread")]

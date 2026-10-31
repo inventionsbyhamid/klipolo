@@ -1,0 +1,121 @@
+[
+  {
+    "code": "copies.paused.playing",
+    "message": "Paused while the video plays. It goes on when you stop.",
+    "params": []
+  },
+  {
+    "code": "copies.paused.exporting",
+    "message": "Paused while you export. It goes on when the export ends.",
+    "params": []
+  },
+  {
+    "code": "copies.paused.recording",
+    "message": "Paused while you record. It goes on when the take ends.",
+    "params": []
+  },
+  {
+    "code": "copies.paused.analyzing",
+    "message": "Paused while Klipolo analyzes your video. It goes on by itself.",
+    "params": []
+  },
+  {
+    "code": "copies.paused.held",
+    "message": "Paused. Press Resume all to go on.",
+    "params": []
+  },
+  {
+    "code": "copies.paused.diskFull",
+    "message": "Paused because the disk is almost full. Free up space, then press Resume all.",
+    "params": []
+  },
+  {
+    "code": "copies.paused.hot",
+    "message": "Paused because this Mac is running hot. It tries again in 5 minutes.",
+    "params": []
+  },
+  {
+    "code": "copies.paused.encoderBusy",
+    "message": "Paused because the video encoder is busy. It tries again by itself.",
+    "params": []
+  },
+  {
+    "code": "copies.paused.workerStopped",
+    "message": "Making the copy stopped unexpectedly. Trying again.",
+    "params": []
+  },
+  {
+    "code": "copies.failed.missing",
+    "message": "{name} isn't where it was. Put it back, then open the project again.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "copies.failed.unreadable",
+    "message": "{name} can't be read as video, so it has no editing copy. The preview plays the file itself.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "copies.failed.unknownLength",
+    "message": "{name} doesn't say how long it is, so it has no editing copy. The preview plays the file itself.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "copies.failed.unusualRate",
+    "message": "{name} has no usable frame rate, so it has no editing copy. The preview plays the file itself.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "copies.failed.cacheUnwritable",
+    "message": "Klipolo can't save editing copies on this disk. Check that it isn't full or read-only, then press Try again.",
+    "params": []
+  },
+  {
+    "code": "copies.failed.encoderBusy",
+    "message": "The video encoder stayed busy, so the editing copy of {name} wasn't made. Press Try again later.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "copies.failed.worker",
+    "message": "Klipolo couldn't start making the editing copy of {name}. Press Try again.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "copies.failed.workerKeepsStopping",
+    "message": "Making the copy keeps stopping. Press Try again later.",
+    "params": []
+  },
+  {
+    "code": "copies.failed.other",
+    "message": "Klipolo couldn't make an editing copy of {name}. Press Try again.",
+    "params": [
+      "name"
+    ]
+  },
+  {
+    "code": "copies.refused.notInProject",
+    "message": "That file isn't in the open project, so its editing copy didn't change.",
+    "params": []
+  },
+  {
+    "code": "copies.refused.unavailable",
+    "message": "Editing copies aren't available right now. Try again in a moment.",
+    "params": []
+  },
+  {
+    "code": "copies.refused.slowDrive",
+    "message": "A slow disk is holding up editing copies. Try again in a moment.",
+    "params": []
+  }
+]

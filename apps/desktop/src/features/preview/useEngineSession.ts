@@ -2,12 +2,14 @@ import { useEffect } from 'react';
 import type { EngineEvent } from '../../bindings/EngineEvent';
 import { codedMessage } from '../../bridge/call';
 import { engine } from '../../bridge/engine';
+import { mediaJobs } from '../../bridge/mediaJobs';
 import { perfAt } from '../../lib/clocks';
 import { errorMessage } from '../../lib/errors';
 import { isCurrentFrame, useEngine } from '../../state/engine';
 import { useMedia } from '../../state/media';
 import { sendSeek, usePlayback } from '../../state/playback';
 import { toast } from '../../state/toasts';
+import { useUi } from '../../state/ui';
 import { resendEditing } from './textEdit';
 
 /** What the page does with an event from the preview engine (exported for its tests). */
@@ -77,6 +79,9 @@ export function useEngineSession() {
       (info) => {
         if (disposed) return;
         store.setInfo(info);
+        // Editing copies follow the person's setting (Rust starts with them on). Fire and forget: without Tauri, or
+        // with the browser's stand-in backend, nothing answers, and that is never an unhandled rejection.
+        mediaJobs.setAuto(useUi.getState().autoCopies).catch(() => undefined);
         if (info.port === 0) store.setStatus('unavailable');
         onVisibility(); // the engine only listens once attached
       },

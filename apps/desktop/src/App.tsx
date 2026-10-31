@@ -9,6 +9,7 @@ import { useEditorShortcuts } from './features/command-palette/useEditorShortcut
 import { useRecordShortcut } from './features/command-palette/useRecordShortcut';
 import { ExportDialog } from './features/export/ExportDialog';
 import { useFinderDrop } from './features/media/useFinderDrop';
+import { MediaJobsFeed } from './features/media-jobs/MediaJobsFeed';
 import { RecordDialog } from './features/record/RecordDialog';
 import { StartScreen } from './features/start/StartScreen';
 import { followSpeech } from './features/timeline/media/speech';
@@ -54,7 +55,7 @@ async function loadOpenProject() {
 
 /**
  * The editor, while a project is open: the library, the preview, the timeline and chat, and the player bar. Finder
- * drops and the editor's keys work only here.
+ * drops and the editor's keys work only here, and the project's editing copies are followed (the top bar's pill).
  */
 function Editor() {
   const [filesOver, setFilesOver] = useState(false);
@@ -69,6 +70,7 @@ function Editor() {
         <Chat />
       </div>
       <PlayerBar />
+      <MediaJobsFeed />
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AiStatus } from '../bindings/AiStatus';
@@ -44,6 +44,14 @@ describe('SettingsDialog', () => {
     await userEvent.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(before).toHaveFocus();
+  });
+
+  it('has the editing copies switch, so copies turned off can be turned on again', async () => {
+    openOn(relay);
+    const section = screen.getByRole('region', { name: 'Editing copies' });
+    expect(within(section).getByRole('switch', { name: 'Make editing copies automatically' })).toBeInTheDocument();
+    expect(section).toHaveTextContent('Exports always use your full-quality files.');
+    await act(async () => undefined);
   });
 
   it('shows a saved key only as its last four characters', async () => {

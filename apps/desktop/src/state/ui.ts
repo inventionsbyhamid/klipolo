@@ -35,10 +35,29 @@ interface UiStore {
   /** The Library's filter pill. */
   libraryTab: LibraryTab;
   setLibraryTab: (tab: LibraryTab) => void;
+  /**
+   * Klipolo makes editing copies of slow files by itself (on unless the person turns it off; kept on this Mac). Sent to
+   * Rust as the editor opens, each time the engine attaches (`useEngineSession`) and when the person flips the switch
+   * (`useMediaJobs.setAuto`).
+   */
+  autoCopies: boolean;
+  setAutoCopies: (on: boolean) => void;
 }
 
 /** The Library's tabs: your clips, music, sounds and images. */
 export type LibraryTab = 'clips' | 'music' | 'sounds' | 'images';
+
+/** Where the Auto copies switch is kept (local storage: `off` when the person turned it off). */
+const AUTO_COPIES = 'klipolo.autoCopies';
+
+/** The Auto copies switch as the person left it; on when nothing was kept, or storage is refused. */
+function keptAutoCopies(): boolean {
+  try {
+    return localStorage.getItem(AUTO_COPIES) !== 'off';
+  } catch {
+    return true;
+  }
+}
 
 export const useUi = create<UiStore>((set) => ({
   pxPerSecond: 40,
@@ -58,4 +77,13 @@ export const useUi = create<UiStore>((set) => ({
     set((s) => ({ safeArea, lastSafeArea: safeArea === 'off' ? s.lastSafeArea : safeArea })),
   libraryTab: 'clips',
   setLibraryTab: (libraryTab) => set({ libraryTab }),
+  autoCopies: keptAutoCopies(),
+  setAutoCopies: (autoCopies) => {
+    try {
+      localStorage.setItem(AUTO_COPIES, autoCopies ? 'on' : 'off');
+    } catch {
+      // Storage refused: the switch holds for this session.
+    }
+    set({ autoCopies });
+  },
 }));

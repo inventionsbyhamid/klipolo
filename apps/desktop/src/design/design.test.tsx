@@ -9,6 +9,7 @@ import { IconButton } from './IconButton';
 import { Kbd } from './Kbd';
 import { Menu, MenuCheckboxItem, MenuContent, MenuTrigger } from './Menu';
 import { Toaster } from './Toaster';
+import { Toggle } from './Toggle';
 
 afterEach(() => useToasts.setState({ toasts: [] }));
 
@@ -32,6 +33,21 @@ describe('design primitives', () => {
     const tooltip = await screen.findByRole('tooltip');
     expect(tooltip).toHaveTextContent('Split');
     expect(within(tooltip).getByText('S').tagName).toBe('KBD');
+  });
+
+  it('toggles are switches named by their label, and a press flips them', async () => {
+    const flipped = vi.fn();
+    renderWithProviders(
+      <>
+        <label htmlFor="safe">Show safe area</label>
+        <Toggle id="safe" checked={false} onChange={flipped} />
+      </>,
+    );
+    const toggle = screen.getByRole('switch', { name: 'Show safe area' });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(toggle).toHaveClass('toggle');
+    await userEvent.click(toggle);
+    expect(flipped).toHaveBeenCalledWith(true);
   });
 
   it('kbd renders a keyboard shortcut', () => {

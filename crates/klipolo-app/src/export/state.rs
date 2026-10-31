@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use klipolo_engine::api::ExportEvent;
@@ -23,7 +23,12 @@ pub struct ExportState {
     asking: AtomicBool,
     /// The person chose Quit: the next exit request goes through.
     quitting: AtomicBool,
+    /// Told when the slot is taken (true) and released (false): editing copies and thumbnail scans wait for exports.
+    busy: Mutex<Vec<Busy>>,
 }
+
+/// What hears the slot taken (`true`) and released (`false`).
+pub type Busy = Arc<dyn Fn(bool) + Send + Sync>;
 
 struct Slot {
     /// `true` stops the run and deletes its job (Cancel export). Dropped when the slot is released.
@@ -53,6 +58,19 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 impl ExportState {
     pub fn is_running(&self) -> bool {
         lock(&self.running).is_some()
+    }
+
+    /// Adds `hook`: `hook(true)` whenever an export takes the slot, `hook(false)` when it lets go, beside the hooks
+    /// given before.
+    pub fn on_busy(&self, hook: Busy) {
+        lock(&self.busy).push(hook);
+    }
+
+    fn tell_busy(&self, busy: bool) {
+        let hooks = lock(&self.busy).clone();
+        for hook in hooks {
+            hook(busy);
+        }
     }
 
     /// The project the run on the slot exports.
@@ -92,6 +110,7 @@ impl ExportState {
         });
         drop(running);
         lock(&self.files).clear();
+        self.tell_busy(true);
         Ok(cancel)
     }
 
@@ -115,7 +134,10 @@ impl ExportState {
     }
 
     pub fn release(&self) {
-        lock(&self.running).take();
+        let released = lock(&self.running).take();
+        if released.is_some() {
+            self.tell_busy(false);
+        }
     }
 
     /// Cancel export, from the dialog or (later) a chat that may not be the one that started it: a Cancel naming `job`
@@ -320,6 +342,32 @@ mod tests {
             state.take_slot().await.unwrap();
             assert!(state.is_running());
         });
+    }
+
+    /// Editing copies (and the thumbnail scans they hold) hear the slot taken and released, each hook once, though the
+    /// run lets go of it twice (its `Releases` and the release at its end).
+    #[test]
+    fn every_hook_hears_the_slot_taken_and_released() {
+        let state = ExportState::default();
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        for who in ["copies", "other"] {
+            let heard = heard.clone();
+            state.on_busy(Arc::new(move |busy| {
+                heard.lock().unwrap().push((who, busy))
+            }));
+        }
+        let _stop = state.reserve().unwrap();
+        state.release();
+        state.release();
+        assert_eq!(
+            *heard.lock().unwrap(),
+            [
+                ("copies", true),
+                ("other", true),
+                ("copies", false),
+                ("other", false)
+            ]
+        );
     }
 
     /// Open and Show in Finder reach only the files the last batch put in place, by index; a new batch forgets them.
