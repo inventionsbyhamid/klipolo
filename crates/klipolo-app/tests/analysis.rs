@@ -40,7 +40,9 @@ const TOKEN: &str = "relay-analysis-token-0123456789";
 const NEW_TOKEN: &str = "relay-analysis-new-token-9876543";
 const CODE: &str = "KLIP-TEST-0003";
 const DEVICE: &str = "6f1c2a4e-9d3b-4b7a-8e21-0c5d9f3a7b64";
-const CREDIT_USED: &str = "This device has used its Klipolo credit.";
+/// The relay's 402 sentence, as `services/relay/relay/proxy.py` sends it (`BUDGET_MESSAGE`).
+const CREDIT_USED: &str =
+    "This device has used its Klipolo credit. Add your own Meta key in Settings.";
 const RATE: u32 = 16_000;
 /// The test clips' length: one turn of speech in it.
 const SECONDS: f64 = 6.0;
@@ -629,8 +631,8 @@ async fn estimate_matches_pricing_formula() {
 }
 
 /// The relay runs out of credit at the scene log (402): the run stops there, nothing asks again, the clip fails with
-/// the relay's sentence and the way on (a Meta key), and the transcript it finished is kept: published and cached. No
-/// scene log is cached.
+/// the relay's sentence, which gives the way on (a Meta key) once, and the transcript it finished is kept: published
+/// and cached. No scene log is cached.
 #[tokio::test(flavor = "multi_thread")]
 async fn relay_402_stops_and_keeps_finished_steps() {
     let server = MockServer::start().await;
@@ -656,7 +658,8 @@ async fn relay_402_stops_and_keeps_finished_steps() {
     assert_eq!(started.refused, None);
     started.finished().await;
 
-    let reason = format!("{CREDIT_USED} Add your own Meta API key in Settings to keep going.");
+    // The relay's sentence says what to do already: the way on is said once.
+    let reason = CREDIT_USED.to_owned();
     assert_eq!(
         h.state.state_of("clip-a"),
         AssetState::Failed {
