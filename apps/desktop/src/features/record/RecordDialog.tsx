@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useRef } from 'react';
+import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { RecorderSetup } from '../../bindings/RecorderSetup';
 import { codedMessage } from '../../bridge/call';
 import { Button } from '../../design/Button';
@@ -10,7 +10,8 @@ import { phaseOf, type RecorderPhase } from '../../lib/recorder/phase';
 import { useRecorder } from '../../state/recorder';
 import { DeviceSelect } from './DeviceSelect';
 import { RecordIcon } from './icons';
-import { cameraNote, notesBefore, notReady } from './notes';
+import { Countdown, CountdownNumber, startsIn } from './Countdown';
+import { cameraNote, notesBefore, notReady, refusedPage } from './notes';
 import { DeniedNote, MicAskedAtRecord, ScreenStep, STEP_BUTTON_ID } from './PermissionStep';
 import { WhatToRecord } from './WhatToRecord';
 import './record.css';
@@ -46,6 +47,14 @@ function Dialog({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving
   const root = useRef<HTMLDivElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
   const close = useRecorder((s) => s.close);
+  const left = useRecorder((s) => s.countdown);
+  const asking = useRecorder((s) => (s.gate?.length ?? 0) > 0);
+  const gateKey = useRecorder((s) => s.gate?.join() ?? '');
+  /** What the countdown announced: its first number, once per countdown. */
+  const [announced, setAnnounced] = useState('');
+  /** The sentence a take that didn't start came back with: Try again presses Record again for it. */
+  const [takeError, setTakeError] = useState<string | null>(null);
+  const was = useRef(phase);
 
   useEffect(() => {
     const dialog = root.current;
@@ -78,11 +87,31 @@ function Dialog({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving
     };
   }, []);
 
-  // A view that goes takes the focused control with it: the keyboard goes to the title.
+  // A take that ends before it starts (cancelled, or it failed) brings the choices back with the keyboard on the title,
+  // never on Record, so an Enter pressed twice to be sure of Cancel can't record. Any other view that goes takes the
+  // focused control with it: the keyboard goes to the title too.
   useEffect(() => {
+    const before = was.current;
+    was.current = phase;
     const dialog = root.current;
-    if (dialog && !dialog.contains(document.activeElement)) title.current?.focus();
+    if (before === 'starting' && phase === 'choosing') {
+      setTakeError(useRecorder.getState().error);
+      title.current?.focus();
+    } else if (dialog && !dialog.contains(document.activeElement)) title.current?.focus();
   }, [phase]);
+
+  // From the Record press the keyboard is on Cancel, and on the start gate's first answer while it asks.
+  useEffect(() => {
+    if (phase !== 'starting') return;
+    const target = asking ? '[data-gate="first"]' : '[data-take-cancel]';
+    root.current?.querySelector<HTMLElement>(target)?.focus();
+  }, [phase, asking, gateKey]);
+
+  // The countdown is announced once, by its first number (again once the start gate has been answered).
+  useEffect(() => {
+    if (phase !== 'starting' || asking) setAnnounced('');
+    else if (left !== null) setAnnounced((said) => said || startsIn(left));
+  }, [phase, asking, left]);
 
   // Keys typed in the dialog stay in it (the editor's shortcuts listen on the window).
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -112,7 +141,8 @@ function Dialog({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving
             className="icon-btn"
             tabIndex={0}
             aria-label="Close"
-            title="Close (Esc)"
+            // From the Record press Esc cancels the take and the dialog stays; this cancels it and closes.
+            title={phase === 'starting' ? 'Close' : 'Close (Esc)'}
             onClick={close}
           >
             <Icon name="x" />
@@ -121,10 +151,20 @@ function Dialog({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving
         <div className="record-body">
           {phase === 'loading' && <Waiting />}
           {phase === 'unavailable' && <Unavailable />}
-          {phase === 'choosing' && <Choosing />}
-          {phase === 'starting' && <Waiting />}
+          {phase === 'choosing' && <Choosing takeError={takeError} />}
+          {phase === 'starting' && (
+            <>
+              <Preview>
+                <CountdownNumber />
+              </Preview>
+              <Countdown />
+            </>
+          )}
         </div>
         <Foot phase={phase} />
+        <p className="sr-only" role="status">
+          {announced}
+        </p>
       </div>
     </div>
   );
@@ -137,7 +177,9 @@ function trapFocus(e: KeyboardEvent, root: HTMLElement | null) {
   if (items.length === 0) return;
   const first = items[0];
   const last = items[items.length - 1];
-  if (e.shiftKey && (document.activeElement === first || !items.includes(document.activeElement as HTMLElement))) {
+  // The title (focused on opening, before the first control) counts as the start too.
+  const atStart = document.activeElement === first || document.activeElement?.id === 'record-title';
+  if (e.shiftKey && atStart) {
     e.preventDefault();
     last.focus();
   } else if (!e.shiftKey && document.activeElement === last) {
@@ -188,14 +230,20 @@ function Preview({ children }: { children?: ReactNode }) {
  * The choices: the preview (or the Screen Recording step, or what went wrong, in its place), what to record, the
  * microphone and the camera, and what the setup says.
  */
-function Choosing() {
+function Choosing({ takeError }: { takeError: string | null }) {
   const setup = useRecorder((s) => s.setup);
   const step = useRecorder((s) => s.setup !== null && screenStep(s.setup, s.picks, s.screenRefused));
   const error = useRecorder((s) => s.error);
   if (setup === null) return null;
   return (
     <>
-      <Preview>{step ? <ScreenStep setup={setup} /> : error !== null && <Said text={error} />}</Preview>
+      <Preview>
+        {step ? (
+          <ScreenStep setup={setup} />
+        ) : (
+          error !== null && <Said text={error} retry={error === takeError} pages={setup.privacySettings} />
+        )}
+      </Preview>
       <WhatToRecord setup={setup} />
       <Devices setup={setup} />
       <Notes setup={setup} />
@@ -203,14 +251,31 @@ function Choosing() {
   );
 }
 
-/** Why a press didn't go, in the preview's place: an info icon and the sentence. */
-function Said({ text }: { text: string }) {
+/**
+ * Why a press didn't go, in the preview's place: an info icon and the sentence. A take that didn't start offers Try
+ * again (Record once more); refused the microphone or the camera, it offers that privacy page too. A permission
+ * button's refusal offers neither: pressing it again is the way.
+ */
+function Said({ text, retry, pages }: { text: string; retry: boolean; pages: boolean }) {
+  const page = retry && pages ? refusedPage(text) : null;
   return (
     <div className="record-step">
       <p role="alert">
         <Icon name="info" />
         {text}
       </p>
+      {retry && (
+        <div className="record-actions">
+          {page !== null && (
+            <Button variant="ghost" onClick={() => void useRecorder.getState().openPrivacy(page)}>
+              Open privacy settings
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => void useRecorder.getState().record()}>
+            Try again
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -297,8 +362,8 @@ function Notes({ setup }: { setup: RecorderSetup }) {
   if (lines.length === 0) return null;
   return (
     <ul className="record-notes">
-      {lines.map((text) => (
-        <li key={text} className="record-note">
+      {lines.map((text, i) => (
+        <li key={i} className="record-note">
           <Icon name="info" />
           <span>{text}</span>
         </li>
@@ -310,15 +375,22 @@ function Notes({ setup }: { setup: RecorderSetup }) {
 /** The footer: where takes go and how to stop one, then Cancel and Record (or the take's Cancel). */
 function Foot({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving'> }) {
   const close = useRecorder((s) => s.close);
+  const asking = useRecorder((s) => (s.gate?.length ?? 0) > 0);
   return (
     <div className="dialog-foot">
-      {phase === 'choosing' && <span className="left">{STATUS}</span>}
+      {(phase === 'choosing' || phase === 'starting') && <span className="left">{STATUS}</span>}
       {phase === 'starting' ? (
-        <Button variant="secondary" onClick={() => void useRecorder.getState().cancel()}>
+        // The take's Cancel: its own element, so the keyboard never stays on it once the choices are back.
+        <Button
+          key="take"
+          variant={asking ? 'ghost' : 'secondary'}
+          data-take-cancel
+          onClick={() => void useRecorder.getState().cancel()}
+        >
           Cancel
         </Button>
       ) : (
-        <Button variant="secondary" onClick={close}>
+        <Button key="dialog" variant="secondary" onClick={close}>
           Cancel
         </Button>
       )}

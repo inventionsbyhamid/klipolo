@@ -3,8 +3,11 @@ import { userEvent } from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ArmedTake } from '../../bindings/ArmedTake';
+import type { CaptureEvent } from '../../bindings/CaptureEvent';
 import type { PresetOffer } from '../../bindings/PresetOffer';
 import type { RecorderSetup } from '../../bindings/RecorderSetup';
+import type { WorkerState } from '../../bindings/WorkerState';
 import { REOPEN_GRACE_MS, useRecorder } from '../../state/recorder';
 import { useToasts } from '../../state/toasts';
 import {
@@ -21,6 +24,13 @@ import { renderWithProviders } from '../../test/render';
 import { RecordDialog } from './RecordDialog';
 
 const rec = () => useRecorder.getState();
+
+// The worker's events, as the app forwards them.
+const state = (s: WorkerState): CaptureEvent => ({ ev: 'state', state: s, elapsedUs: 0 });
+const countdown = (leftS: number): CaptureEvent => ({ ev: 'countdown', leftS });
+const gate = (...missing: string[]): CaptureEvent => ({ ev: 'gate', missing });
+const meter = (source: string, peakDbfs: number): CaptureEvent => ({ ev: 'meter', source, peakDbfs });
+const failed = (code: string): CaptureEvent => ({ ev: 'failed', error: { code, params: {} } });
 
 const SUBTITLE = 'Your screen and your voice. Add your camera if you like.';
 const STATUS = 'Saved in Movies / Klipolo / Recordings. Stop with Option Command R or from the menu bar.';
@@ -44,6 +54,11 @@ async function openOn(setup: RecorderSetup | Error = recorderSetup()) {
   return screen.getByRole('dialog', { name: 'Record' });
 }
 
+/** Take `take`'s worker says `event`, as the app forwards it. */
+function emit(take: string, event: CaptureEvent) {
+  act(() => fake.emit(take, event));
+}
+
 const recordButton = () => screen.getByRole('button', { name: 'Record' });
 /** The yellow buttons that can be pressed now: a disabled one is drawn grey. */
 const yellows = (root: HTMLElement) =>
@@ -57,6 +72,13 @@ async function choose(name: string, choice: string) {
   await userEvent.click(await screen.findByRole('menuitemradio', { name: choice }));
 }
 
+/** Opens the dialog and presses Record: the take is arming, then counting down. */
+async function pressRecord(setup = recorderSetup()) {
+  const dialog = await openOn(setup);
+  await userEvent.click(recordButton());
+  return dialog;
+}
+
 describe('the dialog and its choices', () => {
   it('opening_says_getting_ready_until_the_setup_is_read', async () => {
     const read = deferred<RecorderSetup>();
@@ -65,7 +87,7 @@ describe('the dialog and its choices', () => {
     let opening!: Promise<void>;
     act(() => void (opening = rec().openRecorder()));
     const dialog = screen.getByRole('dialog', { name: 'Record' });
-    expect(within(dialog).getByRole('status')).toHaveTextContent('Getting ready');
+    expect(within(dialog).getByText('Getting ready')).toHaveAttribute('role', 'status');
     expect(screen.queryByRole('button', { name: 'Record' })).toBeNull();
     await act(async () => {
       read.resolve(recorderSetup());
@@ -473,5 +495,164 @@ describe('permission steps', () => {
     const dialog = await openOn(recorderSetup({ permissions: { mic: 'denied' }, privacySettings: false }));
     expect(dialog).toHaveTextContent("Klipolo can't use your microphone.");
     expect(screen.queryByRole('button', { name: 'Open privacy settings' })).toBeNull();
+  });
+});
+
+describe('countdown, saving and failure', () => {
+  it('countdown_shows_the_number_meter_and_cancel', async () => {
+    const dialog = await pressRecord();
+    // Arming, before the worker counts: Getting ready, and Cancel already.
+    expect(dialog).toHaveTextContent('Getting ready');
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    expect(cancel).toHaveFocus();
+    expect(screen.queryByRole('button', { name: 'Record' })).toBeNull();
+    emit('take-1', countdown(3));
+    expect(dialog.querySelector('.record-count')).toHaveTextContent('3');
+    expect(dialog).toHaveTextContent('Recording starts in 3 s.');
+    const announced = within(dialog)
+      .getAllByRole('status')
+      .find((s) => s.textContent === 'Recording starts in 3 s.');
+    expect(announced).toBeDefined();
+    emit('take-1', countdown(2));
+    expect(dialog.querySelector('.record-count')).toHaveTextContent('2');
+    expect(dialog).toHaveTextContent('Recording starts in 2 s.');
+    // Announced once: the status keeps its first words.
+    expect(announced).toHaveTextContent('Recording starts in 3 s.');
+    emit('take-1', meter('mic', -6));
+    const level = screen.getByRole('meter', { name: 'Microphone level' });
+    expect(level).toHaveAttribute('aria-valuenow', '90');
+    emit('take-1', meter('mic', -80));
+    expect(level).toHaveAttribute('aria-valuenow', '0');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('btn-secondary');
+    expect(yellows(dialog)).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(fake.calls).toEqual(['setup', 'arm', 'send:start', 'send:cancel']);
+    expect(recordButton()).toBeInTheDocument();
+  });
+
+  it('no_meter_without_a_microphone', async () => {
+    await openOn();
+    await choose('Microphone: mic-1', 'No microphone');
+    await userEvent.click(recordButton());
+    emit('take-1', countdown(3));
+    expect(screen.queryByRole('meter')).toBeNull();
+  });
+
+  it('esc_closes_while_choosing_and_cancels_the_countdown', async () => {
+    await pressRecord();
+    emit('take-1', countdown(3));
+    await userEvent.keyboard('{Escape}');
+    expect(fake.calls).toContain('send:cancel');
+    expect(rec().open).toBe(true);
+    expect(recordButton()).toBeInTheDocument();
+    // After a cancel the keyboard is on the title, never on Record: a second Enter can't record.
+    expect(screen.getByRole('heading', { name: 'Record' })).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    expect(rec().open).toBe(false);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('the_close_button_cancels_the_countdown_and_closes', async () => {
+    await pressRecord();
+    emit('take-1', countdown(3));
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(fake.calls).toContain('send:cancel');
+    expect(rec().open).toBe(false);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('the_gate_asks_about_each_silent_source', async () => {
+    const dialog = await pressRecord(recorderSetup({ cameras: [device('FaceTime HD Camera')] }));
+    emit('take-1', countdown(3));
+    emit('take-1', gate('camera', 'mic'));
+    expect(dialog).toHaveTextContent("Camera isn't sending anything yet.");
+    expect(dialog).toHaveTextContent("Mic isn't sending anything yet.");
+    expect(dialog).not.toHaveTextContent('Recording starts in');
+    const without = screen.getAllByRole('button', { name: 'Record without it' });
+    expect(without).toHaveLength(2);
+    expect(without[0]).toHaveClass('btn-secondary');
+    expect(without[0]).toHaveAccessibleDescription("Camera isn't sending anything yet.");
+    expect(without[0]).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('btn-ghost');
+    await userEvent.click(without[0]);
+    expect(fake.sent.at(-1)).toEqual({ take: 'take-1', command: { cmd: 'withoutSource', source: 'camera' } });
+    expect(dialog).not.toHaveTextContent("Camera isn't sending anything yet.");
+    expect(dialog).toHaveTextContent("Mic isn't sending anything yet.");
+  });
+
+  it('the_dialog_hides_while_recording_and_saving', async () => {
+    await pressRecord();
+    emit('take-1', countdown(1));
+    emit('take-1', state('recording'));
+    expect(rec().open).toBe(true);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    emit('take-1', state('stopping'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // Saved: the take lands and the dialog goes for good.
+    emit('take-1', { ev: 'finished', session: 'take-1' });
+    expect(rec().open).toBe(false);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('a_take_that_fails_says_why_and_try_again_records_again', async () => {
+    const dialog = await openOn();
+    fake.script.arm = () => refusal('capture.error.busy');
+    await userEvent.click(recordButton());
+    const alert = within(dialog).getByRole('alert');
+    expect(alert).toHaveTextContent('That device is in use.');
+    expect(alert.querySelector('.ico')).not.toBeNull();
+    expect(screen.getByRole('heading', { name: 'Record' })).toHaveFocus();
+    const again = screen.getByRole('button', { name: 'Try again' });
+    expect(again).toHaveClass('btn-secondary');
+    expect(yellows(dialog)).toEqual([recordButton()]);
+    fake.script.arm = undefined;
+    await userEvent.click(again);
+    expect(fake.calls).toEqual(['setup', 'arm', 'arm', 'send:start']);
+    expect(within(dialog).queryByRole('alert')).toBeNull();
+  });
+
+  it('a_take_refused_the_microphone_offers_its_privacy_settings', async () => {
+    const dialog = await pressRecord();
+    emit('take-1', failed('capture.permission.mic'));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      "Allow Klipolo to use your microphone in your computer's privacy settings, then try again.",
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Open privacy settings' }));
+    expect(fake.calls).toContain('openPrivacy:mic');
+  });
+
+  it('a_take_refused_the_screen_shows_the_step_with_why', async () => {
+    const dialog = await pressRecord();
+    emit('take-1', failed('capture.permission.screen'));
+    expect(dialog).toHaveTextContent('Klipolo needs your permission to record your screen.');
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      'Allow Klipolo to record your screen, then reopen Klipolo.',
+    );
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    expect(recordButton()).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('a_refused_record_without_it_is_said_in_the_countdown', async () => {
+    const dialog = await pressRecord();
+    emit('take-1', countdown(3));
+    emit('take-1', gate('mic'));
+    fake.script.send = (_take, command) =>
+      command.cmd === 'withoutSource' ? refusal('capture.error.os') : undefined;
+    await userEvent.click(screen.getByRole('button', { name: 'Record without it' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Recording failed.');
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  });
+
+  it('arming_that_waits_still_says_getting_ready_and_cancels', async () => {
+    await openOn();
+    const arming = deferred<ArmedTake>();
+    fake.script.arm = () => arming.promise;
+    await userEvent.click(recordButton());
+    expect(screen.getByRole('dialog', { name: 'Record' })).toHaveTextContent('Getting ready');
+    await userEvent.keyboard('{Escape}');
+    expect(recordButton()).toBeInTheDocument();
+    await act(async () => arming.resolve({ id: 'take-1', countdownS: 3 }));
+    // Cancelled while arming: its worker goes at once and never starts.
+    expect(fake.calls).toEqual(['setup', 'arm', 'send:disarm']);
   });
 });

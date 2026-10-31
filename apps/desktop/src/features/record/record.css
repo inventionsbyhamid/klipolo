@@ -375,3 +375,94 @@
 .record-field > .record-note {
   justify-self: stretch;
 }
+
+/* ---------- Countdown and the start gate ---------- */
+
+.record-preview .record-wait {
+  position: relative;
+}
+
+/* The number over the preview's centre, on a 96 px scrim circle. */
+.record-count {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: var(--color-scrim);
+  color: var(--color-ink);
+  word-spacing: 0.08em;
+  letter-spacing: var(--tracking-display);
+  font-size: var(--text-3xl);
+  line-height: var(--lh-3xl);
+  font-weight: var(--weight-display);
+  font-stretch: var(--wdth-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.record-countdown {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-5);
+}
+
+.record-countdown:empty {
+  display: none;
+}
+
+.record-starts {
+  color: var(--color-ink);
+  font-size: var(--text-md);
+  line-height: var(--lh-md);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The microphone's level: a 6 px pill track with a paper fill. It follows the voice under reduced motion too (it is
+   content), so its width has no transition. */
+.record-meter {
+  justify-self: stretch;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--color-bay-press);
+}
+
+.record-meter i {
+  display: block;
+  width: var(--p);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-paper);
+}
+
+.record-gate {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.record-gate-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-5);
+  color: var(--color-ink);
+  font-size: var(--text-md);
+  line-height: var(--lh-md);
+}
+
+.record-said-line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+.record-said-line .ico {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-top: 1px;
+}
