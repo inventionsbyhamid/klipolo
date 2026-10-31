@@ -322,9 +322,18 @@ impl Mixdown {
         self.scratch.resize(len * 2, 0.0);
         voice.render(&mut self.scratch, &mut self.reads);
         voice.next = to;
-        // A split with nothing removed plays straight through its cut: no edge ramp on either side.
-        let ramp_in = if self.after[i].is_some() { 0 } else { RAMP };
-        let ramp_out = if self.before[i].is_some() { 0 } else { RAMP };
+        // A split with nothing removed plays straight through its cut, and a loop's seam (a piece of music played to its
+        // file's end, the next starting the file again, `Seam`) through the join: no edge ramp on either side.
+        let ramp_in = if self.after[i].is_some() || s.seam.start {
+            0
+        } else {
+            RAMP
+        };
+        let ramp_out = if self.before[i].is_some() || s.seam.end {
+            0
+        } else {
+            RAMP
+        };
         let fade_in = to_frame(s.fade_in_us).max(ramp_in) as f32;
         let fade_out = to_frame(s.fade_out_us).max(ramp_out) as f32;
         let (g0, g1) = (voice.gain, s.gain as f32);
