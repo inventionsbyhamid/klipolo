@@ -69,6 +69,22 @@ describe('resize, rotate and snap', () => {
     });
   });
 
+  it('a top or bottom edge sets the height and keeps the shape about the centre line, unless freed', () => {
+    const start = { x: 0.1, y: 0.2, w: 0.2, h: 0.1 };
+    // Down by 50 px of a 100 px tall box: half as big again, the top edge and the centre line where they were.
+    const s = resizeRect(start, 's', { x: 30, y: 50 }, 0, canvas, false);
+    expect(s.h).toBeCloseTo(0.15);
+    expect(s.w).toBeCloseTo(0.3);
+    expect(s.y).toBeCloseTo(0.2);
+    expect(s.x + s.w / 2).toBeCloseTo(0.2);
+    // Up from the top: the bottom edge stays.
+    const n = resizeRect(start, 'n', { x: 0, y: -50 }, 0, canvas, false);
+    expect(n.h).toBeCloseTo(0.15);
+    expect(n.y + n.h).toBeCloseTo(0.3);
+    // Freed (Shift): the height alone.
+    expect(resizeRect(start, 's', { x: 0, y: 50 }, 0, canvas, true)).toEqual({ x: 0.1, y: 0.2, w: 0.2, h: 0.15 });
+  });
+
   it('keeps the opposite side fixed on a rotated layer', () => {
     const r = resizeRect({ x: 0.4, y: 0.4, w: 0.2, h: 0.1 }, 'e', { x: 0, y: 50 }, 90, canvas, false);
     expect(r.x).toBeCloseTo(0.375);
