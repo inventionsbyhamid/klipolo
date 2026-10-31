@@ -47,10 +47,11 @@ const goesOn = {
 /**
  * Why media of `kind` let go at this point goes nowhere: it is over a lane that won't take it (a picture on the Video
  * or a sound lane, a sound on the Video or Overlays lane, a video on a sound lane). Null where it would land, off the
- * lanes, or when the kind isn't known.
+ * lanes, in a read-only project, or when the kind isn't known.
  */
 export function dropRefusal(clientX: number, clientY: number, kind: AssetKind | null): string | null {
-  if (!kind || dropTargetAt(clientX, clientY, kind)) return null;
+  // A read-only project takes nothing anywhere: no lane is the wrong one.
+  if (!kind || useProject.getState().snapshot?.readOnly || dropTargetAt(clientX, clientY, kind)) return null;
   const lane = laneAt?.(clientX, clientY) ?? null;
   return lane ? goesOn[kind]() : null;
 }
