@@ -4,7 +4,7 @@
 //!
 //! - **Debug and `synthetic` builds only.** In a release build `fail_point!` is `Ok(())`, `fail_armed!` is `false`,
 //!   `set` does nothing and `KLIPOLO_FAIL` isn't read, so no point's name reaches the binary (a release
-//!   looks for `writer.midAppend`).
+//!   binary never holds `writer.midAppend`).
 //! - **Arming.** `set(name, Some(action))` arms a point for the whole process (tests: a test that arms one runs in its
 //!   own test binary, or uses a name no other test reaches). `KLIPOLO_FAIL` arms them when the first point is reached:
 //!   `KLIPOLO_FAIL="writer.beforeBarrier=abort,writer.midAppend=error:full,remux.midFlips=sleep:500"`, for a child

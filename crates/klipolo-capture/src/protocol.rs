@@ -15,7 +15,7 @@ use crate::live_view_size::ViewPixels;
 use crate::media::SourceId;
 use crate::shell::{Level, WorkerState};
 
-/// What the app asks. None of these reaches chat or MCP (`NOT_FOR_CHAT`, the `CAPTURE` reason). The UI sends them through
+/// What the app asks. None of these reaches chat or MCP. The UI sends them through
 /// the app's `recorder_send` (`Start` only on the person's own Record press).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "cmd", rename_all = "camelCase", rename_all_fields = "camelCase")]

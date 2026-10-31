@@ -1,6 +1,6 @@
 //! ScreenCaptureKit's pure helpers on this Mac: the stream's frame interval and queue depth, the stop codes'
 //! heal events and game sound's planar-to-interleaved step (the cursor's mapping is in `tests/cursor_map.rs`).
-//! created: the real capture is the explicit smoke run's (`examples/screen_smoke.rs`), never a test's.
+//! No stream is created: the real capture is the explicit smoke run's (`examples/screen_smoke/`), never a test's.
 #![cfg(all(target_os = "macos", feature = "real-capture"))]
 
 use klipolo_capture::pipe::PipeEvent;
