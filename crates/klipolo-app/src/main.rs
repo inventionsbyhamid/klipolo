@@ -57,6 +57,7 @@ fn main() {
             // How Klipolo pays for Meta's models (the Keychain), and this Mac's id with the relay (app support).
             let support = app.path().data_dir().ok().map(|dir| dir.join("Klipolo"));
             app.manage(commands::settings::load(support.as_deref()));
+            app.manage(klipolo_app::export::ExportState::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -84,6 +85,13 @@ fn main() {
             media_cache::media_peaks_info,
             media_cache::media_peaks,
             media_cache::media_thumbs,
+            commands::export::export_plan,
+            commands::export::export_start,
+            commands::export::export_cancel,
+            commands::export::export_reveal,
+            commands::export::export_open,
+            commands::export::export_files,
+            commands::export::export_pick_folder,
         ])
         .build(tauri::generate_context!())
         .expect("Klipolo could not start");
