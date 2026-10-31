@@ -617,7 +617,7 @@ async fn errors_say_one_sentence_and_never_touch_the_project() {
             "budget",
             "Your access code's $2.00 is used up.",
         ),
-        (ModelError::Busy, "busy", klipolo_chat::planner::BUSY),
+        (ModelError::Busy(None), "busy", klipolo_chat::planner::BUSY),
         (
             ModelError::Network,
             "network",

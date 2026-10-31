@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use klipolo_analysis::providers::meta::Meta;
-use klipolo_analysis::providers::meta_chat::{CHAT_MODEL, MetaChat, wire_body};
+use klipolo_analysis::providers::meta_chat::{CHAT_MODEL, MetaChat, SERVER_BUSY, wire_body};
 use klipolo_chat::{
     AnalysisState, ChatContext, ChatErrorKind, Inputs, Item, LanguageModel, Library, ModelError,
     ModelRequest, Refs, View, build_context, plan, system_prompt, tools,
@@ -27,6 +27,9 @@ use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 const TOKEN: &str = "relay-chat-token-0123456789";
+/// What the person reads when Klipolo's server (an access code) or Meta (their own key) doesn't answer.
+const SERVER_DOWN: &str = "Klipolo's server isn't answering right now. Try again in a moment.";
+const META_DOWN: &str = "Meta isn't answering right now. Try again in a moment.";
 const RESPONSES: &str = "/meta/v1/responses";
 
 /// The top-level fields the relay forwards (`services/relay`, its client contract).
@@ -564,7 +567,7 @@ async fn busy_is_asked_again_twice_then_reported() {
         .mount(&server)
         .await;
     let e = chat(&server).respond(&neutral_request()).await.unwrap_err();
-    assert_eq!(e, ModelError::Busy);
+    assert_eq!(e, ModelError::Busy(Some(SERVER_BUSY.into())));
     assert_eq!(bodies(&server).await.len(), 3, "the first try and two more");
 }
 
@@ -595,7 +598,7 @@ async fn a_rate_limit_that_is_not_busy_is_not_asked_again() {
     )
     .await;
     let e = chat(&server).respond(&neutral_request()).await.unwrap_err();
-    assert_eq!(e, ModelError::Busy);
+    assert_eq!(e, ModelError::Busy(Some(SERVER_BUSY.into())));
     assert_eq!(bodies(&server).await.len(), 1);
 }
 
@@ -746,9 +749,10 @@ async fn a_content_policy_refusal_is_declined_not_a_refused_key() {
 
 #[tokio::test]
 async fn server_and_network_failures_map_to_neutral_errors() {
+    let down = || ModelError::Unavailable(Some(SERVER_DOWN.into()));
     let cases = [
-        (ResponseTemplate::new(503), ModelError::Unavailable(None)),
-        (ResponseTemplate::new(502), ModelError::Unavailable(None)),
+        (ResponseTemplate::new(503), down()),
+        (ResponseTemplate::new(502), down()),
         (ResponseTemplate::new(401), ModelError::Refused),
         (
             ResponseTemplate::new(403).set_body_json(
@@ -836,6 +840,41 @@ async fn chat_holds_its_own_slot_never_the_analysiss() {
         "{:?}",
         started.elapsed()
     );
+}
+
+/// The person's own key: Meta, not Klipolo, is busy or not answering.
+#[tokio::test]
+async fn with_the_persons_own_key_busy_and_down_name_meta() {
+    let cases = [
+        (
+            ResponseTemplate::new(429).set_body_json(
+                json!({"error": {"code": "rate_limit_exceeded", "message": "Slow down."}}),
+            ),
+            ModelError::Busy(Some(
+                "Meta is busy right now. Try again in a moment.".into(),
+            )),
+        ),
+        (
+            ResponseTemplate::new(503),
+            ModelError::Unavailable(Some(META_DOWN.into())),
+        ),
+    ];
+    for (response, expected) in cases {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/responses"))
+            .respond_with(response)
+            .mount(&server)
+            .await;
+        let direct = MetaChat::new(
+            MetaClient::direct(SecretString::from("sk-direct-key"))
+                .with_meta_base(server.uri())
+                .with_ledger(None),
+        )
+        .with_busy_wait_max(Duration::from_millis(1));
+        let e = direct.respond(&neutral_request()).await.unwrap_err();
+        assert_eq!(e, expected);
+    }
 }
 
 /// An answer that never comes is given up after the time limit, saying who took too long, and chat's slot is free

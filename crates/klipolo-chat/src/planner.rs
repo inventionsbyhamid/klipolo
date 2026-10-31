@@ -56,6 +56,7 @@ pub const TOO_LONG: &str =
     "This project is too long for chat right now. Select a part and ask again.";
 /// Said when the credit is used up and the provider gave no sentence of its own.
 pub const OUT_OF_CREDIT: &str = "Your AI credit has run out.";
+/// Said when the provider is busy, or doesn't answer, and gave no sentence of its own (who: Meta, Klipolo's server).
 pub const BUSY: &str = "Klipolo AI is busy right now. Try again in a moment.";
 pub const UNAVAILABLE: &str = "Klipolo AI isn't answering right now. Try again in a moment.";
 pub const NO_CONNECTION: &str =
@@ -163,7 +164,7 @@ impl ChatError {
         };
         let (kind, message) = match e {
             ModelError::Budget(s) => (ChatErrorKind::Budget, said(Some(s), OUT_OF_CREDIT)),
-            ModelError::Busy => (ChatErrorKind::Busy, BUSY.to_owned()),
+            ModelError::Busy(s) => (ChatErrorKind::Busy, said(s, BUSY)),
             ModelError::Unavailable(s) => (ChatErrorKind::Unavailable, said(s, UNAVAILABLE)),
             ModelError::Network => (ChatErrorKind::Network, NO_CONNECTION.to_owned()),
             ModelError::Refused => (ChatErrorKind::Refused, NOT_ACCEPTED.to_owned()),

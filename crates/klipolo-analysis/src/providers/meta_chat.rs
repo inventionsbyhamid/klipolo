@@ -231,9 +231,10 @@ fn who(relay: bool) -> &'static str {
 /// A Meta client error in chat's terms, `relay` saying whether the call went through the relay. A 402, or a 429 whose
 /// code says the quota is used up (`QUOTA_CODES`, a direct key's), keeps the relay's or Meta's sentence (which credit,
 /// what to do). A timeout keeps its sentence, or says who gave up when there is none (`SERVER_BUSY` through the relay,
-/// Meta's otherwise); a relay with no Meta key and a content-policy refusal say so in their own sentence. A request
-/// refused as sent or an unreadable answer keeps its (redacted) text for logs only. Through the relay, a sentence the
-/// server didn't give names Klipolo's (`MetaError::relay_user_message`): a bare 402 is the device's Klipolo credit.
+/// Meta's otherwise); busy and not answering say who too; a relay with no Meta key and a content-policy refusal say so
+/// in their own sentence. A request refused as sent or an unreadable answer keeps its (redacted) text for logs only.
+/// Through the relay, a sentence the server didn't give names Klipolo's (`MetaError::relay_user_message`): a bare 402
+/// is the device's Klipolo credit.
 pub fn model_error(e: MetaError, relay: bool) -> ModelError {
     let said = |e: &MetaError| {
         if relay {
@@ -253,8 +254,14 @@ pub fn model_error(e: MetaError, relay: bool) -> ModelError {
             let message = message.unwrap_or_default();
             ModelError::Budget(MetaError::Budget { message }.user_message())
         }
-        MetaError::RateLimited { .. } => ModelError::Busy,
-        MetaError::Overloaded { .. } => ModelError::Unavailable(None),
+        MetaError::RateLimited { .. } => ModelError::Busy(Some(format!(
+            "{} is busy right now. Try again in a moment.",
+            who(relay)
+        ))),
+        MetaError::Overloaded { .. } => ModelError::Unavailable(Some(format!(
+            "{} isn't answering right now. Try again in a moment.",
+            who(relay)
+        ))),
         MetaError::TimedOut { message: None, .. } if relay => {
             ModelError::Unavailable(Some(SERVER_BUSY.to_owned()))
         }

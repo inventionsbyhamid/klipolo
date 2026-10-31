@@ -483,7 +483,7 @@ fn every_model_error_is_one_plain_sentence_and_changes_nothing() {
     let before = p.clone();
     let i = inputs(&p, speech);
     let cases = [
-        (ModelError::Busy, ChatErrorKind::Busy),
+        (ModelError::Busy(None), ChatErrorKind::Busy),
         (ModelError::Unavailable(None), ChatErrorKind::Unavailable),
         (ModelError::Network, ChatErrorKind::Network),
         (ModelError::Refused, ChatErrorKind::Refused),
