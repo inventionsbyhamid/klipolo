@@ -2133,6 +2133,44 @@
       "width": 0
     }
   ],
+  "fullFrame": {
+    "anchor": "topLeft",
+    "opacity": 1.0,
+    "overrides": {
+      "landscape": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "portrait": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "square": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    "radius": 0.0,
+    "rect": {
+      "h": 1.0,
+      "w": 1.0,
+      "x": 0.0,
+      "y": 0.0
+    },
+    "rotation": 0.0
+  },
+  "portraitClear": {
+    "h": 0.6,
+    "w": 0.81,
+    "x": 0.06,
+    "y": 0.14
+  },
   "rects": [
     {
       "layout": {
