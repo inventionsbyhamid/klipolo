@@ -22,6 +22,7 @@ use tauri::{AppHandle, Manager, RunEvent, State, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
 use crate::project::ProjectSessionState;
+use crate::state::EngineState;
 
 /// How long a start waits for this Mac's fonts to be read before checking them: past it nothing is called missing,
 /// and the worker still stops on a frame it would draw with a stand-in.
@@ -123,7 +124,7 @@ async fn prepare(app: AppHandle, req: ExportRequest, dir: PathBuf) -> Result<Bat
         feed.text_language,
         &req,
         &dir,
-        None,
+        pcm_dir,
     ))
 }
 

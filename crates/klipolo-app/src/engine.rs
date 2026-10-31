@@ -136,8 +136,13 @@ async fn start_engine(state: &EngineState, feed: FeedRx) -> Result<Engine, Strin
         backend = backend
             .with_audio_cache(caches.audio)
             .with_media_cache(caches.media)
-            // Exports land later; until then no export job's files need keeping.
-            .with_cache_tidy(None);
+            // Exports read decoded sound from this cache too: a running job's files in the usual export folder are
+            // kept (the open project's always are).
+            .with_cache_tidy(
+                klipolo_app::export::default_folder()
+                    .ok()
+                    .map(|dir| klipolo_engine::export::jobs::jobs_root(&dir)),
+            );
     }
     let options = EngineOptions {
         allowed_origins: allowed_origins(),
