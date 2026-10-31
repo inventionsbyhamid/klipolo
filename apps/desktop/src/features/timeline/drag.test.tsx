@@ -76,6 +76,22 @@ describe('dragging blocks', () => {
     expect(vi.mocked(bridge.apply).mock.calls[1][0].ops[0]).toMatchObject({ startUs: 2_000_000 });
   });
 
+  it('a snap shows its guide across the lanes and in the ruler row, which the sticky ruler covers', async () => {
+    usePlayback.setState({ playheadUs: 2_100_000 });
+    renderWithProviders(<Timeline />);
+    const title = block(/Set up billing/);
+    await drag(title, 100, 140);
+    const guides = [...document.querySelectorAll<HTMLElement>('[data-snap-guide]')];
+    expect(guides.map((g) => g.dataset.snapGuide)).toEqual(['ruler', 'lanes']);
+    expect(guides[0].closest('.tl-head')).not.toBeNull();
+    for (const guide of guides) {
+      expect(guide).toHaveStyle({ display: 'block', transform: 'translateX(84px)' }); // 2.1 s at 40 px/s
+    }
+    fireEvent.pointerUp(title, { pointerId: 1, clientX: 140, clientY: 10 });
+    await frames();
+    for (const guide of guides) expect(guide.style.display).toBe('');
+  });
+
   it("dragging a clip past the next clip's middle commits moveClip", async () => {
     renderWithProviders(<Timeline />);
     const a = block(/^screen\.mp4/);

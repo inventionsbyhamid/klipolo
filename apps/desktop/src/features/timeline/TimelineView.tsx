@@ -84,10 +84,13 @@ export function TimelineView() {
   const dragged = useDragged((s) => s.ids);
   const scrollRef = useRef<HTMLDivElement>(null);
   const guideRef = useRef<HTMLDivElement>(null);
+  const rulerGuideRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
   // The blocks' pick and press handlers: one set for the timeline's lifetime, so a `memo` block never re-renders.
-  const [{ onPick, onPress, onTrimPress }] = useState(() => blockPressHandlers(scrollRef, guideRef, tipRef));
+  const [{ onPick, onPress, onTrimPress }] = useState(() =>
+    blockPressHandlers(scrollRef, [guideRef, rulerGuideRef], tipRef),
+  );
   // A zoom's render puts its anchor back under its x as soon as the new width is laid out. Declared before
   // `useViewport`, so its layout effect runs first and the viewport's window is the one on screen.
   useLayoutEffect(() => {
@@ -214,6 +217,8 @@ export function TimelineView() {
                   viewport={viewport}
                   onScrub={seekTo}
                 />
+                {/* The snap guide's part in the ruler row, which covers the lanes' part as they scroll under it. */}
+                <SnapGuide ref={rulerGuideRef} part="ruler" left={HEADER_PX} />
                 {/* Where a dragged layer lands, or a dragged clip's position; drawn by the drag (`showTip`). */}
                 <div ref={tipRef} aria-hidden className="tl-tip" />
               </div>
@@ -230,7 +235,7 @@ export function TimelineView() {
                 <ProposalRanges pps={pps} fromUs={viewport.fromUs} toUs={viewport.toUs} />
                 <RangeSelection pps={pps} />
                 <Playhead pps={pps} />
-                <SnapGuide ref={guideRef} />
+                <SnapGuide ref={guideRef} part="lanes" />
                 <DropIndicator pps={pps} />
               </div>
             </div>

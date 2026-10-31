@@ -37,12 +37,12 @@ export function pickBlock(id: string) {
 }
 
 /**
- * The blocks' press handlers, for the timeline whose scroller, snap guide and tip these refs hold. They read the
- * project as it is at the press, so their identities never change (`memo` blocks never re-render for them).
+ * The blocks' press handlers, for the timeline whose scroller, snap guide's parts and tip these refs hold. They read
+ * the project as it is at the press, so their identities never change (`memo` blocks never re-render for them).
  */
 export function blockPressHandlers(
   scrollRef: RefObject<HTMLElement | null>,
-  guideRef: RefObject<HTMLElement | null>,
+  guideRefs: readonly RefObject<HTMLElement | null>[],
   tipRef: RefObject<HTMLElement | null>,
 ) {
   /** A press picks, then a move starts with the project as it is now. */
@@ -74,7 +74,7 @@ export function blockPressHandlers(
       const grabUs = mainIndex(main).starts[i] + pxToUs(atPx, useUi.getState().pxPerSecond);
       gesture = { kind: 'clip', clipId: id, label: sourceLabel(project, main[i].source), grabUs };
     }
-    const view = timelineDragView(scroller, found?.track.id ?? null, guideRef, tipRef);
+    const view = timelineDragView(scroller, found?.track.id ?? null, guideRefs, tipRef);
     pressBlock(e, gesture, view, playheadUs);
   };
 
@@ -92,7 +92,7 @@ export function blockPressHandlers(
     e.preventDefault();
     block.focus({ preventScroll: true });
     useSelection.getState().select(id);
-    pressTrim(e, block, gesture, timelineDragView(scroller, null, guideRef, tipRef));
+    pressTrim(e, block, gesture, timelineDragView(scroller, null, guideRefs, tipRef));
   };
 
   return { onPick: pickBlock, onPress, onTrimPress };

@@ -7,13 +7,13 @@ import type { DragView, RowHit } from './session';
 
 /**
  * The timeline as a drag sees it: its scroller, the track rows a layer from `fromTrackId` can move to and the new-track
- * zone (only while every track shows), and the snap guide and tip, written through their style (never state: a drag
- * never re-renders).
+ * zone (only while every track shows), and the snap guide's parts and the tip, written through their style (never
+ * state: a drag never re-renders).
  */
 export function timelineDragView(
   scroller: HTMLElement,
   fromTrackId: string | null,
-  guide: RefObject<HTMLElement | null>,
+  guides: readonly RefObject<HTMLElement | null>[],
   tip: RefObject<HTMLElement | null>,
 ): DragView {
   // The scroller stays put during a drag: one layout read, at the press.
@@ -40,10 +40,12 @@ export function timelineDragView(
       return hit ? { trackId: hit.trackId, dy: hit.top - fromTop } : null;
     },
     showGuide(us) {
-      const el = guide.current;
-      if (!el) return;
-      el.style.display = us === null ? '' : 'block';
-      if (us !== null) el.style.transform = `translateX(${usToPx(us, useUi.getState().pxPerSecond)}px)`;
+      const x = us === null ? 0 : usToPx(us, useUi.getState().pxPerSecond);
+      for (const { current: el } of guides) {
+        if (!el) continue;
+        el.style.display = us === null ? '' : 'block';
+        if (us !== null) el.style.transform = `translateX(${x}px)`;
+      }
     },
     showTip(text, clientX) {
       const el = tip.current;
