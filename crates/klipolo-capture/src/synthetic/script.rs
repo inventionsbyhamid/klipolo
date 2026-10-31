@@ -10,7 +10,7 @@ use super::cursor::CursorScript;
 use super::packets::SyntheticVideoSpec;
 use crate::backend::{
     AppAudioApi, CaptureCaps, CursorCaps, DeviceInfo, Devices, DisplayInfo, HotkeyApi,
-    IndicatorPlace, Permission, PickerKind, ScreenApi, Transport,
+    IndicatorPlace, Permission, PickerKind, ScreenApi, Target, Transport,
 };
 use crate::media::Codec;
 use crate::pipe::{PipeError, PipeEvent};
@@ -61,6 +61,8 @@ pub struct Script {
     pub live_switch: bool,
     /// The live view's running stream doesn't take this many new view sizes (as one that didn't answer in time).
     pub live_view_refuses: u32,
+    /// A target's first stills that fail (`Backend::still`), as one whose screenshot didn't come.
+    pub still_fails: Vec<(Target, u32)>,
 }
 
 impl Default for Script {
@@ -99,6 +101,7 @@ impl Default for Script {
             cursor: None,
             live_switch: true,
             live_view_refuses: 0,
+            still_fails: vec![],
             caps: CaptureCaps {
                 screen: ScreenApi::ScreenCaptureKit,
                 app_audio: AppAudioApi::ScreenCaptureKit,

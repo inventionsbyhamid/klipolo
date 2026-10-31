@@ -1,6 +1,6 @@
 //! The seam each OS implements once: what this computer can capture with, its devices and permissions
-//! (asked without capture or prompts), the pipes, Check camera's preview, the encoder probe and the worker's shell. The
-//! UI and the presets read `CaptureCaps` and never branch on the OS.
+//! (asked without capture or prompts), the pipes, Check camera's preview, the live view and the Record dialog's stills,
+//! the encoder probe and the worker's shell. The UI and the presets read `CaptureCaps` and never branch on the OS.
 
 use std::time::Duration;
 
@@ -50,6 +50,12 @@ pub trait Backend: Send + Sync {
     /// permission: it runs only while screen recording is allowed already. Default: Unsupported (Windows' capture tasks
     /// add it; Linux's ScreenCast portal would ask at every opening).
     fn live_view(&self, _target: &Target) -> Result<Box<dyn PreviewPipe>, PipeError> {
+        Err(PipeError::Unsupported)
+    }
+    /// A still of `target` (a display, or an app's windows on its display) `width` pixels wide in its own shape, as a
+    /// JPEG: the Record dialog's cards (`run::thumbs`). Nothing is written, and it never asks for a permission: it runs
+    /// only while screen recording is allowed already. Default: Unsupported.
+    fn still(&self, _target: &Target, _width: u32) -> Result<PreviewFrame, PipeError> {
         Err(PipeError::Unsupported)
     }
     /// The encoders this computer has, measured with generated frames only, within `budget`.

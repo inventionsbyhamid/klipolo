@@ -10,6 +10,8 @@
 //! - `preview`: "camera";
 //! - `live_view`: "liveView", whose first scripted event (any) ends its stream by itself at that time; its frames are
 //!   its picture of `FAKE_DISPLAY` for the view it is told.
+//! - `still`: its picture of `FAKE_DISPLAY` at the width asked, failing a target's first stills as `Script::still_fails`
+//!   says; every still asked for is kept (`stills`).
 //!
 //! A `Target::Portal` pipe sends a fresh `PipeEvent::RestoreToken` ("fake-restore-1", "fake-restore-2", …) as it
 //! starts, as the portal returns a new single-use token on every start.
@@ -20,7 +22,7 @@
 mod pipes;
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use klipolo_platform::clock::host_ns;
@@ -28,12 +30,12 @@ use klipolo_platform::clock::host_ns;
 use super::cursor::SyntheticCursor;
 use super::fixture::FixtureVideo;
 use super::packets::SyntheticVideoSpec;
-use super::preview::FakePreview;
+use super::preview::{FAKE_DISPLAY, FakePreview};
 use super::script::{Script, VideoFeed, video_spec};
 use super::shell::FakeShell;
 use crate::backend::{
-    AudioSpec, Backend, CaptureCaps, Devices, EncoderResult, Permission, Permissions, PreviewPipe,
-    ProbeReport, Target, VideoPipes, VideoSpec,
+    AudioSpec, Backend, CaptureCaps, Devices, EncoderResult, Permission, Permissions, PreviewFrame,
+    PreviewPipe, ProbeReport, Target, VideoPipes, VideoSpec,
 };
 use crate::cursor::CursorSource;
 use crate::media::Codec;
@@ -61,6 +63,8 @@ pub struct FakeBackend {
     screen_requests: Arc<AtomicU64>,
     /// Each screen pipe start's cursor plan, in order.
     cursor_plans: Arc<Mutex<Vec<CursorPlan>>>,
+    /// Each still asked for (`still`), in order: its target and width.
+    stills: Arc<Mutex<Vec<(Target, u32)>>>,
 }
 
 impl FakeBackend {
@@ -80,7 +84,13 @@ impl FakeBackend {
             on_build: Mutex::new(None),
             screen_requests: Arc::default(),
             cursor_plans: Arc::default(),
+            stills: Arc::default(),
         }
+    }
+
+    /// Each still asked for so far, in order: its target and width.
+    pub fn stills(&self) -> Arc<Mutex<Vec<(Target, u32)>>> {
+        self.stills.clone()
     }
 
     /// The cursor plan each screen pipe start had, in order (a heal's restart shows the cursor: Burned).
@@ -222,6 +232,25 @@ impl Backend for FakeBackend {
             ends,
             self.script.live_view_refuses,
         ))
+    }
+
+    /// Its picture of `FAKE_DISPLAY` `width` wide (only a JPEG's start and end markers), unless the script fails this
+    /// one of the target's stills.
+    fn still(&self, target: &Target, width: u32) -> Result<PreviewFrame, PipeError> {
+        let mut stills = self.stills.lock().unwrap_or_else(PoisonError::into_inner);
+        let before = stills.iter().filter(|(t, _)| t == target).count();
+        stills.push((target.clone(), width));
+        let fails = (self.script.still_fails.iter())
+            .find(|(t, _)| t == target)
+            .map_or(0, |(_, n)| *n as usize);
+        if before < fails {
+            return Err(PipeError::Os("a fake still that didn't come".into()));
+        }
+        Ok(PreviewFrame {
+            jpeg: vec![0xff, 0xd8, 0xff, 0xd9],
+            width,
+            height: width * FAKE_DISPLAY.1 / FAKE_DISPLAY.0,
+        })
     }
 
     /// A computer with a dedicated hardware H.264 and HEVC encoder that both hold 1080p60, 1440p60 and 1080p120, and

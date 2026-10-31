@@ -1,11 +1,13 @@
 //! `klipolo --record-worker`: the recorder process the app relaunches itself as (as the export worker), in its own
-//! process group, so it outlives an editor crash. Three forms:
+//! process group, so it outlives an editor crash. Its forms:
 //! - `--record-worker <session folder> [--resume]`: records the take whose `session.json` the app wrote (`resume`: goes
 //!   on with it after a crashed worker, `run::resume`);
 //! - `--record-worker --check-camera <camera id>`: Check camera's preview;
 //! - `--record-worker --live-view <target> [<view>]`: the recorder's live view of `target` (a `backend::Target` as
 //!   JSON), no sound, nothing written, for the big view of `view` pixels (`live_view_size::ViewPixels` as
 //!   JSON), else the small one;
+//! - `--record-worker --thumbs <targets>`: the Record dialog's stills of each screen and app, about once a second each
+//!   (`run::thumbs`); `targets` is a JSON list of `[key, target]` pairs, each target a `backend::Target`;
 //! - `--record-worker --probe <out.json>`: the encoder probe, on generated frames only (so without the consent guard,
 //!   `platform::backend_for_probe`), its report written atomically.
 //!
@@ -24,9 +26,11 @@ use klipolo_platform::qos::{self, Qos};
 
 use crate::backend::{Backend, Target};
 use crate::live_view_size::ViewPixels;
+use crate::run::PreviewIo;
 use crate::run::check::run_check_camera;
 use crate::run::live_view::run_live_view;
 use crate::run::threads::run_session;
+use crate::run::thumbs::run_thumbs;
 use crate::session::SessionDir;
 
 /// How long the first-run probe may take: 5 s at most.
@@ -56,6 +60,16 @@ pub fn main(args: &[String]) -> i32 {
                 }
             }
         }
+        ["--thumbs", targets] => {
+            log::to_stderr();
+            match serde_json::from_str::<Vec<(String, Target)>>(targets) {
+                Ok(targets) => with_backend(|b| run_thumbs(&*b, &targets, PreviewIo::std())),
+                Err(error) => {
+                    eprintln!("--thumbs takes a JSON list of [key, target] pairs: {error}");
+                    2
+                }
+            }
+        }
         ["--probe", out] => {
             log::to_stderr();
             match probe_backend() {
@@ -63,8 +77,8 @@ pub fn main(args: &[String]) -> i32 {
                 None => no_backend(),
             }
         }
-        // A flag is never a folder: `--probe`, `--check-camera` or `--live-view` without its argument is a usage error,
-        // not a take.
+        // A flag is never a folder: `--probe`, `--check-camera`, `--live-view` or `--thumbs` without its argument is a
+        // usage error, not a take.
         [folder] | [folder, "--resume"] if !folder.starts_with("--") => {
             let dir = SessionDir::at(Path::new(folder));
             log::to_file(&dir.diagnostics());
@@ -80,7 +94,8 @@ pub fn main(args: &[String]) -> i32 {
         _ => {
             eprintln!(
                 "usage: --record-worker <session folder> [--resume] | --record-worker --check-camera <camera id> | \
-                 --record-worker --live-view <target JSON> [<view JSON>] | --record-worker --probe <out.json>"
+                 --record-worker --live-view <target JSON> [<view JSON>] | --record-worker --thumbs <targets JSON> | \
+                 --record-worker --probe <out.json>"
             );
             2
         }
@@ -152,6 +167,9 @@ mod tests {
         let screen = r#"{"kind":"display","id":"display-1"}"#;
         let not_a_view = args(&["klipolo", "--record-worker", "--live-view", screen, "{}"]);
         assert_eq!(main(&not_a_view), 2);
+        assert_eq!(main(&args(&["klipolo", "--record-worker", "--thumbs"])), 2);
+        let not_targets = args(&["klipolo", "--record-worker", "--thumbs", screen]);
+        assert_eq!(main(&not_targets), 2);
         if !cfg!(feature = "real-capture") {
             assert_eq!(
                 main(&args(&[
@@ -162,6 +180,9 @@ mod tests {
                 ])),
                 2
             );
+            let screens = format!(r#"[["display-1",{screen}]]"#);
+            let thumbs = args(&["klipolo", "--record-worker", "--thumbs", &screens]);
+            assert_eq!(main(&thumbs), 2);
         }
     }
 }

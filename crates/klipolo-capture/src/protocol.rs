@@ -92,6 +92,14 @@ pub enum Event {
         width: u32,
         height: u32,
     },
+    /// A still of one screen or app for the Record dialog's cards, about once a second each (`run::thumbs`): `key` is
+    /// the app's own name for its target.
+    Thumb {
+        key: String,
+        jpeg_base64: String,
+        width: u32,
+        height: u32,
+    },
     /// The take is complete in its folder (`session` is its id); the app imports it, unless `StartOver` came first.
     Finished {
         session: String,
