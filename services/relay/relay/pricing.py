@@ -14,12 +14,14 @@ from typing import Any
 SPARK_MODELS = frozenset({"muse-spark-1.3", "muse-spark-1.2"})
 SAM_MODEL = "sam-3.1"
 TRANSCRIBE_MODEL = "muse-voice-transcribe-1.0"
+IMAGE_MODEL = "muse-image-1.0"
 
 # The only models the relay forwards, by endpoint. Everything else (Muse
 # Wonder, the *-contributor tiers that train on inputs) is refused.
 MODELS_BY_ENDPOINT: dict[str, frozenset[str]] = {
     "responses": SPARK_MODELS | {SAM_MODEL},
     "asr/transcribe": frozenset({TRANSCRIBE_MODEL}),
+    "images/generations": frozenset({IMAGE_MODEL}),
 }
 
 # Spark's output per call is capped so the most a call can cost is known up
@@ -36,6 +38,10 @@ SAM_IMAGE_USD = 2.50 / 1000
 # Meta bills at least 50 frames per SAM video request.
 SAM_MIN_FRAMES = 50
 TRANSCRIBE_HOUR_USD = 0.18
+# Muse Image, per image returned. A call asks for at most MAX_IMAGES_PER_CALL,
+# and reserves that many whatever it asks for.
+IMAGE_USD = 0.01
+MAX_IMAGES_PER_CALL = 2
 # Added to the reservation of any call that isn't text only: the request is
 # small, but the media or stored items behind it are not.
 MEDIA_RESERVE_USD = 0.75
@@ -46,6 +52,9 @@ UNREADABLE_AUDIO_SECONDS = 600
 # Meta's SAM usage names video frames but no image count is documented, so the
 # relay counts the images in the request and adds them under this key.
 SAM_IMAGES_KEY = "images_in_request"
+# Muse Image's price is per image returned: the relay counts them in the answer
+# and records the count under this key.
+IMAGES_KEY = "images"
 
 
 def cost_usd(endpoint: str, model: str | None, usage: Mapping[str, Any]) -> float:
@@ -78,6 +87,8 @@ def _cost(model: str, usage: Mapping[str, Any]) -> float:
             + cached * SPARK_CACHED_INPUT_USD
             + output_tokens * SPARK_OUTPUT_USD
         )
+    if model == IMAGE_MODEL:
+        return _count(usage, IMAGES_KEY, required=True) * IMAGE_USD
     if model == SAM_MODEL:
         frames = _count(usage, "video_frames_processed")
         if frames > 0:
@@ -104,7 +115,8 @@ def reservation_usage(
     close to that), plus the whole output limit, plus MEDIA_RESERVE_USD
     unless the call is text only.
     Transcription: the audio's length. SAM (always media): the 50-frame video
-    minimum and each image, plus MEDIA_RESERVE_USD.
+    minimum and each image, plus MEDIA_RESERVE_USD. Muse Image: the most images
+    a call may ask for.
     """
     if model in SPARK_MODELS:
         usage: dict[str, Any] = {"input_tokens": request_bytes, "output_tokens": max_output_tokens}
@@ -113,6 +125,9 @@ def reservation_usage(
         media = True
     elif model == TRANSCRIBE_MODEL:
         usage = {"audioDurationMs": math.ceil(audio_seconds * 1000)}
+        media = False
+    elif model == IMAGE_MODEL:
+        usage = {IMAGES_KEY: MAX_IMAGES_PER_CALL}
         media = False
     else:
         usage = {}
