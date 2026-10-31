@@ -572,6 +572,8 @@ fn relay_error(error: &MetaError, offline: &str) -> SettingsError {
     SettingsError::new(match error {
         MetaError::Network(_) => offline.to_owned(),
         MetaError::Overloaded { message: None } => RELAY_BUSY.to_owned(),
+        // A bare 504 is the relay (or Traefik in front of it) giving up, not Meta.
+        MetaError::TimedOut { message: None, .. } => RELAY_BUSY.to_owned(),
         MetaError::Decode(_) => RELAY_UNREADABLE.to_owned(),
         other => other.user_message(),
     })

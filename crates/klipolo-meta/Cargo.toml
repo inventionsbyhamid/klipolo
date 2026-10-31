@@ -8,6 +8,8 @@ description = "One HTTP client for Meta's Model API: direct with the person's ow
 publish = false
 
 [dependencies]
+# Muse Image sends its PNGs as base64 (the version the lockfile already has).
+base64 = "0.22.1"
 reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls", "json", "multipart", "stream"] }
 secrecy = "0.10"
 serde = { version = "1", features = ["derive"] }

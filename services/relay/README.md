@@ -9,7 +9,7 @@ The relay lets people with an access code use Meta's models in Klipolo without t
 | `GET /healthz` | `{"ok": true}` |
 | `POST /v1/devices` | Registers a device, with or without an access code. Returns a bearer token. |
 | `GET /v1/devices/me` | Whether relay AI is on, the budget and the spend. |
-| `POST /meta/v1/responses`, `POST /meta/v1/asr/transcribe`, `POST /meta/v1/files`, `GET` and `DELETE /meta/v1/files/{id}` | Forwarded to Meta for devices with an active code, and charged against the caps. |
+| `POST /meta/v1/responses`, `POST /meta/v1/asr/transcribe`, `POST /meta/v1/images/generations`, `POST /meta/v1/files`, `GET` and `DELETE /meta/v1/files/{id}` | Forwarded to Meta for devices with an active code, and charged against the caps. |
 | `POST /v1/align` | Word timing for transcript turns: multipart `audio` (16 kHz mono 16-bit WAV, at most 10 minutes) and `turns` (JSON). Open to every registered device, 120 minutes a day. |
 
 Errors are always `{"error": "<code>", "message": "<sentence>"}`, except Traefik's rate limit (see Limits to know). Without a Meta key the proxied routes answer 503 `not_configured`.
@@ -33,6 +33,8 @@ What Klipolo, or any other client, must do to use the relay well:
 - **`max_output_tokens` at most 16384** (8192 when missing). More is 400.
 - **No `include` or `truncation`**, or any other field the relay doesn't list: 400. No `previous_response_id` or `conversation` either.
 - **Don't replay reasoning items.** Any reasoning item in `input` makes the call count as media, which reserves $0.75 more.
+- **Muse Image (`images/generations`): `muse-image-1.0` only, `n` at most 2.** More is 400. Its tools (image search, web search, shell) are always turned off. Each image returned costs $0.01, up to the `n` asked for, and a call reserves $0.02 until it is charged. No streaming, edits or `moderation`.
+- **A prompt Meta won't serve** comes back 400 with the code `content_policy_violation` and Meta's reason. Every other Meta error is `meta_error`.
 
 ## Settings
 
@@ -43,7 +45,7 @@ All settings come from the environment.
 | `META_API_KEY` | empty | The server's own Meta key. Never logged. |
 | `DEVICE_CAP_USD` | `2.00` | Most a device can spend, all time. |
 | `GLOBAL_CAP_USD` | `40.00` | Most the whole relay can spend, all time. |
-| `ALLOWED_MODELS` | `muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0` | Models the proxy forwards. Muse Wonder and the contributor tiers are refused even when listed. |
+| `ALLOWED_MODELS` | `muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0,muse-image-1.0` | Models the proxy forwards. Muse Wonder and the contributor tiers are refused even when listed. |
 | `ALIGN_MINUTES_PER_DEVICE_PER_DAY` | `120` | Word timing per device per UTC day. |
 | `ALIGN_CONCURRENCY` | `2` | Alignments running at once. More than 2 can run out of memory in 6 GB. |
 | `ALIGN_THREADS` | `3` | Threads per alignment. |

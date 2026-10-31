@@ -31,7 +31,7 @@ pub enum MetaError {
         message: Option<String>,
     },
     /// 503 and other server errors: Meta or the relay cannot answer right
-    /// now, with the server's reason when it gave one ("Relay not configured.").
+    /// now, with the server's reason when it gave one.
     #[error("Meta or the relay is overloaded or unavailable (5xx){}", detail(.message.as_ref()))]
     Overloaded { message: Option<String> },
     /// Any other refused request (400, 404, 413, 422...), with the server's reason.
@@ -50,10 +50,33 @@ pub enum MetaError {
     /// name, without folders.
     #[error("could not read the local file {name}")]
     LocalFile { name: String },
+    /// A request Meta declined under its content policy (a 4xx with the code
+    /// `content_policy_violation`, from Meta or passed on by the relay), with
+    /// its reason when it gave one.
+    #[error("declined under Meta's content policy{}", detail(.message.as_ref()))]
+    Refused { message: Option<String> },
+    /// 504 or 408: no answer in time (Meta's non-streaming limit, the
+    /// relay's wait for Meta, or a request body too slow to arrive), with the
+    /// server's reason when it gave one.
+    #[error("timed out ({status}){}", detail(.message.as_ref()))]
+    TimedOut {
+        status: u16,
+        message: Option<String>,
+    },
+    /// 503 `not_configured`: the relay has no Meta key of its own yet.
+    #[error("the relay has no Meta key (503 not_configured)")]
+    NotConfigured,
 }
 
 /// The most of a server's message kept in an error.
 const MAX_MESSAGE_CHARS: usize = 300;
+
+/// The relay's 429 code for a device's (or the relay's) calls at once.
+const RELAY_BUSY_CODE: &str = "busy";
+/// Meta's code for a request it won't serve under its content policy.
+const CONTENT_POLICY_CODE: &str = "content_policy_violation";
+/// The relay's 503 code while it has no Meta key.
+const NOT_CONFIGURED_CODE: &str = "not_configured";
 
 /// ": message" for `Display`, or nothing when there is no message.
 fn detail(message: Option<&String>) -> String {
@@ -75,8 +98,8 @@ fn retry_hint(retry_after: Option<u64>) -> String {
 
 impl MetaError {
     /// The error for a refused call: its status, `Retry-After` header and body.
-    /// The body's message is kept (redacted) for 402, 403, 5xx and plain
-    /// refusals.
+    /// The body's message is kept (redacted) for 402, 403, 5xx, content
+    /// policy refusals and plain refusals.
     pub(crate) fn from_status(
         status: u16,
         retry_after: Option<&str>,
@@ -96,13 +119,40 @@ impl MetaError {
                 code: body_code(body, secrets),
                 message: body_message(body, secrets),
             },
+            408 | 504 => Self::TimedOut {
+                status,
+                message: body_message(body, secrets),
+            },
+            503 if body_code(body, secrets).as_deref() == Some(NOT_CONFIGURED_CODE) => {
+                Self::NotConfigured
+            }
             500..=599 => Self::Overloaded {
                 message: body_message(body, secrets),
             },
+            _ if body_code(body, secrets).as_deref() == Some(CONTENT_POLICY_CODE) => {
+                Self::Refused {
+                    message: body_message(body, secrets),
+                }
+            }
             _ => Self::BadRequest {
                 message: body_message(body, secrets)
                     .unwrap_or_else(|| format!("The server answered with status {status}.")),
             },
+        }
+    }
+
+    /// A busy moment to wait out (`retry_after`) and send again, not a
+    /// used-up allowance: the relay's 429 `busy`, or a 429 with neither an
+    /// error code nor a message (Traefik's plain-text rate limit in front of
+    /// the relay). A JSON 429 that gives a reason (the relay's daily
+    /// `align_quota`, Meta's own rate limit, even with a null code) is a stop.
+    pub fn is_busy(&self) -> bool {
+        match self {
+            Self::RateLimited { code, message, .. } => match code.as_deref() {
+                Some(code) => code == RELAY_BUSY_CODE,
+                None => message.is_none(),
+            },
+            _ => false,
         }
     }
 
@@ -146,6 +196,14 @@ impl MetaError {
             }
             Self::Decode(_) => "Meta sent an answer Klipolo could not read. Try again.".into(),
             Self::LocalFile { name } => format!("Klipolo could not read {name}."),
+            Self::Refused { .. } => {
+                "Meta turned this down under its content policy. Try wording it differently.".into()
+            }
+            Self::TimedOut { message, .. } => sentence(
+                message.as_deref().unwrap_or_default(),
+                "Meta took too long to answer. Try again.",
+            ),
+            Self::NotConfigured => "Klipolo's AI service isn't set up yet. Try again later or add your own Meta key in Settings.".into(),
         }
     }
 }

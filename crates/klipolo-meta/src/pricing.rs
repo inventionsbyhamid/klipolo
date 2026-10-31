@@ -14,6 +14,8 @@ pub const ASR_USD_PER_HOUR: f64 = 0.18;
 pub const SAM_FRAME_USD: f64 = 0.20 / 1000.0;
 /// Meta bills at least this many frames per SAM video request.
 pub const SAM_MIN_FRAMES: u64 = 50;
+/// Muse Image, per image returned.
+pub const IMAGE_USD: f64 = 0.01;
 /// Spark input tokens per sampled video frame at 640x360 (measured).
 pub const VIDEO_TOKENS_PER_FRAME: u64 = 131;
 /// Spark input tokens per second of a video's sound (measured).
@@ -40,6 +42,11 @@ pub fn sam_usd(usage: Usage) -> f64 {
         n => n.max(SAM_MIN_FRAMES),
     };
     frames as f64 * SAM_FRAME_USD
+}
+
+/// The cost of a Muse Image answer with `images` pictures.
+pub fn image_usd(images: usize) -> f64 {
+    images as f64 * IMAGE_USD
 }
 
 /// Spark input tokens for `seconds` of 640x360 video sampled at `fps`
