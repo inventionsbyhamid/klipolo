@@ -19,7 +19,7 @@ const { useSelection } = await import('../../state/selection');
 const { useUi } = await import('../../state/ui');
 const { Timeline } = await import('./Timeline');
 const { audioRole } = await import('./lanes/audioRole');
-const { dropTargetAt, setDropIndicator, useDropIndicator } = await import('./dropTarget');
+const { dropRefusal, dropTargetAt, setDropIndicator, useDropIndicator } = await import('./dropTarget');
 const { layerStartUs } = await import('./model/dropOps');
 const { usToPx } = await import('./scale');
 const { videoDurationUs } = await import('../../lib/timeline');
@@ -50,7 +50,7 @@ describe('the four lanes', () => {
     renderWithProviders(<Timeline />);
     // Four lanes, top to bottom, each with its icon's name.
     expect(screen.getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual([
-      'Text and images',
+      'Overlays',
       'Video',
       'Sound effects',
       'Music',
@@ -101,8 +101,11 @@ describe('the four lanes', () => {
     expect(lane('Music')).not.toHaveClass('is-drop');
     // A picture over the Overlays lane marks that lane alone.
     act(() => setDropIndicator(dropTargetAt(40 + 120, 30, 'image')));
-    expect(lane('Text and images')).toHaveClass('is-drop');
+    expect(lane('Overlays')).toHaveClass('is-drop');
     expect(lane('Sound effects')).not.toHaveClass('is-drop');
     act(() => setDropIndicator(null));
+    // Let go on the wrong lane, a picture or a video names the lane by the name its icon has.
+    expect(dropRefusal(40 + 120, 125, 'image')).toBe('Pictures go on the Overlays lane.');
+    expect(dropRefusal(40 + 120, 125, 'video')).toBe('Videos go on the Video or Overlays lane.');
   });
 });

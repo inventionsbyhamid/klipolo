@@ -50,7 +50,11 @@ export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_IN
         <LaneRow
           lane="layers"
           icon="layers"
-          name={t({ id: 'timeline.lane.overlays', message: 'Text and images' })}
+          name={t({
+            id: 'timeline.lane.overlays',
+            message: 'Overlays',
+            comment: 'The lane of titles, pictures and video layers',
+          })}
           empty={!tracks.some((track) => track.kind !== 'audio' && track.items.length > 0)}
           height={layersLanePx(tracks)}
           width={width}
