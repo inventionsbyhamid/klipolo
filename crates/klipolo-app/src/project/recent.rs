@@ -60,8 +60,9 @@ pub(crate) const RECENT_FILE: &str = "recent.json";
 
 /// The newest `limit` projects in `library` (its top-level project files) as the start screen lists them: the ones
 /// stamped in `stamps` first, by when they were opened, then the rest by their last save, which is then their
-/// `opened_ms`. A file that doesn't read as a project is left out (and logged), and so is a link. `thumbs` is the
-/// engine's thumbnail folder; None lists no pictures. Fails only when the library itself can't be listed.
+/// `opened_ms`. A time later than now reads as now (the order still follows the times as written). A file that doesn't
+/// read as a project is left out (and logged), and so is a link. `thumbs` is the engine's thumbnail folder; None lists
+/// no pictures. Fails only when the library itself can't be listed.
 pub(crate) fn recent_in(
     library: &Path,
     stamps: &Path,
@@ -72,7 +73,7 @@ pub(crate) fn recent_in(
         tracing::warn!(%error, "the recent projects couldn't be read");
         BTreeMap::new()
     });
-    Ok(project_files(library, &stamps)?
+    Ok(project_files(library, &stamps, now_ms())?
         .into_iter()
         .filter_map(|found| match read(&found.file) {
             Ok(project) => Some(row(&found.file, found.at_ms, &project, thumbs)),
@@ -90,11 +91,19 @@ pub(crate) fn recent_in(
 const STAMPS_KEPT: usize = 50;
 
 /// Stamps `file` in `stamps` as opened at `now_ms` (again, if it was), keeping the `STAMPS_KEPT` latest; written
-/// atomically. A file that doesn't read as stamps starts over; one that can't be read at all is left as it is, and the
-/// error is returned.
+/// atomically. The stamp is always the newest one: a millisecond after the newest other when the clock went back since
+/// that was written, so the project just opened lists first and is never the one let go. A file that doesn't read as
+/// stamps starts over; one that can't be read at all is left as it is, and the error is returned.
 pub(super) fn stamp(stamps: &Path, file: &Path, now_ms: u64) -> io::Result<()> {
     let mut opened = read_stamps(stamps)?;
-    opened.insert(file.to_string_lossy().into_owned(), now_ms);
+    let key = file.to_string_lossy().into_owned();
+    let newest_other = opened
+        .iter()
+        .filter(|(other, _)| **other != key)
+        .map(|(_, &ms)| ms)
+        .max();
+    let at = newest_other.map_or(now_ms, |newest| now_ms.max(newest.saturating_add(1)));
+    opened.insert(key, at);
     if opened.len() > STAMPS_KEPT {
         let mut oldest_first: Vec<(u64, String)> = opened
             .iter()
@@ -118,17 +127,23 @@ pub(super) fn now_ms() -> u64 {
     ms_since_epoch(SystemTime::now())
 }
 
-/// A project file in the library and when it was opened here (`stamped`), else last saved.
+/// A project file in the library and when it was opened here (`stamped`), else last saved: as written (`order_ms`,
+/// which orders the list) and as shown (`at_ms`, never later than now).
 struct Found {
     file: PathBuf,
     stamped: bool,
+    order_ms: u64,
     at_ms: u64,
 }
 
 /// The top-level project files in `library`, in list order: stamped first, then newest first (by file name on a tie).
 /// Links are left out: a save replaces a link with a file, leaving what it pointed at behind. Fails when `library` can't
 /// be listed.
-fn project_files(library: &Path, stamps: &BTreeMap<String, u64>) -> io::Result<Vec<Found>> {
+fn project_files(
+    library: &Path,
+    stamps: &BTreeMap<String, u64>,
+    now_ms: u64,
+) -> io::Result<Vec<Found>> {
     let mut found: Vec<Found> = fs::read_dir(library)?
         .flatten()
         .filter_map(|entry| {
@@ -136,11 +151,15 @@ fn project_files(library: &Path, stamps: &BTreeMap<String, u64>) -> io::Result<V
             if file.extension()? != PROJECT_EXTENSION || !entry.file_type().ok()?.is_file() {
                 return None;
             }
-            let meta = entry.metadata().ok()?;
             let stamp = stamps.get(file.to_string_lossy().as_ref()).copied();
+            let order_ms = match stamp {
+                Some(ms) => ms,
+                None => entry.metadata().ok()?.modified().map_or(0, ms_since_epoch),
+            };
             Some(Found {
                 stamped: stamp.is_some(),
-                at_ms: stamp.unwrap_or_else(|| meta.modified().map_or(0, ms_since_epoch)),
+                order_ms,
+                at_ms: order_ms.min(now_ms),
                 file,
             })
         })
@@ -151,7 +170,7 @@ fn project_files(library: &Path, stamps: &BTreeMap<String, u64>) -> io::Result<V
 
 /// Stamped first, then newest first, then by file name.
 fn list_order(found: &Found) -> (Reverse<bool>, Reverse<u64>, &Path) {
-    (Reverse(found.stamped), Reverse(found.at_ms), &found.file)
+    (Reverse(found.stamped), Reverse(found.order_ms), &found.file)
 }
 
 /// `time` in ms since the Unix epoch (0 before it).

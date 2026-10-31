@@ -394,21 +394,31 @@ fn opening_or_creating_stamps_recent_json_and_keeps_50() {
         [("Made earlier", earlier_ms), ("Made now", made_ms)]
     );
 
-    // Sixty opens long ago, a millisecond apart: the two above are newer, so 48 of these stay.
+    // Sixty opens long ago, a millisecond apart, beside the two above: the next stamp keeps the 50 latest, so the two
+    // above and 48 of these stay.
     let old = |n: u64| library.join(format!("Old {n:02}.klipolo"));
-    for n in 0..60 {
-        stamp(&stamps, &old(n), 100 + n).unwrap();
-    }
+    let olds: Vec<PathBuf> = (0..60).map(old).collect();
+    let mut opened: Vec<(&Path, u64)> = olds
+        .iter()
+        .zip(100..)
+        .map(|(file, ms)| (file.as_path(), ms))
+        .collect();
+    opened.extend([(made.as_path(), made_ms), (earlier.as_path(), earlier_ms)]);
+    stamped(&stamps, &opened);
+    stamp(&stamps, &earlier, now_ms()).unwrap();
     let kept = on_disk(&stamps);
     assert_eq!(kept.len(), 50);
     let mut expected: Vec<String> = (12..60).map(|n| key(&old(n))).collect();
     expected.extend([key(&made), key(&earlier)]);
     expected.sort();
     assert_eq!(kept.keys().cloned().collect::<Vec<_>>(), expected);
+    assert!(kept[&key(&earlier)] > made_ms);
 
-    stamp(&stamps, &old(12), 5_000).unwrap();
+    // Opened again, a file moves to the top rather than being added twice.
+    stamp(&stamps, &old(12), now_ms()).unwrap();
     let again = on_disk(&stamps);
-    assert_eq!((again.len(), again[&key(&old(12))]), (50, 5_000));
+    assert_eq!(again.len(), 50);
+    assert!(again[&key(&old(12))] > again[&key(&earlier)]);
 }
 
 /// A projects folder that can't be listed (here, a file where the folder should be) fails, so the start screen says so
@@ -448,6 +458,55 @@ fn links_are_not_listed() {
     assert_eq!(
         names(&recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap()),
         [("Here", 1_000)]
+    );
+}
+
+/// A project just opened is always stamped newest, even when the clock went back since the last stamp (it is then a
+/// millisecond after it), so it lists first and is never the stamp let go. A time later than now reads as now, and
+/// the list still keeps the order the times were written in.
+#[test]
+fn a_stamp_is_always_the_newest_and_future_times_read_as_now() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    let ahead = saved(
+        &library,
+        &Project::new("Opened while the clock ran ahead"),
+        1_000,
+    );
+    let after = saved(&library, &Project::new("Opened after"), 1_000);
+    let now = now_ms();
+    let tomorrow = now + 86_400_000;
+    // 49 projects opened "tomorrow" too (no longer in the library), a millisecond apart, before the one ahead.
+    let others: Vec<PathBuf> = (0..49)
+        .map(|n| dir.path().join(format!("Moved {n:02}.klipolo")))
+        .collect();
+    let mut opened: Vec<(&Path, u64)> = others
+        .iter()
+        .zip(tomorrow - 100..)
+        .map(|(file, ms)| (file.as_path(), ms))
+        .collect();
+    opened.push((&ahead, tomorrow));
+    stamped(&stamps, &opened);
+
+    stamp(&stamps, &after, now).unwrap();
+    let written = on_disk(&stamps);
+    assert_eq!(written.len(), 50);
+    assert_eq!(written[&key(&after)], tomorrow + 1);
+    assert!(
+        !written.contains_key(&key(&others[0])),
+        "the oldest stamp went, not the new one"
+    );
+
+    let rows = recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap();
+    assert_eq!(
+        rows.iter().map(|row| row.name.as_str()).collect::<Vec<_>>(),
+        ["Opened after", "Opened while the clock ran ahead"]
+    );
+    let read_at = now_ms();
+    assert!(
+        rows.iter()
+            .all(|row| now <= row.opened_ms && row.opened_ms <= read_at),
+        "a time later than now reads as now"
     );
 }
 
