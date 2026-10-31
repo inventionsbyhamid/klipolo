@@ -1109,6 +1109,116 @@
   opacity: 0.6;
 }
 
+/* A transition whose chip doesn't draw (zoomed out): its halves tinted at the clips' edges, over the filmstrip and
+   under the name. */
+.tl-clip[data-transition-in]::before,
+.tl-clip[data-transition-out]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 5;
+  background: color-mix(in srgb, var(--color-clip-2) 55%, transparent);
+  pointer-events: none;
+}
+
+.tl-clip[data-transition-in]::before {
+  left: 0;
+  width: var(--transition-in);
+}
+
+.tl-clip[data-transition-out]::after {
+  right: 0;
+  width: var(--transition-out);
+}
+
+/* A cut's marker on the Video lane, along its bottom edge: clear of the clips' names at the top and of the trim grips
+   mid-height. A transition is a chip centred on the cut, as wide as it lasts (night with a clip-2 edge; paper when
+   selected). A bare cut's spot shows only while pointed at or focused: a + where a transition fits, else a dot. */
+.tl-transition,
+.tl-cut-spot {
+  position: absolute;
+  bottom: 3px;
+  z-index: 3;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  color: var(--color-ink);
+}
+
+.tl-transition {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-night) 78%, transparent);
+  box-shadow: inset 0 0 0 1px var(--color-clip-2);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.tl-transition:hover {
+  background: var(--color-bay-hover);
+}
+
+.tl-transition.is-selected {
+  background: var(--color-paper);
+  box-shadow: none;
+  color: var(--color-navy);
+}
+
+.tl-transition .ico,
+.tl-cut-plus .ico {
+  width: 10px;
+  height: 10px;
+}
+
+.tl-cut-spot {
+  display: grid;
+  place-items: center;
+  background: transparent;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.tl-cut-spot:hover,
+.tl-cut-spot:focus-visible {
+  opacity: 1;
+}
+
+.tl-cut-plus {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-dialog);
+  box-shadow: inset 0 0 0 1px var(--color-paper), var(--shadow-1);
+}
+
+.tl-cut-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+}
+
+/* The cut markers' one tip, above the marker pointed at or focused, as `.tooltip` draws. */
+.tl-cut-tip {
+  position: absolute;
+  z-index: 50;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-1);
+  color: var(--color-ink);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+}
+
 /* Blocks too narrow to draw one by one (zoomed out), merged into bands in their lane's colour. */
 .tl-band {
   position: absolute;
@@ -2371,6 +2481,11 @@
   display: grid;
   justify-items: start;
   gap: var(--space-4);
+}
+
+/* The transition card's Remove: a small secondary button at its own width, after the fields. */
+.insp-remove {
+  justify-self: start;
 }
 
 .field {

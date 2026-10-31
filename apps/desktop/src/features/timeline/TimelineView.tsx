@@ -14,6 +14,7 @@ import { blockPressHandlers } from './drag/blockPress';
 import { cancelDrag, useDragged } from './drag/controller';
 import { DropIndicator } from './DropIndicator';
 import { registerDropTarget, timelineLaneAt, timelineTargetAt } from './dropTarget';
+import { forgetGoneTransition } from './keys/transitionActions';
 import { useRovingFocus } from './keys/useRovingFocus';
 import { cancelRangeDrag, RangeSelection, rangeDragJustEnded, startRangeDrag } from './lanes/RangeSelection';
 import { BLOCK_HINT_ID, CLIP_INNER_PX, HEADER_PX, MAIN_LANE_MIN_PX, TAIL_US } from './layout';
@@ -145,6 +146,14 @@ export function TimelineView() {
     () =>
       useSelection.subscribe((s) => {
         if (s.selectedId !== null && useRange.getState().range) useRange.getState().clear();
+      }),
+    [],
+  );
+  // A selected transition that goes (removed, its add undone) is no longer selected.
+  useEffect(
+    () =>
+      useProject.subscribe((s, prev) => {
+        if (s.snapshot?.project !== prev.snapshot?.project) forgetGoneTransition(s.snapshot?.project);
       }),
     [],
   );

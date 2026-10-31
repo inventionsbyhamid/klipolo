@@ -3,6 +3,7 @@
 //! reached the old end is fitted to the new one in the same undo step.
 mod common;
 use common::*;
+use klipolo_model::contrib::builtin;
 use klipolo_model::history::Document;
 use klipolo_model::media::music::{
     add_music_ops, apply_with_music_refit, is_music, refit_music_ops, runs, with_music_refit,
@@ -12,7 +13,9 @@ use klipolo_model::ops::{ClipPatch, TrackTarget};
 use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::query::video_duration;
 use klipolo_model::time::Us;
-use klipolo_model::timeline::{Attach, Clip, ClipSource, Item, ItemContent, Track, TrackKind};
+use klipolo_model::timeline::{
+    Attach, Clip, ClipSource, Item, ItemContent, Track, TrackKind, Transition,
+};
 use klipolo_model::{apply_ops, validate, Op, Project, RangeUs, Transaction};
 
 /// A plain video `len` seconds long (one clip of a 10 minute take), with an 8 s loop and a 2 minute song.
@@ -964,6 +967,46 @@ fn piece(id: &str, file: &str, (start, len): (Us, Us), source_in: Us) -> Item {
         *source_in_us = source_in;
     }
     item
+}
+
+/// A transition never moves the video's end (clips keep their places; it plays over their spare footage), so setting
+/// one asks for no refit, and a cut across its cut keeps it, refitted, while the music is fitted to the new end in
+/// the same step.
+#[test]
+fn a_transition_in_place_leaves_the_music_fitted_to_the_video() {
+    // Two pieces of the take (10-30 s and 40-50 s): spare footage either side of their cut at 20 s.
+    let mut p = video(30.0);
+    p.timeline.main = vec![take(10.0, 30.0), take(40.0, 50.0)];
+    let p = with_music(&p, "song", MusicOpts::default());
+    assert_eq!(spans(&music(&p)), [(0.0, 30.0)]);
+    let set = Op::SetTransition {
+        clip_id: p.timeline.main[0].id.clone(),
+        transition: Some(Transition {
+            effect: builtin::TRANSITION_DISSOLVE.into(),
+            duration_us: secs(1.0),
+            params: Default::default(),
+        }),
+    };
+    let done = apply_with_music_refit(&p, vec![set.clone()]).unwrap();
+    assert_eq!(done.ops, [set], "the video's end didn't move: no refit");
+    assert_eq!(done.refused, None);
+    let p = done.project;
+    assert_eq!(spans(&music(&p)), [(0.0, 30.0)]);
+
+    // 18-22 s goes (2 s each side of the cut): the video ends at 26 s, and so does the song, fading out there.
+    let done = apply_with_music_refit(&p, vec![cut(18.0, 22.0)]).unwrap();
+    assert_eq!(done.refused, None);
+    assert!(done.ops.len() > 1, "no refit in {:?}", done.ops);
+    let after = done.project;
+    assert_eq!(video_duration(&after.timeline), secs(26.0));
+    assert_eq!(spans(&music(&after)), [(0.0, 26.0)]);
+    assert_eq!(fade_out(music(&after)[0]), to_secs(MUSIC_FADE_OUT_US));
+    let kept = after.timeline.main[0].transition_out.as_ref();
+    assert_eq!(
+        kept.map(|t| t.duration_us),
+        Some(secs(1.0)),
+        "the transition stays at the cut"
+    );
 }
 
 /// The page's runs of music (`musicRuns` in `apps/desktop/src/lib/musicRuns.ts`) are pinned to `runs` by

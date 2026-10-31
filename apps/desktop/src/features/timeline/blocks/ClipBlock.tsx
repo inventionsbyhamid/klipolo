@@ -1,5 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
-import { memo, useCallback } from 'react';
+import { memo, useCallback, type CSSProperties } from 'react';
 import { cn } from '../../../design/cn';
 import { countRender } from '../../../lib/renderCount';
 import { formatTime } from '../../../lib/time';
@@ -34,6 +34,12 @@ interface ClipBlockProps {
   fadeInUs: number;
   fadeOutUs: number;
   muted: boolean;
+  /**
+   * A transition into or out of it whose chip the lane doesn't draw (the clips are too narrow): the width (px) of its
+   * half on this clip, tinted at that edge so the transition still shows zoomed out. 0: none, or its chip draws.
+   */
+  transitionInPx: number;
+  transitionOutPx: number;
   /** Its inside (px), where the filmstrip and waveform draw: the Video lane less the clip's 1 px edges. */
   innerPx?: number;
   pps: number;
@@ -64,6 +70,8 @@ export const ClipBlock = memo(function ClipBlock({
   fadeInUs,
   fadeOutUs,
   muted,
+  transitionInPx,
+  transitionOutPx,
   innerPx = CLIP_INNER_PX,
   pps,
   selected,
@@ -113,7 +121,17 @@ export const ClipBlock = memo(function ClipBlock({
       // Back to back with its neighbours: a seam (1 px night line) where two clips meet, round only at the ends.
       data-first={position === 1 || undefined}
       data-last={position === count || undefined}
-      style={{ left, width }}
+      style={
+        {
+          left,
+          width,
+          ...(transitionInPx > 0 && { '--transition-in': `${transitionInPx}px` }),
+          ...(transitionOutPx > 0 && { '--transition-out': `${transitionOutPx}px` }),
+        } as CSSProperties
+      }
+      // A transition's tint at the edge (zoomed out), over the filmstrip and under the labels: pseudo-elements.
+      data-transition-in={transitionInPx || undefined}
+      data-transition-out={transitionOutPx || undefined}
       className={cn('tl-clip', selected && 'is-selected', tiny && 'isolate')}
     >
       {/* Its filmstrip and waveform, first: the labels and trim handles draw over them. */}
