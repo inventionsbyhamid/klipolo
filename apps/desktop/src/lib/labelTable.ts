@@ -562,7 +562,7 @@ export const MCP_LABELS: Record<string, MessageDescriptor> = {
 
 /** A label whose step another app made: "Make it vertical (from Example Client)". */
 export const FROM_CLIENT = msg({
-  id: 'mcp.fromClient',
+  id: 'history.fromApp',
   message: '{label} (from {client})',
   comment: 'Undo history entry another app made: {label} is the change, {client} the app',
 });

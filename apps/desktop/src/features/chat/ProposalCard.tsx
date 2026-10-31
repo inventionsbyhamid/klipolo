@@ -300,7 +300,7 @@ export function ProposalCard({ message: m }: { message: ReplyMessage }) {
         <p className="p-title">{proposal.title}</p>
         {client !== undefined && (
           <p className="p-sub">
-            {t({ id: 'mcp.suggestedBy', message: `Suggested by ${client}`, comment: '{client} is another app' })}
+            {t({ id: 'chatPanel.app.suggestedBy', message: `Suggested by ${client}`, comment: '{client} is another app' })}
           </p>
         )}
         {cut && (

@@ -49,7 +49,7 @@ export const ChatMessage = memo(function ChatMessage({ message: m }: { message: 
     <div className="msg-k">
       {client !== undefined && (
         <p className="msg-from">
-          {t({ id: 'mcp.from', message: `From ${client}`, comment: 'Over what another app did: {client} is the app' })}
+          {t({ id: 'chatPanel.app.from', message: `From ${client}`, comment: 'Over what another app did: {client} is the app' })}
         </p>
       )}
       {m.text && <p>{m.text}</p>}

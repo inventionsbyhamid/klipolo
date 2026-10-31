@@ -31,8 +31,8 @@ export function Announcer() {
       // Another app's: who, then what it did (its moments and pictures show in the log).
       const [client, line] = [last.client, appLine(last)];
       text = line
-        ? t({ id: 'mcp.announce.did', message: `From ${client}: ${line}` })
-        : t({ id: 'mcp.from', message: `From ${client}` });
+        ? t({ id: 'chatPanel.app.did', message: `From ${client}: ${line}` })
+        : t({ id: 'chatPanel.app.from', message: `From ${client}` });
     } else text = t({ id: 'chatPanel.announce.says', message: `Klipolo: ${last.text}` });
   }
   return (

@@ -70,11 +70,11 @@ export function OtherApps() {
   const said = !status
     ? ''
     : !status.enabled
-      ? t({ id: 'mcp.status.off', message: 'Off.' })
+      ? t({ id: 'otherApps.status.off', message: 'Off.' })
       : status.connected.length === 0
-        ? t({ id: 'mcp.status.none', message: 'On. No app connected yet.' })
+        ? t({ id: 'otherApps.status.none', message: 'On. No app connected yet.' })
         : t({
-            id: 'mcp.status.used',
+            id: 'otherApps.status.used',
             message: `On. Recently used by ${names(status.connected)}.`,
             comment: '{0} is the names of the apps, e.g. "Example Client and Muse Spark agent"',
           });
@@ -82,10 +82,10 @@ export function OtherApps() {
   return (
     <section className="other-apps" aria-labelledby="settings-apps-title">
       <h3 className="section-title" id="settings-apps-title">
-        {t({ id: 'mcp.title', message: 'Other apps' })}
+        {t({ id: 'otherApps.title', message: 'Other apps' })}
       </h3>
       <div className="switch-row">
-        <label htmlFor="settings-apps">{t({ id: 'mcp.switch', message: 'Let other apps edit with Klipolo' })}</label>
+        <label htmlFor="settings-apps">{t({ id: 'otherApps.switch', message: 'Let other apps edit with Klipolo' })}</label>
         <button
           id="settings-apps"
           type="button"
@@ -101,7 +101,7 @@ export function OtherApps() {
       </div>
       <p className="hint" id="settings-apps-help">
         {t({
-          id: 'mcp.help',
+          id: 'otherApps.help',
           message: 'AI agents and other MCP apps can edit the open project. Cuts always wait for your Apply.',
         })}
       </p>
@@ -116,13 +116,13 @@ export function OtherApps() {
           disabled={!status || status.needsMove}
           onClick={() => void copy()}
         >
-          {t({ id: 'mcp.copy', message: 'Copy config' })}
+          {t({ id: 'otherApps.copy', message: 'Copy config' })}
         </button>
       </div>
       {status?.needsMove ? (
         <Note
           text={t({
-            id: 'mcp.needsMove',
+            id: 'otherApps.needsMove',
             message: 'Move Klipolo to your Applications folder first, then copy the config.',
           })}
         />
@@ -131,14 +131,14 @@ export function OtherApps() {
         <p className="status-ok" role="status">
           <Icon name="check" />
           {t({
-            id: 'mcp.copied',
+            id: 'otherApps.copied',
             message: "Copied. Paste it into your app's MCP settings, then restart that app.",
           })}
         </p>
       ) : copied === 'failed' ? (
         <FieldError
           id="settings-apps-copy-error"
-          text={t({ id: 'mcp.copyFailed', message: "Klipolo couldn't copy the config. Try again." })}
+          text={t({ id: 'otherApps.copyFailed', message: "Klipolo couldn't copy the config. Try again." })}
         />
       ) : null}
     </section>

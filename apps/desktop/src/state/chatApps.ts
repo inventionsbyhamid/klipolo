@@ -78,7 +78,7 @@ export function appLine(m: ReplyMessage): string {
   if (m.undid) {
     const label = inSentence(withoutApp(m.undid));
     if (label)
-      return t({ id: 'mcp.undid', message: `Undid ${label}.`, comment: '{label} is the change taken back' });
+      return t({ id: 'chatPanel.app.undid', message: `Undid ${label}.`, comment: '{label} is the change taken back' });
   }
   return '';
 }

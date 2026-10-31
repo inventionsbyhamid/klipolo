@@ -126,6 +126,22 @@ describe('Settings: Other apps', () => {
     expect(section).toHaveTextContent('On. No app connected yet.');
   });
 
+  it('page_message_ids_stay_out_of_rusts_mcp_namespace', () => {
+    // `mcp.` is the namespace of Rust's codes (`mcp.fromEarlier`, a label Klipolo's host gives): the page's own words
+    // use their own ids, so one id is never two messages.
+    for (const file of [
+      'OtherApps.tsx',
+      '../state/chatApps.ts',
+      '../features/chat/ChatMessage.tsx',
+      '../features/chat/ProposalCard.tsx',
+      '../features/chat/Announcer.tsx',
+      '../lib/labelTable.ts',
+    ]) {
+      const ids = [...readFileSync(join(__dirname, file), 'utf8').matchAll(/id: '(mcp\.[\w.]+)'/g)].map((m) => m[1]);
+      expect(ids.filter((id) => id !== 'mcp.fromEarlier'), file).toEqual([]);
+    }
+  });
+
   it('no_em_or_en_dash_in_new_copy', async () => {
     const write = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText: write }, configurable: true });
