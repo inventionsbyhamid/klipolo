@@ -292,7 +292,7 @@ describe('caption words', () => {
     expect(box).toHaveAttribute('aria-activedescendant', within(box).getByRole('option', { name: 'UM,' }).id);
     await user.clear(screen.getByRole('searchbox', { name: 'Find a word' }));
     await user.type(screen.getByRole('searchbox', { name: 'Find a word' }), 'zebra');
-    expect(screen.getByText('No word matches.')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('No word matches.');
   });
 
   it('an older count of places never overwrites a newer one', async () => {

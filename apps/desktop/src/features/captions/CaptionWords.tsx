@@ -378,11 +378,12 @@ export function CaptionWords({ format }: { format: FormatKind }) {
       </div>
       {hint && <p className="words-hint">{hint}</p>}
       <p role="status" className="words-note">
-        {busy ? t({ id: 'captions.words.updating', message: 'Updating…' }) : note}
+        {busy
+          ? t({ id: 'captions.words.updating', message: 'Updating…' })
+          : shownRows && shownRows.size === 0 && total > 0
+            ? t({ id: 'captions.words.noMatch', message: 'No word matches.' })
+            : note}
       </p>
-      {shownRows && shownRows.size === 0 && total > 0 && (
-        <p className="words-hint">{t({ id: 'captions.words.noMatch', message: 'No word matches.' })}</p>
-      )}
       <div
         ref={listRef}
         role={total > 0 ? 'listbox' : undefined}
