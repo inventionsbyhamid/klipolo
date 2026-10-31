@@ -73,6 +73,9 @@ pub const NOT_PROPOSED: &str = "I couldn't get the removals ready, so I left the
 /// Said beside the additions applied when the project changed before the removals could be proposed.
 pub const REMOVALS_MOVED: &str =
     "The project changed meanwhile, so I left the removals out. Ask me again.";
+/// Said beside the model's undo when its answer also found moments: they were found before the undo.
+pub const MOMENTS_UNDONE: &str =
+    "The undo changed the video, so I left out the moments I found. Ask me again to find them.";
 /// Said beside what landed when the project changed before the moments found could be shown.
 pub const MOMENTS_MOVED: &str =
     "The project changed meanwhile, so I left out the moments I found. Ask me again.";
@@ -381,26 +384,38 @@ impl ChatSession {
         let mut landed = self.commit(now, inputs, &out);
         let mut jobs = jobs::start(&out.compiled);
         name_clips(&mut out, &now.project, inputs);
-        // The moments are times on the revision the edits left: none survive the project moving on (a hand edit, an
-        // undo, another project) while the answer came.
+        // The moments are times on the snapshot the answer was compiled on, the additions in: none survive the project
+        // moving on (a hand edit, another project) while the answer came, nor the model's own undo, which they were found
+        // before.
         let current = self.projects.now().map(|n| n.at);
         let same_project = current.as_ref().is_some_and(|c| c.same_project(&landed.at));
         let moved = current.as_ref() != Some(&landed.at);
-        // Another project opened (or this one closed) while the answer came: nothing of it is for the project open now.
-        if !same_project && landed.lost.is_none() {
+        let committed =
+            landed.undone.is_some() || landed.applied.is_some() || landed.proposal.is_some();
+        // Another project opened (or this one closed) while the answer came, before any of it landed: nothing of it is
+        // for the project open now. What did land, landed on the old project, and the reply says so.
+        if !same_project && landed.lost.is_none() && !committed {
             landed.lost = Some(MOVED);
         }
         let mut notes: Vec<String> = Vec::new();
-        if !out.compiled.moments.is_empty() && (landed.lost.is_some() || moved) {
+        let mut moments_note = None;
+        let stale = landed.lost.is_some() || moved || landed.undone.is_some();
+        if !out.compiled.moments.is_empty() && stale {
             out.compiled.moments.clear();
-            let rest = landed.undone.is_some()
-                || landed.applied.is_some()
-                || landed.proposal.is_some()
-                || !out.compiled.questions.is_empty();
+            let rest = committed
+                || !out.compiled.questions.is_empty()
+                || !jobs.pictures.is_empty()
+                || !jobs.coming.is_empty();
             if landed.lost.is_none() && !rest {
                 landed.lost = Some(MOVED);
             } else if landed.lost.is_none() {
-                notes.push(MOMENTS_MOVED.to_owned());
+                let (said, why) = if landed.undone.is_some() {
+                    (MOMENTS_UNDONE, "the undo moved them")
+                } else {
+                    (MOMENTS_MOVED, "the person changed the project meanwhile")
+                };
+                notes.push(said.to_owned());
+                moments_note = Some(format!("The moments found were left out: {why}."));
             }
         }
 
@@ -410,6 +425,9 @@ impl ChatSession {
             || !out.compiled.moments.is_empty()
             || !out.compiled.questions.is_empty();
         let mut note = out.note.clone();
+        if let Some(left_out) = moments_note {
+            note = format!("{note} {left_out}");
+        }
         if let Some(dropped) = landed.dropped {
             notes.push(dropped.to_owned());
             note = format!(

@@ -17,7 +17,9 @@ use klipolo_app::analysis::AssetAnalysis;
 use klipolo_app::chat::pictures::{
     ChatPictureKind, MOMENT_CUT, PICTURE_GONE, PictureAsk, StickerPlacement, TITLE_GONE,
 };
-use klipolo_app::chat::session::{KEEP_ONLY_READY, MOVED, NEEDS_KEY, OTHER_PROJECT};
+use klipolo_app::chat::session::{
+    KEEP_ONLY_READY, MOMENTS_MOVED, MOMENTS_UNDONE, MOVED, NEEDS_KEY, OTHER_PROJECT,
+};
 use klipolo_app::chat::{
     BLUR_COMING, ChatOutcome, ChatRequest, ChatSession, CommitError, FOLLOW_COMING, Findings,
     MemoryProjects, Models, Projects, Readiness,
@@ -1934,4 +1936,126 @@ async fn a_title_background_moves_with_its_attached_title() {
         .find(|i| i.id != "title")
         .expect("the background");
     assert_eq!(background.attach, attached, "attached where the title is");
+}
+
+#[tokio::test]
+async fn moments_found_beside_the_models_undo_are_left_out() {
+    let chat = chat(vec![
+        answer("", vec![fillers()]),
+        answer(
+            "Undone, and here is the intro.",
+            vec![fc("u", "undo", "{}"), find_intro()],
+        ),
+    ]);
+    let id = proposal_id(&chat.session.send(request("cut the ums")).await.unwrap());
+    chat.session.apply(&id).unwrap();
+    let r = reply(
+        &chat
+            .session
+            .send(request("undo that and find the intro"))
+            .await
+            .unwrap(),
+    );
+    assert!(r["undone"].is_object(), "the cut is taken back");
+    // Found on the timeline before the undo: their times would cut the wrong footage.
+    assert_eq!(r["moments"], serde_json::json!([]), "{r:#}");
+    assert_eq!(r["notes"], serde_json::json!([MOMENTS_UNDONE]));
+    assert_eq!(r["revision"], 2);
+    assert!(
+        chat.session.turns()[1]
+            .note
+            .contains("The moments found were left out")
+    );
+}
+
+#[tokio::test]
+async fn moments_left_out_after_a_hand_edit_keep_the_question_and_say_so() {
+    let ask = fc(
+        "q",
+        "askUser",
+        r#"{"question": "Which intro, the first or the second?"}"#,
+    );
+    let model = Script::new(vec![answer("", vec![find_intro(), ask])]);
+    let gate = model.hold();
+    let chat = chat_with(model.clone(), Found::done(), Paying::key(model.clone()));
+    let sent = tokio::spawn({
+        let session = chat.session.clone();
+        async move { session.send(request("find the intro")).await.unwrap() }
+    });
+    model.arrived.notified().await;
+    chat.project.hand_edit(&rename("Mine")).unwrap();
+    gate.notify_one();
+    let r = reply(&sent.await.unwrap());
+    assert_eq!(r["moments"], serde_json::json!([]));
+    assert_eq!(r["notes"], serde_json::json!([MOMENTS_MOVED]));
+    // The question is the reply (the model wrote nothing else), still asked.
+    assert_eq!(r["text"], "Which intro, the first or the second?");
+    let note = &chat.session.turns()[0].note;
+    assert!(note.contains("The moments found were left out"), "{note}");
+}
+
+#[tokio::test]
+async fn a_sticker_beside_moments_left_out_is_still_asked_for() {
+    let calls = vec![find_intro(), sticker_at_12().unwrap().calls[0].clone()];
+    let model = Script::new(vec![answer("Here, and drawing a plane.", calls)]);
+    let gate = model.hold();
+    let chat = chat_with(model.clone(), Found::done(), Paying::key(model.clone()));
+    let sent = tokio::spawn({
+        let session = chat.session.clone();
+        async move {
+            session
+                .send(at_playhead("find the intro, and a plane here", 12.0))
+                .await
+                .unwrap()
+        }
+    });
+    model.arrived.notified().await;
+    chat.project.hand_edit(&rename("Mine")).unwrap();
+    gate.notify_one();
+    let r = reply(&sent.await.unwrap());
+    assert_eq!(r["moments"], serde_json::json!([]));
+    assert_eq!(r["pictures"][0]["kind"], "sticker", "{r:#}");
+    assert_eq!(r["notes"], serde_json::json!([MOMENTS_MOVED]));
+}
+
+/// The project, another one opening right after a commit lands (before the reply is built).
+struct SwitchingAfterCommit {
+    project: Arc<MemoryProjects>,
+}
+
+impl Projects for SwitchingAfterCommit {
+    fn now(&self) -> Option<klipolo_app::chat::ProjectNow> {
+        self.project.now()
+    }
+
+    fn commit(
+        &self,
+        at: &klipolo_app::chat::At,
+        tx: &Transaction,
+        next: Option<Project>,
+    ) -> Result<klipolo_app::chat::Committed, CommitError> {
+        let done = self.project.commit(at, tx, next)?;
+        self.project.switch(Some(talk())).unwrap();
+        Ok(done)
+    }
+
+    fn undo(
+        &self,
+        at: &klipolo_app::chat::At,
+    ) -> Result<klipolo_app::chat::Committed, CommitError> {
+        self.project.undo(at)
+    }
+}
+
+#[tokio::test]
+async fn edits_that_landed_before_the_project_closed_are_still_said() {
+    let model = Script::new(vec![answer("Done.", vertical_karaoke())]);
+    let project =
+        Arc::new(MemoryProjects::open(talk(), PathBuf::from("/tmp/talk.klipolo")).unwrap());
+    let switching = Arc::new(SwitchingAfterCommit { project });
+    let session = ChatSession::new(switching, Found::done(), Paying::key(model));
+    let r = reply(&session.send(request("vertical")).await.unwrap());
+    // The old project has them: the reply doesn't deny what it carries.
+    assert_eq!(r["text"], "Done.");
+    assert!(r["applied"].is_object());
 }
