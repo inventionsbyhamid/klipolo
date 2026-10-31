@@ -819,7 +819,7 @@ mod tests {
             ("addSound", json!({"name": "whoosh", "atSec": [12.8, 23.0]})),
             (
                 "addText",
-                json!({"text": "Day 1", "preset": "title-card", "atSec": 0.0, "durationSec": 3.0}),
+                json!({"text": "Day 1", "preset": "title", "atSec": 0.0, "durationSec": 3.0}),
             ),
             (
                 "addImage",

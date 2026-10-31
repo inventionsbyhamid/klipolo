@@ -9,10 +9,11 @@
 
 use std::collections::HashMap;
 
-use klipolo_chat::tools::{PictureSize, Position, TitlePreset};
+use klipolo_chat::compile::{TEXT_COMING_SOON, TITLE_CARD};
+use klipolo_chat::tools::{PictureSize, Position, TextPreset};
 use klipolo_chat::{
     AnalysisState, Audience, Compiled, FunctionCall, Inputs, Job, Library, LibraryItem, MediaKind,
-    Problem, Refs, SceneEntry, SceneLog, ToolCall, View, compile,
+    Problem, Refs, Refusal, SceneEntry, SceneLog, ToolCall, View, compile,
 };
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::contrib::ContribId;
@@ -20,7 +21,6 @@ use klipolo_model::layout::{Anchor, Layout};
 use klipolo_model::media::music::is_music;
 use klipolo_model::ops::Op;
 use klipolo_model::params::ParamValue;
-use klipolo_model::presets::SCENE_PRESETS;
 use klipolo_model::project::{Asset, FormatKind};
 use klipolo_model::speech::{Speech, Transcript, Word, WordKind};
 use klipolo_model::time::Us;
@@ -541,7 +541,16 @@ fn an_unknown_name_is_refused_with_what_the_library_has() {
     assert!(refused_to_model(&out, 0).starts_with("addMusic: no music in Library is called"));
 }
 
+/// A text layer's words.
+fn words_on(item: &Item) -> &str {
+    match &item.content {
+        ItemContent::Text { text, .. } => text,
+        other => panic!("not a text layer: {other:?}"),
+    }
+}
+
 #[test]
+#[ignore = "addText is a stub until its four presets are built on the model's text layers"]
 fn add_text_title_at_start_is_three_seconds() {
     let p = project();
     let i = inputs(
@@ -554,7 +563,7 @@ fn add_text_title_at_start_is_three_seconds() {
             &i,
             &[call(
                 "addText",
-                json!({"text": "Day 1 in Lisbon", "preset": "title-card", "atSec": 0.0, "durationSec": duration}),
+                json!({"text": "Day 1 in Lisbon", "preset": "title", "atSec": 0.0, "durationSec": duration}),
             )],
         );
         assert_eq!(out.additions.as_ref().unwrap().label, "chat.addText");
@@ -562,19 +571,12 @@ fn add_text_title_at_start_is_three_seconds() {
         assert_eq!(titles.len(), 1);
         let title = &titles[0];
         assert_eq!((title.start_us, title.duration_us), (0, secs(3.0)));
-        // The title card template fills the frame in every format.
-        assert_eq!(title.layout, Layout::full_frame());
-        let (source, texts) = generator(title);
-        assert_eq!(source, &ContribId::builtin("scene.title-card"));
-        // Only the title shows: the subtitle is left empty, not the template's own words.
-        assert_eq!(
-            texts,
-            HashMap::from([("title", "Day 1 in Lisbon"), ("subtitle", "")])
-        );
+        assert_eq!(words_on(title), "Day 1 in Lisbon");
     }
 }
 
 #[test]
+#[ignore = "addText is a stub until its four presets are built on the model's text layers"]
 fn text_keeps_the_persons_own_words_and_the_models_have_no_dashes() {
     let p = project();
     // The person's spelling wins over the model's.
@@ -588,12 +590,7 @@ fn text_keeps_the_persons_own_words_and_the_models_have_no_dashes() {
         )],
     );
     let layer = &layers(&applied(&p, &out), TrackKind::Overlay)[0];
-    let (source, texts) = generator(layer);
-    assert_eq!(source, &ContribId::builtin("scene.lower-third"));
-    assert_eq!(
-        texts,
-        HashMap::from([("title", "day 1 in LISBON"), ("role", "")])
-    );
+    assert_eq!(words_on(layer), "day 1 in LISBON");
     // Words the model wrote itself (a name from the transcript) never show a dash.
     let i = inputs(&p, "put her name on screen");
     let out = compile(
@@ -605,43 +602,68 @@ fn text_keeps_the_persons_own_words_and_the_models_have_no_dashes() {
         )],
     );
     let layer = &layers(&applied(&p, &out), TrackKind::Overlay)[0];
-    assert_eq!(generator(layer).1["title"], "Sunita, commander");
-    // A title longer than its template holds is refused back.
-    let long = "word ".repeat(20);
+    assert_eq!(words_on(layer), "Sunita, commander");
+}
+
+#[test]
+fn add_text_is_coming_soon() {
+    // Offered with its four presets, but placing them comes later: the person is told plainly, nothing is added, and
+    // the model is not sent back to try the title card instead.
+    let p = project();
+    let i = inputs(&p, "put a title 'Day 1 in Lisbon' at the start");
     let out = compile(
         &p,
         &i,
         &[call(
             "addText",
-            json!({"text": long, "preset": "title-card", "atSec": 0.0, "durationSec": null}),
+            json!({"text": "Day 1 in Lisbon", "preset": "title", "atSec": 0.0, "durationSec": null}),
         )],
     );
-    assert!(
-        refused_to_model(&out, 0).starts_with("addText: text is 99 characters"),
-        "{:?}",
-        out.refusals
+    assert_eq!((&out.additions, out.jobs.len()), (&None, 0));
+    assert_eq!(
+        out.refusals,
+        vec![Refusal {
+            call_index: 0,
+            reason: TEXT_COMING_SOON.to_owned(),
+            audience: Audience::Person,
+            clip: None,
+        }]
     );
 }
 
 #[test]
-fn text_presets_are_the_scene_presets() {
-    let words: Vec<String> = (SCENE_PRESETS.iter())
-        .map(|(local, _)| local.strip_prefix("scene.").unwrap().to_owned())
-        .collect();
+fn text_presets_are_the_four_presets() {
     let tools = klipolo_chat::tools();
     let add_text = (tools.as_array().unwrap().iter())
         .find(|t| t["name"] == "addText")
         .unwrap();
     assert_eq!(
         add_text["parameters"]["properties"]["preset"]["enum"],
-        json!(words)
+        json!(["title", "lower-third", "plain", "caption"])
     );
-    for (preset, local) in [
-        (TitlePreset::LowerThird, "scene.lower-third"),
-        (TitlePreset::TitleCard, "scene.title-card"),
+    for (word, preset) in [
+        ("title", TextPreset::Title),
+        ("lower-third", TextPreset::LowerThird),
+        ("plain", TextPreset::Plain),
+        ("caption", TextPreset::Caption),
     ] {
-        assert_eq!(preset.source(), ContribId::builtin(local));
+        assert_eq!(preset.key(), word);
+        let read = call(
+            "addText",
+            json!({"text": "Hi", "preset": word, "atSec": null, "durationSec": null}),
+        );
+        assert!(matches!(read, ToolCall::AddText { preset: p, .. } if p == preset));
     }
+    // The title card template is only makeTitleCard's.
+    let e = ToolCall::parse(&FunctionCall {
+        name: "addText".into(),
+        call_id: "c".into(),
+        arguments:
+            json!({"text": "Hi", "preset": "title-card", "atSec": null, "durationSec": null})
+                .to_string(),
+    })
+    .unwrap_err();
+    assert_eq!(e.field.as_deref(), Some("preset"));
 }
 
 #[test]
@@ -778,20 +800,50 @@ fn make_title_card_writes_the_persons_title_over_a_background_job() {
     let titles = layers(&applied(&p, &out), TrackKind::Overlay);
     assert_eq!(titles.len(), 1);
     let title = &titles[0];
+    // The template fills the frame in every format, for its own 4 s.
     assert_eq!(title.layout, Layout::full_frame());
+    assert_eq!((title.start_us, title.duration_us), (0, secs(4.0)));
     let (source, texts) = generator(title);
-    assert_eq!(source, &ContribId::builtin("scene.title-card"));
-    // Exactly as the person wrote it.
-    assert_eq!(texts["title"], "day 1 in Lisbon");
+    assert_eq!(source, &ContribId::builtin(TITLE_CARD));
+    // Exactly as the person wrote it, and only it: the template's own subtitle is left empty.
+    assert_eq!(
+        texts,
+        HashMap::from([("title", "day 1 in Lisbon"), ("subtitle", "")])
+    );
     assert_eq!(
         out.jobs,
         vec![Job::MakeTitleBackground {
             prompt: "Lisbon trams at sunset".into(),
             format: FormatKind::Landscape,
             at_us: 0,
-            duration_us: secs(3.0),
+            duration_us: secs(4.0),
             title_id: title.id.clone(),
         }]
+    );
+}
+
+#[test]
+fn a_title_card_keeps_a_length_the_person_gave_and_its_template_holds_its_title() {
+    let p = project();
+    let long = "word ".repeat(20);
+    let i = inputs(&p, &format!("a title card for 3 seconds saying {long}"));
+    let card = |title: &str, duration: serde_json::Value| {
+        call(
+            "makeTitleCard",
+            json!({"title": title, "prompt": "trams", "atSec": 0.0, "durationSec": duration}),
+        )
+    };
+    let out = compile(&p, &i, &[card("word word", json!(3.0))]);
+    let title = &layers(&applied(&p, &out), TrackKind::Overlay)[0];
+    assert_eq!(title.duration_us, secs(3.0));
+    // Longer than the template holds: refused back.
+    let out = compile(&p, &i, &[card(&long, json!(null))]);
+    assert_eq!((&out.additions, out.jobs.len()), (&None, 0));
+    assert!(
+        refused_to_model(&out, 0)
+            .starts_with("makeTitleCard: title is 99 characters; a title card holds at most 60."),
+        "{:?}",
+        out.refusals
     );
 }
 
@@ -941,7 +993,7 @@ fn media_tools_read_their_arguments() {
     );
     let e = error(
         "addText",
-        json!({"text": "Hi", "preset": "title-card", "atSec": 0, "durationSec": 0}),
+        json!({"text": "Hi", "preset": "title", "atSec": 0, "durationSec": 0}),
     );
     assert_eq!(
         e.to_string(),

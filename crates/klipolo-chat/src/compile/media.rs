@@ -4,13 +4,14 @@
 //!   given, else the playhead. "The song" and the like are the person's one music file (`library::is_generic`).
 //! - `addSound`: the whole file at full volume with no fades at each time, attached to the clip under it, cut where the
 //!   video ends; two times on one moment are one sound.
-//! - `addText`: a title template (`TitlePreset`, a scene preset) reading the words, its other words left empty so only
-//!   they show, filling the frame in every format (`Layout::full_frame`). Words the person wrote are theirs as they
-//!   wrote them (`persons_words`); others the model's without dashes (`sanitize::reply`).
+//! - `addText`: STUB until the four text presets are built on the model's text layers: refused for the person
+//!   (`TEXT_COMING_SOON`), nothing added.
 //! - `addImage`: the picture at a size and a place in the frame (`picture_layout`).
 //! - `makeSticker`: a `Job::MakeSticker` only; the app places the picture with `picture_ops` once it is drawn. A job's
 //!   prompt names the picture in the library too, so it has no dashes either.
-//! - `makeTitleCard`: the title card template with the person's exact title, applied at once, and a
+//! - `makeTitleCard`: the title card template (`TITLE_CARD`, a scene preset filling the frame in every format,
+//!   `Layout::full_frame`) with the person's exact title (`persons_words`) and its other words left empty so only the
+//!   title shows, for the template's own length (`TEMPLATE_SECS`) unless the person gave one, applied at once; and a
 //!   `Job::MakeTitleBackground` for the picture to go under it. No title of theirs: refused back, for the model to ask.
 //!
 //! A time from the model stands on the evidence like any other (`Evidence::moment`: a change of shot or topic first),
@@ -20,7 +21,7 @@ use std::collections::BTreeMap;
 
 use klipolo_model::Project;
 use klipolo_model::coded::ErrorParam;
-use klipolo_model::contrib::Catalog;
+use klipolo_model::contrib::{Catalog, ContribId};
 use klipolo_model::ids::new_id;
 use klipolo_model::layout::{Anchor, BoxN, Layout};
 use klipolo_model::media::music::{MusicOpts, add_music_ops};
@@ -31,17 +32,21 @@ use klipolo_model::query::{main_track_duration, video_duration};
 use klipolo_model::time::{MIN_DURATION_US, Us, secs_to_us};
 use klipolo_model::timeline::{Item, ItemContent};
 
-use super::{Compiler, Edit, Job, Refused, label, to_model, unfounded};
+use super::{Compiler, Edit, Job, Refused, label, to_model, to_person, unfounded};
 use crate::context::{secs, within_video};
 use crate::library::{Found, LibraryItem, MediaKind, is_generic};
 use crate::sanitize;
-use crate::tools::media::{PICTURE_SECS, TEXT_SECS};
-use crate::tools::{PictureSize, Position, TitlePreset};
+use crate::tools::media::{PICTURE_SECS, TEMPLATE_SECS};
+use crate::tools::{PictureSize, Position};
 
 /// A sound effect's volume: full, to be heard over the voice.
 pub const SOUND_VOLUME: f64 = 1.0;
 /// Kept clear between a picture and the frame's edges: a share of the frame's shorter side.
 pub const PICTURE_MARGIN: f64 = 0.04;
+/// The title card template `makeTitleCard` shows (`klipolo_model::presets::SCENE_PRESETS`).
+pub const TITLE_CARD: &str = "scene.title-card";
+/// What the person is told when the model puts words on screen with `addText`, until its presets are built.
+pub const TEXT_COMING_SOON: &str = "Putting words on screen from chat is coming soon.";
 /// The most names a refusal lists.
 const LISTED: usize = 12;
 /// What may stand around a title the person quoted, left out of it.
@@ -292,24 +297,19 @@ pub(crate) fn persons_words(message: &str, text: &str) -> Option<String> {
     (!span.is_empty()).then(|| span.to_owned())
 }
 
-/// The ops that add title template `preset` reading `text` (its other words left empty) from `start` for `duration`
-/// (None: `TEXT_SECS`), filling the frame, attached to the clip under it; and the new layer's id. Refused when the
-/// template holds fewer characters, said for `tool`'s `field`.
+/// The ops that add the title card template reading `text` (its other words left empty) from `start` for `duration`
+/// (None: `TEMPLATE_SECS`), filling the frame, attached to the clip under it; and the new layer's id and length.
+/// Refused when the template holds fewer characters, said for `tool`'s `field`.
 fn title_ops(
     work: &Project,
     (tool, field): (&str, &str),
-    preset: TitlePreset,
     text: &str,
     start: Us,
     duration: Option<Us>,
 ) -> Result<(Vec<Op>, String, Us), Refused> {
-    let source = preset.source();
-    let def = (Catalog::builtin().get(&source)).ok_or_else(|| {
-        to_model(format!(
-            "{tool}: this build has no {} template.",
-            preset.key()
-        ))
-    })?;
+    let source = ContribId::builtin(TITLE_CARD);
+    let def = (Catalog::builtin().get(&source))
+        .ok_or_else(|| to_model(format!("{tool}: this build has no title card template.")))?;
     let mut params = BTreeMap::new();
     for spec in &def.params {
         let ParamKind::Text { max_len, .. } = &spec.kind else {
@@ -329,7 +329,7 @@ fn title_ops(
         };
         params.insert(spec.key.clone(), ParamValue::Text(value));
     }
-    let duration = length(work, tool, start, duration, TEXT_SECS)?;
+    let duration = length(work, tool, start, duration, TEMPLATE_SECS)?;
     let id = new_id();
     let ops = vec![Op::AddItem {
         track: TrackTarget::Auto,
@@ -454,26 +454,11 @@ pub(super) fn add_sound(
     })
 }
 
-pub(super) fn add_text(
-    c: &Compiler,
-    work: &Project,
-    text: &str,
-    preset: TitlePreset,
-    (at, duration): (Option<Us>, Option<Us>),
-) -> Result<Edit, Refused> {
-    let start = start(c, work, "addText", "atSec", at)?;
-    let shown = persons_words(&c.inputs.message, text).unwrap_or_else(|| sanitize::reply(text));
-    let (ops, _, _) = title_ops(work, ("addText", "text"), preset, &shown, start, duration)?;
-    Ok(Edit {
-        ops,
-        label: label(
-            "addText",
-            vec![
-                ("text", ErrorParam::from(shown.as_str())),
-                ("preset", ErrorParam::from(preset.key())),
-            ],
-        ),
-    })
+/// STUB: `addText` is read and offered with its four presets, but nothing places them yet. It is refused for the
+/// person, plainly, never sent back to the model to try something else. The presets come with the model's text layers
+/// (`media::text`), with the person's own words as `persons_words` finds them.
+pub(super) fn add_text() -> Result<Edit, Refused> {
+    Err(to_person(TEXT_COMING_SOON.to_owned()))
 }
 
 pub(super) fn add_image(
@@ -539,14 +524,8 @@ pub(super) fn make_title_card(
         )));
     };
     let start = start(c, work, "makeTitleCard", "atSec", at)?;
-    let (ops, title_id, duration) = title_ops(
-        work,
-        ("makeTitleCard", "title"),
-        TitlePreset::TitleCard,
-        &words,
-        start,
-        duration,
-    )?;
+    let (ops, title_id, duration) =
+        title_ops(work, ("makeTitleCard", "title"), &words, start, duration)?;
     let job = Job::MakeTitleBackground {
         prompt: sanitize::reply(prompt),
         format: work.settings.primary_format,

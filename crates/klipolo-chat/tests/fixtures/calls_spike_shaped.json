@@ -114,7 +114,7 @@
       "request": "a whoosh at every topic change, and a title 'Day 1' for 3 seconds at the start",
       "calls": [
         {"name": "addSound", "call_id": "call_26", "arguments": "{\"atSec\": [12.8, 23.0, 51.5], \"name\": \"Whoosh\"}"},
-        {"name": "addText", "call_id": "call_27", "arguments": "{\"text\": \"Day 1\", \"preset\": \"title-card\", \"atSec\": 0, \"durationSec\": 3}"}
+        {"name": "addText", "call_id": "call_27", "arguments": "{\"text\": \"Day 1\", \"preset\": \"title\", \"atSec\": 0, \"durationSec\": 3}"}
       ]
     },
     {

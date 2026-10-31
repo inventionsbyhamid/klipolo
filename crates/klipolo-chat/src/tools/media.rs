@@ -1,13 +1,12 @@
 //! The media tools: music, sound effects, words and pictures on screen from the library (`addMusic`, `addSound`,
 //! `addText`, `addImage`), and pictures Muse Image draws first (`makeSticker`, `makeTitleCard`). Each is one entry of
-//! `TOOLS`; the words they take for places, sizes and title templates are here.
+//! `TOOLS`; the words they take for places, sizes and text presets are here.
 //!
-//! A time left null is the playhead, a length left null the default (`TEXT_SECS`, `PICTURE_SECS`); whether a time
-//! stands on the context is the compiler's to judge, as for every tool.
+//! A time left null is the playhead, a length left null the default (`TEXT_SECS`, `PICTURE_SECS`, `TEMPLATE_SECS`);
+//! whether a time stands on the context is the compiler's to judge, as for every tool.
 
 use std::ops::RangeInclusive;
 
-use klipolo_model::contrib::ContribId;
 use klipolo_model::media::music::MUSIC_VOLUME;
 
 use super::schema::{
@@ -20,35 +19,37 @@ use super::{Tool, ToolCall};
 pub const TEXT_SECS: f64 = 3.0;
 /// How long a picture shows when the person gave no length.
 pub const PICTURE_SECS: f64 = 5.0;
+/// How long the title card template shows when the person gave no length: its scene's own length, its words coming
+/// in and going out included.
+pub const TEMPLATE_SECS: f64 = 4.0;
 /// The lengths a word or picture layer takes, in seconds.
 pub const OVERLAY_SECS: RangeInclusive<f64> = 0.5..=600.0;
 /// The volumes music takes: 1 is the file as it is.
 pub const MUSIC_VOLUMES: RangeInclusive<f64> = 0.0..=1.0;
 
-/// A title template: one of the scene presets (`klipolo_model::presets::SCENE_PRESETS`), which fill the frame.
+/// A text preset: where words sit and how big they are (the constraints' four). The full-frame title card template is
+/// `makeTitleCard`'s, not one of these.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TitlePreset {
-    /// A name and a role at the bottom left.
+pub enum TextPreset {
+    /// Big words at the top centre.
+    Title,
+    /// At the bottom left on a dark box.
     LowerThird,
-    /// A big centred title.
-    TitleCard,
+    /// In the middle.
+    Plain,
+    /// At the bottom centre, where captions go.
+    Caption,
 }
 
-impl TitlePreset {
-    /// The tool's word for it, the scene preset's local id after `scene.` ("title-card").
+impl TextPreset {
+    /// The tool's word for it ("lower-third").
     pub fn key(self) -> &'static str {
         match self {
-            TitlePreset::LowerThird => "lower-third",
-            TitlePreset::TitleCard => "title-card",
+            TextPreset::Title => "title",
+            TextPreset::LowerThird => "lower-third",
+            TextPreset::Plain => "plain",
+            TextPreset::Caption => "caption",
         }
-    }
-
-    /// The scene preset it shows.
-    pub fn source(self) -> ContribId {
-        ContribId::builtin(match self {
-            TitlePreset::LowerThird => "scene.lower-third",
-            TitlePreset::TitleCard => "scene.title-card",
-        })
     }
 }
 
@@ -103,8 +104,13 @@ impl PictureSize {
     }
 }
 
-/// The title templates `addText` offers, in `SCENE_PRESETS`' order.
-pub const TITLE_PRESETS: [TitlePreset; 2] = [TitlePreset::LowerThird, TitlePreset::TitleCard];
+/// The text presets `addText` offers.
+pub const TEXT_PRESETS: [TextPreset; 4] = [
+    TextPreset::Title,
+    TextPreset::LowerThird,
+    TextPreset::Plain,
+    TextPreset::Caption,
+];
 /// The places a picture takes.
 pub const POSITIONS: [Position; 5] = [
     Position::TopLeft,
@@ -116,7 +122,7 @@ pub const POSITIONS: [Position; 5] = [
 /// The sizes a picture takes.
 pub const SIZES: [PictureSize; 3] = [PictureSize::Small, PictureSize::Medium, PictureSize::Large];
 
-impl Word for TitlePreset {
+impl Word for TextPreset {
     fn word(self) -> &'static str {
         self.key()
     }
@@ -213,15 +219,16 @@ pub(super) const ADD_SOUND: Tool = Tool {
 
 pub(super) const ADD_TEXT: Tool = Tool {
     name: "addText",
-    description: "Show words on screen in a title template.",
+    description: "Show words on screen in a text preset.",
     parameters: || {
         vec![
             ("text", string("The words, as the person wrote them.")),
             (
                 "preset",
                 words(
-                    &TITLE_PRESETS,
-                    "lower-third: a name or label at the bottom left. title-card: a big centred title.",
+                    &TEXT_PRESETS,
+                    "title: big, at the top. lower-third: a name or label at the bottom left. plain: in the middle. \
+                     caption: at the bottom.",
                 ),
             ),
             at_sec(),
@@ -231,7 +238,7 @@ pub(super) const ADD_TEXT: Tool = Tool {
     read: |a| {
         Ok(ToolCall::AddText {
             text: a.text("text")?,
-            preset: a.word("preset", &TITLE_PRESETS)?,
+            preset: a.word("preset", &TEXT_PRESETS)?,
             at_us: a.nullable_time("atSec")?,
             duration_us: a.nullable_length("durationSec", &OVERLAY_SECS)?,
         })
@@ -300,7 +307,7 @@ pub(super) const MAKE_TITLE_CARD: Tool = Tool {
                 string("What the background shows, a short phrase."),
             ),
             at_sec(),
-            duration_sec(TEXT_SECS),
+            duration_sec(TEMPLATE_SECS),
         ]
     },
     read: |a| {

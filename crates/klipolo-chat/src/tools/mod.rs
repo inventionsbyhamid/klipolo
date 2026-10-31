@@ -36,7 +36,7 @@ use serde_json::{Map, Value, json};
 
 use args::{Args, kind};
 pub use error::{Problem, ToolError};
-pub use media::{PictureSize, Position, TitlePreset};
+pub use media::{PictureSize, Position, TextPreset};
 use schema::{boolean, list, nullable_seconds, nullable_words, object, seconds, string, words};
 
 /// One tool call as the model made it, whichever provider ran the model: its adapter maps the provider's call into
@@ -106,10 +106,10 @@ pub enum ToolCall {
     },
     /// Play the library's sound `name` at each of `at_us` (at least one).
     AddSound { name: String, at_us: Vec<Us> },
-    /// Show `text` in title template `preset` from `at_us` (None: the playhead) for `duration_us` (None: the default).
+    /// Show `text` in text preset `preset` from `at_us` (None: the playhead) for `duration_us` (None: the default).
     AddText {
         text: String,
-        preset: TitlePreset,
+        preset: TextPreset,
         at_us: Option<Us>,
         duration_us: Option<Us>,
     },
@@ -128,7 +128,7 @@ pub enum ToolCall {
         at_us: Option<Us>,
         duration_us: Option<Us>,
     },
-    /// Show `title` in the title card template, over a background of `prompt` drawn for it.
+    /// Show `title` in the full-frame title card template, over a background of `prompt` drawn for it.
     MakeTitleCard {
         title: String,
         prompt: String,

@@ -180,15 +180,15 @@ fn ideal(message: &str) -> Vec<(&'static str, Value)> {
         "remove pauses over a second and make it square" => vec![pauses, square],
         "blur the license plate" => vec![("blurObjects", json!({"description": "license plate"}))],
         "undo that" => vec![("undo", json!({}))],
-        // The media cases: the person's lofi file from the library, a title card of their words, a whoosh at each
-        // scene cut, and a sticker when she floats.
+        // The media cases: the person's lofi file from the library, the title card template with their words, a
+        // whoosh at each scene cut, and a sticker when she floats.
         "add lofi as background music, quieter when I talk" => vec![(
             "addMusic",
             json!({"file": "lofi-beat.mp3", "volume": null, "duck": true, "atSec": 0.0}),
         )],
         "put a title 'Day 1 in Lisbon' for 3 seconds at the start" => vec![(
-            "addText",
-            json!({"text": "Day 1 in Lisbon", "preset": "title-card", "atSec": 0.0, "durationSec": 3.0}),
+            "makeTitleCard",
+            json!({"title": "Day 1 in Lisbon", "prompt": "Lisbon", "atSec": 0.0, "durationSec": 3.0}),
         )],
         "a whoosh at every topic change" => vec![(
             "addSound",

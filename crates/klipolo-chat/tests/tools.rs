@@ -10,7 +10,7 @@
 use std::collections::BTreeSet;
 
 use klipolo_chat::tools::{
-    CHAT_CAPTION_STYLES, FunctionCall, Moment, PictureSize, Position, Problem, TitlePreset,
+    CHAT_CAPTION_STYLES, FunctionCall, Moment, PictureSize, Position, Problem, TextPreset,
     ToolCall, tools,
 };
 use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
@@ -430,7 +430,7 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 },
                 AddText {
                     text: "Day 1".into(),
-                    preset: TitlePreset::TitleCard,
+                    preset: TextPreset::Title,
                     at_us: Some(0),
                     duration_us: Some(secs_to_us(3.0)),
                 },

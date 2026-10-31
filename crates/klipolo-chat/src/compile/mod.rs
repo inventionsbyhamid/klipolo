@@ -1,7 +1,7 @@
 //! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
 //! context was built from, out as edits.
 //! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer, and the
-//!   media: `addMusic`, `addSound`, `addText`, `addImage` and `makeTitleCard`'s title) are one `Transaction` the app
+//!   media: `addMusic`, `addSound`, `addImage` and `makeTitleCard`'s title) are one `Transaction` the app
 //!   applies at once: one undo step. An addition is judged by what its part does, not by its tool: one that takes
 //!   something away (the model's own `removals`, as a format dropped with what was placed in it) is compiled again with
 //!   the removals and proposed.
@@ -11,8 +11,9 @@
 //! - `findMoments` gives moments, `followSubject` and `blurObjects` jobs for their runners, `makeSticker` and
 //!   `makeTitleCard`'s background jobs for a picture to be drawn (never an op until it exists), `askUser` questions,
 //!   `undo` a flag. `cannotDo` is a refusal shown to the person, as is a tool that needs an analysis the clip doesn't
-//!   have yet (`STILL_LISTENING`, `ANALYZE_FIRST`) and a removal with nothing to remove (`NO_FILLERS`, no pause that
-//!   long); every other refusal goes back to the model with its reason.
+//!   have yet (`STILL_LISTENING`, `ANALYZE_FIRST`), a removal with nothing to remove (`NO_FILLERS`, no pause that
+//!   long) and, until its presets are built, `addText` (`TEXT_COMING_SOON`); every other refusal goes back to the model
+//!   with its reason.
 //!
 //! All calls compile on one working copy, in two phases: the additions in call order, then the removals in call order
 //! on what the additions made, as the app applies them. Each call's ops are one part of its phase's batch
@@ -54,7 +55,9 @@ use crate::library::Library;
 use crate::sanitize;
 use crate::tools::{Moment, PictureSize, Position, ToolCall};
 use map::Map;
-pub use media::{PICTURE_MARGIN, SOUND_VOLUME, picture_layout, picture_ops};
+pub use media::{
+    PICTURE_MARGIN, SOUND_VOLUME, TEXT_COMING_SOON, TITLE_CARD, picture_layout, picture_ops,
+};
 use trim::Trim;
 
 /// What the person is told when a tool needs a clip's analysis and Klipolo is still making it.
@@ -573,12 +576,7 @@ impl Compiler<'_> {
                 at_us,
             } => media::add_music(self, work, file, (*volume, *duck), *at_us),
             ToolCall::AddSound { name, at_us } => media::add_sound(self, work, name, at_us),
-            ToolCall::AddText {
-                text,
-                preset,
-                at_us,
-                duration_us,
-            } => media::add_text(self, work, text, *preset, (*at_us, *duration_us)),
+            ToolCall::AddText { .. } => media::add_text(),
             ToolCall::AddImage {
                 file,
                 size,
