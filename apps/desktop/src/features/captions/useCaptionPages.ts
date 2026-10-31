@@ -36,6 +36,52 @@ function ask(key: string): Promise<CaptionPagesView | null> {
 const MOST = 200;
 
 /**
+ * The Captions view's complete answers, by what they were asked at: kept apart from `recent`, so the lane's and the
+ * canvas's windows never push out the chunks of a long list (past `KEEP` of them, 800 pages).
+ */
+const whole = new Map<string, Promise<CaptionPagesView | null>>();
+const KEEP_WHOLE = 2;
+
+/** Tries at asking every page before giving up on chunks that keep disagreeing. */
+const TRIES = 3;
+
+/**
+ * Every page of `projectId`'s captions in `format` as one answer, `MOST` at a time. Its chunks must be one answer: the
+ * same revision and the same count. When an edit lands in Rust between two of them, every chunk is asked again.
+ */
+async function askAll(projectId: string, format: FormatKind): Promise<CaptionPagesView | null> {
+  const chunk = (from: number) =>
+    captions.pages(projectId, format, { type: 'index', from, count: MOST }).catch(() => null);
+  for (let attempt = 0; attempt < TRIES; attempt++) {
+    const first = await chunk(0);
+    if (!first || first.total <= first.pages.length) return first;
+    const rest = [];
+    for (let from = first.pages.length; from < first.total; from += MOST) rest.push(chunk(from));
+    const more = await Promise.all(rest);
+    if (more.every((v) => v !== null && v.revision === first.revision && v.total === first.total))
+      return { ...first, capped: false, pages: [...first.pages, ...more.flatMap((v) => v?.pages ?? [])] };
+  }
+  return null;
+}
+
+/** `askAll`, one call for the same key; a failed answer is forgotten, so the next view asks again. */
+function askWhole(key: string, projectId: string, format: FormatKind): Promise<CaptionPagesView | null> {
+  let answer = whole.get(key);
+  if (!answer) {
+    answer = askAll(projectId, format);
+    whole.set(key, answer);
+    void answer.then((view) => {
+      if (view === null && whole.get(key) === answer) whole.delete(key);
+    });
+    for (const old of whole.keys()) {
+      if (whole.size <= KEEP_WHOLE) break;
+      whole.delete(old);
+    }
+  }
+  return answer;
+}
+
+/**
  * A window of the open project's caption pages in `format`, or null while captions are off or nothing
  * was asked. It is asked again when the revision, the opening or what was said changes (`pagesEpoch`), or the window
  * moves; the last answer stays shown until the next one lands, so nothing flickers. Never per frame.
@@ -93,9 +139,9 @@ export function useCaptionAnswer(
 }
 
 /**
- * Every page of the open project's captions in `format`, as one answer (`first` 0), asked `MOST` at a time: the
- * Captions view lists them all, its lines wrapping to their words. Asked again as `useCaptionAnswer` is; the last
- * answer stays shown until the next one is complete. `fresh`, `of` and `base` as `useCaptionAnswer`'s.
+ * Every page of the open project's captions in `format`, as one answer (`first` 0), asked `MOST` at a time
+ * (`askAll`): the Captions view lists them all, its lines wrapping to their words. Asked again as `useCaptionAnswer`
+ * is; the last answer stays shown until the next one is complete. `fresh`, `of` and `base` as `useCaptionAnswer`'s.
  */
 export function useAllCaptionPages(format: FormatKind): {
   view: CaptionPagesView | null;
@@ -115,29 +161,15 @@ export function useAllCaptionPages(format: FormatKind): {
     null,
   );
   useEffect(() => {
-    if (key === null) return;
+    if (key === null || projectId === null) return;
     let live = true;
-    const chunk = (from: number) =>
-      ask(JSON.stringify([projectId, opening, revision, epoch, format, { type: 'index', from, count: MOST }]));
-    void (async () => {
-      const first = await chunk(0);
-      let view = first;
-      if (first && first.total > first.pages.length) {
-        const rest = [];
-        for (let from = first.pages.length; from < first.total; from += MOST) rest.push(chunk(from));
-        const more = await Promise.all(rest);
-        view = {
-          ...first,
-          capped: false,
-          pages: [...first.pages, ...more.flatMap((v) => v?.pages ?? [])],
-        };
-      }
+    void askWhole(key, projectId, format).then((view) => {
       if (live) setShown({ key, base, view });
-    })();
+    });
     return () => {
       live = false;
     };
-  }, [key, base, projectId, opening, revision, epoch, format]);
+  }, [key, base, projectId, format]);
   if (key === null) return { view: null, fresh: false, of: null, base };
   return { view: shown?.view ?? null, fresh: shown?.base === base, of: shown?.base ?? null, base };
 }
@@ -159,4 +191,5 @@ export function pageAt(view: CaptionPagesView | null, us: number): PageView | nu
 /** Forget the answers kept (tests). */
 export function forgetCaptionPages() {
   recent.clear();
+  whole.clear();
 }
