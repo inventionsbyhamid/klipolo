@@ -342,9 +342,11 @@ fn pieces(span: Range<Us>, file_len: Us, source_in: Us) -> Vec<Piece> {
     out
 }
 
-/// The runs of music pieces on `track` a refit treats as one song: free music of one file without clock drift, each
-/// piece starting where the one before ends. Indexes into `track.items`, in order.
-fn runs(track: &Track) -> Vec<Range<usize>> {
+/// The runs of music pieces on `track`, each one song: free music of one file without clock drift, each piece starting
+/// where the one before ends. Indexes into `track.items`, in order. A refit fits a run as one, and the page edits one as
+/// one (its volume and ducking on every piece, its fades on the first and last, Delete taking it all): `musicRuns` in
+/// `apps/desktop/src/lib/musicRuns.ts` mirrors this, pinned by `music-runs-parity.json` (`tests/music.rs`).
+pub fn runs(track: &Track) -> Vec<Range<usize>> {
     let piece = |item: &Item| {
         is_music(item)
             && item.attach.is_none()
