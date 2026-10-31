@@ -60,25 +60,13 @@ export function appLine(m: ReplyMessage): string {
  * The chat store's messages from other apps (MCP), told by Rust (`mcp-reply`) and shown as Klipolo's replies are, named
  * for the app. Its change is merged as one undo step (the app's, labelled with its name); its proposal waits like
  * chat's, red on the timeline, for the person's Apply; its moments and pictures show as chat's. Its pictures are drawn
- * here (nothing else draws them) and placed once drawn, as the app was told they would be: the card keeps its Undo chip.
+ * here (nothing else draws them) and wait for the person's Use, as the app was told: never placed by themselves.
  * Replies are taken one at a time, in the order Rust told them, so a proposal is checked on the project the app's
  * change before it left. Nothing shows while no project is open or one is opening or closing, or for another opening.
  */
 export function appActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'receive'> {
   let queue: Promise<void> = Promise.resolve();
   const push = (m: Message) => set((s) => withMessages([...s.messages, m]));
-  const part = (messageId: string, pictureId: string) =>
-    get()
-      .messages.find((m): m is ReplyMessage => m.id === messageId && m.from === 'klipolo' && m.kind === 'reply')
-      ?.pictures.find((p) => p.picture.id === pictureId);
-
-  const drawThenPlace = async (messageId: string, pictureId: string) => {
-    await get().drawPicture(messageId, pictureId);
-    const p = part(messageId, pictureId);
-    // Drawn, and not placed or drawing again yet: placed once, as the person's Use would.
-    if (p?.state === 'drawn' && p.drawn && !p.again && !p.reason) await get().usePicture(messageId, pictureId);
-  };
-
   const take = async (external: ExternalReply) => {
     const { client, reply: r } = external;
     const project = useProject.getState();
@@ -126,7 +114,8 @@ export function appActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'receive
       proposal,
       pictures: r.pictures.map((picture) => ({ picture, state: 'drawing' as const })),
     });
-    for (const picture of r.pictures) void drawThenPlace(r.id, picture.id);
+    // Drawn here (nothing else draws them); placed only by the person's Use, as their own step.
+    for (const picture of r.pictures) void get().drawPicture(r.id, picture.id);
   };
 
   return {

@@ -243,7 +243,7 @@ describe('another app in chat', () => {
     expect(screen.getByRole('button', { name: 'Keep only these' })).toBeEnabled();
   });
 
-  it('an_apps_picture_is_drawn_and_placed_as_its_call_said', async () => {
+  it('an_apps_picture_is_drawn_and_waits_for_the_persons_use', async () => {
     const plane: ChatPicture = { id: 'pic1', kind: 'sticker', prompt: 'paper plane', place: 'Goes in the middle.' };
     const sticker = code('chat.makeSticker', { prompt: 'paper plane' });
     const fake = chat({
@@ -259,9 +259,17 @@ describe('another app in chat', () => {
     });
     renderWithProviders(<ChatPanel />);
     await tell(external('Example Client', { pictures: [plane] }));
-    // Drawn as chat's are (nothing else draws it), then placed: the app's call said it appears once ready.
+    // Drawn as chat's are (nothing else draws it), under the app's name, and then it waits: only the person places it.
+    await waitFor(() => expect(fake.drawn).toEqual(['pic1']));
+    const card = await screen.findByRole('group', { name: 'Paper plane sticker' });
+    const use = await within(card).findByRole('button', { name: 'Use' });
+    expect(within(screen.getByRole('log')).getByText('From Example Client')).toBeInTheDocument();
+    await act(async () => new Promise((done) => setTimeout(done, 50)));
+    expect(fake.used).toEqual([]);
+    expect(useProject.getState().snapshot!.history.revision).toBe(3);
+    // The person's Use places it, as their own step.
+    await userEvent.click(use);
     await waitFor(() => expect(fake.used).toEqual(['pic1']));
-    expect(fake.drawn).toEqual(['pic1']);
     expect(fake.usedPaths).toEqual(['/Movies/Talk Media/Muse Image/paper-plane-1.png']);
     await waitFor(() => expect(useProject.getState().snapshot!.history.revision).toBe(4));
     expect(await screen.findByRole('button', { name: 'Undo add the paper plane sticker' })).toBeInTheDocument();
