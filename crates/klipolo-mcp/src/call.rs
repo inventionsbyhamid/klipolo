@@ -402,6 +402,7 @@ fn host_error(host: &dyn Host, client: &str, e: HostError) -> String {
         HostError::NotYours => words::NOT_YOURS.to_owned(),
         HostError::NothingToUndo => words::NOTHING_TO_UNDO.to_owned(),
         HostError::NoCredit => words::NO_CREDIT.to_owned(),
+        HostError::LowCredit => words::LOW_CREDIT.to_owned(),
         HostError::Refused(why) => why,
     }
 }

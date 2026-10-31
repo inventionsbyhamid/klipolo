@@ -60,8 +60,10 @@ pub enum HostError {
     /// The newest undo step isn't this app's.
     NotYours,
     NothingToUndo,
-    /// A paid job with no Meta key or access code, or too little relay credit for its estimate.
+    /// A paid job with no Meta key or access code.
     NoCredit,
+    /// A paid job with an access code whose relay credit is below the job's estimate.
+    LowCredit,
     /// Anything else, in one plain sentence for the agent.
     Refused(String),
 }
@@ -145,7 +147,7 @@ pub trait Host: Send + Sync + 'static {
     fn estimate_usd(&self, job: &Job) -> f64;
 
     /// Starts a job that costs money, after the app's own checks (a Meta key or an access code, relay credit for its
-    /// estimate): `NoCredit` when they fail.
+    /// estimate): `NoCredit` with no key or code, `LowCredit` when the credit is below the estimate.
     fn start_paid(&self, client: &str, job: &Job) -> Result<(), HostError>;
 
     /// The apps connected now, by name, sorted: told whenever the list changes.

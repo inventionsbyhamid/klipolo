@@ -91,6 +91,9 @@ pub const NOTHING_TO_UNDO: &str = "There is nothing of yours to undo.";
 pub const PACED: &str = "Klipolo is pacing calls from {client}. Wait {wait}, then try again.";
 pub const NO_CREDIT: &str = "This needs AI credit, and Klipolo has no Meta key or access code. The person can add one \
 in Klipolo's Settings.";
+/// A paid job with too little relay credit left for its estimate.
+pub const LOW_CREDIT: &str = "Klipolo's AI credit is too low for this. The person can add credit in Klipolo's \
+Settings.";
 /// Paid jobs past what apps may spend in one run of Klipolo, all apps together.
 pub const OVER_CAP: &str = "Other apps have used this session's AI allowance in Klipolo. The person can do this in \
 Klipolo's own chat.";

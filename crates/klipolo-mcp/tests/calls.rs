@@ -542,6 +542,7 @@ fn agent_words_are_exact() {
         NOTHING_TO_UNDO,
         PACED,
         NO_CREDIT,
+        LOW_CREDIT,
         OVER_CAP,
         READ_ONLY,
     ] {

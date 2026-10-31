@@ -14,7 +14,7 @@ use fake_host::FakeHost;
 use klipolo_chat::Job;
 use klipolo_mcp::limits::{Limits, PAID_JOBS_PER_WINDOW, PAID_RUN_CAP_USD, PAID_WINDOW, Paced};
 use klipolo_mcp::rpc::Mcp;
-use klipolo_mcp::words::{NO_CREDIT, OVER_CAP};
+use klipolo_mcp::words::{LOW_CREDIT, NO_CREDIT, OVER_CAP};
 use serde_json::{Value, json};
 
 fn sticker() -> Value {
@@ -136,4 +136,27 @@ fn edits_without_jobs_never_reach_start_paid() {
     let s = host.state();
     assert_eq!((s.counts.estimates, s.counts.paid_asked), (0, 0));
     assert!(s.started.is_empty());
+}
+
+#[test]
+fn too_little_relay_credit_is_told_apart_from_no_key() {
+    let host = FakeHost::two_clips();
+    host.state().low_credit = true;
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    assert_refused(&agent.call("makeSticker", sticker()), LOW_CREDIT);
+    assert_eq!(
+        LOW_CREDIT,
+        "Klipolo's AI credit is too low for this. The person can add credit in Klipolo's Settings."
+    );
+    assert!(host.state().started.is_empty());
+    // Nothing was spent: with credit added, the whole allowance is there.
+    host.state().low_credit = false;
+    for k in 0..6 {
+        assert_eq!(
+            outcome(&agent.call("makeSticker", sticker())),
+            "started",
+            "{k}"
+        );
+    }
 }

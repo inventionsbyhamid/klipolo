@@ -79,8 +79,10 @@ pub struct State {
     pub applied: Vec<(String, Transaction)>,
     /// Each list of connected apps the server told.
     pub connected: Vec<Vec<String>>,
-    /// A Meta key or an access code, and enough relay credit.
+    /// A Meta key or an access code.
     pub credit: bool,
+    /// The relay credit is below a job's estimate.
+    pub low_credit: bool,
     /// What one paid job costs.
     pub usd_per_job: f64,
     pub limits: HistoryLimits,
@@ -148,6 +150,7 @@ impl FakeHost {
                 applied: Vec::new(),
                 connected: Vec::new(),
                 credit: true,
+                low_credit: false,
                 usd_per_job: 0.04,
                 limits: HistoryLimits::default(),
                 counts: Counts::default(),
@@ -501,6 +504,9 @@ impl Host for FakeHost {
         s.counts.paid_asked += 1;
         if !s.credit {
             return Err(HostError::NoCredit);
+        }
+        if s.low_credit {
+            return Err(HostError::LowCredit);
         }
         s.counts.paid += 1;
         s.started.push((client.to_owned(), job.clone()));
