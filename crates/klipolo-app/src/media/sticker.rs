@@ -38,8 +38,10 @@ pub const NOTHING_TO_CUT_NOTE: &str =
 const FIRST_RING_ALPHA: f32 = 2.0 / 3.0;
 /// A pixel this transparent in the input counts as background.
 const SEE_THROUGH: u8 = 16;
-/// The biggest picture read: Muse Image's are 1600 px on their long side. At 4096 px a side a cut-out holds at most
-/// about 150 MB at once (the pixels, the background mask and, at worst, the flood's queue); at 1600 px, about 25 MB.
+/// The biggest picture read: Muse Image's are 1600 px on their long side. At 4096 x 4096 (16.8 million pixels) the
+/// decode peaks at 112 MiB (the decoded RGB, 48 MiB, beside its RGBA copy, 64 MiB), and the cut holds about 96 MiB:
+/// the 64 MiB of pixels, two 16 MiB maps (background, rings), and a queue and an edge list that hold about one ring of
+/// pixels at a time. At 1600 x 1600 those are 17 MiB and 15 MiB.
 const MAX_SIDE: u32 = 4096;
 
 /// The cut-out: an RGBA PNG, and the share of the picture's pixels it kept (0 to 1).
@@ -241,7 +243,7 @@ fn feather(pixels: &mut RgbaImage, background: &[bool], width: usize, height: us
     // written after: no second copy of the whole picture.
     let raw = pixels.as_raw();
     let at = |i: usize| [raw[4 * i], raw[4 * i + 1], raw[4 * i + 2], raw[4 * i + 3]];
-    let mut edges: Vec<(usize, [u8; 4])> = Vec::new();
+    let mut edges: Vec<(u32, [u8; 4])> = Vec::new();
     for i in (0..width * height).filter(|&i| ring[i] != 0) {
         let pixel = at(i);
         let coverage_at =
@@ -265,7 +267,8 @@ fn feather(pixels: &mut RgbaImage, background: &[bool], width: usize, height: us
             }
         }
         feathered[3] = (alpha * f32::from(pixel[3])).round().clamp(0.0, 255.0) as u8;
-        edges.push((i, feathered));
+        // At most 4096 x 4096 pixels: the index fits in 32 bits, and an entry in 8 bytes.
+        edges.push((i as u32, feathered));
     }
     let out: &mut [u8] = pixels;
     for (px, &cut) in out.chunks_exact_mut(4).zip(background) {
@@ -274,9 +277,14 @@ fn feather(pixels: &mut RgbaImage, background: &[bool], width: usize, height: us
         }
     }
     for (i, feathered) in edges {
+        let i = i as usize;
         out[4 * i..4 * i + 4].copy_from_slice(&feathered);
     }
 }
+
+// An edge entry is 8 bytes (16 with a `usize` index).
+const _: () = assert!(std::mem::size_of::<(u32, [u8; 4])>() == 8);
+const _: () = assert!(MAX_SIDE as u64 * MAX_SIDE as u64 <= u32::MAX as u64);
 
 /// The darkest subject pixel within 2 pixels of `i`: the colour the edge blends towards (the outline's, usually).
 fn darkest_nearby(
