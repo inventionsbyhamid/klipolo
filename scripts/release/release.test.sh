@@ -2,9 +2,9 @@
 # The release checks' own tests, on a small app bundle made here (macOS with the Command Line Tools' clang; nothing is
 # signed, nothing reaches the network, and it takes seconds):
 #   scripts/release/release.test.sh
-# The bundle is an executable that loads one dylib through @rpath, with the licences and a fonts folder: check-bundle.sh
-# must pass it. Then each broken copy must fail with its own message. check-bundle.sh runs from a copy of this folder
-# in a checkout-shaped tree, so the test owns the page's build output it also searches.
+# The bundle is an executable that loads one dylib through @rpath, with the licences, a fonts folder and the bundled
+# pack's manifest: check-bundle.sh must pass it. Then each broken copy must fail with its own message. check-bundle.sh
+# runs from a copy of this folder in a checkout-shaped tree, so the test owns the page's build output it also searches.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 work=$(mktemp -d "${TMPDIR:-/tmp}/klipolo-release-test.XXXXXX")
@@ -31,7 +31,7 @@ cc=(xcrun clang -arch "$arch" -mmacosx-version-min=15.0 -Wl,-headerpad_max_insta
 # A bundle that passes, at <dir>/Klipolo.app.
 make_app() {
   local c=$1/Klipolo.app/Contents
-  mkdir -p "$c/MacOS" "$c/Frameworks" "$c/Resources/licenses" "$c/Resources/fonts"
+  mkdir -p "$c/MacOS" "$c/Frameworks" "$c/Resources/licenses" "$c/Resources/fonts" "$c/Resources/library"
   cat > "$c/Info.plist" << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -49,6 +49,7 @@ EOF
   printf 'Klipolo\nSource code: https://github.com/owner/klipolo (commit %s)\n' "$commit" \
     > "$c/Resources/licenses/NOTICE.txt"
   echo 'OFL' > "$c/Resources/fonts/OFL.txt"
+  echo '{"items": []}' > "$c/Resources/library/manifest.json"
 }
 
 passed=0 failed=0
@@ -91,6 +92,10 @@ expect "empty third-party notices fail" fail "licenses/THIRD-PARTY-NOTICES.txt i
 app=$(case_app stub-third-party)
 printf 'x' > "$app/Contents/Resources/licenses/THIRD-PARTY-NOTICES.txt"
 expect "1-byte third-party notices fail" fail "doesn't start 'Klipolo: third-party notices'" "$check" "$app" "$arch"
+
+app=$(case_app no-pack)
+rm -r "$app/Contents/Resources/library"
+expect "no bundled pack fails" fail "the bundled pack isn't in the app" "$check" "$app" "$arch"
 
 app=$(case_app no-archivo)
 rm "$app/Contents/Resources/licenses/Archivo-OFL.txt"

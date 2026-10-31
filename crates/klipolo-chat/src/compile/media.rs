@@ -1,7 +1,8 @@
 //! The media calls, on the additions' working copy: files from the library (`Inputs::library`, by name) placed as ops,
 //! and pictures Muse Image draws first as jobs.
 //! - `addMusic`: `media::music::add_music_ops` (30 %, ducking under speech, fades, to the video's end) from the time
-//!   given, else the playhead. "The song" and the like are the person's one music file (`library::is_generic`).
+//!   given, else the video's start: background music, wherever the playhead is. "The song" and the like are the
+//!   person's one music file (`library::is_generic`).
 //! - `addSound`: a sound at each time as the library's + puts one (`media::sound::add_sound_ops`: the whole file at full
 //!   volume with no fades, attached to the clip under it, cut where the video ends); two times within
 //!   `evidence::TOLERANCE_US` of each other are one sound, at the first.
@@ -302,7 +303,11 @@ pub(super) fn add_music(
     at: Option<Us>,
 ) -> Result<Edit, Refused> {
     let item = music(c, file)?;
-    let start = start(c, work, "addMusic", "atSec", at)?;
+    let start = match at {
+        // No time given: background music, from the video's start, wherever the playhead is.
+        None if video_duration(&work.timeline) >= MIN_DURATION_US => 0,
+        _ => start(c, work, "addMusic", "atSec", at)?,
+    };
     let defaults = MusicOpts::default();
     let opts = MusicOpts {
         volume: volume.unwrap_or(defaults.volume),

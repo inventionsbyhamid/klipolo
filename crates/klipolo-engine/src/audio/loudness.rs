@@ -20,7 +20,7 @@ use klipolo_model::project::Loudness;
 use super::mix::{Mixdown, RATE, duck_gain_at, fade_gain, to_frame};
 use super::pcm::energy::EnergyWriter;
 use super::pcm::{Effected, Energies, Pcm, WINDOW};
-use super::plan::{AudioPlan, AudioSource, Crossfade, Duck};
+use super::plan::{AudioPlan, AudioSource, Crossfade, Duck, Seam};
 use crate::api::ExportQuality;
 
 /// Frames measured per block.
@@ -447,6 +447,7 @@ pub(crate) fn write_effected(
         fade_out_us: 0,
         crossfade: Crossfade::default(),
         duck: None,
+        seam: Seam::default(),
         ..s.clone()
     };
     let frames = to_frame(unity.end_us).max(0) as u64;

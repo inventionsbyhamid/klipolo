@@ -380,6 +380,7 @@ fn a_file_whose_reading_keeps_failing_plays_up_to_there_and_waits_for_the_next_o
                 fade_in_us: 0,
                 fade_out_us: 0,
                 crossfade: Default::default(),
+                seam: Default::default(),
                 filter: None,
                 centre_from: None,
                 duck: None,

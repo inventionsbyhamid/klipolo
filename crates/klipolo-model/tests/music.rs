@@ -5,14 +5,14 @@ mod common;
 use common::*;
 use klipolo_model::history::Document;
 use klipolo_model::media::music::{
-    add_music_ops, apply_with_music_refit, is_music, refit_music_ops, with_music_refit, MusicOpts,
-    MUSIC_FADE_IN_US, MUSIC_FADE_OUT_US,
+    add_music_ops, apply_with_music_refit, is_music, refit_music_ops, runs, with_music_refit,
+    MusicOpts, MUSIC_FADE_IN_US, MUSIC_FADE_OUT_US,
 };
 use klipolo_model::ops::{ClipPatch, TrackTarget};
 use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::query::video_duration;
 use klipolo_model::time::Us;
-use klipolo_model::timeline::{Clip, ClipSource, Item, ItemContent, Track, TrackKind};
+use klipolo_model::timeline::{Attach, Clip, ClipSource, Item, ItemContent, Track, TrackKind};
 use klipolo_model::{apply_ops, validate, Op, Project, RangeUs, Transaction};
 
 /// A plain video `len` seconds long (one clip of a 10 minute take), with an 8 s loop and a 2 minute song.
@@ -948,4 +948,92 @@ fn new_pieces_get_fresh_ids_when_the_numbers_run_out() {
         assert!(!piece.id.starts_with(&format!("{base}-")), "{}", piece.id);
     }
     assert_ne!(m[2].id, m[3].id);
+}
+
+/// A piece of music `file` (ducking 12 dB), `start` to `start + len` µs, from `source_in` µs into its file.
+fn piece(id: &str, file: &str, (start, len): (Us, Us), source_in: Us) -> Item {
+    let mut item = sound_layer(id, 0.0, 1.0, Some(-12.0));
+    (item.start_us, item.duration_us) = (start, len);
+    if let ItemContent::Audio {
+        asset_id,
+        source_in_us,
+        ..
+    } = &mut item.content
+    {
+        *asset_id = file.into();
+        *source_in_us = source_in;
+    }
+    item
+}
+
+/// The page's runs of music (`musicRuns` in `apps/desktop/src/lib/musicRuns.ts`) are pinned to `runs` by
+/// `apps/desktop/src/lib/music-runs-parity.json`, written here with `UPDATE_GOLDEN=1`: the page edits a run as one
+/// song (its volume and ducking on every piece, Delete taking it all), so it must find the runs the refit finds.
+#[test]
+fn music_runs_parity_json_is_current() {
+    const S: Us = 1_000_000;
+    // A bed of the 8 s loop under 30 s: four pieces back to back, the last cut at the end.
+    let bed = || {
+        vec![
+            piece("bed", "loop", (0, 8 * S), 0),
+            piece("bed-2", "loop", (8 * S, 8 * S), 0),
+            piece("bed-3", "loop", (16 * S, 8 * S), 0),
+            piece("bed-4", "loop", (24 * S, 6 * S), 0),
+        ]
+    };
+    let mut cases: Vec<(&str, Vec<Item>)> = vec![("a bed is one run", bed())];
+    let mut two = bed();
+    for item in &mut two[2..] {
+        if let ItemContent::Audio { asset_id, .. } = &mut item.content {
+            *asset_id = "song".into();
+        }
+    }
+    cases.push(("another file starts another run", two));
+    let mut gap = bed();
+    gap[2].start_us += 5;
+    gap[2].duration_us -= 5;
+    cases.push(("a gap over 4 µs parts the run", gap));
+    let mut near = bed();
+    near[2].start_us += 4;
+    near[2].duration_us -= 4;
+    cases.push(("a gap of 4 µs keeps it", near));
+    let mut effect = bed();
+    effect[1] = sound_layer("whoosh", 8.0, 8.0, None);
+    cases.push(("a sound effect is no music and parts the run", effect));
+    let mut attached = bed();
+    attached[1].attach = Some(Attach {
+        clip_id: "take-0".into(),
+        source: ClipSource::Asset { id: "take".into() },
+        source_us: 8 * S,
+    });
+    cases.push(("an attached piece is no part of a run", attached));
+    let mut drifting = bed();
+    if let ItemContent::Audio { drift_ppm, .. } = &mut drifting[3].content {
+        *drift_ppm = 50.0;
+    }
+    cases.push(("a drifting piece is no part of a run", drifting));
+    let mut off = bed();
+    if let ItemContent::Audio { duck, .. } = &mut off[1].content {
+        *duck = Some(0.0);
+    }
+    cases.push(("music with ducking off is still music", off));
+    cases.push((
+        "sounds alone make no run",
+        vec![sound_layer("pop", 1.0, 1.0, None)],
+    ));
+    let cases: Vec<serde_json::Value> = cases
+        .into_iter()
+        .map(|(name, items)| {
+            let mut track = Track::new(TrackKind::Audio, "Audio 1");
+            track.id = "music".into();
+            track.items = items;
+            let found: Vec<[usize; 2]> = runs(&track).iter().map(|r| [r.start, r.end]).collect();
+            serde_json::json!({ "name": name, "track": track, "runs": found })
+        })
+        .collect();
+    assert_golden(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/desktop/src/lib/music-runs-parity.json"),
+        &sorted_keys(serde_json::json!({ "cases": cases })),
+    );
 }

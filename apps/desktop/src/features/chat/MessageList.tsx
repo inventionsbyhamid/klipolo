@@ -1,13 +1,11 @@
 import { useLingui } from '@lingui/react/macro';
 import { Fragment, useLayoutEffect, useRef } from 'react';
-import type { Asset } from '../../bindings/Asset';
 import { openSettings, useAi } from '../../ai/aiStatus';
 import { NeedsKey } from '../../ai/NeedsKey';
 import { Icon } from '../../layout/Icon';
-import { offerAgain, stateOf, useAnalysis, useSomeNotAnalysed } from '../../state/analysis';
+import { offerAgain, stateOf, useAnalysedClips, useAnalysis, useSomeNotAnalysed } from '../../state/analysis';
 import { useCanChat, useChat } from '../../state/chat';
 import { useChatPanel } from '../../state/chatPanel';
-import { useProject } from '../../state/project';
 import { ChatMessage } from './ChatMessage';
 
 /** What an empty chat suggests, each sent as it reads. */
@@ -19,19 +17,15 @@ const SUGGESTIONS = [
   'find the best moments',
 ];
 
-const NO_ASSETS: Asset[] = [];
-
 /**
  * Where the project's clips are with analysis, for the empty chat's note: some still being heard (their words still to
  * come), some only being watched (the scene log, last: their words are in, so cuts work), some not analysed (never,
  * failed or stopped), or every one done (or no clips).
  */
 function useAnalysisNote(): 'listening' | 'watching' | 'missing' | null {
-  const assets = useProject((s) => s.snapshot?.project.assets ?? NO_ASSETS);
+  const clips = useAnalysedClips();
   return useAnalysis((s) => {
-    const states = assets
-      .filter((a) => a.kind === 'video' || a.kind === 'audio')
-      .map((a) => stateOf(s.states, a.id));
+    const states = clips.map((a) => stateOf(s.states, a.id));
     if (states.some((a) => a.state === 'running' && a.step !== 'scenes')) return 'listening';
     if (states.some((a) => a.state === 'running')) return 'watching';
     if (states.some((a) => a.state !== 'done')) return 'missing';

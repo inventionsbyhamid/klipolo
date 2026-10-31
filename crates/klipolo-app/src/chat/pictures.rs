@@ -16,11 +16,14 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use klipolo_chat::sanitize;
 use klipolo_model::coded::{CodedError, ErrorParam, Said};
+use klipolo_model::contrib::builtin;
 use klipolo_model::ids::{Id, new_id};
 use klipolo_model::layout::Layout;
+use klipolo_model::motion::{Ease, Motion, MotionUse};
 use klipolo_model::ops::{Op, Origin, TrackTarget};
 use klipolo_model::project::Asset;
 use klipolo_model::query::find_item;
+use klipolo_model::time::Us;
 use klipolo_model::timeline::{Item, ItemContent, TrackKind};
 use klipolo_model::{Project, Transaction};
 use serde::Serialize;
@@ -296,8 +299,13 @@ impl Pictures {
     }
 }
 
+/// How long a title card background takes to fade out at its end: as long as the template's scrim takes (its
+/// `scene.json`'s last 0.45 s step, `power2.in`), so the picture goes with the card instead of cutting off after it.
+const BACKGROUND_FADE_US: Us = 450_000;
+
 /// The ops that put `asset` under the title layer `title_id` on `p`, filling the frame for as long as the title shows
-/// (moving with the clip when the title does): a new overlay track just under the title's. None when the title is gone.
+/// (moving with the clip when the title does) and fading out with its scrim (`BACKGROUND_FADE_US`): a new overlay track
+/// just under the title's. None when the title is gone.
 pub fn background_ops(p: &Project, asset: &Asset, title_id: &str) -> Option<Vec<Op>> {
     let (track, at) = find_item(p, title_id)?;
     let title = &p.timeline.tracks[track].items[at];
@@ -320,7 +328,18 @@ pub fn background_ops(p: &Project, asset: &Asset, title_id: &str) -> Option<Vec<
             start_us: title.start_us,
             duration_us: title.duration_us,
             attach: None,
-            layout: Layout::full_frame(),
+            layout: Layout {
+                motion: Some(Motion {
+                    exit: Some(MotionUse {
+                        preset: builtin::motion("fade"),
+                        params: Default::default(),
+                        duration_us: BACKGROUND_FADE_US.min(title.duration_us),
+                        ease: Some(Ease::Power2In),
+                    }),
+                    ..Motion::default()
+                }),
+                ..Layout::full_frame()
+            },
             content: ItemContent::Image {
                 asset_id: asset.id.clone(),
             },

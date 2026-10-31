@@ -1252,7 +1252,8 @@
   line-height: 15px;
 }
 
-.tl-item.is-music.is-selected {
+.tl-item.is-music.is-selected,
+.tl-item.is-music.is-in-run {
   box-shadow: inset 0 0 0 2px var(--color-paper);
 }
 

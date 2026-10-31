@@ -1,5 +1,6 @@
 import { t } from '@lingui/core/macro';
 import { labelText } from '../../../lib/labels';
+import { musicRunOf } from '../../../lib/musicRuns';
 import { cameraSource } from '../../../lib/recording';
 import { clipAt, findItem, itemLabel, sourceLabel } from '../../../lib/timeline';
 import { keyBurst } from '../../../state/keyBurst';
@@ -82,7 +83,8 @@ export function separateCamera(clipId: string) {
 
 /**
  * Mute or Unmute on sound layer `id`: its own switch (the inspector's Mute), so its volume stays for when it plays
- * again. Another kind of layer is left alone.
+ * again. A song laid in pieces back to back (`musicRunOf`) is muted or unmuted whole, in one step, as the piece pressed
+ * says: no piece plays on where the others went quiet. Another kind of layer is left alone.
  */
 export function toggleSoundMute(id: string) {
   keyBurst.after(() => {
@@ -103,7 +105,10 @@ export function toggleSoundMute(id: string) {
           message: `Unmuted ${label}`,
           comment: 'Screen-reader note; {label} is a sound layer’s name',
         });
-    const ops = [itemOp(item, { content: { ...content, muted } })];
+    const pieces = musicRunOf(project.timeline.tracks, id) ?? [item];
+    const ops = pieces.flatMap((piece) =>
+      piece.content.type === 'audio' ? [itemOp(piece, { content: { ...piece.content, muted } })] : [],
+    );
     commit(muteLabel(muted, 'sound'), ops, said, () => {
       if (!muted) noteMutedTrack(id);
     });

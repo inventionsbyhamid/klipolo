@@ -4,6 +4,7 @@ import type { AssetState } from '../bindings/AssetState';
 import type { Estimate } from '../bindings/Estimate';
 import { refreshAiStatus, useAi } from '../ai/aiStatus';
 import { analysisBridge, type AnalysisEvent, type UnlistenFn } from '../bridge/analysis';
+import { analysedAssets } from '../lib/analysed';
 import { useProject } from './project';
 
 interface AnalysisStore {
@@ -117,7 +118,7 @@ export function forgetRemovedClips(): () => void {
 let asked = 0;
 
 /**
- * The clips `assetIds` (the project's videos and sounds) as the banner offers them: the ones not analysed are
+ * The clips `assetIds` (the files the main-track clips play) as the banner offers them: the ones not analysed are
  * estimated; those cached load at once, at no cost (`analysis_start`), and the offer is for the rest. A new offer
  * starts without the last one's sentence. When nothing can pay yet (the device isn't registered), the estimate says
  * why (`Estimate.problem`) and has no price: the banner shows that, and Retry asks again.
@@ -181,20 +182,26 @@ export function notNow() {
 const NO_ASSETS: Asset[] = [];
 
 /**
- * Whether a video or sound of the open project is not analysed (never, or stopped): what Analyze (`offerAgain`) offers.
- * A clip that failed isn't: the banner's Retry is its way on.
+ * The open project's clips analysis is for (`analysedAssets`: the videos and sounds its main-track clips play, never
+ * music, sounds or pictures on layers, nor files never placed). The same array until they change.
  */
-export function useSomeNotAnalysed(): boolean {
-  const assets = useProject((s) => s.snapshot?.project.assets ?? NO_ASSETS);
-  return useAnalysis((s) =>
-    assets.some((a) => (a.kind === 'video' || a.kind === 'audio') && stateOf(s.states, a.id).state === 'none'),
-  );
+export function useAnalysedClips(): Asset[] {
+  return useProject((s) => (s.snapshot ? analysedAssets(s.snapshot.project) : NO_ASSETS));
 }
 
-/** The open project's videos and sounds, by id: what analysis is for. */
+/**
+ * Whether a clip analysis is for (`useAnalysedClips`) is not analysed (never, or stopped): what Analyze (`offerAgain`)
+ * offers. A clip that failed isn't: the banner's Retry is its way on.
+ */
+export function useSomeNotAnalysed(): boolean {
+  const clips = useAnalysedClips();
+  return useAnalysis((s) => clips.some((a) => stateOf(s.states, a.id).state === 'none'));
+}
+
+/** The open project's clips analysis is for, by id (`analysedAssets`). */
 function projectClipIds(): string[] {
-  const assets = useProject.getState().snapshot?.project.assets ?? [];
-  return assets.filter((a) => a.kind === 'video' || a.kind === 'audio').map((a) => a.id);
+  const project = useProject.getState().snapshot?.project;
+  return project ? analysedAssets(project).map((a) => a.id) : [];
 }
 
 /**

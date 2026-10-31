@@ -11,8 +11,8 @@ import { renderWithProviders } from '../../test/render';
 import { CaptionWords } from './CaptionWords';
 import { forgetCaptionPages } from './useCaptionPages';
 
-/** The fixture project's videos and sounds (`fixtureProject`). */
-const CLIPS = ['screen', 'camera', 'mic', 'music', 'broll'];
+/** The files the fixture project's main-track clips play (`fixtureProject`): its song is a layer, not analysed. */
+const CLIPS = ['screen', 'camera', 'mic', 'broll'];
 let estimated: unknown[] = [];
 
 beforeEach(async () => {

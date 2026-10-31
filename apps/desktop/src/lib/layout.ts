@@ -175,6 +175,32 @@ export function containRect(rect: BoxN, width: number, height: number, format: F
   };
 }
 
+/** Whether `rect` is the whole frame, as `fullFrame` places a layer in every format. Mirrors Rust `is_whole_frame`. */
+function isWholeFrame(rect: BoxN): boolean {
+  const eps = 1e-9;
+  return Math.abs(rect.x) < eps && Math.abs(rect.y) < eps && Math.abs(rect.w - 1) < eps && Math.abs(rect.h - 1) < eps;
+}
+
+/**
+ * Where a picture layer of `width`×`height` draws in its layout box in `format`: contained (`containRect`), except in
+ * a box that is the whole frame (a title card's background), which it covers, keeping its shape and reaching past the
+ * frame's edges, so it fills every format. Mirrors Rust `overlay::picture_rect` (parity-tested).
+ */
+export function pictureRect(rect: BoxN, width: number, height: number, format: FormatKind): BoxN {
+  if (!isWholeFrame(rect)) return containRect(rect, width, height, format);
+  const [cw, ch] = FORMAT_SIZE[format];
+  const aw = rect.w * cw;
+  const ah = rect.h * ch;
+  const aspect = width === 0 || height === 0 ? aw / Math.max(ah, Number.EPSILON) : width / height;
+  const [w, h] = aspect > aw / ah ? [ah * aspect, ah] : [aw, aw / aspect];
+  return {
+    x: (rect.x * cw + (aw - w) / 2) / cw,
+    y: (rect.y * ch + (ah - h) / 2) / ch,
+    w: w / cw,
+    h: h / ch,
+  };
+}
+
 /**
  * How much bigger a text layer's font is drawn in `format` than its size says: text scales with its box, so a format
  * whose box is taller in pixels (its own placement, or a derived one the canvas squeezes) draws it bigger. 1 in the

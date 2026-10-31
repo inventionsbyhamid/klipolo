@@ -4,7 +4,7 @@ import type { CameraLayout } from '../bindings/CameraLayout';
 import type { FormatKind } from '../bindings/FormatKind';
 import type { Item } from '../bindings/Item';
 import type { Layout } from '../bindings/Layout';
-import { cameraRect, containRect, fullFrame, resolveRect, textScale, titleLayout } from './layout';
+import { cameraRect, containRect, fullFrame, pictureRect, resolveRect, textScale, titleLayout } from './layout';
 import parity from './layout-parity.json';
 import { safeRect } from './safeAreas';
 import { shownFromUs } from './timeline';
@@ -19,6 +19,7 @@ interface Fixture {
     rect: BoxN | null;
   }[];
   contains: { rect: BoxN; width: number; height: number; format: FormatKind; box: BoxN }[];
+  pictures: { rect: BoxN; width: number; height: number; format: FormatKind; box: BoxN }[];
   texts: { layout: Layout; primary: FormatKind; format: FormatKind; scale: number }[];
   shown: { item: Item; shownUs: number }[];
   fullFrame: Layout;
@@ -46,6 +47,12 @@ describe('layout parity with the engine', () => {
   it('fits pictures in their boxes exactly like Rust', () => {
     expect(fixture.contains.length).toBe(24);
     for (const c of fixture.contains) same(containRect(c.rect, c.width, c.height, c.format), c.box);
+  });
+
+  it('places pictures exactly like Rust: covering a box that is the whole frame, else inside their box', () => {
+    expect(fixture.pictures.length).toBe(24);
+    expect(fixture.pictures.some((c) => c.box.x < 0 || c.box.y < 0)).toBe(true);
+    for (const c of fixture.pictures) same(pictureRect(c.rect, c.width, c.height, c.format), c.box);
   });
 
   it('scales text with its box per format exactly like Rust', () => {
