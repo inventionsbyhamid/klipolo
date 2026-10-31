@@ -651,6 +651,21 @@ impl AnalysisState {
         (self.speech_sink)(Arc::new(inner.speech.clone()));
     }
 
+    /// These assets left the project (removed, not the project closing): they are forgotten, so they get no more
+    /// events or speech. Their file's analysis carries on for any other asset on it; nothing is cancelled.
+    pub fn forget(&self, asset_ids: &[String]) {
+        let mut inner = lock(&self.inner);
+        let mut changed = false;
+        for id in asset_ids {
+            inner.keys.remove(id);
+            changed |= inner.speech.transcripts.remove(id).is_some();
+            changed |= inner.speech.levels.remove(id).is_some();
+        }
+        if changed {
+            (self.speech_sink)(Arc::new(inner.speech.clone()));
+        }
+    }
+
     /// Where `asset_id`'s analysis is.
     pub fn state_of(&self, asset_id: &str) -> AssetState {
         let inner = lock(&self.inner);

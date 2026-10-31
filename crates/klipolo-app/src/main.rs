@@ -95,6 +95,7 @@ fn main() {
             commands::analysis::analysis_start,
             commands::analysis::analysis_cancel,
             commands::analysis::analysis_states,
+            commands::analysis::analysis_forget,
             media_cache::media_peaks_info,
             media_cache::media_peaks,
             media_cache::media_thumbs,

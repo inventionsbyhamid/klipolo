@@ -1756,3 +1756,42 @@ async fn a_task_that_panics_still_ends_and_lets_go() {
     );
     server.verify().await;
 }
+
+/// One of two assets on a file is removed from the project: it is forgotten (no state, no speech, no more events);
+/// the other keeps its analysis, and nothing is cancelled.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_removed_asset_is_forgotten_and_its_twin_keeps_its_analysis() {
+    let server = MockServer::start().await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    mount_speech(&server, "/v1", &h.aligns, Duration::ZERO).await;
+    nothing_else(&server).await;
+    let file = h.clip("talk.m4a", 2);
+    let first = asset("first", AssetKind::Audio, &file, SECONDS);
+    let second = asset("second", AssetKind::Audio, &file, SECONDS);
+    h.state
+        .start(&[first.clone(), second.clone()])
+        .await
+        .finished()
+        .await;
+
+    h.state.forget(&["second".to_owned()]);
+    let told = h.events.lock().unwrap().len();
+    h.state
+        .start(std::slice::from_ref(&first))
+        .await
+        .finished()
+        .await;
+
+    let speech = h.last_speech();
+    assert!(!speech.transcripts.contains_key("second") && !speech.levels.contains_key("second"));
+    assert!(speech.transcripts.contains_key("first"));
+    assert_eq!(h.state.state_of("second"), AssetState::None);
+    assert!(h.state.analysis_for("second").is_none());
+    assert_eq!(
+        h.state.state_of("first"),
+        AssetState::Done { approximate: false }
+    );
+    let after: Vec<AnalysisEvent> = h.events.lock().unwrap()[told..].to_vec();
+    assert!(after.iter().all(|e| e.asset_id() == "first"), "{after:?}");
+    server.verify().await;
+}

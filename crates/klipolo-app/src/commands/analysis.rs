@@ -95,6 +95,13 @@ pub(crate) fn analysis_cancel(analysis: State<'_, AnalysisHandle>) {
     analysis.cancel();
 }
 
+/// These clips left the project: they hear no more about their analysis and lose their captions' speech. Another clip
+/// on the same file keeps it; nothing is cancelled.
+#[tauri::command]
+pub(crate) fn analysis_forget(analysis: State<'_, AnalysisHandle>, asset_ids: Vec<String>) {
+    analysis.forget(&asset_ids);
+}
+
 /// Every clip analysis knows of, and where it is (a page that loads again reads it).
 #[tauri::command]
 pub(crate) fn analysis_states(analysis: State<'_, AnalysisHandle>) -> Vec<AssetAnalysisState> {
