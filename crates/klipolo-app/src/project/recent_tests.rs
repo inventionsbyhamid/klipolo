@@ -532,6 +532,36 @@ fn unknown_times_list_last() {
     );
 }
 
+/// Projects that share a name ("Untitled project" twice, after New project twice) are named by their files, so no two
+/// cards read the same; a name of its own stays.
+#[test]
+fn projects_that_share_a_name_show_their_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    for (file, ms) in [("Untitled project", 2_000), ("Untitled project 2", 3_000)] {
+        let file = library.join(format!("{file}.klipolo"));
+        save(
+            &file,
+            &Project::new("Untitled project"),
+            Durability::Ordered,
+        )
+        .unwrap();
+        set_saved(&file, ms);
+    }
+    let trip = library.join("Holiday.klipolo");
+    save(&trip, &Project::new("Trip"), Durability::Ordered).unwrap();
+    set_saved(&trip, 1_000);
+
+    assert_eq!(
+        names(&recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap()),
+        [
+            ("Untitled project 2", 3_000),
+            ("Untitled project", 2_000),
+            ("Trip", 1_000)
+        ]
+    );
+}
+
 /// Stamping over a `recent.json` that doesn't read as stamps starts it over with the one stamp.
 #[test]
 fn stamping_rewrites_a_damaged_recent_json() {

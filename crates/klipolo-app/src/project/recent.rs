@@ -62,8 +62,8 @@ pub(crate) const RECENT_FILE: &str = "recent.json";
 /// stamped in `stamps` first, by when they were opened, then the rest by their last save, which is then their
 /// `opened_ms`. A time that can't be read is 0, and those list last; a time later than now reads as now (the order
 /// still follows the times as written). A file that doesn't read as a project is left out (and logged), and so is a
-/// link. `thumbs` is the engine's thumbnail folder; None lists no pictures. Fails only when the library itself can't be
-/// listed.
+/// link. Projects that share a name are named by their files instead. `thumbs` is the engine's thumbnail folder; None
+/// lists no pictures. Fails only when the library itself can't be listed.
 pub(crate) fn recent_in(
     library: &Path,
     stamps: &Path,
@@ -74,7 +74,7 @@ pub(crate) fn recent_in(
         tracing::warn!(%error, "the recent projects couldn't be read");
         BTreeMap::new()
     });
-    Ok(project_files(library, &stamps, now_ms())?
+    let mut rows: Vec<ProjectRow> = project_files(library, &stamps, now_ms())?
         .into_iter()
         .filter_map(|found| match read(&found.file) {
             Ok(project) => Some(row(&found.file, found.at_ms, &project, thumbs)),
@@ -85,7 +85,9 @@ pub(crate) fn recent_in(
             }
         })
         .take(limit)
-        .collect())
+        .collect();
+    name_shared_names_by_file(&mut rows);
+    Ok(rows)
 }
 
 /// How many opened projects `recent.json` remembers.
@@ -197,6 +199,22 @@ fn read_stamps(stamps: &Path) -> io::Result<BTreeMap<String, u64>> {
         tracing::warn!(%error, "the recent projects aren't readable");
         BTreeMap::new()
     }))
+}
+
+/// Rows whose projects share a name are named by their files instead ("Untitled project 2"), so no two cards read
+/// the same.
+fn name_shared_names_by_file(rows: &mut [ProjectRow]) {
+    let mut seen: BTreeMap<String, usize> = BTreeMap::new();
+    for row in rows.iter() {
+        *seen.entry(row.name.clone()).or_default() += 1;
+    }
+    for row in rows.iter_mut() {
+        if seen.get(&row.name).is_some_and(|&count| count > 1)
+            && let Some(stem) = Path::new(&row.path).file_stem()
+        {
+            row.name = stem.to_string_lossy().into_owned();
+        }
+    }
 }
 
 /// `project`, read from `file`, as a row.
