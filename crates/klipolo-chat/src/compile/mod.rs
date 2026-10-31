@@ -11,8 +11,9 @@
 //! - `findMoments` gives moments, `followSubject` and `blurObjects` jobs for their runners, `makeSticker` and
 //!   `makeTitleCard`'s background jobs for a picture to be drawn (never an op until it exists), `askUser` questions,
 //!   `undo` a flag. `cannotDo` is a refusal shown to the person, as is a tool that needs an analysis the clip doesn't
-//!   have yet (`STILL_LISTENING`, `ANALYZE_FIRST`) and a removal with nothing to remove (`NO_FILLERS`, no pause that
-//!   long); every other refusal goes back to the model with its reason.
+//!   have yet (`STILL_LISTENING`, `STILL_WATCHING`, `ANALYZE_FIRST`), filler words only roughly timed
+//!   (`ROUGH_FILLERS`) and a removal with nothing to remove (`NO_FILLERS`, no pause that long); every other refusal
+//!   goes back to the model with its reason.
 //!
 //! All calls compile on one working copy, in two phases: the additions in call order (the edits first, then the media
 //! layers on what the edits made, so a trim later in the answer never shortens a picture placed before it), then the
