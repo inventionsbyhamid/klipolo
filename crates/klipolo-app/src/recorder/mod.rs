@@ -13,6 +13,7 @@
 //! - **A test run** (`KLIPOLO_TEST`): the recorder makes no backend and launches no worker; every command answers
 //!   "Recording is off in this test run." (`state`).
 
+mod active;
 mod config;
 mod env;
 mod events;
@@ -27,6 +28,7 @@ mod supervise;
 mod take;
 mod ticker;
 pub mod types;
+mod window;
 mod words;
 
 #[cfg(test)]
@@ -44,4 +46,9 @@ mod tests_stop;
 #[cfg(test)]
 mod tests_supervise;
 
+#[allow(
+    unused_imports,
+    reason = "read by the quit guard and the engine's hold, which come with the take's landing"
+)]
+pub use active::active;
 pub use state::RecorderState;
