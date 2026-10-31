@@ -44,10 +44,15 @@ export function useTimelineCommands(): Command[] {
     const block = clip || found !== null;
     // A layer on a locked track can be copied, nothing more.
     const layer = found && !found.track.locked ? found : null;
-    const sound = layer?.item.content.type === 'audio' ? layer.item.content : null;
-    // A video layer whose file has sound mutes as a sound layer does: its own switch.
-    const content = layer?.item.content;
-    const video = content?.type === 'video' && assetById(project, content.assetId)?.hasAudio ? content : null;
+    // A sound layer, or a video layer whose file has sound: its own switch mutes it. Named as it stands even on a
+    // locked track, where it is off.
+    const content = found?.item.content;
+    const mutable =
+      content?.type === 'audio'
+        ? content
+        : content?.type === 'video' && assetById(project, content.assetId)?.hasAudio
+          ? content
+          : null;
     const ours = clipboard.projectId === project.id;
     // The commands' names are their undo labels, in the language shown.
     const label = {
@@ -56,7 +61,7 @@ export function useTimelineCommands(): Command[] {
       up: labelText('undo.trackUp'),
       down: labelText('undo.trackDown'),
       attach: labelText(found?.item.attach ? 'undo.attach.free' : 'undo.attach.keep'),
-      mute: labelText(muteLabel(!(sound ?? video)?.muted, video ? 'video' : 'sound')),
+      mute: labelText(muteLabel(!mutable?.muted, mutable?.type === 'video' ? 'video' : 'sound')),
     };
 
     const edits: Command[] = [
@@ -210,7 +215,7 @@ export function useTimelineCommands(): Command[] {
           }),
         ),
         // A sound or video layer's own switch, as the inspector's Mute: its volume stays for when it plays again.
-        enabled: sound !== null || video !== null,
+        enabled: layer !== null && mutable !== null,
         run: () => toggleSoundMute(id),
       },
     ];

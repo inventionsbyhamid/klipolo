@@ -109,6 +109,15 @@ describe("a layer's block menu", () => {
     expect(names(items).some((name) => /mute/i.test(name ?? ''))).toBe(false);
   });
 
+  it('on a locked track the switch is named as it stands, and off', async () => {
+    const snapshot = withVideo({ muted: true });
+    snapshot.project.timeline.tracks[0].locked = true;
+    useProject.setState({ snapshot, pending: 0 });
+    renderWithProviders(<Timeline />);
+    await openMenu(/^Video layer, pip\.mp4/);
+    expect(screen.getByRole('menuitem', { name: 'Unmute video' })).toHaveAttribute('aria-disabled', 'true');
+  });
+
   it('a picture layer can be brought forward or sent back, off where no track of its kind is there', async () => {
     useProject.setState({ snapshot: withTrackAbove(fixtureSnapshot()), pending: 0 });
     renderWithProviders(<Timeline />);
