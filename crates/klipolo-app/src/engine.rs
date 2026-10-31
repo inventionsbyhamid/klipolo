@@ -128,13 +128,13 @@ fn allowed_origins() -> Vec<String> {
     origins
 }
 
-/// The app's engine: on the warm-up's GPU backend (or a new one), with the sound and thumbnail caches in the app's
-/// cache folder.
+/// The app's engine: on the warm-up's GPU backend (or a new one), with the app's sound cache (shared with analysis) and
+/// the thumbnail cache in the app's cache folder.
 async fn start_engine(state: &EngineState, feed: FeedRx) -> Result<Engine, String> {
     let mut backend = GpuBackend::for_preview(state.take_warm_up()).await?;
-    if let Some(caches) = state.caches() {
+    if let (Some(caches), Some(sounds)) = (state.caches(), &state.sounds) {
         backend = backend
-            .with_audio_cache(caches.audio)
+            .with_audio_store(sounds.clone())
             .with_media_cache(caches.media)
             // Exports read decoded sound from this cache too: a running job's files in the usual export folder are
             // kept (the open project's always are).

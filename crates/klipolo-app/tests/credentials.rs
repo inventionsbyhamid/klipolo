@@ -622,7 +622,7 @@ async fn a_saved_key_registers_on_the_next_use_when_the_relay_was_down() {
         endpoints(&format!("{}/v1", meta.uri()), &relay.uri()),
         DEVICE.into(),
     )
-    .with_registration_backoff(Duration::ZERO);
+    .with_register_backoff(Duration::ZERO);
 
     credentials.set_key(KEY).await.unwrap();
     // The relay is down at the first use: the feature still gets the key's adapter (approximate word timing), and
@@ -663,7 +663,7 @@ async fn a_bare_504_from_the_relay_says_klipolos_server_is_busy() {
         endpoints(&format!("{}/v1", meta.uri()), &relay.uri()),
         DEVICE.into(),
     )
-    .with_registration_backoff(Duration::ZERO);
+    .with_register_backoff(Duration::ZERO);
 
     credentials.set_key(KEY).await.unwrap();
     let ready = credentials.ready().await;
@@ -715,6 +715,52 @@ async fn parallel_first_uses_against_a_hanging_relay_cost_one_timeout() {
     let ready = credentials.ready().await;
     assert!(started.elapsed() < Duration::from_millis(100));
     assert_eq!(ready.problem.as_deref(), Some(offline));
+}
+
+/// A failed registration pauses the next tries, but only for the credentials it was about: a new key (or code, or
+/// Remove) starts afresh, so the old sentence never shows with the new key.
+#[tokio::test]
+async fn a_new_key_tries_to_register_again_at_once() {
+    let meta = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "data": [] })))
+        .mount(&meta)
+        .await;
+    let relay = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/devices"))
+        .respond_with(ResponseTemplate::new(503))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&relay)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/devices"))
+        .respond_with(registered(TOKEN, 0.0, 0.0))
+        .expect(1)
+        .with_priority(2)
+        .mount(&relay)
+        .await;
+    let store = Arc::new(MemoryStore::default());
+    store.set(META_API_KEY, &secret(BAD_KEY)).unwrap();
+    // The default pause: a minute.
+    let credentials = Credentials::load(
+        store.clone(),
+        endpoints(&format!("{}/v1", meta.uri()), &relay.uri()),
+        DEVICE.into(),
+    );
+
+    let busy = "Klipolo's server is busy right now. Try again in a moment.";
+    assert_eq!(credentials.ready().await.problem.as_deref(), Some(busy));
+    // Within the pause, the same key gets the same sentence without a try.
+    assert_eq!(credentials.ready().await.problem.as_deref(), Some(busy));
+    assert_eq!(relay.received_requests().await.unwrap().len(), 1);
+
+    credentials.set_key(KEY).await.unwrap();
+    let ready = credentials.ready().await;
+    assert_eq!(ready.problem, None, "the new key registers at once");
+    assert_eq!(stored(&store, RELAY_TOKEN).as_deref(), Some(TOKEN));
 }
 
 #[tokio::test]

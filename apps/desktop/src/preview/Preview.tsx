@@ -2,6 +2,8 @@ import { useEffect, useRef, type RefObject } from 'react';
 import type { EngineInfo } from '../bindings/EngineInfo';
 import type { FormatKind } from '../bindings/FormatKind';
 import { engine } from '../bridge/engine';
+import { AnalysisBanner } from '../features/analysis/AnalysisBanner';
+import { RoughCaptionsNote } from '../features/analysis/RoughCaptionsNote';
 import { FormatPills } from '../features/editor/FormatPills';
 import { useShownFormat } from '../features/editor/formats';
 import { useImportMedia } from '../features/media/useImportMedia';
@@ -123,8 +125,8 @@ function DropZone({ over }: { over: boolean }) {
 }
 
 /**
- * The preview panel: the format pills and the engine's frames, fitted to the panel in the chosen format; with no clip
- * yet, the drop zone. `filesOver`: files from Finder are held over the window.
+ * The preview panel: the format pills and the engine's frames, fitted to the panel in the chosen format, under the
+ * analysis banner; with no clip yet, the drop zone. `filesOver`: files from Finder are held over the window.
  */
 export function Preview({ filesOver = false }: { filesOver?: boolean }) {
   const info = useEngine((s) => s.info);
@@ -144,6 +146,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
         <FormatPills />
         <span className="spacer" />
         {status !== 'unavailable' && message && <span className="stage-status">{message}</span>}
+        <RoughCaptionsNote />
         <button className="icon-btn" aria-label="Show safe area" title="Safe area" disabled>
           <Icon name="safe" />
         </button>
@@ -152,6 +155,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
         </button>
       </div>
       <div className="stage-body">
+        {hasVideo && <AnalysisBanner />}
         {hasVideo ? (
           <div className="screen">
             <div

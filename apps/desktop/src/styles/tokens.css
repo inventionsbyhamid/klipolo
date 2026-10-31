@@ -41,6 +41,7 @@
 
   --color-paper: #E9EDF7;        /* you: your bubbles, selection, playhead, focus ring */
   --color-paper-wash: rgb(233 237 247 / 0.12);
+  --color-paper-track: rgb(233 237 247 / 0.25); /* a spinner's track, under its paper head */
   --color-paper-edge: rgb(233 237 247 / 0.9);
 
   /* Lane colors, used on the timeline and media icons only */
