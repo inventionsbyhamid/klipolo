@@ -3,7 +3,6 @@ import type { BoxN } from '../bindings/BoxN';
 import type { Item } from '../bindings/Item';
 import type { Layout } from '../bindings/Layout';
 import type { Op } from '../bindings/Op';
-import type { Project } from '../bindings/Project';
 import { newClipFor, newId } from './defaults';
 
 const MIN_US = 10_000;
@@ -59,7 +58,7 @@ export function placeable(asset: Asset): boolean {
  * sounds and pictures go to the library (the project's files), never the main track, for the person to place from
  * there (a drag, the "+", a drop on a lane). One `addAssets` for all of them.
  */
-export function placementOps(assets: Asset[], _project: Project, _playheadUs: number): Op[] {
+export function placementOps(assets: Asset[]): Op[] {
   const usable = assets.filter(placeable);
   if (usable.length === 0) return [];
   const clips = usable.filter((asset) => asset.kind === 'video').map(newClipFor);

@@ -8,6 +8,9 @@ vi.mock('../../bridge/commands', () => ({
   bridge: { apply: vi.fn(), undo: vi.fn(), importMedia: vi.fn() },
   mediaUrl: (p: string) => p,
 }));
+vi.mock('../../bridge/library', () => ({
+  library: { addMusic: vi.fn(), place: vi.fn(), speechRanges: vi.fn(() => Promise.resolve([])) },
+}));
 // The real snap edges, counted: a drag builds them once per revision, not per frame.
 vi.mock('../timeline/model/snap', async (importOriginal) => {
   const real = await importOriginal<typeof import('../timeline/model/snap')>();
@@ -22,7 +25,10 @@ const { useToasts } = await import('../../state/toasts');
 const { importFiles } = await import('./useImportMedia');
 const { useFinderDrop } = await import('./useFinderDrop');
 const { useUi } = await import('../../state/ui');
-const { registerDropTarget, timelineTargetAt, dropAutoscroll } = await import('../timeline/dropTarget');
+const { registerDropTarget, timelineTargetAt, timelineLaneAt, dropAutoscroll, dropRefusal } = await import(
+  '../timeline/dropTarget'
+);
+const { library } = await import('../../bridge/library');
 
 beforeEach(() => {
   useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
@@ -32,6 +38,8 @@ beforeEach(() => {
   vi.mocked(bridge.apply).mockReset().mockResolvedValue(fixturePatch(fixtureSnapshot()));
   vi.mocked(bridge.importMedia).mockReset();
   vi.mocked(bridge.undo).mockReset();
+  vi.mocked(library.addMusic).mockReset().mockResolvedValue(fixturePatch(fixtureSnapshot()));
+  vi.mocked(library.place).mockReset().mockResolvedValue(fixturePatch(fixtureSnapshot()));
 });
 
 describe('importing media', () => {
@@ -206,9 +214,40 @@ describe('where a drop lands on the timeline', () => {
     expect(at(3, 125, 'video')).toBeNull();
     expect(at(3, 160, 'image')).toBeNull();
     expect(at(3, 125, 'audio')).toMatchObject({ lane: 'sound' });
-    // The main track takes every kind; files from Finder (kind unknown) take the lane's.
-    expect(at(24, 80, 'audio')).toEqual({ lane: 'main', index: 1 });
+    // The main track takes videos, and files from Finder of mixed kinds; a sound or a picture goes on its own lane.
+    expect(at(24, 80, 'video')).toEqual({ lane: 'main', index: 1 });
+    expect(at(24, 80, null)).toEqual({ lane: 'main', index: 1 });
+    expect(at(24, 80, 'audio')).toBeNull();
+    expect(at(24, 80, 'image')).toBeNull();
     expect(at(3, 160, null)).toMatchObject({ lane: 'sound' });
+  });
+
+  it('let go over a lane that won’t take it, media says which lane does', () => {
+    useUi.setState({ pxPerSecond: 10, snapping: false });
+    const scroller = lanes();
+    registerDropTarget(
+      (cx, cy, kind) => timelineTargetAt(scroller, 20, cx, cy, kind),
+      scroller,
+      (cx, cy) => timelineLaneAt(scroller, 20, cx, cy),
+    );
+    expect(dropRefusal(x(3), 80, 'image')).toBe('Pictures go on the Overlays lane.');
+    expect(dropRefusal(x(3), 125, 'image')).toBe('Pictures go on the Overlays lane.');
+    expect(dropRefusal(x(3), 30, 'audio')).toBe('Sounds go on the Sounds or Music lane.');
+    expect(dropRefusal(x(3), 80, 'audio')).toBe('Sounds go on the Sounds or Music lane.');
+    expect(dropRefusal(x(3), 160, 'video')).toBe('Videos go on the Video or Overlays lane.');
+    // Where it lands, off the lanes, or a kind not known: nothing to say.
+    expect(dropRefusal(x(3), 30, 'image')).toBeNull();
+    expect(dropRefusal(x(3), 250, 'image')).toBeNull();
+    expect(dropRefusal(x(3), 80, null)).toBeNull();
+  });
+
+  it('Finder files name their kind by extension: one kind, or none when mixed', async () => {
+    const { kindOfPaths } = await import('../timeline/dropTarget');
+    expect(kindOfPaths(['/a.PNG', '/b.heic'])).toBe('image');
+    expect(kindOfPaths(['/song.mp3'])).toBe('audio');
+    expect(kindOfPaths(['/clip.mov', '/loop.gif'])).toBe('video');
+    expect(kindOfPaths(['/clip.mov', '/song.mp3'])).toBeNull();
+    expect(kindOfPaths(['/notes.txt'])).toBeNull();
   });
 
   it('a picture dropped on the Overlays lane while its tracks are all locked goes on a new track, never a locked one', async () => {
@@ -222,10 +261,55 @@ describe('where a drop lands on the timeline', () => {
     const logo: Asset = { ...snapshot.project.assets.find((a) => a.kind === 'image')!, id: 'n', path: '/n.png' };
     vi.mocked(bridge.importMedia).mockResolvedValue({ assets: [logo], skipped: [] });
     await importFiles(['/n.png'], target);
+    // Placed by Rust as the "+" places a picture, the file coming in with it, on no named track: never the locked one.
+    await vi.waitFor(() => expect(library.place).toHaveBeenCalledTimes(1));
+    expect(library.place).toHaveBeenCalledWith([{ type: 'file', asset: logo }], 3_000_000, { type: 'auto' });
+    expect(bridge.apply).not.toHaveBeenCalled();
+  });
+
+  it('several files let go on the Music lane: the first sound is music from there, the rest go to the library', async () => {
+    useUi.setState({ pxPerSecond: 10, snapping: false });
+    const { assets } = fixtureSnapshot().project;
+    const song: Asset = { ...assets.find((a) => a.kind === 'audio')!, id: 'lofi', path: '/lofi.mp3', name: 'lofi.mp3' };
+    const pop: Asset = { ...song, id: 'pop', path: '/pop.wav', name: 'pop.wav', durationUs: 400_000 };
+    const sticker: Asset = { ...assets.find((a) => a.kind === 'image')!, id: 'st', path: '/st.png', name: 'st.png' };
+    vi.mocked(bridge.importMedia).mockResolvedValue({ assets: [song, pop, sticker], skipped: [] });
+    await importFiles(['/lofi.mp3', '/pop.wav', '/st.png'], {
+      lane: 'sound',
+      trackId: null,
+      atUs: 6_000_000,
+      row: 'music',
+    });
     await vi.waitFor(() => expect(bridge.apply).toHaveBeenCalledTimes(1));
-    const ops = vi.mocked(bridge.apply).mock.calls[0][0].ops;
-    // Placed by the model on a track that takes it (a new one here), never on the locked overlay track.
-    expect(ops).toMatchObject([{ type: 'addAssets' }, { type: 'addItem', track: { type: 'auto' } }]);
+    expect(library.addMusic).toHaveBeenCalledWith({ type: 'file', asset: song }, 6_000_000);
+    // In the same turn, after the music: the others where Add files puts them (the library).
+    const tx = vi.mocked(bridge.apply).mock.calls[0][0];
+    expect(tx.ops).toEqual([{ type: 'addAssets', assets: [pop, sticker] }]);
+    expect(vi.mocked(library.addMusic).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(bridge.apply).mock.invocationCallOrder[0],
+    );
+    await vi.waitFor(() =>
+      expect(useToasts.getState().toasts.map((toast) => toast.text)).toContain(
+        'Added lofi.mp3 as music, 2 files to the library',
+      ),
+    );
+  });
+
+  it('a Finder drop for another project, or one the close gave up on, places nothing, music included', async () => {
+    const { assets } = fixtureSnapshot().project;
+    const song: Asset = { ...assets.find((a) => a.kind === 'audio')!, id: 'lofi', path: '/lofi.mp3', name: 'lofi.mp3' };
+    let answer!: (value: { assets: Asset[]; skipped: [] }) => void;
+    vi.mocked(bridge.importMedia).mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const importing = importFiles(['/lofi.mp3'], { lane: 'sound', trackId: null, atUs: 0, row: 'music' });
+    // Another project opened while the files were read.
+    const other = fixtureSnapshot();
+    other.project.id = 'other';
+    useProject.setState({ snapshot: other });
+    answer({ assets: [song], skipped: [] });
+    await importing;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(library.addMusic).not.toHaveBeenCalled();
+    expect(bridge.apply).not.toHaveBeenCalled();
   });
 
   it('follows the playhead as it plays, with the hour’s edges built once per revision', () => {

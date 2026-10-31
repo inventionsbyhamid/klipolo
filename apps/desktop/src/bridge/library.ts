@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import type { DropOnto } from '../bindings/DropOnto';
 import type { ItemPatch } from '../bindings/ItemPatch';
 import type { MediaSource } from '../bindings/MediaSource';
 import type { PackItem } from '../bindings/PackItem';
@@ -20,6 +21,9 @@ export const library = {
     call<SnapshotPatch>('media_add_sound', { source, atUs, ...applyBase() }),
   addImage: (source: MediaSource, atUs: number) =>
     call<SnapshotPatch>('media_add_image', { source, atUs, ...applyBase() }),
+  /** Sounds and pictures let go on the timeline: one after another from `atUs`, on the track `onto` names. */
+  place: (sources: MediaSource[], atUs: number, onto: DropOnto) =>
+    call<SnapshotPatch>('media_place', { sources, atUs, onto, ...applyBase() }),
   addText: (kind: TextKind, atUs: number, text: string | null = null) =>
     call<SnapshotPatch>('media_add_text', { kind, atUs, text, ...applyBase() }),
   updateItem: (id: string, patch: ItemPatch, label: string) =>

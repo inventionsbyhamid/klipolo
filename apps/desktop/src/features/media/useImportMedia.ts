@@ -1,19 +1,21 @@
 import { plural, t } from '@lingui/core/macro';
 import { useCallback } from 'react';
 import type { Asset } from '../../bindings/Asset';
+import type { Op } from '../../bindings/Op';
+import type { Project } from '../../bindings/Project';
 import type { SkippedFile } from '../../bindings/SkippedFile';
+import type { SnapshotPatch } from '../../bindings/SnapshotPatch';
 import { bridge } from '../../bridge/commands';
+import { library } from '../../bridge/library';
 import { errorMessage } from '../../lib/errors';
 import { placementOps } from '../../lib/placement';
 import { flushBursts } from '../../state/bursts';
 import { afterCommits, beginCommit, keepAtClose } from '../../state/commitQueue';
-import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { toast } from '../../state/toasts';
 import { useUi, type LibraryTab } from '../../state/ui';
 import { dropAllOps, type DropTarget } from '../timeline/drops';
-import { isMusicTarget } from './addMedia';
-import { addMusic } from './place';
+import { dropOnto, dropUs, isMusicTarget } from './place';
 
 /** A sound at least this long is music in the Library; shorter ones are sound effects. */
 export const MUSIC_MIN_US = 15_000_000;
@@ -109,12 +111,75 @@ function sayAdded(count: number, clips: boolean, libraryOnly: boolean) {
   });
 }
 
+/** "Added lofi.mp3 as music", and where the other files dropped with it went. */
+function sayMusicAdded(song: Asset, rest: Asset[]) {
+  const name = song.name;
+  const others = rest.length;
+  const text =
+    others === 0
+      ? t({ id: 'media.added.music.only', message: `Added ${name} as music` })
+      : rest.every((a) => a.kind !== 'video')
+        ? t({
+            id: 'media.added.music.library',
+            message: plural(others, {
+              one: `Added ${name} as music, # file to the library`,
+              other: `Added ${name} as music, # files to the library`,
+            }),
+            comment: '{name} is the file let go on the Music lane; the others dropped with it went to the Library',
+          })
+        : t({
+            id: 'media.added.music.more',
+            message: plural(others, {
+              one: `Added ${name} as music and # more file`,
+              other: `Added ${name} as music and # more files`,
+            }),
+            comment: '{name} is the file let go on the Music lane; the others went where Add files puts them',
+          });
+  toast.info(text, { done: true });
+}
+
 /**
- * Imports files and places them, as one undo step labelled "Import media": `paths` (dropped from Finder), or what the
- * person picks in the file picker (null). With a `target` (files dropped on the timeline) they land there, in order
- * (`dropAllOps`), a sound let go on the Music lane as music that fits the video; without, as the Add button places
- * them: videos at the end of the main track in the order given, sounds and pictures into the library (its tab opens),
- * never the main track. Skipped files are named in one toast. The placing waits for any
+ * The undo steps that place freshly imported `assets`, each sent at the placing's turn, one after another: `music` (a
+ * sound let go on the Music lane) as music from there; then, let go on another lane (`target`), the videos as
+ * `dropAllOps` puts them and the sounds and pictures as the library's "+" does (`library.place`, on the track let go
+ * on); with no lane, all of them where the Add button puts them (`placementOps`).
+ */
+function placeSteps(
+  project: Project,
+  assets: Asset[],
+  target: DropTarget | null,
+  music: { song: Asset; target: DropTarget } | null,
+): (() => Promise<boolean>)[] {
+  const send = (task: () => Promise<SnapshotPatch>) => () => useProject.getState().send(task);
+  const apply = (ops: Op[]) => () =>
+    ops.length === 0 ? Promise.resolve(true) : useProject.getState().apply('media.import', ops);
+  const steps: (() => Promise<boolean>)[] = [];
+  if (music) {
+    const from = dropUs(project, music.target);
+    steps.push(send(() => library.addMusic({ type: 'file', asset: music.song }, from)));
+  }
+  if (!target) {
+    if (assets.length > 0) steps.push(apply(placementOps(assets)));
+    return steps;
+  }
+  const videos = assets.filter((a) => a.kind === 'video');
+  const others = assets.filter((a) => a.kind !== 'video');
+  if (videos.length > 0) steps.push(apply(dropAllOps(project, videos, target, project.settings.fps)));
+  if (others.length > 0) {
+    const at = dropUs(project, target);
+    const onto = dropOnto(target);
+    steps.push(send(() => library.place(others.map((asset) => ({ type: 'file', asset })), at, onto)));
+  }
+  return steps;
+}
+
+/**
+ * Imports files and places them (`placeSteps`): `paths` (dropped from Finder), or what the person picks in the file
+ * picker (null). With a `target` (files dropped on the timeline) they land there, in order: videos as `dropAllOps`
+ * puts them, sounds and pictures as the library's "+" does, and a sound let go on the Music lane as music that fits the
+ * video (the rest of that drop going where the Add button puts it); without, as the Add button places them: videos at
+ * the end of the main track in the order given, sounds and pictures into the library (its tab opens), never the main
+ * track. Skipped files are named in one toast. The placing waits for any
  * commit in flight and builds on the project it left. It is kept for the close from the moment it is asked for: a
  * close or quit while the files are read waits for the placing, in its turn.
  */
@@ -139,49 +204,45 @@ export async function importFiles(paths: string[] | null, target: DropTarget | n
     }
     const { assets } = picked;
     if (assets.length === 0) return;
-    // Let go on the Music lane: the first sound is music that fits the video (one step, the file coming in with it).
+    // Let go on the Music lane: the first sound is music that fits the video, and the rest go where the Add button puts
+    // them. Elsewhere on the timeline videos go in as dropped there, and sounds and pictures as the "+" places them.
     const song = target && isMusicTarget(target) ? assets.find((a) => a.kind === 'audio') : undefined;
-    if (song && target?.lane === 'sound') {
-      await addMusic({ type: 'file', asset: song }, target.atUs);
-      return;
-    }
+    const rest = song ? assets.filter((a) => a !== song) : assets;
+    const lane = song ? null : target;
     // What goes to the library shows there: its tab opens.
-    const shelved = assets.find((a) => a.kind !== 'video');
-    if (!target && shelved) useUi.getState().setLibraryTab(tabOf(shelved));
+    const shelved = rest.find((a) => a.kind !== 'video');
+    if (!lane && shelved) useUi.getState().setLibraryTab(tabOf(shelved));
     placing = true;
     // What is still settling goes in first, so the placing builds on it.
     flushBursts();
     afterCommits(
       () => {
-        try {
-          // The close gave up on it: it never goes in after.
-          if (hold?.dropped) return;
-          // Not into another project the person opened while the files were read.
-          const snapshot = useProject.getState().snapshot;
-          if (!snapshot || snapshot.readOnly || snapshot.project.id !== projectId) return;
-          const { project } = snapshot;
-          const ops = target
-            ? dropAllOps(project, assets, target, project.settings.fps)
-            : placementOps(assets, project, usePlayback.getState().playheadUs);
-          if (ops.length === 0) return;
-          // It holds the commit queue until it lands, so an edit made meanwhile builds on the files placed.
-          const end = beginCommit();
-          void useProject
-            .getState()
-            .apply(label, ops)
-            .then(
-              (ok) =>
-                ok &&
-                sayAdded(
-                  assets.length,
-                  assets.every((a) => a.kind === 'video'),
-                  !target && assets.every((a) => a.kind !== 'video'),
-                ),
-            )
-            .finally(end);
-        } finally {
+        if (hold) hold.started = true;
+        // The close gave up on it: it never goes in after.
+        if (hold?.dropped) return hold.release();
+        // Not into another project the person opened while the files were read.
+        const snapshot = useProject.getState().snapshot;
+        if (!snapshot || snapshot.readOnly || snapshot.project.id !== projectId) return hold?.release();
+        const { project } = snapshot;
+        const steps = placeSteps(project, rest, lane, song && target ? { song, target } : null);
+        if (steps.length === 0) return hold?.release();
+        // It holds the commit queue until every step lands, so an edit made meanwhile builds on the files placed.
+        const end = beginCommit();
+        void (async () => {
+          let ok = true;
+          for (const step of steps) ok = (await step().catch(() => false)) && ok;
+          if (!ok) return;
+          if (song) sayMusicAdded(song, rest);
+          else
+            sayAdded(
+              assets.length,
+              assets.every((a) => a.kind === 'video'),
+              !target && assets.every((a) => a.kind !== 'video'),
+            );
+        })().finally(() => {
+          end();
           hold?.release();
-        }
+        });
       },
       { kept: hold },
     );

@@ -137,12 +137,12 @@ describe('placement', () => {
     hasAudio: false,
   };
   it('audio_and_images_go_to_the_library_not_the_main_track', () => {
-    const ops = placementOps([video, song, logo], fixtureProject(), 2 * S);
+    const ops = placementOps([video, song, logo]);
     expect(ops).toHaveLength(2);
     expect(ops[0]).toMatchObject({ type: 'addAssets', assets: [video, song, logo] });
     expect(ops[1]).toMatchObject({ type: 'insertClip', index: null, clip: { sourceOutUs: 8 * S } });
     // A sound and a picture alone: into the project's files, nothing on the timeline.
-    expect(placementOps([song, logo], fixtureProject(), 0)).toEqual([
+    expect(placementOps([song, logo])).toEqual([
       { type: 'addAssets', assets: [song, logo] },
     ]);
   });
