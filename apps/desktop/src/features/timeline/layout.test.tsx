@@ -92,6 +92,11 @@ describe('the ruler row over the lanes', () => {
   const rule = (selector: string) =>
     new RegExp(`(?:^|\\n)${selector.replace(/\./g, '\\.')} \\{([^}]*)\\}`).exec(appCss)![1];
 
+  it("stays over the lanes' sticky gutters as they scroll under it, its corner included", () => {
+    const z = (selector: string) => Number(/z-index: (\d+);/.exec(rule(selector))![1]);
+    expect(z('.tl-head')).toBeGreaterThan(z('.tl-gutter'));
+  });
+
   it("draws the playhead's stem under its head, since the sticky ruler row covers the line there", () => {
     const head = rule('.tl-playhead.is-head');
     // The head spans the ruler's height as the line does (no height of its own), and its shape runs on as a 2 px stem

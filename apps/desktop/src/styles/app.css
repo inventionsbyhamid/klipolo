@@ -812,11 +812,12 @@
 }
 
 /* The ruler and the playhead's head stay at the top of the lanes' scroller when the lanes scroll (three overlay rows in
-   a short window), over the lanes and the marks that pass under them. */
+   a short window), over the lanes, their sticky gutters (z-index 10) and the marks that pass under them. The ruler
+   draws its own part of the playhead and the snap guide. */
 .tl-head {
   position: sticky;
   top: 0;
-  z-index: 6;
+  z-index: 11;
   display: flex;
   flex: none;
   height: 24px;
