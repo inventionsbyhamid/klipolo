@@ -85,11 +85,11 @@ async fn every_case_is_judged_and_the_cost_added_up_without_the_key() {
     assert!(stdout.contains("FAIL vertical"), "{stdout}");
     assert!(stdout.contains("     reply: Undone."), "{stdout}");
     assert!(
-        stdout.contains("1/18 passed (target 16); 18 model calls; total $0.03"),
+        stdout.contains("1/22 passed (target 20); 22 model calls; total $0.03"),
         "{stdout}"
     );
     assert!(!stdout.contains(KEY) && !stderr.contains(KEY));
-    assert_eq!(server.received_requests().await.unwrap().len(), 18);
+    assert_eq!(server.received_requests().await.unwrap().len(), 22);
 
     // One case on its own must pass.
     let out = run(&env, &["--only", "undo"]).await;
@@ -180,6 +180,24 @@ fn ideal(message: &str) -> Vec<(&'static str, Value)> {
         "remove pauses over a second and make it square" => vec![pauses, square],
         "blur the license plate" => vec![("blurObjects", json!({"description": "license plate"}))],
         "undo that" => vec![("undo", json!({}))],
+        // The media cases: the person's lofi file from the library, a title card of their words, a whoosh at each
+        // scene cut, and a sticker when she floats.
+        "add lofi as background music, quieter when I talk" => vec![(
+            "addMusic",
+            json!({"file": "lofi-beat.mp3", "volume": null, "duck": true, "atSec": 0.0}),
+        )],
+        "put a title 'Day 1 in Lisbon' for 3 seconds at the start" => vec![(
+            "addText",
+            json!({"text": "Day 1 in Lisbon", "preset": "title-card", "atSec": 0.0, "durationSec": 3.0}),
+        )],
+        "a whoosh at every topic change" => vec![(
+            "addSound",
+            json!({"name": "Whoosh", "atSec": [12.8, 23.0, 51.5, 62.5, 85.5, 95.5, 149.5]}),
+        )],
+        "add a sticker of a paper plane in the top right when she mentions flying" => vec![(
+            "makeSticker",
+            json!({"prompt": "paper plane", "position": "top-right", "atSec": 67.0, "durationSec": null}),
+        )],
         other => panic!("no ideal answer for {other:?}"),
     }
 }
@@ -204,10 +222,10 @@ async fn ideal_answers_pass_every_case() {
     ];
     let out = run(&env, &[]).await;
     let (stdout, stderr) = text(&out);
-    assert!(stdout.contains("18/18 passed"), "{stdout}{stderr}");
+    assert!(stdout.contains("22/22 passed"), "{stdout}{stderr}");
     assert_eq!(out.status.code(), Some(0));
     // One call each: clip A's missing filler words are told to the person, with no refusal round.
-    assert!(stdout.contains("18 model calls"), "{stdout}");
+    assert!(stdout.contains("22 model calls"), "{stdout}");
     assert!(
         stdout.contains("     reply: There are no filler words to remove."),
         "{stdout}"
