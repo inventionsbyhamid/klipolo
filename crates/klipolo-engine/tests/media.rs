@@ -284,7 +284,7 @@ fn an_index_in_an_older_format_is_written_again_once() {
     wait_until(|| keys.exists() && settled(&store));
     let magic = |bytes: &[u8]| bytes[..8].to_vec();
     assert_eq!(magic(&std::fs::read(&keys).unwrap()), b"KLPOKEY3");
-    // The same keyframes in the previous format.
+    // The same keyframes under another build's magic.
     let mut old = std::fs::read(&keys).unwrap();
     old[..8].copy_from_slice(b"XXXXKEY3");
     std::fs::write(&keys, &old).unwrap();
