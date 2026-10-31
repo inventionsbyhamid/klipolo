@@ -1,12 +1,12 @@
 import type { Anchor } from '../../bindings/Anchor';
-import type { BoxN } from '../../bindings/BoxN';
 import type { FormatKind } from '../../bindings/FormatKind';
 import type { Layout } from '../../bindings/Layout';
 import type { Motion } from '../../bindings/Motion';
 import type { TextStyle } from '../../bindings/TextStyle';
 import { builtinId } from '../../lib/contrib';
 import { layoutPatchFor } from '../../lib/geometry';
-import { anchorForRect, resolveRect } from '../../lib/layout';
+import { FORMAT_SIZE, resolveRect } from '../../lib/layout';
+import { placedAt } from '../../lib/placement';
 import { safeRect } from '../../lib/safeAreas';
 
 /** How long an animation picked in the inspector runs (0.3 s), at most the layer's length. */
@@ -78,29 +78,8 @@ export function backdropStyle(style: TextStyle, backdrop: Backdrop): TextStyle {
   return { ...style, background: null, shadow: false };
 }
 
-/** Kept clear around a layer placed at a grid position: 4 % of the shorter side. */
-const MARGIN = 0.04;
-
-/**
- * The box `rect` (in `format`) moved to grid position `anchor`, `MARGIN` in from the edges (in 9:16, from the safe
- * area's edges), its size kept.
- */
-export function placedAt(rect: BoxN, anchor: Anchor, format: FormatKind, canvas: [number, number]): BoxN {
-  const [w, h] = canvas;
-  const short = Math.min(w, h);
-  const area = safeRect(format, 'all') ?? { x: 0, y: 0, w: 1, h: 1 };
-  const mx = (MARGIN * short) / w;
-  const my = (MARGIN * short) / h;
-  const left = area.x + mx;
-  const top = area.y + my;
-  const right = area.x + area.w - mx - rect.w;
-  const bottom = area.y + area.h - my - rect.h;
-  const col = anchor.endsWith('Left') ? 0 : anchor.endsWith('Right') ? 2 : 1;
-  const row = anchor.startsWith('top') ? 0 : anchor.startsWith('bottom') ? 2 : 1;
-  const x = col === 0 ? left : col === 2 ? right : area.x + (area.w - rect.w) / 2;
-  const y = row === 0 ? top : row === 2 ? bottom : area.y + (area.h - rect.h) / 2;
-  return { ...rect, x, y };
-}
+/** The Position grid's places (`placedAt`) live in `lib/placement`, which places a new video layer at one too. */
+export { placedAt };
 
 /** The layout placed at grid position `anchor` in `format` (an override in a format other than the primary). */
 export function positionedLayout(
@@ -115,9 +94,39 @@ export function positionedLayout(
   return format === primary ? { ...placed, anchor } : placed;
 }
 
-/** The grid position a layout's box is nearest in `format`. */
+const GRID: Anchor[][] = [
+  ['topLeft', 'topCenter', 'topRight'],
+  ['middleLeft', 'center', 'middleRight'],
+  ['bottomLeft', 'bottomCenter', 'bottomRight'],
+];
+/** Within this of a grid place (a share of the frame), a box is at it. */
+const AT = 1e-4;
+
+/**
+ * Which of an axis's three places (start, middle, end) a box at `at` is at; else the third of the area its centre
+ * (`centre`, a share of the area) is in. A box as long as the area less the margins is at all three: the middle.
+ */
+function bandOf(at: number, places: [number, number, number], centre: number): 0 | 1 | 2 {
+  const index = [1, 0, 2].find((k) => Math.abs(places[k] - at) < AT);
+  if (index !== undefined) return index as 0 | 1 | 2;
+  return centre < 1 / 3 ? 0 : centre < 2 / 3 ? 1 : 2;
+}
+
+/**
+ * The grid position a layout's box is at in `format`: each way, the place `placedAt` puts it (so a layer placed with
+ * the grid, or a new video layer, reads where it was put, in 9:16 too), else the third of the area its centre is in
+ * (in 9:16, of the safe area, where the grid's places are).
+ */
 export function positionOf(layout: Layout, format: FormatKind, primary: FormatKind): Anchor {
-  return anchorForRect(resolveRect(layout, primary, format));
+  const rect = resolveRect(layout, primary, format);
+  const canvas = FORMAT_SIZE[format];
+  const [start, middle, end] = (['topLeft', 'center', 'bottomRight'] as const).map((cell) =>
+    placedAt(rect, cell, format, canvas),
+  );
+  const area = safeRect(format, 'all') ?? { x: 0, y: 0, w: 1, h: 1 };
+  const col = bandOf(rect.x, [start.x, middle.x, end.x], (rect.x + rect.w / 2 - area.x) / area.w);
+  const row = bandOf(rect.y, [start.y, middle.y, end.y], (rect.y + rect.h / 2 - area.y) / area.h);
+  return GRID[row][col];
 }
 
 /** "0:03.0", "1:05", "3.5" (seconds) or "1:02:03" as microseconds; null when it isn't a time. */

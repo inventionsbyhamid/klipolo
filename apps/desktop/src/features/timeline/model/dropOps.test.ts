@@ -27,6 +27,56 @@ describe('dropping media', () => {
     });
   });
 
+  it('a video layer comes in 40 % of the frame wide, its own shape, in the bottom right of every format', () => {
+    // The b-roll is 1920 × 1080: in 16:9, 40 % of the width and of the height, 4 % of the short side in from the right
+    // and bottom edges. It is drawn contained in its box, so a box of its own shape shows all of it and nothing else.
+    const [op] = dropOps(p, asset('broll'), { lane: 'picture', trackId: null, atUs: 0 }, 30);
+    const layout = op.type === 'addItem' ? op.item.layout : null;
+    const margin = 0.04 * 1080;
+    expect(layout?.anchor).toBe('bottomRight');
+    expect(layout?.rect.w).toBeCloseTo(0.4);
+    expect(layout?.rect.h).toBeCloseTo(0.4);
+    expect(layout?.rect.x).toBeCloseTo(1 - 0.4 - margin / 1920);
+    expect(layout?.rect.y).toBeCloseTo(1 - 0.4 - margin / 1080);
+    // Its own place in 9:16: 40 % wide, inside what the apps leave clear (the "all" safe area: x 6 % to 87 %, y 14 % to
+    // 74 %), its bottom right corner the margin in from that area's.
+    const portrait = layout?.overrides.portrait;
+    expect(portrait?.w).toBeCloseTo(0.4);
+    expect(portrait?.h).toBeCloseTo((0.4 * 1080 * (1080 / 1920)) / 1920);
+    expect(portrait!.x + portrait!.w).toBeCloseTo(0.87 - margin / 1080);
+    expect(portrait!.y + portrait!.h).toBeCloseTo(0.74 - margin / 1920);
+    // In 1:1, 40 % wide too; the primary format has no override of its own.
+    expect(layout?.overrides.square?.w).toBeCloseTo(0.4);
+    expect(layout?.overrides.landscape).toBeUndefined();
+  });
+
+  it('a tall video layer is 40 % of the frame high, and a 9:16 project places it inside the safe area', () => {
+    const tall = { ...asset('broll'), id: 'phone', width: 1080, height: 1920 };
+    const [op] = dropOps(p, tall, { lane: 'picture', trackId: null, atUs: 0 }, 30);
+    const rect = op.type === 'addItem' ? op.item.layout.rect : null;
+    // 40 % of 1080 px high, 9:16 wide: 432 × 243 px.
+    expect(rect?.h).toBeCloseTo(0.4);
+    expect(rect?.w).toBeCloseTo(243 / 1920);
+    const q = fixtureProject();
+    q.settings = { ...q.settings, formats: ['portrait'], primaryFormat: 'portrait' };
+    const [inPortrait] = dropOps(q, asset('broll'), { lane: 'picture', trackId: null, atUs: 0 }, 30);
+    const layout = inPortrait.type === 'addItem' ? inPortrait.item.layout : null;
+    expect(layout?.rect.w).toBeCloseTo(0.4);
+    expect(layout!.rect.x + layout!.rect.w).toBeCloseTo(0.87 - (0.04 * 1080) / 1080);
+    expect(layout!.rect.y + layout!.rect.h).toBeCloseTo(0.74 - (0.04 * 1080) / 1920);
+    expect(layout?.overrides.portrait).toBeUndefined();
+    expect(layout?.overrides.landscape?.w).toBeCloseTo(0.4);
+  });
+
+  it('a picture keeps its place: medium and centred', () => {
+    const [op] = dropOps(p, asset('logo'), { lane: 'picture', trackId: null, atUs: 0 }, 30);
+    const layout = op.type === 'addItem' ? op.item.layout : null;
+    expect(layout?.anchor).toBe('center');
+    expect(layout?.rect.x).toBeCloseTo(0.3);
+    expect(layout?.rect.w).toBeCloseTo(0.4);
+    expect(layout?.overrides).toEqual({});
+  });
+
   it('an image dropped on the main track becomes a 5 s layer there', () => {
     const [op] = dropOps(p, asset('logo'), { lane: 'main', index: 1 }, 30);
     expect(op).toMatchObject({
