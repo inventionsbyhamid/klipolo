@@ -144,7 +144,7 @@ export function listenForDevKeys(): () => void {
     } else if (e.code === 'KeyW') {
       e.preventDefault();
       speech.devSample().then(
-        (clips) => toast.info(`Sample words for ${clips} clips.`),
+        (clips) => toast.info(clips === 1 ? 'Sample words for 1 clip.' : `Sample words for ${clips} clips.`),
         (error: unknown) => toast.error(errorMessage(error)),
       );
     }
