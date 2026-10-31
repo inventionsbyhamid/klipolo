@@ -3,17 +3,21 @@
 //! the worker's launch run on a blocking thread, never the page's.
 //!
 //! Event: `recorder-event` (`RecorderEvent`: the worker's `CaptureEvent`s and the recorder's own `Failed`, notes and
-//! `State Idle`, each with its take's id).
+//! `State Idle`, each with its take's id; the Record dialog's previews' `Meter` and `Failed`, with the preview's id).
+
+use std::sync::Arc;
 
 use klipolo_app::export::ExportState;
 use klipolo_capture::preflight::RecorderSetup;
 use klipolo_capture::protocol::Command;
 use klipolo_model::coded::Said;
+use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Manager};
 
+use super::frames::{AppOut, PreviewOut};
 use super::permissions::open_url;
 use super::state::RecorderState;
-use super::types::{ArmOptions, ArmedTake, PrivacyPage, StoppedTake};
+use super::types::{ArmOptions, ArmedTake, Previews, PrivacyPage, StoppedTake};
 use super::words;
 use crate::project::ProjectSessionState;
 
@@ -89,6 +93,35 @@ pub async fn recorder_reopen(app: AppHandle) -> Result<(), Said> {
 pub async fn recorder_open_privacy(app: AppHandle, page: PrivacyPage) -> Result<(), Said> {
     blocking(app, move |_, state| {
         state.open_privacy(page, &open_url).map_err(Said::Coded)
+    })
+    .await
+}
+
+/// The Record dialog's previews, started and stopped to match `want` while it is open and Klipolo is in front: frames
+/// over `frames` (`PreviewFrame`), the mic's peaks and a preview's end as `recorder-event`s with the preview's id
+/// (`PreviewId`). Screen and app pictures only while Screen Recording is allowed (`capture.permission.screen` otherwise,
+/// and the camera's and the mic's are set all the same); the camera and the mic only while allowed, or in the call the
+/// person's "Allow camera" or "Allow microphone" press makes (`want.ask`). `capture.busy` during a take, when every
+/// preview stops.
+#[tauri::command]
+pub async fn recorder_previews(
+    app: AppHandle,
+    want: Previews,
+    frames: Channel<InvokeResponseBody>,
+) -> Result<(), Said> {
+    let out: Arc<dyn PreviewOut> = Arc::new(AppOut::new(app.clone(), frames));
+    blocking(app, move |_, state| {
+        state.previews(&want, out).map_err(Said::Coded)
+    })
+    .await
+}
+
+/// Every preview of the Record dialog stops: it closed, Record was pressed, or the page went out of sight.
+#[tauri::command]
+pub async fn recorder_previews_off(app: AppHandle) -> Result<(), Said> {
+    blocking(app, |_, state| {
+        state.previews_off();
+        Ok(())
     })
     .await
 }

@@ -11,19 +11,23 @@
 //!   config from the person's options and the app's fixed choices.
 //! - **The permission steps** (`permissions`, `screen_reopen`): Allow screen recording, Reopen Klipolo and Open privacy
 //!   settings, each on the person's own press.
+//! - **The Record dialog's previews** (`previews`, `live_view`, `check`, `frames`): the live picture of the choice and
+//!   the camera, each in a worker of its own while the dialog is open, within the consent rules.
 //! - **A test run** (`KLIPOLO_TEST`): the recorder makes no backend and launches no worker; every command answers
 //!   "Recording is off in this test run." (`state`).
 
 mod active;
+mod check;
 pub mod commands;
 mod config;
 mod env;
 mod events;
-#[allow(dead_code, reason = "the preview commands come next")]
 mod frames;
 mod launch;
+mod live_view;
 mod outcomes;
 mod permissions;
+mod previews;
 mod screen_reopen;
 mod send;
 mod setup;
@@ -38,13 +42,21 @@ mod words;
 #[cfg(test)]
 mod test_launch;
 #[cfg(test)]
+mod test_previews;
+#[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_check;
+#[cfg(test)]
+mod tests_live_view;
+#[cfg(test)]
 mod tests_permissions;
 #[cfg(test)]
 mod tests_plan;
+#[cfg(test)]
+mod tests_previews;
 #[cfg(test)]
 mod tests_stop;
 #[cfg(test)]

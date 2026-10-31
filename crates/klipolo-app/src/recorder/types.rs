@@ -94,7 +94,6 @@ pub enum PrivacyPage {
 /// and stops its preview workers to match, within the consent rules: screen and app pictures only while Screen
 /// Recording is allowed, the camera and the mic only while allowed or on the person's own press (`ask`), and nothing
 /// during a take.
-#[allow(dead_code, reason = "the preview commands come next")]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -113,7 +112,6 @@ pub struct Previews {
 }
 
 /// Which picture a preview frame is (`PreviewFrame.kind`).
-#[allow(dead_code, reason = "the preview commands come next")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -128,7 +126,6 @@ pub enum PreviewKind {
 
 /// A preview frame's header. Each frame reaches the page over `recorder_previews`'s channel as raw bytes: the header's
 /// length in two bytes (big-endian), the header as UTF-8 JSON, then the JPEG's own bytes (`frames::frame_message`).
-#[allow(dead_code, reason = "the preview commands come next")]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -145,7 +142,6 @@ pub struct PreviewFrame {
 
 /// The `recorder-event` id of a preview's own events: the mic's peaks (`Meter`), and why a preview stopped by itself
 /// (`Failed`). Never a take's id.
-#[allow(dead_code, reason = "the preview commands come next")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub enum PreviewId {
@@ -159,7 +155,6 @@ pub enum PreviewId {
     Mic,
 }
 
-#[allow(dead_code, reason = "the preview commands come next")]
 impl PreviewId {
     /// The id as `RecorderEvent.take` carries it.
     pub fn as_str(self) -> &'static str {

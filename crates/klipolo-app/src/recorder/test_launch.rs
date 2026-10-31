@@ -1,6 +1,6 @@
 //! The recorder tests' fake worker: a pair of in-memory pipes the test drives. Its stdout gives the lines the test
 //! emits, then the end with the exit code the test (or a hard stop) gives; its stdin collects the commands the recorder
-//! sends. No process starts.
+//! sends. Every launch and command is also kept in one log, in order, with the worker it went to. No process starts.
 
 use std::io::{self, BufRead, Read, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -18,11 +18,21 @@ struct Far {
     code: Option<i32>,
 }
 
+/// A launch or a command, as it happened.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum Logged {
+    /// A worker was launched with these arguments.
+    Spawn(Vec<String>),
+    /// Worker `.0` (in launch order, from 0) was sent a command.
+    Command(usize, Command),
+}
+
 #[derive(Default)]
 pub(super) struct Launched {
     spawned: Mutex<Vec<Vec<String>>>,
     workers: Mutex<Vec<Arc<Mutex<Far>>>>,
     commands: Arc<Mutex<Vec<Command>>>,
+    log: Arc<Mutex<Vec<Logged>>>,
     kills: Mutex<Vec<bool>>,
     /// Lines and exits sent to the recorder (`Fixture::settle` waits for it to handle as many).
     pub(super) sent: AtomicU64,
@@ -52,17 +62,52 @@ impl FakeLaunch {
         self.0.kills.lock().unwrap().clone()
     }
 
+    /// Every launch and command so far, in order.
+    pub(super) fn log(&self) -> Vec<Logged> {
+        self.0.log.lock().unwrap().clone()
+    }
+
+    /// The commands worker `worker` was sent, in order.
+    pub(super) fn commands_to(&self, worker: usize) -> Vec<Command> {
+        (self.log().into_iter())
+            .filter_map(|l| match l {
+                Logged::Command(to, cmd) if to == worker => Some(cmd),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The latest worker launched with `arg` among its arguments, in launch order from 0.
+    pub(super) fn worker_with(&self, arg: &str) -> Option<usize> {
+        let spawned = self.0.spawned.lock().unwrap();
+        spawned
+            .iter()
+            .rposition(|args| args.iter().any(|a| a == arg))
+    }
+
     fn last(&self) -> Arc<Mutex<Far>> {
         (self.0.workers.lock().unwrap().last())
             .cloned()
             .expect("a worker was launched")
     }
 
+    fn nth(&self, worker: usize) -> Arc<Mutex<Far>> {
+        self.0.workers.lock().unwrap()[worker].clone()
+    }
+
     /// The latest worker says `ev`.
     pub(super) fn emit(&self, ev: Event) {
-        let mut line = serde_json::to_vec(&ev).unwrap();
+        self.say(&self.last(), &ev);
+    }
+
+    /// Worker `worker` says `ev`.
+    pub(super) fn emit_to(&self, worker: usize, ev: Event) {
+        self.say(&self.nth(worker), &ev);
+    }
+
+    fn say(&self, far: &Mutex<Far>, ev: &Event) {
+        let mut line = serde_json::to_vec(ev).unwrap();
         line.push(b'\n');
-        let far = self.last();
         let far = far.lock().unwrap();
         (far.lines.as_ref())
             .expect("the worker is running")
@@ -88,7 +133,16 @@ fn end(far: &Mutex<Far>, code: Option<i32>, sent: &AtomicU64) {
 
 impl Launch for FakeLaunch {
     fn spawn(&self, args: &[String]) -> io::Result<WorkerIo> {
-        self.0.spawned.lock().unwrap().push(args.to_vec());
+        let index = {
+            let mut spawned = self.0.spawned.lock().unwrap();
+            spawned.push(args.to_vec());
+            spawned.len() - 1
+        };
+        self.0
+            .log
+            .lock()
+            .unwrap()
+            .push(Logged::Spawn(args.to_vec()));
         let (tx, rx) = channel();
         let far = Arc::new(Mutex::new(Far {
             lines: Some(tx),
@@ -99,6 +153,8 @@ impl Launch for FakeLaunch {
         Ok(WorkerIo {
             stdin: Box::new(Commands {
                 to: self.0.commands.clone(),
+                log: self.0.log.clone(),
+                worker: index,
                 line: Vec::new(),
             }),
             stdout: Box::new(Lines {
@@ -122,6 +178,9 @@ impl Launch for FakeLaunch {
 /// A fake worker's stdin: the commands it reads.
 struct Commands {
     to: Arc<Mutex<Vec<Command>>>,
+    log: Arc<Mutex<Vec<Logged>>>,
+    /// Its worker, in launch order.
+    worker: usize,
     line: Vec<u8>,
 }
 
@@ -130,7 +189,9 @@ impl Write for Commands {
         self.line.extend_from_slice(buf);
         while let Some(at) = self.line.iter().position(|&b| b == b'\n') {
             let line: Vec<u8> = self.line.drain(..=at).collect();
-            let cmd = serde_json::from_slice(&line).expect("a command line");
+            let cmd: Command = serde_json::from_slice(&line).expect("a command line");
+            let logged = Logged::Command(self.worker, cmd.clone());
+            self.log.lock().unwrap().push(logged);
             self.to.lock().unwrap().push(cmd);
         }
         Ok(buf.len())

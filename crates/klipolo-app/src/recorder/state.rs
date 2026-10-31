@@ -18,6 +18,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use super::env::{Done, Env, Sink};
 use super::launch::{Launch, ProcessLaunch, WorkerIo};
 use super::permissions::{self, Open};
+use super::previews::PreviewWorkers;
 use super::setup::{self, Files, Probing, Shown};
 use super::take::Recorder;
 use super::types::{ArmOptions, ArmedTake, PrivacyPage, RecorderEvent, StoppedTake};
@@ -77,6 +78,8 @@ struct On {
     last_setup: Mutex<Option<Shown>>,
     /// One encoder probe at a time.
     probing: Mutex<()>,
+    /// The Record dialog's previews.
+    previews: Arc<PreviewWorkers>,
 }
 
 pub struct RecorderState {
@@ -101,6 +104,7 @@ impl RecorderState {
             make: parts.backend,
         });
         let placed = backend.clone();
+        let (launch, clock, read) = (parts.launch.clone(), parts.clock.clone(), backend.clone());
         let recorder = Recorder::new(Env {
             launch: parts.launch,
             clock: parts.clock,
@@ -110,6 +114,9 @@ impl RecorderState {
             place: Box::new(move || placed.get().caps().indicator),
             ticker: parts.ticker,
         });
+        let permissions = Box::new(move || read.get().permissions());
+        let previews =
+            PreviewWorkers::new(launch, clock, recorder.clone(), permissions, parts.ticker);
         Self {
             on: Some(On {
                 recorder,
@@ -120,6 +127,7 @@ impl RecorderState {
                 open_project: parts.open_project,
                 last_setup: Mutex::new(None),
                 probing: Mutex::new(()),
+                previews,
             }),
         }
     }
@@ -224,6 +232,11 @@ impl RecorderState {
     ) -> Result<(), Said> {
         let on = self.on()?;
         permissions::reopen(&on.recorder, on.files.as_ref(), exporting, flush, restart)
+    }
+
+    /// The Record dialog's previews (`previews`); `capture.error.testRun` in a test run.
+    pub(super) fn preview_workers(&self) -> Result<&Arc<PreviewWorkers>, CodedError> {
+        Ok(&self.on()?.previews)
     }
 
     /// A take is the recorder's, armed through saving.

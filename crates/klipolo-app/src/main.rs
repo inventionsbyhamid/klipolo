@@ -167,6 +167,8 @@ fn main() {
             recorder::commands::recorder_allow_screen,
             recorder::commands::recorder_reopen,
             recorder::commands::recorder_open_privacy,
+            recorder::commands::recorder_previews,
+            recorder::commands::recorder_previews_off,
         ])
         .build(tauri::generate_context!())
         .expect("Klipolo could not start");

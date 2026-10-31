@@ -35,6 +35,13 @@ impl Clock for FakeClock {
     }
 }
 
+impl FakeClock {
+    /// The clock moves `ms` milliseconds.
+    pub(super) fn add_ms(&self, ms: u64) {
+        self.0.fetch_add(ms * 1_000_000, Ordering::SeqCst);
+    }
+}
+
 /// What reached the page and the import.
 #[derive(Default)]
 pub(super) struct FakeSink {
@@ -188,8 +195,14 @@ pub(super) fn fixture() -> Fixture {
 
 /// A recorder on the fake computer `script` describes.
 pub(super) fn fixture_with(script: Script) -> Fixture {
+    fixture_changed(script, |_| {})
+}
+
+/// A recorder on the fake computer `script` describes, its parts changed by `change` first.
+pub(super) fn fixture_changed(script: Script, change: impl FnOnce(&mut Parts)) -> Fixture {
     let dir = tempfile::tempdir().unwrap();
-    let (parts, world) = world(dir.path(), script);
+    let (mut parts, world) = world(dir.path(), script);
+    change(&mut parts);
     Fixture {
         state: RecorderState::build(false, || parts),
         world,
