@@ -109,12 +109,19 @@ fn write_partial(partial: &Path, png: &[u8]) -> io::Result<()> {
 /// link (exFAT, FAT, some network shares) claims the name with a new empty file first, which fails just the same when
 /// the name is taken, and then moves the partial over that placeholder, which is its own.
 fn place(partial: &Path, folder: &Path, slug: &str) -> io::Result<PathBuf> {
-    place_with(&|from, to| fs::hard_link(from, to), partial, folder, slug)
+    place_with(
+        &|from, to| fs::hard_link(from, to),
+        &|from, to| fs::rename(from, to),
+        partial,
+        folder,
+        slug,
+    )
 }
 
-/// `place` with its link step given, so the way round a disk that can't link is tested too.
+/// `place` with its link and rename steps given, so the way round a disk that can't link is tested too.
 fn place_with(
     link: &dyn Fn(&Path, &Path) -> io::Result<()>,
+    rename: &dyn Fn(&Path, &Path) -> io::Result<()>,
     partial: &Path,
     folder: &Path,
     slug: &str,
@@ -125,8 +132,11 @@ fn place_with(
             Ok(()) => return Ok(target),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => continue,
             Err(_) => match File::create_new(&target) {
-                Ok(_placeholder) => {
-                    if let Err(e) = fs::rename(partial, &target) {
+                Ok(placeholder) => {
+                    // Closed before the move: a network share (SMB) can refuse to replace a file that is held open.
+                    // (`Ok(_)` wouldn't do: the match keeps an unmoved value alive until it ends.)
+                    drop(placeholder);
+                    if let Err(e) = rename(partial, &target) {
                         let _ = fs::remove_file(&target);
                         return Err(e);
                     }
@@ -152,6 +162,10 @@ mod tests {
     /// A disk that can't hard-link (exFAT, FAT, some network shares).
     fn no_link(_: &Path, _: &Path) -> io::Result<()> {
         Err(io::Error::new(ErrorKind::Unsupported, "no hard links here"))
+    }
+
+    fn moved(from: &Path, to: &Path) -> io::Result<()> {
+        fs::rename(from, to)
     }
 
     fn partial_with(folder: &Path, bytes: &[u8]) -> PathBuf {
@@ -192,7 +206,7 @@ mod tests {
         fs::write(dir.path().join("cup-1.png"), b"the person's own").unwrap();
         let partial = partial_with(dir.path(), b"new picture");
 
-        let placed = place_with(&no_link, &partial, dir.path(), "cup").unwrap();
+        let placed = place_with(&no_link, &moved, &partial, dir.path(), "cup").unwrap();
 
         assert_eq!(placed, dir.path().join("cup-2.png"));
         assert_eq!(
@@ -201,6 +215,34 @@ mod tests {
         );
         assert_eq!(fs::read(&placed).unwrap(), b"new picture");
         assert!(!partial.exists());
+    }
+
+    /// Whether this process holds `file` open (Linux: its open files are links in `/proc/self/fd`).
+    #[cfg(target_os = "linux")]
+    fn held_open(file: &Path) -> bool {
+        fs::read_dir("/proc/self/fd")
+            .unwrap()
+            .flatten()
+            .any(|fd| fs::read_link(fd.path()).is_ok_and(|target| target == file))
+    }
+
+    /// A network share (SMB) can refuse to replace a file someone holds open, so the placeholder that claims the name is
+    /// closed before the picture moves over it.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_placeholder_is_closed_before_the_picture_moves_over_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let partial = partial_with(dir.path(), b"new picture");
+        let open_at_rename = std::cell::Cell::new(None);
+        let rename = |from: &Path, to: &Path| {
+            open_at_rename.set(Some(held_open(to)));
+            fs::rename(from, to)
+        };
+
+        let placed = place_with(&no_link, &rename, &partial, dir.path(), "cup").unwrap();
+
+        assert_eq!(open_at_rename.get(), Some(false));
+        assert_eq!(fs::read(placed).unwrap(), b"new picture");
     }
 
     /// Two pictures saved at once with the same slug on a disk that can't link each get a name of their own: neither
@@ -218,7 +260,7 @@ mod tests {
                     let start = Arc::clone(&start);
                     std::thread::spawn(move || {
                         start.wait();
-                        place_with(&no_link, &partial, &folder, "cup").unwrap()
+                        place_with(&no_link, &moved, &partial, &folder, "cup").unwrap()
                     })
                 })
                 .collect();
