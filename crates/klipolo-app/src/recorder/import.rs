@@ -287,9 +287,9 @@ pub(super) fn after_landing(
 
 /// The take's project as it is now, open, for the page. Should the person have closed it, or opened another, while the
 /// take landed, it opens again (the open one saved and closed first, as for a take whose project isn't open when it
-/// lands), so a take that was added is never reported as not added. When it can't be opened:
-/// `capture.import.addedNotOpened`, "The recording was added to your project. Open the project from the start screen to
-/// see it."
+/// lands), so a take that was added is never reported as not added. Its file is read first, as then: one that holds
+/// another project by now is never opened in its place. When it can't be opened: `capture.import.addedNotOpened`, "The
+/// recording was added to your project. Open the project from the start screen to see it."
 pub(super) fn snapshot_after(
     sessions: &ProjectSessionState,
     landed: &Landed,
@@ -298,6 +298,14 @@ pub(super) fn snapshot_after(
         && snapshot.project.id == landed.project
     {
         return Ok(snapshot);
+    }
+    let not_opened = || CodedError::new("capture.import.addedNotOpened");
+    if !destination::holds(&landed.file, &landed.project) {
+        tracing::error!(
+            take = landed.recording_id,
+            "recorder: the take's project's file holds another project now, so it isn't opened"
+        );
+        return Err(not_opened());
     }
     tracing::warn!(
         take = landed.recording_id,
@@ -309,7 +317,7 @@ pub(super) fn snapshot_after(
             take = landed.recording_id,
             "recorder: the take's project couldn't be opened again"
         );
-        CodedError::new("capture.import.addedNotOpened")
+        not_opened()
     })
 }
 

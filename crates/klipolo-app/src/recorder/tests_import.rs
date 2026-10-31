@@ -371,6 +371,32 @@ fn a_take_whose_project_closes_while_it_lands_is_still_added() {
     }
 }
 
+/// The take's project closed while it landed, and its file holds another project by now: it isn't opened in the take's
+/// project's place. The page is told the take was added, and the project open stays open.
+#[test]
+fn a_take_whose_project_file_holds_another_project_now_is_not_opened() {
+    let sessions = Sessions::with_project();
+    let take = TakeFixture::saved(Recorded::default(), armed_in(&sessions));
+    let done = take.done(false, sessions.open_file());
+    let library = || -> Result<std::path::PathBuf, klipolo_model::coded::Said> {
+        Err(klipolo_model::coded::Said::code("project.noVideosFolder"))
+    };
+    let mut probe = |path: &std::path::Path, _key: &str| crate::media::probe_asset(path);
+    let to = super::destination::Destination {
+        target: &done.target,
+        file: done.project_file.as_deref(),
+        library: &library,
+        today: OCT_31,
+    };
+    let landed = super::import::import_take(&sessions.state, &take.dir, &to, &mut probe).unwrap();
+    let (other, other_file) = sessions.open_new("Other");
+    std::fs::copy(&other_file, &landed.file).unwrap();
+    let refused = super::import::snapshot_after(&sessions.state, &landed).unwrap_err();
+    assert_eq!(refused.code, "capture.import.addedNotOpened");
+    assert_eq!(sessions.project().id, other, "the open project stays");
+    assert_eq!(sessions.open_file(), Some(other_file));
+}
+
 /// The take lands in the project it was armed in. Should another be open by then, that project opens again (the open
 /// one saved first) and the take lands there; the page's snapshot is that project's.
 #[test]

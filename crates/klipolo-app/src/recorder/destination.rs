@@ -138,7 +138,7 @@ fn open_project(sessions: &ProjectSessionState) -> Option<(String, PathBuf)> {
 }
 
 /// `file` is still project `id`'s.
-fn holds(file: &Path, id: &str) -> bool {
+pub(super) fn holds(file: &Path, id: &str) -> bool {
     read(file).is_ok_and(|project| project.id == id)
 }
 
