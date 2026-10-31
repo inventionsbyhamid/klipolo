@@ -163,7 +163,7 @@
   },
   {
     "code": "capture.stop.encoder",
-    "message": "The video encoder stopped, so the recording stopped and was saved.",
+    "message": "The video encoder stopped, so the recording stopped and was saved. Press Record to try again.",
     "params": []
   },
   {
@@ -232,6 +232,11 @@
     "params": [
       "source"
     ]
+  },
+  {
+    "code": "capture.note.cameraDropped",
+    "message": "The camera stopped recording. The screen kept recording.",
+    "params": []
   },
   {
     "code": "capture.note.micDropping",
@@ -412,6 +417,16 @@
     "params": []
   },
   {
+    "code": "capture.permission.settingsDidntOpen",
+    "message": "System Settings didn't open. Open it from the Apple menu, then choose Privacy & Security.",
+    "params": []
+  },
+  {
+    "code": "capture.permission.reopenExporting",
+    "message": "An export is running. Reopen Klipolo when it's done.",
+    "params": []
+  },
+  {
     "code": "capture.permission.camera",
     "message": "Allow Klipolo to use your camera in your computer's privacy settings, then try again.",
     "params": []
@@ -511,7 +526,7 @@
   },
   {
     "code": "capture.orphan",
-    "message": "Klipolo closed. Still recording.",
+    "message": "Klipolo closed. The recording goes on until you stop it here.",
     "params": []
   },
   {
@@ -711,6 +726,16 @@
   {
     "code": "capture.error.testRun",
     "message": "Recording is off in this test run.",
+    "params": []
+  },
+  {
+    "code": "capture.error.noSettingsFolder",
+    "message": "Klipolo can't find its settings folder, so it can't record. Reopen Klipolo, then try again.",
+    "params": []
+  },
+  {
+    "code": "capture.error.setUp",
+    "message": "The recording couldn't be set up. Check that your Movies folder can be written to, then press Record again.",
     "params": []
   }
 ]
