@@ -26,6 +26,7 @@ fn asset(id: &str, kind: AssetKind) -> Asset {
         fps: if video { 30.0 } else { 0.0 },
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
         rotation: None,
     }
 }

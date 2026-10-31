@@ -432,6 +432,7 @@ fn talk() -> Inputs {
         rotation: None,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
     });
     project.timeline.main.push(Clip::new(
         ClipSource::Asset { id: "talk".into() },

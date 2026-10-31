@@ -115,6 +115,12 @@ pub struct Asset {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub audio_lead_us: Option<Us>,
+    /// The tool that made the file, when Klipolo had one make it ("Muse Image" for a sticker or a title card made in
+    /// chat): the library groups such files under its name. None for a file the person brought; left out of the JSON
+    /// while None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub made_with: Option<String>,
 }
 
 /// The furthest a file's sound may start from its picture: past it the probe takes a broken stream start, not a lead

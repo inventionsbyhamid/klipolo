@@ -183,6 +183,7 @@ fn file(id: &str, kind: AssetKind, has_audio: bool) -> Asset {
         rotation: None,
         has_audio,
         audio_lead_us: None,
+        made_with: None,
     }
 }
 

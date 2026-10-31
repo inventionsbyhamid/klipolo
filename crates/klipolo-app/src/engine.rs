@@ -403,6 +403,7 @@ mod tests {
             rotation: Some(0),
             has_audio: false,
             audio_lead_us: Some(0),
+            made_with: None,
         }];
         project.timeline.main = vec![Clip::new(
             ClipSource::Asset { id: "v".into() },

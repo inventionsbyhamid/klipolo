@@ -46,6 +46,7 @@ fn titled() -> Project {
         fps: 30.0,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
         rotation: None,
     }];
     p.timeline.main = (0..10)
@@ -115,6 +116,7 @@ fn file(id: &str, kind: AssetKind) -> Asset {
         fps: 30.0,
         has_audio: kind == AssetKind::Audio,
         audio_lead_us: None,
+        made_with: None,
         rotation: None,
     }
 }

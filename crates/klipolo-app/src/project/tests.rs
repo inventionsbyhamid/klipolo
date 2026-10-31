@@ -498,6 +498,7 @@ fn only_a_projects_media_files_are_served_to_the_page() {
         rotation: Some(0),
         has_audio: false,
         audio_lead_us: Some(0),
+        made_with: None,
     };
     let mut project = Project::new("Served");
     project.assets = [
@@ -577,6 +578,7 @@ fn two_clips(file: &Path) -> ProjectSessionState {
         rotation: None,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
     };
     let clip = |id: &str, from: i64| {
         let mut clip = Clip::new(

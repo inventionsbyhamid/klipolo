@@ -66,6 +66,7 @@ pub fn film_job(file: &Arc<str>, dir: &Path, seconds: f64, segment_s: u32) -> Ex
         fps: FILM_FPS,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
         rotation: Some(0),
     }];
     p.timeline.main = vec![Clip::new(

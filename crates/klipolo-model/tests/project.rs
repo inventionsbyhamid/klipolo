@@ -94,6 +94,7 @@ fn the_transcripts_language_is_the_one_most_of_the_projects_words_were_heard_in(
         rotation: None,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
     };
     let mut p = Project::new("p");
     p.assets = vec![file("a"), file("b")];

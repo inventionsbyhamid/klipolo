@@ -67,6 +67,7 @@ pub(crate) fn asset_from_info(path: &Path, info: MediaInfo) -> Asset {
         // Where its sound starts against its picture, so its own sound plays in step with it. Sound files and images
         // have none.
         audio_lead_us: (kind == AssetKind::Video).then_some(info.audio_lead_us),
+        made_with: None,
     }
 }
 

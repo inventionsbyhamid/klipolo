@@ -184,6 +184,7 @@ mod tests {
             rotation: Some(0),
             has_audio: false,
             audio_lead_us: None,
+            made_with: None,
         };
         let clip = |id: &str, from: i64, to: i64| Clip {
             id: id.into(),
