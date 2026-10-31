@@ -248,6 +248,7 @@ impl SlotGuard<'_> {
             &inputs.speech,
             &proposal.review,
             tools,
+            Some(client),
         );
         self.slot.open = Some(Stored::new(
             &made,
@@ -279,7 +280,7 @@ fn gone(made: &At, now: Option<&At>) -> Gone {
 
 /// The card for removals `review` made on `base` (the project they apply to, its words in `speech`) by `tools`' calls:
 /// Klipolo's title for them and a tag over each cut, for proposal `id` on `revision`. Chat's proposals and other apps'
-/// are worded alike.
+/// are worded alike, but that an app's keepOnly keeps parts it suggests (`from`: the app; None for chat).
 fn card(
     id: &str,
     revision: u64,
@@ -287,9 +288,10 @@ fn card(
     speech: &Speech,
     review: &Review,
     tools: &[&str],
+    from: Option<&str>,
 ) -> ChatProposal {
     let removed_us = review.removals.ranges.iter().map(RangeUs::len).sum();
-    let said = describe(base, speech, &review.removals, tools);
+    let said = describe(base, speech, &review.removals, tools, from);
     ChatProposal::new(
         id,
         revision,
@@ -843,7 +845,15 @@ impl ChatSession {
                         .map(ToolCall::name)
                         .collect();
                     let id = uuid::Uuid::new_v4().to_string();
-                    let made = card(&id, at.revision, &base, &inputs.speech, &review, &tools);
+                    let made = card(
+                        &id,
+                        at.revision,
+                        &base,
+                        &inputs.speech,
+                        &review,
+                        &tools,
+                        None,
+                    );
                     let stored =
                         Stored::new(&made, at.clone(), &p.tx, &review, Words::read(inputs), None);
                     landed.proposal = Some((id, made));

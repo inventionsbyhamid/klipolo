@@ -194,6 +194,14 @@ fn what_became_of_an_apps_proposal_is_kept_for_it() {
     assert_eq!(chat.slot().waiting(), None);
     assert_eq!(chat.slot().decided("Example Client"), None);
 
+    // An app's keepOnly is worded as suggested: the person chose nothing.
+    let now = projects.now().unwrap();
+    let card = chat
+        .slot()
+        .propose("Example Client", &now, &cut(&now.project), &["keepOnly"]);
+    assert_eq!(card.title(), "Keep only the suggested parts");
+    chat.discard(card.id());
+
     // Discarded, by its id only.
     let id = propose(&chat, &*projects, "Example Client");
     let waiting = chat.slot().waiting().unwrap();

@@ -332,19 +332,20 @@ fn host_proposal_fills_the_chat_slot_and_names_the_client() {
         (waiting.id.as_str(), waiting.from.as_deref()),
         (id.as_str(), Some("Example Client"))
     );
-    assert_eq!(waiting.title, "Keep only the parts you chose");
+    // The person chose nothing: the card says the parts were suggested (the page names who under it).
+    assert_eq!(waiting.title, "Keep only the suggested parts");
     let told = r.told();
     assert_eq!(told.len(), 1, "{told:#?}");
     assert_eq!(told[0]["reply"]["client"], "Example Client");
     let card = &told[0]["reply"]["reply"]["proposal"];
     assert_eq!(card["id"], id.as_str());
-    assert_eq!(card["title"], "Keep only the parts you chose");
+    assert_eq!(card["title"], "Keep only the suggested parts");
     assert_eq!(card["removedUs"], 1_000_000);
     assert_eq!(told[0]["reply"]["reply"]["revision"], 0);
     let expected = ProposalOutcome::Waiting {
         id: id.clone(),
         from: "Example Client".into(),
-        title: "Keep only the parts you chose".into(),
+        title: "Keep only the suggested parts".into(),
         removed_sec: 1.0,
         ranges: vec![[0.0, 1.0]],
     };
@@ -713,12 +714,16 @@ fn the_persons_own_proposal_wins() {
         ChatOutcome::Reply(reply) => reply,
         other => panic!("a reply: {other:?}"),
     };
-    let id = reply.proposal_ref().expect("a proposal").id().to_owned();
+    let card = reply.proposal_ref().expect("a proposal");
+    let id = card.id().to_owned();
+    // The person chose these parts themselves: chat's own title stays as it was.
+    assert_eq!(card.title(), "Keep only the parts you chose");
     assert_eq!(r.host.open_proposal().unwrap().id, id);
     assert_eq!(r.host.open_proposal().unwrap().from, None);
     assert!(matches!(
         r.host.outcome("Example Client"),
-        ProposalOutcome::Waiting { from, .. } if from == KLIPOLO_CHAT
+        ProposalOutcome::Waiting { from, title, .. }
+            if from == KLIPOLO_CHAT && title == "Keep only the parts you chose"
     ));
     let tx = from_app(&rename("Day one"), "Example Client");
     assert_eq!(r.host.apply("Example Client", r.base(), &tx), Err(HostError::Moved));
