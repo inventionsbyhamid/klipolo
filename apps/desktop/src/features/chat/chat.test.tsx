@@ -19,6 +19,7 @@ import { useProject } from '../../state/project';
 import { useProposal } from '../../state/proposal';
 import { useRange } from '../../state/range';
 import { useSelection } from '../../state/selection';
+import { useSpeech } from '../../state/speech';
 import { fixturePatch, fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 import { ChatPanel } from './ChatPanel';
@@ -59,7 +60,7 @@ function changed(revision: number, undo: CodedError | null, extra: Partial<Retur
 /** A cut of the ums and pauses on the fixture (30 s): 2.4 s in three ranges, made on revision 3. */
 const cuts = () =>
   proposal('p1', 3, {
-    title: 'Cut 2 pauses and 1 um',
+    title: 'Cut 2 pauses and 1 filler word',
     removedUs: 2.4 * S,
     removals: {
       ...proposal('x', 0).removals,
@@ -143,7 +144,7 @@ describe('chat', () => {
     });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'cut the ums and long pauses{Enter}');
-    const card = await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    const card = await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
     expect(card).toHaveTextContent('2.4 s in total. 0:30.0 now, 0:27.6 after.');
     expect(within(card).getByText('2.4 s')).toHaveClass('cut');
     // The same proposal on the timeline: its ranges and tags.
@@ -157,7 +158,9 @@ describe('chat', () => {
     fireEvent.keyDown(card, { key: 'Enter' });
     await waitFor(() => expect(fake.applied).toEqual(['p1']));
     expect(await screen.findByText(/^Applied\./)).toBeInTheDocument();
-    expect(screen.getByText('Cut 2 pauses and 1 um, 2.4 s in total.', { exact: false })).toBeInTheDocument();
+    // The applied row says the total once, after the title Rust gave it.
+    expect(screen.getByText('Cut 2 pauses and 1 filler word, 2.4 s in total.', { exact: false })).toBeInTheDocument();
+    expect(screen.queryByText(/in total.*in total/)).toBeNull();
     expect(useProject.getState().snapshot!.history.revision).toBe(4);
     expect(useProposal.getState().proposal).toBeNull();
     expect(screen.getByRole('button', { name: /^Undo/ })).toBeInTheDocument();
@@ -166,13 +169,13 @@ describe('chat', () => {
 
   it('a format-only proposal names what goes, never "0 s"', async () => {
     const p = proposal('p2', 3, {
-      title: 'Make it 9:16 only',
+      title: 'Drop the landscape format',
       removals: { ...proposal('x', 0).removals, formats: ['landscape'] },
     });
     chat({ reply: (r) => reply(r.id, 'This drops the 16:9 version.', { proposal: p }) });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'just vertical{Enter}');
-    const card = await screen.findByRole('group', { name: 'Make it 9:16 only' });
+    const card = await screen.findByRole('group', { name: 'Drop the landscape format' });
     expect(card).toHaveTextContent('Drops the 16:9 version and what was placed for it.');
     expect(card).not.toHaveTextContent('0 s');
     expect(card).not.toHaveTextContent('in total');
@@ -182,7 +185,7 @@ describe('chat', () => {
     const fake = chat({ reply: (r) => reply(r.id, 'I found 3.', { proposal: cuts() }) });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'cut the pauses{Enter}');
-    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
     expect(await screen.findByText('Discarded.')).toBeInTheDocument();
     expect(fake.discarded).toEqual(['p1']);
@@ -195,7 +198,7 @@ describe('chat', () => {
     backend({ project_apply: () => changed(4, code('clip.split')) });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'cut the pauses{Enter}');
-    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
     await act(() => useProject.getState().apply('clip.split' as never, [{ type: 'split', atUs: 5 * S }]));
     expect(
       await screen.findByText('This proposal was dropped because the project changed. Ask again to get a new one.'),
@@ -213,7 +216,7 @@ describe('chat', () => {
     });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'cut the pauses{Enter}');
-    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
     expect(
       await screen.findByText('This proposal was dropped because the project changed. Ask again to get a new one.'),
@@ -237,7 +240,7 @@ describe('chat', () => {
     const fake = chat({ reply: (r) => reply(r.id, 'I found 3.', { proposal: cuts() }) });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'cut the pauses{Enter}');
-    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
     expect(message()).toHaveFocus();
     await userEvent.keyboard('and the intro{Enter}');
     await waitFor(() => expect(fake.requests).toHaveLength(2));
@@ -271,13 +274,14 @@ describe('chat', () => {
     expect(screen.queryByText(/^Selection /)).toBeNull();
   });
 
-  it('names a selected title in the chip and sends it as "this"', async () => {
+  it('shows no chip for a selected title: chat can’t change a layer, so it isn’t "this"', async () => {
     const fake = chat();
     useSelection.setState({ selectedId: 'title' });
     renderWithProviders(<ChatPanel />);
-    expect(screen.getByText(/^Title: /)).toBeInTheDocument();
+    expect(screen.queryByText(/^Title: /)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Clear selection' })).toBeNull();
     await userEvent.type(message(), 'make it bigger{Enter}');
-    await waitFor(() => expect(fake.requests[0]?.item).toBe('title'));
+    await waitFor(() => expect(fake.requests).toHaveLength(1));
   });
 
   it('moment chips seek and play; Keep only these sends their ranges', async () => {
@@ -407,16 +411,16 @@ describe('chat', () => {
       apply: () => ({ change: changed(4, title), undo: title }),
     });
     renderWithProviders(<ChatPanel />);
-    const card = () => screen.getByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    const card = () => screen.getByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
     await userEvent.type(message(), 'cut the pauses{Enter}');
-    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
     expect(message()).toHaveFocus();
     act(() => card().focus());
     await userEvent.keyboard('{Escape}');
     expect(await screen.findByText('Discarded.')).toBeInTheDocument();
     expect(message()).toHaveFocus();
     await userEvent.type(message(), 'cut them again{Enter}');
-    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
     act(() => card().focus());
     await userEvent.keyboard('{Enter}');
     expect(await screen.findByText(/^Applied\./)).toBeInTheDocument();
@@ -438,7 +442,7 @@ describe('chat', () => {
     chat({ reply: (r) => reply(r.id, 'I found 3.', { proposal: cuts() }) });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'cut the pauses{Enter}');
-    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
     const other = fixtureSnapshot();
     other.project = { ...other.project, id: 'other' };
     act(() => useProject.setState({ snapshot: other }));
@@ -467,15 +471,16 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     const fake = chat({
       reply: (r) => {
         n += 1;
-        return reply(r.id, `Proposal ${n}.`, { proposal: proposal(`p${n}`, 3, { ...cuts(), id: `p${n}`, title: `Cut ${n}` }) });
+        const title = n === 1 ? 'Cut 3 pauses' : 'Cut 3 parts';
+        return reply(r.id, `Proposal ${n}.`, { proposal: proposal(`p${n}`, 3, { ...cuts(), id: `p${n}`, title }) });
       },
     });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'cut the pauses{Enter}');
-    await screen.findByRole('group', { name: 'Cut 1' });
+    await screen.findByRole('group', { name: 'Cut 3 pauses' });
     await userEvent.type(message(), 'cut more{Enter}');
-    await screen.findByRole('group', { name: 'Cut 2' });
-    expect(screen.queryByRole('group', { name: 'Cut 1' })).toBeNull();
+    await screen.findByRole('group', { name: 'Cut 3 parts' });
+    expect(screen.queryByRole('group', { name: 'Cut 3 pauses' })).toBeNull();
     expect(screen.getAllByRole('button', { name: 'Apply' })).toHaveLength(1);
     expect(screen.getByText('Replaced by the newer proposal below.')).toBeInTheDocument();
     expect(fake.discarded).toEqual(['p1']);
@@ -554,7 +559,7 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'cut the pauses{Enter}');
-    const card = await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    const card = await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
     await userEvent.click(within(card).getByRole('button', { name: 'Apply' }));
     expect(await within(card).findByText('Klipolo couldn’t make that change.')).toBeInTheDocument();
     expect(within(card).getByRole('button', { name: 'Discard' })).toBeInTheDocument();
@@ -569,7 +574,7 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
       reply: (r) =>
         reply(r.id, 'Here.', {
           proposal: proposal('p1', 3, {
-            title: 'Tidy up',
+            title: 'Apply these changes',
             removals: {
               ...proposal('x', 0).removals,
               tracks: ['t1', 't2'],
@@ -583,7 +588,7 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'tidy up{Enter}');
-    const card = await screen.findByRole('group', { name: 'Tidy up' });
+    const card = await screen.findByRole('group', { name: 'Apply these changes' });
     for (const line of [
       'Removes 2 tracks.',
       'Takes 1 color look out of the project.',
@@ -612,7 +617,7 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
       </>,
     );
     await userEvent.type(message(), 'cut the pauses{Enter}');
-    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
     screen.getByRole('button', { name: 'Close' }).focus();
     await userEvent.keyboard('{Meta>}{Enter}{/Meta}');
     expect(fake.applied).toEqual([]);
@@ -692,12 +697,12 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'cut the pauses{Enter}');
-    const card = await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    const card = await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
     await userEvent.click(within(card).getByRole('button', { name: 'Apply' }));
     expect(
       await screen.findByText('Applied, but the timeline didn’t update. Reopen the project.'),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Cut 2 pauses and 1 um' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Cut 2 pauses and 1 filler word' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^(Retry|Apply)$/ })).toBeNull();
     expect(useProposal.getState().proposal).toBeNull();
   });
@@ -748,7 +753,11 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     refuse = true;
     await userEvent.click(screen.getByRole('button', { name: 'Undo add the title Step 3' }));
     expect(fake.undone).toEqual([4]);
-    expect(await screen.findByText('This change can’t be undone from chat any more.', { selector: 'p.muted' })).toBeInTheDocument();
+    expect(
+      await screen.findByText('This change can’t be undone from chat any more. Use Undo in the top bar.', {
+        selector: 'p.muted',
+      }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Undo add the title|Retry/ })).toBeNull();
     refuse = false;
     act(() => useChat.getState().newChat());
@@ -795,7 +804,7 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
       expect(useToasts.getState().toasts.map((t) => t.text)).toContain("Klipolo couldn't save this change. Try again."),
     );
     expect(screen.getByRole('button', { name: 'Undo add the title Step 3' })).toBeInTheDocument();
-    expect(screen.queryByText('This change can’t be undone from chat any more.')).toBeNull();
+    expect(screen.queryByText('This change can’t be undone from chat any more. Use Undo in the top bar.')).toBeNull();
     expect(useProject.getState().snapshot!.history.revision).toBe(4);
   });
 
@@ -843,7 +852,9 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     await screen.findByText('Added the title.');
     await userEvent.click(screen.getByRole('button', { name: 'Undo add the title Step 3' }));
     const live = document.querySelector('[data-chat-notices]');
-    await waitFor(() => expect(live).toHaveTextContent('This change can’t be undone from chat any more.'));
+    await waitFor(() =>
+      expect(live).toHaveTextContent('This change can’t be undone from chat any more. Use Undo in the top bar.'),
+    );
   });
 
   it('a reply that lands after New chat still brings its change to the timeline', async () => {
@@ -876,7 +887,7 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'cut the pauses{Enter}');
-    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
     const steps = historySteps();
     const end = beginCommit();
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
@@ -904,10 +915,58 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'cut the pauses{Enter}');
-    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
     act(() => useChat.getState().newChat());
     act(() => land());
     await waitFor(() => expect(useProject.getState().snapshot!.history.revision).toBe(4));
+  });
+});
+
+describe('chat: more on proposals and the panel', () => {
+  it('drops an open proposal when the words are timed again, though the revision is the same', async () => {
+    const fake = chat({ reply: (r) => reply(r.id, 'I found 3.', { proposal: cuts() }) });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'cut the ums{Enter}');
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
+    // Captions' "Time the words again" finished: Rust says the speech changed.
+    act(() => useSpeech.setState((s) => ({ pagesEpoch: s.pagesEpoch + 1 })));
+    expect(
+      await screen.findByText('This proposal was dropped because the project changed. Ask again to get a new one.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Apply' })).toBeNull();
+    expect(useProposal.getState().proposal).toBeNull();
+    expect(fake.applied).toEqual([]);
+  });
+
+  it('says why chat is off when the access code was turned off, with the way to Settings', async () => {
+    const notice = 'This access code is no longer active. Enter another code or add your own Meta key.';
+    useAi.setState({ status: { mode: 'relay', code: 'KLIP-TEST-0001', active: false, notice } });
+    chat();
+    renderWithProviders(<ChatPanel />);
+    expect(screen.getByText(notice)).toBeInTheDocument();
+    expect(message()).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Open Settings' }));
+    expect(useAi.getState().settingsOpen).toBe(true);
+    useAi.setState({ settingsOpen: false });
+  });
+
+  it('Escape on the list of cuts leaves the card open; Escape on Discard or the card discards', async () => {
+    const fake = chat({ reply: (r) => reply(r.id, 'I found 3.', { proposal: { ...cuts(), id: `p-${r.id}` } }) });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'cut the pauses{Enter}');
+    const card = await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
+    const show = within(card).getByRole('button', { name: 'Show all 3 cuts' });
+    act(() => show.focus());
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(show);
+    act(() => within(card).getByRole('button', { name: /^pause at 0:09\.0/ }).focus());
+    await userEvent.keyboard('{Escape}');
+    expect(fake.discarded).toEqual([]);
+    expect(within(card).getByRole('button', { name: 'Apply' })).toBeInTheDocument();
+    act(() => within(card).getByRole('button', { name: 'Discard' }).focus());
+    await userEvent.keyboard('{Escape}');
+    expect(await screen.findByText('Discarded.')).toBeInTheDocument();
+    expect(fake.discarded).toHaveLength(1);
   });
 });

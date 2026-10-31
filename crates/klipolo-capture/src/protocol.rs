@@ -5,7 +5,10 @@
 //!
 //! Exit codes of `klipolo --record-worker` (`worker::main`): 0 the take is finished (`Finished` came first); 1 it failed,
 //! and what reached the disk is recovered on the next launch; 2 the arguments or the build are wrong; 3 there is no take
-//! (stopped or cancelled before the start gate, nothing written).
+//! (stopped or cancelled before the start gate, nothing written). The preview forms (Check camera, the live view, the
+//! Record dialog's stills and mic meter): 0 stopped (the stills also when given no target); 1 after a `Failed` that
+//! says why; 2 the arguments or the build are wrong (no `real-capture`). In a test run (`KLIPOLO_TEST`), a build with
+//! `real-capture` panics at the consent guard in every form but the probe, before any capture (exit 101).
 
 use klipolo_model::coded::CodedError;
 use klipolo_model::time::Us;
@@ -70,7 +73,8 @@ pub enum Event {
     Gate {
         missing: Vec<SourceId>,
     },
-    /// A source's peak over the last 100 ms, during the countdown (the mic meter).
+    /// A source's peak over the last 100 ms: during the countdown (the mic meter), and from the Record dialog's mic meter
+    /// before a take (`run::meter`).
     Meter {
         source: SourceId,
         peak_dbfs: f32,
@@ -89,6 +93,14 @@ pub enum Event {
     /// Check camera's framing preview, at most 15 a second; the recorder's live view, about 10 in its small view and up
     /// to 30 in a big one.
     Preview {
+        jpeg_base64: String,
+        width: u32,
+        height: u32,
+    },
+    /// A still of one screen or app for the Record dialog's cards, about once a second each (`run::thumbs`): `key` is
+    /// the app's own name for its target.
+    Thumb {
+        key: String,
         jpeg_base64: String,
         width: u32,
         height: u32,

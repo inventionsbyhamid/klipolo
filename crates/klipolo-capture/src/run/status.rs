@@ -10,6 +10,7 @@ use super::source::Status;
 use crate::disk::DiskLevel;
 use crate::english::{hours_minutes, msg};
 use crate::heal::SourceKind;
+use crate::health::dbfs;
 use crate::manifest::source_param;
 use crate::media::SourceId;
 use crate::shell::{Level, ShellOutput, StatusView, WorkerState};
@@ -129,11 +130,7 @@ impl SessionCore {
             .filter_map(|s| s.mic_rules.as_ref())
             .map(|rules| rules.level(at))
             .reduce(f32::max)?;
-        Some(if peak > 0.0 {
-            20.0 * peak.log10()
-        } else {
-            -120.0
-        })
+        Some(dbfs(peak))
     }
 }
 

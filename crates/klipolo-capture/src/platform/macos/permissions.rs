@@ -4,7 +4,7 @@
 //!   (`screen_permission`).
 //! - camera and microphone: AVFoundation's authorization status, NotAsked, Denied (denied or restricted) or Granted.
 
-use cidre::av;
+use cidre::{av, objc};
 use objc2_core_graphics::CGPreflightScreenCaptureAccess;
 
 use crate::backend::{Permission, Permissions};
@@ -19,6 +19,12 @@ pub(super) fn read() -> Permissions {
         camera: status(av::MediaType::video()),
         mic: status(av::MediaType::audio()),
     }
+}
+
+/// The microphone's state alone, in an autorelease pool of its own: the Record dialog's meter reads it once a second on
+/// a thread with no run loop to drain one.
+pub(super) fn mic() -> Permission {
+    objc::ar_pool(|| status(av::MediaType::audio()))
 }
 
 /// AVFoundation's answer for `media`; Unknown when it raises.

@@ -10,7 +10,7 @@ use super::cursor::CursorScript;
 use super::packets::SyntheticVideoSpec;
 use crate::backend::{
     AppAudioApi, CaptureCaps, CursorCaps, DeviceInfo, Devices, DisplayInfo, HotkeyApi,
-    IndicatorPlace, Permission, PickerKind, ScreenApi, Transport,
+    IndicatorPlace, Permission, PickerKind, ScreenApi, Target, Transport,
 };
 use crate::media::Codec;
 use crate::pipe::{PipeError, PipeEvent};
@@ -52,8 +52,11 @@ pub struct Script {
     /// Encoder ids whose start a video pipe refuses (VideoToolbox's −12900), as HEVC on a Mac whose probe cached it.
     pub refused_encoders: Vec<String>,
     pub caps: CaptureCaps,
-    /// Screen Recording as `permissions()` reads it (default Granted; camera and mic are always Granted).
+    /// Screen Recording as `permissions()` reads it (default Granted; the camera is always Granted).
     pub screen_permission: Permission,
+    /// The mic's permission as `permissions()` first reads it (default Granted); a test changes it while a worker runs
+    /// through `FakeBackend::mic_switch`.
+    pub mic_permission: Permission,
     /// A screen's cursor source (`Backend::cursor_source`); None: the screen's video pipe sends the cursor itself.
     pub cursor: Option<CursorScript>,
     /// The screen's pipe can show the cursor live (`VideoPipe::set_cursor_in_frames`); false: it refuses, and shows it
@@ -61,6 +64,11 @@ pub struct Script {
     pub live_switch: bool,
     /// The live view's running stream doesn't take this many new view sizes (as one that didn't answer in time).
     pub live_view_refuses: u32,
+    /// A target's first stills that fail, and with what (`Backend::still`): `Os` or `NoDevice` as a screenshot that
+    /// didn't come, `PermissionDenied` as one the system refused.
+    pub still_fails: Vec<(Target, u32, PipeError)>,
+    /// The sound pipes add the sync blips to `sound` (default true; off for a pure tone, as the mic meter's test reads).
+    pub sync_blips: bool,
 }
 
 impl Default for Script {
@@ -99,6 +107,8 @@ impl Default for Script {
             cursor: None,
             live_switch: true,
             live_view_refuses: 0,
+            still_fails: vec![],
+            sync_blips: true,
             caps: CaptureCaps {
                 screen: ScreenApi::ScreenCaptureKit,
                 app_audio: AppAudioApi::ScreenCaptureKit,
@@ -116,6 +126,7 @@ impl Default for Script {
                 },
             },
             screen_permission: Permission::Granted,
+            mic_permission: Permission::Granted,
         }
     }
 }

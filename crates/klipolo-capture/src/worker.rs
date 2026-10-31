@@ -1,11 +1,17 @@
 //! `klipolo --record-worker`: the recorder process the app relaunches itself as (as the export worker), in its own
-//! process group, so it outlives an editor crash. Three forms:
+//! process group, so it outlives an editor crash. Its forms:
 //! - `--record-worker <session folder> [--resume]`: records the take whose `session.json` the app wrote (`resume`: goes
 //!   on with it after a crashed worker, `run::resume`);
 //! - `--record-worker --check-camera <camera id>`: Check camera's preview;
 //! - `--record-worker --live-view <target> [<view>]`: the recorder's live view of `target` (a `backend::Target` as
 //!   JSON), no sound, nothing written, for the big view of `view` pixels (`live_view_size::ViewPixels` as
 //!   JSON), else the small one;
+//! - `--record-worker --thumbs <targets>`: the Record dialog's stills of each screen and app, about once a second each
+//!   (`run::thumbs`), at utility QoS; `targets` is a JSON list of `[key, target]` pairs, each target a
+//!   `backend::Target` that shows a screen (a camera or the system's picker is a usage error);
+//! - `--record-worker --meter <mic id> [--ask]`: the Record dialog's mic meter, ten peaks a second of that mic alone
+//!   (`run::meter`); `--ask` only after the person's own "Allow microphone" press, when the mic's permission may be
+//!   asked for;
 //! - `--record-worker --probe <out.json>`: the encoder probe, on generated frames only (so without the consent guard,
 //!   `platform::backend_for_probe`), its report written atomically.
 //!
@@ -24,9 +30,12 @@ use klipolo_platform::qos::{self, Qos};
 
 use crate::backend::{Backend, Target};
 use crate::live_view_size::ViewPixels;
+use crate::run::PreviewIo;
 use crate::run::check::run_check_camera;
 use crate::run::live_view::run_live_view;
+use crate::run::meter::run_meter;
 use crate::run::threads::run_session;
+use crate::run::thumbs::run_thumbs;
 use crate::session::SessionDir;
 
 /// How long the first-run probe may take: 5 s at most.
@@ -56,6 +65,31 @@ pub fn main(args: &[String]) -> i32 {
                 }
             }
         }
+        ["--thumbs", targets] => {
+            log::to_stderr();
+            match serde_json::from_str::<Vec<(String, Target)>>(targets) {
+                Ok(targets) if targets.iter().all(|(_, t)| shows_a_screen(t)) => {
+                    // The stills are background work: macOS passes the class on to the services that take them.
+                    qos::set_current(Qos::Utility);
+                    with_backend(|b| run_thumbs(&*b, &targets, PreviewIo::std()))
+                }
+                Ok(_) => {
+                    eprintln!(
+                        "--thumbs takes screens, apps and windows only, never a camera or the system's picker"
+                    );
+                    2
+                }
+                Err(error) => {
+                    eprintln!("--thumbs takes a JSON list of [key, target] pairs: {error}");
+                    2
+                }
+            }
+        }
+        ["--meter", mic, ask @ ..] if ask.is_empty() || ask == ["--ask"] => {
+            log::to_stderr();
+            let ask = !ask.is_empty();
+            with_backend(|b| run_meter(&*b, mic, ask, PreviewIo::std()))
+        }
         ["--probe", out] => {
             log::to_stderr();
             match probe_backend() {
@@ -63,8 +97,8 @@ pub fn main(args: &[String]) -> i32 {
                 None => no_backend(),
             }
         }
-        // A flag is never a folder: `--probe`, `--check-camera` or `--live-view` without its argument is a usage error,
-        // not a take.
+        // A flag is never a folder: `--probe`, `--check-camera`, `--live-view`, `--thumbs` or `--meter` without its
+        // argument is a usage error, not a take.
         [folder] | [folder, "--resume"] if !folder.starts_with("--") => {
             let dir = SessionDir::at(Path::new(folder));
             log::to_file(&dir.diagnostics());
@@ -80,11 +114,17 @@ pub fn main(args: &[String]) -> i32 {
         _ => {
             eprintln!(
                 "usage: --record-worker <session folder> [--resume] | --record-worker --check-camera <camera id> | \
-                 --record-worker --live-view <target JSON> [<view JSON>] | --record-worker --probe <out.json>"
+                 --record-worker --live-view <target JSON> [<view JSON>] | --record-worker --thumbs <targets JSON> | \
+                 --record-worker --meter <mic id> [--ask] | --record-worker --probe <out.json>"
             );
             2
         }
     }
+}
+
+/// Whether a still can be taken of `target`: a display, an app's windows or a window.
+fn shows_a_screen(target: &Target) -> bool {
+    !matches!(target, Target::Camera { .. } | Target::Portal { .. })
 }
 
 /// This OS's backend (the consent guard runs first), or exit 2 in a build without `real-capture`.
@@ -152,6 +192,21 @@ mod tests {
         let screen = r#"{"kind":"display","id":"display-1"}"#;
         let not_a_view = args(&["klipolo", "--record-worker", "--live-view", screen, "{}"]);
         assert_eq!(main(&not_a_view), 2);
+        assert_eq!(main(&args(&["klipolo", "--record-worker", "--thumbs"])), 2);
+        assert_eq!(main(&args(&["klipolo", "--record-worker", "--meter"])), 2);
+        let not_ask = args(&["klipolo", "--record-worker", "--meter", "mic-1", "--now"]);
+        assert_eq!(main(&not_ask), 2);
+        let not_targets = args(&["klipolo", "--record-worker", "--thumbs", screen]);
+        assert_eq!(main(&not_targets), 2);
+        // A camera or the system's picker is never a still's target, in any build.
+        for target in [
+            r#"{"kind":"camera","id":"cam"}"#,
+            r#"{"kind":"portal","restoreToken":null,"appId":null}"#,
+        ] {
+            let pairs = format!(r#"[["display-1",{screen}],["other",{target}]]"#);
+            let thumbs = args(&["klipolo", "--record-worker", "--thumbs", &pairs]);
+            assert_eq!(main(&thumbs), 2, "{target}");
+        }
         if !cfg!(feature = "real-capture") {
             assert_eq!(
                 main(&args(&[
@@ -162,6 +217,14 @@ mod tests {
                 ])),
                 2
             );
+            let screens = format!(r#"[["display-1",{screen}]]"#);
+            let thumbs = args(&["klipolo", "--record-worker", "--thumbs", &screens]);
+            assert_eq!(main(&thumbs), 2);
+            for meter in [&["mic-1"][..], &["mic-1", "--ask"]] {
+                let mut form = args(&["klipolo", "--record-worker", "--meter"]);
+                form.extend(args(meter));
+                assert_eq!(main(&form), 2);
+            }
         }
     }
 }

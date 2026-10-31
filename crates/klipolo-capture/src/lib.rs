@@ -5,11 +5,12 @@
 //!   `AudioPipe` PCM blocks, both stamped on the host clock), `backend` (devices without capture, permissions without
 //!   prompts, the probe), `shell` (the menu-bar or tray item, HUD, hotkeys, power, focus and the parent watch).
 //! - **Consent**: capture begins only after the person presses Record or Check camera.
-//!   The one exception is the recorder's live view of the chosen screen or window (`run::live_view`): it
-//!   runs only while the recorder is open and in front and screen recording is already allowed, and never opens the
-//!   camera or the mic or asks for a permission. Every real backend sits behind the `real-capture` feature, which only
-//!   the app turns on, and its constructors call `guard::assert_real_capture_allowed` first, which panics in tests
-//!   (`KLIPOLO_TEST`).
+//!   The exceptions are the Record dialog's previews: the live view of the chosen screen or window (`run::live_view`)
+//!   and the stills of each screen and app (`run::thumbs`) run only while the recorder is open and in front and screen
+//!   recording is already allowed, and never open the camera or the mic or ask for a permission; its mic meter
+//!   (`run::meter`) opens only the chosen mic, which the app starts only while the mic is allowed already or on the
+//!   person's own press. Every real backend sits behind the `real-capture` feature, which only the app turns on, and
+//!   its constructors call `guard::assert_real_capture_allowed` first, which panics in tests (`KLIPOLO_TEST`).
 //! - **The cursor** (`cursor`): the cursor's own layer as a screen take records it (format 2 lines, shapes, the
 //!   watchdog that burns it in rather than lose it, resume), behind the `CursorSource` seam.
 //! - **Synthetic sources** (feature `synthetic`): encoded packets, PCM and a fake backend and shell, so the muxers, the
