@@ -23,7 +23,8 @@ use super::test_launch::Logged;
 use super::test_support::*;
 use super::types::{PreviewFrame, PreviewId, Previews, WhatToRecord};
 
-/// The fake computer, with the permissions the test sets.
+/// The fake computer, with the permissions the test sets. It never asks for Screen Recording (only the Allow press's
+/// command does, `permissions`).
 struct Allowing {
     inner: Arc<dyn Backend>,
     now: Arc<Mutex<Permissions>>,
@@ -56,9 +57,6 @@ impl Backend for Allowing {
     }
     fn shell(&self) -> Box<dyn Shell> {
         self.inner.shell()
-    }
-    fn request_screen_permission(&self) {
-        self.inner.request_screen_permission();
     }
 }
 
