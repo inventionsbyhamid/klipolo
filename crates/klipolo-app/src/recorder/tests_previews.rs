@@ -153,6 +153,8 @@ fn changing_the_choice_moves_only_the_live_view() {
     };
     p.set(on_notes.clone()).unwrap();
     assert_eq!(p.told(live), [Command::Stop]);
+    // The new one on its turn.
+    p.advance_ms(500);
     for other in [thumbs, camera, meter] {
         assert!(p.told(other).is_empty(), "worker {other} kept");
     }
@@ -198,11 +200,13 @@ fn leaving_the_window_stops_every_preview() {
     // Behind, a late ask starts nothing.
     p.set(everything()).unwrap();
     assert_eq!(p.launch.spawned(), 4);
-    // In front again, the page's ask starts them again (the stills on their next turn).
+    // In front again, the page's ask starts them again, each on its next turn.
     p.state.window_in_front(true);
     p.set(everything()).unwrap();
+    assert_eq!(p.launch.spawned(), 4);
+    p.advance_ms(500);
     assert_eq!(p.launch.spawned(), 7);
-    p.advance_ms(1_000);
+    p.advance_ms(500);
     assert_eq!(p.launch.spawned(), 8);
     assert_eq!(p.launched(THUMBS).len(), 2);
     // The four that were told to stop and didn't are killed.
@@ -214,16 +218,13 @@ fn leaving_the_window_stops_every_preview() {
 fn arming_kills_every_preview_before_the_take_spawns() {
     let p = previewing(all_allowed());
     p.set(everything()).unwrap();
-    let mut workers = [THUMBS, LIVE, CAMERA, METER]
-        .map(|flag| p.worker(flag))
-        .to_vec();
-    // One more still closing, in its wait: the earlier live picture.
+    let workers = [THUMBS, LIVE, CAMERA, METER].map(|flag| p.worker(flag));
+    // The live picture moves to Notes: the first one is closing, in its wait, and Notes' waits its turn.
     p.set(Previews {
         live: Some(notes()),
         ..everything()
     })
     .unwrap();
-    workers.push(p.worker(LIVE));
     let take = p.arm(options_screen()).unwrap();
     let log = p.launch.log();
     let launched = (log.iter())
@@ -239,7 +240,12 @@ fn arming_kills_every_preview_before_the_take_spawns() {
     // While the take is the recorder's, nothing starts, and the page hears why.
     let refused = p.set(everything()).unwrap_err();
     assert_eq!(refused.code, "capture.busy");
-    assert_eq!(p.launch.spawned(), 6);
+    p.advance_ms(1_000);
+    assert_eq!(
+        p.launch.spawned(),
+        5,
+        "the turn Notes waited for went with the arming"
+    );
     // Record: the take's own Start goes only to the take.
     p.send(Command::Start).unwrap();
     assert_eq!(p.launch.commands().last(), Some(&Command::Start));
@@ -408,4 +414,49 @@ fn a_page_that_loads_again_stops_every_preview() {
     }
     p.says(workers[2], frame());
     assert!(p.frames().is_empty());
+}
+
+#[test]
+fn quick_changes_launch_one_worker_per_pace_and_the_latest_wins() {
+    let p = previewing(all_allowed());
+    let live = |what| Previews {
+        live: Some(what),
+        ..nothing()
+    };
+    p.set(live(screen())).unwrap();
+    // Three more choices 100 ms apart (an arrow key held over the cards): the first view closes, and only the last
+    // choice is launched, on its turn.
+    for what in [notes(), screen(), notes()] {
+        p.advance_ms(100);
+        p.set(live(what)).unwrap();
+    }
+    assert_eq!(p.launched(LIVE).len(), 1);
+    p.advance_ms(200);
+    let launched = p.launched(LIVE);
+    assert_eq!(launched.len(), 2);
+    let target = serde_json::json!({ "kind": "app", "appId": NOTES, "display": "display-1" });
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&launched[1][2]).unwrap(),
+        target
+    );
+    // Klipolo goes behind and comes back at once: the camera and the meter start again on their turn, not at once.
+    let both = Previews {
+        camera: Some("camera-1".into()),
+        mic: Some("mic-1".into()),
+        ..nothing()
+    };
+    p.set(both.clone()).unwrap();
+    p.state.window_in_front(false);
+    p.state.window_in_front(true);
+    p.set(both.clone()).unwrap();
+    assert_eq!((p.launched(CAMERA).len(), p.launched(METER).len()), (1, 1));
+    p.advance_ms(500);
+    assert_eq!((p.launched(CAMERA).len(), p.launched(METER).len()), (2, 2));
+    // A turn waited for ends when Klipolo goes behind.
+    p.state.window_in_front(false);
+    p.state.window_in_front(true);
+    p.set(both).unwrap();
+    p.state.window_in_front(false);
+    p.advance_ms(1_000);
+    assert_eq!((p.launched(CAMERA).len(), p.launched(METER).len()), (2, 2));
 }

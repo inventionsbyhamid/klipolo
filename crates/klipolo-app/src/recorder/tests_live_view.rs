@@ -78,6 +78,7 @@ fn it_closes_when_a_take_arms_and_never_opens_during_one() {
     p.launch.exit(Some(3));
     p.settle();
     p.set(live(screen())).unwrap();
+    p.advance_ms(500);
     assert_eq!(p.launch.spawned(), 3);
 }
 
@@ -88,7 +89,8 @@ fn a_new_target_restarts_it_and_the_same_one_keeps_it() {
     p.set(live(screen())).unwrap();
     assert_eq!(p.launch.spawned(), 1);
     p.set(live(notes())).unwrap();
-    assert_eq!(p.launch.spawned(), 2);
+    p.advance_ms(500);
+    assert_eq!(p.launch.spawned(), 2, "on its turn");
     assert_eq!(p.launch.commands(), [Command::Stop], "the first view's");
     p.set(nothing()).unwrap();
     assert_eq!(p.launch.commands(), [Command::Stop, Command::Stop]);
@@ -129,7 +131,8 @@ fn a_view_whose_worker_ends_by_itself_says_so() {
             .any(|(id, ev)| *id == PreviewId::Live && unavailable(ev)),
         "{heard:?}"
     );
-    // Gone: the next ask opens a new one.
+    // Gone: the next ask opens a new one, on its turn.
     p.set(live(screen())).unwrap();
+    p.advance_ms(500);
     assert_eq!(p.launch.spawned(), 2);
 }

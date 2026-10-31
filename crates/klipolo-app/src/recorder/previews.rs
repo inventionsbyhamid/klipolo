@@ -21,7 +21,7 @@
 //! - The camera and the mic start by themselves only while allowed; otherwise only in the call the person's "Allow
 //!   camera" or "Allow microphone" press makes (`Previews.ask`), when macOS asks; never once refused. One started that
 //!   way is kept while macOS asks.
-//! - Nothing restarts by itself after it ended, but a stills worker held back by its pace (below).
+//! - Nothing restarts by itself after it ended, but a launch held back by its pace (below).
 //!
 //! **Stopping:** every preview stops when Klipolo's main window goes behind another app or is hidden or minimised
 //! (nothing starts again until it is in front and the page asks), when the page loads again (reloaded, or after its
@@ -30,8 +30,10 @@
 //! beside the take on this Mac's one encoder engine), and none starts while the take is the recorder's: its worker
 //! owns the screen and the devices. When Klipolo exits they are killed too. In a test run there are none.
 //!
-//! **The stills' pace:** each stills worker starts with a content read and a still at once, so a new one starts at most
-//! once every `THUMB_EVERY`; one asked for sooner waits its turn (the ticker's).
+//! **Pace:** a preview's worker is launched at most once every `PACE` (the stills' every `THUMB_EVERY`: each stills
+//! worker starts with a content read and a still at once), so a burst of choices, or Klipolo going behind and coming
+//! back, launches one worker per pace, not one per change. A launch asked for sooner waits its turn on the ticker, the
+//! latest ask winning; going behind, a page load, `recorder_previews_off` and arming drop the waiting turns.
 
 use std::io::{BufRead, Read};
 use std::sync::atomic::Ordering;
@@ -56,7 +58,7 @@ use super::take::{Recorder, Worker};
 use super::types::{PreviewId, PreviewKind, Previews, PrivacyPage, WhatToRecord};
 use super::words;
 
-/// How often the ticker looks at closing workers and a stills worker waiting its turn.
+/// How often the ticker looks at closing workers and launches waiting their turn.
 const TICK: Duration = Duration::from_millis(100);
 /// The longest event line read: a frame is a JPEG in base64, a few hundred KB at most.
 const MAX_LINE: u64 = 4 << 20;
@@ -64,6 +66,8 @@ const MAX_LINE: u64 = 4 << 20;
 const MAIN: &str = "main";
 /// The most frames of a kind on their way to the page, not yet drawn.
 const IN_FLIGHT: u8 = 2;
+/// The least time between two launches of a preview's worker (the stills': `THUMB_EVERY`).
+const PACE: Duration = Duration::from_millis(500);
 
 /// The four previews.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,6 +88,16 @@ impl Kind {
             Kind::Camera => PreviewId::Camera,
             Kind::Mic => PreviewId::Mic,
         }
+    }
+
+    /// The least time between two launches of this preview's worker.
+    fn pace_ms(self) -> u64 {
+        let pace = if self == Kind::Thumbs {
+            THUMB_EVERY
+        } else {
+            PACE
+        };
+        pace.as_millis() as u64
     }
 
     /// What the page hears when this preview's worker ends without saying why.
@@ -114,12 +128,27 @@ struct Open {
     said_failed: bool,
 }
 
+/// A launch waiting its turn (`Kind::pace_ms`).
+struct Turn {
+    what: String,
+    key: String,
+    args: Vec<String>,
+}
+
+/// One preview: its running worker, when its last one was launched, and a launch waiting its turn.
+#[derive(Default)]
+struct Slot {
+    open: Option<Open>,
+    launched_ms: Option<u64>,
+    waiting: Option<Turn>,
+}
+
 #[derive(Default)]
 struct Running {
-    thumbs: Option<Open>,
-    live: Option<Open>,
-    camera: Option<Open>,
-    mic: Option<Open>,
+    thumbs: Slot,
+    live: Slot,
+    camera: Slot,
+    mic: Slot,
     closing: Vec<Closing>,
     /// Preview workers launched so far: the next one's generation.
     generations: u64,
@@ -129,12 +158,6 @@ struct Running {
     in_flight: [u8; 3],
     /// The stills' targets: the displays and apps of the dialog's last setup.
     targets: Vec<(String, Target)>,
-    /// The stills are wanted and allowed.
-    want_thumbs: bool,
-    /// When the last stills worker was launched.
-    thumbs_at_ms: Option<u64>,
-    /// A stills worker waits its turn (`THUMB_EVERY` after the last one's launch).
-    thumbs_due: bool,
     /// A screen preview was refused by the system while it ran: neither starts again until the setup is read again.
     screen_refused: bool,
     /// Klipolo's main window is behind another app, hidden or minimised.
@@ -143,7 +166,7 @@ struct Running {
 }
 
 impl Running {
-    fn slot(&mut self, kind: Kind) -> &mut Option<Open> {
+    fn slot(&mut self, kind: Kind) -> &mut Slot {
         match kind {
             Kind::Thumbs => &mut self.thumbs,
             Kind::Live => &mut self.live,
@@ -152,11 +175,28 @@ impl Running {
         }
     }
 
+    fn open(&mut self, kind: Kind) -> &mut Option<Open> {
+        &mut self.slot(kind).open
+    }
+
     /// The running preview whose worker is `generation`.
     fn kind_of(&mut self, generation: u64) -> Option<Kind> {
         (Kind::ALL.into_iter()).find(|&kind| {
-            (self.slot(kind).as_ref()).is_some_and(|o| o.worker.generation == generation)
+            (self.open(kind).as_ref()).is_some_and(|o| o.worker.generation == generation)
         })
+    }
+
+    /// A launch waits its turn, or a closing worker its end.
+    fn ticks(&self) -> bool {
+        let waiting = [&self.thumbs, &self.live, &self.camera, &self.mic];
+        waiting.iter().any(|s| s.waiting.is_some()) || self.closing.iter().any(|c| !c.killed)
+    }
+
+    /// No launch waits its turn any more.
+    fn drop_turns(&mut self) {
+        for kind in Kind::ALL {
+            self.slot(kind).waiting = None;
+        }
     }
 }
 
@@ -232,8 +272,8 @@ impl PreviewWorkers {
         run.out = Some(out);
         run.in_flight = [0; 3];
         let screen = allowed.screen == Permission::Granted && !run.screen_refused;
-        run.want_thumbs = want.thumbs && screen;
-        self.set_thumbs(&mut run, now);
+        let thumbs = thumbs_wanted(&run.targets, want.thumbs && screen);
+        self.show(&mut run, Kind::Thumbs, thumbs, now);
         let live = live_wanted(want.live.as_ref().filter(|_| screen));
         self.show(&mut run, Kind::Live, live, now);
         let asked = |page| want.ask == Some(page);
@@ -292,19 +332,21 @@ impl PreviewWorkers {
         kill_all(&mut self.lock());
     }
 
-    /// The ticker: a closed preview that hasn't ended is killed, and a stills worker that waited its turn starts. False
-    /// once neither is left (the ticker then ends).
+    /// The ticker: a closed preview that hasn't ended is killed, and a launch that waited its turn goes. False once
+    /// neither is left (the ticker then ends).
     pub(super) fn tick(self: &Arc<Self>) -> bool {
         let now = self.now_ms();
         let mut run = self.lock();
         enforce_close(&mut run.closing, now);
-        if run.thumbs_due && (run.behind || self.recorder.active()) {
-            run.want_thumbs = false;
+        if run.behind || self.recorder.active() {
+            run.drop_turns();
         }
-        if run.thumbs_due {
-            self.set_thumbs(&mut run, now);
+        for kind in Kind::ALL {
+            if let Some(turn) = run.slot(kind).waiting.take() {
+                self.launch_in_turn(&mut run, kind, turn, now);
+            }
         }
-        let live = run.thumbs_due || run.closing.iter().any(|c| !c.killed);
+        let live = run.ticks();
         if !live {
             run.ticking = false;
         }
@@ -317,46 +359,20 @@ impl PreviewWorkers {
         for kind in Kind::ALL {
             stopped |= close(run, kind, now);
         }
-        run.want_thumbs = false;
-        run.thumbs_due = false;
+        run.drop_turns();
         run.out = None;
         run.in_flight = [0; 3];
         self.start_ticker(run);
         stopped
     }
 
-    /// The stills, as `want_thumbs` and the setup's targets say: the open worker is kept for the same targets, and a new
-    /// one starts at most once every `THUMB_EVERY`, or waits its turn.
-    fn set_thumbs(self: &Arc<Self>, run: &mut Running, now: u64) {
-        let targets = (run.want_thumbs && !run.targets.is_empty())
-            .then(|| serde_json::to_string(&run.targets).ok())
-            .flatten();
-        let Some(targets) = targets else {
-            run.thumbs_due = false;
-            close(run, Kind::Thumbs, now);
-            return;
-        };
-        if (run.thumbs.as_ref()).is_some_and(|open| open.what == targets) {
-            run.thumbs_due = false;
-            return;
-        }
-        close(run, Kind::Thumbs, now);
-        let every = THUMB_EVERY.as_millis() as u64;
-        if run.thumbs_at_ms.is_some_and(|at| now < at + every) {
-            run.thumbs_due = true;
-            return;
-        }
-        run.thumbs_due = false;
-        run.thumbs_at_ms = Some(now);
-        let args = ["--record-worker", "--thumbs", targets.as_str()].map(String::from);
-        self.launch(run, Kind::Thumbs, &args, targets, String::new());
-    }
-
     /// `kind` shows `wanted`: an open preview showing it already is kept (whatever its permission now: the person's
-    /// press may have started it while macOS asks); any other is closed, and `wanted`'s starts when it may.
+    /// press may have started it while macOS asks), and a launch waiting its turn gives way to it; any other is closed,
+    /// and `wanted`'s is launched when it may and its turn has come (`launch_in_turn`).
     fn show(self: &Arc<Self>, run: &mut Running, kind: Kind, wanted: Option<Wanted>, now: u64) {
-        let open = run.slot(kind).as_ref();
-        if let (Some(open), Some(wanted)) = (open, &wanted)
+        let slot = run.slot(kind);
+        slot.waiting = None;
+        if let (Some(open), Some(wanted)) = (&slot.open, &wanted)
             && open.what == wanted.what
         {
             return;
@@ -368,8 +384,20 @@ impl PreviewWorkers {
             args: Some(args),
         }) = wanted
         {
-            self.launch(run, kind, &args, what, key);
+            self.launch_in_turn(run, kind, Turn { what, key, args }, now);
         }
+    }
+
+    /// `turn`'s worker is launched now if its kind's last launch was at least its pace ago; else it waits its turn on
+    /// the ticker.
+    fn launch_in_turn(self: &Arc<Self>, run: &mut Running, kind: Kind, turn: Turn, now: u64) {
+        let slot = run.slot(kind);
+        if slot.launched_ms.is_some_and(|at| now < at + kind.pace_ms()) {
+            slot.waiting = Some(turn);
+            return;
+        }
+        slot.launched_ms = Some(now);
+        self.launch(run, kind, &turn.args, turn.what, turn.key);
     }
 
     /// Launches `kind`'s worker with `args`; its events are read on a thread of its own. One that can't be launched
@@ -406,7 +434,7 @@ impl PreviewWorkers {
             stdin: io.stdin,
             kill: io.kill,
         };
-        *run.slot(kind) = Some(Open {
+        *run.open(kind) = Some(Open {
             worker,
             what,
             key,
@@ -415,10 +443,9 @@ impl PreviewWorkers {
         self.read_in_background(generation, io.stdout, io.wait);
     }
 
-    /// The ticker, while a preview is closing or a stills worker waits its turn (the app; tests tick themselves).
+    /// The ticker, while a preview is closing or a launch waits its turn (the app; tests tick themselves).
     fn start_ticker(self: &Arc<Self>, run: &mut Running) {
-        let needed = run.thumbs_due || run.closing.iter().any(|c| !c.killed);
-        if !self.ticker || run.ticking || !needed {
+        if !self.ticker || run.ticking || !run.ticks() {
             return;
         }
         run.ticking = true;
@@ -505,7 +532,7 @@ impl PreviewWorkers {
             let Some(kind) = run.kind_of(generation) else {
                 return;
             };
-            let key = (run.slot(kind).as_ref()).map_or_else(String::new, |o| o.key.clone());
+            let key = (run.open(kind).as_ref()).map_or_else(String::new, |o| o.key.clone());
             match (kind, ev) {
                 (
                     Kind::Thumbs,
@@ -573,7 +600,7 @@ impl PreviewWorkers {
         let Some(kind) = run.kind_of(generation) else {
             return;
         };
-        let open = run.slot(kind).take().expect("the preview is open");
+        let open = run.open(kind).take().expect("the preview is open");
         tracing::info!(
             generation,
             ?kind,
@@ -598,7 +625,7 @@ impl PreviewWorkers {
 /// again.
 fn failed(run: &mut Running, kind: Kind, error: CodedError) {
     tracing::info!(?kind, code = %error.code, "recorder: a preview failed");
-    if let Some(open) = run.slot(kind) {
+    if let Some(open) = run.open(kind) {
         open.said_failed = true;
     }
     if matches!(kind, Kind::Thumbs | Kind::Live) && error.code == "capture.permission.screen" {
@@ -606,8 +633,8 @@ fn failed(run: &mut Running, kind: Kind, error: CodedError) {
             "recorder: the screen was refused, so its previews stay off until the dialog reopens"
         );
         run.screen_refused = true;
-        run.want_thumbs = false;
-        run.thumbs_due = false;
+        run.thumbs.waiting = None;
+        run.live.waiting = None;
     }
     if let Some(out) = &run.out {
         out.event(kind.id(), &Event::Failed { error });
@@ -619,7 +646,7 @@ fn failed(run: &mut Running, kind: Kind, error: CodedError) {
 fn kill_all(run: &mut Running) -> bool {
     let mut killed = false;
     for kind in Kind::ALL {
-        if let Some(open) = run.slot(kind).take() {
+        if let Some(open) = run.open(kind).take() {
             (open.worker.kill)(true);
             killed = true;
         }
@@ -629,8 +656,7 @@ fn kill_all(run: &mut Running) -> bool {
         closing.killed = true;
         killed = true;
     }
-    run.want_thumbs = false;
-    run.thumbs_due = false;
+    run.drop_turns();
     run.out = None;
     run.in_flight = [0; 3];
     killed
@@ -638,7 +664,7 @@ fn kill_all(run: &mut Running) -> bool {
 
 /// Closes `kind`'s preview (`check::closing`). True when one was open.
 fn close(run: &mut Running, kind: Kind, now: u64) -> bool {
-    let Some(open) = run.slot(kind).take() else {
+    let Some(open) = run.open(kind).take() else {
         return false;
     };
     closing(&mut run.closing, open.worker, now);
@@ -666,6 +692,20 @@ fn meter_wanted(mic: Option<&String>, permission: Permission, asked: bool) -> Op
         what: mic.clone(),
         key: mic.clone(),
         args,
+    })
+}
+
+/// The stills of `targets` when they are `wanted` (and allowed) and there are any.
+fn thumbs_wanted(targets: &[(String, Target)], wanted: bool) -> Option<Wanted> {
+    if !wanted || targets.is_empty() {
+        return None;
+    }
+    let what = serde_json::to_string(targets).ok()?;
+    let args = ["--record-worker", "--thumbs", what.as_str()].map(String::from);
+    Some(Wanted {
+        what: what.clone(),
+        key: String::new(),
+        args: Some(args.to_vec()),
     })
 }
 
