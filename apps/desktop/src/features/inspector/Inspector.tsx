@@ -58,8 +58,8 @@ const ICONS: Record<Inspected, IconName> = {
 /**
  * The inspector: a raised card docked to the right inside the preview while an overlay or a sound is
  * selected. Its header has the kind's icon and name, a more menu (Duplicate, Bring forward and Send back for a picture
- * layer, Delete) and a close button; its body the fields of that kind, scrolling with a fade at the bottom. On a locked track it says so and offers
- * Unlock. Changes apply at once and each is one undo step.
+ * layer, Delete) and a close button; its body the fields of that kind, scrolling with a fade at the bottom. On a
+ * locked track it says so and offers Unlock. Changes apply at once and each is one undo step.
  */
 export function Inspector({ format }: { format: FormatKind }) {
   const { t } = useLingui();

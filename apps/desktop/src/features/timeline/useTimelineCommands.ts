@@ -21,9 +21,9 @@ const NO_CLIPS: Clip[] = [];
 
 /**
  * The timeline's commands: split, trims to the playhead, nudges, the clipboard, track moves, attaching
- * and a sound or video layer's mute, plus `useTimelineNavCommands`' (selection steps, edit points, zoom, snapping). Each has a
- * stable id, is `enabled` only when it can act on the selection, and runs the same code from its shortcut, the player
- * bar and the block menu. `useCommands` merges them.
+ * and a sound or video layer's mute, plus `useTimelineNavCommands`' (selection steps, edit points, zoom, snapping).
+ * Each has a stable id, is `enabled` only when it can act on the selection, and runs the same code from its shortcut,
+ * the player bar and the block menu. `useCommands` merges them.
  */
 export function useTimelineCommands(): Command[] {
   const { t } = useLingui();
