@@ -339,7 +339,8 @@ pub fn library_pack(state: State<'_, ProjectSessionState>) -> Vec<PackItem> {
     state.pack().items()
 }
 
-/// The longest side of a picture the library shows: its tiles are 64 px wide, so this is room for a 2x screen.
+/// The longest side of a picture the library shows: its tiles are about 75 to 125 px wide (three to a row), so 256
+/// covers them on a 2x screen.
 const PICTURE_SIDE: u32 = 256;
 const PICTURE_UNREADABLE: &str = "That picture couldn't be read.";
 
