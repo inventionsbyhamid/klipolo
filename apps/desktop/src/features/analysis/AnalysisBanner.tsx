@@ -10,6 +10,7 @@ import {
   stateOf,
   useAnalysis,
 } from '../../state/analysis';
+import { Icon } from '../../layout/Icon';
 import { useProject } from '../../state/project';
 import {
   STEP_LABELS,
@@ -76,8 +77,8 @@ function JobRow({ clip }: { clip: Asset }) {
   const state = useAnalysis((s) => stateOf(s.states, clip.id));
   return (
     <div className="analysis-job">
-      <span className={clip.kind === 'video' ? 'analysis-art' : 'analysis-art is-sound'} aria-hidden>
-        {clip.kind === 'audio' && <BannerIcon name="wave" />}
+      <span className={clip.kind === 'video' ? 'art-clip' : 'art-clip is-sound'} aria-hidden>
+        {clip.kind === 'video' ? <Icon name="film" /> : <BannerIcon name="wave" />}
       </span>
       <span className="analysis-job-name" title={clip.name}>
         {clip.name}

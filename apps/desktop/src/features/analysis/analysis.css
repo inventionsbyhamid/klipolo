@@ -103,23 +103,14 @@
   font-size: var(--text-sm);
 }
 
-.analysis-art {
-  display: grid;
-  place-items: center;
+/* The clip's art: the design system's `.art-clip` frame (the library's), at the row's 56 px. */
+.analysis-job .art-clip {
   width: 56px;
-  aspect-ratio: 16 / 9;
-  border-radius: var(--radius-sm);
-  background: var(--color-clip-wash);
-  color: var(--color-ink-soft);
 }
 
-.analysis-art.is-sound {
+.analysis-job .art-clip.is-sound {
   background: var(--color-bay-hover);
-}
-
-.analysis-art .ico {
-  width: 18px;
-  height: 18px;
+  color: var(--color-ink-soft);
 }
 
 .analysis-job-name {
