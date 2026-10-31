@@ -129,6 +129,7 @@ fn context(project: &Project, inputs: &Inputs) -> ChatContext {
         &HashMap::new(),
         &inputs.scenes,
         &inputs.view,
+        &inputs.library,
     )
 }
 

@@ -232,7 +232,14 @@ fn run(args: &Args) -> Result<bool, String> {
                 end: secs_to_us(b),
             }),
         };
-        let ctx = build_context(&fx.project, &fx.speech, &fx.turns, &fx.scenes, &view);
+        let ctx = build_context(
+            &fx.project,
+            &fx.speech,
+            &fx.turns,
+            &fx.scenes,
+            &view,
+            &Library::default(),
+        );
         let inputs = Inputs {
             message: case.message.clone(),
             view,

@@ -117,6 +117,7 @@ fn talk() -> (Project, Inputs, ChatContext) {
         &HashMap::new(),
         &inputs.scenes,
         &inputs.view,
+        &inputs.library,
     );
     (p, inputs, ctx)
 }

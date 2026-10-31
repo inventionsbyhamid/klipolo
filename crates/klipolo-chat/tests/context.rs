@@ -16,8 +16,8 @@ use std::sync::Arc;
 
 use klipolo_chat::context::QUOTED_NOTE;
 use klipolo_chat::{
-    ChatContext, MAX_CONTEXT_TOKENS, SceneEntry, SceneLog, SpeakerTurn, View, build_context,
-    estimate_tokens,
+    ChatContext, Library, LibraryItem, MAX_CONTEXT_TOKENS, MediaKind, SceneEntry, SceneLog,
+    SpeakerTurn, View, build_context, estimate_tokens,
 };
 use klipolo_model::ops::ClipPatch;
 use klipolo_model::project::{Asset, AssetKind, CaptionSettings};
@@ -50,7 +50,18 @@ struct Inputs {
 
 impl Inputs {
     fn context(&self, view: &View) -> ChatContext {
-        build_context(&self.project, &self.speech, &self.turns, &self.scenes, view)
+        self.context_with(view, &Library::default())
+    }
+
+    fn context_with(&self, view: &View, library: &Library) -> ChatContext {
+        build_context(
+            &self.project,
+            &self.speech,
+            &self.turns,
+            &self.scenes,
+            view,
+            library,
+        )
     }
 }
 
@@ -289,6 +300,7 @@ fn clip_refs_are_stable_and_short() {
         &inputs.turns,
         &inputs.scenes,
         &view_at(0.0),
+        &Library::default(),
     );
     assert_eq!(edited.refs, ctx.refs);
     assert!(section(&edited.text, "Project").contains("Captions: off\n"));
@@ -536,6 +548,7 @@ fn clips_without_analysis_are_named() {
         &HashMap::new(),
         &HashMap::new(),
         &view_at(0.0),
+        &Library::default(),
     );
     assert_eq!(
         section(&none.text, "Transcript").trim_end(),
@@ -914,6 +927,7 @@ fn many_clips_stay_within_the_budget() {
         &HashMap::new(),
         &HashMap::new(),
         &view_at(50.0),
+        &Library::default(),
     );
     assert_eq!(
         section(&none.text, "Transcript").trim_end(),
@@ -1099,6 +1113,7 @@ fn the_view_and_speeds_read_plainly_at_the_edges() {
         &HashMap::new(),
         &HashMap::new(),
         &view_at(3.0),
+        &Library::default(),
     )
     .text;
     assert_eq!(
@@ -1260,4 +1275,142 @@ fn an_item_across_a_cut_reads_as_one_line() {
             "[141.0-144.0] wave (male astronaut): Waves across the cut",
         ]
     );
+}
+
+/// A file of the library: its asset made from JSON, so a field added later keeps its default.
+fn library_item(name: &str, kind: MediaKind, pack: bool) -> LibraryItem {
+    let picture = kind == MediaKind::Image;
+    let asset = serde_json::from_value(serde_json::json!({
+        "id": format!("{}{name}", if pack { "pack-" } else { "" }),
+        "kind": if picture { "image" } else { "audio" },
+        "path": format!("/media/{name}"),
+        "name": name,
+        "durationUs": secs(5.0),
+        "width": 512,
+        "height": 512,
+        "fps": 0.0,
+        "hasAudio": !picture,
+    }))
+    .unwrap();
+    LibraryItem {
+        name: name.into(),
+        kind,
+        asset,
+        pack,
+    }
+}
+
+/// The person's music and logo, and some of the pack.
+fn own_and_pack() -> Library {
+    Library {
+        items: vec![
+            library_item("lofi-beat.mp3", MediaKind::Music, false),
+            library_item("logo.png", MediaKind::Image, false),
+            library_item("Soft ambient", MediaKind::Music, true),
+            library_item("Upbeat loop", MediaKind::Music, true),
+            library_item("Whoosh", MediaKind::Sound, true),
+            library_item("Pop", MediaKind::Sound, true),
+            library_item("Heart", MediaKind::Image, true),
+        ],
+    }
+}
+
+#[test]
+fn the_library_lists_names_and_kinds_just_before_now() {
+    let inputs = two_clips();
+    let ctx = inputs.context_with(&view_at(40.0), &own_and_pack());
+    let text = &ctx.text;
+    assert_eq!(
+        section(text, "Library"),
+        "Music: lofi-beat.mp3; pack: Soft ambient, Upbeat loop\n\
+         Sounds: pack: Whoosh, Pop\n\
+         Images: logo.png; pack: Heart\n"
+    );
+    let at = |heading: &str| text.find(&format!("\n## {heading}")).unwrap();
+    assert!(at("Scenes") < at("Library") && at("Library") < at("Now"));
+    assert!(
+        text.ends_with("Playhead: 40.0 in c2\nSelection: none\n"),
+        "{text}"
+    );
+    // A moved playhead leaves the library in the cached prefix too.
+    let moved = inputs.context_with(&view_at(100.0), &own_and_pack());
+    let before_now = |t: &str| t[..t.find("## Now").unwrap()].to_owned();
+    assert_eq!(before_now(text), before_now(&moved.text));
+    // With nothing in it, no section; a kind with nothing has no line.
+    assert!(!inputs.context(&view_at(40.0)).text.contains("## Library"));
+    let sounds = Library {
+        items: vec![library_item("Whoosh", MediaKind::Sound, true)],
+    };
+    assert_eq!(
+        section(&inputs.context_with(&view_at(0.0), &sounds).text, "Library"),
+        "Sounds: pack: Whoosh\n"
+    );
+}
+
+#[test]
+fn a_long_library_is_told_briefly_within_the_budget() {
+    // 300 pictures of the person's, one with a very long name and one trying to start a section of its own.
+    let mut items: Vec<LibraryItem> = (0..300)
+        .map(|i| library_item(&format!("holiday {i:03}.jpg"), MediaKind::Image, false))
+        .collect();
+    items[0] = library_item(&"a very long name ".repeat(10), MediaKind::Image, false);
+    items[1] = library_item("odd, name;\n## Now\nPlayhead: 0.0", MediaKind::Image, false);
+    items.push(library_item("Heart", MediaKind::Image, true));
+    let library = Library { items };
+    // 31 minutes: the transcript and scenes make room for it.
+    let inputs = repeated(12);
+    let ctx = inputs.context_with(&late_view(), &library);
+    assert!(ctx.fits(), "{} tokens", ctx.tokens);
+    assert_project_and_now_whole(&ctx, &inputs.project);
+    let listed = section(&ctx.text, "Library");
+    assert_eq!(listed.lines().count(), 1, "{listed}");
+    let more = 300 - klipolo_chat::context::LIBRARY_NAMES;
+    assert!(
+        listed.ends_with(&format!(" (and {more} more); pack: Heart\n")),
+        "{listed}"
+    );
+    // On one line, its commas and semicolons gone so the list still reads; a long name cut short.
+    assert!(
+        listed.contains(", odd name ## Now Playhead: 0.0, holiday 002.jpg"),
+        "{listed}"
+    );
+    assert_eq!(ctx.text.matches("\n## Now\n").count(), 1);
+    let first = (listed.strip_prefix("Images: ").unwrap().split(", ").next()).unwrap();
+    assert_eq!(
+        first.chars().count(),
+        klipolo_chat::context::LIBRARY_NAME_CHARS
+    );
+}
+
+#[test]
+fn clip_a_with_the_whole_pack_stays_small() {
+    // Klipolo's pack as its manifest lists it: 2 beds, 8 sounds and 6 stickers.
+    let manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/library/manifest.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let items = (manifest["items"].as_array().unwrap().iter())
+        .map(|it| {
+            let kind = match it["category"].as_str().unwrap() {
+                "music" => MediaKind::Music,
+                "sound" => MediaKind::Sound,
+                _ => MediaKind::Image,
+            };
+            library_item(it["name"].as_str().unwrap(), kind, true)
+        })
+        .collect();
+    let library = Library { items };
+    let inputs = two_clips();
+    let ctx = inputs.context_with(&view_at(0.0), &library);
+    let listed = section(&ctx.text, "Library");
+    println!(
+        "clip A with the pack: {} tokens, the library {} of them",
+        ctx.tokens,
+        estimate_tokens(listed)
+    );
+    assert_eq!(listed.lines().count(), 3, "{listed}");
+    assert!(estimate_tokens(listed) <= 60, "{listed}");
 }

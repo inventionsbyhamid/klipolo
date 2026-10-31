@@ -12,8 +12,14 @@
 //!   time through every clip of that file on the main track. An item cut out entirely is left out; a partly cut one
 //!   keeps what remains (a sliver of under `MIN_SCENE_PIECE_US` of the file, of a longer item, is dropped: measured in
 //!   the file, so a short item in a sped-up clip stays).
+//! - `Library`: what the media tools add by name, one line per kind (`Music: lofi.mp3; pack: Soft ambient, Upbeat
+//!   loop`), the person's own files first and then Klipolo's pack, in the order given (`library::Library`). A kind with
+//!   nothing is left out, and so is the section when the library is empty. At most `LIBRARY_NAMES` of the person's
+//!   files a kind, then how many more; each name on one line, at most `LIBRARY_NAME_CHARS` long, its commas and
+//!   semicolons read as spaces so the list still reads.
 //! - `Now`: the playhead and the selection. Last, as they change most often: moving the playhead or the selection
-//!   leaves every byte before `## Now` as it was, so the transcript and scenes stay in the provider's cached prefix.
+//!   leaves every byte before `## Now` as it was, so the transcript, scenes and library stay in the provider's cached
+//!   prefix.
 //!
 //! Every time is TIMELINE seconds with one decimal, as the model reads and writes them. The same input always gives the
 //! same bytes, so the provider's prompt cache can reuse the prefix: the maps given are looked up, or walked into
@@ -28,12 +34,13 @@
 //! from start to end (`every 2nd line plus those near the playhead`), the one longer as shown thinned one step at a
 //! time, every line within `NEAR_PLAYHEAD_US` of the playhead or of either end of the selection kept (at most three
 //! windows of a minute, however long the selection). When Transcript or Scenes had to be told briefly as well, the clip
-//! lines get back what still fits. Lists of clips read as ranges (`c1-c500`). Project and Now are never cut, nor are
-//! the lines near the playhead and the selection's ends or the notes after a section, so the budget can still be
-//! broken (`ChatContext::tokens` lists how), and `tokens` then says so.
+//! lines get back what still fits. Lists of clips read as ranges (`c1-c500`). Project, Library and Now are never cut
+//! (the library is short already), nor are the lines near the playhead and the selection's ends or the notes after a
+//! section, so the budget can still be broken (`ChatContext::tokens` lists how), and `tokens` then says so.
 //!
-//! Free text (names, words, fixes, speaker labels, scene items) is written on one line (`one_line`), never at a line's
-//! start, so nothing said or shown in a video can start a section or a field of its own.
+//! Free text (names, words, fixes, speaker labels, scene items, library names) is written on one line (`one_line`),
+//! never at a line's start, so nothing said or shown in a video, nor a file's name, can start a section or a field of
+//! its own.
 //!
 //! The speaker turns and scene items are neutral inputs keyed by asset id (what the analysis stored, in that file's
 //! time): no provider's type reaches this crate.
@@ -55,6 +62,8 @@ use klipolo_model::time::{RangeUs, Us, scaled};
 use klipolo_model::timeline::{Clip, ClipSource};
 use serde::{Deserialize, Serialize};
 
+use crate::library::{Library, LibraryItem, MediaKind};
+
 /// The most the context may take of the model's input, in tokens (`estimate_tokens`).
 pub const MAX_CONTEXT_TOKENS: usize = 12_000;
 /// The estimate's characters per token.
@@ -73,6 +82,10 @@ pub const QUOTED_NOTE: &str =
 pub const NEAR_PLAYHEAD_US: Us = 30_000_000;
 /// A transcript line's words kept when lines are cut to their sentence starts.
 pub const START_WORDS: usize = 8;
+/// The most of the person's own files Library names of one kind; the rest are counted.
+pub const LIBRARY_NAMES: usize = 30;
+/// The most characters of a name Library shows.
+pub const LIBRARY_NAME_CHARS: usize = 40;
 /// Scene item kinds that mark a change of shot or topic: the scene log's `shot` and `topic`, and the older logs'
 /// `scene_cut`, `b_roll` and `topic_change`. Where "every topic change" falls (`evidence::Evidence::moment`).
 pub const CHANGE_KINDS: [&str; 5] = ["shot", "topic", "scene_cut", "b_roll", "topic_change"];
@@ -181,14 +194,15 @@ pub fn estimate_tokens(text: &str) -> usize {
     text.chars().count().div_ceil(CHARS_PER_TOKEN)
 }
 
-/// The context for `project` with its `speech`, each file's speaker `turns` and `scenes` (by asset id), and the
-/// person's `view`.
+/// The context for `project` with its `speech`, each file's speaker `turns` and `scenes` (by asset id), the person's
+/// `view`, and the `library` the media tools name.
 pub fn build_context(
     project: &Project,
     speech: &Speech,
     turns: &HashMap<String, Vec<SpeakerTurn>>,
     scenes: &HashMap<String, SceneLog>,
     view: &View,
+    library: &Library,
 ) -> ChatContext {
     let starts = clip_starts(&project.timeline.main);
     let spoken = spoken(project, speech);
@@ -261,8 +275,8 @@ pub fn build_context(
         "the playhead"
     };
 
-    // Project and the line on quotes; then Transcript and Scenes; then Now, last, so a moved playhead or selection
-    // leaves every byte before it as it was (the provider's cached prefix).
+    // Project and the line on quotes; then Transcript and Scenes; then Library and Now, last, so a moved playhead or
+    // selection leaves every byte before it as it was (the provider's cached prefix).
     let head = |brief: Brief| {
         let mut head = String::new();
         project_section(&mut head, project, &starts, brief);
@@ -272,6 +286,9 @@ pub fn build_context(
         head
     };
     let mut now = String::from("\n");
+    if library_section(&mut now, library) {
+        now.push('\n');
+    }
     now_section(&mut now, project, view);
     let quoted = |brief: Brief| {
         let transcript = Quoted {
@@ -704,6 +721,57 @@ pub(crate) fn within_video(p: &Project, view: &View) -> (Us, Option<RangeUs>) {
         view.playhead_us.clamp(0, length),
         selection.filter(|r| !r.is_empty()),
     )
+}
+
+/// `## Library` and a line for each kind it has; false when it has nothing (and nothing is written).
+fn library_section(out: &mut String, library: &Library) -> bool {
+    let kinds = [
+        (MediaKind::Music, "Music"),
+        (MediaKind::Sound, "Sounds"),
+        (MediaKind::Image, "Images"),
+    ];
+    let mut lines = String::new();
+    for (kind, heading) in kinds {
+        let (own, pack): (Vec<&LibraryItem>, Vec<&LibraryItem>) = (library.items.iter())
+            .filter(|i| i.kind == kind)
+            .partition(|i| !i.pack);
+        if own.is_empty() && pack.is_empty() {
+            continue;
+        }
+        let listed = |items: &[&LibraryItem], most: usize| {
+            let mut names: Vec<String> = (items.iter().take(most))
+                .map(|i| library_name(&i.name))
+                .collect();
+            if items.len() > most {
+                let more = items.len() - most;
+                let last = names.pop().unwrap_or_default();
+                names.push(format!("{last} (and {more} more)"));
+            }
+            names.join(", ")
+        };
+        let mut parts = Vec::new();
+        if !own.is_empty() {
+            parts.push(listed(&own, LIBRARY_NAMES));
+        }
+        if !pack.is_empty() {
+            parts.push(format!("pack: {}", listed(&pack, pack.len())));
+        }
+        let _ = writeln!(lines, "{heading}: {}", parts.join("; "));
+    }
+    if lines.is_empty() {
+        return false;
+    }
+    out.push_str("## Library\n");
+    out.push_str(&lines);
+    true
+}
+
+/// A library name as Library shows it: on one line, its commas and semicolons as spaces, at most
+/// `LIBRARY_NAME_CHARS` long.
+fn library_name(name: &str) -> String {
+    let line = one_line(&name.replace([',', ';'], " "));
+    let cut: String = line.chars().take(LIBRARY_NAME_CHARS).collect();
+    cut.trim_end().to_owned()
 }
 
 fn now_section(out: &mut String, p: &Project, view: &View) {
