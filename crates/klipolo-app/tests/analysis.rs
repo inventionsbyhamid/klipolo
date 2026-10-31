@@ -123,7 +123,12 @@ impl FakeMedia {
 }
 
 impl Media for FakeMedia {
-    fn sound(&self, _src: &Path, out: &Path) -> Result<AudioInfo, AudioError> {
+    fn sound(
+        &self,
+        _src: &Path,
+        out: &Path,
+        _cancel: &AtomicBool,
+    ) -> Result<AudioInfo, AudioError> {
         self.sounds.fetch_add(1, Ordering::SeqCst);
         std::fs::write(out, wav_of(&tone(self.seconds)))?;
         Ok(AudioInfo {

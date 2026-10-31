@@ -16,8 +16,9 @@ use klipolo_model::time::Us;
 
 /// A clip's local work (see the module notes). Blocking calls.
 pub trait Media: Send + Sync {
-    /// `src`'s sound as a mono 16-bit WAV at 16 kHz, written to `out` (`audio::extract_wav_16k`).
-    fn sound(&self, src: &Path, out: &Path) -> Result<AudioInfo, AudioError>;
+    /// `src`'s sound as a mono 16-bit WAV at 16 kHz, written to `out` (`audio::extract_wav_16k`); `cancel` stops it
+    /// (`AudioError::Stopped`).
+    fn sound(&self, src: &Path, out: &Path, cancel: &AtomicBool) -> Result<AudioInfo, AudioError>;
 
     /// `src`'s loudness, dB per 100 ms of its sound; None when it has none or it can't be read now.
     fn levels(&self, src: &Path, cancel: &AtomicBool) -> Option<Levels>;
@@ -47,8 +48,8 @@ impl EngineMedia {
 }
 
 impl Media for EngineMedia {
-    fn sound(&self, src: &Path, out: &Path) -> Result<AudioInfo, AudioError> {
-        audio::extract_wav_16k(src, out)
+    fn sound(&self, src: &Path, out: &Path, cancel: &AtomicBool) -> Result<AudioInfo, AudioError> {
+        audio::extract_wav_16k_cancellable(src, out, cancel)
     }
 
     /// From the sound cache's energies (decoding the file into it first if no build has): no second decode of our

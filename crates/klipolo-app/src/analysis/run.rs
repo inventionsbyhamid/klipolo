@@ -278,8 +278,9 @@ impl AnalysisState {
             self.progress(key, AnalysisStep::Audio, 0);
             let wav = work.join("sound.wav");
             let made = {
-                let (src, wav) = (clip.path.clone(), wav.clone());
-                self.local(move |media| media.sound(&src, &wav)).await
+                let (src, wav, run) = (clip.path.clone(), wav.clone(), run.clone());
+                self.local(move |media| media.sound(&src, &wav, &run.cancel))
+                    .await
             };
             let info = made
                 .map_err(Outcome::Failed)?
@@ -400,8 +401,9 @@ impl AnalysisState {
         self.progress(key, AnalysisStep::Audio, 0);
         let wav = work.join("sound.wav");
         let made = {
-            let (src, wav) = (clip.path.clone(), wav.clone());
-            self.local(move |media| media.sound(&src, &wav)).await
+            let (src, wav, run) = (clip.path.clone(), wav.clone(), run.clone());
+            self.local(move |media| media.sound(&src, &wav, &run.cancel))
+                .await
         };
         let Ok(Ok(info)) = made else {
             return Ok(found);
