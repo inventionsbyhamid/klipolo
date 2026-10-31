@@ -4,8 +4,9 @@
 //!   `klipolo-app --record-worker --probe <file>` (5 s at most), and is kept at
 //!   `<app data>/recorder/probe-<os>-<klipolo>.json`. One probe at a time (two at once would each measure half the
 //!   engine), never while a take is the recorder's (it would measure beside the take's sessions), and a report in which
-//!   every encoder refused is never kept, so the next opening measures again. A probe that hung or crashed leaves a
-//!   `.failed` mark, so the dialog doesn't wait for it again in this version.
+//!   every encoder refused is never used, kept or found (an earlier build may have kept one), so the next opening
+//!   measures again. A report with no encoder at all (a computer without a hardware one) is kept. A probe that hung or
+//!   crashed isn't waited for again until Klipolo opens again, and leaves a `.failed` mark for diagnosis.
 //! - **The recordings folder** is measured once per opening of the dialog (`check_folder`: 1 MB written and fully
 //!   flushed, and whether it can lock a file), never while a take records there; one that can't lock is refused up
 //!   front (`refuse_folder`).
@@ -14,6 +15,7 @@
 //!   it with their fallbacks, and the camera only where that quality has room for it.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 
 use klipolo_capture::backend::{Backend, PresetId, ProbeReport};
@@ -40,7 +42,7 @@ impl Files {
         self.dir.join(format!("{}.json", probe_name()))
     }
 
-    /// The mark of a probe that hung or crashed, for this macOS version and this Klipolo.
+    /// The mark of a probe that hung or crashed, for this macOS version and this Klipolo: for diagnosis only.
     pub(super) fn probe_failed(&self) -> PathBuf {
         self.dir.join(format!("{}.failed", probe_name()))
     }
@@ -71,10 +73,12 @@ pub(super) struct Shown {
 
 /// How a setup gets the probe's report.
 pub(super) enum Probing<'a> {
-    /// Measured now when none is kept, by `run` (which writes it to the path it is given), one probe at a time.
+    /// Measured now when none is kept, by `run` (which writes it to the path it is given), one probe at a time, unless
+    /// a probe gave no report since Klipolo opened (`failed`).
     Run {
         run: &'a dyn Fn(&Path),
         one_at_a_time: &'a Mutex<()>,
+        failed: &'a AtomicBool,
     },
     /// Only a kept report: a take is the recorder's, or a take is armed without the dialog.
     Kept,
@@ -83,19 +87,23 @@ pub(super) enum Probing<'a> {
 /// The probe's report: kept, else measured now (`Probing::Run`), else None (the dialog then offers no quality and the
 /// backend picks its encoder).
 fn probe_report(files: &Files, probing: Probing<'_>) -> Option<ProbeReport> {
-    let kept = || read_json::<ProbeReport>(&files.probe());
-    if let Some(report) = kept() {
+    if let Some(report) = kept(files) {
         return Some(report);
     }
-    let Probing::Run { run, one_at_a_time } = probing else {
+    let Probing::Run {
+        run,
+        one_at_a_time,
+        failed,
+    } = probing
+    else {
         return None;
     };
     let _one = one_at_a_time.lock().unwrap_or_else(PoisonError::into_inner);
     // Another setup may have measured while this one waited.
-    if let Some(report) = kept() {
+    if let Some(report) = kept(files) {
         return Some(report);
     }
-    if files.probe_failed().exists() {
+    if failed.load(Ordering::SeqCst) {
         return None;
     }
     if let Err(error) = std::fs::create_dir_all(&files.dir) {
@@ -103,21 +111,23 @@ fn probe_report(files: &Files, probing: Probing<'_>) -> Option<ProbeReport> {
         return None;
     }
     run(&files.probe());
-    match kept() {
+    match read_json::<ProbeReport>(&files.probe()) {
         Some(report) if every_encoder_refused(&report) => {
             tracing::warn!(
                 "recorder: every encoder refused the probe, so it measures again next time"
             );
-            if let Err(error) = std::fs::remove_file(files.probe()) {
-                tracing::warn!(%error, "recorder: the refused probe's report wasn't removed");
-            }
+            forget(&files.probe());
             None
         }
-        Some(report) => Some(report),
+        Some(report) => {
+            forget(&files.probe_failed());
+            Some(report)
+        }
         None => {
             tracing::warn!(
-                "recorder: the encoder probe gave no report, so it isn't run again in this version"
+                "recorder: the encoder probe gave no report, so it isn't run again until Klipolo opens again"
             );
+            failed.store(true, Ordering::SeqCst);
             if let Err(error) = std::fs::write(files.probe_failed(), b"") {
                 tracing::warn!(%error, "recorder: the probe's failure wasn't marked");
             }
@@ -126,9 +136,32 @@ fn probe_report(files: &Files, probing: Probing<'_>) -> Option<ProbeReport> {
     }
 }
 
-/// No encoder measured anything: each refused its session (as one can right after a restart or under load).
+/// The kept report, unless every encoder refused it (an earlier build kept such reports): that one goes, so the probe
+/// measures again.
+fn kept(files: &Files) -> Option<ProbeReport> {
+    let report = read_json::<ProbeReport>(&files.probe())?;
+    if every_encoder_refused(&report) {
+        tracing::warn!("recorder: a kept probe report in which every encoder refused is measured again");
+        forget(&files.probe());
+        return None;
+    }
+    Some(report)
+}
+
+/// Removes a file of the recorder's, if it is there.
+fn forget(path: &Path) {
+    match std::fs::remove_file(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => tracing::warn!(%error, file = ?path.file_name(), "recorder: a file of its own wasn't removed"),
+    }
+}
+
+/// Every encoder there was refused its session (as one can right after a restart or under load), so nothing was
+/// measured. A report with no encoder at all is a computer without a hardware one: nothing to measure again.
 fn every_encoder_refused(report: &ProbeReport) -> bool {
-    (report.encoders.iter()).all(|e| e.fps_1080p60 <= 0.0 && e.max_fps_1440p <= 0.0)
+    !report.encoders.is_empty()
+        && (report.encoders.iter()).all(|e| e.fps_1080p60 <= 0.0 && e.max_fps_1440p <= 0.0)
 }
 
 /// The Record dialog's data. `root`: the recordings folder; `measure`: write 1 MB there to see how fast it is (never

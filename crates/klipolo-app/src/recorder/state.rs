@@ -4,6 +4,7 @@
 //! command refuses with it, before any worker or OS call.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -77,6 +78,8 @@ struct On {
     last_setup: Mutex<Option<Shown>>,
     /// One encoder probe at a time.
     probing: Mutex<()>,
+    /// A probe gave no report since Klipolo opened (it hung or crashed): not waited for again until it opens again.
+    probe_failed: AtomicBool,
 }
 
 pub struct RecorderState {
@@ -120,6 +123,7 @@ impl RecorderState {
                 open_project: parts.open_project,
                 last_setup: Mutex::new(None),
                 probing: Mutex::new(()),
+                probe_failed: AtomicBool::new(false),
             }),
         }
     }
@@ -153,6 +157,7 @@ impl RecorderState {
             Probing::Run {
                 run: &*on.probe,
                 one_at_a_time: &on.probing,
+                failed: &on.probe_failed,
             }
         };
         let root = on.root.as_deref();

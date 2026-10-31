@@ -1,5 +1,6 @@
 //! The Record dialog's data and a take's plan: the setup read from the fake backend without capture or prompts, the
-//! encoder probe (once per app version, one at a time, never beside a take, never kept when every encoder refused),
+//! encoder probe (once per app version, one at a time, never beside a take, never used when every encoder refused,
+//! tried again once Klipolo opens again after one that gave nothing),
 //! and each take's `session.json` from the person's options and the app's fixed choices, this Mac's encoders included.
 //! The fake backend and fake workers only: nothing captures and nothing is asked of the OS.
 
@@ -17,6 +18,7 @@ use klipolo_capture::synthetic::Script;
 use klipolo_model::project::SourceRole;
 use klipolo_platform::caps::OsFamily;
 
+use super::state::RecorderState;
 use super::test_support::*;
 use super::types::WhatToRecord;
 
@@ -134,7 +136,54 @@ fn a_refused_probe_is_measured_again_and_a_failed_one_is_not() {
     rec.state.setup().unwrap();
     rec.state.setup().unwrap();
     assert_eq!(rec.probes.load(Ordering::SeqCst), 1, "not waited for again");
-    assert!(rec.files.probe_failed().exists());
+    assert!(rec.files.probe_failed().exists(), "marked, for diagnosis");
+}
+
+/// A probe that hung or crashed is waited for once per opening of Klipolo, not once per version: one bad moment (a
+/// restart, a busy engine) never pins "no qualities" until the next update. Its mark goes once one measures.
+#[test]
+fn a_probe_that_gave_nothing_runs_again_once_klipolo_opens_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let (parts, before) = world(dir.path(), Script::default());
+    *before.probe_writes.lock().unwrap() = None;
+    let first = RecorderState::build(false, || parts);
+    first.setup().unwrap();
+    first.setup().unwrap();
+    assert_eq!(before.probes.load(Ordering::SeqCst), 1);
+    assert!(before.files.probe_failed().exists());
+
+    // Klipolo opens again: a new recorder over the same folders.
+    let (parts, again) = world(dir.path(), Script::default());
+    let reopened = RecorderState::build(false, || parts);
+    let setup = reopened.setup().unwrap();
+    assert_eq!(again.probes.load(Ordering::SeqCst), 1, "measured again");
+    assert!(!setup.offers.is_empty());
+    assert!(again.files.probe().exists());
+    assert!(!again.files.probe_failed().exists(), "its mark goes");
+}
+
+/// A kept report in which every encoder refused (an earlier build kept such reports) is measured again rather than
+/// used; a report with no encoder at all (a computer without a hardware one) is kept, not measured on every opening.
+#[test]
+fn a_kept_refused_report_is_measured_again_and_one_without_encoders_is_kept() {
+    let rec = fixture();
+    let mut refused = probe_report();
+    for encoder in &mut refused.encoders {
+        (encoder.fps_1080p60, encoder.max_fps_1440p) = (0.0, 0.0);
+    }
+    std::fs::create_dir_all(&rec.files.dir).unwrap();
+    std::fs::write(rec.files.probe(), serde_json::to_vec(&refused).unwrap()).unwrap();
+    assert!(!rec.state.setup().unwrap().offers.is_empty(), "measured now");
+    assert_eq!(rec.probes.load(Ordering::SeqCst), 1);
+
+    let rec = fixture();
+    let mut none = probe_report();
+    none.encoders.clear();
+    *rec.probe_writes.lock().unwrap() = Some(none);
+    rec.state.setup().unwrap();
+    rec.state.setup().unwrap();
+    assert_eq!(rec.probes.load(Ordering::SeqCst), 1, "kept after the first");
+    assert!(rec.files.probe().exists());
 }
 
 #[test]
