@@ -1,0 +1,363 @@
+//! The start screen's list, over a library in a temporary folder: every time is set by hand (a fixed clock), as
+//! `recent.json` stamps or as a file's last save.
+
+use std::collections::BTreeMap;
+use std::fs::{self, File};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
+use std::time::{Duration, SystemTime};
+
+use klipolo_engine::media::key::{CacheKind, stem};
+use klipolo_engine::media::sprite::Sprite;
+use klipolo_engine::media::thumbs::{self, Fill};
+use klipolo_model::project::{Asset, AssetKind, Project};
+use klipolo_model::recording::{
+    Recording, RecordingKind, RecordingSource, SourceMix, SourceRole, SourceRun,
+};
+use klipolo_model::timeline::{Clip, ClipSource};
+use klipolo_platform::durable::{Durability, Os};
+
+use super::*;
+use crate::project::{ProjectSessionState, lock, open_in, save};
+
+/// The library, the stamps file and the thumbnails' folder in `dir`, as the app has them: the library made, the
+/// others not yet.
+fn folders(dir: &Path) -> (PathBuf, PathBuf, PathBuf) {
+    let library = dir.join("Klipolo");
+    fs::create_dir_all(&library).unwrap();
+    (
+        library,
+        dir.join("data").join("recent.json"),
+        dir.join("cache").join("media").join("thumbs"),
+    )
+}
+
+/// `project` saved as `<name>.klipolo` in `folder`, last saved at `saved_ms`.
+fn saved(folder: &Path, project: &Project, saved_ms: u64) -> PathBuf {
+    let file = folder.join(format!("{}.klipolo", project.name));
+    save(&file, project, Durability::Ordered).unwrap();
+    set_saved(&file, saved_ms);
+    file
+}
+
+fn set_saved(file: &Path, ms: u64) {
+    File::options()
+        .write(true)
+        .open(file)
+        .unwrap()
+        .set_modified(SystemTime::UNIX_EPOCH + Duration::from_millis(ms))
+        .unwrap();
+}
+
+/// `recent.json` as the app writes it: `{ path: opened_ms }`.
+fn stamped(stamps: &Path, opened: &[(&Path, u64)]) {
+    let map: BTreeMap<String, u64> = opened
+        .iter()
+        .map(|(file, ms)| (file.to_string_lossy().into_owned(), *ms))
+        .collect();
+    fs::create_dir_all(stamps.parent().unwrap()).unwrap();
+    fs::write(stamps, serde_json::to_vec(&map).unwrap()).unwrap();
+}
+
+fn names(rows: &[ProjectRow]) -> Vec<(&str, u64)> {
+    rows.iter()
+        .map(|row| (row.name.as_str(), row.opened_ms))
+        .collect()
+}
+
+/// A stand-in media file (its bytes are never read: a thumbnail's cache is keyed by the file's path, size and time).
+fn media_file(dir: &Path, name: &str) -> PathBuf {
+    let file = dir.join("media").join(name);
+    fs::create_dir_all(file.parent().unwrap()).unwrap();
+    fs::write(&file, format!("not really {name}")).unwrap();
+    file
+}
+
+fn asset(id: &str, kind: AssetKind, file: &Path) -> Asset {
+    let video = kind == AssetKind::Video;
+    Asset {
+        id: id.into(),
+        kind,
+        path: file.to_string_lossy().into_owned(),
+        name: file.file_name().unwrap().to_string_lossy().into_owned(),
+        duration_us: 10_000_000,
+        width: if video { 1280 } else { 0 },
+        height: if video { 720 } else { 0 },
+        fps: if video { 30.0 } else { 0.0 },
+        rotation: None,
+        has_audio: !video,
+        audio_lead_us: None,
+        made_with: None,
+    }
+}
+
+fn clip(source: ClipSource, from_us: i64, to_us: i64) -> Clip {
+    Clip::new(source, from_us, to_us)
+}
+
+fn of_asset(id: &str) -> ClipSource {
+    ClipSource::Asset { id: id.into() }
+}
+
+/// Chunk `chunk` of `file`'s thumbnails, written as a scan writes it: its sprite's path.
+fn cache_chunk(thumbs_root: &Path, file: &Path, chunk: u32, tile: (u32, u32)) -> String {
+    let stem = stem(file.to_str().unwrap(), &CacheKind::Thumbs).unwrap();
+    let sprite = Sprite::new(chunk, tile);
+    thumbs::write_chunk(&Os, thumbs_root, &stem, &sprite, Fill::Keys).unwrap();
+    thumbs::chunk_path(thumbs_root, &stem, chunk, Fill::Keys)
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// Projects opened here come first, the latest open first, even before a file saved after them; the rest follow. A
+/// stamp for a file that isn't in the library lists nothing.
+#[test]
+fn opened_projects_come_first_newest_first() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    let older = saved(&library, &Project::new("Opened before"), 1_000);
+    let newer = saved(&library, &Project::new("Opened last"), 1_000);
+    saved(&library, &Project::new("Saved later"), 9_000);
+    let gone = dir.path().join("Elsewhere").join("Gone.klipolo");
+    stamped(&stamps, &[(&older, 2_000), (&newer, 3_000), (&gone, 4_000)]);
+
+    let rows = recent_in(&library, &stamps, None, RECENT_LIMIT);
+    assert_eq!(
+        names(&rows),
+        [
+            ("Opened last", 3_000),
+            ("Opened before", 2_000),
+            ("Saved later", 9_000)
+        ]
+    );
+    assert_eq!(rows[0].path, newer.to_string_lossy());
+}
+
+/// With nothing opened yet (no `recent.json`), the library's project files list by their last save, newest first.
+/// Other files, a save's temporary file, folders and projects in sub folders aren't listed.
+#[test]
+fn never_opened_files_follow_by_last_save() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    saved(&library, &Project::new("First"), 1_000);
+    saved(&library, &Project::new("Third"), 3_000);
+    saved(&library, &Project::new("Second"), 2_000);
+    fs::write(library.join("notes.txt"), "a note").unwrap();
+    fs::write(library.join("Second.klipolo.4242.tmp"), "half a save").unwrap();
+    fs::create_dir_all(library.join("A folder.klipolo")).unwrap();
+    saved(&library.join("Recordings"), &Project::new("Nested"), 4_000);
+
+    let rows = recent_in(&library, &stamps, None, RECENT_LIMIT);
+    assert_eq!(
+        names(&rows),
+        [("Third", 3_000), ("Second", 2_000), ("First", 1_000)]
+    );
+}
+
+/// A file that doesn't read as a project is left out, and the next readable one takes its place; a `recent.json` that
+/// doesn't read counts as no stamps.
+#[test]
+fn unreadable_files_are_skipped() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    saved(&library, &Project::new("Good"), 1_000);
+    let text = library.join("Not a project.klipolo");
+    fs::write(&text, "not a project").unwrap();
+    set_saved(&text, 2_000);
+    let bytes = library.join("Not text.klipolo");
+    fs::write(&bytes, [0xff, 0xfe, 0x00]).unwrap();
+    set_saved(&bytes, 3_000);
+    fs::create_dir_all(stamps.parent().unwrap()).unwrap();
+    fs::write(&stamps, "{ not json").unwrap();
+
+    assert_eq!(
+        names(&recent_in(&library, &stamps, None, RECENT_LIMIT)),
+        [("Good", 1_000)]
+    );
+    assert_eq!(
+        names(&recent_in(&library, &stamps, None, 1)),
+        [("Good", 1_000)],
+        "skipped files don't use up the limit"
+    );
+}
+
+/// The start screen lists the 30 latest projects.
+#[test]
+fn at_most_30_rows() {
+    assert_eq!(RECENT_LIMIT, 30);
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    for n in 1..=35 {
+        saved(
+            &library,
+            &Project::new(format!("Project {n:02}")),
+            n * 1_000,
+        );
+    }
+
+    let rows = recent_in(&library, &stamps, None, RECENT_LIMIT);
+    assert_eq!(rows.len(), 30);
+    assert_eq!(rows.first().unwrap().name, "Project 35");
+    assert_eq!(rows.last().unwrap().name, "Project 06");
+}
+
+/// A card's picture is the first tile of its first main clip's cached thumbnails (chunk 0), never another clip's and
+/// never a later chunk; None when there's no cache, no clip, or that chunk isn't scanned yet. Its length is the main
+/// track's.
+#[test]
+fn thumb_is_the_first_clips_cached_tile_or_none() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, root) = folders(dir.path());
+    let first = media_file(dir.path(), "first.mp4");
+    let second = media_file(dir.path(), "second.mp4");
+    let mut project = Project::new("Two clips");
+    // The assets in another order than the clips: the first clip counts, not the first file.
+    project.assets = vec![
+        asset("second", AssetKind::Video, &second),
+        asset("first", AssetKind::Video, &first),
+    ];
+    project.timeline.main = vec![
+        clip(of_asset("first"), 0, 2_000_000),
+        clip(of_asset("second"), 1_000_000, 4_000_000),
+    ];
+    saved(&library, &project, 2_000);
+    saved(&library, &Project::new("No clips"), 1_000);
+    let row = |thumbs: Option<&Path>| recent_in(&library, &stamps, thumbs, RECENT_LIMIT);
+
+    let rows = row(None);
+    assert_eq!(
+        rows.iter()
+            .map(|r| (r.name.as_str(), r.duration_us, r.clips))
+            .collect::<Vec<_>>(),
+        [("Two clips", 5_000_000, 2), ("No clips", 0, 0)]
+    );
+    assert_eq!(rows[0].thumb, None, "no cache folder");
+    assert_eq!(row(Some(&root))[0].thumb, None, "nothing scanned yet");
+
+    cache_chunk(&root, &second, 0, (20, 10));
+    cache_chunk(&root, &first, 1, (16, 10));
+    assert_eq!(
+        row(Some(&root))[0].thumb,
+        None,
+        "another clip's tile, or a later chunk, isn't the card's"
+    );
+
+    let sprite = cache_chunk(&root, &first, 0, (16, 10));
+    let rows = row(Some(&root));
+    assert_eq!(
+        rows[0].thumb,
+        Some(ThumbTile {
+            sprite,
+            tile_w: 16,
+            tile_h: 10,
+            cols: 8,
+        })
+    );
+    assert_eq!(rows[1].thumb, None, "no clip, no picture");
+}
+
+/// A recording's card shows its main footage, the screen: not the camera, not the first source listed.
+#[test]
+fn a_recording_project_uses_its_screen_file_for_the_thumb() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, root) = folders(dir.path());
+    let screen = media_file(dir.path(), "screen.mp4");
+    let camera = media_file(dir.path(), "camera.mp4");
+    let voice = media_file(dir.path(), "voice.m4a");
+    let source = |id: &str, role: SourceRole, asset_id: &str| RecordingSource {
+        id: id.into(),
+        role,
+        label: format!("capture.source.{id}"),
+        runs: vec![SourceRun {
+            asset_id: asset_id.into(),
+            offset_us: 0,
+            duration_us: 10_000_000,
+            drift_ppm: 0.0,
+            file_in_us: 0,
+        }],
+        nudge_us: 0,
+        mix: SourceMix::default(),
+        synced: None,
+    };
+    let mut project = Project::new("A take");
+    project.assets = vec![
+        asset("voice", AssetKind::Audio, &voice),
+        asset("camera", AssetKind::Video, &camera),
+        asset("screen", AssetKind::Video, &screen),
+    ];
+    project.recordings = vec![Recording {
+        id: "take".into(),
+        kind: RecordingKind::Screen,
+        sources: vec![
+            source("mic", SourceRole::Mic, "voice"),
+            source("camera", SourceRole::Camera, "camera"),
+            source("screen", SourceRole::Screen, "screen"),
+        ],
+        primary: "screen".into(),
+        cursor: None,
+        markers: Vec::new(),
+        game: None,
+    }];
+    project.timeline.main = vec![clip(
+        ClipSource::Recording { id: "take".into() },
+        0,
+        6_000_000,
+    )];
+    saved(&library, &project, 1_000);
+    cache_chunk(&root, &camera, 0, (20, 10));
+    let sprite = cache_chunk(&root, &screen, 0, (16, 10));
+
+    let rows = recent_in(&library, &stamps, Some(&root), RECENT_LIMIT);
+    assert_eq!((rows[0].duration_us, rows[0].clips), (6_000_000, 1));
+    assert_eq!(
+        rows[0].thumb,
+        Some(ThumbTile {
+            sprite,
+            tile_w: 16,
+            tile_h: 10,
+            cols: 8,
+        })
+    );
+}
+
+/// Listing reads the files and nothing else: the open project stays open as it was, no file in the library is
+/// written, the stamps aren't touched and nothing is scanned for thumbnails.
+#[test]
+fn listing_never_opens_a_project() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, root) = folders(dir.path());
+    let open = saved(&library, &Project::new("Open now"), 2_000);
+    let other = saved(&library, &Project::new("Another"), 1_000);
+    let state = ProjectSessionState::default();
+    open_in(&state, &open).unwrap();
+    stamped(&stamps, &[(&open, 3_000)]);
+    let session = |state: &ProjectSessionState| {
+        let held = lock(state);
+        let held = held.as_ref().expect("a project is open");
+        (
+            held.file.clone(),
+            held.document.project().id.clone(),
+            held.document.revision(),
+            state.opens.load(Ordering::SeqCst),
+        )
+    };
+    let on_disk = || {
+        let mut files: Vec<(PathBuf, Vec<u8>, SystemTime)> = fs::read_dir(&library)
+            .unwrap()
+            .map(|entry| {
+                let path = entry.unwrap().path();
+                let modified = fs::metadata(&path).unwrap().modified().unwrap();
+                (path.clone(), fs::read(&path).unwrap(), modified)
+            })
+            .collect();
+        files.sort();
+        (files, fs::read(&stamps).unwrap())
+    };
+    let before = (session(&state), on_disk());
+
+    let rows = recent_in(&library, &stamps, Some(&root), RECENT_LIMIT);
+    assert_eq!(names(&rows), [("Open now", 3_000), ("Another", 1_000)]);
+    assert_eq!(rows[1].path, other.to_string_lossy());
+    assert_eq!((session(&state), on_disk()), before);
+    assert!(!root.exists(), "nothing was scanned");
+}

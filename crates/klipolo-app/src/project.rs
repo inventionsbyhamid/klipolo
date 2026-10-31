@@ -37,13 +37,15 @@ use klipolo_model::history::{Change, Document, HistoryLimits, Snapshot, Snapshot
 use klipolo_model::project::{AssetKind, FormatKind, Project};
 use klipolo_platform::pressure::{self, Pressure};
 pub(crate) use library::{library_dir, read};
+use recent::{ProjectRow, RECENT_FILE, RECENT_LIMIT, recent_in};
 pub(crate) use saver::{SaveStatus, Saver, Version};
 pub(crate) use session::ProjectSessionState;
 #[cfg(test)]
 pub(crate) use session::opened;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 use crate::pack::Pack;
+use crate::state::EngineState;
 use tokio::sync::watch;
 
 /// A project file's extension: `~/Movies/Klipolo/<name>.klipolo`.
@@ -154,6 +156,30 @@ pub fn project_create(
 #[tauri::command(async)]
 pub fn project_open(state: State<'_, ProjectSessionState>, path: String) -> Result<Snapshot, Said> {
     open_in(&state, Path::new(&path))
+}
+
+/// The start screen's recent projects (`recent::recent_in`): the library's project files, last opened first. Nothing is
+/// opened. Each card's thumbnail sprite is let through the asset protocol (the cache folder's scope holds it already).
+#[tauri::command(async)]
+#[expect(dead_code, reason = "registered with the start screen")]
+pub fn projects_recent(
+    app: AppHandle,
+    engine: State<'_, EngineState>,
+) -> Result<Vec<ProjectRow>, Said> {
+    // Without an app data folder nothing was stamped: the list goes by last save.
+    let stamps = app
+        .path()
+        .app_data_dir()
+        .map(|dir| dir.join(RECENT_FILE))
+        .unwrap_or_default();
+    let thumbs = engine.caches().map(|caches| caches.thumbs());
+    let rows = recent_in(&library_dir()?, &stamps, thumbs.as_deref(), RECENT_LIMIT);
+    let scope = app.asset_protocol_scope();
+    for tile in rows.iter().filter_map(|row| row.thumb.as_ref()) {
+        // A sprite that can't be allowed shows the clip art instead.
+        let _ = scope.allow_file(&tile.sprite);
+    }
+    Ok(rows)
 }
 
 /// Closes the open project once its edits are saved; its analysis stops.
