@@ -57,7 +57,7 @@ describe('export run', () => {
     const message = 'Your disk is full. Free up space, then resume.';
     const s = run([started, progress(80, 12), { type: 'paused', message, compatibility: null }]);
     expect([s.phase, s.jobId, s.message, s.etaS]).toEqual(['failed', 'job', message, null]);
-    expect(s.announcement).toBe(`${message} 16:9 was not saved.`);
+    expect(s.announcement).toBe(`16:9 was not saved. ${message}`);
   });
 
   it('rows show the file name as written', () => {
@@ -81,7 +81,8 @@ describe('export run', () => {
     expect(s.phase).toBe('failed');
     expect(s.message).toBe('The disk is full. Free up space, then try again.');
     expect(unsavedFormats(s)).toEqual(['portrait']);
-    expect(s.announcement).toBe('The disk is full. Free up space, then try again. 9:16 was not saved.');
+    // What was lost first, then why and what to do.
+    expect(s.announcement).toBe('9:16 was not saved. The disk is full. Free up space, then try again.');
     expect(s.ready).toEqual([0]);
   });
 
