@@ -1,5 +1,5 @@
 //! ScreenCaptureKit's pure rules (`platform::macos` captures with them), built on every OS so the Linux
-//! test them too:
+//! CI runs test them too:
 //! - the stream's pacing: frames asked for 10 % faster than the take's rate, so a display that presents a frame a hair
 //!   late never halves it; and how many buffers the stream may hold;
 //! - the stop codes, as the heal policy's events;
