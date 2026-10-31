@@ -239,6 +239,11 @@
     "params": []
   },
   {
+    "code": "capture.note.savedFromFiles",
+    "message": "The recorder stopped while saving, so Klipolo finished the recording from its files.",
+    "params": []
+  },
+  {
     "code": "capture.note.micDropping",
     "message": "{source} keeps disconnecting. We record it again each time it's back.",
     "params": [
@@ -554,6 +559,11 @@
     ]
   },
   {
+    "code": "capture.import.notAdded",
+    "message": "The recording couldn't be added to your project. Its files are kept in the take's folder.",
+    "params": []
+  },
+  {
     "code": "capture.menu.stop",
     "message": "Stop and save",
     "params": []
@@ -720,7 +730,7 @@
   },
   {
     "code": "capture.error.driveStuck",
-    "message": "The drive stopped answering, so the recording couldn't be finished. What reached it will be recovered when Klipolo opens.",
+    "message": "The drive stopped answering. What reached it is kept, and Klipolo finishes the recording from it.",
     "params": []
   },
   {

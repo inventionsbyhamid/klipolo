@@ -112,6 +112,8 @@ pub const ENGLISH: Messages = &[
     ("capture.note.micFlapping", "{source} keeps disconnecting, so we'll wait until it settles before using it again."),
     // The camera's encoder gave up mid-take: the app keeps recording the screen without it.
     ("capture.note.cameraDropped", "The camera stopped recording. The screen kept recording."),
+    // The worker stopped while it saved, and the app finished the take from its files: said with the landed take.
+    ("capture.note.savedFromFiles", "The recorder stopped while saving, so Klipolo finished the recording from its files."),
     ("capture.note.micDropping", "{source} keeps disconnecting. We record it again each time it's back."),
     ("capture.note.levels", "{source}'s sound level couldn't be measured, so it plays as it was recorded."),
     ("capture.note.encoderFallback", "{source} was recorded with another video encoder, as the usual one didn't start."),
@@ -186,6 +188,8 @@ pub const ENGLISH: Messages = &[
     ("capture.import.noVideo", "This take has no picture to edit. Its sound files are in the recording's folder."),
     ("capture.import.videoUnreadable", "This take's picture couldn't be read, so there's nothing to edit. Its files are kept in the take's folder."),
     ("capture.import.unreadable", "Part of {source} ({seconds} s at {atUs}) couldn't be read, so it isn't in the edit. Its file is kept in the take's folder."),
+    // A saved take the app couldn't add to its project (the project couldn't be opened, made or saved).
+    ("capture.import.notAdded", "The recording couldn't be added to your project. Its files are kept in the take's folder."),
     // The recorder's menu-bar, notification-area or tray item.
     ("capture.menu.stop", "Stop and save"),
     ("capture.menu.pause", "Pause"),
@@ -222,7 +226,7 @@ pub const ENGLISH: Messages = &[
     ("capture.error.os", "Recording failed."),
     // A command or a close for a take (or Check camera's preview) that has already ended: nothing is done.
     ("capture.error.staleTake", "That recording has already ended."),
-    ("capture.error.driveStuck", "The drive stopped answering, so the recording couldn't be finished. What reached it will be recovered when Klipolo opens."),
+    ("capture.error.driveStuck", "The drive stopped answering. What reached it is kept, and Klipolo finishes the recording from it."),
     // A test run (`KLIPOLO_TEST`): the app's recorder makes no backend and launches no worker.
     ("capture.error.testRun", "Recording is off in this test run."),
     // The app's recorder has no folder of its own for its settings.
