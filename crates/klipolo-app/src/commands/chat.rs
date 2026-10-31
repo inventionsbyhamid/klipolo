@@ -1,8 +1,10 @@
 //! Chat: thin commands over `klipolo_app::chat::ChatSession`. A message comes back as a reply (what was applied, as a
-//! patch the page merges; the proposal, with its id; the moments; the pictures it asked for) or as why nothing happened
-//! (`ChatOutcome::Failed`), never as a rejection. Apply, Discard and Undo name a proposal or chat's last change; a
-//! project that moved on is `project.moved`. A picture is drawn when the page asks (and again for Try again) and placed
-//! on Use. Everything comes back from the commands: no events. None carries a key or a token.
+//! patch the page merges; the proposal, with its id; the moments and the revision they are on; the pictures it asked
+//! for) or as why nothing happened (`ChatOutcome::Failed`). It is rejected only with `project.moved`, when its
+//! selection or "Keep only these" ranges are on a revision the project left. Apply, Discard and Undo name a proposal or
+//! the change a chip is under; a project that moved on is `project.moved`. A picture is drawn when the page asks (and
+//! again for Try again) and placed on Use. Everything comes back from the commands: no events. None carries a key or a
+//! token.
 
 use std::sync::Arc;
 
@@ -113,7 +115,8 @@ pub(crate) async fn chat_draw_picture(
     Ok(drawn)
 }
 
-/// Use: places picture `id` in the open project as one undo step; a plain sentence when its moment or its title is gone.
+/// Use: places picture `id` in the open project as one undo step; a plain sentence when its moment or its title is
+/// gone.
 #[tauri::command(async)]
 pub(crate) fn chat_use_picture(
     chat: State<'_, ChatHandle>,

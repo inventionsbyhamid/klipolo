@@ -1,7 +1,7 @@
 //! The open project as chat reads and edits it, behind an interface the app's project session implements
-//! (`ProjectSessionState` in the binary), so the chat runs and tests without Tauri. Chat reads the project as it is when
-//! a message is sent (`Projects::now`) and commits only on that revision: an edit made on a revision the project moved
-//! on from (a hand edit while the model answered, an undo, another project) is refused, never rebased.
+//! (`ProjectSessionState` in the binary), so the chat runs and tests without Tauri. Chat reads the project as it is
+//! when a message is sent (`Projects::now`) and commits only on that revision: an edit made on a revision the project
+//! moved on from (a hand edit while the model answered, an undo, another project) is refused, never rebased.
 //!
 //! `commit_reviewed` is the one way chat's edits enter the history: additions are applied once, and a proposal the
 //! person applies records the project its review already made (`Transaction::review`), applied once too. Either way it

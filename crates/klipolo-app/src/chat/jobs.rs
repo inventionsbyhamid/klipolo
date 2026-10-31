@@ -1,8 +1,9 @@
-//! A message's jobs (`klipolo_chat::Job`): work for a runner rather than ops. Following a subject and blurring aren't in
-//! Klipolo yet, so the reply says they are coming and nothing changes for them. A picture to draw goes to `pictures`
-//! (`PictureAsk`), which draws it when the page asks and places it on Use.
+//! A message's jobs (`klipolo_chat::Job`): work for a runner rather than ops. Following a subject and blurring aren't
+//! in Klipolo yet, so the reply says they are coming and nothing changes for them. A picture to draw goes to
+//! `pictures` (`PictureAsk`), which draws it when the page asks and places it on Use.
 //!
-//! Every kind of job is matched in `start`: a new kind of job the compiler makes doesn't build until it is handled here.
+//! Every kind of job is matched in `start`: a new kind of job the compiler makes doesn't build until it is handled
+//! here.
 
 use klipolo_chat::{Compiled, Job};
 

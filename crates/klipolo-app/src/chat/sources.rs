@@ -23,8 +23,8 @@ pub enum Readiness {
     Ready { model: Arc<dyn LanguageModel> },
     /// Neither a key nor a code: the panel asks for one.
     NeedsKey,
-    /// A key or code is saved, but nothing can pay yet (with a code, this Mac couldn't register with the relay): why, in
-    /// one sentence, to show with Retry.
+    /// A key or code is saved, but nothing can pay yet (with a code, this Mac couldn't register with the relay): why,
+    /// in one sentence, to show with Retry.
     Problem(String),
 }
 

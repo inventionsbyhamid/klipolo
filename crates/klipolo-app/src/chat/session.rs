@@ -23,9 +23,10 @@
 //! - **Jobs:** following a subject and blurring aren't in Klipolo yet: the reply says they are coming (`jobs`). A
 //!   picture (a sticker, a title card's background) is named in the reply, drawn when the page asks, and placed on Use
 //!   as one undo step (`pictures`).
-//! - **Undo chips** name the revision their change left (`undo_last`): one takes its change back only while nothing came
-//!   after it.
-//! - **Spend:** every model call's cost goes into the session's AI spend (`SpendCounter`); nothing is shown per message.
+//! - **Undo chips** name the revision their change left (`undo_last`): one takes its change back only while nothing
+//!   came after it.
+//! - **Spend:** every model call's cost goes into the session's AI spend (`SpendCounter`); nothing is shown per
+//!   message.
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
@@ -264,9 +265,9 @@ impl ChatSession {
         })
     }
 
-    /// Applies proposal `id` as one undo step. Refused with `project.moved` (and dropped) when the project moved on from
-    /// the revision it was made for, or when it is gone (replaced, discarded, dropped, another project). Refused for any
-    /// other reason (a read-only project, a disk that refused it), it stays open for Retry.
+    /// Applies proposal `id` as one undo step. Refused with `project.moved` (and dropped) when the project moved on
+    /// from the revision it was made for, or when it is gone (replaced, discarded, dropped, another project). Refused
+    /// for any other reason (a read-only project, a disk that refused it), it stays open for Retry.
     pub fn apply(&self, id: &str) -> Result<ChatApplied, CommitError> {
         let stored = {
             let mut talk = lock(&self.talk);
