@@ -31,7 +31,8 @@ export function standing(
 
 /**
  * Undo for a chat edit: an outline chip with the undo icon. It asks Rust to take back the change that made
- * `revision` (`chatBridge().undoLast`), which Rust does only while it is still chat's last change; refused
+ * `revision` (`chatBridge().undoLast`) in undo's turn (`useProject.stepWith`: a change still settling or on its way goes
+ * first), which Rust does only while it is still chat's last change; refused
  * (`project.moved`), the chip says plainly it can't be undone from chat any more, with nothing to press. Taken back, it
  * reads "Redo" for 10 s, then goes for good (a change after it never brings it back). Buried under later changes
  * before it was used, it does nothing and says why. When it changes under the keyboard, the keyboard goes back to the
@@ -97,9 +98,9 @@ export function UndoChip({ undo, revision }: { undo: CodedError; revision: numbe
         // One press takes back one change: a second before the first lands would take back the one before.
         if (busy || state !== 'latest') return;
         setBusy(true);
-        void chatBridge()
-          .undoLast(revision)
-          .then((change) => useProject.getState().adopt(change))
+        void useProject
+          .getState()
+          .stepWith(() => chatBridge().undoLast(revision))
           .catch((error: unknown) => {
             if (isCode(error, 'project.moved')) setRefused(true);
             else toast.error(errorMessage(error));

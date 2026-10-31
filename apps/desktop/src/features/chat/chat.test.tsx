@@ -10,6 +10,8 @@ import { useAnalysis } from '../../state/analysis';
 import { installChatBridge } from '../../bridge/chat';
 import { fakeChat, proposal, reply, type FakeChatScript } from '../../bridge/chatFake';
 import { useChat, useChatStandIn } from '../../state/chat';
+import { beginCommit } from '../../state/commitQueue';
+import { useToasts } from '../../state/toasts';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { useProposal } from '../../state/proposal';
@@ -747,5 +749,46 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     await userEvent.click(await screen.findByRole('button', { name: 'Undo add text' }));
     expect(fake.undone).toEqual([4, 5]);
     expect(await screen.findByRole('button', { name: 'Redo add text' })).toBeInTheDocument();
+  });
+
+  it('the Undo chip waits its turn behind a change on its way, then takes back its own', async () => {
+    const undo = code('text.add');
+    const fake = chat({
+      reply: (r) => reply(r.id, 'Added the title.', { applied: { change: changed(4, undo), undo } }),
+      undoLast: (revision) => changed(revision + 1, null, { canRedo: true, redoLabel: 'text.add' }),
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add a title{Enter}');
+    await screen.findByText('Added the title.');
+    // A commit on its way (a drop, a slider let go): the chip's undo goes after it.
+    const end = beginCommit();
+    await userEvent.click(screen.getByRole('button', { name: 'Undo add text' }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fake.undone).toEqual([]);
+    act(() => end());
+    await waitFor(() => expect(fake.undone).toEqual([4]));
+    expect(await screen.findByRole('button', { name: 'Redo add text' })).toBeInTheDocument();
+    expect(useProject.getState().snapshot!.history.revision).toBe(5);
+  });
+
+  it('the Undo chip says other refusals in a toast, and stays', async () => {
+    const undo = code('text.add');
+    chat({
+      reply: (r) => reply(r.id, 'Added the title.', { applied: { change: changed(4, undo), undo } }),
+      undoLast: () => {
+        throw new Error("Klipolo couldn't save this change. Try again.");
+      },
+    });
+    useToasts.setState({ toasts: [] });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add a title{Enter}');
+    await screen.findByText('Added the title.');
+    await userEvent.click(screen.getByRole('button', { name: 'Undo add text' }));
+    await waitFor(() =>
+      expect(useToasts.getState().toasts.map((t) => t.text)).toContain("Klipolo couldn't save this change. Try again."),
+    );
+    expect(screen.getByRole('button', { name: 'Undo add text' })).toBeInTheDocument();
+    expect(screen.queryByText('This change can’t be undone from chat any more.')).toBeNull();
+    expect(useProject.getState().snapshot!.history.revision).toBe(4);
   });
 });

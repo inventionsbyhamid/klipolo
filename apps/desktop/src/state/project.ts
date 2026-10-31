@@ -200,6 +200,22 @@ export const useProject = create<ProjectStore>((set, get) => {
         },
       ),
     redo: () => step(() => bridge.redo()).then(() => undefined),
+    stepWith: (task) => {
+      let refused: { error: unknown } | null = null;
+      return step(async () => {
+        try {
+          return await task();
+        } catch (error) {
+          refused = { error };
+          // Nothing changed: the copy's own revision, with no patch.
+          const now = get().snapshot!;
+          return { baseRevision: now.history.revision, history: now.history, patch: { clips: [], items: [] } };
+        }
+      }).then((done) => {
+        if (refused) throw refused.error;
+        return done;
+      });
+    },
   };
 });
 
