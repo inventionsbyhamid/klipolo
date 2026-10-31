@@ -95,7 +95,8 @@ impl StartSteps for AppSteps<'_> {
 }
 
 /// Saves the latest edits (the export reads the project as saved), then freezes the open project into a batch for
-/// `dir`: refused when it has nothing to show or uses a font that isn't on this Mac, and when the folder can't be made.
+/// `dir`: refused when it has nothing to show or uses a font that isn't on this Mac, and when the folder can't be made
+/// or written in.
 async fn prepare(app: AppHandle, req: ExportRequest, dir: PathBuf) -> Result<Batch, Said> {
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || handle.state::<ProjectSessionState>().flush())
@@ -108,7 +109,8 @@ async fn prepare(app: AppHandle, req: ExportRequest, dir: PathBuf) -> Result<Bat
     let feed = open_feed(&app.state::<ProjectSessionState>())?;
     export::refuse_empty(&feed.project)?;
     fonts_checked(&feed, req.allow_stand_ins).await?;
-    std::fs::create_dir_all(&dir).map_err(|e| export::folder_error(&e, &dir))?;
+    // A folder Klipolo can't write in is named now, rather than failing as the job is written.
+    export::make_folder(&dir)?;
     // Jobs an export cut off by a crash left behind go now (only Klipolo's: `export::tidy_jobs`).
     let tidied = dir.clone();
     let _ = tauri::async_runtime::spawn_blocking(move || export::tidy_jobs(&tidied)).await;
@@ -360,7 +362,7 @@ pub(crate) fn guard_menu_quit(_app: &tauri::App) -> tauri::Result<()> {
 
 /// The quit guard: quitting (Command Q, or closing the window) while an export runs asks first. Keep exporting goes
 /// back to it; Quit stops it (its job and parts deleted, as Cancel does), then quits. A quit that can't be asked about
-/// still stops it and deletes its job on the way out.
+/// still stops it and deletes its job on the way out (`on_exit`).
 pub(crate) fn guard_quit(app: &AppHandle, event: &RunEvent) {
     match event {
         RunEvent::ExitRequested { api, code, .. } => {
@@ -376,15 +378,37 @@ pub(crate) fn guard_quit(app: &AppHandle, event: &RunEvent) {
                 api.prevent_close();
             }
         }
-        // A quit nothing could ask before (the Dock's Quit, logging out, an AppleScript quit: a Mac app gets no exit
-        // request for those): the running export stops and its job goes now, before the process ends.
-        RunEvent::Exit => {
+        _ => {}
+    }
+}
+
+/// The exit's two steps, in order: `flush` puts every edit onto the disk, then `clear` stops a running export and
+/// deletes its job (waiting up to `EXIT_WAIT` for it). The edits go first: macOS gives a quitting app little time, and
+/// they are what the person would lose.
+fn exit_steps(flush: impl FnOnce(), clear: impl FnOnce()) {
+    flush();
+    clear();
+}
+
+/// As the app exits (`RunEvent::Exit`), however it quits: the open project's edits are saved, then a running export
+/// stops and its job goes, before the process ends. A quit nothing could ask before (the Dock's Quit, logging out, an
+/// AppleScript quit: a Mac app gets no exit request for those) reaches only this.
+pub(crate) fn on_exit(app: &AppHandle) {
+    exit_steps(
+        || {
+            if let Err(error) = app.state::<ProjectSessionState>().flush() {
+                tracing::warn!(
+                    detail = error.detail(),
+                    "the last edits couldn't be saved at quit"
+                );
+            }
+        },
+        || {
             if let Some(state) = app.try_state::<ExportState>() {
                 export::clear_on_quit(&state, EXIT_WAIT);
             }
-        }
-        _ => {}
-    }
+        },
+    );
 }
 
 /// True while an export runs and the person is being asked; its Quit exits with `exit_code`.
@@ -443,4 +467,21 @@ pub(crate) fn state_at_launch() -> ExportState {
         }
     }
     ExportState::default()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+
+    use super::exit_steps;
+
+    #[test]
+    fn at_exit_the_edits_are_saved_before_the_export_is_cleared() {
+        let done = RefCell::new(Vec::new());
+        exit_steps(
+            || done.borrow_mut().push("flush"),
+            || done.borrow_mut().push("clear"),
+        );
+        assert_eq!(done.into_inner(), ["flush", "clear"]);
+    }
 }

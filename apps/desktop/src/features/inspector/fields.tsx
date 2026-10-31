@@ -153,8 +153,8 @@ export function Swatches({
             className="swatch add"
             aria-label={t({
               id: 'color.custom',
-              message: `${label}: more colours`,
-              comment: '{label} is e.g. Text colour; opens a field to type any colour',
+              message: `${label}: more colors`,
+              comment: '{label} is e.g. Text color; opens a field to type any color',
             })}
           >
             <Icon name="plus" />
@@ -165,7 +165,7 @@ export function Swatches({
             <span aria-hidden>#</span>
             <input
               className="input input-sm"
-              aria-label={t({ id: 'color.hex', message: 'Hex colour' })}
+              aria-label={t({ id: 'color.hex', message: 'Hex color' })}
               placeholder={current.slice(1)}
               value={hex}
               maxLength={7}

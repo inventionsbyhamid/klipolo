@@ -103,8 +103,6 @@ pub mod problem {
     pub const NEWER: &str = code!("model.newerVersion");
     /// It was made with an older test build, which this one doesn't open.
     pub const OLDER: &str = code!("model.olderVersion");
-    /// Home couldn't start reading it (the system is short of resources); the next listing tries again.
-    pub const NOT_READ: &str = code!("project.notRead");
 }
 
 /// The problem of a project file that doesn't load (`load_project`'s error).

@@ -188,13 +188,8 @@ fn main() {
             if let Some(mcp) = app.try_state::<McpState>() {
                 mcp.stop();
             }
-            // Every edit is on the disk before the app goes.
-            if let Err(error) = app.state::<ProjectSessionState>().flush() {
-                tracing::warn!(
-                    detail = error.detail(),
-                    "the last edits couldn't be saved at quit"
-                );
-            }
+            // Every edit is on the disk, then a running export stops, before the app goes.
+            commands::export::on_exit(app);
         }
     });
 }

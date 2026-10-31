@@ -62,11 +62,11 @@ describe('TopBar', () => {
     useProject.setState({ snapshot: emptySnapshot() });
     const { rerender } = render(<TopBar />);
     const exportButton = () => screen.getByRole('button', { name: 'Export' });
-    expect(exportButton()).toBeDisabled();
+    expect(exportButton()).toHaveAttribute('aria-disabled', 'true');
     expect(exportButton().title).toBe('Add a video first');
     useProject.setState({ snapshot: fixtureSnapshot() });
     rerender(<TopBar />);
-    expect(exportButton()).toBeEnabled();
+    expect(exportButton()).not.toHaveAttribute('aria-disabled');
     expect(exportButton().title).toBe('Export (Command E)');
     await userEvent.click(exportButton());
     expect(useExport.getState().open).toBe(true);
@@ -105,8 +105,43 @@ describe('TopBar', () => {
     expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       'New project',
       'All projects',
+      'Rename',
       'Show in Finder',
     ]);
+  });
+
+  it('Rename names the project in one undo step, its words trimmed; Escape keeps the name', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    const renamed = fixtureSnapshot();
+    renamed.project.name = 'Launch video';
+    renamed.history = { ...renamed.history, revision: 4, undoLabel: 'editor.rename.undo' };
+    vi.mocked(bridge.apply).mockReset().mockResolvedValue({ ...fixturePatch(renamed), baseRevision: 3 });
+    render(<TopBar />);
+    await userEvent.click(within(await openMenu('Billing tutorial')).getByRole('menuitem', { name: 'Rename' }));
+    const field = await screen.findByRole('textbox', { name: 'Project name' });
+    await waitFor(() => expect(field).toHaveFocus());
+    expect(field).toHaveValue('Billing tutorial');
+    await userEvent.clear(field);
+    await userEvent.type(field, '  Launch video {Enter}');
+    await waitFor(() => expect(bridge.apply).toHaveBeenCalledTimes(1));
+    expect(bridge.apply).toHaveBeenCalledWith({
+      label: 'editor.rename.undo',
+      ops: [{ type: 'rename', name: 'Launch video' }],
+    });
+    // The new name shows, Undo takes it back, and the focus is back on the name.
+    const name = await screen.findByRole('button', { name: 'Launch video' });
+    expect(screen.getByRole('button', { name: 'Undo rename project' })).toBeInTheDocument();
+    await waitFor(() => expect(name).toHaveFocus());
+
+    // Escape, or a name left empty, keeps the name.
+    await userEvent.click(within(await openMenu('Launch video')).getByRole('menuitem', { name: 'Rename' }));
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Project name' }), ' 2{Escape}');
+    expect(await screen.findByRole('button', { name: 'Launch video' })).toBeInTheDocument();
+    await userEvent.click(within(await openMenu('Launch video')).getByRole('menuitem', { name: 'Rename' }));
+    await userEvent.clear(await screen.findByRole('textbox', { name: 'Project name' }));
+    await userEvent.keyboard('{Enter}');
+    expect(await screen.findByRole('button', { name: 'Launch video' })).toBeInTheDocument();
+    expect(bridge.apply).toHaveBeenCalledTimes(1);
   });
 
   it('project_menu_new_project_creates_and_opens_it', async () => {
@@ -135,7 +170,7 @@ describe('TopBar', () => {
     // While the new project is made, the menu's items are off: another New project or All projects would overlap it.
     const menu = await openMenu('Billing tutorial');
     const items = within(menu).getAllByRole('menuitem');
-    expect(items.map((item) => item.getAttribute('aria-disabled'))).toEqual(['true', 'true', 'true']);
+    expect(items.map((item) => item.getAttribute('aria-disabled'))).toEqual(['true', 'true', 'true', 'true']);
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'New project' }));
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'All projects' }));
     expect(bridge.createProject).toHaveBeenCalledTimes(1);
@@ -147,6 +182,7 @@ describe('TopBar', () => {
     // Once it has opened, the menu works again.
     const after = await openMenu('Untitled project');
     expect(within(after).getAllByRole('menuitem').map((item) => item.getAttribute('aria-disabled'))).toEqual([
+      null,
       null,
       null,
       null,

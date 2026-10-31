@@ -30,11 +30,6 @@
     "params": []
   },
   {
-    "code": "project.notRead",
-    "message": "Klipolo couldn't read this project just now. Go back to Home to try again.",
-    "params": []
-  },
-  {
     "code": "model.notFound.clip",
     "message": "That clip no longer exists.",
     "params": []

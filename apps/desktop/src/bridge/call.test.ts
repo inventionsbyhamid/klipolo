@@ -28,6 +28,16 @@ describe('call', () => {
     );
   });
 
+  it('says what to do next when an export or a new project fails', async () => {
+    const { codedMessage } = await import('./call');
+    const said = (code: string) => codedMessage({ code, params: {} });
+    expect(said('exports.diskFull')).toBe('The disk is full. Free up space, then try again.');
+    expect(said('exports.decodeFailed')).toBe(
+      "A clip couldn't be read. Try again. If it happens again, check that every clip plays in the preview.",
+    );
+    expect(said('project.createFailed')).toBe("Klipolo couldn't create the project. Check the disk, then try again.");
+  });
+
   it('says plainly when the app has no such command, keeping what Tauri said as the cause', async () => {
     vi.mocked(invoke).mockRejectedValueOnce('Command chat_draw_picture not found');
     const error = (await call('chat_draw_picture', { id: 'p' }).catch((e: unknown) => e)) as Error;

@@ -84,7 +84,7 @@ export function TextInspector({
   ];
   const sizeLabel = t({ id: 'text.size', message: 'Size' });
   const families = useBundledFamilies(FAMILIES);
-  const colorLabel = t({ id: 'text.color', message: 'Text colour' });
+  const colorLabel = t({ id: 'text.color', message: 'Text color' });
   return (
     <>
       <TextField key={content.text} id={item.id} content={content} locked={locked} />
@@ -112,7 +112,7 @@ export function TextInspector({
           ops={(size) => styleOps((now) => scaledStyle(now, size))}
         />
       </Field>
-      <Field label={t({ id: 'text.color.short', message: 'Color', comment: 'The text colour field' })}>
+      <Field label={t({ id: 'text.color.short', message: 'Color', comment: 'The text color field' })}>
         <Swatches
           label={colorLabel}
           value={style.color}
