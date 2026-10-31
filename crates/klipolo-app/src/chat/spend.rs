@@ -3,13 +3,10 @@
 
 use std::sync::{Mutex, PoisonError};
 
-use serde::Serialize;
-use ts_rs::TS;
+use crate::credentials::SessionSpend;
 
-/// Chat's spend this session, in US dollars.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export)]
+/// Chat's spend this session, in US dollars (Settings shows it in `SessionSpend`).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ChatSpend {
     /// What the messages' model calls cost.
     pub chat_usd: f64,
@@ -24,6 +21,17 @@ pub struct ChatSpend {
 impl ChatSpend {
     pub fn total_usd(&self) -> f64 {
         self.chat_usd + self.pictures_usd
+    }
+
+    /// The session's AI spend Settings shows: this, with what the analysis cost.
+    pub fn with_analysis(&self, analysis_usd: f64) -> SessionSpend {
+        SessionSpend {
+            analysis_usd,
+            chat_usd: self.chat_usd,
+            chat_messages: self.messages,
+            pictures_usd: self.pictures_usd,
+            pictures: self.pictures,
+        }
     }
 }
 

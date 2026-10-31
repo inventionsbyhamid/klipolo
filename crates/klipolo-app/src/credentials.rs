@@ -122,6 +122,28 @@ pub struct AiStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub notice: Option<String>,
+    /// What AI cost since the app started, as Klipolo counts it: the app adds it (`SessionSpend`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub session: Option<SessionSpend>,
+}
+
+/// What AI cost since the app started, by kind, in US dollars at Meta's prices: Settings shows it with a key or a
+/// code. Nothing is shown per message.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SessionSpend {
+    /// Transcripts, word times and scene logs.
+    pub analysis_usd: f64,
+    /// Chat's messages.
+    pub chat_usd: f64,
+    /// The messages that reached the model.
+    pub chat_messages: u32,
+    /// Pictures drawn for chat (stickers, title card backgrounds).
+    pub pictures_usd: f64,
+    /// The pictures asked for.
+    pub pictures: u32,
 }
 
 /// How long a device registration may take (it is a tiny POST).

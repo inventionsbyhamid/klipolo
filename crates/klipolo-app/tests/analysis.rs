@@ -1242,6 +1242,12 @@ async fn one_file_imported_twice_is_analysed_and_priced_once() {
         );
         assert_eq!(speech.transcripts[id].words.len(), 3);
     }
+    // The session's analysis spend counts the file once.
+    assert!(
+        (h.state.spent_usd() - asr_usd(SECONDS)).abs() < 1e-12,
+        "{}",
+        h.state.spent_usd()
+    );
     server.verify().await;
 }
 
