@@ -549,11 +549,7 @@ impl AnalysisState {
         };
         let Some(run) = self.run_now(generation) else {
             // The project changed meanwhile: what this start took on is let go.
-            let mut inner = lock(&self.inner);
-            for content in ready.iter().chain(&paid) {
-                inner.claimed.remove(&content.key);
-                inner.reserved.remove(&content.key);
-            }
+            self.let_go(&ready, &paid, refused.is_some());
             return Started::none();
         };
         let starting = ready
@@ -577,6 +573,18 @@ impl AnalysisState {
             )));
         }
         Started { tasks, refused }
+    }
+
+    /// A start the project switch overtook lets go of what it took on: its claims and the credit it promised. A
+    /// refused start let its paid contents go already, and promised nothing for them: another start may hold them now,
+    /// with its own credit promised, so they are not this start's to let go.
+    fn let_go(&self, ready: &[Content], paid: &[Content], refused: bool) {
+        let paid = if refused { &[] } else { paid };
+        let mut inner = lock(&self.inner);
+        for content in ready.iter().chain(paid) {
+            inner.claimed.remove(&content.key);
+            inner.reserved.remove(&content.key);
+        }
     }
 
     /// The adapter that pays for `paid`, or why there is none: no key or code, a code whose device can't register now
@@ -952,6 +960,73 @@ fn about(usd: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::credentials::MemoryStore;
+
+    /// An analysis with nothing to pay with and nowhere to tell: for its bookkeeping alone.
+    fn bare() -> Arc<AnalysisState> {
+        let credentials = Credentials::load(
+            Arc::new(MemoryStore::default()),
+            crate::credentials::Endpoints {
+                meta_base: "http://127.0.0.1:9/v1".into(),
+                relay_base: "http://127.0.0.1:9".into(),
+            },
+            "device".into(),
+        );
+        AnalysisState::new(
+            Arc::new(credentials),
+            Arc::new(EngineMedia::new(None)),
+            std::env::temp_dir().join("klipolo-let-go-test"),
+            std::env::temp_dir().join("klipolo-let-go-test-work"),
+            Arc::new(|_| {}),
+            Arc::new(|_| {}),
+        )
+    }
+
+    fn content(key: &str) -> Content {
+        Content {
+            key: key.into(),
+            clip: Clip {
+                id: key.into(),
+                path: PathBuf::from("/clips/x.mov"),
+                video: true,
+                has_audio: true,
+                duration_us: 1_000_000,
+            },
+            cached: Cached::default(),
+        }
+    }
+
+    /// A refused start already let its paid contents go (another start may hold them since, with credit promised):
+    /// overtaken by a switch, it lets go only of what it still holds. One that wasn't refused holds its paid ones too.
+    #[test]
+    fn a_refused_start_overtaken_by_a_switch_lets_go_only_of_what_it_holds() {
+        let state = bare();
+        {
+            let mut inner = lock(&state.inner);
+            // The overtaken start holds "ready"; a new start holds "paid", with its credit promised.
+            inner
+                .claimed
+                .extend(["ready".to_owned(), "paid".to_owned()]);
+            inner.reserved.insert("paid".into(), 0.07);
+        }
+        state.let_go(&[content("ready")], &[content("paid")], true);
+        {
+            let inner = lock(&state.inner);
+            assert!(!inner.claimed.contains("ready"));
+            assert!(
+                inner.claimed.contains("paid"),
+                "the new start keeps its claim"
+            );
+            assert_eq!(
+                inner.reserved.get("paid"),
+                Some(&0.07),
+                "and its promised credit"
+            );
+        }
+        state.let_go(&[], &[content("paid")], false);
+        let inner = lock(&state.inner);
+        assert!(!inner.claimed.contains("paid") && inner.reserved.is_empty());
+    }
 
     #[test]
     fn credit_is_refused_only_with_a_code_and_over_what_is_left() {
