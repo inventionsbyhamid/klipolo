@@ -19,19 +19,24 @@ pub fn beside(path: &Path) -> PathBuf {
 }
 
 /// The index beside `path`, if it was written for this very file (same size and number). Only its 24-byte header is
-/// read until it shows that (decoders ask this of every file, and a user's folder may hold its own `.keys`). One of
-/// ours whose index doesn't read (an older format, or damaged) is made again (`made_again`).
+/// read until it shows that (decoders ask this of every file, and a user's folder may hold its own `.keys`). One
+/// written for this file that doesn't read (under another build's magic or layout, or damaged) is made again
+/// (`made_again`).
 pub fn load_beside(path: &Path) -> Option<StoredKeys> {
     use std::io::Read;
     let mut file = std::fs::File::open(beside(path)).ok()?;
     let mut header = [0u8; 24];
     file.read_exact(&mut header).ok()?;
-    let mut rest = header.strip_prefix(BESIDE_MAGIC.as_slice())?;
+    let (magic, mut rest) = header.split_at(8);
     let len = u64::from_le_bytes(take(&mut rest)?);
     let file_id = u64::from_le_bytes(take(&mut rest)?);
     let now = SourceId::of(&std::fs::metadata(path).ok()?);
     if (now.len, now.file_id) != (len, file_id) {
         return None;
+    }
+    if magic != BESIDE_MAGIC.as_slice() {
+        drop(file);
+        return made_again(path);
     }
     let mut body = Vec::new();
     file.read_to_end(&mut body).ok()?;
@@ -131,11 +136,11 @@ mod tests {
     use super::*;
 
     /// An index beside its copy that doesn't read (another build's magic, outside or inside)
-    /// the copy's sample table and written over, so the next open loads it as it is and no decoder demuxes the copy
+    /// is made again from the copy's sample table and written over, so the next open loads it as it is and no decoder demuxes the copy
     /// whole. A `.keys` that isn't this copy's (someone's own file, or one for another version of the copy) is left as
     /// it is.
     #[test]
-    fn an_older_index_beside_its_copy_is_made_again_once_and_others_are_left_alone() {
+    fn an_index_beside_its_copy_that_doesnt_read_is_made_again_once_and_others_are_left_alone() {
         let _ = ffmpeg::init();
         let dir = tempfile::tempdir().unwrap();
         // An editing copy as the worker leaves it: frames in order, its index beside it.
@@ -153,6 +158,20 @@ mod tests {
         std::fs::write(&index, &old).unwrap();
 
         assert_eq!(load_beside(&copy), Some(keys.clone()), "made again");
+        // Under another build's outer magic, for this very file: made again too.
+        let mut other_magic = std::fs::read(&index).unwrap();
+        other_magic[..8].copy_from_slice(b"XXXXCPY1");
+        std::fs::write(&index, &other_magic).unwrap();
+        assert_eq!(
+            load_beside(&copy),
+            Some(keys.clone()),
+            "made again from another magic"
+        );
+        assert_eq!(
+            &std::fs::read(&index).unwrap()[..8],
+            BESIDE_MAGIC,
+            "written over"
+        );
         let now = std::fs::read(&index).unwrap();
         assert_eq!(decode(&now[24..]), Some(keys.clone()), "written over");
         // Decoder threads finding an older index at once all get it, and it is left whole.
