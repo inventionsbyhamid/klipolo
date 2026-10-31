@@ -130,11 +130,12 @@ impl Recorder {
         now: u64,
         finishing: &mut Option<String>,
     ) -> Vec<Effect> {
-        let (action, args, recovered) = {
+        let (action, args, recovered, said_failed) = {
             let Some(take) = slot.take.as_mut() else {
                 return Vec::new();
             };
             take.worker = None;
+            let said_failed = take.sup.said_failed();
             let mut action = take.sup.on_exit(code, now);
             // The worker refuses too; this is the app's half: a take the journal says was stopped, finished or
             // recovered is never recorded again.
@@ -152,7 +153,7 @@ impl Recorder {
                 take.dir.root.to_string_lossy().into_owned(),
                 "--resume".to_string(),
             ];
-            (action, args, done(take, true))
+            (action, args, done(take, true), said_failed)
         };
         match action {
             SupervisorAction::Resume => match self.spawn(slot, &args) {
@@ -175,10 +176,16 @@ impl Recorder {
                 *finishing = Some(recovered.id.clone());
                 give_up(recovered)
             }
-            // The crash loop's end says why itself (`give_up`); this one is said with the landed take.
+            // The crash loop's end says why itself (`give_up`), as does a worker that said `Failed` (a drive that stopped
+            // answering while it saved); else it is said with the landed take.
             SupervisorAction::Recover => {
                 *finishing = Some(recovered.id.clone());
-                vec![Effect::Finish(saved_from_files(recovered))]
+                let told = if said_failed {
+                    recovered
+                } else {
+                    saved_from_files(recovered)
+                };
+                vec![Effect::Finish(told)]
             }
             // Every take ends with one `Idle` once it is freed. No take (Cancel or Disarm before the gate; a worker
             // that ended before it): `Idle` alone, after `Failed` only when the worker didn't say why, and a folder

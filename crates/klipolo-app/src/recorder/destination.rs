@@ -7,7 +7,8 @@
 //!    file is gone. It is named "Recording, {Mon D}" for this computer's date, in the three formats New project makes.
 //!
 //! The project is opened or made only once the take's files have been read, so a take that failed, or has nothing to
-//! edit, leaves the library and the open project as they were.
+//! edit, leaves the library and the open project as they were. A project made for a take whose step is then refused
+//! goes again (`unmake`): no empty project is left behind.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -17,7 +18,9 @@ use klipolo_capture::session::{ImportTarget, SessionDir};
 use klipolo_model::coded::Said;
 use klipolo_model::project::FormatKind;
 
-use crate::project::{ProjectSessionState, create_in, new_project, open_in, read, with_open};
+use crate::project::{
+    ProjectSessionState, close_in, create_file_in, new_project, open_in, read, with_open,
+};
 
 /// A new project's formats, as New project makes them.
 pub(super) const FORMATS: [FormatKind; 3] = [
@@ -47,29 +50,49 @@ pub(super) struct Destination<'a> {
     pub(super) today: Day,
 }
 
-/// The project the take in `dir` lands in (the module doc), open now: its id.
+/// The project a take lands in, open now.
+pub(super) struct Target {
+    pub(super) id: String,
+    /// Where it is saved.
+    pub(super) file: PathBuf,
+    /// Made for this take just now.
+    pub(super) made: bool,
+}
+
+impl Target {
+    fn there(id: &str, file: &Path) -> Self {
+        Self {
+            id: id.to_owned(),
+            file: file.to_path_buf(),
+            made: false,
+        }
+    }
+}
+
+/// The project the take in `dir` lands in (the module doc), open now.
 pub(super) fn open_for(
     sessions: &ProjectSessionState,
     dir: &SessionDir,
     to: &Destination<'_>,
-) -> Result<String, Said> {
-    let open = open_id(sessions);
+) -> Result<Target, Said> {
+    let open = open_project(sessions);
+    let open_is = |id: &str| open.as_ref().filter(|(open, _)| open == id);
     if let Some(landed) = recover::ending(dir).imported
-        && open.as_ref() == Some(&landed)
+        && let Some((id, file)) = open_is(&landed)
     {
-        return Ok(landed);
+        return Ok(Target::there(id, file));
     }
     let (name, formats) = match to.target {
         ImportTarget::Project { id } => {
-            if open.as_ref() == Some(id) {
-                return Ok(id.clone());
+            if let Some((id, file)) = open_is(id) {
+                return Ok(Target::there(id, file));
             }
             if let Some(file) = to.file.filter(|file| holds(file, id)) {
                 tracing::info!(
                     "recorder: the take's project isn't open now, so it opens again for the take"
                 );
                 open_in(sessions, file)?;
-                return Ok(id.clone());
+                return Ok(Target::there(id, file));
             }
             tracing::warn!("recorder: the take's project is gone, so the take lands in a new one");
             (recording_name(to.today), FORMATS.to_vec())
@@ -78,14 +101,40 @@ pub(super) fn open_for(
         ImportTarget::New => (recording_name(to.today), FORMATS.to_vec()),
     };
     let library = (to.library)()?;
-    let snapshot = create_in(sessions, &library, new_project(&name, formats))?;
+    let (snapshot, file) = create_file_in(sessions, &library, new_project(&name, formats))?;
     tracing::info!("recorder: a new project was made for the take");
-    Ok(snapshot.project.id)
+    Ok(Target {
+        id: snapshot.project.id,
+        file,
+        made: true,
+    })
 }
 
-/// The open project's id.
-fn open_id(sessions: &ProjectSessionState) -> Option<String> {
-    with_open(sessions, |open| Ok(open.document.project().id.clone())).ok()
+/// The project made for a take at `file`, whose step was then refused: closed while it is still the open one, and its
+/// file removed, as if it was never made. One that can't be closed stays, with its file.
+pub(super) fn unmake(sessions: &ProjectSessionState, file: &Path) {
+    let open = with_open(sessions, |open| Ok(open.file == file)).unwrap_or(false);
+    if open && let Err(error) = close_in(sessions) {
+        tracing::warn!(
+            ?error,
+            "recorder: the project made for the take couldn't be closed, so it stays"
+        );
+        return;
+    }
+    match std::fs::remove_file(file) {
+        Ok(()) => tracing::info!("recorder: the project made for the take went again"),
+        Err(error) => {
+            tracing::warn!(%error, "recorder: the project made for the take couldn't be removed")
+        }
+    }
+}
+
+/// The open project's id and file.
+fn open_project(sessions: &ProjectSessionState) -> Option<(String, PathBuf)> {
+    with_open(sessions, |open| {
+        Ok((open.document.project().id.clone(), open.file.clone()))
+    })
+    .ok()
 }
 
 /// `file` is still project `id`'s.

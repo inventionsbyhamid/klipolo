@@ -7,10 +7,10 @@
 //!   starts it. While it records, Klipolo's window hides (`window`); when it is saved, failed or over, the window shows
 //!   again. A take whose screen's encoder gives up mid-take is stopped and saved; one whose camera's does records on
 //!   without the camera (`outcomes`). When Klipolo exits, a take that hasn't started is disarmed (`active`).
-//! - **The landing** (`sink`, `import`, `destination`): a saved take lands in the project open when it was armed (opened
-//!   again should another be open by then), or a new "Recording, {Mon D}" for a take from the start screen, as one
-//!   undo step, and the page hears `recorder-imported`. The engine's background media work waits from arming until the
-//!   take has landed.
+//! - **The landing** (`sink`, `import`, `destination`, `zoom`): a saved take lands in the project open when it was armed
+//!   (opened again should another be open by then), or a new "Recording, {Mon D}" for a take from the start screen, as
+//!   one undo step, then its clicks' auto zoom as a second, and the page hears `recorder-imported`. The engine's
+//!   background media work waits from arming until the take has landed.
 //! - **Quitting during a take** (`quitting`, `app_quit`): the exit is held, the take stopped, and Klipolo exits once it
 //!   has landed, or after 30 s.
 //! - **Setup** (`setup`, `config`): the Record dialog's data from the backend without capture or prompts, and a take's
@@ -43,6 +43,7 @@ mod ticker;
 pub mod types;
 mod window;
 mod words;
+mod zoom;
 
 #[cfg(test)]
 mod test_launch;
@@ -64,6 +65,8 @@ mod tests_plan;
 mod tests_stop;
 #[cfg(test)]
 mod tests_supervise;
+#[cfg(test)]
+mod tests_zoom;
 
 pub use active::release_on_exit;
 pub use app_quit::guard_quit;

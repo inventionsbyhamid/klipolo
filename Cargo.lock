@@ -2426,6 +2426,7 @@ dependencies = [
  "klipolo-analysis",
  "klipolo-capture",
  "klipolo-chat",
+ "klipolo-cursor",
  "klipolo-engine",
  "klipolo-fonts",
  "klipolo-meta",

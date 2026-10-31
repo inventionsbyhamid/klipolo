@@ -3,11 +3,12 @@
 //! after the person's Stop, Cancel or Disarm.
 
 use std::io::Write;
+use std::sync::TryLockError;
 
 use klipolo_capture::protocol::Command;
 use klipolo_model::coded::CodedError;
 
-use super::take::{Recorder, Worker};
+use super::take::{Recorder, Slot, Worker};
 use super::types::StoppedTake;
 use super::words;
 
@@ -51,17 +52,33 @@ impl Recorder {
     /// whether it had started (only then is it saved), or None when there is no take. Stop is safe in every state: it
     /// never starts capture.
     pub fn stop_running(&self) -> Option<StoppedTake> {
-        let mut slot = self.lock();
-        let take = slot.take.as_mut()?;
-        take.sup.stop_requested();
-        if let Some(worker) = take.worker.as_mut() {
-            write_line(worker, &Command::Stop);
-        }
-        Some(StoppedTake {
-            id: take.cfg.id.clone(),
-            started: take.sup.started(),
-        })
+        stop_in(&mut self.lock())
     }
+
+    /// `stop_running` only when the recorder's lock is free now, so a caller that mustn't wait for file work under it
+    /// (the main thread) never does: false when it is held, and nothing was sent.
+    pub(super) fn stop_running_if_free(&self) -> bool {
+        let mut slot = match self.slot.try_lock() {
+            Ok(slot) => slot,
+            Err(TryLockError::Poisoned(slot)) => slot.into_inner(),
+            Err(TryLockError::WouldBlock) => return false,
+        };
+        stop_in(&mut slot);
+        true
+    }
+}
+
+/// Stop for the slot's take, whatever its id (`Recorder::stop_running`).
+fn stop_in(slot: &mut Slot) -> Option<StoppedTake> {
+    let take = slot.take.as_mut()?;
+    take.sup.stop_requested();
+    if let Some(worker) = take.worker.as_mut() {
+        write_line(worker, &Command::Stop);
+    }
+    Some(StoppedTake {
+        id: take.cfg.id.clone(),
+        started: take.sup.started(),
+    })
 }
 
 /// `cmd` as one line on the worker's stdin. A worker that has gone can't hear it: its exit is supervised.

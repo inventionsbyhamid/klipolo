@@ -302,6 +302,75 @@ fn cancelled_take_from_the_start_screen_makes_no_project() {
     assert!(sessions.open_file().is_none());
 }
 
+/// A take from the start screen whose step the new project refuses leaves no empty "Recording, {Mon D}" behind: the
+/// project made for it is closed and its file goes. The take's files stay.
+#[test]
+fn a_start_screen_take_that_is_refused_leaves_no_project() {
+    let sessions = Sessions::start_screen();
+    let take = TakeFixture::saved(Recorded::default(), ImportTarget::New);
+    let library = tempfile::tempdir().unwrap();
+    let path = library.path().to_path_buf();
+    let library_dir =
+        move || -> Result<std::path::PathBuf, klipolo_model::coded::Said> { Ok(path.clone()) };
+    // Every run's asset gets the same id, so the project refuses the step.
+    let mut probe = |path: &std::path::Path, _key: &str| {
+        crate::media::probe_asset(path).map(|asset| klipolo_model::project::Asset {
+            id: "same".into(),
+            ..asset
+        })
+    };
+    let landing = super::import::Landing {
+        library: &library_dir,
+        today: OCT_31,
+        files: None,
+        probe: &mut probe,
+    };
+    let refused =
+        super::import::land(&sessions.state, &take.done(false, None), landing).unwrap_err();
+    assert_eq!(refused.code, "capture.import.notAdded");
+    let left: Vec<_> = std::fs::read_dir(library.path())
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name())
+        .collect();
+    assert!(left.is_empty(), "no project left behind: {left:?}");
+    assert!(sessions.open_file().is_none(), "still the start screen");
+    assert!(take.dir.root.join("mic").is_dir(), "its files stay");
+}
+
+/// Should the person close the take's project, or open another, while the take lands, the page is still told it was
+/// added: the project opens again, with the take, as for a take whose project isn't open when it lands.
+#[test]
+fn a_take_whose_project_closes_while_it_lands_is_still_added() {
+    for close in [true, false] {
+        let sessions = Sessions::with_project();
+        let take = TakeFixture::saved(Recorded::default(), armed_in(&sessions));
+        let done = take.done(false, sessions.open_file());
+        let library = || -> Result<std::path::PathBuf, klipolo_model::coded::Said> {
+            Err(klipolo_model::coded::Said::code("project.noVideosFolder"))
+        };
+        let mut probe = |path: &std::path::Path, _key: &str| crate::media::probe_asset(path);
+        let to = super::destination::Destination {
+            target: &done.target,
+            file: done.project_file.as_deref(),
+            library: &library,
+            today: OCT_31,
+        };
+        let landed =
+            super::import::import_take(&sessions.state, &take.dir, &to, &mut probe).unwrap();
+        if close {
+            crate::project::close_in(&sessions.state).unwrap();
+        } else {
+            sessions.open_new("Other");
+        }
+        let snapshot = super::import::snapshot_after(&sessions.state, &landed).unwrap();
+        assert_eq!(snapshot.project.id, landed.project, "closed: {close}");
+        assert_eq!(snapshot.project.recordings.len(), 1, "with the take");
+        assert!(snapshot.opening.is_some());
+        assert_eq!(sessions.project().id, landed.project, "open again");
+    }
+}
+
 /// The take lands in the project it was armed in. Should another be open by then, that project opens again (the open
 /// one saved first) and the take lands there; the page's snapshot is that project's.
 #[test]
@@ -368,6 +437,30 @@ fn a_take_that_fell_back_to_another_encoder_lets_the_probe_report_go() {
     }
 }
 
+/// A take recorded on a fallback encoder lets the probe's report go even when it can't land (here: no picture).
+#[test]
+fn a_fallback_take_that_cannot_land_lets_the_probe_report_go_too() {
+    let kept = tempfile::tempdir().unwrap();
+    let files = Files {
+        dir: kept.path().to_path_buf(),
+    };
+    std::fs::write(files.probe(), b"{}").unwrap();
+    let sessions = Sessions::with_project();
+    let recorded = Recorded {
+        picture: false,
+        ..Recorded::default()
+    };
+    let take = TakeFixture::saved(recorded, armed_in(&sessions));
+    let mut manifest = read_manifest(&take.dir).unwrap();
+    manifest.notes.push(CodedError::new(FALLBACK_NOTE));
+    write_manifest(&take.dir, &manifest).unwrap();
+    let refused = sessions
+        .land(&take.done(false, sessions.open_file()), Some(&files))
+        .unwrap_err();
+    assert_eq!(refused.code, "capture.import.noVideo");
+    assert!(!files.probe().exists(), "the report goes");
+}
+
 #[test]
 fn a_new_project_is_named_for_the_day_the_take_lands() {
     assert_eq!(
@@ -405,7 +498,18 @@ fn a_take_that_cannot_land_says_so_in_the_recorders_words() {
     assert_eq!(refused.code, "capture.import.notAdded");
     assert_eq!(
         klipolo_capture::english::english(&refused),
-        "The recording couldn't be added to your project. Its files are kept in the take's folder."
+        "The recording couldn't be added to your project. Its files are in Movies / Klipolo / Recordings."
     );
     assert!(!take.dir.imported_mark().exists());
+}
+
+/// A drive that stops answering while the take saves: what happens, and what to do next.
+#[test]
+fn a_stuck_drive_says_what_happens_and_what_to_do() {
+    let stuck = CodedError::new("capture.error.driveStuck");
+    assert_eq!(
+        klipolo_capture::english::english(&stuck),
+        "The drive stopped answering. Klipolo finishes the recording from what was saved. Check the drive before you \
+         record again."
+    );
 }

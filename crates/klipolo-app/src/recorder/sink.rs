@@ -3,9 +3,10 @@
 //!
 //! Events:
 //! - `recorder-event` (`RecorderEvent`): the worker's events and the recorder's own, each with its take's id.
-//! - `recorder-imported` (`TakeImport`): a take landed in its project as one undo step. Its snapshot is that project,
-//!   open now. When the take didn't land, the page hears a critical `Health` note on `recorder-event` instead (a
-//!   `capture.*` code); the take's files stay in its folder either way.
+//! - `recorder-imported` (`TakeImport`): a take landed in its project as one undo step, then its clicks' auto zoom as a
+//!   second (`zooms` items; none and no step without clicks). Its snapshot is that project, open now, zooms and all.
+//!   When the take didn't land, the page hears a critical `Health` note on `recorder-event` instead (a `capture.*`
+//!   code); the take's files stay in its folder either way.
 
 use std::path::Path;
 

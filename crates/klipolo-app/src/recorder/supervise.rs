@@ -107,6 +107,11 @@ impl Supervisor {
         self.started
     }
 
+    /// The current worker said why it failed (`Failed`).
+    pub fn said_failed(&self) -> bool {
+        self.said_failed
+    }
+
     /// The person's Stop, Cancel or Disarm went to the worker, or it said Stopping.
     pub fn is_stopping(&self) -> bool {
         self.stopping

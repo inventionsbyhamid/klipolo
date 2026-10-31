@@ -6,9 +6,12 @@
 //! 2. `recording_from` makes the recording, each run's file probed (`probe`) and a one-sided mic centred from the
 //!    manifest's peaks. A take with nothing to edit stops here, with no project made, opened or changed.
 //! 3. The project is opened (`destination`). The recording's id is the take's, so a take already in it isn't added
-//!    again.
+//!    again. A project made for the take goes again when the step is refused.
 //! 4. The clip is the whole take, last on the main track, its camera mirrored as "Mirror my camera" was (`clip_for`).
 //! 5. `Imported { project }` goes to the take's journal and its `imported` mark is written.
+//!
+//! Then its clicks get their auto zoom as a second step, "Add auto zoom" (`zoom`), unless the take was in the project
+//! already: zooms are never added twice.
 //!
 //! The person is told how the take ended when nothing said it already (`Done.note`), then the recorder's notes, then the
 //! import's own (`recording_from` leaves out its repeats).
@@ -23,15 +26,17 @@ use klipolo_capture::recover::{self, RecoverError};
 use klipolo_capture::session::{self, SessionDir, read_config};
 use klipolo_model::Op;
 use klipolo_model::coded::{CodedError, Said};
+use klipolo_model::history::Snapshot;
 use klipolo_model::project::{Asset, Recording};
 use klipolo_model::timeline::ClipSource;
 use klipolo_platform::durable;
 
-use super::destination::{self, Day, Destination};
+use super::destination::{self, Day, Destination, Target};
 use super::env::Done;
 use super::setup::{self, Files};
 use super::types::TakeImport;
-use crate::project::{ProjectSessionState, build_and_apply, snapshot_now};
+use super::zoom::zoom_take;
+use crate::project::{ProjectSessionState, build_and_apply, open_in, snapshot_now};
 
 /// The step's label: "Add recording".
 pub(super) const LABEL: &str = "undo.record";
@@ -39,9 +44,15 @@ pub(super) const LABEL: &str = "undo.record";
 /// A take in its project.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Landed {
+    /// The project's id.
+    pub(super) project: String,
+    /// Where the project is saved.
+    pub(super) file: PathBuf,
     pub(super) recording_id: String,
     /// Its clip on the main track.
     pub(super) clip_id: String,
+    /// Added now (false: the take was in its project already).
+    pub(super) added: bool,
     pub(super) notes: Vec<CodedError>,
 }
 
@@ -72,14 +83,18 @@ pub(super) fn import_take(
     let (imported, notes) = recording_from(&manifest, dir, &manifest_peaks, probe)
         .map_err(|e| ImportError::Said(Said::Coded(e)))?;
     let recording = imported.recording;
-    let project = destination::open_for(sessions, dir, to)?;
-    let clip_id = add(
-        sessions,
-        &project,
-        imported.assets,
-        &recording,
-        mirror_of(dir),
-    )?;
+    let Target {
+        id: project,
+        file,
+        made,
+    } = destination::open_for(sessions, dir, to)?;
+    let mirror = mirror_of(dir);
+    let (clip_id, added) = add(sessions, &project, imported.assets, &recording, mirror)
+        .inspect_err(|_| {
+            if made {
+                destination::unmake(sessions, &file);
+            }
+        })?;
     imported_in(dir, &project);
     tracing::info!(
         take = recording.id,
@@ -92,21 +107,24 @@ pub(super) fn import_take(
         }
     }
     Ok(Landed {
+        project,
+        file,
         recording_id: recording.id,
         clip_id,
+        added,
         notes: all,
     })
 }
 
 /// The step in `project`, unless the take is in it already: its clip's id either way (empty when the person has
-/// deleted that clip since).
+/// deleted that clip since), and whether the step was made now.
 fn add(
     sessions: &ProjectSessionState,
     project: &str,
     assets: Vec<Asset>,
     recording: &Recording,
     mirror: bool,
-) -> Result<String, Said> {
+) -> Result<(String, bool), Said> {
     let clip = clip_for(recording, mirror);
     let clip_id = clip.id.clone();
     let mut there = None;
@@ -136,9 +154,9 @@ fn add(
                 take = recording.id,
                 "recorder: the take is in its project already"
             );
-            clip_id
+            (clip_id, false)
         }
-        None => clip_id,
+        None => (clip_id, true),
     })
 }
 
@@ -201,9 +219,11 @@ pub(super) struct Landing<'a> {
     pub(super) probe: &'a mut dyn FnMut(&Path, &str) -> Result<Asset, String>,
 }
 
-/// Lands `done` (`import_take`): what the page hears as `recorder-imported`, or the note it hears instead, a
-/// `capture.*` code (the take's files stay in its folder either way). A take recorded on a fallback encoder lets the
-/// probe's report go, so the next opening of the Record dialog measures again.
+/// Lands `done` (`import_take`), then adds its auto zoom (`zoom_take`) when it was added now: what the page hears as
+/// `recorder-imported`, or the note it hears instead, a `capture.*` code (the take's files stay in its folder either
+/// way). Its snapshot is the take's project, open again should it have closed meanwhile (`snapshot_after`). A take that
+/// landed but whose zooms the project refused is still landed, with none. A take recorded on a fallback encoder lets
+/// the probe's report go, landed or not, so the next opening of the Record dialog measures again.
 pub(super) fn land(
     sessions: &ProjectSessionState,
     done: &Done,
@@ -215,14 +235,28 @@ pub(super) fn land(
         library: with.library,
         today: with.today,
     };
-    let landed = import_take(sessions, &done.dir, &to, with.probe).map_err(|error| {
+    let landed = import_take(sessions, &done.dir, &to, with.probe);
+    if let Some(files) = with.files {
+        forget_stale_probe(files, &done.dir, &landed);
+    }
+    let landed = landed.map_err(|error| {
         tracing::warn!(take = done.id, ?error, "recorder: the take didn't land");
         not_landed(error)
     })?;
-    if let Some(files) = with.files {
-        setup::forget_stale_probe(files, &landed.notes);
-    }
-    let snapshot = snapshot_now(sessions).map_err(|said| not_landed(said.into()))?;
+    let zooms = if landed.added {
+        let (project, take, clip) = (&landed.project, &landed.recording_id, &landed.clip_id);
+        zoom_take(sessions, project, take, clip).unwrap_or_else(|said| {
+            tracing::warn!(
+                take = done.id,
+                ?said,
+                "recorder: the take landed without its auto zoom"
+            );
+            0
+        })
+    } else {
+        0
+    };
+    let snapshot = snapshot_after(sessions, &landed)?;
     let mut notes: Vec<CodedError> = done.note.iter().cloned().collect();
     notes.extend(landed.notes);
     Ok(TakeImport {
@@ -231,13 +265,54 @@ pub(super) fn land(
         clip_id: landed.clip_id,
         snapshot,
         notes,
-        zooms: 0,
+        zooms,
     })
 }
 
+/// The take's project as it is now, open, for the page. Should the person have closed it, or opened another, while the
+/// take landed, it opens again (the open one saved and closed first, as for a take whose project isn't open when it
+/// lands), so a take that was added is never reported as not added. When it can't be opened:
+/// `capture.import.addedNotOpened`, "The recording was added to your project. Open the project from the start screen to
+/// see it."
+pub(super) fn snapshot_after(
+    sessions: &ProjectSessionState,
+    landed: &Landed,
+) -> Result<Snapshot, CodedError> {
+    if let Ok(snapshot) = snapshot_now(sessions)
+        && snapshot.project.id == landed.project
+    {
+        return Ok(snapshot);
+    }
+    tracing::warn!(
+        take = landed.recording_id,
+        "recorder: the take's project closed while it landed, so it opens again"
+    );
+    open_in(sessions, &landed.file).map_err(|said| {
+        tracing::error!(
+            ?said,
+            take = landed.recording_id,
+            "recorder: the take's project couldn't be opened again"
+        );
+        CodedError::new("capture.import.addedNotOpened")
+    })
+}
+
+/// The probe's report goes after a take recorded on a fallback encoder: from its notes when it landed, else from its
+/// manifest's when there is one.
+fn forget_stale_probe(files: &Files, dir: &SessionDir, landed: &Result<Landed, ImportError>) {
+    match landed {
+        Ok(landed) => setup::forget_stale_probe(files, &landed.notes),
+        Err(_) => {
+            if let Ok(manifest) = read_manifest(dir) {
+                setup::forget_stale_probe(files, &manifest.notes);
+            }
+        }
+    }
+}
+
 /// What the person is told when a take didn't land: the recorder's own words (a take with no picture, one that couldn't
-/// be finished from its files), else "The recording couldn't be added to your project. Its files are kept in the
-/// take's folder."
+/// be finished from its files), else "The recording couldn't be added to your project. Its files are in Movies /
+/// Klipolo / Recordings."
 fn not_landed(error: ImportError) -> CodedError {
     match error {
         ImportError::Said(Said::Coded(said)) if said.code.starts_with("capture.") => said,

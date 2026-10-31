@@ -1,6 +1,6 @@
 //! Making or opening the project to work in.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use klipolo_model::coded::Said;
 use klipolo_model::history::{Document, Snapshot};
@@ -31,6 +31,15 @@ pub(crate) fn create_in(
     library: &Path,
     project: Project,
 ) -> Result<Snapshot, Said> {
+    create_file_in(state, library, project).map(|(snapshot, _)| snapshot)
+}
+
+/// `create_in`, and the new project's file.
+pub(crate) fn create_file_in(
+    state: &ProjectSessionState,
+    library: &Path,
+    project: Project,
+) -> Result<(Snapshot, PathBuf), Said> {
     let document = Document::new(project).map_err(|e| Said::Coded(e.coded()))?;
     let file = new_file(library, &document.project().name);
     save(&file, document.project(), Durability::Ordered).map_err(|error| {
@@ -51,7 +60,7 @@ pub(crate) fn create_in(
         let _ = std::fs::remove_file(&file);
     })?;
     snapshot.opening = Some(opening);
-    Ok(snapshot)
+    Ok((snapshot, file))
 }
 
 /// Opens the project in `file` (the open one is saved and closed first): its snapshot, with the opening it made.
