@@ -131,8 +131,14 @@ fn a_view_whose_worker_ends_by_itself_says_so() {
             .any(|(id, ev)| *id == PreviewId::Live && unavailable(ev)),
         "{heard:?}"
     );
-    // Gone: the next ask opens a new one, on its turn.
-    p.set(live(screen())).unwrap();
+    // Gone: the page's next asks don't launch it again; another choice opens; the dialog opening again tries it again.
     p.advance_ms(500);
+    p.set(live(screen())).unwrap();
+    assert_eq!(p.launch.spawned(), 1);
+    p.set(live(notes())).unwrap();
     assert_eq!(p.launch.spawned(), 2);
+    p.state.setup().unwrap();
+    p.advance_ms(500);
+    p.set(live(screen())).unwrap();
+    assert_eq!(p.launch.spawned(), 3);
 }

@@ -460,3 +460,30 @@ fn quick_changes_launch_one_worker_per_pace_and_the_latest_wins() {
     p.advance_ms(1_000);
     assert_eq!((p.launched(CAMERA).len(), p.launched(METER).len()), (2, 2));
 }
+
+#[test]
+fn a_failed_preview_waits_for_the_dialog_to_open_again() {
+    let p = previewing(all_allowed());
+    let camera = |id: &str| Previews {
+        camera: Some(id.into()),
+        ..nothing()
+    };
+    p.set(camera("camera-1")).unwrap();
+    let first = p.worker(CAMERA);
+    p.says(first, failed("capture.error.noDevice"));
+    p.launch.exit_to(first, Some(1));
+    // The page's next asks (a pick, Klipolo back in front) don't launch it again and again.
+    for _ in 0..3 {
+        p.advance_ms(1_000);
+        p.set(camera("camera-1")).unwrap();
+    }
+    assert_eq!(p.launched(CAMERA).len(), 1);
+    assert_eq!(p.heard().len(), 1, "said once");
+    // Another camera starts; the dialog reading its setup again lets the first try again.
+    p.set(camera("camera-2")).unwrap();
+    assert_eq!(p.launched(CAMERA).len(), 2);
+    p.state.setup().unwrap();
+    p.advance_ms(500);
+    p.set(camera("camera-1")).unwrap();
+    assert_eq!(p.launched(CAMERA).len(), 3);
+}

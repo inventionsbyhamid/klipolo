@@ -21,7 +21,10 @@
 //! - The camera and the mic start by themselves only while allowed; otherwise only in the call the person's "Allow
 //!   camera" or "Allow microphone" press makes (`Previews.ask`), when macOS asks; never once refused. One started that
 //!   way is kept while macOS asks.
-//! - Nothing restarts by itself after it ended, but a launch held back by its pace (below).
+//! - Nothing restarts by itself after it ended, but a launch held back by its pace (below). A preview that failed (not
+//!   for a permission, which the next permission read decides) or ended by itself isn't launched again for the same
+//!   display, app, camera or mic until the dialog reads its setup again, so the page's asks don't relaunch it again and
+//!   again.
 //!
 //! **Stopping:** every preview stops when Klipolo's main window goes behind another app or is hidden or minimised
 //! (nothing starts again until it is in front and the page asks), when the page loads again (reloaded, or after its
@@ -135,12 +138,14 @@ struct Turn {
     args: Vec<String>,
 }
 
-/// One preview: its running worker, when its last one was launched, and a launch waiting its turn.
+/// One preview: its running worker, when its last one was launched, a launch waiting its turn, and what it showed when
+/// it last failed (held until the setup is read again).
 #[derive(Default)]
 struct Slot {
     open: Option<Open>,
     launched_ms: Option<u64>,
     waiting: Option<Turn>,
+    failed: Option<String>,
 }
 
 #[derive(Default)]
@@ -240,11 +245,14 @@ impl PreviewWorkers {
     }
 
     /// The Record dialog read its setup (it opened, or tried again): the stills show its displays and apps from now on,
-    /// and the screen's previews may start again after a refusal.
+    /// and the screen's previews may start again after a refusal, and any preview after a failure.
     pub(super) fn setup_read(&self, devices: &Devices) {
         let mut run = self.lock();
         run.targets = thumb_targets(devices);
         run.screen_refused = false;
+        for kind in Kind::ALL {
+            run.slot(kind).failed = None;
+        }
     }
 
     /// The previews to match `want`, their frames and events to `out` from now on. Refused during a take
@@ -378,14 +386,22 @@ impl PreviewWorkers {
             return;
         }
         close(run, kind, now);
-        if let Some(Wanted {
+        let Some(Wanted {
             what,
             key,
             args: Some(args),
         }) = wanted
-        {
-            self.launch_in_turn(run, kind, Turn { what, key, args }, now);
+        else {
+            return;
+        };
+        if run.slot(kind).failed.as_ref() == Some(&what) {
+            tracing::info!(
+                ?kind,
+                "recorder: a preview that failed waits for the dialog to open again"
+            );
+            return;
         }
+        self.launch_in_turn(run, kind, Turn { what, key, args }, now);
     }
 
     /// `turn`'s worker is launched now if its kind's last launch was at least its pace ago; else it waits its turn on
@@ -601,6 +617,9 @@ impl PreviewWorkers {
             return;
         };
         let open = run.open(kind).take().expect("the preview is open");
+        if !open.said_failed {
+            run.slot(kind).failed = Some(open.what.clone());
+        }
         tracing::info!(
             generation,
             ?kind,
@@ -625,8 +644,14 @@ impl PreviewWorkers {
 /// again.
 fn failed(run: &mut Running, kind: Kind, error: CodedError) {
     tracing::info!(?kind, code = %error.code, "recorder: a preview failed");
-    if let Some(open) = run.open(kind) {
+    let held = !error.code.starts_with("capture.permission.");
+    let slot = run.slot(kind);
+    if let Some(open) = &mut slot.open {
         open.said_failed = true;
+        // Not for a permission: the next permission read decides those.
+        if held {
+            slot.failed = Some(open.what.clone());
+        }
     }
     if matches!(kind, Kind::Thumbs | Kind::Live) && error.code == "capture.permission.screen" {
         tracing::warn!(
