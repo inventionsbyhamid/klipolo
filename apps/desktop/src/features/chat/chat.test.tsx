@@ -5,6 +5,7 @@ import { mockIPC } from '@tauri-apps/api/mocks';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { CodedError } from '../../bindings/CodedError';
 import { useAi } from '../../ai/aiStatus';
+import { useAnalysis } from '../../state/analysis';
 import { installChatBridge } from '../../bridge/chat';
 import { fakeChat, proposal, reply, type FakeChatScript } from '../../bridge/chatFake';
 import { useChat, useChatStandIn } from '../../state/chat';
@@ -86,6 +87,8 @@ beforeEach(() => {
   useAi.setState({ status: { mode: 'key', keyHint: '6789' } });
   useChat.getState().reset(fixtureSnapshot().project.id);
   useChatStandIn.setState({ on: false });
+  const done = { state: 'done', approximate: false } as const;
+  useAnalysis.setState({ states: { screen: done, camera: done, mic: done, music: done, broll: done } });
 });
 
 describe('chat', () => {
@@ -450,6 +453,21 @@ describe('chat', () => {
 });
 
 describe('chat: one proposal at a time, moments of their revision, and the keys', () => {
+  it('an empty chat says when the clips aren’t analysed yet, and while they are', () => {
+    useAnalysis.setState({ states: {} });
+    renderWithProviders(<ChatPanel />);
+    expect(
+      screen.getByText('Analyze the clips first to cut pauses, find moments and add captions. Format and music work now.'),
+    ).toBeInTheDocument();
+    act(() => useAnalysis.setState({ states: { screen: { state: 'running', step: 'words', pct: 40 } } }));
+    expect(
+      screen.getByText('Klipolo is still listening to these clips. Cuts and moments work when analysis is done.'),
+    ).toBeInTheDocument();
+    const done = { state: 'done', approximate: false } as const;
+    act(() => useAnalysis.setState({ states: { screen: done, camera: done, mic: done, music: done, broll: done } }));
+    expect(screen.queryByText(/Analyze the clips first|still listening/)).toBeNull();
+  });
+
   it('the development stand-in lets chat run without a key written into the AI status', () => {
     useAi.setState({ status: { mode: 'none' } });
     renderWithProviders(<ChatPanel />);

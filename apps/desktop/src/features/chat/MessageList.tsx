@@ -1,8 +1,12 @@
 import { useLingui } from '@lingui/react/macro';
 import { Fragment, useLayoutEffect, useRef } from 'react';
+import type { Asset } from '../../bindings/Asset';
 import { NeedsKey } from '../../ai/NeedsKey';
+import { Icon } from '../../layout/Icon';
+import { stateOf, useAnalysis } from '../../state/analysis';
 import { useCanChat, useChat } from '../../state/chat';
 import { useChatPanel } from '../../state/chatPanel';
+import { useProject } from '../../state/project';
 import { ChatMessage } from './ChatMessage';
 
 /** What an empty chat suggests, each sent as it reads. */
@@ -14,10 +18,32 @@ const SUGGESTIONS = [
   'find the best moments',
 ];
 
-/** "Ask for an edit", its suggestions (greyed while chat can't run), and the NeedsKey card when there is no key or code. */
+const NO_ASSETS: Asset[] = [];
+
+/**
+ * Where the project's clips are with analysis, for the empty chat's note: some still being analysed, some not analysed
+ * (never, failed or stopped), or every one done (or no clips).
+ */
+function useAnalysisNote(): 'running' | 'missing' | null {
+  const assets = useProject((s) => s.snapshot?.project.assets ?? NO_ASSETS);
+  return useAnalysis((s) => {
+    const states = assets
+      .filter((a) => a.kind === 'video' || a.kind === 'audio')
+      .map((a) => stateOf(s.states, a.id).state);
+    if (states.includes('running')) return 'running';
+    if (states.some((state) => state !== 'done')) return 'missing';
+    return null;
+  });
+}
+
+/**
+ * "Ask for an edit", its suggestions (greyed while chat can't run), the NeedsKey card when there is no key or code, and
+ * a note while the clips aren't analysed or are being analysed.
+ */
 function EmptyChat() {
   const { t } = useLingui();
   const allowed = useCanChat();
+  const analysis = useAnalysisNote();
   return (
     <div className="chat-empty">
       <h3>{t({ id: 'chatPanel.empty.title', message: 'Ask for an edit' })}</h3>
@@ -44,6 +70,23 @@ function EmptyChat() {
             </span>
           ))}
         </div>
+      )}
+      {allowed && analysis && (
+        <p className="note">
+          <Icon name="info" />
+          <span>
+            {analysis === 'running'
+              ? t({
+                  id: 'chatPanel.empty.analysing',
+                  message: 'Klipolo is still listening to these clips. Cuts and moments work when analysis is done.',
+                })
+              : t({
+                  id: 'chatPanel.empty.notAnalysed',
+                  message:
+                    'Analyze the clips first to cut pauses, find moments and add captions. Format and music work now.',
+                })}
+          </span>
+        </p>
       )}
     </div>
   );
