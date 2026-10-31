@@ -1,12 +1,12 @@
 //! The supervisor: a hung worker is asked to stop, then killed, and resumed as a new run at most 3 times in 10
-//! minutes; a worker slow to save is never taken for a hung one; heartbeats reach the page only once the take is
-//! saving. Its own rules in virtual time, then through the recorder with fake workers: nothing captures.
+//! minutes; a worker slow to save is never taken for a hung one, and one that saved but doesn't exit is let go after its
+//! grace; heartbeats reach the page only once the take is saving. Its own rules in virtual time, then through the recorder with fake workers: nothing captures.
 
 use klipolo_capture::protocol::{Command, Event};
 use klipolo_capture::shell::WorkerState::*;
 use klipolo_model::coded::CodedError;
 
-use super::supervise::{RESUME_WINDOW_MS, Supervisor, SupervisorAction};
+use super::supervise::{EXIT_GRACE_MS, RESUME_WINDOW_MS, Supervisor, SupervisorAction};
 use super::test_support::*;
 
 const BEAT: Event = Event::Heartbeat {
@@ -135,5 +135,61 @@ fn a_worker_that_ends_before_recording_ends_the_take() {
         s.on_exit(Some(3), 1_000),
         SupervisorAction::Ended { failed: None },
         "it said why itself"
+    );
+}
+
+/// A worker that saved the take (`Finished`) but never exits would hold the recorder for the whole session: after 15 s
+/// it is asked to stop, 2 s later killed, and the recorder is free for the next take. Its files were complete, so the
+/// take is landed as saved, never finished from its files.
+#[test]
+fn a_saved_take_whose_worker_never_exits_frees_the_recorder() {
+    let rec = fixture();
+    let id = rec.arm(options_screen()).unwrap().id;
+    rec.send(Command::Start).unwrap();
+    rec.launch.emit(state(Recording));
+    rec.send(Command::Stop).unwrap();
+    rec.launch.emit(state(Stopping));
+    rec.launch.emit(Event::Finished {
+        session: id.clone(),
+    });
+    // Heartbeats after it saved don't keep it alive.
+    rec.launch.emit(BEAT);
+    rec.advance_s(14);
+    assert!(rec.launch.kills().is_empty(), "it may still be exiting");
+    assert!(rec.state.active());
+    rec.advance_s(1);
+    assert_eq!(rec.launch.kills(), [false], "asked to stop");
+    rec.advance_s(2);
+    assert_eq!(rec.launch.kills(), [false, true], "then killed");
+    rec.settle();
+    assert_eq!(rec.rec().take_id(), None, "the recorder is free");
+    assert!(!rec.state.active());
+    let finished = rec.finished();
+    assert!(finished.len() == 1 && !finished[0].recover, "{finished:?}");
+    assert_eq!(rec.events().last(), Some(&state(Idle)));
+    rec.arm(options_screen()).unwrap();
+}
+
+#[test]
+fn a_saved_take_s_worker_is_asked_to_go_after_its_grace_only() {
+    let mut s = Supervisor::new(0);
+    s.on_event(&state(Recording), 0);
+    s.on_event(&state(Stopping), 1_000);
+    s.on_event(
+        &Event::Finished {
+            session: "t".into(),
+        },
+        2_000,
+    );
+    assert_eq!(s.on_tick(2_000 + EXIT_GRACE_MS - 1), None);
+    assert_eq!(
+        s.on_tick(2_000 + EXIT_GRACE_MS),
+        Some(SupervisorAction::Kill { hard: false })
+    );
+    s.on_event(&BEAT, 2_000 + EXIT_GRACE_MS + 500);
+    assert_eq!(
+        s.on_tick(2_000 + EXIT_GRACE_MS + 2_000),
+        Some(SupervisorAction::Kill { hard: true }),
+        "a heartbeat doesn't undo the request"
     );
 }
