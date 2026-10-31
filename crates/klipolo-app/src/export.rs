@@ -16,6 +16,7 @@ mod captions;
 mod estimate;
 mod fonts;
 mod naming;
+mod state;
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -36,6 +37,7 @@ pub use captions::export_speech;
 pub use estimate::{Estimate, apple_silicon, estimate};
 pub use fonts::{missing_fonts, refuse_missing};
 pub use naming::{format_word, plan_files};
+pub use state::{ExportState, Releases};
 
 /// What an export will write, and what it costs (an honest estimate before it starts).
 #[derive(Clone, Debug, PartialEq, Serialize, TS)]
