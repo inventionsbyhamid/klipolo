@@ -1,10 +1,15 @@
-//! Auto zoom on a take's clicks: the camera plans the take once with the spec's rules, and the plan is cut into
-//! pieces where the view rests on the whole frame. Facts are built by hand on the timeline.
+//! Auto zoom on a take's clicks: the camera plans the take once with the spec's rules, the plan is cut into pieces
+//! where the view rests on the whole frame, and each piece no zoom covers yet becomes an attached Auto zoom item.
+//! Facts are built by hand on the timeline.
 
 use klipolo_cursor::Us;
 use klipolo_cursor::camera::{Plan, Rules};
-use klipolo_cursor::timeline::{ClickAt, TimelineFacts};
-use klipolo_cursor::zooms::{CLICKS, auto_plan, pieces};
+use klipolo_cursor::timeline::{ClickAt, SpanAt, TimelineFacts};
+use klipolo_cursor::zooms::{AUTO_SCALE, CLICKS, auto_plan, auto_spans, auto_zoom_ops, pieces};
+use klipolo_model::cursor_style::FocusKind;
+use klipolo_model::layout::{Anchor, BoxN, Layout};
+use klipolo_model::ops::{Op, TrackTarget};
+use klipolo_model::timeline::{ItemContent, ZoomTarget};
 
 const S: Us = 1_000_000;
 const SPAN: (Us, Us) = (0, 20 * S);
@@ -32,8 +37,12 @@ fn planned(at: &[(Us, f32, f32)], span: (Us, Us)) -> Plan {
     auto_plan(&clicks(at), CLICKS, span, Rules::default())
 }
 
+fn gap() -> Us {
+    Rules::default().out_gap_us
+}
+
 fn cut(p: &Plan) -> Vec<(Us, Us)> {
-    pieces(p.keys(), Rules::default().out_gap_us)
+    pieces(p.keys(), gap())
 }
 
 #[test]
@@ -150,4 +159,102 @@ fn a_click_0_4_s_before_the_end_still_zooms() {
         "{:?}",
         p.view_at(4_600_000)
     );
+}
+
+#[test]
+fn no_clicks_no_pieces_no_ops() {
+    let f = TimelineFacts {
+        dwells: vec![SpanAt {
+            from_us: 5 * S,
+            to_us: 8 * S,
+            x: 0.30,
+            y: 0.40,
+        }],
+        ..Default::default()
+    };
+    let p = auto_plan(&f, CLICKS, SPAN, Rules::default());
+    let spans = auto_spans(&p, &[], gap());
+    assert_eq!(spans, vec![]);
+    let mut mint = || -> String { unreachable!("no item, no id") };
+    assert_eq!(auto_zoom_ops(&spans, AUTO_SCALE, CLICKS, &mut mint), vec![]);
+}
+
+#[test]
+fn a_taken_span_is_left_alone() {
+    let p = planned(&APART, SPAN);
+    let all = cut(&p);
+    assert_eq!(all.len(), 2, "{all:?}");
+    assert_eq!(auto_spans(&p, &[], gap()), all);
+    assert_eq!(auto_spans(&p, &[(9 * S, 12 * S)], gap()), vec![all[0]]);
+    // In any order: one overlapping the first piece's end takes it.
+    let late_first = [(20 * S, 21 * S), (5 * S, 6 * S)];
+    assert_eq!(auto_spans(&p, &late_first, gap()), vec![all[1]]);
+    // Spans that only touch a piece take nothing.
+    let touching = [(all[1].1, all[1].1 + S), (all[0].1, all[1].0)];
+    assert_eq!(auto_spans(&p, &touching, gap()), all);
+}
+
+#[test]
+fn ops_are_attached_auto_zoom_items_at_2x() {
+    let spans = [(S, 4 * S), (9 * S, 12 * S)];
+    let mut n = 0;
+    let mut mint = || {
+        n += 1;
+        format!("zoom-{n}")
+    };
+    let ops = auto_zoom_ops(&spans, AUTO_SCALE, CLICKS, &mut mint);
+    assert_eq!(ops.len(), 2);
+    let whole = Layout::new(
+        Anchor::Center,
+        BoxN {
+            x: 0.0,
+            y: 0.0,
+            w: 1.0,
+            h: 1.0,
+        },
+    );
+    for (i, (op, &(from, to))) in ops.iter().zip(&spans).enumerate() {
+        let Op::AddItem {
+            track,
+            item,
+            attach,
+        } = op
+        else {
+            panic!("{op:?}")
+        };
+        assert_eq!(*track, TrackTarget::Auto);
+        assert!(*attach);
+        assert_eq!(item.id, format!("zoom-{}", i + 1));
+        assert_eq!((item.start_us, item.end_us()), (from, to));
+        assert_eq!(item.attach, None);
+        assert_eq!(item.layout, whole);
+        assert_eq!(
+            item.content,
+            ItemContent::Zoom {
+                target: ZoomTarget::Auto {
+                    using: vec![FocusKind::Clicks]
+                },
+                scale: 2.0,
+            }
+        );
+        assert!(item.effects.is_empty());
+    }
+
+    // The kinds as the item keeps them: sorted, each once, and none for all three (every kind).
+    let using_of = |using: &[FocusKind]| {
+        let ops = auto_zoom_ops(&spans[..1], AUTO_SCALE, using, &mut || "z".into());
+        match &ops[0] {
+            Op::AddItem { item, .. } => match &item.content {
+                ItemContent::Zoom {
+                    target: ZoomTarget::Auto { using },
+                    ..
+                } => using.clone(),
+                c => panic!("{c:?}"),
+            },
+            op => panic!("{op:?}"),
+        }
+    };
+    use FocusKind::{Clicks, Pauses, Typing};
+    assert_eq!(using_of(&[Typing, Clicks, Typing]), vec![Clicks, Typing]);
+    assert_eq!(using_of(&[Typing, Pauses, Clicks, Pauses]), vec![]);
 }
