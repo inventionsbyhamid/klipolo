@@ -94,8 +94,12 @@ done
 # crates/klipolo-app/entitlements.plist (tauri.conf.json's bundle.macOS.entitlements), and sign.sh again with the
 # Developer ID. Without one, macOS silences that device and never asks. Screen Recording has no entitlement.
 entitlements=$tmp/entitlements.plist
-if ! codesign -d --entitlements - --xml "$app" > "$entitlements" 2> /dev/null; then
-  fail "the app isn't signed, so it has no entitlements (the build signs it ad hoc)"
+# codesign's own first line goes in the failure: a codesign that can't run or can't read the signature fails here too.
+if ! codesign -d --entitlements - --xml "$app" > "$entitlements" 2> "$tmp/codesign.err"; then
+  fail "the app isn't signed, so it has no entitlements (the build signs it ad hoc); codesign says:" \
+    "$(head -n 1 "$tmp/codesign.err")"
+elif [ ! -s "$entitlements" ]; then
+  fail "the app's signature has no entitlements, so macOS would silence the camera and microphone without asking"
 else
   for key in com.apple.security.device.camera com.apple.security.device.audio-input; do
     [ "$(/usr/libexec/PlistBuddy -c "Print :$key" "$entitlements" 2> /dev/null || true)" = true ] \

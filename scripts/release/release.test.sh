@@ -129,7 +129,11 @@ expect "an empty NSCameraUsageDescription fails" fail "Info.plist has no NSCamer
 # key, or with one false.
 app=$(case_app unsigned)
 rm "$work/unsigned/signature.plist"
-expect "an unsigned bundle fails" fail "the app isn't signed" "$check" "$app" "$arch"
+expect "an unsigned bundle fails with codesign's words" fail "codesign says: $app: code object is not signed at all" \
+  "$check" "$app" "$arch"
+app=$(case_app no-entitlements)
+: > "$work/no-entitlements/signature.plist"
+expect "a signature with no entitlements fails" fail "the app's signature has no entitlements" "$check" "$app" "$arch"
 for key in com.apple.security.device.camera com.apple.security.device.audio-input; do
   app=$(case_app "no-$key")
   /usr/libexec/PlistBuddy -c "Delete :$key" "$work/no-$key/signature.plist"
