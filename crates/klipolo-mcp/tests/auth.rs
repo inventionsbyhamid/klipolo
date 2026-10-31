@@ -2,6 +2,8 @@
 //! HTTP server on 127.0.0.1 that refuses another program on the Mac (no token or a wrong one, a browser page, DNS
 //! rebinding, a huge or slow body, a flood of connections or sessions) before it reads a body, and stays answering.
 
+#![cfg(unix)]
+
 #[path = "support/client.rs"]
 mod client;
 #[path = "support/fake_host.rs"]
