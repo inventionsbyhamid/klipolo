@@ -5,7 +5,7 @@ import { useAi } from '../ai/aiStatus';
 import { chatBridge } from '../bridge/chat';
 import { errorMessage } from '../lib/errors';
 import { findItem } from '../lib/timeline';
-import { session, withMessages, type ChatStore, type Message } from './chatMessages';
+import { session, staleMoments, withMessages, type ChatStore, type Message } from './chatMessages';
 import { dropStale, proposalActions, replaceOpen, showOpenProposal } from './chatProposals';
 import { usePlayback } from './playback';
 import { useProject } from './project';
@@ -143,6 +143,8 @@ export const useChat = create<ChatStore>((set, get) => {
           notes: outcome.notes,
           questions: outcome.questions,
           moments: outcome.moments,
+          revision: revision ?? null,
+          momentsStale: false,
           applied,
           proposal,
         });
@@ -170,7 +172,8 @@ useChat.subscribe((s, was) => {
 });
 
 // Another project (or the same one opened again, or none) starts the conversation over. A change to the project drops
-// an open proposal made on the revision before (a hand edit, an undo): it would cut the wrong footage.
+// an open proposal made on the revision before (a hand edit, an undo): it would cut the wrong footage. It also leaves
+// the moments replies gave before it with times that may have moved: they can't be kept only any more.
 useProject.subscribe((s, was) => {
   const [a, b] = [s.snapshot, was.snapshot];
   if (a?.project.id !== b?.project.id || a?.opening !== b?.opening) {
@@ -178,7 +181,9 @@ useProject.subscribe((s, was) => {
     return;
   }
   if (a && a.history.revision !== b?.history.revision) {
-    const next = dropStale(useChat.getState().messages, a.history.revision);
-    if (next) useChat.setState(withMessages(next));
+    const was = useChat.getState().messages;
+    const dropped = dropStale(was, a.history.revision) ?? was;
+    const next = staleMoments(dropped, a.history.revision) ?? dropped;
+    if (next !== was) useChat.setState(withMessages(next));
   }
 });

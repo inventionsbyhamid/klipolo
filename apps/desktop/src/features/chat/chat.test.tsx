@@ -474,6 +474,44 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     expect(useProposal.getState().proposal?.id).toBe('p2');
   });
 
+  it('sends the revision each request was made on; moments go stale once the project changes', async () => {
+    /** The project moves on to `revision` (a hand edit, an undo). */
+    const moveTo = (revision: number) =>
+      act(() =>
+        useProject.setState({
+          snapshot: { ...useProject.getState().snapshot!, history: changed(revision, code('clip.split')).history },
+        }),
+      );
+    const fake = chat({
+      reply: (r) =>
+        reply(r.id, 'Two moments.', {
+          moments: [
+            { startUs: 3 * S, endUs: 5 * S, label: 'The first firing' },
+            { startUs: 21 * S, endUs: 24 * S, label: 'The cracked bowl' },
+          ],
+        }),
+    });
+    backend({ engine_play: () => null });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'find the kiln{Enter}');
+    await screen.findByRole('button', { name: '0:21.0 The cracked bowl' });
+    expect(fake.requests[0].baseRevision).toBe(3);
+    expect(screen.getByRole('button', { name: 'Keep only these' })).toBeEnabled();
+    moveTo(4);
+    // The times are the old revision's: Keep only these waits for a new answer, and says why.
+    expect(screen.getByRole('button', { name: 'Keep only these' })).toBeDisabled();
+    expect(screen.getByText('The video changed since. Ask again to keep only these.')).toBeInTheDocument();
+    // An undo back is a change too: they stay stale.
+    moveTo(5);
+    expect(screen.getByRole('button', { name: 'Keep only these' })).toBeDisabled();
+    // The chips still seek.
+    await userEvent.click(screen.getByRole('button', { name: '0:21.0 The cracked bowl' }));
+    expect(usePlayback.getState().playheadUs).toBe(21 * S);
+    await userEvent.type(message(), 'again{Enter}');
+    await waitFor(() => expect(fake.requests).toHaveLength(2));
+    expect(fake.requests[1].baseRevision).toBe(5);
+  });
+
   it('an empty chat says when the clips aren’t analysed yet, and while they are', () => {
     useAnalysis.setState({ states: {} });
     renderWithProviders(<ChatPanel />);

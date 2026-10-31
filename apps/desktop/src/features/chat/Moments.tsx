@@ -8,9 +8,10 @@ import { usePlayback } from '../../state/playback';
 /**
  * The moments a reply points at: a pill row each with a round play disc, the time in faint and the
  * title; a click moves the playhead there and plays. "Keep only these" sends a keep-only request with their ranges, which
- * Klipolo proposes like any other removal.
+ * Klipolo proposes like any other removal. `stale`: the project changed since the reply, so their times may have
+ * moved: the chips still seek, but Keep only these is off and says why.
  */
-export function Moments({ moments }: { moments: ChatMoment[] }) {
+export function Moments({ moments, stale }: { moments: ChatMoment[]; stale: boolean }) {
   const { t } = useLingui();
   if (moments.length === 0) return null;
   return (
@@ -40,6 +41,7 @@ export function Moments({ moments }: { moments: ChatMoment[] }) {
         <button
           type="button"
           className="chip chip-outline"
+          disabled={stale}
           onClick={() =>
             void useChat.getState().send(t({ id: 'chatPanel.keepOnly', message: 'Keep only these' }), {
               keepOnly: moments.map((m) => ({ start: m.startUs, end: m.endUs })),
@@ -49,6 +51,11 @@ export function Moments({ moments }: { moments: ChatMoment[] }) {
           {t({ id: 'chatPanel.keepOnly', message: 'Keep only these' })}
         </button>
       </div>
+      {stale && (
+        <p className="muted">
+          {t({ id: 'chatPanel.keepOnly.stale', message: 'The video changed since. Ask again to keep only these.' })}
+        </p>
+      )}
     </>
   );
 }

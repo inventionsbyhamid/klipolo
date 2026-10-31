@@ -107,10 +107,11 @@
   height: 16px;
 }
 
-.chip-outline:not([aria-disabled="true"]):hover {
+.chip-outline:not(:disabled):not([aria-disabled="true"]):hover {
   box-shadow: inset 0 0 0 1px var(--color-ink);
 }
 
+.chip:disabled,
 .chip[aria-disabled="true"] {
   color: var(--color-ink-disabled);
   box-shadow: inset 0 0 0 1px var(--color-line);

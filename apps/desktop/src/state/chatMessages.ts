@@ -36,6 +36,10 @@ export type Message =
       notes: string[];
       questions: string[];
       moments: ChatMoment[];
+      /** The revision the reply landed on (its additions in): the one its moments' times are on. */
+      revision: number | null;
+      /** The project changed since it landed: its moments still seek, but can't be kept only (their times moved). */
+      momentsStale: boolean;
       /** Additions applied at once: their undo label and the revision they made (the Undo chip). */
       applied: { undo: CodedError; revision: number } | null;
       proposal: ProposalPart | null;
@@ -95,6 +99,21 @@ export function openProposal(messages: Message[]): { message: ReplyMessage; part
     if (m.from === 'klipolo' && m.kind === 'reply' && m.proposal?.state === 'open') return { message: m, part: m.proposal };
   }
   return null;
+}
+
+/**
+ * `messages` with the moments of every reply that landed on another revision than `revision` marked stale, for good (an
+ * undo back to it is a change too); null when nothing changed.
+ */
+export function staleMoments(messages: Message[], revision: number): Message[] | null {
+  let changed = false;
+  const next = messages.map((m) => {
+    if (m.from !== 'klipolo' || m.kind !== 'reply' || m.moments.length === 0 || m.momentsStale) return m;
+    if (m.revision === revision) return m;
+    changed = true;
+    return { ...m, momentsStale: true };
+  });
+  return changed ? next : null;
 }
 
 /** Each reset starts a new session: a reply or an apply that resolves after it belongs to the one before. */

@@ -51,7 +51,7 @@ export const ChatMessage = memo(function ChatMessage({ message: m }: { message: 
       ))}
       {m.applied && <UndoChip undo={m.applied.undo} revision={m.applied.revision} />}
       {m.proposal && <ProposalCard message={m} />}
-      <Moments moments={m.moments} />
+      <Moments moments={m.moments} stale={m.momentsStale} />
     </div>
   );
 });
