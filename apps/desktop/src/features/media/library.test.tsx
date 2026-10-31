@@ -121,6 +121,10 @@ describe('the Library', () => {
     renderWithProviders(<Library />);
     const panel = screen.getByRole('tabpanel');
     expect(within(panel).getByText('kiln-door.wav')).toBeInTheDocument();
+    // A short sound's length to the tenth, a long one's to the second.
+    expect(within(panel).getByText('kiln-door.wav').closest('li')).toHaveTextContent('0:02.0');
+    expect(within(panel).getByText('music.mp3').closest('li')).toHaveTextContent('2:00');
+    expect(within(panel).getByText('music.mp3').closest('li')).not.toHaveTextContent('2:00.0');
     // The fixture's song plays as a sound effect (no ducking): it is listed here, "On the timeline".
     const song = within(panel).getByText('music.mp3').closest('li')!;
     expect(song).toHaveTextContent('On the timeline');

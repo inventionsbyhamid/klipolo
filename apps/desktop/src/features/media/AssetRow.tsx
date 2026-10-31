@@ -2,7 +2,7 @@ import { useLingui } from '@lingui/react/macro';
 import type { PointerEvent, ReactNode } from 'react';
 import type { Asset } from '../../bindings/Asset';
 import { Icon } from '../../layout/Icon';
-import { formatTime } from '../../lib/time';
+import { formatPrecise, formatTime } from '../../lib/time';
 import { beginMediaDrag } from '../timeline/drag/mediaDrag';
 import type { DropTarget } from '../timeline/drops';
 
@@ -46,7 +46,8 @@ export function AssetRow({ asset, art, title, used, onAdd, onDrop, menu, addLabe
     e.currentTarget.setPointerCapture?.(e.pointerId);
     beginMediaDrag(e, asset, onDrop);
   };
-  const length = formatTime(asset.durationUs);
+  // A short sound to the tenth ("0:00.4"), anything longer to the second.
+  const length = asset.durationUs < 10_000_000 ? formatPrecise(asset.durationUs) : formatTime(asset.durationUs);
   return (
     <li
       data-asset-id={asset.id}
