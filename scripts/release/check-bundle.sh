@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # The app bundle's check before anything is signed (build-mac.sh runs it; it works on a signed app too):
 #   scripts/release/check-bundle.sh <Klipolo.app> <x86_64|arm64>
-# Fails unless the licences and the fonts are in Resources, every Mach-O is built for <arch> only and for macOS 15.0
-# or older, every load path is @rpath/, @executable_path/, @loader_path/, /usr/lib/ or /System/Library/, and every
-# LC_RPATH is relative (@executable_path/ or @loader_path/), never a machine path such as the dev FFmpeg prefix's.
+# Fails unless the licences (the third-party notices too, none of them empty) and the fonts are in Resources, every
+# Mach-O is built for <arch> only and for macOS 15.0 or older, every load path is @rpath/, @executable_path/,
+# @loader_path/, /usr/lib/ or /System/Library/, and every LC_RPATH is relative (@executable_path/ or @loader_path/),
+# never a machine path such as the dev FFmpeg prefix's.
 # The app must also find its libraries: the main executable's LC_RPATHs include @executable_path/../Frameworks, and
 # every @rpath/<name> that any Mach-O in the bundle loads is a file at Contents/Frameworks/<name>. And no file under
 # Contents names the builder's home folder or user name, nor does the page as built in apps/desktop/dist: the main
@@ -24,8 +25,12 @@ rc=0
 fail() { echo "FAIL: $*"; rc=1; }
 is_macho "$main" || fail "the main executable ${main#"$app"/} isn't a Mach-O file"
 
-for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt NOTICE.txt; do
-  [ -f "$app/Contents/Resources/licenses/$f" ] || fail "licenses/$f isn't in the app"
+for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt NOTICE.txt THIRD-PARTY-NOTICES.txt; do
+  if [ ! -f "$app/Contents/Resources/licenses/$f" ]; then
+    fail "licenses/$f isn't in the app"
+  elif [ ! -s "$app/Contents/Resources/licenses/$f" ]; then
+    fail "licenses/$f is empty"
+  fi
 done
 [ -d "$app/Contents/Resources/fonts" ] || fail "the fonts aren't in the app"
 

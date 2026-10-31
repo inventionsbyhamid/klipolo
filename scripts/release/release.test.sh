@@ -41,7 +41,9 @@ make_app() {
 EOF
   cp "$build/klipolo-app" "$c/MacOS/"
   cp "$build/libfoo.1.dylib" "$c/Frameworks/"
-  for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt NOTICE.txt; do echo "$f" > "$c/Resources/licenses/$f"; done
+  for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt NOTICE.txt THIRD-PARTY-NOTICES.txt; do
+    echo "$f" > "$c/Resources/licenses/$f"
+  done
   echo 'OFL' > "$c/Resources/fonts/OFL.txt"
 }
 
@@ -73,6 +75,14 @@ expect "a good bundle passes" pass "$check" "$app" "$arch"
 app=$(case_app no-ffmpeg-notice)
 rm "$app/Contents/Resources/licenses/FFmpeg-LGPL.txt"
 expect "a missing licence fails" fail "licenses/FFmpeg-LGPL.txt isn't in the app" "$check" "$app" "$arch"
+
+app=$(case_app no-third-party)
+rm "$app/Contents/Resources/licenses/THIRD-PARTY-NOTICES.txt"
+expect "no third-party notices fails" fail "licenses/THIRD-PARTY-NOTICES.txt isn't in the app" "$check" "$app" "$arch"
+
+app=$(case_app empty-third-party)
+: > "$app/Contents/Resources/licenses/THIRD-PARTY-NOTICES.txt"
+expect "empty third-party notices fail" fail "licenses/THIRD-PARTY-NOTICES.txt is empty" "$check" "$app" "$arch"
 
 app=$(case_app no-rpath)
 install_name_tool -delete_rpath @executable_path/../Frameworks "$app/Contents/MacOS/klipolo-app" 2> /dev/null
