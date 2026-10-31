@@ -18,6 +18,24 @@ export const FORMAT_SHORT: Record<FormatKind, string> = {
   square: '1:1',
 };
 
+const FULL: BoxN = { x: 0, y: 0, w: 1, h: 1 };
+
+/**
+ * A layer that fills the frame in every format (a title template): the whole canvas as its rect and as its own rect in
+ * every format there is, listed or not. Mirrors Rust `Layout::full_frame` (parity-tested); the model takes the primary
+ * format's own rect off as the layer is added, so later moves of its rect show there.
+ */
+export function fullFrame(): Layout {
+  return {
+    anchor: 'topLeft',
+    rect: FULL,
+    rotation: 0,
+    opacity: 1,
+    radius: 0,
+    overrides: { landscape: FULL, portrait: FULL, square: FULL },
+  };
+}
+
 type Band = 'start' | 'middle' | 'end';
 
 function bands(anchor: Anchor): [Band, Band] {
