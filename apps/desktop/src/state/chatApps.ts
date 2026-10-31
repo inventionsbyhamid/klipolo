@@ -21,12 +21,11 @@ import { useProject } from './project';
 /**
  * Whether an app's reply is about the project as it is open now. Rust names the opening an app's change was made on
  * (revisions start again at 0 on each opening, so a revision alone can't tell two openings apart): a reply about
- * another opening is ignored. A reply that names none (an app older than this page) is taken as the open one's.
+ * another opening is ignored. A copy that doesn't know its opening takes it as its own.
  */
 export function fromThisOpening(external: ExternalReply): boolean {
-  const told = (external as ExternalReply & { opening?: number }).opening;
   const open = useProject.getState().snapshot?.opening;
-  return told === undefined || open === undefined || told === open;
+  return open === undefined || external.opening === open;
 }
 
 /** `params` without the app's name: the message's header names the app already. */

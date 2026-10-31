@@ -60,10 +60,16 @@ function changed(revision: number, undo: CodedError | null, extra: Record<string
   };
 }
 
-/** What another app did, as Rust tells it: an id of its own, no words, and `parts`. */
+/** The opening of the project the tests have open. */
+const OPENING = 1;
+/** The fixture's project, as this opening of it. */
+const opened = () => ({ ...fixtureSnapshot(), opening: OPENING });
+
+/** What another app did, as Rust tells it, about this opening: an id of its own, no words, and `parts`. */
 function external(client: string, parts: Partial<ChatReply>): ExternalReply {
   return {
     client,
+    opening: OPENING,
     reply: {
       id: crypto.randomUUID(),
       text: '',
@@ -103,7 +109,7 @@ function chat(script: Partial<Parameters<typeof fakeChat>[0]> = {}): FakeChat {
 
 beforeEach(async () => {
   backend();
-  useProject.setState({ snapshot: fixtureSnapshot(), pending: 0, switching: false });
+  useProject.setState({ snapshot: opened(), pending: 0, switching: false });
   useSelection.setState({ selectedId: null });
   useRange.setState({ range: null });
   useProposal.getState().show(null);
@@ -234,11 +240,11 @@ describe('another app in chat', () => {
     const undo = vertical();
     // Made on the project's opening before this one (revisions start again at 0 on each): not this project's change.
     const before = { ...external('Example Client', { applied: { change: changed(4, undo), undo }, revision: 4 }), opening: 1 };
-    await tell(before as ExternalReply);
+    await tell(before);
     expect(useChat.getState().messages).toEqual([]);
     expect(useProject.getState().snapshot!.history.revision).toBe(3);
     // This opening's is taken.
-    await tell({ ...before, opening: 2 } as ExternalReply);
+    await tell({ ...before, opening: 2 });
     await waitFor(() => expect(useProject.getState().snapshot!.history.revision).toBe(4));
     expect(within(screen.getByRole('log')).getByText('From Example Client')).toBeInTheDocument();
   });
