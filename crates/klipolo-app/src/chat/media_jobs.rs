@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 
+use klipolo_chat::tools::Position;
 use klipolo_chat::{MakeSticker, picture_ops, sticker_placement};
 use klipolo_model::Project;
 use klipolo_model::ids::Id;
@@ -11,6 +12,7 @@ use klipolo_model::ops::Op;
 use klipolo_model::project::Asset;
 use klipolo_model::time::Us;
 
+use super::describe::seconds;
 use super::pictures::{PictureAsk, StickerPlacement};
 
 /// A `makeSticker` job, read again on the project as it is when its picture comes.
@@ -36,8 +38,18 @@ impl StickerPlacement for Sticker {
 
 /// A sticker to draw.
 pub(super) fn sticker(job: &MakeSticker) -> PictureAsk {
+    let corner = match job.position {
+        Position::TopLeft => "in the top left corner",
+        Position::TopRight => "in the top right corner",
+        Position::BottomLeft => "in the bottom left corner",
+        Position::BottomRight => "in the bottom right corner",
+        Position::Center => "in the middle",
+    };
+    let at = seconds(job.at_us);
+    let length = seconds(job.duration_us);
     PictureAsk::Sticker {
         prompt: job.prompt.clone(),
+        place: format!("Goes {corner} at {at} for {length}."),
         placement: Arc::new(Sticker(job.clone())),
     }
 }

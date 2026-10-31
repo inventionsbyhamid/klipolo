@@ -1176,6 +1176,7 @@ fn studio_with(
 fn sticker(spot: Option<(Us, Us)>) -> PictureAsk {
     PictureAsk::Sticker {
         prompt: "paper plane".into(),
+        place: "Goes in the middle at 2.0 s for 3.0 s.".into(),
         placement: Arc::new(Spot(spot)),
     }
 }
@@ -1435,6 +1436,10 @@ async fn a_sticker_the_model_asks_for_follows_its_footage_while_it_is_drawn() {
     assert_eq!(r["pictures"][0]["kind"], "sticker");
     assert_eq!(r["pictures"][0]["prompt"], "paper plane");
     assert_eq!(
+        r["pictures"][0]["place"],
+        "Goes in the middle at 12.0 s for 3.0 s."
+    );
+    assert_eq!(
         s.chat.project.revision(),
         0,
         "a picture is no op until it exists"
@@ -1496,6 +1501,10 @@ async fn a_title_card_s_background_goes_under_the_title_the_answer_added() {
     let r = reply(&out);
     assert!(r["applied"].is_object(), "the title is in at once: {r:#}");
     assert_eq!(r["pictures"][0]["kind"], "titleBackground");
+    assert_eq!(
+        r["pictures"][0]["place"],
+        "Goes behind the title, for as long as it shows."
+    );
     let id = r["pictures"][0]["id"].as_str().unwrap().to_owned();
     let p = s.chat.project.project();
     let (title_track, title) = (p.timeline.tracks.iter().enumerate())
@@ -2058,4 +2067,11 @@ async fn edits_that_landed_before_the_project_closed_are_still_said() {
     // The old project has them: the reply doesn't deny what it carries.
     assert_eq!(r["text"], "Done.");
     assert!(r["applied"].is_object());
+}
+
+#[test]
+fn a_picture_that_cant_be_placed_says_what_to_do_next() {
+    for said in [MOMENT_CUT, TITLE_GONE] {
+        assert!(said.ends_with("Ask me for it again."), "{said}");
+    }
 }

@@ -8,4 +8,8 @@ export type ChatPicture = { id: string, kind: ChatPictureKind,
 /**
  * What it shows, as asked, without dashes.
  */
-prompt: string, };
+prompt: string, 
+/**
+ * Where it goes, in one sentence: "Goes in the top right corner at 12.0 s for 3.0 s."
+ */
+place: string, };

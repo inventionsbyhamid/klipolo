@@ -38,10 +38,13 @@ pub const PICTURE_GONE: &str = "That picture is gone. Ask me for it again.";
 /// Said when Use comes before the picture was drawn.
 pub const NOT_DRAWN: &str = "That picture isn't ready yet.";
 /// Said when the part of the video a sticker was for was cut while it was drawn: nothing is placed.
-pub const MOMENT_CUT: &str =
-    "The part of the video that sticker was for was cut while it was drawn, so I didn't place it.";
+pub const MOMENT_CUT: &str = "The part of the video that sticker was for was cut while it was drawn, so I didn't place \
+                              it. Ask me for it again.";
 /// Said when a title card's title is gone: its background isn't drawn or placed.
-pub const TITLE_GONE: &str = "The title for that background is gone, so I left it out.";
+pub const TITLE_GONE: &str =
+    "The title for that background is gone, so I left it out. Ask me for it again.";
+/// Where a title card's background goes.
+pub const BEHIND_THE_TITLE: &str = "Goes behind the title, for as long as it shows.";
 
 /// Where a sticker goes once it is drawn: the compiler's job, read again on the project as it is then.
 pub trait StickerPlacement: Send + Sync {
@@ -57,6 +60,8 @@ pub trait StickerPlacement: Send + Sync {
 pub enum PictureAsk {
     Sticker {
         prompt: String,
+        /// Where it goes, in one sentence for its card: "Goes in the top right corner at 12.0 s for 3.0 s."
+        place: String,
         placement: Arc<dyn StickerPlacement>,
     },
     /// The background of the title card whose title layer is `title_id`.
@@ -80,6 +85,8 @@ pub struct ChatPicture {
     pub kind: ChatPictureKind,
     /// What it shows, as asked, without dashes.
     pub prompt: String,
+    /// Where it goes, in one sentence: "Goes in the top right corner at 12.0 s for 3.0 s."
+    pub place: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
@@ -137,6 +144,10 @@ impl Pictures {
                 PictureAsk::TitleBackground { .. } => ChatPictureKind::TitleBackground,
             },
             prompt: sanitize::reply(ask.prompt().trim()),
+            place: match &ask {
+                PictureAsk::Sticker { place, .. } => sanitize::reply(place),
+                PictureAsk::TitleBackground { .. } => BEHIND_THE_TITLE.to_owned(),
+            },
         };
         self.lock().push(Waiting {
             id: card.id.clone(),
