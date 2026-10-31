@@ -7,7 +7,8 @@ mod common;
 use common::harness::{Harness, Src, cfg, mics};
 use klipolo_capture::protocol::Command;
 use klipolo_capture::run::core::{Effect, SessionCore};
-use klipolo_capture::shell::WorkerState;
+use klipolo_capture::shell::{ShellInput, WorkerState};
+use klipolo_model::project::GameInfo;
 
 const SOURCES: &[Src] = &[Src::Screen, Src::Mic];
 
@@ -71,4 +72,57 @@ fn stop_is_taken_from_every_state() {
     saving.command(Command::Stop);
     assert_eq!(saving.state(), WorkerState::Stopping);
     assert_eq!(finalized(&saving), 1);
+}
+
+/// The app quitting or crashing while the take is armed: nothing could start or land it, so the worker disarms (no take,
+/// its global key gone, exit 3). A game's armed take waits for its key, and a take past the start records on, orphaned.
+#[test]
+fn the_app_going_disarms_an_armed_take_only() {
+    let mut armed = Harness::new(cfg(SOURCES, 3));
+    armed.shell(ShellInput::ParentGone);
+    assert!(
+        armed.effects().iter().any(|e| matches!(e, Effect::Exit(3))),
+        "armed: ends with no take"
+    );
+    assert!(
+        armed
+            .effects()
+            .iter()
+            .any(|e| matches!(e, Effect::StopPipes))
+    );
+    assert!(armed.file_keys().is_empty(), "nothing written");
+
+    let mut game = cfg(SOURCES, 3);
+    game.game = Some(GameInfo {
+        app_id: "com.example.game".into(),
+        name: "The Game".into(),
+        profile_id: None,
+    });
+    let mut game = Harness::new(game);
+    game.shell(ShellInput::ParentGone);
+    assert_eq!(
+        game.state(),
+        WorkerState::Armed,
+        "a game's take waits for its key"
+    );
+    assert!(!game.effects().iter().any(|e| matches!(e, Effect::Exit(_))));
+
+    let mut countdown = Harness::new(cfg(SOURCES, 3));
+    countdown.command(Command::Start);
+    countdown.feed(0.0, 1.5);
+    countdown.shell(ShellInput::ParentGone);
+    assert_eq!(
+        countdown.state(),
+        WorkerState::Countdown,
+        "the person's Record goes on"
+    );
+
+    let mut recording = Harness::recording(SOURCES);
+    recording.shell(ShellInput::ParentGone);
+    assert_eq!(
+        recording.state(),
+        WorkerState::Recording,
+        "records on, orphaned"
+    );
+    assert_eq!(finalized(&recording), 0);
 }

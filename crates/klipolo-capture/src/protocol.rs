@@ -1,6 +1,7 @@
 //! The worker's protocol with the app (the app's supervisor): JSON lines, the app's commands on the worker's stdin and
 //! the worker's events on its stdout. A line that doesn't parse is logged and skipped, never a Stop. The parent going
-//! away (stdin's end of file) is never a Stop either: the worker records on, orphaned.
+//! away (stdin's end of file) is never a Stop either: the worker records on, orphaned. A take still armed then (not a
+//! game's) is disarmed instead, as nothing could start or land it.
 //!
 //! Exit codes of `klipolo --record-worker` (`worker::main`): 0 the take is finished (`Finished` came first); 1 it failed,
 //! and what reached the disk is recovered on the next launch; 2 the arguments or the build are wrong; 3 there is no take

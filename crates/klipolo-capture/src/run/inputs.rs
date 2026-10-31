@@ -45,6 +45,15 @@ impl SessionCore {
             }
             ShellInput::ParentGone => {
                 self.orphan = true;
+                // Armed and the app gone (it quit or crashed): nothing could start or land the take, and its global
+                // key would start a recording no one asked for. A game's armed take waits for its key, as before.
+                if self.state == WorkerState::Armed && self.cfg.game.is_none() {
+                    tracing::info!(
+                        "core: the app went while the take was armed, so it is disarmed"
+                    );
+                    self.end_without_a_take(now, fx);
+                    return;
+                }
                 fx.push(self.status(now));
             }
         }
