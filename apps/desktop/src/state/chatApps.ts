@@ -100,6 +100,8 @@ export function appActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'receive
     // A project opening or closing: it waits until the page has it, then goes by the opening and the revision.
     await switchLanded();
     if (!useProject.getState().snapshot || !fromThisOpening(external)) return;
+    // Told twice: shown (and its pictures drawn) once.
+    if (get().messages.some((m) => m.id === r.id)) return;
     const mine = session.now();
     let applied: ReplyMessage['applied'] = null;
     if (r.applied) {

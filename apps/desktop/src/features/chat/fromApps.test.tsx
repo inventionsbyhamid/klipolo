@@ -377,6 +377,14 @@ describe('another app in chat', () => {
     expect(useProposal.getState().proposal?.id).toBe('p1');
   });
 
+  it('a_reply_told_twice_shows_once', async () => {
+    chat();
+    const once = external('Example Client', { moments: [{ startUs: 0, endUs: S, label: 'Intro' }] });
+    await useChat.getState().receive(once);
+    await useChat.getState().receive(once);
+    expect(useChat.getState().messages).toHaveLength(1);
+  });
+
   it('nothing_shows_with_no_project_open', async () => {
     chat();
     renderWithProviders(<ChatPanel />);
