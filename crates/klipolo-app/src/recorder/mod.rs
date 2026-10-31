@@ -18,6 +18,8 @@ mod env;
 mod events;
 mod launch;
 mod outcomes;
+mod permissions;
+mod screen_reopen;
 mod send;
 mod setup;
 mod state;
@@ -33,6 +35,8 @@ mod test_launch;
 mod test_support;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_permissions;
 #[cfg(test)]
 mod tests_plan;
 #[cfg(test)]
