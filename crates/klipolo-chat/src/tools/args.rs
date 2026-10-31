@@ -234,6 +234,31 @@ impl Args {
         Ok(text.split_whitespace().collect::<Vec<_>>().join(" "))
     }
 
+    /// Words for the screen (`addText`'s text, a title card's title): as `text` reads them, but with their line breaks,
+    /// which a text layer draws: each line's runs of white space one space, a CR LF or any other line break one `\n`,
+    /// blank lines at either end gone. Not empty.
+    pub(super) fn shown(&mut self, key: &str) -> Result<String, ToolError> {
+        let value = self.take(key)?;
+        let Value::String(text) = &value else {
+            return Err(self.error(
+                key,
+                Problem::WrongType {
+                    expected: "text",
+                    got: kind(&value),
+                },
+            ));
+        };
+        let lines: Vec<String> = (text.replace("\r\n", "\n"))
+            .split(['\n', '\r', '\u{85}', '\u{2028}', '\u{2029}'])
+            .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+            .collect();
+        let shown = lines.join("\n").trim_matches('\n').to_owned();
+        if shown.is_empty() {
+            return Err(self.error(key, Problem::Empty));
+        }
+        Ok(shown)
+    }
+
     /// Text as `label` reads it, not empty.
     pub(super) fn text(&mut self, key: &str) -> Result<String, ToolError> {
         let text = self.label(key)?;

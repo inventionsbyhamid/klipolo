@@ -210,12 +210,13 @@ function CutList({ proposal }: { proposal: ChatProposal }) {
  * (the project changed while it was open), or replaced (a newer proposal came: one is open at a time), to a sentence
  * that says so. An Apply refused for another reason leaves it open, saying why, its Apply now Retry. An Apply Rust made
  * that the page couldn't take in closes it with a sentence that says to reopen the project. When it collapses with the
- * keyboard in it, the keyboard goes back to the chat box.
+ * keyboard in it, the keyboard goes back to the chat box. Another app's proposal says which app suggested it.
  */
 export function ProposalCard({ message: m }: { message: ReplyMessage }) {
   const { t } = useLingui();
   const part = m.proposal!;
   const { proposal, state } = part;
+  const client = m.client;
   const focusProps = useReturnFocus(state === 'open' || state === 'applying');
   const main = useProject((s) => s.snapshot?.project.timeline.main);
   const others = useOtherRemovals(proposal);
@@ -262,6 +263,12 @@ export function ProposalCard({ message: m }: { message: ReplyMessage }) {
         {t({ id: 'chatPanel.proposal.replaced', message: 'Replaced by the newer proposal below.' })}
       </p>
     );
+  if (state === 'superseded')
+    return (
+      <p className="muted faint">
+        {t({ id: 'chatPanel.proposal.superseded', message: 'Replaced by a newer proposal.' })}
+      </p>
+    );
   const busy = state === 'applying';
   const { apply, discard } = useChat.getState();
   const now = main ? mainIndex(main).mainEndUs : 0;
@@ -291,6 +298,11 @@ export function ProposalCard({ message: m }: { message: ReplyMessage }) {
       <Strip proposal={proposal} />
       <div>
         <p className="p-title">{proposal.title}</p>
+        {client !== undefined && (
+          <p className="p-sub">
+            {t({ id: 'chatPanel.app.suggestedBy', message: `Suggested by ${client}`, comment: '{client} is another app' })}
+          </p>
+        )}
         {cut && (
           <p className="p-sub">
             <b className="cut">{total}</b>{' '}

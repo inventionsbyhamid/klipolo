@@ -48,7 +48,7 @@ pub(crate) fn commit_reviewed(
 }
 
 /// Undo and redo together keep 50 steps while the system is short of memory.
-fn history_limits() -> HistoryLimits {
+pub(super) fn history_limits() -> HistoryLimits {
     limits_at(pressure::level())
 }
 

@@ -6,7 +6,7 @@ import { CHAT_LABELS } from './chatLabels';
 import { contribLabelInSentence } from './contrib';
 import { contribName } from './contribNames';
 import { formatFileSize, formatSeconds } from './format';
-import { TABLE } from './labelTable';
+import { FROM_CLIENT, MCP_LABELS, TABLE } from './labelTable';
 import { CAPTION_LOOKS } from './textLook';
 import { formatTime } from './time';
 
@@ -45,6 +45,8 @@ const captionStyles = new Map(CAPTION_LOOKS.map((look) => [look.name.id, look.na
 addLabelSource((id) => captionStyles.get(id));
 // Chat's changes (`chat.<tool>`).
 addLabelSource((id) => (Object.hasOwn(CHAT_LABELS, id) ? CHAT_LABELS[id] : undefined));
+// Other apps' folded steps (`mcp.*`).
+addLabelSource((id) => (Object.hasOwn(MCP_LABELS, id) ? MCP_LABELS[id] : undefined));
 
 export function labelDescriptor(id: string): MessageDescriptor | undefined {
   // Own keys only: an id from elsewhere (a project file, chat) is never a property of the table's prototype.
@@ -115,13 +117,18 @@ export function wordParams(
   return out;
 }
 
-/** `id` with `params`, in the language shown (or `inI18n`'s); '' for an id nothing knows. */
+/**
+ * `id` with `params`, in the language shown (or `inI18n`'s); '' for an id nothing knows. A step another app made (its
+ * params name the app as `client`) says so: "Make it vertical (from Example Client)"; its folded step names the app already.
+ */
 export function wordLabel(id: string, params?: LabelParams | null, inI18n: I18n = i18n): string {
   const descriptor = labelDescriptor(id);
+  if (!descriptor) return '';
   // By id, so the label's own values are the ones worded (a descriptor's would win over them).
-  return descriptor
-    ? inI18n._(descriptor.id, wordParams(params, inI18n), { message: descriptor.message })
-    : '';
+  const label = inI18n._(descriptor.id, wordParams(params, inI18n), { message: descriptor.message });
+  const client = params?.client;
+  if (typeof client !== 'string' || Object.hasOwn(MCP_LABELS, id)) return label;
+  return inI18n._(FROM_CLIENT.id, { label, client }, { message: FROM_CLIENT.message });
 }
 
 /** `label` in the language shown: a command's or a button's name that is also its undo label. */

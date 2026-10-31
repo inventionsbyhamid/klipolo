@@ -5,8 +5,8 @@ import type { ChatRequest } from '../bindings/ChatRequest';
 import { useAi } from '../ai/aiStatus';
 import { isCode } from '../bridge/call';
 import { chatBridge } from '../bridge/chat';
+import { onMcpReply, type UnlistenFn } from '../bridge/mcp';
 import { errorMessage } from '../lib/errors';
-import { findItem } from '../lib/timeline';
 import {
   creditMoved,
   session,
@@ -15,14 +15,12 @@ import {
   type ChatStore,
   type Message,
 } from './chatMessages';
+import { appActions } from './chatApps';
 import { pictureActions } from './chatPictures';
 import { dropStale, proposalActions, replaceOpen, showOpenProposal } from './chatProposals';
-import { usePlayback } from './playback';
+import { currentView } from './editorView';
 import { useProject } from './project';
-import { useRange } from './range';
-import { useSelection } from './selection';
 import { useSpeech } from './speech';
-import { useUi } from './ui';
 
 export { MAX_MESSAGES, type Message, type ReplyMessage, type FailedMessage } from './chatMessages';
 
@@ -63,17 +61,10 @@ function requestFor(
   baseRevision?: number,
 ): ChatRequest {
   const snapshot = useProject.getState().snapshot;
-  const project = snapshot?.project;
-  const range = useRange.getState().range;
-  const selected = useSelection.getState().selectedId;
-  const item = project && selected && findItem(project, selected) ? selected : null;
   return {
     id,
     text,
-    selection: range ? { start: range.startUs, end: range.endUs } : null,
-    item,
-    playheadUs: usePlayback.getState().playheadUs,
-    format: useUi.getState().previewFormat ?? project?.settings.primaryFormat ?? null,
+    ...currentView(),
     keepOnly,
     baseRevision: baseRevision ?? snapshot?.history.revision ?? 0,
   };
@@ -85,7 +76,7 @@ let sayings = 0;
 /**
  * The chat panel's conversation: one message at a time, the replies as Rust sent them (their words
  * already clean), the additions merged as one undo step, the proposal cards (`chatProposals`), whose open one the
- * timeline shows red (`useProposal`), and the picture cards (`chatPictures`).
+ * timeline shows red (`useProposal`), the picture cards (`chatPictures`), and what other apps did (`chatApps`).
  */
 export const useChat = create<ChatStore>((set, get) => {
   const push = (m: Message) => set((s) => withMessages([...s.messages, m]));
@@ -156,9 +147,12 @@ export const useChat = create<ChatStore>((set, get) => {
           return failed(outcome.message, outcome.kind);
         }
         const revision = useProject.getState().snapshot?.history.revision;
+        // Made on the project as it is, or on a change still on its way here (another app's): it waits, and the drop on
+        // a revision change checks it again once that lands. Made on one the project has left: dropped.
+        const waits = revision !== undefined && outcome.proposal !== null && outcome.proposal.baseRevision >= revision;
         const proposal = outcome.proposal && {
           proposal: outcome.proposal,
-          state: outcome.proposal.baseRevision === revision ? ('open' as const) : ('dropped' as const),
+          state: waits ? ('open' as const) : ('dropped' as const),
         };
         // One open proposal per project: a newer one replaces the one waiting, which Rust forgets.
         if (proposal?.state === 'open') {
@@ -219,8 +213,14 @@ export const useChat = create<ChatStore>((set, get) => {
 
     ...proposalActions(set, get),
     ...pictureActions(set, get),
+    ...appActions(set, get),
   };
 });
+
+/** What other apps do (`mcp-reply`) comes into the conversation, named for each app (`chatApps`). */
+export function followApps(): Promise<UnlistenFn> {
+  return onMcpReply((external) => void useChat.getState().receive(external));
+}
 
 // The open proposal is the timeline's red ranges.
 useChat.subscribe((s, was) => {

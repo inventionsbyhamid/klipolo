@@ -1,7 +1,8 @@
 //! A proposal in Klipolo's words: its title on the card ("Cut 14 pauses and 9 filler words") and a short tag over each
 //! cut ("um", "pause"), read from what it removes on the project it applies to. The title names what goes, never how
 //! long: the card says the total once under it ("23.4 s in total"). A proposal that removes no footage (a format
-//! dropped with what was placed for it) is titled by what it drops.
+//! dropped with what was placed for it) is titled by what it drops. "Keep only these" keeps the parts the person chose;
+//! another app's keepOnly keeps parts it suggests (the card names the app under its title).
 
 use klipolo_model::Project;
 use klipolo_model::project::FormatKind;
@@ -11,6 +12,10 @@ use klipolo_model::time::{RangeUs, US_PER_SEC, Us};
 
 /// The tag over a cut that only takes a pause away.
 pub const PAUSE_TAG: &str = "pause";
+/// The title of a keepOnly the person asked for: they chose the parts.
+pub const KEEP_CHOSEN: &str = "Keep only the parts you chose";
+/// The title of another app's keepOnly: it chose the parts, and the card says who under the title.
+pub const KEEP_SUGGESTED: &str = "Keep only the suggested parts";
 
 /// What a proposal takes away, as the card shows it.
 pub(crate) struct Described {
@@ -21,11 +26,13 @@ pub(crate) struct Described {
 
 /// Describes removals made on `base` (the project the proposal applies to, its words in `speech`). `tools` names the
 /// tools whose calls made the proposal: a cut with no word in it is a pause only when `removeSilences` asked for one.
+/// `from` is the app that made it, None for Klipolo's chat.
 pub(crate) fn describe(
     base: &Project,
     speech: &Speech,
     removals: &Removals,
     tools: &[&str],
+    from: Option<&str>,
 ) -> Described {
     let pauses_asked = tools.contains(&"removeSilences");
     let said = spoken(base, speech);
@@ -61,7 +68,12 @@ pub(crate) fn describe(
     let title = if removals.ranges.is_empty() {
         dropped(removals)
     } else if tools == ["keepOnly"] {
-        "Keep only the parts you chose".to_owned()
+        (if from.is_some() {
+            KEEP_SUGGESTED
+        } else {
+            KEEP_CHOSEN
+        })
+        .to_owned()
     } else {
         cut_title(pauses, fillers, others)
     };
@@ -153,7 +165,14 @@ mod tests {
     use super::*;
 
     fn titled(removals: Removals, tools: &[&str]) -> String {
-        describe(&Project::new("P"), &Speech::default(), &removals, tools).title
+        describe(
+            &Project::new("P"),
+            &Speech::default(),
+            &removals,
+            tools,
+            None,
+        )
+        .title
     }
 
     #[test]
@@ -193,10 +212,20 @@ mod tests {
         assert_eq!(titled(ranges(14), &["removeSilences"]), "Cut 14 pauses");
         assert_eq!(titled(ranges(1), &["cutRange"]), "Cut 1 part");
         assert_eq!(titled(ranges(3), &["cutRange"]), "Cut 3 parts");
-        assert_eq!(
-            titled(ranges(2), &["keepOnly"]),
-            "Keep only the parts you chose"
+        assert_eq!(titled(ranges(2), &["keepOnly"]), KEEP_CHOSEN);
+        // Another app's keepOnly: the parts are its suggestion, not the person's choice.
+        let speech = Speech::default();
+        let removals = ranges(2);
+        let said = describe(
+            &Project::new("P"),
+            &speech,
+            &removals,
+            &["keepOnly"],
+            Some("Example Client"),
         );
+        assert_eq!(said.title, KEEP_SUGGESTED);
+        assert_eq!(KEEP_CHOSEN, "Keep only the parts you chose");
+        assert_eq!(KEEP_SUGGESTED, "Keep only the suggested parts");
     }
 
     #[test]
@@ -254,7 +283,13 @@ mod tests {
             ],
             ..Removals::default()
         };
-        let said = describe(&p, &speech, &removals, &["removeFillers", "removeSilences"]);
+        let said = describe(
+            &p,
+            &speech,
+            &removals,
+            &["removeFillers", "removeSilences"],
+            None,
+        );
         assert_eq!(said.title, "Cut 1 pause and 1 filler word");
     }
 }

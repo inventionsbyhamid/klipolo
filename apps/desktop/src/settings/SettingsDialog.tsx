@@ -3,6 +3,8 @@ import type { AiStatus } from '../bindings/AiStatus';
 import { closeSettings, openSettings, refreshAiStatus, useAi } from '../ai/aiStatus';
 import { AiIcon } from '../ai/icons';
 import { Icon } from '../layout/Icon';
+import { FieldError, Note } from './FieldNotes';
+import { OtherApps } from './OtherApps';
 import {
   type BudgetView,
   type PayChoice,
@@ -20,6 +22,7 @@ const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), [tabindex="0"]';
 
 /**
  * Settings: how Klipolo pays for Meta's models, an access code or the person's own key,
+ * and whether other apps may edit the open project (`OtherApps`).
  * Mounted once; opens from the top bar, NeedsKey or Command comma. Esc and the close button close it, and focus goes
  * back where it was. The key is sent to Rust and never shown again: only "Saved" and its last 4 characters.
  */
@@ -118,6 +121,7 @@ function Settings() {
         </div>
         <PayChoices choice={choice} onPick={pick} onArrow={setChoice} />
         {choice === 'code' ? <CodeSection status={status} /> : <KeySection status={status} />}
+        <OtherApps />
         <div className="dialog-foot">
           <span className="left">Audio and low-resolution video go to Meta's model API.</span>
           <button type="button" className="btn btn-primary" onClick={closeSettings}>
@@ -394,24 +398,6 @@ function SessionSpend({ status }: { status: AiStatus | null }) {
       <dd>{view.total}</dd>
       <dd className="session-kinds">{view.kinds.join(', ')}</dd>
     </dl>
-  );
-}
-
-function FieldError({ id, text }: { id: string; text: string }) {
-  return (
-    <p className="field-error" id={id} role="alert">
-      <Icon name="info" />
-      {text}
-    </p>
-  );
-}
-
-function Note({ text }: { text: string }) {
-  return (
-    <p className="field-note" role="status">
-      <Icon name="info" />
-      {text}
-    </p>
   );
 }
 
