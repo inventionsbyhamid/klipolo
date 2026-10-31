@@ -23,7 +23,7 @@ import { BlockMedia } from '../media/BlockMedia';
 import type { BlockFiles } from '../media/blockFiles';
 import { usToPx } from '../scale';
 import { TrimHandles } from './TrimHandles';
-import { VolumeLine } from './VolumeLine';
+import { DuckTag, VolumeLine } from './VolumeLine';
 
 /** The icon before an overlay's name (T for text, the picture for an image). */
 const ICON: Partial<Record<LayerKind, LucideIcon>> = { text: Type, image: Image, video: Film, audio: Music };
@@ -161,77 +161,82 @@ export const ItemBlock = memo(function ItemBlock({
   const tooltip = [title, movesWith].filter(Boolean).join('. ');
   const Icon = ICON[kind];
   return (
-    <button
-      type="button"
-      tabIndex={tabbable ? 0 : -1}
-      aria-describedby={BLOCK_HINT_ID}
-      data-block-id={id}
-      ref={ref}
-      aria-label={name}
-      aria-pressed={selected}
-      title={tooltip || undefined}
-      onPointerDown={(e) => onPress(e, id)}
-      onPointerMove={onBlockPointerMove}
-      onPointerUp={onBlockPointerUp}
-      onPointerCancel={onBlockPointerCancel}
-      onLostPointerCapture={onBlockLostCapture}
-      onClick={(e) => {
-        // Never reaches the lane (which seeks). A pointer's click was its press, which already picked.
-        e.stopPropagation();
-        if (e.detail === 0) onPick(id);
-      }}
-      data-left={left}
-      data-width={width}
-      data-look={look}
-      style={{ left, width, top, height }}
-      className={cn('tl-item', `is-${look}`, selected && 'is-selected', dimmed && 'is-dimmed', tiny && 'isolate')}
-    >
-      {/* Music's waveform, or a video layer's filmstrip, first: its marks and label draw over it. */}
-      {!tiny && files && look !== 'sound' && (content.type === 'video' || content.type === 'audio') && (
-        <BlockMedia
-          kind={content.type}
-          thumbPath={files.thumbPath}
-          filmUs={files.thumbUs}
-          peakPaths={files.peakPaths}
-          peakLeadUs={files.peakLeadUs}
-          startUs={startUs}
-          durationUs={durationUs}
-          sourceInUs={content.sourceInUs}
-          speed={content.type === 'video' ? content.speed : layerRate(content)}
-          centreFrom={content.type === 'audio' ? content.centreFrom : null}
-          volume={content.volume}
-          fadeInUs={content.type === 'audio' ? content.fadeInUs : 0}
-          fadeOutUs={content.type === 'audio' ? content.fadeOutUs : 0}
-          muted={content.type === 'video' ? content.muted : muted}
-          faded={soundMuted}
-          pps={pps}
-          height={height}
-          waveToken={look === 'music' ? '--color-lane-music' : undefined}
-        />
-      )}
-      {/* Music's volume line, its dips under speech and their tag. */}
+    <>
+      <button
+        type="button"
+        tabIndex={tabbable ? 0 : -1}
+        aria-describedby={BLOCK_HINT_ID}
+        data-block-id={id}
+        ref={ref}
+        aria-label={name}
+        aria-pressed={selected}
+        title={tooltip || undefined}
+        onPointerDown={(e) => onPress(e, id)}
+        onPointerMove={onBlockPointerMove}
+        onPointerUp={onBlockPointerUp}
+        onPointerCancel={onBlockPointerCancel}
+        onLostPointerCapture={onBlockLostCapture}
+        onClick={(e) => {
+          // Never reaches the lane (which seeks). A pointer's click was its press, which already picked.
+          e.stopPropagation();
+          if (e.detail === 0) onPick(id);
+        }}
+        data-left={left}
+        data-width={width}
+        data-look={look}
+        style={{ left, width, top, height }}
+        className={cn('tl-item', `is-${look}`, selected && 'is-selected', dimmed && 'is-dimmed', tiny && 'isolate')}
+      >
+        {/* Music's waveform, or a video layer's filmstrip, first: its marks and label draw over it. */}
+        {!tiny && files && look !== 'sound' && (content.type === 'video' || content.type === 'audio') && (
+          <BlockMedia
+            kind={content.type}
+            thumbPath={files.thumbPath}
+            filmUs={files.thumbUs}
+            peakPaths={files.peakPaths}
+            peakLeadUs={files.peakLeadUs}
+            startUs={startUs}
+            durationUs={durationUs}
+            sourceInUs={content.sourceInUs}
+            speed={content.type === 'video' ? content.speed : layerRate(content)}
+            centreFrom={content.type === 'audio' ? content.centreFrom : null}
+            volume={content.volume}
+            fadeInUs={content.type === 'audio' ? content.fadeInUs : 0}
+            fadeOutUs={content.type === 'audio' ? content.fadeOutUs : 0}
+            muted={content.type === 'video' ? content.muted : muted}
+            faded={soundMuted}
+            pps={pps}
+            height={height}
+            waveToken={look === 'music' ? '--color-lane-music' : undefined}
+          />
+        )}
+        {/* Music's volume line and its dips under speech (their tag is beside the block: `DuckTag`). */}
+        {!tiny && look === 'music' && content.type === 'audio' && (
+          <VolumeLine
+            id={id}
+            startUs={startUs}
+            durationUs={durationUs}
+            content={content}
+            pps={pps}
+            height={height}
+          />
+        )}
+        {!tiny && (
+          <span className="tl-item-name">
+            {Icon && look === 'overlay' && <Icon size={11} strokeWidth={1.8} aria-hidden />}
+            {attachedTo !== null && <Link2 size={9} strokeWidth={2.4} aria-hidden />}
+            {soundMuted && <VolumeX size={10} aria-hidden data-muted />}
+            {locked && <Lock size={10} aria-hidden />}
+            <span className="truncate">{label}</span>
+          </span>
+        )}
+        {!tiny && !locked && (
+          <TrimHandles selected={selected} onTrimPress={(e, edge) => onTrimPress(e, id, edge)} />
+        )}
+      </button>
       {!tiny && look === 'music' && content.type === 'audio' && (
-        <VolumeLine
-          id={id}
-          startUs={startUs}
-          durationUs={durationUs}
-          content={content}
-          pps={pps}
-          height={height}
-        />
+        <DuckTag startUs={startUs} durationUs={durationUs} content={content} left={left} width={width} top={top} />
       )}
-      {!tiny && (
-        <span className="tl-item-name">
-          {Icon && look === 'overlay' && <Icon size={11} strokeWidth={1.8} aria-hidden />}
-          {attachedTo !== null && <Link2 size={9} strokeWidth={2.4} aria-hidden />}
-          {soundMuted && <VolumeX size={10} aria-hidden data-muted />}
-          {locked && <Lock size={10} aria-hidden />}
-          <span className="truncate">{label}</span>
-        </span>
-      )}
-      {!tiny && !locked && (
-        <TrimHandles selected={selected} onTrimPress={(e, edge) => onTrimPress(e, id, edge)} />
-      )}
-    </button>
+    </>
   );
 });

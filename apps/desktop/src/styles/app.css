@@ -1268,12 +1268,12 @@
   cursor: ns-resize;
 }
 
-/* The tag rides the music piece's right edge, or the lanes' visible right while the piece runs past it. */
+/* The tag rides the music piece's right edge, or the lanes' visible right while the piece runs past it. The band is
+   the block's sibling (sticky inside a button doesn't stick), placed over the piece by its inline left, width and top;
+   above the blocks (z-index 1 to 3) and never in the way of a press. */
 .tl-duck-band {
   position: absolute;
-  top: 3px;
-  right: 6px;
-  left: 6px;
+  z-index: 4;
   display: flex;
   justify-content: flex-end;
   pointer-events: none;

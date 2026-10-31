@@ -35,16 +35,16 @@ export function levelAt(y: number): number {
 /**
  * Where the music ducks under speech (`speech`, sorted), in the layer's own time: each dip goes down from `a` to `b`,
  * stays low to `c` and is back up by `d`, easing in over `ATTACK_US` before the words and out over `RELEASE_US` after.
- * None when it doesn't duck (no depth, or 0 dB) or nobody speaks while it plays.
+ * None when it doesn't duck (no depth, or 0 dB), is muted (a flat line has no dip), or nobody speaks while it plays.
  */
 export function duckDips(
   durationUs: number,
   startUs: number,
-  duck: number | undefined,
+  { duck, muted }: Pick<AudioContent, 'duck' | 'muted'>,
   speech: RangeUs[],
 ): [number, number, number, number][] {
   const dips: [number, number, number, number][] = [];
-  if (duck === undefined || !(duck < 0)) return dips;
+  if (muted || duck === undefined || !(duck < 0)) return dips;
   for (const r of speech) {
     const from = r.start - startUs;
     const to = r.end - startUs;
@@ -66,7 +66,7 @@ export function levelPoints(
 ): [number, number][] {
   const duck = content.duck !== undefined && content.duck < 0 ? 10 ** (content.duck / 20) : 1;
   const volume = content.muted ? 0 : content.volume;
-  const dips = duckDips(durationUs, startUs, content.duck, speech);
+  const dips = duckDips(durationUs, startUs, content, speech);
   const duckAt = (us: number) => {
     let gain = 1;
     for (const [a, b, c, d] of dips) {
@@ -110,9 +110,9 @@ interface VolumeLineProps {
 const TAG_MIN_PX = 240;
 
 /**
- * The Music lane's volume line: violet, 2 px, at the music's level, dipping where it ducks under speech,
- * with "Quieter while people talk" at the right of each piece wide enough to hold it. Drag the line up or down to
- * change the volume; Option drag to change how deep it ducks. Each drag is one undo step, committed on release.
+ * The Music lane's volume line: violet, 2 px, at the music's level, dipping where it ducks under speech
+ * (its tag is `DuckTag`, beside the block). Drag the line up or down to change the volume; Option drag to change how
+ * deep it ducks. Each drag is one undo step, committed on release.
  */
 export const VolumeLine = memo(function VolumeLine({
   id,
@@ -127,8 +127,6 @@ export const VolumeLine = memo(function VolumeLine({
   const line = useRef<SVGPolylineElement>(null);
   const width = Math.max(1, usToPx(durationUs, pps));
   const points = levelPoints(durationUs, startUs, content, speech);
-  // Tagged where it ducks under someone speaking: its fades alone are no dip.
-  const dips = duckDips(durationUs, startUs, content.duck, speech).length > 0;
   const drawn = (pts: [number, number][]) =>
     pts.map(([us, g]) => `${((us / durationUs) * width).toFixed(1)},${(levelY(g) * height).toFixed(1)}`).join(' ');
   const shown = drawn(points);
@@ -217,18 +215,42 @@ export const VolumeLine = memo(function VolumeLine({
           </title>
         </polyline>
       </svg>
-      {dips && width >= TAG_MIN_PX && (
-        // Across the piece, so the tag keeps to the right edge of what the lanes show of it.
-        <span className="tl-duck-band">
-          <span className="tl-duck-tag">
-            {t({
-              id: 'music.ducking.tag',
-              message: 'Quieter while people talk',
-              comment: 'On the Music lane, where the music ducks under speech',
-            })}
-          </span>
-        </span>
-      )}
     </>
+  );
+});
+
+/**
+ * "Quieter while people talk" over a music piece that ducks under someone speaking (its fades alone are no dip), at
+ * the right of the piece, or of what the lanes show of it while the piece runs past their edge. It is the block's
+ * sibling in the lane, not inside its button, so it keeps to the scroller's visible right; a piece narrower than
+ * `TAG_MIN_PX` has none. `left`, `width` and `top` are the block's own, in the lane's px.
+ */
+export const DuckTag = memo(function DuckTag({
+  startUs,
+  durationUs,
+  content,
+  left,
+  width,
+  top,
+}: {
+  startUs: number;
+  durationUs: number;
+  content: Pick<AudioContent, 'duck' | 'muted'>;
+  left: number;
+  width: number;
+  top: number;
+}) {
+  const speech = useSpeech((s) => s.ranges);
+  if (width < TAG_MIN_PX || duckDips(durationUs, startUs, content, speech).length === 0) return null;
+  return (
+    <span className="tl-duck-band" style={{ left: left + 6, width: width - 12, top: top + 3 }}>
+      <span className="tl-duck-tag">
+        {t({
+          id: 'music.ducking.tag',
+          message: 'Quieter while people talk',
+          comment: 'On the Music lane, where the music ducks under speech',
+        })}
+      </span>
+    </span>
   );
 });

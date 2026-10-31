@@ -98,10 +98,29 @@ describe('the music’s volume line', () => {
     expect(screen.getByRole('group', { name: 'Music' })).not.toHaveTextContent('Quieter while people talk');
   });
 
-  it('the tag keeps to the right of what the lanes show of a long piece', () => {
+  it('the tag sits beside the block, never in its button, and keeps to the right of what the lanes show', () => {
+    useProject.setState({ snapshot: music(), pending: 0 });
+    renderWithProviders(<Timeline />);
+    const tag = screen.getByText('Quieter while people talk');
+    // Sticky inside a button doesn't stick: the tag is the block's sibling, over the piece.
+    expect(tag.closest('button')).toBeNull();
+    const block = screen.getByRole('group', { name: 'Music' }).querySelector<HTMLElement>('[data-look="music"]')!;
+    const band = tag.parentElement!;
+    expect(band).toHaveClass('tl-duck-band');
+    expect(band.style.left).toBe(`${Number(block.dataset.left) + 6}px`);
+    expect(band.style.width).toBe(`${Number(block.dataset.width) - 12}px`);
     const appCss = readFileSync(resolve(__dirname, '../../styles/app.css'), 'utf8');
     expect(appCss).toMatch(/\.tl-duck-tag \{[^}]*position: sticky;[^}]*right: \d+px;/s);
-    expect(appCss).toMatch(/\.tl-duck-band \{[^}]*left: 6px;[^}]*justify-content: flex-end;/s);
+    expect(appCss).toMatch(/\.tl-duck-band \{[^}]*position: absolute;[^}]*justify-content: flex-end;/s);
+  });
+
+  it('muted music under speech has no tag: its line is flat', () => {
+    const snapshot = music();
+    const [song] = snapshot.project.timeline.tracks[1].items;
+    song.content = { ...(song.content as AudioContent), muted: true };
+    useProject.setState({ snapshot, pending: 0 });
+    renderWithProviders(<Timeline />);
+    expect(screen.getByRole('group', { name: 'Music' })).not.toHaveTextContent('Quieter while people talk');
   });
 
   it('a drag of the line changes the volume, an Option drag how deep it ducks: one undo step each', async () => {
