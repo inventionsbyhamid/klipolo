@@ -5,7 +5,7 @@ import type { Previews } from '../bindings/Previews';
 import type { RecorderEvent } from '../bindings/RecorderEvent';
 import type { RecorderSetup } from '../bindings/RecorderSetup';
 import type { WhatToRecord } from '../bindings/WhatToRecord';
-import { isCode } from '../bridge/call';
+import { isCode, saidOf } from '../bridge/call';
 import { recorder } from '../bridge/recorder';
 import { type Picks, whatToRecord } from '../lib/recorder/choices';
 import { previewFrame } from '../lib/recorder/previewWire';
@@ -67,8 +67,15 @@ const get = useRecorderPreviews.getState;
 /** How long after the app answered busy (a take let go, whose worker hasn't gone yet) the previews are asked again. */
 export const BUSY_RETRY_MS = 1_000;
 
-/** The previews were started and not stopped since: frames and levels are shown only then. */
+/** The previews show: started, and neither stopped nor paused since. Frames and levels are drawn only then. */
 let running = false;
+/**
+ * The app was asked for previews and not told to stop since: it may still run one (while Klipolo is behind, a camera
+ * or mic preview waiting for macOS's answer), so a refusal of the camera or the mic is still heard.
+ */
+let started = false;
+/** Openings so far: a refusal answered for an earlier opening is never put on a later one. */
+let openings = 0;
 /** What the latest start asked for. */
 let wanted: Previews | null = null;
 /** Starts so far: an answer is acted on only while its start is the latest. */
@@ -168,8 +175,34 @@ function draw({ kind, key, atMs }: PreviewFrame, jpeg: Blob, want: Previews) {
   }
 }
 
-/** The app refused a start: the screen's pictures (the cards keep their icons), busy (asked again soon), or nothing. */
-function refusedStart(mine: number, error: unknown) {
+/** The device whose refusal `code` is, if it is a camera's or a mic's. */
+function refusedDevice(code: string): AskedDevice | null {
+  if (code === 'capture.permission.camera') return 'camera';
+  if (code === 'capture.permission.mic') return 'mic';
+  return null;
+}
+
+/** macOS refuses `device`: its row says so, with its privacy page, and its picture or level goes. */
+function deviceRefused(device: AskedDevice) {
+  const s = get();
+  if (device === 'camera') letGo(s.camera);
+  set({
+    refused: { ...s.refused, [device]: true },
+    ...(device === 'camera' ? { camera: null, cameraAt: null } : { meterDbfs: null }),
+  });
+}
+
+/**
+ * The app refused a start: the camera or the mic (an Allow press for a device macOS refuses; said in its row however
+ * late, within this opening), the screen's pictures (the cards keep their icons), busy (asked again soon), or nothing.
+ */
+function refusedStart(mine: number, opening: number, error: unknown) {
+  const said = saidOf(error);
+  const device = typeof said === 'string' ? null : refusedDevice(said.code);
+  if (device !== null) {
+    if (opening === openings) deviceRefused(device);
+    return;
+  }
   if (mine !== starts || !running) return;
   if (isCode(error, 'capture.permission.screen')) {
     screenPicturesRefused();
@@ -196,11 +229,13 @@ function screenPicturesRefused() {
  */
 export function startPreviews(want: Previews): void {
   const mine = ++starts;
+  const opening = openings;
   clearTimeout(busyTimer);
   dropUnwanted(want);
   running = true;
+  started = true;
   wanted = want;
-  void inTurn(() => recorder.previews(want, onFrame)).catch((error: unknown) => refusedStart(mine, error));
+  void inTurn(() => recorder.previews(want, onFrame)).catch((error: unknown) => refusedStart(mine, opening, error));
 }
 
 /** "Allow camera" or "Allow microphone": the previews as they are, asking for `device`, which is when macOS asks. */
@@ -210,22 +245,34 @@ export function allowPreview(device: AskedDevice): void {
 }
 
 /**
- * Every preview stops (Record, Klipolo behind or hidden, the dialog closing), and its pictures and level go. Nothing is
- * sent when none runs.
+ * Klipolo went behind or was hidden: the page shows no preview until it is back in front (then `startPreviews`). The app
+ * stops them itself, but for one waiting for macOS's answer to an Allow press, so nothing is sent: an off would close
+ * that one too, and the answer would be lost. A refusal of the camera or the mic is still heard.
  */
-export function stopPreviews(): void {
+export function pausePreviews(): void {
   clearTimeout(busyTimer);
   if (!running) return;
   starts++;
   running = false;
   wanted = null;
   dropAll();
+}
+
+/**
+ * Every preview stops (Record or Try again, the dialog closing or going), and its pictures and level go. Nothing is
+ * sent when the app runs none.
+ */
+export function stopPreviews(): void {
+  pausePreviews();
+  if (!started) return;
+  started = false;
   void inTurn(() => recorder.previewsOff()).catch(() => undefined);
 }
 
 /** The dialog closed: the previews stop, and what this opening pressed and was refused is forgotten. */
 export function forgetPreviews(): void {
   stopPreviews();
+  openings++;
   set(FRESH);
 }
 
@@ -242,9 +289,14 @@ const PREVIEW_IDS: ReadonlySet<string> = new Set<PreviewId>([
  */
 export function hearPreview(e: RecorderEvent): boolean {
   if (!PREVIEW_IDS.has(e.take)) return false;
-  if (!running) return true;
   const id = e.take as PreviewId;
   const ev = e.event;
+  if (!running) {
+    // Behind, macOS's answer to an Allow press may still come: a no is said in its row.
+    const device = ev.ev === 'failed' ? refusedDevice(ev.error.code) : null;
+    if (started && device !== null && id === `preview-${device}`) deviceRefused(device);
+    return true;
+  }
   if (ev.ev === 'meter') {
     if (id === 'preview-mic' && ev.source === 'mic' && wanted !== null && wanted.mic !== null)
       set({ meterDbfs: ev.peakDbfs });
@@ -267,17 +319,12 @@ function stopped(id: PreviewId, code: string) {
       letGo(s.live);
       return set({ live: null, liveAt: null });
     case 'preview-camera':
+      if (code === 'capture.permission.camera') return deviceRefused('camera');
       letGo(s.camera);
-      return set({
-        camera: null,
-        cameraAt: null,
-        ...(code === 'capture.permission.camera' ? { refused: { ...s.refused, camera: true } } : {}),
-      });
+      return set({ camera: null, cameraAt: null });
     case 'preview-mic':
-      return set({
-        meterDbfs: null,
-        ...(code === 'capture.permission.mic' ? { refused: { ...s.refused, mic: true } } : {}),
-      });
+      if (code === 'capture.permission.mic') return deviceRefused('mic');
+      return set({ meterDbfs: null });
   }
 }
 
@@ -285,8 +332,10 @@ function stopped(id: PreviewId, code: string) {
 export function resetPreviews(): void {
   clearTimeout(busyTimer);
   running = false;
+  started = false;
   wanted = null;
   starts++;
+  openings++;
   chain = Promise.resolve();
   dropAll();
   set(FRESH);

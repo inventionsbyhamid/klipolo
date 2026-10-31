@@ -13,6 +13,7 @@ import { useRecorder } from '../../state/recorder';
 import {
   allowPreview,
   type AskedDevice,
+  pausePreviews,
   previewsFor,
   startPreviews,
   stopPreviews,
@@ -77,8 +78,9 @@ function useInFront(): boolean {
 
 /**
  * The previews run only while the choices show and Klipolo is in front: on opening, on every change of choice, and
- * back in front, as the app starts nothing again by itself. They stop on Record (the store stops them first), when
- * Klipolo goes behind or is hidden, and when the dialog goes.
+ * back in front, as the app starts nothing again by itself. They stop on Record (the store stops them first) and when
+ * the dialog goes. Behind or hidden, the page only stops showing them: the app stops them itself, keeping one that
+ * waits for macOS's answer to an Allow press.
  */
 function usePreviews(phase: RecorderPhase) {
   const front = useInFront();
@@ -88,8 +90,9 @@ function usePreviews(phase: RecorderPhase) {
   );
   useEffect(() => {
     const wanted = JSON.parse(want) as Previews | null;
-    if (front && wanted !== null) startPreviews(wanted);
-    else stopPreviews();
+    if (wanted === null) stopPreviews();
+    else if (front) startPreviews(wanted);
+    else pausePreviews();
   }, [front, want]);
   useEffect(() => () => stopPreviews(), []);
 }

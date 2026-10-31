@@ -251,21 +251,23 @@ describe('the previews in the Record dialog', () => {
     await openOn();
     expect(fake.previewed).toEqual([want()]);
     await sendFrame(fake, 'thumb', 'display:main', 'main 1');
-    // Klipolo goes behind: every preview stops, and its pictures go with it.
+    // Klipolo goes behind: the app stops the previews itself (keeping one that waits for macOS's answer), so the
+    // dialog sends no off; it lets its pictures go and shows nothing more.
     await windowFocus('blur');
-    expect(fake.previewed.at(-1)).toBe('off');
+    expect(fake.previewed).toEqual([want()]);
     expect(shownIn(card('Display main'))).toBeNull();
+    expect(previews().thumbs).toEqual({});
     // A frame still on its way is never shown.
     await sendFrame(fake, 'thumb', 'display:main', 'main 2');
     expect(shownIn(card('Display main'))).toBeNull();
     // In front again: the app started nothing by itself, so the dialog asks again.
     await windowFocus('focus');
-    expect(fake.previewed.at(-1)).toEqual(want());
-    // Hidden, then shown.
+    expect(fake.previewed).toEqual([want(), want()]);
+    // Hidden, then shown: the same.
     await visibility('hidden');
-    expect(fake.previewed.at(-1)).toBe('off');
+    expect(fake.previewed).toEqual([want(), want()]);
     await visibility('visible');
-    expect(fake.previewed.at(-1)).toEqual(want());
+    expect(fake.previewed).toEqual([want(), want(), want()]);
     // Record: they stop before the take arms, and nothing starts during the countdown.
     await userEvent.click(recordButton());
     await flush();
@@ -358,6 +360,45 @@ describe('the previews in the Record dialog', () => {
     expect(settings).toHaveLength(2);
     await userEvent.click(settings[0]);
     expect(fake.calls).toContain('openPrivacy:mic');
+  });
+
+  it('a_no_to_allow_camera_answered_while_klipolo_is_behind_reaches_the_camera_row', async () => {
+    const dialog = await openOn(
+      recorderSetup({ cameras: [device('FaceTime HD Camera')], permissions: { camera: 'notAsked' } }),
+    );
+    await choose('Camera: No camera', 'FaceTime HD Camera');
+    await userEvent.click(screen.getByRole('button', { name: 'Allow camera' }));
+    await flush();
+    const asked = fake.previewed.length;
+    // macOS's question takes the focus: the camera's worker waits for its answer, and nothing stops it.
+    await windowFocus('blur');
+    expect(fake.previewed.slice(asked)).toEqual([]);
+    // "Don't Allow".
+    emit('preview-camera', failed('capture.permission.camera'));
+    await windowFocus('focus');
+    expect(dialog).toHaveTextContent("Klipolo can't use your camera. Allow it in Privacy & Security, then try again.");
+    const settings = screen.getByRole('button', { name: 'Open privacy settings' });
+    expect(settings.closest('.record-field')).toContainElement(
+      screen.getByRole('button', { name: 'Camera: FaceTime HD Camera' }),
+    );
+    await userEvent.click(settings);
+    expect(fake.calls).toContain('openPrivacy:camera');
+  });
+
+  it('an_allow_press_the_app_refuses_shows_the_refusal_in_its_row', async () => {
+    // Turned off in System Settings while the dialog is open: the press's own call comes back refused.
+    fake.script.previews = (w) => (w.ask === 'mic' ? refusal('capture.permission.mic') : undefined);
+    const dialog = await openOn(recorderSetup({ permissions: { mic: 'notAsked' } }));
+    await userEvent.click(screen.getByRole('button', { name: 'Allow microphone' }));
+    await flush();
+    expect(dialog).toHaveTextContent(
+      "Klipolo can't use your microphone. Allow it in Privacy & Security, then try again.",
+    );
+    const settings = screen.getByRole('button', { name: 'Open privacy settings' });
+    expect(settings.closest('.record-field')).toContainElement(
+      screen.getByRole('button', { name: 'Microphone: mic-1' }),
+    );
+    expect(screen.queryByRole('meter')).toBeNull();
   });
 
   it('blob_urls_are_revoked', async () => {
