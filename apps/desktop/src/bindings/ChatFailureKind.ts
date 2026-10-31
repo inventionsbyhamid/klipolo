@@ -3,4 +3,4 @@
 /**
  * What kind of failure, so the panel offers the right way out: Retry, or Open Settings.
  */
-export type ChatFailureKind = "tooLong" | "budget" | "busy" | "unavailable" | "network" | "refused" | "needsKey" | "registration" | "other";
+export type ChatFailureKind = "tooLong" | "budget" | "busy" | "unavailable" | "network" | "refused" | "declined" | "needsKey" | "registration" | "other";

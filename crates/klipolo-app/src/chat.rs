@@ -3,7 +3,7 @@
 //! built: its fields are set only by these constructors, so the page shows them as they are and never cleans them
 //! itself. Klipolo's own sentences (a proposal's title, a failure's plain reason) are written without dashes.
 
-use klipolo_chat::sanitize;
+use klipolo_chat::{ChatError, ChatErrorKind, PlanOut, sanitize};
 use klipolo_model::coded::CodedError;
 use klipolo_model::history::SnapshotPatch;
 use klipolo_model::project::FormatKind;
@@ -135,6 +135,9 @@ pub enum ChatFailureKind {
     Network,
     /// The key or the code was not accepted (Open Settings).
     Refused,
+    /// Turned down under the provider's content policy: the sentence says so, and asking in other words may work, so
+    /// the panel offers no Retry of the same text.
+    Declined,
     /// No key and no code (the NeedsKey card).
     NeedsKey,
     /// With an access code, this Mac couldn't register with the relay: the sentence says why (Retry).
@@ -211,6 +214,41 @@ impl ChatReply {
 
     pub fn proposal_ref(&self) -> Option<&ChatProposal> {
         self.proposal.as_ref()
+    }
+}
+
+impl ChatReply {
+    /// The reply to request `id` from what the planner made of it: its words (cleaned again here), the questions it asked
+    /// that its words don't already say, and the moments it points at. The additions applied and the proposal are the
+    /// app's to add (`applied`, `proposal`), once it has applied or kept them.
+    pub fn from_plan(id: impl Into<String>, plan: &PlanOut) -> Self {
+        let mut reply = Self::new(id, &plan.reply);
+        for question in &plan.compiled.questions {
+            if !plan.reply.contains(question.trim()) {
+                reply = reply.question(question);
+            }
+        }
+        for moment in &plan.compiled.moments {
+            reply = reply.moment(moment.range, &moment.label);
+        }
+        reply
+    }
+}
+
+impl From<&ChatError> for ChatFailure {
+    /// The planner's failure as the panel shows it: its sentence, and what way out it offers.
+    fn from(error: &ChatError) -> Self {
+        let kind = match error.kind {
+            ChatErrorKind::TooLong => ChatFailureKind::TooLong,
+            ChatErrorKind::Budget => ChatFailureKind::Budget,
+            ChatErrorKind::Busy => ChatFailureKind::Busy,
+            ChatErrorKind::Unavailable => ChatFailureKind::Unavailable,
+            ChatErrorKind::Network => ChatFailureKind::Network,
+            ChatErrorKind::Refused => ChatFailureKind::Refused,
+            ChatErrorKind::Declined => ChatFailureKind::Declined,
+            ChatErrorKind::Other => ChatFailureKind::Other,
+        };
+        Self::new(kind, &error.message)
     }
 }
 

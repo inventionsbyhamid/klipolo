@@ -4,6 +4,7 @@
 use klipolo_app::chat::{
     ChatFailure, ChatFailureKind, ChatOutcome, ChatProposal, ChatReply, ChatRequest,
 };
+use klipolo_chat::{ChatError, ChatErrorKind, Compiled, Moment, PlanOut};
 use klipolo_model::risk::Removals;
 use klipolo_model::time::RangeUs;
 
@@ -95,4 +96,55 @@ fn a_request_reads_as_the_page_sends_it() {
     .unwrap();
     assert_eq!(keep.keep_only, vec![range(10, 20)]);
     assert_eq!(keep.selection, Some(range(1, 2)));
+}
+
+#[test]
+fn a_plan_reads_as_its_reply_its_new_questions_and_its_moments() {
+    let plan = PlanOut {
+        reply: "She talks about the kiln twice. Which one?".into(),
+        compiled: Compiled {
+            questions: vec![
+                "Which one?".into(),
+                "Keep the intro \u{2014} or not?".into(),
+            ],
+            moments: vec![Moment {
+                range: range(3_000_000, 5_000_000),
+                label: "The first firing".into(),
+            }],
+            ..Compiled::default()
+        },
+        usage_usd: 0.005,
+        note: String::new(),
+        calls: vec![],
+        answers: vec![],
+    };
+    let reply = ChatReply::from_plan("r1", &plan);
+    assert_eq!(reply.text(), "She talks about the kiln twice. Which one?");
+    // A question the reply already asks isn't said twice; the other is cleaned.
+    assert_eq!(reply.questions(), ["Keep the intro, or not?"]);
+    assert_eq!(reply.moments()[0].label(), "The first firing");
+}
+
+#[test]
+fn a_planner_failure_keeps_its_sentence_and_its_kind() {
+    let error = |kind, message: &str| ChatError {
+        kind,
+        message: message.into(),
+        usage_usd: 0.0,
+        detail: String::new(),
+        model_calls: 1,
+    };
+    let declined = ChatFailure::from(&error(
+        ChatErrorKind::Declined,
+        "The AI turned this down. Try wording it differently.",
+    ));
+    assert_eq!(declined.kind(), ChatFailureKind::Declined);
+    assert_eq!(
+        declined.message(),
+        "The AI turned this down. Try wording it differently."
+    );
+    let busy = ChatFailure::from(&error(ChatErrorKind::Busy, "Klipolo AI is busy right now."));
+    assert_eq!(busy.kind(), ChatFailureKind::Busy);
+    let json = serde_json::to_value(ChatOutcome::Failed(declined)).unwrap();
+    assert_eq!(json["kind"], "declined");
 }
