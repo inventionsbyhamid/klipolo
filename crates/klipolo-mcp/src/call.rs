@@ -1,7 +1,8 @@
 //! An edit tool's call from an app: chat's own tool, read, checked and compiled as chat's are, then applied, proposed
 //! or refused. In order:
 //! 1. `ToolCall::parse`: a call that doesn't fit its tool is refused with the parse error's sentence.
-//! 2. The open project (`NO_PROJECT` without one).
+//! 2. The open project (`NO_PROJECT` without one). A call naming times or clip refs needs the app to have read the
+//!    project's main track as it is now (`Seen`): `READ_FIRST` when it never read, `STALE` when the clips moved since.
 //! 3. `findMoments` only points the person at moments (it is read-only): it compiles alone and is shown.
 //! 4. The proposal slot, shared with Klipolo's chat: while a proposal that isn't the app's own waits, every edit is
 //!    refused (`WAITING_OTHER`).
@@ -15,7 +16,9 @@
 //! A result is one text and `structuredContent`: `{"outcome": "done" | "proposed" | "shown" | "refused", "revision"?,
 //! "proposalId"?, "removedSec"?}`. `isError` is true exactly when nothing was done.
 
-use klipolo_chat::{Audience, Compiled, FunctionCall, Moment, Refusal, ToolCall, compile};
+use klipolo_chat::{
+    Audience, Compiled, FunctionCall, Moment, Refusal, ToolCall, compile, timeline_key,
+};
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::ops::Origin;
@@ -24,7 +27,7 @@ use serde_json::{Value, json};
 
 use crate::host::{Host, HostError, OpenProposal, Snapshot};
 use crate::rpc::Mcp;
-use crate::session::Session;
+use crate::session::{Seen, Session};
 use crate::words::{self, fill};
 
 /// The most ranges a result names; the rest are counted (`getProposal` lists them all).
@@ -43,6 +46,11 @@ pub fn run(mcp: &Mcp, session: &mut Session, call: &FunctionCall) -> Value {
     };
     // An app's words are never the person's typed times: only the person's view in Klipolo counts.
     snap.inputs.message.clear();
+    if new.names_timeline()
+        && let Err(said) = read_as_it_is(session.seen.as_ref(), &snap)
+    {
+        return refused(said);
+    }
     if matches!(new, ToolCall::FindMoments { .. }) {
         return show(host, client, &snap, new);
     }
@@ -58,6 +66,18 @@ pub fn run(mcp: &Mcp, session: &mut Session, call: &FunctionCall) -> Value {
         return refused(&reasons(&out.refusals));
     }
     edit(host, client, &snap, &calls, out, own.as_ref())
+}
+
+/// Whether what the app last read (`seen`) is the project's main track as it is now; else what to read.
+fn read_as_it_is(seen: Option<&Seen>, snap: &Snapshot) -> Result<(), &'static str> {
+    let Some(seen) = seen else {
+        return Err(words::READ_FIRST);
+    };
+    if seen.project_id == snap.project.id && seen.key == timeline_key(&snap.project) {
+        Ok(())
+    } else {
+        Err(words::STALE)
+    }
 }
 
 /// `tx`, an app's batch: the same label and ops, the app's name added to its params, from the app.

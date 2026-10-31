@@ -17,7 +17,8 @@ use klipolo_mcp::Host;
 use klipolo_mcp::call::from_app;
 use klipolo_mcp::rpc::Mcp;
 use klipolo_mcp::words::{
-    DONE, KLIPOLO_CHAT, NO_MOMENTS, PROPOSED_NO_FOOTAGE, UNCHANGED, WAITING_OTHER, fill,
+    DONE, KLIPOLO_CHAT, NO_MOMENTS, PROPOSED_NO_FOOTAGE, READ_FIRST, STALE, UNCHANGED,
+    WAITING_OTHER, fill,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -543,4 +544,98 @@ fn agent_words_are_exact() {
         fill("{a} and {b} and {c", &[("a", "{b}"), ("b", "2")]),
         "{b} and 2 and {c"
     );
+}
+
+/// The person cuts 5 to 6 s by hand: c1 becomes 0 to 5 s and 5 to 12 s.
+fn person_cuts(host: &FakeHost) -> u64 {
+    host.person_edit(&Transaction {
+        label: "edit.cut".into(),
+        ops: vec![Op::DeleteRanges {
+            ranges: vec![span(5.0, 6.0)],
+        }],
+        ..Transaction::default()
+    })
+}
+
+#[test]
+fn time_call_before_reading_is_refused() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    let before = host.revision();
+    for (tool, arguments) in [
+        ("cutRange", json!({"startSec": 0, "endSec": 13})),
+        (
+            "keepOnly",
+            json!({"ranges": [{"startSec": 0, "endSec": 13}]}),
+        ),
+        ("splitAt", json!({"atSec": 13})),
+        (
+            "trimClip",
+            json!({"clip": "c2", "edge": "end", "toSec": 140}),
+        ),
+        (
+            "findMoments",
+            json!({"query": "the pool", "ranges": [{"startSec": 0, "endSec": 13, "label": "the pool"}]}),
+        ),
+        ("addSound", json!({"name": "whoosh", "atSec": [13]})),
+    ] {
+        assert_refused(&agent.call(tool, arguments), READ_FIRST);
+    }
+    assert_eq!(host.revision(), before);
+    assert!(host.state().slot.is_none());
+    assert!(host.state().moments.is_empty());
+    // Another session's read is its own: this one still hasn't read.
+    Agent::open(&mcp, "Agent").read();
+    assert_refused(&agent.cut(0.0, 13.0), READ_FIRST);
+    // A call that names no time or clip needs no read.
+    let format = agent.call("setFormat", set_format("square", true));
+    assert_eq!(outcome(&format), "done", "{format}");
+    // Once read, the cut is proposed.
+    agent.read();
+    assert_eq!(outcome(&agent.cut(0.0, 13.0)), "proposed");
+}
+
+#[test]
+fn stale_timeline_is_refused_until_read_again() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    // The person cuts by hand: the times the app read no longer hold.
+    let before = person_cuts(&host);
+    assert_refused(&agent.cut(0.0, 13.0), STALE);
+    assert_refused(&agent.call("splitAt", json!({"atSec": 20})), STALE);
+    assert_eq!(host.revision(), before);
+    assert!(host.state().slot.is_none());
+    // Reading the transcript is reading too: times from it hold.
+    agent.call("getTranscript", json!({}));
+    let result = agent.cut(0.0, 12.0);
+    assert_eq!(outcome(&result), "proposed", "{result}");
+    assert_eq!(
+        host.state().slot.as_ref().unwrap().proposal.ranges,
+        [span(0.0, 12.0)]
+    );
+    // Another project open in Klipolo: what the app read was of the one before.
+    host.person_discards();
+    host.change_project(|p| p.id = "another-project".into());
+    assert_refused(&agent.cut(0.0, 12.0), STALE);
+}
+
+#[test]
+fn format_change_keeps_read_times_valid() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    agent.read();
+    // The shape, the captions and the words change; the main track's clips don't move.
+    for (tool, arguments) in [
+        ("setFormat", set_format("square", true)),
+        ("setCaptions", json!({"on": false, "style": null})),
+    ] {
+        let result = agent.call(tool, arguments);
+        assert_eq!(outcome(&result), "done", "{result}");
+    }
+    let result = agent.cut(0.0, 13.0);
+    assert_eq!(outcome(&result), "proposed", "{result}");
 }
