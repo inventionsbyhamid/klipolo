@@ -4,11 +4,11 @@ import { retry, useAnalysis } from '../../state/analysis';
 import './analysis.css';
 
 /**
- * The rough note: its sentence, and the clips "Time words again" asks for (joined by spaces, so what the store gives
- * is a string that stays the same while nothing changes).
+ * The rough note: why (each reason timing again can help with, once; empty for none), and the clips "Time words again"
+ * asks for (joined by spaces, so what the store gives is a string that stays the same while nothing changes).
  */
 interface Rough {
-  text: string;
+  reason: string;
   again: string;
 }
 
@@ -27,7 +27,7 @@ export function RoughCaptionsNote() {
   const timing = useAnalysis((s) =>
     Object.values(s.states).some((state) => state.state === 'running' && state.step === 'words'),
   );
-  const text = useAnalysis((s) => rough(s.states)?.text ?? null);
+  const reason = useAnalysis((s) => rough(s.states)?.reason ?? null);
   const again = useAnalysis((s) => rough(s.states)?.again ?? '');
   // Without a key or code nothing can time the words: the button would do nothing.
   const needsKey = useNeedsKey();
@@ -39,11 +39,13 @@ export function RoughCaptionsNote() {
       </span>
     );
   }
-  if (text === null) return null;
+  if (reason === null) return null;
+  // The reason in full, on a line of its own under the note: the head grows rather than cutting it off.
   return (
-    <span className="stage-status analysis-rough">
-      <span className="analysis-rough-text" title={text}>
-        {text}
+    <span className="stage-status analysis-rough is-done">
+      <span className="analysis-rough-text">
+        <span>{LEAD}</span>
+        {reason && <span className="analysis-rough-reason">{reason}</span>}
       </span>
       {again && !needsKey && (
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => void retry(again.split(' '))}>
@@ -55,8 +57,8 @@ export function RoughCaptionsNote() {
 }
 
 /**
- * The done clips with rough words: the note's sentence (each reason timing them again can help with, once), and the
- * clips timing them again can help. None when no clip is rough.
+ * The done clips with rough words: why (each reason timing them again can help with, once), and the clips timing them
+ * again can help. None when no clip is rough.
  */
 function rough(states: Record<string, AssetState>): Rough | null {
   const clips = Object.entries(states).flatMap(([id, state]) =>
@@ -65,5 +67,5 @@ function rough(states: Record<string, AssetState>): Rough | null {
   if (clips.length === 0) return null;
   const helped = clips.filter((c) => c.state.timeAgain);
   const reasons = [...new Set(helped.flatMap((c) => (c.state.approximateReason ? [c.state.approximateReason] : [])))];
-  return { text: [LEAD, ...reasons].join(' '), again: helped.map((c) => c.id).join(' ') };
+  return { reason: reasons.join(' '), again: helped.map((c) => c.id).join(' ') };
 }

@@ -186,6 +186,25 @@
   white-space: nowrap;
 }
 
+/* Done with rough words: the note and its reason in full, the reason on a line of its own under it in the small size.
+   The head grows a line rather than cutting either off. */
+.analysis-rough.is-done {
+  overflow: visible;
+  white-space: normal;
+}
+
+.analysis-rough.is-done .analysis-rough-text {
+  display: grid;
+  gap: var(--space-1);
+  overflow: visible;
+  white-space: normal;
+}
+
+.analysis-rough-reason {
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
 /* "Time words again": never squeezed by the sentence before it. */
 .analysis-rough .btn {
   flex: none;

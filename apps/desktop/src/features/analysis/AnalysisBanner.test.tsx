@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -244,7 +246,8 @@ describe('the analysis banner', () => {
       },
     });
     renderWithProviders(<RoughCaptionsNote />);
-    expect(screen.getByText(`Some captions are timed roughly. ${stopped}`)).toBeInTheDocument();
+    expect(screen.getByText('Some captions are timed roughly.')).toBeInTheDocument();
+    expect(screen.getByText(stopped)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Time words again' }));
     // As the person: the words are timed again whatever the page did before.
     expect(bridge.start).toHaveBeenCalledWith(['a']);
@@ -274,6 +277,26 @@ describe('the analysis banner', () => {
     renderWithProviders(<RoughCaptionsNote />);
     expect(screen.getByText(/Word timing stopped before it finished\./)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Time words again' })).toBeNull();
+  });
+
+  it('shows the reason in full, on a line of its own under the note', () => {
+    const quota = "This device has used today's 120 minutes of word timing. It resets at midnight UTC.";
+    useAnalysis.setState({
+      states: { a: { state: 'done', approximate: true, approximateReason: quota, timeAgain: true } },
+    });
+    renderWithProviders(<RoughCaptionsNote />);
+    const reason = screen.getByText(quota);
+    expect(reason).toHaveClass('analysis-rough-reason');
+    expect(reason).not.toHaveTextContent('Some captions are timed roughly.');
+    // jsdom draws no CSS: the stylesheet itself must let the reason wrap, never cut it off with an ellipsis.
+    const css = readFileSync(resolve(__dirname, 'analysis.css'), 'utf8');
+    const rule = (selector: string) =>
+      css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.]/g, '\\.')}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
+    for (const selector of ['.analysis-rough.is-done', '.analysis-rough.is-done .analysis-rough-text']) {
+      expect(rule(selector)).toMatch(/white-space:\s*normal/);
+      expect(rule(selector)).toMatch(/overflow:\s*visible/);
+    }
+    expect(rule('.analysis-rough-reason')).not.toMatch(/nowrap|ellipsis/);
   });
 
   it('says why a Retry of a failed clip was refused', async () => {
