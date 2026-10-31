@@ -73,8 +73,9 @@ pub struct ModelResponse {
 pub enum ModelError {
     /// The credit for these calls is used up: the provider's own sentence for the person (which credit, what to do).
     Budget(String),
-    /// Too many requests right now, still so after the adapter waited and asked again.
-    Busy,
+    /// Too many requests right now, still so after the adapter waited and asked again: the provider's sentence for the
+    /// person when it has one (who is busy).
+    Busy(Option<String>),
     /// The service is down, not set up, or gave no answer in time: the provider's sentence for the person when it has
     /// one (who gave up, what to do).
     Unavailable(Option<String>),
@@ -111,7 +112,8 @@ impl fmt::Display for ModelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ModelError::Budget(said) => write!(f, "out of credit: {said}"),
-            ModelError::Busy => f.write_str("busy"),
+            ModelError::Busy(None) => f.write_str("busy"),
+            ModelError::Busy(Some(said)) => write!(f, "busy: {said}"),
             ModelError::Unavailable(None) => f.write_str("unavailable"),
             ModelError::Unavailable(Some(said)) => write!(f, "unavailable: {said}"),
             ModelError::Network => f.write_str("no answer"),

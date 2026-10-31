@@ -1849,3 +1849,43 @@ fn media_tools_read_their_arguments() {
         "addText: durationSec must be between 0.5 and 600 seconds, not 0."
     );
 }
+
+#[test]
+fn music_and_words_added_beside_a_cut_end_with_the_cut_video() {
+    // One answer lays the song and puts words on screen (the additions, at once), and cuts 20 to 25 s (proposed): the
+    // song the additions laid to the 30 s end is fitted to the new 25 s end by the proposal, fading out there.
+    let p = project();
+    let i = inputs(
+        &p,
+        "add lofi and a title Day 1 at the start, and cut 20 to 25",
+    );
+    let calls = [
+        call(
+            "addMusic",
+            json!({"file": "lofi", "volume": null, "duck": null, "atSec": 0.0}),
+        ),
+        call(
+            "addText",
+            json!({"text": "Day 1", "preset": "title", "atSec": 0.0, "durationSec": null}),
+        ),
+        call("cutRange", json!({"startSec": 20.0, "endSec": 25.0})),
+    ];
+    for calls in [calls.to_vec(), calls.iter().rev().cloned().collect()] {
+        let out = compile(&p, &i, &calls);
+        let with_additions = applied(&p, &out);
+        let end = |p: &Project| {
+            let music = layers(p, TrackKind::Audio);
+            let last = music.iter().rfind(|l| is_music(l)).expect("music").clone();
+            let ItemContent::Audio { fade_out_us, .. } = last.content else {
+                unreachable!()
+            };
+            (last.end_us(), fade_out_us)
+        };
+        assert_eq!(end(&with_additions), (secs(30.0), secs(2.0)), "{calls:?}");
+        let proposal = out.proposal.expect("the cut is proposed");
+        let after = apply_ops(&with_additions, &proposal.tx.ops).unwrap();
+        assert_eq!(video_duration(&after.timeline), secs(25.0), "{calls:?}");
+        assert_eq!(end(&after), (secs(25.0), secs(2.0)), "{calls:?}");
+        assert_eq!(proposal.review.after, after, "{calls:?}");
+    }
+}

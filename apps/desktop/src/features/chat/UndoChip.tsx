@@ -34,7 +34,7 @@ export function standing(
  * Undo for a chat edit: an outline chip with the undo icon. It asks Rust to take back the change that made
  * `revision` (`chatBridge().undoLast`) in undo's turn (`useProject.stepWith`: a change still settling or on its way
  * goes first), which Rust does only while it is still chat's last change; refused (`project.moved`), the chip says
- * plainly it can't be undone from chat any more, with nothing to press. Taken back, it reads "Redo" for 10 s, then goes
+ * plainly it can't be undone from chat any more and points at the top bar's Undo, with nothing to press. Taken back, it reads "Redo" for 10 s, then goes
  * for good (a change after it never brings it back). Buried under later changes before it was used, it does nothing and
  * says why. When it changes under the keyboard, the keyboard goes back to the chat box.
  */
@@ -59,7 +59,7 @@ export function UndoChip({ undo, revision }: { undo: CodedError; revision: numbe
   if (refused)
     return (
       <p className="muted">
-        {t({ id: 'chatPanel.undo.refused', message: 'This change can’t be undone from chat any more.' })}
+        {t({ id: 'chatPanel.undo.refused', message: 'This change can’t be undone from chat any more. Use Undo in the top bar.' })}
       </p>
     );
   if (state === 'undone') {
@@ -88,7 +88,7 @@ export function UndoChip({ undo, revision }: { undo: CodedError; revision: numbe
     );
   }
   const name = historyAction('undo', undo.code, undo.params);
-  const refusedText = t({ id: 'chatPanel.undo.refused', message: 'This change can’t be undone from chat any more.' });
+  const refusedText = t({ id: 'chatPanel.undo.refused', message: 'This change can’t be undone from chat any more. Use Undo in the top bar.' });
   const chip = (
     <button
       type="button"
