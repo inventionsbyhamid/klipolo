@@ -24,6 +24,21 @@ pub(crate) fn apply_and_commit(
     Ok(open.document.snapshot_patch(change))
 }
 
+/// Chat's edits as one undo step (`klipolo_app::chat::commit_reviewed`): `next` when given (the project a proposal's
+/// review made, applied once already), else the ops applied once. A read-only project refuses them like any edit.
+pub(crate) fn commit_reviewed(
+    open: &mut OpenProject,
+    tx: &Transaction,
+    next: Option<Project>,
+) -> Result<SnapshotPatch, Said> {
+    if open.read_only {
+        return Err(read_only_refusal());
+    }
+    open.document.set_limits(history_limits());
+    klipolo_app::chat::commit_reviewed(&mut open.document, tx, next)
+        .map_err(|e| Said::Coded(e.coded()))
+}
+
 /// Undo and redo together keep 50 steps while the system is short of memory.
 fn history_limits() -> HistoryLimits {
     limits_at(pressure::level())
