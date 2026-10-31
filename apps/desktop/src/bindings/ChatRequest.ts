@@ -21,4 +21,9 @@ item: string | null, playheadUs: number,
 /**
  * The format the preview shows.
  */
-format: FormatKind | null, };
+format: FormatKind | null, 
+/**
+ * "Keep only these" under moments: keep only these timeline ranges and remove the rest, proposed without asking
+ * the model (they are Klipolo's own moments). Empty for a message the person typed.
+ */
+keepOnly: Array<RangeUs>, };

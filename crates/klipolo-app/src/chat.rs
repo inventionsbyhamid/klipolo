@@ -27,6 +27,10 @@ pub struct ChatRequest {
     pub playhead_us: Us,
     /// The format the preview shows.
     pub format: Option<FormatKind>,
+    /// "Keep only these" under moments: keep only these timeline ranges and remove the rest, proposed without asking
+    /// the model (they are Klipolo's own moments). Empty for a message the person typed.
+    #[serde(default)]
+    pub keep_only: Vec<RangeUs>,
 }
 
 /// What a message came to: a reply, or why nothing happened (the project untouched).

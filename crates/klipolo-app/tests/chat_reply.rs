@@ -1,7 +1,9 @@
 //! The chat panel shows what the model wrote as it is: a reply is cleaned of em and en dashes as it is built, so the
 //! page never cleans it itself.
 
-use klipolo_app::chat::{ChatFailure, ChatFailureKind, ChatOutcome, ChatProposal, ChatReply};
+use klipolo_app::chat::{
+    ChatFailure, ChatFailureKind, ChatOutcome, ChatProposal, ChatReply, ChatRequest,
+};
 use klipolo_model::risk::Removals;
 use klipolo_model::time::RangeUs;
 
@@ -76,4 +78,21 @@ fn serializes_as_the_page_reads_it() {
     .unwrap();
     assert_eq!(failed["type"], "failed");
     assert_eq!(failed["kind"], "registration");
+}
+
+#[test]
+fn a_request_reads_as_the_page_sends_it() {
+    // A typed message has no ranges to keep; "Keep only these" sends its moments'.
+    let typed: ChatRequest = serde_json::from_value(serde_json::json!({
+        "id": "r1", "text": "cut the ums", "selection": null, "item": null, "playheadUs": 0, "format": "portrait"
+    }))
+    .unwrap();
+    assert!(typed.keep_only.is_empty());
+    let keep: ChatRequest = serde_json::from_value(serde_json::json!({
+        "id": "r2", "text": "Keep only these", "selection": { "start": 1, "end": 2 }, "item": null,
+        "playheadUs": 5, "format": null, "keepOnly": [{ "start": 10, "end": 20 }]
+    }))
+    .unwrap();
+    assert_eq!(keep.keep_only, vec![range(10, 20)]);
+    assert_eq!(keep.selection, Some(range(1, 2)));
 }
