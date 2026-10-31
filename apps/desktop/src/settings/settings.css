@@ -386,6 +386,30 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* What AI cost this session: the total on the right, each kind under it. */
+.session-spend {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-1) var(--space-6);
+  margin: 0;
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+}
+
+.session-spend dd {
+  margin: 0;
+  color: var(--color-ink);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-spend .session-kinds {
+  grid-column: 1 / -1;
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+  text-align: left;
+}
+
 .settings-dialog .fine {
   color: var(--color-ink-faint);
   font-size: var(--text-xs);
