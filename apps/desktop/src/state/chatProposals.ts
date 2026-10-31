@@ -1,0 +1,89 @@
+import { isCode } from '../bridge/call';
+import { chatBridge } from '../bridge/chat';
+import { errorMessage } from '../lib/errors';
+import {
+  openProposal,
+  session,
+  withMessages,
+  type ChatGet,
+  type ChatSet,
+  type ChatStore,
+  type Message,
+  type ProposalPart,
+  type ReplyMessage,
+} from './chatMessages';
+import { useProject } from './project';
+import { useProposal } from './proposal';
+
+/**
+ * The chat store's proposal cards: Apply (one undo step, merged as Rust made it), Discard (nothing
+ * changes), and dropping an open one when the project changes under it (it was made on an older revision).
+ */
+export function proposalActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'apply' | 'discard'> {
+  const update = (id: string, patch: (p: ProposalPart) => Partial<ProposalPart>) =>
+    set((s) =>
+      withMessages(
+        s.messages.map((m) =>
+          m.id === id && m.from === 'klipolo' && m.kind === 'reply' && m.proposal
+            ? { ...m, proposal: { ...m.proposal, ...patch(m.proposal) } }
+            : m,
+        ),
+      ),
+    );
+  const find = (id: string) =>
+    get().messages.find(
+      (m): m is ReplyMessage => m.id === id && m.from === 'klipolo' && m.kind === 'reply' && m.proposal !== null,
+    );
+
+  return {
+    apply: async (id) => {
+      const m = find(id);
+      if (!m || m.proposal?.state !== 'open') return;
+      const mine = session.now();
+      update(id, () => ({ state: 'applying' }));
+      try {
+        const applied = await chatBridge().apply(m.proposal.proposal.id);
+        if (session.now() !== mine) return;
+        await useProject.getState().adopt(applied.change);
+        if (session.now() !== mine) return;
+        update(id, () => ({ state: 'applied', undo: applied.undo, revision: applied.change.history.revision }));
+      } catch (error) {
+        if (session.now() !== mine) return;
+        // The project changed since it was made (`project.moved`): dropped, as a hand edit drops it.
+        if (isCode(error, 'project.moved')) update(id, () => ({ state: 'dropped' }));
+        else update(id, () => ({ state: 'refused', reason: errorMessage(error) }));
+      }
+    },
+
+    discard: (id) => {
+      const m = find(id);
+      if (!m || m.proposal?.state !== 'open') return;
+      void chatBridge()
+        .discard(m.proposal.proposal.id)
+        .catch(() => undefined);
+      update(id, () => ({ state: 'discarded' }));
+    },
+  };
+}
+
+/** `messages` with every open proposal not made on `revision` dropped (a hand edit, an undo, another project). */
+export function dropStale(messages: Message[], revision: number | null): Message[] | null {
+  let changed = false;
+  const next = messages.map((m) => {
+    if (m.from !== 'klipolo' || m.kind !== 'reply' || m.proposal?.state !== 'open') return m;
+    if (m.proposal.proposal.baseRevision === revision) return m;
+    changed = true;
+    return { ...m, proposal: { ...m.proposal, state: 'dropped' as const } };
+  });
+  return changed ? next : null;
+}
+
+/** The timeline shows the open proposal's ranges red (`useProposal`), and nothing once it is applied or gone. */
+export function showOpenProposal(messages: Message[]) {
+  const open = openProposal(messages)?.part.proposal ?? null;
+  const shown = useProposal.getState().proposal;
+  if ((shown?.id ?? null) === (open?.id ?? null)) return;
+  useProposal.getState().show(
+    open && { id: open.id, baseRevision: open.baseRevision, removals: open.removals, tags: open.tags },
+  );
+}
