@@ -3,14 +3,14 @@ import { expect, it, vi } from 'vitest';
 import { fixturePatch, fixtureSnapshot } from '../test/fixtures';
 
 vi.mock('../bridge/commands', () => ({
-  bridge: { apply: vi.fn(), closeProject: vi.fn() },
+  bridge: { apply: vi.fn(), closeProject: vi.fn(), createProject: vi.fn(), openProject: vi.fn() },
   mediaUrl: (p: string) => p,
 }));
 vi.mock('../bridge/engine', () => ({
   engine: { preview: vi.fn(() => Promise.resolve()), previewClear: vi.fn(() => Promise.resolve()) },
 }));
 const { bridge } = await import('../bridge/commands');
-const { useProject } = await import('./project');
+const { newProject, useProject } = await import('./project');
 const { beginCommit } = await import('./commitQueue');
 const { useBurst } = await import('./useBurst');
 const { registerBurst } = await import('./bursts');
@@ -66,4 +66,39 @@ it("closing goes round again for a change one burst hands to another that the ro
   off();
   // The second round committed it, ahead of the close.
   expect(order).toEqual(['apply #445566', 'close']);
+});
+
+it('a new project, or another one opened, lets a change still settling go in first', async () => {
+  for (const [name, switchTo] of [
+    ['create', () => newProject()],
+    ['open', () => useProject.getState().open('/Users/me/Movies/Klipolo/Other.klipolo')],
+  ] as const) {
+    useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
+    const order: string[] = [];
+    vi.mocked(bridge.apply).mockImplementation((tx) => {
+      order.push(JSON.stringify(tx).includes('#778899') ? 'apply #778899' : 'apply');
+      return Promise.resolve(fixturePatch(fixtureSnapshot()));
+    });
+    const other = { ...fixtureSnapshot(), opening: 2 };
+    other.project = { ...other.project, id: 'other' };
+    vi.mocked(bridge.createProject).mockImplementation(() => {
+      order.push('create');
+      return Promise.resolve(other);
+    });
+    vi.mocked(bridge.openProject).mockImplementation(() => {
+      order.push('open');
+      return Promise.resolve(other);
+    });
+    // A slider's change settles while another commit is on its way: it waits its turn, and the switch waits for it.
+    const burst = renderHook(() => useBurst());
+    const landed = beginCommit();
+    act(() => burst.result.current.push({ label: 'text.color.undo', ops: [{ type: 'rename', name: '#778899' }] }));
+    let switched!: Promise<boolean>;
+    act(() => void (switched = switchTo()));
+    landed();
+    await act(() => switched);
+    burst.unmount();
+    expect(order, name).toEqual(['apply #778899', name]);
+    expect(useProject.getState().snapshot?.project.id, name).toBe('other');
+  }
 });

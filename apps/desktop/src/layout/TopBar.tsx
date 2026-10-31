@@ -1,59 +1,105 @@
+import { useLingui } from '@lingui/react/macro';
 import icon from '../styles/klipolo-icon.svg';
 import { openSettings } from '../ai/aiStatus';
+import { projects } from '../bridge/projects';
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../design/Menu';
 import { ExportButton } from '../features/export/ExportButton';
+import { errorMessage } from '../lib/errors';
 import { historyAction } from '../lib/history';
 import { AiChip } from '../settings/AiChip';
-import { useProject } from '../state/project';
+import { newProject, useProject } from '../state/project';
 import { saveStateOf, useSaving } from '../state/saving';
+import { toast } from '../state/toasts';
 import { Icon } from './Icon';
 
-/** The top bar: the window's drag region, the project's name and whether it is saved, undo and redo, and Export. */
+/**
+ * The project menu, opened from the project's name: New project, All projects (closes the project once
+ * its edits are saved, back to the start screen) and Show in Finder (its file, selected). One at a time: while a new
+ * project is made or the project closes, its items are off.
+ */
+function ProjectMenu({ name }: { name: string }) {
+  const { t } = useLingui();
+  const switching = useProject((s) => s.switching);
+  /** Runs `action` unless a switch is under way (a press that reached the item before it turned off). */
+  const once = (action: () => void) => () => {
+    if (!useProject.getState().switching) action();
+  };
+  const showInFinder = () => void projects.reveal().catch((error: unknown) => toast.error(errorMessage(error)));
+  return (
+    <Menu>
+      <MenuTrigger asChild>
+        <button type="button" className="project" title={name}>
+          <span className="project-name">{name}</span>
+          <Icon name="chev-down" />
+        </button>
+      </MenuTrigger>
+      <MenuContent>
+        <MenuItem onSelect={once(() => void newProject())} disabled={switching}>
+          {t({ id: 'project.menu.new', message: 'New project', comment: 'Project menu item' })}
+        </MenuItem>
+        <MenuItem onSelect={once(() => void useProject.getState().close())} disabled={switching}>
+          {t({
+            id: 'project.menu.all',
+            message: 'All projects',
+            comment: 'Project menu item: closes the project and goes back to the start screen',
+          })}
+        </MenuItem>
+        <MenuSeparator />
+        <MenuItem onSelect={once(showInFinder)} disabled={switching}>
+          {t({ id: 'project.menu.finder', message: 'Show in Finder', comment: 'Project menu item' })}
+        </MenuItem>
+      </MenuContent>
+    </Menu>
+  );
+}
+
+/**
+ * The top bar: the window's drag region. With a project open: its name (the project menu), whether it is saved, undo
+ * and redo, and Export. On the start screen only the app icon, the AI chip and Settings.
+ */
 export function TopBar() {
-  const name = useProject((s) => s.snapshot?.project.name ?? 'Untitled project');
-  const open = useProject((s) => s.snapshot !== null);
-  const history = useProject((s) => s.snapshot?.history);
   const snapshot = useProject((s) => s.snapshot);
   const saving = useSaving();
   const state = saveStateOf(snapshot, saving);
+  const history = snapshot?.history;
   const undo = historyAction('undo', history?.undoLabel ?? null, history?.undoParams);
   const redo = historyAction('redo', history?.redoLabel ?? null, history?.redoParams);
   return (
     <header className="topbar" data-tauri-drag-region>
       <img className="app-icon" src={icon} alt="Klipolo" width={26} height={26} />
-      <div className="project" title={name}>
-        <span className="project-name">{name}</span>
-        <Icon name="chev-down" />
-      </div>
-      {open && (
-        <span className="save-state" title={saving.failing ?? undefined}>
-          {state === 'failing' ? 'Not saved' : state === 'saving' ? 'Saving…' : 'Saved'}
-        </span>
+      {snapshot && (
+        <>
+          <ProjectMenu name={snapshot.project.name} />
+          <span className="save-state" title={saving.failing ?? undefined}>
+            {state === 'failing' ? 'Not saved' : state === 'saving' ? 'Saving…' : 'Saved'}
+          </span>
+          <span className="topbar-divider" aria-hidden />
+          <button
+            className="icon-btn"
+            aria-label={undo}
+            title={`${undo} (Command Z)`}
+            disabled={!history?.canUndo}
+            onClick={() => void useProject.getState().undo()}
+          >
+            <Icon name="undo" />
+          </button>
+          <button
+            className="icon-btn"
+            aria-label={redo}
+            title={`${redo} (Shift Command Z)`}
+            disabled={!history?.canRedo}
+            onClick={() => void useProject.getState().redo()}
+          >
+            <Icon name="redo" />
+          </button>
+        </>
       )}
-      <span className="topbar-divider" aria-hidden />
-      <button
-        className="icon-btn"
-        aria-label={undo}
-        title={`${undo} (Command Z)`}
-        disabled={!history?.canUndo}
-        onClick={() => void useProject.getState().undo()}
-      >
-        <Icon name="undo" />
-      </button>
-      <button
-        className="icon-btn"
-        aria-label={redo}
-        title={`${redo} (Shift Command Z)`}
-        disabled={!history?.canRedo}
-        onClick={() => void useProject.getState().redo()}
-      >
-        <Icon name="redo" />
-      </button>
       <div className="topbar-right" data-tauri-drag-region>
         <AiChip />
         <button className="icon-btn" aria-label="Settings" title="Settings (Command ,)" onClick={openSettings}>
           <Icon name="settings" />
         </button>
-        <ExportButton />
+        {snapshot && <ExportButton />}
       </div>
     </header>
   );

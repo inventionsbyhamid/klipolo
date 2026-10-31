@@ -12,6 +12,7 @@ mod chat;
 mod create;
 mod disk;
 mod library;
+mod recent;
 mod saver;
 mod session;
 #[cfg(test)]
@@ -37,13 +38,15 @@ use klipolo_model::history::{Change, Document, HistoryLimits, Snapshot, Snapshot
 use klipolo_model::project::{AssetKind, FormatKind, Project};
 use klipolo_platform::pressure::{self, Pressure};
 pub(crate) use library::{library_dir, read};
+use recent::{ProjectRow, RECENT_FILE, RECENT_LIMIT, recent_in};
 pub(crate) use saver::{SaveStatus, Saver, Version};
 pub(crate) use session::ProjectSessionState;
 #[cfg(test)]
 pub(crate) use session::opened;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 use crate::pack::Pack;
+use crate::state::EngineState;
 use tokio::sync::watch;
 
 /// A project file's extension: `~/Movies/Klipolo/<name>.klipolo`.
@@ -154,6 +157,77 @@ pub fn project_create(
 #[tauri::command(async)]
 pub fn project_open(state: State<'_, ProjectSessionState>, path: String) -> Result<Snapshot, Said> {
     open_in(&state, Path::new(&path))
+}
+
+/// The start screen's recent projects (`recent::recent_in`): the library's project files, last opened first. Nothing is
+/// opened. Each card's thumbnail sprite is let through the asset protocol (the cache folder's scope holds it already).
+/// A projects folder that can't be listed fails as `project.libraryFailed`, never as an empty library.
+#[tauri::command(async)]
+pub fn projects_recent(
+    app: AppHandle,
+    engine: State<'_, EngineState>,
+) -> Result<Vec<ProjectRow>, Said> {
+    // Without an app data folder nothing was stamped: the list goes by last save.
+    let stamps = app
+        .path()
+        .app_data_dir()
+        .map(|dir| dir.join(RECENT_FILE))
+        .unwrap_or_default();
+    let thumbs = engine.caches().map(|caches| caches.thumbs());
+    let mut rows =
+        recent_in(&library_dir()?, &stamps, thumbs.as_deref(), RECENT_LIMIT).map_err(|error| {
+            tracing::warn!(%error, "the projects folder couldn't be listed");
+            Said::code("project.libraryFailed")
+        })?;
+    let scope = app.asset_protocol_scope();
+    for row in &mut rows {
+        // A sprite that can't be let through goes: the card shows the clip art instead.
+        if row
+            .thumb
+            .as_ref()
+            .is_some_and(|tile| scope.allow_file(&tile.sprite).is_err())
+        {
+            row.thumb = None;
+        }
+    }
+    Ok(rows)
+}
+
+/// The open project's file, for Show in Finder: `project.none` with none open, `project.revealGone` when the file isn't
+/// there (moved or deleted since it was opened).
+fn project_file(state: &ProjectSessionState) -> Result<PathBuf, Said> {
+    let file = lock(state)
+        .as_ref()
+        .map(|open| open.file.clone())
+        .ok_or_else(|| Said::code("project.none"))?;
+    if file.is_file() {
+        Ok(file)
+    } else {
+        Err(Said::code("project.revealGone"))
+    }
+}
+
+/// What `open -R` came to: shown; refused (`project.revealGone`: the file went just before); or not run at all
+/// (`project.revealFailed`).
+fn finder_said(status: std::io::Result<std::process::ExitStatus>) -> Result<(), Said> {
+    match status {
+        Ok(status) if status.success() => Ok(()),
+        Ok(status) => {
+            tracing::warn!(%status, "Finder didn't show the project");
+            Err(Said::code("project.revealGone"))
+        }
+        Err(error) => {
+            tracing::warn!(%error, "Finder couldn't be asked to show the project");
+            Err(Said::code("project.revealFailed"))
+        }
+    }
+}
+
+/// Shows the open project's file in Finder, selected, once `open` has done so (off the main thread).
+#[tauri::command(async)]
+pub fn project_reveal(state: State<'_, ProjectSessionState>) -> Result<(), Said> {
+    let file = project_file(&state)?;
+    finder_said(crate::commands::export::opener(true, &[file]).status())
 }
 
 /// Closes the open project once its edits are saved; its analysis stops.
