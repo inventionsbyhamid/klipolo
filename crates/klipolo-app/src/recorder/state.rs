@@ -197,7 +197,8 @@ impl RecorderState {
             .map_or(0, |d| d.as_millis() as u64);
         let id = klipolo_model::ids::new_id();
         let (cfg, notes) = setup::plan(&shown, options, &id, target, created_ms)?;
-        on.recorder.arm(cfg, notes)
+        // The previews stop before the take's worker is launched, which then owns the screen and the devices.
+        on.previews.around_arm(|| on.recorder.arm(cfg, notes))
     }
 
     /// One command to take `take`'s worker.

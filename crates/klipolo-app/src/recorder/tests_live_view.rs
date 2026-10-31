@@ -1,11 +1,14 @@
-//! The live picture's tests: it opens with Screen Recording allowed and never launches without it; a new choice restarts
-//! it and the same one keeps it; one that doesn't stop is killed; and one whose worker ends by itself says so. Fake
-//! workers only: nothing captures.
+//! The live picture's tests: it opens with Screen Recording allowed and never launches without it; it closes when a take
+//! arms and never opens during one; a new choice restarts it and the same one keeps it; it closes when the window goes
+//! behind and its frames stop; one that doesn't stop is killed, and none outlives Klipolo; and one whose worker ends by
+//! itself says so. Fake workers only: nothing captures.
 
 use klipolo_capture::backend::{Permission, Permissions, Target};
 use klipolo_capture::protocol::{Command, Event};
+use klipolo_capture::shell::WorkerState;
 
 use super::test_previews::*;
+use super::test_support::*;
 use super::types::{PreviewId, PreviewKind, Previews};
 
 const LIVE: &str = "--live-view";
@@ -50,6 +53,36 @@ fn it_never_launches_while_screen_recording_isn_t_allowed() {
 }
 
 #[test]
+fn it_closes_when_a_take_arms_and_never_opens_during_one() {
+    let p = previewing(all_allowed());
+    p.set(live(screen())).unwrap();
+    let view = p.worker(LIVE);
+    p.arm(options_screen()).unwrap();
+    p.send(Command::Start).unwrap();
+    assert_eq!(p.launch.commands(), [Command::Stop, Command::Start]);
+    // A frame the closing view still sends never reaches the page.
+    p.says(view, frame());
+    assert!(p.frames().is_empty());
+    // While a take runs, it never opens.
+    let refused = p.set(live(screen())).unwrap_err();
+    assert_eq!(refused.code, "capture.busy");
+    assert_eq!(
+        p.launch.spawned(),
+        2,
+        "the view's worker and the take's only"
+    );
+    // Once the take is over, it opens again.
+    p.launch.emit(Event::State {
+        state: WorkerState::Stopping,
+        elapsed_us: 0,
+    });
+    p.launch.exit(Some(3));
+    p.settle();
+    p.set(live(screen())).unwrap();
+    assert_eq!(p.launch.spawned(), 3);
+}
+
+#[test]
 fn a_new_target_restarts_it_and_the_same_one_keeps_it() {
     let p = previewing(all_allowed());
     p.set(live(screen())).unwrap();
@@ -63,12 +96,25 @@ fn a_new_target_restarts_it_and_the_same_one_keeps_it() {
 }
 
 #[test]
-fn a_view_that_doesn_t_stop_is_killed() {
+fn it_closes_when_the_window_goes_behind_and_its_frames_stop() {
+    let p = previewing(all_allowed());
+    p.set(live(screen())).unwrap();
+    p.state.window_in_front(false);
+    assert_eq!(p.launch.commands(), [Command::Stop]);
+    p.says(p.worker(LIVE), frame());
+    assert!(p.frames().is_empty(), "a closing view's frame");
+}
+
+#[test]
+fn a_view_that_doesn_t_stop_is_killed_and_none_outlives_the_app() {
     let p = previewing(all_allowed());
     p.set(live(screen())).unwrap();
     p.set(nothing()).unwrap();
     p.advance_ms(3_000);
     assert_eq!(p.launch.kills(), [true], "hard-stopped after the wait");
+    p.set(live(screen())).unwrap();
+    p.state.previews_exit();
+    assert_eq!(p.launch.kills(), [true, true], "at Klipolo's exit");
 }
 
 #[test]

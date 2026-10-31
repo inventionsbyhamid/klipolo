@@ -20,7 +20,10 @@
 //!   way is kept while macOS asks.
 //! - Nothing restarts by itself after it ended, but a stills worker held back by its pace (below).
 //!
-//! **Stopping:** every preview stops on `recorder_previews_off`. In a test run there are none.
+//! **Stopping:** every preview stops when Klipolo's main window goes behind another app or is hidden or minimised
+//! (nothing starts again until it is in front and the page asks), when a take arms (before its worker is launched, and
+//! none starts while the take is the recorder's: its worker owns the screen and the devices), on
+//! `recorder_previews_off`, and when Klipolo exits (killed). In a test run there are none.
 //!
 //! **The stills' pace:** each stills worker starts with a content read and a still at once, so a new one starts at most
 //! once every `THUMB_EVERY`; one asked for sooner waits its turn (the ticker's).
@@ -35,6 +38,7 @@ use klipolo_capture::protocol::Event;
 use klipolo_capture::run::thumbs::{MAX_THUMBS, THUMB_EVERY};
 use klipolo_model::coded::CodedError;
 use klipolo_platform::clock::Clock;
+use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 
 use super::check::{Closing, camera_wanted, closing, enforce_close, may_open};
 use super::config::take_target;
@@ -51,6 +55,8 @@ use super::words;
 const TICK: Duration = Duration::from_millis(100);
 /// The longest event line read: a frame is a JPEG in base64, a few hundred KB at most.
 const MAX_LINE: u64 = 4 << 20;
+/// Klipolo's main window (`tauri.conf.json`'s `main`).
+const MAIN: &str = "main";
 
 /// The four previews.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -122,6 +128,8 @@ struct Running {
     thumbs_due: bool,
     /// A screen preview was refused by the system while it ran: neither starts again until the setup is read again.
     screen_refused: bool,
+    /// Klipolo's main window is behind another app, hidden or minimised.
+    behind: bool,
     ticking: bool,
 }
 
@@ -147,7 +155,7 @@ impl Running {
 pub(super) struct PreviewWorkers {
     launch: Arc<dyn Launch>,
     clock: Arc<dyn Clock>,
-    /// The take's recorder.
+    /// The take's recorder: while it has a take, no preview runs.
     recorder: Arc<Recorder>,
     /// Screen Recording, the camera's and the mic's permissions, read without a prompt.
     permissions: Box<dyn Fn() -> Permissions + Send + Sync>,
@@ -190,9 +198,10 @@ impl PreviewWorkers {
         run.screen_refused = false;
     }
 
-    /// The previews to match `want`, their frames and events to `out` from now on. `capture.permission.screen` when the
-    /// stills or the live picture were refused (Screen Recording isn't allowed, or the system refused them while they
-    /// ran): the camera's and the mic's are set all the same.
+    /// The previews to match `want`, their frames and events to `out` from now on. Refused during a take
+    /// (`capture.busy`: every preview stops). `capture.permission.screen` when the stills or the live picture were
+    /// refused (Screen Recording isn't allowed, or the system refused them while they ran): the camera's and the mic's
+    /// are set all the same. While Klipolo is behind, nothing starts.
     pub(super) fn set(
         self: &Arc<Self>,
         want: &Previews,
@@ -203,6 +212,14 @@ impl PreviewWorkers {
         let allowed = (self.permissions)();
         let now = self.now_ms();
         let mut run = self.lock();
+        if self.recorder.active() {
+            self.stop_all(&mut run, now);
+            return Err(self.recorder.busy_error());
+        }
+        if run.behind {
+            tracing::info!("recorder: previews asked for while Klipolo is behind, so none starts");
+            return Ok(());
+        }
         run.out = Some(out);
         let screen = allowed.screen == Permission::Granted && !run.screen_refused;
         run.want_thumbs = want.thumbs && screen;
@@ -239,12 +256,51 @@ impl PreviewWorkers {
         }
     }
 
+    /// A take arms: every preview stops, then `arm` runs, under the previews' lock, so none starts until the take is
+    /// the recorder's (`set` refuses from then on).
+    pub(super) fn around_arm<T>(self: &Arc<Self>, arm: impl FnOnce() -> T) -> T {
+        let now = self.now_ms();
+        let mut run = self.lock();
+        if self.stop_all(&mut run, now) {
+            tracing::info!("recorder: a take arms, so the previews stop first");
+        }
+        arm()
+    }
+
+    /// Klipolo's main window came to the front (`true`), or went behind another app or was hidden or minimised: then
+    /// every preview stops, and none starts until it is in front again and the page asks.
+    pub(super) fn in_front(self: &Arc<Self>, front: bool) {
+        let now = self.now_ms();
+        let mut run = self.lock();
+        run.behind = !front;
+        if !front && self.stop_all(&mut run, now) {
+            tracing::info!("recorder: Klipolo went behind, so the previews stop");
+        }
+    }
+
+    /// Klipolo exits: every preview worker, open or closing, is killed now (each runs in a session of its own).
+    pub(super) fn exit(&self) {
+        let mut run = self.lock();
+        for kind in Kind::ALL {
+            if let Some(open) = run.slot(kind).take() {
+                (open.worker.kill)(true);
+            }
+        }
+        for closing in (run.closing.iter_mut()).filter(|c| !c.killed) {
+            (closing.worker.kill)(true);
+            closing.killed = true;
+        }
+    }
+
     /// The ticker: a closed preview that hasn't ended is killed, and a stills worker that waited its turn starts. False
     /// once neither is left (the ticker then ends).
     pub(super) fn tick(self: &Arc<Self>) -> bool {
         let now = self.now_ms();
         let mut run = self.lock();
         enforce_close(&mut run.closing, now);
+        if run.thumbs_due && (run.behind || self.recorder.active()) {
+            run.want_thumbs = false;
+        }
         if run.thumbs_due {
             self.set_thumbs(&mut run, now);
         }
@@ -627,5 +683,36 @@ impl RecorderState {
         if let Ok(previews) = self.preview_workers() {
             previews.off();
         }
+    }
+
+    /// Klipolo's main window came to the front, or went behind (every preview stops).
+    pub(super) fn window_in_front(&self, front: bool) {
+        if let Ok(previews) = self.preview_workers() {
+            previews.in_front(front);
+        }
+    }
+
+    /// Klipolo exits: every preview worker is killed.
+    pub(super) fn previews_exit(&self) {
+        if let Ok(previews) = self.preview_workers() {
+            previews.exit();
+        }
+    }
+}
+
+/// The previews follow Klipolo's main window: they stop when it goes behind another app or is hidden or minimised, and
+/// may start again once it is in front; every preview worker is killed as Klipolo exits.
+pub fn follow_window(app: &AppHandle, event: &RunEvent) {
+    let Some(state) = app.try_state::<RecorderState>() else {
+        return;
+    };
+    match event {
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::Focused(front),
+            ..
+        } if label == MAIN => state.window_in_front(*front),
+        RunEvent::Exit => state.previews_exit(),
+        _ => {}
     }
 }

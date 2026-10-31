@@ -13,7 +13,7 @@
 //!   settings, each on the person's own press.
 //! - **The Record dialog's previews** (`previews`, `live_view`, `check`, `frames`): stills of each screen and app, the
 //!   live picture of the choice, the camera and the mic's level, each in a worker of its own while the dialog is open
-//!   and Klipolo is in front, within the consent rules.
+//!   and Klipolo is in front, within the consent rules, and stopped before a take arms.
 //! - **A test run** (`KLIPOLO_TEST`): the recorder makes no backend and launches no worker; every command answers
 //!   "Recording is off in this test run." (`state`).
 
@@ -69,4 +69,5 @@ mod tests_supervise;
 )]
 pub use active::active;
 pub use active::release_on_exit;
+pub use previews::follow_window;
 pub use state::RecorderState;

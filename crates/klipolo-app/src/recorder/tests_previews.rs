@@ -1,6 +1,7 @@
 //! The Record dialog's previews: only what is allowed starts; the person's Allow press starts the camera's or the mic's
 //! preview once; the screen's wait for Screen Recording and launch nothing; a new choice moves only the live picture;
-//! and in a test run none starts. The stills start at most once a second, never again by themselves once the system refused the screen,
+//! every preview stops when Klipolo goes behind and when a take arms, before its worker is launched; and in a test run
+//! none starts. The stills start at most once a second, never again by themselves once the system refused the screen,
 //! and each says when it came. Fake workers and a fake page only: nothing captures and nothing asks.
 
 use klipolo_capture::backend::{Permission, Permissions};
@@ -8,7 +9,9 @@ use klipolo_capture::protocol::{Command, Event};
 
 use super::frames::now_ms;
 use super::state::RecorderState;
+use super::test_launch::Logged;
 use super::test_previews::*;
+use super::test_support::*;
 use super::types::{PreviewId, PreviewKind, Previews, PrivacyPage};
 
 const THUMBS: &str = "--thumbs";
@@ -174,13 +177,81 @@ fn changing_the_choice_moves_only_the_live_view() {
 }
 
 #[test]
+fn leaving_the_window_stops_every_preview() {
+    let p = previewing(all_allowed());
+    p.set(everything()).unwrap();
+    let workers = [THUMBS, LIVE, CAMERA, METER].map(|flag| p.worker(flag));
+    p.state.window_in_front(false);
+    for worker in workers {
+        assert_eq!(p.told(worker), [Command::Stop], "worker {worker}");
+    }
+    // What they still send never reaches the page.
+    p.says(workers[0], still("display:display-1"));
+    p.says(workers[1], frame());
+    p.says(workers[2], frame());
+    let meter = Event::Meter {
+        source: "mic".into(),
+        peak_dbfs: -12.0,
+    };
+    p.says(workers[3], meter);
+    assert!(p.frames().is_empty() && p.heard().is_empty());
+    // Behind, a late ask starts nothing.
+    p.set(everything()).unwrap();
+    assert_eq!(p.launch.spawned(), 4);
+    // In front again, the page's ask starts them again (the stills on their next turn).
+    p.state.window_in_front(true);
+    p.set(everything()).unwrap();
+    assert_eq!(p.launch.spawned(), 7);
+    p.advance_ms(1_000);
+    assert_eq!(p.launch.spawned(), 8);
+    assert_eq!(p.launched(THUMBS).len(), 2);
+    // The four that were told to stop and didn't are killed.
+    p.advance_ms(1_000);
+    assert_eq!(p.launch.kills(), [true; 4]);
+}
+
+#[test]
+fn arming_stops_every_preview_before_the_take_spawns() {
+    let p = previewing(all_allowed());
+    p.set(everything()).unwrap();
+    let workers = [THUMBS, LIVE, CAMERA, METER].map(|flag| p.worker(flag));
+    let take = p.arm(options_screen()).unwrap();
+    let log = p.launch.log();
+    let launched = (log.iter())
+        .position(|l| matches!(l, Logged::Spawn(args) if !args[1].starts_with("--")))
+        .expect("the take's worker");
+    for worker in workers {
+        let stopped = log
+            .iter()
+            .position(|l| *l == Logged::Command(worker, Command::Stop));
+        assert!(
+            stopped.is_some_and(|at| at < launched),
+            "worker {worker}: {log:?}"
+        );
+    }
+    // While the take is the recorder's, nothing starts, and the page hears why.
+    let refused = p.set(everything()).unwrap_err();
+    assert_eq!(refused.code, "capture.busy");
+    assert_eq!(p.launch.spawned(), 5);
+    // A frame a closing preview still sends never reaches the page.
+    p.says(workers[2], frame());
+    assert!(p.frames().is_empty());
+    // Record: the take's own Start goes only to the take.
+    p.send(Command::Start).unwrap();
+    assert_eq!(p.launch.commands().last(), Some(&Command::Start));
+    assert!(!take.id.starts_with("preview-"));
+}
+
+#[test]
 fn test_run_starts_no_preview() {
     let state = RecorderState::build(true, || panic!("a test run makes no recorder"));
     let page = std::sync::Arc::new(Page::default());
     let refused = state.previews(&everything(), page).unwrap_err();
     assert_eq!(refused.code, "capture.error.testRun");
-    // The stop has nothing to stop.
+    // The stops have nothing to stop.
     state.previews_off();
+    state.window_in_front(false);
+    state.previews_exit();
 }
 
 #[test]
