@@ -137,7 +137,7 @@ fn place(p: &mut Project, t: usize, item: Item, places: &mut Places) -> (usize, 
         (t, insert_sorted(&mut p.timeline.tracks[t], item))
     } else {
         let (outside, tracks) = split_tracks(p);
-        place_above(tracks, t, item, &|id| outside.contains(id), settled)
+        place_above(tracks, t, item, &|id| outside.contains(id), settled, true)
     };
     let tracks = &p.timeline.tracks;
     places.put_item(tracks, &tracks[at.0].items[at.1].id, at);
