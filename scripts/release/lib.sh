@@ -57,6 +57,9 @@ naming_files() {
 # file under crates/<crate>/src whose first line is `// SPDX-License-Identifier: MIT` and whose first four lines name
 # Cap Software, Inc. (crates/klipolo-capture/NOTICE lists them). Returns 1 when a folder or a file couldn't be read
 # (the files found are printed all the same).
+# It finds them by that header alone, the convention every file from Cap's MIT crates keeps: line 1 exactly that SPDX
+# line (not `MIT OR Apache-2.0`, no attribute or comment before it, LF line endings), in a .rs file under a crate's src.
+# A file from Cap's MIT crates without that header, or kept in tests/, examples/ or build.rs, isn't found.
 cap_mit_files() {
   local repo=$1 list f found="" rc=0
   [ -d "$repo/crates" ] || return 0
