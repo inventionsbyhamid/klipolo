@@ -17,6 +17,15 @@ pub const NO_PROJECT: &str = "No project is open in Klipolo. Ask the person to o
 /// Who made a proposal Klipolo's own chat made (`ProposalOutcome::Waiting::from`).
 pub const KLIPOLO_CHAT: &str = "Klipolo's chat";
 
+/// An edit tool's answer until calls are built.
+pub const NOT_BUILT: &str = "Not built yet.";
+
+/// A message that isn't one JSON-RPC object (a batch, a bare value).
+pub const ONE_MESSAGE: &str =
+    "Send one JSON-RPC message, as an object, per request. Batches are not supported.";
+pub const UNKNOWN_METHOD: &str = "Unknown method.";
+pub const UNKNOWN_RESOURCE: &str = "No such resource.";
+
 /// `getSummary`.
 pub const SUMMARY_TOOL: &str = "The project in short: its revision, name, formats, length, captions and clips (c1, c2 \
 and so on, in timeline seconds), then the person's playhead and selection.";

@@ -4,17 +4,22 @@
 //! protocol and reaches the app only through `host::Host`: no Tauri type, no model vendor, and it never calls a model
 //! (an MCP client is its own planner).
 //!
-//! - `session`: what of the project an app's session last read.
+//! - `rpc`: JSON-RPC messages in, replies out (`Mcp::handle`), and what the stdio bridge answers alone (`listed`).
+//! - `session`: one per `initialize`, with the app's name and what of the project it last read.
 //! - `tools`: chat's edit tools minus its conversation tools, plus four reads; `resources`: the reads; `pages`: the
 //!   transcript in pages.
+//! - `call`: an edit tool's call.
 //! - `words`: what agents read.
 
+pub mod call;
 pub mod host;
 pub mod pages;
 pub mod resources;
+pub mod rpc;
 pub mod session;
 pub mod tools;
 pub mod words;
 
 pub use host::{Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot};
-pub use session::{Seen, Session};
+pub use rpc::{Handled, Mcp, initialize_result, listed};
+pub use session::{Seen, Session, UNNAMED, client_name};
