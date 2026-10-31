@@ -1,12 +1,12 @@
-//! The camera's preview for the Record dialog's bubble: Check camera's worker (`--record-worker --check-camera`), the
+//! The camera's preview for the Record dialog's bubble, in a worker of its own (`--record-worker --check-camera`): the
 //! camera alone, no mic and nothing written. It starts by itself only while the camera is allowed already; otherwise
 //! only on the person's "Allow camera" press, when macOS asks (`Previews.ask`). A preview of the same camera is kept as
 //! the dialog's other choices change.
 //!
 //! Every preview's close is enforced here (`closing`, the live view's, the stills' and the meter's too): the worker is
 //! told to stop (it stops on Stop or its stdin's end) and kept until it ends, and killed when it hasn't
-//! `CLOSE_WAIT_MS` later; one still there when Klipolo exits is killed then (`PreviewWorkers::exit`), so none outlives
-//! Klipolo with the camera, the mic or the screen on. A closing preview's frames and events never reach the page.
+//! `CLOSE_WAIT_MS` later; one still there when a take arms or Klipolo exits is killed then, so none captures beside a
+//! take or outlives Klipolo with the camera, the mic or the screen on. A closing preview's frames and events never reach the page.
 
 use klipolo_capture::backend::Permission;
 use klipolo_capture::protocol::Command;

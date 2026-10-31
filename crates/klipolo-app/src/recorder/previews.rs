@@ -31,11 +31,11 @@
 //!
 //! **Stopping:** every preview stops when Klipolo's main window goes behind another app or is hidden or minimised
 //! (but one waiting for macOS's answer, above; nothing starts again until it is in front and the page asks), when the
-//! page loads again (reloaded, or after its
-//! process ended: none runs for a page that can't show it), and on `recorder_previews_off`. When a take arms, every
-//! preview worker is killed at once, before the take's worker is launched (previews write nothing, and none captures
-//! beside the take on this Mac's one encoder engine), and none starts while the take is the recorder's: its worker
-//! owns the screen and the devices. When Klipolo exits they are killed too. In a test run there are none.
+//! page loads again (reloaded, or after its process ended: none runs for a page that can't show it), and on
+//! `recorder_previews_off`. When a take arms, every preview worker is killed at once, before the take's worker is
+//! launched (previews write nothing, and none captures beside the take on this Mac's one encoder engine), and none
+//! starts while the take is the recorder's: its worker owns the screen and the devices. When Klipolo exits they are
+//! killed too. In a test run there are none.
 //!
 //! **Pace:** a preview's worker is launched at most once every `PACE` (the stills' every `THUMB_EVERY`: each stills
 //! worker starts with a content read and a still at once), so a burst of choices, or Klipolo going behind and coming
