@@ -155,11 +155,16 @@ function dropAll() {
 
 /**
  * One frame: drawn when it is of what is wanted now, else dropped. Either way it is acked once, so the app goes on;
- * one that doesn't read is acked by the kind its header names, if it names one.
+ * one that doesn't read is acked by the kind its header names, if it names one. A frame that can't be drawn is
+ * skipped, never thrown back into the channel, which would hold every frame after it.
  */
 function onFrame(message: ArrayBuffer) {
   const read = previewFrame(message);
-  if (read !== null && running && wanted !== null) draw(read.frame, read.jpeg, wanted);
+  try {
+    if (read !== null && running && wanted !== null) draw(read.frame, read.jpeg, wanted);
+  } catch {
+    // Skipped: the last picture stays, and the next frame is drawn.
+  }
   const kind = read?.frame.kind ?? previewKind(message);
   if (kind !== null) void recorder.previewAck(kind).catch(() => undefined);
 }

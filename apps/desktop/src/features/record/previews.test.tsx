@@ -550,6 +550,19 @@ describe('the previews in the Record dialog', () => {
     expect(fake.acks).toEqual(['thumb', 'live', 'camera', 'thumb', 'live']);
   });
 
+  it('a_frame_that_fails_to_draw_is_still_acked_and_the_next_one_draws', async () => {
+    await openOn();
+    vi.spyOn(URL, 'createObjectURL').mockImplementationOnce(() => {
+      throw new Error('Out of memory.');
+    });
+    await sendFrame(fake, 'thumb', 'display:main', 'main 1');
+    expect(fake.acks).toEqual(['thumb']);
+    expect(shownIn(card('Display main'))).toBeNull();
+    await sendFrame(fake, 'thumb', 'display:main', 'main 2');
+    expect(await frameIn(card('Display main'))).toBe('main 2');
+    expect(fake.acks).toEqual(['thumb', 'thumb']);
+  });
+
   it('a_frame_that_does_not_read_is_acked_once_too', async () => {
     await openOn();
     const send = (message: ArrayBuffer) => act(async () => fake.frames?.(message));
