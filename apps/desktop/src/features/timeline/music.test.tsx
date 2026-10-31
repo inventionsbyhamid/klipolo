@@ -1,4 +1,6 @@
 import { act, fireEvent, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ItemContent } from '../../bindings/ItemContent';
 import type { Op } from '../../bindings/Op';
@@ -94,6 +96,12 @@ describe('the music’s volume line', () => {
     useProject.setState({ snapshot: music(-12), pending: 0 });
     renderWithProviders(<Timeline />);
     expect(screen.getByRole('group', { name: 'Music' })).not.toHaveTextContent('Quieter while people talk');
+  });
+
+  it('the tag keeps to the right of what the lanes show of a long piece', () => {
+    const appCss = readFileSync(resolve(__dirname, '../../styles/app.css'), 'utf8');
+    expect(appCss).toMatch(/\.tl-duck-tag \{[^}]*position: sticky;[^}]*right: \d+px;/s);
+    expect(appCss).toMatch(/\.tl-duck-band \{[^}]*left: 6px;[^}]*justify-content: flex-end;/s);
   });
 
   it('a drag of the line changes the volume, an Option drag how deep it ducks: one undo step each', async () => {

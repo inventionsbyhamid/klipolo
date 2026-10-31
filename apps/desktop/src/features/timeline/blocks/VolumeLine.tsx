@@ -218,12 +218,15 @@ export const VolumeLine = memo(function VolumeLine({
         </polyline>
       </svg>
       {dips && width >= TAG_MIN_PX && (
-        <span className="tl-duck-tag">
-          {t({
-            id: 'music.ducking.tag',
-            message: 'Quieter while people talk',
-            comment: 'On the Music lane, where the music ducks under speech',
-          })}
+        // Across the piece, so the tag keeps to the right edge of what the lanes show of it.
+        <span className="tl-duck-band">
+          <span className="tl-duck-tag">
+            {t({
+              id: 'music.ducking.tag',
+              message: 'Quieter while people talk',
+              comment: 'On the Music lane, where the music ducks under speech',
+            })}
+          </span>
         </span>
       )}
     </>
