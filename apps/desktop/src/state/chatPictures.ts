@@ -113,13 +113,18 @@ export function pictureActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'dra
         if (session.now() !== mine) return;
         // A sentence from Rust: it can't be placed any more. Anything else (a coded refusal): Use stays, with why.
         const gone = error instanceof Error && typeof error.cause === 'string';
-        update(messageId, pictureId, () => ({ state: gone ? 'gone' : 'drawn', reason: errorMessage(error) }));
+        update(messageId, pictureId, () => ({
+          state: gone ? 'gone' : 'drawn',
+          // A Try again still drawing goes on saying so, so its button isn't offered twice.
+          again: !gone && drawing.has(`${mine}:${pictureId}`),
+          reason: errorMessage(error),
+        }));
         return;
       }
       if (session.now() !== mine) return;
       if (!applied) {
         // Not sent (the project can't be edited now): Use stays.
-        update(messageId, pictureId, () => ({ state: 'drawn' }));
+        update(messageId, pictureId, () => ({ state: 'drawn', again: drawing.has(`${mine}:${pictureId}`) }));
         return;
       }
       const made = applied;

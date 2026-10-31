@@ -285,12 +285,13 @@ describe('pictures chat asks for', () => {
     expect(c).not.toHaveAttribute('aria-busy');
   });
 
-  it('a Use refused during Try again brings Try again back', async () => {
+  it('a Use refused during Try again keeps Use and says a new one is still drawing, until it lands', async () => {
     let n = 0;
+    let land: () => void = () => undefined;
     chat({
       drawPicture: async () => {
         n += 1;
-        if (n === 2) await new Promise<void>(() => undefined);
+        if (n === 2) await new Promise<void>((resolve) => (land = resolve));
         return picture(n);
       },
       usePicture: () => {
@@ -303,7 +304,12 @@ describe('pictures chat asks for', () => {
     await userEvent.click(await within(c).findByRole('button', { name: 'Try again' }));
     await userEvent.click(within(c).getByRole('button', { name: 'Use' }));
     expect(await within(c).findByRole('alert')).toHaveTextContent('The video changed. Try again.');
-    expect(within(c).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(within(c).getByRole('button', { name: 'Use' })).toBeInTheDocument();
+    // The second drawing is still on its way: the card says so instead of offering a Try again that can't start.
+    expect(within(c).getByText('Drawing a new one.')).toBeInTheDocument();
+    expect(within(c).queryByRole('button', { name: 'Try again' })).toBeNull();
+    land();
+    expect(await within(c).findByRole('button', { name: 'Try again' })).toBeInTheDocument();
     expect(within(c).queryByText('Drawing a new one.')).toBeNull();
     expect(c).not.toHaveAttribute('aria-busy');
   });
