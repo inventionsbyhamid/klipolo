@@ -16,15 +16,17 @@ import { ImageInspector } from './ImageInspector';
 import { commitLatest } from '../../state/latest';
 import { TemplateInspector } from './TemplateInspector';
 import { TextInspector } from './TextInspector';
+import { VideoInspector } from './VideoInspector';
 
-/** What the inspector shows: a text, a picture, a title template, music or a sound effect. */
-export type Inspected = 'text' | 'image' | 'template' | 'music' | 'sound';
+/** What the inspector shows: a text, a picture, a title template, music, a sound effect or a video layer. */
+export type Inspected = 'text' | 'image' | 'template' | 'music' | 'sound' | 'video';
 
-/** The kind of `item` the inspector has fields for, or null (a clip, a video layer, a zoom). */
+/** The kind of `item` the inspector has fields for, or null (a clip, a zoom). */
 export function inspectedKind(item: Item): Inspected | null {
   const c = item.content;
   if (c.type === 'text') return 'text';
   if (c.type === 'image') return 'image';
+  if (c.type === 'video') return 'video';
   if (c.type === 'generator' && c.source.includes('/scene.')) return 'template';
   if (c.type === 'audio') return typeof c.duck === 'number' ? 'music' : 'sound';
   return null;
@@ -50,6 +52,7 @@ const ICONS: Record<Inspected, IconName> = {
   template: 'text',
   music: 'music',
   sound: 'pulse',
+  video: 'film',
 };
 
 /**
@@ -74,9 +77,11 @@ export function Inspector({ format }: { format: FormatKind }) {
           ? t({ id: 'inspector.music', message: 'Music' })
           : kind === 'sound'
             ? t({ id: 'inspector.sound', message: 'Sound' })
-            : content.type === 'generator'
-              ? contribLabel(content.source, 'scene')
-              : '';
+            : kind === 'video'
+              ? t({ id: 'inspector.video', message: 'Video' })
+              : content.type === 'generator'
+                ? contribLabel(content.source, 'scene')
+                : '';
   const close = () => useSelection.getState().select(null);
   return (
     <aside
@@ -143,6 +148,9 @@ export function Inspector({ format }: { format: FormatKind }) {
               <TemplateInspector key={item.id} item={item} content={content} locked={track.locked} />
             )}
             {content.type === 'audio' && <AudioInspector key={item.id} item={item} content={content} />}
+            {content.type === 'video' && (
+              <VideoInspector key={item.id} item={item} content={content} format={format} primary={primary} />
+            )}
           </>
         )}
       </div>
