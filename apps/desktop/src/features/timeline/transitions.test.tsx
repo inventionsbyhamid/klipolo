@@ -504,4 +504,30 @@ describe('the cut markers and the clips around them', () => {
     expect(screen.queryByRole('complementary', { name: 'Transition settings' })).toBeNull();
     expect(cutMarker()).toHaveFocus();
   });
+
+  it('a selected transition that goes is no longer selected: removed, or its add undone', async () => {
+    vi.mocked(bridge.apply).mockImplementation(engineApplies(0));
+    useProject.setState({ snapshot: withDissolve() });
+    useSelection.setState({ selectedId: 'transition:a' });
+    renderWithProviders(
+      <>
+        <Timeline />
+        <ShortcutsHarness />
+      </>,
+    );
+    // A change that keeps it keeps it selected.
+    act(() => useProject.setState({ snapshot: withDissolve() }));
+    expect(useSelection.getState().selectedId).toBe('transition:a');
+    fireEvent.keyDown(window, { key: 'Delete' });
+    await frames();
+    expect(useProject.getState().snapshot!.project.timeline.main[0].transitionOut).toBeUndefined();
+    expect(useSelection.getState().selectedId).toBeNull();
+    // Undo of an add: the project comes back without it.
+    act(() => {
+      useProject.setState({ snapshot: withDissolve() });
+      useSelection.setState({ selectedId: 'transition:a' });
+    });
+    act(() => useProject.setState({ snapshot: withHandles() }));
+    expect(useSelection.getState().selectedId).toBeNull();
+  });
 });

@@ -10,7 +10,7 @@ import { splitDuration } from '../../../lib/transitions';
 import { keyBurst } from '../../../state/keyBurst';
 import { usePlayback } from '../../../state/playback';
 import { useProject } from '../../../state/project';
-import { transitionSelection, useSelection } from '../../../state/selection';
+import { transitionClipId, transitionSelection, useSelection } from '../../../state/selection';
 import { toast } from '../../../state/toasts';
 import { useTimelineFocus } from '../../../state/timelineFocus';
 import { mainIndex, type MainIndex } from '../model/index';
@@ -193,6 +193,17 @@ export function removeTransition(clipId: string, { focusCut = false }: { focusCu
       },
     );
   });
+}
+
+/**
+ * A selected transition that `project` no longer has (removed, its add undone, dropped by an edit) is no longer
+ * selected, so nothing acts on a transition that isn't there.
+ */
+export function forgetGoneTransition(project: Project | undefined) {
+  const clipId = transitionClipId(useSelection.getState().selectedId);
+  if (clipId === null || !project) return;
+  const i = cutIndex(project, clipId);
+  if (i < 0 || !project.timeline.main[i].transitionOut) useSelection.getState().select(null);
 }
 
 /** Enter on a cut: its transition is selected; a bare cut with room for one gets one; one without says why. */
