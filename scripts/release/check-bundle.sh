@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
 # The app bundle's check before anything is signed (build-mac.sh runs it; it works on a signed app too):
-#   scripts/release/check-bundle.sh <Klipolo.app> <x86_64|arm64>
-# Fails unless the licences and the fonts are in Resources, every Mach-O is built for <arch> only and for macOS 15.0
-# or older, every load path is @rpath/, @executable_path/, @loader_path/, /usr/lib/ or /System/Library/, and every
-# LC_RPATH is relative (@executable_path/ or @loader_path/), never a machine path such as the dev FFmpeg prefix's.
+#   scripts/release/check-bundle.sh <Klipolo.app> <x86_64|arm64> [<page build folder>]
+# Fails unless the licences (the third-party notices too, none of them empty) and the fonts are in Resources, every
+# Mach-O is built for <arch> only and for macOS 15.0 or older, every load path is @rpath/, @executable_path/,
+# @loader_path/, /usr/lib/ or /System/Library/, and every LC_RPATH is relative (@executable_path/ or @loader_path/),
+# never a machine path such as the dev FFmpeg prefix's.
 # The app must also find its libraries: the main executable's LC_RPATHs include @executable_path/../Frameworks, and
 # every @rpath/<name> that any Mach-O in the bundle loads is a file at Contents/Frameworks/<name>. And no file under
-# Contents names the builder's home folder or user name.
+# Contents names the builder's home folder or user name, nor does the page build it was made from: the main
+# executable holds the page brotli-compressed, so searching the binary can't see into it. That page build is
+# apps/desktop/dist unless a folder is given, which is the app's own page only right after the build that made it
+# (build-mac.sh checks then); for an app built earlier, give the page build kept from that build. NOTICE.txt must
+# give the source code's https:// address and the full commit built, its {{SOURCE_URL}} and {{SOURCE_COMMIT}} filled
+# in.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
+repo=$(cd "$here/../.." && pwd -P)
 . "$here/lib.sh"
-usage() { echo "usage: $0 <Klipolo.app> <x86_64|arm64>" >&2; exit 2; }
-[ $# -eq 2 ] || usage
-app=${1%/} arch=$2
+usage() { echo "usage: $0 <Klipolo.app> <x86_64|arm64> [<page build folder>]" >&2; exit 2; }
+[ $# -eq 2 ] || [ $# -eq 3 ] || usage
+app=${1%/} arch=$2 page=${3:-$repo/apps/desktop/dist}
 case "$arch" in x86_64 | arm64) ;; aarch64) arch=arm64 ;; *) usage ;; esac
 [ -f "$app/Contents/Info.plist" ] || { echo "refused: not an app bundle: $app" >&2; exit 2; }
 main=$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")
@@ -22,10 +29,36 @@ rc=0
 fail() { echo "FAIL: $*"; rc=1; }
 is_macho "$main" || fail "the main executable ${main#"$app"/} isn't a Mach-O file"
 
-for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt NOTICE.txt; do
-  [ -f "$app/Contents/Resources/licenses/$f" ] || fail "licenses/$f isn't in the app"
+for f in FFmpeg-LGPL.txt COPYING.LGPLv2.1 LICENSE.txt NOTICE.txt THIRD-PARTY-NOTICES.txt Archivo-OFL.txt; do
+  if [ ! -f "$app/Contents/Resources/licenses/$f" ]; then
+    fail "licenses/$f isn't in the app"
+  elif [ ! -s "$app/Contents/Resources/licenses/$f" ]; then
+    fail "licenses/$f is empty"
+  fi
 done
+# The third-party notices are the file third-party.sh writes, not a stand-in: it starts with its title.
+notices=$app/Contents/Resources/licenses/THIRD-PARTY-NOTICES.txt
+if [ -s "$notices" ] && [ "$(head -n 1 "$notices")" != "Klipolo: third-party notices" ]; then
+  fail "licenses/THIRD-PARTY-NOTICES.txt doesn't start 'Klipolo: third-party notices' (scripts/release/third-party.sh)"
+fi
 [ -d "$app/Contents/Resources/fonts" ] || fail "the fonts aren't in the app"
+# NOTICE.txt gives the public address of the source code and the commit built (the AGPL's source offer for this
+# version). build-mac.sh fills its {{SOURCE_URL}} and {{SOURCE_COMMIT}} placeholders from KLIPOLO_SOURCE_URL and the
+# checkout; a bundle that still has either can't ship.
+licences=$app/Contents/Resources/licenses
+if [ -f "$licences/NOTICE.txt" ]; then
+  source_line=$(grep '^Source code: ' "$licences/NOTICE.txt" || true)
+  source_re='^Source code: ([^ ]+) \(commit ([^ ]+)\)$'
+  source_url="" source_commit=""
+  if [[ "$source_line" =~ $source_re ]]; then source_url=${BASH_REMATCH[1]} source_commit=${BASH_REMATCH[2]}; fi
+  if grep -rqF -e '{{SOURCE_URL}}' -e '{{SOURCE_COMMIT}}' "$licences"; then
+    fail "licenses/NOTICE.txt still has a {{SOURCE_URL}} or {{SOURCE_COMMIT}} placeholder: build with build-mac.sh"
+  elif is_source_url "$source_url" && is_commit "$source_commit"; then
+    echo "-- source code: $source_url at commit $source_commit"
+  else
+    fail "licenses/NOTICE.txt gives no source code line 'Source code: <https:// address> (commit <40 hex digits>)'"
+  fi
+fi
 
 files=$(mktemp)
 trap 'rm -f "$files"' EXIT
@@ -49,9 +82,6 @@ while IFS= read -r -d '' f; do
     echo "   LC_RPATH $r"
     case "$r" in @executable_path/* | @loader_path/*) ;; *) fail "$rel has a machine LC_RPATH: $r" ;; esac
   done
-  if [ "$f" = "$main" ] && ! grep -qx '@executable_path/../Frameworks' <<< "$rpaths"; then
-    fail "$rel has no @executable_path/../Frameworks LC_RPATH, so it can't find the libraries in Frameworks"
-  fi
   own=$(otool -D "$f" | tail -n +2)
   for dep in $(otool -L "$f" | tail -n +2 | awk '{print $1}' | grep '^@rpath/' || true); do
     [ "$dep" = "$own" ] && continue
@@ -59,22 +89,24 @@ while IFS= read -r -d '' f; do
   done
 done < "$files"
 [ "$count" -gt 1 ] || fail "only $count Mach-O files in the app"
+# The main executable's own, whether or not the walk above met it: one of its LC_RPATHs is exactly this text.
+main_rpaths=$(otool -l "$main" | awk '$1 == "cmd" {r = ($2 == "LC_RPATH")} r && $1 == "path" {print $2}' || true)
+grep -qxF '@executable_path/../Frameworks' <<< "$main_rpaths" \
+  || fail "${main#"$app"/} has no @executable_path/../Frameworks LC_RPATH, so it can't find the libraries in Frameworks"
 
-# No file under Contents (binaries, the page, resources) names the builder's home folder or user name. A user name
-# shorter than 4 characters would match ordinary text, so then only the home folder is looked for.
-user=$(id -un)
-patterns=(-e "$home")
-[ "${#user}" -lt 4 ] || patterns+=(-e "$user")
+# No file under Contents (binaries, resources) or in the page's build output names the builder's home folder or user
+# name (lib.sh's naming_files: the user name only as a whole path part). The page build is the folder given, else
+# apps/desktop/dist (see the top); without one the check fails rather than skip the page.
+searched=("$app/Contents")
+if [ -f "$page/index.html" ]; then searched+=("$page"); else fail "no page build at $page to search (pnpm build)"; fi
 set +e
-named=$(LC_ALL=C grep -rlF "${patterns[@]}" "$app/Contents")
+named=$(naming_files "$home" "$(id -un)" "${searched[@]}")
 status=$?
 set -e
-case $status in
-  0) fail "these files name the builder's home folder or user name: $(tr '\n' ' ' <<< "$named")" ;;
-  1) ;;
-  *) fail "couldn't read every file under Contents to look for the home folder" ;;
-esac
+# grep says 2 when it couldn't read a file, also when it found others: both are failures, and both are told.
+[ -z "$named" ] || fail "these files name the builder's home folder or user name: $(tr '\n' ' ' <<< "$named")"
+[ "$status" -le 1 ] || fail "couldn't read every file under Contents and the page to look for the home folder"
 
 [ $rc -eq 0 ] || { echo "RESULT: FAIL" >&2; exit 1; }
 echo "bundle check: $count Mach-O files, $arch only, relative rpaths only, every @rpath library in Frameworks," \
-  "no file names the home folder or the user name"
+  "no file in the app or the page names the home folder or the user name"

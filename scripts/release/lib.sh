@@ -40,6 +40,45 @@ is_macho() {
   esac
 }
 
+# The files under <path>... that name the home folder <home> (anywhere) or the user <user> (only as a whole path part,
+# /<user>/, so an account named test or build doesn't match "testing" or "builder"):
+#   naming_files <home> <user> <path>...
+# A user name shorter than 4 characters isn't looked for: /lib/ and /src/ are in every binary. Prints the files found
+# and returns grep's status: 0 some found, 1 none, 2 a file couldn't be read (the files found are printed all the same).
+naming_files() {
+  local home=$1 user=$2
+  shift 2
+  local patterns=(-e "$home")
+  [ "${#user}" -lt 4 ] || patterns+=(-e "/$user/")
+  LC_ALL=C grep -rlF "${patterns[@]}" "$@"
+}
+
+# The public address of Klipolo's source code, as NOTICE.txt gives it: https://, a host, and a path of plain URL
+# characters (no spaces, quotes, & or \).
+is_source_url() {
+  local re='^https://[A-Za-z0-9.-]+(/[A-Za-z0-9._~/%+=@:#?-]*)?$'
+  [[ "$1" =~ $re ]]
+}
+
+# A full git commit id: 40 lowercase hex digits, as `git rev-parse HEAD` prints it.
+is_commit() {
+  [[ "$1" =~ ^[0-9a-f]{40}$ ]]
+}
+
+# <notice>'s source code line filled in, in place: {{SOURCE_URL}} becomes <url> and {{SOURCE_COMMIT}} <commit>, the
+# commit the app is built from: fill_source <notice> <url> <commit>. Nothing changes unless both are good. Each
+# replacement is quoted in an assignment, so bash 5.2's patsub_replacement never reads a & in it, and bash 3.2 (which
+# keeps quotes in a replacement inside "${...}") takes it as plain text too.
+fill_source() {
+  local url_placeholder='{{SOURCE_URL}}' commit_placeholder='{{SOURCE_COMMIT}}' text
+  is_source_url "$2" || { echo "refused: not an https:// source code address: $2" >&2; return 1; }
+  is_commit "$3" || { echo "refused: not a full commit id: $3" >&2; return 1; }
+  text=$(< "$1")
+  text=${text//"$url_placeholder"/"$2"}
+  text=${text//"$commit_placeholder"/"$3"}
+  printf '%s\n' "$text" > "$1"
+}
+
 # A release version: X.Y.Z, digits and dots only, as CFBundleShortVersionString and CFBundleVersion require.
 is_version() {
   [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
