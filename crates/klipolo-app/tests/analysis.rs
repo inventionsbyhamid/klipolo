@@ -1339,3 +1339,118 @@ async fn another_project_stops_analysis_and_starts_with_no_speech() {
     );
     server.verify().await;
 }
+
+/// Word timing is down the first time (the words are spread, and cached so), and back the next: the words are timed
+/// again from the cached turns, with no second transcription, and the better transcript replaces the cached one.
+#[tokio::test(flavor = "multi_thread")]
+async fn rough_words_are_timed_again_for_free_once_word_timing_is_back() {
+    let server = MockServer::start().await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(asr_answer())
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(ResponseTemplate::new(503))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(align_answer())
+        .expect(1)
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let file = h.clip("talk.m4a", 2);
+    let clip = asset("talk", AssetKind::Audio, &file, SECONDS);
+
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+    assert_eq!(
+        h.state.state_of("talk"),
+        AssetState::Done { approximate: true }
+    );
+    let rough: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
+    assert!(rough.approximate);
+
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+
+    assert_eq!(
+        h.state.state_of("talk"),
+        AssetState::Done { approximate: false }
+    );
+    let timed: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
+    assert!(!timed.approximate && timed.turns.iter().all(|t| t.aligned));
+    assert_eq!(
+        h.last_speech().transcripts["talk"].words,
+        timed.transcript.words
+    );
+    assert_eq!(requests(&server, "POST", "/v1/align").await.len(), 2);
+    server.verify().await;
+}
+
+/// Cancel while words are being timed: what was heard is cached (it is paid for), so the next run sends no
+/// transcription.
+#[tokio::test(flavor = "multi_thread")]
+async fn cancel_during_word_timing_keeps_what_was_heard() {
+    let server = MockServer::start().await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(asr_answer())
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(Counted {
+            count: h.aligns.clone(),
+            template: align_answer().set_delay(Duration::from_millis(400)),
+        })
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let file = h.clip("talk.m4a", 2);
+    let clip = asset("talk", AssetKind::Audio, &file, SECONDS);
+
+    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while h.aligns.load(Ordering::SeqCst) == 0 {
+        assert!(Instant::now() < deadline, "word timing never started");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    h.state.cancel();
+    started.finished().await;
+    assert_eq!(h.state.state_of("talk"), AssetState::None);
+    assert!(
+        h.cache_dir(&file)
+            .load::<TranscriptOut>("transcript")
+            .is_some(),
+        "what was heard is cached"
+    );
+
+    h.state
+        .start(std::slice::from_ref(&clip))
+        .await
+        .finished()
+        .await;
+
+    assert_eq!(
+        h.state.state_of("talk"),
+        AssetState::Done { approximate: false }
+    );
+    server.verify().await;
+}

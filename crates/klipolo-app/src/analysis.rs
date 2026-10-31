@@ -482,12 +482,25 @@ impl AnalysisState {
                 inner.claimed.remove(&content.key);
             }
         }
+        // Cached words timed roughly because word timing failed or stopped are timed again: free, so with whatever
+        // adapter there is, whatever the credit.
+        let retime = ready
+            .iter()
+            .any(|c| c.cached.transcript.as_ref().is_some_and(run::timed_again));
+        let timer = match (&first, retime) {
+            (_, false) => None,
+            (Some(meta), true) => Some(meta.clone()),
+            (None, true) => self.credentials.ready().await.meta,
+        };
         let run = self.run_now();
-        let starting = ready.into_iter().map(|content| (content, None)).chain(
-            paid.into_iter()
-                .filter(|_| first.is_some())
-                .map(|content| (content, first.clone())),
-        );
+        let starting = ready
+            .into_iter()
+            .map(|content| (content, timer.clone()))
+            .chain(
+                paid.into_iter()
+                    .filter(|_| first.is_some())
+                    .map(|content| (content, first.clone())),
+            );
         let mut tasks = Vec::new();
         for (content, meta) in starting {
             self.progress(&content.key, AnalysisStep::Audio, 0);

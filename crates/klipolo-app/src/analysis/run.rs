@@ -9,7 +9,7 @@ use klipolo_analysis::cache::{Dir, content_key};
 use klipolo_analysis::providers::meta::Meta;
 use klipolo_analysis::providers::{ProviderErrorKind, Transcriber};
 use klipolo_analysis::scenes;
-use klipolo_analysis::transcript::{Sound, TranscriptOut, align, finish, hear};
+use klipolo_analysis::transcript::{ROUGH_WORDS, Sound, TranscriptOut, align, finish, hear};
 use klipolo_analysis::{AnalysisError, VideoError};
 use klipolo_model::speech::Word;
 use klipolo_platform::qos::{self, Qos};
@@ -54,6 +54,25 @@ impl Run {
     pub(crate) fn open(&self) -> bool {
         !self.cancelled() && self.stopped().is_none()
     }
+}
+
+/// Why a transcript cached when Cancel stopped its word timing is approximate (it is timed again on the next run).
+pub(crate) const WORDS_STOPPED: &str = "Word timing stopped before it finished.";
+
+/// Whether `found`'s words are timed roughly for a reason another try may fix (word timing failed, stopped or was
+/// unreachable), rather than because its turns don't match their sound (`transcript::ROUGH_WORDS`).
+pub(crate) fn timed_again(found: &TranscriptOut) -> bool {
+    found.approximate
+        && !found.turns.is_empty()
+        && found.approximate_reason.as_deref() != Some(ROUGH_WORDS)
+}
+
+/// What `hear_and_time` heard.
+enum Heard {
+    /// The whole transcript, its words timed (or roughly, where word timing failed).
+    All(TranscriptOut),
+    /// Cancelled while timing words: what was heard and timed so far.
+    Stopped(TranscriptOut),
 }
 
 /// How a clip's analysis ended.
@@ -166,7 +185,10 @@ impl AnalysisState {
             }
         }
         let needs_scenes = clip.video && !scenes_cached;
-        if let (Some(found), false) = (&cached.transcript, needs_scenes) {
+        // Words timed roughly because word timing failed or stopped are timed again when something can call the
+        // aligner (free: no transcription).
+        let retime = first.is_some() && cached.transcript.as_ref().is_some_and(timed_again);
+        if let (Some(found), false, false) = (&cached.transcript, needs_scenes, retime) {
             return Outcome::Done {
                 approximate: found.approximate,
             };
@@ -198,6 +220,10 @@ impl AnalysisState {
             dir: &dir,
         };
         let transcript = match cached.transcript {
+            Some(found) if retime => match self.time_again(&job, found).await {
+                Ok(timed) => timed,
+                Err(outcome) => return outcome,
+            },
             Some(found) => found,
             None => match self.transcribe(&job).await {
                 Ok(made) => made,
@@ -244,9 +270,18 @@ impl AnalysisState {
                 .map_err(|e| self.failure(AnalysisError::from(e), run))?;
             self.progress(key, AnalysisStep::Audio, 100);
             if info.has_audio {
-                let out = self.hear_and_time(job, &wav, &model).await;
+                let heard = self.hear_and_time(job, &wav, &model).await;
                 let _ = std::fs::remove_file(&wav);
-                out?
+                match heard? {
+                    Heard::All(out) => out,
+                    Heard::Stopped(mut out) => {
+                        // Paid for already: kept, its words timed again on the next run.
+                        out.transcript.key = key.to_owned();
+                        self.store(dir, "transcript", &out, &model).await;
+                        self.found_transcript(key, &out);
+                        return Err(Outcome::Stopped);
+                    }
+                }
             } else {
                 TranscriptOut::no_speech(&model, clip.duration_us, 0.0)
             }
@@ -260,13 +295,14 @@ impl AnalysisState {
     }
 
     /// The words of the clip's WAV: `hear`, the turn-level transcript published, `align`, `finish`. Cancelled while
-    /// timing words: what was timed is shown, and nothing is cached.
+    /// timing words: what was heard (and timed so far) is given as `Heard::Stopped`, to cache: its transcription is
+    /// paid for, and its words can be timed again for free.
     async fn hear_and_time(
         self: &Arc<Self>,
         job: &Job<'_>,
         wav: &Path,
         model: &str,
-    ) -> Result<TranscriptOut, Outcome> {
+    ) -> Result<Heard, Outcome> {
         let Job {
             key, calls, run, ..
         } = *job;
@@ -277,7 +313,11 @@ impl AnalysisState {
             .await
             .map_err(|e| self.failure(e, run))?;
         if sound.is_silent() {
-            return Ok(TranscriptOut::no_speech(model, sound.duration_us, 0.0));
+            return Ok(Heard::All(TranscriptOut::no_speech(
+                model,
+                sound.duration_us,
+                0.0,
+            )));
         }
         calls
             .meter
@@ -287,11 +327,11 @@ impl AnalysisState {
             .map_err(|e| self.failure(e, run))?;
         self.spend(key, heard.cost_usd);
         if heard.turns.is_empty() {
-            return Ok(TranscriptOut::no_speech(
+            return Ok(Heard::All(TranscriptOut::no_speech(
                 model,
                 sound.duration_us,
                 heard.cost_usd,
-            ));
+            )));
         }
         let mut rough = finish(
             model,
@@ -314,11 +354,77 @@ impl AnalysisState {
             heard.cost_usd,
         );
         if run.cancelled() {
-            out.transcript.key = key.to_owned();
-            self.found_transcript(key, &out);
+            if out.approximate {
+                out.approximate_reason = Some(WORDS_STOPPED.to_owned());
+            }
+            return Ok(Heard::Stopped(out));
+        }
+        Ok(Heard::All(out))
+    }
+
+    /// `found`'s words timed again (no transcription: free), from the clip's WAV made again; cached and shown when
+    /// more of its turns are timed than before. A WAV that can't be made, or an aligner that still fails, keeps
+    /// `found` as it is.
+    async fn time_again(
+        self: &Arc<Self>,
+        job: &Job<'_>,
+        found: TranscriptOut,
+    ) -> Result<TranscriptOut, Outcome> {
+        let Job {
+            key,
+            clip,
+            calls,
+            run,
+            work,
+            dir,
+        } = *job;
+        if run.cancelled() {
             return Err(Outcome::Stopped);
         }
-        Ok(out)
+        self.progress(key, AnalysisStep::Audio, 0);
+        let wav = work.join("sound.wav");
+        let made = {
+            let (src, wav) = (clip.path.clone(), wav.clone());
+            self.local(move |media| media.sound(&src, &wav)).await
+        };
+        let Ok(Ok(info)) = made else {
+            return Ok(found);
+        };
+        let sound = match Sound::load(&wav, calls.max_audio_s()).await {
+            Ok(sound) if info.has_audio => sound,
+            _ => return Ok(found),
+        };
+        let _ = std::fs::remove_file(&wav);
+        calls
+            .meter
+            .begin(AnalysisStep::Words, found.turns.len(), 0, 100);
+        let timing = align(calls, &sound, &found.turns).await;
+        let mut timed = finish(
+            &found.transcript.model,
+            sound.duration_us,
+            found.turns.clone(),
+            Some(timing),
+            found.cost_usd,
+        );
+        let aligned = |t: &TranscriptOut| t.turns.iter().filter(|t| t.aligned).count();
+        if aligned(&timed) <= aligned(&found) {
+            return if run.cancelled() {
+                Err(Outcome::Stopped)
+            } else {
+                Ok(found)
+            };
+        }
+        timed.transcript.key = key.to_owned();
+        if run.cancelled() && timed.approximate {
+            timed.approximate_reason = Some(WORDS_STOPPED.to_owned());
+        }
+        self.store(dir, "transcript", &timed, &timed.transcript.model)
+            .await;
+        self.found_transcript(key, &timed);
+        if run.cancelled() {
+            return Err(Outcome::Stopped);
+        }
+        Ok(timed)
     }
 
     /// The clip's scene log from its small copy, snapped to `words` (its transcript's), cached once logged. A clip
