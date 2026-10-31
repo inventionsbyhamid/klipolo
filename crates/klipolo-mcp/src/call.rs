@@ -15,17 +15,20 @@
 //!    within the app's pace of applied batches (`Limits::applied`).
 //!    Removals become a proposal for the person, never applied here: in place of the app's own, or, once additions
 //!    applied (which drops it, as any change does), on top of them.
+//! 7. Each job that costs money passes the run's allowance and the app's pace of jobs (`Limits::paid`), then only
+//!    `Host::start_paid` starts it, after the app's own checks. Nothing here calls a model.
 //!
 //! The only commit is `Host::apply` of additions that `needs_review` passes, and the only other change the app's own
 //! undo: no path here cuts footage.
 //!
-//! A result is one text and `structuredContent`: `{"outcome": "done" | "proposed" | "shown" | "refused", "revision"?,
-//! "proposalId"?, "removedSec"?}`. `isError` is true exactly when nothing was done.
+//! A result is one text and `structuredContent`: `{"outcome": "done" | "proposed" | "shown" | "started" | "refused",
+//! "revision"?, "proposalId"?, "removedSec"?}`, the outcome what changed most (a proposal, then the project, then a
+//! job started). `isError` is true exactly when nothing was done; when part was, the text says what wasn't.
 
 use std::time::Instant;
 
 use klipolo_chat::{
-    Audience, Compiled, FunctionCall, Moment, Refusal, ToolCall, compile, timeline_key,
+    Audience, Compiled, FunctionCall, Job, Moment, Refusal, ToolCall, compile, timeline_key,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -34,6 +37,7 @@ use klipolo_model::time::{RangeUs, Us};
 use serde_json::{Value, json};
 
 use crate::host::{Host, HostError, OpenProposal, Snapshot};
+use crate::limits::Paced;
 use crate::rpc::Mcp;
 use crate::session::{Seen, Session};
 use crate::words::{self, fill};
@@ -151,7 +155,7 @@ pub fn from_app(tx: &Transaction, client: &str) -> Transaction {
 }
 
 /// The compiled `calls`, the last one the app's new call and the others those of `own`, its waiting proposal: additions
-/// applied, then the removals proposed.
+/// applied, then the removals proposed, then the jobs started.
 fn edit(
     mcp: &Mcp,
     client: &str,
@@ -162,6 +166,7 @@ fn edit(
 ) -> Value {
     let host = mcp.host();
     let at = calls.len() - 1;
+    let compiled = |i: &usize| !out.refusals.iter().any(|r| r.call_index == *i);
     let mut said: Vec<String> = Vec::new();
     let mut revision = snap.revision;
     if let Some(additions) = &out.additions {
@@ -179,23 +184,21 @@ fn edit(
     }
     let changed = revision != snap.revision;
     if changed {
-        let applied = (0..calls.len()).filter(|i| {
-            !out.proposed_calls.contains(i)
-                && !out.refusals.iter().any(|r| r.call_index == *i)
-                && adds(&calls[*i])
-        });
+        let applied = (0..calls.len())
+            .filter(|i| !out.proposed_calls.contains(i) && compiled(i) && adds(&calls[*i]));
         said.push(fill(
             words::DONE,
             &[("tools", &names(applied.map(|i| &calls[i])))],
         ));
     }
+
     // The app's own proposal stands as it is, unless the call adds to it or the additions changed the project (which
     // dropped it).
     let proposal =
         (out.proposal).filter(|_| own.is_none() || changed || out.proposed_calls.contains(&at));
     // An earlier call of its proposal that no longer compiles (it stood on a selection gone since) is left out of what
     // takes the proposal's place: the app hears which, and why.
-    let left_out: Vec<String> = if own.is_some() && (changed || proposal.is_some()) {
+    let mut left_out: Vec<String> = if own.is_some() && (changed || proposal.is_some()) {
         (out.refusals.iter())
             .filter(|r| r.call_index < at)
             .map(|r| fill(words::LEFT_OUT, &[("reason", &reason(r))]))
@@ -203,61 +206,102 @@ fn edit(
     } else {
         Vec::new()
     };
-    let Some(proposal) = proposal else {
-        if said.is_empty() {
-            said.push(words::UNCHANGED.to_owned());
+    let mut proposed_as: Option<(String, Us)> = None;
+    if let Some(proposal) = proposal {
+        let proposed: Vec<ToolCall> = (out.proposed_calls.iter())
+            .map(|&i| calls[i].clone())
+            .collect();
+        let (removed_us, ranges) = (proposal.removed_us, proposal.ranges.clone());
+        // A commit drops the open proposal; until one, the new proposal takes its place.
+        let replacing = if changed {
+            None
+        } else {
+            own.map(|p| p.id.as_str())
+        };
+        match host.propose(client, revision, &proposed, proposal, replacing) {
+            Ok(id) => {
+                let tools = names(proposed.iter());
+                said.push(if removed_us > 0 {
+                    fill(
+                        words::PROPOSED,
+                        &[
+                            ("tools", &tools),
+                            ("removed", &secs(removed_us)),
+                            ("ranges", &ranges_said(&ranges)),
+                        ],
+                    )
+                } else {
+                    fill(words::PROPOSED_NO_FOOTAGE, &[("tools", &tools)])
+                });
+                *mcp.own() = Some(Own {
+                    client: client.to_owned(),
+                    id: id.clone(),
+                    calls: proposed,
+                });
+                proposed_as = Some((id, removed_us));
+            }
+            // The additions are in: the answer says so, and that the removals weren't proposed.
+            Err(_) if changed => {
+                said.push(words::NOT_PROPOSED.to_owned());
+                left_out.clear();
+            }
+            Err(e) => return refused(&host_error(host, client, e)),
         }
-        said.extend(left_out);
-        return answer(&said, json!({"outcome": "done", "revision": revision}));
-    };
-    let proposed: Vec<ToolCall> = (out.proposed_calls.iter())
-        .map(|&i| calls[i].clone())
-        .collect();
-    let (removed_us, ranges) = (proposal.removed_us, proposal.ranges.clone());
-    // A commit drops the open proposal; until one, the new proposal takes its place.
-    let replacing = if changed {
-        None
-    } else {
-        own.map(|p| p.id.as_str())
-    };
-    match host.propose(client, revision, &proposed, proposal, replacing) {
-        Ok(id) => {
-            let tools = names(proposed.iter());
-            *mcp.own() = Some(Own {
-                client: client.to_owned(),
-                id: id.clone(),
-                calls: proposed.clone(),
-            });
-            said.push(if removed_us > 0 {
-                fill(
-                    words::PROPOSED,
-                    &[
-                        ("tools", &tools),
-                        ("removed", &secs(removed_us)),
-                        ("ranges", &ranges_said(&ranges)),
-                    ],
-                )
-            } else {
-                fill(words::PROPOSED_NO_FOOTAGE, &[("tools", &tools)])
-            });
-            said.extend(left_out);
-            answer(
-                &said,
-                json!({
-                    "outcome": "proposed",
-                    "revision": revision,
-                    "proposalId": id,
-                    "removedSec": removed_us as f64 / 1e6,
-                }),
-            )
-        }
-        // The additions are in: the answer says so, and that the removals weren't proposed.
-        Err(_) if changed => {
-            said.push(words::NOT_PROPOSED.to_owned());
-            answer(&said, json!({"outcome": "done", "revision": revision}))
-        }
-        Err(e) => refused(&host_error(host, client, e)),
     }
+    said.extend(left_out);
+
+    let mut started = false;
+    let mut not_started: Vec<String> = Vec::new();
+    for job in &out.jobs {
+        match start(mcp, client, job) {
+            Ok(()) => started = true,
+            Err(why) if !not_started.contains(&why) => not_started.push(why),
+            Err(_) => {}
+        }
+    }
+    if started {
+        let makers = (0..calls.len()).filter(|i| compiled(i) && makes_jobs(&calls[*i]));
+        said.push(fill(
+            words::STARTED,
+            &[("tools", &names(makers.map(|i| &calls[i])))],
+        ));
+    }
+    if !changed && proposed_as.is_none() && !started && !not_started.is_empty() {
+        return refused(&not_started.join(" "));
+    }
+    said.extend(not_started);
+
+    let structured = match proposed_as {
+        Some((id, removed_us)) => json!({
+            "outcome": "proposed",
+            "revision": revision,
+            "proposalId": id,
+            "removedSec": removed_us as f64 / 1e6,
+        }),
+        None if !changed && started => json!({"outcome": "started"}),
+        None => json!({"outcome": "done", "revision": revision}),
+    };
+    if said.is_empty() {
+        said.push(words::UNCHANGED.to_owned());
+    }
+    answer(&said, structured)
+}
+
+/// Starts `job` for `client`, within the run's allowance and the app's pace of jobs, only through the host and its own
+/// checks; else why not.
+fn start(mcp: &Mcp, client: &str, job: &Job) -> Result<(), String> {
+    let host = mcp.host();
+    let usd = host.estimate_usd(job);
+    match mcp.limits().paid(client, Instant::now(), usd) {
+        Ok(()) => {}
+        Err(Paced::OverCap) => return Err(words::OVER_CAP.to_owned()),
+        Err(Paced::Wait) => return Err(paced(client)),
+    }
+    host.start_paid(client, job).map_err(|e| {
+        // Nothing was spent.
+        mcp.limits().unpaid(usd);
+        host_error(host, client, e)
+    })
 }
 
 /// `findMoments`, compiled alone on the project as it is: the moments shown to the person, nothing else.
@@ -335,6 +379,17 @@ fn reason(r: &Refusal) -> String {
         }
         _ => r.reason.clone(),
     }
+}
+
+/// Whether `call` makes a job for a runner or an image maker.
+fn makes_jobs(call: &ToolCall) -> bool {
+    matches!(
+        call,
+        ToolCall::MakeSticker { .. }
+            | ToolCall::MakeTitleCard { .. }
+            | ToolCall::FollowSubject { .. }
+            | ToolCall::BlurObjects { .. }
+    )
 }
 
 /// Whether `call` can make additions (what `findMoments` and the jobs make is not an edit to apply).

@@ -5,7 +5,10 @@
 //! - batches applied at once (`APPLIED_PER_WINDOW` for one app, `APPLIED_ALL_PER_WINDOW` for all apps together, so a
 //!   new name doesn't start over);
 //! - sessions opened (`OPENED_PER_MINUTE` for one app, `OPENED_ALL_PER_MINUTE` for all apps together, so names an app
-//!   picks itself can't push out the sessions of apps already connected).
+//!   picks itself can't push out the sessions of apps already connected);
+//! - jobs that cost money (`PAID_JOBS_PER_WINDOW` for one app), within what all apps together may spend in this run of
+//!   Klipolo (`PAID_RUN_CAP_USD`, by the host's estimates). Only `Host::start_paid` starts one, after the app's own
+//!   checks; one it refused gives its price back, since nothing was spent.
 //!
 //! Apps are known by the name they give (`session::client_name`): sessions of one name share their paces.
 //!
@@ -32,6 +35,13 @@ pub const OPENED_PER_MINUTE: usize = 10;
 /// replaces every session kept.
 pub const OPENED_ALL_PER_MINUTE: usize = 20;
 
+/// Jobs that cost money one app may start within `PAID_WINDOW`.
+pub const PAID_JOBS_PER_WINDOW: usize = 10;
+pub const PAID_WINDOW: Duration = Duration::from_secs(10 * 60);
+/// What all apps together may spend on jobs in one run of Klipolo, in US dollars; past it, the person continues in
+/// Klipolo's own chat.
+pub const PAID_RUN_CAP_USD: f64 = 0.25;
+
 const MINUTE: Duration = Duration::from_secs(60);
 /// Apps whose paces are kept before those with nothing in their windows go.
 const APPS_KEPT: usize = 64;
@@ -41,6 +51,8 @@ const APPS_KEPT: usize = 64;
 pub enum Paced {
     /// The app, or all apps together, reached a pace: it waits a little and tries again.
     Wait,
+    /// Apps spent what they may on jobs in this run (`PAID_RUN_CAP_USD`).
+    OverCap,
 }
 
 /// When recent events of one kind happened, oldest first: each app's, and all apps' together.
@@ -91,6 +103,14 @@ struct Paces {
     calls: Pace,
     applied: Pace,
     opened: Pace,
+    paid: Pace,
+    /// What jobs started in this run cost, all apps together, in millionths of a dollar.
+    spent: u64,
+}
+
+/// `usd` in millionths of a dollar; None when it isn't a number (never under an allowance). Below zero is nothing.
+fn micros(usd: f64) -> Option<u64> {
+    usd.is_finite().then(|| (usd.max(0.0) * 1e6).round() as u64)
 }
 
 /// The paces of this run, shared by every session.
@@ -119,6 +139,28 @@ impl Limits {
     pub fn applied(&self, client: &str, now: Instant) -> Result<(), Paced> {
         let limits = (APPLIED_PER_WINDOW, Some(APPLIED_ALL_PER_WINDOW));
         self.paces().applied.take(client, now, PACE_WINDOW, limits)
+    }
+
+    /// One more job of `usd` for `client` at `now`: `OverCap` when it would take all apps' spending in this run past
+    /// `PAID_RUN_CAP_USD`, `Wait` past the app's pace of jobs. Counted as spent when it passes.
+    pub fn paid(&self, client: &str, now: Instant, usd: f64) -> Result<(), Paced> {
+        let cost = micros(usd).ok_or(Paced::OverCap)?;
+        let cap = micros(PAID_RUN_CAP_USD).unwrap_or(0);
+        let mut paces = self.paces();
+        if paces.spent.saturating_add(cost) > cap {
+            return Err(Paced::OverCap);
+        }
+        (paces.paid).take(client, now, PAID_WINDOW, (PAID_JOBS_PER_WINDOW, None))?;
+        paces.spent += cost;
+        Ok(())
+    }
+
+    /// Gives back what `paid` counted for a job of `usd` that didn't start (the host's own checks refused it). The
+    /// app's pace of jobs keeps it: an app looping on refused jobs is still paced.
+    pub fn unpaid(&self, usd: f64) {
+        let cost = micros(usd).unwrap_or(0);
+        let mut paces = self.paces();
+        paces.spent = paces.spent.saturating_sub(cost);
     }
 }
 

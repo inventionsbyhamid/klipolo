@@ -31,6 +31,9 @@ decided.";
 pub const SHOWN: &str = "Shown to the person in Klipolo: {n} moments ({ranges}).";
 /// One moment pointed out.
 pub const SHOWN_ONE: &str = "Shown to the person in Klipolo: 1 moment ({ranges}).";
+/// Jobs started: a picture to draw, a subject to follow.
+pub const STARTED: &str =
+    "Started in Klipolo ({tools}). What it makes appears in the edit once it is ready.";
 /// `findMoments` with no moment in it.
 pub const NO_MOMENTS: &str = "No moments were given, so nothing was shown.";
 /// A call that changes nothing: the edit already is as it asks.

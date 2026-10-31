@@ -47,7 +47,11 @@ pub struct Counts {
     pub applies: usize,
     pub proposes: usize,
     pub undos: usize,
+    /// Jobs started.
     pub paid: usize,
+    /// Jobs priced, and jobs asked to start (started or not).
+    pub estimates: usize,
+    pub paid_asked: usize,
 }
 
 pub struct State {
@@ -456,11 +460,14 @@ impl Host for FakeHost {
     }
 
     fn estimate_usd(&self, _job: &Job) -> f64 {
-        self.state().usd_per_job
+        let mut s = self.state();
+        s.counts.estimates += 1;
+        s.usd_per_job
     }
 
     fn start_paid(&self, client: &str, job: &Job) -> Result<(), HostError> {
         let mut s = self.state();
+        s.counts.paid_asked += 1;
         if !s.credit {
             return Err(HostError::NoCredit);
         }

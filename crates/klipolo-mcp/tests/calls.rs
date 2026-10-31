@@ -528,6 +528,7 @@ fn agent_words_are_exact() {
         NOT_PROPOSED,
         LEFT_OUT,
         UNDONE,
+        STARTED,
         REMOVES,
         PUSHES_OUT,
         OVER_SHARE,
