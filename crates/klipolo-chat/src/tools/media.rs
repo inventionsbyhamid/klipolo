@@ -140,16 +140,13 @@ impl Word for PictureSize {
 }
 
 fn at_sec() -> (&'static str, serde_json::Value) {
-    (
-        "atSec",
-        nullable_number("When it starts, timeline seconds. Null for the playhead."),
-    )
+    ("atSec", nullable_number("Start. Null for the playhead."))
 }
 
 fn duration_sec(default_secs: f64) -> (&'static str, serde_json::Value) {
     (
         "durationSec",
-        nullable_number(&format!("How long it shows. Null for {default_secs} s.")),
+        nullable_number(&format!("Length. Null for {default_secs} s.")),
     )
 }
 
@@ -162,24 +159,23 @@ fn position() -> (&'static str, serde_json::Value) {
 
 pub(super) const ADD_MUSIC: Tool = Tool {
     name: "addMusic",
-    description: "Play music from Library to the video's end, fading in and out, quieter while someone speaks unless \
-                  duck is false.",
+    description: "Play music from Library to the video's end, fading in and out.",
     parameters: || {
         vec![
             ("file", string("The music's name in Library.")),
             (
                 "volume",
-                nullable_number(&format!("0 to 1. Null for {MUSIC_VOLUME}, under a voice.")),
+                nullable_number(&format!("0 to 1. Null for {MUSIC_VOLUME}.")),
             ),
             (
                 "duck",
-                nullable_boolean("False keeps it level while people speak."),
+                nullable_boolean(
+                    "Quieter while people speak; false keeps it level. Null for true.",
+                ),
             ),
             (
                 "atSec",
-                nullable_number(
-                    "Where it starts. Null for the playhead; 0.0 for background music.",
-                ),
+                nullable_number("Start. Null for the playhead; 0.0 for background music."),
             ),
         ]
     },
