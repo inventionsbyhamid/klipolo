@@ -325,6 +325,11 @@ export const TABLE = {
     comment: 'Undo history entry: how far the following crop zooms in',
   }),
   'speed.undo': msg({ id: 'speed.undo', message: 'Change speed', comment: 'Undo history entry' }),
+  'speed.undo.note': msg({
+    id: 'speed.undo.note',
+    message: 'Change speed. {note}',
+    comment: 'Undo history entry; {note} says what it did to transitions, e.g. “A transition is shortened.”',
+  }),
   'volume.undo': msg({ id: 'volume.undo', message: 'Change volume', comment: 'Undo history entry' }),
   'volume.mute.undo': msg({
     id: 'volume.mute.undo',

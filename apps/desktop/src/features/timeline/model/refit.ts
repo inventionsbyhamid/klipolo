@@ -35,8 +35,9 @@ export function reorderRefit(project: Project, from: number, to: number): Refit 
 
 /**
  * What trimming clip `i` to `trimmed` does to the transitions into and out of it (an end trimmed out to its file's end
- * leaves its transition no footage). Only those two can change: the clips around them are refitted as a window
- * starting two clips earlier, so the transition into `i` sees what comes before it.
+ * leaves its transition no footage), or setting it to a new speed (at 2x its spare footage lasts half as long). Only
+ * those two can change: the clips around them are refitted as a window starting two clips earlier, so the transition
+ * into `i` sees what comes before it.
  */
 export function trimRefit(project: Project, i: number, trimmed: Clip): Refit {
   const first = Math.max(0, i - 2);
@@ -58,6 +59,13 @@ export function removeRefit(project: Project, i: number): Refit {
   rest.splice(i, 1);
   const into = compare(project, rest, i - 1, i);
   return { removed: into.removed + own, shortened: into.shortened };
+}
+
+/** What setting clip `id` to `speed` does to transitions, as a sentence (`refitNote`); '' when nothing changes. */
+export function speedNote(project: Project, id: string, speed: number): string {
+  const main = project.timeline.main;
+  const i = main.findIndex((clip) => clip.id === id);
+  return i < 0 ? '' : refitNote(trimRefit(project, i, { ...main[i], speed }));
 }
 
 /**
