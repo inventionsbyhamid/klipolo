@@ -6,7 +6,9 @@ vi.mock('../bridge/ai', () => ({
 }));
 const { aiBridge } = await import('../bridge/ai');
 const { useAi, needsKey } = await import('../ai/aiStatus');
-const { budgetView, chipView, initialChoice, removePayment, saveCode, saveKey, usd } = await import('./settings');
+const { budgetView, chipView, initialChoice, removePayment, saveCode, saveKey, sessionView, usd } = await import(
+  './settings'
+);
 
 const KEY = 'sk-meta-test-key-0123456789';
 const relay: AiStatus = { mode: 'relay', code: 'KLIP-TEST-0001', budgetUsd: 2, spentUsd: 0.06, active: true };
@@ -14,6 +16,32 @@ const relay: AiStatus = { mode: 'relay', code: 'KLIP-TEST-0001', budgetUsd: 2, s
 beforeEach(() => {
   vi.clearAllMocks();
   useAi.setState({ status: null, settingsOpen: false });
+});
+
+describe("the session's AI spend", () => {
+  const spent = { analysisUsd: 0.08, chatUsd: 0.021, chatMessages: 4, picturesUsd: 0.02, pictures: 2 };
+
+  it('adds up what analysis, chat and pictures cost, each kind named', () => {
+    expect(sessionView({ mode: 'key', keyHint: '6789', session: spent })).toEqual({
+      total: '$0.12',
+      kinds: ['Analysis $0.08', 'Chat $0.02 for 4 messages', 'Pictures $0.02 for 2'],
+    });
+  });
+
+  it('leaves out what cost nothing, and says less than a cent', () => {
+    const session = { analysisUsd: 0, chatUsd: 0.004, chatMessages: 1, picturesUsd: 0, pictures: 0 };
+    expect(sessionView({ ...relay, session })).toEqual({
+      total: 'under $0.01',
+      kinds: ['Chat under $0.01 for 1 message'],
+    });
+  });
+
+  it('shows nothing before anything was spent', () => {
+    const none = { analysisUsd: 0, chatUsd: 0, chatMessages: 0, picturesUsd: 0, pictures: 0 };
+    expect(sessionView({ mode: 'key', session: none })).toBeNull();
+    expect(sessionView({ mode: 'key' })).toBeNull();
+    expect(sessionView(null)).toBeNull();
+  });
 });
 
 describe('the budget', () => {

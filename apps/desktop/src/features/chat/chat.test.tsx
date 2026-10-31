@@ -3,6 +3,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { mockIPC } from '@tauri-apps/api/mocks';
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { ChatOutcome } from '../../bindings/ChatOutcome';
 import type { CodedError } from '../../bindings/CodedError';
 import { useAi } from '../../ai/aiStatus';
 import { useEditorShortcuts } from '../command-palette/useEditorShortcuts';
@@ -10,6 +11,9 @@ import { useAnalysis } from '../../state/analysis';
 import { installChatBridge } from '../../bridge/chat';
 import { fakeChat, proposal, reply, type FakeChatScript } from '../../bridge/chatFake';
 import { useChat, useChatStandIn } from '../../state/chat';
+import { beginCommit } from '../../state/commitQueue';
+import { historySteps } from '../../state/project';
+import { useToasts } from '../../state/toasts';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { useProposal } from '../../state/proposal';
@@ -21,6 +25,8 @@ import { ChatPanel } from './ChatPanel';
 
 const S = 1_000_000;
 const code = (c: string, params: CodedError['params'] = {}): CodedError => ({ code: c, params });
+/** The undo label Rust gives a title card chat added. */
+const titleCard = () => code('chat.makeTitleCard', { title: 'Step 3' });
 let calls: Record<string, any[]> = {};
 
 /** Rust's project side: edits and undo answer the next revision; `extra` answers other commands. */
@@ -94,9 +100,9 @@ beforeEach(() => {
 
 describe('chat', () => {
   it('sends a message and shows the applied reply with an Undo chip that takes it back, then Redo', async () => {
-    const undo = code('text.add');
+    const undo = titleCard();
     const fake = chat({ reply: (r) => reply(r.id, 'Added the title.', { applied: { change: changed(4, undo), undo } }) });
-    backend({ project_undo: () => changed(5, null, { canRedo: true, redoLabel: 'text.add' }) });
+    backend({ project_undo: () => changed(5, null, { canRedo: true, redoLabel: 'chat.makeTitleCard' }) });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'add a title Step 3{Enter}');
     expect(screen.getByText('add a title Step 3')).toBeInTheDocument();
@@ -104,26 +110,26 @@ describe('chat', () => {
     expect(fake.requests[0]).toMatchObject({ text: 'add a title Step 3', selection: null, playheadUs: 0, keepOnly: [] });
     // Merged: one change, one undo step.
     expect(useProject.getState().snapshot!.history.revision).toBe(4);
-    await userEvent.click(screen.getByRole('button', { name: 'Undo add text' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Undo add the title Step 3' }));
     await waitFor(() => expect(calls.project_undo).toHaveLength(1));
     // Taken back: the chip turns into Redo for a while.
-    expect(await screen.findByRole('button', { name: 'Redo add text' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Redo add the title Step 3' })).toBeInTheDocument();
     // A change after that buries it: the chip goes for good, never back as an Undo that does nothing.
     act(() =>
       useProject.setState({ snapshot: { ...useProject.getState().snapshot!, history: changed(6, code('clip.split')).history } }),
     );
-    expect(screen.queryByRole('button', { name: /^(Undo|Redo) add text/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^(Undo|Redo) add the title/ })).toBeNull();
   });
 
   it('takes back nothing once another change came after it: the chip says so', async () => {
-    const undo = code('text.add');
+    const undo = titleCard();
     chat({ reply: (r) => reply(r.id, 'Added the title.', { applied: { change: changed(4, undo), undo } }) });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'add a title{Enter}');
     await screen.findByText('Added the title.');
     // A hand edit lands after it.
     act(() => useProject.setState({ snapshot: { ...useProject.getState().snapshot!, history: changed(5, code('clip.split')).history } }));
-    const chip = screen.getByRole('button', { name: 'Undo add text' });
+    const chip = screen.getByRole('button', { name: 'Undo add the title Step 3' });
     expect(chip).toHaveAttribute('aria-disabled', 'true');
     await userEvent.click(chip);
     expect(calls.project_undo).toBeUndefined();
@@ -712,6 +718,9 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
           : reply(r.id, 'Done.');
       },
     });
+    // The page is on that revision too (a reply on another one has stale moments).
+    const at7 = fixtureSnapshot();
+    useProject.setState({ snapshot: { ...at7, history: { ...at7.history, revision: 7 } } });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'find the kiln{Enter}');
     await userEvent.click(await screen.findByRole('button', { name: 'Keep only these' }));
@@ -720,7 +729,7 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
   });
 
   it('Undo takes a chat change back through chat with the revision it made, and says so plainly once it can’t', async () => {
-    const undo = code('text.add');
+    const undo = titleCard();
     let refuse = false;
     let made = 3;
     const fake = chat({
@@ -730,22 +739,175 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
       },
       undoLast: (revision) => {
         if (refuse) throw new Error('The video changed.', { cause: code('project.moved') });
-        return changed(revision + 1, null, { canRedo: true, redoLabel: 'text.add' });
+        return changed(revision + 1, null, { canRedo: true, redoLabel: 'chat.makeTitleCard' });
       },
     });
     renderWithProviders(<ChatPanel />);
     await userEvent.type(message(), 'add a title{Enter}');
     await screen.findByText('Added the title.');
     refuse = true;
-    await userEvent.click(screen.getByRole('button', { name: 'Undo add text' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Undo add the title Step 3' }));
     expect(fake.undone).toEqual([4]);
-    expect(await screen.findByText('This change can’t be undone from chat any more.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Undo add text|Retry/ })).toBeNull();
+    expect(await screen.findByText('This change can’t be undone from chat any more.', { selector: 'p.muted' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Undo add the title|Retry/ })).toBeNull();
     refuse = false;
     act(() => useChat.getState().newChat());
     await userEvent.type(message(), 'add a title{Enter}');
-    await userEvent.click(await screen.findByRole('button', { name: 'Undo add text' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Undo add the title Step 3' }));
     expect(fake.undone).toEqual([4, 5]);
-    expect(await screen.findByRole('button', { name: 'Redo add text' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Redo add the title Step 3' })).toBeInTheDocument();
+  });
+
+  it('the Undo chip waits its turn behind a change on its way, then takes back its own', async () => {
+    const undo = titleCard();
+    const fake = chat({
+      reply: (r) => reply(r.id, 'Added the title.', { applied: { change: changed(4, undo), undo } }),
+      undoLast: (revision) => changed(revision + 1, null, { canRedo: true, redoLabel: 'chat.makeTitleCard' }),
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add a title{Enter}');
+    await screen.findByText('Added the title.');
+    // A commit on its way (a drop, a slider let go): the chip's undo goes after it.
+    const end = beginCommit();
+    await userEvent.click(screen.getByRole('button', { name: 'Undo add the title Step 3' }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fake.undone).toEqual([]);
+    act(() => end());
+    await waitFor(() => expect(fake.undone).toEqual([4]));
+    expect(await screen.findByRole('button', { name: 'Redo add the title Step 3' })).toBeInTheDocument();
+    expect(useProject.getState().snapshot!.history.revision).toBe(5);
+  });
+
+  it('the Undo chip says other refusals in a toast, and stays', async () => {
+    const undo = titleCard();
+    chat({
+      reply: (r) => reply(r.id, 'Added the title.', { applied: { change: changed(4, undo), undo } }),
+      undoLast: () => {
+        throw new Error("Klipolo couldn't save this change. Try again.");
+      },
+    });
+    useToasts.setState({ toasts: [] });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add a title{Enter}');
+    await screen.findByText('Added the title.');
+    await userEvent.click(screen.getByRole('button', { name: 'Undo add the title Step 3' }));
+    await waitFor(() =>
+      expect(useToasts.getState().toasts.map((t) => t.text)).toContain("Klipolo couldn't save this change. Try again."),
+    );
+    expect(screen.getByRole('button', { name: 'Undo add the title Step 3' })).toBeInTheDocument();
+    expect(screen.queryByText('This change can’t be undone from chat any more.')).toBeNull();
+    expect(useProject.getState().snapshot!.history.revision).toBe(4);
+  });
+
+  it('moments a reply found on another revision than the page has come stale', async () => {
+    const moments = [{ startUs: 2 * S, endUs: 6 * S, label: 'the kiln' }];
+    // The page is at 3; the reply landed on 2 (the project moved under it before the page heard).
+    chat({ reply: (r) => reply(r.id, 'Here it is.', { moments, revision: 2 }) });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'find the kiln{Enter}');
+    await screen.findByText('Here it is.');
+    expect(screen.getByRole('button', { name: 'Keep only these' })).toBeDisabled();
+    expect(screen.getByText('The video changed since. Ask again to keep only these.')).toBeInTheDocument();
+  });
+
+  it('a message whose Retry is refused because the video changed goes back into the box; Keep only does not', async () => {
+    let n = 0;
+    chat({
+      reply: () => {
+        n += 1;
+        if (n === 1) return { type: 'failed', kind: 'busy', message: 'Klipolo AI is busy right now. Try again in a moment.' };
+        throw new Error('The video changed. Try again.', { cause: code('project.moved') });
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'cut this{Enter}');
+    await userEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('The video changed. Ask again.')).toBeInTheDocument();
+    expect(message()).toHaveValue('cut this');
+    // Keep only's words are a label, not something typed: they don't go into the box.
+    act(() => useChat.getState().setDraft(''));
+    await act(() => useChat.getState().send('Keep only these', { keepOnly: [{ start: 0, end: S }], baseRevision: 1 }));
+    expect(message()).toHaveValue('');
+  });
+
+  it('a refused Undo chip is said aloud', async () => {
+    const undo = titleCard();
+    chat({
+      reply: (r) => reply(r.id, 'Added the title.', { applied: { change: changed(4, undo), undo } }),
+      undoLast: () => {
+        throw new Error('The video changed.', { cause: code('project.moved') });
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add a title{Enter}');
+    await screen.findByText('Added the title.');
+    await userEvent.click(screen.getByRole('button', { name: 'Undo add the title Step 3' }));
+    const live = document.querySelector('[data-chat-notices]');
+    await waitFor(() => expect(live).toHaveTextContent('This change can’t be undone from chat any more.'));
+  });
+
+  it('a reply that lands after New chat still brings its change to the timeline', async () => {
+    const undo = code('chat.setCaptions', { on: 'on' });
+    let answer: (o: ChatOutcome) => void = () => undefined;
+    chat({ reply: () => new Promise<ChatOutcome>((done) => (answer = done)) });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'add captions{Enter}');
+    act(() => useChat.getState().newChat());
+    await act(async () => answer(reply('m', 'Captions are on.', { applied: { change: changed(4, undo), undo } })));
+    // Rust made the change: the timeline has it, though the conversation it belonged to is gone.
+    await waitFor(() => expect(useProject.getState().snapshot!.history.revision).toBe(4));
+    expect(screen.queryByText('Captions are on.')).toBeNull();
+  });
+
+  it('the Undo chip names the change chat made', async () => {
+    const undo = code('chat.andMore', { first: code('chat.setFormat', { format: 'portrait', others: 'kept' }), more: 1 });
+    chat({ reply: (r) => reply(r.id, 'Done.', { applied: { change: changed(4, undo), undo } }) });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'vertical with karaoke captions{Enter}');
+    expect(await screen.findByRole('button', { name: 'Undo make it vertical, and 1 more' })).toBeInTheDocument();
+  });
+
+  it('Apply waits behind a change still on its way, and is no undo step; the chip’s undo is one', async () => {
+    const title = code('chat.removeFillers');
+    const fake = chat({
+      reply: (r) => reply(r.id, 'I found 3.', { proposal: cuts() }),
+      apply: () => ({ change: changed(4, title), undo: title }),
+      undoLast: (revision) => changed(revision + 1, null, { canRedo: true, redoLabel: 'chat.removeFillers' }),
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'cut the pauses{Enter}');
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    const steps = historySteps();
+    const end = beginCommit();
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fake.applied).toEqual([]);
+    act(() => end());
+    await waitFor(() => expect(fake.applied).toEqual(['p1']));
+    await waitFor(() => expect(useProject.getState().snapshot!.history.revision).toBe(4));
+    expect(historySteps()).toBe(steps);
+    // Its Undo chip is a real undo.
+    await userEvent.click(await screen.findByRole('button', { name: 'Undo cut the filler words' }));
+    await waitFor(() => expect(fake.undone).toEqual([4]));
+    expect(historySteps()).toBe(steps + 1);
+  });
+
+  it('an Apply that lands after New chat still brings its change to the timeline', async () => {
+    const title = code('chat.removeFillers');
+    let land: () => void = () => undefined;
+    chat({
+      reply: (r) => reply(r.id, 'I found 3.', { proposal: cuts() }),
+      apply: async () => {
+        await new Promise<void>((done) => (land = done));
+        return { change: changed(4, title), undo: title };
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'cut the pauses{Enter}');
+    await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    act(() => useChat.getState().newChat());
+    act(() => land());
+    await waitFor(() => expect(useProject.getState().snapshot!.history.revision).toBe(4));
   });
 });
