@@ -183,14 +183,19 @@ describe('the dialog and its choices', () => {
   it('no_open_app_says_so', async () => {
     const dialog = await openOn();
     await userEvent.click(screen.getByRole('radio', { name: 'One app' }));
-    expect(dialog).toHaveTextContent('No apps with windows are open.');
+    // The list is read as Record opens: the way to a new app is to open it again.
+    expect(dialog).toHaveTextContent('No apps with windows are open. Open the app, then open Record again.');
     expect(recordButton()).toHaveAccessibleDescription('Choose an app first');
   });
 
   it('no_screen_listed_keeps_record_off', async () => {
-    await openOn(recorderSetup({ displays: [] }));
+    const dialog = await openOn(recorderSetup({ displays: [] }));
+    const none = 'Klipolo found no screen to record. Close Record and open it again.';
+    expect(dialog).toHaveTextContent(none);
+    // There is nothing to choose: nothing says to.
+    expect(dialog).not.toHaveTextContent('Choose a screen');
     expect(recordButton()).toHaveAttribute('aria-disabled', 'true');
-    expect(recordButton()).toHaveAccessibleDescription('Choose a screen to record.');
+    expect(recordButton()).toHaveAccessibleDescription(none);
     await userEvent.click(recordButton());
     expect(fake.calls).toEqual(['setup']);
   });
@@ -279,7 +284,9 @@ describe('the dialog and its choices', () => {
   });
 
   it('the_camera_s_note_at_the_take_s_quality_shows_while_a_camera_is_chosen', async () => {
-    const note = "This computer can't record your camera at the same time as the screen.";
+    // What happens then, by the choice's own name.
+    const note =
+      "This computer can't record your camera at the same time as the screen. Klipolo records the screen alone, as with No camera.";
     const base = recorderSetup({ cameras: [device('FaceTime HD Camera')] });
     const offer = (over: Partial<PresetOffer>): PresetOffer => ({
       id: 'native60',
@@ -315,6 +322,25 @@ describe('the dialog and its choices', () => {
     expect(dialog).toHaveTextContent(note);
     await choose('Camera: FaceTime HD Camera', 'No camera');
     expect(dialog).not.toHaveTextContent(note);
+  });
+
+  it('a_mic_klipolo_chose_instead_says_so_in_klipolo_s_voice', async () => {
+    const dialog = await openOn(
+      recorderSetup({
+        mics: [device('MacBook Pro Microphone')],
+        notes: [
+          { code: 'capture.preflight.micMissing', params: { fallback: 'MacBook Pro Microphone' } },
+          { code: 'capture.preflight.bluetoothMic', params: { fallback: 'MacBook Pro Microphone' } },
+        ],
+      }),
+    );
+    expect(dialog).toHaveTextContent(
+      "The microphone you chose isn't connected, so Klipolo picked MacBook Pro Microphone.",
+    );
+    expect(dialog).toHaveTextContent(
+      "Your headphones' microphone lowers the sound quality while recording, so Klipolo picked MacBook Pro Microphone.",
+    );
+    expect(dialog.textContent).not.toMatch(/\bwe\b/i);
   });
 
   it('focus_is_trapped_and_returns_to_the_trigger', async () => {

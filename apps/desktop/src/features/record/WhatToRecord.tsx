@@ -3,6 +3,7 @@ import type { RecorderSetup } from '../../bindings/RecorderSetup';
 import { Segmented } from '../../design/Segmented';
 import type { Picks } from '../../lib/recorder/choices';
 import { useRecorder } from '../../state/recorder';
+import { NO_SCREEN } from './notes';
 import { ThumbCard } from './ThumbCard';
 
 /** The cards' group: a press on Record with nothing chosen puts the keyboard on it. */
@@ -38,13 +39,14 @@ export function WhatToRecord({ setup }: { setup: RecorderSetup }) {
   const cards = cardsOf(setup, picks);
   const chosen = screens ? picks.display : picks.appId;
   const choose = (value: string) => pick(screens ? { display: value } : { appId: value });
+  // The lists are read as Record opens: a screen or an app that comes later needs a new opening.
   const caption =
     chosen !== null
       ? null
       : screens
-        ? 'Choose a screen to record.'
+        ? NO_SCREEN
         : cards.length === 0
-          ? 'No apps with windows are open.'
+          ? 'No apps with windows are open. Open the app, then open Record again.'
           : 'Choose an app';
   const stop = cards.some((c) => c.value === chosen) ? chosen : (cards[0]?.value ?? null);
 

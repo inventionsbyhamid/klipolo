@@ -67,6 +67,9 @@ export function cameraNote(setup: RecorderSetup, picks: Picks): CodedError | nul
   return offer ? offer.cameraNote : fit.choices.cameraNote;
 }
 
+/** The setup lists no screen: there is nothing to choose, and a new reading may find one. */
+export const NO_SCREEN = 'Klipolo found no screen to record. Close Record and open it again.';
+
 /** Why Record can't start yet, as the dialog says it; null when it can. */
 export type NotReady =
   /** A take runs: it stops from the recorder's own item. */
@@ -87,7 +90,7 @@ export function notReady(setup: RecorderSetup, picks: Picks, screenRefused: bool
   if (block) return { why: 'note', text: codedMessage(block) };
   if (!setup.caps.osSupported) return { why: 'note', text: codedMessage(coded('capture.error.unsupported')) };
   if (screenStep(setup, picks, screenRefused)) return { why: 'screen', text: 'Allow screen recording first' };
-  if (picks.display === null) return { why: 'choose', text: 'Choose a screen to record.' };
+  if (picks.display === null) return { why: 'choose', text: NO_SCREEN };
   if (picks.kind === 'app' && picks.appId === null) return { why: 'choose', text: 'Choose an app first' };
   return null;
 }
