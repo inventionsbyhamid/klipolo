@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 use image::{ExtendedColorType, ImageEncoder};
 use klipolo_engine::render::image_load::decode_rgba;
-use klipolo_model::coded::Said;
+use klipolo_model::coded::{CodedError, Said};
 use klipolo_model::history::SnapshotPatch;
 use klipolo_model::media::music::{MusicOpts, add_music_ops};
 use klipolo_model::media::place::{Onto, place_ops};
@@ -21,7 +21,7 @@ use klipolo_model::params::ParamValue;
 use klipolo_model::project::{Asset, AssetKind, Project};
 use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::TrackKind;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 use ts_rs::TS;
 
@@ -192,9 +192,28 @@ pub fn media_add_sound(
     )
 }
 
+/// A file let go on the timeline that came into the project without a layer, and why.
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct UnplacedFile {
+    pub name: String,
+    pub reason: CodedError,
+}
+
+/// What `media_place` did: the change, and the files that got no layer.
+#[derive(Clone, Debug, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PlaceAnswer {
+    pub patch: SnapshotPatch,
+    pub unplaced: Vec<UnplacedFile>,
+}
+
 /// Sounds and pictures let go on the timeline at `at_us` (one from the library, or several from Finder): each as the
 /// "+" places it, one after another, on the track `onto` names when it takes them (`place_ops`). One undo step, named
-/// for what it adds: a sound, a picture, or files.
+/// for what it adds: a sound, a picture, or files. A file that gets no layer still comes in, and is named with why;
+/// when none gets one, the first file's reason refuses it.
 #[tauri::command(async)]
 pub fn media_place(
     state: State<'_, ProjectSessionState>,
@@ -203,9 +222,10 @@ pub fn media_place(
     onto: DropOnto,
     base_revision: Option<u64>,
     project_id: Option<String>,
-) -> Result<SnapshotPatch, Said> {
+) -> Result<PlaceAnswer, Said> {
     let pack = state.pack();
-    build_named_and_apply(&state, project_id.as_deref(), base_revision, |project| {
+    let mut unplaced = Vec::new();
+    let patch = build_named_and_apply(&state, project_id.as_deref(), base_revision, |project| {
         let assets = sources
             .iter()
             .map(|source| resolve(project, &pack, source))
@@ -215,10 +235,19 @@ pub fn media_place(
             [_] => "media.image.add",
             _ => "media.import",
         };
-        let ops = place_ops(project, &assets, at_us.max(0), &onto.onto()).map_err(coded)?;
-        Ok((label.to_owned(), ops))
+        let placed = place_ops(project, &assets, at_us.max(0), &onto.onto()).map_err(coded)?;
+        unplaced = placed
+            .unplaced
+            .into_iter()
+            .map(|(index, error)| UnplacedFile {
+                name: assets[index].name.clone(),
+                reason: error.coded(),
+            })
+            .collect();
+        Ok((label.to_owned(), placed.ops))
     })
-    .map_err(|e| e.said())
+    .map_err(|e| e.said())?;
+    Ok(PlaceAnswer { patch, unplaced })
 }
 
 /// Picture `source` at `at_us`: medium, centred, for 5 s, moving with the clip under it (`add_image_ops`).

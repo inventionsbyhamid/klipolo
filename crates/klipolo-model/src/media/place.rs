@@ -2,7 +2,7 @@
 //! the library's "+" places it ([`sound::add_sound_ops`], [`image::add_image_ops`]), on the track it was let go on when
 //! that track takes it, one after another from the moment it was let go at, as one undo step.
 
-use crate::error::{invalid, Result};
+use crate::error::{invalid, ModelError, Result};
 use crate::ids::{new_id, Id};
 use crate::messages::code;
 use crate::ops::{Op, TrackTarget};
@@ -21,12 +21,21 @@ pub enum Onto {
     New(TrackKind),
 }
 
+/// What `place_ops` makes: the ops, and the files that come into the project without a layer, each with why (by its
+/// index in the files asked for).
+#[derive(Debug)]
+pub struct Placed {
+    pub ops: Vec<Op>,
+    pub unplaced: Vec<(usize, ModelError)>,
+}
+
 /// The ops that place `assets` (sounds and pictures) from `at_us`, one after another: each starts where the one before
 /// it ends. A sound goes where `sound::add_sound_ops` puts it and a picture where `image::add_image_ops` does, attached
 /// to the clip under it; on `onto`'s track when that track takes it (its kind, shown and unlocked, and for a sound
-/// effect holding no music), else wherever there is room. A new track is made once, for the files of its kind. A file with no room left (at or past the video's end)
-/// still comes into the project, without a layer. Refused for a video, and when no file is placed at all (no room).
-pub fn place_ops(p: &Project, assets: &[Asset], at_us: Us, onto: &Onto) -> Result<Vec<Op>> {
+/// effect holding no music), else wherever there is room. A new track is made once, for the files of its kind. A file
+/// that can't be placed (no sound, or no room left at or past the video's end) still comes into the project, without a
+/// layer, and is named in `unplaced`. Refused for a video, and with the first file's reason when none is placed.
+pub fn place_ops(p: &Project, assets: &[Asset], at_us: Us, onto: &Onto) -> Result<Placed> {
     if assets.iter().any(|a| a.kind == AssetKind::Video) {
         return Err(invalid(code!("model.image.notImage")));
     }
@@ -50,7 +59,8 @@ pub fn place_ops(p: &Project, assets: &[Asset], at_us: Us, onto: &Onto) -> Resul
     };
     let mut at = at_us;
     let mut placed = 0;
-    for asset in assets {
+    let mut unplaced = Vec::new();
+    for (index, asset) in assets.iter().enumerate() {
         let kind = if asset.kind == AssetKind::Audio {
             TrackKind::Audio
         } else {
@@ -60,8 +70,12 @@ pub fn place_ops(p: &Project, assets: &[Asset], at_us: Us, onto: &Onto) -> Resul
             AssetKind::Audio => sound::add_sound_ops(&now, asset, at),
             _ => image::add_image_ops(&now, asset, at),
         };
-        let Ok(mut built) = built else {
-            continue;
+        let mut built = match built {
+            Ok(built) => built,
+            Err(error) => {
+                unplaced.push((index, error));
+                continue;
+            }
         };
         if onto == &Onto::New(kind) && track.is_none() {
             let id = new_id();
@@ -101,7 +115,10 @@ pub fn place_ops(p: &Project, assets: &[Asset], at_us: Us, onto: &Onto) -> Resul
         ops.extend(built);
     }
     if placed == 0 {
-        return Err(invalid(code!("model.sound.noRoom")));
+        return Err(unplaced
+            .into_iter()
+            .next()
+            .map_or_else(|| invalid(code!("model.sound.noRoom")), |(_, error)| error));
     }
-    Ok(ops)
+    Ok(Placed { ops, unplaced })
 }

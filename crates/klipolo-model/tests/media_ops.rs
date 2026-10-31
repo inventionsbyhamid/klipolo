@@ -461,7 +461,9 @@ fn dropped_sounds_go_one_after_another_and_follow_cuts() {
         duration_us: secs(0.4),
         ..whoosh()
     };
-    let ops = place_ops(&p, &[whoosh(), pop], secs(5.0), &Onto::Track("sfx".into())).unwrap();
+    let placed = place_ops(&p, &[whoosh(), pop], secs(5.0), &Onto::Track("sfx".into())).unwrap();
+    assert!(placed.unplaced.is_empty());
+    let ops = placed.ops;
     let p = apply_ops(&p, &ops).unwrap();
     let on: Vec<(&str, i64)> = p.timeline.tracks[0]
         .items
@@ -508,7 +510,8 @@ fn a_drop_makes_one_new_track_and_keeps_each_kind_on_its_own() {
         secs(2.0),
         &Onto::New(TrackKind::Audio),
     )
-    .unwrap();
+    .unwrap()
+    .ops;
     let new_tracks = ops
         .iter()
         .filter(|op| matches!(op, Op::AddTrack { .. }))
@@ -540,6 +543,42 @@ fn a_drop_makes_one_new_track_and_keeps_each_kind_on_its_own() {
     };
     let e = place_ops(&p, &[late], end, &Onto::Auto).unwrap_err();
     assert_eq!(e.coded().code, "model.sound.noRoom");
+}
+
+/// Files that get no layer come into the project all the same and are named, with why; when none gets one, the drop is
+/// refused with the first file's own reason (a file with no sound says so, not "no room").
+#[test]
+fn a_drop_names_the_files_that_got_no_layer_and_refuses_with_the_first_reason() {
+    use klipolo_model::media::place::{place_ops, Onto};
+    let p = fixture();
+    let end = video_duration(&p.timeline);
+    // The first fits before the end; the second would start at the end.
+    let long = Asset {
+        id: "long".into(),
+        duration_us: secs(2.0),
+        ..whoosh()
+    };
+    let late = Asset {
+        id: "late".into(),
+        ..whoosh()
+    };
+    let placed = place_ops(&p, &[long, late], end - secs(2.0), &Onto::Auto).unwrap();
+    assert_eq!(placed.unplaced.len(), 1);
+    assert_eq!(placed.unplaced[0].0, 1);
+    assert_eq!(placed.unplaced[0].1.coded().code, "model.sound.noRoom");
+    let after = apply_ops(&p, &placed.ops).unwrap();
+    assert!(
+        after.asset("late").is_some(),
+        "in the project without a layer"
+    );
+    // Nothing placed: the first file's reason.
+    let silent = Asset {
+        id: "silent".into(),
+        has_audio: false,
+        ..whoosh()
+    };
+    let e = place_ops(&p, &[silent], secs(1.0), &Onto::Auto).unwrap_err();
+    assert_eq!(e.coded().code, "model.sound.noSound");
 }
 
 /// A sound let go on a track that holds music goes on a sound track instead, and so does one that would overflow its
@@ -575,7 +614,7 @@ fn a_dropped_sound_never_lands_on_a_track_that_holds_music() {
         &Onto::Track(music_track.clone()),
     )
     .unwrap();
-    let p2 = apply_ops(&p, &placed).unwrap();
+    let p2 = apply_ops(&p, &placed.ops).unwrap();
     let on = |p: &Project, asset: &str| {
         p.timeline
             .tracks
@@ -595,13 +634,13 @@ fn a_dropped_sound_never_lands_on_a_track_that_holds_music() {
     sfx.id = "sfx".into();
     q.timeline.tracks.insert(0, sfx);
     let first = place_ops(&q, &[whoosh()], secs(2.0), &Onto::Track("sfx".into())).unwrap();
-    let q = apply_ops(&q, &first).unwrap();
+    let q = apply_ops(&q, &first.ops).unwrap();
     let pop = Asset {
         id: "pop".into(),
         ..whoosh()
     };
     let second = place_ops(&q, &[pop], secs(2.0), &Onto::Track("sfx".into())).unwrap();
-    let q = apply_ops(&q, &second).unwrap();
+    let q = apply_ops(&q, &second.ops).unwrap();
     let landed = on(&q, "pop");
     assert_ne!(landed.id, music_track);
     assert!(!landed.items.iter().any(is_music));
