@@ -1,8 +1,11 @@
+import { Channel } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { ArmedTake } from '../bindings/ArmedTake';
 import type { ArmOptions } from '../bindings/ArmOptions';
 import type { CaptureCommand } from '../bindings/CaptureCommand';
 import type { CodedError } from '../bindings/CodedError';
+import type { PreviewKind } from '../bindings/PreviewKind';
+import type { Previews } from '../bindings/Previews';
 import type { PrivacyPage } from '../bindings/PrivacyPage';
 import type { RecorderEvent } from '../bindings/RecorderEvent';
 import type { RecorderSetup } from '../bindings/RecorderSetup';
@@ -58,6 +61,22 @@ export interface RecorderBridge {
   reopen(): Promise<void>;
   /** "Open privacy settings": the Screen Recording, camera or microphone page. It only opens the page. */
   openPrivacy(page: PrivacyPage): Promise<void>;
+  /**
+   * The Record dialog's previews, as `want` says (`recorder_previews`): the app starts and stops them to match, within
+   * the consent rules (the screen's pictures only with Screen Recording allowed; the camera and the mic only when
+   * allowed, or on the person's own Allow press, `want.ask`). Each picture comes to `onFrame` as the channel's raw
+   * message (`previewFrame`); the mic's level and why a preview stopped come as `recorder-event`s of a `PreviewId`.
+   * Refused with `capture.permission.screen` (the camera and the mic were still set), `capture.busy` while a take is
+   * the app's, and `capture.error.testRun` in a test run. While Klipolo is behind it starts nothing and resolves.
+   */
+  previews(want: Previews, onFrame: (message: ArrayBuffer) => void): Promise<void>;
+  /** Every preview stops (`recorder_previews_off`). */
+  previewsOff(): Promise<void>;
+  /**
+   * A frame of `kind` reached the page (`recorder_preview_ack`): the app sends a kind's next frames only while at
+   * most two are unanswered, so a slow page never piles them up.
+   */
+  previewAck(kind: PreviewKind): Promise<void>;
   /** Every take's events (`recorder-event`), each with its take's id, until the returned function is called. */
   onEvent(handler: (event: RecorderEvent) => void): Promise<UnlistenFn>;
   /** Every take that went into a project (`recorder-imported`), until the returned function is called. */
@@ -73,6 +92,9 @@ export const tauriRecorder: RecorderBridge = {
   allowScreen: () => call<void>('recorder_allow_screen'),
   reopen: () => call<void>('recorder_reopen'),
   openPrivacy: (page) => call<void>('recorder_open_privacy', { page }),
+  previews: (want, onFrame) => call<void>('recorder_previews', { want, frames: new Channel<ArrayBuffer>(onFrame) }),
+  previewsOff: () => call<void>('recorder_previews_off'),
+  previewAck: (kind) => call<void>('recorder_preview_ack', { kind }),
   onEvent: (handler) => listen<RecorderEvent>('recorder-event', (event) => handler(event.payload)),
   onImported: (handler) => listen<TakeImport>('recorder-imported', (event) => handler(event.payload)),
 };
@@ -88,6 +110,9 @@ export const recorder: RecorderBridge = {
   allowScreen: () => current.allowScreen(),
   reopen: () => current.reopen(),
   openPrivacy: (page) => current.openPrivacy(page),
+  previews: (want, onFrame) => current.previews(want, onFrame),
+  previewsOff: () => current.previewsOff(),
+  previewAck: (kind) => current.previewAck(kind),
   onEvent: (handler) => current.onEvent(handler),
   onImported: (handler) => current.onImported(handler),
 };

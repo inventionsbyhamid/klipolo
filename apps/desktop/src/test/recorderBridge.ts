@@ -7,6 +7,8 @@ import type { CodedError } from '../bindings/CodedError';
 import type { DeviceInfo } from '../bindings/DeviceInfo';
 import type { DisplayInfo } from '../bindings/DisplayInfo';
 import type { Permissions } from '../bindings/Permissions';
+import type { PreviewKind } from '../bindings/PreviewKind';
+import type { Previews } from '../bindings/Previews';
 import type { RecorderEvent } from '../bindings/RecorderEvent';
 import type { RecorderSetup } from '../bindings/RecorderSetup';
 import type { Snapshot } from '../bindings/Snapshot';
@@ -116,6 +118,8 @@ export interface FakeRecorderScript {
   allowScreen?: () => Answer<void> | undefined;
   reopen?: () => Answer<void> | undefined;
   openPrivacy?: () => Answer<void> | undefined;
+  /** The previews, as wanted: run by default. */
+  previews?: (want: Previews) => Answer<void> | undefined;
   /**
    * A take that is cancelled or disarmed ends with its `state: idle` right after, as the app says once its worker has
    * gone (true by default). False: the test says it (`emit`).
@@ -132,6 +136,14 @@ export type FakeRecorder = RecorderBridge & {
   armed: ArmOptions[];
   /** Every command sent, with its take. */
   sent: { take: string; command: CaptureCommand }[];
+  /** Every previews call in order: what was wanted, or `off`. */
+  previewed: (Previews | 'off')[];
+  /** Each frame said drawn, by its kind, in order. */
+  acks: PreviewKind[];
+  /** Every call in order, the previews' with the rest (`previews`, `previewsOff`; acks aside). */
+  log: string[];
+  /** Where the app sends preview frames: the latest previews call's channel; null before the first. */
+  frames: ((message: ArrayBuffer) => void) | null;
   /** Take `take`'s worker (or the app about it) says `event`. */
   emit: (take: string, event: CaptureEvent) => void;
   /** A take went into a project. */
@@ -153,44 +165,68 @@ export function fakeRecorder(script: FakeRecorderScript = {}): FakeRecorder {
     handlers.add(handler);
     return Promise.resolve(() => void handlers.delete(handler));
   };
+  /** A call, in both lists. */
+  const record = (call: string) => {
+    fake.calls.push(call);
+    fake.log.push(call);
+  };
   const fake: FakeRecorder = {
     script,
     calls: [],
     armed: [],
     sent: [],
+    previewed: [],
+    acks: [],
+    log: [],
+    frames: null,
     setup: () => {
-      fake.calls.push('setup');
+      record('setup');
       return answer(fake.script.setup?.(), () => recorderSetup());
     },
     arm: (options) => {
-      fake.calls.push('arm');
+      record('arm');
       fake.armed.push(options);
       takes += 1;
       const id = `take-${takes}`;
       return answer(fake.script.arm?.(options), () => ({ id, countdownS: 3 }));
     },
     send: async (take, command) => {
-      fake.calls.push(`send:${command.cmd}`);
+      record(`send:${command.cmd}`);
       fake.sent.push({ take, command });
       await answer(fake.script.send?.(take, command), () => undefined);
       if ((command.cmd === 'cancel' || command.cmd === 'disarm') && fake.script.idle !== false)
         queueMicrotask(() => fake.emit(take, { ev: 'state', state: 'idle', elapsedUs: 0 }));
     },
     stopRunning: () => {
-      fake.calls.push('stopRunning');
+      record('stopRunning');
       return answer(fake.script.stopRunning?.(), () => null);
     },
     allowScreen: () => {
-      fake.calls.push('allowScreen');
+      record('allowScreen');
       return answer(fake.script.allowScreen?.(), () => undefined);
     },
     reopen: () => {
-      fake.calls.push('reopen');
+      record('reopen');
       return answer(fake.script.reopen?.(), () => undefined);
     },
     openPrivacy: (page) => {
-      fake.calls.push(`openPrivacy:${page}`);
+      record(`openPrivacy:${page}`);
       return answer(fake.script.openPrivacy?.(), () => undefined);
+    },
+    previews: (want, onFrame) => {
+      fake.log.push('previews');
+      fake.previewed.push(want);
+      fake.frames = onFrame;
+      return answer(fake.script.previews?.(want), () => undefined);
+    },
+    previewsOff: () => {
+      fake.log.push('previewsOff');
+      fake.previewed.push('off');
+      return Promise.resolve();
+    },
+    previewAck: (kind) => {
+      fake.acks.push(kind);
+      return Promise.resolve();
     },
     onEvent: (handler) => listen(events, handler),
     onImported: (handler) => listen(landings, handler),

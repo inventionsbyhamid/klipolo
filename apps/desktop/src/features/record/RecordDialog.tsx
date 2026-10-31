@@ -1,4 +1,5 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import type { Previews } from '../../bindings/Previews';
 import type { RecorderSetup } from '../../bindings/RecorderSetup';
 import { codedMessage } from '../../bridge/call';
 import { Button } from '../../design/Button';
@@ -8,6 +9,7 @@ import { Icon } from '../../layout/Icon';
 import { deviceDenied, screenStep } from '../../lib/recorder/permission';
 import { phaseOf, type RecorderPhase } from '../../lib/recorder/phase';
 import { useRecorder } from '../../state/recorder';
+import { previewsFor, startPreviews, stopPreviews, useRecorderPreviews } from '../../state/recorderPreviews';
 import { DeviceSelect } from './DeviceSelect';
 import { RecordIcon } from './icons';
 import { Countdown, CountdownNumber, startsIn } from './Countdown';
@@ -36,6 +38,51 @@ export function RecordDialog() {
   return open && phase !== 'recording' && phase !== 'saving' ? <Dialog phase={phase} /> : null;
 }
 
+/** Klipolo's window is in front: focused and shown. It starts so, as the dialog opens from a press in it. */
+function useInFront(): boolean {
+  const [front, setFront] = useState(() => document.visibilityState !== 'hidden');
+  useEffect(() => {
+    let focused = true;
+    const update = () => setFront(focused && document.visibilityState !== 'hidden');
+    const blur = () => {
+      focused = false;
+      update();
+    };
+    const focus = () => {
+      focused = true;
+      update();
+    };
+    window.addEventListener('blur', blur);
+    window.addEventListener('focus', focus);
+    document.addEventListener('visibilitychange', update);
+    return () => {
+      window.removeEventListener('blur', blur);
+      window.removeEventListener('focus', focus);
+      document.removeEventListener('visibilitychange', update);
+    };
+  }, []);
+  return front;
+}
+
+/**
+ * The previews run while the choices show and Klipolo is in front: on opening, on every change of choice,
+ * and back in front, as the app starts nothing again by itself. They stop on Record (the store stops them first),
+ * when Klipolo goes behind or is hidden, and when the dialog goes.
+ */
+function usePreviews(phase: RecorderPhase) {
+  const front = useInFront();
+  const shotsRefused = useRecorderPreviews((s) => s.screenRefused);
+  const want = useRecorder((s) =>
+    JSON.stringify(phase === 'choosing' ? previewsFor(s.setup, s.picks, s.screenRefused || shotsRefused) : null),
+  );
+  useEffect(() => {
+    const wanted = JSON.parse(want) as Previews | null;
+    if (front && wanted !== null) startPreviews(wanted);
+    else stopPreviews();
+  }, [front, want]);
+  useEffect(() => () => stopPreviews(), []);
+}
+
 /** Esc: cancels a take on its way, else closes. */
 function onEscape() {
   const s = useRecorder.getState();
@@ -53,6 +100,7 @@ function Dialog({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving
   /** What the countdown announced: its first number, once per countdown. */
   const [announced, setAnnounced] = useState('');
   const was = useRef(phase);
+  usePreviews(phase);
 
   useEffect(() => {
     const dialog = root.current;

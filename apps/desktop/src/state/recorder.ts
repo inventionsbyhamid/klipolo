@@ -8,6 +8,7 @@ import { defaultPicks, NO_PICKS, type Picks } from '../lib/recorder/choices';
 import { clipStarts } from '../lib/timeline';
 import { usePlayback } from './playback';
 import { useProject } from './project';
+import { forgetPreviews, hearPreview, resetPreviews } from './recorderPreviews';
 import { NO_ERROR, NO_TAKE, refused, takeSlice, type ErrorFrom, type TakeSlice } from './recorderTake';
 import { useSelection } from './selection';
 
@@ -61,8 +62,8 @@ export interface RecorderStore extends RecorderState {
    */
   openRecorder: () => Promise<void>;
   /**
-   * Closes the dialog. From the press through the countdown the take is cancelled first; while it records, it is
-   * stopped and saved, and followed to its end.
+   * Closes the dialog and stops its previews. From the press through the countdown the take is cancelled first; while
+   * it records, it is stopped and saved, and followed to its end.
    */
   close: () => void;
   pick: (p: Partial<Picks>) => void;
@@ -164,6 +165,7 @@ export const useRecorder = create<RecorderStore>((set, get) => {
 
     close: () => {
       if (!get().open) return;
+      forgetPreviews();
       takePart.closing();
       opening++;
       set(CLOSED);
@@ -195,13 +197,13 @@ export const useRecorder = create<RecorderStore>((set, get) => {
 });
 
 /**
- * Follows the recorder once for the whole run: every take's events (only the dialog's take is heard) and every take
- * that lands. Resolves with the function that stops following.
+ * Follows the recorder once for the whole run: the Record dialog's previews' events, every take's events (only the
+ * dialog's take is heard) and every take that lands. Resolves with the function that stops following.
  */
 export function followRecorder(): Promise<UnlistenFn> {
   if (following) return following;
   const mine: Promise<UnlistenFn> = Promise.all([
-    recorder.onEvent((event) => takePart.hear(event)),
+    recorder.onEvent((event) => void (hearPreview(event) || takePart.hear(event))),
     recorder.onImported((landed) => void onImported(landed)),
   ]).then(
     ([offEvents, offImported]) =>
@@ -222,6 +224,7 @@ export function followRecorder(): Promise<UnlistenFn> {
 /** Back to as it was at launch: closed, no take, nothing followed, asked or waited for (tests). */
 export function forgetRecorder() {
   takePart.forget();
+  resetPreviews();
   opening++;
   reading = null;
   asking = false;

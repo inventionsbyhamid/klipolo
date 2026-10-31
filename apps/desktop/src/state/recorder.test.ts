@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ArmedTake } from '../bindings/ArmedTake';
 import type { ArmOptions } from '../bindings/ArmOptions';
 import type { CaptureEvent } from '../bindings/CaptureEvent';
+import type { Previews } from '../bindings/Previews';
 import type { Snapshot } from '../bindings/Snapshot';
 import type { WorkerState } from '../bindings/WorkerState';
 import { tauriRecorder } from '../bridge/recorder';
@@ -735,6 +736,10 @@ describe('the bridge', () => {
     await tauriRecorder.allowScreen();
     await tauriRecorder.reopen();
     await tauriRecorder.openPrivacy('camera');
+    const want: Previews = { thumbs: true, live: null, camera: 'cam', mic: null, ask: 'camera' };
+    await tauriRecorder.previews(want, () => undefined);
+    await tauriRecorder.previewAck('live');
+    await tauriRecorder.previewsOff();
     expect(calls.map(([cmd]) => cmd)).toEqual([
       'recorder_setup',
       'recorder_arm',
@@ -743,10 +748,16 @@ describe('the bridge', () => {
       'recorder_allow_screen',
       'recorder_reopen',
       'recorder_open_privacy',
+      'recorder_previews',
+      'recorder_preview_ack',
+      'recorder_previews_off',
     ]);
     expect(calls[1][1]).toEqual({ options });
     expect(calls[2][1]).toEqual({ take: 'take-1', command: { cmd: 'start' } });
     expect(calls[6][1]).toEqual({ page: 'camera' });
+    // The frames come over a channel of their own, given with the wish.
+    expect(calls[7][1]).toMatchObject({ want, frames: expect.objectContaining({ id: expect.any(Number) }) });
+    expect(calls[8][1]).toEqual({ kind: 'live' });
   });
 
   it('the_bridge_hears_the_recorder_and_the_landing', async () => {

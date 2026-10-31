@@ -11,6 +11,7 @@ import { armOptions } from '../lib/recorder/choices';
 import { screenStep } from '../lib/recorder/permission';
 import { phaseOf } from '../lib/recorder/phase';
 import type { RecorderState, RecorderStore } from './recorder';
+import { stopPreviews } from './recorderPreviews';
 import { toast } from './toasts';
 
 type Set = StoreApi<RecorderStore>['setState'];
@@ -291,6 +292,8 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
     if (screenStep(s.setup, s.picks, s.screenRefused)) return;
     const options = armOptions(s.picks);
     if (options === null) return;
+    // The take's worker owns the screen, the camera and the mic from here: the dialog's previews let them go.
+    stopPreviews();
     // A take whose worker said it failed hasn't gone yet: Record waits for it, as for any take let go.
     if (s.take !== null) leave(s.take);
     presses += 1;
