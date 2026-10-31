@@ -187,4 +187,19 @@ describe('the analysis banner', () => {
     rerender(<RoughCaptionsNote />);
     expect(screen.getByText('Rough captions until words are timed')).toBeInTheDocument();
   });
+
+  it('says why a Retry of a failed clip was refused', async () => {
+    bridge.estimate.mockResolvedValue(offer({ clips: [] }));
+    showProject(CLIPS);
+    useAnalysis.setState({
+      states: { a: { state: 'failed', reason: 'Meta is busy right now. Try again in a moment.' } },
+    });
+    const refusal =
+      'Your access code has $0.00 left, and this needs about $0.04. Trim the clips first, or add your own Meta key in ' +
+      'Settings.';
+    bridge.start.mockRejectedValueOnce(new Error(refusal));
+    renderWithProviders(<AnalysisBanner />);
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText(refusal)).toBeInTheDocument();
+  });
 });

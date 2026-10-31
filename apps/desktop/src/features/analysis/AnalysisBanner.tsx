@@ -150,6 +150,11 @@ export function AnalysisBanner() {
             Cancel
           </button>
         )}
+        {error && (
+          <p className="analysis-text analysis-error" role="alert">
+            {error}
+          </p>
+        )}
         <div className="analysis-jobs">
           {[...running, ...failed].map((clip) => (
             <JobRow key={clip.id} clip={clip} />
