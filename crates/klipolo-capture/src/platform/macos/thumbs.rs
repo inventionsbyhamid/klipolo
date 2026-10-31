@@ -9,15 +9,17 @@
 //! periodic "continue to allow" confirmation may appear then: macOS's own reminder, not a request Klipolo makes).
 //!
 //! The screenshot comes as a sample buffer, whose BGRA pixel buffer `jpeg` encodes as it does the live view's frames.
-//! Each still reads the content list again, so a window that opened or an app that quit since the last one shows as it
-//! is now. Memory: one BGRA buffer of at most 320 pixels wide (about 400 KB for a 16:10 display), one Core Image context
-//! kept for the worker's life, and one JPEG.
+//! Each still runs inside its own autorelease pool, so the system's objects it makes (the content list, the screenshot,
+//! Core Image's image and its JPEG) are freed with it, on a thread that has no run loop to drain them. Each still reads
+//! the content list again, so a window that opened or an app that quit since the last one shows as it is now. Memory:
+//! one BGRA buffer of at most 320 pixels wide (about 400 KB for a 16:10 display), one Core Image context kept for the
+//! worker's life, and one JPEG.
 
 use std::sync::mpsc::sync_channel;
 use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
-use cidre::{arc, blocks, cg, cm, cv, ns, sc};
+use cidre::{arc, blocks, cg, cm, cv, ns, objc, sc};
 use objc2_core_graphics::CGPreflightScreenCaptureAccess;
 
 use super::filter;
@@ -48,26 +50,28 @@ impl Stills {
         if !CGPreflightScreenCaptureAccess() {
             return Err(PipeError::PermissionDenied);
         }
-        let content = filter::content()?;
-        let picked = filter::pick(&content, target)?;
-        drop(content);
-        let size = still_size(picked.pixels, width);
-        let shot = shoot(&picked.filter, &still_config(size, picked.window))?;
-        let image = shot
-            .image_buf()
-            .ok_or_else(|| PipeError::Os("the still has no picture".into()))?;
-        let mut jpeg = self.jpeg.lock().unwrap_or_else(PoisonError::into_inner);
-        let jpeg = match &mut *jpeg {
-            Some(jpeg) => jpeg,
-            none => none.insert(Jpeg::new()?),
-        };
-        let bytes = jpeg
-            .encode(image)
-            .ok_or_else(|| PipeError::Os("the still's JPEG".into()))?;
-        Ok(PreviewFrame {
-            jpeg: bytes,
-            width: image.width() as u32,
-            height: image.height() as u32,
+        objc::ar_pool(|| {
+            let content = filter::content()?;
+            let picked = filter::pick(&content, target)?;
+            drop(content);
+            let size = still_size(picked.pixels, width);
+            let shot = shoot(&picked.filter, &still_config(size, picked.window))?;
+            let image = shot
+                .image_buf()
+                .ok_or_else(|| PipeError::Os("the still has no picture".into()))?;
+            let mut jpeg = self.jpeg.lock().unwrap_or_else(PoisonError::into_inner);
+            let jpeg = match &mut *jpeg {
+                Some(jpeg) => jpeg,
+                none => none.insert(Jpeg::new()?),
+            };
+            let bytes = jpeg
+                .encode(image)
+                .ok_or_else(|| PipeError::Os("the still's JPEG".into()))?;
+            Ok(PreviewFrame {
+                jpeg: bytes,
+                width: image.width() as u32,
+                height: image.height() as u32,
+            })
         })
     }
 }
