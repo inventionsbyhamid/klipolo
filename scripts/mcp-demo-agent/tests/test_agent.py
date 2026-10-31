@@ -293,9 +293,9 @@ def test_the_prompt_asks_for_format_and_captions_before_the_cut():
 def test_the_reply_prints_with_no_em_or_en_dash(tmp_path):
     # The reply is what the video shows: a dash between words reads as a comma, one in a range as a hyphen.
     said = (
-        "Done — it's vertical with karaoke captions — and the cut waits for your Apply.\n"
-        "I kept 61.2–91.0 s—the best moment – as the teaser, — nothing else.\n"
-        "— Captions are karaoke."
+        "Done \u2014 it's vertical with karaoke captions \u2014 and the cut waits for your Apply.\n"
+        "I kept 61.2\u201391.0 s\u2014the best moment \u2013 as the teaser, \u2014 nothing else.\n"
+        "\u2014 Captions are karaoke."
     )
     meta = Meta(response(message(said)))
     command, _ = klipolo(tmp_path)
@@ -312,7 +312,7 @@ def test_the_reply_prints_with_no_em_or_en_dash(tmp_path):
 
 def test_the_prompt_asks_for_no_em_or_en_dash():
     assert "Never use em or en dashes, in your answer or in text you add." in agent.SYSTEM_PROMPT
-    assert not any(dash in agent.SYSTEM_PROMPT for dash in "–—")
+    assert not any(dash in agent.SYSTEM_PROMPT for dash in "\u2013\u2014")
 
 
 def test_cost_is_priced_from_usage_with_cached_input_at_the_cached_price():
