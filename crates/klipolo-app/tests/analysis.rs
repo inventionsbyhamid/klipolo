@@ -596,6 +596,12 @@ async fn cached_asset_makes_no_network_call() {
     );
     assert_eq!(media.sounds.load(Ordering::SeqCst), 0, "nothing decoded");
     assert_eq!(media.copies.load(Ordering::SeqCst), 0);
+    // Straight to done: nothing to do, so no "Analyzing" on the way.
+    let told = h.events_for("clip-a");
+    assert!(
+        !told.iter().any(|e| matches!(e, AnalysisEvent::Progress(_))),
+        "{told:?}"
+    );
     let speech = h.last_speech();
     assert_eq!(
         speech.transcripts["clip-a"].words,

@@ -591,7 +591,11 @@ impl AnalysisState {
             );
         let mut tasks = Vec::new();
         for (content, meta) in starting {
-            self.progress(&content.key, AnalysisStep::Audio, 0);
+            // Only a content with something to send shows as running: one whose results are all cached goes straight
+            // to done, with no "Analyzing" on the way.
+            if meta.is_some() {
+                self.progress(&content.key, AnalysisStep::Audio, 0);
+            }
             tasks.push(tokio::spawn(self.clone().analyse(
                 content,
                 run.clone(),
