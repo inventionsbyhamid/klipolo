@@ -2,10 +2,12 @@
 
 mod commands;
 mod engine;
+mod english;
 mod log;
 mod mcp;
 mod media;
 mod media_cache;
+mod media_jobs;
 mod pack;
 mod project;
 mod state;
@@ -16,7 +18,7 @@ use std::sync::Arc;
 use klipolo_engine::render::fonts::{self, FontDirs};
 use klipolo_engine::render::mode::RenderMode;
 use klipolo_engine::render::warm::Warmup;
-use tauri::{Emitter, Manager, RunEvent};
+use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 
 use crate::mcp::McpState;
 use crate::project::{ProjectSessionState, SaveStatus};
@@ -29,12 +31,17 @@ fn main() {
     if std::env::args().nth(1).as_deref() == Some("--mcp") {
         std::process::exit(klipolo_mcp::bridge::main());
     }
-    // Export runs out of process in this same binary: no second executable, always the same version. Before Tauri
-    // starts and before any window exists; its log is stderr, which the app forwards into its own.
+    // Export and editing copies run out of process in this same binary: no second executable, always the same
+    // version. Before Tauri starts and before any window exists; their log is stderr, which the app forwards into its
+    // own.
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("--export-worker") {
         log::install_worker();
         std::process::exit(klipolo_engine::export::worker::main(&args[2..]));
+    }
+    if args.get(1).map(String::as_str) == Some("--proxy-worker") {
+        log::install_worker();
+        std::process::exit(klipolo_engine::media::proxy::worker::main(&args[2..]));
     }
     log::install();
     // The engine's fonts, once: the bundled folder in the app's resources (or the repository's in a dev build).
@@ -110,6 +117,34 @@ fn main() {
             app.manage(analysis);
             app.manage(chat);
             app.manage(commands::export::state_at_launch());
+            // Editing copies of the open project's slow files, beside the thumbnails in the media cache. The preview
+            // reads them once made; they wait while an export holds the slot.
+            let proxies = app
+                .state::<EngineState>()
+                .caches()
+                .map_or_else(
+                    || std::env::temp_dir().join("Klipolo"),
+                    |caches| caches.media,
+                )
+                .join("proxies");
+            let handle = app.handle().clone();
+            let copies = media_jobs::MediaJobs::new(
+                proxies,
+                media_jobs::launcher(),
+                Arc::new(move |list| {
+                    let _ = handle.emit("media-jobs", list);
+                }),
+            );
+            copies.start();
+            copies.watch(app.state::<ProjectSessionState>().subscribe());
+            let exporting = copies.clone();
+            app.state::<klipolo_app::export::ExportState>()
+                .on_busy(Arc::new(move |busy| exporting.set_exporting(busy)));
+            // Analysis is the person's own action: copies wait while it decodes a clip on this Mac.
+            let analyzing = copies.clone();
+            app.state::<commands::analysis::AnalysisHandle>()
+                .on_decoding(move |on| analyzing.set_analyzing(on));
+            app.manage(copies);
             commands::export::guard_menu_quit(app)?;
             Ok(())
         })
@@ -178,19 +213,38 @@ fn main() {
             commands::export::export_open,
             commands::export::export_files,
             commands::export::export_pick_folder,
+            media_jobs::commands::media_jobs_list,
+            media_jobs::commands::media_jobs_pause,
+            media_jobs::commands::media_jobs_resume,
+            media_jobs::commands::media_job_stop,
+            media_jobs::commands::media_job_retry,
+            media_jobs::commands::media_jobs_set_auto,
         ])
         .build(tauri::generate_context!())
         .expect("Klipolo could not start");
     app.run(|app, event| {
         // Quitting while an export runs asks first.
         commands::export::guard_quit(app, &event);
-        if let RunEvent::Exit = event {
-            // Other apps' access ends with the app: the server stops and its connection file goes.
-            if let Some(mcp) = app.try_state::<McpState>() {
-                mcp.stop();
+        match event {
+            RunEvent::Exit => {
+                // Other apps' access ends with the app: the server stops and its connection file goes.
+                if let Some(mcp) = app.try_state::<McpState>() {
+                    mcp.stop();
+                }
+                // Every edit is on the disk, then a running export stops, before the app goes. An editing copy being
+                // made keeps its finished segments: its worker sees the app go and is made on at the next launch.
+                commands::export::on_exit(app);
             }
-            // Every edit is on the disk, then a running export stops, before the app goes.
-            commands::export::on_exit(app);
+            // Back in front: a source exported again elsewhere meanwhile must not keep showing its old editing copy.
+            RunEvent::WindowEvent {
+                event: WindowEvent::Focused(true),
+                ..
+            } => {
+                if let Some(copies) = app.try_state::<media_jobs::MediaJobs>() {
+                    copies.recheck();
+                }
+            }
+            _ => {}
         }
     });
 }

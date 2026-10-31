@@ -633,11 +633,16 @@ impl AnalysisState {
         let _turn = self.local.acquire().await.map_err(|_| stopped())?;
         let media = self.media.clone();
         let (tx, rx) = tokio::sync::oneshot::channel();
+        // What waits for analysis (editing copies) hears the decode start now and end with the work itself, before its
+        // answer goes back, even when the pipeline stopped waiting for it.
+        let decoding = self.decoding.begin();
         std::thread::Builder::new()
             .name("klipolo-analysis".into())
             .spawn(move || {
                 qos::set_current(Qos::Utility);
-                let _ = tx.send(work(&*media));
+                let out = work(&*media);
+                drop(decoding);
+                let _ = tx.send(out);
             })
             .map_err(|e| {
                 tracing::warn!(%e, "analysis: no thread");

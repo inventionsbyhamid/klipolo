@@ -12,7 +12,7 @@
 //!   pipeline, all at once (the Meta adapter keeps the device's request slots): its sound (step `audio`), its speaker
 //!   turns (`transcript`, published at once as turn-level captions), its word times (`words`), then its scene log
 //!   (`scenes`) for a video. Decoding (the sound, the scene log's small copy) runs one clip at a time on a thread of
-//!   utility priority, and one video call runs at a time.
+//!   utility priority, and one video call runs at a time. Editing copies wait while it decodes (`on_decoding`).
 //! - **Results** go into the engine's `Speech` (a new `Arc<Speech>` for the open revision: the captions update live),
 //!   with each clip's sound levels (`Speech::levels`, from the sound cache's energies), and are kept here for chat
 //!   (`AnalysisState::analysis_for`). Each finished step is cached (`klipolo_analysis::cache`): `transcript.json` as
@@ -29,6 +29,7 @@
 
 mod calls;
 pub mod chat;
+mod decoding;
 pub mod media;
 mod run;
 
@@ -429,6 +430,8 @@ pub struct AnalysisState {
     inner: Mutex<Inner>,
     /// Decoding a clip (its sound, its small copy), one clip at a time.
     local: Semaphore,
+    /// Told when that decoding starts and stops (`on_decoding`).
+    decoding: Arc<decoding::Decoding>,
     /// One video call at a time, whatever the mode.
     videos: Arc<Semaphore>,
 }
@@ -459,8 +462,15 @@ impl AnalysisState {
             speech_sink: speech,
             inner: Mutex::default(),
             local: Semaphore::new(1),
+            decoding: Arc::default(),
             videos: Arc::new(Semaphore::new(1)),
         })
+    }
+
+    /// `f(true)` when analysis starts decoding a clip on this Mac (its sound, its levels, its small copy), `f(false)`
+    /// once that step has ended: editing copies wait meanwhile, so the two never decode video at once.
+    pub fn on_decoding(&self, f: impl Fn(bool) + Send + Sync + 'static) {
+        self.decoding.listen(Box::new(f));
     }
 
     /// The project switch count now (`Inner::generation`).
