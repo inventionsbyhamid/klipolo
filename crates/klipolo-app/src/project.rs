@@ -174,15 +174,21 @@ pub fn projects_recent(
         .map(|dir| dir.join(RECENT_FILE))
         .unwrap_or_default();
     let thumbs = engine.caches().map(|caches| caches.thumbs());
-    let rows =
+    let mut rows =
         recent_in(&library_dir()?, &stamps, thumbs.as_deref(), RECENT_LIMIT).map_err(|error| {
             tracing::warn!(%error, "the projects folder couldn't be listed");
             Said::code("project.libraryFailed")
         })?;
     let scope = app.asset_protocol_scope();
-    for tile in rows.iter().filter_map(|row| row.thumb.as_ref()) {
-        // A sprite that can't be allowed shows the clip art instead.
-        let _ = scope.allow_file(&tile.sprite);
+    for row in &mut rows {
+        // A sprite that can't be let through goes: the card shows the clip art instead.
+        if row
+            .thumb
+            .as_ref()
+            .is_some_and(|tile| scope.allow_file(&tile.sprite).is_err())
+        {
+            row.thumb = None;
+        }
     }
     Ok(rows)
 }
