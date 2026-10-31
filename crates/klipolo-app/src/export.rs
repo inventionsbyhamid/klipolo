@@ -41,7 +41,7 @@ pub use captions::export_speech;
 pub use estimate::{Estimate, apple_silicon, estimate};
 pub use fonts::{missing_fonts, refuse_missing};
 pub use naming::{format_word, plan_files};
-pub use run::{run, said};
+pub use run::{run, said, tidy_jobs};
 pub use start::{StartSteps, Started, create_job, start_on_slot};
 pub use state::{ExportState, Releases};
 

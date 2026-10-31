@@ -108,6 +108,8 @@ async fn prepare(app: AppHandle, req: ExportRequest, dir: PathBuf) -> Result<Bat
     export::refuse_empty(&feed.project)?;
     fonts_checked(&feed, req.allow_stand_ins).await?;
     std::fs::create_dir_all(&dir).map_err(|e| export::folder_error(&e, &dir))?;
+    // Parts an export the app quit in the middle of left behind go now.
+    export::tidy_jobs(&dir);
     // Decoded sound goes to the worker's own folder: the preview's cache may tidy its files while an export reads them.
     Ok(export::freeze(
         feed.project,
