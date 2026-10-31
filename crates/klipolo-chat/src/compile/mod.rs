@@ -9,7 +9,8 @@
 //!   takes away, on the timeline), applied as one undo step when the person says so.
 //! - `findMoments` gives moments, `followSubject` and `blurObjects` jobs for their runners, `askUser` questions, `undo`
 //!   a flag. `cannotDo` is a refusal shown to the person, as is a tool that needs an analysis the clip doesn't have yet
-//!   (`STILL_LISTENING`, `ANALYZE_FIRST`); every other refusal goes back to the model with its reason.
+//!   (`STILL_LISTENING`, `ANALYZE_FIRST`) and a removal with nothing to remove (`NO_FILLERS`, no pause that long);
+//!   every other refusal goes back to the model with its reason.
 //!
 //! All calls compile on one working copy, in two phases: the additions in call order, then the removals in call order
 //! on what the additions made, as the app applies them. Each call's ops are one part of its phase's batch
@@ -54,6 +55,8 @@ use trim::Trim;
 pub const STILL_LISTENING: &str = "Klipolo is still listening to this clip";
 /// What the person is told when a tool needs a clip's analysis and none was started.
 pub const ANALYZE_FIRST: &str = "Analyze this clip first";
+/// What the person is told when `removeFillers` finds no filler word.
+pub const NO_FILLERS: &str = "There are no filler words to remove.";
 
 /// How far a file's analysis (transcript, loudness, scene log) is. A file missing from `Inputs::analysis` counts as
 /// not started.
@@ -186,6 +189,15 @@ fn to_model(reason: String) -> Refused {
     Refused {
         reason,
         audience: Audience::Model,
+        clip: None,
+    }
+}
+
+/// A sentence for the person: a fact about the project the model couldn't change by trying again.
+fn to_person(reason: String) -> Refused {
+    Refused {
+        reason,
+        audience: Audience::Person,
         clip: None,
     }
 }

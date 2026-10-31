@@ -656,6 +656,30 @@ fn refusals_for_the_person_are_shown_not_sent_back() {
 }
 
 #[test]
+fn nothing_to_remove_takes_one_call_and_one_clear_reply() {
+    // talk.mov has no loudness, so no pause to remove: the person is told, with no second call, and the model's
+    // claim that it is removing them is not repeated.
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    let model = Fake::new(vec![
+        answer(
+            "Removing the long pauses.",
+            vec![fc("call_1", "removeSilences", r#"{"minPauseSec": 1}"#)],
+            0.002,
+        ),
+        answer("A second call.", vec![], 0.002),
+    ]);
+    let out = send(&model, &[], "remove pauses over a second", &i, &p).unwrap();
+    assert_eq!(model.seen().len(), 1);
+    assert_eq!(
+        out.reply,
+        "There are no pauses longer than 1.0 s to remove."
+    );
+    assert_eq!(out.compiled.proposal, None);
+    assert_eq!(out.usage_usd, 0.002);
+}
+
+#[test]
 fn unreadable_calls_go_back_to_the_model() {
     let (p, speech) = talk();
     let i = inputs(&p, speech);
@@ -807,23 +831,19 @@ fn a_refused_call_the_second_answer_lets_go_is_named() {
     assert!(!out.reply.contains("Done"), "{}", out.reply);
     assert!(out.note.contains("Not done: cutRange."), "{}", out.note);
 
-    // There are no pauses to remove: the model says so after the refusal, and its words stay.
+    // The model explains after the refusal, without a call: its words were written knowing, so they stay.
     let model = Fake::new(vec![
-        answer(
-            "",
-            vec![fc("call_1", "removeSilences", r#"{"minPauseSec": 1}"#)],
-            0.002,
-        ),
-        answer("There are no long pauses here.", vec![], 0.002),
+        answer("", vec![cut_call("call_1", 12.3, 19.7)], 0.002),
+        answer("Nothing is said after 7.8 s.", vec![], 0.002),
     ]);
-    let out = send(&model, &[], "remove the long pauses", &i, &p).unwrap();
+    let out = send(&model, &[], "cut the boring bit", &i, &p).unwrap();
     assert!(
-        out.reply.starts_with("There are no long pauses here."),
+        out.reply.starts_with("Nothing is said after 7.8 s."),
         "{}",
         out.reply
     );
     assert!(
-        out.reply.contains("I couldn't remove the pauses"),
+        out.reply.contains("I couldn't make the cut"),
         "{}",
         out.reply
     );

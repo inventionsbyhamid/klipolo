@@ -404,10 +404,18 @@ fn remove_silences_uses_levels_and_min_pause() {
     );
     assert_eq!(proposal.removed_us, secs(2.2));
     assert_eq!(proposal.tx.label, "chat.removeSilences");
-    // No pause that long: said back to the model.
+    // No pause that long: told to the person, with the length asked.
     let none = compile(&p, &i, &[call("removeSilences", r#"{"minPauseSec": 5}"#)]);
     assert_eq!(none.proposal, None);
-    assert!(refused_to_model(&none, 0).starts_with("removeSilences: "));
+    assert_eq!(
+        none.refusals,
+        vec![Refusal {
+            call_index: 0,
+            reason: "There are no pauses longer than 5.0 s to remove.".into(),
+            audience: Audience::Person,
+            clip: None,
+        }]
+    );
 }
 
 #[test]
@@ -1481,4 +1489,35 @@ fn proposed_calls_name_the_calls_in_the_proposal() {
     // With nothing proposed, no call is.
     let out = compile(&p, &i, &calls[..1]);
     assert_eq!((out.proposal, out.proposed_calls), (None, vec![]));
+}
+
+#[test]
+fn nothing_to_remove_is_told_to_the_person() {
+    // No loudness for talk.mov: no pause to find. Shown to the person, never sent back for a second model call.
+    let (p, speech) = talk();
+    let i = inputs(&p, speech, "remove pauses over a second");
+    let out = compile(&p, &i, &[call("removeSilences", r#"{"minPauseSec": 1}"#)]);
+    assert_eq!(out.proposal, None);
+    assert_eq!(
+        out.refusals,
+        vec![Refusal {
+            call_index: 0,
+            reason: "There are no pauses longer than 1.0 s to remove.".into(),
+            audience: Audience::Person,
+            clip: None,
+        }]
+    );
+    // No speech in the clips: no filler word.
+    let p = three_clips();
+    let i = inputs(&p, Speech::default(), "remove the ums");
+    let out = compile(&p, &i, &[call("removeFillers", "{}")]);
+    assert_eq!(
+        out.refusals,
+        vec![Refusal {
+            call_index: 0,
+            reason: "There are no filler words to remove.".into(),
+            audience: Audience::Person,
+            clip: None,
+        }]
+    );
 }

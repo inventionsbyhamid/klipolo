@@ -17,9 +17,10 @@
 //! call, and no question or `cannotDo` instead).
 //!
 //! The reply is the model's text, then the sentences of refusals meant for the person, then what couldn't be done; all
-//! of it without em or en dashes (`sanitize::reply`). When nothing came of the answer but what couldn't be done, the
-//! model's text (which may claim it did it) is left out. With none of these, the reply is `askUser`'s questions, else a
-//! short sentence on what was done; otherwise the questions are only in `Compiled::questions`.
+//! of it without em or en dashes (`sanitize::reply`). When nothing came of the answer and a call of it was refused after
+//! the model wrote its text (still refused back, or refused for the person, `cannotDo` aside), that text, which may
+//! claim the edit, is left out. With none of these, the reply is `askUser`'s questions, else a short sentence on what
+//! was done; otherwise the questions are only in `Compiled::questions`.
 //!
 //! Errors leave the project untouched: nothing is compiled, and each is one plain sentence (`ChatError`). A project
 //! whose context is over budget (`ChatContext::fits`) is refused before any model call.
@@ -429,9 +430,13 @@ fn finish(
         || !compiled.jobs.is_empty()
         || !compiled.questions.is_empty()
         || compiled.undo;
+    // An edit refused for the person (nothing to remove, a clip not analyzed yet): the text was written before it.
+    let told_undone = (compiled.refusals.iter()).any(|r| {
+        r.audience == Audience::Person && !matches!(calls[r.call_index], ToolCall::CannotDo { .. })
+    });
     let mut parts: Vec<String> = Vec::new();
     let text = text.trim();
-    if !text.is_empty() && (unfinished.is_empty() || came_of_it) {
+    if !text.is_empty() && (came_of_it || (unfinished.is_empty() && !told_undone)) {
         parts.push(text.to_owned());
     }
     for r in &compiled.refusals {

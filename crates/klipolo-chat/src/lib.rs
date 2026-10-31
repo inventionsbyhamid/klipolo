@@ -15,7 +15,7 @@ pub mod sanitize;
 pub mod tools;
 
 pub use compile::{
-    ANALYZE_FIRST, AnalysisState, Audience, Compiled, Inputs, Job, Proposal, Refusal,
+    ANALYZE_FIRST, AnalysisState, Audience, Compiled, Inputs, Job, NO_FILLERS, Proposal, Refusal,
     STILL_LISTENING, compile,
 };
 pub use context::{

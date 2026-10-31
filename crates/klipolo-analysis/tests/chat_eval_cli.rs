@@ -189,16 +189,6 @@ async fn ideal_answers_pass_every_case() {
     let cases: Value =
         serde_json::from_str(include_str!("../../klipolo-chat/evals/cases.json")).unwrap();
     let server = MockServer::start().await;
-    // Clip A has no filler words: the refusal round's answer says so, without a call.
-    Mock::given(method("POST"))
-        .and(path("/responses"))
-        .and(body_string_contains("there are no filler words"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(spark("There are no ums to remove.", &[])),
-        )
-        .with_priority(1)
-        .mount(&server)
-        .await;
     for case in cases["cases"].as_array().unwrap() {
         let message = case["message"].as_str().unwrap();
         Mock::given(method("POST"))
@@ -216,6 +206,10 @@ async fn ideal_answers_pass_every_case() {
     let (stdout, stderr) = text(&out);
     assert!(stdout.contains("18/18 passed"), "{stdout}{stderr}");
     assert_eq!(out.status.code(), Some(0));
-    // Only the filler case needed a refusal round.
-    assert!(stdout.contains("19 model calls"), "{stdout}");
+    // One call each: clip A's missing filler words are told to the person, with no refusal round.
+    assert!(stdout.contains("18 model calls"), "{stdout}");
+    assert!(
+        stdout.contains("     reply: There are no filler words to remove."),
+        "{stdout}"
+    );
 }
