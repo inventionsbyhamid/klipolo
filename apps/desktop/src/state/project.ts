@@ -144,11 +144,36 @@ export const useProject = create<ProjectStore>((set, get) => {
     });
   }
 
+  /**
+   * Every edit made goes in before the project closes or another takes its place, as at quit: what is still settling,
+   * every commit on its way and every edit waiting its turn (a press's, a queued drop, an undo), each in its turn.
+   */
+  async function landEdits() {
+    flushBursts({ closing: true });
+    await commitsDone();
+  }
+
+  /**
+   * A create, open or close: `switching` from the press until it has landed or failed, so the project menu runs one at
+   * a time, the open project's edits landing first. With no project open (the start screen) it is sent at once, so a
+   * second press already finds it pending too.
+   */
+  async function switchTo(task: () => Promise<Snapshot | null>): Promise<boolean> {
+    set({ switching: true });
+    try {
+      if (get().snapshot) await landEdits();
+      return await run(task, true);
+    } finally {
+      set({ switching: false });
+    }
+  }
+
   return {
     snapshot: null,
     pending: 0,
-    create: (name, formats) => run(() => bridge.createProject(name, formats), true),
-    open: (path) => run(() => bridge.openProject(path), true),
+    switching: false,
+    create: (name, formats) => switchTo(() => bridge.createProject(name, formats)),
+    open: (path) => switchTo(() => bridge.openProject(path)),
     load: (snapshot) => {
       if (get().snapshot?.project.id !== snapshot.project.id) return run(async () => snapshot, true);
       // As `adopt`: what is still settling goes first (Rust refuses it: it was built on the copy before), and it holds
@@ -166,14 +191,10 @@ export const useProject = create<ProjectStore>((set, get) => {
       }).finally(end);
     },
     close: async () => {
-      // Every edit made goes in before the project closes, as at quit: what is still settling, every commit on its way
-      // and every edit waiting its turn (a press's, a queued drop, an undo), each in its turn.
-      flushBursts({ closing: true });
-      await commitsDone();
-      await run(async () => {
+      await switchTo(async () => {
         await bridge.closeProject();
         return null;
-      }, true);
+      });
     },
     apply: (label, ops, params, built, opts) => {
       if (readOnly()) return Promise.resolve(false);
@@ -227,6 +248,11 @@ export const useProject = create<ProjectStore>((set, get) => {
     },
   };
 });
+
+/** The start screen's and the project menu's New project: "Untitled project" in all three formats, 16:9 first. */
+export function newProject(): Promise<boolean> {
+  return useProject.getState().create('Untitled project', ['landscape', 'portrait', 'square']);
+}
 
 /** Where an edit built now is built (`Built`): for ops built before they go in, such as a held burst's. */
 export function captureBase(): Built {
