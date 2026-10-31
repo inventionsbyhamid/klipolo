@@ -184,6 +184,17 @@ fn only_the_capture_files_name_a_capture_api_and_none_lists_through_cpal() {
     assert!(checked >= 40, "only {checked} files checked");
 }
 
+/// ScreenCaptureKit's screenshot is the Record dialog's stills' alone: no other file, capture file or not, names it,
+/// so no screenshot is taken anywhere without the stills' preflight-first rule (`tests/thumbs.rs` checks its order).
+#[test]
+fn only_the_stills_take_a_screenshot() {
+    let named: Vec<String> = sources()
+        .filter(|(_, text)| code_of(text).contains("ScreenshotManager"))
+        .map(|(file, _)| file)
+        .collect();
+    assert_eq!(named, ["platform/macos/thumbs.rs"]);
+}
+
 /// Screen Recording's request runs only on the person's press of "Allow screen recording": nothing in this
 /// crate calls `Backend::request_screen_permission`, and in every other crate only the app recorder's permission
 /// commands do (none before the app has a recorder).
