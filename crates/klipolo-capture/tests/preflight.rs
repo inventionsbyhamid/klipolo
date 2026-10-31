@@ -12,6 +12,16 @@ use klipolo_capture::probe::decide;
 use klipolo_capture::profile::GameProfile;
 use klipolo_platform::power::Battery;
 
+/// The fake keeps the cursor in its frames (`CursorCaps::none()`), so where the separate cursor ships (macOS) preflight
+/// says so, right after the screen's permission; elsewhere the gate is off and no note says it.
+fn cursor_note() -> &'static [&'static str] {
+    if klipolo_capture::preflight::cursor::SEPARATE_ENABLED {
+        &["capture.preflight.cursorBurned"]
+    } else {
+        &[]
+    }
+}
+
 /// One dedicated H.264 engine (about 276 Mpx/s flat out) for the screen and the camera, a 1920×1200 60 Hz display and
 /// a 4K 120 Hz one.
 fn shared_encoder() -> (FakeCounting, ProbeReport) {
@@ -86,7 +96,10 @@ fn preflight_decides_per_display_and_fits_the_camera_beside_each_quality() {
     };
     let s = setup(&backend, Some(&igpu), None, None, None, false);
     let codes: Vec<&str> = s.notes.iter().map(|n| n.code.as_str()).collect();
-    assert_eq!(codes, ["capture.preflight.cameraWithScreen"]);
+    assert_eq!(
+        codes,
+        [cursor_note(), &["capture.preflight.cameraWithScreen"]].concat()
+    );
     assert_eq!(backend.capture_calls(), 0);
 }
 
@@ -216,15 +229,18 @@ fn preflight_notes_come_in_order_and_a_network_folder_is_refused() {
     assert_eq!(
         codes,
         [
-            "capture.preflight.osTooOld",
-            "capture.permission.screen",
-            "capture.preflight.diskShort",
-            "capture.preflight.slowDrive",
-            "capture.preflight.networkFolder",
-            "capture.preflight.virtualMic",
-            "capture.preflight.cameraBusy",
-            "capture.preflight.lowBattery",
+            &["capture.preflight.osTooOld", "capture.permission.screen"][..],
+            cursor_note(),
+            &[
+                "capture.preflight.diskShort",
+                "capture.preflight.slowDrive",
+                "capture.preflight.networkFolder",
+                "capture.preflight.virtualMic",
+                "capture.preflight.cameraBusy",
+                "capture.preflight.lowBattery",
+            ],
         ]
+        .concat()
     );
     let charging = Battery {
         percent: 15,
