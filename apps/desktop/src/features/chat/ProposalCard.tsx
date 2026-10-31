@@ -173,7 +173,11 @@ function CutList({ proposal }: { proposal: ChatProposal }) {
                   <button
                     type="button"
                     className="p-cut"
-                    aria-label={`${what} at ${from}`}
+                    aria-label={t({
+                      id: 'chatPanel.proposal.cutAt',
+                      message: `${what} at ${from}`,
+                      comment: 'A cut in the list: its tag ("um", "pause") and where it starts',
+                    })}
                     onPointerEnter={() => hover(i)}
                     onPointerLeave={() => hover(null)}
                     onFocus={() => hover(i)}

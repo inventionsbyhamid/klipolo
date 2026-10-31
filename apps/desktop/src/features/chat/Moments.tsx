@@ -22,7 +22,11 @@ export function Moments({ moments, stale }: { moments: ChatMoment[]; stale: bool
             key={i}
             type="button"
             className="moment"
-            aria-label={`${formatPrecise(m.startUs)} ${m.label}`}
+            aria-label={t({
+              id: 'chatPanel.moment',
+              message: `${formatPrecise(m.startUs)} ${m.label}`,
+              comment: 'A moment chat points at: where it starts, then its title',
+            })}
             onClick={() => {
               const playback = usePlayback.getState();
               playback.seek(m.startUs);
