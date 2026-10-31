@@ -4,8 +4,9 @@
 //! switches and on quit.
 //!
 //! **One apply path.** Hand edits, chat and other apps (`apps`) commit through `with_open`, so every edit is one undo
-//! step, reaches the engine and is saved. `apply_transaction` applies a batch, refusing it when the project moved on from the base
-//! the caller built it on (never rebased). Every command fails with a code the UI words, or a plain sentence (`Said`).
+//! step, reaches the engine and is saved. `apply_transaction` applies a batch, refusing it when the project moved on
+//! from the base the caller built it on (never rebased). Every command fails with a code the UI words, or a plain
+//! sentence (`Said`).
 
 mod apply;
 mod apps;

@@ -1,7 +1,7 @@
-//! What Settings' "Copy config" puts on the clipboard for an MCP app: one JSON block they all take,
-//! starting this same Klipolo with `--mcp` (the stdio bridge, `klipolo_mcp::bridge`). And whether Klipolo has to move
-//! first: run from its disk image, or from where macOS translocated it, its path is gone once it quits, and so is the
-//! app's way in.
+//! What Settings' "Copy config" puts on the clipboard for an MCP app: one `mcpServers` JSON block
+//! take, starting this same Klipolo with `--mcp` (the stdio bridge, `klipolo_mcp::bridge`). And whether Klipolo has to
+//! move first: run from its disk image, or from where macOS translocated it, its path is gone once it quits, and so is
+//! the app's way in.
 
 use std::path::Path;
 
