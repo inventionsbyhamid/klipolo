@@ -73,12 +73,12 @@ describe('a drop on a lane that won’t take it', () => {
     expect(texts()).toEqual(['Pictures go on the Overlays lane.']);
   });
 
-  it('a sound from Finder let go on the Overlays lane says it goes on Sounds or Music, and imports nothing', async () => {
+  it('a sound from Finder let go on the Overlays lane says it goes on Sound effects or Music, and imports nothing', async () => {
     renderHook(() => useFinderDrop());
     await act(() => Promise.resolve());
     act(() => deliver({ payload: { type: 'enter', position: { x: 140, y: 30 }, paths: ['/pop.wav'] } }));
     act(() => deliver({ payload: { type: 'drop', position: { x: 140, y: 30 }, paths: ['/pop.wav'] } }));
-    expect(texts()).toEqual(['Sounds go on the Sounds or Music lane.']);
+    expect(texts()).toEqual(['Sounds go on the Sound effects or Music lane.']);
     expect(bridge.importMedia).not.toHaveBeenCalled();
   });
 });
