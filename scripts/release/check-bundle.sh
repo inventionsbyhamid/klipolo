@@ -49,9 +49,6 @@ while IFS= read -r -d '' f; do
     echo "   LC_RPATH $r"
     case "$r" in @executable_path/* | @loader_path/*) ;; *) fail "$rel has a machine LC_RPATH: $r" ;; esac
   done
-  if [ "$f" = "$main" ] && ! grep -qx '@executable_path/../Frameworks' <<< "$rpaths"; then
-    fail "$rel has no @executable_path/../Frameworks LC_RPATH, so it can't find the libraries in Frameworks"
-  fi
   own=$(otool -D "$f" | tail -n +2)
   for dep in $(otool -L "$f" | tail -n +2 | awk '{print $1}' | grep '^@rpath/' || true); do
     [ "$dep" = "$own" ] && continue
@@ -59,6 +56,10 @@ while IFS= read -r -d '' f; do
   done
 done < "$files"
 [ "$count" -gt 1 ] || fail "only $count Mach-O files in the app"
+# The main executable's own, whether or not the walk above met it: one of its LC_RPATHs is exactly this text.
+main_rpaths=$(otool -l "$main" | awk '$1 == "cmd" {r = ($2 == "LC_RPATH")} r && $1 == "path" {print $2}' || true)
+grep -qxF '@executable_path/../Frameworks' <<< "$main_rpaths" \
+  || fail "${main#"$app"/} has no @executable_path/../Frameworks LC_RPATH, so it can't find the libraries in Frameworks"
 
 # No file under Contents (binaries, the page, resources) names the builder's home folder or user name. A user name
 # shorter than 4 characters would match ordinary text, so then only the home folder is looked for.

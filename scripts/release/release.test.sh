@@ -78,6 +78,21 @@ app=$(case_app no-rpath)
 install_name_tool -delete_rpath @executable_path/../Frameworks "$app/Contents/MacOS/klipolo-app" 2> /dev/null
 expect "no Frameworks rpath fails" fail "has no @executable_path/../Frameworks LC_RPATH" "$check" "$app" "$arch"
 
+# The rpath is compared as text, not as a pattern: `.` would match any character.
+app=$(case_app rpath-lookalike)
+install_name_tool -rpath @executable_path/../Frameworks @executable_path/xx/Frameworks "$app/Contents/MacOS/klipolo-app" 2> /dev/null
+expect "a look-alike Frameworks rpath fails" fail "has no @executable_path/../Frameworks LC_RPATH" "$check" "$app" "$arch"
+
+# The main executable's rpath is checked even when the walk over the files doesn't meet it (here it is a link to a
+# Mach-O elsewhere in the bundle that has no rpath).
+app=$(case_app main-is-a-link)
+mkdir "$app/Contents/Resources/bin"
+mv "$app/Contents/MacOS/klipolo-app" "$app/Contents/Resources/bin/"
+install_name_tool -delete_rpath @executable_path/../Frameworks "$app/Contents/Resources/bin/klipolo-app" 2> /dev/null
+ln -s ../Resources/bin/klipolo-app "$app/Contents/MacOS/klipolo-app"
+expect "a main executable the walk skips is still checked" fail "has no @executable_path/../Frameworks LC_RPATH" \
+  "$check" "$app" "$arch"
+
 app=$(case_app no-dylib)
 rm "$app/Contents/Frameworks/libfoo.1.dylib"
 expect "a missing @rpath library fails" fail "Contents/Frameworks/libfoo.1.dylib isn't there" "$check" "$app" "$arch"
