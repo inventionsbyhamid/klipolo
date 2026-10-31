@@ -73,6 +73,9 @@ pub const QUOTED_NOTE: &str =
 pub const NEAR_PLAYHEAD_US: Us = 30_000_000;
 /// A transcript line's words kept when lines are cut to their sentence starts.
 pub const START_WORDS: usize = 8;
+/// Scene item kinds that mark a change of shot or topic: the scene log's `shot` and `topic`, and the older logs'
+/// `scene_cut`, `b_roll` and `topic_change`. Where "every topic change" falls (`evidence::Evidence::moment`).
+pub const CHANGE_KINDS: [&str; 5] = ["shot", "topic", "scene_cut", "b_roll", "topic_change"];
 
 /// Where the person is: the playhead and the selection, in timeline time.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -904,6 +907,16 @@ fn write_line(out: &mut String, said: &[Said], line: &Range<usize>, sentence_sta
         out.push_str(&mark);
     }
     out.push('\n');
+}
+
+/// Where the scene items of a change kind (`CHANGE_KINDS`, any case) start on the timeline, each piece as Scenes shows
+/// it: where the media tools place things "at every topic change".
+pub(crate) fn scene_changes(p: &Project, scenes: &HashMap<String, SceneLog>) -> Vec<Us> {
+    let starts = clip_starts(&p.timeline.main);
+    (scene_pieces(p, &starts, scenes).iter())
+        .filter(|s| CHANGE_KINDS.contains(&s.item.kind.trim().to_lowercase().as_str()))
+        .map(|s| s.start_us)
+        .collect()
 }
 
 /// Where the scene items play on the timeline, each as one line of Scenes shows it: the compiler's evidence.

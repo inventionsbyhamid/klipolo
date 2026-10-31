@@ -12,7 +12,7 @@ use std::task::{Context, Poll, Waker};
 
 use klipolo_chat::{
     AnalysisState, Audience, BoxFuture, ChatContext, ChatError, ChatErrorKind, FunctionCall,
-    Inputs, Item, KEPT_TURNS, LanguageModel, MAX_CONTEXT_TOKENS, ModelError, ModelRequest,
+    Inputs, Item, KEPT_TURNS, LanguageModel, Library, MAX_CONTEXT_TOKENS, ModelError, ModelRequest,
     ModelResponse, PROPOSED_OUTPUT, PlanOut, Refs, STILL_LISTENING, TOLD_PERSON, TOO_LONG,
     ToolCall, Turn, View, build_context, plan, remember, sanitize, system_prompt, tools,
 };
@@ -118,6 +118,7 @@ fn inputs(project: &Project, speech: Speech) -> Inputs {
         analysis: (project.assets.iter())
             .map(|a| (a.id.clone(), AnalysisState::Done))
             .collect(),
+        library: Library::default(),
     }
 }
 
@@ -954,5 +955,50 @@ fn an_empty_exchange_sends_no_empty_reply() {
         !input
             .iter()
             .any(|item| matches!(item, Item::Assistant { .. }))
+    );
+}
+
+#[test]
+fn a_picture_being_drawn_is_said_to_be_on_its_way() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    // No text from the model: the reply says the work has started, not that nothing changed.
+    let sticker = fc(
+        "call_1",
+        "makeSticker",
+        r#"{"prompt": "paper plane", "position": "top-right", "atSec": 0.0, "durationSec": null}"#,
+    );
+    let model = Fake::new(vec![answer("", vec![sticker], 0.002)]);
+    let out = send(&model, &[], "a paper plane sticker in the corner", &i, &p).unwrap();
+    assert_eq!(out.compiled.jobs.len(), 1);
+    assert_eq!(
+        (&out.compiled.additions, &out.compiled.refusals),
+        (&None, &vec![])
+    );
+    assert_eq!(out.reply, "Working on it.");
+}
+
+#[test]
+fn a_media_call_refused_twice_is_named_by_what_it_does() {
+    let (p, speech) = talk();
+    let i = inputs(&p, speech);
+    // The library is empty: no whoosh to add, in either answer.
+    let whoosh = |id: &str| fc(id, "addSound", r#"{"name": "whoosh", "atSec": [0.5]}"#);
+    let model = Fake::new(vec![
+        answer("Adding a whoosh.", vec![whoosh("call_1")], 0.002),
+        answer("Adding a whoosh.", vec![whoosh("call_2")], 0.002),
+    ]);
+    let out = send(&model, &[], "a whoosh at the start", &i, &p).unwrap();
+    assert_eq!(
+        out.reply,
+        "I couldn't add the sound, so I left that unchanged."
+    );
+    let seen = model.seen();
+    let output = output_for(&seen[1], "call_1");
+    assert!(
+        output.starts_with(
+            "addSound: no sound in Library is called \"whoosh\". Library has no sound."
+        ),
+        "{output}"
     );
 }

@@ -1,16 +1,18 @@
 //! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
 //! context was built from, out as edits.
-//! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer) are one
-//!   `Transaction` the app applies at once: one undo step. An addition is judged by what its part does, not by its
-//!   tool: one that takes something away (the model's own `removals`, as a format dropped with what was placed in it)
-//!   is compiled again with the removals and proposed.
+//! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer, and the
+//!   media: `addMusic`, `addSound`, `addText`, `addImage` and `makeTitleCard`'s title) are one `Transaction` the app
+//!   applies at once: one undo step. An addition is judged by what its part does, not by its tool: one that takes
+//!   something away (the model's own `removals`, as a format dropped with what was placed in it) is compiled again with
+//!   the removals and proposed.
 //! - Removals (`cutRange`, `keepOnly`, `removeSilences`, `removeFillers`, a trim that makes a clip shorter) are one
 //!   `Proposal`: a `Transaction` for the project as the additions leave it, judged by the model's own review (what it
 //!   takes away, on the timeline), applied as one undo step when the person says so.
-//! - `findMoments` gives moments, `followSubject` and `blurObjects` jobs for their runners, `askUser` questions, `undo`
-//!   a flag. `cannotDo` is a refusal shown to the person, as is a tool that needs an analysis the clip doesn't have yet
-//!   (`STILL_LISTENING`, `ANALYZE_FIRST`) and a removal with nothing to remove (`NO_FILLERS`, no pause that long);
-//!   every other refusal goes back to the model with its reason.
+//! - `findMoments` gives moments, `followSubject` and `blurObjects` jobs for their runners, `makeSticker` and
+//!   `makeTitleCard`'s background jobs for a picture to be drawn (never an op until it exists), `askUser` questions,
+//!   `undo` a flag. `cannotDo` is a refusal shown to the person, as is a tool that needs an analysis the clip doesn't
+//!   have yet (`STILL_LISTENING`, `ANALYZE_FIRST`) and a removal with nothing to remove (`NO_FILLERS`, no pause that
+//!   long); every other refusal goes back to the model with its reason.
 //!
 //! All calls compile on one working copy, in two phases: the additions in call order, then the removals in call order
 //! on what the additions made, as the app applies them. Each call's ops are one part of its phase's batch
@@ -26,18 +28,20 @@
 //!
 //! Undo labels are message ids with values, worded by the UI: `chat.<tool>` (`chat.cutRange {startUs, endUs}`), and
 //! `chat.andMore {first, more}` for a step of several calls. Splitting by concern: `additions`, `removals`, `trim`
-//! (both), `map`.
+//! (both), `media` (the library's music, sounds, words and pictures, and the pictures to draw), `map`.
 
 mod additions;
 mod map;
+mod media;
 mod removals;
 mod trim;
 
 use std::collections::HashMap;
 
 use klipolo_model::coded::{CodedError, ErrorParam};
+use klipolo_model::ids::Id;
 use klipolo_model::ops::{Op, Origin, Transaction};
-use klipolo_model::project::AssetKind;
+use klipolo_model::project::{AssetKind, FormatKind};
 use klipolo_model::risk::{Review, removals};
 use klipolo_model::speech::{Speech, run_spans};
 use klipolo_model::time::{RangeUs, Us};
@@ -46,9 +50,11 @@ use klipolo_model::{ModelError, Project, finish_parts};
 
 use crate::context::{Refs, SceneLog, View, secs};
 use crate::evidence::{Evidence, Unfounded};
+use crate::library::Library;
 use crate::sanitize;
-use crate::tools::{Moment, ToolCall};
+use crate::tools::{Moment, PictureSize, Position, ToolCall};
 use map::Map;
+pub use media::{PICTURE_MARGIN, SOUND_VOLUME, picture_layout, picture_ops};
 use trim::Trim;
 
 /// What the person is told when a tool needs a clip's analysis and Klipolo is still making it.
@@ -82,6 +88,8 @@ pub struct Inputs {
     pub scenes: HashMap<String, SceneLog>,
     /// Each file's analysis, by asset id.
     pub analysis: HashMap<String, AnalysisState>,
+    /// What the media tools name: the project's music, sounds and pictures and Klipolo's pack.
+    pub library: Library,
 }
 
 /// What one message's calls compiled to.
@@ -116,11 +124,34 @@ pub struct Proposal {
     pub ranges: Vec<RangeUs>,
 }
 
-/// Work for a runner that tracks or blurs (Plan 5), named by one short noun phrase.
+/// Work for a runner: tracking or blurring what one short noun phrase names, or a picture for an image maker to draw
+/// (Muse Image in the app). A picture's job is never an op until the picture exists: the app places it when it comes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Job {
-    Follow { description: String },
-    Blur { description: String },
+    Follow {
+        description: String,
+    },
+    Blur {
+        description: String,
+    },
+    /// A sticker of `prompt`, cut out of its background, to show from `at_us` for `duration_us` at `size` and
+    /// `position` (`picture_ops`), on the project as the additions leave it.
+    MakeSticker {
+        prompt: String,
+        at_us: Us,
+        duration_us: Us,
+        position: Position,
+        size: PictureSize,
+    },
+    /// A background about `prompt` in `format`'s shape, with no lettering, to go under the title layer `title_id` the
+    /// additions placed from `at_us` for `duration_us` (it moves with its clip, so the app reads where it is then).
+    MakeTitleBackground {
+        prompt: String,
+        format: FormatKind,
+        at_us: Us,
+        duration_us: Us,
+        title_id: Id,
+    },
 }
 
 /// A call that compiled to nothing, and why, in one plain sentence on one line.
@@ -391,6 +422,46 @@ impl Compiler<'_> {
                     moments.push((i, found));
                     continue;
                 }
+                ToolCall::MakeSticker {
+                    prompt,
+                    position,
+                    at_us,
+                    duration_us,
+                } => {
+                    let times = (*at_us, *duration_us);
+                    match media::make_sticker(self, &adding.work, prompt, *position, times) {
+                        Ok(job) => out.jobs.push(job),
+                        Err(r) => refuse(&mut out, i, r),
+                    }
+                    continue;
+                }
+                ToolCall::MakeTitleCard {
+                    title,
+                    prompt,
+                    at_us,
+                    duration_us,
+                } => {
+                    let made = media::make_title_card(
+                        self,
+                        &adding.work,
+                        (title, prompt),
+                        (*at_us, *duration_us),
+                    );
+                    // The title is an addition; its background is drawn only once the title is in.
+                    let tried = made.and_then(|(edit, job)| {
+                        let tried = (adding.try_edit(edit))
+                            .map_err(|e| to_model(format!("makeTitleCard: {e}")))?;
+                        Ok((tried, job))
+                    });
+                    match tried {
+                        Ok((tried, job)) => {
+                            adding.keep(tried);
+                            out.jobs.push(job);
+                        }
+                        Err(r) => refuse(&mut out, i, r),
+                    }
+                    continue;
+                }
                 ToolCall::CutRange { .. }
                 | ToolCall::KeepOnly { .. }
                 | ToolCall::RemoveSilences { .. }
@@ -418,9 +489,7 @@ impl Compiler<'_> {
                 | ToolCall::AddMusic { .. }
                 | ToolCall::AddSound { .. }
                 | ToolCall::AddText { .. }
-                | ToolCall::AddImage { .. }
-                | ToolCall::MakeSticker { .. }
-                | ToolCall::MakeTitleCard { .. } => {
+                | ToolCall::AddImage { .. } => {
                     (self.addition(&adding.work, call), Removal::Moved(call))
                 }
             };
@@ -497,6 +566,26 @@ impl Compiler<'_> {
             ToolCall::FixCaptionWords { find, replace } => {
                 additions::fix_caption_words(self, work, find, replace)
             }
+            ToolCall::AddMusic {
+                file,
+                volume,
+                duck,
+                at_us,
+            } => media::add_music(self, work, file, (*volume, *duck), *at_us),
+            ToolCall::AddSound { name, at_us } => media::add_sound(self, work, name, at_us),
+            ToolCall::AddText {
+                text,
+                preset,
+                at_us,
+                duration_us,
+            } => media::add_text(self, work, text, *preset, (*at_us, *duration_us)),
+            ToolCall::AddImage {
+                file,
+                size,
+                position,
+                at_us,
+                duration_us,
+            } => media::add_image(self, work, file, (*size, *position), (*at_us, *duration_us)),
             other => Err(to_model(format!("{}: not an addition.", other.name()))),
         }
     }

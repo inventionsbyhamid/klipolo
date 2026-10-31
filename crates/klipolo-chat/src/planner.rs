@@ -20,7 +20,8 @@
 //! of it without em or en dashes (`sanitize::reply`). When nothing came of the answer and a call of it was refused after
 //! the model wrote its text (still refused back, or refused for the person, `cannotDo` aside), that text, which may
 //! claim the edit, is left out. With none of these, the reply is `askUser`'s questions, else a short sentence on what
-//! was done; otherwise the questions are only in `Compiled::questions`.
+//! was done (or, for only work handed to a runner, that it is under way); otherwise the questions are only in
+//! `Compiled::questions`.
 //!
 //! Errors leave the project untouched: nothing is compiled, and each is one plain sentence (`ChatError`). A project
 //! whose context is over budget (`ChatContext::fits`) is refused before any model call.
@@ -460,6 +461,8 @@ fn finish(
                 (true, true) => "Done. The removals are waiting for you to apply them.",
                 (true, false) => "Done.",
                 (false, true) => "Here is what I would remove. Apply it or discard it.",
+                // Only work for a runner: a picture being drawn, a subject being tracked.
+                (false, false) if !compiled.jobs.is_empty() => "Working on it.",
                 (false, false) => "Nothing changed.",
             }
             .to_owned(),
@@ -500,6 +503,12 @@ fn task(tool: &str) -> &'static str {
         "findMoments" => "find those moments",
         "followSubject" => "follow the subject",
         "blurObjects" => "add the blur",
+        "addMusic" => "add the music",
+        "addSound" => "add the sound",
+        "addText" => "put the words on screen",
+        "addImage" => "add the picture",
+        "makeSticker" => "make the sticker",
+        "makeTitleCard" => "make the title card",
         "undo" => "undo the last change",
         _ => "do part of this",
     }

@@ -23,8 +23,8 @@ use std::sync::Arc;
 
 use klipolo_analysis::providers::meta_chat::MetaChat;
 use klipolo_chat::{
-    AnalysisState, Audience, ChatError, Inputs, PlanOut, SceneLog, SpeakerTurn, ToolCall, Turn,
-    View, build_context, plan,
+    AnalysisState, Audience, ChatError, Inputs, Library, PlanOut, SceneLog, SpeakerTurn, ToolCall,
+    Turn, View, build_context, plan,
 };
 use klipolo_meta::{MetaClient, SecretString};
 use klipolo_model::Project;
@@ -240,6 +240,7 @@ fn run(args: &Args) -> Result<bool, String> {
             speech: fx.speech.clone(),
             scenes: fx.scenes.clone(),
             analysis: HashMap::from([(fx.asset.clone(), AnalysisState::Done)]),
+            library: Library::default(),
         };
         let planned = runtime.block_on(plan(
             &model,
