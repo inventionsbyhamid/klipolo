@@ -19,6 +19,8 @@ pub mod commands;
 mod config;
 mod env;
 mod events;
+#[allow(dead_code, reason = "the preview commands come next")]
+mod frames;
 mod launch;
 mod outcomes;
 mod permissions;
