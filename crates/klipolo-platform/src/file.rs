@@ -261,7 +261,11 @@ mod tests {
             assert_eq!(refused.kind(), io::ErrorKind::PermissionDenied, "{mode:o}");
         }
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o400)).unwrap();
-        assert_eq!(read_private(&path, 64).unwrap(), b"secret", "read only by its owner");
+        assert_eq!(
+            read_private(&path, 64).unwrap(),
+            b"secret",
+            "read only by its owner"
+        );
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
         // SAFETY: geteuid has no preconditions and can't fail.
         if unsafe { libc::geteuid() } == 0 {
@@ -272,7 +276,11 @@ mod tests {
                 .unwrap();
             assert!(given.success());
             let refused = read_private(&path, 64).unwrap_err();
-            assert_eq!(refused.kind(), io::ErrorKind::PermissionDenied, "another user's");
+            assert_eq!(
+                refused.kind(),
+                io::ErrorKind::PermissionDenied,
+                "another user's"
+            );
         }
     }
 
