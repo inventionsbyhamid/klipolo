@@ -20,7 +20,13 @@ export function Announcer() {
   else if (last?.from === 'klipolo' && last.kind === 'reply') {
     if (last.proposal?.state === 'open') {
       const title = last.proposal.proposal.title;
-      text = t({ id: 'chatPanel.announce.review', message: `Needs your review: ${title}` });
+      const review = t({ id: 'chatPanel.announce.review', message: `Needs your review: ${title}` });
+      // Another app's says which app suggested it.
+      const client = last.client;
+      text =
+        client === undefined
+          ? review
+          : t({ id: 'chatPanel.app.review', message: `From ${client}. ${review}`, comment: '{client} is another app' });
     } else if (last.client !== undefined) {
       // Another app's: who, then what it did (its moments and pictures show in the log).
       const [client, line] = [last.client, appLine(last)];

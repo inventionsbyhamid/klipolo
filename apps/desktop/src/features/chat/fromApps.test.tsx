@@ -165,7 +165,11 @@ describe('another app in chat', () => {
     await waitFor(() => expect(useProposal.getState().proposal?.id).toBe('p1'));
     const card = screen.getByRole('group', { name: 'Keep only the suggested parts' });
     expect(within(card).getByText('Suggested by Muse Spark agent')).toBeInTheDocument();
-    expect(screen.getByText('From Muse Spark agent')).toBeInTheDocument();
+    expect(within(screen.getByRole('log')).getByText('From Muse Spark agent')).toBeInTheDocument();
+    // Said aloud with who suggested it.
+    expect(document.querySelector('.sr-only[aria-live="polite"]')).toHaveTextContent(
+      'From Muse Spark agent. Needs your review: Keep only the suggested parts',
+    );
     // Nothing is cut until the person's Apply, which goes to Rust by the proposal's id.
     expect(useProject.getState().snapshot!.history.revision).toBe(3);
     await userEvent.click(within(card).getByRole('button', { name: 'Apply' }));
