@@ -72,6 +72,8 @@ fn main() {
             app.state::<ProjectSessionState>()
                 .on_switch(Arc::new(move || stopping.project_changed()));
             app.manage(analysis);
+            app.manage(commands::export::state_at_launch());
+            commands::export::guard_menu_quit(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -115,10 +117,19 @@ fn main() {
             commands::media::library_pack,
             commands::fonts::fonts_bundled,
             commands::fonts::fonts_face,
+            commands::export::export_plan,
+            commands::export::export_start,
+            commands::export::export_cancel,
+            commands::export::export_reveal,
+            commands::export::export_open,
+            commands::export::export_files,
+            commands::export::export_pick_folder,
         ])
         .build(tauri::generate_context!())
         .expect("Klipolo could not start");
     app.run(|app, event| {
+        // Quitting while an export runs asks first.
+        commands::export::guard_quit(app, &event);
         // Every edit is on the disk before the app goes.
         if let RunEvent::Exit = event
             && let Err(error) = app.state::<ProjectSessionState>().flush()

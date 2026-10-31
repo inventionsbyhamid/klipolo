@@ -10,7 +10,7 @@ import { useEngine } from '../../state/engine';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
-import { useUi } from '../../state/ui';
+import { useShownFormat } from '../editor/formats';
 import { clipIndexAt, mainIndex } from '../timeline/model/index';
 import { GizmoLayer } from './GizmoLayer';
 import { sceneStartUs } from './sceneStart';
@@ -33,12 +33,7 @@ function fitsAs(width: number, height: number, [w, h]: readonly [number, number]
   return Math.round(fit) === box.width && Math.round(fit / ratio) === box.height;
 }
 
-/** The format the preview shows: the one picked, else the project's primary one. */
-export function useShownFormat(): FormatKind {
-  const picked = useUi((s) => s.previewFormat);
-  const primary = useProject((s) => s.snapshot?.project.settings.primaryFormat ?? 'landscape');
-  return picked ?? primary;
-}
+export { useShownFormat };
 
 /**
  * Tells the engine what to render: the format, at the frame box's size in device pixels (within the engine's

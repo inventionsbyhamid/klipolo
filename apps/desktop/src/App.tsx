@@ -5,6 +5,7 @@ import { bridge } from './bridge/commands';
 import { Toaster } from './design/Toaster';
 import { TooltipProvider } from './design/Tooltip';
 import { useEditorShortcuts } from './features/command-palette/useEditorShortcuts';
+import { ExportDialog } from './features/export/ExportDialog';
 import { useFinderDrop } from './features/media/useFinderDrop';
 import { followSpeech } from './features/timeline/media/speech';
 import { useEngineSession } from './features/preview/useEngineSession';
@@ -81,6 +82,7 @@ export function App() {
         </div>
         <PlayerBar />
         <SettingsDialog />
+        <ExportDialog />
         <Toaster />
       </div>
     </TooltipProvider>

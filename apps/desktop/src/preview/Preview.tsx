@@ -1,23 +1,19 @@
 import { useLingui } from '@lingui/react/macro';
-import type { FormatKind } from '../bindings/FormatKind';
 import { AnalysisBanner } from '../features/analysis/AnalysisBanner';
 import { RoughCaptionsNote } from '../features/analysis/RoughCaptionsNote';
+import { FormatPills } from '../features/editor/FormatPills';
+import { useShownFormat } from '../features/editor/formats';
 import { Inspector, useInspected } from '../features/inspector/Inspector';
 import { useImportMedia } from '../features/media/useImportMedia';
 import { AddTitleMenu } from '../features/preview/AddTitleMenu';
-import { Stage, useShownFormat } from '../features/preview/Stage';
+import { Stage } from '../features/preview/Stage';
 import { Icon } from '../layout/Icon';
 import { useEngine } from '../state/engine';
 import { useProject } from '../state/project';
 import { useUi } from '../state/ui';
 
+/** The format the preview shows (it lives with the format switch). */
 export { useShownFormat };
-
-const FORMATS: [FormatKind, string][] = [
-  ['landscape', '16:9'],
-  ['portrait', '9:16'],
-  ['square', '1:1'],
-];
 
 /**
  * An empty project's drop zone: drop videos anywhere on the window, or choose them (the one red), or
@@ -57,10 +53,8 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
   const { t } = useLingui();
   const status = useEngine((s) => s.status);
   const message = useEngine((s) => s.message);
-  const formats = useProject((s) => s.snapshot?.project.settings.formats);
   const hasVideo = useProject((s) => (s.snapshot?.project.timeline.main.length ?? 0) > 0);
   const format = useShownFormat();
-  const setFormat = useUi((s) => s.setPreviewFormat);
   const safeArea = useUi((s) => s.safeArea);
   const setSafeArea = useUi((s) => s.setSafeArea);
   const inspected = useInspected();
@@ -69,13 +63,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
   return (
     <main className={native && hasVideo ? 'panel stage has-hole' : 'panel stage'} aria-label="Preview">
       <div className="stage-head">
-        <div className="seg" role="radiogroup" aria-label="Format">
-          {FORMATS.filter(([kind]) => !formats || formats.includes(kind)).map(([kind, label]) => (
-            <button key={kind} role="radio" aria-checked={format === kind} onClick={() => setFormat(kind)}>
-              {label}
-            </button>
-          ))}
-        </div>
+        <FormatPills />
         <span className="spacer" />
         {status !== 'unavailable' && message && <span className="stage-status">{message}</span>}
         <RoughCaptionsNote />

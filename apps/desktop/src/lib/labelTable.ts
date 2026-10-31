@@ -261,6 +261,11 @@ export const TABLE = {
     message: 'Remove {ratio} version',
     comment: 'Undo history entry; {ratio} is an aspect ratio such as 9:16',
   }),
+  'format.switch.undo': msg({
+    id: 'format.switch.undo',
+    message: 'Switch to {ratio}',
+    comment: 'Undo history entry: the main format changed; {ratio} is an aspect ratio such as 9:16',
+  }),
   'looks.apply.undo': msg({
     id: 'looks.apply.undo',
     message: 'Apply {look} look',
