@@ -165,6 +165,7 @@ impl RecorderState {
         };
         let root = on.root.as_deref();
         let shown = setup::recorder_setup(&*backend, files, probing, root, !own_take, own_take);
+        on.previews.setup_read(&shown.setup.devices);
         let setup = shown.setup.clone();
         *lock(&on.last_setup) = Some(shown);
         Ok(setup)

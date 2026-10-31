@@ -1,7 +1,7 @@
 //! The preview tests' world: the recorder's fake world (fake workers, the clock the test moves) on a fake computer with
 //! one display, one app with windows, a camera and a mic, whose Screen Recording, camera and mic permissions the test
-//! sets, and a page that keeps the frames and events it gets. The dialog's setup is read first, as the dialog does on
-//! opening. Nothing captures and nothing asks.
+//! sets and changes as it runs (read again at every ask), and a page that keeps the frames and events it gets. The
+//! dialog's setup is read first, as the dialog does on opening. Nothing captures and nothing asks.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -19,6 +19,7 @@ use klipolo_capture::synthetic::Script;
 use klipolo_model::coded::CodedError;
 
 use super::frames::PreviewOut;
+use super::test_launch::Logged;
 use super::test_support::*;
 use super::types::{PreviewFrame, PreviewId, Previews, WhatToRecord};
 
@@ -85,6 +86,7 @@ impl PreviewOut for Page {
 /// A recorder whose dialog read its setup, its page, and the permissions the test changes.
 pub(super) struct Previewing {
     pub(super) rec: Fixture,
+    allowed: Arc<Mutex<Permissions>>,
     pub(super) page: Arc<Page>,
 }
 
@@ -109,7 +111,8 @@ pub(super) fn previewing(allowed: Permissions) -> Previewing {
         frontmost: false,
         exe: None,
     });
-    let now = Arc::new(Mutex::new(allowed));
+    let allowed = Arc::new(Mutex::new(allowed));
+    let now = allowed.clone();
     let rec = fixture_changed(script, move |parts| {
         let make = std::mem::replace(&mut parts.backend, Box::new(|| unreachable!()));
         let backend: Arc<dyn Backend> = Arc::new(Allowing { inner: make(), now });
@@ -118,6 +121,7 @@ pub(super) fn previewing(allowed: Permissions) -> Previewing {
     rec.state.setup().unwrap();
     Previewing {
         rec,
+        allowed,
         page: Arc::default(),
     }
 }
@@ -140,6 +144,11 @@ impl Previewing {
         set
     }
 
+    /// The person changes a permission (in System Settings, or by answering macOS).
+    pub(super) fn allow(&self, change: impl FnOnce(&mut Permissions)) {
+        change(&mut self.allowed.lock().unwrap());
+    }
+
     /// The clock moves `ms` milliseconds, and the previews' ticker ticks.
     pub(super) fn advance_ms(&self, ms: u64) {
         self.settle();
@@ -153,6 +162,17 @@ impl Previewing {
         self.launch
             .worker_with(flag)
             .unwrap_or_else(|| panic!("a worker launched with {flag}"))
+    }
+
+    /// The arguments of every worker launched with `flag`, in order.
+    pub(super) fn launched(&self, flag: &str) -> Vec<Vec<String>> {
+        self.settle();
+        (self.launch.log().into_iter())
+            .filter_map(|l| match l {
+                Logged::Spawn(args) if args.iter().any(|a| a == flag) => Some(args),
+                _ => None,
+            })
+            .collect()
     }
 
     /// The commands worker `worker` was sent.
@@ -226,5 +246,22 @@ pub(super) fn frame() -> Event {
         jpeg_base64: STANDARD.encode(JPEG),
         width: 2,
         height: 2,
+    }
+}
+
+/// A card's still of `JPEG`.
+pub(super) fn still(key: &str) -> Event {
+    Event::Thumb {
+        key: key.into(),
+        jpeg_base64: STANDARD.encode(JPEG),
+        width: 2,
+        height: 2,
+    }
+}
+
+/// A preview's `Failed` with `code`.
+pub(super) fn failed(code: &str) -> Event {
+    Event::Failed {
+        error: CodedError::new(code),
     }
 }

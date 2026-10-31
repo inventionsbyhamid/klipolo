@@ -11,8 +11,9 @@
 //!   config from the person's options and the app's fixed choices.
 //! - **The permission steps** (`permissions`, `screen_reopen`): Allow screen recording, Reopen Klipolo and Open privacy
 //!   settings, each on the person's own press.
-//! - **The Record dialog's previews** (`previews`, `live_view`, `check`, `frames`): the live picture of the choice and
-//!   the camera, each in a worker of its own while the dialog is open, within the consent rules.
+//! - **The Record dialog's previews** (`previews`, `live_view`, `check`, `frames`): stills of each screen and app, the
+//!   live picture of the choice, the camera and the mic's level, each in a worker of its own while the dialog is open
+//!   and Klipolo is in front, within the consent rules.
 //! - **A test run** (`KLIPOLO_TEST`): the recorder makes no backend and launches no worker; every command answers
 //!   "Recording is off in this test run." (`state`).
 

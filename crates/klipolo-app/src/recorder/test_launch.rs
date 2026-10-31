@@ -85,6 +85,11 @@ impl FakeLaunch {
             .rposition(|args| args.iter().any(|a| a == arg))
     }
 
+    /// Worker `worker`'s arguments.
+    pub(super) fn args_of(&self, worker: usize) -> Vec<String> {
+        self.0.spawned.lock().unwrap()[worker].clone()
+    }
+
     fn last(&self) -> Arc<Mutex<Far>> {
         (self.0.workers.lock().unwrap().last())
             .cloned()
@@ -119,6 +124,11 @@ impl FakeLaunch {
     /// The latest worker ends with `code`.
     pub(super) fn exit(&self, code: Option<i32>) {
         end(&self.last(), code, &self.0.sent);
+    }
+
+    /// Worker `worker` ends with `code`.
+    pub(super) fn exit_to(&self, worker: usize, code: Option<i32>) {
+        end(&self.nth(worker), code, &self.0.sent);
     }
 }
 

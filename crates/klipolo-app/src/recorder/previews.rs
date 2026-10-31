@@ -1,60 +1,75 @@
 //! The Record dialog's previews, the app's side (`recorder_previews`): the page says what it wants previewed
-//! (`Previews`) and the app starts and stops preview workers to match, each this app's own binary in a form that
+//! (`Previews`) and the app starts and stops four preview workers to match, each this app's own binary in a form that
 //! writes nothing and holds nothing once told to stop:
+//! - **the stills** (`--record-worker --thumbs`): each display and app of the dialog's last setup, about once a second
+//!   each, for the cards;
 //! - **the live picture** of the chosen display or app, small (`live_view`);
-//! - **the camera** for the bubble (`check`).
+//! - **the camera** for the bubble (`check`);
+//! - **the mic's meter** (`--record-worker --meter`): ten peaks a second, as `recorder-event`s of `PreviewId::Mic`.
 //!
-//! Frames go to the page as raw bytes (`frames`), each with when the app got it. The workers' stderr goes into the
-//! app's log (`launch::ProcessLaunch`).
+//! Frames go to the page as raw bytes (`frames`), each with when the app got it, so a card whose stills have stopped
+//! coming can be shown as such. The workers' stderr goes into the app's log (`launch::ProcessLaunch`).
 //!
 //! **Consent** (whatever the page asks):
-//! - The live picture starts only while Screen Recording is allowed (read without a prompt): otherwise
-//!   `capture.permission.screen` and nothing is launched.
-//! - The camera starts by itself only while allowed; otherwise only in the call the person's "Allow camera" press makes
-//!   (`Previews.ask`), when macOS asks; never once refused. One started that way is kept while macOS asks.
-//! - Nothing restarts by itself after it ended.
+//! - The stills and the live picture start only while Screen Recording is allowed (read without a prompt): otherwise
+//!   `capture.permission.screen` and nothing is launched. Once one of them is refused by the system mid-run (the person
+//!   said no to macOS's question, or took the permission back), neither starts again until the dialog reads its setup
+//!   again (it reopens), so macOS's question is never raised again and again.
+//! - The camera and the mic start by themselves only while allowed; otherwise only in the call the person's "Allow
+//!   camera" or "Allow microphone" press makes (`Previews.ask`), when macOS asks; never once refused. One started that
+//!   way is kept while macOS asks.
+//! - Nothing restarts by itself after it ended, but a stills worker held back by its pace (below).
 //!
 //! **Stopping:** every preview stops on `recorder_previews_off`. In a test run there are none.
+//!
+//! **The stills' pace:** each stills worker starts with a content read and a still at once, so a new one starts at most
+//! once every `THUMB_EVERY`; one asked for sooner waits its turn (the ticker's).
 
 use std::io::{BufRead, Read};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use klipolo_capture::backend::{Permission, Permissions};
+use klipolo_capture::backend::{Devices, Permission, Permissions, Target};
 use klipolo_capture::protocol::Event;
+use klipolo_capture::run::thumbs::{MAX_THUMBS, THUMB_EVERY};
 use klipolo_model::coded::CodedError;
 use klipolo_platform::clock::Clock;
 
-use super::check::{Closing, camera_wanted, closing, enforce_close};
+use super::check::{Closing, camera_wanted, closing, enforce_close, may_open};
+use super::config::take_target;
 use super::frames::{PreviewOut, frame_message, now_ms};
 use super::launch::Launch;
-use super::live_view::live_wanted;
+use super::live_view::{card_key, live_wanted};
 use super::setup::is_os_id;
 use super::state::RecorderState;
 use super::take::{Recorder, Worker};
 use super::types::{PreviewId, PreviewKind, Previews, PrivacyPage, WhatToRecord};
 use super::words;
 
-/// How often the ticker looks at closing workers.
+/// How often the ticker looks at closing workers and a stills worker waiting its turn.
 const TICK: Duration = Duration::from_millis(100);
 /// The longest event line read: a frame is a JPEG in base64, a few hundred KB at most.
 const MAX_LINE: u64 = 4 << 20;
 
-/// The previews.
+/// The four previews.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind {
+    Thumbs,
     Live,
     Camera,
+    Mic,
 }
 
 impl Kind {
-    const ALL: [Kind; 2] = [Kind::Live, Kind::Camera];
+    const ALL: [Kind; 4] = [Kind::Thumbs, Kind::Live, Kind::Camera, Kind::Mic];
 
     fn id(self) -> PreviewId {
         match self {
+            Kind::Thumbs => PreviewId::Thumbs,
             Kind::Live => PreviewId::Live,
             Kind::Camera => PreviewId::Camera,
+            Kind::Mic => PreviewId::Mic,
         }
     }
 
@@ -62,9 +77,7 @@ impl Kind {
     fn ended(self) -> CodedError {
         match self {
             Kind::Live => CodedError::new("capture.liveView.unavailable"),
-            Kind::Camera => {
-                CodedError::new("capture.error.os").with("detail", "the preview stopped")
-            }
+            _ => CodedError::new("capture.error.os").with("detail", "the preview stopped"),
         }
     }
 }
@@ -80,7 +93,7 @@ pub(super) struct Wanted {
 /// A running preview.
 struct Open {
     worker: Worker,
-    /// What it shows: the live picture's target as JSON, the camera's id.
+    /// What it shows: the stills' targets as JSON, the live picture's target as JSON, the camera's or the mic's id.
     what: String,
     /// Its frames' key: the live picture's card, the camera's id.
     key: String,
@@ -90,21 +103,35 @@ struct Open {
 
 #[derive(Default)]
 struct Running {
+    thumbs: Option<Open>,
     live: Option<Open>,
     camera: Option<Open>,
+    mic: Option<Open>,
     closing: Vec<Closing>,
     /// Preview workers launched so far: the next one's generation.
     generations: u64,
     /// Where frames and events go: the page of the last `recorder_previews`.
     out: Option<Arc<dyn PreviewOut>>,
+    /// The stills' targets: the displays and apps of the dialog's last setup.
+    targets: Vec<(String, Target)>,
+    /// The stills are wanted and allowed.
+    want_thumbs: bool,
+    /// When the last stills worker was launched.
+    thumbs_at_ms: Option<u64>,
+    /// A stills worker waits its turn (`THUMB_EVERY` after the last one's launch).
+    thumbs_due: bool,
+    /// A screen preview was refused by the system while it ran: neither starts again until the setup is read again.
+    screen_refused: bool,
     ticking: bool,
 }
 
 impl Running {
     fn slot(&mut self, kind: Kind) -> &mut Option<Open> {
         match kind {
+            Kind::Thumbs => &mut self.thumbs,
             Kind::Live => &mut self.live,
             Kind::Camera => &mut self.camera,
+            Kind::Mic => &mut self.mic,
         }
     }
 
@@ -155,8 +182,17 @@ impl PreviewWorkers {
         self.clock.now_ns() / 1_000_000
     }
 
+    /// The Record dialog read its setup (it opened, or tried again): the stills show its displays and apps from now on,
+    /// and the screen's previews may start again after a refusal.
+    pub(super) fn setup_read(&self, devices: &Devices) {
+        let mut run = self.lock();
+        run.targets = thumb_targets(devices);
+        run.screen_refused = false;
+    }
+
     /// The previews to match `want`, their frames and events to `out` from now on. `capture.permission.screen` when the
-    /// live picture was refused (Screen Recording isn't allowed): the camera's is set all the same.
+    /// stills or the live picture were refused (Screen Recording isn't allowed, or the system refused them while they
+    /// ran): the camera's and the mic's are set all the same.
     pub(super) fn set(
         self: &Arc<Self>,
         want: &Previews,
@@ -168,17 +204,26 @@ impl PreviewWorkers {
         let now = self.now_ms();
         let mut run = self.lock();
         run.out = Some(out);
-        let screen = allowed.screen == Permission::Granted;
+        let screen = allowed.screen == Permission::Granted && !run.screen_refused;
+        run.want_thumbs = want.thumbs && screen;
+        self.set_thumbs(&mut run, now);
         let live = live_wanted(want.live.as_ref().filter(|_| screen));
         self.show(&mut run, Kind::Live, live, now);
-        let asked = want.ask == Some(PrivacyPage::Camera);
-        let camera = camera_wanted(want.camera.as_ref(), allowed.camera, asked);
+        let asked = |page| want.ask == Some(page);
+        let camera = camera_wanted(
+            want.camera.as_ref(),
+            allowed.camera,
+            asked(PrivacyPage::Camera),
+        );
         self.show(&mut run, Kind::Camera, camera, now);
+        let mic = meter_wanted(want.mic.as_ref(), allowed.mic, asked(PrivacyPage::Mic));
+        self.show(&mut run, Kind::Mic, mic, now);
         self.start_ticker(&mut run);
-        if want.live.is_some() && !screen {
+        if (want.thumbs || want.live.is_some()) && !screen {
             tracing::info!(
                 permission = ?allowed.screen,
-                "recorder: the live picture waits for Screen Recording"
+                refused = run.screen_refused,
+                "recorder: the screen's previews wait for Screen Recording"
             );
             return Err(CodedError::new("capture.permission.screen"));
         }
@@ -194,12 +239,16 @@ impl PreviewWorkers {
         }
     }
 
-    /// The ticker: a closed preview that hasn't ended is killed. False once none is left (the ticker then ends).
-    pub(super) fn tick(&self) -> bool {
+    /// The ticker: a closed preview that hasn't ended is killed, and a stills worker that waited its turn starts. False
+    /// once neither is left (the ticker then ends).
+    pub(super) fn tick(self: &Arc<Self>) -> bool {
         let now = self.now_ms();
         let mut run = self.lock();
         enforce_close(&mut run.closing, now);
-        let live = run.closing.iter().any(|c| !c.killed);
+        if run.thumbs_due {
+            self.set_thumbs(&mut run, now);
+        }
+        let live = run.thumbs_due || run.closing.iter().any(|c| !c.killed);
         if !live {
             run.ticking = false;
         }
@@ -212,9 +261,38 @@ impl PreviewWorkers {
         for kind in Kind::ALL {
             stopped |= close(run, kind, now);
         }
+        run.want_thumbs = false;
+        run.thumbs_due = false;
         run.out = None;
         self.start_ticker(run);
         stopped
+    }
+
+    /// The stills, as `want_thumbs` and the setup's targets say: the open worker is kept for the same targets, and a new
+    /// one starts at most once every `THUMB_EVERY`, or waits its turn.
+    fn set_thumbs(self: &Arc<Self>, run: &mut Running, now: u64) {
+        let targets = (run.want_thumbs && !run.targets.is_empty())
+            .then(|| serde_json::to_string(&run.targets).ok())
+            .flatten();
+        let Some(targets) = targets else {
+            run.thumbs_due = false;
+            close(run, Kind::Thumbs, now);
+            return;
+        };
+        if (run.thumbs.as_ref()).is_some_and(|open| open.what == targets) {
+            run.thumbs_due = false;
+            return;
+        }
+        close(run, Kind::Thumbs, now);
+        let every = THUMB_EVERY.as_millis() as u64;
+        if run.thumbs_at_ms.is_some_and(|at| now < at + every) {
+            run.thumbs_due = true;
+            return;
+        }
+        run.thumbs_due = false;
+        run.thumbs_at_ms = Some(now);
+        let args = ["--record-worker", "--thumbs", targets.as_str()].map(String::from);
+        self.launch(run, Kind::Thumbs, &args, targets, String::new());
     }
 
     /// `kind` shows `wanted`: an open preview showing it already is kept (whatever its permission now: the person's
@@ -280,9 +358,9 @@ impl PreviewWorkers {
         self.read_in_background(generation, io.stdout, io.wait);
     }
 
-    /// The ticker, while a preview is closing (the app; tests tick themselves).
+    /// The ticker, while a preview is closing or a stills worker waits its turn (the app; tests tick themselves).
     fn start_ticker(self: &Arc<Self>, run: &mut Running) {
-        let needed = run.closing.iter().any(|c| !c.killed);
+        let needed = run.thumbs_due || run.closing.iter().any(|c| !c.killed);
         if !self.ticker || run.ticking || !needed {
             return;
         }
@@ -372,11 +450,23 @@ impl PreviewWorkers {
             };
             let key = (run.slot(kind).as_ref()).map_or_else(String::new, |o| o.key.clone());
             match (kind, ev) {
+                (
+                    Kind::Thumbs,
+                    Event::Thumb {
+                        key, jpeg_base64, ..
+                    },
+                ) => Some((PreviewKind::Thumb, key, jpeg_base64)),
                 (Kind::Live, Event::Preview { jpeg_base64, .. }) => {
                     Some((PreviewKind::Live, key, jpeg_base64))
                 }
                 (Kind::Camera, Event::Preview { jpeg_base64, .. }) => {
                     Some((PreviewKind::Camera, key, jpeg_base64))
+                }
+                (Kind::Mic, ev @ Event::Meter { .. }) => {
+                    if let Some(out) = &run.out {
+                        out.event(kind.id(), &ev);
+                    }
+                    None
                 }
                 (_, Event::Failed { error }) => {
                     failed(&mut run, kind, error);
@@ -433,11 +523,21 @@ impl PreviewWorkers {
     }
 }
 
-/// Open preview `kind` said why it ends, and the page hears it.
+/// Open preview `kind` said why it ends, and the page hears it. The system refused the screen to the stills or the live
+/// picture: neither starts again until the dialog reads its setup again, so macOS's question isn't raised again and
+/// again.
 fn failed(run: &mut Running, kind: Kind, error: CodedError) {
     tracing::info!(?kind, code = %error.code, "recorder: a preview failed");
     if let Some(open) = run.slot(kind) {
         open.said_failed = true;
+    }
+    if matches!(kind, Kind::Thumbs | Kind::Live) && error.code == "capture.permission.screen" {
+        tracing::warn!(
+            "recorder: the screen was refused, so its previews stay off until the dialog reopens"
+        );
+        run.screen_refused = true;
+        run.want_thumbs = false;
+        run.thumbs_due = false;
     }
     if let Some(out) = &run.out {
         out.event(kind.id(), &Event::Failed { error });
@@ -451,6 +551,49 @@ fn close(run: &mut Running, kind: Kind, now: u64) -> bool {
     };
     closing(&mut run.closing, open.worker, now);
     true
+}
+
+/// The mic's meter for `mic`, with `--ask` only on the person's own press while macOS hasn't asked yet; its worker's
+/// arguments only when it may start now (`check::may_open`).
+fn meter_wanted(mic: Option<&String>, permission: Permission, asked: bool) -> Option<Wanted> {
+    let mic = mic?;
+    let args = may_open(permission, asked).map(|ask| {
+        let mut args: Vec<String> = ["--record-worker", "--meter", mic].map(String::from).into();
+        if ask {
+            args.push("--ask".into());
+        }
+        args
+    });
+    if args.is_none() {
+        tracing::info!(
+            ?permission,
+            "recorder: the mic's meter waits for its permission or Allow microphone"
+        );
+    }
+    Some(Wanted {
+        what: mic.clone(),
+        key: mic.clone(),
+        args,
+    })
+}
+
+/// The stills' targets, each under its card's key: every display, then every app's windows on the first display (as
+/// "One app" records them), at most `MAX_THUMBS` (the worker takes no more).
+fn thumb_targets(devices: &Devices) -> Vec<(String, Target)> {
+    let screens = (devices.displays.iter()).map(|d| WhatToRecord::Screen {
+        display: d.id.clone(),
+    });
+    let main = devices.displays.first().map(|d| d.id.clone());
+    let apps = main.into_iter().flat_map(|display| {
+        (devices.apps.iter()).map(move |a| WhatToRecord::App {
+            app_id: a.app_id.clone(),
+            display: display.clone(),
+        })
+    });
+    (screens.chain(apps))
+        .take(MAX_THUMBS)
+        .map(|what| (card_key(&what), take_target(&what)))
+        .collect()
 }
 
 /// The page's ids are names the OS gave (`setup::is_os_id`).
