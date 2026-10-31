@@ -1131,6 +1131,40 @@ fn a_stickers_footage_is_found_again_once_a_removal_is_applied() {
 }
 
 #[test]
+fn a_title_card_with_a_removal_is_the_same_in_either_order() {
+    let p = project();
+    let i = inputs(
+        &p,
+        "a title card saying flying high when I say flying, and cut the first words",
+    );
+    let card = call(
+        "makeTitleCard",
+        json!({"title": "flying high", "prompt": "clouds", "atSec": 12.0, "durationSec": null}),
+    );
+    let cut = call("cutRange", json!({"startSec": 0.5, "endSec": 2.0}));
+    for calls in both_orders([card, cut]) {
+        let out = compile(&p, &i, &calls);
+        // The title is placed on the project as the additions leave it; the cut waits for the person.
+        let with_additions = applied(&p, &out);
+        let title = layers(&with_additions, TrackKind::Overlay)[0].clone();
+        assert_eq!(title.start_us, secs(12.0), "{calls:?}");
+        assert!(
+            matches!(&out.jobs[..], [Job::MakeTitleBackground { title_id, .. }] if *title_id == title.id),
+            "{calls:?}"
+        );
+        // Applied, the cut takes the title along with its footage: the job's layer is still there, earlier.
+        let proposal = out.proposal.as_ref().expect("the cut, proposed");
+        let after = apply_ops(&with_additions, &proposal.tx.ops).unwrap();
+        let moved = layers(&after, TrackKind::Overlay);
+        assert_eq!(
+            (moved[0].id.as_str(), moved[0].start_us),
+            (title.id.as_str(), secs(12.0) - proposal.removed_us),
+            "{calls:?}"
+        );
+    }
+}
+
+#[test]
 fn media_additions_apply_at_once_as_one_step() {
     let p = project();
     let i = inputs(
