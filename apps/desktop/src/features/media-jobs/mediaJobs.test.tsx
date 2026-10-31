@@ -242,6 +242,16 @@ describe('the editing copies pill', () => {
     expect(screen.queryByRole('button', { name: 'Resume all' })).toBeNull();
   });
 
+  it('says a copy waits while Klipolo analyzes a video, and that it goes on by itself after', async () => {
+    useMediaJobs.setState({ jobs: [{ ...paused, reason: coded('copies.paused.analyzing') }] });
+    renderWithProviders(pill());
+    await userEvent.click(screen.getByRole('button', { name: /^Preparing 1 file/ }));
+    expect(screen.getByText('Paused while Klipolo analyzes your video. It goes on by itself.')).toBeInTheDocument();
+    // Nothing for the person to resume: Pause all can still hold it off.
+    expect(screen.getByRole('button', { name: 'Pause all' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Resume all' })).toBeNull();
+  });
+
   it('sits in the top bar only while a project is open, and says what copies are for', async () => {
     useMediaJobs.setState({ jobs: [working] });
     const { unmount } = renderWithProviders(<TopBar />);

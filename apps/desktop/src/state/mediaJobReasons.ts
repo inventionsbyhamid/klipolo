@@ -12,15 +12,16 @@ import { codedMessage } from '../bridge/call';
 
 /**
  * What a row says (`media_jobs::schedule`, `Job::reason`; a waiting row has no reason): waiting its turn, paused while
- * the video plays, an export runs or a take records, paused by a hold (the person's, an action's, or automatic copies
- * off: the list's `held` says which), paused for a full disk, heat or a busy encoder, its worker stopped and about to
- * start again (`workerStopped`), the file missing, or a copy that couldn't be made.
+ * the video plays, an export runs, a take records or analysis decodes a clip, paused by a hold (the person's, an
+ * action's, or automatic copies off: the list's `held` says which), paused for a full disk, heat or a busy encoder, its
+ * worker stopped and about to start again (`workerStopped`), the file missing, or a copy that couldn't be made.
  */
 export type CopyWhy =
   | 'waiting'
   | 'playing'
   | 'exporting'
   | 'recording'
+  | 'analyzing'
   | 'held'
   | 'diskFull'
   | 'hot'
@@ -43,6 +44,7 @@ const WHY: Record<string, CopyWhy> = {
   'copies.paused.playing': 'playing',
   'copies.paused.exporting': 'exporting',
   'copies.paused.recording': 'recording',
+  'copies.paused.analyzing': 'analyzing',
   'copies.paused.held': 'held',
   'copies.paused.diskFull': 'diskFull',
   'copies.paused.hot': 'hot',

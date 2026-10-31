@@ -16,11 +16,11 @@ export { copyWhy, type CopyWhy } from './mediaJobReasons';
  */
 export const PROGRESS_DRAW_MS = 500;
 
-/** Paused only while the video plays, an export runs or a take records: it goes on by itself. */
+/** Paused only while the video plays, an export runs, a take records or analysis decodes: it goes on by itself. */
 export function pausedForAWhile(job: MediaJobInfo): boolean {
   if (job.state !== 'paused') return false;
   const why = copyWhy(job);
-  return why === 'playing' || why === 'exporting' || why === 'recording';
+  return why === 'playing' || why === 'exporting' || why === 'recording' || why === 'analyzing';
 }
 
 /**
