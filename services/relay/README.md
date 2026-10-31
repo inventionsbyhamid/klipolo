@@ -72,9 +72,10 @@ The fast suite needs no torch and never calls Meta:
 .venv/bin/pytest -q
 ```
 
-The full suite, with the slow alignment tests, runs in the image. Run it in the source folder on the server:
+The full suite, with the slow alignment tests, runs in the image. Run it on the server, in the build folder (see Deploy):
 
 ```sh
+cd <build folder>
 docker run --rm --cpus 8 --memory 6g --user root -v "$PWD:/src:ro" -w /src klipolo-relay:<tag> sh -c '
   pip install -q --root-user-action=ignore "pytest>=8" "httpx2>=2.16" "respx>=0.22" &&
   python -m pytest -p no:cacheprovider -m "slow or not slow" -q tests'
@@ -83,6 +84,8 @@ docker run --rm --cpus 8 --memory 6g --user root -v "$PWD:/src:ro" -w /src klipo
 ## Deploy
 
 The relay is the Docker Compose service `klipolo-relay` in the Coolify project `klipolo`, built from `compose.yml`. The image is built on the server and never pulled; `RELAY_TAG` in Coolify picks the tag. Traefik routes `api.klipolo.com` to it with a Let's Encrypt certificate. It has no host ports, 8 CPUs, 6 GB, a data volume and a 200 MB in-memory `/tmp`.
+
+To run your own relay, put your own domain in place of `api.klipolo.com`, in `compose.yml`'s Traefik labels and in step 6's health check.
 
 **Never set a domain for this service in Coolify.** The routing comes from the Traefik labels in `compose.yml`. A Coolify domain adds a second router with Coolify's gzip middleware, which can hold back small streamed events, and it would skip the rate limits.
 
