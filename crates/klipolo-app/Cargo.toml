@@ -53,6 +53,8 @@ security-framework = "3.7"
 [dev-dependencies]
 # A portrait photo's EXIF orientation, a TIFF to import, and a full disk's errno, in the import and save tests.
 image = { version = "0.25", default-features = false, features = ["jpeg", "tiff"] }
+# Reading a test file's streams as the probe does (the engine's FFmpeg bindings, at their version and features).
+ffmpeg = { package = "ffmpeg-next", version = "=9.0.0", default-features = false, features = ["codec", "format"] }
 libc = "0.2"
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "test-util"] }

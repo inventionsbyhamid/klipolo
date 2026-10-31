@@ -2383,6 +2383,7 @@ dependencies = [
 name = "klipolo-app"
 version = "0.1.0"
 dependencies = [
+ "ffmpeg-next",
  "image",
  "klipolo-analysis",
  "klipolo-chat",

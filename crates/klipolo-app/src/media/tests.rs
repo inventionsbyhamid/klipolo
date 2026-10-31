@@ -299,6 +299,15 @@ fn mp3_with_cover_art_is_audio() {
         file.extend(mp3);
     }
     std::fs::write(&path, file).unwrap();
+    // FFmpeg reads the cover as a picture stream: the case this test is about.
+    let _ = ffmpeg::init();
+    let input = ffmpeg::format::input(&path).unwrap();
+    assert!(
+        input.streams().any(|s| s
+            .disposition()
+            .contains(ffmpeg::format::stream::Disposition::ATTACHED_PIC)),
+        "the cover is an attached picture stream"
+    );
     let result = probe_each(vec![path], probe_asset);
     assert!(result.skipped.is_empty(), "{:?}", result.skipped);
     let song = &result.assets[0];
@@ -324,6 +333,26 @@ fn a_tiff_imports_as_a_picture() {
     let scan = &result.assets[0];
     assert_eq!(
         (scan.kind, scan.width, scan.height),
+        (AssetKind::Image, 40, 20)
+    );
+}
+
+/// A HEIC photo (the engine's 40 x 20 fixture) imports as a picture at its size. The Mac reads HEIC; this runs there.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_heic_imports_as_a_picture() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("photo.heic");
+    std::fs::write(
+        &path,
+        include_bytes!("../../../klipolo-engine/src/render/image_load/red-blue-40x20.heic"),
+    )
+    .unwrap();
+    let result = probe_each(vec![path], probe_asset);
+    assert!(result.skipped.is_empty(), "{:?}", result.skipped);
+    let photo = &result.assets[0];
+    assert_eq!(
+        (photo.kind, photo.width, photo.height),
         (AssetKind::Image, 40, 20)
     );
 }
