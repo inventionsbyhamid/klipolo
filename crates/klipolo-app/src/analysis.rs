@@ -13,8 +13,9 @@
 //!   utility priority, and one video call runs at a time.
 //! - **Results** go into the engine's `Speech` (a new `Arc<Speech>` for the open revision: the captions update live),
 //!   with each clip's sound levels (`Speech::levels`, from the sound cache's energies), and are kept here for chat
-//!   (`AnalysisState::analysis_for`). Each finished step is cached (`klipolo_analysis::cache`): `transcript.json` once
-//!   its words are timed, `scenes.json` once logged. Nothing half done is cached.
+//!   (`AnalysisState::analysis_for`). Each finished step is cached (`klipolo_analysis::cache`): `transcript.json` as
+//!   soon as it is heard (its words timed roughly, for a quit or a crash to keep) and again once they are timed,
+//!   `scenes.json` once logged. A half-done scene log isn't cached.
 //! - **Stops:** Cancel (`AnalysisState::cancel`) sends nothing more after the requests in flight; their clips go back to
 //!   not analysed and keep what was cached. A used-up credit (402) stops every paid request of the run, and the clips
 //!   that needed one fail with the reason (the relay's sentence and the way on: a Meta key); word timing, which is free,

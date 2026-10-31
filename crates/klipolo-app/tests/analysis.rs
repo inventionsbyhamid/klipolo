@@ -16,7 +16,7 @@ use klipolo_analysis::providers::meta::{
 };
 use klipolo_analysis::proxy::{ProxyChunk, ProxyInfo};
 use klipolo_analysis::scenes::{SceneItem, SceneLog};
-use klipolo_analysis::transcript::{Timing, TranscriptOut, Turn, finish};
+use klipolo_analysis::transcript::{ROUGH_WORDS, Timing, TranscriptOut, Turn, finish};
 use klipolo_app::analysis::chat::{scene_entries, speaker_turns};
 use klipolo_app::analysis::media::{EngineMedia, Media};
 use klipolo_app::analysis::{
@@ -1489,6 +1489,104 @@ async fn cancel_during_word_timing_keeps_what_was_heard() {
     server.verify().await;
 }
 
+/// The app quits (or crashes) while words are timed: the transcript, paid for already, is cached with its words timed
+/// roughly, for a reason another try can fix. The next launch transcribes nothing and times the words again.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_quit_during_word_timing_keeps_the_paid_transcript() {
+    let server = MockServer::start().await;
+    let media = FakeMedia::whole(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    Mock::given(method("POST"))
+        .and(path("/v1/asr/transcribe"))
+        .respond_with(asr_answer())
+        .expect(1)
+        .mount(&server)
+        .await;
+    // The first launch's word timing doesn't answer before the quit; the next launch's does.
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(Counted {
+            count: h.aligns.clone(),
+            template: align_answer().set_delay(Duration::from_secs(30)),
+        })
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/align"))
+        .respond_with(align_answer())
+        .expect(1)
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    nothing_else(&server).await;
+    let file = h.clip("talk.m4a", 2);
+    let clip = asset("talk", AssetKind::Audio, &file, SECONDS);
+
+    // The first launch runs on a runtime of its own, shut down while it times words, as quitting the app stops it.
+    let quitting = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+    {
+        let (state, clip) = (h.state.clone(), clip.clone());
+        quitting.spawn(async move {
+            state
+                .start(std::slice::from_ref(&clip))
+                .await
+                .finished()
+                .await
+        });
+    }
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while h.aligns.load(Ordering::SeqCst) == 0 {
+        assert!(Instant::now() < deadline, "word timing never started");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    quitting.shutdown_background();
+
+    let kept: TranscriptOut = h
+        .cache_dir(&file)
+        .load("transcript")
+        .expect("the paid transcript is cached");
+    assert!(kept.approximate && !kept.turns.is_empty());
+    assert_ne!(kept.approximate_reason.as_deref(), Some(ROUGH_WORDS));
+
+    // The next launch: a new analysis over the same cache. The clip costs nothing, and the page's own start as the
+    // project opens times its words.
+    let relaunched = AnalysisState::new(
+        Arc::new(Credentials::load(
+            Arc::new(key_store()),
+            Endpoints {
+                meta_base: format!("{}/v1", server.uri()),
+                relay_base: server.uri(),
+            },
+            DEVICE.into(),
+        )),
+        media,
+        h.cache_root.clone(),
+        h.clips.with_file_name("work-again"),
+        Arc::new(|_| {}),
+        Arc::new(|_| {}),
+    );
+    let estimate = relaunched.estimate(std::slice::from_ref(&clip)).await;
+    assert_eq!(
+        (estimate.cached, estimate.usd),
+        (vec!["talk".to_owned()], 0.0)
+    );
+    relaunched
+        .start_as(std::slice::from_ref(&clip), Asked::Page)
+        .await
+        .finished()
+        .await;
+
+    let timed: TranscriptOut = h.cache_dir(&file).load("transcript").unwrap();
+    assert!(!timed.approximate && timed.turns.iter().all(|t| t.aligned));
+    server.verify().await;
+}
+
 /// A clip's sound levels are cached with its transcript: a clip analysed before gets them with no decode.
 #[tokio::test(flavor = "multi_thread")]
 async fn cached_levels_need_no_decode() {
@@ -1721,11 +1819,12 @@ async fn a_task_that_panics_still_ends_and_lets_go() {
         .respond_with(device(2.0, 0.0))
         .mount(&server)
         .await;
+    // Before anything is paid for: a fault later (timing words) keeps the transcript, and nothing is left to promise.
     let h = harness_with(
         &server,
         code_store(),
         FakeMedia::whole(SECONDS),
-        Some(AnalysisStep::Words),
+        Some(AnalysisStep::Transcript),
     );
     mount_speech(&server, "/meta/v1", &h.aligns, Duration::ZERO).await;
     nothing_else(&server).await;

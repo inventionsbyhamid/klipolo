@@ -59,6 +59,9 @@ impl Run {
 
 /// Why a transcript cached when Cancel stopped its word timing is approximate (it is timed again on the next run).
 pub(crate) const WORDS_STOPPED: &str = "Word timing stopped before it finished.";
+/// Why the turn-level transcript cached before its words are timed is approximate. The timed one replaces it; one left
+/// by a quit or a crash is timed again on the next run.
+pub(crate) const WORDS_UNFINISHED: &str = "Word timing didn't finish last time.";
 
 /// Whether `found`'s words are timed roughly for a reason another try may fix (word timing failed, stopped or was
 /// unreachable), rather than because its turns don't match their sound (`transcript::ROUGH_WORDS`).
@@ -288,8 +291,8 @@ impl AnalysisState {
         }
     }
 
-    /// The clip's transcript: its sound, its turns (published at once as turn-level captions), its words timed;
-    /// cached once timed. A clip with no sound, or only silence, makes no request and has no words.
+    /// The clip's transcript: its sound, its turns (published and cached at once as turn-level captions), its words
+    /// timed; cached again once timed. A clip with no sound, or only silence, makes no request and has no words.
     async fn transcribe(self: &Arc<Self>, job: &Job<'_>) -> Result<TranscriptOut, Outcome> {
         let Job {
             key,
@@ -342,9 +345,9 @@ impl AnalysisState {
         Ok(out)
     }
 
-    /// The words of the clip's WAV: `hear`, the turn-level transcript published, `align`, `finish`. Cancelled while
-    /// timing words: what was heard (and timed so far) is given as `Heard::Stopped`, to cache: its transcription is
-    /// paid for, and its words can be timed again for free.
+    /// The words of the clip's WAV: `hear`, the turn-level transcript published and cached, `align`, `finish`.
+    /// Cancelled while timing words: what was heard (and timed so far) is given as `Heard::Stopped`, to cache: its
+    /// transcription is paid for, and its words can be timed again for free.
     async fn hear_and_time(
         self: &Arc<Self>,
         job: &Job<'_>,
@@ -390,6 +393,10 @@ impl AnalysisState {
         );
         rough.transcript.key = key.to_owned();
         self.found_transcript(key, &rough);
+        // Paid for already: cached now, so a quit or a crash while words are timed doesn't lose it. Its reason isn't
+        // `ROUGH_WORDS`, so the next run times its words again (`timed_again`); the timed transcript replaces it.
+        rough.approximate_reason = Some(WORDS_UNFINISHED.to_owned());
+        self.store(job.dir, "transcript", &rough, model).await;
         calls
             .meter
             .begin(AnalysisStep::Words, heard.turns.len(), 0, 100);
