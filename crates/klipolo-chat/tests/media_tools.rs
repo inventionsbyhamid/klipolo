@@ -9,18 +9,22 @@
 
 use std::collections::HashMap;
 
-use klipolo_chat::compile::{TEXT_COMING_SOON, TITLE_CARD};
 use klipolo_chat::tools::{PictureSize, Position, TextPreset};
 use klipolo_chat::{
     AnalysisState, Audience, Compiled, FunctionCall, Inputs, Job, Library, LibraryItem,
-    MakeSticker, MediaKind, Problem, Refs, Refusal, SceneEntry, SceneLog, ToolCall, View, compile,
-    picture_ops, sticker_placement,
+    MakeSticker, MediaKind, Problem, Refs, SceneEntry, SceneLog, ToolCall, View, compile,
+    sticker_ops, sticker_placement,
 };
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::contrib::ContribId;
-use klipolo_model::layout::{Anchor, Layout};
+use klipolo_model::layout::{Anchor, Layout, resolve_rect};
+use klipolo_model::media::image::{Spot, add_image_ops, add_image_ops_at, image_layout};
 use klipolo_model::media::music::is_music;
-use klipolo_model::ops::Op;
+use klipolo_model::media::sound::add_sound_ops;
+use klipolo_model::media::text::{
+    PORTRAIT_CLEAR, TextPreset as ModelPreset, TitleTemplate, preset_rect, text_item,
+};
+use klipolo_model::ops::{Op, TrackTarget};
 use klipolo_model::params::ParamValue;
 use klipolo_model::project::{Asset, FormatKind};
 use klipolo_model::query::video_duration;
@@ -612,8 +616,14 @@ fn words_on(item: &Item) -> &str {
     }
 }
 
+/// The one overlay layer of `p` once `out`'s additions are applied.
+fn the_layer(p: &Project, out: &Compiled) -> Item {
+    let overlays = layers(&applied(p, out), TrackKind::Overlay);
+    assert_eq!(overlays.len(), 1, "{overlays:#?}");
+    overlays[0].clone()
+}
+
 #[test]
-#[ignore = "addText is a stub until its four presets are built on the model's text layers"]
 fn add_text_title_at_start_is_three_seconds() {
     let p = project();
     let i = inputs(
@@ -630,17 +640,46 @@ fn add_text_title_at_start_is_three_seconds() {
             )],
         );
         assert_eq!(out.additions.as_ref().unwrap().label, "chat.addText");
-        let titles = layers(&applied(&p, &out), TrackKind::Overlay);
-        assert_eq!(titles.len(), 1);
-        let title = &titles[0];
+        let title = the_layer(&p, &out);
         assert_eq!((title.start_us, title.duration_us), (0, secs(3.0)));
-        assert_eq!(words_on(title), "Day 1 in Lisbon");
+        assert_eq!(words_on(&title), "Day 1 in Lisbon");
+        // Exactly the layer the canvas's Add title makes.
+        let made = text_item(
+            ModelPreset::Title,
+            "Day 1 in Lisbon",
+            FormatKind::Landscape,
+            0,
+        );
+        assert_eq!(
+            (&title.content, &title.layout),
+            (&made.content, &made.layout)
+        );
     }
 }
 
 #[test]
-#[ignore = "addText is a stub until its four presets are built on the model's text layers"]
-fn text_keeps_the_persons_own_words_and_the_models_have_no_dashes() {
+fn an_invented_time_for_words_is_refused() {
+    // Nothing is said, shown or selected near 25.5 s.
+    let p = project();
+    let i = inputs(&p, "put Day 1 on screen at the good bit");
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "addText",
+            json!({"text": "Day 1", "preset": "title", "atSec": 25.5, "durationSec": null}),
+        )],
+    );
+    assert_eq!(out.additions, None);
+    let reason = refused_to_model(&out, 0);
+    assert!(
+        reason.starts_with("addText: atSec 25.5 is not within 0.3 s of a word"),
+        "{reason}"
+    );
+}
+
+#[test]
+fn add_text_takes_the_persons_own_words_or_asks() {
     let p = project();
     // The person's spelling wins over the model's.
     let i = inputs(&p, "lower third saying day 1 in LISBON please");
@@ -652,46 +691,86 @@ fn text_keeps_the_persons_own_words_and_the_models_have_no_dashes() {
             json!({"text": "Day 1 in Lisbon", "preset": "lower-third", "atSec": 0.0, "durationSec": null}),
         )],
     );
-    let layer = &layers(&applied(&p, &out), TrackKind::Overlay)[0];
-    assert_eq!(words_on(layer), "day 1 in LISBON");
-    // Words the model wrote itself (a name from the transcript) never show a dash.
+    assert_eq!(words_on(&the_layer(&p, &out)), "day 1 in LISBON");
+    // Words of the model's own are refused back, for it to ask: nothing is added.
     let i = inputs(&p, "put her name on screen");
     let out = compile(
         &p,
         &i,
         &[call(
             "addText",
-            json!({"text": "Sunita \u{2014} commander", "preset": "lower-third", "atSec": 0.0, "durationSec": null}),
+            json!({"text": "Sunita Williams", "preset": "lower-third", "atSec": 0.0, "durationSec": null}),
         )],
     );
-    let layer = &layers(&applied(&p, &out), TrackKind::Overlay)[0];
-    assert_eq!(words_on(layer), "Sunita, commander");
+    assert_eq!(out.additions, None);
+    let reason = refused_to_model(&out, 0);
+    assert!(
+        reason.starts_with("addText: the words must be the person's own")
+            && reason.contains("askUser"),
+        "{reason}"
+    );
 }
 
 #[test]
-fn add_text_is_coming_soon() {
-    // Offered with its four presets, but placing them comes later: the person is told plainly, nothing is added, and
-    // the model is not sent back to try the title card instead.
-    let p = project();
-    let i = inputs(&p, "put a title 'Day 1 in Lisbon' at the start");
-    let out = compile(
-        &p,
-        &i,
-        &[call(
-            "addText",
-            json!({"text": "Day 1 in Lisbon", "preset": "title", "atSec": 0.0, "durationSec": null}),
-        )],
-    );
-    assert_eq!((&out.additions, out.jobs.len()), (&None, 0));
-    assert_eq!(
-        out.refusals,
-        vec![Refusal {
-            call_index: 0,
-            reason: TEXT_COMING_SOON.to_owned(),
-            audience: Audience::Person,
-            clip: None,
-        }]
-    );
+fn every_text_preset_lands_where_the_canvas_puts_it_in_every_format() {
+    // Each of the four presets, with each format the main one: the layer the model's `text_item` makes, in each
+    // format's own place, inside the area 9:16 keeps clear.
+    let formats = [
+        FormatKind::Landscape,
+        FormatKind::Portrait,
+        FormatKind::Square,
+    ];
+    let presets = [
+        ("title", ModelPreset::Title),
+        ("lower-third", ModelPreset::LowerThird),
+        ("plain", ModelPreset::Plain),
+        ("caption", ModelPreset::Caption),
+    ];
+    for primary in formats {
+        let mut p = project();
+        p.settings.formats = formats.to_vec();
+        p.settings.primary_format = primary;
+        let i = inputs(&p, "words on screen saying a day at the studio, at 2 s");
+        for (word, preset) in presets {
+            let out = compile(
+                &p,
+                &i,
+                &[call(
+                    "addText",
+                    json!({"text": "A day at the studio", "preset": word, "atSec": 2.0, "durationSec": null}),
+                )],
+            );
+            let layer = the_layer(&p, &out);
+            let made = text_item(preset, "a day at the studio", primary, secs(2.0));
+            assert_eq!(
+                (
+                    &layer.content,
+                    &layer.layout,
+                    layer.start_us,
+                    layer.duration_us
+                ),
+                (&made.content, &made.layout, secs(2.0), secs(3.0)),
+                "{word} in {primary:?}"
+            );
+            assert!(layer.attach.is_some(), "{word}: moves with its clip");
+            for format in formats {
+                let r = resolve_rect(&layer.layout, primary, format);
+                assert_eq!(
+                    r,
+                    preset_rect(preset, format),
+                    "{word} in {primary:?}, {format:?}"
+                );
+                if format == FormatKind::Portrait {
+                    let c = PORTRAIT_CLEAR;
+                    let inside = r.x >= c.x - 1e-9
+                        && r.y >= c.y - 1e-9
+                        && r.x + r.w <= c.x + c.w + 1e-9
+                        && r.y + r.h <= c.y + c.h + 1e-9;
+                    assert!(inside, "{word} in {primary:?}: {r:?}");
+                }
+            }
+        }
+    }
 }
 
 #[test]
@@ -808,6 +887,10 @@ fn nothing_is_placed_at_or_past_the_videos_end() {
             "makeSticker",
             json!({"prompt": "plane", "position": null, "atSec": 30.0, "durationSec": null}),
         ),
+        call(
+            "addText",
+            json!({"text": "the end", "preset": "plain", "atSec": 30.0, "durationSec": null}),
+        ),
     ];
     for c in at_end {
         let out = compile(&p, &i, std::slice::from_ref(&c));
@@ -869,6 +952,111 @@ fn nothing_is_placed_at_or_past_the_videos_end() {
         vec![(secs(28.0), secs(2.0)), (secs(28.0), secs(2.0))]
     );
     assert_eq!(video_duration(&after.timeline), secs(30.0));
+    // Words 0.2 s before the end are cut there too, their fades fitted to what is left (each no longer than the layer).
+    let mut last = inputs(&p, "add The End here");
+    last.view.playhead_us = secs(29.8);
+    let out = compile(
+        &p,
+        &last,
+        &[call(
+            "addText",
+            json!({"text": "The End", "preset": "plain", "atSec": null, "durationSec": null}),
+        )],
+    );
+    let words = the_layer(&p, &out);
+    assert_eq!((words.start_us, words.duration_us), (secs(29.8), secs(0.2)));
+    let motion = words.layout.motion.as_ref().expect("its fades");
+    for fade in [&motion.enter, &motion.exit].into_iter().flatten() {
+        assert!(fade.duration_us <= secs(0.2), "{fade:?}");
+    }
+}
+
+/// A layer an `AddItem` adds, without its id (chat's and the library's are each new): the track it asks for, whether
+/// it attaches to the clip under it, and the layer.
+#[derive(Debug, PartialEq)]
+struct Added {
+    track: TrackTarget,
+    attach: bool,
+    item: Item,
+}
+
+/// The layers `ops` add.
+fn layers_of(ops: &[Op]) -> Vec<Added> {
+    (ops.iter())
+        .filter_map(|op| match op {
+            Op::AddItem {
+                track,
+                item,
+                attach,
+            } => Some(Added {
+                track: track.clone(),
+                attach: *attach,
+                item: Item {
+                    id: String::new(),
+                    ..item.clone()
+                },
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The layers `out`'s additions add.
+fn added_layers(out: &Compiled) -> Vec<Added> {
+    layers_of(&out.additions.as_ref().expect("additions").ops)
+}
+
+#[test]
+fn chat_places_sounds_and_pictures_as_the_librarys_plus_does() {
+    let p = project();
+    let i = inputs(&p, "a whoosh and the logo at 12 s");
+    // A sound: the same layer as the library's + makes at that moment.
+    let out = compile(
+        &p,
+        &i,
+        &[call("addSound", json!({"name": "whoosh", "atSec": [12.0]}))],
+    );
+    let plus = add_sound_ops(&p, &whoosh(), secs(12.0)).unwrap();
+    assert_eq!(added_layers(&out), layers_of(&plus));
+    // Attached to the clip under it, on the first track with room, as the library's.
+    assert!(
+        added_layers(&out)
+            .iter()
+            .all(|a| a.attach && a.track == TrackTarget::Auto)
+    );
+    // A picture with no size or place given: the same, medium and in the middle, for its 5 s.
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "addImage",
+            json!({"file": "logo", "size": null, "position": null, "atSec": 12.0, "durationSec": null}),
+        )],
+    );
+    let plus = add_image_ops(&p, &logo(), secs(12.0)).unwrap();
+    assert_eq!(added_layers(&out), layers_of(&plus));
+    // In a corner, each format has its own: in 9:16, inside the area the apps keep clear.
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "addImage",
+            json!({"file": "logo", "size": "small", "position": "top-right", "atSec": 12.0, "durationSec": null}),
+        )],
+    );
+    let added = added_layers(&out);
+    assert!(added[0].attach, "moves with the clip under it");
+    let layout = &added[0].item.layout;
+    assert_eq!(
+        layout,
+        &image_layout(800, 400, 0.2, Spot::TopRight, FormatKind::Landscape)
+    );
+    let portrait = resolve_rect(layout, FormatKind::Landscape, FormatKind::Portrait);
+    let c = PORTRAIT_CLEAR;
+    assert!(
+        portrait.x >= c.x && portrait.y >= c.y && portrait.x + portrait.w <= c.x + c.w,
+        "{portrait:?}"
+    );
 }
 
 #[test]
@@ -927,6 +1115,47 @@ fn make_sticker_becomes_a_job_not_an_op() {
 }
 
 #[test]
+fn a_drawn_sticker_is_placed_where_its_job_says_as_a_picture_is() {
+    // A 5 s sticker at 12 s, top right; the drawing comes back as a picture not in the project yet.
+    let p = project();
+    let mut job = sticker_job(&p, 12.0);
+    job.position = Position::TopRight;
+    let drawn = asset(
+        "drawn",
+        "image",
+        "paper plane sticker.png",
+        5.0,
+        (1024, 1024),
+        false,
+    );
+    let ops = sticker_ops(&p, &job, &drawn).expect("a place");
+    // The same ops the library's picture makes there, for the job's length.
+    let mut plus = add_image_ops_at(&p, &drawn, secs(12.0), 0.35, Spot::TopRight).unwrap();
+    for op in &mut plus {
+        if let Op::AddItem { item, .. } = op {
+            item.duration_us = secs(5.0);
+        }
+    }
+    assert_eq!(layers_of(&ops), layers_of(&plus));
+    assert_eq!(assets_added(&ops), ["drawn"]);
+    let after = apply_ops(&p, &ops).unwrap();
+    let sticker = &layers(&after, TrackKind::Overlay)[0];
+    assert!(
+        sticker.attach.is_some(),
+        "the sticker moves with its footage"
+    );
+    assert_eq!(
+        (sticker.start_us, sticker.duration_us),
+        (secs(12.0), secs(5.0))
+    );
+    // Its moment cut while it was drawn: nowhere to go.
+    assert_eq!(
+        sticker_ops(&cut_out(&p, &[(11.0, 13.0)]), &job, &drawn),
+        None
+    );
+}
+
+#[test]
 fn a_sticker_whose_footage_is_cut_while_it_is_drawn_is_dropped() {
     let p = project();
     let job = sticker_job(&p, 12.0);
@@ -973,14 +1202,12 @@ fn a_copy_placed_earlier_doesnt_take_the_sticker() {
 fn a_sticker_past_the_main_track_has_no_anchor() {
     // A picture runs to 35 s, past the clips' end at 30 s; a sticker at 32 s has no footage under it.
     let p = project();
-    let ops = picture_ops(
-        &p,
-        &logo(),
-        secs(25.0),
-        secs(10.0),
-        PictureSize::Small,
-        Position::Center,
-    );
+    let mut ops = add_image_ops(&p, &logo(), secs(25.0)).unwrap();
+    for op in &mut ops {
+        if let Op::AddItem { item, .. } = op {
+            item.duration_us = secs(10.0);
+        }
+    }
     let longer = apply_ops(&p, &ops).unwrap();
     assert_eq!(video_duration(&longer.timeline), secs(35.0));
     let job = sticker_job(&longer, 32.0);
@@ -1035,7 +1262,7 @@ fn make_title_card_writes_the_persons_title_over_a_background_job() {
     assert_eq!(title.layout, full);
     assert_eq!((title.start_us, title.duration_us), (0, secs(4.0)));
     let (source, texts) = generator(title);
-    assert_eq!(source, &ContribId::builtin(TITLE_CARD));
+    assert_eq!(source, &TitleTemplate::TitleCard.source());
     // Exactly as the person wrote it, and only it: the template's own subtitle is left empty.
     assert_eq!(
         texts,
@@ -1056,7 +1283,7 @@ fn the_title_card_lasts_as_long_as_its_template() {
     // The default length is the template's own `duration`, its words coming in and going out included.
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../klipolo-model/presets")
-        .join(TITLE_CARD)
+        .join("scene.title-card")
         .join("scene.json");
     let scene = klipolo_model::Scene::from_stored(&std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(klipolo_chat::tools::media::TEMPLATE_SECS, scene.duration);
@@ -1085,6 +1312,28 @@ fn a_title_card_keeps_a_length_the_person_gave_and_its_template_holds_its_title(
         "{:?}",
         out.refusals
     );
+}
+
+#[test]
+fn a_title_cards_background_may_be_the_models_own_choice() {
+    // The person gave only the words: the background the model chose is drawn, and the title goes in at once.
+    let p = project();
+    let i = inputs(&p, "make a title card that says Day 1 in Lisbon");
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "makeTitleCard",
+            json!({"title": "Day 1 in Lisbon", "prompt": "Lisbon street at golden hour", "atSec": null, "durationSec": null}),
+        )],
+    );
+    assert_eq!(out.refusals, vec![]);
+    let title = the_layer(&p, &out);
+    assert!(matches!(
+        &out.jobs[..],
+        [Job::MakeTitleBackground { prompt, title_id, .. }]
+            if prompt == "Lisbon street at golden hour" && *title_id == title.id
+    ));
 }
 
 #[test]
@@ -1379,6 +1628,43 @@ fn media_additions_apply_at_once_as_one_step() {
             ..
         })]
     ));
+}
+
+#[test]
+fn the_undo_step_is_named_for_the_answers_first_call() {
+    // The music is asked for first; the clip's split goes in before it (layers go on what the edits make), yet the one
+    // undo step is named for the music, then how many more.
+    let p = project();
+    let i = inputs(&p, "add lofi, and split the clip at 12 s");
+    let out = compile(
+        &p,
+        &i,
+        &[
+            call(
+                "addMusic",
+                json!({"file": "lofi", "volume": null, "duck": null, "atSec": 0.0}),
+            ),
+            call("splitAt", json!({"atSec": 12.0})),
+        ],
+    );
+    let tx = out.additions.as_ref().expect("additions");
+    assert_eq!(tx.label, "chat.andMore");
+    let params = tx.params.as_ref().unwrap();
+    match &params["first"] {
+        ErrorParam::Coded(first) => assert_eq!(first.code, "chat.addMusic"),
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(params["more"], ErrorParam::from(1usize));
+    // A format the video already has changes nothing, and is noted so.
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "setFormat",
+            json!({"format": "landscape", "keepOthers": true}),
+        )],
+    );
+    assert_eq!((out.additions, out.unchanged), (None, vec![0]));
 }
 
 #[test]

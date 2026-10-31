@@ -47,6 +47,11 @@ export const CHAT_LABELS: Record<string, MessageDescriptor> = {
   'chat.addMusic': msg({ id: 'chat.addMusic', message: 'Add {file}', comment: 'Undo history entry: music added' }),
   'chat.addSound': msg({ id: 'chat.addSound', message: 'Add {name}', comment: 'Undo history entry: a sound added' }),
   'chat.addImage': msg({ id: 'chat.addImage', message: 'Add {file}', comment: 'Undo history entry: a picture added' }),
+  'chat.addText': msg({
+    id: 'chat.addText',
+    message: 'Add the words {text}',
+    comment: 'Undo history entry: words put on screen in a text preset, e.g. "Add the words Day 1 in Lisbon"',
+  }),
   'chat.makeTitleCard': msg({
     id: 'chat.makeTitleCard',
     message: 'Add the title {title}',

@@ -1140,11 +1140,8 @@ fn drawn() -> Result<Vec<MadeImage>, ImageError> {
 struct Spot(Option<(Us, Us)>);
 
 impl StickerPlacement for Spot {
-    fn placement(&self, _project: &Project) -> Option<(Us, Us)> {
-        self.0
-    }
-
-    fn ops(&self, project: &Project, asset: &Asset, start_us: Us, duration_us: Us) -> Vec<Op> {
+    fn ops(&self, project: &Project, asset: &Asset) -> Option<Vec<Op>> {
+        let (start_us, duration_us) = self.0?;
         let mut ops = Vec::new();
         if project.asset(&asset.id).is_none() {
             ops.push(Op::AddAssets {
@@ -1166,7 +1163,7 @@ impl StickerPlacement for Spot {
                 effects: Vec::new(),
             },
         });
-        ops
+        Some(ops)
     }
 }
 

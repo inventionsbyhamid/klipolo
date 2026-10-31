@@ -2,18 +2,21 @@
 //! and pictures Muse Image draws first as jobs.
 //! - `addMusic`: `media::music::add_music_ops` (30 %, ducking under speech, fades, to the video's end) from the time
 //!   given, else the playhead. "The song" and the like are the person's one music file (`library::is_generic`).
-//! - `addSound`: the whole file at full volume with no fades at each time, attached to the clip under it, cut where the
-//!   video ends; two times within `evidence::TOLERANCE_US` of each other are one sound, at the first.
-//! - `addText`: STUB until the four text presets are built on the model's text layers: refused for the person
-//!   (`TEXT_COMING_SOON`), nothing added.
-//! - `addImage`: the picture at a size and a place in the frame (`picture_layout`).
+//! - `addSound`: a sound at each time as the library's + puts one (`media::sound::add_sound_ops`: the whole file at full
+//!   volume with no fades, attached to the clip under it, cut where the video ends); two times within
+//!   `evidence::TOLERANCE_US` of each other are one sound, at the first.
+//! - `addText`: the person's own words (`persons_words`; words of the model's own are refused back, for it to ask) in
+//!   one of the four text presets, placed by the model's `media::text::add_text_ops` exactly as the canvas's Add title
+//!   and the library's presets place it: each format's own place, in 9:16 inside the area the apps keep clear.
+//! - `addImage`: the picture as the library's + puts one (`media::image::add_image_ops_at`), at a size and in a corner of
+//!   each format's own area (in 9:16 the area the apps keep clear) when one was asked for.
 //! - `makeSticker`: a `Job::MakeSticker` only, on the project as the message's additions leave it, anchored to the
-//!   footage it shows over as a layer attaches (`Attach`); once the picture is drawn the app asks `sticker_placement`
-//!   where and how long, on the project as it is then, and places it with `picture_ops`. A job's prompt names the
+//!   footage it shows over as a layer attaches (`Attach`); once the picture is drawn the app places it with
+//!   `sticker_ops` (where and how long `sticker_placement` says, on the project as it is then). A job's prompt names the
 //!   picture in the library too, so it has no dashes either.
-//! - `makeTitleCard`: the title card template (`TITLE_CARD`, a scene preset filling the frame in every format,
-//!   `Layout::full_frame`) with the person's exact title (`persons_words`) and its other words left empty so only the
-//!   title shows, for the template's own length (`TEMPLATE_SECS`) unless the person gave one, applied at once; and a
+//! - `makeTitleCard`: the title card template as the canvas adds one (`media::text::add_template_ops`, filling the frame
+//!   in every format) with the person's exact title (`persons_words`) and its other words left empty so only the
+//!   title shows, for the template's own length (`TEMPLATE_US`) unless the person gave one, applied at once; and a
 //!   `Job::MakeTitleBackground` for the picture to go under it, in the primary format as the additions leave it. No
 //!   title of theirs: refused back, for the model to ask.
 //!
@@ -22,126 +25,37 @@
 //! play past the end is cut there, so no media call makes the video longer. A file from the pack comes in with the ops
 //! that first place it.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use klipolo_model::Project;
 use klipolo_model::coded::ErrorParam;
-use klipolo_model::contrib::{Catalog, ContribId};
-use klipolo_model::ids::{Id, new_id};
-use klipolo_model::layout::{Anchor, BoxN, Layout};
+use klipolo_model::contrib::Catalog;
+use klipolo_model::ids::Id;
+use klipolo_model::media::image::{IMAGE_US, add_image_ops_at};
 use klipolo_model::media::music::{MusicOpts, add_music_ops};
-use klipolo_model::ops::{Op, TrackTarget};
+use klipolo_model::media::sound::add_sound_ops;
+use klipolo_model::media::text::{
+    TEMPLATE_US, TEXT_US, TitleTemplate, add_template_ops, add_text_ops,
+};
+use klipolo_model::motion;
+use klipolo_model::ops::Op;
 use klipolo_model::params::{ParamKind, ParamValue};
-use klipolo_model::project::{Asset, AssetKind, FormatKind};
+use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::query::{anchor_at, main_track_duration, resolve_attach, video_duration};
-use klipolo_model::time::{MIN_DURATION_US, Us, secs_to_us};
-use klipolo_model::timeline::{Item, ItemContent};
+use klipolo_model::time::{MIN_DURATION_US, Us};
+use klipolo_model::{Project, apply_ops};
 
-use super::{Compiler, Edit, Job, MakeSticker, Refused, label, to_model, to_person, unfounded};
+use super::{Compiler, Edit, Job, MakeSticker, Refused, label, to_model, unfounded};
 use crate::context::{secs, within_video};
 use crate::evidence::TOLERANCE_US;
 use crate::library::{Found, LibraryItem, MediaKind, is_generic};
 use crate::sanitize;
-use crate::tools::media::{PICTURE_SECS, TEMPLATE_SECS};
-use crate::tools::{PictureSize, Position};
+use crate::tools::{PictureSize, Position, TextPreset};
 
-/// A sound effect's volume: full, to be heard over the voice.
-pub const SOUND_VOLUME: f64 = 1.0;
-/// Kept clear between a picture and the frame's edges: a share of the frame's shorter side.
-pub const PICTURE_MARGIN: f64 = 0.04;
-/// The title card template `makeTitleCard` shows (`klipolo_model::presets::SCENE_PRESETS`).
-pub const TITLE_CARD: &str = "scene.title-card";
-/// What the person is told when the model puts words on screen with `addText`, until its presets are built.
-pub const TEXT_COMING_SOON: &str = "Putting words on screen from chat is coming soon.";
 /// The most names a refusal lists, then how many more there are: as many as Library shows of a kind.
 const LISTED: usize = crate::context::LIBRARY_NAMES;
 /// What may stand around a title the person quoted, left out of it.
 const QUOTES: [char; 9] = ['\'', '"', '`', '‘', '’', '“', '”', '«', '»'];
-
-/// The canvas of `format` in pixels.
-fn canvas(format: FormatKind) -> (f64, f64) {
-    let (w, h) = format.size();
-    (f64::from(w), f64::from(h))
-}
-
-/// Where a `width` x `height` picture goes in `format`: `size`'s share of the frame's width with its shape kept (at
-/// most as tall as the frame less the margins), at `position`: a corner `PICTURE_MARGIN` of the shorter side in from
-/// its edges, or the middle. Other formats derive their place from its anchor (`resolve_rect`). An unknown size is
-/// square.
-pub fn picture_layout(
-    width: u32,
-    height: u32,
-    size: PictureSize,
-    position: Position,
-    format: FormatKind,
-) -> Layout {
-    let (cw, ch) = canvas(format);
-    let aspect = if width == 0 || height == 0 {
-        1.0
-    } else {
-        f64::from(width) / f64::from(height)
-    };
-    let margin = PICTURE_MARGIN * cw.min(ch);
-    let (mx, my) = (margin / cw, margin / ch);
-    let mut w = size.share();
-    let mut h = w * cw / aspect / ch;
-    let tallest = 1.0 - 2.0 * my;
-    if h > tallest {
-        h = tallest;
-        w = h * ch * aspect / cw;
-    }
-    let (x, y, anchor) = match position {
-        Position::TopLeft => (mx, my, Anchor::TopLeft),
-        Position::TopRight => (1.0 - mx - w, my, Anchor::TopRight),
-        Position::BottomLeft => (mx, 1.0 - my - h, Anchor::BottomLeft),
-        Position::BottomRight => (1.0 - mx - w, 1.0 - my - h, Anchor::BottomRight),
-        Position::Center => ((1.0 - w) / 2.0, (1.0 - h) / 2.0, Anchor::Center),
-    };
-    Layout::new(anchor, BoxN { x, y, w, h })
-}
-
-/// The ops that show picture `asset` from `start_us` for `duration_us`, at `size` and `position` in the primary format
-/// (`picture_layout`), on the first overlay track with room, attached to the clip under it (none past the main track's
-/// end). The file comes in with it when the project doesn't have it yet. Also for a sticker once it is drawn
-/// (`Job::MakeSticker`).
-pub fn picture_ops(
-    p: &Project,
-    asset: &Asset,
-    start_us: Us,
-    duration_us: Us,
-    size: PictureSize,
-    position: Position,
-) -> Vec<Op> {
-    let mut ops = Vec::new();
-    if p.asset(&asset.id).is_none() {
-        ops.push(Op::AddAssets {
-            assets: vec![asset.clone()],
-        });
-    }
-    let layout = picture_layout(
-        asset.width,
-        asset.height,
-        size,
-        position,
-        p.settings.primary_format,
-    );
-    ops.push(Op::AddItem {
-        track: TrackTarget::Auto,
-        attach: start_us < main_track_duration(&p.timeline.main),
-        item: Item {
-            id: new_id(),
-            start_us,
-            duration_us,
-            attach: None,
-            layout,
-            content: ItemContent::Image {
-                asset_id: asset.id.clone(),
-            },
-            effects: Vec::new(),
-        },
-    });
-    ops
-}
 
 /// Up to `LISTED` names, quoted, and how many more.
 fn names(items: &[&LibraryItem]) -> String {
@@ -249,10 +163,24 @@ fn start(
 }
 
 /// How long a layer from `start` (before the video's end, as `start` gives it) shows in `work`: `wanted` (None:
-/// `default_secs`), cut where the video ends.
-fn length(work: &Project, start: Us, wanted: Option<Us>, default_secs: f64) -> Us {
-    let wanted = wanted.unwrap_or_else(|| secs_to_us(default_secs));
-    wanted.min(video_duration(&work.timeline).saturating_sub(start))
+/// `default_us`), cut where the video ends.
+fn length(work: &Project, start: Us, wanted: Option<Us>, default_us: Us) -> Us {
+    (wanted.unwrap_or(default_us)).min(video_duration(&work.timeline).saturating_sub(start))
+}
+
+/// `ops` with the layer they add lasting `duration_us` (the model's ops add one at its default length), its motion
+/// fitted to that length as a trim fits it (`Motion::fit`: a text's fades no longer than the layer).
+fn lasting(mut ops: Vec<Op>, duration_us: Us) -> Vec<Op> {
+    for op in &mut ops {
+        if let Op::AddItem { item, .. } = op {
+            item.duration_us = duration_us;
+            item.layout.motion = item.layout.motion.take().and_then(|mut m| {
+                m.fit(duration_us);
+                motion::kept(m)
+            });
+        }
+    }
+    ops
 }
 
 /// A word of a message with where it sits, compared as `bare`.
@@ -301,17 +229,18 @@ pub(crate) fn persons_words(message: &str, text: &str) -> Option<String> {
 }
 
 /// The ops that add the title card template reading `text` (its other words left empty) from `start` for `duration`
-/// (None: `TEMPLATE_SECS`), filling the frame, attached to the clip under it; and the new layer's id and length.
-/// Refused when the template holds fewer characters, said for `tool`'s `field`.
+/// (None: `TEMPLATE_US`), as the canvas adds a title template (`media::text::add_template_ops`: filling the frame in
+/// every format, attached to the clip under it); and the new layer's id. Refused when the template holds fewer
+/// characters, said for `tool`'s `field`.
 fn title_ops(
     work: &Project,
     (tool, field): (&str, &str),
     text: &str,
     start: Us,
     duration: Option<Us>,
-) -> Result<(Vec<Op>, String, Us), Refused> {
-    let source = ContribId::builtin(TITLE_CARD);
-    let def = (Catalog::builtin().get(&source))
+) -> Result<(Vec<Op>, Id), Refused> {
+    let template = TitleTemplate::TitleCard;
+    let def = (Catalog::builtin().get(&template.source()))
         .ok_or_else(|| to_model(format!("{tool}: this build has no title card template.")))?;
     let mut params = BTreeMap::new();
     for spec in &def.params {
@@ -332,22 +261,14 @@ fn title_ops(
         };
         params.insert(spec.key.clone(), ParamValue::Text(value));
     }
-    let duration = length(work, start, duration, TEMPLATE_SECS);
-    let id = new_id();
-    let ops = vec![Op::AddItem {
-        track: TrackTarget::Auto,
-        attach: start < main_track_duration(&work.timeline.main),
-        item: Item {
-            id: id.clone(),
-            start_us: start,
-            duration_us: duration,
-            attach: None,
-            layout: Layout::full_frame(),
-            content: ItemContent::generator(source, params),
-            effects: Vec::new(),
-        },
-    }];
-    Ok((ops, id, duration))
+    let ops = add_template_ops(work, template, params, start);
+    let id = (ops.iter())
+        .find_map(|op| match op {
+            Op::AddItem { item, .. } => Some(item.id.clone()),
+            _ => None,
+        })
+        .ok_or_else(|| to_model(format!("{tool}: the title card template added nothing.")))?;
+    Ok((lasting(ops, length(work, start, duration, TEMPLATE_US)), id))
 }
 
 pub(super) fn add_music(
@@ -395,7 +316,6 @@ pub(super) fn add_sound(
             item.name
         )));
     }
-    let video_end = video_duration(&work.timeline);
     let mut starts: Vec<Us> = Vec::with_capacity(times.len());
     for (k, &t) in times.iter().enumerate() {
         let field = format!("atSec[{k}]");
@@ -408,40 +328,23 @@ pub(super) fn add_sound(
             starts.push(at);
         }
     }
+    // The file comes in once, then a sound at each moment as the library's + puts one (`add_sound_ops`).
     let mut ops = Vec::with_capacity(starts.len() + 1);
-    if work.asset(&asset.id).is_none() {
-        ops.push(Op::AddAssets {
+    let with_file = if work.asset(&asset.id).is_none() {
+        let add = Op::AddAssets {
             assets: vec![asset.clone()],
-        });
-    }
-    let main_end = main_track_duration(&work.timeline.main);
+        };
+        let with_file = apply_ops(work, std::slice::from_ref(&add))
+            .map_err(|e| to_model(format!("addSound: {e}")))?;
+        ops.push(add);
+        Cow::Owned(with_file)
+    } else {
+        Cow::Borrowed(work)
+    };
     for &at in &starts {
-        ops.push(Op::AddItem {
-            track: TrackTarget::Auto,
-            attach: at < main_end,
-            item: Item {
-                id: new_id(),
-                start_us: at,
-                duration_us: asset.duration_us.min(video_end - at),
-                attach: None,
-                // Sound has no picture: the whole canvas, as every sound layer's box.
-                layout: Layout::new(Anchor::TopLeft, BoxN::FULL),
-                content: ItemContent::Audio {
-                    asset_id: asset.id.clone(),
-                    source_in_us: 0,
-                    volume: SOUND_VOLUME,
-                    muted: false,
-                    fade_in_us: 0,
-                    fade_out_us: 0,
-                    effect: None,
-                    drift_ppm: 0.0,
-                    centre_from: None,
-                    tie: None,
-                    duck: None,
-                },
-                effects: Vec::new(),
-            },
-        });
+        let sound =
+            add_sound_ops(&with_file, asset, at).map_err(|e| to_model(format!("addSound: {e}")))?;
+        ops.extend(sound);
     }
     Ok(Edit {
         ops,
@@ -455,11 +358,32 @@ pub(super) fn add_sound(
     })
 }
 
-/// STUB: `addText` is read and offered with its four presets, but nothing places them yet. It is refused for the
-/// person, plainly, never sent back to the model to try something else. The presets come with the model's text layers
-/// (`media::text`), with the person's own words as `persons_words` finds them.
-pub(super) fn add_text() -> Result<Edit, Refused> {
-    Err(to_person(TEXT_COMING_SOON.to_owned()))
+pub(super) fn add_text(
+    c: &Compiler,
+    work: &Project,
+    text: &str,
+    preset: TextPreset,
+    (at, duration): (Option<Us>, Option<Us>),
+) -> Result<Edit, Refused> {
+    let Some(words) = persons_words(&c.inputs.message, text) else {
+        return Err(to_model(format!(
+            "addText: the words must be the person's own, and they did not write {text:?}. If they gave none, ask \
+             them with askUser."
+        )));
+    };
+    let start = start(c, work, "addText", "atSec", at)?;
+    let ops = add_text_ops(work, preset.preset(), &words, start)
+        .map_err(|e| to_model(format!("addText: {e}")))?;
+    Ok(Edit {
+        ops: lasting(ops, length(work, start, duration, TEXT_US)),
+        label: label(
+            "addText",
+            vec![
+                ("text", ErrorParam::from(words.as_str())),
+                ("preset", ErrorParam::from(preset.key())),
+            ],
+        ),
+    })
 }
 
 pub(super) fn add_image(
@@ -477,16 +401,13 @@ pub(super) fn add_image(
         )));
     }
     let start = start(c, work, "addImage", "atSec", at)?;
-    let duration = length(work, start, duration, PICTURE_SECS);
+    let size = size.unwrap_or(PictureSize::Medium);
+    let spot = position.unwrap_or(Position::Center).spot();
+    // As the library's + puts a picture (`add_image_ops`), at a size and in a corner when one was asked for.
+    let ops = add_image_ops_at(work, &item.asset, start, size.share(), spot)
+        .map_err(|e| to_model(format!("addImage: {e}")))?;
     Ok(Edit {
-        ops: picture_ops(
-            work,
-            &item.asset,
-            start,
-            duration,
-            size.unwrap_or(PictureSize::Medium),
-            position.unwrap_or(Position::Center),
-        ),
+        ops: lasting(ops, length(work, start, duration, IMAGE_US)),
         label: label(
             "addImage",
             vec![("file", ErrorParam::from(item.name.as_str()))],
@@ -508,6 +429,16 @@ pub fn sticker_placement(p: &Project, job: &MakeSticker) -> Option<(Us, Us)> {
     (room >= MIN_DURATION_US).then(|| (start, job.duration_us.min(room)))
 }
 
+/// The ops that place drawn sticker `asset` for `job` on `p`, the project as it is when the picture comes: where and for
+/// how long `sticker_placement` says, at the job's size and in its corner as the library places a picture
+/// (`media::image::add_image_ops_at`). None when there is nowhere to place it: the footage it was for was cut, or its
+/// start is now at the video's end (or the file isn't a picture, which a drawing always is).
+pub fn sticker_ops(p: &Project, job: &MakeSticker, asset: &Asset) -> Option<Vec<Op>> {
+    let (start, duration) = sticker_placement(p, job)?;
+    let ops = add_image_ops_at(p, asset, start, job.size.share(), job.position.spot()).ok()?;
+    Some(lasting(ops, duration))
+}
+
 /// `makeSticker`'s job, on the project as the message's additions leave it (`with_additions`), whatever came before it
 /// in the answer: where it shows, and the footage it shows over (`query::anchor_at`, as a layer attaches; None past
 /// the main track's end).
@@ -522,7 +453,7 @@ pub(super) fn make_sticker(
     Ok(Job::MakeSticker(MakeSticker {
         prompt: sanitize::reply(prompt),
         at_us: start,
-        duration_us: length(with_additions, start, duration, PICTURE_SECS),
+        duration_us: length(with_additions, start, duration, IMAGE_US),
         position: position.unwrap_or(Position::Center),
         size: PictureSize::Medium,
         anchor: anchor_at(&with_additions.timeline.main, start),
@@ -543,7 +474,7 @@ pub(super) fn make_title_card(
         )));
     };
     let start = start(c, work, "makeTitleCard", "atSec", at)?;
-    let (ops, title_id, _) = title_ops(work, ("makeTitleCard", "title"), &words, start, duration)?;
+    let (ops, title_id) = title_ops(work, ("makeTitleCard", "title"), &words, start, duration)?;
     let edit = Edit {
         ops,
         label: label(
