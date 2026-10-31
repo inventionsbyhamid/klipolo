@@ -1,5 +1,5 @@
 import { ContextMenu } from 'radix-ui';
-import type { ComponentProps, ReactNode } from 'react';
+import { useId, type ComponentProps, type ReactNode } from 'react';
 import { menuItemClass } from './Menu';
 
 /**
@@ -38,17 +38,32 @@ export function ContextMenuItem({
   shortcut,
   onSelect,
   disabled,
+  note,
 }: {
   children: ReactNode;
   /** Its keyboard shortcut ("⌘C"), shown at the end. */
   shortcut?: string;
   onSelect: () => void;
   disabled?: boolean;
+  /** What to know about it, such as why it is off: its tooltip, and its description for screen readers. */
+  note?: string;
 }) {
+  const noteId = useId();
   return (
-    <ContextMenu.Item className={menuItemClass} onSelect={onSelect} disabled={disabled}>
+    <ContextMenu.Item
+      className={menuItemClass}
+      onSelect={onSelect}
+      disabled={disabled}
+      title={note}
+      aria-describedby={note ? noteId : undefined}
+    >
       <span className="menu-item-text">{children}</span>
       {shortcut && <span className="menu-key">{shortcut}</span>}
+      {note && (
+        <span id={noteId} hidden>
+          {note}
+        </span>
+      )}
     </ContextMenu.Item>
   );
 }

@@ -506,6 +506,38 @@ describe('the cut markers and the clips around them', () => {
     expect(useToasts.getState().toasts.at(-1)?.text).toMatch(/^Not enough extra footage here for a transition/);
   });
 
+  it('in a project with one clip, ⌘T and the clip’s menu say a transition goes between two clips', async () => {
+    const needsTwo = 'A transition goes between two clips. Split this clip or add another video first.';
+    const s = fixtureSnapshot();
+    s.project.timeline.main = s.project.timeline.main.slice(0, 1);
+    useProject.setState({ snapshot: s });
+    renderWithProviders(
+      <>
+        <Timeline />
+        <ShortcutsHarness />
+      </>,
+    );
+    fireEvent.keyDown(window, { key: 't', metaKey: true });
+    await frames();
+    expect(bridge.apply).not.toHaveBeenCalled();
+    expect(useToasts.getState().toasts.at(-1)?.text).toBe(needsTwo);
+    // The clip selected: the same.
+    useToasts.setState({ toasts: [] });
+    act(() => useSelection.getState().select('a'));
+    fireEvent.keyDown(window, { key: 't', metaKey: true });
+    await frames();
+    expect(bridge.apply).not.toHaveBeenCalled();
+    expect(useToasts.getState().toasts.at(-1)?.text).toBe(needsTwo);
+    // Its menu lists Add transition after, off, with the same note as its tooltip and description.
+    const a = screen.getByRole('button', { name: /^screen\.mp4/ });
+    act(() => a.focus());
+    fireEvent.keyDown(a, { key: 'F10', shiftKey: true });
+    const item = await screen.findByRole('menuitem', { name: /^Add transition after/ });
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).toHaveAttribute('title', needsTwo);
+    expect(item).toHaveAccessibleDescription(needsTwo);
+  });
+
   it('a type this build lacks reads "Missing transition" once, its id as the tooltip', () => {
     const s = withDissolve();
     s.project.timeline.main[0].transitionOut!.effect = 'com.acme/fancy';

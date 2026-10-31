@@ -47,10 +47,8 @@ const focusedCut = () => (blockFocused() ? cutClipId(useTimelineFocus.getState()
 export function useTransitionCommands(): Command[] {
   const { t } = useLingui();
   const project = useProject((s) => s.snapshot?.project);
-  const selectedId = useSelection((s) => s.selectedId);
   return useMemo(() => {
     if (!project) return [];
-    const chosen = chosenCut(project, selectedId);
     return [
       {
         id: 'add-transition',
@@ -65,11 +63,13 @@ export function useTransitionCommands(): Command[] {
             comment: 'Comma-separated search words for Add transition',
           }),
         ),
-        // Whenever there's a cut to act on: one with no room says so (`addTransition`'s toast), never nothing.
-        enabled: chosen >= 0 || project.timeline.main.length > 1,
+        // Whenever there's a clip: a cut with no room says so (`addTransition`'s toast), and so does a video of one
+        // clip, which has no cut; never nothing.
+        enabled: project.timeline.main.length > 0,
         run: (options) => {
           const now = useProject.getState().snapshot?.project;
           if (!now) return;
+          if (now.timeline.main.length < 2) return toast.info(transitionLabels.needsTwo());
           let i = chosenCut(now, useSelection.getState().selectedId, options, focusedCut());
           if (i < 0 && options?.block === undefined)
             i = clipBeforeNearestCut(mainIndex(now.timeline.main), usePlayback.getState().playheadUs);
@@ -79,5 +79,5 @@ export function useTransitionCommands(): Command[] {
         },
       },
     ];
-  }, [t, project, selectedId]);
+  }, [t, project]);
 }

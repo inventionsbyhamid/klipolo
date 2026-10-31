@@ -7,6 +7,7 @@ import { useProject } from '../../../state/project';
 import { useSelection } from '../../../state/selection';
 import type { Command } from '../../command-palette/command';
 import { useCommands } from '../../command-palette/useCommands';
+import { transitionLabels } from '../keys/transitionActions';
 
 /** The menu's name for screen readers: "Actions for screen.mp4". */
 export function blockMenuLabel(id: string): string | undefined {
@@ -34,10 +35,12 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const project = useProject((s) => s.snapshot?.project);
   const byId = new Map(commands.map((c) => [c.id, c]));
   const found = project ? findItem(project, blockId) : null;
-  // A clip with one after it and no transition into it yet (one it has is selected at its cut).
+  // A clip with one after it and no transition into it yet (one it has is selected at its cut). A video's only clip
+  // lists it off, saying why: a transition goes between two clips.
   const main = project?.timeline.main ?? [];
   const at = found ? -1 : main.findIndex((clip) => clip.id === blockId);
   const transitionAfter = at >= 0 && at + 1 < main.length && !main[at].transitionOut;
+  const onlyClip = at === 0 && main.length === 1;
 
   // A sound layer, or a video layer whose file has sound, has Mute.
   const mutes = !!project && !!found && hasOwnSound(project, found.item);
@@ -57,11 +60,13 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
       message: 'Add transition after',
       comment: 'A clip’s menu item: a transition from this clip into the next one',
     }),
+    off: onlyClip ? transitionLabels.needsTwo() : undefined,
   };
-  const groups: { id: string; label?: string }[][] =
+  // `off`: listed, but off here, with why.
+  const groups: { id: string; label?: string; off?: string }[][] =
     kind === 'clip'
       ? [
-          [split, ...(transitionAfter ? [addTransition] : [])],
+          [split, ...(transitionAfter || onlyClip ? [addTransition] : [])],
           [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }, { id: 'paste-effects' }],
           [{ id: 'delete' }],
         ]
@@ -78,11 +83,12 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
           [{ id: 'delete' }],
         ];
 
-  const item = ({ id, label }: { id: string; label?: string }, command: Command) => (
+  const item = ({ id, label, off }: { id: string; label?: string; off?: string }, command: Command) => (
     <ContextMenuItem
       key={id}
       shortcut={typeof command.shortcut === 'string' ? command.shortcut : undefined}
-      disabled={!command.enabled}
+      disabled={off !== undefined || !command.enabled}
+      note={off ?? (command.enabled ? undefined : command.reason)}
       onSelect={() => {
         useSelection.getState().select(blockId);
         // On this block alone: Split at playhead on a clip splits that clip, or says why it can't.
@@ -90,9 +96,6 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
       }}
     >
       {label ?? command.label}
-      {!command.enabled && command.reason && (
-        <span className="menu-note">{command.reason}</span>
-      )}
     </ContextMenuItem>
   );
   return groups

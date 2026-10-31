@@ -56,7 +56,7 @@ export interface Command {
   /** Other words people search with, e.g. "cut" for Split clip (in the language shown). */
   keywords?: string[];
   enabled: boolean;
-  /** Why it is off, said with it where it is listed (a block's menu): "Mic is on its own track here." */
+  /** Why it is off, said with it where it is listed (a block's menu item's tooltip): "Mic is on its own track here." */
   reason?: string;
   /** Listed in the palette but inert: the feature ships in the next build. */
   nextBuild?: boolean;
