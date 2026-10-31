@@ -5,4 +5,4 @@ import type { PresetOffer } from "./PresetOffer";
 /**
  * The probe's choices for one display and camera state, and the offers they give.
  */
-export type Fitted = { choices: Choices, offers: Array<PresetOffer>, };
+export type CaptureFitted = { choices: Choices, offers: Array<PresetOffer>, };

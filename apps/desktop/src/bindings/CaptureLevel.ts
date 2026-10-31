@@ -3,4 +3,4 @@
 /**
  * How a take is doing: the item's colour and the notes' weight.
  */
-export type Level = "ok" | "healing" | "warning" | "critical";
+export type CaptureLevel = "ok" | "healing" | "warning" | "critical";

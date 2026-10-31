@@ -3,4 +3,4 @@
 /**
  * Where the HUD flashes.
  */
-export type Corner = "topLeft" | "topRight" | "bottomLeft" | "bottomRight";
+export type CaptureCorner = "topLeft" | "topRight" | "bottomLeft" | "bottomRight";
