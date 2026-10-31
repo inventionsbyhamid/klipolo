@@ -271,6 +271,21 @@ describe('the previews in the Record dialog', () => {
     expect(meter).toHaveAttribute('aria-valuenow', '90');
   });
 
+  it('a_page_hidden_while_klipolo_keeps_the_focus_stops_the_previews', async () => {
+    // The display sleeps or the screen locks: the page is hidden, but the window keeps the focus, so the app goes on.
+    await openOn(recorderSetup({ cameras: [device('FaceTime HD Camera')] }));
+    await choose('Camera: No camera', 'FaceTime HD Camera');
+    await sendFrame(fake, 'camera', 'FaceTime HD Camera', 'face 1');
+    await visibility('hidden');
+    expect(fake.previewed.at(-1)).toBe('off');
+    expect(bubble()).toBeNull();
+    await sendFrame(fake, 'camera', 'FaceTime HD Camera', 'face 2');
+    expect(bubble()).toBeNull();
+    // Shown again, with the dialog still open: the previews start again, asking for nothing.
+    await visibility('visible');
+    expect(fake.previewed.at(-1)).toEqual(want({ camera: 'FaceTime HD Camera' }));
+  });
+
   it('closing_while_klipolo_is_behind_still_stops_the_previews', async () => {
     await openOn();
     await windowFocus('blur');
@@ -306,11 +321,11 @@ describe('the previews in the Record dialog', () => {
     // In front again: the app started nothing by itself, so the dialog asks again.
     await windowFocus('focus');
     expect(fake.previewed).toEqual([want(), want()]);
-    // Hidden, then shown: the same.
+    // Hidden (the app doesn't see that): they stop; shown again, they start again.
     await visibility('hidden');
-    expect(fake.previewed).toEqual([want(), want()]);
+    expect(fake.previewed).toEqual([want(), want(), 'off']);
     await visibility('visible');
-    expect(fake.previewed).toEqual([want(), want(), want()]);
+    expect(fake.previewed).toEqual([want(), want(), 'off', want()]);
     // Record: they stop before the take arms, and nothing starts during the countdown.
     await userEvent.click(recordButton());
     await flush();

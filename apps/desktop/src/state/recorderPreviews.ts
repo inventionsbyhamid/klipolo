@@ -255,9 +255,10 @@ export function allowPreview(device: AskedDevice): void {
 }
 
 /**
- * Klipolo went behind or was hidden: the page shows no preview until it is back in front (then `startPreviews`). The app
- * stops them itself, but for one waiting for macOS's answer to an Allow press, so nothing is sent: an off would close
- * that one too, and the answer would be lost. A refusal of the camera or the mic is still heard.
+ * Klipolo went behind (another app has the focus): the page shows no preview until it is back in front (then
+ * `startPreviews`). The app stops them itself, but for one waiting for macOS's answer to an Allow press, so nothing is
+ * sent: an off would close that one too, and the answer would be lost. A refusal of the camera or the mic is still
+ * heard.
  */
 export function pausePreviews(): void {
   clearTimeout(busyTimer);
@@ -269,8 +270,8 @@ export function pausePreviews(): void {
 }
 
 /**
- * Every preview stops (Record or Try again, the dialog closing or going), and its pictures and level go. Nothing is
- * sent when the app runs none.
+ * Every preview stops (Record or Try again, the page hidden, the dialog closing or going), and its pictures and level
+ * go. Nothing is sent when the app runs none.
  */
 export function stopPreviews(): void {
   pausePreviews();

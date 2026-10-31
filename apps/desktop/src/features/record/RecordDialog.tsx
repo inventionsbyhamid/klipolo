@@ -50,12 +50,18 @@ export function RecordDialog() {
   return open && phase !== 'recording' && phase !== 'saving' ? <Dialog phase={phase} /> : null;
 }
 
-/** Klipolo's window is in front: focused and shown, as the window says when the dialog opens, then as it changes. */
-function useInFront(): boolean {
-  const [front, setFront] = useState(() => document.hasFocus() && document.visibilityState !== 'hidden');
+/** Where Klipolo's page is: `front` (focused and shown), `behind` (shown, another app has the focus), or `hidden`. */
+type Place = 'front' | 'behind' | 'hidden';
+
+const placeOf = (focused: boolean): Place =>
+  document.visibilityState === 'hidden' ? 'hidden' : focused ? 'front' : 'behind';
+
+/** Where Klipolo's page is, as the window says when the dialog opens, then as it changes. */
+function usePlace(): Place {
+  const [place, setPlace] = useState(() => placeOf(document.hasFocus()));
   useEffect(() => {
     let focused = document.hasFocus();
-    const update = () => setFront(focused && document.visibilityState !== 'hidden');
+    const update = () => setPlace(placeOf(focused));
     const blur = () => {
       focused = false;
       update();
@@ -73,27 +79,28 @@ function useInFront(): boolean {
       document.removeEventListener('visibilitychange', update);
     };
   }, []);
-  return front;
+  return place;
 }
 
 /**
  * The previews run only while the choices show and Klipolo is in front: on opening, on every change of choice, and
- * back in front, as the app starts nothing again by itself. They stop on Record (the store stops them first) and when
- * the dialog goes. Behind or hidden, the page only stops showing them: the app stops them itself, keeping one that
- * waits for macOS's answer to an Allow press.
+ * back in front, as the app starts nothing again by itself. They stop on Record (the store stops them first), when
+ * the dialog goes, and when the page is hidden (the display asleep, the screen locked: the window may keep the focus,
+ * so the app doesn't see it). Behind, the page only stops showing them: the app stops them itself, keeping one that
+ * waits for macOS's answer to an Allow press (its question takes the focus but never hides the page).
  */
 function usePreviews(phase: RecorderPhase) {
-  const front = useInFront();
+  const place = usePlace();
   const shotsRefused = useRecorderPreviews((s) => s.screenRefused);
   const want = useRecorder((s) =>
     JSON.stringify(phase === 'choosing' ? previewsFor(s.setup, s.picks, s.screenRefused || shotsRefused) : null),
   );
   useEffect(() => {
     const wanted = JSON.parse(want) as Previews | null;
-    if (wanted === null) stopPreviews();
-    else if (front) startPreviews(wanted);
+    if (wanted === null || place === 'hidden') stopPreviews();
+    else if (place === 'front') startPreviews(wanted);
     else pausePreviews();
-  }, [front, want]);
+  }, [place, want]);
   useEffect(() => () => stopPreviews(), []);
 }
 
