@@ -500,10 +500,16 @@ fn damaged_energies_are_refused_and_made_again_from_the_cached_sound() {
         b[10..12].fill(0);
         b
     };
+    let other_magic = {
+        let mut b = bytes.clone();
+        b[..8].copy_from_slice(b"XXXXENG1");
+        b
+    };
     for (what, damaged) in [
         ("truncated", bytes[..bytes.len() / 2].to_vec()),
         ("zeroed windows", zeroed),
         ("an older format", older),
+        ("another magic", other_magic),
     ] {
         std::fs::write(&energy, &damaged).unwrap();
         assert!(first.energies(&key, &pcm).is_none(), "{what}: refused");
@@ -553,5 +559,35 @@ fn a_cache_under_another_magic_is_decoded_again() {
     assert!(super::peaks::info(&files[1]).is_some());
     for file in &files {
         assert_ne!(&std::fs::read(file).unwrap()[..8], b"XXXXXXX1");
+    }
+}
+
+/// A cache hit needs its peaks: a sound file whose peaks file is missing, or under another magic, is decoded again,
+/// with no error, and its peaks are written anew.
+#[test]
+fn a_cache_without_readable_peaks_is_decoded_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let wav = dir.path().join("voice.wav");
+    write_wav(&wav, 5);
+    let key = PcmKey {
+        path: wav.display().to_string(),
+    };
+    let cache = dir.path().join("cache");
+    PcmStore::new(cache.clone()).build(&key).unwrap();
+    let stem = crate::media::key::stem(&key.path, &crate::media::key::CacheKind::Pcm).unwrap();
+    let peaks = cache.join(format!("{stem}.peaks"));
+    let mut other_magic = std::fs::read(&peaks).unwrap();
+    other_magic[..8].copy_from_slice(b"XXXXPKS1");
+    for (what, damaged) in [("missing", None), ("another magic", Some(other_magic))] {
+        match damaged {
+            Some(bytes) => std::fs::write(&peaks, bytes).unwrap(),
+            None => std::fs::remove_file(&peaks).unwrap(),
+        }
+        let next = PcmStore::new(cache.clone());
+        assert!(next.build(&key).expect(what).is_complete(), "{what}");
+        assert!(
+            super::peaks::info(&peaks).is_some(),
+            "{what}: written again"
+        );
     }
 }
