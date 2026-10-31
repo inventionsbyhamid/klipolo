@@ -9,7 +9,9 @@
 //!
 //! Every other request goes to Klipolo's server, at the port and with the token in `<support>/mcp.json`, read again for
 //! each one: Klipolo restarts, and the person turns access off and on, each time with a new port and token. A file
-//! whose process is gone counts as off, so a file a crash left behind never sends the token to whatever took its port.
+//! whose process is gone counts as off, so a file a crash left behind never sends the token to whatever took its port,
+//! unless its process id was given to another process since: then the bridge sends that run's token, dead with it, and
+//! the app's requests to whatever listens on that port now.
 //! The bridge opens a session of its own under the name the app gave in its `initialize`, as soon as it can (so
 //! Klipolo shows the app as connected), and again whenever Klipolo no longer knows it (404). A refused token (401)
 //! reads the file once more, then counts as off; a server that stopped (503) is off; a pace on new sessions (429) is
