@@ -1,0 +1,328 @@
+/* The Captions view. */
+
+/* While it is open the left panel is wider (384, 352 below 1280 wide), and the Library's width comes back after. */
+.workspace:has(.library[data-view="captions"]) {
+  --library-w: 384px;
+}
+
+@media (max-width: 1279px) {
+  .workspace:has(.library[data-view="captions"]) {
+    --library-w: 352px;
+  }
+}
+
+.cap-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--space-6) var(--space-6);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-bay-press) transparent;
+}
+
+.style-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-5) var(--space-4);
+}
+
+.style-card {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  text-align: left;
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+}
+
+.style-card:focus-visible {
+  outline: 2px solid var(--color-paper);
+  outline-offset: 2px;
+}
+
+.style-frame {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  aspect-ratio: 2 / 1;
+  padding-bottom: 10%;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(160deg, var(--color-bay-press), var(--color-clip-deep) 55%, var(--color-night));
+  container-type: inline-size;
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.style-card:hover .style-frame {
+  transform: translateY(-2px);
+}
+
+.style-card[aria-checked="true"] .style-frame {
+  box-shadow: 0 0 0 2px var(--color-bay), 0 0 0 4px var(--color-paper);
+}
+
+.style-off {
+  align-items: center;
+  padding: 0;
+  color: var(--color-ink-soft);
+}
+
+.style-off .ico {
+  width: 26px;
+  height: 26px;
+}
+
+.style-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--weight-strong);
+  white-space: nowrap;
+}
+
+.style-check .ico {
+  width: 14px;
+  height: 14px;
+}
+
+.style-frame .cap {
+  position: relative;
+  max-width: 94%;
+  overflow: hidden;
+  font-size: 10.5cqi;
+  line-height: 1.12;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.words-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin: var(--space-7) 0 var(--space-3);
+}
+
+.words-head h3 {
+  margin-right: auto;
+  font-size: var(--text-lg);
+  line-height: var(--lh-lg);
+  font-weight: var(--weight-strong);
+  font-stretch: var(--wdth-title);
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 148px;
+  height: 30px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--color-bay-raised);
+  color: var(--color-ink-faint);
+  font-size: var(--text-sm);
+}
+
+.search:focus-within {
+  box-shadow: inset 0 0 0 2px var(--color-paper);
+}
+
+.search .ico {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+
+.search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  font: inherit;
+  outline: none;
+}
+
+.search input::placeholder {
+  color: var(--color-ink-faint);
+}
+
+.search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.words-hint {
+  margin-bottom: var(--space-4);
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+.words-note {
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+.words-note:empty {
+  display: none;
+}
+
+.word-lines {
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.word-lines:focus-visible {
+  outline: 2px solid var(--color-paper);
+  outline-offset: 2px;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--color-line);
+  /* Off screen, a long list's lines cost no layout or paint. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 52px;
+}
+
+.line-when {
+  padding-top: 5px;
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.line.is-now .line-when {
+  color: var(--color-ink);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.word {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bay-raised);
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  cursor: default;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.word:hover {
+  background: var(--color-bay-hover);
+}
+
+.line.is-now .word {
+  background: var(--color-bay-hover);
+}
+
+.word[aria-selected="true"] {
+  background: var(--color-bay-press);
+}
+
+.word-lines:focus-visible .word.is-active {
+  outline: 2px solid var(--color-paper);
+  outline-offset: 1px;
+}
+
+.word.is-filler {
+  background: transparent;
+  color: var(--color-ink-faint);
+  outline: 1px dashed var(--color-line-strong);
+  outline-offset: -1px;
+  font-style: italic;
+}
+
+.word.is-hidden {
+  background: transparent;
+  color: var(--color-ink-disabled);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+.word.is-hidden .ico {
+  width: 13px;
+  height: 13px;
+}
+
+.word.is-fixed {
+  box-shadow: inset 0 0 0 1px var(--color-clip-2);
+}
+
+.word-edit {
+  position: relative;
+  display: inline-block;
+}
+
+.word-edit input {
+  height: 26px;
+  min-width: 56px;
+  max-width: 100%;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-dialog);
+  box-shadow: 0 0 0 2px var(--color-paper);
+  color: var(--color-ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  outline: none;
+}
+
+/* Under the line's words, in the flow: nothing is covered. */
+.fix-bar {
+  order: 1;
+  flex-basis: 100%;
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-1);
+}
+
+.fix-bar p {
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+.fix-bar p b {
+  color: var(--color-ink);
+  font-weight: var(--weight-strong);
+}
+
+.fix-bar .actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.fix-bar .actions .fine {
+  margin-left: auto;
+  color: var(--color-ink-faint);
+  font-size: var(--text-xs);
+}
