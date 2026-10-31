@@ -1254,6 +1254,43 @@ fn a_stickers_footage_is_found_again_once_a_removal_is_applied() {
 }
 
 #[test]
+fn pictures_near_the_end_are_as_long_whatever_the_answer_does_after_them() {
+    // The clip plays 26 s of its 30 s file; in the same answer it grows to 28 s. A picture or a title card at 24 s gets
+    // the 4 s before the new end in either order, not the 2 s before the old one.
+    let mut p = project();
+    p.timeline.main[0].source_out_us = secs(26.0);
+    let i = inputs(
+        &p,
+        "the logo and a title card saying the end at 24 s, and let the clip run to 28 s",
+    );
+    let logo = call(
+        "addImage",
+        json!({"file": "logo", "size": null, "position": null, "atSec": 24.0, "durationSec": null}),
+    );
+    let card = call(
+        "makeTitleCard",
+        json!({"title": "the end", "prompt": "sunset", "atSec": 24.0, "durationSec": null}),
+    );
+    let longer = call(
+        "trimClip",
+        json!({"clip": "c1", "edge": "end", "toSec": 28.0}),
+    );
+    let answers =
+        (both_orders([logo, longer.clone()]).into_iter()).chain(both_orders([card, longer]));
+    for calls in answers {
+        let out = compile(&p, &i, &calls);
+        let after = applied(&p, &out);
+        let overlays = layers(&after, TrackKind::Overlay);
+        assert_eq!(
+            (overlays[0].start_us, overlays[0].duration_us),
+            (secs(24.0), secs(4.0)),
+            "{calls:?}"
+        );
+        assert_eq!(video_duration(&after.timeline), secs(28.0), "{calls:?}");
+    }
+}
+
+#[test]
 fn a_title_card_with_a_removal_is_the_same_in_either_order() {
     let p = project();
     let i = inputs(

@@ -15,8 +15,9 @@
 //!   long) and, until its presets are built, `addText` (`TEXT_COMING_SOON`); every other refusal goes back to the model
 //!   with its reason.
 //!
-//! All calls compile on one working copy, in two phases: the additions in call order, then the removals in call order
-//! on what the additions made, as the app applies them. Each call's ops are one part of its phase's batch
+//! All calls compile on one working copy, in two phases: the additions in call order (the edits first, then the media
+//! layers on what the edits made, so a trim later in the answer never shortens a picture placed before it), then the
+//! removals in call order on what the additions made, as the app applies them. Each call's ops are one part of its phase's batch
 //! (`apply_part`), tried on a copy and checked as the batch would end there (`finish_parts`): a call that fails is a
 //! `Refusal` with its index, and the others still compile. The removals' working copy ends as `apply_ops` of the
 //! proposal on the additions' result, so the review takes it as it is (`review_applied`) rather than applying again.
@@ -381,11 +382,13 @@ impl Compiler<'_> {
             undo: calls.iter().any(|c| matches!(c, ToolCall::Undo)),
             ..Compiled::default()
         };
-        // In call order: the additions compile now; removals, moments and pictures to draw wait for the project the
-        // additions make, so what comes later in the answer never moves them.
+        // In call order: the edits that are additions compile now; media layers go on the project they make, then
+        // removals, moments and pictures to draw wait for the project all the additions make, so nothing later in the
+        // answer moves or shortens what came before it.
         let mut adding = Phase::new(self.snapshot.clone());
         let mut waiting: Vec<(usize, Removal)> = Vec::new();
         let mut moments: Vec<(usize, &[Moment])> = Vec::new();
+        let mut layers: Vec<(usize, &ToolCall)> = Vec::new();
         let mut jobs: Vec<(usize, Job)> = Vec::new();
         let mut stickers: Vec<(usize, &ToolCall)> = Vec::new();
         let mut titles: Vec<(usize, &str, Id)> = Vec::new();
@@ -441,27 +444,12 @@ impl Compiler<'_> {
                     stickers.push((i, call));
                     continue;
                 }
-                ToolCall::MakeTitleCard {
-                    title,
-                    prompt,
-                    at_us,
-                    duration_us,
-                } => {
-                    let made =
-                        media::make_title_card(self, &adding.work, title, (*at_us, *duration_us));
-                    // The title is an addition; its background is drawn only once the title is in.
-                    let tried = made.and_then(|(edit, title_id)| {
-                        let tried = (adding.try_edit(edit))
-                            .map_err(|e| to_model(format!("makeTitleCard: {e}")))?;
-                        Ok((tried, title_id))
-                    });
-                    match tried {
-                        Ok((tried, title_id)) => {
-                            adding.keep(tried);
-                            titles.push((i, prompt.as_str(), title_id));
-                        }
-                        Err(r) => refuse(&mut out, i, r),
-                    }
+                ToolCall::AddMusic { .. }
+                | ToolCall::AddSound { .. }
+                | ToolCall::AddText { .. }
+                | ToolCall::AddImage { .. }
+                | ToolCall::MakeTitleCard { .. } => {
+                    layers.push((i, call));
                     continue;
                 }
                 ToolCall::CutRange { .. }
@@ -487,11 +475,7 @@ impl Compiler<'_> {
                 ToolCall::SplitAt { .. }
                 | ToolCall::SetFormat { .. }
                 | ToolCall::SetCaptions { .. }
-                | ToolCall::FixCaptionWords { .. }
-                | ToolCall::AddMusic { .. }
-                | ToolCall::AddSound { .. }
-                | ToolCall::AddText { .. }
-                | ToolCall::AddImage { .. } => {
+                | ToolCall::FixCaptionWords { .. } => {
                     (self.addition(&adding.work, call), Removal::Moved(call))
                 }
             };
@@ -509,6 +493,41 @@ impl Compiler<'_> {
                 Err(r) => refuse(&mut out, i, r),
             }
         }
+
+        // The media layers, in call order, on the project the other additions make: where one starts and how long it
+        // plays (cut at the video's end) don't depend on whether a trim or a split came before it or after it.
+        for (i, call) in layers {
+            let tried = match call {
+                ToolCall::MakeTitleCard {
+                    title,
+                    at_us,
+                    duration_us,
+                    ..
+                } => media::make_title_card(self, &adding.work, title, (*at_us, *duration_us))
+                    .map(|(edit, title_id)| (edit, Some(title_id))),
+                _ => self.addition(&adding.work, call).map(|edit| (edit, None)),
+            }
+            .and_then(|(edit, title_id)| {
+                let tried = (adding.try_edit(edit))
+                    .map_err(|e| to_model(format!("{}: {e}", call.name())))?;
+                Ok((tried, title_id))
+            });
+            match tried {
+                // A layer takes nothing away; if one ever did, it would be proposed like any other.
+                Ok((tried, _)) if tried.removes => waiting.push((i, Removal::Moved(call))),
+                Ok((tried, title_id)) => {
+                    adding.keep(tried);
+                    // The title is in: its background is drawn for it.
+                    if let (Some(title_id), ToolCall::MakeTitleCard { prompt, .. }) =
+                        (title_id, call)
+                    {
+                        titles.push((i, prompt.as_str(), title_id));
+                    }
+                }
+                Err(r) => refuse(&mut out, i, r),
+            }
+        }
+        waiting.sort_by_key(|(i, _)| *i);
 
         // The project as the additions leave it: what the app applies them to, and what the proposal starts from.
         let with_additions = adding.done.clone();
