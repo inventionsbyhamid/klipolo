@@ -8,6 +8,7 @@ this file.
 Klipolo comes with no warranty, to the extent the law allows. See the licence for details.
 
 You can get the complete source code of this version of Klipolo from the same place you downloaded it.
+Source code: {{SOURCE_URL}}
 
 Parts of Klipolo's video engine are derived from Cap (https://github.com/CapSoftware/Cap), commit
 d327051c175aa092c06ad9fc6684298b1b5fed6b, Copyright (c) 2023-present Cap Software, Inc. They are used under the

@@ -53,6 +53,22 @@ naming_files() {
   LC_ALL=C grep -rlF "${patterns[@]}" "$@"
 }
 
+# The public address of Klipolo's source code, as NOTICE.txt gives it: https://, a host, and a path of plain URL
+# characters (no spaces, quotes, & or \).
+is_source_url() {
+  local re='^https://[A-Za-z0-9.-]+(/[A-Za-z0-9._~/%+=@:#?-]*)?$'
+  [[ "$1" =~ $re ]]
+}
+
+# <notice> with its {{SOURCE_URL}} placeholder replaced by <url>, in place: fill_source_url <notice> <url>. The URL is
+# checked first, as bash would read a & in it as the text replaced.
+fill_source_url() {
+  local placeholder='{{SOURCE_URL}}' text
+  is_source_url "$2" || { echo "refused: not an https:// source code address: $2" >&2; return 1; }
+  text=$(< "$1")
+  printf '%s\n' "${text//"$placeholder"/$2}" > "$1"
+}
+
 # A release version: X.Y.Z, digits and dots only, as CFBundleShortVersionString and CFBundleVersion require.
 is_version() {
   [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]

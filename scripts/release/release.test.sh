@@ -152,6 +152,42 @@ expect "a user named test isn't found in words" pass found test "$names/plain" "
 expect "a user named test is found as a path part" pass found test "$names/path" "$names/path/b.txt"
 expect "a user name under 4 characters isn't looked for" pass found lib "$names/path" ""
 
+# The source code address build-mac.sh puts in NOTICE.txt: https:// with plain URL characters only.
+url_ok() { (. "$repo/scripts/release/lib.sh" && is_source_url "$1"); }
+url_refused() { ! url_ok "$1"; }
+for u in https://github.com/owner/klipolo https://klipolo.app/source https://gitlab.com/o/klipolo/-/tree/v0.1.0; do
+  expect "source address $u is taken" pass url_ok "$u"
+done
+for u in "" http://klipolo.app/source "https://" "https://klipolo.app/a b" "https://klipolo.app/?a=1&b=2" \
+  'https://klipolo.app/a"b' 'https://klipolo.app/a\b' "ftp://klipolo.app/source"; do
+  expect "source address \"$u\" is refused" pass url_refused "$u"
+done
+notice=$work/NOTICE.txt
+filled() {  # filled <url>: the checkout's NOTICE.txt with its placeholder filled holds the address once, and no placeholder
+  cp "$here/../../crates/klipolo-app/licenses/NOTICE.txt" "$notice"
+  (. "$repo/scripts/release/lib.sh" && fill_source_url "$notice" "$1") || return 1
+  [ "$(grep -c "^Source code: $1\$" "$notice")" = 1 ] && ! grep -qF '{{SOURCE_URL}}' "$notice"
+}
+expect "NOTICE.txt gets the source address" pass filled https://github.com/owner/klipolo
+unchanged() {  # unchanged <url>: a refused address leaves NOTICE.txt's placeholder as it was
+  cp "$here/../../crates/klipolo-app/licenses/NOTICE.txt" "$notice"
+  ! (. "$repo/scripts/release/lib.sh" && fill_source_url "$notice" "$1" 2> /dev/null) \
+    && cmp -s "$notice" "$here/../../crates/klipolo-app/licenses/NOTICE.txt"
+}
+expect "a refused address leaves NOTICE.txt alone" pass unchanged "https://klipolo.app/?a=1&b=2"
+# build-mac.sh refuses to start without the address (the copy in the test's tree, which has no FFmpeg to build with).
+refused_build() {  # refused_build <KLIPOLO_SOURCE_URL or "unset">
+  local out rc
+  if [ "$1" = unset ]; then
+    out=$(env -u KLIPOLO_SOURCE_URL "$repo/scripts/release/build-mac.sh" x86_64 0.1.0 2>&1) && rc=0 || rc=$?
+  else
+    out=$(KLIPOLO_SOURCE_URL=$1 "$repo/scripts/release/build-mac.sh" x86_64 0.1.0 2>&1) && rc=0 || rc=$?
+  fi
+  [ "$rc" -eq 2 ] && grep -qF 'refused: set KLIPOLO_SOURCE_URL' <<< "$out"
+}
+expect "build-mac.sh refuses to start without KLIPOLO_SOURCE_URL" pass refused_build unset
+expect "build-mac.sh refuses an http:// KLIPOLO_SOURCE_URL" pass refused_build http://klipolo.app/source
+
 # sign.sh --list prints paths inside the app, whatever characters the app's own path has (it signs nothing). It runs
 # from this folder, as it reads the checkout's entitlements.
 odd="$work/odd|name [1] & co.v2"
