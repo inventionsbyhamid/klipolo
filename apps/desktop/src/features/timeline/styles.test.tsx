@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { compile } from 'tailwindcss';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixtureSnapshot } from '../../test/fixtures';
 import { longProject } from '../../test/longProject';
@@ -14,20 +15,41 @@ const { Timeline } = await import('./Timeline');
 /** The app's own stylesheet, as written (jsdom draws no CSS at all, so a class with no rule goes unnoticed there). */
 const appCss = readFileSync(resolve(__dirname, '../../styles/app.css'), 'utf8');
 
-/**
- * Tailwind utilities the timeline's blocks carry besides app.css's classes, each checked to exist in Tailwind 4 (a
- * colour utility only exists for a colour `theme-bridge.css` maps), and lucide's own icon classes, which need no rule.
- */
-const UTILITIES = new Set(['isolate', 'truncate', 'pointer-events-none', 'absolute', 'top-0', 'origin-top-left']);
+/** Lucide's own icon classes, which need no rule. */
 const ICONS = /^lucide(-|$)/;
 
 /** Whether app.css has a rule for `.name`: a class with no rule draws nothing, which no jsdom count would notice. */
-const styled = (name: string) => new RegExp(`\\.${name.replace(/[-/[\]]/g, '\\$&')}(?![\\w-])`).test(appCss);
+const styled = (name: string) => new RegExp(`\\.${escape(name)}(?![\\w-])`).test(appCss);
+const escape = (name: string) => name.replace(/[^\w-]/g, '\\$&');
 
-/** Every class on the elements `selector` finds that neither app.css nor the allowed utilities define. */
-function unstyled(selector: string): string[] {
-  const names = [...document.querySelectorAll(selector)].flatMap((el) => [...el.classList]);
-  return [...new Set(names)].filter((name) => !UTILITIES.has(name) && !ICONS.test(name) && !styled(name));
+/**
+ * The classes Tailwind 4 really makes a utility of, from the page's own Tailwind entry (`styles/tailwind.css`: the
+ * theme, the utilities and `theme-bridge.css`'s colours), compiled for `names`. A colour utility only exists for a colour
+ * `theme-bridge.css` maps, which is what `bg-clip-deep` missed.
+ */
+async function tailwindUtilities(names: string[]): Promise<Set<string>> {
+  const styles = resolve(__dirname, '../../styles');
+  const tailwind = resolve(__dirname, '../../../node_modules/tailwindcss');
+  const compiler = await compile(readFileSync(resolve(styles, 'tailwind.css'), 'utf8'), {
+    base: styles,
+    loadStylesheet: async (id, base) => {
+      const path = id.startsWith('tailwindcss/')
+        ? resolve(tailwind, id.slice('tailwindcss/'.length))
+        : resolve(base, id);
+      return { path, base: dirname(path), content: readFileSync(path, 'utf8') };
+    },
+  });
+  const css = compiler.build(names);
+  return new Set(names.filter((name) => css.includes(`.${escape(name)}`)));
+}
+
+/** Every class on the elements `selector` finds that neither app.css nor Tailwind defines. */
+async function unstyled(selector: string): Promise<string[]> {
+  const names = [...new Set([...document.querySelectorAll(selector)].flatMap((el) => [...el.classList]))].filter(
+    (name) => !ICONS.test(name) && !styled(name),
+  );
+  const utilities = await tailwindUtilities(names);
+  return names.filter((name) => !utilities.has(name));
 }
 
 const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
@@ -41,22 +63,22 @@ beforeEach(() => {
 });
 
 describe('the timeline draws with classes app.css defines', () => {
-  it('zoomed out, every lane draws its bands in a colour app.css gives them', () => {
+  it('zoomed out, every lane draws its bands in a colour app.css gives them', async () => {
     useProject.setState({ snapshot: { ...fixtureSnapshot(), project: longProject() }, pending: 0 });
     useUi.setState({ pxPerSecond: 0.2 });
     renderWithProviders(<Timeline />);
     const bands = document.querySelectorAll('[data-band]');
     expect(bands.length).toBeGreaterThan(0);
     expect(document.querySelector('[data-lane="main"] [data-band]')).toHaveClass('tl-band', 'is-video');
-    expect(unstyled('[data-band]')).toEqual([]);
+    expect(await unstyled('[data-band]')).toEqual([]);
   });
 
-  it('clips, layers and their parts carry only styled classes', () => {
+  it('clips, layers and their parts carry only styled classes', async () => {
     useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
     useUi.setState({ pxPerSecond: 40 });
     useSelection.setState({ selectedId: 'a' });
     renderWithProviders(<Timeline />);
     expect(document.querySelectorAll('[data-block-id]').length).toBeGreaterThan(2);
-    expect(unstyled('[data-block-id], [data-block-id] *, [data-lane], [data-lane] > *')).toEqual([]);
+    expect(await unstyled('[data-block-id], [data-block-id] *, [data-lane], [data-lane] > *')).toEqual([]);
   });
 });
