@@ -281,7 +281,7 @@ describe('the editing copies pill', () => {
     await userEvent.click(pillButton);
     const popover = screen.getByRole('dialog', { name: 'Editing copies' });
     expect(popover).toHaveTextContent(
-      'Klipolo makes lighter copies of large videos so the preview plays smoothly. Exports always use your full-quality files.',
+      'Klipolo makes lighter copies of videos that would play slowly on this Mac, so the preview plays smoothly. Exports always use your full-quality files.',
     );
     expect(popover).toHaveTextContent("It's larger than this Mac plays smoothly.");
     unmount();

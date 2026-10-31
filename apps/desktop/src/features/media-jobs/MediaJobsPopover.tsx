@@ -98,11 +98,11 @@ export function MediaJobsPopover() {
           {auto
             ? t({
                 id: 'mediaJobs.none',
-                message: 'No files are being prepared. Large videos you add get a copy by themselves.',
+                message: 'No files are being prepared. Videos that would play slowly get a copy by themselves.',
               })
             : t({
                 id: 'mediaJobs.none.off',
-                message: 'Automatic copies are off. Turn them on to make copies of large videos.',
+                message: 'Automatic copies are off. Turn them on to make copies of videos that play slowly.',
               })}
         </p>
       )}

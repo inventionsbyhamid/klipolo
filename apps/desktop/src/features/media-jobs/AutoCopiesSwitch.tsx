@@ -12,7 +12,7 @@ export const COPIES_TITLE = msg({ id: 'mediaJobs.title', message: 'Editing copie
 export const ABOUT_COPIES = msg({
   id: 'mediaJobs.about',
   message:
-    'Klipolo makes lighter copies of large videos so the preview plays smoothly. Exports always use your full-quality files.',
+    'Klipolo makes lighter copies of videos that would play slowly on this Mac, so the preview plays smoothly. Exports always use your full-quality files.',
 });
 
 /** "Make editing copies automatically": the popover's switch (kept on this Mac). */
