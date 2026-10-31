@@ -8,6 +8,7 @@ this file.
 Klipolo comes with no warranty, to the extent the law allows. See the licence for details.
 
 You can get the complete source code of this version of Klipolo from the same place you downloaded it.
+Source code: {{SOURCE_URL}} (commit {{SOURCE_COMMIT}})
 
 Parts of Klipolo's video engine are derived from Cap (https://github.com/CapSoftware/Cap), commit
 d327051c175aa092c06ad9fc6684298b1b5fed6b, Copyright (c) 2023-present Cap Software, Inc. They are used under the
@@ -18,3 +19,6 @@ Klipolo uses FFmpeg under the GNU Lesser General Public License, version 2.1 or 
 Archivo, which the caption style samples fall back to, is under the SIL Open Font License 1.1 (Archivo-OFL.txt).
 The interface uses the Mac's system font. The video fonts in Klipolo.app/Contents/Resources/fonts each come with
 their own licence file in their folder.
+
+Klipolo also uses the Rust crates and JavaScript packages listed in THIRD-PARTY-NOTICES.txt, each under the licence
+given there.
