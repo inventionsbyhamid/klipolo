@@ -118,6 +118,10 @@ pub trait Transcriber: Send + Sync {
     /// limit itself, across every caller.
     fn max_in_flight(&self) -> usize;
 
+    /// What hearing `seconds` of sound is expected to cost, in US dollars, before any call (the estimate shown before
+    /// analysis).
+    fn estimate_usd(&self, seconds: f64) -> f64;
+
     /// The turns heard in `wav` (mono 16-bit PCM at 16 kHz, at most `max_audio_s`). `keywords` (names, jargon) bias
     /// the spelling; empty for none.
     fn transcribe<'a>(
@@ -218,7 +222,10 @@ pub enum ProviderErrorKind {
     /// Busy with this device's other requests for a moment: wait `ProviderError::retry_after_s` and send the request
     /// again (`retry_busy`). Not a stop.
     Busy,
-    /// The key, token or code was refused.
+    /// The key or token was not accepted (401). Through Klipolo's relay a new token may fix it (the app registers the
+    /// device again); a person's own key that isn't accepted is wrong.
+    Unauthorized,
+    /// The key, token or code may not make this call (403): a code that was turned off, a model the key can't use.
     NotAllowed,
     /// The service is missing or not answering (none set up, down, unreachable).
     Unavailable,

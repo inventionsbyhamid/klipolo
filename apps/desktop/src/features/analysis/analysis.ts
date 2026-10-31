@@ -1,0 +1,84 @@
+import type { AnalysisStep } from '../../bindings/AnalysisStep';
+import type { Estimate } from '../../bindings/Estimate';
+
+/** The steps in order, as the step dots show them. */
+export const STEPS: AnalysisStep[] = ['audio', 'transcript', 'words', 'scenes'];
+
+/** Each step in the person's words. */
+export const STEP_LABELS: Record<AnalysisStep, string> = {
+  audio: 'Getting audio',
+  transcript: 'Transcribing',
+  words: 'Timing words',
+  scenes: 'Watching the footage',
+};
+
+/** "1 clip", "2 clips". */
+export function clipCount(n: number): string {
+  return n === 1 ? '1 clip' : `${n} clips`;
+}
+
+/** Dollars and cents: "$0.04". */
+export function dollars(usd: number): string {
+  return `$${Math.max(0, usd).toFixed(2)}`;
+}
+
+/** What it costs, as the offer says it: "about $0.04", or "less than $0.01" for a sliver. */
+export function about(usd: number): string {
+  return usd < 0.01 ? 'less than $0.01' : `about ${dollars(usd)}`;
+}
+
+/** The offer's title: "Analyze 2 clips for about $0.04". */
+export function offerTitle(estimate: Estimate): string {
+  return `Analyze ${clipCount(estimate.clips.length)} for ${about(estimate.usd)}`;
+}
+
+/**
+ * How long it takes, roughly: word timing runs at about the speed of the sound, and the rest overlaps it, so about as
+ * long as the clips.
+ */
+export function howLong(seconds: number): string {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  return minutes === 1 ? 'Takes about a minute.' : `Takes about ${minutes} minutes.`;
+}
+
+/**
+ * The offer's sentence: what Analyze does and how long it takes, what clips analyzed before cost, and with an access
+ * code the credit left, or why Analyze is refused (Rust's sentence, which suggests trimming first).
+ */
+export function offerText(estimate: Estimate, videos: boolean): string {
+  const them = estimate.clips.length === 1 ? 'it' : 'them';
+  const parts = [
+    videos
+      ? `Klipolo transcribes ${them}, times each word and watches the footage.`
+      : `Klipolo transcribes ${them} and times each word.`,
+    howLong(estimate.seconds),
+  ];
+  const cached = estimate.cached.length;
+  if (cached > 0) parts.push(`${clipCount(cached)} analyzed before ${cached === 1 ? 'loads' : 'load'} at no cost.`);
+  if (estimate.refusal) parts.push(estimate.refusal);
+  else if (estimate.creditLeftUsd != null)
+    parts.push(`You have ${dollars(estimate.creditLeftUsd)} left on your access code.`);
+  return parts.join(' ');
+}
+
+/** The progress banner's title. */
+export function progressTitle(running: number, failed: number): string {
+  if (running > 0) return `Analyzing ${clipCount(running)}`;
+  return `Couldn't finish ${clipCount(failed)}`;
+}
+
+/** One step dot: done, the one running (filled to `pct`), or still to come. */
+export type Dot = { kind: 'done' } | { kind: 'now'; pct: number } | { kind: 'next' };
+
+/** The four step dots for a clip at `step`, `pct` of the way through it. */
+export function stepDots(step: AnalysisStep, pct: number): Dot[] {
+  const at = STEPS.indexOf(step);
+  return STEPS.map((_, i) =>
+    i < at ? { kind: 'done' } : i === at ? { kind: 'now', pct: Math.min(100, Math.max(0, pct)) } : { kind: 'next' },
+  );
+}
+
+/** What a screen reader hears of a clip's progress: every 25%, not every percent (live regions). */
+export function spokenProgress(name: string, step: AnalysisStep, pct: number): string {
+  return `${name}: ${STEP_LABELS[step]}, ${Math.floor(Math.min(100, Math.max(0, pct)) / 25) * 25}%`;
+}

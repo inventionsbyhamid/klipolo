@@ -317,7 +317,7 @@
   height: 14px;
   flex: none;
   border-radius: 50%;
-  border: 2px solid var(--color-paper-wash);
+  border: 2px solid var(--color-paper-track);
   border-top-color: var(--color-paper);
   animation: settings-spin 0.9s linear infinite;
 }
