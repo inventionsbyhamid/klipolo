@@ -145,12 +145,24 @@ pub(crate) fn build_and_apply(
     label: &str,
     build: impl FnOnce(&Project) -> Result<Vec<Op>, Said>,
 ) -> Result<SnapshotPatch, ApplyError> {
+    build_named_and_apply(state, project_id, base, |project| {
+        build(project).map(|ops| (label.to_owned(), ops))
+    })
+}
+
+/// As `build_and_apply`, with the undo step's label chosen by `build` from what it found in the project.
+pub(crate) fn build_named_and_apply(
+    state: &ProjectSessionState,
+    project_id: Option<&str>,
+    base: Option<u64>,
+    build: impl FnOnce(&Project) -> Result<(String, Vec<Op>), Said>,
+) -> Result<SnapshotPatch, ApplyError> {
     on_open(state, |open| {
         let id = project_id.map_or_else(|| open.document.project().id.clone(), str::to_owned);
         check(open, &id, base)?;
-        let ops = build(open.document.project()).map_err(ApplyError::Refused)?;
+        let (label, ops) = build(open.document.project()).map_err(ApplyError::Refused)?;
         let tx = Transaction {
-            label: label.into(),
+            label,
             ops,
             ..Default::default()
         };

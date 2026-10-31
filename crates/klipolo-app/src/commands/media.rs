@@ -13,19 +13,23 @@ use klipolo_engine::render::image_load::decode_rgba;
 use klipolo_model::coded::Said;
 use klipolo_model::history::SnapshotPatch;
 use klipolo_model::media::music::{MusicOpts, add_music_ops};
+use klipolo_model::media::place::{Onto, place_ops};
 use klipolo_model::media::text::{TextPreset, TitleTemplate, add_template_ops, add_text_ops};
 use klipolo_model::media::{image::add_image_ops, sound::add_sound_ops};
 use klipolo_model::ops::{ItemPatch, Op};
 use klipolo_model::params::ParamValue;
 use klipolo_model::project::{Asset, AssetKind, Project};
 use klipolo_model::time::{RangeUs, Us};
+use klipolo_model::timeline::TrackKind;
 use serde::Deserialize;
 use tauri::State;
 use ts_rs::TS;
 
 use crate::media::is_picture;
 use crate::pack::{Pack, PackItem};
-use crate::project::{ProjectSessionState, asset_kind, build_and_apply, servable};
+use crate::project::{
+    ProjectSessionState, asset_kind, build_and_apply, build_named_and_apply, servable,
+};
 
 /// The file a media command places.
 #[derive(Clone, Debug, Deserialize, TS)]
@@ -38,6 +42,28 @@ pub enum MediaSource {
     File { asset: Asset },
     /// An item of Klipolo's pack, by its id (`library_pack`).
     Pack { id: String },
+}
+
+/// Which track a drop names (`place_ops`'s `Onto`): none, the track it was let go on, or a new track of a kind.
+#[derive(Clone, Debug, Deserialize, TS)]
+#[serde(tag = "type", rename_all = "camelCase")]
+#[ts(export)]
+pub enum DropOnto {
+    Auto,
+    Track { id: String },
+    NewSound,
+    NewPicture,
+}
+
+impl DropOnto {
+    fn onto(&self) -> Onto {
+        match self {
+            Self::Auto => Onto::Auto,
+            Self::Track { id } => Onto::Track(id.clone()),
+            Self::NewSound => Onto::New(TrackKind::Audio),
+            Self::NewPicture => Onto::New(TrackKind::Overlay),
+        }
+    }
 }
 
 /// A text layer of a preset, or a title template (a motion graphic that fills the frame).
@@ -164,6 +190,35 @@ pub fn media_add_sound(
         project_id,
         |p, asset| add_sound_ops(p, asset, at_us).map_err(coded),
     )
+}
+
+/// Sounds and pictures let go on the timeline at `at_us` (one from the library, or several from Finder): each as the
+/// "+" places it, one after another, on the track `onto` names when it takes them (`place_ops`). One undo step, named
+/// for what it adds: a sound, a picture, or files.
+#[tauri::command(async)]
+pub fn media_place(
+    state: State<'_, ProjectSessionState>,
+    sources: Vec<MediaSource>,
+    at_us: Us,
+    onto: DropOnto,
+    base_revision: Option<u64>,
+    project_id: Option<String>,
+) -> Result<SnapshotPatch, Said> {
+    let pack = state.pack();
+    build_named_and_apply(&state, project_id.as_deref(), base_revision, |project| {
+        let assets = sources
+            .iter()
+            .map(|source| resolve(project, &pack, source))
+            .collect::<Result<Vec<_>, _>>()?;
+        let label = match assets.as_slice() {
+            [one] if one.kind == AssetKind::Audio => "media.sound.add",
+            [_] => "media.image.add",
+            _ => "media.import",
+        };
+        let ops = place_ops(project, &assets, at_us.max(0), &onto.onto()).map_err(coded)?;
+        Ok((label.to_owned(), ops))
+    })
+    .map_err(|e| e.said())
 }
 
 /// Picture `source` at `at_us`: medium, centred, for 5 s, moving with the clip under it (`add_image_ops`).

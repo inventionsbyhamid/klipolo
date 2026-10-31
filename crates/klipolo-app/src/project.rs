@@ -23,7 +23,9 @@ use std::time::Duration;
 
 #[cfg(test)]
 use apply::apply_and_commit;
-pub(crate) use apply::{ApplyError, apply_transaction, build_and_apply, step, with_open};
+pub(crate) use apply::{
+    ApplyError, apply_transaction, build_and_apply, build_named_and_apply, step, with_open,
+};
 pub(crate) use create::{create_in, new_project, open_in, snapshot_now};
 pub(crate) use disk::{SaveError, save};
 use klipolo_engine::session::{FeedRx, ProjectFeed};
