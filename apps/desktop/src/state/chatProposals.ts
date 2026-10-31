@@ -40,7 +40,7 @@ export function proposalActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'ap
       const m = find(id);
       if (!m || m.proposal?.state !== 'open') return;
       const mine = session.now();
-      update(id, () => ({ state: 'applying' }));
+      update(id, () => ({ state: 'applying', reason: undefined }));
       try {
         const applied = await chatBridge().apply(m.proposal.proposal.id);
         if (session.now() !== mine) return;
@@ -49,9 +49,10 @@ export function proposalActions(set: ChatSet, get: ChatGet): Pick<ChatStore, 'ap
         update(id, () => ({ state: 'applied', undo: applied.undo, revision: applied.change.history.revision }));
       } catch (error) {
         if (session.now() !== mine) return;
-        // The project changed since it was made (`project.moved`): dropped, as a hand edit drops it.
+        // The project changed since it was made (`project.moved`): dropped, as a hand edit drops it. Refused for any
+        // other reason, it waits again, saying why, to be tried again or discarded.
         if (isCode(error, 'project.moved')) update(id, () => ({ state: 'dropped' }));
-        else update(id, () => ({ state: 'refused', reason: errorMessage(error) }));
+        else update(id, () => ({ state: 'open', reason: errorMessage(error) }));
       }
     },
 

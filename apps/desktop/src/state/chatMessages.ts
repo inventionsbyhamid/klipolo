@@ -6,9 +6,9 @@ import type { CodedError } from '../bindings/CodedError';
 
 /**
  * Where a proposal stands: waiting, being applied, applied, discarded, dropped (the project changed), replaced (a newer
- * one came: a project has one open proposal at a time), refused.
+ * one came: a project has one open proposal at a time).
  */
-export type ProposalState = 'open' | 'applying' | 'applied' | 'discarded' | 'dropped' | 'replaced' | 'refused';
+export type ProposalState = 'open' | 'applying' | 'applied' | 'discarded' | 'dropped' | 'replaced';
 
 /** A proposal in a reply, and what came of it. */
 export interface ProposalPart {
@@ -17,7 +17,7 @@ export interface ProposalPart {
   /** Applied: its undo label, and the revision Apply made (its Undo chip works while that is the latest change). */
   undo?: CodedError;
   revision?: number;
-  /** Refused: why, in one sentence. */
+  /** Open again after Apply was refused (not because the project moved): why, in one sentence, with Retry. */
   reason?: string;
 }
 

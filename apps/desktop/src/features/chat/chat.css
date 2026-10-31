@@ -216,6 +216,13 @@
   line-height: var(--lh-sm);
 }
 
+/* Why Apply was refused, over the actions that try again. */
+.p-why {
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
 .p-sub b.cut {
   color: var(--color-cut-text);
   font-weight: var(--weight-strong);

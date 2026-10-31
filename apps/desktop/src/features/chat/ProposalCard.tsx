@@ -159,7 +159,7 @@ function CutList({ proposal }: { proposal: ChatProposal }) {
  * keyboard from the chat box (Enter there always sends): the person reaches it with Tab; Enter on the card applies and
  * Escape discards. Applied, it collapses to the applied row with its Undo chip; discarded, to "Discarded."; dropped
  * (the project changed while it was open), or replaced (a newer proposal came: one is open at a time), to a sentence
- * that says so. When it collapses with the keyboard in it, the
+ * that says so. An Apply refused for another reason leaves it open, saying why, its Apply now Retry. When it collapses with the keyboard in it, the
  * keyboard goes back to the chat box.
  */
 export function ProposalCard({ message: m }: { message: ReplyMessage }) {
@@ -203,7 +203,6 @@ export function ProposalCard({ message: m }: { message: ReplyMessage }) {
         {t({ id: 'chatPanel.proposal.replaced', message: 'Replaced by the newer proposal below.' })}
       </p>
     );
-  if (state === 'refused') return <p className="muted">{part.reason}</p>;
   const busy = state === 'applying';
   const { apply, discard } = useChat.getState();
   const now = main ? mainIndex(main).mainEndUs : 0;
@@ -249,6 +248,11 @@ export function ProposalCard({ message: m }: { message: ReplyMessage }) {
         ))}
       </div>
       <CutList proposal={proposal} />
+      {part.reason && !busy && (
+        <p className="p-why" role="alert">
+          {part.reason}
+        </p>
+      )}
       <div className="p-actions">
         <button
           type="button"
@@ -258,7 +262,9 @@ export function ProposalCard({ message: m }: { message: ReplyMessage }) {
         >
           {busy
             ? t({ id: 'chatPanel.proposal.applying', message: 'Applying' })
-            : t({ id: 'chatPanel.proposal.apply', message: 'Apply' })}
+            : part.reason
+              ? t({ id: 'chatPanel.proposal.retry', message: 'Retry' })
+              : t({ id: 'chatPanel.proposal.apply', message: 'Apply' })}
         </button>
         <button
           type="button"

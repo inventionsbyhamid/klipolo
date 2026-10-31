@@ -533,6 +533,28 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     expect(screen.getByText('No connection.')).toBeInTheDocument();
   });
 
+  it('an Apply refused for another reason keeps the card open with why, and Retry applies it', async () => {
+    let refuse = true;
+    const undo = code('chat.removeFillers');
+    chat({
+      reply: (r) => reply(r.id, 'I found 3.', { proposal: cuts() }),
+      apply: () => {
+        if (refuse) throw new Error('Klipolo couldn’t make that change.');
+        return { change: changed(4, undo), undo };
+      },
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'cut the pauses{Enter}');
+    const card = await screen.findByRole('group', { name: 'Cut 2 pauses and 1 um' });
+    await userEvent.click(within(card).getByRole('button', { name: 'Apply' }));
+    expect(await within(card).findByText('Klipolo couldn’t make that change.')).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Discard' })).toBeInTheDocument();
+    expect(useProposal.getState().proposal?.id).toBe('p1');
+    refuse = false;
+    await userEvent.click(within(card).getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText(/^Applied\./)).toBeInTheDocument();
+  });
+
   it('an empty chat says when the clips aren’t analysed yet, and while they are', () => {
     useAnalysis.setState({ states: {} });
     renderWithProviders(<ChatPanel />);
