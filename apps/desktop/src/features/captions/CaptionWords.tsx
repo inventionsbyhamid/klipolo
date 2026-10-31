@@ -195,19 +195,25 @@ export function CaptionWords({ format }: { format: FormatKind }) {
   const at = sel && shownRows ? list.findIndex((l) => l.key === sel.focus) : -1;
   const focus = shownRows ? (at < 0 ? undefined : at) : sel && nav ? nav.at.get(sel.focus) : undefined;
 
+  /** The counts asked so far: only the latest one's answer is taken, so an older one never overwrites it. */
+  const counts = useRef(0);
   /**
    * Asks where else `w`, being fixed, shows. When that can't be asked, the word counts as showing here only: its fix
    * bar fixes just this one (never waits for a count that won't come).
    */
   const countPlaces = (w: WordView) => {
     if (!projectId) return;
+    counts.current += 1;
+    const mine = counts.current;
     void captions
       .find(projectId, format, w.said ?? w.text)
       .then(
         (matches) => matches ?? [w],
         () => [w],
       )
-      .then((matches) => setEdit((e) => (e?.word === w ? { ...e, matches } : e)));
+      .then((matches) => {
+        if (mine === counts.current) setEdit((e) => (e?.word === w ? { ...e, matches } : e));
+      });
   };
   /** Opens `w` for fixing, and asks where else it shows. */
   const open = (w: WordView) => {

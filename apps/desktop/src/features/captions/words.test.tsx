@@ -294,4 +294,26 @@ describe('caption words', () => {
     await user.type(screen.getByRole('searchbox', { name: 'Find a word' }), 'zebra');
     expect(screen.getByText('No word matches.')).toBeInTheDocument();
   });
+
+  it('an older count of places never overwrites a newer one', async () => {
+    const answers: ((v: unknown) => void)[] = [];
+    findReply = () => new Promise((r) => answers.push(r));
+    const user = userEvent.setup();
+    renderWithProviders(<CaptionWords format="portrait" />);
+    await user.click(within(await list()).getByRole('option', { name: 'TEO' }));
+    await waitFor(() => expect(answers).toHaveLength(1));
+    // The words update while the first count is on its way: a second one is asked.
+    act(() => {
+      const snap = useProject.getState().snapshot!;
+      useProject.setState({ snapshot: { ...snap, history: { ...snap.history, revision: snap.history.revision + 1 } } });
+    });
+    await waitFor(() => expect(answers).toHaveLength(2));
+    await user.clear(fixField());
+    await user.type(fixField(), 'Theo');
+    await act(async () => answers[1]([PAGES[1].words[1], PAGES[2].words[0]]));
+    const bar = screen.getByRole('group', { name: 'Fix word' });
+    expect(bar).toHaveTextContent('It appears 2 times.');
+    await act(async () => answers[0]([PAGES[1].words[1]]));
+    expect(bar).toHaveTextContent('It appears 2 times.');
+  });
 });
