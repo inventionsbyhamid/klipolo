@@ -108,6 +108,7 @@ fn build() -> Value {
                 fps: 0.0,
                 has_audio: false,
                 audio_lead_us: None,
+                made_with: None,
                 rotation: None,
             };
             for format in FORMATS {
