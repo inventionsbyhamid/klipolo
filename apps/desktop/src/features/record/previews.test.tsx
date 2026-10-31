@@ -12,6 +12,7 @@ import { useRecorder } from '../../state/recorder';
 import { useRecorderPreviews } from '../../state/recorderPreviews';
 import {
   app,
+  deferred,
   device,
   display,
   type FakeRecorder,
@@ -503,6 +504,21 @@ describe('the previews in the Record dialog', () => {
     expect(screen.queryByRole('meter')).toBeNull();
   });
 
+  it('a_refusal_answered_for_an_earlier_opening_never_marks_the_next', async () => {
+    const answer = deferred<void>();
+    fake.script.previews = (w) => (w.ask === 'mic' ? answer.promise : undefined);
+    await openOn(recorderSetup({ permissions: { mic: 'notAsked' } }));
+    await userEvent.click(screen.getByRole('button', { name: 'Allow microphone' }));
+    await flush();
+    // Closed and opened again before macOS's no came back for the earlier press.
+    act(() => rec().close());
+    await act(() => rec().openRecorder());
+    await flush();
+    await act(async () => answer.reject(refusal('capture.permission.mic')));
+    await flush();
+    expect(screen.getByRole('dialog', { name: 'Record' })).not.toHaveTextContent("Klipolo can't use your microphone.");
+    expect(screen.getByRole('button', { name: 'Allow microphone' })).toBeInTheDocument();
+  });
 
   it('blob_urls_are_revoked', async () => {
     await openOn(recorderSetup({ cameras: [device('cam')] }));
