@@ -10,8 +10,7 @@ import { renderWithProviders } from '../../test/render';
 
 /*
  * The docked inspector card: its text, picture and sound fields each commit one labelled change, built at
- * its turn through the commit queue. The inspector has no camera, clip speed or framing fields, so nothing here tests
- * them.
+ * its turn through the commit queue. A main-track clip's card is tested in `clipInspector.test.tsx`.
  */
 
 const apply = vi.fn<(label: string, ops: Op[], params?: LabelParams) => Promise<boolean>>(() =>
@@ -86,8 +85,8 @@ describe('the inspector', () => {
   it('is not there while nothing it has fields for is selected', () => {
     const { rerender } = renderWithProviders(<Inspector format="landscape" />);
     expect(screen.queryByRole('complementary')).toBeNull();
-    // A clip is changed on the timeline, not here.
-    act(() => useSelection.setState({ selectedId: 'a' }));
+    // Something that's gone (removed since it was selected).
+    act(() => useSelection.setState({ selectedId: 'gone' }));
     rerender(<Inspector format="landscape" />);
     expect(screen.queryByRole('complementary')).toBeNull();
   });
