@@ -23,6 +23,7 @@ vi.mock('../../bridge/engine', () => ({
 }));
 const { useProject } = await import('../../state/project');
 const { useUi } = await import('../../state/ui');
+const { useSelection } = await import('../../state/selection');
 const { useSpeech } = await import('./media/speech');
 const { Timeline } = await import('./Timeline');
 const { levelPoints, levelY, ATTACK_US, RELEASE_US, DuckTag } = await import('./blocks/VolumeLine');
@@ -42,6 +43,25 @@ function music(duck = -12) {
       content: { ...(song.content as AudioContent), volume: 0.3, duck, fadeInUs: 500_000, fadeOutUs: 2 * S },
     },
   ];
+  return snapshot;
+}
+
+/**
+ * The fixture's song laid as one bed of three pieces back to back, 0 to 30 s, as `add_music_ops` lays a short song
+ * under a longer video: one song, one level.
+ */
+function bed() {
+  const snapshot = music();
+  const audio = snapshot.project.timeline.tracks[1];
+  const [song] = audio.items;
+  const content = song.content as AudioContent;
+  audio.items = ['bed', 'bed-2', 'bed-3'].map((id, k) => ({
+    ...song,
+    id,
+    startUs: k * 10 * S,
+    durationUs: 10 * S,
+    content: { ...content, fadeInUs: k === 0 ? content.fadeInUs : 0, fadeOutUs: k === 2 ? content.fadeOutUs : 0 },
+  }));
   return snapshot;
 }
 
@@ -177,6 +197,33 @@ describe('the music’s volume line', () => {
     const deeper = (apply.mock.calls[1][1][0] as unknown as { patch: { content: AudioContent } }).patch.content;
     expect(deeper.duck).toBeLessThan(-12);
     expect(deeper.volume).toBe(0.3);
+  });
+
+  it('a song laid in pieces is one: a drag on one piece sets them all, each keeping its fades', async () => {
+    useProject.setState({ snapshot: bed(), pending: 0, apply });
+    useSelection.setState({ selectedId: null });
+    renderWithProviders(<Timeline />);
+    const lane = screen.getByRole('group', { name: 'Music' });
+    const grips = lane.querySelectorAll('.tl-volume-grip');
+    expect(grips).toHaveLength(3);
+    fireEvent.pointerDown(grips[1], { button: 0, pointerId: 1, clientY: 100 });
+    fireEvent.pointerUp(grips[1], { pointerId: 1, clientY: 90 });
+    await act(async () => undefined);
+    expect(apply).toHaveBeenCalledTimes(1);
+    const [label, ops] = apply.mock.calls[0];
+    expect(label).toBe('volume.undo');
+    const set = ops.map((op) => {
+      const { id, patch } = op as unknown as { id: string; patch: { content: AudioContent } };
+      return [id, patch.content.volume, patch.content.fadeInUs, patch.content.fadeOutUs];
+    });
+    const louder = set[0][1] as number;
+    expect(louder).toBeGreaterThan(0.3);
+    // Each piece keeps its own fades.
+    expect(set).toEqual([
+      ['bed', louder, 500_000, 0],
+      ['bed-2', louder, 0, 0],
+      ['bed-3', louder, 0, 2 * S],
+    ]);
   });
 
   it('a drag that is refused puts the line back where the project has it', async () => {

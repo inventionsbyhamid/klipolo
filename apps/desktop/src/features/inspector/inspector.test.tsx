@@ -56,6 +56,31 @@ const styleOf = (call: Parameters<typeof apply>) => (call[1][0] as unknown as St
 type AudioContent = Extract<ItemContent, { type: 'audio' }>;
 const contentOf = (call: Parameters<typeof apply>) =>
   (call[1][0] as unknown as { patch: { content: AudioContent } }).patch.content;
+/** Each op's layer and the content it sets. */
+const contents = (call: Parameters<typeof apply>) =>
+  call[1].map((op) => {
+    const { id, patch } = op as unknown as { id: string; patch: { content: AudioContent } };
+    return [id, patch.content] as const;
+  });
+
+/**
+ * The fixture's song laid as one bed of three pieces back to back, 0 to 30 s: music of one file at 30 %, ducking
+ * 12 dB, fading in on the first piece and out on the last, as `add_music_ops` lays a short song under a longer video.
+ */
+function bed() {
+  const snapshot = fixtureSnapshot();
+  const audio = snapshot.project.timeline.tracks[1];
+  const [song] = audio.items;
+  const music: AudioContent = { ...(song.content as AudioContent), volume: 0.3, duck: -12 };
+  audio.items = ['bed', 'bed-2', 'bed-3'].map((id, k) => ({
+    ...song,
+    id,
+    startUs: k * 10_000_000,
+    durationUs: 10_000_000,
+    content: { ...music, fadeInUs: k === 0 ? 500_000 : 0, fadeOutUs: k === 2 ? 2_000_000 : 0 },
+  }));
+  return snapshot;
+}
 
 describe('the inspector', () => {
   it('is not there while nothing it has fields for is selected', () => {
@@ -364,5 +389,46 @@ describe('the inspector', () => {
     expect(screen.queryByRole('slider', { name: 'How much quieter' })).toBeNull();
     await userEvent.click(screen.getByRole('radio', { name: 'On' }));
     expect(contentOf(apply.mock.calls[2]).duck).toBe(-18);
+  });
+
+  it('a song laid in pieces is one: its volume and ducking go on every piece, its fades on its first and last', async () => {
+    useProject.setState({ snapshot: bed() });
+    useSelection.setState({ selectedId: 'bed-2' });
+    renderWithProviders(<Inspector format="landscape" />);
+    // The volume, set on the middle piece: all three at 60 %, one change.
+    const thumb = screen.getByRole('slider', { name: 'Volume' });
+    const root = thumb.parentElement!.parentElement!;
+    root.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 20 }) as DOMRect;
+    Object.assign(Element.prototype, {
+      setPointerCapture: () => undefined,
+      releasePointerCapture: () => undefined,
+      hasPointerCapture: () => true,
+    });
+    fireEvent.pointerDown(root, { button: 0, pointerId: 1, clientX: 30 });
+    fireEvent.pointerUp(root, { pointerId: 1, clientX: 30 });
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(apply.mock.calls[0][0]).toBe('volume.undo');
+    expect(contents(apply.mock.calls[0]).map(([id, c]) => [id, c.volume])).toEqual([
+      ['bed', 0.6],
+      ['bed-2', 0.6],
+      ['bed-3', 0.6],
+    ]);
+    // Ducking off: every piece, one change; each keeps its own fades.
+    await userEvent.click(screen.getByRole('radio', { name: 'Off' }));
+    expect(apply.mock.calls[1][0]).toBe('music.duck.undo');
+    expect(contents(apply.mock.calls[1]).map(([id, c]) => [id, c.duck, c.fadeInUs, c.fadeOutUs])).toEqual([
+      ['bed', 0, 500_000, 0],
+      ['bed-2', 0, 0, 0],
+      ['bed-3', 0, 0, 2_000_000],
+    ]);
+    // The fades are the song's: in on its first piece, out on its last.
+    const fadeIn = screen.getByRole('radiogroup', { name: 'Fade in' });
+    const fadeOut = screen.getByRole('radiogroup', { name: 'Fade out' });
+    expect(within(fadeIn).getByRole('radio', { name: '0.5 s' })).toHaveAttribute('aria-checked', 'true');
+    expect(within(fadeOut).getByRole('radio', { name: '2 s' })).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(within(fadeIn).getByRole('radio', { name: '1 s' }));
+    expect(contents(apply.mock.calls[2]).map(([id, c]) => [id, c.fadeInUs])).toEqual([['bed', 1_000_000]]);
+    await userEvent.click(within(fadeOut).getByRole('radio', { name: '1 s' }));
+    expect(contents(apply.mock.calls[3]).map(([id, c]) => [id, c.fadeOutUs])).toEqual([['bed-3', 1_000_000]]);
   });
 });
