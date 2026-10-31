@@ -1,12 +1,13 @@
 //! A message's context and compiler inputs, built once from the project snapshot it is sent on and what each of that
 //! project's clips' analysis has found then (`Findings`): the model reads the context, and its calls compile against
-//! the same snapshot and inputs.
+//! the same snapshot and inputs. The media the tools may name (`Library`) are the project's own pictures: which sound
+//! file is music and which a sound effect, and the bundled pack, come from the app's library once it has one.
 
 use std::collections::HashMap;
 
 use klipolo_chat::{
-    AnalysisState as ChatAnalysis, ChatContext, Inputs, Library, SceneLog, SpeakerTurn, View,
-    build_context,
+    AnalysisState as ChatAnalysis, ChatContext, Inputs, Library, LibraryItem, MediaKind, SceneLog,
+    SpeakerTurn, View, build_context,
 };
 use klipolo_model::Project;
 use klipolo_model::project::AssetKind;
@@ -49,8 +50,7 @@ pub(crate) fn gather(
             scenes.insert(id.clone(), scene_entries(log));
         }
     }
-    // The media the tools may name: none until the app has a library of its own.
-    let library = Library::default();
+    let library = library_of(project);
     let context = build_context(project, &speech, &turns, &scenes, &view, &library);
     let inputs = Inputs {
         message: message.to_owned(),
@@ -62,4 +62,19 @@ pub(crate) fn gather(
         library,
     };
     (context, inputs)
+}
+
+/// The media `project` holds that chat's tools may name: its pictures, by the names the library shows.
+fn library_of(project: &Project) -> Library {
+    Library {
+        items: (project.assets.iter())
+            .filter(|a| a.kind == AssetKind::Image)
+            .map(|asset| LibraryItem {
+                name: asset.name.clone(),
+                kind: MediaKind::Image,
+                asset: asset.clone(),
+                pack: false,
+            })
+            .collect(),
+    }
 }

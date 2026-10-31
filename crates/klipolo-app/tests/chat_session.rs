@@ -1491,3 +1491,43 @@ async fn a_title_card_s_background_goes_under_the_title_the_answer_added() {
         "the title, then its background"
     );
 }
+
+#[tokio::test]
+async fn the_projects_own_pictures_are_in_the_library_the_model_reads() {
+    let mut p = talk();
+    p.assets.push(Asset {
+        id: "logo".into(),
+        kind: AssetKind::Image,
+        path: "/media/logo.png".into(),
+        name: "logo.png".into(),
+        duration_us: secs(5.0),
+        width: 512,
+        height: 512,
+        fps: 0.0,
+        rotation: None,
+        has_audio: false,
+        audio_lead_us: None,
+    });
+    let logo = answer(
+        "",
+        vec![fc(
+            "i",
+            "addImage",
+            r#"{"file": "logo", "size": null, "position": "top-right", "atSec": 0.0, "durationSec": null}"#,
+        )],
+    );
+    let s = studio_with(p, Painter::new(vec![]), vec![logo]);
+    let out = s
+        .chat
+        .session
+        .send(request("put my logo in the top right"))
+        .await
+        .unwrap();
+    let context = match &s.chat.model.seen()[0].input[0] {
+        Item::Context { text } => text.clone(),
+        _ => unreachable!(),
+    };
+    assert!(context.contains("logo.png"), "{context}");
+    assert!(reply(&out)["applied"].is_object(), "{:#}", reply(&out));
+    assert_eq!(pictures_on(&s.chat.project.project()).len(), 1);
+}
