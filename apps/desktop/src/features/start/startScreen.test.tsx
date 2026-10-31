@@ -384,8 +384,8 @@ describe('StartScreen', () => {
     answer(ROWS);
     await waitFor(() => expect(cards()).toHaveLength(3));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    // The focus goes on to the first card, not back to the page.
-    expect(card('Studio tour')).toHaveFocus();
+    // The focus goes on to the first card, not back to the page (moved once the cards are drawn).
+    await waitFor(() => expect(card('Studio tour')).toHaveFocus());
   });
 
   it('one_yellow_and_no_red_or_dash', async () => {
