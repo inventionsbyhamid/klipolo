@@ -60,9 +60,10 @@ pub(crate) const RECENT_FILE: &str = "recent.json";
 
 /// The newest `limit` projects in `library` (its top-level project files) as the start screen lists them: the ones
 /// stamped in `stamps` first, by when they were opened, then the rest by their last save, which is then their
-/// `opened_ms`. A time later than now reads as now (the order still follows the times as written). A file that doesn't
-/// read as a project is left out (and logged), and so is a link. `thumbs` is the engine's thumbnail folder; None lists
-/// no pictures. Fails only when the library itself can't be listed.
+/// `opened_ms`. A time that can't be read is 0, and those list last; a time later than now reads as now (the order
+/// still follows the times as written). A file that doesn't read as a project is left out (and logged), and so is a
+/// link. `thumbs` is the engine's thumbnail folder; None lists no pictures. Fails only when the library itself can't be
+/// listed.
 pub(crate) fn recent_in(
     library: &Path,
     stamps: &Path,
@@ -136,9 +137,9 @@ struct Found {
     at_ms: u64,
 }
 
-/// The top-level project files in `library`, in list order: stamped first, then newest first (by file name on a tie).
-/// Links are left out: a save replaces a link with a file, leaving what it pointed at behind. Fails when `library` can't
-/// be listed.
+/// The top-level project files in `library`, in list order: stamped first, then newest first (by file name on a tie),
+/// and files whose time is unknown (0) last. Links are left out: a save replaces a link with a file, leaving what it
+/// pointed at behind. Fails when `library` can't be listed.
 fn project_files(
     library: &Path,
     stamps: &BTreeMap<String, u64>,
@@ -168,9 +169,14 @@ fn project_files(
     Ok(found)
 }
 
-/// Stamped first, then newest first, then by file name.
-fn list_order(found: &Found) -> (Reverse<bool>, Reverse<u64>, &Path) {
-    (Reverse(found.stamped), Reverse(found.order_ms), &found.file)
+/// Known times first, then stamped first, then newest first, then by file name.
+fn list_order(found: &Found) -> (Reverse<bool>, Reverse<bool>, Reverse<u64>, &Path) {
+    (
+        Reverse(found.order_ms > 0),
+        Reverse(found.stamped),
+        Reverse(found.order_ms),
+        &found.file,
+    )
 }
 
 /// `time` in ms since the Unix epoch (0 before it).

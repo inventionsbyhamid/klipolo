@@ -510,6 +510,28 @@ fn a_stamp_is_always_the_newest_and_future_times_read_as_now() {
     );
 }
 
+/// A file whose time is unknown (0) lists after every project with a time, stamped or not.
+#[test]
+fn unknown_times_list_last() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    let opened = saved(&library, &Project::new("Opened"), 1_000);
+    let zero_stamp = saved(&library, &Project::new("Stamped at 0"), 3_000);
+    saved(&library, &Project::new("Saved long ago"), 1);
+    saved(&library, &Project::new("No time"), 0);
+    stamped(&stamps, &[(&opened, 5_000), (&zero_stamp, 0)]);
+
+    assert_eq!(
+        names(&recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap()),
+        [
+            ("Opened", 5_000),
+            ("Saved long ago", 1),
+            ("Stamped at 0", 0),
+            ("No time", 0)
+        ]
+    );
+}
+
 /// Stamping over a `recent.json` that doesn't read as stamps starts it over with the one stamp.
 #[test]
 fn stamping_rewrites_a_damaged_recent_json() {
