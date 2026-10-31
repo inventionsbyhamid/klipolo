@@ -426,6 +426,41 @@ describe('the take', () => {
     expect(useToasts.getState().toasts).toEqual([]);
   });
 
+  it('a_refused_cancel_falls_back_to_stop_the_running_recording', async () => {
+    const take = await pressed();
+    fake.emit(take, countdown(3));
+    fake.script.send = (_take, command) =>
+      command.cmd === 'cancel' ? refusal('capture.error.unsupported') : undefined;
+    await rec().cancel();
+    expect(fake.calls.slice(-2)).toEqual(['send:cancel', 'stopRunning']);
+    expect(rec().error).toBeNull();
+    // Stop couldn't be sent either: that is said.
+    fake = await installFakeRecorder();
+    const next = await pressed();
+    fake.emit(next, countdown(3));
+    fake.script.send = (_take, command) =>
+      command.cmd === 'cancel' ? refusal('capture.error.unsupported') : undefined;
+    fake.script.stopRunning = () => refusal('capture.error.testRun');
+    await rec().cancel();
+    expect(rec().error).toBe('Recording is off in this test run.');
+  });
+
+  it('a_late_refused_cancel_never_says_its_sentence_on_the_next_press', async () => {
+    const take = await pressed();
+    fake.emit(take, countdown(3));
+    const answer = deferred<void>();
+    fake.script.send = (_take, command) => (command.cmd === 'cancel' ? answer.promise : undefined);
+    fake.script.stopRunning = () => refusal('capture.error.testRun');
+    const cancelling = rec().cancel();
+    // Its worker goes anyway, and the person presses Record again.
+    fake.emit(take, state('idle'));
+    await rec().record();
+    expect(rec().take).toBe('take-2');
+    answer.reject(refusal('capture.error.unsupported'));
+    await cancelling;
+    expect(rec().error).toBeNull();
+  });
+
   it('a_take_that_fails_before_arming_answers_never_starts', async () => {
     await opened();
     const arming = deferred<ArmedTake>();

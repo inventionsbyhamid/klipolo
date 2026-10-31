@@ -95,6 +95,8 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
    * dialog goes with it. A `stopping` alone proves nothing: a take stopped in its countdown says it too.
    */
   let recorded: string | null = null;
+  /** Record presses so far: a sentence about an earlier take is never put on a later press. */
+  let presses = 0;
 
   function leave(id: string) {
     leaving?.gone();
@@ -119,16 +121,32 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
     clearTimeout(timer);
   }
 
-  /** Lets take `id` go with `command`; a refusal other than "it has gone already" is said. */
-  async function letGo(id: string, command: 'cancel' | 'disarm') {
-    leave(id);
-    if (started === id) started = null;
+  /**
+   * Tells take `id` to end with `command`. A take that has gone already needs nothing more. Any other refusal falls back
+   * to "Stop the running recording", which never starts capture; only if that fails too is it said, and never once a
+   * later Record was pressed.
+   */
+  async function tell(id: string, command: 'cancel' | 'disarm' | 'stop') {
+    const mine = presses;
     try {
       await recorder.send(id, { cmd: command });
     } catch (error) {
       if (isCode(error, STALE)) return gone(id);
-      set({ error: errorMessage(error) });
+      try {
+        await recorder.stopRunning();
+      } catch (stopError) {
+        if (presses !== mine) return;
+        if (get().open) set({ error: errorMessage(stopError) });
+        else toast.error(errorMessage(stopError));
+      }
     }
+  }
+
+  /** Lets take `id` go with `command`: only its last word is heard from now on. */
+  async function letGo(id: string, command: 'cancel' | 'disarm') {
+    leave(id);
+    if (started === id) started = null;
+    await tell(id, command);
   }
 
   /** What the take said while Klipolo's window was hidden, said now that it is back. */
@@ -245,6 +263,7 @@ export function takeSlice(set: Set, get: Get): TakeSlice {
     if (options === null) return;
     // A take whose worker said it failed hasn't gone yet: Record waits for it, as for any take let go.
     if (s.take !== null) leave(s.take);
+    presses += 1;
     const mine: Press = { cancelled: false };
     press = mine;
     held.length = 0;
