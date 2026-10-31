@@ -7,8 +7,8 @@
 //!   JSON), no sound, nothing written, for the big view of `view` pixels (`live_view_size::ViewPixels` as
 //!   JSON), else the small one;
 //! - `--record-worker --thumbs <targets>`: the Record dialog's stills of each screen and app, about once a second each
-//!   (`run::thumbs`); `targets` is a JSON list of `[key, target]` pairs, each target a `backend::Target` that shows a
-//!   screen (a camera or the system's picker is a usage error);
+//!   (`run::thumbs`), at utility QoS; `targets` is a JSON list of `[key, target]` pairs, each target a
+//!   `backend::Target` that shows a screen (a camera or the system's picker is a usage error);
 //! - `--record-worker --meter <mic id>`: the Record dialog's mic meter, ten peaks a second of that mic alone
 //!   (`run::meter`);
 //! - `--record-worker --probe <out.json>`: the encoder probe, on generated frames only (so without the consent guard,
@@ -68,6 +68,8 @@ pub fn main(args: &[String]) -> i32 {
             log::to_stderr();
             match serde_json::from_str::<Vec<(String, Target)>>(targets) {
                 Ok(targets) if targets.iter().all(|(_, t)| shows_a_screen(t)) => {
+                    // The stills are background work: macOS passes the class on to the services that take them.
+                    qos::set_current(Qos::Utility);
                     with_backend(|b| run_thumbs(&*b, &targets, PreviewIo::std()))
                 }
                 Ok(_) => {
