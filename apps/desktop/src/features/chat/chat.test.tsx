@@ -555,6 +555,37 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     expect(await screen.findByText(/^Applied\./)).toBeInTheDocument();
   });
 
+  it('names every kind of removal that isn’t footage', async () => {
+    chat({
+      reply: (r) =>
+        reply(r.id, 'Here.', {
+          proposal: proposal('p1', 3, {
+            title: 'Tidy up',
+            removals: {
+              ...proposal('x', 0).removals,
+              tracks: ['t1', 't2'],
+              luts: ['l1'],
+              recordings: ['r1'],
+              markers: ['m1', 'm2', 'm3'],
+              sounds: ['r2'],
+            },
+          }),
+        }),
+    });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'tidy up{Enter}');
+    const card = await screen.findByRole('group', { name: 'Tidy up' });
+    for (const line of [
+      'Removes 2 tracks.',
+      'Takes 1 color look out of the project.',
+      'Removes 1 recording.',
+      'Removes or moves 3 markers.',
+      'Leaves 1 recording with less of its sound.',
+    ])
+      expect(within(card).getByText(line)).toBeInTheDocument();
+    expect(within(card).queryByText(/0\.0 s/)).toBeNull();
+  });
+
   it('an empty chat says when the clips aren’t analysed yet, and while they are', () => {
     useAnalysis.setState({ states: {} });
     renderWithProviders(<ChatPanel />);

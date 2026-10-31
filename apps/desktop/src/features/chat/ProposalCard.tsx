@@ -70,6 +70,47 @@ function useOtherRemovals(proposal: ChatProposal): string[] {
         }),
       }),
     );
+  if (r.tracks.length > 0)
+    out.push(
+      t({
+        id: 'chatPanel.proposal.tracks',
+        message: plural(r.tracks.length, { one: 'Removes # track.', other: 'Removes # tracks.' }),
+      }),
+    );
+  if (r.recordings.length > 0)
+    out.push(
+      t({
+        id: 'chatPanel.proposal.recordings',
+        message: plural(r.recordings.length, { one: 'Removes # recording.', other: 'Removes # recordings.' }),
+      }),
+    );
+  if (r.sounds.length > 0)
+    out.push(
+      t({
+        id: 'chatPanel.proposal.sounds',
+        message: plural(r.sounds.length, {
+          one: 'Leaves # recording with less of its sound.',
+          other: 'Leaves # recordings with less of their sound.',
+        }),
+      }),
+    );
+  if (r.markers.length > 0)
+    out.push(
+      t({
+        id: 'chatPanel.proposal.markers',
+        message: plural(r.markers.length, { one: 'Removes or moves # marker.', other: 'Removes or moves # markers.' }),
+      }),
+    );
+  if (r.luts.length > 0)
+    out.push(
+      t({
+        id: 'chatPanel.proposal.luts',
+        message: plural(r.luts.length, {
+          one: 'Takes # color look out of the project.',
+          other: 'Takes # color looks out of the project.',
+        }),
+      }),
+    );
   if (r.effects.length > 0 || r.transitions.length > 0)
     out.push(t({ id: 'chatPanel.proposal.effects', message: 'Takes some effects away.' }));
   return out;
