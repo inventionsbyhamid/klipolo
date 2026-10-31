@@ -275,21 +275,26 @@ fn given(got: f64) -> String {
     }
 }
 
-/// The caption styles `setCaptions` offers, in the schema's order, each with how the model is told it looks. The
-/// other built-ins (Loud, Arcade) stay out of chat.
+/// The caption styles `setCaptions` offers, in the schema's order, each with how the model is told it looks. Whether a
+/// word lights up as it is said is what tells them apart when a person asks for captions "that light up" or "word by
+/// word": karaoke and highlight light up each word, bold only pops words in. The other built-ins (Loud, Arcade) stay
+/// out of chat.
 pub const CHAT_CAPTION_STYLES: [(BuiltinCaptionStyle, &str); 5] = [
-    (BuiltinCaptionStyle::Clean, "calm subtitles"),
+    (
+        BuiltinCaptionStyle::Clean,
+        "calm subtitles, a sentence at a time",
+    ),
     (
         BuiltinCaptionStyle::Bold,
-        "big words that pop in as they are said",
+        "up to three big uppercase words that pop in one by one; no word lights up",
     ),
     (
         BuiltinCaptionStyle::Karaoke,
-        "a line where the spoken word lights up",
+        "a line of words where each word lights up as it is said, word by word",
     ),
     (
         BuiltinCaptionStyle::Highlight,
-        "a coloured box follows each word",
+        "up to four big uppercase words where a coloured box lights up each word as it is said, word by word",
     ),
     (BuiltinCaptionStyle::Boxed, "sentences on rounded boxes"),
 ];
