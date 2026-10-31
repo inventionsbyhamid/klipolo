@@ -37,6 +37,7 @@ use klipolo_model::media::sound::add_sound_ops;
 use klipolo_model::media::text::{
     TEMPLATE_US, TEXT_US, TitleTemplate, add_template_ops, add_text_ops,
 };
+use klipolo_model::motion;
 use klipolo_model::ops::Op;
 use klipolo_model::params::{ParamKind, ParamValue};
 use klipolo_model::project::{Asset, AssetKind};
@@ -167,11 +168,16 @@ fn length(work: &Project, start: Us, wanted: Option<Us>, default_us: Us) -> Us {
     (wanted.unwrap_or(default_us)).min(video_duration(&work.timeline).saturating_sub(start))
 }
 
-/// `ops` with the layer they add lasting `duration_us` (the model's ops add one at its default length).
+/// `ops` with the layer they add lasting `duration_us` (the model's ops add one at its default length), its motion
+/// fitted to that length as a trim fits it (`Motion::fit`: a text's fades no longer than the layer).
 fn lasting(mut ops: Vec<Op>, duration_us: Us) -> Vec<Op> {
     for op in &mut ops {
         if let Op::AddItem { item, .. } = op {
             item.duration_us = duration_us;
+            item.layout.motion = item.layout.motion.take().and_then(|mut m| {
+                m.fit(duration_us);
+                motion::kept(m)
+            });
         }
     }
     ops

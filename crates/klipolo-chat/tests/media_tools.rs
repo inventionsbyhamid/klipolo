@@ -866,6 +866,10 @@ fn nothing_is_placed_at_or_past_the_videos_end() {
             "makeSticker",
             json!({"prompt": "plane", "position": null, "atSec": 30.0, "durationSec": null}),
         ),
+        call(
+            "addText",
+            json!({"text": "the end", "preset": "plain", "atSec": 30.0, "durationSec": null}),
+        ),
     ];
     for c in at_end {
         let out = compile(&p, &i, std::slice::from_ref(&c));
@@ -927,6 +931,23 @@ fn nothing_is_placed_at_or_past_the_videos_end() {
         vec![(secs(28.0), secs(2.0)), (secs(28.0), secs(2.0))]
     );
     assert_eq!(video_duration(&after.timeline), secs(30.0));
+    // Words 0.2 s before the end are cut there too, their fades fitted to what is left (each no longer than the layer).
+    let mut last = inputs(&p, "add The End here");
+    last.view.playhead_us = secs(29.8);
+    let out = compile(
+        &p,
+        &last,
+        &[call(
+            "addText",
+            json!({"text": "The End", "preset": "plain", "atSec": null, "durationSec": null}),
+        )],
+    );
+    let words = the_layer(&p, &out);
+    assert_eq!((words.start_us, words.duration_us), (secs(29.8), secs(0.2)));
+    let motion = words.layout.motion.as_ref().expect("its fades");
+    for fade in [&motion.enter, &motion.exit].into_iter().flatten() {
+        assert!(fade.duration_us <= secs(0.2), "{fade:?}");
+    }
 }
 
 /// The layers `ops` add, without their ids (chat's and the library's are each new).
