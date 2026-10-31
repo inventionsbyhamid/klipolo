@@ -1070,6 +1070,94 @@ fn a_take_pauses_the_copy_being_made_until_it_ends() {
     });
 }
 
+/// A video layer (picture in picture) gets its copy as main clips do: the timeline's files are listed in its order,
+/// layers' included, before files it doesn't use; and once the copy is in the preview's map, the layer reads it with
+/// the same times, while a plan without the map (export's) reads the file itself.
+#[test]
+fn a_video_layer_gets_its_copy_and_plays_from_it() {
+    use klipolo_engine::plan::{Layer, PlanContext, VideoRole, frame_plan};
+    use klipolo_model::layout::{Anchor, BoxN, Layout};
+    use klipolo_model::project::FormatKind;
+    use klipolo_model::timeline::{Clip, ClipSource, Item, ItemContent, Track, TrackKind};
+
+    let (main, layer, unused) = (
+        Path::new("/v/main.mp4"),
+        Path::new("/v/layer.mp4"),
+        Path::new("/v/unused.mp4"),
+    );
+    let mut project = Project::new("Layers");
+    project.assets = vec![video(unused), video(layer), video(main)];
+    project.timeline.main = vec![Clip::new(
+        ClipSource::Asset {
+            id: "main.mp4".into(),
+        },
+        0,
+        20_000_000,
+    )];
+    let mut track = Track::new(TrackKind::Overlay, "Picture in picture");
+    track.items.push(Item {
+        id: "pip".into(),
+        start_us: 2_000_000,
+        duration_us: 10_000_000,
+        attach: None,
+        layout: Layout::new(
+            Anchor::TopLeft,
+            BoxN {
+                x: 0.6,
+                y: 0.6,
+                w: 0.35,
+                h: 0.35,
+            },
+        ),
+        content: ItemContent::Video {
+            asset_id: "layer.mp4".into(),
+            source_in_us: 1_000_000,
+            speed: 1.0,
+            volume: 1.0,
+            muted: true,
+            mirror: false,
+            tie: None,
+        },
+        effects: Vec::new(),
+    });
+    project.timeline.tracks = vec![track];
+    let view = super::decide::view_of(&project);
+    let listed: Vec<&str> = view.paths.iter().map(|p| &**p).collect();
+    assert_eq!(
+        listed,
+        ["/v/main.mp4", "/v/layer.mp4", "/v/unused.mp4"],
+        "the layer's file is listed after the main footage under it"
+    );
+
+    let copy = MediaCopy::new("/cache/layer.mp4", 30_000.0 / 1001.0);
+    let map: MediaMap = [(Arc::<str>::from("/v/layer.mp4"), copy.clone())]
+        .into_iter()
+        .collect();
+    let project = Arc::new(project);
+    let layer_source = |ctx: &PlanContext| {
+        frame_plan(ctx, 5_000_000, FormatKind::Landscape)
+            .layers
+            .into_iter()
+            .find_map(|l| match l {
+                Layer::Video(v) if v.role == VideoRole::Overlay => Some(v.source),
+                _ => None,
+            })
+            .expect("the layer is drawn at 5 s")
+    };
+    let preview = layer_source(&PlanContext::new(project.clone()).with_media(Arc::new(map)));
+    assert_eq!(
+        &*preview.path, "/cache/layer.mp4",
+        "the preview reads the copy"
+    );
+    assert_eq!(&*preview.original, "/v/layer.mp4");
+    assert_eq!(preview.time_us, 4_000_000, "at the same time in the file");
+    let export = layer_source(&PlanContext::new(project));
+    assert_eq!(
+        &*export.path, "/v/layer.mp4",
+        "export reads the file itself"
+    );
+}
+
 /// The proxies folder keeps to its budget, least recently used first, never touching the open project's copies; a job
 /// whose source changed (it can never resume) goes at once, one whose source is missing now (an unplugged drive) stays.
 #[test]
