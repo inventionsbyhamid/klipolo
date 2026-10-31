@@ -1,7 +1,8 @@
 //! Streamable HTTP on 127.0.0.1: POST `/mcp` with one JSON-RPC message, answered with JSON (no stream: no call waits
 //! for the person). A bearer token per run; sessions by `Mcp-Session-Id`.
 //!
-//! Another program on the Mac can't use or wear down Klipolo:
+//! Another program on the Mac can't use Klipolo or wear it down, though it can keep other apps waiting (by holding
+//! every connection slot):
 //! - It listens on 127.0.0.1 only, on a free port.
 //! - Each request is checked from its head, before a byte of its body is read: any `Origin` (a browser page), or a
 //!   `Host` other than `127.0.0.1:{port}` or `localhost:{port}` (DNS rebinding), is 403; no token or a wrong one
