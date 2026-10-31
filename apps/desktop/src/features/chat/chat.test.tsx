@@ -949,4 +949,23 @@ describe('chat: more on proposals and the panel', () => {
     expect(useAi.getState().settingsOpen).toBe(true);
     useAi.setState({ settingsOpen: false });
   });
+
+  it('Escape on the list of cuts leaves the card open; Escape on Discard or the card discards', async () => {
+    const fake = chat({ reply: (r) => reply(r.id, 'I found 3.', { proposal: { ...cuts(), id: `p-${r.id}` } }) });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'cut the pauses{Enter}');
+    const card = await screen.findByRole('group', { name: 'Cut 2 pauses and 1 filler word' });
+    const show = within(card).getByRole('button', { name: 'Show all 3 cuts' });
+    act(() => show.focus());
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(show);
+    act(() => within(card).getByRole('button', { name: /^pause at 0:09\.0/ }).focus());
+    await userEvent.keyboard('{Escape}');
+    expect(fake.discarded).toEqual([]);
+    expect(within(card).getByRole('button', { name: 'Apply' })).toBeInTheDocument();
+    act(() => within(card).getByRole('button', { name: 'Discard' }).focus());
+    await userEvent.keyboard('{Escape}');
+    expect(await screen.findByText('Discarded.')).toBeInTheDocument();
+    expect(fake.discarded).toHaveLength(1);
+  });
 });
