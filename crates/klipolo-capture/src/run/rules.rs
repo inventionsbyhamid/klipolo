@@ -23,7 +23,7 @@ use super::source::Status;
 use crate::disk::{self, DiskLevel};
 use crate::english::msg;
 use crate::heal::{HealAction, SourceKind};
-use crate::health::VideoProblem;
+use crate::health::{VideoProblem, dbfs, peak_of};
 use crate::media::{PcmBlock, SourceId};
 use crate::pipe::{PipeEvent, VideoStats};
 use crate::protocol::Event;
@@ -269,7 +269,7 @@ impl SessionCore {
             return;
         }
         self.feed_mic_rules(i, block);
-        let peak = block.samples.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+        let peak = peak_of(block);
         let src = &mut self.srcs[i];
         if let Some(sample) = crate::gate::GateSample::from_pcm(block, src.kind)
             && let Some(gate) = &mut self.gate
@@ -281,14 +281,9 @@ impl SessionCore {
         }
         src.meter.0 = src.meter.0.max(peak);
         if now.saturating_sub(src.meter.1) >= METER_NS {
-            let peak_dbfs = if src.meter.0 > 0.0 {
-                20.0 * src.meter.0.log10()
-            } else {
-                -120.0
-            };
             fx.push(Effect::Emit(Event::Meter {
                 source: src.id.clone(),
-                peak_dbfs,
+                peak_dbfs: dbfs(src.meter.0),
             }));
             src.meter = (0.0, now);
         }

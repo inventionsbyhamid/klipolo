@@ -2,7 +2,8 @@
 //! start, the preview pipe starts unless the person stopped first, and each frame it paces (`pace::PreviewPacer`, before
 //! the JPEG is made) goes to the app as a `Preview` event, until the Stop or the pipe's own end. The live view's view
 //! size, as the app last said it, goes to the pipe between frames, and again every `RESIZE_AGAIN` until
-//! the stream takes it. Nothing is written and nothing is re-encoded here.
+//! the stream takes it. Nothing is written and nothing is re-encoded here. The Record dialog's stills and mic meter
+//! (`thumbs`, `meter`) read the app's word and send their events the same way, through `PreviewIo`.
 
 use std::io::{BufRead, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,6 +23,61 @@ use crate::shell::WorkerState;
 const FRAMES: usize = 2;
 /// A view size the stream didn't take is tried again this long after: never left big while small.
 const RESIZE_AGAIN: Duration = Duration::from_millis(500);
+/// How often a wait on the real clock looks at the app's Stop.
+const STOP_LOOK: Duration = Duration::from_millis(50);
+
+/// A preview worker's ends (the stills', the mic meter's): the app's lines in, its events out, and the clock it keeps
+/// time by.
+pub struct PreviewIo {
+    pub input: Box<dyn BufRead + Send>,
+    pub output: Box<dyn Write + Send>,
+    pub clock: Box<dyn Clock>,
+}
+
+impl PreviewIo {
+    /// The worker's own: stdin, stdout and real time.
+    pub fn std() -> Self {
+        let input = Box::new(std::io::BufReader::new(std::io::stdin()));
+        Self::new(input, Box::new(std::io::stdout()))
+    }
+
+    /// `input` and `output` on real time.
+    pub fn new(input: Box<dyn BufRead + Send>, output: Box<dyn Write + Send>) -> Self {
+        Self {
+            input,
+            output,
+            clock: Box::new(RealClock(Instant::now())),
+        }
+    }
+}
+
+/// A preview worker's time since it started: real time, or a test's own.
+pub trait Clock: Send {
+    fn now(&self) -> Duration;
+    /// Waits until `at`, unless `stopped` says so first: then false, at once.
+    fn wait_until(&mut self, at: Duration, stopped: &dyn Fn() -> bool) -> bool;
+}
+
+/// Real time from the worker's start, its waits looking at the app's Stop every `STOP_LOOK`.
+struct RealClock(Instant);
+
+impl Clock for RealClock {
+    fn now(&self) -> Duration {
+        self.0.elapsed()
+    }
+
+    fn wait_until(&mut self, at: Duration, stopped: &dyn Fn() -> bool) -> bool {
+        loop {
+            if stopped() {
+                return false;
+            }
+            let Some(left) = at.checked_sub(self.now()).filter(|l| !l.is_zero()) else {
+                return true;
+            };
+            std::thread::sleep(left.min(STOP_LOOK));
+        }
+    }
+}
 
 /// The worker's events to the app, one JSON line each.
 pub(super) struct Events(Box<dyn Write + Send>);
@@ -62,6 +118,11 @@ pub(super) struct AppWord {
 impl AppWord {
     pub(super) fn stopped(&self) -> bool {
         self.stop.load(Ordering::Acquire)
+    }
+
+    /// The Stop as a pipe's `start` reads it, right before it opens its device.
+    pub(super) fn stop_flag(&self) -> StopFlag {
+        StopFlag::new(self.stop.clone())
     }
 
     /// The view size the app said since the last call, if it said one.
@@ -149,10 +210,15 @@ pub(super) fn run_preview(
 
 fn preview_event(frame: &PreviewFrame) -> Event {
     Event::Preview {
-        jpeg_base64: base64::engine::general_purpose::STANDARD.encode(&frame.jpeg),
+        jpeg_base64: base64_of(&frame.jpeg),
         width: frame.width,
         height: frame.height,
     }
+}
+
+/// A JPEG's bytes as the protocol's text.
+pub(super) fn base64_of(jpeg: &[u8]) -> String {
+    base64::engine::general_purpose::STANDARD.encode(jpeg)
 }
 
 /// The worker's state, as a preview worker says it.

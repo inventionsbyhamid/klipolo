@@ -15,6 +15,7 @@ use std::sync::Arc;
 use klipolo_engine::render::fonts::{self, FontDirs};
 use klipolo_engine::render::mode::RenderMode;
 use klipolo_engine::render::warm::Warmup;
+use tauri::webview::PageLoadEvent;
 use tauri::{Emitter, Manager, RunEvent};
 
 use crate::project::{ProjectSessionState, SaveStatus};
@@ -46,6 +47,12 @@ fn main() {
     let warm = Warmup::start(RenderMode::Interactive);
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // A page that loads again (reloaded, or after its process ended) leaves no preview running.
+        .on_page_load(|webview, page| {
+            if webview.label() == "main" && page.event() == PageLoadEvent::Started {
+                recorder::page_loads(webview.app_handle());
+            }
+        })
         .setup(move |app| {
             let cache = app.path().app_cache_dir().ok();
             app.manage(EngineState::new(Some(warm), cache));
@@ -167,6 +174,9 @@ fn main() {
             recorder::commands::recorder_allow_screen,
             recorder::commands::recorder_reopen,
             recorder::commands::recorder_open_privacy,
+            recorder::commands::recorder_previews,
+            recorder::commands::recorder_previews_off,
+            recorder::commands::recorder_preview_ack,
         ])
         .build(tauri::generate_context!())
         .expect("Klipolo could not start");
@@ -177,6 +187,8 @@ fn main() {
         recorder::guard_quit(app, &event);
         // A take still armed at exit is disarmed: no worker outlives Klipolo waiting with its global key.
         recorder::release_on_exit(app, &event);
+        // The Record dialog's previews stop when the window goes behind, hides or minimises, and none outlives Klipolo.
+        recorder::follow_window(app, &event);
         // Every edit is on the disk before the app goes.
         if let RunEvent::Exit = event
             && let Err(error) = app.state::<ProjectSessionState>().flush()

@@ -2421,6 +2421,7 @@ dependencies = [
 name = "klipolo-app"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "ffmpeg-next",
  "image",
  "klipolo-analysis",

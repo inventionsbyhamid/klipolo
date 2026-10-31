@@ -14,6 +14,8 @@
 //! - `shared_stream`: a screen's stream start as the sound that shares it waits on it;
 //! - `sleep`: how long the computer slept, by the wall clock;
 //! - `still`: the screen encoder thread's schedule: re-feeds, nudges, a pipe-sourced cursor's heartbeat;
+//! - `stills_service`: how the Record dialog's stills spare the capture service: one request in flight, one content
+//!   list a round;
 //! - `vt_ids`: which VideoToolbox encoders run apart from the GPU, and on which engine.
 
 pub mod camera;
@@ -29,4 +31,5 @@ pub mod sck;
 pub mod shared_stream;
 pub mod sleep;
 pub mod still;
+pub mod stills_service;
 pub mod vt_ids;

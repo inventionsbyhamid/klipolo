@@ -43,6 +43,22 @@ pub const NOT_HEARD_US: Us = 60_000_000;
 pub const STALL_NS: u64 = 2_000_000_000;
 /// Drops are counted over this window.
 pub const DROP_WINDOW_NS: u64 = 10_000_000_000;
+/// What the meters show for a peak of nothing (exact zeros), in dBFS.
+pub const SILENCE_DBFS: f32 = -120.0;
+
+/// A block's loudest sample (0-1 for a well-formed block): one pass over its samples, no allocation.
+pub fn peak_of(block: &PcmBlock) -> f32 {
+    block.samples.iter().fold(0.0f32, |m, s| m.max(s.abs()))
+}
+
+/// A peak in dBFS, as the meters show it (the countdown's, the HUD's, the Record dialog's): `SILENCE_DBFS` for nothing.
+pub fn dbfs(peak: f32) -> f32 {
+    if peak > 0.0 {
+        20.0 * peak.log10()
+    } else {
+        SILENCE_DBFS
+    }
+}
 
 /// Something the person should know about a take: a `capture.*` code, the source it is about, its params and its
 /// weight (the item's colour).
@@ -124,7 +140,7 @@ impl MicRules {
             return;
         }
         self.started_at.get_or_insert(at_us);
-        let peak = block.samples.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+        let peak = peak_of(block);
         if peak == 0.0 {
             self.zeros_since.get_or_insert(at_us);
         } else {

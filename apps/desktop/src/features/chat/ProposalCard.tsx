@@ -16,6 +16,9 @@ import { UndoChip } from './UndoChip';
 
 const FORMAT_NAMES: Record<FormatKind, string> = { landscape: '16:9', portrait: '9:16', square: '1:1' };
 
+/** Whether a key went to the card's Discard button. */
+const isDiscard = (target: EventTarget) => target instanceof HTMLElement && target.hasAttribute('data-discard');
+
 /** A length in seconds with one decimal ("2.4 s"). */
 const seconds = (us: number) => `${(us / 1_000_000).toFixed(1)} s`;
 
@@ -202,7 +205,8 @@ function CutList({ proposal }: { proposal: ChatProposal }) {
  * the whole project with a red tick per cut, the title, the seconds it cuts in red with the video's length now and
  * after (or, for a removal that isn't footage, what goes), the list of cuts, and Apply and Discard. It never takes the
  * keyboard from the chat box (Enter there always sends): the person reaches it with Tab; Enter on the card applies and
- * Escape discards. Applied, it collapses to the applied row with its Undo chip; discarded, to "Discarded."; dropped
+ * Escape on the card or on Discard discards (Escape on its other buttons, such as the list of cuts, is the editor's).
+ * Applied, it collapses to the applied row with its Undo chip; discarded, to "Discarded."; dropped
  * (the project changed while it was open), or replaced (a newer proposal came: one is open at a time), to a sentence
  * that says so. An Apply refused for another reason leaves it open, saying why, its Apply now Retry. An Apply Rust made
  * that the page couldn't take in closes it with a sentence that says to reopen the project. When it collapses with the
@@ -275,7 +279,7 @@ export function ProposalCard({ message: m }: { message: ReplyMessage }) {
         if (e.key === 'Enter' && e.target === e.currentTarget) {
           e.preventDefault();
           void apply(m.id);
-        } else if (e.key === 'Escape') {
+        } else if (e.key === 'Escape' && (e.target === e.currentTarget || isDiscard(e.target))) {
           // The editor's Escape (clear the selection) doesn't also run.
           e.preventDefault();
           e.stopPropagation();
@@ -324,6 +328,7 @@ export function ProposalCard({ message: m }: { message: ReplyMessage }) {
         <button
           type="button"
           className="btn btn-secondary"
+          data-discard=""
           aria-disabled={busy || undefined}
           onClick={() => !busy && discard(m.id)}
         >

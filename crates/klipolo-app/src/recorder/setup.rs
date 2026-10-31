@@ -321,7 +321,7 @@ pub(super) fn plan(
 }
 
 /// An id the OS gave: bounded, without control characters.
-fn is_os_id(id: &str) -> bool {
+pub(super) fn is_os_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 1_024 && !id.chars().any(char::is_control)
 }
 

@@ -19,6 +19,7 @@ use tauri::{AppHandle, Manager};
 use super::env::{Env, Sink};
 use super::launch::{Launch, ProcessLaunch, WorkerIo};
 use super::permissions::{self, Open};
+use super::previews::PreviewWorkers;
 use super::setup::{self, Files, Probing, Shown};
 use super::sink::AppSink;
 use super::take::Recorder;
@@ -89,6 +90,8 @@ struct On {
     probing: Mutex<()>,
     /// A probe gave no report since Klipolo opened (it hung or crashed): not waited for again until it opens again.
     probe_failed: AtomicBool,
+    /// The Record dialog's previews.
+    previews: Arc<PreviewWorkers>,
 }
 
 pub struct RecorderState {
@@ -113,6 +116,7 @@ impl RecorderState {
             make: parts.backend,
         });
         let placed = backend.clone();
+        let (launch, clock, read) = (parts.launch.clone(), parts.clock.clone(), backend.clone());
         let recorder = Recorder::new(Env {
             launch: parts.launch,
             clock: parts.clock,
@@ -122,6 +126,9 @@ impl RecorderState {
             place: Box::new(move || placed.get().caps().indicator),
             ticker: parts.ticker,
         });
+        let permissions = Box::new(move || read.get().permissions());
+        let previews =
+            PreviewWorkers::new(launch, clock, recorder.clone(), permissions, parts.ticker);
         Self {
             on: Some(On {
                 recorder,
@@ -133,6 +140,7 @@ impl RecorderState {
                 last_setup: Mutex::new(None),
                 probing: Mutex::new(()),
                 probe_failed: AtomicBool::new(false),
+                previews,
             }),
         }
     }
@@ -171,6 +179,7 @@ impl RecorderState {
         };
         let root = on.root.as_deref();
         let shown = setup::recorder_setup(&*backend, files, probing, root, !own_take, own_take);
+        on.previews.setup_read(&shown.setup.devices);
         let setup = shown.setup.clone();
         *lock(&on.last_setup) = Some(shown);
         Ok(setup)
@@ -202,7 +211,9 @@ impl RecorderState {
             .map_or(0, |d| d.as_millis() as u64);
         let id = klipolo_model::ids::new_id();
         let (cfg, notes) = setup::plan(&shown, options, &id, target, created_ms)?;
-        on.recorder.arm(cfg, notes, project_file)
+        // The previews stop before the take's worker is launched, which then owns the screen and the devices.
+        on.previews
+            .around_arm(|| on.recorder.arm(cfg, notes, project_file))
     }
 
     /// One command to take `take`'s worker.
@@ -238,6 +249,11 @@ impl RecorderState {
     ) -> Result<(), Said> {
         let on = self.on()?;
         permissions::reopen(&on.recorder, on.files.as_ref(), exporting, flush, restart)
+    }
+
+    /// The Record dialog's previews (`previews`); `capture.error.testRun` in a test run.
+    pub(super) fn preview_workers(&self) -> Result<&Arc<PreviewWorkers>, CodedError> {
+        Ok(&self.on()?.previews)
     }
 
     /// A take is the recorder's, armed through saving.

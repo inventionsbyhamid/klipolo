@@ -29,11 +29,13 @@ use klipolo_chat::{
     AnalysisState, BoxFuture, FunctionCall, Item, LanguageModel, LibraryItem, MediaKind,
     ModelError, ModelRequest, ModelResponse,
 };
+use klipolo_model::media::music::{MUSIC_FADE_OUT_US, is_music};
 use klipolo_model::ops::{Op, Origin};
 use klipolo_model::project::{Asset, AssetKind, FormatKind};
+use klipolo_model::query::video_duration;
 use klipolo_model::speech::{Levels, Transcript, Word, WordKind};
 use klipolo_model::time::{RangeUs, Us};
-use klipolo_model::timeline::{Clip, ClipSource};
+use klipolo_model::timeline::{Clip, ClipSource, ItemContent};
 use klipolo_model::{Project, Transaction};
 use serde_json::Value;
 use tokio::sync::Notify;
@@ -115,33 +117,66 @@ fn transcript() -> Arc<Transcript> {
     })
 }
 
-/// What the analysis found: "talk.mov"'s words, or nothing yet (`state`).
+/// What the analysis found: "talk.mov"'s words once they are in (done, or the scene log still being made), or nothing
+/// yet (`state`). Its words are one transcript until they are timed again (`retime`), as the analysis keeps them.
 struct Found {
     state: Mutex<AnalysisState>,
+    analysis: Mutex<Arc<AssetAnalysis>>,
+    levels: HashMap<String, Arc<Levels>>,
 }
 
 impl Found {
-    fn done() -> Arc<Self> {
+    fn at(state: AnalysisState) -> Arc<Self> {
         Arc::new(Self {
-            state: Mutex::new(AnalysisState::Done),
+            state: Mutex::new(state),
+            analysis: Mutex::new(Arc::new(AssetAnalysis {
+                transcript: Some(transcript()),
+                ..AssetAnalysis::default()
+            })),
+            levels: HashMap::new(),
         })
     }
 
+    fn done() -> Arc<Self> {
+        Self::at(AnalysisState::Done)
+    }
+
     fn not_started() -> Arc<Self> {
-        Arc::new(Self {
-            state: Mutex::new(AnalysisState::NotStarted),
-        })
+        Self::at(AnalysisState::NotStarted)
+    }
+
+    /// Done, with "talk.mov"'s loudness: quiet from 10.0 to 10.8 s and from 15.0 to 17.0 s.
+    fn with_pauses() -> Arc<Self> {
+        let db: Vec<f32> = (0..300)
+            .map(|w| {
+                if (100..108).contains(&w) || (150..170).contains(&w) {
+                    -70.0
+                } else {
+                    -20.0
+                }
+            })
+            .collect();
+        let mut found = Arc::into_inner(Self::done()).unwrap();
+        found
+            .levels
+            .insert("talk".into(), Arc::new(Levels { db: db.into() }));
+        Arc::new(found)
+    }
+
+    /// The words timed again: the same words, a new transcript.
+    fn retime(&self) {
+        *self.analysis.lock().unwrap() = Arc::new(AssetAnalysis {
+            transcript: Some(transcript()),
+            ..AssetAnalysis::default()
+        });
     }
 }
 
 impl Findings for Found {
     fn found(&self, asset_id: &str) -> Option<Arc<AssetAnalysis>> {
-        (asset_id == "talk" && *self.state.lock().unwrap() == AnalysisState::Done).then(|| {
-            Arc::new(AssetAnalysis {
-                transcript: Some(transcript()),
-                ..AssetAnalysis::default()
-            })
-        })
+        let state = *self.state.lock().unwrap();
+        let heard = matches!(state, AnalysisState::Done | AnalysisState::Watching);
+        (asset_id == "talk" && heard).then(|| self.analysis.lock().unwrap().clone())
     }
 
     fn state(&self, _asset_id: &str) -> AnalysisState {
@@ -149,7 +184,7 @@ impl Findings for Found {
     }
 
     fn levels(&self) -> HashMap<String, Arc<Levels>> {
-        HashMap::new()
+        self.levels.clone()
     }
 }
 
@@ -409,7 +444,7 @@ async fn apply_is_one_undo_step() {
     assert_eq!(r["proposal"]["baseRevision"], 0);
     let ranges = r["proposal"]["removals"]["ranges"].as_array().unwrap();
     assert_eq!(ranges.len(), 2, "both fillers: {r:#}");
-    assert_eq!(r["proposal"]["title"], "Cut 2 filler words, 1.0 s in total");
+    assert_eq!(r["proposal"]["title"], "Cut 2 filler words");
     let tags: Vec<&str> = (r["proposal"]["tags"].as_array().unwrap().iter())
         .map(|t| t["label"].as_str().unwrap())
         .collect();
@@ -582,7 +617,7 @@ async fn errors_say_one_sentence_and_never_touch_the_project() {
             "budget",
             "Your access code's $2.00 is used up.",
         ),
-        (ModelError::Busy, "busy", klipolo_chat::planner::BUSY),
+        (ModelError::Busy(None), "busy", klipolo_chat::planner::BUSY),
         (
             ModelError::Network,
             "network",
@@ -683,7 +718,7 @@ async fn a_clip_not_analyzed_yet_is_named() {
     let model = Script::new(vec![answer("Removing them now.", vec![fillers()])]);
     let chat = chat_with(model.clone(), Found::not_started(), Paying::key(model));
     let r = reply(&chat.session.send(request("cut the ums")).await.unwrap());
-    assert_eq!(r["text"], "Analyze this clip first (talk.mov).");
+    assert_eq!(r["text"], "Analyze this clip (talk.mov) first.");
     assert!(r["proposal"].is_null());
 }
 
@@ -844,12 +879,7 @@ async fn keep_only_these_proposes_without_the_model() {
     };
     let r = reply(&chat.session.send(keep).await.unwrap());
     assert_eq!(r["text"], KEEP_ONLY_READY);
-    assert!(
-        r["proposal"]["title"]
-            .as_str()
-            .unwrap()
-            .starts_with("Keep only the parts you chose, cutting")
-    );
+    assert_eq!(r["proposal"]["title"], "Keep only the parts you chose");
     assert!(chat.model.seen().is_empty());
 }
 
@@ -879,7 +909,7 @@ async fn the_selection_is_this() {
         "{context}"
     );
     let r = reply(&out);
-    assert_eq!(r["proposal"]["title"], "Cut 6.0 s");
+    assert_eq!(r["proposal"]["title"], "Cut 1 part");
     assert_eq!(r["proposal"]["removedUs"], secs(6.0));
 }
 
@@ -2211,5 +2241,119 @@ async fn chats_media_tools_find_the_projects_music_and_sounds_and_the_pack() {
             .project()
             .asset("klipolo-pack-soft-ambient")
             .is_some()
+    );
+}
+
+/// Where the music on `p` ends, and its last piece's fade-out.
+fn music_end(p: &Project) -> (Us, Us) {
+    let last = (p.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .filter(|i| is_music(i))
+        .max_by_key(|i| i.end_us())
+        .expect("music");
+    let ItemContent::Audio { fade_out_us, .. } = &last.content else {
+        unreachable!()
+    };
+    (last.end_us(), *fade_out_us)
+}
+
+#[tokio::test]
+async fn chats_cuts_fit_the_music_to_the_new_end() {
+    // "Add my song", then "cut the long pauses", then Apply: the song ends at the video's new end, fading out there.
+    let mut p = talk();
+    p.assets.push(sound_file("song", "song.mp3", 60.0));
+    let model = Script::new(vec![
+        answer(
+            "",
+            vec![fc(
+                "m",
+                "addMusic",
+                r#"{"file": "song", "volume": null, "duck": null, "atSec": 0.0}"#,
+            )],
+        ),
+        answer(
+            "",
+            vec![fc("s", "removeSilences", r#"{"minPauseSec": null}"#)],
+        ),
+    ]);
+    let project = Arc::new(MemoryProjects::open(p, PathBuf::from("/tmp/talk.klipolo")).unwrap());
+    let session = ChatSession::new(project.clone(), Found::with_pauses(), Paying::key(model));
+    reply(&session.send(request("add my song")).await.unwrap());
+    assert_eq!(
+        music_end(&project.project()),
+        (secs(30.0), MUSIC_FADE_OUT_US)
+    );
+    let out = session.send(request("cut the long pauses")).await.unwrap();
+    // The card says the song is shortened, beside the 2.2 s of footage.
+    let r = reply(&out);
+    assert_eq!(r["proposal"]["removedUs"], secs(2.2));
+    assert_eq!(
+        r["proposal"]["removals"]["shortened"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "{r:#}"
+    );
+    session.apply(&proposal_id(&out)).unwrap();
+    let after = project.project();
+    assert_eq!(video_duration(&after.timeline), secs(27.8));
+    assert_eq!(music_end(&after), (secs(27.8), MUSIC_FADE_OUT_US));
+    // One undo takes back the cut and the song's new end together.
+    project.step(false).unwrap();
+    assert_eq!(
+        music_end(&project.project()),
+        (secs(30.0), MUSIC_FADE_OUT_US)
+    );
+}
+
+#[tokio::test]
+async fn ums_are_cut_while_the_scene_log_is_made_and_moments_wait() {
+    let model = Script::new(vec![
+        answer("", vec![fillers()]),
+        answer(
+            "",
+            vec![fc(
+                "f",
+                "findMoments",
+                r#"{"query": "the module", "ranges": []}"#,
+            )],
+        ),
+    ]);
+    let chat = chat_with(
+        model.clone(),
+        Found::at(AnalysisState::Watching),
+        Paying::key(model),
+    );
+    let out = chat.session.send(request("cut the ums")).await.unwrap();
+    let ranges = &reply(&out)["proposal"]["removals"]["ranges"];
+    assert_eq!(ranges.as_array().unwrap().len(), 2, "both fillers");
+    let r = reply(&chat.session.send(request("find the module")).await.unwrap());
+    assert_eq!(
+        r["text"],
+        "Klipolo is still watching this clip (talk.mov). Ask me again when its analysis is done."
+    );
+}
+
+#[tokio::test]
+async fn a_proposal_made_before_the_words_were_timed_again_is_dropped() {
+    let found = Found::done();
+    let model = Script::new(vec![answer("", vec![fillers()])]);
+    let chat = chat_with(model.clone(), found.clone(), Paying::key(model));
+    let out = chat.session.send(request("cut the ums")).await.unwrap();
+    let id = proposal_id(&out);
+    // "Time the words again" in Captions: new words at new times, the revision the same.
+    found.retime();
+    assert_eq!(chat.session.apply(&id).unwrap_err(), CommitError::Moved);
+    assert_eq!(chat.project.revision(), 0, "nothing was cut");
+    assert!(plays(&chat.project.project(), 0.6));
+    // Dropped for good.
+    assert_eq!(chat.session.apply(&id).unwrap_err(), CommitError::Moved);
+    let note = &chat.session.turns()[0].note;
+    assert!(
+        note.ends_with(
+            "The proposal was dropped: the clip's words were timed again before the person applied it."
+        ),
+        "{note}"
     );
 }

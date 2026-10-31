@@ -24,6 +24,7 @@ use objc2_foundation::NSBundle;
 use crate::backend::Target;
 use crate::pipe::PipeError;
 use crate::platform::common::sck::{ListedApp, USER_DECLINED, left_out};
+use crate::platform::common::stills_service::Answered;
 
 /// How long the content list may take (it waits on the person while macOS's prompt is up).
 const CONTENT_WAIT: Duration = Duration::from_secs(30);
@@ -41,8 +42,23 @@ pub(super) struct Picked {
 
 /// The shareable content now: displays, windows and running apps.
 pub(super) fn content() -> Result<arc::R<sc::ShareableContent>, PipeError> {
+    content_with(None)
+}
+
+/// `content`, the read's `answered` told as its answer comes, even after this stopped waiting for it (the stills' one
+/// request in flight).
+pub(super) fn content_answering(
+    answered: Answered,
+) -> Result<arc::R<sc::ShareableContent>, PipeError> {
+    content_with(Some(answered))
+}
+
+fn content_with(mut answered: Option<Answered>) -> Result<arc::R<sc::ShareableContent>, PipeError> {
     let (tx, rx) = sync_channel(1);
     sc::ShareableContent::current_with_ch(move |content, error| {
+        if let Some(answered) = &mut answered {
+            answered.answer();
+        }
         let answer = match (content, error) {
             (Some(c), _) => Ok(c.retained()),
             (None, Some(e)) if e.code() == USER_DECLINED => Err(PipeError::PermissionDenied),

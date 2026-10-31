@@ -17,20 +17,27 @@
 //!   config from the person's options and the app's fixed choices.
 //! - **The permission steps** (`permissions`, `screen_reopen`): Allow screen recording, Reopen Klipolo and Open privacy
 //!   settings, each on the person's own press.
+//! - **The Record dialog's previews** (`previews`, `live_view`, `check`, `frames`): stills of each screen and app, the
+//!   live picture of the choice, the camera and the mic's level, each in a worker of its own while the dialog is open
+//!   and Klipolo is in front, within the consent rules, and stopped before a take arms.
 //! - **A test run** (`KLIPOLO_TEST`): the recorder makes no backend and launches no worker; every command answers
 //!   "Recording is off in this test run." (`state`).
 
 mod active;
 mod app_quit;
+mod check;
 pub mod commands;
 mod config;
 mod destination;
 mod env;
 mod events;
+mod frames;
 mod import;
 mod launch;
+mod live_view;
 mod outcomes;
 mod permissions;
+mod previews;
 mod quitting;
 mod screen_reopen;
 mod send;
@@ -48,19 +55,27 @@ mod zoom;
 #[cfg(test)]
 mod test_launch;
 #[cfg(test)]
+mod test_previews;
+#[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod test_takes;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_check;
+#[cfg(test)]
 mod tests_end;
 #[cfg(test)]
 mod tests_import;
 #[cfg(test)]
+mod tests_live_view;
+#[cfg(test)]
 mod tests_permissions;
 #[cfg(test)]
 mod tests_plan;
+#[cfg(test)]
+mod tests_previews;
 #[cfg(test)]
 mod tests_stop;
 #[cfg(test)]
@@ -70,4 +85,5 @@ mod tests_zoom;
 
 pub use active::release_on_exit;
 pub use app_quit::guard_quit;
+pub use previews::{follow_window, page_loads};
 pub use state::RecorderState;
