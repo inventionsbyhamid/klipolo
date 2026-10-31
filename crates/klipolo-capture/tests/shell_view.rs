@@ -106,25 +106,20 @@ fn the_menu_lists_the_sources_then_what_the_person_can_do() {
             "Pause",
             "Mark this moment",
             "Stoppen und sichern",
-            "Start over"
         ]
     );
     assert_eq!(
         menu_actions(WorkerState::Recording),
-        [
-            MenuAction::Pause,
-            MenuAction::Marker,
-            MenuAction::Stop,
-            MenuAction::StartOver
-        ]
+        [MenuAction::Pause, MenuAction::Marker, MenuAction::Stop],
+        "no Start over: Klipolo doesn't offer it"
     );
     assert_eq!(menu_lines(&view(WorkerState::Paused), &w)[2], "Resume");
-    assert_eq!(menu_lines(&view(WorkerState::Paused), &w)[5], "Start over");
+    assert_eq!(menu_lines(&view(WorkerState::Paused), &w).len(), 5);
     // Before the gate a Stop leaves no take: the person cancels; there is nothing to start over.
     assert_eq!(menu_lines(&view(WorkerState::Armed), &w)[2..], ["Cancel"]);
     assert_eq!(menu_actions(WorkerState::Armed), [MenuAction::Stop]);
     assert_eq!(menu_actions(WorkerState::Countdown), [MenuAction::Stop]);
-    // Saving: nothing to press, Start over included.
+    // Saving: nothing to press.
     assert!(menu_actions(WorkerState::Stopping).is_empty());
     assert!(menu_actions(WorkerState::Ready).is_empty());
 }

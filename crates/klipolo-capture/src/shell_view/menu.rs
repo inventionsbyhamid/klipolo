@@ -38,15 +38,14 @@ pub fn menu_lines(view: &StatusView, words: &Words) -> Vec<String> {
         .collect()
 }
 
-/// The menu's actions for `state`: Pause or Resume, "Mark this moment", "Stop and save" and, last and set apart (a
-/// native menu puts a separator before it), "Start over", while the take runs; "Cancel" (a Stop, 
-/// which leaves no take) while armed or starting; none otherwise (Stopping and saving included, so Start over is never
-/// offered then).
+/// The menu's actions for `state`: Pause or Resume, "Mark this moment" and "Stop and save" while the take runs;
+/// "Cancel" (a Stop, which leaves no take) while armed or starting; none otherwise (Stopping and saving included).
+/// Klipolo offers no Start over: a take that ends is saved and lands in the project.
 pub fn menu_actions(state: WorkerState) -> &'static [MenuAction] {
-    use MenuAction::{Marker, Pause, Resume, StartOver, Stop};
+    use MenuAction::{Marker, Pause, Resume, Stop};
     match state {
-        WorkerState::Recording => &[Pause, Marker, Stop, StartOver],
-        WorkerState::Paused => &[Resume, Marker, Stop, StartOver],
+        WorkerState::Recording => &[Pause, Marker, Stop],
+        WorkerState::Paused => &[Resume, Marker, Stop],
         WorkerState::Armed | WorkerState::Starting | WorkerState::Countdown => &[MenuAction::Stop],
         _ => &[],
     }
@@ -62,7 +61,7 @@ pub fn ready_line(state: WorkerState, words: &Words, start_key: Option<&str>) ->
 
 /// The app's Dock icon menu's actions for `state`: the item's own while the take records or is paused
 /// (Pause or Resume, "Mark this moment", "Stop and save"), so the person can stop when the menu-bar item is hidden behind
-/// the notch; none otherwise. Start over stays in the item and its key.
+/// the notch; none otherwise.
 pub fn dock_actions(state: WorkerState) -> &'static [MenuAction] {
     use MenuAction::{Marker, Pause, Resume, Stop};
     match state {
