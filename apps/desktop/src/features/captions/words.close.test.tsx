@@ -120,6 +120,22 @@ describe('closing the project with a caption edit on its way', () => {
     expect(applied().map((tx: any) => tx.ops[0].look)).toEqual([{ hidden: true }, {}]);
   });
 
+  it('at close, a press kept after this view’s fix landed, its pages still on their way, is said', async () => {
+    const pages = savedProject();
+    const { user, box, unmount } = await wordsOpen();
+    await user.click(within(box).getByRole('option', { name: 'we' }));
+    pages.hold();
+    await user.clear(fixField());
+    await user.type(fixField(), 'wee{Enter}');
+    expect(await screen.findByText('Updating…')).toBeInTheDocument();
+    // Lit on the word before the fix: a look over it could miss the correction.
+    await user.keyboard('h');
+    const project = await closeAndReopen({ unmount });
+    await pages.open();
+    expect(toasts()).toEqual([ONE_LOST]);
+    expect(project.wordLooks).toEqual([]);
+  });
+
   it('at close, a press kept while this view’s fix is on its way is said', async () => {
     let release!: () => void;
     const held = new Promise<void>((r) => (release = r));

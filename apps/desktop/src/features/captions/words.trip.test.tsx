@@ -108,6 +108,28 @@ describe('the word list during a round trip and after edits', () => {
     await waitFor(() => expect(lit(box)).toEqual(['then']));
   });
 
+  it('comes back to the word picked when the middle of the undone correction is another word', async () => {
+    let fixed = false;
+    const pages = pagesOf(() =>
+      fixed
+        ? [[said('so', 0, 0)], [said('wego', 1, 1, 3.5)], [said('now', 4, 4)]]
+        : 'so we then go now'.split(' ').map((t, i) => [said(t, i, i)]),
+    );
+    backend({ captions_pages: pages.answer });
+    const user = userEvent.setup();
+    renderWithProviders(<CaptionWords format="portrait" />);
+    const box = await list();
+    await user.click(within(box).getByRole('option', { name: 'go' }));
+    await user.keyboard('{Escape}');
+    fixed = true;
+    nextRevision();
+    await waitFor(() => expect(lit(box)).toEqual(['wego']));
+    // The correction's middle (2.25 s) is "then" again: the selection is still the word picked, "go".
+    fixed = false;
+    nextRevision();
+    await waitFor(() => expect(lit(box)).toEqual(['go']));
+  });
+
   it('undoes with Command Z while the word list has the focus', async () => {
     const pages = pagesOf(() => 'so we then go'.split(' ').map((t, i) => [said(t, i, i)]));
     backend({ captions_pages: pages.answer, project_undo: () => revisionPatch(4) });
