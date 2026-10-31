@@ -381,9 +381,10 @@ fn add_music_by_name_uses_defaults_with_ducking() {
 }
 
 #[test]
-fn music_starts_at_the_playhead_when_no_time_is_given() {
+fn music_with_no_time_starts_with_the_video_wherever_the_playhead_is() {
+    // Background music: "add lofi" with the playhead at 12 s still lays it from the start.
     let p = project();
-    let mut i = inputs(&p, "add lofi here");
+    let mut i = inputs(&p, "add lofi");
     i.view.playhead_us = secs(12.0);
     let out = compile(
         &p,
@@ -396,8 +397,19 @@ fn music_starts_at_the_playhead_when_no_time_is_given() {
     let music = layers(&applied(&p, &out), TrackKind::Audio);
     assert_eq!(
         (music[0].start_us, music[music.len() - 1].end_us()),
-        (secs(12.0), secs(30.0))
+        (0, secs(30.0))
     );
+    // A time given is where it starts.
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "addMusic",
+            json!({"file": "lofi", "volume": null, "duck": null, "atSec": 10.0}),
+        )],
+    );
+    let music = layers(&applied(&p, &out), TrackKind::Audio);
+    assert_eq!(music[0].start_us, secs(10.0));
 }
 
 #[test]
