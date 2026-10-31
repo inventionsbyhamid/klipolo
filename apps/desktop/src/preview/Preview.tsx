@@ -80,7 +80,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
               ? t({ id: 'preview.safeArea.tip', message: 'Safe area: where the apps leave a 9:16 video clear' })
               : t({ id: 'preview.safeArea.off', message: 'Shows in 9:16' })
           }
-          aria-pressed={safeArea !== 'off'}
+          aria-pressed={portrait && safeArea !== 'off'}
           aria-disabled={!portrait || undefined}
           onClick={() => portrait && setSafeArea(safeArea === 'off' ? 'all' : 'off')}
         >
