@@ -56,7 +56,7 @@ export function WhatToRecord({ setup }: { setup: RecorderSetup }) {
       : screens
         ? NO_SCREEN
         : cards.length === 0
-          ? 'No apps with windows are open. Open the app, then open Record again.'
+          ? 'No apps with windows are open. Open the app you want to record, then open Record again.'
           : 'Choose an app';
   const stop = cards.some((c) => c.value === chosen) ? chosen : (cards[0]?.value ?? null);
 

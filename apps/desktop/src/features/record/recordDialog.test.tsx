@@ -184,7 +184,9 @@ describe('the dialog and its choices', () => {
     const dialog = await openOn();
     await userEvent.click(screen.getByRole('radio', { name: 'One app' }));
     // The list is read as Record opens: the way to a new app is to open it again.
-    expect(dialog).toHaveTextContent('No apps with windows are open. Open the app, then open Record again.');
+    expect(dialog).toHaveTextContent(
+      'No apps with windows are open. Open the app you want to record, then open Record again.',
+    );
     expect(recordButton()).toHaveAccessibleDescription('Choose an app first');
   });
 
