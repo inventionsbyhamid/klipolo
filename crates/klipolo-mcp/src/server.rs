@@ -11,10 +11,12 @@
 //! - A head must arrive within `HEAD_TIMEOUT`, which also closes a connection idle that long; a body, once its token
 //!   is checked, within `BODY_TIMEOUT` and `BODY_LIMIT`.
 //! - Every message is handled on a blocking thread, one at a time for all apps, so the runtime keeps answering.
+//!   Once stopped, nothing more is handled: a request still arriving is 503.
 //!
 //! Then: bad JSON is -32700 (400); `initialize` opens a session (its id in `Mcp-Session-Id`), and every other message
 //! needs one (400 without, 404 for one Klipolo doesn't know, so the client opens a new one); too many sessions opened
-//! lately is 429. GET is 405 (Klipolo sends nothing unasked); any other path is 404.
+//! lately is 429 with `Retry-After`. DELETE `/mcp` ends a session (204); GET is 405 (Klipolo sends nothing unasked);
+//! any other path is 404.
 
 use std::convert::Infallible;
 use std::io;
@@ -26,7 +28,7 @@ use http_body_util::{BodyExt, Full, LengthLimitError, Limited};
 use hyper::body::{Bytes, Incoming};
 use hyper::header::{
     ALLOW, AUTHORIZATION, CONNECTION, CONTENT_LENGTH, CONTENT_TYPE, HOST, HeaderMap, HeaderValue,
-    ORIGIN,
+    ORIGIN, RETRY_AFTER,
 };
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
@@ -48,6 +50,8 @@ pub const HEAD_TIMEOUT: Duration = Duration::from_secs(10);
 pub const BODY_TIMEOUT: Duration = Duration::from_secs(10);
 /// The largest body read.
 pub const BODY_LIMIT: usize = 256 << 10;
+/// How often sessions unused for `session::IDLE` are looked for.
+pub const EXPIRE_EVERY: Duration = Duration::from_secs(60);
 /// How long a connection may finish the request it is on once the server stops.
 const STOP_GRACE: Duration = Duration::from_secs(2);
 /// The one path served.
@@ -64,8 +68,8 @@ pub struct Running {
 }
 
 impl Running {
-    /// Stops: the accept loop ends and the port closes, and each connection finishes the request it is on (for at most
-    /// `STOP_GRACE`) and closes.
+    /// Stops: the accept loop ends and the port closes, each connection finishes the request it is on (for at most
+    /// `STOP_GRACE`) and closes, and every session ends. The paces and the app's waiting proposal stay with the `Mcp`.
     pub fn stop(self) {
         drop(self);
     }
@@ -79,6 +83,7 @@ impl Running {
 impl Drop for Running {
     fn drop(&mut self) {
         self.stop.send_replace(true);
+        self.mcp.end_all();
     }
 }
 
@@ -89,6 +94,14 @@ struct Shared {
     port: u16,
     /// Held while a message is handled: one at a time, for all apps.
     turn: Arc<Mutex<()>>,
+    /// True once the server stops.
+    stopping: watch::Receiver<bool>,
+}
+
+impl Shared {
+    fn stopped(&self) -> bool {
+        *self.stopping.borrow()
+    }
 }
 
 /// Listens on a free port of 127.0.0.1 now, so a failure is said at once, and serves on `rt` until stopped.
@@ -106,8 +119,10 @@ pub fn serve(rt: &Handle, mcp: Arc<Mcp>, token: String) -> io::Result<Running> {
         token,
         port,
         turn: Arc::new(Mutex::new(())),
+        stopping: stopping.clone(),
     });
-    rt.spawn(accept(listener, shared, stopping));
+    rt.spawn(accept(listener, Arc::clone(&shared), stopping.clone()));
+    rt.spawn(expire(shared, stopping));
     tracing::info!(port, "the MCP server is listening");
     Ok(Running { port, stop, mcp })
 }
@@ -166,12 +181,31 @@ async fn accept(
     }
 }
 
-/// `f` on a blocking thread, in its turn: one at a time for all apps. None when it panicked.
+/// Every `EXPIRE_EVERY` until stopped, the sessions unused for `session::IDLE` go.
+async fn expire(s: Arc<Shared>, mut stopping: watch::Receiver<bool>) {
+    let first = tokio::time::Instant::now() + EXPIRE_EVERY;
+    let mut every = tokio::time::interval_at(first, EXPIRE_EVERY);
+    every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        tokio::select! {
+            _ = every.tick() => {}
+            _ = stopping.wait_for(|stop| *stop) => return,
+        }
+        let mcp = Arc::clone(&s.mcp);
+        blocking(&s, move || mcp.expire(mcp.now())).await;
+    }
+}
+
+/// `f` on a blocking thread, in its turn: one at a time for all apps. None when it panicked, or when the server
+/// stopped before its turn came: once the person turns it off, nothing more is handled.
 async fn blocking<T: Send + 'static>(
     s: &Shared,
     f: impl FnOnce() -> T + Send + 'static,
 ) -> Option<T> {
     let turn = Arc::clone(&s.turn).lock_owned().await;
+    if s.stopped() {
+        return None;
+    }
     tokio::task::spawn_blocking(move || {
         let _turn = turn;
         f()
@@ -193,9 +227,10 @@ async fn answer(s: &Shared, req: Request<Incoming>) -> Answer {
     }
     match *req.method() {
         Method::POST => post(s, req).await,
+        Method::DELETE => delete(s, req.headers()).await,
         _ => {
             let mut answer = closing(StatusCode::METHOD_NOT_ALLOWED);
-            (answer.headers_mut()).insert(ALLOW, HeaderValue::from_static("POST"));
+            (answer.headers_mut()).insert(ALLOW, HeaderValue::from_static("POST, DELETE"));
             answer
         }
     }
@@ -260,13 +295,16 @@ async fn post(s: &Shared, req: Request<Incoming>) -> Answer {
     let known = session.is_some();
     let mcp = Arc::clone(&s.mcp);
     let Some(handled) = blocking(s, move || mcp.handle(session.as_deref(), msg)).await else {
-        return json_answer(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            &rpc_error(&id, -32603, words::FAILED),
-        );
+        return not_handled(s, &id);
     };
     match handled {
         Handled::Reply { body, new_session } => {
+            // The server stopped while this opened a session: it ends with the rest.
+            if let Some(id) = &new_session
+                && s.stopped()
+            {
+                s.mcp.end(id);
+            }
             let mut answer = json_answer(StatusCode::OK, &body);
             if let Some(v) = new_session.and_then(|id| HeaderValue::from_str(&id).ok()) {
                 answer.headers_mut().insert(SESSION_ID, v);
@@ -282,11 +320,54 @@ async fn post(s: &Shared, req: Request<Incoming>) -> Answer {
             StatusCode::BAD_REQUEST,
             &rpc_error(&id, -32600, words::SESSION_FIRST),
         ),
-        Handled::Paced => json_answer(
-            StatusCode::TOO_MANY_REQUESTS,
-            &rpc_error(&id, -32000, words::SESSIONS_PACED),
-        ),
+        Handled::Paced(wait) => {
+            let mut answer = json_answer(
+                StatusCode::TOO_MANY_REQUESTS,
+                &rpc_error(&id, -32000, &words::sessions_paced(wait)),
+            );
+            let secs = (wait.as_secs_f64().ceil() as u64).max(1);
+            answer
+                .headers_mut()
+                .insert(RETRY_AFTER, HeaderValue::from(secs));
+            answer
+        }
     }
+}
+
+/// DELETE: the client ends its session.
+async fn delete(s: &Shared, headers: &HeaderMap) -> Answer {
+    let Some(session) = headers.get(SESSION_ID) else {
+        return json_answer(
+            StatusCode::BAD_REQUEST,
+            &rpc_error(&Value::Null, -32600, words::SESSION_FIRST),
+        );
+    };
+    let session = session.to_str().unwrap_or_default().to_owned();
+    let mcp = Arc::clone(&s.mcp);
+    match blocking(s, move || mcp.end(&session)).await {
+        Some(true) => empty(StatusCode::NO_CONTENT),
+        Some(false) => json_answer(
+            StatusCode::NOT_FOUND,
+            &rpc_error(&Value::Null, -32001, words::NO_SUCH_SESSION),
+        ),
+        None => not_handled(s, &Value::Null),
+    }
+}
+
+/// A message that wasn't handled: the server stopped (503), or handling it failed (500).
+fn not_handled(s: &Shared, id: &Value) -> Answer {
+    if s.stopped() {
+        let mut answer = json_answer(
+            StatusCode::SERVICE_UNAVAILABLE,
+            &rpc_error(id, -32000, words::STOPPED),
+        );
+        (answer.headers_mut()).insert(CONNECTION, HeaderValue::from_static("close"));
+        return answer;
+    }
+    json_answer(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        &rpc_error(id, -32603, words::FAILED),
+    )
 }
 
 fn rpc_error(id: &Value, code: i64, message: &str) -> Value {

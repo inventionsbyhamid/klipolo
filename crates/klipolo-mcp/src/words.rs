@@ -119,6 +119,11 @@ pub fn paced(client: &str, paced: Paced) -> String {
     }
 }
 
+/// What an app reads when it opened too many sessions lately: how long to wait.
+pub fn sessions_paced(wait: Duration) -> String {
+    fill(SESSIONS_PACED, &[("wait", &how_long(wait))])
+}
+
 /// `wait` as an agent reads it, rounded up: "1 second", "30 seconds", from a minute on "1 minute", "5 minutes".
 fn how_long(wait: Duration) -> String {
     let secs = (wait.as_secs_f64().ceil() as u64).max(1);
@@ -182,10 +187,13 @@ pub const SESSION_FIRST: &str = "Send initialize first, then its Mcp-Session-Id 
 /// A session Klipolo doesn't know: it started again, or the session went idle.
 pub const NO_SUCH_SESSION: &str =
     "Klipolo doesn't know this session. Send initialize to open a new one.";
-/// Too many sessions opened lately, by this app or by all apps together.
-pub const SESSIONS_PACED: &str = "Klipolo is pacing new sessions. Wait a minute, then try again.";
+/// Too many sessions opened lately, by this app or by all apps together (`wait`: how long, as `PACED` says it).
+pub const SESSIONS_PACED: &str = "Klipolo is pacing new sessions. Wait {wait}, then try again.";
 /// A message Klipolo failed on.
 pub const FAILED: &str = "Klipolo couldn't finish that request.";
+/// A message that arrived as the person turned off other apps' access.
+pub const STOPPED: &str = "Klipolo stopped listening to other apps. The person can turn it on again in Klipolo's \
+Settings.";
 
 /// `getSummary`.
 pub const SUMMARY_TOOL: &str = "The project in short: its revision, name, formats, length, captions and clips (c1, c2 \

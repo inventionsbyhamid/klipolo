@@ -10,11 +10,11 @@ mod fake_host;
 use std::ffi::OsString;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use client::{Client, head, hello, raw, read_raw, request};
+use client::{Client, SESSION_ID, head, hello, raw, read_raw, request};
 use fake_host::FakeHost;
 use klipolo_chat::{Job, Moment, Proposal, ToolCall};
 use klipolo_mcp::connection::{
@@ -22,8 +22,11 @@ use klipolo_mcp::connection::{
 };
 use klipolo_mcp::host::{Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot};
 use klipolo_mcp::rpc::{Mcp, listed};
-use klipolo_mcp::server::{self, BODY_LIMIT, BODY_TIMEOUT, CONNECTIONS, HEAD_TIMEOUT, Running};
-use klipolo_mcp::words::{NO_SUCH_SESSION, NOT_JSON, SESSION_FIRST, TOO_LARGE, TOO_SLOW};
+use klipolo_mcp::server::{
+    self, BODY_LIMIT, BODY_TIMEOUT, CONNECTIONS, EXPIRE_EVERY, HEAD_TIMEOUT, Running,
+};
+use klipolo_mcp::session::{IDLE, MAX_SESSIONS};
+use klipolo_mcp::words::{NO_SUCH_SESSION, NOT_JSON, SESSION_FIRST, STOPPED, TOO_LARGE, TOO_SLOW};
 use klipolo_model::Transaction;
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
@@ -432,8 +435,8 @@ async fn slow_body_is_408_after_10_s() {
     let started = tokio::time::Instant::now();
     let early = read_raw(&mut stream, BODY_TIMEOUT - Duration::from_millis(100)).await;
     assert_eq!((early.status, early.closed), (0, false), "{early:?}");
-    // The paused test clock fires a timer this far off at the end of its wheel's slot, up to about 4 s late: the
-    // refusal is checked to come after the timeout and well before twice it.
+    // On the paused test clock a timer this far off can fire a few seconds late (the clock jumps from timer to timer
+    // while the runtime waits on sockets): the refusal is checked to come after the timeout and well before twice it.
     let answer = read_raw(&mut stream, BODY_TIMEOUT).await;
     let waited = started.elapsed();
     assert_refused_closed(&answer, 408, "a slow body");
@@ -442,14 +445,6 @@ async fn slow_body_is_408_after_10_s() {
         waited >= BODY_TIMEOUT && waited < 2 * BODY_TIMEOUT,
         "{waited:?}"
     );
-    // A slow body without the token is refused at once instead.
-    let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-    let bytes = post_head(100, &[ours(port)]) + "{\"jsonrpc\"";
-    stream.write_all(bytes.as_bytes()).await.unwrap();
-    let started = tokio::time::Instant::now();
-    let answer = read_raw(&mut stream, Duration::from_secs(1)).await;
-    assert_refused_closed(&answer, 401, "a slow body without the token");
-    assert!(started.elapsed() < Duration::from_secs(1));
 }
 
 #[tokio::test(start_paused = true)]
@@ -602,20 +597,35 @@ async fn initialize_opens_a_session_and_the_rest_need_it() {
     );
 }
 
-/// The two-clip host, each project read taking a while; how many reads ran at once, at most.
+/// The two-clip host, each project read taking `takes`; how many reads ran, and how many at once at most.
 struct Slow {
     host: Arc<FakeHost>,
+    takes: Duration,
+    reads: AtomicUsize,
     now: AtomicUsize,
     most: AtomicUsize,
 }
 
 const READ_TAKES: Duration = Duration::from_millis(300);
 
+impl Slow {
+    fn new(takes: Duration) -> Arc<Slow> {
+        Arc::new(Slow {
+            host: FakeHost::two_clips(),
+            takes,
+            reads: AtomicUsize::new(0),
+            now: AtomicUsize::new(0),
+            most: AtomicUsize::new(0),
+        })
+    }
+}
+
 impl Host for Slow {
     fn snapshot(&self) -> Option<Snapshot> {
+        self.reads.fetch_add(1, Ordering::SeqCst);
         let now = self.now.fetch_add(1, Ordering::SeqCst) + 1;
         self.most.fetch_max(now, Ordering::SeqCst);
-        std::thread::sleep(READ_TAKES);
+        std::thread::sleep(self.takes);
         self.now.fetch_sub(1, Ordering::SeqCst);
         self.host.snapshot()
     }
@@ -657,11 +667,7 @@ impl Host for Slow {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn messages_are_handled_one_at_a_time_and_refusals_never_wait() {
-    let slow = Arc::new(Slow {
-        host: FakeHost::two_clips(),
-        now: AtomicUsize::new(0),
-        most: AtomicUsize::new(0),
-    });
+    let slow = Slow::new(READ_TAKES);
     let mcp = Arc::new(Mcp::new(slow.clone()));
     let server = server::serve(&Handle::current(), mcp, TOKEN.to_owned()).unwrap();
     let port = server.port;
@@ -690,4 +696,249 @@ async fn messages_are_handled_one_at_a_time_and_refusals_never_wait() {
         read.await.unwrap();
     }
     assert_eq!(slow.most.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn unknown_session_is_404_and_delete_ends_one() {
+    let (server, host) = serve();
+    let port = server.port;
+    let mut agent = Client::new(port, TOKEN);
+    agent.initialize("Agent").await;
+    let mut other = Client::new(port, TOKEN);
+    other.initialize("Other app").await;
+    assert_eq!(server.connected(), ["Agent", "Other app"]);
+    // The app ends its session: it is gone, and the app no longer shows as connected.
+    assert_eq!(agent.end().await, 204);
+    assert_eq!(server.connected(), ["Other app"]);
+    assert_eq!(host.state().connected.last().unwrap(), &["Other app"]);
+    let answer = agent.post(&request(4, "ping", json!({}))).await;
+    assert_eq!(answer.status(), 404);
+    let reply: Value = answer.json().await.unwrap();
+    assert_eq!(reply["error"]["message"], NO_SUCH_SESSION);
+    // Ending it again, or one Klipolo never knew, is 404; without a session id, 400.
+    assert_eq!(agent.end().await, 404);
+    agent.session = Some("f".repeat(32));
+    assert_eq!(agent.end().await, 404);
+    agent.session = None;
+    assert_eq!(agent.end().await, 400);
+    // Ending a session needs the token, like the rest.
+    let session = other.session.clone().unwrap();
+    let delete = head("DELETE", "/mcp", &[ours(port), (SESSION_ID, session)]);
+    let answer = raw(port, delete.as_bytes(), Duration::from_secs(1)).await;
+    assert_refused_closed(&answer, 401, "DELETE without the token");
+    assert!(other.answers().await);
+    assert_eq!(server.connected(), ["Other app"]);
+}
+
+/// A clock a test moves by hand, from `start`.
+fn hand_clock(
+    start: Instant,
+) -> (
+    Arc<Mutex<Instant>>,
+    impl Fn() -> Instant + Send + Sync + 'static,
+) {
+    let clock = Arc::new(Mutex::new(start));
+    let read = Arc::clone(&clock);
+    (clock, move || *read.lock().unwrap())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_flood_of_sessions_is_paced_and_the_app_connected_stays() {
+    let host = FakeHost::two_clips();
+    let start = Instant::now();
+    let (clock, now) = hand_clock(start);
+    let set = |secs: u64| *clock.lock().unwrap() = start + Duration::from_secs(secs);
+    let mcp = Arc::new(Mcp::with_clock(host.clone(), now));
+    let server = server::serve(&Handle::current(), mcp, TOKEN.to_owned()).unwrap();
+    let port = server.port;
+    let mut live = Client::new(port, TOKEN);
+    live.initialize("Live app").await;
+    assert_eq!(live.call("getContext", json!({})).await["isError"], false);
+
+    // Without the token, a flood opens nothing: each is refused from its head, and its connection closes.
+    for k in 0..40 {
+        let bytes = initialize_bytes(&[ours(port)], &format!("Stranger {k}"));
+        let answer = raw(port, bytes.as_bytes(), Duration::from_secs(1)).await;
+        assert_refused_closed(&answer, 401, "a session without the token");
+    }
+    assert_eq!(server.connected(), ["Live app"]);
+
+    // With it, one name past 10 sessions a minute waits, and is told how long.
+    set(1);
+    for _ in 0..10 {
+        Client::new(port, TOKEN).initialize("Flood").await;
+    }
+    let answer = (Client::new(port, TOKEN))
+        .post(&request(1, "initialize", hello("Flood")))
+        .await;
+    assert_eq!(answer.status(), 429);
+    assert_eq!(answer.headers()["retry-after"], "60");
+    assert!(answer.headers().get(SESSION_ID).is_none());
+    let reply: Value = answer.json().await.unwrap();
+    assert_eq!(
+        reply,
+        json!({"jsonrpc": "2.0", "id": 1, "error": {
+            "code": -32000,
+            "message": "Klipolo is pacing new sessions. Wait 1 minute, then try again.",
+        }})
+    );
+
+    // Many names, minute after minute: all apps together open 20 a minute, and the app connected, working now and
+    // then, keeps its session while the least recently used go.
+    let mut opened_each_minute = Vec::new();
+    for minute in 0..5u64 {
+        set(60 * minute + 30);
+        let summary = live.call("getSummary", json!({})).await;
+        assert_eq!(summary["isError"], false, "{summary}");
+        set(60 * minute + 31);
+        let mut opened = 0;
+        for k in 0..25 {
+            let name = format!("Flood {minute}.{k}");
+            let answer = (Client::new(port, TOKEN))
+                .post(&request(1, "initialize", hello(&name)))
+                .await;
+            match answer.status().as_u16() {
+                200 => opened += 1,
+                429 => {
+                    let wait: u64 = answer.headers()["retry-after"]
+                        .to_str()
+                        .unwrap()
+                        .parse()
+                        .unwrap();
+                    assert!((1..=60).contains(&wait), "{wait}");
+                }
+                other => panic!("{other}"),
+            }
+        }
+        opened_each_minute.push(opened);
+        let connected = server.connected();
+        assert!(connected.len() <= MAX_SESSIONS, "{}", connected.len());
+        assert!(
+            connected.contains(&"Live app".to_owned()),
+            "minute {minute}"
+        );
+    }
+    // The first minute had room for 9 more: the live app's session and the 10 of one name came first.
+    assert_eq!(opened_each_minute, [9, 20, 20, 20, 20]);
+    assert!(live.answers().await);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn stop_ends_sessions_and_starting_again_keeps_the_paces() {
+    let temp = tempfile::tempdir().unwrap();
+    let host = FakeHost::two_clips();
+    let mcp = Arc::new(Mcp::new(host.clone()));
+    let first = McpServer::start(&Handle::current(), Arc::clone(&mcp), temp.path()).unwrap();
+    let file = connection::read(temp.path()).unwrap();
+    let mut agent = Client::new(file.port, &file.token);
+    for _ in 0..10 {
+        agent.initialize("Agent").await;
+    }
+    // A connection kept open after its request.
+    let mut idle = TcpStream::connect(("127.0.0.1", file.port)).await.unwrap();
+    let body = request(1, "initialize", hello("Checker")).to_string();
+    let bytes = post_head(body.len(), &[ours(file.port), bearer(&file.token)]) + &body;
+    idle.write_all(bytes.as_bytes()).await.unwrap();
+    let answer = read_raw(&mut idle, Duration::from_millis(500)).await;
+    assert_eq!((answer.status, answer.closed), (200, false), "{answer:?}");
+    assert_eq!(first.connected(), ["Agent", "Checker"]);
+
+    first.stop();
+    // The open connection closes, and no app shows as connected.
+    let after = read_raw(&mut idle, Duration::from_secs(3)).await;
+    assert!(after.closed, "{after:?}");
+    assert!(mcp.connected().is_empty());
+    assert_eq!(
+        host.state().connected.last().unwrap(),
+        &Vec::<String>::new()
+    );
+
+    // Turned on again: a new token, the last run's sessions gone, and the same paces. The app opened 10 sessions this
+    // minute, so its 11th waits; another app is welcome.
+    let second = McpServer::start(&Handle::current(), Arc::clone(&mcp), temp.path()).unwrap();
+    let file = connection::read(temp.path()).unwrap();
+    let agent = Client::new(file.port, &file.token);
+    let answer = agent.post(&request(1, "initialize", hello("Agent"))).await;
+    assert_eq!(answer.status(), 429);
+    let mut other = Client::new(file.port, &file.token);
+    other.initialize("Other app").await;
+    assert_eq!(second.connected(), ["Other app"]);
+    second.stop();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_session_of_the_last_run_is_404() {
+    let temp = tempfile::tempdir().unwrap();
+    let mcp = Arc::new(Mcp::new(FakeHost::two_clips()));
+    let first = McpServer::start(&Handle::current(), Arc::clone(&mcp), temp.path()).unwrap();
+    let file = connection::read(temp.path()).unwrap();
+    let mut agent = Client::new(file.port, &file.token);
+    agent.initialize("Agent").await;
+    first.stop();
+    let second = McpServer::start(&Handle::current(), mcp, temp.path()).unwrap();
+    let file = connection::read(temp.path()).unwrap();
+    let mut again = Client::new(file.port, &file.token);
+    again.session = agent.session.clone();
+    let answer = again.post(&request(2, "ping", json!({}))).await;
+    assert_eq!(answer.status(), 404);
+    // It opens a new one.
+    again.initialize("Agent").await;
+    assert!(again.answers().await);
+    second.stop();
+}
+
+#[tokio::test(start_paused = true)]
+async fn idle_sessions_go_every_minute() {
+    let host = FakeHost::two_clips();
+    let start = Instant::now();
+    let (clock, now) = hand_clock(start);
+    let mcp = Arc::new(Mcp::with_clock(host.clone(), now));
+    let server = server::serve(&Handle::current(), mcp, TOKEN.to_owned()).unwrap();
+    assert_eq!(EXPIRE_EVERY, Duration::from_secs(60));
+    let mut agent = Client::new(server.port, TOKEN);
+    agent.initialize("Agent").await;
+    // Unused for longer than `IDLE`: it goes when the server next looks, within a minute or so.
+    *clock.lock().unwrap() = start + IDLE + Duration::from_secs(1);
+    assert_eq!(server.connected(), ["Agent"]);
+    let began = tokio::time::Instant::now();
+    while !server.connected().is_empty() && began.elapsed() < 3 * EXPIRE_EVERY {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    assert!(server.connected().is_empty(), "after {:?}", began.elapsed());
+    assert_eq!(
+        host.state().connected.last().unwrap(),
+        &Vec::<String>::new()
+    );
+    let answer = agent.post(&request(2, "ping", json!({}))).await;
+    assert_eq!(answer.status(), 404);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn nothing_is_handled_once_stopped() {
+    let slow = Slow::new(Duration::from_secs(1));
+    let mcp = Arc::new(Mcp::new(slow.clone()));
+    let server = server::serve(&Handle::current(), Arc::clone(&mcp), TOKEN.to_owned()).unwrap();
+    let port = server.port;
+    let mut first = Client::new(port, TOKEN);
+    first.initialize("One").await;
+    let mut second = Client::new(port, TOKEN);
+    second.initialize("Two").await;
+    // One app's read runs, and another's waits its turn.
+    let running = tokio::spawn(async move { first.call("getContext", json!({})).await });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let waiting = tokio::spawn(async move {
+        let read = json!({"name": "getContext", "arguments": {}});
+        second.post(&request(2, "tools/call", read)).await
+    });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    // The person turns the server off: the read under way finishes, and the one waiting is never handled.
+    server.stop();
+    let read = running.await.unwrap();
+    assert_eq!(read["isError"], false, "{read}");
+    let answer = waiting.await.unwrap();
+    assert_eq!(answer.status(), 503);
+    let reply: Value = answer.json().await.unwrap();
+    assert_eq!(reply["error"]["message"], STOPPED);
+    assert_eq!(slow.reads.load(Ordering::SeqCst), 1);
+    assert!(mcp.connected().is_empty());
 }

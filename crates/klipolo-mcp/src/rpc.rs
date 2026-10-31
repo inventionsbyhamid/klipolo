@@ -1,22 +1,23 @@
 //! MCP over JSON-RPC 2.0: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`,
 //! `resources/templates/list` and `resources/read`, one message in and at most one reply out. `initialize` opens a
 //! session, unless the app or all apps together opened too many in the last minute (`Handled::Paced`); every other
-//! message needs one (`Handled::NoSession` otherwise). Tool calls and resource reads share the app's pace (`PACED`
-//! past it), but what became of a proposal, which an app polls. An edit tool's call goes to `call::run`; a read is
-//! answered here. Refusals an agent can act on are tool results with `isError`; JSON-RPC
-//! errors are only for a message that isn't one object or a request without a method (-32600), an unknown method
-//! (-32601), an unknown tool (-32602) and an unknown resource (-32002). Bad JSON (-32700) is the server's, before a
-//! message reaches here. Nothing here trusts the client.
+//! message needs one (`Handled::NoSession` otherwise). A session ends when its app says so (`end`), when the server
+//! stops (`end_all`), or once unused for `session::IDLE` (`expire`). Tool calls and resource reads share the app's pace
+//! (`PACED` past it), but what became of a proposal, which an app polls. An edit tool's call goes to `call::run`; a
+//! read is answered here. Refusals an agent can act on are tool results with `isError`; JSON-RPC errors are only for a
+//! message that isn't one object or a request without a method (-32600), an unknown method (-32601), an unknown tool
+//! (-32602) and an unknown resource (-32002). Bad JSON (-32700) is the server's, before a message reaches here. Nothing
+//! here trusts the client.
 
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use klipolo_chat::FunctionCall;
 use klipolo_model::text_safety::clean;
 use serde_json::{Value, json};
 
 use crate::host::Host;
-use crate::limits::Limits;
+use crate::limits::{Limits, Paced};
 use crate::resources;
 use crate::session::{NAME_CHARS, Session, Sessions, client_name, locked};
 use crate::{call, tools, words};
@@ -36,11 +37,12 @@ pub enum Handled {
     Accepted,
     /// No session, or one Klipolo doesn't know (it restarted, or the session went idle): the client opens a new one.
     NoSession,
-    /// Too many sessions opened by this client, or by all clients together, lately: it waits and tries again.
-    Paced,
+    /// Too many sessions opened by this client, or by all clients together, lately: it waits this long and tries again.
+    Paced(Duration),
 }
 
-/// The server's protocol state: the host, and the sessions.
+/// The server's protocol state: the host, the sessions, and the apps' paces. The app keeps one for its whole run, so
+/// turning the server off and on keeps the paces, the allowance for jobs and an app's waiting proposal.
 pub struct Mcp {
     host: Arc<dyn Host>,
     sessions: Mutex<Sessions>,
@@ -50,17 +52,33 @@ pub struct Mcp {
     own: Mutex<Option<call::Own>>,
     /// The apps' paces in this run.
     limits: Limits,
+    /// What time it is, for the paces and the sessions.
+    clock: Box<dyn Fn() -> Instant + Send + Sync>,
 }
 
 impl Mcp {
     pub fn new(host: Arc<dyn Host>) -> Mcp {
+        Mcp::with_clock(host, Instant::now)
+    }
+
+    /// An `Mcp` whose time is `clock`'s (tests move it by hand).
+    pub fn with_clock(
+        host: Arc<dyn Host>,
+        clock: impl Fn() -> Instant + Send + Sync + 'static,
+    ) -> Mcp {
         Mcp {
             host,
             sessions: Mutex::new(Sessions::default()),
             told: Mutex::new(Vec::new()),
             own: Mutex::new(None),
             limits: Limits::default(),
+            clock: Box::new(clock),
         }
+    }
+
+    /// What time it is, by this `Mcp`'s clock.
+    pub fn now(&self) -> Instant {
+        (self.clock)()
     }
 
     pub fn host(&self) -> &dyn Host {
@@ -104,7 +122,7 @@ impl Mcp {
             return Handled::Accepted;
         };
         let mut session = locked(&entry);
-        session.used = Instant::now();
+        session.used = self.now();
         reply(match method {
             "tools/call" => self.call_tool(&mut session, id, params),
             "resources/read" => {
@@ -152,6 +170,24 @@ impl Mcp {
         gone
     }
 
+    /// Ends session `id` (its app said it is done); false when Klipolo doesn't have it. The host hears if the apps
+    /// connected changed.
+    pub fn end(&self, id: &str) -> bool {
+        let gone = locked(&self.sessions).remove(id);
+        if gone {
+            self.tell_connected();
+        }
+        gone
+    }
+
+    /// Ends every session (the server stopped). The host hears if the apps connected changed.
+    pub fn end_all(&self) {
+        let gone = locked(&self.sessions).clear();
+        if gone {
+            self.tell_connected();
+        }
+    }
+
     /// A copy of session `id`, if Klipolo has it.
     pub fn session(&self, id: &str) -> Option<Session> {
         let entry = locked(&self.sessions).get(id)?;
@@ -162,14 +198,19 @@ impl Mcp {
     /// Opens a session for the app `params` name, unless it, or all apps together, opened too many lately.
     fn initialize(&self, id: &Value, params: &Value) -> Handled {
         let client = client_name(params);
-        if self.limits.opened(&client, Instant::now()).is_err() {
-            return Handled::Paced;
+        if let Err(paced) = self.limits.opened(&client, self.now()) {
+            // Opening sessions has no allowance to run out of, only a pace: a minute at most.
+            let wait = match paced {
+                Paced::Wait(wait) => wait,
+                Paced::OverCap => Duration::from_secs(60),
+            };
+            return Handled::Paced(wait);
         }
         let asked = params
             .get("protocolVersion")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        let session = locked(&self.sessions).open(client, Instant::now());
+        let session = locked(&self.sessions).open(client, self.now());
         self.tell_connected();
         Handled::Reply {
             body: ok(id, initialize_result(asked)),
@@ -179,7 +220,7 @@ impl Mcp {
 
     /// What `session`'s app reads when it is past its pace of calls now; else None, and the call counts toward it.
     fn paced(&self, session: &Session) -> Option<String> {
-        let paced = self.limits.call(&session.client, Instant::now()).err()?;
+        let paced = self.limits.call(&session.client, self.now()).err()?;
         Some(words::paced(&session.client, paced))
     }
 

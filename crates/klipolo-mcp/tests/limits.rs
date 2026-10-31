@@ -184,16 +184,17 @@ fn initialize_past_10_a_minute_is_paced() {
     assert_eq!(limits.opened("Yet another app", t0), Err(minute));
     assert_eq!(limits.opened("Yet another app", at(t0, 60.0)), Ok(()));
 
-    // Through the server: the 11th `initialize` of one app within a minute is paced and opens nothing.
+    // Through the server: the 11th `initialize` of one app within a minute is paced, told how long until the oldest
+    // leaves the minute, and opens nothing.
     let host = FakeHost::two_clips();
-    let mcp = Mcp::new(host.clone());
+    let mcp = Mcp::with_clock(host.clone(), move || t0);
     for _ in 0..10 {
         Agent::open(&mcp, "Agent");
     }
     let params = json!({"protocolVersion": "2025-06-18", "clientInfo": {"name": "Agent"}});
     assert_eq!(
         mcp.handle(None, request(1, "initialize", params)),
-        Handled::Paced
+        Handled::Paced(Duration::from_secs(60))
     );
     assert_eq!(mcp.connected(), ["Agent"]);
     Agent::open(&mcp, "Other app");

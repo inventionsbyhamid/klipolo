@@ -131,6 +131,18 @@ impl Sessions {
         apps
     }
 
+    /// Drops session `id`; true when it was here.
+    pub(crate) fn remove(&mut self, id: &str) -> bool {
+        self.map.remove(id).is_some()
+    }
+
+    /// Drops every session; true when any was here.
+    pub(crate) fn clear(&mut self) -> bool {
+        let any = !self.map.is_empty();
+        self.map.clear();
+        any
+    }
+
     /// Drops the sessions unused for `IDLE` at `now`; true when any went. O(sessions).
     pub(crate) fn expire(&mut self, now: Instant) -> bool {
         let before = self.map.len();

@@ -27,8 +27,6 @@
 //! "revision"?, "proposalId"?, "removedSec"?}`, the outcome what changed most (a proposal, then the project, then a
 //! job started). `isError` is true exactly when nothing was done; when part was, the text says what wasn't.
 
-use std::time::Instant;
-
 use klipolo_chat::compile::TEXT_COMING_SOON;
 use klipolo_chat::{
     ANALYZE_FIRST, Audience, Compiled, FunctionCall, Job, Moment, Refusal, ToolCall, compile,
@@ -216,7 +214,7 @@ fn edit(
         if tx.needs_review(Some(&snap.project)) {
             return refused(words::REMOVES);
         }
-        let applied_at = Instant::now();
+        let applied_at = mcp.now();
         if let Err(paced) = mcp.limits().applied(client, applied_at) {
             return refused(&words::paced(client, paced));
         }
@@ -351,7 +349,7 @@ fn edit(
 fn start(mcp: &Mcp, client: &str, job: &Job) -> Result<(), String> {
     let host = mcp.host();
     let usd = host.estimate_usd(job);
-    match mcp.limits().paid(client, Instant::now(), usd) {
+    match mcp.limits().paid(client, mcp.now(), usd) {
         Ok(()) => {}
         Err(paced) => return Err(words::paced(client, paced)),
     }
