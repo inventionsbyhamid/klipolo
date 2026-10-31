@@ -522,6 +522,17 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     expect(message()).toHaveValue('にほん');
   });
 
+  it('Retry does nothing while chat can’t send, and keeps the failure', async () => {
+    const fake = chat({ reply: () => ({ type: 'failed', kind: 'network', message: 'No connection.' }) });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'cut the ums{Enter}');
+    await screen.findByText('No connection.');
+    act(() => useAi.setState({ status: { mode: 'none' } }));
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(fake.requests).toHaveLength(1);
+    expect(screen.getByText('No connection.')).toBeInTheDocument();
+  });
+
   it('an empty chat says when the clips aren’t analysed yet, and while they are', () => {
     useAnalysis.setState({ states: {} });
     renderWithProviders(<ChatPanel />);

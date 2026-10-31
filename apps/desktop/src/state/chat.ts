@@ -69,6 +69,11 @@ function requestFor(id: string, text: string, keepOnly: { start: number; end: nu
  */
 export const useChat = create<ChatStore>((set, get) => {
   const push = (m: Message) => set((s) => withMessages([...s.messages, m]));
+  /** A message can go now: a project open and editable, chat allowed, and none under way. */
+  const ready = () => {
+    const snapshot = useProject.getState().snapshot;
+    return snapshot !== null && snapshot.readOnly == null && canChat() && get().pending === null;
+  };
 
   return {
     projectId: null,
@@ -93,8 +98,7 @@ export const useChat = create<ChatStore>((set, get) => {
     send: async (text, options) => {
       const snapshot = useProject.getState().snapshot;
       const trimmed = text.trim();
-      if (!snapshot || !trimmed || get().pending || snapshot.readOnly != null) return;
-      if (!canChat()) return;
+      if (!snapshot || !trimmed || !ready()) return;
       const mine = session.now();
       const live = () => session.now() === mine && get().projectId === snapshot.project.id;
       const id = crypto.randomUUID();
@@ -157,7 +161,8 @@ export const useChat = create<ChatStore>((set, get) => {
 
     retry: async (messageId) => {
       const m = get().messages.find((x) => x.id === messageId);
-      if (!m || m.from !== 'klipolo' || m.kind !== 'failed' || get().pending) return;
+      // Checked before the failure goes: a Retry that can't send leaves it as it was.
+      if (!m || m.from !== 'klipolo' || m.kind !== 'failed' || !ready()) return;
       set((s) => withMessages(s.messages.filter((x) => x !== m)));
       await get().send(m.retry.text, { keepOnly: m.retry.keepOnly, echo: false });
     },
