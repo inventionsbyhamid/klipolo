@@ -27,7 +27,7 @@ pub fn add_sound_ops(p: &Project, asset: &Asset, at_us: Us) -> Result<Vec<Op>> {
     let start = at_us.max(0);
     let video = video_duration(&p.timeline);
     let length = if video > 0 {
-        asset.duration_us.min(video.saturating_sub(start))
+        asset.duration_us.min((video - start).max(0))
     } else {
         asset.duration_us
     };
