@@ -882,24 +882,82 @@ async fn undo_last_takes_back_chats_change_only_while_it_is_the_last() {
         answer("", vertical_karaoke()),
         answer("", vertical_karaoke()),
     ]);
-    chat.session.send(request("vertical")).await.unwrap();
-    chat.session.undo_last().unwrap();
+    let out = chat.session.send(request("vertical")).await.unwrap();
+    let chip = reply(&out)["applied"]["change"]["history"]["revision"]
+        .as_u64()
+        .unwrap();
+    assert_eq!(chip, 1);
+    chat.session.undo_last(chip).unwrap();
     assert_eq!(
         chat.project.project().settings.primary_format,
         FormatKind::Landscape
     );
     assert_eq!(
-        chat.session.undo_last().unwrap_err(),
+        chat.session.undo_last(chip).unwrap_err(),
         CommitError::Moved,
         "once"
     );
 
     chat.project.step(true).unwrap();
     chat.project.step(false).unwrap();
-    chat.session.send(request("vertical again")).await.unwrap();
+    let out = chat.session.send(request("vertical again")).await.unwrap();
+    let chip = reply(&out)["applied"]["change"]["history"]["revision"]
+        .as_u64()
+        .unwrap();
     chat.project.hand_edit(&rename("Mine")).unwrap();
-    assert_eq!(chat.session.undo_last().unwrap_err(), CommitError::Moved);
+    assert_eq!(
+        chat.session.undo_last(chip).unwrap_err(),
+        CommitError::Moved
+    );
     assert_eq!(chat.project.project().name, "Mine");
+}
+
+#[tokio::test]
+async fn an_undo_chip_takes_back_only_the_change_it_is_under() {
+    let chat = chat(vec![
+        answer("", vertical_karaoke()),
+        answer("", vec![fillers()]),
+    ]);
+    let out = chat.session.send(request("vertical")).await.unwrap();
+    let additions = reply(&out)["applied"]["change"]["history"]["revision"]
+        .as_u64()
+        .unwrap();
+    let out = chat.session.send(request("cut the ums")).await.unwrap();
+    let applied = chat.session.apply(&proposal_id(&out)).unwrap();
+    // The additions' chip, after Apply: the top step is the cut, so it is refused and the cut stays.
+    assert_eq!(
+        chat.session.undo_last(additions).unwrap_err(),
+        CommitError::Moved
+    );
+    assert!(!plays(&chat.project.project(), 0.6), "the cut stays");
+    assert_eq!(chat.project.undo_steps(), 2);
+    // The cut's own chip takes it back.
+    chat.session
+        .undo_last(applied.change.history.revision)
+        .unwrap();
+    assert!(plays(&chat.project.project(), 0.6));
+    assert_eq!(
+        chat.project.project().settings.primary_format,
+        FormatKind::Portrait
+    );
+}
+
+#[tokio::test]
+async fn new_chat_forgets_the_last_change_too() {
+    let chat = chat(vec![answer("", vertical_karaoke())]);
+    let out = chat.session.send(request("vertical")).await.unwrap();
+    let chip = reply(&out)["applied"]["change"]["history"]["revision"]
+        .as_u64()
+        .unwrap();
+    chat.session.reset();
+    assert_eq!(
+        chat.session.undo_last(chip).unwrap_err(),
+        CommitError::Moved
+    );
+    assert_eq!(
+        chat.project.project().settings.primary_format,
+        FormatKind::Portrait
+    );
 }
 
 #[tokio::test]

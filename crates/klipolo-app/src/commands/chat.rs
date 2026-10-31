@@ -82,10 +82,14 @@ pub(crate) fn chat_discard_proposal(chat: State<'_, ChatHandle>, id: String) {
     chat.discard(&id);
 }
 
-/// Takes back chat's last change while nothing has changed since; else `project.moved`.
+/// The Undo chip under chat's change that left the project at `revision` (`ChatApplied.change.history.revision`): takes
+/// it back while it is still the last change; else `project.moved`.
 #[tauri::command(async)]
-pub(crate) fn chat_undo_last(chat: State<'_, ChatHandle>) -> Result<SnapshotPatch, Said> {
-    chat.undo_last().map_err(|e| e.said())
+pub(crate) fn chat_undo_last(
+    chat: State<'_, ChatHandle>,
+    revision: u64,
+) -> Result<SnapshotPatch, Said> {
+    chat.undo_last(revision).map_err(|e| e.said())
 }
 
 /// New chat: the conversation kept for the model, and its proposals, are forgotten.

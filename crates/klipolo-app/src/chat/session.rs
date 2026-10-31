@@ -23,6 +23,8 @@
 //! - **Jobs:** following a subject and blurring aren't in Klipolo yet: the reply says they are coming (`jobs`). A
 //!   picture (a sticker, a title card's background) is named in the reply, drawn when the page asks, and placed on Use
 //!   as one undo step (`pictures`).
+//! - **Undo chips** name the revision their change left (`undo_last`): one takes its change back only while nothing came
+//!   after it.
 //! - **Spend:** every model call's cost goes into the session's AI spend (`SpendCounter`); nothing is shown per message.
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -308,20 +310,22 @@ impl ChatSession {
         }
     }
 
-    /// Takes back chat's last change, when nothing has changed since; else `project.moved`.
-    pub fn undo_last(&self) -> Result<SnapshotPatch, CommitError> {
+    /// The Undo chip under chat's change that left the project at `revision`: takes it back while it is still the last
+    /// change; else `project.moved` (another change came after it, chat's or the person's).
+    pub fn undo_last(&self, revision: u64) -> Result<SnapshotPatch, CommitError> {
         let last = lock(&self.talk).last_change.clone();
-        let last = last.ok_or(CommitError::Moved)?;
+        let last = (last.filter(|l| l.revision == revision)).ok_or(CommitError::Moved)?;
         let committed = self.projects.undo(&last)?;
         lock(&self.talk).last_change = None;
         Ok(committed.patch)
     }
 
-    /// New chat: the conversation, its proposal and its pictures are forgotten.
+    /// New chat: the conversation, its proposal, its last change and its pictures are forgotten.
     pub fn reset(&self) {
         let mut talk = lock(&self.talk);
         talk.exchanges.clear();
         talk.open = None;
+        talk.last_change = None;
         self.pictures.clear();
     }
 
