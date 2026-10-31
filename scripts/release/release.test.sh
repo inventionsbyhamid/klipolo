@@ -209,6 +209,12 @@ refused_build() {  # refused_build <KLIPOLO_SOURCE_URL or "unset">
   [ "$rc" -eq 2 ] && grep -qF 'refused: set KLIPOLO_SOURCE_URL' <<< "$out"
 }
 expect "build-mac.sh refuses to start without KLIPOLO_SOURCE_URL" pass refused_build unset
+# build-mac.sh checks the third-party notices are current once the page's packages are in, before the app is built.
+notices_checked() {
+  awk '/^pnpm install --frozen-lockfile$/ && !i {i = NR} /third-party\.sh" --check$/ && !c {c = NR}
+    /^  pnpm tauri build --ci / && !b {b = NR} END {exit !(i && c && b && i < c && c < b)}' "$here/build-mac.sh"
+}
+expect "build-mac.sh checks the notices between pnpm install and the build" pass notices_checked
 expect "build-mac.sh refuses an http:// KLIPOLO_SOURCE_URL" pass refused_build http://klipolo.app/source
 
 # sign.sh --list prints paths inside the app, whatever characters the app's own path has (it signs nothing). It runs
