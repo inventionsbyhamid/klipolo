@@ -194,6 +194,10 @@ pub const FAILED: &str = "Klipolo couldn't finish that request.";
 /// A message that arrived as the person turned off other apps' access.
 pub const STOPPED: &str = "Klipolo stopped listening to other apps. The person can turn it on again in Klipolo's \
 Settings.";
+/// A request after `initialize` whose `MCP-Protocol-Version` Klipolo doesn't speak.
+pub const VERSION_UNKNOWN: &str =
+    "Klipolo doesn't speak this MCP-Protocol-Version. Send the version initialize answered with.";
+
 
 /// `getSummary`.
 pub const SUMMARY_TOOL: &str = "The project in short: its revision, name, formats, length, captions and clips (c1, c2 \

@@ -26,7 +26,9 @@ use klipolo_mcp::server::{
     self, BODY_LIMIT, BODY_TIMEOUT, CONNECTIONS, EXPIRE_EVERY, HEAD_TIMEOUT, Running,
 };
 use klipolo_mcp::session::{IDLE, MAX_SESSIONS};
-use klipolo_mcp::words::{NO_SUCH_SESSION, NOT_JSON, SESSION_FIRST, STOPPED, TOO_LARGE, TOO_SLOW};
+use klipolo_mcp::words::{
+    NO_SUCH_SESSION, NOT_JSON, SESSION_FIRST, STOPPED, TOO_LARGE, TOO_SLOW, VERSION_UNKNOWN,
+};
 use klipolo_model::Transaction;
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
@@ -735,6 +737,75 @@ async fn messages_are_handled_one_at_a_time_and_refusals_never_wait() {
         read.await.unwrap();
     }
     assert_eq!(slow.most.load(Ordering::SeqCst), 1);
+}
+
+/// A request after `initialize` whose `MCP-Protocol-Version` Klipolo doesn't speak is 400, and nothing is handled; one
+/// without the header is taken at the version agreed. `initialize` agrees on the version in its body, so a header
+/// there is never refused.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_unknown_protocol_version_header_is_400() {
+    let (server, host) = serve();
+    let port = server.port;
+    let mut client = Client::new(port, TOKEN);
+    client.initialize("Agent").await;
+    let session = client.session.clone().unwrap();
+    let send = |method: &'static str, version: Option<&'static str>| {
+        let session = session.clone();
+        async move {
+            let body = request(7, method, json!({})).to_string();
+            let mut headers = vec![
+                ours(port),
+                bearer(TOKEN),
+                (SESSION_ID, session),
+                ("Connection", "close".to_owned()),
+            ];
+            headers.extend(version.map(|v| ("MCP-Protocol-Version", v.to_owned())));
+            let bytes = post_head(body.len(), &headers) + &body;
+            raw(port, bytes.as_bytes(), Duration::from_secs(2)).await
+        }
+    };
+    let snapshots = host.state().counts.snapshots;
+    for version in ["2099-01-01", "2026-07-28", "2024-11-05", ""] {
+        let answer = send("tools/list", Some(version)).await;
+        assert_eq!(answer.status, 400, "{version}: {answer:?}");
+        assert_eq!(
+            answer.json(),
+            json!({"jsonrpc": "2.0", "id": 7, "error": {"code": -32600, "message": VERSION_UNKNOWN}}),
+            "{version}"
+        );
+    }
+    assert_eq!(host.state().counts.snapshots, snapshots, "nothing handled");
+    for version in [Some("2025-06-18"), Some("2025-11-25"), None] {
+        let answer = send("ping", version).await;
+        assert_eq!(answer.status, 200, "{version:?}: {answer:?}");
+        assert_eq!(answer.json()["result"], json!({}));
+    }
+    // initialize with a version Klipolo doesn't speak in the header: agreed in the body, at Klipolo's latest.
+    let body = request(1, "initialize", hello("Agent")).to_string();
+    let headers = [
+        ours(port),
+        bearer(TOKEN),
+        ("MCP-Protocol-Version", "2026-07-28".to_owned()),
+        ("Connection", "close".to_owned()),
+    ];
+    let bytes = post_head(body.len(), &headers) + &body;
+    let answer = raw(port, bytes.as_bytes(), Duration::from_secs(2)).await;
+    assert_eq!(answer.status, 200, "{answer:?}");
+    // DELETE with a version Klipolo doesn't speak ends nothing.
+    let bytes = head(
+        "DELETE",
+        "/mcp",
+        &[
+            ours(port),
+            bearer(TOKEN),
+            (SESSION_ID, client.session.clone().unwrap()),
+            ("MCP-Protocol-Version", "2099-01-01".to_owned()),
+            ("Connection", "close".to_owned()),
+        ],
+    );
+    let answer = raw(port, bytes.as_bytes(), Duration::from_secs(2)).await;
+    assert_eq!(answer.status, 400, "{answer:?}");
+    assert!(client.answers().await, "the session is still open");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

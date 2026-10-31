@@ -15,8 +15,9 @@
 //!
 //! Then: bad JSON is -32700 (400); `initialize` opens a session (its id in `Mcp-Session-Id`), and every other message
 //! needs one (400 without, 404 for one Klipolo doesn't know, so the client opens a new one); too many sessions opened
-//! lately is 429 with `Retry-After`. DELETE `/mcp` ends a session (204); GET is 405 (Klipolo sends nothing unasked);
-//! any other path is 404.
+//! lately is 429 with `Retry-After`. After `initialize`, an `MCP-Protocol-Version` Klipolo doesn't speak is 400, and a
+//! request without one is taken at the version agreed. DELETE `/mcp` ends a session (204); GET is 405 (Klipolo sends
+//! nothing unasked); any other path is 404.
 
 use std::convert::Infallible;
 use std::io;
@@ -39,7 +40,7 @@ use subtle::ConstantTimeEq;
 use tokio::runtime::Handle;
 use tokio::sync::{Mutex, Semaphore, watch};
 
-use crate::rpc::{Handled, Mcp};
+use crate::rpc::{Handled, Mcp, VERSIONS};
 use crate::words;
 
 /// Connections served at once; past it, a new one waits in the system's queue until one closes.
@@ -57,6 +58,7 @@ const STOP_GRACE: Duration = Duration::from_secs(2);
 /// The one path served.
 pub const PATH: &str = "/mcp";
 const SESSION_ID: &str = "mcp-session-id";
+const PROTOCOL_VERSION: &str = "mcp-protocol-version";
 
 type Answer = Response<Full<Bytes>>;
 
@@ -265,10 +267,18 @@ fn authorized(token: &str, headers: &HeaderMap) -> bool {
         && bool::from(given.trim().as_bytes().ct_eq(token.as_bytes()))
 }
 
+/// Whether a request's `MCP-Protocol-Version` is one Klipolo speaks; one without it is taken at the version agreed.
+fn speaks(headers: &HeaderMap) -> bool {
+    headers
+        .get(PROTOCOL_VERSION)
+        .is_none_or(|v| v.to_str().is_ok_and(|v| VERSIONS.contains(&v)))
+}
+
 /// POST: one message, read within the limits, handled in its turn.
 async fn post(s: &Shared, req: Request<Incoming>) -> Answer {
     let session =
         (req.headers().get(SESSION_ID)).map(|v| v.to_str().unwrap_or_default().to_owned());
+    let speaks = speaks(req.headers());
     let claimed = (req.headers().get(CONTENT_LENGTH))
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse::<u64>().ok());
@@ -292,6 +302,13 @@ async fn post(s: &Shared, req: Request<Incoming>) -> Answer {
         );
     };
     let id = msg.get("id").cloned().unwrap_or(Value::Null);
+    // `initialize` agrees on the version in its body; every later request names it, or is taken at it.
+    if !speaks && msg.get("method").and_then(Value::as_str) != Some("initialize") {
+        return json_answer(
+            StatusCode::BAD_REQUEST,
+            &rpc_error(&id, -32600, words::VERSION_UNKNOWN),
+        );
+    }
     let known = session.is_some();
     let mcp = Arc::clone(&s.mcp);
     let Some(handled) = blocking(s, move || mcp.handle(session.as_deref(), msg)).await else {
@@ -336,6 +353,12 @@ async fn post(s: &Shared, req: Request<Incoming>) -> Answer {
 
 /// DELETE: the client ends its session.
 async fn delete(s: &Shared, headers: &HeaderMap) -> Answer {
+    if !speaks(headers) {
+        return json_answer(
+            StatusCode::BAD_REQUEST,
+            &rpc_error(&Value::Null, -32600, words::VERSION_UNKNOWN),
+        );
+    }
     let Some(session) = headers.get(SESSION_ID) else {
         return json_answer(
             StatusCode::BAD_REQUEST,
