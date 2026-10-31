@@ -21,4 +21,9 @@ config: string,
  * Klipolo runs from its disk image or a translocated copy: it has to move to Applications before the config can
  * name it.
  */
-needsMove: boolean, };
+needsMove: boolean, 
+/**
+ * Off because another Klipolo on this Mac lets other apps in now (it serves the connection file, a dev build
+ * beside the installed app): this one can't until that one quits.
+ */
+anotherListens: boolean, };
