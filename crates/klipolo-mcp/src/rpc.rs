@@ -2,8 +2,9 @@
 //! `resources/templates/list` and `resources/read`, one message in and at most one reply out. `initialize` opens a
 //! session; every other message needs one (`Handled::NoSession` otherwise). An edit tool's call goes to `call::run`; a
 //! read is answered here. Refusals an agent can act on are tool results with `isError`; JSON-RPC errors are only for a
-//! message that isn't one object (-32600), an unknown method (-32601), an unknown tool (-32602) and an unknown resource
-//! (-32002). Bad JSON (-32700) is the server's, before a message reaches here. Nothing here trusts the client.
+//! message that isn't one object or a request without a method (-32600), an unknown method (-32601), an unknown tool
+//! (-32602) and an unknown resource (-32002). Bad JSON (-32700) is the server's, before a message reaches here.
+//! Nothing here trusts the client.
 
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -72,8 +73,15 @@ impl Mcp {
         let Some(entry) = session.and_then(|s| locked(&self.sessions).get(s)) else {
             return Handled::NoSession;
         };
-        // A notification, or a reply to a request: Klipolo sends no requests.
         let (Some(id), Some(method)) = (id, method) else {
+            // A request with no method to answer: the client waits on its id, so it hears why.
+            if let Some(id) = id
+                && !obj.contains_key("result")
+                && !obj.contains_key("error")
+            {
+                return reply(error(id, -32600, words::NO_METHOD));
+            }
+            // A notification, or a reply to a request: Klipolo sends no requests.
             return Handled::Accepted;
         };
         let mut session = locked(&entry);

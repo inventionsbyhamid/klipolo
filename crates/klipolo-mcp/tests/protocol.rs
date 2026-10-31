@@ -288,6 +288,41 @@ fn batch_is_32600() {
 }
 
 #[test]
+fn request_without_a_method_is_32600() {
+    let mcp = Mcp::new(FakeHost::two_clips());
+    let session = open(&mcp, "Agent");
+    // An id, but no method to answer: the client waits on it, so it hears why.
+    for (id, msg) in [
+        (1, json!({"jsonrpc": "2.0", "id": 1})),
+        (2, json!({"jsonrpc": "2.0", "id": 2, "method": 7})),
+        (
+            3,
+            json!({"jsonrpc": "2.0", "id": 3, "method": null, "params": {}}),
+        ),
+    ] {
+        let reply = body(mcp.handle(Some(&session), msg.clone()));
+        assert_eq!(error_code(&reply), -32600, "{msg}");
+        assert_eq!(reply["id"], id);
+    }
+    // A client's reply to a request carries a result or an error: nothing to answer.
+    for msg in [
+        json!({"jsonrpc": "2.0", "id": 4, "result": {}}),
+        json!({"jsonrpc": "2.0", "id": 5, "error": {"code": -1, "message": "no"}}),
+    ] {
+        assert_eq!(
+            mcp.handle(Some(&session), msg.clone()),
+            Handled::Accepted,
+            "{msg}"
+        );
+    }
+    // Without a session it is still the session that is missing.
+    assert_eq!(
+        mcp.handle(None, json!({"jsonrpc": "2.0", "id": 6})),
+        Handled::NoSession
+    );
+}
+
+#[test]
 fn unknown_tool_is_32602() {
     let mcp = Mcp::new(FakeHost::two_clips());
     let session = open(&mcp, "Agent");

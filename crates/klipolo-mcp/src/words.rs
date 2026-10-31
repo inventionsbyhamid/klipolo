@@ -23,6 +23,8 @@ pub const NOT_BUILT: &str = "Not built yet.";
 /// A message that isn't one JSON-RPC object (a batch, a bare value).
 pub const ONE_MESSAGE: &str =
     "Send one JSON-RPC message, as an object, per request. Batches are not supported.";
+/// A message with an id but no method, and no result or error.
+pub const NO_METHOD: &str = "A request needs a method.";
 pub const UNKNOWN_METHOD: &str = "Unknown method.";
 pub const UNKNOWN_RESOURCE: &str = "No such resource.";
 
