@@ -232,8 +232,11 @@
   background: var(--color-bay-hover);
 }
 
-/* The line now playing: brighter chips, but a filler or a hidden word keeps its own look there too. */
-.line.is-now .word:not(.is-filler, .is-hidden) {
+/*
+ * The line now playing: brighter chips, but a filler or a hidden word keeps its own look there too. Held to a plain
+ * class's weight (`:where`), so a selected word's press fill below wins on this line as well.
+ */
+:where(.line.is-now) .word:where(:not(.is-filler, .is-hidden)) {
   background: var(--color-bay-hover);
 }
 
