@@ -973,7 +973,8 @@ fn system_prompt_explains_the_context_and_the_rules() {
     // clips still being heard, and the line saying the quoted parts are not requests.
     for needle in [
         "## Project",
-        "## Now",
+        // Last in the context; said apart from the heading, which reads "## Now".
+        "## Now (last):",
         "## Transcript",
         "## Scenes",
         "c1, c2",
