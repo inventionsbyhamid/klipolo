@@ -140,9 +140,9 @@ fn out_after_hold(plan: &Plan, end: Us, gap_us: Us) -> Option<[Key; 2]> {
     ])
 }
 
-/// One Auto zoom item per span, each attached to the clip under it on the first zoom track with room: the whole
-/// frame, no effects, zooming at most `scale`, framing the kinds in `using` (sorted, each once, none when all three:
-/// every kind). Ids come from `mint`, in span order.
+/// One Auto zoom item per span of some length, each attached to the clip under it on the first zoom track with room:
+/// the whole frame, no effects, zooming at most `scale`, framing the kinds in `using` (sorted, each once, none when all
+/// three: every kind). Ids come from `mint`, in span order; a span of no length takes none.
 pub fn auto_zoom_ops(
     spans: &[(Us, Us)],
     scale: f64,
@@ -151,6 +151,7 @@ pub fn auto_zoom_ops(
 ) -> Vec<Op> {
     let using = canonical(using);
     (spans.iter())
+        .filter(|s| s.0 < s.1)
         .map(|&(from, to)| Op::AddItem {
             track: TrackTarget::Auto,
             attach: true,

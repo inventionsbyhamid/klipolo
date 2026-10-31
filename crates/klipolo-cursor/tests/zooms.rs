@@ -311,6 +311,25 @@ fn ops_are_attached_auto_zoom_items_at_2x() {
 }
 
 #[test]
+fn spans_of_no_length_make_no_items() {
+    let mut n = 0;
+    let mut mint = || {
+        n += 1;
+        format!("zoom-{n}")
+    };
+    let spans = [(S, S), (3 * S, 2 * S), (4 * S, 5 * S)];
+    let ops = auto_zoom_ops(&spans, AUTO_SCALE, CLICKS, &mut mint);
+    assert_eq!(ops.len(), 1, "{ops:?}");
+    let Op::AddItem { item, .. } = &ops[0] else {
+        panic!("{ops:?}")
+    };
+    assert_eq!(
+        (item.id.as_str(), item.start_us, item.duration_us),
+        ("zoom-1", 4 * S, S)
+    );
+}
+
+#[test]
 fn the_last_zoom_ends_after_its_hold_not_at_the_take_end() {
     let p = planned(&LATE, (0, 60 * S));
     // The camera holds its last shot until the take's end...
