@@ -59,10 +59,9 @@ fn it_closes_when_a_take_arms_and_never_opens_during_one() {
     let view = p.worker(LIVE);
     p.arm(options_screen()).unwrap();
     p.send(Command::Start).unwrap();
-    assert_eq!(p.launch.commands(), [Command::Stop, Command::Start]);
-    // A frame the closing view still sends never reaches the page.
-    p.says(view, frame());
-    assert!(p.frames().is_empty());
+    assert_eq!(p.launch.kills(), [true], "killed at arming");
+    assert_eq!(p.launch.commands(), [Command::Start]);
+    assert!(p.told(view).is_empty());
     // While a take runs, it never opens.
     let refused = p.set(live(screen())).unwrap_err();
     assert_eq!(refused.code, "capture.busy");

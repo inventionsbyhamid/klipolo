@@ -25,6 +25,8 @@ pub(super) enum Logged {
     Spawn(Vec<String>),
     /// Worker `.0` (in launch order, from 0) was sent a command.
     Command(usize, Command),
+    /// Worker `.0` was stopped by the app: at once (`true`) or asked to (`false`).
+    Kill(usize, bool),
 }
 
 #[derive(Default)]
@@ -176,6 +178,8 @@ impl Launch for FakeLaunch {
             // A hung worker ignores the request; the hard stop ends it as a signal does.
             kill: Box::new(move |hard| {
                 launched.kills.lock().unwrap().push(hard);
+                let logged = Logged::Kill(index, hard);
+                launched.log.lock().unwrap().push(logged);
                 if hard {
                     end(&killed, None, &launched.sent);
                 }

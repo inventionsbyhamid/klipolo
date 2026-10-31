@@ -24,9 +24,10 @@
 //! - Nothing restarts by itself after it ended, but a stills worker held back by its pace (below).
 //!
 //! **Stopping:** every preview stops when Klipolo's main window goes behind another app or is hidden or minimised
-//! (nothing starts again until it is in front and the page asks), when a take arms (before its worker is launched, and
-//! none starts while the take is the recorder's: its worker owns the screen and the devices), on
-//! `recorder_previews_off`, and when Klipolo exits (killed). In a test run there are none.
+//! (nothing starts again until it is in front and the page asks), and on `recorder_previews_off`. When a take arms, every
+//! preview worker is killed at once, before the take's worker is launched (previews write nothing, and none captures
+//! beside the take on this Mac's one encoder engine), and none starts while the take is the recorder's: its worker
+//! owns the screen and the devices. When Klipolo exits they are killed too. In a test run there are none.
 //!
 //! **The stills' pace:** each stills worker starts with a content read and a still at once, so a new one starts at most
 //! once every `THUMB_EVERY`; one asked for sooner waits its turn (the ticker's).
@@ -264,13 +265,12 @@ impl PreviewWorkers {
         }
     }
 
-    /// A take arms: every preview stops, then `arm` runs, under the previews' lock, so none starts until the take is
-    /// the recorder's (`set` refuses from then on).
-    pub(super) fn around_arm<T>(self: &Arc<Self>, arm: impl FnOnce() -> T) -> T {
-        let now = self.now_ms();
+    /// A take arms: every preview worker, open or closing, is killed at once (they write nothing), then `arm` runs,
+    /// under the previews' lock, so none starts until the take is the recorder's (`set` refuses from then on).
+    pub(super) fn around_arm<T>(&self, arm: impl FnOnce() -> T) -> T {
         let mut run = self.lock();
-        if self.stop_all(&mut run, now) {
-            tracing::info!("recorder: a take arms, so the previews stop first");
+        if kill_all(&mut run) {
+            tracing::info!("recorder: a take arms, so the previews are stopped at once");
         }
         arm()
     }
@@ -288,16 +288,7 @@ impl PreviewWorkers {
 
     /// Klipolo exits: every preview worker, open or closing, is killed now (each runs in a session of its own).
     pub(super) fn exit(&self) {
-        let mut run = self.lock();
-        for kind in Kind::ALL {
-            if let Some(open) = run.slot(kind).take() {
-                (open.worker.kill)(true);
-            }
-        }
-        for closing in (run.closing.iter_mut()).filter(|c| !c.killed) {
-            (closing.worker.kill)(true);
-            closing.killed = true;
-        }
+        kill_all(&mut self.lock());
     }
 
     /// The ticker: a closed preview that hasn't ended is killed, and a stills worker that waited its turn starts. False
@@ -620,6 +611,28 @@ fn failed(run: &mut Running, kind: Kind, error: CodedError) {
     if let Some(out) = &run.out {
         out.event(kind.id(), &Event::Failed { error });
     }
+}
+
+/// Every preview worker, open or closing, is killed at once, and nothing is sent to the page any more. True when one
+/// was.
+fn kill_all(run: &mut Running) -> bool {
+    let mut killed = false;
+    for kind in Kind::ALL {
+        if let Some(open) = run.slot(kind).take() {
+            (open.worker.kill)(true);
+            killed = true;
+        }
+    }
+    for closing in (run.closing.iter_mut()).filter(|c| !c.killed) {
+        (closing.worker.kill)(true);
+        closing.killed = true;
+        killed = true;
+    }
+    run.want_thumbs = false;
+    run.thumbs_due = false;
+    run.out = None;
+    run.in_flight = [0; 3];
+    killed
 }
 
 /// Closes `kind`'s preview (`check::closing`). True when one was open.

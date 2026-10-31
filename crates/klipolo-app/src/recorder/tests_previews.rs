@@ -211,37 +211,40 @@ fn leaving_the_window_stops_every_preview() {
 }
 
 #[test]
-fn arming_stops_every_preview_before_the_take_spawns() {
+fn arming_kills_every_preview_before_the_take_spawns() {
     let p = previewing(all_allowed());
     p.set(everything()).unwrap();
-    let workers = [THUMBS, LIVE, CAMERA, METER].map(|flag| p.worker(flag));
+    let mut workers = [THUMBS, LIVE, CAMERA, METER]
+        .map(|flag| p.worker(flag))
+        .to_vec();
+    // One more still closing, in its wait: the earlier live picture.
+    p.set(Previews {
+        live: Some(notes()),
+        ..everything()
+    })
+    .unwrap();
+    workers.push(p.worker(LIVE));
     let take = p.arm(options_screen()).unwrap();
     let log = p.launch.log();
     let launched = (log.iter())
         .position(|l| matches!(l, Logged::Spawn(args) if !args[1].starts_with("--")))
         .expect("the take's worker");
     for worker in workers {
-        let stopped = log
-            .iter()
-            .position(|l| *l == Logged::Command(worker, Command::Stop));
+        let killed = log.iter().position(|l| *l == Logged::Kill(worker, true));
         assert!(
-            stopped.is_some_and(|at| at < launched),
+            killed.is_some_and(|at| at < launched),
             "worker {worker}: {log:?}"
         );
     }
     // While the take is the recorder's, nothing starts, and the page hears why.
     let refused = p.set(everything()).unwrap_err();
     assert_eq!(refused.code, "capture.busy");
-    assert_eq!(p.launch.spawned(), 5);
-    // A frame a closing preview still sends never reaches the page.
-    p.says(workers[2], frame());
-    assert!(p.frames().is_empty());
+    assert_eq!(p.launch.spawned(), 6);
     // Record: the take's own Start goes only to the take.
     p.send(Command::Start).unwrap();
     assert_eq!(p.launch.commands().last(), Some(&Command::Start));
     assert!(!take.id.starts_with("preview-"));
 }
-
 #[test]
 fn test_run_starts_no_preview() {
     let state = RecorderState::build(true, || panic!("a test run makes no recorder"));

@@ -17,8 +17,8 @@ fn camera() -> Previews {
     }
 }
 
-/// Record closes the camera's preview before the take starts: the preview's Stop goes out at arming, then the take's
-/// Start.
+/// Record closes the camera's preview before the take starts: the preview is killed at arming, then the take's Start
+/// goes out.
 #[test]
 fn record_closes_the_camera_preview_before_the_take_starts() {
     let p = previewing(all_allowed());
@@ -29,7 +29,8 @@ fn record_closes_the_camera_preview_before_the_take_starts() {
     );
     p.arm(options_screen()).unwrap();
     p.send(Command::Start).unwrap();
-    assert_eq!(p.launch.commands(), [Command::Stop, Command::Start]);
+    assert_eq!(p.launch.kills(), [true]);
+    assert_eq!(p.launch.commands(), [Command::Start]);
 }
 
 /// Its frames reach the page under the camera's id; once it closes, a frame it still sends never does.
