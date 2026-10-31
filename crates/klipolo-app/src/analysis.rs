@@ -551,6 +551,18 @@ impl AnalysisState {
         }
     }
 
+    /// Another project opened, or the project closed: the runs going are cancelled (their requests in flight finish,
+    /// and an uploaded clip is still deleted), and the old project's assets are forgotten, so nothing more is told
+    /// about them and the engine's speech starts empty. What the files' analysis found stays (as their cache does):
+    /// the next project's assets on the same files get it at once.
+    pub fn project_changed(&self) {
+        self.cancel();
+        let mut inner = lock(&self.inner);
+        inner.keys.clear();
+        inner.speech = Speech::default();
+        (self.speech_sink)(Arc::new(inner.speech.clone()));
+    }
+
     /// Where `asset_id`'s analysis is.
     pub fn state_of(&self, asset_id: &str) -> AssetState {
         let inner = lock(&self.inner);

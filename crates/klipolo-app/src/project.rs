@@ -41,6 +41,8 @@ pub(crate) use session::opened;
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::watch;
 
+use crate::commands::analysis::AnalysisHandle;
+
 /// A project file's extension: `~/Movies/Klipolo/<name>.klipolo`.
 pub(crate) const PROJECT_EXTENSION: &str = "klipolo";
 /// How long closing, switching or quitting waits for the last save.
@@ -133,31 +135,40 @@ pub(crate) fn allow_assets(app: &AppHandle, project: &Project) {
     }
 }
 
-/// A new project named `name` (the first format is its primary), saved in the library and opened.
+/// A new project named `name` (the first format is its primary), saved in the library and opened. The open project's
+/// analysis stops first (`AnalysisState::project_changed`).
 #[tauri::command(async)]
 pub fn project_create(
     state: State<'_, ProjectSessionState>,
+    analysis: State<'_, AnalysisHandle>,
     name: String,
     formats: Vec<FormatKind>,
 ) -> Result<Snapshot, Said> {
+    analysis.project_changed();
     create_in(&state, &library_dir()?, new_project(&name, formats))
 }
 
-/// Opens the project file at `path` (the open one is saved and closed first).
+/// Opens the project file at `path` (the open one is saved and closed first, and its analysis stops).
 #[tauri::command(async)]
 pub fn project_open(
     app: AppHandle,
     state: State<'_, ProjectSessionState>,
+    analysis: State<'_, AnalysisHandle>,
     path: String,
 ) -> Result<Snapshot, Said> {
+    analysis.project_changed();
     let snapshot = open_in(&state, Path::new(&path))?;
     allow_assets(&app, &snapshot.project);
     Ok(snapshot)
 }
 
-/// Closes the open project once its edits are saved.
+/// Closes the open project once its edits are saved; its analysis stops.
 #[tauri::command(async)]
-pub fn project_close(state: State<'_, ProjectSessionState>) -> Result<(), Said> {
+pub fn project_close(
+    state: State<'_, ProjectSessionState>,
+    analysis: State<'_, AnalysisHandle>,
+) -> Result<(), Said> {
+    analysis.project_changed();
     set_open(&state, None).map(|_| ())
 }
 

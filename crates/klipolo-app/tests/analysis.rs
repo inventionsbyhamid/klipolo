@@ -1306,3 +1306,36 @@ async fn the_estimate_says_why_a_code_cannot_pay_yet() {
     assert_eq!((estimate.problem, estimate.usd), (None, 0.0));
     server.verify().await;
 }
+
+/// Another project opens while a clip is being analysed: its run is cancelled, the old project's clip is forgotten (no
+/// more events for it, no state), and the engine's speech starts empty.
+#[tokio::test(flavor = "multi_thread")]
+async fn another_project_stops_analysis_and_starts_with_no_speech() {
+    let server = MockServer::start().await;
+    let h = harness(&server, key_store(), FakeMedia::whole(SECONDS));
+    mount_speech(&server, "/v1", &h.aligns, Duration::from_millis(400)).await;
+    nothing_else(&server).await;
+    let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 2), SECONDS);
+
+    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while h.aligns.load(Ordering::SeqCst) == 0 {
+        assert!(Instant::now() < deadline, "word timing never started");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert!(h.last_speech().transcripts.contains_key("talk"));
+    let told = h.events.lock().unwrap().len();
+    h.state.project_changed();
+    started.finished().await;
+
+    assert!(h.last_speech().transcripts.is_empty() && h.last_speech().levels.is_empty());
+    assert_eq!(h.state.state_of("talk"), AssetState::None);
+    assert!(h.state.states().is_empty());
+    assert!(h.state.analysis_for("talk").is_none());
+    assert_eq!(
+        h.events.lock().unwrap().len(),
+        told,
+        "nothing told about the old project"
+    );
+    server.verify().await;
+}
