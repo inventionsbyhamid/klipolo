@@ -174,8 +174,11 @@ export function addTransition(clipId: string) {
   });
 }
 
-/** Remove transition (Delete with one selected, the card's Remove): clip `clipId`'s transition out. */
-export function removeTransition(clipId: string) {
+/**
+ * Remove transition (Delete with one selected, the card's Remove): clip `clipId`'s transition out. `focusCut`: focus
+ * goes to its cut once it has gone (the card's Remove, which goes with it), never to the page.
+ */
+export function removeTransition(clipId: string, { focusCut = false }: { focusCut?: boolean } = {}) {
   keyBurst.after(() => {
     const project = editable();
     const i = project ? cutIndex(project, clipId) : -1;
@@ -185,6 +188,9 @@ export function removeTransition(clipId: string) {
       'transition.remove',
       [transitionOp(clipId, null)],
       t({ id: 'transition.removed', message: `Removed the transition between ${before} and ${after}` }),
+      () => {
+        if (focusCut) useTimelineFocus.getState().focus(cutId(clipId), true);
+      },
     );
   });
 }

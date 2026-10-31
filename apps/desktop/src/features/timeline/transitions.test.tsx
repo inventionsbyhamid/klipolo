@@ -484,4 +484,24 @@ describe('the cut markers and the clips around them', () => {
       ops: [{ type: 'setTransition', clipId: 'a', transition: { effect: WIPE, durationUs: 4_000_000, params: {} } }],
     });
   });
+
+  it("the card's Remove leaves focus on the cut, never the page", async () => {
+    vi.mocked(bridge.apply).mockImplementation(engineApplies(0));
+    useProject.setState({ snapshot: withDissolve() });
+    useSelection.setState({ selectedId: 'transition:a' });
+    renderWithProviders(
+      <>
+        <Timeline />
+        <Inspector format="landscape" />
+      </>,
+    );
+    const remove = screen.getByRole('button', { name: 'Remove transition' });
+    act(() => remove.focus());
+    await userEvent.keyboard('{Enter}');
+    await frames();
+    expect(useProject.getState().snapshot!.project.timeline.main[0].transitionOut).toBeUndefined();
+    // The card has gone with it; the cut it was at has the focus.
+    expect(screen.queryByRole('complementary', { name: 'Transition settings' })).toBeNull();
+    expect(cutMarker()).toHaveFocus();
+  });
 });

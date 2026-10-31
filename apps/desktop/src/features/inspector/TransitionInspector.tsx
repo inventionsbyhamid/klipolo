@@ -143,7 +143,7 @@ export function TransitionInspector({ project, clip, index, transition }: Inspec
         <button
           type="button"
           className="btn btn-secondary btn-sm insp-remove"
-          onClick={() => removeTransition(clip.id)}
+          onClick={() => removeTransition(clip.id, { focusCut: true })}
         >
           <Icon name="trash" />
           {labelText('transition.remove')}
