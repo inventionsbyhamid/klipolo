@@ -2,11 +2,11 @@ import type { UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 
 /**
- * Files dragged onto the window from Finder: held over it (with where, in page px), gone again, or dropped (their
- * paths, in Finder's order).
+ * Files dragged onto the window from Finder: held over it (with where, in page px, and their paths as they come in),
+ * gone again, or dropped (their paths, in Finder's order).
  */
 export type FileDrag =
-  | { type: 'over'; x: number; y: number }
+  | { type: 'over'; x: number; y: number; paths?: string[] }
   | { type: 'leave' }
   | { type: 'drop'; paths: string[]; x: number; y: number };
 
@@ -27,6 +27,7 @@ export function onFileDrag(handler: (drag: FileDrag) => void): Promise<UnlistenF
     const x = payload.position.x / dpr;
     const y = payload.position.y / dpr;
     if (payload.type === 'drop') handler({ type: 'drop', paths: payload.paths, x, y });
+    else if (payload.type === 'enter') handler({ type: 'over', x, y, paths: payload.paths });
     else handler({ type: 'over', x, y });
   });
 }

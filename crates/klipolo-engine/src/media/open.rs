@@ -4,10 +4,10 @@
 //! file named like media would then make the probe, and every decode after it, read whatever those names reach (links
 //! included), so every input opens here, with:
 //! - `format_whitelist`: only the demuxers for what Klipolo reads. The person's import types (`mp4 mov m4v mkv webm avi
-//!   mp3 wav m4a aac flac ogg png jpg jpeg webp gif`, the import's extension list) and Klipolo's own files (recordings'
-//!   `mp4` and `caf`, editing copies, proxies and export segments in `mp4`/`mov`) need `mov`, `matroska`, `avi`,
-//!   `mp3`, `wav`, `aac`, `flac`, `ogg`, `caf`, `gif`, `apng` (an animated PNG: it wins over `png_pipe` for one
-//!   N1), the single-image pipes and `image2`. A file whose contents pick any other demuxer (`concat`, `hls`,
+//!   mp3 wav m4a aac flac ogg png jpg jpeg webp heic avif tif tiff gif`, the import's extension list) and Klipolo's own
+//!   files (recordings' `mp4` and `caf`, editing copies, proxies and export segments in `mp4`/`mov`) need `mov` (HEIC
+//!   and AVIF too), `matroska`, `avi`, `mp3`, `wav`, `aac`, `flac`, `ogg`, `caf`, `gif`, `apng` (an animated PNG: it
+//!   wins over `png_pipe` for one), the single-image pipes (`tiff_pipe` for a TIFF) and `image2`. A file whose
 //!   `subfile`, `sdp`, `rtsp`, `tty`…) is refused before that demuxer reads anything;
 //! - `pattern_type=none`: `image2` (which wins for most JPEG photos, by their extension) reads the file named, never a
 //!   numbered sequence or a glob;
@@ -28,9 +28,12 @@ use ffmpeg::format::context::Input;
 
 /// The demuxers Klipolo reads with (see the module's doc). A demuxer's name lists its aliases (`mov,mp4,m4a,3gp,…`);
 /// one of them matching is enough. Widening this: rename the failure mark in `media/activity/files.rs` (and on an FFmpeg
-/// upgrade that adds a decoder), so files refused before are analysed again.
-pub const DEMUXERS: &str =
-    "mov,matroska,avi,mp3,wav,aac,flac,ogg,caf,gif,apng,image2,png_pipe,jpeg_pipe,webp_pipe";
+/// upgrade that adds a decoder), so files refused before are analysed again. `tiff_pipe` reads a still picture only,
+/// which that pass never analyses, so it came in without a rename.
+pub const DEMUXERS: &str = concat!(
+    "mov,matroska,avi,mp3,wav,aac,flac,ogg,caf,gif,apng,",
+    "image2,png_pipe,jpeg_pipe,webp_pipe,tiff_pipe"
+);
 
 /// The options every input opens with, then `extra`'s.
 fn guarded(extra: ffmpeg::Dictionary) -> ffmpeg::Dictionary<'static> {

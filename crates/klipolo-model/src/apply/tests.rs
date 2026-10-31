@@ -46,6 +46,7 @@ fn titled() -> Project {
         fps: 30.0,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
         rotation: None,
     }];
     p.timeline.main = (0..10)
@@ -115,6 +116,7 @@ fn file(id: &str, kind: AssetKind) -> Asset {
         fps: 30.0,
         has_audio: kind == AssetKind::Audio,
         audio_lead_us: None,
+        made_with: None,
         rotation: None,
     }
 }
@@ -605,6 +607,88 @@ fn a_run_of_speed_changes_lays_out_once_as_one_by_one_would() {
     let batch = apply_ops(&separated, &ops).unwrap();
     assert_eq!(passes() - before, 2);
     assert_eq!(batch, one_by_one(&separated, &ops));
+}
+
+/// A sound layer of `asset` from `start` for `length`, attached to the clip under it; music when `duck` is set.
+fn sound_item(
+    p: &Project,
+    id: &str,
+    asset: &str,
+    start: Us,
+    length: Us,
+    duck: Option<f64>,
+) -> Item {
+    Item {
+        id: id.into(),
+        start_us: start,
+        duration_us: length,
+        attach: if duck.is_some() {
+            None
+        } else {
+            anchor_at(&p.timeline.main, start)
+        },
+        layout: Layout::new(Anchor::TopLeft, BoxN::FULL),
+        content: ItemContent::Audio {
+            asset_id: asset.into(),
+            source_in_us: 0,
+            volume: 1.0,
+            muted: false,
+            fade_in_us: 0,
+            fade_out_us: 0,
+            effect: None,
+            drift_ppm: 0.0,
+            centre_from: None,
+            tie: None,
+            duck,
+        },
+        effects: Vec::new(),
+    }
+}
+
+/// Two sound effects that a faster clip squeezes together, under an audio track that holds music with a gap where the
+/// second one lands: the bump that moves it up settles alike as one batch, op by op, and through the whole-project
+/// reference pass (which `verify-normalize` checks after every op).
+#[test]
+fn a_bumped_sound_under_music_settles_alike_in_a_batch_and_op_by_op() {
+    let mut p = titled();
+    p.assets.extend([
+        file("pop", AssetKind::Audio),
+        file("song", AssetKind::Audio),
+    ]);
+    let mut sfx = Track::new(TrackKind::Audio, "Sounds");
+    sfx.id = "sfx".into();
+    sfx.items = vec![
+        sound_item(&p, "a", "pop", S, S, None),
+        sound_item(&p, "b", "pop", 2 * S + S / 10, S, None),
+    ];
+    let mut music = Track::new(TrackKind::Audio, "Music");
+    music.id = "music".into();
+    music.items = vec![sound_item(&p, "bed", "song", 20 * S, 40 * S, Some(-12.0))];
+    p.timeline.tracks.extend([sfx, music]);
+    normalize(&mut p);
+    let ops = vec![
+        Op::MoveItem {
+            id: "title-0".into(),
+            track_id: None,
+            start_us: S,
+        },
+        speed("clip-0", 4.0),
+        speed("clip-1", 2.0),
+    ];
+    let batch = apply_ops(&p, &ops).unwrap();
+    assert_eq!(batch, one_by_one(&p, &ops));
+    assert_eq!(batch, whole_pass_after_every_op(&p, &ops).unwrap());
+    let on = |q: &Project, id: &str| {
+        q.timeline.tracks[crate::query::find_item(q, id).unwrap().0]
+            .id
+            .clone()
+    };
+    assert_eq!(on(&batch, "a"), "sfx");
+    assert_ne!(
+        on(&batch, "b"),
+        "sfx",
+        "squeezed onto the first, it was bumped up"
+    );
 }
 
 /// What a batch finds through its index, and the layers it updates in their slots, give exactly

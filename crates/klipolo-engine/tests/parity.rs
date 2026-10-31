@@ -1,7 +1,8 @@
 //! Pins TS `resolveRect`/`cameraRect`/`containRect`/`textScale` (apps/desktop/src/lib/layout.ts) to Rust: gizmos
 //! hit-test with the TS functions, the engine draws with these. Also `shownFromUs`
 //! (apps/desktop/src/lib/timeline.ts): where the editor puts the playhead to show a layer, past a title's intro
-//! animation. Regenerate with `KLIPOLO_UPDATE_PARITY=1 cargo test -p klipolo-engine --test parity`.
+//! animation. And `fullFrame` and `titleLayout` (`lib/layout.ts`) and the 9:16 safe area (`lib/safeAreas`). Regenerate with
+//! `KLIPOLO_UPDATE_PARITY=1 cargo test -p klipolo-engine --test parity`.
 
 use std::fs;
 use std::path::PathBuf;
@@ -108,6 +109,7 @@ fn build() -> Value {
                 fps: 0.0,
                 has_audio: false,
                 audio_lead_us: None,
+                made_with: None,
                 rotation: None,
             };
             for format in FORMATS {
@@ -212,9 +214,33 @@ fn build() -> Value {
         };
         shown.push(json!({ "item": item, "shownUs": shown_from_us(&item) }));
     }
-    sorted_keys(
-        json!({ "rects": rects, "cameras": cameras, "contains": contains, "texts": texts, "shown": shown }),
-    )
+    // A layer that fills the frame in every format (title templates), and the area a 9:16 text preset sits in, which
+    // is the preview's safe area: the page builds and draws both.
+    let full_frame = Layout::full_frame();
+    let portrait_clear = klipolo_model::media::text::PORTRAIT_CLEAR;
+    // Where a title the person adds on the canvas goes in each format, whichever is the primary.
+    let title_text: Vec<Value> = FORMATS
+        .iter()
+        .map(|&primary| {
+            json!({
+                "primary": primary,
+                "layout": klipolo_model::media::text::preset_layout(
+                    klipolo_model::media::text::TextPreset::Title,
+                    primary,
+                ),
+            })
+        })
+        .collect();
+    sorted_keys(json!({
+        "rects": rects,
+        "cameras": cameras,
+        "contains": contains,
+        "texts": texts,
+        "shown": shown,
+        "fullFrame": full_frame,
+        "portraitClear": portrait_clear,
+        "titleText": title_text,
+    }))
 }
 
 /// `v` with every object's keys sorted, at every depth: the fixture is the same whether or not a crate that turns on

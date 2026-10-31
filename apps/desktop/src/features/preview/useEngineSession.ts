@@ -8,6 +8,7 @@ import { isCurrentFrame, useEngine } from '../../state/engine';
 import { useMedia } from '../../state/media';
 import { sendSeek, usePlayback } from '../../state/playback';
 import { toast } from '../../state/toasts';
+import { resendEditing } from './textEdit';
 
 function onEngineEvent(event: EngineEvent) {
   switch (event.type) {
@@ -15,6 +16,8 @@ function onEngineEvent(event: EngineEvent) {
       useEngine.getState().setSession(event.session);
       // A new session starts at 0 in the engine; show where the playhead actually is.
       sendSeek(usePlayback.getState().playheadUs);
+      // A title typed on the canvas meanwhile is left out of the new session's frames too.
+      resendEditing();
       break;
     case 'warning':
       toast.error(event.message);

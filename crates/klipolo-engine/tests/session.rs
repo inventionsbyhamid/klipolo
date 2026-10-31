@@ -236,6 +236,7 @@ async fn a_dry_run_trim_moves_the_page() {
         rotation: None,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
     }];
     let mut c = Clip::new(ClipSource::Asset { id: "v".into() }, 0, secs(10.0));
     c.id = "c".into();

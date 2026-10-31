@@ -2,7 +2,8 @@ import type { Asset } from '../../../bindings/Asset';
 import { cn } from '../../../design/cn';
 import { IMAGE_US } from '../../../lib/placement';
 import { useDragState } from '../../../state/dragState';
-import { dropAutoscroll, dropTargetAt, setDropIndicator, type DropTarget } from '../dropTarget';
+import { toast } from '../../../state/toasts';
+import { dropAutoscroll, dropRefusal, dropTargetAt, setDropIndicator, type DropTarget } from '../dropTarget';
 import { DRAG_SLOP_PX, type PointerLike } from './session';
 
 /** The ghost sits this far below and right of the pointer, so it never hides where the drop goes. */
@@ -97,8 +98,11 @@ function onUp(e: PointerEvent) {
   if (!d || e.pointerId !== d.pointerId) return;
   // Where it is let go, not where the last frame drew it.
   const target = d.ghost ? dropTargetAt(e.clientX, e.clientY, d.asset.kind) : null;
+  // Let go over a lane that won't take it: which lane does.
+  const refused = d.ghost && !target ? dropRefusal(e.clientX, e.clientY, d.asset.kind) : null;
   end();
   if (target) d.onDrop(target);
+  else if (refused) toast.info(refused);
 }
 
 function onCancel(e: PointerEvent) {

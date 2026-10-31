@@ -24,6 +24,7 @@ fn asset(id: &str) -> klipolo_model::project::Asset {
         rotation: None,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
     }
 }
 

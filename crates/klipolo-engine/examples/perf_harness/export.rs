@@ -53,6 +53,7 @@ fn project_of(seconds: f64) -> Project {
         fps: 30.0,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
         rotation: None,
     }];
     p.timeline.main = vec![Clip::new(

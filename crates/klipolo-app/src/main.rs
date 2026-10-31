@@ -5,6 +5,7 @@ mod engine;
 mod log;
 mod media;
 mod media_cache;
+mod pack;
 mod project;
 mod state;
 
@@ -42,6 +43,12 @@ fn main() {
             let cache = app.path().app_cache_dir().ok();
             app.manage(EngineState::new(Some(warm), cache));
             let projects = ProjectSessionState::default();
+            // Klipolo's pack where this install has it; a project's pack files point here as it opens.
+            projects.set_pack(
+                pack::pack_dir(app.path().resource_dir().ok())
+                    .map(|dir| pack::Pack::read(&dir))
+                    .unwrap_or_default(),
+            );
             let handle = app.handle().clone();
             projects.set_save_report(Arc::new(move |status: SaveStatus| {
                 let _ = handle.emit("project-save", status);
@@ -49,9 +56,7 @@ fn main() {
             // The project open when the app last quit opens again; the page reads it with `project_snapshot`.
             if let Ok(data) = app.path().app_data_dir() {
                 projects.remember_last_in(data.join("last-project"));
-                if let Some(snapshot) = projects.open_last() {
-                    project::allow_assets(app.handle(), &snapshot.project);
-                }
+                projects.open_last();
             }
             // The Captions panel's pages, one build kept; new speech on the feed is told to the page.
             app.manage(klipolo_app::captions::CaptionsCache::default());
@@ -84,6 +89,7 @@ fn main() {
             engine::engine_preview_clear,
             engine::engine_play,
             engine::engine_pause,
+            engine::engine_set_editing,
             project::project_create,
             project::project_open,
             project::project_close,
@@ -104,6 +110,17 @@ fn main() {
             media_cache::media_peaks_info,
             media_cache::media_peaks,
             media_cache::media_thumbs,
+            commands::media::media_add_music,
+            commands::media::media_add_sound,
+            commands::media::media_add_image,
+            commands::media::media_place,
+            commands::media::media_add_text,
+            commands::media::media_update_item,
+            commands::media::media_picture,
+            commands::media::media_speech_ranges,
+            commands::media::library_pack,
+            commands::fonts::fonts_bundled,
+            commands::fonts::fonts_face,
             commands::captions::captions_pages,
             commands::captions::captions_find,
             commands::captions::dev_fixture_speech,

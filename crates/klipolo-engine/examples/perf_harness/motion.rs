@@ -66,6 +66,7 @@ fn scene(png: &Path, layers: [(Option<Motion>, Option<Blend>); 4]) -> Project {
         fps: 0.0,
         has_audio: false,
         audio_lead_us: None,
+        made_with: None,
         rotation: None,
     });
     let boxes = [(0.05, 0.1), (0.55, 0.1), (0.05, 0.55), (0.55, 0.55)];

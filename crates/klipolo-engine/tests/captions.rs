@@ -30,6 +30,7 @@ fn project(style: &str) -> Project {
         rotation: None,
         has_audio: true,
         audio_lead_us: None,
+        made_with: None,
     }];
     p.timeline.main = vec![Clip::new(ClipSource::Asset { id: "v".into() }, 0, s(10.0))];
     klipolo_model::apply_ops(&p, &[]).unwrap()
