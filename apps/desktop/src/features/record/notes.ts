@@ -19,7 +19,7 @@ const BLOCKING = [
 
 /**
  * Notes the setup words about the default camera and mic: the dialog says them for the devices chosen instead
- * (`notesBefore`).
+ * (`notesBefore`), and the camera's fit for the take's display under the camera (`cameraNote`).
  */
 const FOR_THE_CHOICE: ReadonlySet<string> = new Set([
   'capture.preflight.cameraBusy',
@@ -48,10 +48,23 @@ export function notesBefore(setup: RecorderSetup, picks: Picks): CodedError[] {
   const camera = setup.devices.cameras.find((c) => c.id === picks.camera);
   if (camera?.inUse) notes.push(coded('capture.preflight.cameraBusy', { device: camera.name }));
   else if (camera?.suspended) notes.push(coded('capture.preflight.cameraOff', { device: camera.name }));
-  if (camera) notes.push(...setup.notes.filter((n) => n.code === 'capture.preflight.cameraWithScreen'));
   const mic = setup.devices.mics.find((m) => m.id === picks.mic);
   if (mic?.isVirtual) notes.push(coded('capture.preflight.virtualMic', { device: mic.name }));
   return notes;
+}
+
+/**
+ * Why the chosen camera isn't recorded beside the screen at the quality the take records at, null when it is (or with
+ * "No camera"). The quality is the one the app plans the take at: the best offer for a whole screen or an app's
+ * windows on the take's display with the camera on (else its first), from the setup the dialog shows. Arming
+ * starts the take at once, so the person reads this here, before Record.
+ */
+export function cameraNote(setup: RecorderSetup, picks: Picks): CodedError | null {
+  if (picks.camera === null) return null;
+  const listed = setup.displays.find((d) => d.display === picks.display) ?? setup.displays[0];
+  const fit = listed ? (listed.withCamera ?? listed.noCamera) : { choices: setup.choices, offers: setup.offers };
+  const offer = fit.offers.find((o) => o.bestNative) ?? fit.offers[0];
+  return offer ? offer.cameraNote : fit.choices.cameraNote;
 }
 
 /** Why Record can't start yet, as the dialog says it; null when it can. */

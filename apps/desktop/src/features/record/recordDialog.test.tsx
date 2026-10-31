@@ -3,6 +3,7 @@ import { userEvent } from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PresetOffer } from '../../bindings/PresetOffer';
 import type { RecorderSetup } from '../../bindings/RecorderSetup';
 import { REOPEN_GRACE_MS, useRecorder } from '../../state/recorder';
 import { useToasts } from '../../state/toasts';
@@ -253,6 +254,45 @@ describe('the dialog and its choices', () => {
     expect(dialog).toHaveTextContent('Loopback is a virtual microphone. Your voice may not be recorded.');
     await choose('Camera: No camera', 'FaceTime HD Camera');
     expect(dialog).toHaveTextContent('FaceTime HD Camera is in use by another app.');
+  });
+
+  it('the_camera_s_note_at_the_take_s_quality_shows_while_a_camera_is_chosen', async () => {
+    const note = "This computer can't record your camera at the same time as the screen.";
+    const base = recorderSetup({ cameras: [device('FaceTime HD Camera')] });
+    const offer = (over: Partial<PresetOffer>): PresetOffer => ({
+      id: 'native60',
+      width: 2560,
+      height: 1440,
+      fps: 60,
+      gbPerHour: 4,
+      minutesLeft: null,
+      bestNative: false,
+      bestGame: false,
+      camera: null,
+      cameraNote: null,
+      ...over,
+    });
+    const fitted = (offers: PresetOffer[]) => ({ choices: base.choices, offers });
+    const setup: RecorderSetup = {
+      ...base,
+      displays: [
+        {
+          display: 'main',
+          noCamera: fitted([offer({ bestNative: true })]),
+          // The take records at the best offer for a whole screen, not the first one listed.
+          withCamera: fitted([
+            offer({ id: 'light' }),
+            offer({ bestNative: true, cameraNote: { code: 'capture.preflight.cameraWithScreen', params: {} } }),
+          ]),
+        },
+      ],
+    };
+    const dialog = await openOn(setup);
+    expect(dialog).not.toHaveTextContent(note);
+    await choose('Camera: No camera', 'FaceTime HD Camera');
+    expect(dialog).toHaveTextContent(note);
+    await choose('Camera: FaceTime HD Camera', 'No camera');
+    expect(dialog).not.toHaveTextContent(note);
   });
 
   it('focus_is_trapped_and_returns_to_the_trigger', async () => {

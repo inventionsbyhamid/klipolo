@@ -371,3 +371,7 @@
 .record-denied .btn {
   margin-left: calc(-1 * var(--space-5));
 }
+
+.record-field > .record-note {
+  justify-self: stretch;
+}

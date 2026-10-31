@@ -10,7 +10,7 @@ import { phaseOf, type RecorderPhase } from '../../lib/recorder/phase';
 import { useRecorder } from '../../state/recorder';
 import { DeviceSelect } from './DeviceSelect';
 import { RecordIcon } from './icons';
-import { notesBefore, notReady } from './notes';
+import { cameraNote, notesBefore, notReady } from './notes';
 import { DeniedNote, MicAskedAtRecord, ScreenStep, STEP_BUTTON_ID } from './PermissionStep';
 import { WhatToRecord } from './WhatToRecord';
 import './record.css';
@@ -217,12 +217,15 @@ function Said({ text }: { text: string }) {
 
 /**
  * The microphone and the camera. A refused one says so under its select while it is chosen; a microphone not asked
- * for yet says macOS asks at the Record press; a camera shows its two toggles.
+ * for yet says macOS asks at the Record press; a camera shows why it won't be recorded at the take's quality, if it
+ * won't, and its two toggles.
  */
 function Devices({ setup }: { setup: RecorderSetup }) {
   const picks = useRecorder((s) => s.picks);
   const pick = useRecorder((s) => s.pick);
   const pages = setup.privacySettings;
+  const fit = cameraNote(setup, picks);
+  const fitText = fit === null ? '' : codedMessage(fit);
   return (
     <div className="record-devices">
       <DeviceSelect kind="mic" devices={setup.devices.mics} value={picks.mic} onPick={(mic) => pick({ mic })}>
@@ -236,6 +239,12 @@ function Devices({ setup }: { setup: RecorderSetup }) {
         onPick={(camera) => pick({ camera })}
       >
         {deviceDenied(setup, 'camera', picks) && <DeniedNote kind="camera" pages={pages} />}
+        {fitText !== '' && (
+          <p className="record-note">
+            <Icon name="info" />
+            <span>{fitText}</span>
+          </p>
+        )}
         {picks.camera !== null && (
           <>
             <ToggleRow
