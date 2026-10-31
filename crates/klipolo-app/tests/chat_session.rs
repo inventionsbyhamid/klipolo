@@ -1111,8 +1111,17 @@ struct Studio {
 
 /// A chat on `project`, saved in a folder of its own, whose pictures `painter` draws.
 fn studio(project: Project, painter: Arc<Painter>) -> Studio {
+    studio_with(project, painter, vec![])
+}
+
+/// `studio`, the model answering from `answers`.
+fn studio_with(
+    project: Project,
+    painter: Arc<Painter>,
+    answers: Vec<Result<ModelResponse, ModelError>>,
+) -> Studio {
     let folder = tempfile::tempdir().unwrap();
-    let model = Script::new(vec![]);
+    let model = Script::new(answers);
     let paying = Paying::key(model.clone());
     *paying.images.lock().unwrap() = Ok(painter.clone());
     let projects =
@@ -1329,4 +1338,156 @@ async fn pictures_go_with_their_project() {
     let refused = s.chat.session.draw_picture(&card.id).await.unwrap_err();
     assert_eq!(sentence(refused), PICTURE_GONE);
     assert!(s.painter.asked.lock().unwrap().is_empty());
+}
+
+// ---------- Pictures the model asks for, through the compiler's jobs ----------
+
+fn at_playhead(text: &str, at: f64) -> ChatRequest {
+    ChatRequest {
+        playhead_us: secs(at),
+        ..request(text)
+    }
+}
+
+fn sticker_at_12() -> Result<ModelResponse, ModelError> {
+    answer(
+        "Drawing a paper plane.",
+        vec![fc(
+            "s",
+            "makeSticker",
+            r#"{"prompt": "paper plane", "position": null, "atSec": 12.0, "durationSec": 3.0}"#,
+        )],
+    )
+}
+
+fn cut(from: f64, to: f64) -> Transaction {
+    Transaction {
+        label: "Cut".into(),
+        ops: vec![Op::DeleteRanges {
+            ranges: vec![RangeUs {
+                start: secs(from),
+                end: secs(to),
+            }],
+        }],
+        ..Default::default()
+    }
+}
+
+/// The image layers on the overlay tracks: (track index, start, length).
+fn pictures_on(p: &Project) -> Vec<(usize, Us, Us)> {
+    (p.timeline.tracks.iter().enumerate())
+        .flat_map(|(t, track)| track.items.iter().map(move |i| (t, i)))
+        .filter(|(_, i)| {
+            matches!(
+                i.content,
+                klipolo_model::timeline::ItemContent::Image { .. }
+            )
+        })
+        .map(|(t, i)| (t, i.start_us, i.duration_us))
+        .collect()
+}
+
+#[tokio::test]
+async fn a_sticker_the_model_asks_for_follows_its_footage_while_it_is_drawn() {
+    let s = studio_with(talk(), Painter::new(vec![drawn()]), vec![sticker_at_12()]);
+    let out = s
+        .chat
+        .session
+        .send(at_playhead("add a paper plane sticker here", 12.0))
+        .await
+        .unwrap();
+    let r = reply(&out);
+    assert_eq!(r["pictures"][0]["kind"], "sticker");
+    assert_eq!(r["pictures"][0]["prompt"], "paper plane");
+    assert_eq!(
+        s.chat.project.revision(),
+        0,
+        "a picture is no op until it exists"
+    );
+    let id = r["pictures"][0]["id"].as_str().unwrap().to_owned();
+
+    // Four seconds before it are cut while it is drawn: it shows over the same footage, now at 8 s.
+    s.chat.project.hand_edit(&cut(0.0, 4.0)).unwrap();
+    s.chat.session.draw_picture(&id).await.unwrap();
+    let placed = s.chat.session.place_picture(&id).unwrap();
+    assert_eq!(placed.undo.code, "chat.makeSticker");
+    assert_eq!(
+        pictures_on(&s.chat.project.project()),
+        [(0, secs(8.0), secs(3.0))]
+    );
+    assert_eq!(s.chat.project.undo_steps(), 2, "the cut, then the sticker");
+}
+
+#[tokio::test]
+async fn a_sticker_whose_footage_was_cut_while_it_was_drawn_is_left_out() {
+    let s = studio_with(talk(), Painter::new(vec![drawn()]), vec![sticker_at_12()]);
+    let out = s
+        .chat
+        .session
+        .send(at_playhead("add a paper plane sticker here", 12.0))
+        .await
+        .unwrap();
+    let id = reply(&out)["pictures"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    s.chat.project.hand_edit(&cut(10.0, 16.0)).unwrap();
+    s.chat.session.draw_picture(&id).await.unwrap();
+    assert_eq!(
+        sentence(s.chat.session.place_picture(&id).unwrap_err()),
+        MOMENT_CUT
+    );
+    assert!(pictures_on(&s.chat.project.project()).is_empty());
+    assert_eq!(s.chat.project.undo_steps(), 1, "only the cut");
+}
+
+#[tokio::test]
+async fn a_title_card_s_background_goes_under_the_title_the_answer_added() {
+    let title = answer(
+        "",
+        vec![fc(
+            "t",
+            "makeTitleCard",
+            r#"{"title": "Day one", "prompt": "a calm sea", "atSec": 0.0, "durationSec": null}"#,
+        )],
+    );
+    let s = studio_with(talk(), Painter::new(vec![drawn()]), vec![title]);
+    let out = s
+        .chat
+        .session
+        .send(request("a title card that says Day one over a calm sea"))
+        .await
+        .unwrap();
+    let r = reply(&out);
+    assert!(r["applied"].is_object(), "the title is in at once: {r:#}");
+    assert_eq!(r["pictures"][0]["kind"], "titleBackground");
+    let id = r["pictures"][0]["id"].as_str().unwrap().to_owned();
+    let p = s.chat.project.project();
+    let (title_track, title) = (p.timeline.tracks.iter().enumerate())
+        .find_map(|(t, track)| {
+            track
+                .items
+                .first()
+                .map(|i| (t, (i.start_us, i.duration_us)))
+        })
+        .expect("the title layer");
+
+    s.chat.session.draw_picture(&id).await.unwrap();
+    assert_eq!(*s.painter.asked.lock().unwrap(), [ImageSize::Landscape]);
+    s.chat.session.place_picture(&id).unwrap();
+    let p = s.chat.project.project();
+    assert_eq!(
+        pictures_on(&p),
+        [(title_track, title.0, title.1)],
+        "on a track under the title's, for as long as it shows"
+    );
+    assert!(
+        !p.timeline.tracks[title_track + 1].items.is_empty(),
+        "the title is above it"
+    );
+    assert_eq!(
+        s.chat.project.undo_steps(),
+        2,
+        "the title, then its background"
+    );
 }
