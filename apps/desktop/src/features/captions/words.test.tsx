@@ -246,6 +246,19 @@ describe('caption words', () => {
     expect(txs[0].ops).toHaveLength(2);
   });
 
+  it('asks where else a word shows again when the words update', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CaptionWords format="portrait" />);
+    await user.click(within(await list()).getByRole('option', { name: 'TEO' }));
+    await waitFor(() => expect(finds).toHaveLength(1));
+    act(() => {
+      const snap = useProject.getState().snapshot!;
+      useProject.setState({ snapshot: { ...snap, history: { ...snap.history, revision: snap.history.revision + 1 } } });
+    });
+    await waitFor(() => expect(finds).toHaveLength(2));
+    expect(fixField()).toBeInTheDocument();
+  });
+
   it('typing then Escape lets the word go unchanged', async () => {
     const user = userEvent.setup();
     renderWithProviders(<CaptionWords format="portrait" />);

@@ -181,12 +181,10 @@ export function CaptionWords({ format }: { format: FormatKind }) {
   const focus = sel && nav ? nav.at.get(sel.focus) : undefined;
 
   /**
-   * Opens `w` for fixing, and asks where else it shows. When that can't be asked, the word counts as showing here
-   * only: its fix bar fixes just this one (never waits for a count that won't come).
+   * Asks where else `w`, being fixed, shows. When that can't be asked, the word counts as showing here only: its fix
+   * bar fixes just this one (never waits for a count that won't come).
    */
-  const open = (w: WordView) => {
-    const started = { word: w, matches: null };
-    setEdit(started);
+  const countPlaces = (w: WordView) => {
     if (!projectId) return;
     void captions
       .find(projectId, format, w.said ?? w.text)
@@ -196,6 +194,21 @@ export function CaptionWords({ format }: { format: FormatKind }) {
       )
       .then((matches) => setEdit((e) => (e?.word === w ? { ...e, matches } : e)));
   };
+  /** Opens `w` for fixing, and asks where else it shows. */
+  const open = (w: WordView) => {
+    setEdit({ word: w, matches: null });
+    countPlaces(w);
+  };
+  // The words updated (an edit, new speech) with a word open: where it shows is asked again, and counted as not known
+  // until then, so Fix all never fixes places that moved.
+  const placesOf = useRef(of);
+  useEffect(() => {
+    if (placesOf.current === of) return;
+    placesOf.current = of;
+    if (!edit) return;
+    setEdit((e) => (e ? { ...e, matches: null } : e));
+    countPlaces(edit.word);
+  }, [of, edit]);
   const toggleHidden = () => {
     if (words.length === 0) return;
     const hidden = lookedNow(words).every((w) => w.look.hidden === true);
