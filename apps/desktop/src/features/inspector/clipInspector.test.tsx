@@ -229,6 +229,14 @@ describe('the clip card', () => {
     expect(apply).not.toHaveBeenCalled();
   });
 
+  it('the Fill focus is one row under one label, its slider named for the way it moves', async () => {
+    renderWithProviders(<Inspector format="portrait" />);
+    const across = await screen.findByRole('slider', { name: 'Focus across' });
+    const row = screen.getByText('Fill focus').closest('.field')!;
+    expect(row).toContainElement(across);
+    expect(Array.from(row.querySelectorAll('.field-label'), (label) => label.textContent)).toEqual(['Fill focus']);
+  });
+
   it('a video taller than the frame moves its Fill focus down', async () => {
     const snapshot = fixtureSnapshot();
     snapshot.project.timeline.main.push({ ...snapshot.project.timeline.main[1], id: 'tall' });
