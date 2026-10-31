@@ -4,4 +4,18 @@ import type { AnalysisStep } from "./AnalysisStep";
 /**
  * Where a clip's analysis is.
  */
-export type AssetState = { "state": "none" } | { "state": "running", step: AnalysisStep, pct: number, } | { "state": "done", approximate: boolean, approximateReason?: string, emptyReason?: string, timeAgain?: boolean, } | { "state": "failed", reason: string, };
+export type AssetState = { "state": "none" } | { "state": "running", step: AnalysisStep, pct: number, } | { "state": "done", approximate: boolean, 
+/**
+ * Why some words are timed roughly, as one plain sentence: word timing's own (it failed, stopped or didn't
+ * finish), or that they don't match their sound.
+ */
+approximateReason?: string, 
+/**
+ * Why the clip has no words ("No speech found."), when it has none.
+ */
+emptyReason?: string, 
+/**
+ * Timing the words again can time the rough ones (word timing failed, stopped or didn't finish): the page
+ * offers it. Not for words that don't match their sound.
+ */
+timeAgain?: boolean, } | { "state": "failed", reason: string, };
