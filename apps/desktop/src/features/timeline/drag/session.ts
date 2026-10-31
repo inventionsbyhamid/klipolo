@@ -8,6 +8,7 @@ import { newId } from '../../../lib/defaults';
 import { commitInFlight } from '../../../state/commitQueue';
 import { useDragState } from '../../../state/dragState';
 import { changedSince, type Built } from '../../../state/editBase';
+import { usePlayback } from '../../../state/playback';
 import { captureBase, useProject } from '../../../state/project';
 import { useUi } from '../../../state/ui';
 import { HEADER_PX } from '../layout';
@@ -142,7 +143,8 @@ export function newSession(
  * the new project, its base too), and a commit landing (a drop's, a nudge the press let go in) is the queue's own: then
  * it carries on from the new project. A change from elsewhere (chat's, merged mid-drag) makes it `outdated`: it stops,
  * and its release is refused, never added to where that change put things. A zoom or the other track view redraws
- * every block under it (cancelled); snapping on or off (N) redraws the drag.
+ * every block under it (cancelled); snapping on or off (N) redraws the drag. Playback starting ends a trim's edge
+ * display: playback draws from the playhead, and a paused trim shows its edge again at its next frame.
  */
 export function watchSession(
   s: Session,
@@ -168,9 +170,13 @@ export function watchSession(
     if (u.pxPerSecond !== s.pps || u.timelineExpanded !== s.expanded) cancel();
     else if (u.snapping !== prev.snapping) redraw();
   });
+  const offPlayback = usePlayback.subscribe((p, prev) => {
+    if (live() && p.playing && !prev.playing) s.shownUs = null;
+  });
   return () => {
     offProject();
     offUi();
+    offPlayback();
   };
 }
 

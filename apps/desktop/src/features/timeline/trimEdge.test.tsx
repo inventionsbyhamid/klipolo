@@ -1,5 +1,5 @@
 import { act, fireEvent, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixtureSnapshot, revisionPatch } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 
@@ -9,6 +9,8 @@ vi.mock('../../bridge/engine', () => ({
     preview: vi.fn().mockResolvedValue(undefined),
     previewClear: vi.fn().mockResolvedValue(undefined),
     seek: vi.fn().mockResolvedValue(undefined),
+    play: vi.fn().mockResolvedValue(undefined),
+    pause: vi.fn().mockResolvedValue(25_000_000),
   },
 }));
 const { bridge } = await import('../../bridge/commands');
@@ -17,6 +19,7 @@ const { useProject } = await import('../../state/project');
 const { usePlayback } = await import('../../state/playback');
 const { useUi } = await import('../../state/ui');
 const { Timeline } = await import('./Timeline');
+const { Timecode } = await import('../preview/Timecode');
 
 const PLAYHEAD = 25_000_000;
 const frames = () => act(() => new Promise((r) => setTimeout(r, 40)));
@@ -242,3 +245,69 @@ describe('a trim ended from elsewhere goes back to the playhead', () => {
   });
 });
 
+describe('playback started mid-trim', () => {
+  /** Animation frames by hand: what waits for the next one runs at `nextFrame()`. */
+  const waiting: FrameRequestCallback[] = [];
+  const nextFrame = () => act(() => waiting.splice(0).forEach((cb) => cb(0)));
+  const space = (el: HTMLElement) => fireEvent.keyDown(el, { key: ' ' });
+
+  beforeEach(() => {
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => waiting.push(cb));
+    vi.mocked(engine.play).mockClear();
+  });
+  afterEach(() => {
+    nextFrame();
+    nextFrame();
+    vi.unstubAllGlobals();
+  });
+
+  it('Space plays from the playhead: the edge waiting to go out never does, and nothing moves', async () => {
+    const { container } = renderWithProviders(
+      <>
+        <Timeline />
+        <Timecode durationUs={30_000_000} className="timecode" />
+      </>,
+    );
+    const a = block(/^screen\.mp4/);
+    press(edge(a, 'end'), 799);
+    move(a, 759);
+    nextFrame(); // the trim's frame: its dry run and its edge go out at the next one
+    space(a);
+    nextFrame();
+    expect(engine.play).toHaveBeenCalledWith(PLAYHEAD, 1, usePlayback.getState().seq);
+    expect(engine.seek).not.toHaveBeenCalled();
+    // While playing the trim never seeks, nor does its release.
+    move(a, 719);
+    nextFrame();
+    nextFrame();
+    release(a, 719);
+    nextFrame();
+    nextFrame();
+    expect(engine.seek).not.toHaveBeenCalled();
+    expect(usePlayback.getState().playheadUs).toBe(PLAYHEAD);
+    expect(container.querySelector('.timecode')?.textContent).toBe('0:25.0');
+    await frames();
+  });
+
+  it('Space ends the edge display: paused again, the trim shows its edge once more', async () => {
+    renderWithProviders(<Timeline />);
+    const a = block(/^screen\.mp4/);
+    press(edge(a, 'end'), 799);
+    move(a, 759);
+    nextFrame();
+    space(a); // plays
+    nextFrame();
+    expect(engine.seek).not.toHaveBeenCalled();
+    space(a); // pauses
+    move(a, 759);
+    nextFrame();
+    nextFrame();
+    expect(seeks().at(-1)?.[0]).toBe(18_966_667);
+    release(a, 759);
+    nextFrame();
+    nextFrame();
+    expect(seeks().at(-1)?.[0]).toBe(PLAYHEAD);
+    expect(usePlayback.getState().playheadUs).toBe(PLAYHEAD);
+    await frames();
+  });
+});
