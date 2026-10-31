@@ -234,6 +234,30 @@ fn the_quits_stop_names_the_take_it_waits_for() {
     assert_eq!(rec.launch.commands(), [Command::Start, Command::Stop]);
 }
 
+/// Klipolo's exit never waits for the recorder's lock on the main thread: with it held, an armed take isn't disarmed
+/// then (its worker disarms itself when Klipolo has gone).
+#[test]
+fn exiting_never_waits_for_the_recorders_lock() {
+    let rec = fixture();
+    rec.arm(options_screen()).unwrap();
+    rec.launch.emit(state(Armed));
+    rec.settle();
+    let (holder, free) = hold_the_lock(&rec);
+    let state = &rec.state;
+    let answered = std::thread::scope(|s| {
+        let (tx, rx) = mpsc::channel();
+        s.spawn(move || {
+            let _ = tx.send(state.disarm_unstarted());
+        });
+        let answered = rx.recv_timeout(Duration::from_secs(1));
+        free.send(()).unwrap();
+        answered
+    });
+    holder.join().unwrap();
+    assert_eq!(answered, Ok(false), "answered at once, without the lock");
+    assert!(rec.launch.commands().is_empty(), "nothing sent");
+}
+
 /// No take, a take that has ended, or a test run: quitting goes straight ahead.
 #[test]
 fn a_quit_without_a_take_is_never_held() {

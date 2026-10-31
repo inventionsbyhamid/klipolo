@@ -2,6 +2,7 @@
 //! then, and quitting and the engine's background media work wait for it), and what a take that hasn't started becomes
 //! when Klipolo exits: disarmed, so no armed worker outlives the app with its global key.
 
+use std::sync::TryLockError;
 use std::sync::atomic::Ordering;
 
 use klipolo_capture::protocol::Command;
@@ -19,9 +20,19 @@ impl Recorder {
 
     /// Klipolo exits: a take that hasn't started is disarmed (no take, its folder gone, its key unregistered). A take
     /// past its start records on in its own worker, orphaned, and is stopped from its menu-bar item. True when a
-    /// Disarm was sent.
+    /// Disarm was sent. The exit runs on the main thread, which never waits for the recorder's lock (it covers file
+    /// work): while it is held nothing is sent, and a worker still armed disarms itself once Klipolo has gone.
     pub(super) fn disarm_unstarted(&self) -> bool {
-        let mut slot = self.lock();
+        let mut slot = match self.slot.try_lock() {
+            Ok(slot) => slot,
+            Err(TryLockError::Poisoned(slot)) => slot.into_inner(),
+            Err(TryLockError::WouldBlock) => {
+                tracing::warn!(
+                    "recorder: Klipolo exits while the recorder is busy, so nothing is disarmed now"
+                );
+                return false;
+            }
+        };
         let Some(take) = slot.take.as_mut() else {
             return false;
         };
