@@ -13,7 +13,7 @@ import { RecordIcon } from './icons';
 import { Countdown, CountdownNumber, startsIn } from './Countdown';
 import { cameraNote, notesBefore, notReady, refusedPage } from './notes';
 import { DeniedNote, MicAskedAtRecord, ScreenStep, STEP_BUTTON_ID } from './PermissionStep';
-import { WhatToRecord } from './WhatToRecord';
+import { CARDS_ID, WhatToRecord } from './WhatToRecord';
 import './record.css';
 
 /** What Tab moves between: enabled buttons in the Tab order (a radio group's other radios are left out). */
@@ -264,9 +264,7 @@ function Said({ text, setup }: { text: string; setup: RecorderSetup }) {
               Open privacy settings
             </Button>
           )}
-          <Button variant="secondary" onClick={() => void useRecorder.getState().record()}>
-            Try again
-          </Button>
+          <RecordPress variant="secondary">Try again</RecordPress>
         </div>
       )}
     </div>
@@ -396,31 +394,38 @@ function Foot({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving'>
 const READY = 'Recording starts after a 3 s countdown.';
 
 /**
- * Record: the only control that starts a take. Off while it can't (a take runs, the setup blocks it, Screen Recording
- * isn't allowed yet, nothing is chosen), still focusable so its tooltip says why. Always the same element, so the
- * keyboard stays on it as it turns on and off.
+ * Record, and a failed take's Try again: the only controls that start a take. Off while Record can't (a take runs, the
+ * setup blocks it, Screen Recording isn't allowed yet, nothing is chosen), still focusable so its tooltip says why, and
+ * a press puts the keyboard where that can be met: the Screen Recording step's button, or the cards to choose from.
+ * Always the same element, so the keyboard stays on it as it turns on and off.
  */
-function RecordButton() {
+function RecordPress({ variant, children }: { variant: 'primary' | 'secondary'; children: ReactNode }) {
   const setup = useRecorder((s) => s.setup);
   const picks = useRecorder((s) => s.picks);
   const screenRefused = useRecorder((s) => s.screenRefused);
   if (setup === null) return null;
   const waiting = notReady(setup, picks, screenRefused);
+  const press = () => {
+    // While the Screen Recording step shows, a press goes to its button: macOS's own prompt is never the only
+    // explanation.
+    if (waiting === null) void useRecorder.getState().record();
+    else if (waiting.why === 'screen') document.getElementById(STEP_BUTTON_ID)?.focus();
+    else if (waiting.why === 'choose') document.querySelector<HTMLElement>(`#${CARDS_ID} [tabindex="0"]`)?.focus();
+  };
   return (
     <Tooltip label={waiting?.text ?? READY} side="top" describes={waiting !== null}>
-      <Button
-        variant="primary"
-        aria-disabled={waiting !== null || undefined}
-        onClick={() => {
-          // While the Screen Recording step shows, a press goes to its button: macOS's own prompt is never the only
-          // explanation.
-          if (waiting?.why === 'screen') document.getElementById(STEP_BUTTON_ID)?.focus();
-          else if (waiting === null) void useRecorder.getState().record();
-        }}
-      >
-        <RecordIcon name="record" />
-        Record
+      <Button variant={variant} aria-disabled={waiting !== null || undefined} onClick={press}>
+        {children}
       </Button>
     </Tooltip>
+  );
+}
+
+function RecordButton() {
+  return (
+    <RecordPress variant="primary">
+      <RecordIcon name="record" />
+      Record
+    </RecordPress>
   );
 }

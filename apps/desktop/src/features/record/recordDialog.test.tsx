@@ -679,6 +679,25 @@ describe('countdown, saving and failure', () => {
     expect(fake.calls).toContain('openPrivacy:camera');
   });
 
+  it('try_again_with_one_app_and_none_chosen_asks_for_an_app', async () => {
+    const dialog = await openOn(recorderSetup({ apps: [app('com.apple.Safari', 'Safari')] }));
+    fake.script.arm = () => refusal('capture.error.busy');
+    await userEvent.click(recordButton());
+    await userEvent.click(screen.getByRole('radio', { name: 'One app' }));
+    const again = screen.getByRole('button', { name: 'Try again' });
+    expect(again).toHaveAttribute('aria-disabled', 'true');
+    expect(again).toHaveAccessibleDescription('Choose an app first');
+    await userEvent.click(again);
+    // It arms nothing, and the keyboard goes to the apps to pick one.
+    expect(fake.calls).toEqual(['setup', 'arm']);
+    expect(screen.getByRole('radio', { name: 'Safari' })).toHaveFocus();
+    expect(dialog).toHaveTextContent('Choose an app');
+    await userEvent.click(screen.getByRole('radio', { name: 'Safari' }));
+    expect(again).not.toHaveAttribute('aria-disabled');
+    fake.script.arm = undefined;
+    await userEvent.click(again);
+    expect(fake.armed.at(-1)?.what).toEqual({ kind: 'app', appId: 'com.apple.Safari', display: 'main' });
+  });
 
   it('record_is_one_element_as_it_turns_off_and_on', async () => {
     await openOn(recorderSetup({ apps: [app('com.apple.Safari', 'Safari')] }));

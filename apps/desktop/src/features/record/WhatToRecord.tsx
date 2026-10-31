@@ -5,6 +5,9 @@ import type { Picks } from '../../lib/recorder/choices';
 import { useRecorder } from '../../state/recorder';
 import { ThumbCard } from './ThumbCard';
 
+/** The cards' group: a press on Record with nothing chosen puts the keyboard on it. */
+export const CARDS_ID = 'record-cards';
+
 /** The arrow keys' step in the card group: a radio group moves to the previous or next card, and wraps. */
 const STEPS: Record<string, number> = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 };
 
@@ -77,6 +80,7 @@ export function WhatToRecord({ setup }: { setup: RecorderSetup }) {
       )}
       <div
         className="record-cards"
+        id={CARDS_ID}
         role="radiogroup"
         aria-label={screens ? 'Screens' : 'Apps'}
         aria-describedby={caption === null ? undefined : captionId}
