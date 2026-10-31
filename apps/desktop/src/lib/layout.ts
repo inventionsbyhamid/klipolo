@@ -18,6 +18,8 @@ export const FORMAT_SHORT: Record<FormatKind, string> = {
   square: '1:1',
 };
 
+const FORMATS: FormatKind[] = ['landscape', 'portrait', 'square'];
+
 /** The whole frame, a new object each time (a layout is changed in place by drags). */
 const full = (): BoxN => ({ x: 0, y: 0, w: 1, h: 1 });
 
@@ -35,6 +37,36 @@ export function fullFrame(): Layout {
     radius: 0,
     overrides: { landscape: full(), portrait: full(), square: full() },
   };
+}
+
+/** Rust `media::text`'s Title preset: 96 px words, a box 1.6 sizes tall and at most 1536 px wide. */
+export const TITLE_SIZE = 96;
+const TITLE_MAX_W = 1536;
+const BOX_LINES = 1.6;
+/** Kept clear inside a title's area: 4 % of a 1080-pixel side. */
+const MARGIN_PX = 43.2;
+/** What a 9:16 video keeps clear of the apps' buttons and captions (Rust `PORTRAIT_CLEAR`, the "all" safe area). */
+const PORTRAIT_CLEAR: BoxN = { x: 0.06, y: 0.14, w: 0.81, h: 0.6 };
+
+/** The Title preset's box in `format`: centred at the top of the format's area less the margin (Rust `preset_rect`). */
+function titleRect(format: FormatKind): BoxN {
+  const [cw, ch] = FORMAT_SIZE[format];
+  const area = format === 'portrait' ? PORTRAIT_CLEAR : full();
+  const [ax, ay] = [area.x * cw + MARGIN_PX, area.y * ch + MARGIN_PX];
+  const [aw, ah] = [area.w * cw - 2 * MARGIN_PX, area.h * ch - 2 * MARGIN_PX];
+  const w = Math.min(TITLE_MAX_W, aw);
+  const h = Math.min(TITLE_SIZE * BOX_LINES, ah);
+  return { x: (ax + (aw - w) / 2) / cw, y: ay / ch, w: w / cw, h: h / ch };
+}
+
+/**
+ * Where a title added on the canvas goes: the Title preset's box in `primary`, and its own place in each other format
+ * (in 9:16, inside what the apps leave clear), as Rust's `preset_layout` puts one (parity-tested).
+ */
+export function titleLayout(primary: FormatKind): Layout {
+  const overrides: Layout['overrides'] = {};
+  for (const format of FORMATS) if (format !== primary) overrides[format] = titleRect(format);
+  return { anchor: 'topCenter', rect: titleRect(primary), rotation: 0, opacity: 1, radius: 0, overrides };
 }
 
 type Band = 'start' | 'middle' | 'end';

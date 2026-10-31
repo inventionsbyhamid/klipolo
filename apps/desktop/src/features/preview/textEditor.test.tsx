@@ -1,8 +1,10 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Item } from '../../bindings/Item';
 import { Toaster } from '../../design/Toaster';
 import { activateLocale } from '../../i18n';
+import { safeRect } from '../../lib/safeAreas';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { useSelection } from '../../state/selection';
@@ -132,6 +134,37 @@ describe('on-canvas text', () => {
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(useTextEdit.getState().closing).toBeNull());
     expect(heard.applied).toHaveLength(1);
+  });
+
+  it('a title added in a 16:9 and 9:16 video goes inside what the apps leave clear in 9:16, wherever it is typed', async () => {
+    const snapshot = fixtureSnapshot();
+    snapshot.project.settings.formats = ['landscape', 'portrait'];
+    useProject.setState({ snapshot });
+    useUi.setState({ previewFormat: 'portrait' });
+    const add = { current: null as null | (() => Promise<void>) };
+    function Adder() {
+      add.current = useAddText();
+      return null;
+    }
+    renderWithProviders(
+      <>
+        <Stage />
+        <Adder />
+      </>,
+    );
+    await act(() => add.current!());
+    await userEvent.keyboard('Rosa’s studio{Escape}');
+    await waitFor(() => expect(heard.applied).toHaveLength(1));
+    const { layout } = (heard.applied[0].ops[0] as unknown as { item: Item }).item;
+    const clear = safeRect('portrait', 'all')!;
+    const portrait = layout.overrides.portrait!;
+    expect(portrait.x).toBeGreaterThanOrEqual(clear.x);
+    expect(portrait.y).toBeGreaterThanOrEqual(clear.y);
+    expect(portrait.x + portrait.w).toBeLessThanOrEqual(clear.x + clear.w);
+    expect(portrait.y + portrait.h).toBeLessThanOrEqual(clear.y + clear.h);
+    // Its own place in 1:1 too, and centred at the top of the 16:9 frame.
+    expect(layout.overrides.square).toBeDefined();
+    expect(layout.rect.x + layout.rect.w / 2).toBeCloseTo(0.5, 9);
   });
 
   it('Add title, Text, opens the new box with the cursor in it, as the menu closes', async () => {

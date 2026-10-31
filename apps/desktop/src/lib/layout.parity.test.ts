@@ -4,7 +4,7 @@ import type { CameraLayout } from '../bindings/CameraLayout';
 import type { FormatKind } from '../bindings/FormatKind';
 import type { Item } from '../bindings/Item';
 import type { Layout } from '../bindings/Layout';
-import { cameraRect, containRect, fullFrame, resolveRect, textScale } from './layout';
+import { cameraRect, containRect, fullFrame, resolveRect, textScale, titleLayout } from './layout';
 import parity from './layout-parity.json';
 import { safeRect } from './safeAreas';
 import { shownFromUs } from './timeline';
@@ -23,6 +23,7 @@ interface Fixture {
   shown: { item: Item; shownUs: number }[];
   fullFrame: Layout;
   portraitClear: BoxN;
+  titleText: { primary: FormatKind; layout: Layout }[];
 }
 const fixture = parity as unknown as Fixture;
 
@@ -68,5 +69,17 @@ describe('layout parity with the engine', () => {
 
   it('keeps 9:16 text where the apps leave clear, the safe area the preview draws', () => {
     expect(safeRect('portrait', 'all')).toEqual(fixture.portraitClear);
+  });
+
+  it('places a title added on the canvas in every format exactly like Rust’s Title preset', () => {
+    expect(fixture.titleText.length).toBe(3);
+    for (const c of fixture.titleText) {
+      const { rect, overrides, ...rest } = titleLayout(c.primary);
+      const { rect: rustRect, overrides: rustOverrides, ...rustRest } = c.layout;
+      expect(rest).toEqual(rustRest);
+      same(rect, rustRect);
+      expect(Object.keys(overrides).sort()).toEqual(Object.keys(rustOverrides).sort());
+      for (const [format, box] of Object.entries(rustOverrides)) same(overrides[format as FormatKind]!, box!);
+    }
   });
 });

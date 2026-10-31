@@ -159,6 +159,10 @@ describe('placement', () => {
       sourceOutUs: 8 * S,
       speed: 1,
     });
-    expect(newTextItem('Hi', 0, 3 * S).content).toMatchObject({ type: 'text', text: 'Hi' });
+    const title = newTextItem('Hi', 0, 3 * S, 'portrait');
+    expect(title.content).toMatchObject({ type: 'text', text: 'Hi', style: { size: 96 } });
+    // Placed in every format at once: its rect in the primary, its own place in each other one.
+    expect(Object.keys(title.layout.overrides).sort()).toEqual(['landscape', 'square']);
+    expect(title.layout.rect).not.toBe(title.layout.overrides.landscape);
   });
 });
