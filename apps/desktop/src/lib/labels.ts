@@ -2,6 +2,7 @@ import { i18n, type I18n, type MessageDescriptor } from '@lingui/core';
 import type { ErrorParam } from '../bindings/ErrorParam';
 import type { ContribKind } from '../bindings/ContribKind';
 import { intlLocale, type UiLocale } from '../i18n';
+import { CHAT_LABELS } from './chatLabels';
 import { contribLabelInSentence } from './contrib';
 import { contribName } from './contribNames';
 import { formatFileSize, formatSeconds } from './format';
@@ -42,6 +43,8 @@ export function addLabelSource(source: (id: string) => MessageDescriptor | undef
 // Caption styles, which a label names by their own id as a nested code (`{ style: { code: 'text.look.box' } }`).
 const captionStyles = new Map(CAPTION_LOOKS.map((look) => [look.name.id, look.name]));
 addLabelSource((id) => captionStyles.get(id));
+// Chat's changes (`chat.<tool>`).
+addLabelSource((id) => (Object.hasOwn(CHAT_LABELS, id) ? CHAT_LABELS[id] : undefined));
 
 export function labelDescriptor(id: string): MessageDescriptor | undefined {
   // Own keys only: an id from elsewhere (a project file, chat) is never a property of the table's prototype.

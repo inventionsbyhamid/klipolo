@@ -27,4 +27,11 @@ describe('call', () => {
       "The sound of interview.mov can't be read after 40:12, so it's silent from there. The file may be damaged.",
     );
   });
+
+  it('says plainly when the app has no such command, keeping what Tauri said as the cause', async () => {
+    vi.mocked(invoke).mockRejectedValueOnce('Command chat_draw_picture not found');
+    const error = (await call('chat_draw_picture', { id: 'p' }).catch((e: unknown) => e)) as Error;
+    expect(error.message).toBe("Klipolo can't do that in this version. Restart Klipolo and try again.");
+    expect(error.cause).toBe('Command chat_draw_picture not found');
+  });
 });

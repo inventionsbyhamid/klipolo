@@ -68,6 +68,8 @@ pub enum MakeError {
     NoPrompt,
     /// The model failed (busy, out of credit, refused, timed out...), with its one sentence.
     Maker(ImageError),
+    /// The model answered, but with no picture in its answer.
+    Empty { made_with: String },
     /// The picture came back but couldn't be read.
     Unreadable { made_with: String, detail: String },
     /// The picture couldn't be saved in the project's media folder.
@@ -75,11 +77,20 @@ pub enum MakeError {
 }
 
 impl MakeError {
+    /// Whether a picture came back, so its request was paid for, although none was saved: one that couldn't be read
+    /// or saved.
+    pub fn billed(&self) -> bool {
+        matches!(self, Self::Unreadable { .. } | Self::Save { .. })
+    }
+
     /// One plain sentence for the person.
     pub fn user_message(&self) -> String {
         match self {
             Self::NoPrompt => "Say what the picture should show.".into(),
             Self::Maker(e) => e.user_message().to_owned(),
+            Self::Empty { made_with } => {
+                format!("{made_with} didn't send a picture back, so try again.")
+            }
             Self::Unreadable { made_with, .. } => {
                 format!("{made_with} sent a picture Klipolo couldn't read, so try again.")
             }
@@ -101,6 +112,7 @@ impl fmt::Display for MakeError {
         match self {
             Self::NoPrompt => f.write_str("no prompt"),
             Self::Maker(e) => write!(f, "{e}"),
+            Self::Empty { .. } => f.write_str("the answer held no picture"),
             Self::Unreadable { detail, .. } => write!(f, "unreadable picture: {detail}"),
             Self::Save { detail, .. } => write!(f, "couldn't save the picture: {detail}"),
         }
@@ -189,13 +201,9 @@ async fn draw(
         .make(prompt, size, 1)
         .await
         .map_err(MakeError::Maker)?;
-    images
-        .into_iter()
-        .next()
-        .ok_or_else(|| MakeError::Unreadable {
-            made_with: maker.made_with().to_owned(),
-            detail: "the answer held no picture".into(),
-        })
+    images.into_iter().next().ok_or_else(|| MakeError::Empty {
+        made_with: maker.made_with().to_owned(),
+    })
 }
 
 /// Saves `png` under a new name in `folder` and describes it as an image asset at its absolute path, as import does.

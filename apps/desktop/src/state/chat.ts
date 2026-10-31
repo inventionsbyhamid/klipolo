@@ -7,7 +7,15 @@ import { isCode } from '../bridge/call';
 import { chatBridge } from '../bridge/chat';
 import { errorMessage } from '../lib/errors';
 import { findItem } from '../lib/timeline';
-import { session, staleMoments, withMessages, type ChatStore, type Message } from './chatMessages';
+import {
+  creditMoved,
+  session,
+  staleMoments,
+  withMessages,
+  type ChatStore,
+  type Message,
+} from './chatMessages';
+import { pictureActions } from './chatPictures';
 import { dropStale, proposalActions, replaceOpen, showOpenProposal } from './chatProposals';
 import { usePlayback } from './playback';
 import { useProject } from './project';
@@ -70,10 +78,13 @@ function requestFor(
   };
 }
 
+/** Each saying of a notice, so the same words said again are said again. */
+let sayings = 0;
+
 /**
  * The chat panel's conversation: one message at a time, the replies as Rust sent them (their words
- * clean), the additions merged as one undo step, the proposal cards (`chatProposals`), whose open one the timeline shows
- * red (`useProposal`).
+ * already clean), the additions merged as one undo step, the proposal cards (`chatProposals`), whose open one the
+ * timeline shows red (`useProposal`), and the picture cards (`chatPictures`).
  */
 export const useChat = create<ChatStore>((set, get) => {
   const push = (m: Message) => set((s) => withMessages([...s.messages, m]));
@@ -89,15 +100,17 @@ export const useChat = create<ChatStore>((set, get) => {
     pending: null,
     draft: '',
     setDraft: (draft) => set({ draft }),
+    notice: null,
+    say: (text) => set({ notice: { text, seq: ++sayings } }),
 
     reset: (projectId) => {
       session.next();
-      set({ projectId, messages: [], pending: null, draft: '' });
+      set({ projectId, messages: [], pending: null, draft: '', notice: null });
     },
 
     newChat: () => {
       session.next();
-      set({ messages: [], pending: null });
+      set({ messages: [], pending: null, notice: null });
       void chatBridge()
         .reset()
         .catch(() => undefined);
@@ -109,6 +122,11 @@ export const useChat = create<ChatStore>((set, get) => {
       if (!snapshot || !trimmed || !ready()) return;
       const mine = session.now();
       const live = () => session.now() === mine && get().projectId === snapshot.project.id;
+      /** The project it was sent to is still open (New chat or not): Rust's changes to it are the page's too. */
+      const sameProject = () => {
+        const now = useProject.getState().snapshot;
+        return now?.project.id === snapshot.project.id && now.opening === snapshot.opening;
+      };
       const id = crypto.randomUUID();
       const keepOnly = options?.keepOnly ?? [];
       set({ pending: { id } });
@@ -119,6 +137,16 @@ export const useChat = create<ChatStore>((set, get) => {
         push({ id, from: 'klipolo', kind: 'failed', text: message, failure, retry: again });
       try {
         const outcome = await chatBridge().send(request);
+        // The additions first, as one undo step, then what the model's undo changed: the proposal was made on the
+        // project they leave. Merged whenever the project it was sent to is open, even after New chat: Rust made them.
+        let applied = null;
+        if (outcome.type === 'reply' && sameProject()) {
+          if (outcome.applied) {
+            await useProject.getState().adopt(outcome.applied.change);
+            applied = { undo: outcome.applied.undo, revision: outcome.applied.change.history.revision };
+          }
+          if (outcome.undone) await useProject.getState().adopt(outcome.undone);
+        }
         if (!live()) return;
         if (outcome.type === 'failed') {
           // Declined under the provider's policy: the same words would be declined again, so they go back into the
@@ -126,15 +154,6 @@ export const useChat = create<ChatStore>((set, get) => {
           if (outcome.kind === 'declined' && get().draft.trim() === '') set({ draft: trimmed });
           return failed(outcome.message, outcome.kind);
         }
-        // The additions first, as one undo step, then what the model's undo changed: the proposal was made on the
-        // project they leave.
-        let applied = null;
-        if (outcome.applied) {
-          await useProject.getState().adopt(outcome.applied.change);
-          applied = { undo: outcome.applied.undo, revision: outcome.applied.change.history.revision };
-        }
-        if (outcome.undone) await useProject.getState().adopt(outcome.undone);
-        if (!live()) return;
         const revision = useProject.getState().snapshot?.history.revision;
         const proposal = outcome.proposal && {
           proposal: outcome.proposal,
@@ -158,14 +177,21 @@ export const useChat = create<ChatStore>((set, get) => {
           questions: outcome.questions,
           moments: outcome.moments,
           revision: outcome.revision,
-          momentsStale: false,
+          // Moments found on another revision than the page has are stale as they come.
+          momentsStale: outcome.moments.length > 0 && outcome.revision !== revision,
           applied,
           proposal,
+          pictures: outcome.pictures.map((picture) => ({ picture, state: 'drawing' as const })),
         });
+        // Each picture it asked for is drawn now, for its card.
+        for (const picture of outcome.pictures) void get().drawPicture(id, picture.id);
       } catch (error) {
         if (!live()) return;
         // Its times were on a revision the project left: sent again it would be refused again, so it says to ask anew.
-        if (isCode(error, 'project.moved'))
+        // A message the person typed goes back into the box to send again (unless they typed something new meanwhile);
+        // Keep only's words are a label, not theirs.
+        if (isCode(error, 'project.moved')) {
+          if (keepOnly.length === 0 && get().draft.trim() === '') set({ draft: trimmed });
           push({
             id,
             from: 'klipolo',
@@ -174,9 +200,10 @@ export const useChat = create<ChatStore>((set, get) => {
             failure: 'other',
             retry: null,
           });
-        else failed(errorMessage(error), 'other');
+        } else failed(errorMessage(error), 'other');
       } finally {
         set((s) => (s.pending?.id === id ? { pending: null } : {}));
+        creditMoved();
       }
     },
 
@@ -190,6 +217,7 @@ export const useChat = create<ChatStore>((set, get) => {
     },
 
     ...proposalActions(set, get),
+    ...pictureActions(set, get),
   };
 });
 

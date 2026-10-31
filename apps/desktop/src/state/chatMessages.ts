@@ -1,6 +1,9 @@
 import type { StoreApi } from 'zustand';
+import { refreshAiStatus, useAi } from '../ai/aiStatus';
 import type { ChatFailureKind } from '../bindings/ChatFailureKind';
 import type { ChatMoment } from '../bindings/ChatMoment';
+import type { ChatPicture } from '../bindings/ChatPicture';
+import type { ChatPictureDrawn } from '../bindings/ChatPictureDrawn';
 import type { ChatProposal } from '../bindings/ChatProposal';
 import type { CodedError } from '../bindings/CodedError';
 
@@ -20,6 +23,35 @@ export interface ProposalPart {
   revision?: number;
   /** Open again after Apply was refused (not because the project moved): why, in one sentence, with Retry. */
   reason?: string;
+}
+
+/**
+ * Where a picture a reply asked for stands: being drawn, drawn (its card shows it with Use and Try again), being
+ * placed, placed (its Undo chip), failed to draw (why, with Try again), or gone (it can't be placed any more: why, and
+ * nothing to press).
+ */
+export type PictureState = 'drawing' | 'drawn' | 'placing' | 'placed' | 'failed' | 'gone';
+
+/** A picture in a reply, and what came of it. */
+export interface PicturePart {
+  picture: ChatPicture;
+  state: PictureState;
+  /** The latest picture drawn (Try again draws another). */
+  drawn?: ChatPictureDrawn;
+  /** Why it failed or is gone, or why Use was refused, in one sentence. */
+  reason?: string;
+  /** Placed: its undo label, and the revision Use made (its Undo chip works while that is the latest change). */
+  applied?: { undo: CodedError; revision: number };
+  /** Try again is drawing a new picture; the one drawn before stays, with Use. */
+  again?: boolean;
+  /** Placed, but the page couldn't take the change in: no Undo chip, and it says so. */
+  unshown?: boolean;
+}
+
+/** A sentence about chat that isn't a message, to say aloud: `seq` tells one saying from the next of the same words. */
+export interface Notice {
+  text: string;
+  seq: number;
 }
 
 /**
@@ -44,6 +76,8 @@ export type Message =
       /** Additions applied at once: their undo label and the revision they made (the Undo chip). */
       applied: { undo: CodedError; revision: number } | null;
       proposal: ProposalPart | null;
+      /** The pictures it asked for (stickers, title card backgrounds). */
+      pictures: PicturePart[];
     }
   | {
       id: string;
@@ -76,6 +110,13 @@ export interface ChatStore {
   /** What the person has typed in the chat box and not sent: kept while chat is folded. */
   draft: string;
   setDraft: (draft: string) => void;
+  /**
+   * A sentence about chat that isn't a message (an Undo chip refused, a picture ready or placed), said aloud in its own
+   * place beside the messages', so neither a thinking message nor its reply keeps it from being heard.
+   */
+  notice: Notice | null;
+  /** Says `text` aloud (the Announcer), again even when it is the same words. */
+  say: (text: string) => void;
   /** Another project (or none), or New chat: the conversation starts over, and a reply under way is dropped. */
   reset: (projectId: string | null) => void;
   /**
@@ -92,6 +133,10 @@ export interface ChatStore {
   newChat: () => void;
   apply: (messageId: string) => Promise<void>;
   discard: (messageId: string) => void;
+  /** Draws picture `pictureId` of reply `messageId` (again, for Try again). */
+  drawPicture: (messageId: string, pictureId: string) => Promise<void>;
+  /** Use: places the picture drawn, as one undo step. */
+  usePicture: (messageId: string, pictureId: string) => Promise<void>;
 }
 
 export type ChatSet = StoreApi<ChatStore>['setState'];
@@ -106,7 +151,8 @@ export function withMessages(messages: Message[]) {
 export function openProposal(messages: Message[]): { message: ReplyMessage; part: ProposalPart } | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (m.from === 'klipolo' && m.kind === 'reply' && m.proposal?.state === 'open') return { message: m, part: m.proposal };
+    if (m.from === 'klipolo' && m.kind === 'reply' && m.proposal?.state === 'open')
+      return { message: m, part: m.proposal };
   }
   return null;
 }
@@ -124,6 +170,14 @@ export function staleMoments(messages: Message[], revision: number): Message[] |
     return { ...m, momentsStale: true };
   });
   return changed ? next : null;
+}
+
+/**
+ * With an access code, the credit the top bar shows moved once a message or a picture was paid for: asked again. A
+ * key's status has no credit to ask about.
+ */
+export function creditMoved() {
+  if (useAi.getState().status?.mode === 'relay') void refreshAiStatus();
 }
 
 /** Each reset starts a new session: a reply or an apply that resolves after it belongs to the one before. */

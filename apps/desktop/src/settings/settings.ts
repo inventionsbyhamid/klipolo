@@ -14,6 +14,30 @@ export interface BudgetView {
   shareLeft: number;
 }
 
+/** What AI cost this session as the dialog says it: the total, and each kind that cost something. */
+export interface SessionView {
+  total: string;
+  kinds: string[];
+}
+
+/** "Analysis $0.08", "Chat $0.02 for 4 messages", "Pictures $0.02 for 2"; null before anything was spent. */
+export function sessionView(status: AiStatus | null): SessionView | null {
+  const s = status?.session;
+  if (!s) return null;
+  const kinds: string[] = [];
+  if (s.analysisUsd > 0) kinds.push(`Analysis ${spend(s.analysisUsd)}`);
+  if (s.chatUsd > 0 || s.chatMessages > 0)
+    kinds.push(`Chat ${spend(s.chatUsd)} for ${s.chatMessages} ${s.chatMessages === 1 ? 'message' : 'messages'}`);
+  if (s.picturesUsd > 0 || s.pictures > 0) kinds.push(`Pictures ${spend(s.picturesUsd)} for ${s.pictures}`);
+  if (kinds.length === 0) return null;
+  return { total: spend(s.analysisUsd + s.chatUsd + s.picturesUsd), kinds };
+}
+
+/** Dollars and cents, or "under $0.01" for a cost that rounds to nothing. */
+function spend(amount: number): string {
+  return amount > 0 && amount < 0.005 ? 'under $0.01' : usd(amount);
+}
+
 /** The top bar's chip: what it says and which icon it shows. */
 export interface ChipView {
   icon: 'key' | 'ticket';
