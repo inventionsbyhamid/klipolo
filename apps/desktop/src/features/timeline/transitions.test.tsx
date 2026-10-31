@@ -398,6 +398,24 @@ describe('a press on a cut marker: a drag trims the clip on that side, a still c
     await frames();
     expect(applied().map((tx) => tx.label)).toEqual(['timeline.trim.clip.undo', 'transition.add']);
   });
+
+  it("a drag from the cut whose release never comes doesn't eat the next click", async () => {
+    useProject.setState({ snapshot: withHandles() });
+    renderWithProviders(<Timeline />);
+    fireEvent.pointerDown(cutMarker(), { pointerId: 1, button: 0, buttons: 1, clientX: 8, clientY: 60 });
+    fireEvent.pointerMove(cutMarker(), { pointerId: 1, buttons: 1, clientX: 3, clientY: 60 });
+    await frames();
+    // The release never reaches the page (Mission Control mid-drag), and Escape puts the edge back.
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    // The next click on empty lane space seeks there: 200 px at 40 px/s.
+    const lane = document.querySelector<HTMLElement>('[data-lane="main"] .tl-lane')!;
+    fireEvent.pointerDown(lane, { pointerId: 1, button: 0, buttons: 1, clientX: 200, clientY: 60 });
+    fireEvent.pointerUp(lane, { pointerId: 1, clientX: 200, clientY: 60 });
+    fireEvent.click(lane, { clientX: 200, detail: 1 });
+    await frames();
+    expect(usePlayback.getState().playheadUs).toBe(5_000_000);
+    expect(applied()).toEqual([]);
+  });
 });
 
 /** A stand-in engine that applies `setTransition` to the store after `ms`. */

@@ -69,7 +69,10 @@ let held: { down: PointerEvent<HTMLElement>; clipId: string; edge: Edge } | null
 /** The last press was passed to a trim: the click its release makes is not the marker's. */
 let handedOff = false;
 
-/** After a press passed to a trim, the click its release makes (on the lane, which would seek) does nothing. */
+/**
+ * After a press passed to a trim, the click its release makes (on the lane, which would seek) does nothing. A new
+ * press ends it too: a release that never reached the page (Mission Control mid-drag) can't eat a later click.
+ */
 function swallowNextClick() {
   const swallow = (e: Event) => {
     e.stopPropagation();
@@ -83,10 +86,12 @@ function swallowNextClick() {
     window.removeEventListener('click', swallow, true);
     window.removeEventListener('pointerup', later, true);
     window.removeEventListener('pointercancel', later, true);
+    window.removeEventListener('pointerdown', stop, true);
   }
   window.addEventListener('click', swallow, true);
   window.addEventListener('pointerup', later, true);
   window.addEventListener('pointercancel', later, true);
+  window.addEventListener('pointerdown', stop, true);
 }
 
 /**
