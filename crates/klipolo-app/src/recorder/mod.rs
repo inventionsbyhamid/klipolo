@@ -13,10 +13,13 @@
 //! - **A test run** (`KLIPOLO_TEST`): the recorder makes no backend and launches no worker; every command answers
 //!   "Recording is off in this test run." (`state`).
 
+mod config;
 mod env;
 mod events;
 mod launch;
 mod outcomes;
+mod setup;
+mod state;
 mod supervise;
 mod take;
 mod ticker;
@@ -26,4 +29,12 @@ mod words;
 #[cfg(test)]
 mod test_launch;
 #[cfg(test)]
+mod test_support;
+#[cfg(test)]
+mod tests;
+#[cfg(test)]
+mod tests_plan;
+#[cfg(test)]
 mod tests_supervise;
+
+pub use state::RecorderState;
