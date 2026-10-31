@@ -10,8 +10,9 @@
 //!    (`Own`), on the revision the proposal was made on, while the clips they name stay where they were (else
 //!    `OWN_MOVED`) and they still remove what was proposed (else `OWN_CHANGED`). One Klipolo doesn't know waits for
 //!    the person (`OWN_WAITING`).
-//! 5. `compile`, with no typed message: an app's words are never the person's times. A refusal of the call is the
-//!    tool's error, with its reason, and nothing changes.
+//! 5. `compile_for_app`, with no typed message: an app's words are never the person's times, but the words it puts on
+//!    screen (`addText`, `makeTitleCard`'s title) are its own, as it gave them. A refusal of the call is the tool's
+//!    error, with its reason, and nothing changes.
 //! 6. Additions apply at once as one undo step the app made (`from_app`), checked again first to take nothing away,
 //!    within the app's pace of applied batches (`Limits::applied`; a batch the host refuses gives its place back).
 //!    Removals become a proposal for the person, never applied here: in place of the app's own, or, once additions
@@ -28,8 +29,8 @@
 //! job started). `isError` is true exactly when nothing was done; when part was, the text says what wasn't.
 
 use klipolo_chat::{
-    ANALYZE_FIRST, Audience, Compiled, FunctionCall, Job, Moment, Refusal, ToolCall, compile,
-    timeline_key,
+    ANALYZE_FIRST, Audience, Compiled, FunctionCall, Job, Moment, Refusal, ToolCall,
+    compile_for_app, timeline_key,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -100,7 +101,7 @@ pub fn run(mcp: &Mcp, session: &mut Session, call: &FunctionCall) -> Value {
     };
     calls.push(new);
     let at = calls.len() - 1;
-    let out = compile(&snap.project, &snap.inputs, &calls);
+    let out = compile_for_app(&snap.project, &snap.inputs, &calls);
     let mine: Vec<&Refusal> = out.refusals.iter().filter(|r| r.call_index == at).collect();
     if !mine.is_empty() {
         return refused(&reasons(mine));
@@ -158,7 +159,7 @@ fn joined(
         return Err(words::OWN_MOVED.to_owned());
     }
     // Read again now, the calls must remove what they did when proposed. One more compile, of the waiting calls alone.
-    let again = compile(&snap.project, &snap.inputs, &own.calls);
+    let again = compile_for_app(&snap.project, &snap.inputs, &own.calls);
     if !again.refusals.is_empty() || again.proposal.is_none_or(|p| p.tx.ops != own.ops) {
         return Err(words::OWN_CHANGED.to_owned());
     }
@@ -361,7 +362,7 @@ fn start(mcp: &Mcp, client: &str, job: &Job) -> Result<(), String> {
 
 /// `findMoments`, compiled alone on the project as it is: the moments shown to the person, nothing else.
 fn show(host: &dyn Host, client: &str, snap: &Snapshot, call: ToolCall) -> Value {
-    let out = compile(&snap.project, &snap.inputs, std::slice::from_ref(&call));
+    let out = compile_for_app(&snap.project, &snap.inputs, std::slice::from_ref(&call));
     if !out.refusals.is_empty() {
         return refused(&reasons(&out.refusals));
     }
@@ -432,10 +433,6 @@ fn reasons<'a>(refusals: impl IntoIterator<Item = &'a Refusal>) -> String {
     said.join(" ")
 }
 
-/// How chat refuses a title card whose words the person didn't type: an app's words never are.
-const CHAT_TITLE_WORDS: &str = "makeTitleCard: the title must be the person's own words";
-/// How chat refuses words on screen the person didn't type.
-const CHAT_TEXT_WORDS: &str = "addText: the words must be the person's own";
 /// How chat ends a refusal of a time that stands on nothing: what counts for chat's model.
 const CHAT_TIMES_FROM: &str = ", the selection, the playhead, the video's start or end, or a time the person said. Use \
 a time from the context.";
@@ -444,20 +441,12 @@ const CHAT_ASK: &str = " with askUser";
 
 /// A refusal's reason, as a sentence an app can act on. Chat words some for its own model and the person in its panel;
 /// an app reads them in its own terms:
-/// - a title card and words on screen, which need the person's own words, are for Klipolo's chat
-///   (`TITLE_CARD_WORDS`, `TEXT_WORDS`);
 /// - a clip not analyzed yet is the person's to analyze (`NOT_ANALYZED`);
 /// - a time must stand on the reads an app has, never its own words (`TIMES_FROM`);
 /// - it asks its own person, not through `askUser`.
 ///
 /// One for the person names the clip it is about: "Klipolo is still listening to this clip (c2)."
 fn reason(r: &Refusal) -> String {
-    if r.reason.starts_with(CHAT_TITLE_WORDS) {
-        return words::TITLE_CARD_WORDS.to_owned();
-    }
-    if r.reason.starts_with(CHAT_TEXT_WORDS) {
-        return words::TEXT_WORDS.to_owned();
-    }
     if r.audience == Audience::Person && r.reason == ANALYZE_FIRST {
         return match &r.clip {
             Some(clip) => fill(words::NOT_ANALYZED, &[("clip", clip)]),

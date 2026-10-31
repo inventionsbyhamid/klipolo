@@ -12,14 +12,14 @@ mod fake_host;
 
 use agent::{Agent, assert_refused, outcome, text};
 use fake_host::FakeHost;
-use klipolo_chat::{AnalysisState, FunctionCall, Moment, Proposal, ToolCall, View, compile};
+use klipolo_chat::{AnalysisState, FunctionCall, Job, Moment, Proposal, ToolCall, View, compile};
 use klipolo_mcp::Host;
 use klipolo_mcp::call::from_app;
 use klipolo_mcp::rpc::Mcp;
 use klipolo_mcp::words::{
-    DECIDED, DONE, KLIPOLO_CHAT, MOVED, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS, NOTHING_TO_UNDO,
-    OVER_SHARE, OWN_CHANGED, OWN_MOVED, OWN_WAITING, PROPOSED_NO_FOOTAGE, PUSHES_OUT, READ_FIRST,
-    REDO_WAITS, STALE, TEXT_WORDS, TITLE_CARD_WORDS, UNCHANGED, UNDO_DROPPED, UNDONE,
+    DECIDED, DONE, KLIPOLO_CHAT, MOVED, NO_CREDIT, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS,
+    NOTHING_TO_UNDO, OVER_SHARE, OWN_CHANGED, OWN_MOVED, OWN_WAITING, PROPOSED_NO_FOOTAGE,
+    PUSHES_OUT, READ_FIRST, REDO_WAITS, STALE, STARTED, UNCHANGED, UNDO_DROPPED, UNDONE,
     WAITING_OTHER, fill,
 };
 use klipolo_model::Transaction;
@@ -28,6 +28,7 @@ use klipolo_model::history::{HistoryLimits, Maker};
 use klipolo_model::ops::{Op, Origin};
 use klipolo_model::project::FormatKind;
 use klipolo_model::time::RangeUs;
+use klipolo_model::timeline::ItemContent;
 use serde_json::{Value, json};
 
 fn span(a: f64, b: f64) -> RangeUs {
@@ -562,9 +563,7 @@ fn agent_words_are_exact() {
         LOW_CREDIT,
         OVER_CAP,
         READ_ONLY,
-        TITLE_CARD_WORDS,
         NOT_ANALYZED,
-        TEXT_WORDS,
         TIMES_FROM,
     ] {
         assert!(!said.contains(['\u{2013}', '\u{2014}']), "{said}");
@@ -1206,30 +1205,74 @@ fn removals_that_cant_reopen_because_another_proposal_waits_say_so() {
     assert_eq!(host.open_proposal().map(|p| p.from), Some(None));
 }
 
+/// The words on the project's text layers.
+fn texts_on_screen(host: &FakeHost) -> Vec<String> {
+    let p = host.project();
+    (p.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .filter_map(|i| match &i.content {
+            ItemContent::Text { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// An app acts for its own person: the words it gives go on screen at once, as one undo step the app made.
 #[test]
-fn a_title_card_needs_the_persons_own_words() {
+fn an_apps_own_words_go_on_screen() {
     let host = FakeHost::two_clips();
     let mcp = Mcp::new(host.clone());
     let agent = Agent::open(&mcp, "Agent");
     let before = host.revision();
-    let result = agent.call(
-        "makeTitleCard",
-        json!({"title": "Welcome aboard", "prompt": "a sunrise over the station", "atSec": null, "durationSec": null}),
-    );
-    // An app's words are never the person's: it is told where the person makes one, and nothing about askUser.
-    assert_refused(&result, TITLE_CARD_WORDS);
+    let words =
+        json!({"text": "Hello from orbit", "preset": "title", "atSec": null, "durationSec": null});
+    let result = agent.call("addText", words);
+    assert_eq!(result["isError"], false, "{result}");
+    assert_eq!(text(&result), fill(DONE, &[("tools", "addText")]));
+    assert_eq!(host.revision(), before + 1);
+    assert_eq!(host.state().applied.last().unwrap().0, "Agent");
+    assert_eq!(texts_on_screen(&host), ["Hello from orbit"]);
+}
+
+/// An app's title card takes its own title at once, as a step the app made, and its background is a paid job that
+/// starts only through the host's checks and the app's pace, as a sticker's does.
+#[test]
+fn an_apps_title_card_takes_its_own_title_and_starts_its_background() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    let before = host.revision();
+    let card = json!({"title": "Welcome aboard", "prompt": "a sunrise over the station", "atSec": null, "durationSec": null});
+    let result = agent.call("makeTitleCard", card.clone());
+    assert_eq!(result["isError"], false, "{result}");
+    let tools = [("tools", "makeTitleCard")];
     assert_eq!(
-        TITLE_CARD_WORDS,
-        "makeTitleCard: a title card needs the person's own words, typed in Klipolo's chat. Ask the person to make it \
-         there."
+        text(&result),
+        format!("{} {}", fill(DONE, &tools), fill(STARTED, &tools))
     );
-    assert!(!text(&result).contains("askUser"));
-    assert_eq!(host.revision(), before);
-    let counts = host.state().counts;
+    assert_eq!(result["structuredContent"]["outcome"], "done");
+    assert_eq!(host.revision(), before + 1);
+    {
+        let s = host.state();
+        assert_eq!(s.applied.last().unwrap().0, "Agent");
+        assert!(
+            matches!(&s.started[..], [(client, Job::MakeTitleBackground { prompt, .. })]
+                if client == "Agent" && prompt == "a sunrise over the station"),
+            "{:?}",
+            s.started
+        );
+        assert_eq!((s.counts.estimates, s.counts.paid_asked), (1, 1));
+    }
+    // With no Meta key or access code, the title still goes in, and the background is said not to start.
+    host.state().credit = false;
+    let result = agent.call("makeTitleCard", card);
+    assert_eq!(result["isError"], false, "{result}");
     assert_eq!(
-        (counts.applies, counts.estimates, counts.paid_asked),
-        (0, 0, 0)
+        text(&result),
+        format!("{} {}", fill(DONE, &tools), NO_CREDIT)
     );
+    assert_eq!(host.revision(), before + 2);
+    assert_eq!(host.state().started.len(), 1);
 }
 
 #[test]
@@ -1248,16 +1291,5 @@ fn chat_worded_refusals_are_said_for_apps() {
         assert!(text(&result).ends_with(ends), "{result}");
         assert!(!text(&result).contains("askUser"), "{result}");
     }
-    // Words on screen are the person's own, typed in Klipolo's chat: an app is told where the person adds them, and
-    // nothing about askUser.
-    let words = json!({"text": "Hello", "preset": "title", "atSec": null, "durationSec": null});
-    let result = agent.call("addText", words);
-    assert_refused(&result, TEXT_WORDS);
-    assert_eq!(
-        TEXT_WORDS,
-        "addText: words on screen need the person's own words, typed in Klipolo's chat. Ask the person to add them \
-         there."
-    );
-    assert!(!text(&result).contains("askUser"));
     assert_eq!(host.state().counts.applies, 0);
 }
