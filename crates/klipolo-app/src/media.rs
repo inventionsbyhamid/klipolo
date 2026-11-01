@@ -158,24 +158,34 @@ pub(crate) fn probe_each(
     result
 }
 
-/// Probes `paths` (dropped from Finder), or the files the person picks when `paths` is null. Nothing is granted to the
-/// page here: it reads a file only once the open project uses it (`media_cache`, `media_picture`).
+/// Probes `paths` (dropped from Finder), or the files the person picks when `paths` is null: one picture when `picture`
+/// (the clip card's background), else any media. Nothing is granted to the page here: it reads a file only once the
+/// open project uses it (`media_cache`, `media_picture`).
 #[tauri::command]
 pub async fn media_import(
     app: AppHandle,
     paths: Option<Vec<String>>,
+    picture: Option<bool>,
 ) -> Result<MediaImport, String> {
     let chosen: Vec<PathBuf> = match paths {
         Some(paths) => paths.into_iter().map(PathBuf::from).collect(),
         None => {
             let picker = app.clone();
+            let picture = picture.unwrap_or(false);
             tauri::async_runtime::spawn_blocking(move || {
-                picker
-                    .dialog()
-                    .file()
-                    .set_title("Add videos, music, sounds or images")
-                    .add_filter("Media", MEDIA_EXTENSIONS)
-                    .blocking_pick_files()
+                let dialog = picker.dialog().file();
+                if picture {
+                    dialog
+                        .set_title("Choose a picture for the background")
+                        .add_filter("Pictures", PICTURE_EXTENSIONS)
+                        .blocking_pick_file()
+                        .map(|file| vec![file])
+                } else {
+                    dialog
+                        .set_title("Add videos, music, sounds or images")
+                        .add_filter("Media", MEDIA_EXTENSIONS)
+                        .blocking_pick_files()
+                }
             })
             .await
             .map_err(|e| e.to_string())?

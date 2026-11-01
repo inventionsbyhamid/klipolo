@@ -9,18 +9,22 @@ use crate::platform::encode::CodecRole;
 const QP2LAMBDA: usize = 118;
 /// JPEG quantiser scale (2 is near lossless, 31 is blocky): small files that still read at 72 px.
 const QSCALE: usize = 4;
+/// A poster's (`thumbs::write_poster`): about libjpeg's quality 90, sharp at a card's size on a Retina screen.
+pub const POSTER_QSCALE: usize = 3;
 
 /// The sprite as one baseline JPEG (about 146 KB for 64 tiles of busy 128 × 72 test video, measured).
 pub fn encode_jpeg(sprite: &Sprite) -> Result<Vec<u8>, String> {
     let (planes, strides) = sprite.planes();
-    encode_planes(sprite.size(), planes, strides)
+    encode_planes(sprite.size(), planes, strides, QSCALE)
 }
 
-/// A full-range 4:2:0 picture of `size` (even sides), its Y, U and V rows `strides` apart, as one baseline JPEG.
+/// A full-range 4:2:0 picture of `size` (even sides), its Y, U and V rows `strides` apart, as one baseline JPEG at
+/// quantiser scale `qscale`.
 pub fn encode_planes(
     (w, h): (u32, u32),
     planes: [&[u8]; 3],
     strides: [usize; 3],
+    qscale: usize,
 ) -> Result<Vec<u8>, String> {
     let choice = crate::platform::encode::candidates(CodecRole::Still)
         .first()
@@ -35,7 +39,7 @@ pub fn encode_planes(
     encoder.set_height(h);
     encoder.set_format(Pixel::YUVJ420P);
     encoder.set_time_base((1, 1));
-    encoder.set_quality(QSCALE * QP2LAMBDA);
+    encoder.set_quality(qscale * QP2LAMBDA);
     encoder.set_flags(ffmpeg::codec::Flags::QSCALE);
     let mut encoder = encoder
         .open_as(codec)

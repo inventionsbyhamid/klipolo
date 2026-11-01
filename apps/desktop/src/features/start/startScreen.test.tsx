@@ -11,6 +11,19 @@ import { renderWithProviders } from '../../test/render';
 // `projects_recent` goes through the real bridge to this `invoke`; creating and opening go through the project bridge.
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
+// Rust's events, by name: a test sends one by calling its handler.
+const { heard, listen } = vi.hoisted(() => {
+  const heard = new Map<string, (event: { payload: unknown }) => void>();
+  const listen = vi.fn(async (name: string, handler: (event: { payload: unknown }) => void) => {
+    heard.set(name, handler);
+    return () => heard.delete(name);
+  });
+  return { heard, listen };
+});
+vi.mock('@tauri-apps/api/event', () => ({ listen }));
+// A picture loads when the test says so.
+const { preloadImage } = vi.hoisted(() => ({ preloadImage: vi.fn() }));
+vi.mock('../../lib/preloadImage', () => ({ preloadImage }));
 vi.mock('../../bridge/commands', () => ({
   bridge: { createProject: vi.fn(), openProject: vi.fn(), duplicateProject: vi.fn(), snapshot: vi.fn() },
   mediaUrl: (path: string) => `asset://localhost${path}`,
@@ -23,6 +36,7 @@ const { useProject } = await import('../../state/project');
 const { useExport } = await import('../../state/export');
 const { useToasts } = await import('../../state/toasts');
 const { StartScreen } = await import('./StartScreen');
+const { followPosters, usePosters } = await import('../../state/posters');
 
 const MINUTE = 60_000;
 const NOW = new Date(2026, 9, 31, 12, 0).getTime();
@@ -99,6 +113,8 @@ beforeEach(() => {
   useToasts.setState({ toasts: [] });
   vi.mocked(bridge.createProject).mockResolvedValue(fixtureSnapshot());
   vi.mocked(bridge.openProject).mockResolvedValue(fixtureSnapshot());
+  preloadImage.mockResolvedValue(undefined);
+  usePosters.setState({ landed: {}, heard: 0 });
 });
 
 afterEach(() => {
@@ -275,6 +291,52 @@ describe('StartScreen', () => {
     expect(none.querySelector('svg.ico')).not.toBeNull();
     // The picture stays out of the card's name.
     expect(screen.getByRole('button', { name: 'Studio tour' })).toBeInTheDocument();
+  });
+
+  it("a card swaps to its poster once the picture has loaded, and keeps its tile until then", async () => {
+    await followPosters();
+    recentAnswers(ROWS);
+    renderWithProviders(<StartScreen />);
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    let loaded!: () => void;
+    preloadImage.mockImplementation(() => new Promise<void>((resolve) => (loaded = resolve)));
+    const sprite = '/cache/media/thumbs/kiln/poster-202x360.v2.jpg';
+    act(() =>
+      heard.get('projects://poster')!({
+        payload: {
+          path: ROWS[2].path,
+          thumb: { sprite, tileW: 202, tileH: 360, cols: 1, crop: { left: 0, top: 0.1, right: 0, bottom: 0.3 } },
+        },
+      }),
+    );
+    expect(preloadImage).toHaveBeenCalledWith(`asset://localhost${sprite}`);
+    const tile = () => card('Kiln vlog').querySelector<HTMLElement>('.start-tile')!;
+    // Until the picture has loaded the card keeps the tile it had: never an empty picture between the two.
+    expect(tile().style.backgroundImage).toBe('url("asset://localhost/cache/media/thumbs/kiln/c-00000.k.jpg")');
+    await act(async () => loaded());
+    expect(tile().style.backgroundImage).toBe(`url("asset://localhost${sprite}")`);
+    // What the first clip's crop keeps (the middle six tenths, top to bottom) fills the picture's height.
+    expect(tile().style.backgroundSize).toBe('100% 166.667%');
+    expect(tile().style.backgroundPosition).toBe('0% 25%');
+    expect(tile().style.height).toBe('100%');
+    // The other cards are as they were.
+    expect(card('Studio tour').querySelector<HTMLElement>('.start-tile')!.style.backgroundImage).toContain('tour');
+  });
+
+  it('a poster heard before the list was read gives way to the list', async () => {
+    await followPosters();
+    const sprite = '/cache/media/thumbs/kiln/poster-202x360.v2.jpg';
+    // Heard and loaded on an earlier visit; the list read since has the card's picture as it is now.
+    await act(async () =>
+      heard.get('projects://poster')!({
+        payload: { path: ROWS[2].path, thumb: { sprite, tileW: 202, tileH: 360, cols: 1 } },
+      }),
+    );
+    recentAnswers(ROWS);
+    renderWithProviders(<StartScreen />);
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    const tile = card('Kiln vlog').querySelector<HTMLElement>('.start-tile')!;
+    expect(tile.style.backgroundImage).toBe('url("asset://localhost/cache/media/thumbs/kiln/c-00000.k.jpg")');
   });
 
   it('opening_a_card_opens_its_project', async () => {

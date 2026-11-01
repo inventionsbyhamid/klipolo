@@ -48,6 +48,8 @@ export const bridge = {
   snapshot: () => call<Snapshot>('project_snapshot'),
   /** Probes `paths` (a Finder drop), or the files the person picks (none given): the assets, and what was skipped. */
   importMedia: (paths?: string[]) => call<MediaImport>('media_import', { paths: paths ?? null }),
+  /** One picture chosen on this Mac (for the background), probed: none when the picker is closed without one. */
+  choosePicture: () => call<MediaImport>('media_import', { paths: null, picture: true }),
   /** Edits are saved in the background: this hears each save that lands, and when saving starts failing. */
   onSaveStatus: (handler: (status: SaveStatus) => void): Promise<UnlistenFn> =>
     listen<SaveStatus>('project-save', (event) => handler(event.payload)),
