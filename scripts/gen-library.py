@@ -15,10 +15,12 @@ scripts/gen-library.test.sh checks that two runs write the same bytes as the com
 """
 
 import argparse
+import concurrent.futures
 import hashlib
 import io
 import json
 import math
+import os
 import pathlib
 import struct
 import wave
@@ -886,7 +888,7 @@ OUTLINE = 18.0  # the navy outline inside a white shape's border, in pixels
 
 class Shape:
     def near(self, x, y, reach):
-        """The shape as seen from points within `reach` of (x, y): the same distances, sometimes with less to work out."""
+        """The shape as seen from points within `reach` of (x, y): the same distances, often with less to work out."""
         return self
 
 
@@ -1189,7 +1191,8 @@ def arrow_head(tip_x, tip_y, dx, dy, length_, width_):
 
 def sparkle_star(cx, cy, r):
     """A four-point sparkle: a square's middle less the four circles round its corners, its points rounded."""
-    parts = [Box(cx, cy, r, r, 0.0)] + [Outside(Circle(cx + sx * r, cy + sy * r, r)) for sx in (-1, 1) for sy in (-1, 1)]
+    corners = [Outside(Circle(cx + sx * r, cy + sy * r, r)) for sx in (-1, 1) for sy in (-1, 1)]
+    parts = [Box(cx, cy, r, r, 0.0)] + corners
     return Grown(Within(*parts), 14.0)
 
 
@@ -1390,32 +1393,49 @@ They are dedicated to the public domain under CC0 1.0 Universal:
 https://creativecommons.org/publicdomain/zero/1.0/
 """
 
+SPEECH_TAGS = ["speech", "talk", "say", "quote", "white"]
 
-def build():
-    """Every file of the pack, by path, and the manifest's items."""
+
+def made(key):
+    """One item's file, and its length or size. Each item is made on its own, so several are made at once."""
+    kind, k = key
+    if kind == "sound":
+        samples = normalised(SOUNDS[k][3](), SOUNDS[k][4])
+        return wav_bytes(samples, SR), dict(duration_ms=round(len(samples) * 1000 / SR))
+    if kind == "music":
+        samples = MUSIC[k][3]()
+        return wav_bytes(samples, MUSIC_RATE), dict(duration_ms=round(len(samples) * 1000 / MUSIC_RATE))
+    if kind == "sticker":
+        return sticker(STICKERS[k][3], STICKERS[k][4]), dict(width=SIZE, height=SIZE)
+    if kind == "speech":
+        return png_bytes(layered(bubble, [(BORDER, WHITE), (0.0, NAVY), (-18.0, WHITE)]), 470), dict(width=SIZE,
+                                                                                                    height=SIZE)
+    return painted(DRAWN[k][3]()), dict(width=SIZE, height=SIZE)
+
+
+def build(workers=None):
+    """Every file of the pack, by path, and the manifest's items. The items are made by `workers` processes at once
+    (default: one a CPU, at most 8), the longest first; the bytes are the same however many."""
+    listed = [(id_, name, "sound", f"sounds/{id_}.wav", tags, ("sound", k))
+              for k, (id_, name, tags, _, _) in enumerate(SOUNDS)]
+    listed += [(id_, name, "music", f"music/{id_}.wav", tags, ("music", k))
+               for k, (id_, name, tags, _) in enumerate(MUSIC)]
+    listed += [(id_, name, "sticker", f"stickers/{id_}.png", tags, ("sticker", k))
+               for k, (id_, name, tags, _, _) in enumerate(STICKERS)]
+    listed.append(("bubble", "Speech bubble", "sticker", "stickers/bubble.png", SPEECH_TAGS, ("speech", 0)))
+    listed += [(id_, name, "sticker", f"stickers/{id_}.png", tags, ("drawn", k))
+               for k, (id_, name, tags, _) in enumerate(DRAWN)]
+
+    keys = sorted((entry[-1] for entry in listed), key=lambda key: key[0] != "music")
+    with concurrent.futures.ProcessPoolExecutor(workers or min(os.cpu_count() or 1, 8)) as pool:
+        made_by = {key: pool.submit(made, key) for key in keys}
+        results = [made_by[entry[-1]].result() for entry in listed]
+
     files, items = {}, []
-
-    def item(id_, name, category, path, data, tags, **size):
+    for (id_, name, category, path, tags, _), (data, size) in zip(listed, results):
         files[path] = data
         items.append(dict(id=id_, name=name, category=category, file=path, **size, tags=tags,
                           sha256=hashlib.sha256(data).hexdigest(), license="CC0-1.0"))
-
-    for id_, name, tags, make, peak in SOUNDS:
-        samples = normalised(make(), peak)
-        item(id_, name, "sound", f"sounds/{id_}.wav", wav_bytes(samples, SR), tags,
-             duration_ms=round(len(samples) * 1000 / SR))
-    for id_, name, tags, make in MUSIC:
-        samples = make()
-        item(id_, name, "music", f"music/{id_}.wav", wav_bytes(samples, MUSIC_RATE), tags,
-             duration_ms=round(len(samples) * 1000 / MUSIC_RATE))
-    for id_, name, tags, shape, colour in STICKERS:
-        item(id_, name, "sticker", f"stickers/{id_}.png", sticker(shape, colour), tags, width=SIZE, height=SIZE)
-    speech = png_bytes(layered(bubble, [(BORDER, WHITE), (0.0, NAVY), (-18.0, WHITE)]), 470)
-    item("bubble", "Speech bubble", "sticker", "stickers/bubble.png", speech,
-         ["speech", "talk", "say", "quote", "white"], width=SIZE, height=SIZE)
-    for id_, name, tags, draw in DRAWN:
-        item(id_, name, "sticker", f"stickers/{id_}.png", painted(draw()), tags, width=SIZE, height=SIZE)
-
     manifest = dict(version=1, id="klipolo-pack", name="Klipolo pack", license="CC0-1.0", creator="Klipolo",
                     items=items)
     files["manifest.json"] = (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode()
