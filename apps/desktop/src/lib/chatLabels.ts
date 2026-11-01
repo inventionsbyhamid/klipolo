@@ -90,6 +90,40 @@ export const CHAT_LABELS: Record<string, MessageDescriptor> = {
     message: 'Add a title card background',
     comment: 'Undo history entry: a drawn background placed under a title',
   }),
+  'chat.setCameraMode': msg({
+    id: 'chat.setCameraMode',
+    message:
+      '{mode, select, hidden {Hide the camera} splitBottom {Put the camera under the screen} other {Show the camera as a bubble}}',
+    comment: 'Undo history entry: how a recording’s camera shows changed',
+  }),
+  'chat.adjustCamera': msg({
+    id: 'chat.adjustCamera',
+    message: 'Adjust the camera',
+    comment: 'Undo history entry: the camera bubble moved, resized or restyled',
+  }),
+  'chat.detachCamera': msg({
+    id: 'chat.detachCamera',
+    message: 'Separate the camera',
+    comment: 'Undo history entry: a recording’s camera made a layer of its own',
+  }),
+  'chat.muteSource': msg({
+    id: 'chat.muteSource',
+    message:
+      '{mute, select, on {Mute} other {Unmute}} the {source, select, computerSound {computer sound} gameSound {game sound} videoSound {camera sound} other {mic}}',
+    comment: 'Undo history entry: a recorded sound muted or unmuted, e.g. "Mute the mic"',
+  }),
+  'chat.setSourceVolume': msg({
+    id: 'chat.setSourceVolume',
+    message:
+      'Set the {source, select, computerSound {computer sound} gameSound {game sound} videoSound {camera sound} other {mic}} to {percent}%',
+    comment: 'Undo history entry: a recorded sound’s volume, in percent of how it was recorded, e.g. "Set the mic to 50%"',
+  }),
+  'chat.separateSound': msg({
+    id: 'chat.separateSound',
+    message:
+      'Separate the {source, select, computerSound {computer sound} gameSound {game sound} videoSound {camera sound} other {mic}}',
+    comment: 'Undo history entry: a recorded sound put on a track of its own, e.g. "Separate the mic"',
+  }),
   'chat.andMore': msg({
     id: 'chat.andMore',
     message: '{first}, and {more} more',

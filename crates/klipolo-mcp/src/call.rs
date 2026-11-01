@@ -26,10 +26,10 @@
 //! undo: no path here cuts footage.
 //!
 //! A result's text says what was done, with chat's own notes on it (a new speed that shortens a transition, as the clip
-//! card says it), what was proposed and what wasn't done. A result is one text and `structuredContent`: `{"outcome":
-//! "done" | "proposed" | "shown" | "started" | "refused", "revision"?, "proposalId"?, "removedSec"?}`, the outcome what
-//! changed most (a proposal, then the project, then a job started). `isError` is true exactly when nothing was done;
-//! when part was, the text says what wasn't.
+//! card says it, or a camera left as it was because it is its own layer), what was proposed and what wasn't done. A
+//! result is one text and `structuredContent`: `{"outcome": "done" | "proposed" | "shown" | "started" | "refused",
+//! "revision"?, "proposalId"?, "removedSec"?}`, the outcome what changed most (a proposal, then the project, then a
+//! job started). `isError` is true exactly when nothing was done; when part was, the text says what wasn't.
 
 use klipolo_chat::{
     ANALYZE_FIRST, Audience, Compiled, FunctionCall, Job, Moment, ROUGH_FILLERS,
@@ -255,7 +255,8 @@ fn edit(
             words::DONE,
             &[("tools", &names(applied.map(|i| &calls[i])))],
         ));
-        // What the additions did beyond what was asked: a new speed that shortens a transition.
+        // What the additions did beyond what was asked, or left as they were: a new speed that shortens a transition, a
+        // camera that is its own layer.
         said.extend(out.notes.iter().cloned());
     }
 
