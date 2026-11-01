@@ -123,6 +123,11 @@ export function gateSentence(id: string): string {
   return codedMessage(coded('capture.gate.waiting', { source: sourceName(id) }));
 }
 
+/** "macOS is asking you something. Answer it, and the countdown starts again.", while a system alert holds it. */
+export function systemAlertSentence(): string {
+  return codedMessage(coded('capture.gate.systemAlert'));
+}
+
 /** The privacy page a take's refusal is about (the microphone or the camera), by its code; else null. */
 export function refusedPage(code: string | null): 'mic' | 'camera' | null {
   if (code === 'capture.permission.mic') return 'mic';

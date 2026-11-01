@@ -11,8 +11,11 @@ import { renderWithProviders } from '../../test/render';
 import { CaptionWords } from './CaptionWords';
 import { forgetCaptionPages } from './useCaptionPages';
 
-/** The files the fixture project's main-track clips play (`fixtureProject`): its song is a layer, not analysed. */
-const CLIPS = ['screen', 'camera', 'mic', 'broll'];
+/**
+ * What the fixture project (`fixtureProject`) offers for analysis: its recording, by its voice (the mic), and the
+ * b-roll. Its song is a layer, and its screen and camera aren't offered: the recording's words are the mic's.
+ */
+const CLIPS = ['mic', 'broll'];
 let estimated: unknown[] = [];
 
 beforeEach(async () => {
@@ -50,7 +53,7 @@ describe('caption words with none to show', () => {
 
   it('says so of several clips heard with no speech', async () => {
     useAnalysis.setState({
-      states: { screen: silent, camera: done, mic: silent, music: done, broll: done },
+      states: { screen: done, camera: done, mic: silent, music: done, broll: silent },
     });
     renderWithProviders(<CaptionWords format="portrait" />);
     expect(await screen.findByText('No speech found in these clips.')).toBeInTheDocument();
@@ -70,7 +73,7 @@ describe('caption words with none to show', () => {
 
   it('offers nothing while clips are being analysed', async () => {
     useAnalysis.setState({
-      states: { screen: { state: 'running', step: 'transcript', pct: 30 } },
+      states: { mic: { state: 'running', step: 'transcript', pct: 30 } },
     });
     renderWithProviders(<CaptionWords format="portrait" />);
     expect(await screen.findByText(/No caption words yet/)).toBeInTheDocument();

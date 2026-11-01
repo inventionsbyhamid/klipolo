@@ -92,6 +92,12 @@ impl Harness {
         self.apply(fx);
     }
 
+    /// A system alert is on the screen now (`up`), or not, as the threads layer reads it from the backend.
+    pub fn system_alert(&mut self, up: bool) {
+        let fx = self.core.system_alert(up, self.now);
+        self.apply(fx);
+    }
+
     /// A pipe's event: it also stops or starts the fake's media, as the fake backend's pipes do.
     pub fn pipe_event(&mut self, source: &str, event: PipeEvent) {
         if let Some(f) = self.fakes.iter_mut().find(|f| f.id == source) {

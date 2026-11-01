@@ -189,6 +189,11 @@
     ]
   },
   {
+    "code": "capture.gate.systemAlert",
+    "message": "macOS is asking you something. Answer it, and the countdown starts again.",
+    "params": []
+  },
+  {
     "code": "capture.paused.sleep",
     "message": "Recording paused while your computer slept.",
     "params": []

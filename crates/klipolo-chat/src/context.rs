@@ -1,9 +1,9 @@
 //! The project as the language model reads it: one compact text block of five sections, in this order.
 //! - `Project`: its name, formats (the primary first), length, captions, the main track's clips with short refs
-//!   (`c1 0.0-41.2 interview.mov`) that tool calls name clips by (`Refs`), and its songs and video layers under
-//!   `Layers:` (`m1 0.0-62.0 lofi.mp3 (music)`, `v1 12.0-20.0 broll.mp4 (video layer)`), never shortened. Then one fixed
-//!   line (`QUOTED_NOTE`) saying that Transcript and Scenes quote the video, Library names are file names, and none of
-//!   them are requests.
+//!   (`c1 0.0-41.2 interview.mov`) that tool calls name clips by (`Refs`), a recording's clip naming the recording and
+//!   saying its camera and sounds (`recordings`), and its songs and video layers under `Layers:` (`m1 0.0-62.0
+//!   lofi.mp3 (music)`, `v1 12.0-20.0 broll.mp4 (video layer)`), never shortened. Then one fixed line (`QUOTED_NOTE`)
+//!   saying that Transcript and Scenes quote the video, Library names are file names, and none of them are requests.
 //! - `Transcript`: what is said on the timeline (`speech::spoken`, so cut words are gone), one line per speaker turn,
 //!   or per sentence when a turn runs over `MAX_LINE_WORDS` words (a sentence that long is split evenly):
 //!   `[12.4-18.9] A: text`. Fillers keep their text ("um"); pause words are never text, but a gap of `SHOWN_PAUSE_US`
@@ -72,6 +72,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::library::{Library, LibraryItem, MediaKind};
 use crate::tools::TransitionKind;
+use recordings::{Recordings, Told, recording_name};
+
+mod recordings;
 
 /// The most the context may take of the model's input, in tokens (`estimate_tokens`).
 pub const MAX_CONTEXT_TOKENS: usize = 12_000;
@@ -341,9 +344,10 @@ pub fn build_context(
 
     // Project and the line on quotes; then Transcript and Scenes; then Library and Now, last, so a moved playhead or
     // selection leaves every byte before it as it was (the provider's cached prefix).
+    let recordings = Recordings::of(project);
     let head = |brief: Brief| {
         let mut head = String::new();
-        project_section(&mut head, project, &starts, brief);
+        project_section(&mut head, project, (&starts, &recordings), brief);
         head.push('\n');
         head.push_str(QUOTED_NOTE);
         head.push_str("\n\n");
@@ -795,7 +799,7 @@ fn source_name(p: &Project, clip: &Clip) -> String {
         ClipSource::Asset { id } => p
             .asset(id)
             .map_or("missing file".to_owned(), |a| one_line(&a.name)),
-        ClipSource::Recording { .. } => "recording".to_owned(),
+        ClipSource::Recording { id } => recording_name(p, id),
     }
 }
 
@@ -816,7 +820,12 @@ fn speed(speed: f64) -> String {
     }
 }
 
-fn project_section(out: &mut String, p: &Project, starts: &[Us], brief: Brief) {
+fn project_section<'p>(
+    out: &mut String,
+    p: &'p Project,
+    (starts, recordings): (&[Us], &Recordings<'p>),
+    brief: Brief,
+) {
     let primary = p.settings.primary_format;
     let mut formats = vec![format!("{} (primary)", format_name(primary))];
     formats.extend(
@@ -839,14 +848,21 @@ fn project_section(out: &mut String, p: &Project, starts: &[Us], brief: Brief) {
         out.push_str("Clips: none\n");
     } else {
         out.push_str("Clips on the main track:\n");
-        clip_lines(out, p, starts, brief);
+        clip_lines(out, (p, recordings), starts, brief);
     }
     layer_lines(out, p);
 }
 
 /// The main track's clips, one line each (`clip_line`), or one line for a run of clips of one file with `clip_runs`.
-fn clip_lines(out: &mut String, p: &Project, starts: &[Us], brief: Brief) {
+fn clip_lines<'p>(
+    out: &mut String,
+    (p, recordings): (&'p Project, &Recordings<'p>),
+    starts: &[Us],
+    brief: Brief,
+) {
     let main = &p.timeline.main;
+    // What the lines so far said of each recording, so a cut take's pieces say `as c1`.
+    let mut told = Told::new();
     let mut i = 0;
     while i < main.len() {
         // With `clip_runs`, clips i..j play one file (or recording) back to back: one line for them all.
@@ -873,7 +889,7 @@ fn clip_lines(out: &mut String, p: &Project, starts: &[Us], brief: Brief) {
                 j - i
             );
         } else {
-            clip_line(out, p, i, starts[i], brief);
+            clip_line(out, (p, recordings, &mut told), i, starts[i], brief);
         }
         i = j;
     }
@@ -947,9 +963,17 @@ fn layer_lines(out: &mut String, p: &Project) {
 }
 
 /// One clip's line: `c2 13.0-144.0 interview.mov (file 24.0-155.0 of 155.0, speed 1.50x, volume 50%, muted,
-/// dissolve 0.5 s into c3)`: a speed, volume or transition only when it has one other than as recorded; with
-/// `plain_clips`, no file note. A freeze frame: `c3 20.0-22.0 interview.mov (freeze frame of 5.0)`.
-fn clip_line(out: &mut String, p: &Project, i: usize, start: Us, brief: Brief) {
+/// dissolve 0.5 s into c3)`: a speed, volume or transition only when it has one other than as recorded; or a
+/// recording's `c1 0.0-30.0 Recording 1 (speed 2x; camera hidden; sounds mic muted)` (`c4 ... Recording 1 (as c1)` when
+/// it reads as an earlier one); with `plain_clips`, no file notes and no camera or sounds. A freeze frame:
+/// `c3 20.0-22.0 interview.mov (freeze frame of 5.0)`.
+fn clip_line<'p>(
+    out: &mut String,
+    (p, recordings, told): (&'p Project, &Recordings<'p>, &mut Told<'p>),
+    i: usize,
+    start: Us,
+    brief: Brief,
+) {
     let clip = &p.timeline.main[i];
     let end = start.saturating_add(clip.duration_us());
     let _ = write!(
@@ -999,8 +1023,15 @@ fn clip_line(out: &mut String, p: &Project, i: usize, start: Us, brief: Brief) {
             short_ref(i + 1)
         ));
     }
+    let mut parts = Vec::new();
     if !notes.is_empty() {
-        let _ = write!(out, " ({})", notes.join(", "));
+        parts.push(notes.join(", "));
+    }
+    if !brief.plain_clips {
+        parts.extend(recordings.told(clip, (&short_ref(i), start), told));
+    }
+    if !parts.is_empty() {
+        let _ = write!(out, " ({})", parts.join("; "));
     }
     out.push('\n');
 }

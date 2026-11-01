@@ -8,7 +8,7 @@ import { cn } from '../../design/cn';
 import { SpriteIcon } from '../../design/SpriteIcon';
 import { formatPrecise } from '../../lib/time';
 import { useStableCallback } from '../../lib/useStableCallback';
-import { offerAgain, useAnalysedClips, useAnalysis, whyNoWords } from '../../state/analysis';
+import { offerAgain, useAnalysedClips, useAnalysis, useTakes, whyNoWords } from '../../state/analysis';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { pageAt, useAllCaptionPages } from './useCaptionPages';
@@ -25,7 +25,8 @@ const seek = (w: WordView) => usePlayback.getState().seek(w.startUs);
 function useWhyNoWords() {
   const analysed = useAnalysedClips();
   const clips = useMemo(() => analysed.map((a) => a.id), [analysed]);
-  return useAnalysis((s) => whyNoWords(s.states, clips));
+  const takes = useTakes();
+  return useAnalysis((s) => whyNoWords(s.states, clips, takes));
 }
 
 /** The word being fixed in place, as it was when the field opened, and the places it shows ("Fix all"). */

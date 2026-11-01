@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 import type { Asset } from '../../bindings/Asset';
+import type { Project } from '../../bindings/Project';
 import { openSettings, useAi, useNeedsKey } from '../../ai/aiStatus';
+import { recordingOf, voiceOf } from '../../lib/analysed';
+import { assetName, recordingName } from '../../lib/timeline';
 import {
   analyze,
   cancelAnalysis,
@@ -10,17 +13,21 @@ import {
   stateOf,
   useAnalysedClips,
   useAnalysis,
+  useTakes,
 } from '../../state/analysis';
+import { useProject } from '../../state/project';
 import { Icon } from '../../layout/Icon';
 import {
   FILE_MISSING,
   STEP_LABELS,
+  counted,
   missingTitle,
   offerText,
   offerTitle,
   progressTitle,
   spokenProgress,
   stepDots,
+  takeState,
 } from './analysis';
 import './analysis.css';
 
@@ -49,8 +56,14 @@ function BannerIcon({ name }: { name: keyof typeof ICONS }) {
   );
 }
 
-/** The files the project's main-track clips play: what analysis is for (`useAnalysedClips`). */
+/**
+ * What analysis offers (`useAnalysedClips`): the files the project's main-track clips play, a recording counted as one
+ * clip by its voice.
+ */
 const useClips = useAnalysedClips;
+
+const NO_ASSETS: Asset[] = [];
+const NO_RECORDINGS: Project['recordings'] = [];
 
 /**
  * Asks for the offer whenever the clips not analysed change (an import, another project, a Cancel) or the way to pay
@@ -69,15 +82,29 @@ function useOffer(clips: Asset[]) {
   }, [ids, mode]);
 }
 
-/** A clip's art and name, as each row of the banner starts. */
+/**
+ * A row's name: a recording's voice is the take, named as the timeline names the take's clip ("Recording 1"); a
+ * recording's file placed on its own as that clip is ("Screen of Recording 1"); any other file by its own name. The
+ * row and what a screen reader hears of it say the same.
+ */
+function rowName(project: Project | undefined, clip: Asset): string {
+  if (!project) return clip.name;
+  const take = voiceOf(project, clip.id);
+  return take ? recordingName(project, take) : assetName(project, clip);
+}
+
+/** A clip's art and name, as each row of the banner starts (`rowName`): a take has a film's art. */
 function ClipName({ clip }: { clip: Asset }) {
+  const take = useProject((s) => (s.snapshot ? voiceOf(s.snapshot.project, clip.id) : null));
+  const name = useProject((s) => rowName(s.snapshot?.project, clip));
+  const film = clip.kind === 'video' || take !== null;
   return (
     <>
-      <span className={clip.kind === 'video' ? 'art-clip' : 'art-clip is-sound'} aria-hidden>
-        {clip.kind === 'video' ? <Icon name="film" /> : <BannerIcon name="wave" />}
+      <span className={film ? 'art-clip' : 'art-clip is-sound'} aria-hidden>
+        {film ? <Icon name="film" /> : <BannerIcon name="wave" />}
       </span>
-      <span className="analysis-job-name" title={clip.name}>
-        {clip.name}
+      <span className="analysis-job-name" title={name}>
+        {name}
       </span>
     </>
   );
@@ -97,12 +124,29 @@ function MissingRows({ clips }: { clips: Asset[] }) {
   );
 }
 
-/** One clip's row while its analysis runs or after it failed: its step and step dots, or why it stopped. */
-function JobRow({ clip }: { clip: Asset }) {
-  const state = useAnalysis((s) => stateOf(s.states, clip.id));
+/** `clips` as the banner's rows, in order: a take's files (`takes`) are one row, a clip of its own. */
+function rowsOf(clips: Asset[], takes: ReadonlyMap<string, string>): Asset[][] {
+  const rows = new Map<string, Asset[]>();
+  for (const clip of clips) {
+    const key = takes.get(clip.id) ?? clip.id;
+    rows.set(key, [...(rows.get(key) ?? []), clip]);
+  }
+  return [...rows.values()];
+}
+
+/**
+ * One clip's row while its analysis runs or after it failed, a take's files as one (`takeState`): its step and step
+ * dots, or why it stopped, with Retry for its files that failed.
+ */
+function JobRow({ files }: { files: Asset[] }) {
+  const state = useAnalysis((s) => takeState(files.map((f) => stateOf(s.states, f.id))));
+  const again = () => {
+    const { states } = useAnalysis.getState();
+    void retry(files.filter((f) => stateOf(states, f.id).state === 'failed').map((f) => f.id));
+  };
   return (
     <div className="analysis-job">
-      <ClipName clip={clip} />
+      <ClipName clip={files[0]} />
       {state.state === 'running' && (
         <>
           <span className="analysis-job-step">
@@ -125,7 +169,7 @@ function JobRow({ clip }: { clip: Asset }) {
           <span className="analysis-job-reason" role="alert">
             {state.reason}
           </span>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void retry([clip.id])}>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={again}>
             <BannerIcon name="retry" />
             Retry
           </button>
@@ -139,8 +183,9 @@ function JobRow({ clip }: { clip: Asset }) {
  * The analysis banner at the top of the preview. After an import it offers "Analyze 2 clips for about
  * $0.04" (clips analyzed before load at once, at no cost); with an access code it shows the credit left and refuses,
  * with why, when the estimate is over it. While clips are analysed it lists each with its step; a clip that failed
- * keeps what finished and offers Retry. Without a key or code it asks for one in Settings. A clip whose file is gone
- * is never offered: it is listed under the offer with what to do.
+ * keeps what finished and offers Retry. A take counts as one clip throughout, whatever files its voice is in. Without
+ * a key or code it asks for one in Settings. A clip whose file is gone is never offered: it is listed under the offer
+ * with what to do.
  */
 export function AnalysisBanner() {
   const clips = useClips();
@@ -150,17 +195,28 @@ export function AnalysisBanner() {
   const error = useAnalysis((s) => s.error);
   const dismissed = useAnalysis((s) => s.dismissed);
   const busy = useAnalysis((s) => s.busy);
+  const takes = useTakes();
+  const assets = useProject((s) => s.snapshot?.project.assets ?? NO_ASSETS);
+  const recordings = useProject((s) => s.snapshot?.project.recordings ?? NO_RECORDINGS);
   const needsKey = useNeedsKey();
 
-  const running = clips.filter((c) => stateOf(states, c.id).state === 'running');
-  const failed = clips.filter((c) => stateOf(states, c.id).state === 'failed');
-  if (running.length > 0 || failed.length > 0) {
-    const spoken = running
-      .map((c) => {
-        const s = stateOf(states, c.id);
-        return s.state === 'running' ? spokenProgress(c.name, s.step, s.pct) : '';
+  const at = (files: Asset[]) => takeState(files.map((f) => stateOf(states, f.id)));
+  const rows = rowsOf(
+    clips.filter((c) => ['running', 'failed'].includes(stateOf(states, c.id).state)),
+    takes,
+  );
+  const running = rows.filter((files) => at(files).state === 'running');
+  const failed = rows.filter((files) => at(files).state === 'failed');
+  const spoken = useProject((s) =>
+    running
+      .map((files) => {
+        const state = at(files);
+        const name = rowName(s.snapshot?.project, files[0]);
+        return state.state === 'running' ? spokenProgress(name, state.step, state.pct) : '';
       })
-      .join('. ');
+      .join('. '),
+  );
+  if (running.length > 0 || failed.length > 0) {
     return (
       <section className="analysis-banner is-progress" aria-label="Analysis">
         <p className="analysis-title">
@@ -178,8 +234,8 @@ export function AnalysisBanner() {
           </p>
         )}
         <div className="analysis-jobs">
-          {[...running, ...failed].map((clip) => (
-            <JobRow key={clip.id} clip={clip} />
+          {[...running, ...failed].map((files) => (
+            <JobRow key={files[0].id} files={files} />
           ))}
         </div>
         <p className="sr-only" role="status">
@@ -229,7 +285,10 @@ export function AnalysisBanner() {
       </section>
     );
   }
-  const videos = clips.some((c) => c.kind === 'video' && estimate.clips.includes(c.id));
+  // Footage is watched only for a video imported on its own: a recording's files are analysed for their words only.
+  const videos = clips.some(
+    (c) => c.kind === 'video' && !recordingOf({ assets, recordings }, c.id) && estimate.clips.includes(c.id),
+  );
   const refused = !!estimate.refusal;
   // Retry asks for the estimate again (the price may have changed), never starts a run unseen.
   const pending = clips.filter((c) => stateOf(states, c.id).state === 'none').map((c) => c.id);
@@ -263,8 +322,8 @@ export function AnalysisBanner() {
         <BannerIcon name="wave" />
       </span>
       <div>
-        <p className="analysis-title">{offerTitle(estimate)}</p>
-        <p className="analysis-text">{error ?? offerText(estimate, videos)}</p>
+        <p className="analysis-title">{offerTitle(counted(estimate, takes))}</p>
+        <p className="analysis-text">{error ?? offerText(counted(estimate, takes), videos)}</p>
       </div>
       <div className="analysis-actions">
         <button type="button" className="btn btn-ghost" onClick={notNow}>
