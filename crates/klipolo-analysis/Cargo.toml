@@ -35,6 +35,8 @@ thiserror = "2"
 # Reading the WAV off the async threads (`spawn_blocking`) and the dev CLI's one-thread runtime (`rt`), waiting out a
 # busy answer (`time`), one device's slots for the Meta adapter (`sync`).
 tokio = { version = "1", features = ["rt", "sync", "time"] }
+# A paid SAM answer's lines that didn't read, in the log (`providers::meta_sam`).
+tracing = "0.1"
 
 [dev-dependencies]
 tempfile = "3"

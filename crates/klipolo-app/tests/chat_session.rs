@@ -2745,6 +2745,7 @@ mod follow {
                         .collect(),
                     frames_billed: u64::from(frames),
                     cost_usd: f64::from(frames.max(50)) * 0.0002,
+                    cut_off: false,
                 })
             })
         }

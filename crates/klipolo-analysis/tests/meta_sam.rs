@@ -27,6 +27,11 @@ fn video() -> (tempfile::TempDir, PathBuf) {
 /// message and text part added, one text delta per frame line, the text and the message done, then the completed
 /// response carrying the whole text again and the frames billed.
 fn answer(text: &str, frames: u64) -> ResponseTemplate {
+    answer_ending(text, frames, "completed")
+}
+
+/// [`answer`] ending as `status`: `incomplete` for one Meta stopped part-way.
+fn answer_ending(text: &str, frames: u64, status: &str) -> ResponseTemplate {
     let message = |status: &str, text: &str| {
         json!({"type": "message", "id": "msg_1", "role": "assistant", "status": status,
                "content": [{"type": "output_text", "text": text, "annotations": [], "logprobs": []}]})
@@ -41,13 +46,14 @@ fn answer(text: &str, frames: u64) -> ResponseTemplate {
         json!({"type": "response.content_part.added", "item_id": "msg_1", "part": part}),
     ];
     for line in text.split_inclusive('\n') {
-        events.push(json!({"type": "response.output_text.delta", "item_id": "msg_1", "delta": line}));
+        events
+            .push(json!({"type": "response.output_text.delta", "item_id": "msg_1", "delta": line}));
     }
     events.extend([
         json!({"type": "response.output_text.done", "item_id": "msg_1", "text": text}),
         json!({"type": "response.output_item.done", "output_index": 0, "item": message("completed", text)}),
-        json!({"type": "response.completed", "response": {
-            "id": "resp_1", "object": "response", "model": "sam-3.1", "status": "completed",
+        json!({"type": format!("response.{status}"), "response": {
+            "id": "resp_1", "object": "response", "model": "sam-3.1", "status": status,
             "output": [message("completed", text)],
             "usage": {"input_tokens": 0, "output_tokens": 0, "video_frames_processed": frames}
         }}),
@@ -185,5 +191,46 @@ async fn nothing_found_is_an_empty_tracking_still_billed() {
     assert!(tracking.frames.iter().all(|f| f.boxes.is_empty()));
     // Under the 50-frame minimum: billed as 50.
     assert!((tracking.cost_usd - 0.01).abs() < 1e-12);
+    server.verify().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_line_that_doesnt_read_is_skipped_and_the_rest_of_the_paid_answer_kept() {
+    let server = MockServer::start().await;
+    mount_files(&server, "/v1", "file-sam-bad-line").await;
+    let mut lines: Vec<&str> = PERSON.lines().collect();
+    lines[5] = "<5f>0<|box;x1=1;y1=";
+    let text = lines.join("\n");
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(answer(&text, 160))
+        .mount(&server)
+        .await;
+    let (_dir, file) = video();
+    let tracking = direct(&server).track(&file, "person").await.unwrap();
+    assert_eq!(tracking.frames.len(), 159);
+    assert!(!tracking.frames.iter().any(|f| f.frame == 5));
+    assert!(!tracking.cut_off);
+    server.verify().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_answer_meta_stopped_part_way_is_kept_and_said_to_be_cut_off() {
+    let server = MockServer::start().await;
+    mount_files(&server, "/v1", "file-sam-cut").await;
+    // The first 40 frames, the last of them cut off mid-line.
+    let mut text: String = PERSON.lines().take(40).collect::<Vec<_>>().join("\n");
+    text.push_str("\n<40f>3<|box;x1=");
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(answer_ending(&text, 160, "incomplete"))
+        .mount(&server)
+        .await;
+    let (_dir, file) = video();
+    let tracking = direct(&server).track(&file, "person").await.unwrap();
+    assert_eq!(tracking.frames.len(), 40);
+    assert!(tracking.cut_off);
+    // Billed for every frame sent.
+    assert!((tracking.cost_usd - 0.032).abs() < 1e-12);
     server.verify().await;
 }

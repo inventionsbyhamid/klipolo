@@ -51,11 +51,21 @@ impl SubjectTracker for Meta {
 }
 
 /// SAM's frame lines as boxes in parts of the picture, priced by the frames it billed; `relay` when it came through
-/// Klipolo's relay.
+/// Klipolo's relay. The answer is paid for, so a line that doesn't read (one cut off part-way, say) is skipped and the
+/// rest kept; only an answer of which no line reads fails. One Meta stopped part-way (`incomplete`) is said to be cut
+/// off, so only what it covers is kept as tracked.
 fn tracking(out: ResponseOut, relay: bool) -> Result<Tracking, ProviderError> {
     let text = out.output_text.as_deref().unwrap_or_default();
-    let frames = klipolo_sam::parse_frames(text)
-        .map_err(|e| provider_error(MetaError::Decode(format!("SAM: {e}")), relay))?;
+    let (frames, skipped) = klipolo_sam::parse_frames_lenient(text);
+    if let Some(first) = skipped.first() {
+        if frames.is_empty() {
+            return Err(provider_error(
+                MetaError::Decode(format!("SAM: {first}")),
+                relay,
+            ));
+        }
+        tracing::warn!(skipped = skipped.len(), %first, "SAM: lines of a paid answer didn't read; kept the rest");
+    }
     let frames = frames
         .into_iter()
         .map(|f| TrackedFrame {
@@ -81,5 +91,6 @@ fn tracking(out: ResponseOut, relay: bool) -> Result<Tracking, ProviderError> {
         frames,
         frames_billed: out.usage.video_frames_processed,
         cost_usd: pricing::sam_usd(out.usage),
+        cut_off: out.status.as_deref() == Some("incomplete"),
     })
 }

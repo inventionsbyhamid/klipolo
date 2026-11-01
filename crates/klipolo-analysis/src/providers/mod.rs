@@ -261,6 +261,9 @@ pub struct Tracking {
     pub frames_billed: u64,
     /// What the call cost, in US dollars.
     pub cost_usd: f64,
+    /// The answer stopped part-way: frames after the last one here weren't answered (though billed).
+    #[serde(default)]
+    pub cut_off: bool,
 }
 
 /// A video to every match of a short noun phrase ("person", "man in red"), frame by frame.
