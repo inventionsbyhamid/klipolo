@@ -951,7 +951,8 @@
   font-size: var(--text-md);
 }
 
-/* Choose files (the one yellow) and Record your screen, then the key; the key goes under them where they don't fit. */
+/* Choose files (the one yellow) and Record your screen side by side (one above the other where they don't fit), and
+   Choose files' key under them. */
 .drop-actions {
   display: flex;
   flex-wrap: wrap;
@@ -961,6 +962,11 @@
   margin-top: var(--space-4);
   color: var(--color-ink-faint);
   font-size: var(--text-sm);
+}
+
+.drop-actions > span {
+  flex-basis: 100%;
+  text-align: center;
 }
 
 .btn-lg {
