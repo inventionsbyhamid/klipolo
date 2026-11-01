@@ -130,8 +130,8 @@ export function paintBlock(canvas: HTMLCanvasElement, spec: PaintSpec, rest: Zoo
   // What the picture depends on besides the loaded files (sprites and peaks never change once written).
   const look = [spec.kind, a, b, startUs, durationUs, sourceInUs, speed, pps, height, filmPx, wavePx, scale]
     .concat([spec.spanUs, spec.volume, spec.fadeInUs, spec.fadeOutUs, Number(spec.muted), spec.theme])
-    .concat((spec.volumeKeys ?? []).map((k) => `${k.tUs}:${k.v}:${JSON.stringify(k.ease ?? '')}`))
     .join()
+    .concat('|', JSON.stringify(spec.volumeKeys ?? []))
     .concat('|', spec.waveToken, '|', runsKey(spec.runs));
 
   let live = true;
