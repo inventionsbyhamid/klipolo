@@ -156,7 +156,7 @@ impl SceneDrawer {
             text: text.map(|t| &t.layouts),
             backdrop: backdrop.map(|b| b.map),
         };
-        // Its own target and its offscreen nodes' only as big as what they draw, the largest across its motion (Tasks
+        // Its own target and its offscreen nodes' only as big as what they draw, the largest across its motion:
         // surveyed once, with its own text (one frame is all of a scene that holds one pose throughout).
         let packing = Packing {
             size: at.size,

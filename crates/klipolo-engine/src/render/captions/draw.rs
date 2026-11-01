@@ -2,8 +2,8 @@
 //! (`captions.wgsl`'s `quad` and `shade`), written in four groups in one buffer and drawn with one instanced draw, which
 //! keeps their order: every visible word's shadow, then its outline, then the boxes (the line boxes' smooth union, the
 //! box behind the word being said, a highlighted word's box), then every fill with its glow. Each word's quad is its
-//! order). Each word's quad is its atlas cell placed at `block centre + R(turn) × (block scale × (word centre + offset
-//! × em))`, sized `cell × block scale × word scale`.
+//! atlas cell placed at `block centre + R(turn) × (block scale × (word centre + offset × em))`, sized
+//! `cell × block scale × word scale`.
 //!
 //! Per frame: at most `3 × 32 + 2 + 32` instances of 96 bytes written into a kept `Vec` (no allocation once warm) and
 //! uploaded in one write; 96 bytes of uniform (the output size and the line boxes).
