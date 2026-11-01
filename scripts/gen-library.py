@@ -1685,7 +1685,7 @@ SOUNDS = [
     ("sparkle", "Sparkle", ["sparkle", "magic", "shine", "twinkle", "reveal"],
      lambda: edges(sparkle(), 0.001, 0.3), 0.45),
     ("impact", "Impact", ["impact", "boom", "hit", "cinematic", "transition"], impact, 0.4),
-    ("bass-drop", "Bass drop", ["bass drop", "drop", "bass", "boom", "beat"], bass_drop, 0.35),
+    ("bass-drop", "Bass drop", ["bass drop", "drop", "bass", "boom", "transition"], bass_drop, 0.35),
     ("long-riser", "Long riser", ["riser", "build up", "tension", "suspense", "intro"], long_riser, 0.5),
     ("swipe-left", "Swipe left", ["swipe", "left", "slide", "transition", "quick"], lambda: swipe(False, 139), 0.5),
     ("swipe-right", "Swipe right", ["swipe", "right", "slide", "transition", "quick"], lambda: swipe(True, 137), 0.5),
@@ -1700,14 +1700,14 @@ SOUNDS = [
     ("pop-high", "High pop", ["pop", "high", "appear", "cute", "short"], pop_high, 0.55),
     ("bubbles", "Bubble pops", ["bubbles", "pop", "popping", "appear", "fun"], bubbles, 0.55),
     ("boing", "Cartoon boing", ["boing", "bounce", "spring", "cartoon", "funny"], boing, 0.42),
-    ("drum-hit", "Drum hit", ["drum", "hit", "punch", "beat", "snare"], drum_hit, 0.45),
+    ("drum-hit", "Drum hit", ["drum", "hit", "punch", "snare", "kick"], drum_hit, 0.45),
     ("tick-tock", "Tick tock", ["clock", "tick tock", "timer", "countdown", "waiting"], tick_tock, 0.55),
 ]
 
 MUSIC = [
-    ("soft-ambient", "Soft ambient", ["calm", "ambient", "soft", "background", "chill", "loop"], soft_ambient),
-    ("upbeat-loop", "Upbeat loop", ["upbeat", "happy", "energetic", "pop", "background", "loop"], upbeat_loop),
-    ("chill-beat", "Chill beat", ["lofi", "chill", "study", "relaxed", "background", "loop"], chill_beat),
+    ("soft-ambient", "Soft ambient", ["calm", "ambient", "soft", "chill", "loop"], soft_ambient),
+    ("upbeat-loop", "Upbeat loop", ["upbeat", "happy", "energetic", "pop", "loop"], upbeat_loop),
+    ("chill-beat", "Chill beat", ["lofi", "chill", "study", "relaxed", "loop"], chill_beat),
     ("energetic-loop", "Energetic loop", ["energetic", "hype", "fast", "sport", "intense", "loop"], energetic_loop),
 ]
 

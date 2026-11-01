@@ -160,7 +160,7 @@
         "drop",
         "bass",
         "boom",
-        "beat"
+        "transition"
       ],
       "sha256": "dc91eeec52b738fb8d75490b778f92054c226a6b2f7ae5ba914f5236d031da3b",
       "license": "CC0-1.0"
@@ -383,8 +383,8 @@
         "drum",
         "hit",
         "punch",
-        "beat",
-        "snare"
+        "snare",
+        "kick"
       ],
       "sha256": "fd872b4c7f7439895a2eb7cdb1cc6ee73dcdbf31433b64db11660226cc59dad3",
       "license": "CC0-1.0"
@@ -415,7 +415,6 @@
         "calm",
         "ambient",
         "soft",
-        "background",
         "chill",
         "loop"
       ],
@@ -433,7 +432,6 @@
         "happy",
         "energetic",
         "pop",
-        "background",
         "loop"
       ],
       "sha256": "9dc2406ca6fa59daad63d2f22354417518fe00551c9b370cf287ad9e3652f57b",
@@ -450,7 +448,6 @@
         "chill",
         "study",
         "relaxed",
-        "background",
         "loop"
       ],
       "sha256": "b3e782c02eda7b734ca3719e8c2d42f8788798487d20525b91cf90c548a9d180",
