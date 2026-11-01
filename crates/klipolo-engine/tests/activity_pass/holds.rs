@@ -1,5 +1,5 @@
-//! Holds: a tap of Play keeps the idle decoder, an export or a take lets it go at
-//! once, and a reopened part file shows its chunks while the pass waits.
+//! Holds: a tap of Play keeps the idle decoder, an export or a take lets it go at once, and a reopened part file shows
+//! its chunks while the pass waits.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};

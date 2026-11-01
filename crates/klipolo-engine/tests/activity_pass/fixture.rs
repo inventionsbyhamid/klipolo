@@ -25,8 +25,8 @@ fn clip(name: &str) -> String {
     path.display().to_string()
 }
 
-/// Tick 0 is the video stream's first frame, the clock every decoder numbers frames on (engine fix
-/// 7): an audio lead inside a file is the recording's `audioLeadUs`, never a shift of the picture's clock. This clip's
+/// Tick 0 is the video stream's first frame, the clock every decoder numbers frames on: an audio lead inside a file is
+/// the recording's `audioLeadUs`, never a shift of the picture's clock. This clip's
 /// sound starts at 0 and its video 0.5 s in, for 2.5 s, and a box appears 1 s into the video: so at 1.0 s on the
 /// video's clock, the change of tick 9 (the container's clock would put it at tick 14), and the track lasts the
 /// video's 2.5 s.
@@ -147,8 +147,8 @@ fn activity_pass_speed() {
     assert!(track.is_complete());
 }
 
-/// What a file is (a container FFmpeg rejects) can't be analysed for good, while a file it may
-/// read later (no access now) can't be read now; only the first is ever marked.
+/// What a file is (a container FFmpeg rejects) can't be analysed for good, while a file it may read later (no access
+/// now) can't be read now; only the first is ever marked.
 #[test]
 fn open_errors_say_whether_they_last() {
     let dir = tempfile::tempdir().unwrap();
