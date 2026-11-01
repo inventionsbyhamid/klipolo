@@ -9,7 +9,7 @@ use klipolo_model::query::video_duration;
 use klipolo_model::speech::Speech;
 use klipolo_model::time::RangeUs;
 
-use super::caption_file::job_captions;
+use super::caption_file::{frozen_name, job_captions};
 use super::job::{AUDIO_BITRATE, ExportJob, JobOutput, JobState, PartStatus};
 use crate::api::{ExportCompatibility, ExportJobInfo, ExportJobState, ExportQuality, PlannedFile};
 use crate::audio::plan::ducking_speech;
@@ -233,6 +233,33 @@ impl ExportJob {
             );
             hash == self.settings_hash
         })
+    }
+
+    /// Whether `saved` (a project as saved now, one that isn't open) still makes what this job renders, judged with the
+    /// words the job froze: what was said in a project's files is heard again only while it is open, so a closed
+    /// project's job is changed exactly when the project's saved content is. A job whose frozen pages or caption file
+    /// can't be read is never current.
+    pub fn is_current_as_saved(&self, saved: &Project) -> bool {
+        let Ok(captions) = std::fs::read(self.dir.join(super::job::CAPTIONS_FILE)) else {
+            return false;
+        };
+        let file = match self.caption_file {
+            None => None,
+            Some(kind) => match std::fs::read_to_string(self.dir.join(frozen_name(kind))) {
+                Ok(text) => Some((kind, text)),
+                Err(_) => return false,
+            },
+        };
+        let hash = settings_hash(
+            saved,
+            &captions,
+            file.as_ref(),
+            &self.speech_ranges,
+            self.fps,
+            self.quality,
+            &self.outputs,
+        );
+        hash == self.settings_hash
     }
 
     /// For `export_jobs`: `running` when a worker of this app is on it, `stale` from `is_current`.
