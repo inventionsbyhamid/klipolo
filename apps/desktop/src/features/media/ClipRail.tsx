@@ -6,7 +6,7 @@ import { beginMediaDrag } from '../timeline/drag/mediaDrag';
 import { DRAG_SLOP_PX } from '../timeline/drag/session';
 import { addClip, toTheEnd } from './addMedia';
 import { squareTileStyle, useClipPicture } from './clipPicture';
-import { loadMarks, marked, markUsed, useMarks } from './marks';
+import { loadMarks, marked, markUsed, useSettledMarks } from './marks';
 import { shelves, useNearView, type ShelfClip } from './shelves';
 
 /** On a Mac, Control-click is a right-click: it doesn't start a drag. */
@@ -67,19 +67,27 @@ function RailClip({ clip }: { clip: ShelfClip }) {
 
 /**
  * The folded library's clips (a 72 px rail of clip thumbnails), in the Clips tab's order: a recording as one
- * (its main footage's picture), then the videos, favorites and the recently used first. Nothing when the project has
- * no clips.
+ * (its main footage's picture), then the videos, favorites and the recently used first. As the list does, it moves
+ * no thumbnail while the pointer or the focus is on it (`useSettledMarks`), so a second press lands on the clip aimed
+ * at. Nothing when the project has no clips.
  */
 export function ClipRail() {
   const { t } = useLingui();
   const project = useProject((s) => s.snapshot?.project);
-  const marks = useMarks((s) => s.marks);
+  const order = useSettledMarks('rail');
   useEffect(loadMarks, []);
   if (!project) return null;
-  const clips = marked(shelves(project).clips, (clip) => clip.key, marks);
+  const clips = marked(shelves(project).clips, (clip) => clip.key, order.marks);
   if (clips.length === 0) return null;
   return (
-    <ul className="rail-clips" aria-label={t({ id: 'library.clips', message: 'Your clips' })}>
+    <ul
+      className="rail-clips"
+      aria-label={t({ id: 'library.clips', message: 'Your clips' })}
+      onPointerLeave={order.settle}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) order.settle();
+      }}
+    >
       {clips.map((clip) => (
         <RailClip key={`${clip.source.type}:${clip.source.id}`} clip={clip} />
       ))}

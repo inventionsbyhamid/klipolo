@@ -1,5 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
-import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { useEffect, useRef, type PointerEvent, type ReactNode } from 'react';
 import type { Asset } from '../../bindings/Asset';
 import type { PackItem } from '../../bindings/PackItem';
 import type { Project } from '../../bindings/Project';
@@ -12,7 +12,17 @@ import { addClip, addMedia, toTheEnd } from './addMedia';
 import { AssetMenu } from './AssetMenu';
 import { AssetRow } from './AssetRow';
 import { FavoriteButton, type Favorite } from './FavoriteButton';
-import { fileKey, loadMarks, marked, markUsed, markWhenAdded, packKey, setFavorite, useMarks } from './marks';
+import {
+  fileKey,
+  loadMarks,
+  marked,
+  markUsed,
+  markWhenAdded,
+  packKey,
+  setFavorite,
+  useMarks,
+  useSettledMarks,
+} from './marks';
 import { addImage, addMusic, addPackItem, addSound, dropPackItem } from './place';
 import { searchLibrary, type Searchable } from './search';
 import {
@@ -175,28 +185,6 @@ const clipKey = (clip: ShelfClip) => clip.key;
 const packItemKey = (item: PackItem) => packKey(item.id);
 
 /**
- * The marks a tab's lists are in order by: as they were when the tab, the search or the marks read from Rust last
- * changed, or when the pointer or the focus last left the lists (`settle`). A star or an add shows on its own row at
- * once but moves no row while the person is on the list, so the next click lands on the item they aimed at, focus
- * stays on the star they pressed, and a drag that began meanwhile goes on.
- */
-function useSettledMarks(tab: LibraryTab, query: string) {
-  const reads = useMarks((s) => s.reads);
-  const key = `${tab}\n${query}\n${reads}`;
-  const [settled, setSettled] = useState(() => ({ key, marks: useMarks.getState().marks }));
-  let marks = settled.marks;
-  if (settled.key !== key) {
-    marks = useMarks.getState().marks;
-    setSettled({ key, marks });
-  }
-  const settle = () => {
-    const now = useMarks.getState().marks;
-    setSettled((s) => (s.marks === now ? s : { key: s.key, marks: now }));
-  };
-  return { marks, settle };
-}
-
-/**
  * What the Library shows on one tab: your files first, then Klipolo's pack where it has some. Clips are
  * the project's videos and its recordings, each take one row ("Recording 1", its length and sources) that adds the
  * whole take; Music and Sounds the sounds (by how they play, else by length) and the pack's beds and effects;
@@ -211,7 +199,7 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
   const project = useProject((s) => s.snapshot?.project);
   const pack = usePack((s) => s.items);
   const marks = useMarks((s) => s.marks);
-  const order = useSettledMarks(tab, query);
+  const order = useSettledMarks(`${tab}\n${query}`);
   useEffect(loadPack, []);
   useEffect(loadMarks, []);
   if (!project) return null;

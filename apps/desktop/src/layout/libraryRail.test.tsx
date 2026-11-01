@@ -152,6 +152,21 @@ describe('the folded library’s thumbnails', () => {
     ]);
   });
 
+  it('a press moves no thumbnail while the pointer is on the rail, so a second press lands where aimed', async () => {
+    vi.mocked(bridge.apply).mockResolvedValue(revisionPatch(4));
+    renderWithProviders(<Library />);
+    act(() => useLibraryPanel.getState().setCollapsed(true));
+    const names = () => within(railClips()).getAllByRole('button').map((b) => b.getAttribute('aria-label'));
+    expect(names()).toEqual(['Recording 1', 'broll.mp4']);
+    await userEvent.click(within(railClips()).getByRole('button', { name: 'broll.mp4' }));
+    // Added, so recently used: it would list first, but not under the pointer.
+    await waitFor(() => expect(useMarks.getState().marks['file:/media/broll']?.usedMs).toBeGreaterThan(0));
+    expect(names()).toEqual(['Recording 1', 'broll.mp4']);
+    // Once the pointer leaves, the rail catches up.
+    fireEvent.pointerLeave(railClips());
+    expect(names()).toEqual(['broll.mp4', 'Recording 1']);
+  });
+
   it('a drag puts the clip on the timeline as its row’s does, and adds nothing on letting go', async () => {
     vi.mocked(bridge.apply).mockResolvedValue(revisionPatch(4));
     renderWithProviders(<Library />);
