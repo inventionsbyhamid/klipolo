@@ -1,4 +1,4 @@
-import { act, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixtureSnapshot } from '../test/fixtures';
@@ -44,5 +44,22 @@ describe('the library folded', () => {
     act(() => screen.getByRole('tab', { name: 'Clips' }).focus());
     act(() => useLibraryPanel.getState().setCollapsed(true));
     expect(screen.getByRole('button', { name: 'Open library' })).toHaveFocus();
+  });
+
+  it('Collapse library in its head folds it, as chat has Collapse chat, and the rail keeps the keyboard', async () => {
+    renderWithProviders(<Library />);
+    const collapse = screen.getByRole('button', { name: 'Collapse library' });
+    await userEvent.click(collapse);
+    expect(useLibraryPanel.getState().collapsed).toBe(true);
+    expect(screen.getByRole('button', { name: 'Open library' })).toHaveFocus();
+  });
+
+  it("a double click on its edge folds it, and on the rail's edge opens it again", () => {
+    const { container } = renderWithProviders(<Library />);
+    const edge = () => container.querySelector<HTMLElement>('[data-library-edge]')!;
+    fireEvent.doubleClick(edge());
+    expect(useLibraryPanel.getState().collapsed).toBe(true);
+    fireEvent.doubleClick(edge());
+    expect(useLibraryPanel.getState().collapsed).toBe(false);
   });
 });

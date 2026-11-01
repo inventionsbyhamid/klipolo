@@ -186,8 +186,18 @@
   padding: var(--space-5) 0;
 }
 
-.library-rail .ico.is-mirrored {
+.library .ico.is-mirrored {
   transform: scaleX(-1);
+}
+
+/* The library's right edge: a double click folds it or opens it again. */
+.library-edge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 6px;
 }
 
 .timeline {
