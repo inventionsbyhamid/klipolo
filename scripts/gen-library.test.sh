@@ -93,11 +93,12 @@ def _():
                     "thumbs-up", "fire", "sparkles", "lightbulb", "new-tag", "subscribe", "cursor-hand"],
     }
     assert {k: [i["id"] for i in of(k)] for k in want} == want, [i["id"] for i in items]
-    assert len(items) == 54 and manifest["license"] == "CC0-1.0" and manifest["creator"] == "Klipolo"
+    assert len(items) == 62 and manifest["license"] == "CC0-1.0" and manifest["creator"] == "Klipolo"
     for i in items:
         assert i["license"] == "CC0-1.0", i["id"]
         assert i["name"] and not any(d in i["name"] for d in "–—"), i["id"]
-        assert i["file"].startswith(f"{i['category']}s/" if i["category"] != "music" else "music/"), i["file"]
+        folders = {"sound": ["sounds/"], "music": ["music/"], "sticker": ["stickers/", "backgrounds/"]}
+        assert any(i["file"].startswith(f) for f in folders[i["category"]]), i["file"]
         assert ("duration_ms" in i) == (i["category"] != "sticker"), i["id"]
         assert ("width" in i and "height" in i) == (i["category"] == "sticker"), i["id"]
     size = sum(len(v) for v in files(committed).values())
@@ -142,7 +143,8 @@ def _():
         assert 8000 < peak < 32767, f"{i['id']}: peak {peak}"
 
 
-def rgba_rows(path):
+def png_chunks(path):
+    """A PNG's header (width, height, depth, colour type, compression, filter, interlace) and its pixel data."""
     data = path.read_bytes()
     assert data[:8] == b"\x89PNG\r\n\x1a\n", "not a PNG"
     pos, idat, header = 8, b"", None
@@ -154,6 +156,11 @@ def rgba_rows(path):
         elif kind == b"IDAT":
             idat += body
         pos += 12 + length
+    return header, idat
+
+
+def rgba_rows(path):
+    header, idat = png_chunks(path)
     w, h, depth, colour, _, _, interlace = header
     assert (depth, colour, interlace) == (8, 6, 0), f"8-bit RGBA, not interlaced: {header}"
     raw, stride, rows, prev = zlib.decompress(idat), w * 4, [], bytearray(w * 4)
@@ -177,7 +184,7 @@ def rgba_rows(path):
 
 @check("stickers_have_transparent_corners")
 def _():
-    for i in of("sticker"):
+    for i in [i for i in of("sticker") if i["file"].startswith("stickers/")]:
         w, h, rows = rgba_rows(committed / i["file"])
         assert (w, h) == (1024, 1024) == (i["width"], i["height"]), f"{i['id']}: {w} x {h}"
         for y0, x0 in [(0, 0), (0, w - 32), (h - 32, 0), (h - 32, w - 32)]:
@@ -186,6 +193,23 @@ def _():
         alpha = [row[x * 4 + 3] for row in rows[::8] for x in range(0, w, 8)]
         solid = sum(a == 255 for a in alpha) / len(alpha)
         assert 0.05 < solid < 0.8, f"{i['id']}: {solid:.0%} of it is solid"
+
+
+@check("backgrounds_fill_a_16x9_or_9x16_frame")
+def _():
+    shapes = {}
+    for i in [i for i in of("sticker") if i["file"].startswith("backgrounds/")]:
+        header, idat = png_chunks(committed / i["file"])
+        w, h, depth, colour, _, _, interlace = header
+        assert (w, h) in [(1920, 1080), (1080, 1920)] and (w, h) == (i["width"], i["height"]), f"{i['id']}: {w} x {h}"
+        assert (depth, colour, interlace) == (8, 2, 0), f"{i['id']}: 8-bit RGB with no alpha: {header}"
+        assert len(zlib.decompress(idat)) == h * (1 + 3 * w), f"{i['id']}: its pixels don't fill {w} x {h}"
+        ratio = "16:9" if w > h else "9:16"
+        name, said = i["name"].rsplit(" ", 1)
+        assert said == ratio and i["id"].endswith(ratio.replace(":", "x")) and ratio in i["tags"], i["id"]
+        shapes.setdefault(name, set()).add(ratio)
+        assert len(committed.joinpath(i["file"]).read_bytes()) < 800 * 1024, f"{i['id']} is over 800 KB"
+    assert len(shapes) == 4 and all(s == {"16:9", "9:16"} for s in shapes.values()), shapes
 
 
 sys.exit(1 if failed else 0)
