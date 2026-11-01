@@ -23,15 +23,20 @@ fn video() -> (tempfile::TempDir, PathBuf) {
     (dir, file)
 }
 
-fn answer(text: &str, frames: u64) -> Value {
-    json!({
-        "id": "resp_1",
-        "object": "response",
-        "model": "sam-3.1",
-        "status": "completed",
-        "output": [{"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": text}]}],
-        "usage": {"input_tokens": 0, "output_tokens": 0, "video_frames_processed": frames}
-    })
+/// SAM's answer as the stream of events it sends: the text in two deltas, then the final answer with its usage.
+fn answer(text: &str, frames: u64) -> ResponseTemplate {
+    let (first, rest) = text.split_at(text.len() / 2);
+    let events = [
+        json!({"type": "response.created", "response": {"status": "in_progress"}}),
+        json!({"type": "response.output_text.delta", "delta": first}),
+        json!({"type": "response.output_text.delta", "delta": rest}),
+        json!({"type": "response.completed", "response": {
+            "id": "resp_1", "object": "response", "model": "sam-3.1", "status": "completed", "output": [],
+            "usage": {"input_tokens": 0, "output_tokens": 0, "video_frames_processed": frames}
+        }}),
+    ];
+    let body: String = events.iter().map(|e| format!("data: {e}\n\n")).collect();
+    ResponseTemplate::new(200).set_body_raw(body, "text/event-stream")
 }
 
 async fn mount_files(server: &MockServer, prefix: &str, id: &str) {
@@ -72,7 +77,7 @@ async fn tracks_a_phrase_and_reads_the_real_answer_into_boxes() {
     mount_files(&server, "/v1", "file-sam").await;
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(answer(PERSON, 160)))
+        .respond_with(answer(PERSON, 160))
         .expect(1)
         .mount(&server)
         .await;
@@ -86,6 +91,7 @@ async fn tracks_a_phrase_and_reads_the_real_answer_into_boxes() {
         .body_json()
         .unwrap();
     assert_eq!(sent["model"], "sam-3.1");
+    assert_eq!(sent["stream"], true);
     assert_eq!(sent["input"][0]["content"][0]["text"], "person");
     assert_eq!(sent["input"][0]["content"][1]["file_id"], "file-sam");
 
@@ -138,7 +144,7 @@ async fn through_the_relay_and_on_a_failure_the_upload_is_deleted() {
     mount_files(&server, "/v1", "file-sam-bad").await;
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(answer("not frames", 50)))
+        .respond_with(answer("not frames", 50))
         .mount(&server)
         .await;
     let err = direct(&server).track(&file, "person").await.unwrap_err();
@@ -152,7 +158,7 @@ async fn nothing_found_is_an_empty_tracking_still_billed() {
     mount_files(&server, "/v1", "file-sam-none").await;
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(answer("", 20)))
+        .respond_with(answer("", 20))
         .mount(&server)
         .await;
     let (_dir, file) = video();

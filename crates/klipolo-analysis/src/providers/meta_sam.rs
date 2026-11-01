@@ -1,6 +1,7 @@
 //! SAM 3.1 as the `SubjectTracker`, through the Meta adapter's client and slots: the video is uploaded (Files API),
-//! SAM is asked for every match of the phrase on every frame (one JSON answer, masks one bit a pixel and skipped), and
-//! the upload is deleted on every path, as the scene log's are. A video call holds the device's video slot from its
+//! SAM is asked for every match of the phrase on every frame (read from its streamed events to the final usage, as the
+//! relay forwards SAM video calls only streamed; masks one bit a pixel and skipped), and the upload is deleted on every
+//! path, as the scene log's are. A video call holds the device's video slot from its
 //! upload to its answer. SAM's boxes come back in the video's pixels; they leave here as parts of the picture.
 
 use std::path::Path;
@@ -42,7 +43,7 @@ impl SubjectTracker for Meta {
                 id: Some(id),
             };
             let body = klipolo_sam::concept_request(upload.id(), phrase);
-            let answer = retry_busy(|| self.call(self.client().respond(body.clone()))).await;
+            let answer = retry_busy(|| self.call(self.client().respond_stream(body.clone()))).await;
             upload.delete().await;
             tracking(answer?, self.client().is_relay())
         })
