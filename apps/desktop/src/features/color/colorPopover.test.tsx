@@ -128,6 +128,15 @@ describe('the color popover', () => {
     expect(h.onCommit).toHaveBeenCalledTimes(2);
   });
 
+  it('with an alpha, the popover opens on the swatch of the same colour whatever its opacity', async () => {
+    const box = PRESETS.map((p) => (p.name === 'Navy' ? { ...p, value: '#121A33DB' } : p));
+    field(handlers(), { label: 'Highlight', value: '#121A3380', presets: box, alpha: true, none: { label: 'No highlight' } });
+    await open('Highlight: more colors');
+    const navy = within(screen.getByRole('dialog', { name: 'Highlight' })).getByRole('option', { name: 'Navy' });
+    expect(navy).toHaveAttribute('aria-selected', 'true');
+    expect(navy).toHaveFocus();
+  });
+
   it('with an alpha, Opacity changes only the alpha', async () => {
     const h = handlers();
     field(h, { label: 'Highlight', value: '#121A33DB', alpha: true, none: { label: 'No highlight' } });

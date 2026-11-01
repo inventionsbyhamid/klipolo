@@ -2,7 +2,7 @@ import { Ban } from 'lucide-react';
 import { Fragment, useLayoutEffect, useRef, useState, type FocusEvent, type JSX, type KeyboardEvent } from 'react';
 import { cn } from '../cn';
 import { Tooltip } from '../Tooltip';
-import { sameColor } from './colorMath';
+import { sameColor, sameRgb } from './colorMath';
 
 export interface SwatchOption {
   /** `#RRGGBB(AA)`; null for the none choice. */
@@ -34,6 +34,8 @@ interface SwatchListProps {
   onPreviewEnd(): void;
   /** Clicked, or Enter or Space: one change. */
   onPick(v: string | null): void;
+  /** The setting takes an alpha: the swatch of its red, green and blue is selected, whatever the opacity. */
+  alpha?: boolean;
 }
 
 /** A swatch's identity in its list (each is there once): what the roving tab stop follows as swatches come and go. */
@@ -67,12 +69,22 @@ export function focusSwatch(container: Element) {
  * focus would take the first Escape, which should close the popover. Hovering or focusing one previews it; leaving the
  * list, or Escape, ends the preview (Escape still reaches the popover around it, which closes).
  */
-export function SwatchList({ label, groups, value, onPreview, onPreviewEnd, onPick }: SwatchListProps): JSX.Element {
+export function SwatchList({
+  label,
+  groups,
+  value,
+  onPreview,
+  onPreviewEnd,
+  onPick,
+  alpha = false,
+}: SwatchListProps): JSX.Element {
   const refs = useRef<(HTMLDivElement | null)[]>([]);
   /** The swatch focus is on (`idOf`), while it is in the list (the roving tab stop); null once it has left. */
   const [focused, setFocused] = useState<string | null>(null);
   const all = groups.flatMap((g) => g.options);
-  const selected = value === undefined ? -1 : all.findIndex((o) => sameColor(o.value, value));
+  const same = (a: string | null, b: string | null) =>
+    alpha && a !== null && b !== null ? sameRgb(a, b) : sameColor(a, b);
+  const selected = value === undefined ? -1 : all.findIndex((o) => same(o.value, value));
   const focusedAt = focused === null ? -1 : all.findIndex((o) => idOf(o) === focused);
   const tabStop = focusedAt >= 0 ? focusedAt : Math.max(0, selected);
   // The list changed under focus and took the focused swatch with it: focus fell to the page, where the editor's keys

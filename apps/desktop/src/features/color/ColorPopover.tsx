@@ -160,6 +160,7 @@ function PopoverBody({
         label={t({ id: 'color.swatches', message: 'Colors', comment: 'The color swatches in the color popover' })}
         groups={groups}
         value={selected}
+        alpha={alpha}
         onPreview={onPreview}
         onPreviewEnd={onPreviewEnd}
         // A Recent swatch is a custom colour again (it comes first in Recent); Recent repeats no other swatch.
