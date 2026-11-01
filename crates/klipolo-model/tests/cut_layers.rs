@@ -411,3 +411,56 @@ fn a_cut_and_what_it_ends_undo_as_one_step() {
     assert_eq!(span(item_by_id(doc.project(), "across")), (15.0, 20.0));
     assert!(!has(doc.project(), "late"));
 }
+
+#[test]
+fn a_recording_clips_separated_sound_follows_its_clip_through_a_cut() {
+    // Clip a's mic, separated: sound layers of the recording's own, attached to the clip and tied to the recording.
+    let p = after(
+        &project(vec![]),
+        &[Op::DetachSource {
+            clip_id: "a".into(),
+            source_id: "mic".into(),
+        }],
+    );
+    let mic = |p: &Project| -> Vec<(f64, f64)> {
+        let mut layers: Vec<&Item> = (p.timeline.tracks.iter().flat_map(|t| &t.items))
+            .filter(
+                |i| matches!(&i.content, ItemContent::Audio { asset_id, .. } if asset_id == "mic"),
+            )
+            .collect();
+        layers.sort_by_key(|i| i.start_us);
+        layers.into_iter().map(span).collect()
+    };
+    let tied = |p: &Project| {
+        (p.timeline.tracks.iter().flat_map(|t| &t.items)).all(|i| {
+            i.attach.is_some() && matches!(&i.content, ItemContent::Audio { tie: Some(_), .. })
+        })
+    };
+    assert_eq!(mic(&p), [(0.0, 20.0)]);
+    assert!(tied(&p));
+
+    // A cut through the clip cuts its sound with it; keeping only the start keeps the sound under it, none past the end.
+    let middle = after(&p, &[cut(5.0, 10.0)]);
+    assert_eq!(mic(&middle), [(0.0, 5.0), (5.0, 15.0)]);
+    assert!(tied(&middle));
+    let start = after(&p, &[cut(5.0, 30.0)]);
+    assert_eq!(mic(&start), [(0.0, 5.0)]);
+    assert!(tied(&start));
+    assert_nothing_past_the_end(&start);
+    // Removing the clip takes its sound.
+    assert!(mic(&after(&p, &[Op::RemoveClip { id: "a".into() }])).is_empty());
+
+    // Freed by the person, it keeps its time like any free layer, and is trimmed to a new end before its own.
+    let id = p.timeline.tracks[0].items[0].id.clone();
+    let freed = after(
+        &p,
+        &[Op::SetAttach {
+            id: id.clone(),
+            attached: false,
+        }],
+    );
+    assert_eq!(mic(&after(&freed, &[cut(5.0, 10.0)])), [(0.0, 20.0)]);
+    let short = after(&freed, &[cut(5.0, 30.0)]);
+    assert_eq!(mic(&short), [(0.0, 5.0)]);
+    assert_eq!(item_by_id(&short, &id).attach, None);
+}
