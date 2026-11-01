@@ -4,6 +4,7 @@ import type { CameraMode } from '../../bindings/CameraMode';
 import type { CameraShape } from '../../bindings/CameraShape';
 import type { Clip } from '../../bindings/Clip';
 import type { FormatKind } from '../../bindings/FormatKind';
+import type { Item } from '../../bindings/Item';
 import type { Project } from '../../bindings/Project';
 import { Segmented } from '../../design/Segmented';
 import { cameraLayer, cameraModePatch, hasCameraOverlay, isCameraOnly } from '../../lib/camera';
@@ -140,10 +141,33 @@ export function CameraFields({
 }
 
 /**
+ * A camera that is its own layer now (`cameraLayer`): said, with the way to that layer, whose card has its controls.
+ * Its clip's own camera offers none, so it is never drawn twice.
+ */
+export function SeparatedCamera({ layer, label }: { layer: Item; label: string }) {
+  const { t } = useLingui();
+  return (
+    <Field label={label}>
+      <div className="insp-note">
+        <p className="field-note">
+          {t({ id: 'clip.camera.layer.note', message: 'The camera is its own layer now.' })}
+        </p>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => useSelection.getState().select(layer.id)}
+        >
+          {t({ id: 'clip.camera.layer', message: 'Select camera layer' })}
+        </button>
+      </div>
+    </Field>
+  );
+}
+
+/**
  * A recording clip's camera on its card: the camera's controls while it shows beside the screen (the way back to a
- * camera hidden in the format shown), the way to its layer once it is a layer of its own (`cameraLayer`: its controls
- * are that layer's then), and Mirror for a take of the camera alone (the camera is the clip's footage). Nothing for any
- * other clip.
+ * camera hidden in the format shown), the way to its layer once it is a layer of its own (`SeparatedCamera`), and
+ * Mirror for a take of the camera alone (the camera is the clip's footage). Nothing for any other clip.
  */
 export function ClipCameraFields({ project, clip, format }: { project: Project; clip: Clip; format: FormatKind }) {
   const { t } = useLingui();
@@ -153,22 +177,6 @@ export function ClipCameraFields({ project, clip, format }: { project: Project; 
   if (!hasCameraOverlay(project, clip)) return null;
   const label = t({ id: 'layer.camera', message: 'Camera', comment: 'A recording’s camera picture' });
   const layer = cameraLayer(project, clip);
-  if (layer)
-    return (
-      <Field label={label}>
-        <div className="insp-note">
-          <p className="field-note">
-            {t({ id: 'clip.camera.layer.note', message: 'The camera is its own layer now.' })}
-          </p>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => useSelection.getState().select(layer.id)}
-          >
-            {t({ id: 'clip.camera.layer', message: 'Select camera layer' })}
-          </button>
-        </div>
-      </Field>
-    );
+  if (layer) return <SeparatedCamera layer={layer} label={label} />;
   return <CameraFields clip={clip} camera={camera} format={format} layoutLabel={label} />;
 }

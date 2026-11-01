@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Item } from '../../bindings/Item';
@@ -149,6 +149,18 @@ describe('the Camera card', () => {
     expect(group('Camera layout')).toBeInTheDocument();
     for (const name of ['Camera shape', 'Border', 'Mirror'])
       expect(screen.queryByRole('radiogroup', { name })).toBeNull();
+  });
+
+  it('goes to the layer once the camera is separated while selected, so it is never drawn twice', async () => {
+    renderWithProviders(<Inspector format="landscape" />);
+    expect(group('Camera layout')).toBeInTheDocument();
+    // Separated from elsewhere (chat, another app): the selection stays on the camera.
+    act(() => useProject.setState({ snapshot: separated() }));
+    expect(screen.getByRole('complementary', { name: 'Camera settings' })).toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup', { name: 'Camera layout' })).toBeNull();
+    expect(screen.getByText('The camera is its own layer now.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Select camera layer' }));
+    expect(useSelection.getState().selectedId).toBe('a-camera');
   });
 
   it('closes with its close button', async () => {
