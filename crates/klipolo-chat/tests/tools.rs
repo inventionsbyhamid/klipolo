@@ -11,8 +11,8 @@
 use std::collections::BTreeSet;
 
 use klipolo_chat::tools::{
-    BubbleChange, CHAT_CAPTION_STYLES, ClipRef, FunctionCall, Moment, PictureSize, Position,
-    Problem, SizeStep, Sound, TextPreset, ToolCall, TransitionKind, tools,
+    BackgroundChoice, BubbleChange, CHAT_CAPTION_STYLES, ClipRef, FunctionCall, Moment,
+    PictureSize, Position, Problem, SizeStep, Sound, TextPreset, ToolCall, TransitionKind, tools,
 };
 use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
 use klipolo_model::layout::Anchor;
@@ -194,6 +194,7 @@ fn every_tool_schema_is_strict() {
             "splitAt",
             "setClip",
             "setTransition",
+            "setBackground",
             "setFormat",
             "setCaptions",
             "fixCaptionWords",
@@ -244,6 +245,10 @@ fn every_tool_schema_is_strict() {
             "setClip.speed",
             "setClip.volume",
             "setTransition.durationSec",
+            "setBackground.color",
+            "setBackground.colorEnd",
+            "setBackground.kind",
+            "setBackground.padding",
             "setCaptions.style",
             "addMusic.atSec",
             "addMusic.duck",
@@ -471,6 +476,15 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 after: ClipRef::One("c1".into()),
                 kind: Some(TransitionKind::Dissolve),
                 duration_us: None,
+            }],
+        ),
+        (
+            "put a blurred background behind it",
+            vec![SetBackground {
+                kind: Some(BackgroundChoice::Blur),
+                color: None,
+                color_end: None,
+                padding: None,
             }],
         ),
         (
@@ -1348,7 +1362,7 @@ fn the_prompt_is_one_fixed_text_and_small() {
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     // 914 measured with the clip tools' line and the recordings' line.
     assert!(prompt_tokens <= 920, "prompt {prompt_tokens} tokens");
-    // 4,099 measured with the clip tools (setClip, setTransition) and the recording tools (the camera's three and the
-    // recorded sounds' three, about 1,010 of them).
-    assert!(tools_tokens <= 4_150, "tools {tools_tokens} tokens");
+    // 4,307 measured with the clip tools (setClip, setTransition), setBackground (about 210) and the recording tools
+    // (the camera's three and the recorded sounds' three, about 1,010 of them).
+    assert!(tools_tokens <= 4_350, "tools {tools_tokens} tokens");
 }

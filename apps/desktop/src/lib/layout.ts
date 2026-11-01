@@ -2,6 +2,7 @@ import type { Anchor } from '../bindings/Anchor';
 import type { BoxN } from '../bindings/BoxN';
 import type { CameraLayout } from '../bindings/CameraLayout';
 import type { CameraMode } from '../bindings/CameraMode';
+import type { Crop } from '../bindings/Crop';
 import type { FormatKind } from '../bindings/FormatKind';
 import type { Layout } from '../bindings/Layout';
 
@@ -173,6 +174,28 @@ export function containRect(rect: BoxN, width: number, height: number, format: F
     w: w / cw,
     h: h / ch,
   };
+}
+
+/**
+ * Where a video layer of `width`×`height` draws in its layout box in `format`: what its `crop` leaves, contained in the
+ * box (`containRect`), or the box itself when it `fill`s it (the picture covers it, cut at its edges). An unknown size
+ * takes the box's shape before the crop. Mirrors Rust `overlay::video_rect` (parity-tested).
+ */
+export function videoRect(
+  rect: BoxN,
+  width: number,
+  height: number,
+  fill: boolean,
+  crop: Crop | null | undefined,
+  format: FormatKind,
+): BoxN {
+  if (fill) return rect;
+  if (!crop) return containRect(rect, width, height, format);
+  const [cw, ch] = FORMAT_SIZE[format];
+  const known = width !== 0 && height !== 0;
+  const w = (known ? width : rect.w * cw) * (1 - crop.left - crop.right);
+  const h = (known ? height : rect.h * ch) * (1 - crop.top - crop.bottom);
+  return containRect(rect, w, h, format);
 }
 
 /** Whether `rect` is the whole frame, as `fullFrame` places a layer in every format. Mirrors Rust `is_whole_frame`. */

@@ -14,7 +14,8 @@ pub(super) fn background_plan(p: &Project, registry: &Registry, s: &mut Table) -
     let b = &p.background;
     let black = BackgroundPlan::Solid { color: [0, 0, 0] };
     match b.kind {
-        BackgroundKind::None => black,
+        // Behind the blurred footage (`plan::clip`), which covers it wherever a clip doesn't fill the frame.
+        BackgroundKind::None | BackgroundKind::Blur => black,
         BackgroundKind::Solid => BackgroundPlan::Solid {
             color: parse_hex(&b.color),
         },

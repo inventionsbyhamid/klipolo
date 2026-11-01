@@ -1,4 +1,4 @@
-//! Pins TS `resolveRect`/`cameraRect`/`containRect`/`pictureRect`/`textScale` (apps/desktop/src/lib/layout.ts) to
+//! Pins TS `resolveRect`/`cameraRect`/`containRect`/`pictureRect`/`videoRect`/`textScale` (apps/desktop/src/lib/layout.ts) to
 //! Rust: gizmos hit-test with the TS functions, the engine draws with these. Also `shownFromUs`
 //! (apps/desktop/src/lib/timeline.ts): where the editor puts the playhead to show a layer, past a title's intro
 //! animation. And `fullFrame` and `titleLayout` (`lib/layout.ts`) and the 9:16 safe area (`lib/safeAreas`). Regenerate with
@@ -8,8 +8,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use klipolo_engine::plan::framing::camera_rect_for;
-use klipolo_engine::plan::overlay::{contain, picture_rect, shown_from_us, text_scale};
+use klipolo_engine::plan::overlay::{contain, picture_rect, shown_from_us, text_scale, video_rect};
 use klipolo_model::contrib::builtin;
+use klipolo_model::crop::Crop;
 use klipolo_model::layout::{Anchor, BoxN, Layout, resolve_rect};
 use klipolo_model::motion::{Motion, MotionUse};
 use klipolo_model::project::FormatKind::{self, *};
@@ -146,6 +147,41 @@ fn build() -> Value {
             }
         }
     }
+    // Video layers: what the crop leaves, contained in the box, or the box itself when the layer fills it.
+    let mut videos = Vec::new();
+    let cut = Crop {
+        left: 0.1,
+        top: 0.05,
+        right: 0.2,
+        bottom: 0.0,
+    };
+    for rect in boxes {
+        for (width, height) in [(1920, 1080), (1080, 1920), (0, 0)] {
+            let asset = Asset {
+                id: "a".into(),
+                kind: AssetKind::Video,
+                path: String::new(),
+                name: String::new(),
+                duration_us: 1_000_000,
+                width,
+                height,
+                fps: 30.0,
+                has_audio: false,
+                audio_lead_us: None,
+                made_with: None,
+                rotation: None,
+            };
+            for fill in [false, true] {
+                for crop in [None, Some(cut)] {
+                    for format in FORMATS {
+                        let (dest, _) =
+                            video_rect(rect, &asset, fill, crop.unwrap_or_default(), format);
+                        videos.push(json!({ "rect": rect, "width": width, "height": height, "fill": fill, "crop": crop, "format": format, "box": dest }));
+                    }
+                }
+            }
+        }
+    }
     // Text scales with its box per format: derived boxes, one squeezed by the canvas, and own placements (one in the
     // primary format itself).
     let mut texts = Vec::new();
@@ -265,6 +301,7 @@ fn build() -> Value {
         "cameras": cameras,
         "contains": contains,
         "pictures": pictures,
+        "videos": videos,
         "texts": texts,
         "shown": shown,
         "fullFrame": full_frame,

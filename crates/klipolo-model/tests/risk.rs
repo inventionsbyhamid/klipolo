@@ -108,6 +108,8 @@ fn a_faster_video_layer_keeps_its_footage() {
                     volume: 1.0,
                     muted: false,
                     mirror: false,
+                    fill: false,
+                    crop: None,
                     tie: None,
                 }),
                 ..Default::default()
