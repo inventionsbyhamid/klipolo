@@ -230,6 +230,7 @@ fn main() {
             commands::export::export_reveal,
             commands::export::export_open,
             commands::export::export_files,
+            commands::export::export_share,
             commands::export::export_pick_folder,
             recorder::commands::recorder_setup,
             recorder::commands::recorder_arm,
