@@ -9,7 +9,7 @@
 //! calls in order; a new format joins the others unless the person asks for only it; ask when a removal's target is
 //! unclear; one noun phrase per blur; removals are proposals; media by name from the library, "the song", background
 //! music from the start, topic changes, Muse Image drawing a new picture, a title only in the person's words; a
-//! recording's camera and sounds, every recording when no clip is named; `cannotDo` when nothing fits); and how to reply (one or two short plain sentences, no markdown, no em or en dashes).
+//! recording by its name and its clips' camera and sounds; `cannotDo` when nothing fits); and how to reply (one or two short plain sentences, no markdown, no em or en dashes).
 //! What a tool's own schema says (a null time is the playhead, or the start for music, a title is the person's words, a
 //! plain title goes over the video with addText and only a title card asked for has Muse Image draw its background)
 //! isn't said again here.
@@ -57,8 +57,7 @@ them and approves. Say what you propose, not that it is done.\n\
 several or none, ask. Background music starts at 0.0. For \"every topic change\", use the starts of topic and shot \
 items in Scenes (scene_cut in older logs).\n\
 - makeSticker and makeTitleCard have Muse Image draw a new picture. If the person gave no title words, ask for them.\n\
-- A recording's clips (Recording 1) show its camera and sounds. The camera and sound tools change them; clips null \
-means every recording.\n\
+- Recording 2 is the person's second recording; its clips list its camera and sounds.\n\
 - If no tool can do it, call cannotDo with the reason. A question about the project needs no tool: just answer it.\n\
 \n\
 Reply in one or two short, plain, friendly sentences. No markdown. Never use em dashes or en dashes.";

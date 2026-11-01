@@ -1118,15 +1118,15 @@ fn the_context_numbers_several_mics_and_names_a_camera_only_take() {
 // ---- The prompt.
 
 #[test]
-fn the_prompt_says_how_a_recordings_camera_and_sounds_read_and_change() {
+fn the_prompt_names_a_recording_and_says_its_clips_list_its_camera_and_sounds() {
     let prompt = klipolo_chat::prompt::system_prompt();
     let line = (prompt.lines())
-        .find(|l| l.contains("Recording 1"))
+        .find(|l| l.contains("Recording 2"))
         .expect("a line on recordings");
-    for needle in ["camera and sounds", "clips null", "every recording"] {
+    for needle in ["second recording", "camera and sounds"] {
         assert!(line.contains(needle), "{line:?} says {needle:?}");
     }
     // One short line, in the rules' style.
     assert!(line.starts_with("- "), "{line:?}");
-    assert!(klipolo_chat::estimate_tokens(line) <= 40, "{line:?}");
+    assert!(klipolo_chat::estimate_tokens(line) <= 25, "{line:?}");
 }
