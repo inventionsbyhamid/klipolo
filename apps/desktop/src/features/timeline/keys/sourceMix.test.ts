@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import type { Op } from '../../../bindings/Op';
 import type { Project } from '../../../bindings/Project';
+import type { Recording } from '../../../bindings/Recording';
 import type { RecordingSource } from '../../../bindings/RecordingSource';
+import type { SourceRole } from '../../../bindings/SourceRole';
 import { separated, twoTakes } from '../../../test/sounds';
+import parity from './source-mix-parity.json';
 import {
   changesNothing,
   fillGapsOps,
@@ -179,5 +183,110 @@ describe('centring a one-sided sound', () => {
       sourceId: 'mic',
       patch: { mix: { volume: 1, muted: false, effects: [], centreFrom: 1 } },
     });
+  });
+});
+
+/** Chat's words for a kind of recorded sound, as the lanes' roles. */
+const ROLE: Record<string, SourceRole> = { mic: 'mic', gameSound: 'gameAudio', computerSound: 'systemAudio' };
+
+interface Case {
+  call: {
+    name: 'muteSource' | 'setSourceVolume' | 'centreSource';
+    args: { source: string; muted?: boolean; volume?: number; centred?: boolean };
+  };
+  ops: Op[];
+  /** The files' loudness per channel the app gave chat. */
+  peaks: { assetId: string; peaks: number[] }[];
+}
+
+/** The timeline's ops for one of chat's requests. */
+function lanesOps(project: Project, { call, peaks }: Case): Op[] {
+  const role = ROLE[call.args.source];
+  switch (call.name) {
+    case 'muteSource':
+      return kindMuteOps(project, role, call.args.muted!);
+    case 'setSourceVolume':
+      return kindVolumeOps(project, role, call.args.volume! / 100);
+    case 'centreSource':
+      return kindCentreOps(
+        project,
+        role,
+        call.args.centred!,
+        new Map(peaks.map((p) => [p.assetId, p.peaks])),
+      );
+  }
+}
+
+describe('the timeline mixes and centres a kind of sound as chat does', () => {
+  // Rust is the truth: chat's source tools compile these requests on this project and write
+  // `source-mix-parity.json`.
+  const project = parity.project as unknown as Project;
+  for (const c of parity.cases as unknown as Case[]) {
+    it(`${c.call.name} ${JSON.stringify(c.call.args)}`, () => {
+      expect(lanesOps(project, c)).toEqual(c.ops);
+    });
+  }
+});
+
+describe('a lane acts on its own source alone', () => {
+  interface Golden {
+    project: Project;
+    cases: {
+      call: { name: string; args: { muted?: boolean; volume?: number; which?: string } };
+      ops: Op[];
+    }[];
+  }
+
+  it("lane n of a kind is chat's which: n, each recording's nth source of it", () => {
+    const { project, cases } = parity.twoMics as unknown as Golden;
+    expect(cases.map((c) => c.call.args.which)).toEqual(['1', '2']);
+    cases.forEach((c, nth) => {
+      expect(kindMuteOps(project, 'mic', true, nth), `lane ${nth + 1}`).toEqual(c.ops);
+    });
+  });
+
+  it("the Camera sound lane is chat's videoSound: synced cameras only, never a take's silent camera", () => {
+    const { project, cases } = parity.cameraSound as unknown as Golden;
+    expect(cases).toHaveLength(3);
+    for (const c of cases) {
+      const ops =
+        c.call.name === 'muteSource'
+          ? kindMuteOps(project, 'camera', c.call.args.muted!, 0)
+          : kindVolumeOps(project, 'camera', c.call.args.volume! / 100, 0);
+      expect(ops, JSON.stringify(c.call)).toEqual(c.ops);
+    }
+  });
+});
+
+describe("the Fill gaps switch is chat's fillGaps", () => {
+  // Rust's `fill` turns the first interview's fill off (its default); `fillOn` turns the second's on, whose default
+  // already fills (no op for it) and whose clip c8 has a mix of its own that gains it.
+  const project = parity.cameraSound.project as unknown as Project;
+  const golden = parity.cameraSound as unknown as Record<
+    'fill' | 'fillOn',
+    { call: { args: { on: boolean; recording: string } }; ops: Op[] }
+  >;
+  for (const name of ['fill', 'fillOn'] as const) {
+    it(name, () => {
+      const { call, ops } = golden[name];
+      const r = project.recordings.find((x: Recording) => x.id === call.args.recording)!;
+      expect(fillGapsOps(project, r, call.args.on)).toEqual(ops);
+    });
+  }
+
+  it("fillMuted: the person's mute always wins", () => {
+    // Rust's `fill_muted`: the fill off and c1's camera sound muted by the person; turned on, only the default fills.
+    const {
+      project: p,
+      call,
+      ops,
+    } = (
+      parity.cameraSound as unknown as {
+        fillMuted: { project: Project; call: { args: { on: boolean; recording: string } }; ops: Op[] };
+      }
+    ).fillMuted;
+    const r = p.recordings.find((x: Recording) => x.id === call.args.recording)!;
+    expect(ops).toHaveLength(1);
+    expect(fillGapsOps(p, r, call.args.on)).toEqual(ops);
   });
 });
