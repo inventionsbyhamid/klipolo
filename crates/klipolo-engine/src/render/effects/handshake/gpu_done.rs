@@ -59,8 +59,8 @@ impl GpuDone {
 mod tests {
     use super::*;
 
-    /// A late callback of an older frame (a wait that gave up, a lost device's queue) never moves the newest
-    /// frame or its time back; n4/n5: read without a lock, the time never older than its frame's.
+    /// A late callback of an older frame (a wait that gave up, a lost device's queue) never moves the newest frame or
+    /// its time back; read without a lock, the time is never older than its frame's.
     #[test]
     fn the_newest_frame_moves_only_forward_with_its_time() {
         let g = GpuDone::default();

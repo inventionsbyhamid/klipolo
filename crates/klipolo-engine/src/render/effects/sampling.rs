@@ -1,6 +1,6 @@
-//! Runtime sampling of agent-made passes in the app's preview (the backstop of
-//! the checks before it). A measurement can miss what a setting does at a value it never took; the preview times the
-//! passes it draws and slows down one that runs far over its class.
+//! Runtime sampling of agent-made passes in the app's preview, a backstop to the measurement. A measurement can miss
+//! what a setting does at a value it never took; the preview times the passes it draws and slows down one that runs far
+//! over its class.
 //!
 //! - **What is timed.** Only in `RenderMode::Interactive`, only on a device with `TIMESTAMP_QUERY`, only `Checked`
 //!   filters and generators with a verified cost (built-ins never), every [`SAMPLE_EVERY`]th frame, at most
@@ -177,7 +177,7 @@ pub struct PassSampler {
     sampling_now: bool,
     now_s: f64,
     degrader: Degrader,
-    /// Time spent in the sampler itself (the [Mac] check's figure).
+    /// Time spent in the sampler itself (the figure for the check run by hand on a Mac after a Mac build).
     cost: Duration,
 }
 
@@ -216,7 +216,7 @@ impl PassSampler {
         self.clock = Clock::Stepped { step_s, frames: 0 };
     }
 
-    /// Sampling on or off (the [Mac] check's comparison).
+    /// Sampling on or off (the comparison for the check run by hand on a Mac after a Mac build).
     pub fn set_on(&mut self, on: bool) {
         self.on = on;
     }

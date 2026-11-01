@@ -1,6 +1,6 @@
-//! What every pass of one frame shares (moved from `render/effects.rs`), with the layer's own box in the passes' uv
-//! that padding added, and the `KlFrame` uniform a pass reads, built from it and the pass (moved from
-//! `pipelines.rs`; ABI v1.1 adds `fps`, `duration`, `resolution` and `step_fps`).
+//! What every pass of one frame shares, with the layer's own box in the passes' uv that padding added, and the
+//! `KlFrame` uniform a pass reads, built from it and the pass (ABI v1.1 adds `fps`, `duration`, `resolution` and
+//! `step_fps`).
 
 use bytemuck::{Pod, Zeroable};
 
