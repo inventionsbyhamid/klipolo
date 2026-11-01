@@ -155,3 +155,16 @@ fn export_bindings_caption_styles() {
     )
     .unwrap();
 }
+
+/// The shorts' two styles sit in 9:16's lower third, under a speaker's chin, inside the band the apps keep clear (the
+/// engine's organic-safe 0.15 to 0.72).
+#[test]
+fn the_shorts_styles_sit_in_the_lower_third_of_9_16() {
+    for key in ["word-pop", "bold-box"] {
+        let style = CaptionStyles::builtin()
+            .get(&ContribId::builtin(&format!("caption.{key}")))
+            .unwrap();
+        let y = style.position.get(FormatKind::Portrait).y;
+        assert!((0.667..=0.72).contains(&y), "{key}: centred at {y} of the height");
+    }
+}
