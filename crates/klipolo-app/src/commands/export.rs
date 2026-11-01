@@ -257,12 +257,67 @@ pub(crate) fn export_jobs(
 
 /// What unfinished jobs are judged by: their project as it is now, looked up once per project however many of its
 /// jobs are listed. The open project (its latest edits) with what was said in its files; another project from its file
-/// in the library, found by the id stored in it, with the words its job froze (what was said in a project's files is
-/// heard again only while it is open). A project that's gone counts as changed.
+/// in the library, found by the id stored in it (`SavedProjects`), with the words its job froze (what was said in a
+/// project's files is heard again only while it is open). A project that's gone counts as changed.
 struct Judge {
     open: Option<ProjectFeed>,
     library: Option<PathBuf>,
     saved: HashMap<String, Option<Project>>,
+}
+
+/// The library's projects as last read, by file, with when each file last changed: a closed project's jobs are judged
+/// without reading every project file each time the list is asked for, only those that changed since.
+#[derive(Default)]
+pub(crate) struct SavedProjects {
+    read: std::sync::Mutex<HashMap<PathBuf, (std::time::SystemTime, Option<Project>)>>,
+}
+
+impl SavedProjects {
+    /// The project with id `id` as saved in the library `dir` (its `.klipolo` files), reading (with `read`) only the
+    /// files that changed since they were last read. A file that isn't a project is passed over.
+    pub(crate) fn find(
+        &self,
+        dir: &Path,
+        id: &str,
+        read: &dyn Fn(&Path) -> Result<Project, Said>,
+    ) -> Option<Project> {
+        let files: Vec<(PathBuf, std::time::SystemTime)> = std::fs::read_dir(dir)
+            .ok()?
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().is_some_and(|e| e == PROJECT_EXTENSION))
+            .filter_map(|path| {
+                let changed = std::fs::metadata(&path).and_then(|m| m.modified()).ok()?;
+                Some((path, changed))
+            })
+            .collect();
+        let mut known = self
+            .read
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // Files that went are forgotten.
+        known.retain(|path, _| files.iter().any(|(file, _)| file == path));
+        let mut found = None;
+        for (path, changed) in files {
+            let fresh = known.get(&path).is_some_and(|(at, _)| *at == changed);
+            if !fresh {
+                known.insert(path.clone(), (changed, read(&path).ok()));
+            }
+            if found.is_none()
+                && let Some((_, Some(project))) = known.get(&path)
+                && project.id == id
+            {
+                found = Some(project.clone());
+            }
+        }
+        found
+    }
+}
+
+/// The library's projects as last read, for the whole app.
+fn saved_projects() -> &'static SavedProjects {
+    static SAVED: OnceLock<SavedProjects> = OnceLock::new();
+    SAVED.get_or_init(SavedProjects::default)
 }
 
 impl Judge {
@@ -287,21 +342,12 @@ impl Judge {
         let library = self.library.as_deref();
         self.saved
             .entry(job.project_id.clone())
-            .or_insert_with(|| library.and_then(|dir| saved_project(dir, &job.project_id)))
+            .or_insert_with(|| {
+                library.and_then(|dir| saved_projects().find(dir, &job.project_id, &read))
+            })
             .as_ref()
             .is_none_or(|project| !job.is_current_as_saved(project))
     }
-}
-
-/// The project with id `id` as saved in the library `dir` (its `.klipolo` files, read until one has it).
-fn saved_project(dir: &Path, id: &str) -> Option<Project> {
-    std::fs::read_dir(dir)
-        .ok()?
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|e| e == PROJECT_EXTENSION))
-        .filter_map(|path| read(&path).ok())
-        .find(|project| project.id == id)
 }
 
 /// Pauses the running export `job`: it stops at its next part, keeping every finished part.
@@ -689,9 +735,56 @@ pub(crate) fn state_at_launch(data: Option<&Path>) -> ExportState {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
+    use std::path::Path;
+    use std::time::{Duration, SystemTime};
 
-    use super::exit_steps;
+    use klipolo_model::coded::Said;
+    use klipolo_model::project::Project;
+
+    use super::{SavedProjects, exit_steps};
+
+    /// A closed project's job is judged by its file in the library, found by the id saved in it: each file is read once
+    /// while it is unchanged, and again once it changes. A file that isn't a project is passed over.
+    #[test]
+    fn the_library_is_read_again_only_where_a_file_changed() {
+        let library = tempfile::tempdir().unwrap();
+        let file = |name: &str| {
+            let path = library.path().join(format!("{name}.klipolo"));
+            std::fs::write(&path, name).unwrap();
+            path
+        };
+        let (kiln, tour) = (file("Kiln vlog"), file("Studio tour"));
+        file("Broken");
+        std::fs::write(library.path().join("notes.txt"), "not a project").unwrap();
+        let reads = Cell::new(0);
+        let read = |path: &Path| -> Result<Project, Said> {
+            reads.set(reads.get() + 1);
+            let name = std::fs::read_to_string(path).unwrap();
+            if name == "Broken" {
+                return Err(Said::code("model.unreadable"));
+            }
+            let mut project = Project::new(&name);
+            project.id = name;
+            Ok(project)
+        };
+        let saved = SavedProjects::default();
+        let found = saved.find(library.path(), "Studio tour", &read);
+        assert_eq!(found.map(|p| p.name), Some("Studio tour".into()));
+        assert_eq!(reads.get(), 3, "each project file once");
+        assert!(saved.find(library.path(), "Kiln vlog", &read).is_some());
+        assert_eq!(reads.get(), 3, "unchanged: none read again");
+        let later = SystemTime::now() + Duration::from_secs(5);
+        std::fs::File::options()
+            .write(true)
+            .open(&tour)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
+        assert!(saved.find(library.path(), "Gone", &read).is_none());
+        assert_eq!(reads.get(), 4, "only the file that changed");
+        let _ = kiln;
+    }
 
     #[test]
     fn at_exit_the_edits_are_saved_before_the_export_is_paused() {
