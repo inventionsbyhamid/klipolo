@@ -140,6 +140,20 @@ export function FontMenu({
   useLayoutEffect(() => {
     latestPick.current = onPick;
   });
+  // Gone while a font is shown on the text (the selection moved on with the menu open): the text is put back.
+  const latestPreview = useRef({ onPreview, weight, italic });
+  useLayoutEffect(() => {
+    latestPreview.current = { onPreview, weight, italic };
+  });
+  useEffect(
+    () => () => {
+      if (!previewed.current) return;
+      previewed.current = false;
+      const { onPreview: put, weight: w, italic: i } = latestPreview.current;
+      put?.(null, w, i);
+    },
+    [],
+  );
   const apply = (font: FontRef, w: number, i: boolean) => {
     hover.stop();
     previewed.current = false;

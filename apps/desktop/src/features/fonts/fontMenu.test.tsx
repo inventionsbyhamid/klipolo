@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mockIPC } from '@tauri-apps/api/mocks';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
@@ -172,6 +172,26 @@ describe('the font menu', () => {
     await userEvent.keyboard('{Escape}');
     expect(onPreview).toHaveBeenLastCalledWith(null, 400, false);
     expect(onPick).not.toHaveBeenCalled();
+  });
+
+  it('puts the text back when it goes while a font is shown on it', async () => {
+    const onPreview = vi.fn();
+    renderWithProviders(
+      <FontMenu
+        label="Font"
+        value={{ family: 'Inter', source: { type: 'bundled' } }}
+        weight={400}
+        italic={false}
+        onPick={vi.fn()}
+        onPreview={onPreview}
+      />,
+    );
+    await open();
+    await screen.findByRole('option', { name: /Anton/ });
+    await userEvent.keyboard('{ArrowDown}');
+    expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ family: 'Anton' }), 400, false);
+    cleanup();
+    expect(onPreview).toHaveBeenLastCalledWith(null, 400, false);
   });
 
   it('previews the font the pointer rests on, not each one it sweeps past', async () => {
