@@ -1,5 +1,5 @@
-//! Scene text when its build thread can't answer (lavapipe in
-//! CI): an export never draws a frame without its text and says nothing (it stops, naming why), and the preview says
+//! Scene text when its build thread can't answer (lavapipe in CI): an export never draws a frame without its text and
+//! says nothing (it stops, naming why), and the preview says
 //! once that a motion graphic's text couldn't be drawn, also when it shows an earlier text in its place. An export frame
 //! also always gets its own text while builds asked ahead of it fill the thread's queue.
 

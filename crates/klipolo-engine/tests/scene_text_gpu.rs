@@ -40,7 +40,7 @@ async fn empty_and_missing_glyph_text_is_honest() {
         h.notes()
             .iter()
             .any(|n| n.starts_with("frame.cjkFontMissing")),
-        "the CJK code"
+        "the missing-CJK-font code"
     );
     let _ = cjk;
 }
@@ -121,8 +121,7 @@ async fn a_lower_third_draws_its_name_and_role() {
     );
 }
 
-/// Each unusual title draws inside its box, quickly, and says only what
-/// the rules say.
+/// Each unusual title draws inside its box, quickly, and says only what the text notes say.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]
 async fn unusual_titles_stay_in_their_box() {
@@ -163,7 +162,7 @@ async fn unusual_titles_stay_in_their_box() {
     );
 }
 
-/// An image node showing an emoji draws one picture in its box: in colour where the system has an
+/// An image node showing an emoji draws one picture in its box: in colour where the system has an emoji face, else the
 /// text stand-in, never nothing and never past its box.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]
