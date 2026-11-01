@@ -15,6 +15,7 @@ import { deleteBlock, duplicate } from '../timeline/commands';
 import { setClipSpeed } from './clipSpeed';
 import { cardEscape } from './common';
 import { FramingField } from './FramingField';
+import { SourceMixTools } from './SourceMixTools';
 import { SpeedField } from './SpeedField';
 import { VolumeControls } from './VolumeControls';
 
@@ -22,8 +23,9 @@ import { VolumeControls } from './VolumeControls';
  * The clip card: the inspector for a selected main-track clip, in the left column like the others. Its header has the
  * film icon and the clip's name (its file's, or a recording's own: "Recording 1"), a more menu (Duplicate, Delete: the
  * timeline's own commands; a main clip has no layer order) and a close button. Its fields: Fit or Fill in the format
- * shown, and the Fill focus while Fill crops (`FramingField`); Speed (0.5x to 2x, the clip's length follows); and when
- * the clip has sound, Volume (0 to 200%) and Mute. Each change is one undo step.
+ * shown, and the Fill focus while Fill crops (`FramingField`); Speed (0.5x to 2x, the clip's length follows); when
+ * the clip has sound, Volume (0 to 200%) and Mute; and a recording clip's Sounds, each recorded sound's own mute,
+ * volume and sync (`SourceMixTools`). Each change is one undo step.
  */
 export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind }) {
   const { t } = useLingui();
@@ -31,6 +33,8 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
   const project = useProject((s) => s.snapshot?.project);
   if (!project) return null;
   const title = sourceLabel(project, clip.source);
+  const source = clip.source;
+  const recording = source.type === 'recording' ? project.recordings.find((r) => r.id === source.id) : undefined;
   const close = () => useSelection.getState().select(null);
   const setSpeed = (speed: number) => setClipSpeed(clip, speed, title, `${formatNumber(locale, speed)}×`);
   return (
@@ -83,6 +87,7 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
             }}
           />
         )}
+        {recording && <SourceMixTools clip={clip} recording={recording} />}
       </div>
     </aside>
   );

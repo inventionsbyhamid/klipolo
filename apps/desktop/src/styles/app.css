@@ -2613,6 +2613,66 @@
   gap: var(--space-3);
 }
 
+/* A recording clip's Sounds: a row per recorded sound, its name and mute, its volume, then its sync. */
+.sound-rows {
+  display: grid;
+  gap: var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sound-row {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.sound-row-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sound-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sound-sync {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+}
+
+.sound-sync-text {
+  flex: 1;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.sound-switch {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.sound-switch-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.sound-switch-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs);
+}
+
 /* A typed time or length: its label inside the field, faint, before the value. */
 .value-field {
   gap: var(--space-2);
