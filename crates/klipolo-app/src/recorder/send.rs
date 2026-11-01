@@ -72,11 +72,16 @@ impl Recorder {
 }
 
 /// `cmd` to take `take`'s worker, if it is the slot's and its worker is there (the app's own: the Dock icon's menu).
-/// The person's Stop is never followed by a resume.
+/// The person's Stop is never followed by a resume; once the take is stopping, only Stop goes on (a click from a menu
+/// opened before it, Pause or Marker, is dropped).
 pub(super) fn send_to_take(slot: &mut Slot, take: &str, cmd: &Command) {
     let Some(current) = slot.take.as_mut().filter(|t| t.cfg.id == take) else {
         return;
     };
+    if current.sup.is_stopping() && *cmd != Command::Stop {
+        tracing::info!(take, ?cmd, "recorder: a command after Stop isn't passed on");
+        return;
+    }
     if matches!(cmd, Command::Stop | Command::Cancel | Command::Disarm) {
         current.sup.stop_requested();
     }

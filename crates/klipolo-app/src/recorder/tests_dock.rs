@@ -120,3 +120,19 @@ fn the_dock_menu_never_waits_for_the_recorders_lock() {
     }
     assert_eq!(rec.launch.commands(), [Command::Start, Command::Marker]);
 }
+
+/// A click from a Dock menu opened before the take was told to stop: only Stop goes on, never a stale Pause or Marker.
+#[test]
+fn after_the_docks_stop_a_stale_pause_or_marker_goes_nowhere() {
+    let rec = fixture();
+    rec.arm(options_screen()).unwrap();
+    rec.send(Command::Start).unwrap();
+    for s in [Armed, Starting, Countdown, Recording] {
+        rec.launch.emit(state(s));
+    }
+    rec.settle();
+    rec.rec().dock_click("klipolo.stop");
+    rec.rec().dock_click("klipolo.marker");
+    rec.rec().dock_click("klipolo.pause");
+    assert_eq!(rec.launch.commands(), [Command::Start, Command::Stop]);
+}
