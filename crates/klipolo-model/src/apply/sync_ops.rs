@@ -88,6 +88,9 @@ pub(super) fn use_recording(
     c.source_in_us = run.rec_of(from, nudge);
     c.source_out_us = run.rec_of(to, nudge);
     c.source = now;
+    // A drifting run plays the same footage a hair shorter: the volume keys fit it.
+    let len = c.duration_us();
+    crate::volume::fit(&mut c.volume_keys, len);
     Ok(())
 }
 
