@@ -6,7 +6,7 @@ use klipolo_model::history::Document;
 use klipolo_model::ops::{op_risk, Op, OpRisk};
 use klipolo_model::project::Project;
 use klipolo_model::time::Us;
-use klipolo_model::timeline::{Item, ItemContent, TrackKind};
+use klipolo_model::timeline::{Item, ItemContent, Track, TrackKind};
 use klipolo_model::{apply_ops, Transaction};
 
 fn detach(clip: &str) -> Op {
@@ -134,6 +134,47 @@ fn separating_is_refused_where_it_would_change_what_is_heard() {
         refused("This clip's sound is already in its own layer.")
     );
     assert!(apply_ops(&fixture(), &[detach("nope")]).is_err());
+}
+
+/// The clip's file used as music elsewhere is not its own sound, so separating still works; its own sound, cut in two
+/// with the clip, still counts for the second piece.
+#[test]
+fn only_the_clip_s_own_sound_counts_as_already_separated() {
+    let mut p = fixture();
+    let mut music = Track::new(TrackKind::Audio, "Music");
+    music.id = "music-track".into();
+    // The b-roll's sound from its 5 s mark, under all of "b" (20 s to 30 s).
+    music.items.push(Item {
+        content: ItemContent::Audio {
+            asset_id: "broll".into(),
+            source_in_us: secs(5.0),
+            volume: 0.3,
+            muted: false,
+            fade_in_us: 0,
+            fade_out_us: 0,
+            effect: None,
+            drift_ppm: 0.0,
+            centre_from: None,
+            tie: None,
+            duck: None,
+        },
+        ..still_item("bed", 18.0, 5.0)
+    });
+    p.timeline.tracks.push(music);
+    let p = apply_ops(&p, &[detach("b")]).unwrap();
+    assert_eq!(
+        broll_sounds(&p),
+        [
+            (secs(18.0), secs(5.0), secs(5.0)),
+            (secs(20.0), secs(10.0), 0)
+        ]
+    );
+    let cut = apply_ops(&p, &[Op::Split { at_us: secs(25.0) }]).unwrap();
+    let second = cut.timeline.main[2].id.clone();
+    assert_eq!(
+        apply_ops(&cut, &[detach(&second)]).unwrap_err(),
+        refused("This clip's sound is already in its own layer.")
+    );
 }
 
 /// Separate, then undo: the layer is gone and the clip plays its own sound again, exactly as before.
