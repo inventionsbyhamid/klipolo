@@ -1067,6 +1067,8 @@ OUTLINE = 18.0  # the navy outline inside a white shape's border, in pixels
 
 
 class Shape:
+    """A signed distance from a point to a shape's edge, negative inside: called with the point's x and y."""
+
     def near(self, x, y, reach):
         """The shape as seen from points within `reach` of (x, y): the same distances, often with less to work out."""
         return self
@@ -1518,8 +1520,8 @@ def spline_weights():
 
 def full_size(paint, width, height, extra):
     """Rows of `width` x `height` RGB bytes: `paint(u, v)` (u and v from 0 to 1 across and down the frame) on the grid,
-    drawn up to full size. `extra` are rows of a number for each byte, added before rounding down (a dither, or a dither
-    and grain), used in turn."""
+    drawn up to full size. `extra` are rows of a number for each byte, added before rounding down (an ordered dither, or
+    a half and a grain), used in turn."""
     weights, cols = spline_weights(), width // STEP
 
     def point(j, size):
