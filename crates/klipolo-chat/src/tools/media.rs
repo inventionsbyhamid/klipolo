@@ -244,7 +244,7 @@ pub(super) const ADD_SOUND: Tool = Tool {
 pub(super) const ADD_TEXT: Tool = Tool {
     name: "addText",
     description: "Show words over the video in a text preset, at once and free: a title, a name, a caption. For a \
-                  full-screen title card, use makeTitleCard.",
+                  full-screen title card, use makeTitleCard. A short's hook: at most 6 punchy words.",
     parameters: || {
         vec![
             ("text", string("The words, as the person wrote them.")),

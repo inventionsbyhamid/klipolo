@@ -404,6 +404,38 @@ fn said_in_video(c: &Compiler, text: &str) -> Option<String> {
         })
 }
 
+/// The most words a hook paraphrasing the video holds.
+pub const HOOK_WORDS: usize = 6;
+
+/// `text` as a short's hook that paraphrases the video: at most `HOOK_WORDS` words, more than half of its words of three
+/// letters or more said in the video (in a transcript of the project's files). As the model wrote it, trimmed.
+fn hook_from_video(c: &Compiler, text: &str) -> Option<String> {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.is_empty() || words.len() > HOOK_WORDS {
+        return None;
+    }
+    let bare = |w: &str| {
+        w.trim_matches(|ch: char| !ch.is_alphanumeric())
+            .to_lowercase()
+    };
+    let content: Vec<String> = (words.iter())
+        .map(|w| bare(w))
+        .filter(|w| w.chars().count() >= 3)
+        .collect();
+    if content.is_empty() {
+        return None;
+    }
+    let transcripts = &c.inputs.speech.transcripts;
+    let said: std::collections::HashSet<String> = (c.snapshot.assets.iter())
+        .filter_map(|a| transcripts.get(&a.id))
+        .flat_map(|t| t.words.iter())
+        .filter(|w| w.kind != WordKind::Pause)
+        .map(|w| bare(&w.text))
+        .collect();
+    let found = content.iter().filter(|w| said.contains(*w)).count();
+    (2 * found > content.len()).then(|| words.join(" "))
+}
+
 pub(super) fn add_text(
     c: &Compiler,
     work: &Project,
@@ -416,7 +448,10 @@ pub(super) fn add_text(
     let words = if c.by_app {
         apps_words(("addText", "text"), text)?
     } else {
-        (persons_words(&c.inputs.message, text).or_else(|| said_in_video(c, text))).ok_or_else(|| {
+        (persons_words(&c.inputs.message, text)
+            .or_else(|| said_in_video(c, text))
+            .or_else(|| hook_from_video(c, text)))
+        .ok_or_else(|| {
             to_model(format!(
                 "addText: the words must be the person's own or said in the video, and {text:?} is neither. If they \
                  gave none, quote the video or ask them with askUser."

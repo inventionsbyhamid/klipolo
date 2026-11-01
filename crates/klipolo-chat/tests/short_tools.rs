@@ -909,3 +909,40 @@ fn the_text_null_reads_as_null_where_a_field_may_be_null() {
     );
     assert!(matches!(read, ToolCall::AddText { ref text, .. } if text == "null"));
 }
+
+#[test]
+fn a_hook_may_paraphrase_a_line_in_six_words_or_fewer() {
+    let p = project();
+    let hook = |text: &str| json!({"text": text, "preset": "title", "atSec": 0.0, "durationSec": 2.0, "animation": "kinetic", "font": null});
+    // Most of its words are said in the video ("flying", "Lisbon", "today"): a paraphrase, taken.
+    let out = run(
+        &p,
+        "make a short with a hook",
+        &[("addText", hook("Flying over Lisbon today"))],
+    );
+    assert_eq!(out.refusals, vec![]);
+    // Seven words or more, or words the video never says, go back to the model.
+    let out = run(
+        &p,
+        "make a short with a hook",
+        &[("addText", hook("Flying over Lisbon today was so much fun"))],
+    );
+    assert!(refused_to_model(&out, 0).contains("said in the video"));
+    let out = run(
+        &p,
+        "make a short with a hook",
+        &[("addText", hook("Best trip ever"))],
+    );
+    assert!(refused_to_model(&out, 0).contains("said in the video"));
+    // The tool says how long a hook is.
+    let tools = klipolo_chat::tools();
+    let add_text = (tools.as_array().unwrap().iter())
+        .find(|t| t["name"] == "addText")
+        .unwrap();
+    assert!(
+        add_text["description"]
+            .as_str()
+            .unwrap()
+            .contains("at most 6 punchy words")
+    );
+}
