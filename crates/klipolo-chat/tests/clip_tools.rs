@@ -1211,3 +1211,100 @@ fn a_video_layers_speed_volume_and_mute_are_its_cards() {
         "setClip: v2 has no sound, so it has no volume or mute."
     );
 }
+
+/// A screen recording (screen, camera and mic, 60 s) played whole as c1, its camera separated: a video layer attached
+/// to the clip, v1.
+fn with_separated_camera() -> Project {
+    use klipolo_model::recording::{
+        Recording, RecordingKind, RecordingSource, SourceMix, SourceRole, SourceRun,
+    };
+    let source = |id: &str, role: SourceRole| RecordingSource {
+        id: id.into(),
+        role,
+        label: format!("capture.source.{id}"),
+        runs: vec![SourceRun {
+            asset_id: id.into(),
+            offset_us: 0,
+            duration_us: secs(60.0),
+            drift_ppm: 0.0,
+            file_in_us: 0,
+        }],
+        nudge_us: 0,
+        mix: SourceMix::default(),
+        synced: None,
+    };
+    let mut p = Project::new("Recording");
+    let mut mic = file("mic", 60.0, true);
+    mic.kind = AssetKind::Audio;
+    (mic.width, mic.height, mic.fps) = (0, 0, 0.0);
+    p.assets = vec![
+        file("screen", 60.0, false),
+        file("camera", 60.0, false),
+        mic,
+    ];
+    p.recordings = vec![Recording {
+        id: "rec".into(),
+        kind: RecordingKind::Screen,
+        sources: vec![
+            source("screen", SourceRole::Screen),
+            source("camera", SourceRole::Camera),
+            source("mic", SourceRole::Mic),
+        ],
+        primary: "screen".into(),
+        cursor: None,
+        markers: vec![],
+        game: None,
+    }];
+    let mut take = Clip::new(ClipSource::Recording { id: "rec".into() }, 0, secs(60.0));
+    take.id = "take".into();
+    // Its camera shows in a bubble, as a take records it.
+    take.camera = Some(klipolo_model::timeline::CameraLayout::default());
+    p.timeline.main = vec![take];
+    let detach = Op::DetachSource {
+        clip_id: "take".into(),
+        source_id: "camera".into(),
+    };
+    apply_ops(&p, &[detach]).unwrap()
+}
+
+#[test]
+fn a_separated_cameras_speed_is_its_clips_as_the_video_layer_card_does() {
+    let p = with_separated_camera();
+    assert!(
+        Refs::of(&p).video("v1").is_some(),
+        "the camera is a video layer"
+    );
+    let out = run(&p, &[("setClip", set_clip("v1", json!({"speed": 2})))]);
+    let (ops, _, after) = applied(&p, &out);
+    // The card's Speed on a separated camera is the clip's (`setClipSpeed(cameraClip)`), so the lips stay in sync.
+    let by_hand = card(
+        "take",
+        ClipPatch {
+            speed: Some(2.0),
+            ..ClipPatch::default()
+        },
+    );
+    assert_eq!(ops, std::slice::from_ref(&by_hand));
+    assert_eq!(after, apply_ops(&p, &[by_hand]).unwrap());
+    assert_eq!(after.timeline.main[0].speed, 2.0);
+    // Its file has no sound: no Volume or Mute, as the card shows none.
+    let out = run(&p, &[("setClip", set_clip("v1", json!({"muted": true})))]);
+    assert_eq!(
+        model_refusal(&out),
+        "setClip: v1 has no sound, so it has no volume or mute."
+    );
+}
+
+#[test]
+fn the_layers_key_changes_only_when_a_layer_ref_would_name_another_layer() {
+    let p = with_layers();
+    let key = klipolo_chat::layers_key(&p);
+    // A new volume or a cut of the main track leaves every layer where its ref names it.
+    let quieter = run(&p, &[("setClip", set_clip("m1", json!({"volume": 0.6})))]);
+    let (_, _, after) = applied(&p, &quieter);
+    assert_eq!(klipolo_chat::layers_key(&after), key);
+    // A layer taken away before the last one: v2 would name another layer, or none.
+    let mut fewer = p.clone();
+    (fewer.timeline.tracks.iter_mut()).for_each(|t| t.items.retain(|i| i.id != "pip-1"));
+    assert_ne!(klipolo_chat::layers_key(&fewer), key);
+}
