@@ -68,12 +68,12 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   // A recording clip's sounds (`useSourceCommands`): their mutes in this clip, then Separate beside the camera's.
   const sounds = commands.filter((c) => c.id.startsWith('source-mute:')).map((c) => ({ id: c.id }));
   const separates = commands.filter((c) => c.id.startsWith('source-separate:')).map((c) => ({ id: c.id }));
-  // `off`: listed, but off here, with why. No Paste effects: nothing shows a block's effects or takes them off.
+  // `off`: listed, but off here, with why.
   const groups: { id: string; label?: string; off?: string }[][] =
     kind === 'clip'
       ? [
           [split, ...(transitionAfter || onlyClip ? [addTransition] : [])],
-          [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }],
+          [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }, { id: 'paste-effects' }],
           sounds,
           [...(hasCamera ? [{ id: 'separate-camera' }] : []), ...separates],
           [{ id: 'delete' }],
@@ -81,7 +81,13 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
       : [
           [split, { id: 'attach' }, ...(mutes ? [{ id: 'sound-mute' }] : [])],
           order,
-          [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }],
+          [
+            { id: 'copy' },
+            { id: 'cut' },
+            { id: 'duplicate' },
+            // Sound and zoom layers have no effects.
+            ...(found?.track.kind === 'overlay' ? [{ id: 'paste-effects' }] : []),
+          ],
           [{ id: 'delete' }],
         ];
 

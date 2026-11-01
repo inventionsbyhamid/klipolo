@@ -10,6 +10,7 @@ import { contentNow, contentOps, editContent } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { PositionField, TimingField } from './common';
 import { CropField, isNoCrop } from './CropField';
+import { EffectsButton } from './EffectsButton';
 import { Field } from './fields';
 import { setClipSpeed } from './clipSpeed';
 import { PictureFields } from './ImageInspector';
@@ -21,11 +22,12 @@ export type VideoContent = Extract<ItemContent, { type: 'video' }>;
 
 /**
  * A video layer's fields (a picture in picture): Size, Opacity and Corner radius (`PictureFields`), Framing (Fit shows
- * the whole picture in its box, Fill covers the box from the centre, cutting the edges) and Crop (`CropField`), its
- * sound (Volume and Mute, when its file has sound), Speed (its length follows), Mirror, Position and Timing. A separated camera keeps
- * its clip's speed, so the lips stay in sync with the mic: its Speed changes the clip's as the clip card's does, saying
- * what that does to the clip's transitions. Each change is built at its turn from the layer as the project has it then
- * (`contentOps`), setting only its own field: Speed keeps a volume change still on its way.
+ * the whole picture in its box, Fill covers the box from the centre, cutting the edges) and Crop (`CropField`),
+ * Effects, its sound (Volume and Mute, when its file has sound), Speed (its length follows), Mirror, Position and
+ * Timing. A separated camera keeps its clip's speed, so the lips stay in sync with the mic: its Speed changes the
+ * clip's as the clip card's does, saying what that does to the clip's transitions. Each change is built at its turn
+ * from the layer as the project has it then (`contentOps`), setting only its own field: Speed keeps a volume change
+ * still on its way.
  */
 export function VideoInspector({
   item,
@@ -84,6 +86,7 @@ export function VideoInspector({
         latest={() => contentNow(item.id, content).crop}
         ops={(crop) => contentOps(item, content, { crop: isNoCrop(crop) ? undefined : crop })}
       />
+      <EffectsButton target={{ type: 'item', id: item.id }} effects={item.effects} />
       {hasAudio && (
         <VolumeControls
           volume={content.volume}

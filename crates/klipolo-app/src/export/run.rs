@@ -64,6 +64,7 @@ mod tests {
 
     use klipolo_engine::api::{ExportQuality, ExportRequest};
     use klipolo_engine::export::runner::Attempt;
+    use klipolo_model::captions::sidecar::CaptionFile;
     use klipolo_model::project::FormatKind;
 
     use super::*;
@@ -168,6 +169,35 @@ mod tests {
             0,
             "no file in the folder"
         );
+    }
+
+    /// A caption file asked for is written with the job, from the finished words, ready to go beside the landscape
+    /// video; the job knows its kind.
+    #[tokio::test]
+    async fn a_job_keeps_the_caption_file_asked_for() {
+        let dir = tempfile::tempdir().unwrap();
+        let (project, speech) =
+            klipolo_engine::test_support::captions_project("caption.bold", &[("Hello", 1.0, 1.4)]);
+        let req = ExportRequest {
+            formats: vec![FormatKind::Landscape],
+            quality: ExportQuality::High,
+            caption_file: Some(CaptionFile::Srt),
+            allow_stand_ins: false,
+            replaces: None,
+            allow_missing_cursor: false,
+        };
+        let batch = crate::export::freeze(
+            Arc::new(project),
+            &speech,
+            "en".into(),
+            &req,
+            dir.path(),
+            None,
+        );
+        let job = crate::export::create_job(batch).await.unwrap();
+        assert_eq!(job.caption_file, Some(CaptionFile::Srt));
+        let frozen = std::fs::read_to_string(job.dir.join("captions.srt")).unwrap();
+        assert!(frozen.contains("Hello"), "{frozen}");
     }
 
     /// A worker that runs until it is killed (a long export), saying nothing.
