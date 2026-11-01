@@ -1,6 +1,6 @@
-//! One caption frame: which words show, their colours and motion, the box that
-//! follows the spoken word, and the block's tilt and exit, from each style's data. Pure: no GPU. A frame allocates
-//! nothing (counted by this binary's own allocator, per thread).
+//! One caption frame: which words show, their colours and motion, the box that follows the spoken word, and the block's
+//! tilt and exit, from each style's data. Pure: no GPU. A frame allocates nothing (counted by this binary's own
+//! allocator, per thread).
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
