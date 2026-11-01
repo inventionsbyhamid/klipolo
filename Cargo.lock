@@ -2564,7 +2564,6 @@ dependencies = [
  "block2",
  "cidre",
  "dirs",
- "klipolo-speech-wire",
  "libc",
  "num_cpus",
  "objc2",

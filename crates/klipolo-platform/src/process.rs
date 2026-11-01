@@ -187,22 +187,6 @@ pub fn set_background(pid: u32, started: u64, on: bool) -> io::Result<()> {
     crate::imp::set_background(pid, started, on)
 }
 
-/// The nice value `lower_self` gives: below normal, as utility work is, never the OS's lowest.
-pub use klipolo_speech_wire::lower::LOWERED_NICE;
-
-/// This process below normal CPU priority, for good: utility, never the OS's lowest, for work nobody waits on frame by
-/// frame. Called before the process starts any other thread, so every thread it starts later inherits it. At the
-/// lowest priority every editor thread would preempt its threads, and the others would spin waiting for them. The
-/// speech wire's `lower::lower`:
-/// - macOS: nice `LOWERED_NICE` for the process and utility QoS for the calling thread (never the darwin background
-///   band, which also throttles disk reads);
-/// - Linux: nice `LOWERED_NICE` (or nicer, if it already is) and `SCHED_BATCH` for the calling thread, which the
-///   threads it starts inherit (raising nice back needs `CAP_SYS_NICE`, hence for good);
-/// - Windows: `BELOW_NORMAL_PRIORITY_CLASS` for the process.
-pub fn lower_self() -> io::Result<()> {
-    klipolo_speech_wire::lower::lower()
-}
-
 /// Process 0 is never one process to signal or reprioritise: `kill` and `setpriority` take it for the caller.
 fn one_process(pid: u32) -> io::Result<()> {
     if pid == 0 {

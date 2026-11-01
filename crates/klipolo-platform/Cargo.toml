@@ -20,8 +20,6 @@ tokio = { version = "1", features = ["process"] }
 dirs = "7"
 # Physical cores for `caps` (hardware classes, model thread counts); the version klipolo-engine already builds.
 num_cpus = "1"
-# `process::lower_self` is the speech wire's `lower` (one implementation).
-klipolo-speech-wire = { path = "../klipolo-speech-wire" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
