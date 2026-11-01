@@ -7,6 +7,14 @@ import type { ExportQuality } from '../bindings/ExportQuality';
 import type { FormatKind } from '../bindings/FormatKind';
 import { call } from './call';
 
+/** A box in the page, in CSS px from its top left (an element's `getBoundingClientRect`). */
+export interface PageRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 function channel(onEvent: (event: ExportEvent) => void): Channel<ExportEvent> {
   const events = new Channel<ExportEvent>();
   events.onmessage = onEvent;
@@ -39,6 +47,11 @@ export const exporter = {
   cancel: (job?: string) => call<void>('export_cancel', job ? { job } : {}),
   /** Shows file `index` of the last export in Finder; without one, its folder with the first file selected. */
   reveal: (index?: number) => call<void>('export_reveal', index === undefined ? {} : { index }),
+  /**
+   * Shows the Mac's share menu (AirDrop, Messages, Mail and the like) for the last export's files, beside `anchor` (the
+   * button pressed, in page px). Resolves once the menu shows.
+   */
+  share: (anchor: PageRect) => call<void>('export_share', { anchor }),
   /** Opens file `index` of the last export in its app. */
   open: (index: number) => call<void>('export_open', { index }),
   /** The last export's files in place, by index, with their sizes. */

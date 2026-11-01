@@ -96,6 +96,15 @@ export function revealExported(index?: number): Promise<void> {
   return shown.catch((error: unknown) => toast.error(errorMessage(error)));
 }
 
+/**
+ * Shows the share menu for the last export's files beside `button` (Share…); files that are gone, or a menu that can't
+ * show, say so in a toast.
+ */
+export function shareExported(button: Element): Promise<void> {
+  const { x, y, width, height } = button.getBoundingClientRect();
+  return exporter.share({ x, y, width, height }).catch((error: unknown) => toast.error(errorMessage(error)));
+}
+
 /** Opens file `index` of the last export in its app; one that is gone says so in a toast. */
 export function openExported(index: number): Promise<void> {
   return exporter.open(index).catch((error: unknown) => toast.error(errorMessage(error)));

@@ -23,6 +23,7 @@ pub mod pressure;
 pub mod process;
 pub mod qos;
 pub mod screen_color;
+pub mod share;
 #[cfg(any(windows, test))]
 mod trash_rule;
 

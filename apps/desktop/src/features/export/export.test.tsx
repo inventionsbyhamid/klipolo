@@ -34,6 +34,7 @@ vi.mock('../../bridge/exporter', () => ({
     start: vi.fn(() => Promise.resolve()),
     cancel: vi.fn(() => Promise.resolve()),
     reveal: vi.fn(() => Promise.resolve()),
+    share: vi.fn(() => Promise.resolve()),
     open: vi.fn(() => Promise.resolve()),
     files: vi.fn(() => Promise.resolve([{ name: 'Billing tutorial 16x9 2.mp4', bytes: 148_000_000 }])),
     pickFolder: vi.fn(() => Promise.resolve('Desktop / Clips')),
@@ -514,6 +515,19 @@ describe('export dialog', () => {
     expect(done.text).toBe('Exported 1 video.');
     done.actions![0].run();
     expect(exporter.reveal).toHaveBeenCalledWith();
+  });
+
+  it('Share… opens the share menu for the exported files beside the button, and says so when they are gone', async () => {
+    await openAndExport();
+    emit({ type: 'fileReady', index: 0, path: landscape.path }, { type: 'finished' });
+    const share = await screen.findByRole('button', { name: 'Share…' });
+    share.getBoundingClientRect = () => ({ x: 300, y: 500, left: 300, top: 500, width: 90, height: 36 }) as DOMRect;
+    await userEvent.click(share);
+    expect(exporter.share).toHaveBeenCalledWith({ x: 300, y: 500, width: 90, height: 36 });
+    const gone = { code: 'exports.revealGone', params: {} };
+    vi.mocked(exporter.share).mockRejectedValueOnce(new Error("That video isn't there any more.", { cause: gone }));
+    await userEvent.click(share);
+    await waitFor(() => expect(useToasts.getState().toasts.at(-1)?.text).toBe("That video isn't there any more."));
   });
 
   it('Open and Show in Finder say so when the file is gone', async () => {

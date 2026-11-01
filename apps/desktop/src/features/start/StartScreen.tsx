@@ -163,6 +163,22 @@ export function StartScreen({ onRecord, takeFocus = false }: StartScreenProps) {
   const create = () => {
     if (!busy()) void newProject();
   };
+  /**
+   * A card's Duplicate: the copy opens, the card busy meanwhile; a copy that fails says why (the store) and the list is
+   * read again.
+   */
+  const duplicate = (path: string) => {
+    if (busy()) return;
+    setOpening(path);
+    void useProject
+      .getState()
+      .duplicate(path)
+      .then((opened) => {
+        if (!mounted.current) return;
+        setOpening(null);
+        if (!opened) list();
+      });
+  };
 
   const actions = (
     <div className="start-actions">
@@ -238,6 +254,7 @@ export function StartScreen({ onRecord, takeFocus = false }: StartScreenProps) {
                 nowMs={nowMs}
                 busy={opening === row.path}
                 onOpen={openProject}
+                onDuplicate={duplicate}
               />
             ))}
           </ul>

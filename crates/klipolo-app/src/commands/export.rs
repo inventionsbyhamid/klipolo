@@ -17,8 +17,9 @@ use klipolo_engine::export::runner::{Batch, ProcessLauncher, discard_job};
 use klipolo_engine::render::fonts;
 use klipolo_engine::session::ProjectFeed;
 use klipolo_model::coded::Said;
+use serde::Deserialize;
 use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager, RunEvent, State, WindowEvent};
+use tauri::{AppHandle, Manager, RunEvent, State, WebviewWindow, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
 use crate::project::ProjectSessionState;
@@ -232,6 +233,63 @@ pub(crate) fn export_reveal(
 ) -> Result<(), Said> {
     let files = exported(&state, index)?;
     system_open(true, &files[..1])
+}
+
+/// A box in the page, in CSS px from its top left (the Share… button's `getBoundingClientRect`).
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) struct PageRect {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+/// Shows the Mac's share menu (AirDrop, Messages, Mail and the person's other apps) for the last export's files, beside
+/// `anchor` (the Share… button): only files it put in place that are still there (`exports.revealGone` when none is),
+/// and `exports.shareFailed` when the menu can't show. Resolves once the menu shows.
+#[tauri::command]
+pub(crate) async fn export_share(
+    window: WebviewWindow,
+    state: State<'_, ExportState>,
+    anchor: PageRect,
+) -> Result<(), Said> {
+    let files = exported(&state, None)?;
+    share(&window, anchor, files).await
+}
+
+/// The menu shows on the main thread, at the button's place in the webview (the page starts at its title bar inset).
+#[cfg(target_os = "macos")]
+async fn share(window: &WebviewWindow, anchor: PageRect, files: Vec<PathBuf>) -> Result<(), Said> {
+    use klipolo_platform::share::{Anchor, show};
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    window
+        .with_webview(move |webview| {
+            let view = webview.inner();
+            let (x, y) = klipolo_engine::present::macos::page_origin_in(view).unwrap_or_default();
+            let at = Anchor {
+                x: x + anchor.x,
+                y: y + anchor.y,
+                width: anchor.width,
+                height: anchor.height,
+            };
+            let _ = tx.send(show(view, at, &files));
+        })
+        .map_err(|_| Said::code("exports.shareFailed"))?;
+    match rx.await {
+        Ok(true) => Ok(()),
+        _ => Err(Said::code("exports.shareFailed")),
+    }
+}
+
+/// No share menu here (Klipolo's builds for Linux and Windows are for its checks).
+#[cfg(not(target_os = "macos"))]
+async fn share(
+    _window: &WebviewWindow,
+    _anchor: PageRect,
+    _files: Vec<PathBuf>,
+) -> Result<(), Said> {
+    Err(Said::code("exports.shareFailed"))
 }
 
 /// Opens file `index` of the last export in its app (QuickTime Player for a video).

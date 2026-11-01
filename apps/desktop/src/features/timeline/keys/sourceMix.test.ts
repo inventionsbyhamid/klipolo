@@ -190,8 +190,8 @@ describe('centring a one-sided sound', () => {
  * `source-mix-parity.json` pins the ops chat's source tools compile to for each case's `call` (`muteSource`,
  * `setSourceVolume`, `centreSource`, `which`, `videoSound`, `fillGaps`), on the projects it holds, with the loudness
  * each file had (`peaks`). The lanes, the clip card and those tools must make the same change for the same request.
- * The Rust test that writes the file lands with those tools; until then `klipolo-model`'s `source_mix_golden` test
- * applies every case's ops to its project.
+ * `klipolo-chat`'s `source_mix_parity` test writes the file (`UPDATE_GOLDEN=1`), and `klipolo-model`'s
+ * `source_mix_golden` test applies every case's ops to its project.
  */
 
 /** Chat's words for a kind of recorded sound, as the lanes' roles. */
