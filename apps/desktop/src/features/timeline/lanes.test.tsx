@@ -54,7 +54,7 @@ describe('the four lanes', () => {
       'Overlays',
       'Video',
       'Mic',
-      "Screen's sound",
+      'Screen’s sound',
       'Sound effects',
       'Music',
     ]);

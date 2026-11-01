@@ -27,7 +27,7 @@ describe("a recording's sounds by name", () => {
   it("names a picture's own sound after it", () => {
     const r = twoTakes().recordings[0];
     const screen = r.sources[0];
-    expect(soundName(r, screen)).toBe("Screen's sound");
+    expect(soundName(r, screen)).toBe('Screen’s sound');
     expect(soundName(r, { ...screen, role: 'camera', label: 'capture.source.camera' })).toBe('Camera sound');
   });
 

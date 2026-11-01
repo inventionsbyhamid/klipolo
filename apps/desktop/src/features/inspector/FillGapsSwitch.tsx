@@ -78,12 +78,12 @@ export function FillGapsSwitch({
           {mutedHere
             ? t({
                 id: 'source.fillGaps.mutedHere',
-                message: "You muted the camera's sound in this clip, so it stays silent here, gaps included.",
+                message: 'You muted the camera’s sound in this clip, so it stays silent here, gaps included.',
                 comment: 'Under the Fill gaps switch when the person muted the camera sound in the selected clip',
               })
             : t({
                 id: 'source.fillGaps.hint',
-                message: "Where your recording has nothing, the camera's sound plays.",
+                message: 'Where your recording has nothing, the camera’s sound plays.',
                 comment: 'Under the Fill gaps switch of the camera sound',
               })}
         </p>

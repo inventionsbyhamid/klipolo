@@ -35,7 +35,7 @@ const CAMERA_SOUND = msg({
 /** The same for a screen or game file that carries sound. */
 const VIDEO_SOUND = msg({
   id: 'source.cameraSound.ofVideo',
-  message: "{video}'s sound",
+  message: '{video}’s sound',
   comment: 'A lane and a row in Sounds: the sound a video file recorded; {video} is its name, e.g. Screen',
 });
 /** A recording's second (third...) source of a kind, when Klipolo names it. */
@@ -82,7 +82,7 @@ export const nthParam = (name: ErrorParam, nth: number): ErrorParam => ({
   params: { name, n: nth + 1 },
 });
 
-/** "{video}'s sound": the sound a video file carries. */
+/** "{video}’s sound": the sound a video file carries. */
 export const videoSoundParam = (video: ErrorParam): ErrorParam => ({
   code: VIDEO_SOUND.id,
   params: { video },

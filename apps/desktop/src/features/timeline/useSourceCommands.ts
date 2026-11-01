@@ -81,7 +81,7 @@ export function useSourceCommands(): Command[] {
         keywords: searchWords(
           t({
             id: 'command.sourceMute.keywords',
-            message: 'audio, sound, silence, mic, computer sound',
+            message: 'audio, sound, silence, mic, game sound',
             comment: 'Comma-separated search words for Mute (a recorded sound) in this clip',
           }),
         ),
