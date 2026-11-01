@@ -929,6 +929,226 @@
       "annotations": {
         "readOnlyHint": false
       },
+      "description": "Keyframes, or enter, exit and loop presets, for a layer. Null keeps.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "keys": {
+            "description": "A property listed gets just these keys; [] removes all.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "atSec": {
+                  "description": "From the layer's start.",
+                  "type": "number"
+                },
+                "ease": {
+                  "description": "Into it.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "property": {
+                  "description": "What moves.",
+                  "enum": [
+                    "x",
+                    "y",
+                    "scale",
+                    "rotation",
+                    "opacity"
+                  ],
+                  "type": "string"
+                },
+                "value": {
+                  "description": "Its value.",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "property",
+                "atSec",
+                "value",
+                "ease"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "layer": {
+            "description": "last, or a ref.",
+            "type": "string"
+          },
+          "presets": {
+            "description": "enter, exit or loop and a preset; a semicolon between.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "layer",
+          "keys",
+          "presets"
+        ],
+        "type": "object"
+      },
+      "name": "setMotion"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Words come in by letter, word or line, each from the values set.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "layer": {
+            "description": "last, or a ref.",
+            "type": "string"
+          },
+          "set": {
+            "description": "Keys to set.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "description": "A key.",
+                  "type": "string"
+                },
+                "value": {
+                  "description": "Its value.",
+                  "type": [
+                    "number",
+                    "string",
+                    "boolean"
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "layer",
+          "set"
+        ],
+        "type": "object"
+      },
+      "name": "animateText"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Set a layer's or clip's card fields by key. Unset keys keep.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "layer": {
+            "description": "last, or a ref.",
+            "type": "string"
+          },
+          "set": {
+            "description": "Keys to set.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "description": "A key.",
+                  "type": "string"
+                },
+                "value": {
+                  "description": "Its value.",
+                  "type": [
+                    "number",
+                    "string",
+                    "boolean"
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "layer",
+          "set"
+        ],
+        "type": "object"
+      },
+      "name": "setLayer"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Add, change, move or remove one effect on a clip or layer.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "An effect or look.",
+            "type": "string"
+          },
+          "set": {
+            "description": "Its settings, and at or remove.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "description": "A key.",
+                  "type": "string"
+                },
+                "value": {
+                  "description": "Its value.",
+                  "type": [
+                    "number",
+                    "string",
+                    "boolean"
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "target": {
+            "description": "A ref, or last.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "name",
+          "set"
+        ],
+        "type": "object"
+      },
+      "name": "setEffects"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
       "description": "Show a recording's camera as a bubble, split under the screen, or hidden.",
       "inputSchema": {
         "additionalProperties": false,
