@@ -1,7 +1,7 @@
 //! What the renderer reads of an instance beyond its static fields: a node's rest pose with its repeat copy's gap
-//! copy's gap (where its text is put on whole pixels), its repeat index, the
-//! emitters, whether a backdrop draws, and a generator fill's settings as the node binds them. Never per frame beyond a
-//! copy; allocation-free but for a fill's settings, read once with the instance.
+//! (where its text is put on whole pixels), its repeat index, the emitters, whether a backdrop draws, and a generator
+//! fill's settings as the node binds them. Never per frame beyond a copy; allocation-free but for a fill's settings,
+//! read once with the instance.
 
 use super::super::eval::NodeState;
 use super::super::timeline::Prop;

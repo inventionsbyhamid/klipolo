@@ -1,6 +1,6 @@
 //! A path's own bounds: the tight box around its lines and curves (a curve's extremes, not its control points), as
-//! SVG's `getBBox`. A path without a `viewBox` fits this box into its node's, and so does a motion path, so a dot riding
-//! a path drawn beside it stays on it.
+//! SVG's `getBBox`. A path without a `viewBox` fits this box into its node's, and so does a motion path, so a dot
+//! riding a path drawn beside it stays on it.
 
 use super::PathCmd;
 

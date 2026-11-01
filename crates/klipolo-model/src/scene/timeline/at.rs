@@ -1,6 +1,6 @@
 //! GSAP's position parameter as data, read once at compile (the same grammar as the check's `check::timing`) and placed
 //! wherever the members a stagger spreads over are known: at compile with the check's counts, then again in each
-//! instance on the texts actually laid out (the evaluator places tweens on the laid-out texts).
+//! instance on the texts actually laid out.
 
 use super::super::check::is_name;
 use super::super::{Tween, Val};

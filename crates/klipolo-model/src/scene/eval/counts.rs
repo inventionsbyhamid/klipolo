@@ -1,5 +1,5 @@
-//! What a frame draws, counted against the runtime caps; the renderer degrades what
-//! is past them, with one diagnostic per scene.
+//! What a frame draws, counted against the runtime caps; the renderer degrades what is past them, with one diagnostic
+//! per scene.
 
 use super::super::SceneLimits;
 

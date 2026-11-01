@@ -1,4 +1,4 @@
-//! Where an instance's still is drawn (its hold point): the latest moment before any exit
+//! Where an instance's still is drawn (the hold point): the latest moment before any exit
 //! starts, else the scene's end, so a still is never a blank exit. An exit is a property's last change to a value that
 //! hides its node (opacity or `visible` 0, a scale of 0, a position a whole box or a 1080p frame's width away) after
 //! which nothing brings it back; a `set` to 0 before an entrance or a blink that repeats forever isn't one.
