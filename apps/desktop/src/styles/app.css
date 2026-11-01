@@ -1249,6 +1249,48 @@
   background: color-mix(in srgb, var(--color-lane-music) 40%, transparent);
 }
 
+.tl-band.is-source {
+  top: 2px;
+  bottom: 3px;
+  background: color-mix(in srgb, var(--color-clip-deep) 70%, transparent);
+}
+
+/* A recorded sound's lane under Video: each clip's part of the sound in the clip's blue, its waveform in clip-2,
+   dimmed where the sound is muted. Nothing on it is picked: a press there seeks, as on empty lane. */
+.tl-source-part {
+  position: absolute;
+  top: 2px;
+  bottom: 3px;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-clip-deep) 70%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-clip-2) 40%, transparent);
+  pointer-events: none;
+}
+
+.tl-source-part[data-muted="true"] {
+  opacity: 0.6;
+}
+
+/* Its header in the 40 px gutter: the kind's icon, which opens its volume, and Mute. */
+.tl-source-head {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.icon-btn.tl-source-btn {
+  width: 19px;
+  height: 19px;
+  border-radius: var(--radius-xs);
+}
+
+.source-volume {
+  display: grid;
+  gap: var(--space-3);
+  width: 240px;
+}
+
 /* Layers: overlays (paper at 16 % with a 2 px paper edge; solid paper when selected), sound effects (teal, named to
    the right in teal) and music (violet body and edge, its waveform at 40 %, its name in a violet tag). */
 .tl-item {
