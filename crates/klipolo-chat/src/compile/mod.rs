@@ -716,8 +716,9 @@ impl Compiler<'_> {
 
     /// The person's refusal when `call` needs an analysis some clip on the main track lacks: its voice files' words for
     /// removing fillers and pauses (a scene log still being made doesn't hold them up), and its picture's scene log too
-    /// for finding moments. Not started anywhere wins over still being made, since analyzing is something the person
-    /// can do, and words still to come over a scene log; the refusal names the first clip it is about.
+    /// for finding moments (a video imported on its own: a take's files are never watched). Not started anywhere wins
+    /// over still being made, since analyzing is something the person can do, and words still to come over a scene
+    /// log; the refusal names the first clip it is about.
     fn missing_analysis(&self, call: &ToolCall) -> Option<Refused> {
         let pictures = match call {
             ToolCall::RemoveFillers | ToolCall::RemoveSilences { .. } => false,
@@ -740,9 +741,12 @@ impl Compiler<'_> {
         let (mut not_started, mut transcribing, mut watching) = (None, None, None);
         for clip in &p.timeline.main {
             let mut files = voices.get(clip.id.as_str()).cloned().unwrap_or_default();
+            // A take's file placed on its own is heard for its words only, never watched (`analysed::words_only`):
+            // there is no scene log to wait for.
             if pictures
                 && let ClipSource::Asset { id } = &clip.source
                 && p.asset(id).is_some_and(|a| a.kind == AssetKind::Video)
+                && !klipolo_model::analysed::words_only(p, id)
             {
                 files.push(id.as_str());
             }
