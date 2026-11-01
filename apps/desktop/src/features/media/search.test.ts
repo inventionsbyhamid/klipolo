@@ -71,4 +71,8 @@ describe('the library search', () => {
     expect(search([sticker, picture], 'star photo')).toEqual([picture, sticker]);
     expect(search([sticker, item('Kiln door.wav', 'sound')], 'star sound')).toEqual([]);
   });
+
+  it('"favorites" asks for the starred items, not the star sticker', () => {
+    expect(search([item('Star', 'sticker', ['star', 'gold'], 'Built in')], 'favorites')).toEqual([]);
+  });
 });

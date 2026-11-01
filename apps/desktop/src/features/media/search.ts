@@ -55,7 +55,6 @@ const GROUPS = [
   ['sparkle', 'magic', 'shine', 'twinkle'],
   ['check', 'tick', 'done', 'correct'],
   ['heart', 'love', 'like'],
-  ['star', 'favorite', 'favourite'],
   ['speech', 'talk', 'quote'],
   ['circle', 'ring', 'highlight'],
 ];
