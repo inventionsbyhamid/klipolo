@@ -925,9 +925,10 @@ fn clip_lines<'p>(
 
 /// `Layers:` and a line for each layer with a ref (`Refs`), never shortened: `m1 0.0-62.0 lofi.mp3 (music, volume 50%,
 /// muted)`, `v1 12.0-20.0 broll.mp4 (video layer, speed 0.50x, volume 50%, muted)`, `t1 0.5-3.5 "Day one" (words,
-/// enter pop, exit fade)` (a title template's title, as `title`), `i1 10.0-15.0 heart.png (picture, emphasis pulse)`. A
-/// song's volume and mute are its first piece's (its card sets them on every piece). Nothing when there is no such
-/// layer.
+/// enter pop, exit fade)` (a title template's title, as `title`; animated words as `words, animated by word`), `i1
+/// 10.0-15.0 heart.png (picture, emphasis pulse, keys x y, effects glow)`: the properties with keys and the effects, by
+/// the words `setMotion` and `setEffects` take. A song's volume and mute are its first piece's (its card sets them on
+/// every piece). Nothing when there is no such layer.
 fn layer_lines(out: &mut String, p: &Project) {
     let layers = layers(p);
     if layers.is_empty() {
@@ -945,6 +946,17 @@ fn layer_lines(out: &mut String, p: &Project) {
                 texts += 1;
                 let (words, kind) = match &item.content {
                     ItemContent::Text { text, .. } => (text.as_str(), "words"),
+                    // Animated words are words, by their unit.
+                    ItemContent::Generator { source, params, .. }
+                        if source.as_str() == klipolo_model::media::text_motion::SOURCE =>
+                    {
+                        match params.get("title") {
+                            Some(klipolo_model::params::ParamValue::Text(t)) => {
+                                (t.as_str(), "words")
+                            }
+                            _ => ("", "words"),
+                        }
+                    }
                     ItemContent::Generator { params, .. } => match params.get("title") {
                         Some(klipolo_model::params::ParamValue::Text(t)) => (t.as_str(), "title"),
                         _ => ("", "title"),
@@ -952,7 +964,14 @@ fn layer_lines(out: &mut String, p: &Project) {
                     _ => continue,
                 };
                 let mut notes = vec![kind.to_owned()];
+                if let ItemContent::Generator { source, params, .. } = &item.content
+                    && source.as_str() == klipolo_model::media::text_motion::SOURCE
+                    && let Some(klipolo_model::params::ParamValue::Text(by)) = params.get("by")
+                {
+                    notes.push(format!("animated by {by}"));
+                }
                 notes.extend(motion_notes(item));
+                notes.extend(effect_notes(item));
                 let _ = writeln!(
                     out,
                     "t{texts} {}-{} \"{}\" ({})",
@@ -970,6 +989,7 @@ fn layer_lines(out: &mut String, p: &Project) {
                 };
                 let mut notes = vec!["picture".to_owned()];
                 notes.extend(motion_notes(item));
+                notes.extend(effect_notes(item));
                 let _ = writeln!(
                     out,
                     "i{pictures} {}-{} {} ({})",
@@ -1068,7 +1088,33 @@ fn motion_notes(item: &Item) -> Vec<String> {
     if let Some(u) = &m.looping {
         out.push(format!("emphasis {}", word(u, "")));
     }
+    // Which properties have keys (setMotion's words), so a call to change one knows the others stay.
+    if let Some(k) = &m.keys {
+        let moved: Vec<&str> = [
+            ("x", &k.x),
+            ("y", &k.y),
+            ("scale", &k.scale),
+            ("rotation", &k.rotation),
+            ("opacity", &k.opacity),
+        ]
+        .into_iter()
+        .filter(|(_, keys)| !keys.is_empty())
+        .map(|(name, _)| name)
+        .collect();
+        if !moved.is_empty() {
+            out.push(format!("keys {}", moved.join(" ")));
+        }
+    }
     out
+}
+
+/// A layer's effects, by the word `setEffects` names them (`effects blur glow`); nothing without any.
+fn effect_notes(item: &Item) -> Option<String> {
+    let words: Vec<&str> = (item.effects.iter())
+        .map(|e| e.effect.as_str())
+        .map(|id| id.rsplit_once('.').map_or(id, |(_, word)| word))
+        .collect();
+    (!words.is_empty()).then(|| one_line(&format!("effects {}", words.join(" "))))
 }
 
 /// One clip's line: `c2 13.0-144.0 interview.mov (file 24.0-155.0 of 155.0, speed 1.50x, volume 50%, muted,

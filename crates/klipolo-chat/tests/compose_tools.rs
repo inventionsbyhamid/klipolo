@@ -1144,3 +1144,42 @@ fn the_prompt_names_every_effect_setting_look_and_preset_the_catalogue_has() {
         }
     }
 }
+
+#[test]
+fn the_context_says_animated_words_keys_and_effects() {
+    let p = project();
+    let out = run(
+        &p,
+        &[
+            (
+                "animateText",
+                json!({"layer": "t1", "set": [{"key": "by", "value": "letter"}, {"key": "opacity", "value": 0}]}),
+            ),
+            (
+                "setMotion",
+                json!({"layer": "i1", "keys": [{"property": "y", "atSec": 0, "value": 0.1, "ease": null},
+                    {"property": "y", "atSec": 1, "value": 0, "ease": "out"}], "presets": null}),
+            ),
+            ("setEffects", effect("i1", "glow", json!([]))),
+        ],
+    );
+    let after = applied(&p, &out);
+    let ctx = klipolo_chat::build_context(
+        &after,
+        &Speech::default(),
+        &Default::default(),
+        &Default::default(),
+        &View::default(),
+        &Library::default(),
+    );
+    let at = ctx.text.find("Layers:\n").expect("a Layers list");
+    let lines: Vec<&str> = ctx.text[at..].lines().skip(1).take(3).collect();
+    assert_eq!(
+        lines,
+        [
+            "t1 0.5-3.5 \"Day one\" (words, animated by letter, exit fade)",
+            "i1 10.0-15.0 heart.png (picture, keys y, effects glow)",
+            "m1 0.0-30.0 lofi.mp3 (music, volume 30%)",
+        ]
+    );
+}
