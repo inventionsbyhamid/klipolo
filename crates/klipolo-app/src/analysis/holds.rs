@@ -8,8 +8,10 @@
 //!   tries again.
 //! - Both wait while an export runs or a take records.
 //!
-//! A step waits before it starts and, for the sound and the small copy, between the blocks or frames it decodes, so a
-//! decode under way stops where it is and goes on from there (its decoder kept open: nothing is decoded twice).
+//! A step waits before it starts and, for the speech copy and the small copy, between the blocks or frames it decodes, so
+//! a decode under way stops where it is and goes on from there (its decoder kept open: nothing is decoded twice). The
+//! sound levels decode into the preview's own sound cache, which playback may be waiting on: they wait only before they
+//! start.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
