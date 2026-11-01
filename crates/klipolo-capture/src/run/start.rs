@@ -1,7 +1,8 @@
 //! The core's start and stop: Record starts the pipes; once all have started, the countdown runs while the start gate
-//! waits for real samples from each source (a gate question or a mic rule firing holds it), and at T0 the session
-//! clock starts. Stop is idempotent: before the gate it leaves no take (exit 3); after it every run is ended and the
-//! files are finished (`Finalize`). Also the core's small helpers: events, notes and pipe commands.
+//! waits for real samples from each source (a gate question, a mic rule firing or a system alert on the screen holds
+//! it), and at T0 the session clock starts. Stop is idempotent: before the gate it leaves no take (exit 3); after it
+//! every run is ended and the files are finished (`Finalize`). Also the core's small helpers: events, notes and pipe
+//! commands.
 
 use klipolo_model::coded::CodedError;
 use klipolo_model::project::MarkerKind;
@@ -80,7 +81,7 @@ impl SessionCore {
             }
             GateState::Waiting { .. } => {}
         }
-        let held = c.asked.is_some() || c.held_by.is_some();
+        let held = c.asked.is_some() || c.held_by.is_some() || c.alert;
         let total = u64::from(self.cfg.countdown_s) * 1_000_000_000;
         if held {
             if let Some(from) = c.running_since.take() {
@@ -155,6 +156,33 @@ impl SessionCore {
             self.countdown.held_by = None;
         }
         self.countdown.asked = None;
+    }
+
+    /// Whether the threads layer reads the system's alerts (`Backend::system_alert`): from the start until the gate.
+    pub fn watches_system_alerts(&self) -> bool {
+        matches!(self.state, WorkerState::Starting | WorkerState::Countdown)
+    }
+
+    /// Whether a system alert is on the screen now (`up`), as the threads layer reads it from the start until the gate
+    /// (macOS's own question, such as the one a take's first stream can raise about the private window picker). While
+    /// one is up the countdown waits; once it goes the countdown starts again from the top, so the person has the whole
+    /// count after answering it and the question is never in the recording. Each change is said once
+    /// (`Event::SystemAlert`), and the HUD says why it waits. Any other time it changes nothing.
+    pub fn system_alert(&mut self, up: bool, now_ns: u64) -> Vec<Effect> {
+        let mut fx = Vec::new();
+        self.advance(now_ns, &mut fx);
+        if !self.watches_system_alerts() || self.countdown.alert == up {
+            return fx;
+        }
+        self.countdown.alert = up;
+        fx.push(Effect::Emit(Event::SystemAlert { up }));
+        if !up {
+            let c = &mut self.countdown;
+            (c.done_ns, c.running_since) = (0, None);
+        }
+        // A countdown held or let go says so (its number and the status); one still starting, once it begins.
+        self.advance(now_ns, &mut fx);
+        fx
     }
 
     /// Stop from any state (idempotent). Before the gate nothing was written: exit 3, no take. After it: every run

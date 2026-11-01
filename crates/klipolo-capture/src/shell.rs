@@ -229,8 +229,8 @@ pub struct StatusView {
     /// The loudest mic's peak over about the last half second, in dBFS, while counting down or recording (the HUD's
     /// meter); None without a mic, or in any other state.
     pub mic_dbfs: Option<f32>,
-    /// Why the countdown is held, worded (a mic rule's note, or "{source} isn't sending anything yet."): the HUD shows
-    /// it instead of a digit that has stopped. None unless counting down and held.
+    /// Why the countdown is held, worded (a system alert on the screen, a mic rule's note, or "{source} isn't sending
+    /// anything yet."): the HUD shows it instead of a digit that has stopped. None unless counting down and held.
     pub held: Option<String>,
     /// The take began without the editor in sight (the person's start key, or Start over's next take): the HUD shows
     /// its countdown and question, and the start key answers it.
