@@ -15,7 +15,7 @@ import { useShownFormat } from '../editor/formats';
 import { clipIndexAt, mainIndex } from '../timeline/model/index';
 import { GizmoLayer } from './GizmoLayer';
 import { sceneStartUs } from './sceneStart';
-import { stageLayout } from './stageLayout';
+import { cardAnchor, selectedBox, stageLayout } from './stageLayout';
 import { useDevicePixelRatio } from './useDevicePixelRatio';
 import { useSettledSize } from './useSettledSize';
 
@@ -28,11 +28,11 @@ function fitsAs(width: number, height: number, [w, h]: readonly [number, number]
 
 export { useShownFormat };
 
-/** The card's slot (CSS px): its width and the gap before it, from the design tokens. */
-function cardSlot(el: Element | null): number {
+/** The card's width and the gap before its slot (CSS px), from the design tokens. */
+function cardSize(el: Element | null): { width: number; gap: number } {
   const style = el ? getComputedStyle(el) : null;
   const px = (name: string, fallback: number) => parseFloat(style?.getPropertyValue(name) ?? '') || fallback;
-  return px('--inspector-w', 264) + px('--space-6', 16);
+  return { width: px('--inspector-w', 264), gap: px('--space-6', 16) };
 }
 
 /**
@@ -153,8 +153,8 @@ function pressedOn(target: EventTarget, stage: Element, video: Element | null): 
  * differs from the one drawn; it re-renders once, at the settled size (`useSettledSize`).
  *
  * Only the area and the format place the video, never the selection (`stageLayout`): the card that a selection shows
- * goes in a slot kept clear at the area's right (`data-card="slot"`), or over the video (`"over"`), so selecting never
- * resizes the video or the engine's drawable.
+ * goes in a slot kept clear at the area's right (`data-card="slot"`), or over the video (`"over"`), in the stage's corner
+ * that covers the selected layer least (`data-anchor`), so selecting never resizes the video or the engine's drawable.
  */
 export function Stage() {
   const project = useProject((s) => s.snapshot!.project);
@@ -179,8 +179,12 @@ export function Stage() {
   );
   // The tokens change with the window's width, which changes the area too. Full screen shows no card: no slot.
   const full = useFullScreen((s) => s.on);
-  const slot = useMemo(() => (full ? 0 : cardSlot(areaRef.current)), [area, full]);
-  const { card, pad, canvas } = stageLayout(area, FORMAT_SIZE[format], slot);
+  const size = useMemo(() => cardSize(areaRef.current), [area]);
+  const { card, pad, canvas } = stageLayout(area, FORMAT_SIZE[format], full ? 0 : size.width + size.gap);
+  // Over the video, the card's corner follows the selected layer as the project has it: never mid-drag.
+  const anchor = useSelection((s) =>
+    card === 'over' ? cardAnchor(selectedBox(project, s.selectedId, format), area, canvas, size.width) : undefined,
+  );
   const dpr = useDevicePixelRatio();
   useViewSync(videoRef, info, format, dpr);
   useNativeHole(videoRef, native);
@@ -191,6 +195,7 @@ export function Stage() {
       data-testid="stage-area"
       className="screen"
       data-card={card}
+      data-anchor={anchor}
       style={pad > 0 ? { paddingRight: pad } : undefined}
       onPointerDown={(e) => {
         pressed.current = pressedOn(e.target, e.currentTarget, videoRef.current);

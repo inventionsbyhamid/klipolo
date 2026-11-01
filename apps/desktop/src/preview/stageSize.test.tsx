@@ -177,3 +177,60 @@ describe('selecting never resizes the video', () => {
     expect(css).not.toMatch(/has-inspector[^{]*\.(screen|frame)/);
   });
 });
+
+/*
+ * Over the video the card goes to the stage's corner that covers the selected layer least, picked from the layer as the
+ * project has it: a drag on the canvas never moves the card, and the stage never changes size or place.
+ */
+describe('the card over the video', () => {
+  const anchor = () => screen.getByTestId('stage-area').dataset.anchor;
+
+  it('a title in the top half gets the bottom right', () => {
+    useSelection.setState({ selectedId: 'title' });
+    renderWithProviders(<Preview />);
+    expect(screen.getByTestId('stage-area')).toHaveAttribute('data-card', 'over');
+    expect(card()).toHaveAccessibleName('Title settings');
+    expect(anchor()).toBe('bottom-right');
+  });
+
+  it('a centred caption near the bottom gets the top right, and the stage keeps its box between them', () => {
+    const snapshot = fixtureSnapshot();
+    const title = snapshot.project.timeline.tracks[0].items[0];
+    snapshot.project.timeline.tracks[0].items.push({
+      ...title,
+      id: 'caption',
+      startUs: 5_000_000,
+      layout: { ...title.layout, anchor: 'bottomCenter', rect: { x: 0.2, y: 0.8, w: 0.6, h: 0.12 } },
+    });
+    useProject.setState({ snapshot });
+    useSelection.setState({ selectedId: 'title' });
+    renderWithProviders(<Preview />);
+    const before = stageBox();
+    act(() => useSelection.getState().select('caption'));
+    expect(anchor()).toBe('top-right');
+    act(() => useSelection.getState().select('title'));
+    expect(anchor()).toBe('bottom-right');
+    expect(stageBox()).toEqual(before);
+  });
+
+  it('a drag of the title down the video never moves the card, and the stage keeps its box', async () => {
+    const apply = vi.fn(() => Promise.resolve(true));
+    useProject.setState({ apply });
+    usePlayback.setState({ playheadUs: 2_000_000 });
+    useSelection.setState({ selectedId: 'title' });
+    renderWithProviders(<Preview />);
+    const before = stageBox();
+    const title = () => screen.getByRole('button', { name: /^Text: Set up billing/ });
+    fireEvent.pointerDown(title(), { button: 0, clientX: 400, clientY: 60, pointerId: 1 });
+    for (const y of [120, 240, 400]) {
+      fireEvent.pointerMove(title(), { clientX: 400, clientY: y, pointerId: 1 });
+      await act(() => new Promise((r) => setTimeout(r, 20)));
+      expect(anchor()).toBe('bottom-right');
+      expect(stageBox()).toEqual(before);
+    }
+    fireEvent.pointerUp(title(), { pointerId: 1 });
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(stageBox()).toEqual(before);
+    await act(() => Promise.resolve());
+  });
+});

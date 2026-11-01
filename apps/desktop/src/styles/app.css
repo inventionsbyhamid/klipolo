@@ -2666,11 +2666,22 @@
   flex-direction: column;
 }
 
-/* Over the frame: only as tall as its fields, and lifted off the video. */
+/* Over the frame: only as tall as its fields, up to 60 % of the stage (they scroll inside), lifted off the video, in
+   the stage's corner that covers the selected layer least (`data-anchor`: the top right unless it says otherwise). */
 .screen[data-card="over"] ~ .inspector {
   bottom: auto;
-  max-height: 100%;
+  max-height: 60%;
   box-shadow: var(--shadow-2);
+}
+
+.screen[data-card="over"][data-anchor^="bottom"] ~ .inspector {
+  top: auto;
+  bottom: 0;
+}
+
+.screen[data-card="over"][data-anchor$="left"] ~ .inspector {
+  right: auto;
+  left: 0;
 }
 
 /* The empty slot says what goes there. Never over the frame. */
