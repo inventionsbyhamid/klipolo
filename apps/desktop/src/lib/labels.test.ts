@@ -63,7 +63,7 @@ describe('undo labels as message ids', () => {
   });
 
   it("words chat's clip and transition changes as the cards' own entries, with a speed's note", () => {
-    const clip = (change: string) => historyAction('undo', 'chat.setClip', { clip: 'c2', change });
+    const clip = (change: string) => historyAction('undo', 'chat.setClip', { clip: 'c2', change, noun: 'clip' });
     expect(['speed', 'volume', 'mute', 'unmute', 'fit', 'fill', 'several'].map(clip)).toEqual([
       'Undo change speed',
       'Undo change volume',
@@ -79,6 +79,14 @@ describe('undo labels as message ids', () => {
         change: 'speed',
         note: { code: 'timeline.refit', params: { removed, shortened } },
       });
+    // A song's and a video layer's, as their cards name them.
+    const layer = (change: string, noun: string) => historyAction('undo', 'chat.setClip', { clip: 'm1', change, noun });
+    expect([layer('mute', 'sound'), layer('unmute', 'video'), layer('volume', 'sound'), layer('several', 'video')]).toEqual([
+      'Undo mute sound',
+      'Undo unmute video layer',
+      'Undo change volume',
+      'Undo change video layer',
+    ]);
     expect(note(1, 0)).toBe('Undo change speed. A transition is removed.');
     expect(note(0, 2)).toBe('Undo change speed. 2 transitions are shortened.');
     expect(note(2, 1)).toBe('Undo change speed. 2 transitions are removed and one is shortened.');

@@ -47,8 +47,9 @@ export const CHAT_LABELS: Record<string, MessageDescriptor> = {
   'chat.setClip': msg({
     id: 'chat.setClip',
     message:
-      '{change, select, speed {Change speed} volume {Change volume} mute {Mute clip} unmute {Unmute clip} fit {Fit video} fill {Fill video} other {Change clip}}',
-    comment: 'Undo history entry: chat changed a clip as its card does (the same words as the card’s own entries)',
+      '{change, select, speed {Change speed} volume {Change volume} mute {{noun, select, sound {Mute sound} video {Mute video layer} other {Mute clip}}} unmute {{noun, select, sound {Unmute sound} video {Unmute video layer} other {Unmute clip}}} fit {Fit video} fill {Fill video} other {{noun, select, sound {Change sound} video {Change video layer} other {Change clip}}}}',
+    comment:
+      'Undo history entry: chat changed a clip, a song (noun sound) or a video layer (noun video) as its card does, in the card’s own words',
   }),
   'chat.setClip.note': msg({
     id: 'chat.setClip.note',
