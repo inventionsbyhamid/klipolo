@@ -67,6 +67,7 @@ fn inputs(p: &Project) -> Inputs {
             .map(|a| (a.id.clone(), AnalysisState::Done))
             .collect(),
         time_again: HashSet::new(),
+        cursor: None,
         library: Library::default(),
     }
 }
