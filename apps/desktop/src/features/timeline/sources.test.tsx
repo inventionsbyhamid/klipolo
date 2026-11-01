@@ -317,7 +317,8 @@ describe("the lanes and menus make the pinned source tools' ops", () => {
     expect(within(second).getByRole('button', { name: 'Mute Mic 2' })).toBeInTheDocument();
     // Both lanes show the mic's icon: each header's controls are named after its lane.
     expect(within(second).getByRole('toolbar', { name: 'Mic 2' })).toBeInTheDocument();
-    expect(within(screen.getByRole('group', { name: 'Mic' })).getByRole('toolbar', { name: 'Mic' })).toBeInTheDocument();
+    const first = screen.getByRole('group', { name: 'Mic' });
+    expect(within(first).getByRole('toolbar', { name: 'Mic' })).toBeInTheDocument();
     fireEvent.contextMenu(screen.getByRole('button', { name: /^Recording 1, clip 1 of 2/ }));
     expect(await screen.findByRole('menuitem', { name: 'Mute Mic in this clip' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'Mute Mic 2 in this clip' })).toBeInTheDocument();
