@@ -57,8 +57,13 @@ export function MotionField({ item }: { item: Item }) {
           const here = times.find((k) => Math.abs(k - tUs) <= slack);
           const before = previousKey(times, tUs, slack);
           const after = nextKey(times, tUs, slack);
+          // The key there (Position's x key, else its y key) gives the ease shown.
           const key =
-            here === undefined ? undefined : motion?.keys?.[PROPERTY_KEYS[prop][0]]?.find((k) => Math.abs(k.tUs - here) <= slack);
+            here === undefined
+              ? undefined
+              : PROPERTY_KEYS[prop]
+                  .map((name) => motion?.keys?.[name]?.find((k) => Math.abs(k.tUs - here) <= slack))
+                  .find((k) => k !== undefined);
           const choice = easeChoice(key?.ease);
           const name = names[prop];
           return (

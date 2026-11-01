@@ -44,7 +44,8 @@ export function PictureFields({ item, format, primary }: { item: Item; format: F
   // With motion keys, Size and Opacity show the layer as drawn at the playhead and set its key there.
   const keyed = !!item.layout.motion?.keys;
   const tUs = usePlayback((s) => (keyed ? s.playheadUs : item.startUs)) - item.startUs;
-  const at = () => usePlayback.getState().playheadUs - item.startUs;
+  // The playhead in the layer's time, within it: a key never goes outside the layer.
+  const at = () => Math.min(item.durationUs, Math.max(0, usePlayback.getState().playheadUs - item.startUs));
   const rect = shownPlace(item.layout, tUs, item.durationUs, primary, format).rect;
   const size = t({ id: 'image.size', message: 'Size' });
   const opacity = t({ id: 'media.opacity', message: 'Opacity' });
