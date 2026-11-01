@@ -152,3 +152,24 @@ fn a_face_s_bytes_are_the_file_the_engine_draws_with() {
         std::fs::read(dir.join("Anton/Anton-Regular.ttf")).unwrap()
     );
 }
+
+#[tokio::test]
+async fn a_download_is_never_removed_under_a_running_export_nor_one_that_isnt_the_store_s() {
+    let fonts = fonts();
+    let dir = tempfile::tempdir().unwrap();
+    let downloads = Downloads::open(Some(dir.path()));
+    let host = FakeHost::with(on_and_consented());
+    let id = klipolo_fonts::store::DownloadedId {
+        family: "Lato".into(),
+        version: "v24".into(),
+    };
+    let busy = downloads::remove(&*host, &fonts, &downloads, id.clone(), &|| true).await;
+    assert_eq!(busy, Err(klipolo_fonts::english::in_use("Lato")));
+    let not_ours = downloads::remove(&*host, &fonts, &downloads, id, &|| false).await;
+    assert_eq!(
+        not_ours,
+        Err(klipolo_fonts::download::FontError::NotOurs.code())
+    );
+    assert!(host.changed.lock().unwrap().is_empty());
+    assert!(downloads::list(&downloads).is_empty());
+}

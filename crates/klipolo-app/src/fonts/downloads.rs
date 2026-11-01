@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use klipolo_fonts::download::{FontError, download_family, fetch_preview, which_for};
 use klipolo_fonts::english::{google_off, needs_consent, unknown_google, version_gone};
 use klipolo_fonts::google::GoogleFamily;
-use klipolo_fonts::store::FontStore;
+use klipolo_fonts::store::{DownloadedFamily, DownloadedId, FontStore};
 use klipolo_model::coded::CodedError;
 use klipolo_model::font::FontRef;
 
@@ -303,4 +303,54 @@ pub fn set_enabled(
         downloads.cancel_all();
     }
     host.set_google(&|g| g.enabled = enabled)
+}
+
+/// The downloaded families with their sizes (Settings).
+pub fn list(downloads: &Downloads) -> Vec<DownloadedFamily> {
+    downloads
+        .store()
+        .map(FontStore::families)
+        .unwrap_or_default()
+}
+
+/// Removes the downloaded family `id` names (a running download of it is stopped first): through the store's own
+/// manifests, never a path. Refused while an export runs (`exporting`): its job draws with every download registered
+/// when it started. Projects using it then show it as missing.
+pub async fn remove(
+    host: &dyn Host,
+    fonts: &Fonts,
+    downloads: &Downloads,
+    id: DownloadedId,
+    exporting: &(dyn Fn() -> bool + Sync),
+) -> Result<(), CodedError> {
+    let store = downloads
+        .store()
+        .cloned()
+        .ok_or_else(|| FontError::NotOurs.code())?;
+    if exporting() {
+        return Err(klipolo_fonts::english::in_use(&id.family));
+    }
+    // Never while start-up's tidy runs, as a download waits.
+    fonts.downloads_ready().await;
+    downloads.cancel(&id.family);
+    let held = downloads.family_lock(&id.family);
+    let _one_at_a_time = held.lock().await;
+    // An export that started while this waited its turn is seen too.
+    if exporting() {
+        return Err(klipolo_fonts::english::in_use(&id.family));
+    }
+    let gone = id.clone();
+    tokio::task::spawn_blocking(move || store.remove(&gone))
+        .await
+        .map_err(|_| FontError::NotOurs.code())?
+        .map_err(failed)?;
+    let font = FontRef {
+        family: id.family.clone(),
+        source: klipolo_model::font::FontSource::Google {
+            version: id.version.clone(),
+        },
+    };
+    klipolo_engine::render::fonts::unregister(&klipolo_fonts::alias::alias(&font));
+    host.changed(&id.family);
+    Ok(())
 }

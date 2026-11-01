@@ -5,12 +5,15 @@
 
 use std::sync::Arc;
 
+use klipolo_app::export::ExportState;
 use klipolo_app::fonts::downloads::{self, Downloads, Host};
 use klipolo_app::fonts::google::{self, GoogleFonts};
 use klipolo_app::fonts::{Fonts, face_bytes};
 use klipolo_fonts::browse::{Browse, BrowseAsk, browse, browse_rows, row_for};
 use klipolo_fonts::bundled::{BUNDLED, BundledFace, bundled_dir, fallback_only};
+use klipolo_fonts::google::CatalogueInfo;
 use klipolo_fonts::search::{FontRow, SearchFilter};
+use klipolo_fonts::store::{DownloadedFamily, DownloadedId};
 use klipolo_mcp::connection::support_dir;
 use klipolo_model::coded::{CodedError, Said};
 use klipolo_model::font::FontRef;
@@ -238,6 +241,49 @@ pub async fn fonts_preview(
 ) -> Result<tauri::ipc::Response, Said> {
     let bytes = downloads::preview(&AppHost(app), &fonts, &downloads, &family).await?;
     Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// The downloaded families, with their sizes (Settings, Fonts).
+#[tauri::command(async)]
+pub fn fonts_downloaded(downloads: State<'_, Downloads>) -> Vec<DownloadedFamily> {
+    downloads::list(&downloads)
+}
+
+/// Removes a downloaded family by its id; refused while an export runs, as it draws with every download.
+#[tauri::command]
+pub async fn fonts_remove(
+    app: AppHandle,
+    fonts: State<'_, Fonts>,
+    downloads: State<'_, Downloads>,
+    id: DownloadedId,
+) -> Result<(), Said> {
+    let exports = app.clone();
+    let exporting = move || {
+        exports
+            .try_state::<ExportState>()
+            .is_some_and(|export| export.is_running())
+    };
+    Ok(downloads::remove(&AppHost(app), &fonts, &downloads, id, &exporting).await?)
+}
+
+/// Shows the downloaded fonts' folder in Finder (Settings, Fonts).
+#[tauri::command(async)]
+pub fn fonts_reveal(downloads: State<'_, Downloads>) {
+    if let Some(store) = downloads.store() {
+        let _ = super::export::opener(true, &[store.root().to_path_buf()]).spawn();
+    }
+}
+
+/// Which Google catalogue the app ships: its date, or that it is the sample of a test build.
+#[tauri::command]
+pub async fn fonts_catalogue() -> CatalogueInfo {
+    tauri::async_runtime::spawn_blocking(|| klipolo_fonts::google::catalogue().info())
+        .await
+        .unwrap_or_else(|_| CatalogueInfo {
+            date: String::new(),
+            sample: true,
+            families: 0,
+        })
 }
 
 /// The fonts' start: Google's catalogue decoded and the downloads registered with the engine, each on a blocking
