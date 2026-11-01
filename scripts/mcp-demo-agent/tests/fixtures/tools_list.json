@@ -646,7 +646,7 @@
       "annotations": {
         "readOnlyHint": false
       },
-      "description": "Show words over the video in a text preset, at once and free: a title, a name, a caption. For a full-screen title card, use makeTitleCard.",
+      "description": "Show words over the video in a text preset, at once and free: a title, a name, a caption. For a full-screen title card, use makeTitleCard. A short's hook: at most 6 punchy words.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
