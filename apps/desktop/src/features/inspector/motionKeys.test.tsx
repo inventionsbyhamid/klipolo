@@ -8,6 +8,8 @@ import type { Op } from '../../bindings/Op';
 import type { LabelParams } from '../../lib/labels';
 import { fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
+import { FORMAT_SIZE } from '../../lib/layout';
+import { positionedLayout } from './inspectorOps';
 
 /*
  * Keys set by hand in the cards: a layer's Motion rows (a key at the playhead holding the value there, its ease, and
@@ -82,6 +84,22 @@ describe('Motion keys in the card', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Remove Scale key' }));
     expect(apply.mock.calls[1][0]).toBe('keys.remove.undo');
     expect(layoutOf(apply.mock.calls[1]).motion?.keys?.scale).toEqual([key(0, 1)]);
+  });
+
+  it('with position keys, the Position grid sets the key at the playhead and leaves the layer where it rests', async () => {
+    const snapshot = title({ x: [key(0, 0), key(2, 0.2)] });
+    const rest = snapshot.project.timeline.tracks[0].items[0].layout;
+    renderWithProviders(<Inspector format="landscape" />);
+    await userEvent.click(screen.getByRole('radio', { name: 'Top left' }));
+    expect(apply.mock.calls[0][0]).toBe('layout.position.undo');
+    const layout = layoutOf(apply.mock.calls[0]);
+    expect(layout.rect).toEqual(rest.rect);
+    // Drawn at top left: its own box moved by the keys' offset at the playhead (1 s into the title).
+    const want = positionedLayout(rest, 'topLeft', 'landscape', 'landscape', FORMAT_SIZE.landscape).rect;
+    const x = layout.motion!.keys!.x.find((k) => k.tUs === S)!.v;
+    const y = layout.motion!.keys!.y.find((k) => k.tUs === S)!.v;
+    expect(rest.rect.x + x).toBeCloseTo(want.x, 9);
+    expect(rest.rect.y + y).toBeCloseTo(want.y, 9);
   });
 
   it('the keys before and after the playhead put the playhead on them', async () => {

@@ -16,6 +16,9 @@ import {
   type OutChoice,
 } from './inspectorOps';
 import { commitLatest, editLayout } from '../../state/latest';
+import { keySlackUs } from '../../state/keyEdits';
+import { usePlayback } from '../../state/playback';
+import { placeWithKeys } from '../../lib/keyedPlace';
 
 /**
  * A card's Escape (its `aside`'s key handler): `close` the card, for an Escape pressed in the card itself. Not one a
@@ -59,7 +62,16 @@ export function PositionField({ item, format, primary }: { item: Item; format: F
         value={positionOf(item.layout, format, primary)}
         onPick={(anchor) =>
           void editLayout('layout.position.undo', item, (layout) =>
-            positionedLayout(layout, anchor, format, primary, FORMAT_SIZE[format]),
+            // With position keys, the layer as drawn at the playhead goes there, and the key there takes the move.
+            placeWithKeys(
+              layout,
+              (drawn) => positionedLayout(drawn, anchor, format, primary, FORMAT_SIZE[format]),
+              Math.min(item.durationUs, Math.max(0, usePlayback.getState().playheadUs - item.startUs)),
+              item.durationUs,
+              primary,
+              format,
+              keySlackUs(),
+            ),
           )
         }
       />
