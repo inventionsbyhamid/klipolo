@@ -102,11 +102,15 @@ impl SessionCore {
         (c.held_by.clone()).or_else(|| c.asked.as_ref()?.first().cloned())
     }
 
-    /// Why the countdown is held, if it is: the mic rule that fired, else the first source the gate still waits for.
+    /// Why the countdown is held, if it is: a system alert on the screen, else the mic rule that fired, else the first
+    /// source the gate still waits for.
     fn held_reason(&self) -> Option<CodedError> {
         let c = &self.countdown;
         if self.state != WorkerState::Countdown {
             return None;
+        }
+        if c.alert {
+            return Some(msg!("capture.gate.systemAlert"));
         }
         if c.held_by.is_some() {
             return c.held_note.clone();

@@ -121,6 +121,7 @@ function Dialog({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving
   const left = useRecorder((s) => s.countdown);
   const asking = useRecorder((s) => (s.gate?.length ?? 0) > 0);
   const gateKey = useRecorder((s) => s.gate?.join() ?? '');
+  const macosAsks = useRecorder((s) => s.systemAlert);
   /** What the countdown announced: its first number, once per countdown. */
   const [announced, setAnnounced] = useState('');
   const was = useRef(phase);
@@ -175,11 +176,12 @@ function Dialog({ phase }: { phase: Exclude<RecorderPhase, 'recording' | 'saving
     root.current?.querySelector<HTMLElement>(target)?.focus();
   }, [phase, asking, gateKey]);
 
-  // The countdown is announced once, by its first number (again once the start gate has been answered).
+  // The countdown is announced once, by its first number (again once the start gate or macOS's question has been
+  // answered).
   useEffect(() => {
-    if (phase !== 'starting' || asking) setAnnounced('');
+    if (phase !== 'starting' || asking || macosAsks) setAnnounced('');
     else if (left !== null) setAnnounced((said) => said || startsIn(left));
-  }, [phase, asking, left]);
+  }, [phase, asking, macosAsks, left]);
 
   // Keys typed in the dialog stay in it (the editor's shortcuts listen on the window).
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {

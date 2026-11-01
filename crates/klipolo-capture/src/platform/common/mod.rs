@@ -1,5 +1,6 @@
 //! The OS backends' pure helpers: no OS call, no `real-capture`, built on every OS, so the Linux CI runs test the
 //! macOS and Windows rules too. Each OS's backend calls its own.
+//! - `alerts`: which on-screen windows are macOS's own questions, which a take's countdown waits for;
 //! - `camera`: a camera's format and frame rate for a preset, what its notices mean, how a suspended one counts;
 //! - `cursor_checks`: the macOS cursor source's self-checks: a monitor that misses buttons or moves, the event clock;
 //! - `cursor_looks`: the macOS cursor's shape looks: no current cursor, the cursor seed, the shape limit, animations;
@@ -18,6 +19,7 @@
 //!   list a round;
 //! - `vt_ids`: which VideoToolbox encoders run apart from the GPU, and on which engine.
 
+pub mod alerts;
 pub mod camera;
 pub mod cursor_checks;
 pub mod cursor_looks;
