@@ -157,12 +157,12 @@
       "annotations": {
         "readOnlyHint": false
       },
-      "description": "Set a clip's speed, volume, mute, or Fit or Fill. Null keeps a value.",
+      "description": "Set a clip's speed, volume, mute, or Fit or Fill; a song's volume or mute; a video layer's speed, volume or mute. Null keeps a value.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
           "clip": {
-            "description": "A clip's ref, such as c2, or all.",
+            "description": "A ref: c2 for a clip, m1 for a song, v1 for a video layer, or all for every clip.",
             "type": "string"
           },
           "framing": {
