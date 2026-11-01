@@ -140,4 +140,13 @@ describe("a block's menu", () => {
     expect(await screen.findByRole('menuitem', { name: /^Duplicate/ })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: /Paste effects/ })).toBeNull();
   });
+
+  it('says why Paste effects is off when nothing with effects was copied', async () => {
+    useClipboard.setState({ projectId: null, entry: null, effects: null });
+    renderTimeline();
+    fireEvent.contextMenu(screen.getByRole('button', { name: /^broll\.mp4/ }));
+    const paste = await screen.findByRole('menuitem', { name: /Paste effects/ });
+    expect(paste).toHaveAttribute('aria-disabled', 'true');
+    expect(paste).toHaveAccessibleDescription('Copy a clip or layer that has effects first.');
+  });
 });
