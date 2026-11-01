@@ -159,6 +159,32 @@ fn playing_forward_never_starts_before_the_file() {
     assert_eq!((b.source_in_us, b.source_out_us), (0, secs(10.0)));
 }
 
+/// A clip whose sound plays in its own layer (Separate sound) is not reversed: the layer would keep playing forward.
+#[test]
+fn a_clip_whose_sound_is_separate_is_not_reversed() {
+    let p = apply_ops(
+        &with_copy(),
+        &[Op::DetachSound {
+            clip_id: "b".into(),
+        }],
+    )
+    .unwrap();
+    assert_eq!(
+        apply_ops(&p, &[reverse("b", Some((0.0, 10.0)))]).unwrap_err(),
+        refused("This clip's sound plays in its own layer. Remove that layer before reversing the clip.")
+    );
+    // Its sound separated after it was reversed: playing it forward is refused too.
+    let p = apply_ops(&with_copy(), &[reverse("b", Some((0.0, 10.0)))]).unwrap();
+    let p = apply_ops(
+        &p,
+        &[Op::DetachSound {
+            clip_id: "b".into(),
+        }],
+    )
+    .unwrap();
+    assert!(apply_ops(&p, &[reverse("b", None)]).is_err());
+}
+
 /// The file a reversed clip plays forward from can't be removed while the clip is there.
 #[test]
 fn a_reversed_clip_keeps_its_own_file() {

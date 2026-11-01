@@ -672,6 +672,11 @@
     "params": []
   },
   {
+    "code": "model.reverse.sound",
+    "message": "This clip's sound plays in its own layer. Remove that layer before reversing the clip.",
+    "params": []
+  },
+  {
     "code": "model.settings.fps",
     "message": "fps must be 24, 25, 30, 50 or 60.",
     "params": []

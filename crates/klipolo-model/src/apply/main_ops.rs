@@ -181,8 +181,9 @@ pub(super) fn freeze_frame(p: &mut Project, at_us: Us, duration_us: Us) -> Resul
 /// `ReverseClip` (see the op): imported clip `clip_id` plays backward from `copy` (its range `[in, out)` of the file
 /// becomes `[to - out, to - in)` of the copy), or, reversed already and with no copy, forward from its own file again
 /// (the same turn the other way). Layers anchored to the clip keep their offset into it, so none moves. Refused for a
-/// freeze frame, a recording clip, a copy that doesn't hold the clip's whole range, and a clip with nothing to turn.
-/// Played forward, it never starts before its file's start (a copy measured a hair longer than the stretch it holds).
+/// freeze frame, a recording clip, a clip whose own sound plays in a layer (Separate sound: the layer would keep
+/// playing forward), a copy that doesn't hold the clip's whole range, and a clip with nothing to turn. Played forward,
+/// it never starts before its file's start (a copy measured a hair longer than the stretch it holds).
 pub(super) fn reverse_clip(
     p: &mut Project,
     clip_id: &str,
@@ -197,6 +198,9 @@ pub(super) fn reverse_clip(
     let ClipSource::Asset { id: file } = &clip.source else {
         return Err(invalid(code!("model.reverse.recording")));
     };
+    if super::detach::sound_in_a_layer(p, i, places) {
+        return Err(invalid(code!("model.reverse.sound")));
+    }
     let (source, reversed, to) = match (copy, &clip.reversed) {
         // Backward from the copy.
         (Some(c), None) => {
