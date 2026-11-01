@@ -10,8 +10,8 @@ use klipolo_model::crop::{Crop, within};
 use klipolo_model::cursor_style::{ClickSource, CursorCapture, RecordingCursor};
 use klipolo_model::project::FormatKind::{Landscape, Portrait, Square};
 use klipolo_model::project::{FormatKind, Project, RecordingKind};
-use klipolo_model::timeline::{Framing, FramingMode};
-use support::{bx, close, ctx, project, secs, videos};
+use klipolo_model::timeline::{Framing, FramingMode, ItemContent, ZoomTarget};
+use support::{bx, close, ctx, item, project, secs, videos, zoom_track};
 
 fn crop(left: f64, top: f64, right: f64, bottom: f64) -> Crop {
     Crop {
@@ -204,4 +204,49 @@ fn a_screen_take_that_follows_the_cursor_plans_with_its_top_cut() {
     p.timeline.main[0].crop = Some(crop(0.0, 0.1, 0.0, 0.1));
     let (shown, _) = main_at(&p, 2.0, Portrait);
     assert!(shown.y >= 0.1 - 1e-9 && shown.y + shown.h <= 0.9 + 1e-9, "{shown:?}");
+}
+
+#[test]
+fn a_zoom_near_a_cut_edge_stays_inside_what_the_crop_leaves() {
+    // The left 30 % is cut (a sidebar), and a 2x zoom aims at x 0.2 to 0.5, across the cut edge.
+    let mut p = project();
+    p.timeline.main[1].crop = Some(crop(0.3, 0.0, 0.0, 0.0));
+    p.timeline.main[1]
+        .framing
+        .insert(Landscape, framing(FramingMode::Fit));
+    let target = ZoomTarget::Rect {
+        rect: bx(0.2, 0.25, 0.3, 0.5),
+    };
+    p.timeline.tracks = vec![zoom_track(vec![item(
+        "z",
+        21.0,
+        3.0,
+        bx(0.0, 0.0, 1.0, 1.0),
+        ItemContent::Zoom { target, scale: 2.0 },
+    )])];
+    let mut zoomed = false;
+    for t in [21.5, 22.0, 23.0, 23.5] {
+        let (shown, _) = main_at(&p, t, Landscape);
+        assert!(shown.x >= 0.3 - 1e-9, "at {t}: {shown:?}");
+        assert!(shown.x + shown.w <= 1.0 + 1e-9, "at {t}: {shown:?}");
+        zoomed |= shown.w < 0.69;
+    }
+    assert!(zoomed, "the zoom never came in");
+    // A mirrored camera-only take: the cut is on the side the person sees, and the zoom stays off it too.
+    let mut cam = p.clone();
+    let rec = &mut cam.recordings[0];
+    rec.sources.remove(0);
+    rec.sources[0].runs[0].offset_us = 0;
+    rec.primary = "camera".into();
+    rec.kind = RecordingKind::Camera;
+    let clip = &mut cam.timeline.main[0];
+    clip.camera.as_mut().unwrap().mirror = true;
+    clip.framing.insert(Landscape, framing(FramingMode::Fit));
+    clip.crop = Some(crop(0.3, 0.0, 0.0, 0.0));
+    cam.timeline.tracks[0].items[0].start_us = secs(1.0);
+    for t in [2.0, 3.0] {
+        let (shown, _) = main_at(&cam, t, Landscape);
+        // In the file, the person's left 30 % is the right 30 %.
+        assert!(shown.x + shown.w <= 0.7 + 1e-9, "at {t}: {shown:?}");
+    }
 }
