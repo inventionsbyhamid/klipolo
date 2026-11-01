@@ -1,5 +1,4 @@
-//! Exporting the film in process, as the worker runs it, and checking what the output shows (macOS, 
-//! `trial` builds).
+//! Exporting the film in process, as the worker runs it, and checking what the output shows (macOS, `trial` builds).
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
