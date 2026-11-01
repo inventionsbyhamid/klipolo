@@ -16,13 +16,14 @@ use klipolo_chat::{
 };
 use klipolo_model::captions::styles::BuiltinCaptionStyle;
 use klipolo_model::coded::ErrorParam;
+use klipolo_model::layout::{Anchor, BoxN, Layout};
 use klipolo_model::media::music::{MUSIC_FADE_OUT_US, MusicOpts, add_music_ops, is_music};
 use klipolo_model::ops::{Edge, Op, Origin};
 use klipolo_model::project::{Asset, AssetKind, CaptionSettings, FormatKind, Settings};
 use klipolo_model::query::{main_track_duration, video_duration};
 use klipolo_model::speech::{Levels, Speech, Transcript, Word, WordKind, spoken, word_cut};
 use klipolo_model::time::{RangeUs, Us};
-use klipolo_model::timeline::{Clip, ClipSource, ItemContent};
+use klipolo_model::timeline::{Clip, ClipSource, Item, ItemContent, Track, TrackKind};
 use klipolo_model::{Document, Project, apply_ops};
 
 fn secs(s: f64) -> Us {
@@ -451,6 +452,58 @@ fn keep_only_proposes_the_complement() {
         main_track_duration(&proposal.review.after.timeline.main),
         secs(5.5)
     );
+}
+
+#[test]
+fn keep_only_takes_a_free_sound_with_the_footage_it_played_over() {
+    // A 40 s sound dropped at 20 s, free of the clips, on "broll.mov" (30 s): its last 10 s run past the video.
+    let mut p = broll(30.0);
+    let mut whoosh = file("whoosh", 40.0, true);
+    whoosh.kind = AssetKind::Audio;
+    (whoosh.width, whoosh.height, whoosh.fps) = (0, 0, 0.0);
+    p.assets.push(whoosh);
+    let mut track = Track::new(TrackKind::Audio, "Audio 1");
+    track.items.push(Item {
+        id: "whoosh-layer".into(),
+        start_us: secs(20.0),
+        duration_us: secs(40.0),
+        attach: None,
+        layout: Layout::new(Anchor::Center, BoxN::FULL),
+        content: ItemContent::Audio {
+            asset_id: "whoosh".into(),
+            source_in_us: 0,
+            volume: 1.0,
+            muted: false,
+            fade_in_us: 0,
+            fade_out_us: 0,
+            effect: None,
+            drift_ppm: 0.0,
+            centre_from: None,
+            tie: None,
+            duck: None,
+        },
+        effects: Vec::new(),
+    });
+    p.timeline.tracks.push(track);
+    let i = inputs(&p, Speech::default(), "keep only the first 5 seconds");
+    let out = compile(
+        &p,
+        &i,
+        &[call(
+            "keepOnly",
+            r#"{"ranges": [{"startSec": 0, "endSec": 5}]}"#,
+        )],
+    );
+    assert_eq!(out.refusals, vec![]);
+    let proposal = out.proposal.expect("a proposal");
+    let after = &proposal.review.after;
+    assert_eq!(main_track_duration(&after.timeline.main), secs(5.0));
+    assert!(
+        after.timeline.tracks.iter().all(|t| t.items.is_empty()),
+        "nothing is left past the new end: {:?}",
+        after.timeline.tracks
+    );
+    assert_eq!(proposal.review.removals.items, ["whoosh-layer"]);
 }
 
 #[test]
