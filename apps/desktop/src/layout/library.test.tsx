@@ -1,4 +1,4 @@
-import { act, screen, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixtureSnapshot } from '../test/fixtures';
@@ -163,6 +163,21 @@ describe('a recording in the Library', () => {
       '1:00, game',
       '1:00, game and camera',
     ]);
+  });
+
+  it('a recording the project doesn’t have, or one with no length, says so as a recording', async () => {
+    const { addRecording, toTheEnd } = await import('../features/media/addMedia');
+    const { useToasts } = await import('../state/toasts');
+    useToasts.setState({ toasts: [] });
+    const texts = () => useToasts.getState().toasts.map((toast) => toast.text);
+    act(() => addRecording('gone', toTheEnd));
+    await waitFor(() => expect(texts()).toEqual(["That recording isn't in this project."]));
+    const [take] = useProject.getState().snapshot!.project.recordings;
+    for (const source of take.sources) for (const run of source.runs) Object.assign(run, { offsetUs: 0, durationUs: 0 });
+    act(() => addRecording('rec', toTheEnd));
+    await waitFor(() =>
+      expect(texts()).toEqual(["That recording isn't in this project.", 'This recording is too short to add.']),
+    );
   });
 
   it('a search finds a recording by its name and by its sources', async () => {

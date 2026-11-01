@@ -52,6 +52,13 @@ export const mediaRefusal = {
   noTarget: () => t({ id: 'media.add.noTarget', message: 'Choose where to add the file.' }),
   tooShort: () => t({ id: 'media.add.tooShort', message: 'This file is too short to add.' }),
   tooShortMany: () => t({ id: 'media.add.tooShortMany', message: 'These files are too short to add.' }),
+  recordingUnknown: () =>
+    t({
+      id: 'media.add.recordingUnknown',
+      message: "That recording isn't in this project.",
+      comment: 'The library added a recording that was removed meanwhile',
+    }),
+  recordingTooShort: () => t({ id: 'media.add.recordingTooShort', message: 'This recording is too short to add.' }),
 };
 
 /**
@@ -115,11 +122,11 @@ export function addRecording(
     const project = editable();
     if (!project) return;
     const recording = project.recordings.find((r) => r.id === recordingId);
-    if (!recording) return toast.info(mediaRefusal.unknown());
+    if (!recording) return toast.info(mediaRefusal.recordingUnknown());
     const at = typeof target === 'function' ? target(project) : target;
     if (at.lane !== 'main') return;
     const clip = newRecordingClip(recording, recordingCamera(project, recording));
-    if (clip.sourceOutUs <= 0) return toast.info(mediaRefusal.tooShort());
+    if (clip.sourceOutUs <= 0) return toast.info(mediaRefusal.recordingTooShort());
     const main = project.timeline.main;
     const op: Op = { type: 'insertClip', clip, index: Math.max(0, Math.min(main.length, at.index)) };
     commit('media.add', [op], addedSaid(project, op, recordingName(project, recording.id)), () => {
