@@ -331,8 +331,11 @@ impl Speaker {
         out
     }
 
-    /// Why `usd` is refused: more than an access code's credit left.
+    /// Why `usd` is refused: more than an access code's credit left. Free (all tracked before) asks nothing.
     async fn over_credit(&self, usd: f64) -> Option<String> {
+        if usd <= 0.0 {
+            return None;
+        }
         let left = self.trackers.credit_left().await?;
         (usd > left).then(|| {
             format!(
