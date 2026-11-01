@@ -9,11 +9,13 @@ mod speech;
 use std::sync::Arc;
 
 use klipolo_model::ContribId;
+use klipolo_model::motion::Key;
 use klipolo_model::project::{Asset, Loudness, Project};
 use klipolo_model::query::{RunInClip, clip_starts, run_in_clip, run_within, sound_sources};
 use klipolo_model::time::{RangeUs, Us, unscaled};
 use klipolo_model::timeline::{ClipSource, EffectInstance};
 use klipolo_model::transitions::split;
+use klipolo_model::volume;
 
 use crate::registry::Registry;
 pub use changes::may_change_sound;
@@ -55,6 +57,9 @@ pub struct AudioSource {
     /// Lowered under speech (a sound layer's `ItemContent::Audio::duck`, when anyone is known to speak); None plays at
     /// `gain` throughout.
     pub duck: Option<Duck>,
+    /// The level set by hand over time (`Clip::volume_keys`, a sound layer's): in place of the clip's or layer's volume,
+    /// `gain` is multiplied by the line's level at each sample. None plays at `gain` throughout.
+    pub line: Option<Line>,
     /// Where it plays on from the piece before it, or into the one after it, across a loop's seam (`plan::layers`):
     /// the mixer ramps neither edge there.
     pub seam: Seam,
@@ -81,10 +86,50 @@ pub struct Duck {
     pub speech: Arc<[RangeUs]>,
 }
 
+/// Volume keys on the timeline (`klipolo_model::volume`): `keys` count from `origin_us`, the start of the clip or layer
+/// they belong to. A source that plays only part of it (a run of a recording, a transition's pre-roll) reads the same
+/// line from the same origin.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Line {
+    pub origin_us: Us,
+    pub keys: Arc<[Key]>,
+}
+
+impl Line {
+    /// The line's level at timeline µs `at_us` (0 to 2).
+    pub fn level_at(&self, at_us: Us) -> f64 {
+        volume::level_at(&self.keys, at_us.saturating_sub(self.origin_us), 1.0)
+    }
+
+    /// The level at timeline frame `f` (`mix::RATE`), to the µs.
+    pub fn level_at_frame(&self, f: i64) -> f64 {
+        self.level_at((f as f64 * 1e6 / f64::from(super::mix::RATE)).round() as Us)
+    }
+}
+
+/// What a clip or layer at `volume` with `keys` from `origin_us` plays at: (its volume, no line) without keys, else
+/// (1, the line), which the mixer reads sample by sample.
+fn level(volume: f64, keys: &[Key], origin_us: Us) -> (f64, Option<Line>) {
+    if keys.is_empty() {
+        (volume, None)
+    } else {
+        let line = Line {
+            origin_us,
+            keys: Arc::from(keys),
+        };
+        (1.0, Some(line))
+    }
+}
+
 impl AudioSource {
     /// Source frames played per timeline frame: the speed change and the drift correction together.
     pub fn step(&self) -> f64 {
         self.speed * self.rate
+    }
+
+    /// Its gain at timeline µs `at_us` with its line, before fades and ducking.
+    pub fn level_at(&self, at_us: Us) -> f64 {
+        self.gain * self.line.as_ref().map_or(1.0, |l| l.level_at(at_us))
     }
 }
 
@@ -162,9 +207,10 @@ pub fn audio_plan(p: &Project, registry: &Registry, speech: Arc<[RangeUs]>) -> A
     let main = &p.timeline.main;
     for (i, (clip, start)) in main.iter().zip(clip_starts(main)).enumerate() {
         // A freeze frame is silent whatever its mute says: its range is only its length.
-        if clip.muted || clip.volume <= 0.0 || clip.is_freeze() {
+        if clip.muted || volume::silent(&clip.volume_keys, clip.volume) || clip.is_freeze() {
             continue;
         }
+        let (clip_gain, line) = level(clip.volume, &clip.volume_keys, start);
         // A transition crossfades the two clips' sound over its window (equal power; it replaces the fades).
         let incoming = i
             .checked_sub(1)
@@ -199,7 +245,7 @@ pub fn audio_plan(p: &Project, registry: &Registry, speech: Arc<[RangeUs]>) -> A
                     },
                 speed: clip.speed,
                 rate,
-                gain: clip.volume * gain,
+                gain: clip_gain * gain,
                 fade_in_us: if at_start { fade_in } else { 0 },
                 fade_out_us: if at_end { fade_out } else { 0 },
                 crossfade: Crossfade {
@@ -209,6 +255,7 @@ pub fn audio_plan(p: &Project, registry: &Registry, speech: Arc<[RangeUs]>) -> A
                 filter,
                 centre_from: centre,
                 duck: None,
+                line: line.clone(),
                 seam: Seam::default(),
             });
             sources.len() - 1
