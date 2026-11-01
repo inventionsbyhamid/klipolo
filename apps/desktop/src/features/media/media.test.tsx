@@ -265,6 +265,42 @@ describe('where a drop lands on the timeline', () => {
     useUi.setState({ timelineExpanded: false });
   });
 
+  it("while every track shows, a track's row says why it takes nothing", () => {
+    useUi.setState({ pxPerSecond: 10, snapping: false, timelineExpanded: true });
+    const snapshot = fixtureSnapshot();
+    const [overlay, audio] = snapshot.project.timeline.tracks;
+    snapshot.project.timeline.tracks = [
+      { ...overlay, locked: true },
+      { ...overlay, id: 't3', hidden: true, items: [] },
+      { ...overlay, id: 'z', kind: 'zoom', items: [] },
+      audio,
+    ];
+    useProject.setState({ snapshot });
+    const scroller = row({}, 0, 300);
+    const track = (id: string, kind: string, top: number) =>
+      row({ 'data-lane': id, 'data-track-id': id, 'data-track-kind': kind }, top, 28);
+    scroller.append(
+      track('t1', 'overlay', 20),
+      track('t3', 'overlay', 50),
+      track('z', 'zoom', 80),
+      track('t2', 'audio', 110),
+    );
+    registerDropTarget(
+      (cx, cy, kind) => timelineTargetAt(scroller, 10, cx, cy, kind),
+      scroller,
+      (cx, cy) => timelineLaneAt(scroller, 10, cx, cy),
+    );
+    const why = (y: number, kind: Asset['kind']) => dropRefusal(128 + 30, y, kind);
+    expect(why(30, 'image')).toBe('This track is locked.');
+    expect(why(60, 'image')).toBe('This track is hidden.');
+    expect(why(90, 'image')).toBe('A zoom track takes no media.');
+    expect(why(120, 'image')).toBe('Pictures go on an overlay track.');
+    expect(why(120, 'video')).toBe('Videos go on the Video lane or an overlay track.');
+    expect(why(60, 'audio')).toBe('This track is hidden.');
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    expect(why(30, 'audio')).toBe('Sounds go on an audio track.');
+  });
+
   it("a sound or a pack sound let go on a track's row lands there as a sound effect, never as music", async () => {
     const { addMedia } = await import('./addMedia');
     const { dropPackItem } = await import('./place');

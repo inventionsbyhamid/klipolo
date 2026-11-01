@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import type { AssetKind } from '../../bindings/AssetKind';
 import { kindOfPath } from '../../lib/mediaKinds';
 import type { Project } from '../../bindings/Project';
+import type { Track } from '../../bindings/Track';
 import { snapToFrame } from '../../lib/time';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
@@ -47,22 +48,34 @@ const goesOn = {
 
 /**
  * Why media of `kind` let go at this point goes nowhere: it is over a lane that won't take it (a picture on the Video
- * or a sound lane, a sound on the Video or Overlays lane, a video on a sound lane). Null where it would land, off the
- * lanes, in a read-only project, or when the kind isn't known.
+ * or a sound lane, a sound on the Video or Overlays lane, a video on a sound lane), or, while every track shows, a
+ * track that won't (locked, hidden, a zoom track, another kind's, or one holding music for a sound). Null where it
+ * would land, off the lanes, in a read-only project, or when the kind isn't known.
  */
 export function dropRefusal(clientX: number, clientY: number, kind: AssetKind | null): string | null {
   // A read-only project takes nothing anywhere: no lane is the wrong one.
   if (!kind || useProject.getState().snapshot?.readOnly || dropTargetAt(clientX, clientY, kind)) return null;
   const lane = laneAt?.(clientX, clientY) ?? null;
   if (!lane) return null;
-  // While every track shows, a track's own row says why it won't take a sound.
+  // While every track shows, a track's own row says why it takes nothing.
   const track = useProject.getState().snapshot?.project.timeline.tracks.find((tr) => tr.id === lane);
-  if (track?.kind === 'audio' && kind === 'audio' && track.items.some(isMusic))
+  return track ? trackRefusal(track, kind) : goesOn[kind]();
+}
+
+/** Why a track's own row (every track showing) takes no media of `kind`. */
+function trackRefusal(track: Track, kind: AssetKind): string {
+  if (track.locked) return t({ id: 'drop.refused.locked', message: 'This track is locked.' });
+  if (track.hidden) return t({ id: 'drop.refused.hidden', message: 'This track is hidden.' });
+  if (track.kind === 'zoom') return t({ id: 'drop.refused.zoom', message: 'A zoom track takes no media.' });
+  if (track.kind === 'audio' && kind === 'audio')
     return t({
       id: 'drop.refused.musicTrack',
       message: 'This track holds music. Sound effects go on a track without it.',
     });
-  return goesOn[kind]();
+  if (kind === 'audio') return t({ id: 'drop.refused.soundTrack', message: 'Sounds go on an audio track.' });
+  return kind === 'image'
+    ? t({ id: 'drop.refused.pictureTrack', message: 'Pictures go on an overlay track.' })
+    : t({ id: 'drop.refused.videoTrack', message: 'Videos go on the Video lane or an overlay track.' });
 }
 
 /** What Finder is dragging, by the files' extensions: one kind when they are all of it, else null (any lane). */
