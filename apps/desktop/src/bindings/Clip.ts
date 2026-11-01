@@ -7,12 +7,18 @@ import type { EffectInstance } from "./EffectInstance";
 import type { FillFocus } from "./FillFocus";
 import type { FormatKind } from "./FormatKind";
 import type { Framing } from "./Framing";
+import type { Key } from "./Key";
 import type { Look } from "./Look";
 import type { Reversed } from "./Reversed";
 import type { SourceMix } from "./SourceMix";
 import type { Transition } from "./Transition";
 
-export type Clip = { id: string, source: ClipSource, sourceInUs: number, sourceOutUs: number, speed: number, volume: number, muted: boolean, fadeInUs: number, fadeOutUs: number, look: Look, 
+export type Clip = { id: string, source: ClipSource, sourceInUs: number, sourceOutUs: number, speed: number, volume: number, 
+/**
+ * The level over time, set by hand (`volume`): keys from the clip's start, each a gain from 0 to 2. With keys the
+ * line is the clip's level and `volume` waits for when they are gone. Left out of the JSON while empty.
+ */
+volumeKeys?: Array<Key>, muted: boolean, fadeInUs: number, fadeOutUs: number, look: Look, 
 /**
  * Only for recording clips that include a camera.
  */
