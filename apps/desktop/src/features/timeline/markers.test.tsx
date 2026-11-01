@@ -144,6 +144,25 @@ describe('marker flags', () => {
     await vi.waitFor(() => expect(document.activeElement).toHaveAccessibleName('Marker at 11:40'));
   });
 
+  it('a marker too close to the one before to draw is reached with the arrows, and keeps the Tab stop', async () => {
+    const snapshot = twoTakes();
+    // m3 3 s after m1: 6 px apart at 2 px a second, so only m1's flag draws at rest.
+    snapshot.project.recordings[0].markers.splice(1, 0, { id: 'm3', atUs: 128_000_000, kind: 'manual' });
+    useProject.setState({ snapshot, pending: 0 });
+    renderWithProviders(<Timeline />);
+    expect(screen.queryByRole('button', { name: 'Marker at 2:08' })).toBeNull();
+    const first = screen.getByRole('button', { name: 'Marker at 2:05' });
+    act(() => first.focus());
+    fireEvent.keyDown(first, { key: 'ArrowRight' });
+    const near = await screen.findByRole('button', { name: 'Marker at 2:08' });
+    expect(near).toHaveFocus();
+    expect(near).toHaveAttribute('tabindex', '0');
+    act(() => near.blur());
+    expect(screen.getByRole('button', { name: 'Marker at 2:08' })).toHaveAttribute('tabindex', '0');
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Marker at 2:08' }), { key: 'ArrowRight' });
+    expect(await screen.findByRole('button', { name: 'Marker at 6:40' })).toHaveFocus();
+  });
+
   it('a marker with a label says it', () => {
     const snapshot = twoTakes();
     snapshot.project.recordings[0].markers[0] = { ...snapshot.project.recordings[0].markers[0], label: 'Clutch' };
