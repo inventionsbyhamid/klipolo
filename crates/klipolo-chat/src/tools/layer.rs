@@ -23,9 +23,9 @@ pub enum Order {
 }
 
 /// The keys `setLayer` takes.
-pub const LAYER_KEYS: [&str; 15] = [
+pub const LAYER_KEYS: [&str; 17] = [
     "box", "rotation", "opacity", "corners", "blend", "crop", "fill", "order", "start", "length",
-    "remove", "fadeIn", "fadeOut", "duck", "separate",
+    "remove", "fadeIn", "fadeOut", "duck", "separate", "after", "split",
 ];
 /// How long a fade may be, in seconds.
 pub const FADE_SECS: (f64, f64) = (0.0, 10.0);
@@ -73,14 +73,18 @@ pub struct LayerChange {
     pub remove: bool,
     /// Put an imported clip's sound on a layer of its own.
     pub separate: bool,
+    /// Move a clip on the main track: after the clip this ref names, or to the start (`start`).
+    pub after: Option<String>,
+    /// Split a layer in two at this timeline time, as the context shows it.
+    pub split_us: Option<Us>,
 }
 
 pub(super) const SET_LAYER: Tool = Tool {
     name: "setLayer",
     description: "A layer's or clip's card fields. Keys: box (\"x y w h\", frame shares from the top left), \
                   rotation, opacity, corners (0 to 0.5), blend (normal, multiply, screen, add, overlay), order (forward, \
-                  back), start (timeline s), length (s), remove; video layers: crop (\"l t r b\" or none), fill; clips: crop, \
-                  separate (its sound); clips and music: fadeIn, fadeOut (s); music: duck.",
+                  back), start (timeline s), length (s), split (timeline s), remove; video layers: crop (\"l t r b\" or \
+                  none), fill; clips: crop, separate (its sound), after (a clip ref, or start); clips and music: fadeIn, fadeOut (s); music: duck.",
     parameters: || vec![layer_field(), ("set", schema("Keys to set."))],
     read: |a| {
         let layer = a.layer_ref("layer")?;
@@ -151,6 +155,8 @@ pub(super) const SET_LAYER: Tool = Tool {
                 "length" => change.length_us = Some(secs_to_us(p.number(a, LENGTH_SECS)?)),
                 "remove" => change.remove = p.flag(a)?,
                 "separate" => change.separate = p.flag(a)?,
+                "after" => change.after = Some(p.text(a)?),
+                "split" => change.split_us = Some(secs_to_us(p.number(a, (0.0, LONGEST))?)),
                 _ => {
                     change.order = Some(match p.word(a, &["forward", "back"])? {
                         "forward" => Order::Forward,

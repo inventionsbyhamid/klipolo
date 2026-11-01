@@ -406,7 +406,9 @@ impl ToolCall {
             | ToolCall::SetSourceVolume { clips, .. }
             | ToolCall::SeparateSound { clips, .. } => clips.is_some(),
             ToolCall::SetLayer { layer, change } => {
-                matches!(layer, LayerRef::One(r) if r.starts_with('c')) || change.start_us.is_some()
+                matches!(layer, LayerRef::One(r) if r.starts_with('c'))
+                    || change.start_us.is_some()
+                    || change.split_us.is_some()
             }
             ToolCall::SetEffects { target, .. } => {
                 matches!(target, LayerRef::One(r) if r.starts_with('c'))

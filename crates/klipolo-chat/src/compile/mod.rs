@@ -1147,7 +1147,7 @@ impl Compiler<'_> {
             let refs = &self.inputs.refs;
             if let Some(id) = refs.clip(r) {
                 let target = layer::Target::Clip(id.to_owned(), r.clone());
-                let edit = layer::set_clip_fades(work, (&id.to_owned(), r), change);
+                let edit = layer::set_clip_fades(self, work, (&id.to_owned(), r), change);
                 return Some(edit.map(|edit| Done::again(edit, Again::Layer(target))));
             }
             if let Some(first) = refs.music(r) {

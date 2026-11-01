@@ -53,6 +53,12 @@ pub(super) fn set_layer(
             "setLayer: separate is for imported clips (c1), and {said} is a layer. Leave it out."
         )));
     }
+    if change.after.is_some() {
+        return Err(to_model(format!(
+            "setLayer: after is for clips (c1): it moves a clip on the main track, and {said} is a layer. Use start \
+             to move a layer in time."
+        )));
+    }
     if change.fade_in_us.is_some() || change.fade_out_us.is_some() || change.duck.is_some() {
         return Err(to_model(format!(
             "setLayer: fadeIn, fadeOut and duck are for clips and music, and {said} is a layer. Fade a layer in or \
@@ -136,6 +142,22 @@ pub(super) fn set_layer(
             at_us: start.saturating_add(length),
         });
     }
+    if let Some(at) = change.split_us {
+        let now = super::media::start(c, work, "setLayer", "split", Some(at))?;
+        let end = start.saturating_add(change.length_us.unwrap_or(item.duration_us));
+        if now <= start || now >= end {
+            return Err(to_model(format!(
+                "setLayer: split {} s is not inside {said}, which plays from {} to {} s.",
+                crate::context::secs(at),
+                crate::context::secs(start),
+                crate::context::secs(end)
+            )));
+        }
+        ops.push(Op::SplitItem {
+            id: id.clone(),
+            at_us: now,
+        });
+    }
     let edit = Edit {
         ops,
         label: label("setLayer", vec![("layer", ErrorParam::from(noun(item)))]),
@@ -194,6 +216,8 @@ fn beyond_sound(change: &LayerChange, song: bool) -> Option<&'static str> {
         (c.remove && !song, "remove"),
         (c.separate && song, "separate"),
         (c.duck.is_some() && !song, "duck"),
+        (c.split_us.is_some(), "split"),
+        (c.after.is_some() && song, "after"),
     ]
     .into_iter()
     .find_map(|(set, key)| set.then_some(key))
@@ -203,13 +227,14 @@ fn beyond_sound(change: &LayerChange, song: bool) -> Option<&'static str> {
 /// them, its crop, and its sound put on a layer of its own (an imported clip's, as Separate sound does). A fade where a
 /// transition already blends the cut is refused, as the card refuses it.
 pub(super) fn set_clip_fades(
+    c: &Compiler,
     work: &Project,
     (id, said): (&Id, &str),
     change: &LayerChange,
 ) -> Result<Edit, Refused> {
     if let Some(key) = beyond_sound(change, false) {
         return Err(to_model(format!(
-            "setLayer: {said} is a clip, which takes only crop, separate, fadeIn and fadeOut here, not {key}. Use \
+            "setLayer: {said} is a clip, which takes only crop, separate, after, fadeIn and fadeOut here, not {key}. Use \
              setClip for its speed, volume or framing, trimClip or cutRange for its length."
         )));
     }
@@ -271,6 +296,28 @@ pub(super) fn set_clip_fades(
         ops.push(Op::DetachSound {
             clip_id: id.clone(),
         });
+    }
+    if let Some(to) = &change.after {
+        let others: Vec<&Id> = main.iter().map(|k| &k.id).filter(|k| *k != id).collect();
+        let index = if to.eq_ignore_ascii_case("start") {
+            0
+        } else {
+            let Some(other) = c.inputs.refs.clip(to) else {
+                return Err(to_model(format!("setLayer: after: there is no clip {to}.")));
+            };
+            let Some(at) = others.iter().position(|k| k.as_str() == other) else {
+                return Err(to_model(format!(
+                    "setLayer: after: {said} can't go after itself. Name another clip, or start."
+                )));
+            };
+            at + 1
+        };
+        if main.iter().position(|k| &k.id == id) != Some(index) {
+            ops.push(Op::MoveClip {
+                id: id.clone(),
+                index,
+            });
+        }
     }
     Ok(Edit {
         ops,
@@ -376,6 +423,6 @@ pub(super) fn again(
     match target {
         Target::Layer(id, said) => set_layer(c, work, (id, said), change),
         Target::Song(first, said) => set_song_sound(work, (first, said), change),
-        Target::Clip(id, said) => set_clip_fades(work, (id, said), change),
+        Target::Clip(id, said) => set_clip_fades(c, work, (id, said), change),
     }
 }

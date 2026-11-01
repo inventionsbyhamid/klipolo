@@ -906,7 +906,7 @@ fn fades_and_ducking_go_on_clips_and_music() {
             set("c1", json!([{"key": "opacity", "value": 0.5}])),
         )],
     );
-    assert!(refused_to_model(&out, 0).contains("takes only crop, separate, fadeIn and fadeOut"));
+    assert!(refused_to_model(&out, 0).contains("takes only crop, separate, after, fadeIn and fadeOut"));
     let out = run(
         &p,
         &[(
@@ -1500,4 +1500,82 @@ fn animated_words_go_back_to_plain_words() {
         )],
     );
     assert!(refused_to_model(&out, 0).contains("is plain words already"));
+}
+
+/// A clip moves to another place on the main track by setLayer's after key: after another clip, or to the start.
+#[test]
+fn a_clip_moves_after_another_or_to_the_start() {
+    let p = project();
+    let ops = [
+        klipolo_model::ops::Op::Split { at_us: secs(10.0) },
+        klipolo_model::ops::Op::Split { at_us: secs(20.0) },
+    ];
+    let p = apply_ops(&p, &ops).unwrap();
+    let ids =
+        |p: &Project| -> Vec<String> { p.timeline.main.iter().map(|c| c.id.clone()).collect() };
+    let [a, b, c] = <[String; 3]>::try_from(ids(&p)).unwrap();
+    let first = applied(
+        &p,
+        &run(
+            &p,
+            &[(
+                "setLayer",
+                set("c3", json!([{"key": "after", "value": "start"}])),
+            )],
+        ),
+    );
+    assert_eq!(ids(&first), [c.clone(), a.clone(), b.clone()]);
+    let after = applied(
+        &p,
+        &run(
+            &p,
+            &[(
+                "setLayer",
+                set("c3", json!([{"key": "after", "value": "c1"}])),
+            )],
+        ),
+    );
+    assert_eq!(ids(&after), [a.clone(), c.clone(), b.clone()]);
+    let out = run(
+        &p,
+        &[(
+            "setLayer",
+            set("c3", json!([{"key": "after", "value": "c9"}])),
+        )],
+    );
+    assert!(refused_to_model(&out, 0).contains("there is no clip c9"));
+    let out = run(
+        &p,
+        &[(
+            "setLayer",
+            set("i1", json!([{"key": "after", "value": "c1"}])),
+        )],
+    );
+    assert!(refused_to_model(&out, 0).contains("after is for clips"));
+}
+
+/// A layer splits in two at a time the context shows, as splitAt splits a clip.
+#[test]
+fn a_layer_splits_at_a_time_the_context_shows() {
+    let p = project();
+    let mut i = inputs(&p, "split the heart here");
+    i.view.playhead_us = secs(12.0);
+    let calls = [call(
+        "setLayer",
+        set("i1", json!([{"key": "split", "value": 12}])),
+    )];
+    let out = compile(&p, &i, &calls);
+    let after = applied(&p, &out);
+    let mut hearts: Vec<(Us, Us)> = (after.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .filter(|i| matches!(i.content, ItemContent::Image { .. }))
+        .map(|i| (i.start_us, i.duration_us))
+        .collect();
+    hearts.sort();
+    assert_eq!(hearts, [(secs(10.0), secs(2.0)), (secs(12.0), secs(3.0))]);
+    let out = run(
+        &p,
+        &[("setLayer", set("i1", json!([{"key": "split", "value": 3}])))],
+    );
+    assert!(refused_to_model(&out, 0).contains("split"));
 }

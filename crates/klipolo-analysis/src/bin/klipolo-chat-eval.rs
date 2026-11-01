@@ -1080,6 +1080,7 @@ fn layer_said(c: &klipolo_chat::tools::LayerChange) -> Vec<Value> {
         ("fadeOut", c.fade_out_us.map(s)),
         ("start", c.start_us.map(s)),
         ("length", c.length_us.map(s)),
+        ("split", c.split_us.map(s)),
     ] {
         out.extend(value.map(|v| pair(key, json!(v))));
     }
@@ -1091,6 +1092,7 @@ fn layer_said(c: &klipolo_chat::tools::LayerChange) -> Vec<Value> {
         };
         pair("crop", json!(said))
     }));
+    out.extend(c.after.as_ref().map(|to| pair("after", json!(to))));
     for (key, on) in [("remove", c.remove), ("separate", c.separate)] {
         if on {
             out.push(pair(key, json!(true)));
