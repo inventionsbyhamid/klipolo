@@ -4,6 +4,7 @@ import type { ProjectRow } from '../../bindings/ProjectRow';
 import type { ThumbTile } from '../../bindings/ThumbTile';
 import { mediaUrl } from '../../bridge/commands';
 import { cn } from '../../design/cn';
+import { useExport } from '../../state/export';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../design/Menu';
 import { Icon } from '../../layout/Icon';
 import { openedLabel } from '../../lib/relativeTime';
@@ -28,6 +29,23 @@ function tileStyle(thumb: ThumbTile): CSSProperties {
     backgroundPosition: '0px 0px',
   };
 }
+
+type Unfinished = 'running' | 'paused' | 'unfinished';
+
+/** What a project's unfinished exports amount to, for its card; null when it has none. */
+function unfinishedOf(jobs: ReturnType<typeof useExport.getState>['jobs'], projectId: string): Unfinished | null {
+  const mine = jobs.filter((j) => j.projectId === projectId);
+  if (mine.length === 0) return null;
+  if (mine.some((j) => j.state === 'running')) return 'running';
+  if (mine.some((j) => j.state === 'paused')) return 'paused';
+  return 'unfinished';
+}
+
+const UNFINISHED_TEXT: Record<Unfinished, string> = {
+  running: 'Exporting',
+  paused: 'Export paused',
+  unfinished: 'Export unfinished',
+};
 
 interface ProjectCardProps {
   row: ProjectRow;
@@ -69,13 +87,17 @@ function CardMenu({ row, onDuplicate }: Pick<ProjectCardProps, 'row' | 'onDuplic
 
 /**
  * One project on the start screen: its first clip's picture (else the clip art), its name and "Opened
- * 2 hours ago, 4:12" (just the length when the time it was opened isn't known). A click or Enter opens it. Named by
- * its name and described by that line. Its menu (`CardMenu`) duplicates it.
+ * 2 hours ago, 4:12" (just the length when the time it was opened isn't known), and a quiet badge when it has an
+ * unfinished export (after a quit, a crash or a pause), so it is seen from here too: opening the project shows the dot
+ * on Export and the rows to resume. A click or Enter opens it. Named by its name and described by that line and the
+ * badge. Its menu (`CardMenu`) duplicates it.
  */
 export function ProjectCard({ row, nowMs, busy, onOpen, onDuplicate }: ProjectCardProps) {
   const { t } = useLingui();
   const nameId = useId();
   const metaId = useId();
+  const badgeId = useId();
+  const unfinished = useExport((s) => unfinishedOf(s.jobs, row.id));
   const length = formatDuration(row.durationUs);
   const opened = row.openedMs > 0 ? openedLabel(row.openedMs, nowMs) : null;
   return (
@@ -86,7 +108,7 @@ export function ProjectCard({ row, nowMs, busy, onOpen, onDuplicate }: ProjectCa
         tabIndex={0}
         className={cn('start-card', busy && 'is-busy')}
         aria-labelledby={nameId}
-        aria-describedby={metaId}
+        aria-describedby={unfinished ? `${metaId} ${badgeId}` : metaId}
         aria-busy={busy || undefined}
         onClick={() => onOpen(row.path)}
       >
@@ -112,6 +134,11 @@ export function ProjectCard({ row, nowMs, busy, onOpen, onDuplicate }: ProjectCa
                 comment: '{opened} is when it was last opened ("Opened 2 hours ago"), {length} its length ("4:12")',
               })}
         </span>
+        {unfinished && (
+          <span className="start-badge" id={badgeId}>
+            {UNFINISHED_TEXT[unfinished]}
+          </span>
+        )}
       </button>
       <CardMenu row={row} onDuplicate={onDuplicate} />
     </li>

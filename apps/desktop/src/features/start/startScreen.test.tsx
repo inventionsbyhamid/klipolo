@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ExportJobInfo } from '../../bindings/ExportJobInfo';
 import type { ProjectRow } from '../../bindings/ProjectRow';
 import { fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
@@ -14,8 +15,12 @@ vi.mock('../../bridge/commands', () => ({
   bridge: { createProject: vi.fn(), openProject: vi.fn(), duplicateProject: vi.fn(), snapshot: vi.fn() },
   mediaUrl: (path: string) => `asset://localhost${path}`,
 }));
+// Unfinished exports (the cards' badges) come from the export bridge.
+vi.mock('../../bridge/exporter', () => ({ exporter: { jobs: vi.fn(() => Promise.resolve([])) } }));
 const { bridge } = await import('../../bridge/commands');
+const { exporter } = await import('../../bridge/exporter');
 const { useProject } = await import('../../state/project');
+const { useExport } = await import('../../state/export');
 const { useToasts } = await import('../../state/toasts');
 const { StartScreen } = await import('./StartScreen');
 
@@ -24,6 +29,7 @@ const NOW = new Date(2026, 9, 31, 12, 0).getTime();
 
 const ROWS: ProjectRow[] = [
   {
+    id: 'tour',
     path: '/Users/me/Movies/Klipolo/Studio tour.klipolo',
     name: 'Studio tour',
     openedMs: NOW - 2 * 60 * MINUTE,
@@ -33,6 +39,7 @@ const ROWS: ProjectRow[] = [
     open: false,
   },
   {
+    id: 'untitled',
     path: '/Users/me/Movies/Klipolo/Untitled project.klipolo',
     name: 'Untitled project',
     openedMs: NOW - 5 * MINUTE,
@@ -42,6 +49,7 @@ const ROWS: ProjectRow[] = [
     open: false,
   },
   {
+    id: 'kiln',
     path: '/Users/me/Movies/Klipolo/Kiln vlog.klipolo',
     name: 'Kiln vlog',
     openedMs: new Date(2026, 9, 12, 9, 30).getTime(),
@@ -86,6 +94,7 @@ function cssRule(selector: string): Record<string, string> {
 
 beforeEach(() => {
   vi.spyOn(Date, 'now').mockReturnValue(NOW);
+  useExport.setState({ jobs: [] });
   useProject.setState({ snapshot: null, pending: 0, switching: false });
   useToasts.setState({ toasts: [] });
   vi.mocked(bridge.createProject).mockResolvedValue(fixtureSnapshot());
@@ -100,7 +109,43 @@ afterEach(() => {
   vi.mocked(bridge.duplicateProject).mockReset();
 });
 
+/** An unfinished export of project `projectId`, in `state`, as `export_jobs` lists it. */
+const unfinished = (projectId: string, state: ExportJobInfo['state']): ExportJobInfo => ({
+  jobId: `${projectId}-${state}`,
+  projectId,
+  projectName: projectId,
+  quality: 'high',
+  files: [],
+  state,
+  message: null,
+  frame: 0,
+  totalFrames: 10,
+  segmentsDone: 1,
+  segmentsTotal: 4,
+  stale: false,
+  createdMs: 0,
+  compatibility: null,
+});
+
 describe('StartScreen', () => {
+  it('a project with an unfinished export says so on its card, quietly', async () => {
+    useExport.setState({ jobs: [] });
+    vi.mocked(exporter.jobs).mockResolvedValueOnce([
+      unfinished('tour', 'paused'),
+      unfinished('kiln', 'interrupted'),
+      unfinished('kiln', 'failed'),
+    ]);
+    recentAnswers(ROWS);
+    renderWithProviders(<StartScreen onRecord={() => undefined} />);
+    await waitFor(() => expect(within(card('Studio tour')).queryByText('Export paused')).not.toBeNull());
+    expect(card('Studio tour')).toHaveAccessibleDescription('Opened 2 hours ago, 4:12 Export paused');
+    expect(within(card('Kiln vlog')).getByText('Export unfinished')).toBeInTheDocument();
+    expect(card('Untitled project').querySelector('.start-badge')).toBeNull();
+    // One running reads as exporting, whatever else it has.
+    act(() => useExport.setState({ jobs: [unfinished('kiln', 'paused'), unfinished('kiln', 'running')] }));
+    expect(within(card('Kiln vlog')).getByText('Exporting')).toBeInTheDocument();
+  });
+
   it('lists_projects_with_name_opened_time_and_duration', async () => {
     let answer!: (rows: ProjectRow[]) => void;
     invoke.mockImplementation(() => new Promise((resolve) => (answer = resolve)));

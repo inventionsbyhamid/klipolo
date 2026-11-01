@@ -133,6 +133,17 @@ fn opened_projects_come_first_newest_first() {
     assert_eq!(rows[0].path, newer.to_string_lossy());
 }
 
+/// A row names its project by the id saved in it, so the start screen can mark a project whose export is unfinished.
+#[test]
+fn a_row_carries_its_projects_id() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    let project = Project::new("Kiln vlog");
+    saved(&library, &project, 1_000);
+    let rows = recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap();
+    assert_eq!(rows[0].id, project.id);
+}
+
 /// With nothing opened yet (no `recent.json`), the library's project files list by their last save, newest first.
 /// Other files, a save's temporary file, folders and projects in sub folders aren't listed.
 #[test]

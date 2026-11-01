@@ -26,6 +26,7 @@ const { readRecent, useRecentProjects } = await import('../../state/recentProjec
 const { useCommands } = await import('./useCommands');
 
 const recentRow = (name: string, open = false): ProjectRow => ({
+  id: name,
   path: `/Users/me/Movies/Klipolo/${name}.klipolo`,
   name,
   openedMs: 0,
