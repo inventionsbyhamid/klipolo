@@ -74,6 +74,9 @@ pub struct ReversedInfo {
     pub frames: u64,
     /// The copy's length: the range's, from its first frame on.
     pub duration_us: Us,
+    /// The stretch of the source it holds, `duration_us` long: the copy's time `t` is the source's `held.end - t`. Its end
+    /// is the range's, or the file's last frame's end before it.
+    pub held: RangeUs,
     pub has_audio: bool,
     pub bytes: u64,
 }
@@ -336,6 +339,7 @@ fn write_to(
         fps,
         frames: writer.frames,
         duration_us: end - from,
+        held: RangeUs { start: from, end },
         has_audio: writer.sound.is_some(),
         bytes,
     })

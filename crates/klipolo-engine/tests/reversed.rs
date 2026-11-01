@@ -254,6 +254,7 @@ fn only_the_range_is_reversed() {
     let got = levels(&out);
     assert!(near(&got, &want), "got {got:?}, want {want:?}");
     assert_eq!(info.duration_us, 500_000);
+    assert_eq!(info.held, range);
 }
 
 #[test]
