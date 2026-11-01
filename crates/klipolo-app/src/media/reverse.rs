@@ -2,10 +2,15 @@
 //! the project, `<stem> Media/Reversed/<name> reversed.mov` (then `… reversed 2.mov`), for the page to play the clip from
 //! (`ReverseClip`). The copy holds the clip's stretch of its file and up to `HANDLE_US` more on each side, so a
 //! transition at either cut keeps its room and a trim can still grow the clip a little. It goes with the project, so
-//! every export reads it like any file. A copy that stops or fails leaves no file. Blocking: run off the main thread.
+//! every export reads it like any file. Each copy is written to a hidden file of its own and then takes the first free
+//! name (`place_copy`), so two made at once never meet. A copy that stops or fails leaves no file, and what a crash
+//! left is swept away by a later copy (`sweep`). Blocking: run off the main thread.
 
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
+use std::time::{Duration, SystemTime};
 
 use klipolo_engine::media::reversed::{self, Reverse, ReverseError};
 use klipolo_model::project::{AssetKind, Project};
@@ -66,19 +71,67 @@ pub fn video_bps(width: u32, height: u32, fps: f64) -> u32 {
     (f64::from(width) * f64::from(height) * fps * BITS_PER_PIXEL).clamp(MIN_BPS, MAX_BPS) as u32
 }
 
-/// The first free `<stem> reversed.mov`, `<stem> reversed 2.mov` … in `folder`.
-fn free_path(folder: &Path, name: &str) -> PathBuf {
+/// The most names tried for one copy (`<stem> reversed.mov` to `<stem> reversed 9999.mov`).
+const MAX_NUMBER: u32 = 9999;
+/// A hidden file this old is left over from a crash: no copy takes this long.
+const STALE: Duration = Duration::from_secs(6 * 60 * 60);
+/// How a copy being made is named in its folder until it is whole: `.reversing-<random>.mov`.
+const JOB_PREFIX: &str = ".reversing-";
+
+/// A hidden file in `folder` for one copy to be written to, its own: two copies made at once never share one.
+fn job_file(folder: &Path) -> PathBuf {
+    folder.join(format!("{JOB_PREFIX}{}.mov", uuid::Uuid::new_v4().simple()))
+}
+
+/// Puts the whole copy `job` in `folder` under the first free `<stem> reversed.mov`, `<stem> reversed 2.mov` … (`name`
+/// is its source's file name), and returns that path. A name is taken by a hard link, which fails when the name
+/// exists, so no file is ever replaced, even by a copy finished at the same moment; then `job` goes.
+fn place_copy(job: &Path, folder: &Path, name: &str) -> io::Result<PathBuf> {
     let stem = Path::new(name)
         .file_stem()
         .map_or_else(|| "clip".to_owned(), |s| s.to_string_lossy().into_owned());
     let base = safe_file_name(&format!("{stem} reversed"));
-    (1u32..)
-        .map(|n| match n {
+    for n in 1..=MAX_NUMBER {
+        let path = match n {
             1 => folder.join(format!("{base}.mov")),
             n => folder.join(format!("{base} {n}.mov")),
-        })
-        .find(|p| !p.exists())
-        .expect("some number is free")
+        };
+        match fs::hard_link(job, &path) {
+            Ok(()) => {
+                let _ = fs::remove_file(job);
+                return Ok(path);
+            }
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "every name is taken",
+    ))
+}
+
+/// Removes what a crash left in `folder` while making a copy (`job_file`'s and the engine's hidden partials) once it is
+/// older than `STALE`. Anything else stays, and what can't be read or removed is left for next time.
+fn sweep(folder: &Path) {
+    let Ok(entries) = fs::read_dir(folder) else {
+        return;
+    };
+    let now = SystemTime::now();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let ours = name.starts_with(JOB_PREFIX)
+            || (name.starts_with('.') && name.ends_with(reversed::PARTIAL_SUFFIX));
+        let old = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| now.duration_since(t).ok())
+            .is_some_and(|age| age > STALE);
+        if ours && old {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
 }
 
 /// Writes clip `clip_id` of `project` (saved as `project_file`) backward, as the module says, telling `progress` 0 to 1.
@@ -106,11 +159,12 @@ pub fn make(
     }
     let range = copy_range(clip.source_in_us, clip.source_out_us, asset.duration_us);
     let folder = made_folder(project_file, "Reversed");
-    std::fs::create_dir_all(&folder).map_err(|error| {
+    fs::create_dir_all(&folder).map_err(|error| {
         tracing::warn!(%error, "the reversed copies' folder couldn't be made");
         ReverseFailure::Failed { name: name.clone() }
     })?;
-    let out = free_path(&folder, &asset.name);
+    sweep(&folder);
+    let job = job_file(&folder);
     let spec = Reverse {
         range,
         video_bps: video_bps(asset.width, asset.height, asset.fps),
@@ -118,12 +172,19 @@ pub fn make(
         threads: 0,
         buffer_bytes: BUFFER_BYTES,
     };
-    match reversed::write(src, &out, &spec, cancel, progress) {
-        Ok(info) => Ok(MadeCopy {
-            path: out,
-            from_us: info.held.start,
-            to_us: info.held.end,
-        }),
+    match reversed::write(src, &job, &spec, cancel, progress) {
+        Ok(info) => match place_copy(&job, &folder, &asset.name) {
+            Ok(path) => Ok(MadeCopy {
+                path,
+                from_us: info.held.start,
+                to_us: info.held.end,
+            }),
+            Err(error) => {
+                tracing::warn!(%error, file = %name, "a reversed copy couldn't be named");
+                let _ = fs::remove_file(&job);
+                Err(ReverseFailure::Failed { name })
+            }
+        },
         Err(ReverseError::Stopped) => Err(ReverseFailure::Stopped),
         Err(ReverseError::NoEncoder) => Err(ReverseFailure::NoEncoder),
         Err(ReverseError::NoVideo) => Err(ReverseFailure::NotImported),
@@ -194,21 +255,60 @@ mod tests {
         assert_eq!(video_bps(1920, 1080, 0.0), 18_662_400);
     }
 
+    /// Two copies of one file made at once (two halves of a split clip) each write a hidden file of their own, then take
+    /// the first free name beside the project: neither overwrites the other, nor a file already there.
     #[test]
-    fn the_copy_takes_the_first_free_name_beside_the_project() {
+    fn two_copies_of_one_file_take_two_names_and_never_replace_a_file() {
         let dir = tempfile::tempdir().unwrap();
         let folder = made_folder(&dir.path().join("Trip.klipolo"), "Reversed");
         std::fs::create_dir_all(&folder).unwrap();
-        assert_eq!(
-            free_path(&folder, "broll.mp4"),
-            folder.join("broll reversed.mov")
-        );
-        std::fs::write(folder.join("broll reversed.mov"), b"").unwrap();
-        assert_eq!(
-            free_path(&folder, "broll.mp4"),
-            folder.join("broll reversed 2.mov")
-        );
         assert!(folder.ends_with("Trip Media/Reversed"));
+        std::fs::write(folder.join("broll reversed.mov"), b"kept").unwrap();
+        let (a, b) = (job_file(&folder), job_file(&folder));
+        assert_ne!(a, b);
+        assert!(a.file_name().unwrap().to_string_lossy().starts_with('.'));
+        std::fs::write(&a, b"a").unwrap();
+        std::fs::write(&b, b"b").unwrap();
+        let placed_a = place_copy(&a, &folder, "broll.mp4").unwrap();
+        let placed_b = place_copy(&b, &folder, "broll.mp4").unwrap();
+        assert_eq!(placed_a, folder.join("broll reversed 2.mov"));
+        assert_eq!(placed_b, folder.join("broll reversed 3.mov"));
+        let read = |p: &Path| std::fs::read(p).unwrap();
+        assert_eq!(read(&folder.join("broll reversed.mov")), b"kept");
+        assert_eq!(
+            (read(&placed_a), read(&placed_b)),
+            (b"a".to_vec(), b"b".to_vec())
+        );
+        assert!(!a.exists() && !b.exists());
+    }
+
+    /// What a crash left while making a copy goes once it is stale; a fresh one (a copy being made now) and the
+    /// person's own files stay.
+    #[test]
+    fn a_crash_s_leftovers_are_swept_once_stale() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path();
+        let stale = SystemTime::now() - Duration::from_secs(7 * 60 * 60);
+        let make = |name: &str, old: bool| {
+            let path = folder.join(name);
+            fs::write(&path, b"x").unwrap();
+            if old {
+                fs::File::options()
+                    .write(true)
+                    .open(&path)
+                    .unwrap()
+                    .set_modified(stale)
+                    .unwrap();
+            }
+            path
+        };
+        let old_job = make(".reversing-1.mov", true);
+        let old_partial = make("..reversing-1.mov.2.partial.mov", true);
+        let new_job = make(".reversing-3.mov", false);
+        let own = make("broll reversed.mov", true);
+        sweep(folder);
+        assert!(!old_job.exists() && !old_partial.exists());
+        assert!(new_job.exists() && own.exists());
     }
 
     #[test]
