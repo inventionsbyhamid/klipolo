@@ -1,12 +1,12 @@
 //! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
 //! built from, out as edits.
 //! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer, the clip
-//!   tools `setClip` and `setTransition`, the media: `addMusic`, `addSound`, `addText`, `addImage` and
-//!   `makeTitleCard`'s title, and a recording's camera and sounds: `setCameraMode`, `adjustCamera`, `detachCamera`,
-//!   `muteSource`, `setSourceVolume`, `separateSound`) are one `Transaction` the app applies at once: one undo step. An
-//!   addition is judged by what its part does, not by its tool: one that takes something away (the model's own
-//!   `removals`, as a format dropped with what was placed in it) is compiled again with the removals and proposed: a
-//!   speed that leaves a transition no room, or a transition taken away.
+//!   tools `setClip` and `setTransition`, the media: `addMusic`, `addSound`, `addText`, `addImage`, `makeTitleCard`'s
+//!   title and a layer's animation (`animate`), and a recording's camera and sounds: `setCameraMode`, `adjustCamera`,
+//!   `detachCamera`, `muteSource`, `setSourceVolume`, `separateSound`) are one `Transaction` the app applies at once:
+//!   one undo step. An addition is judged by what its part does, not by its tool: one that takes something away (the
+//!   model's own `removals`, as a format dropped with what was placed in it) is compiled again with the removals and
+//!   proposed: a speed that leaves a transition no room, or a transition taken away.
 //! - Removals (`cutRange`, `keepOnly`, `removeSilences`, `removeFillers`, a trim that makes a clip shorter) are one
 //!   `Proposal`: a `Transaction` for the project as the additions leave it, judged by the model's own review (what it
 //!   takes away, on the timeline), applied as one undo step when the person says so.
@@ -38,9 +38,11 @@
 //! recording tool left as it was, is a note for the person (`Compiled::notes`). Splitting by concern: `additions`,
 //! `removals`, `trim` (both), `media` (the library's music, sounds, words and pictures, and the pictures to draw),
 //! `clips` (a clip's speed, volume, mute and framing, and the transitions at its cuts), `recorded` (a recording's
-//! camera, in `cameras` and `bubble`, and its sounds, in `sources`), `map`.
+//! camera, in `cameras` and `bubble`, and its sounds, in `sources`), `animate` (a layer's animation, with its sound),
+//! `map`.
 
 mod additions;
+mod animate;
 mod bubble;
 mod cameras;
 mod clips;
@@ -56,8 +58,9 @@ use std::collections::{HashMap, HashSet};
 use klipolo_model::coded::{CodedError, ErrorParam};
 use klipolo_model::ids::Id;
 use klipolo_model::media::music::refit_music_ops;
+use klipolo_model::motion::Motion;
 use klipolo_model::ops::{Op, Origin, Transaction};
-use klipolo_model::project::{AssetKind, FormatKind};
+use klipolo_model::project::{Asset, AssetKind, FormatKind};
 use klipolo_model::risk::{Review, removals};
 use klipolo_model::speech::{Speech, run_spans};
 use klipolo_model::time::{RangeUs, Us};
@@ -68,7 +71,7 @@ use crate::context::{Refs, SceneLog, View, secs};
 use crate::evidence::{Evidence, Unfounded};
 use crate::library::Library;
 use crate::sanitize;
-use crate::tools::{Moment, PictureSize, Position, ToolCall};
+use crate::tools::{LayerRef, Moment, PictureSize, Position, ToolCall};
 pub(crate) use cameras::every_camera;
 pub use clips::{NO_ROOM, NO_ROOM_ANYWHERE, NO_TRANSITIONS};
 use map::Map;
@@ -188,7 +191,7 @@ pub struct Proposal {
 
 /// Work for a runner: tracking or blurring what one short noun phrase names, or a picture for an image maker to draw
 /// (Muse Image in the app). A picture's job is never an op until the picture exists: the app places it when it comes.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Job {
     Follow {
         description: String,
@@ -214,8 +217,9 @@ pub enum Job {
 /// place (`query::anchor_at`), so it moves with that footage while the picture is drawn. `at_us` is where that footage
 /// played on the project as the message's additions left it, and the start to use when `anchor` is None (past the main
 /// track's end). When the picture comes, `sticker_placement` says where and how long on the project as it is then, or
-/// None to drop the job (that footage was cut, or the start is now at the video's end).
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// None to drop the job (that footage was cut, or the start is now at the video's end). An `animate` call after it in
+/// the answer gives it `motion` and a `sound` from the library, placed with it.
+#[derive(Clone, Debug, PartialEq)]
 pub struct MakeSticker {
     pub prompt: String,
     pub at_us: Us,
@@ -223,6 +227,9 @@ pub struct MakeSticker {
     pub position: Position,
     pub size: PictureSize,
     pub anchor: Option<Attach>,
+    pub motion: Option<Box<Motion>>,
+    /// Plays where its animation starts: as it comes in, or as it goes out when its motion has only an exit.
+    pub sound: Option<Box<Asset>>,
 }
 
 /// A call that compiled to nothing, and why, in one plain sentence on one line.
@@ -416,6 +423,19 @@ struct Tried {
     removes: bool,
 }
 
+/// A layer a call added, for `animate`: an item, or the sticker a call asked for.
+#[derive(Clone)]
+enum Added {
+    Item(Id),
+    Sticker(usize),
+}
+
+/// What `animate` gave a sticker still to be drawn.
+struct Animated {
+    motion: Option<Motion>,
+    sound: Option<Asset>,
+}
+
 /// A call waiting for the removals' phase.
 enum Removal<'c> {
     /// A removal tool.
@@ -550,7 +570,8 @@ impl Compiler<'_> {
                 | ToolCall::AddSound { .. }
                 | ToolCall::AddText { .. }
                 | ToolCall::AddImage { .. }
-                | ToolCall::MakeTitleCard { .. } => {
+                | ToolCall::MakeTitleCard { .. }
+                | ToolCall::Animate { .. } => {
                     layers.push((i, call));
                     continue;
                 }
@@ -637,7 +658,54 @@ impl Compiler<'_> {
 
         // The media layers, in call order, on the project the other additions make: where one starts and how long it
         // plays (cut at the video's end) don't depend on whether a trim or a split came before it or after it.
+        // The layer each call added, by call index, for an `animate` of the last one: an item on the working copy, or
+        // a sticker still to be drawn (by its call), whose job takes the animation (`Animated`).
+        let mut added: Vec<(usize, Added)> = (stickers.iter())
+            .map(|&(j, _)| (j, Added::Sticker(j)))
+            .collect();
+        let mut animated: HashMap<usize, Animated> = HashMap::new();
         for (i, call) in layers {
+            if let ToolCall::Animate {
+                layer,
+                enter,
+                exit,
+                emphasis,
+                sound,
+            } = call
+            {
+                let change = animate::Change {
+                    enter: *enter,
+                    exit: *exit,
+                    emphasis: *emphasis,
+                };
+                let target = self.animated_layer(layer, i, &added);
+                let edit = match target {
+                    Ok(Added::Sticker(j)) => {
+                        match self.animate_sticker(calls, j, &change, sound.as_deref(), &animated) {
+                            Ok(sticker) => {
+                                animated.insert(j, sticker);
+                            }
+                            Err(r) => refuse(&mut out, i, r),
+                        }
+                        continue;
+                    }
+                    Ok(Added::Item(id)) => {
+                        let said = match layer {
+                            LayerRef::Last => "last",
+                            LayerRef::One(r) => r.as_str(),
+                        };
+                        animate::animate(self, &adding.work, (&id, said), &change, sound.as_deref())
+                    }
+                    Err(r) => Err(r),
+                };
+                match edit.and_then(|edit| {
+                    (adding.try_edit(edit)).map_err(|e| to_model(format!("animate: {e}")))
+                }) {
+                    Ok(tried) => adding.keep(tried, i),
+                    Err(r) => refuse(&mut out, i, r),
+                }
+                continue;
+            }
             let tried = match call {
                 ToolCall::MakeTitleCard {
                     title,
@@ -657,6 +725,16 @@ impl Compiler<'_> {
                 // A layer takes nothing away; if one ever did, it would be proposed like any other.
                 Ok((tried, _)) if tried.removes => waiting.push((i, Removal::Moved(call))),
                 Ok((tried, title_id)) => {
+                    // A layer that draws: the one `animate` names as the last.
+                    let drawn = (tried.edit.ops.iter()).find_map(|op| match op {
+                        Op::AddItem { item, .. } if item.content.is_visual() => {
+                            Some(item.id.clone())
+                        }
+                        _ => None,
+                    });
+                    if let Some(id) = drawn {
+                        added.push((i, Added::Item(id)));
+                    }
                     adding.keep(tried, i);
                     // The title is in: its background is drawn for it.
                     if let (Some(title_id), ToolCall::MakeTitleCard { prompt, .. }) =
@@ -692,7 +770,13 @@ impl Compiler<'_> {
             };
             let times = (*at_us, *duration_us);
             match media::make_sticker(self, &with_additions, prompt, *position, times) {
-                Ok(job) => jobs.push((i, job)),
+                Ok(mut job) => {
+                    if let (Job::MakeSticker(sticker), Some(a)) = (&mut job, animated.remove(&i)) {
+                        sticker.motion = a.motion.map(Box::new);
+                        sticker.sound = a.sound.map(Box::new);
+                    }
+                    jobs.push((i, job));
+                }
                 Err(r) => refuse(&mut out, i, r),
             }
         }
@@ -773,6 +857,67 @@ impl Compiler<'_> {
         out
     }
 
+    /// The layer `animate` call `i` names: by its ref from the context, or the one the last call before it added
+    /// (`added`, by call index).
+    fn animated_layer(
+        &self,
+        layer: &LayerRef,
+        i: usize,
+        added: &[(usize, Added)],
+    ) -> Result<Added, Refused> {
+        match layer {
+            LayerRef::Last => (added.iter())
+                .filter(|(j, _)| *j < i)
+                .max_by_key(|(j, _)| *j)
+                .map(|(_, a)| a.clone())
+                .ok_or_else(|| {
+                    to_model(
+                        "animate: no layer was added before it in this answer. Name one by its ref from Layers, such \
+                         as t1 or i1."
+                            .to_owned(),
+                    )
+                }),
+            LayerRef::One(r) => {
+                let refs = &self.inputs.refs;
+                (refs.text(r).or_else(|| refs.picture(r)).or_else(|| refs.video(r)))
+                    .map(|id| Added::Item(id.to_owned()))
+                    .ok_or_else(|| to_model(format!("animate: there is no layer {r}.")))
+            }
+        }
+    }
+
+    /// `change` and `sound` for the sticker call `j` asks for, on top of what earlier calls gave it (`so_far`): a
+    /// picture, so no typewriter.
+    fn animate_sticker(
+        &self,
+        calls: &[ToolCall],
+        j: usize,
+        change: &animate::Change,
+        sound: Option<&str>,
+        so_far: &HashMap<usize, Animated>,
+    ) -> Result<Animated, Refused> {
+        if change.enter == Some(crate::tools::Entrance::Typewriter) {
+            return Err(to_model(
+                "animate: typewriter is for words. Use another enter for the sticker.".to_owned(),
+            ));
+        }
+        let length = match calls.get(j) {
+            Some(ToolCall::MakeSticker { duration_us, .. }) => {
+                duration_us.unwrap_or(klipolo_model::media::image::IMAGE_US)
+            }
+            _ => klipolo_model::media::image::IMAGE_US,
+        };
+        let before = so_far.get(&j);
+        let sound = match sound {
+            Some(name) => Some(animate::sound(self, name)?.asset.clone()),
+            None => before.and_then(|b| b.sound.clone()),
+        };
+        Ok(Animated {
+            motion: animate::animated(before.and_then(|b| b.motion.clone()), change, length, None),
+            sound,
+        })
+    }
+
     /// An addition tool's edit on `work` (a trim is planned apart, `trim::plan`).
     fn addition(&self, work: &Project, call: &ToolCall) -> Result<Edit, Refused> {
         match call {
@@ -797,7 +942,15 @@ impl Compiler<'_> {
                 preset,
                 at_us,
                 duration_us,
-            } => media::add_text(self, work, text, *preset, (*at_us, *duration_us)),
+                animation,
+            } => media::add_text(
+                self,
+                work,
+                text,
+                *preset,
+                (*at_us, *duration_us),
+                *animation,
+            ),
             ToolCall::AddImage {
                 file,
                 size,

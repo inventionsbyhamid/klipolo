@@ -11,6 +11,7 @@ use klipolo_model::media::image::IMAGE_US;
 use klipolo_model::media::music::MUSIC_VOLUME;
 use klipolo_model::media::text::{TEMPLATE_US, TEXT_US};
 
+use super::animate::ENTRANCES;
 use super::schema::{
     Word, list, nullable_boolean, nullable_number, nullable_words, seconds, string, words,
 };
@@ -256,6 +257,10 @@ pub(super) const ADD_TEXT: Tool = Tool {
             ),
             at_sec(),
             duration_sec(TEXT_SECS),
+            (
+                "animation",
+                nullable_words(&ENTRANCES, "How they come in. Null: fade."),
+            ),
         ]
     },
     read: |a| {
@@ -264,6 +269,7 @@ pub(super) const ADD_TEXT: Tool = Tool {
             preset: a.word("preset", &TEXT_PRESETS)?,
             at_us: a.nullable_time("atSec")?,
             duration_us: a.nullable_length("durationSec", &OVERLAY_SECS)?,
+            animation: a.nullable_word("animation", &ENTRANCES)?,
         })
     },
 };

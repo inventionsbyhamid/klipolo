@@ -19,8 +19,10 @@
 //! sit together; the tests check every schema is strict and every reader reads the fields its schema lists. Splitting
 //! by concern: `schema` (the pieces of a schema, and the words a tool takes), `args` (a call's arguments read field by
 //! field), `error` (why a call couldn't be read), `media` (the media tools and their words), `clips` (the clip and
-//! transition tools and their words), `recorded` (a recording's camera and recorded sounds, and their words).
+//! transition tools and their words), `recorded` (a recording's camera and recorded sounds, and their words),
+//! `animate` (a layer's animation and its words).
 
+pub mod animate;
 mod args;
 pub mod clips;
 mod error;
@@ -38,6 +40,7 @@ use klipolo_model::timeline::{CameraMode, FramingMode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
+pub use animate::{Emphasis, Entrance, Exit, LayerRef};
 use args::{Args, kind};
 pub use clips::{ClipRef, TransitionKind};
 pub use error::{Problem, ToolError};
@@ -131,12 +134,14 @@ pub enum ToolCall {
     },
     /// Play the library's sound `name` at each of `at_us` (at least one).
     AddSound { name: String, at_us: Vec<Us> },
-    /// Show `text` in text preset `preset` from `at_us` (None: the playhead) for `duration_us` (None: the default).
+    /// Show `text` in text preset `preset` from `at_us` (None: the playhead) for `duration_us` (None: the default),
+    /// coming in as `animation` says (None: a fade).
     AddText {
         text: String,
         preset: TextPreset,
         at_us: Option<Us>,
         duration_us: Option<Us>,
+        animation: Option<Entrance>,
     },
     /// Show the library's picture `file`; None for what the person left unsaid.
     AddImage {
@@ -159,6 +164,16 @@ pub enum ToolCall {
         prompt: String,
         at_us: Option<Us>,
         duration_us: Option<Us>,
+    },
+    /// Set how the layer `layer` names comes in, goes out and moves while it shows (None keeps each, a `None` word takes
+    /// it away), with the library's sound `sound` (a name, not yet resolved) as it comes in, or goes out when only its
+    /// exit is set.
+    Animate {
+        layer: LayerRef,
+        enter: Option<Entrance>,
+        exit: Option<Exit>,
+        emphasis: Option<Emphasis>,
+        sound: Option<String>,
     },
     /// Show the cameras of `clips` (refs from the context, not yet resolved; None: every clip with one) as `mode`, in
     /// `format` alone or in every format.
@@ -263,6 +278,7 @@ impl ToolCall {
             ToolCall::AddImage { .. } => "addImage",
             ToolCall::MakeSticker { .. } => "makeSticker",
             ToolCall::MakeTitleCard { .. } => "makeTitleCard",
+            ToolCall::Animate { .. } => "animate",
             ToolCall::SetCameraMode { .. } => "setCameraMode",
             ToolCall::AdjustCamera { .. } => "adjustCamera",
             ToolCall::DetachCamera { .. } => "detachCamera",
@@ -275,10 +291,17 @@ impl ToolCall {
         }
     }
 
-    /// Whether the call names a song or a video layer by its ref (`m1`, `v1`), which holds only while the layers stay
-    /// as the context named them (`context::layers_key`).
+    /// Whether the call names a song, a video layer, words or a picture by its ref (`m1`, `v1`, `t1`, `i1`), which holds
+    /// only while the layers stay as the context named them (`context::layers_key`).
     pub fn names_layer(&self) -> bool {
-        matches!(self, ToolCall::SetClip { clip: ClipRef::One(r), .. } if r.starts_with(['m', 'v']))
+        match self {
+            ToolCall::SetClip {
+                clip: ClipRef::One(r),
+                ..
+            } => r.starts_with(['m', 'v']),
+            ToolCall::Animate { layer, .. } => matches!(layer, LayerRef::One(_)),
+            _ => false,
+        }
     }
 
     /// Whether the call names a timeline time or a clip ref, which hold only while the main track's clips stay where
@@ -313,6 +336,7 @@ impl ToolCall {
             | ToolCall::FixCaptionWords { .. }
             | ToolCall::FollowSubject { .. }
             | ToolCall::BlurObjects { .. }
+            | ToolCall::Animate { .. }
             | ToolCall::Undo
             | ToolCall::AskUser { .. }
             | ToolCall::CannotDo { .. } => false,
@@ -632,6 +656,7 @@ const TOOLS: &[Tool] = &[
     media::ADD_IMAGE,
     media::MAKE_STICKER,
     media::MAKE_TITLE_CARD,
+    animate::ANIMATE,
     recorded::SET_CAMERA_MODE,
     recorded::ADJUST_CAMERA,
     recorded::DETACH_CAMERA,

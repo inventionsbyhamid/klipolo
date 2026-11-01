@@ -11,8 +11,8 @@
 use std::collections::BTreeSet;
 
 use klipolo_chat::tools::{
-    BubbleChange, CHAT_CAPTION_STYLES, ClipRef, FunctionCall, Moment, PictureSize, Position,
-    Problem, SizeStep, Sound, TextPreset, ToolCall, TransitionKind, tools,
+    BubbleChange, CHAT_CAPTION_STYLES, ClipRef, Entrance, FunctionCall, LayerRef, Moment,
+    PictureSize, Position, Problem, SizeStep, Sound, TextPreset, ToolCall, TransitionKind, tools,
 };
 use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
 use klipolo_model::layout::Anchor;
@@ -206,6 +206,7 @@ fn every_tool_schema_is_strict() {
             "addImage",
             "makeSticker",
             "makeTitleCard",
+            "animate",
             "setCameraMode",
             "adjustCamera",
             "detachCamera",
@@ -248,6 +249,7 @@ fn every_tool_schema_is_strict() {
             "addMusic.atSec",
             "addMusic.duck",
             "addMusic.volume",
+            "addText.animation",
             "addText.atSec",
             "addText.durationSec",
             "addImage.atSec",
@@ -259,6 +261,10 @@ fn every_tool_schema_is_strict() {
             "makeSticker.position",
             "makeTitleCard.atSec",
             "makeTitleCard.durationSec",
+            "animate.emphasis",
+            "animate.enter",
+            "animate.exit",
+            "animate.sound",
             "setCameraMode.clips",
             "setCameraMode.format",
             "adjustCamera.border",
@@ -494,6 +500,7 @@ fn parses_each_tool_from_spike_shaped_calls() {
                     preset: TextPreset::Title,
                     at_us: Some(0),
                     duration_us: Some(secs_to_us(3.0)),
+                    animation: None,
                 },
             ],
         ),
@@ -581,6 +588,16 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 source: Sound::Mic,
                 which: None,
                 clips: None,
+            }],
+        ),
+        (
+            "make the heart pop in with a pop sound",
+            vec![Animate {
+                layer: LayerRef::One("i1".into()),
+                enter: Some(Entrance::Pop),
+                exit: None,
+                emphasis: None,
+                sound: Some("Pop".into()),
             }],
         ),
     ];
@@ -1349,6 +1366,6 @@ fn the_prompt_is_one_fixed_text_and_small() {
     // 914 measured with the clip tools' line and the recordings' line.
     assert!(prompt_tokens <= 920, "prompt {prompt_tokens} tokens");
     // 4,099 measured with the clip tools (setClip, setTransition) and the recording tools (the camera's three and the
-    // recorded sounds' three, about 1,010 of them).
-    assert!(tools_tokens <= 4_150, "tools {tools_tokens} tokens");
+    // recorded sounds' three, about 1,010 of them); 4,381 with animate and the words' entrance.
+    assert!(tools_tokens <= 4_700, "tools {tools_tokens} tokens");
 }

@@ -510,6 +510,7 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         ToolCall::AddText { .. } => "The words are on screen.",
         ToolCall::MakeTitleCard { .. } => "The title is in.",
         ToolCall::MakeSticker { .. } => "The sticker is being drawn.",
+        ToolCall::Animate { .. } => "The animation is in.",
         ToolCall::FollowSubject { .. } | ToolCall::BlurObjects { .. } => "Working on it.",
         ToolCall::SetFormat { .. } => "The format is changed.",
         ToolCall::SetCaptions { .. } => "The captions are changed.",

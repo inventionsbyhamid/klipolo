@@ -601,6 +601,7 @@ fn every_call() -> Vec<(ToolCall, bool)> {
                 preset: TextPreset::Title,
                 at_us: None,
                 duration_us: None,
+                animation: None,
             },
             false,
         ),
@@ -610,8 +611,19 @@ fn every_call() -> Vec<(ToolCall, bool)> {
                 preset: TextPreset::Title,
                 at_us: Some(secs(3.0)),
                 duration_us: Some(secs(2.0)),
+                animation: Some(klipolo_chat::tools::Entrance::Pop),
             },
             true,
+        ),
+        (
+            ToolCall::Animate {
+                layer: klipolo_chat::tools::LayerRef::One("i1".into()),
+                enter: Some(klipolo_chat::tools::Entrance::Pop),
+                exit: None,
+                emphasis: None,
+                sound: Some("Pop".into()),
+            },
+            false,
         ),
         (
             ToolCall::AddImage {

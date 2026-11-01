@@ -524,6 +524,27 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
+          "animation": {
+            "description": "How they come in. Null: fade.",
+            "enum": [
+              "pop",
+              "fade",
+              "zoom",
+              "bounce",
+              "blur",
+              "typewriter",
+              "fromLeft",
+              "fromRight",
+              "fromTop",
+              "fromBottom",
+              "none",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "atSec": {
             "description": "Start. Null for the playhead.",
             "type": [
@@ -557,7 +578,8 @@
           "text",
           "preset",
           "atSec",
-          "durationSec"
+          "durationSec",
+          "animation"
         ],
         "type": "object"
       },
@@ -721,6 +743,90 @@
         "type": "object"
       },
       "name": "makeTitleCard"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "How a layer comes in, goes out and moves while shown, with a sound. Null keeps; none removes.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "emphasis": {
+            "description": "While shown.",
+            "enum": [
+              "pulse",
+              "shake",
+              "wiggle",
+              "none",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enter": {
+            "description": "typewriter: words only.",
+            "enum": [
+              "pop",
+              "fade",
+              "zoom",
+              "bounce",
+              "blur",
+              "typewriter",
+              "fromLeft",
+              "fromRight",
+              "fromTop",
+              "fromBottom",
+              "none",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exit": {
+            "description": "How it goes out.",
+            "enum": [
+              "pop",
+              "fade",
+              "zoom",
+              "toLeft",
+              "toRight",
+              "toTop",
+              "toBottom",
+              "none",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "layer": {
+            "description": "last (added by the call before), or a ref from Layers: t1, i1, v1.",
+            "type": "string"
+          },
+          "sound": {
+            "description": "A sound from Library, as it comes in.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "layer",
+          "enter",
+          "exit",
+          "emphasis",
+          "sound"
+        ],
+        "type": "object"
+      },
+      "name": "animate"
     },
     {
       "annotations": {

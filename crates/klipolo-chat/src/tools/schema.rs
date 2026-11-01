@@ -85,3 +85,8 @@ pub(super) fn object(properties: Vec<(&'static str, Value)>) -> Value {
         "additionalProperties": false,
     })
 }
+
+/// Text, or null.
+pub(super) fn nullable_string(description: &str) -> Value {
+    json!({"type": ["string", "null"], "description": description})
+}

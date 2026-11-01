@@ -25,6 +25,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use klipolo_analysis::providers::meta_chat::MetaChat;
+use klipolo_chat::tools::LayerRef;
 use klipolo_chat::{
     AnalysisState, Audience, ChatError, Inputs, Library, LibraryItem, MediaKind, PlanOut, SceneLog,
     SpeakerTurn, ToolCall, Turn, View, build_context, plan,
@@ -665,11 +666,29 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             preset,
             at_us,
             duration_us,
+            animation,
         } => json!({
             "text": text,
             "preset": preset.key(),
             "atSec": at_us.map(s),
             "durationSec": duration_us.map(s),
+            "animation": animation.map(|x| x.key()),
+        }),
+        ToolCall::Animate {
+            layer,
+            enter,
+            exit,
+            emphasis,
+            sound,
+        } => json!({
+            "layer": match layer {
+                LayerRef::Last => "last",
+                LayerRef::One(r) => r.as_str(),
+            },
+            "enter": enter.map(|x| x.key()),
+            "exit": exit.map(|x| x.key()),
+            "emphasis": emphasis.map(|x| x.key()),
+            "sound": sound,
         }),
         ToolCall::AddImage {
             file,

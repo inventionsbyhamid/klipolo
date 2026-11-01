@@ -1332,6 +1332,8 @@ fn make_sticker_becomes_a_job_not_an_op() {
             position: Position::TopRight,
             size: PictureSize::Medium,
             anchor: Some(talk_at(12.0)),
+            motion: None,
+            sound: None,
         })]
     );
     // The prompt names the picture in the library too: no dashes.
