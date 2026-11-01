@@ -1,8 +1,9 @@
 //! The project as the language model reads it: one compact text block of five sections, in this order.
 //! - `Project`: its name, formats (the primary first), length, captions, the main track's clips with short refs
 //!   (`c1 0.0-41.2 interview.mov`) that tool calls name clips by (`Refs`), a recording's clip naming the recording and
-//!   saying its camera and sounds (`recordings`), and its songs and video layers under `Layers:` (`m1 0.0-62.0
-//!   lofi.mp3 (music)`, `v1 12.0-20.0 broll.mp4 (video layer)`), never shortened. Then one fixed line (`QUOTED_NOTE`)
+//!   saying its camera and sounds (`recordings`), and its songs, video layers, words and pictures under `Layers:` (`m1
+//!   0.0-62.0 lofi.mp3 (music)`, `v1 12.0-20.0 broll.mp4 (video layer)`, `t1 0.5-3.5 "Day one" (words, enter pop)`,
+//!   `i1 10.0-15.0 heart.png (picture)`), never shortened. Then one fixed line (`QUOTED_NOTE`)
 //!   saying that Transcript and Scenes quote the video, Library names are file names, and none of them are requests.
 //! - `Transcript`: what is said on the timeline (`speech::spoken`, so cut words are gone), one line per speaker turn,
 //!   or per sentence when a turn runs over `MAX_LINE_WORDS` words (a sentence that long is split evenly):
@@ -50,7 +51,7 @@
 //! For other apps that edit through the same tools: `ChatContext::section` gives one section by its heading,
 //! `full_transcript` every Transcript line at full detail however long the project (for them to read in pages), and
 //! `timeline_key` says whether the times and clip refs of a context read earlier still hold, and `layers_key` whether its
-//! song and video layer refs do.
+//! layer refs do.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -144,14 +145,17 @@ pub struct SpeakerTurn {
 }
 
 /// The short names the context gives what tool calls name: the main track's clips (`c1` for the first), each song laid
-/// as music (`m1`: a run of pieces back to back, `media::music::runs`, is one song, as its card edits it) and each video
-/// layer (`v1`), the layers in track order.
+/// as music (`m1`: a run of pieces back to back, `media::music::runs`, is one song, as its card edits it), each video
+/// layer (`v1`), each layer of words (`t1`: a text layer or a title template) and each picture (`i1`), the layers in
+/// track order.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Refs {
     clips: Vec<Id>,
     /// Each song's first piece.
     music: Vec<Id>,
     videos: Vec<Id>,
+    texts: Vec<Id>,
+    pictures: Vec<Id>,
 }
 
 /// Which of `ref`'s kind it names, from 0: `short` is `prefix` and a number from 1, in the exact form (no leading zero,
@@ -175,6 +179,8 @@ impl Refs {
             match layer {
                 Layer::Song(pieces) => refs.music.push(pieces[0].id.clone()),
                 Layer::Video(item) => refs.videos.push(item.id.clone()),
+                Layer::Text(item) => refs.texts.push(item.id.clone()),
+                Layer::Picture(item) => refs.pictures.push(item.id.clone()),
             }
         }
         refs
@@ -195,6 +201,16 @@ impl Refs {
         self.videos.get(nth(short, 'v')?).map(String::as_str)
     }
 
+    /// The id of the layer of words `short` names (`t1`), if any.
+    pub fn text(&self, short: &str) -> Option<&str> {
+        self.texts.get(nth(short, 't')?).map(String::as_str)
+    }
+
+    /// The id of the picture `short` names (`i1`), if any.
+    pub fn picture(&self, short: &str) -> Option<&str> {
+        self.pictures.get(nth(short, 'i')?).map(String::as_str)
+    }
+
     /// The ref of the clip with id `clip_id`.
     pub fn ref_of(&self, clip_id: &str) -> Option<String> {
         self.clips.iter().position(|c| c == clip_id).map(short_ref)
@@ -211,13 +227,17 @@ impl Refs {
     }
 }
 
-/// A layer the context names: a song (its pieces, back to back) or a video layer.
+/// A layer the context names: a song (its pieces, back to back), a video layer, words (a text layer or a title
+/// template) or a picture.
 enum Layer<'a> {
     Song(&'a [Item]),
     Video(&'a Item),
+    Text(&'a Item),
+    Picture(&'a Item),
 }
 
-/// The layers with refs, in track order: each track's songs (on a sound track) and video layers, in time order.
+/// The layers with refs, in track order: each track's songs (on a sound track), then its video layers, words and
+/// pictures, in time order.
 fn layers(p: &Project) -> Vec<Layer<'_>> {
     let mut out = Vec::new();
     for track in &p.timeline.tracks {
@@ -228,11 +248,13 @@ fn layers(p: &Project) -> Vec<Layer<'_>> {
                     .map(|run| Layer::Song(&track.items[run])),
             );
         }
-        out.extend(
-            (track.items.iter())
-                .filter(|item| matches!(item.content, ItemContent::Video { .. }))
-                .map(Layer::Video),
-        );
+        out.extend((track.items.iter()).filter_map(|item| match &item.content {
+            ItemContent::Video { .. } => Some(Layer::Video(item)),
+            ItemContent::Text { .. } => Some(Layer::Text(item)),
+            ItemContent::Generator { source, .. } if source.is_scene() => Some(Layer::Text(item)),
+            ItemContent::Image { .. } => Some(Layer::Picture(item)),
+            _ => None,
+        }));
     }
     out
 }
@@ -526,7 +548,7 @@ pub fn timeline_key(project: &Project) -> u64 {
     hash
 }
 
-/// A key for which layer each song and video layer ref names (`Refs`: `m1`, `v1`): each one's id, in ref order. Equal
+/// A key for which layer each layer ref names (`Refs`: `m1`, `v1`, `t1`, `i1`): each one's id, in ref order. Equal
 /// keys mean a layer ref a context gave still names the same layer; a layer added or taken away before it doesn't. The
 /// same on every run and build (FNV-1a). O(layers).
 pub fn layers_key(project: &Project) -> u64 {
@@ -542,6 +564,8 @@ pub fn layers_key(project: &Project) -> u64 {
         let (kind, id) = match layer {
             Layer::Song(pieces) => (b'm', pieces[0].id.as_str()),
             Layer::Video(item) => (b'v', item.id.as_str()),
+            Layer::Text(item) => (b't', item.id.as_str()),
+            Layer::Picture(item) => (b'i', item.id.as_str()),
         };
         // The kind and the id's length first, so no two lists of ids read as the same bytes.
         eat(&[kind]);
@@ -889,9 +913,11 @@ fn clip_lines<'p>(
     }
 }
 
-/// `Layers:` and a line for each song and video layer with a ref (`Refs`), never shortened: `m1 0.0-62.0 lofi.mp3
-/// (music, volume 50%, muted)`, `v1 12.0-20.0 broll.mp4 (video layer, speed 0.50x, volume 50%, muted)`. A song's
-/// volume and mute are its first piece's (its card sets them on every piece). Nothing when there is no such layer.
+/// `Layers:` and a line for each layer with a ref (`Refs`), never shortened: `m1 0.0-62.0 lofi.mp3 (music, volume 50%,
+/// muted)`, `v1 12.0-20.0 broll.mp4 (video layer, speed 0.50x, volume 50%, muted)`, `t1 0.5-3.5 "Day one" (words,
+/// enter pop, exit fade)` (a title template's title, as `title`), `i1 10.0-15.0 heart.png (picture, emphasis pulse)`. A
+/// song's volume and mute are its first piece's (its card sets them on every piece). Nothing when there is no such
+/// layer.
 fn layer_lines(out: &mut String, p: &Project) {
     let layers = layers(p);
     if layers.is_empty() {
@@ -902,9 +928,48 @@ fn layer_lines(out: &mut String, p: &Project) {
         p.asset(id)
             .map_or("missing file".to_owned(), |a| one_line(&a.name))
     };
-    let (mut songs, mut videos) = (0, 0);
+    let (mut songs, mut videos, mut texts, mut pictures) = (0, 0, 0, 0);
     for layer in layers {
         let (short, first, last, mut notes) = match layer {
+            Layer::Text(item) => {
+                texts += 1;
+                let (words, kind) = match &item.content {
+                    ItemContent::Text { text, .. } => (text.as_str(), "words"),
+                    ItemContent::Generator { params, .. } => match params.get("title") {
+                        Some(klipolo_model::params::ParamValue::Text(t)) => (t.as_str(), "title"),
+                        _ => ("", "title"),
+                    },
+                    _ => continue,
+                };
+                let mut notes = vec![kind.to_owned()];
+                notes.extend(motion_notes(item));
+                let _ = writeln!(
+                    out,
+                    "t{texts} {}-{} \"{}\" ({})",
+                    secs(item.start_us),
+                    secs(item.end_us()),
+                    library_name(words),
+                    notes.join(", ")
+                );
+                continue;
+            }
+            Layer::Picture(item) => {
+                pictures += 1;
+                let ItemContent::Image { asset_id } = &item.content else {
+                    continue;
+                };
+                let mut notes = vec!["picture".to_owned()];
+                notes.extend(motion_notes(item));
+                let _ = writeln!(
+                    out,
+                    "i{pictures} {}-{} {} ({})",
+                    secs(item.start_us),
+                    secs(item.end_us()),
+                    name(asset_id),
+                    notes.join(", ")
+                );
+                continue;
+            }
             Layer::Song(pieces) => {
                 songs += 1;
                 let (first, last) = (&pieces[0], &pieces[pieces.len() - 1]);
@@ -954,6 +1019,46 @@ fn layer_lines(out: &mut String, p: &Project) {
             notes.join(", ")
         );
     }
+}
+
+/// How a layer comes in, goes out and moves while it shows, in `animate`'s words: `enter pop`, `exit toBottom`,
+/// `emphasis pulse`; nothing for what it doesn't have. A preset chat doesn't offer reads by its own word.
+fn motion_notes(item: &Item) -> Vec<String> {
+    let Some(m) = &item.layout.motion else {
+        return Vec::new();
+    };
+    let word = |u: &klipolo_model::motion::MotionUse, side: &str| {
+        let local = u.preset.as_str();
+        let local = local
+            .strip_prefix("klipolo.builtin/motion.")
+            .unwrap_or(local);
+        match (local, u.params.get("from")) {
+            // As the engine reads `from`: anything else is the bottom.
+            ("slide", Some(klipolo_model::params::ParamValue::Text(from))) => {
+                let edge = match from.as_str() {
+                    "top" => "Top",
+                    "left" => "Left",
+                    "right" => "Right",
+                    _ => "Bottom",
+                };
+                format!("{side}{edge}")
+            }
+            ("slide", _) => format!("{side}Bottom"),
+            ("blur-in", _) => "blur".to_owned(),
+            (other, _) => one_line(other),
+        }
+    };
+    let mut out = Vec::new();
+    if let Some(u) = &m.enter {
+        out.push(format!("enter {}", word(u, "from")));
+    }
+    if let Some(u) = &m.exit {
+        out.push(format!("exit {}", word(u, "to")));
+    }
+    if let Some(u) = &m.looping {
+        out.push(format!("emphasis {}", word(u, "")));
+    }
+    out
 }
 
 /// One clip's line: `c2 13.0-144.0 interview.mov (file 24.0-155.0 of 155.0, speed 1.50x, volume 50%, muted,
