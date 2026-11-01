@@ -385,7 +385,7 @@ async fn a_repeating_hardware_failure_can_finish_in_compatibility_mode() {
     let (outcome, events) = run_short(&fake, batch(dir.path()).0).await;
     assert!(matches!(outcome, Outcome::Paused), "{events:?}");
     assert!(
-        matches!(events.last(), Some(ExportEvent::Paused { message: Some(m), compatibility: Some(_) })
+        matches!(events.last(), Some(ExportEvent::Paused { message: Some(Said::Text(m)), compatibility: Some(_) })
         if m == DECODE_FAILED)
     );
     let job = the_job(dir.path());
@@ -663,7 +663,7 @@ async fn a_disk_that_doesnt_answer_pauses_naming_the_file() {
         "{message}"
     );
     assert!(events.contains(&ExportEvent::Paused {
-        message: Some(message.clone()),
+        message: Some(Said::Text(message.clone())),
         compatibility: None,
     }));
     assert!(!events.iter().any(|e| matches!(e, ExportEvent::Retrying)));
@@ -894,6 +894,35 @@ fn a_job_freezes_its_captions_and_never_runs_without_them() {
     );
     std::fs::remove_file(job.dir.join(CAPTIONS_FILE)).unwrap();
     assert!(ExportJob::open(&job.dir).is_err());
+}
+
+/// A job of a project that isn't open is judged by the project as saved, with the words it froze (what was said in a
+/// project's files is heard again only while it is open): unchanged, it is current without any speech at hand, its
+/// caption file included; a changed timeline or caption style makes it stale; a job whose frozen pages are gone is
+/// never called current.
+#[test]
+fn a_closed_projects_job_is_judged_by_its_saved_content_with_the_words_it_froze() {
+    use klipolo_engine::export::job::CAPTIONS_FILE;
+    use klipolo_model::captions::sidecar::CaptionFile;
+
+    let (p, sp) = story("caption.bold", &[("hello", 0.5, 0.9)]);
+    let out = tempfile::tempdir().unwrap();
+    let job = ExportJob::create_for_test_with(out.path(), &p, Arc::new(sp), Some(CaptionFile::Srt));
+    assert!(job.is_current_as_saved(&p), "nothing changed");
+    let mut renamed = p.clone();
+    renamed.name = "Story, final".into();
+    assert!(
+        job.is_current_as_saved(&renamed),
+        "a new name renders the same video"
+    );
+    let mut cut = p.clone();
+    cut.timeline.main[0].speed = 2.0;
+    assert!(!job.is_current_as_saved(&cut), "the timeline changed");
+    let mut restyled = p.clone();
+    restyled.captions.enabled = !restyled.captions.enabled;
+    assert!(!job.is_current_as_saved(&restyled), "the captions changed");
+    std::fs::remove_file(job.dir.join(CAPTIONS_FILE)).unwrap();
+    assert!(!job.is_current_as_saved(&p), "its pages are gone");
 }
 
 /// An export draws the pages frozen in its job, read back as they were when it is resumed, whatever the

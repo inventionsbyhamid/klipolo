@@ -352,6 +352,45 @@ fn a_cropped_clips_path_sizes_its_crop_in_the_whole_file() {
 }
 
 #[test]
+fn a_crop_that_keeps_one_guest_follows_that_guest() {
+    let mut p = project();
+    // A two-person interview cropped to its right half: the bigger guest on the left is cut off.
+    p.timeline.main[0].crop = Some(Crop {
+        left: 0.5,
+        top: 0.0,
+        right: 0.0,
+        bottom: 0.0,
+    });
+    let clip = &p.timeline.main[0];
+    let guest = |id: u32, cx: f64, width: f64| TrackedBox {
+        id,
+        left: cx - width / 2.0,
+        top: 0.15,
+        right: cx + width / 2.0,
+        bottom: 1.0,
+        confidence: Some(0.9),
+    };
+    let range = RangeUs {
+        start: s(30.0),
+        end: s(40.0),
+    };
+    let both = SubjectTrack {
+        frames: (0..20)
+            .map(|frame| TrackedFrame {
+                frame,
+                boxes: vec![guest(1, 0.3, 0.3), guest(2, 0.75, 0.15)],
+            })
+            .collect(),
+        ..track(range, 0.5)
+    };
+    let path = clip_path(&p, clip, Portrait, &footage(&p, clip).unwrap(), &[both]).unwrap();
+    for at in [30.0, 35.0, 39.5] {
+        let x = path.centre_at(s(at)).unwrap().0;
+        assert!((x - 0.75).abs() < 0.02, "at {at} s: {x} in {path:?}");
+    }
+}
+
+#[test]
 fn a_format_the_person_set_to_fit_is_never_followed() {
     let mut p = project();
     let all = [Landscape, Portrait, Square];
@@ -458,7 +497,7 @@ fn a_clips_people_are_named_left_to_right_with_their_voices_and_share() {
     let foot = footage(&p, clip).unwrap();
     let tracks = [two(foot.range)];
     let (turns, heard) = interview();
-    let people = clip_people(&foot, &tracks, &turns, &heard);
+    let people = clip_people(clip, &foot, &tracks, &turns, &heard);
     assert_eq!(
         people,
         [
@@ -473,7 +512,7 @@ fn a_clips_people_are_named_left_to_right_with_their_voices_and_share() {
         ]
     );
     // One person: nobody to choose between.
-    assert!(clip_people(&foot, &[track(foot.range, 0.4)], &turns, &heard).is_empty());
+    assert!(clip_people(clip, &foot, &[track(foot.range, 0.4)], &turns, &heard).is_empty());
 }
 
 #[test]

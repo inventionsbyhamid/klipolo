@@ -1,8 +1,10 @@
 //! The speaker's path for one format's crop, from a tracker's boxes (`TrackedFrame`s, each with its time in the clip's
 //! source time: from one tracked stretch or several):
 //!
+//! - **The area** is what the clip's crop keeps of the picture (all of it when uncropped). The caller leaves out anyone
+//!   whose middle is outside it; the subject is picked near its middle, and the crop stays inside it.
 //! - **Shots** run between the cuts. Each picks its own subject (`main_subject`): the person with the most area near
-//!   the middle over the shot, so the largest, most central one. Someone else who is there for most of the shot and at
+//!   the area's middle over the shot, so the largest, most central one. Someone else who is there for most of the shot and at
 //!   least half as big joins them while both fit in the crop (a two-person shot is framed together).
 //! - **The aim** on a frame is the subject's middle across and, down, a crop whose top sits just above their head
 //!   (`HEADROOM`): their head and upper body. Between two frames it moves straight from one to the next; while the
@@ -14,7 +16,7 @@
 //! - **Keys** every `KEY_STEP_US` from each shot's start while the crop moves, and only the first and last of a hold
 //!   (the crop's centre goes straight between them, so it draws the same), so a long still talk stays a few keys a
 //!   shot. A shot's first key is a cut, so the crop jumps there and never pans from one shot to the next. A shot with
-//!   nobody in it holds the middle.
+//!   nobody in it holds the area's middle.
 //! - **Two or more people** (`people`: the main subject and those framed with them, left to right) who don't all fit
 //!   the crop: it keeps whoever is speaking (`Talk`). A new speaker takes the frame only after `MIN_TALK_US` of talk
 //!   (a "mm-hm" never does), at least `MIN_HOLD_US` after the last switch. Short turns back and forth, or talk over
@@ -26,6 +28,7 @@
 
 use klipolo_cursor::smooth::step;
 use klipolo_model::fill_focus::{FocusKey, FocusPath, Keep, MAX_PEOPLE, Who};
+use klipolo_model::layout::BoxN;
 use klipolo_model::time::Us;
 
 use crate::providers::{TrackedBox, TrackedFrame};
@@ -86,18 +89,33 @@ pub struct PathInput<'a> {
     pub cuts: &'a [Us],
     /// The crop's size, as parts of the picture's width and height.
     pub crop: (f64, f64),
+    /// What the clip's crop keeps of the picture, where the file has it (`FULL` when uncropped): the subject is picked
+    /// near its middle and the crop stays inside it.
+    pub area: BoxN,
     /// Who on screen speaks when, in the same time; empty when nobody was heard.
     pub talk: &'a [Talk],
     /// Who to keep in frame where two or more people are in a shot.
     pub keep: &'a Keep,
 }
 
+/// The whole picture.
+pub const FULL: BoxN = BoxN {
+    x: 0.0,
+    y: 0.0,
+    w: 1.0,
+    h: 1.0,
+};
+
 /// The path, or None when nobody was found on any frame.
 pub fn focus_path(input: &PathInput) -> Option<FocusPath> {
     if input.end_us <= input.start_us {
         return None;
     }
-    let crop = (sane_side(input.crop.0), sane_side(input.crop.1));
+    let area = sane_area(input.area);
+    let crop = (
+        sane_side(input.crop.0).min(area.w),
+        sane_side(input.crop.1).min(area.h),
+    );
     let timed = input.frames;
     let shots = shots(input.start_us, input.end_us, input.cuts);
     // Fewer keys a second on very long footage, to stay within the path's cap.
@@ -114,11 +132,12 @@ pub fn focus_path(input: &PathInput) -> Option<FocusPath> {
             .copied()
             .collect();
         let plain: Vec<TrackedFrame> = in_shot.iter().map(|(_, f)| (*f).clone()).collect();
-        let ranked = people(&plain);
+        let ranked = people_in(&plain, area);
         let cast = Cast {
             frames: &in_shot,
             ranked: &ranked,
             crop,
+            area,
         };
         if let Some(plan) = cast.plan((start, end), input.talk, input.keep, last) {
             last = plan.last;
@@ -134,9 +153,9 @@ pub fn focus_path(input: &PathInput) -> Option<FocusPath> {
                 let aims = if own.is_empty() { &all } else { &own };
                 let first = keys.len();
                 if aims.is_empty() {
-                    keys.push(key(from, (0.5, 0.5)));
+                    keys.push(key(from, middle(area)));
                 } else {
-                    follow(aims, (from, to), crop, key_step, &mut keys);
+                    follow(aims, (from, to), (crop, area), key_step, &mut keys);
                 }
                 if first > 0 {
                     keys[first].cut = true;
@@ -144,13 +163,13 @@ pub fn focus_path(input: &PathInput) -> Option<FocusPath> {
             }
             continue;
         }
-        let aims = aims(&in_shot, crop);
+        let aims = aims(&in_shot, crop, area);
         found |= !aims.is_empty();
         let first = keys.len();
         if aims.is_empty() {
-            keys.push(key(start, (0.5, 0.5)));
+            keys.push(key(start, middle(area)));
         } else {
-            follow(&aims, (start, end), crop, key_step, &mut keys);
+            follow(&aims, (start, end), (crop, area), key_step, &mut keys);
         }
         if first > 0 {
             keys[first].cut = true;
@@ -162,13 +181,18 @@ pub fn focus_path(input: &PathInput) -> Option<FocusPath> {
 /// The ids of a shot's people, left to right: its main subject and those framed with them (`companions`), at most
 /// `MAX_PEOPLE` (the largest). None when nobody is there.
 pub fn people(frames: &[TrackedFrame]) -> Vec<u32> {
-    let Some(main) = main_subject(frames) else {
+    people_in(frames, FULL)
+}
+
+/// [`people`] where the clip's crop keeps `area`: its main subject picked near the area's middle.
+pub fn people_in(frames: &[TrackedFrame], area: BoxN) -> Vec<u32> {
+    let Some(main) = main_subject(frames, area) else {
         return Vec::new();
     };
     let stats = stats(frames);
-    let area = |id: u32| (stats.iter().find(|s| s.id == id)).map_or(0.0, |s| s.area / s.n as f64);
+    let size = |id: u32| (stats.iter().find(|s| s.id == id)).map_or(0.0, |s| s.area / s.n as f64);
     let mut others = companions(frames, main);
-    others.sort_by(|a, b| area(*b).total_cmp(&area(*a)).then(a.cmp(b)));
+    others.sort_by(|a, b| size(*b).total_cmp(&size(*a)).then(a.cmp(b)));
     others.truncate(usize::from(MAX_PEOPLE) - 1);
     let mut ids = vec![main];
     ids.extend(others);
@@ -263,6 +287,7 @@ struct Cast<'a> {
     frames: &'a [(Us, &'a TrackedFrame)],
     ranked: &'a [u32],
     crop: (f64, f64),
+    area: BoxN,
 }
 
 /// One stretch of speech that may take the frame: from, to, and who wants it (one person, or several talking).
@@ -322,7 +347,7 @@ impl Cast<'_> {
         if speaker_only && (talk.is_empty() || all_fit) {
             return None;
         }
-        let main = main_subject(&self.plain())
+        let main = main_subject(&self.plain(), self.area)
             .and_then(|id| self.ranked.iter().position(|r| *r == id))
             .map_or(1, |i| i as u8 + 1);
         let mut targets: Vec<(Us, Target)> = Vec::new();
@@ -443,8 +468,8 @@ impl Cast<'_> {
                 continue;
             };
             let crop = self.crop;
-            let y = if crop.1 >= 0.999 {
-                0.5
+            let y = if crop.1 >= self.area.h * 0.999 {
+                middle(self.area).1
             } else {
                 group.top - HEADROOM * crop.1 + crop.1 / 2.0
             };
@@ -608,16 +633,18 @@ fn claims(talk: &[Talk]) -> Vec<Claim> {
     claims
 }
 
-/// The id of the shot's main subject in `frames`: the most area near the middle across the frames (a box's area times
-/// how near its middle is to the picture's, from 1 there to 0.5 at an edge). None when nobody is there.
-pub fn main_subject(frames: &[TrackedFrame]) -> Option<u32> {
+/// The id of the shot's main subject in `frames`: the most area near the middle of `area` across the frames (a box's
+/// area times how near its middle is to `area`'s, from 1 there to 0.5 at its edge). None when nobody is there.
+pub fn main_subject(frames: &[TrackedFrame], area: BoxN) -> Option<u32> {
+    let mid = area.x + area.w / 2.0;
     let mut scores: Vec<(u32, f64)> = Vec::new();
     for b in frames
         .iter()
         .flat_map(|f| f.boxes.iter())
         .filter(|b| sure(b))
     {
-        let score = b.width() * b.height() * (1.0 - (b.centre_x() - 0.5).abs());
+        let near = (1.0 - (b.centre_x() - mid).abs() / area.w).max(0.0);
+        let score = b.width() * b.height() * near;
         match scores.iter_mut().find(|(id, _)| *id == b.id) {
             Some((_, s)) => *s += score,
             None => scores.push((b.id, score)),
@@ -631,6 +658,24 @@ pub fn main_subject(frames: &[TrackedFrame]) -> Option<u32> {
 
 fn sure(b: &TrackedBox) -> bool {
     b.confidence.is_none_or(|c| c >= MIN_CONFIDENCE) && b.width() > 0.0 && b.height() > 0.0
+}
+
+/// `area` when it is a part of the picture with some size, else the whole picture.
+fn sane_area(area: BoxN) -> BoxN {
+    let ok = [area.x, area.y, area.w, area.h]
+        .iter()
+        .all(|v| v.is_finite())
+        && area.w > 1e-3
+        && area.h > 1e-3
+        && area.x >= 0.0
+        && area.y >= 0.0
+        && area.x + area.w <= 1.0 + 1e-9
+        && area.y + area.h <= 1.0 + 1e-9;
+    if ok { area } else { FULL }
+}
+
+fn middle(area: BoxN) -> (f64, f64) {
+    (area.x + area.w / 2.0, area.y + area.h / 2.0)
 }
 
 fn sane_side(side: f64) -> f64 {
@@ -652,9 +697,9 @@ pub fn shots(start: Us, end: Us, cuts: &[Us]) -> Vec<(Us, Us)> {
 }
 
 /// The aim on each frame of a shot where its subject (and anyone framed with them) is: (time, x, y).
-fn aims(frames: &[(Us, &TrackedFrame)], crop: (f64, f64)) -> Vec<(Us, f64, f64)> {
+fn aims(frames: &[(Us, &TrackedFrame)], crop: (f64, f64), area: BoxN) -> Vec<(Us, f64, f64)> {
     let plain: Vec<TrackedFrame> = frames.iter().map(|(_, f)| (*f).clone()).collect();
-    let Some(main) = main_subject(&plain) else {
+    let Some(main) = main_subject(&plain, area) else {
         return Vec::new();
     };
     let together = companions(&plain, main);
@@ -682,8 +727,8 @@ fn aims(frames: &[(Us, &TrackedFrame)], crop: (f64, f64)) -> Vec<(Us, f64, f64)>
             }
         }
         let x = group.centre_x();
-        let y = if crop.1 >= 0.999 {
-            0.5
+        let y = if crop.1 >= area.h * 0.999 {
+            middle(area).1
         } else {
             group.top - HEADROOM * crop.1 + crop.1 / 2.0
         };
@@ -737,20 +782,23 @@ fn aim_at(aims: &[(Us, f64, f64)], t: Us) -> (f64, f64) {
     }
 }
 
-/// One axis of the crop as it follows.
+/// One axis of the crop as it follows, inside `lo` to `lo + room`.
 struct Axis {
     c: f64,
     v: f64,
     size: f64,
+    lo: f64,
+    room: f64,
     /// Moving toward the aim (+1 or -1), or at rest (0).
     moving: f64,
 }
 
 impl Axis {
-    /// The crop's centre kept where the crop stays inside the picture.
+    /// The crop's centre kept where the crop stays inside its area.
     fn inside(&self, c: f64) -> f64 {
         let half = self.size / 2.0;
-        c.clamp(half, 1.0 - half)
+        let lo = self.lo + half;
+        c.clamp(lo, (self.lo + self.room - half).max(lo))
     }
 
     fn step(&mut self, aim: f64, dt: f64) {
@@ -786,7 +834,7 @@ impl Axis {
 fn follow(
     aims: &[(Us, f64, f64)],
     (start, end): (Us, Us),
-    crop: (f64, f64),
+    (crop, area): ((f64, f64), BoxN),
     key_step: Us,
     keys: &mut Vec<FocusKey>,
 ) {
@@ -805,12 +853,16 @@ fn follow(
         c: 0.5,
         v: 0.0,
         size: crop.0,
+        lo: area.x,
+        room: area.w,
         moving: 0.0,
     };
     let mut y = Axis {
         c: 0.5,
         v: 0.0,
         size: crop.1,
+        lo: area.y,
+        room: area.h,
         moving: 0.0,
     };
     x.c = x.inside(opening.0);

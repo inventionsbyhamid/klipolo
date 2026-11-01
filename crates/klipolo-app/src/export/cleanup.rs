@@ -1,24 +1,22 @@
-//! Nothing half made outlives an export. Klipolo doesn't resume one, so every job folder that won't finish goes, and
-//! only Klipolo's own:
-//! - a run that ends without its files deletes its job (and the folder a Cancel set aside) on the spot, then the
-//!   `.jobs` folder when it is empty (`finish_run`);
-//! - quitting while one runs stops it and deletes its folder on the thread that quits, before the process can end
-//!   (`clear_on_quit`): a background delete could be cut off;
-//! - a crash or a force quit leaves one behind: the next start, and the next launch for the usual folder, sweep it
-//!   (`tidy_jobs`, `sweep_folder`).
+//! What an export leaves on the disk. An export that doesn't finish keeps its job and every finished part, so it can
+//! resume from them: one that fails or pauses (a full disk, a disk gone, a busy encoder, a graphics processor that
+//! stopped), one Quit pauses, and one a crash, a force quit or the Mac shutting down cut off. Only what can't resume
+//! goes, and only Klipolo's own:
+//! - Cancel discards its job all at once (the engine sets it aside and deletes it on its own thread); as the run ends
+//!   the folder it set aside goes here too, then `.jobs` when it is empty (`finish_run`);
+//! - a finished run's job is the engine's to delete; `.jobs` goes when it is empty;
+//! - Discard deletes a kept job (`jobs::discard`);
+//! - at the next start, and the next launch for the usual folder, the folders of job creations and discards a crash
+//!   cut off (`<id>.<pid>.new`, `.gone`), once their process is gone (`jobs::tidy_staging`).
 //!
-//! What counts as Klipolo's leftover job: a folder in `.jobs` named by a job id, holding a `job.json`, that hasn't
-//! changed for 10 minutes (a running worker writes its parts and manifest all the time, so another instance's live job
-//! is never one). Anything else there (another tool's folder, a file) is left alone, and so are the folders of job
-//! creations and discards in progress (`<id>.<pid>.new`, `.gone`): `jobs::tidy_staging` removes those once their
-//! process is gone.
+//! Kept jobs are never swept, a crash's or one whose project changed since included: the export dialog lists them to
+//! resume or discard.
 
 use std::io;
 use std::path::Path;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
-use klipolo_engine::export::job::JOB_FILE;
-use klipolo_engine::export::jobs::{discarded_name, jobs_root, tidy_staging, valid_job_id};
+use klipolo_engine::export::jobs::{discarded_name, jobs_root, tidy_staging};
 
 use super::ExportState;
 
@@ -37,105 +35,44 @@ fn remove_now(dir: &Path) {
     }
 }
 
-/// Job `job` in `dir` (a job folder), and the folder a Cancel of it set aside in this process (`discarded_name`),
-/// deleted now.
-fn remove_job(dir: &Path, job: Option<&str>) {
-    remove_now(dir);
-    if let (Some(root), Some(job)) = (dir.parent(), job) {
-        remove_now(&root.join(discarded_name(job)));
-    }
-}
-
 /// `.jobs` beside `dir`'s job, if nothing is left in it (`remove_dir` refuses a folder that isn't empty).
 fn remove_root_if_empty(root: &Path) {
     let _ = std::fs::remove_dir(root);
 }
 
-/// After a run that ended (`finished`: its files are in place, and the engine has deleted its job): a run that didn't
-/// finish has its job folder `dir` and the folder a Cancel set aside deleted now; then `.jobs` goes if it is empty.
-pub fn finish_run(dir: &Path, job: &str, finished: bool) {
-    if !finished {
-        remove_job(dir, Some(job));
+/// After a run that ended: a cancelled one (`cancelled`) has its job folder `dir` and the folder Cancel set aside in
+/// this process (`discarded_name`) deleted now; any other keeps its job (finished, the engine has deleted it; paused or
+/// failed, it resumes). Then `.jobs` goes if it is empty.
+pub fn finish_run(dir: &Path, job: &str, cancelled: bool) {
+    if cancelled {
+        remove_now(dir);
+        if let Some(root) = dir.parent() {
+            remove_now(&root.join(discarded_name(job)));
+        }
     }
     if let Some(root) = dir.parent() {
         remove_root_if_empty(root);
     }
 }
 
-/// Quitting while an export runs (the guard's Quit, or a quit nothing can hold): stops the run, deletes its job folder
-/// at once, waits up to `wait` for the run to let go of the slot, and deletes whatever its worker wrote meanwhile.
-/// Blocking: it runs on the thread that quits, so the process can't end before the files are gone.
-pub fn clear_on_quit(state: &ExportState, wait: Duration) {
-    let Some(stopped) = state.stop_for_quit() else {
+/// Quitting while an export runs (the guard's Quit, or a quit nothing can hold, the Mac shutting down included): pauses
+/// the run, so its job and finished parts are kept and it resumes next time (`ExportState::pause_for_quit`), and waits up
+/// to `wait` for it to stop at a part and let go of the slot. Past that the app goes anyway: its worker stops with it,
+/// and the job lists as stopped, its finished parts intact. Blocking: it runs on the thread that quits.
+pub fn pause_on_quit(state: &ExportState, wait: Duration) {
+    if state.pause_for_quit().is_none() {
         return;
-    };
-    let job = stopped.job.as_deref();
-    if let Some(dir) = &stopped.dir {
-        remove_job(dir, job);
     }
     let until = Instant::now() + wait;
     while state.is_running() && Instant::now() < until {
         std::thread::sleep(Duration::from_millis(20));
     }
-    if let Some(dir) = &stopped.dir {
-        remove_job(dir, job);
-        if let Some(root) = dir.parent() {
-            remove_root_if_empty(root);
-        }
-    }
 }
 
-/// The newest change in a job folder: its own, its files' and those of its format folders (where the worker writes
-/// its parts).
-fn last_change(dir: &Path) -> Option<SystemTime> {
-    let mut newest = std::fs::metadata(dir).and_then(|m| m.modified()).ok();
-    let mut seen = |m: Option<SystemTime>| {
-        if m > newest {
-            newest = m;
-        }
-    };
-    for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
-        let meta = entry.metadata().ok();
-        seen(meta.as_ref().and_then(|m| m.modified().ok()));
-        if meta.is_some_and(|m| m.is_dir()) {
-            for inner in std::fs::read_dir(entry.path())
-                .into_iter()
-                .flatten()
-                .flatten()
-            {
-                seen(inner.metadata().and_then(|m| m.modified()).ok());
-            }
-        }
-    }
-    newest
-}
-
-/// Whether `entry` (in `.jobs`) is a job of Klipolo's that no one is running any more (the module doc).
-fn leftover_job(path: &Path) -> bool {
-    let named = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .is_some_and(valid_job_id);
-    named
-        && path.is_dir()
-        && path.join(JOB_FILE).is_file()
-        && klipolo_platform::process::is_leftover(None, last_change(path))
-}
-
-/// Deletes the jobs runs that never ended left in `dir`'s `.jobs` (the module doc says which), and the folders of job
-/// creations and discards a crash cut off (`tidy_staging`). Blocking. Files in place in `dir` are never touched.
+/// Deletes the folders of job creations and discards a crash cut off in `dir`'s `.jobs` (`tidy_staging`); every job
+/// stays. Blocking. Files in place in `dir` are never touched.
 pub fn tidy_jobs(dir: &Path) {
-    let root = jobs_root(dir);
-    let Ok(entries) = std::fs::read_dir(&root) else {
-        return;
-    };
-    for path in entries.filter_map(Result::ok).map(|e| e.path()) {
-        if leftover_job(&path) {
-            tracing::info!("export: deleting a job an earlier run left");
-            remove_now(&path);
-        }
-    }
-    tidy_staging(&root);
+    tidy_staging(&jobs_root(dir));
 }
 
 /// At launch, for the usual export folder: `tidy_jobs`, then `.jobs` itself if nothing is left in it.
@@ -144,105 +81,86 @@ pub fn sweep_folder(dir: &Path) {
     remove_root_if_empty(&jobs_root(dir));
 }
 
-/// The job folder `dir` holds for a test, its files' times moved `age` into the past.
-#[cfg(test)]
-pub(super) fn age(dir: &Path, age: Duration) {
-    let then = SystemTime::now() - age;
-    let mut paths: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
-        .unwrap()
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .collect();
-    paths.push(dir.to_path_buf());
-    for path in paths {
-        std::fs::File::open(&path)
-            .unwrap()
-            .set_modified(then)
-            .unwrap();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
+    use std::time::SystemTime;
+
+    use klipolo_engine::export::job::JOB_FILE;
 
     use super::*;
 
     const OLD: Duration = Duration::from_secs(3600);
 
-    /// A job folder `id` in `dir`'s `.jobs`, with a manifest when `manifest`, `age` old.
-    fn job(dir: &Path, id: &str, manifest: bool, old: Duration) -> PathBuf {
+    /// A job folder `id` in `dir`'s `.jobs` with a part and a manifest, its files' times `old` in the past.
+    fn job(dir: &Path, id: &str, old: Duration) -> PathBuf {
         let job = jobs_root(dir).join(id);
         std::fs::create_dir_all(job.join("landscape")).unwrap();
         std::fs::write(job.join("landscape").join("0.mp4"), b"part").unwrap();
-        if manifest {
-            std::fs::write(job.join(JOB_FILE), b"{}").unwrap();
+        std::fs::write(job.join(JOB_FILE), b"{}").unwrap();
+        let then = SystemTime::now() - old;
+        for path in [job.join("landscape").join("0.mp4"), job.join(JOB_FILE)] {
+            std::fs::File::open(&path)
+                .unwrap()
+                .set_modified(then)
+                .unwrap();
         }
-        age(&job.join("landscape"), old);
-        age(&job, old);
         job
     }
 
-    /// A job an earlier run left (the app crashed mid-export) goes at the next start or launch; the videos in the
-    /// folder stay, and `.jobs` goes once it is empty.
+    /// A job a crash or a shutdown left, however old, stays at the next start and launch with every part: it is
+    /// offered to resume. What a crash cut off while a job was being written or discarded goes once its process is
+    /// gone; a live process's never does. The videos in the folder are never touched.
     #[test]
-    fn a_job_an_earlier_run_left_goes() {
+    fn a_crashs_job_stays_to_resume_and_only_cut_off_writes_go() {
         let dir = tempfile::tempdir().unwrap();
-        let left = job(
-            dir.path(),
-            "0a1b2c3d-4e5f-6789-abcd-ef0123456789",
-            true,
-            OLD,
-        );
-        std::fs::write(dir.path().join("Demo 16x9.mp4"), b"a video").unwrap();
-        sweep_folder(dir.path());
-        assert!(!left.exists());
-        assert!(!jobs_root(dir.path()).exists(), "the empty .jobs goes too");
-        assert!(dir.path().join("Demo 16x9.mp4").is_file());
-        sweep_folder(&dir.path().join("nowhere"));
-    }
-
-    /// Only Klipolo's leftovers: another tool's folder in `.jobs`, a folder without a manifest, a job something wrote
-    /// to in the last minutes (another instance's live export) and a job being created by a live process all stay.
-    #[test]
-    fn only_klipolos_leftover_jobs_go() {
-        let dir = tempfile::tempdir().unwrap();
-        let foreign = job(dir.path(), "renders", true, OLD);
-        let no_manifest = job(dir.path(), "0a1b2c3d", false, OLD);
-        let live = job(dir.path(), "1b2c3d4e", true, Duration::ZERO);
+        let left = job(dir.path(), "0a1b2c3d-4e5f-6789-abcd-ef0123456789", OLD);
         let creating = job(
             dir.path(),
             &format!("2c3d4e5f.{}.new", std::process::id()),
-            true,
             OLD,
         );
-        let stray = jobs_root(dir.path()).join("notes.txt");
-        std::fs::write(&stray, b"mine").unwrap();
+        let cut_off = job(dir.path(), "3d4e5f6a.999999999.new", Duration::ZERO);
+        let discard_cut_off = job(dir.path(), "4e5f6a7b.999999999.gone", Duration::ZERO);
+        let foreign = job(dir.path(), "renders", OLD);
+        std::fs::write(dir.path().join("Demo 16x9.mp4"), b"a video").unwrap();
         sweep_folder(dir.path());
-        for kept in [&foreign, &no_manifest, &live, &creating, &stray] {
-            assert!(kept.exists(), "{} stays", kept.display());
-        }
-        // A creation whose process is gone is the staging sweep's.
-        let cut_off = job(dir.path(), "3d4e5f6a.999999999.new", true, OLD);
+        assert!(left.join("landscape").join("0.mp4").is_file(), "kept whole");
+        assert!(creating.exists() && foreign.exists());
+        assert!(!cut_off.exists() && !discard_cut_off.exists());
+        assert!(dir.path().join("Demo 16x9.mp4").is_file());
         tidy_jobs(dir.path());
-        assert!(!cut_off.exists());
-        assert!(live.exists() && creating.exists());
+        assert!(left.exists(), "a start keeps it too");
+        // Nothing left in `.jobs`: it goes at launch; a folder that isn't there is fine.
+        let empty = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(jobs_root(empty.path())).unwrap();
+        sweep_folder(empty.path());
+        assert!(!jobs_root(empty.path()).exists());
+        sweep_folder(&dir.path().join("nowhere"));
     }
 
+    /// A run that ends without its files keeps its job to resume; a cancelled one takes its job and the folder Cancel
+    /// set aside with it, then the empty `.jobs`.
     #[test]
-    fn a_run_that_ends_takes_its_job_and_the_empty_jobs_folder_with_it() {
+    fn a_run_that_stops_keeps_its_job_and_a_cancelled_one_takes_it() {
         let dir = tempfile::tempdir().unwrap();
         let id = "4e5f6a7b";
-        let running = job(dir.path(), id, true, Duration::ZERO);
+        let stopped = job(dir.path(), id, Duration::ZERO);
+        finish_run(&stopped, id, false);
+        assert!(
+            stopped.join("landscape").join("0.mp4").is_file(),
+            "kept to resume"
+        );
         // Cancel set the job aside (this process's name for it) and is deleting it on its own thread.
-        let aside = job(dir.path(), &discarded_name(id), true, Duration::ZERO);
-        finish_run(&running, id, false);
-        assert!(!running.exists() && !aside.exists());
+        let aside = job(dir.path(), &discarded_name(id), Duration::ZERO);
+        std::fs::remove_dir_all(&stopped).unwrap();
+        finish_run(&stopped, id, true);
+        assert!(!aside.exists());
         assert!(!jobs_root(dir.path()).exists());
         // A finished run's job is the engine's to delete; `.jobs` stays while something else is in it.
-        let other = job(dir.path(), "5f6a7b8c", true, OLD);
+        let other = job(dir.path(), "5f6a7b8c", OLD);
         let done = jobs_root(dir.path()).join("6a7b8c9d");
-        finish_run(&done, "6a7b8c9d", true);
+        finish_run(&done, "6a7b8c9d", false);
         assert!(other.exists());
     }
 }

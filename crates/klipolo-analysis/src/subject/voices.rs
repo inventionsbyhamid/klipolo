@@ -21,10 +21,11 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use klipolo_model::fill_focus::Voice;
+use klipolo_model::layout::BoxN;
 use klipolo_model::time::{RangeUs, Us};
 use serde::{Deserialize, Serialize};
 
-use super::path::{Talk, fit_together, people, shots};
+use super::path::{FULL, Talk, fit_together, people_in, shots};
 use super::{Copy, FPS, SubjectCopy, unique_name};
 use crate::cache::Dir;
 use crate::error::{AnalysisError, VideoError};
@@ -94,6 +95,19 @@ pub fn windows(
     turns: &[VoiceTurn],
     crop_w: f64,
 ) -> Vec<Window> {
+    windows_in(frames, cuts, range, turns, crop_w, FULL)
+}
+
+/// [`windows`] where the clip's crop keeps `area` of the picture: its people are named as the path names them
+/// (`path::people_in`).
+pub fn windows_in(
+    frames: &[(Us, &TrackedFrame)],
+    cuts: &[Us],
+    range: RangeUs,
+    turns: &[VoiceTurn],
+    crop_w: f64,
+    area: BoxN,
+) -> Vec<Window> {
     // The shots whose people don't all fit.
     let mut contested: Vec<Contested> = Vec::new();
     for (from, to) in shots(range.start, range.end, cuts) {
@@ -102,7 +116,7 @@ pub fn windows(
             .map(|(t, f)| (*t, (*f).clone()))
             .collect();
         let plain: Vec<TrackedFrame> = in_shot.iter().map(|(_, f)| f.clone()).collect();
-        let ids = people(&plain);
+        let ids = people_in(&plain, area);
         if ids.len() >= 2 && !fit_together(&plain, &ids, crop_w) {
             contested.push((from, to, ids, in_shot));
         }

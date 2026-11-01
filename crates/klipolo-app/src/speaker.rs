@@ -455,7 +455,7 @@ impl Speaker {
             } else {
                 // People to choose between only when following a person: two of a named thing aren't.
                 let people = if phrase == PERSON {
-                    clip_people(&target.footage, own, turns, voices)
+                    clip_people(clip, &target.footage, own, turns, voices)
                 } else {
                     Vec::new()
                 };

@@ -11,8 +11,9 @@ Limits: the caller runs at most two at once (`app.state.sam_videos`); each
 step shares one timeout; the upload's size cap is the caller's; a video over
 `MAX_SECONDS`, or of unknown length, is refused. Each run on the person's file
 reads it only as MOV/MP4 from a file (`-f mov -protocol_whitelist file`), on
-two threads, refuses pictures over 4K (`-max_pixels`), and runs at a lower
-priority under a memory limit (`MEMORY_LIMIT_BYTES`). Whatever ends a wait (a
+two threads with its filters on one (never a pool sized by the host's cores),
+refuses pictures over 4K (`-max_pixels`), and runs at a lower priority under a
+memory limit (`MEMORY_LIMIT_BYTES`). Whatever ends a wait (a
 timeout, a cancel, an error), the child is killed and reaped.
 """
 
@@ -36,8 +37,10 @@ FFPROBE = "ffprobe"
 MAX_SECONDS = 600
 FPS = 2
 LONG_SIDE = 640
-# What one run may use: two threads, pictures up to 3840 x 2160, 1.5 GB of address space, a lower priority.
+# What one run may use: two threads, its filters on one, pictures up to 3840 x 2160, 1.5 GB of address space, a
+# lower priority. Unpinned, ffmpeg sizes the filter pool from the host's cores, each thread with its own stack.
 THREADS = "2"
+_FILTER_THREADS = ["-filter_threads", "1", "-filter_complex_threads", "1"]
 MAX_PIXELS = str(3840 * 2160)
 MEMORY_LIMIT_BYTES = 1536 * 1024 * 1024
 NICENESS = 10
@@ -89,13 +92,14 @@ async def _duration(src: Path, timeout_s: float) -> float | None:
 
 def encode_args(src: Path, out: Path) -> list[str]:
     """The encode: the first video stream only, `FPS` frames a second, its long
-    side at most `LONG_SIDE`, no sound, at most `MAX_SECONDS`, on two threads."""
+    side at most `LONG_SIDE`, no sound, at most `MAX_SECONDS`, on two threads
+    (its filters on one)."""
     scale = (
         f"fps={FPS},scale=w='min({LONG_SIDE},iw)':h='min({LONG_SIDE},ih)'"
         ":force_original_aspect_ratio=decrease:force_divisible_by=2"
     )
     return [
-        FFMPEG, "-nostdin", "-v", "error", *_INPUT, "-threads", THREADS, "-max_pixels", MAX_PIXELS,
+        FFMPEG, "-nostdin", "-v", "error", *_FILTER_THREADS, *_INPUT, "-threads", THREADS, "-max_pixels", MAX_PIXELS,
         "-i", str(src), "-map", "0:v:0", "-an", "-sn", "-dn", "-map_metadata", "-1", "-t", str(MAX_SECONDS),
         "-vf", scale, "-c:v", "libx264", "-threads", THREADS, "-preset", "veryfast", "-crf", "30",
         "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-progress", "pipe:1", "-y", str(out),

@@ -26,6 +26,8 @@ use super::library::read;
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct ProjectRow {
+    /// The project's id (saved in it): its unfinished exports name it.
+    pub id: String,
     /// The project file, for `project_open`.
     pub path: String,
     pub name: String,
@@ -254,6 +256,7 @@ pub(crate) fn mark_open(rows: &mut [ProjectRow], open: Option<&Path>) {
 fn row(file: &Path, opened_ms: u64, project: &Project, thumbs: Option<&Path>) -> ProjectRow {
     let main = &project.timeline.main;
     ProjectRow {
+        id: project.id.clone(),
         path: file.to_string_lossy().into_owned(),
         name: project.name.clone(),
         opened_ms,

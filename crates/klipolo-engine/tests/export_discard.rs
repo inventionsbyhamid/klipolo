@@ -64,3 +64,27 @@ fn a_discard_cut_off_by_a_crash_is_swept_at_the_next_start() {
     assert!(!dead.exists(), "swept");
     assert!(live.exists(), "a live discard is never touched");
 }
+
+/// Only Klipolo's own cut-off folders go: a job id, then the id of a process that is gone. A folder of another name, or
+/// one that names no process, stays, however old.
+#[test]
+fn the_sweep_takes_only_klipolos_own_cut_off_folders() {
+    let root = tempfile::tempdir().unwrap();
+    let folder = |name: String| {
+        let path = root.path().join(name);
+        std::fs::create_dir_all(path.join("landscape")).unwrap();
+        let old = std::time::SystemTime::now() - Duration::from_secs(3 * 3600);
+        std::fs::File::open(&path)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        path
+    };
+    let cut_off = folder(format!("{JOB}.{}.new", u32::MAX));
+    let another_tool = folder(format!("renders.{}.new", u32::MAX));
+    let no_process = folder(format!("{JOB}.gone"));
+    let no_job = folder(format!("{}.gone", u32::MAX));
+    tidy_staging(root.path());
+    assert!(!cut_off.exists(), "Klipolo's own, its process gone");
+    assert!(another_tool.exists() && no_process.exists() && no_job.exists());
+}

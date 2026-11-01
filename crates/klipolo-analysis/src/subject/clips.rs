@@ -11,18 +11,20 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use klipolo_engine::plan::fill_crop;
+use klipolo_engine::plan::framing::as_shown;
 use klipolo_model::fill_focus::{FillFocus, FocusPath, Keep, MAX_PEOPLE, Person, Voice};
 use klipolo_model::framing::effective_framing;
 use klipolo_model::ids::Id;
+use klipolo_model::layout::BoxN;
 use klipolo_model::ops::{ClipPatch, Op};
 use klipolo_model::project::{AssetKind, FormatKind, Project};
 use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::{Clip, ClipSource, FramingMode};
 
 use super::SubjectTrack;
-use super::path::{PathInput, focus_path, people, shots};
+use super::path::{PathInput, focus_path, people_in, shots};
 use super::voices::{self, VoiceTurn, Window};
-use crate::providers::{Heard, TrackedFrame};
+use crate::providers::{Heard, TrackedBox, TrackedFrame};
 
 /// A Fill crop at least this share of the picture on both sides crops nothing.
 const WHOLE: f64 = 0.999;
@@ -120,8 +122,9 @@ impl Speech<'_> {
 }
 
 /// `clip`'s speaker path in `format` from the tracked stretches of its file (`tracks`, from one or several requests,
-/// in any order), over just the footage it plays, in its source time. None when nobody was found there, or Fill crops
-/// nothing.
+/// in any order), over just the footage it plays, in its source time. Only people whose middle is inside what the
+/// clip's crop keeps count, and the path stays inside it (`kept_in_file`). None when nobody was found there, or Fill
+/// crops nothing.
 pub fn clip_path(
     p: &Project,
     clip: &Clip,
@@ -144,9 +147,9 @@ pub fn speaker_path(
 ) -> Option<FocusPath> {
     let crop = path_crop(p, clip, format)?;
     let shift = footage.shift_us;
-    let (frames, cuts) = file_frames(footage, tracks);
-    let frames: Vec<(Us, &TrackedFrame)> =
-        frames.into_iter().map(|(at, f)| (at + shift, f)).collect();
+    let kept = kept_in_file(clip);
+    let (frames, cuts) = file_frames(footage, tracks, kept);
+    let frames: Vec<(Us, &TrackedFrame)> = frames.iter().map(|(at, f)| (at + shift, f)).collect();
     let cuts: Vec<Us> = cuts.into_iter().map(|c| c + shift).collect();
     let talk = voices::talk(speech.turns, speech.voices, shift);
     let input = PathInput {
@@ -157,18 +160,20 @@ pub fn speaker_path(
         crop,
         talk: &talk,
         keep: speech.keep,
+        area: kept,
     };
     focus_path(&input)
 }
 
-/// The tracked frames around `footage` (a second either side, so the crop eases in toward its first and last frames)
-/// and its cuts, on the file's clock, in order.
-fn file_frames<'t>(
+/// The tracked frames around `footage` (a second either side, so the crop eases in toward its first and last frames),
+/// with only the people whose middle is inside `kept`, and its cuts, on the file's clock, in order.
+fn file_frames(
     footage: &Footage,
-    tracks: &'t [SubjectTrack],
-) -> (Vec<(Us, &'t TrackedFrame)>, Vec<Us>) {
+    tracks: &[SubjectTrack],
+    kept: BoxN,
+) -> (Vec<(Us, TrackedFrame)>, Vec<Us>) {
     let (from, to) = (footage.range.start, footage.range.end);
-    let mut frames: Vec<(Us, &TrackedFrame)> = Vec::new();
+    let mut frames: Vec<(Us, TrackedFrame)> = Vec::new();
     let mut cuts: Vec<Us> = Vec::new();
     for t in tracks
         .iter()
@@ -179,7 +184,7 @@ fn file_frames<'t>(
             let at = t.range.start + (f64::from(f.frame) / fps * 1e6).round() as Us;
             (from - MARGIN_US..to + MARGIN_US)
                 .contains(&at)
-                .then_some((at, f))
+                .then(|| (at, kept_boxes(f, kept)))
         }));
         cuts.extend(t.cuts.iter().filter(|c| (from..to).contains(*c)));
     }
@@ -190,10 +195,30 @@ fn file_frames<'t>(
     (frames, cuts)
 }
 
+/// What `clip`'s crop keeps of its footage, where the file has it: a mirrored camera take's crop is on the picture as
+/// shown, so it is flipped back, as the engine draws it (`fill_focused`). The whole picture when uncropped.
+fn kept_in_file(clip: &Clip) -> BoxN {
+    let mirror = matches!(clip.source, ClipSource::Recording { .. })
+        && clip.camera.as_ref().is_some_and(|c| c.mirror);
+    as_shown(mirror, clip.crop.unwrap_or_default().kept())
+}
+
+/// `frame` with only the boxes whose middle is inside `kept`.
+fn kept_boxes(frame: &TrackedFrame, kept: BoxN) -> TrackedFrame {
+    let inside = |b: &&TrackedBox| {
+        let (x, y) = (b.centre_x(), (b.top + b.bottom) / 2.0);
+        (kept.x..=kept.x + kept.w).contains(&x) && (kept.y..=kept.y + kept.h).contains(&y)
+    };
+    TrackedFrame {
+        frame: frame.frame,
+        boxes: frame.boxes.iter().filter(inside).copied().collect(),
+    }
+}
+
 /// The share of the whole file's picture `clip`'s Fill crop shows in `format` (across, down): Fill's crop is in what
 /// the clip's own crop leaves, the path in the whole file. None when Fill crops nothing there.
 fn path_crop(p: &Project, clip: &Clip, format: FormatKind) -> Option<(f64, f64)> {
-    let kept = clip.crop.unwrap_or_default().kept();
+    let kept = kept_in_file(clip);
     let crop = fill_crop(p, clip, format)?;
     Some((crop.w * kept.w, crop.h * kept.h))
 }
@@ -215,19 +240,23 @@ pub fn voice_windows(
     let Some(crop_w) = narrowest else {
         return Vec::new();
     };
-    let (frames, cuts) = file_frames(footage, tracks);
-    voices::windows(&frames, &cuts, footage.range, turns, crop_w)
+    let kept = kept_in_file(clip);
+    let (frames, cuts) = file_frames(footage, tracks, kept);
+    let frames: Vec<(Us, &TrackedFrame)> = frames.iter().map(|(at, f)| (*at, f)).collect();
+    voices::windows_in(&frames, &cuts, footage.range, turns, crop_w, kept)
 }
 
 /// The people `clip`'s crop chooses between, left to right: as many as its busiest shot has (none when that is one),
 /// each with the voices matched to them and their share of the speech in the footage it plays.
 pub fn clip_people(
+    clip: &Clip,
     footage: &Footage,
     tracks: &[SubjectTrack],
     turns: &[VoiceTurn],
     heard: &BTreeMap<Voice, Heard>,
 ) -> Vec<Person> {
-    let (frames, cuts) = file_frames(footage, tracks);
+    let kept = kept_in_file(clip);
+    let (frames, cuts) = file_frames(footage, tracks, kept);
     let range = footage.range;
     let most = (shots(range.start, range.end, &cuts).into_iter())
         .map(|(from, to)| {
@@ -235,7 +264,7 @@ pub fn clip_people(
                 .filter(|(t, _)| (from..to).contains(t))
                 .map(|(_, f)| (*f).clone())
                 .collect();
-            people(&in_shot).len()
+            people_in(&in_shot, kept).len()
         })
         .max()
         .unwrap_or(0)

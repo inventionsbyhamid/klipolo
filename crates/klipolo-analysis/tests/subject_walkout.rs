@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use klipolo_analysis::providers::meta::Meta;
 use klipolo_analysis::providers::{Heard, TrackedBox, TrackedFrame, VoiceMatcher};
-use klipolo_analysis::subject::path::{PathInput, focus_path, people};
+use klipolo_analysis::subject::path::{FULL, PathInput, focus_path, people};
 use klipolo_analysis::subject::voices::{self, VoiceTurn};
 use klipolo_meta::{MetaClient, SecretString, pricing};
 use klipolo_model::fill_focus::{Keep, Voice};
@@ -112,6 +112,7 @@ fn a_real_two_person_walk_keeps_whoever_speaks() {
         crop: PORTRAIT,
         talk: &talk,
         keep: &Keep::Speaker,
+        area: FULL,
     };
     let path = focus_path(&input).unwrap();
     assert!(path.is_valid());

@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useIntlLocale } from '../../i18n/react';
 import { formatNumber, formatPercent } from '../../lib/format';
 import { FORMAT_SHORT } from '../../lib/layout';
-import { exportPercent, useExport } from '../../state/export';
+import { exportPercent, NO_PAUSE_FINISHING, useExport } from '../../state/export';
 import { timeLeft, videos } from './presets';
 
 /**
@@ -25,6 +25,7 @@ export function ExportProgress() {
       finishing: s.finishing,
       retrying: s.retrying,
       retries: s.retries,
+      pausing: s.pausing,
       stopping: s.stopping,
       saving: s.saving,
     })),
@@ -51,13 +52,15 @@ export function ExportProgress() {
     ? ''
     : s.stopping
       ? t({ id: 'export.progress.stopping', message: 'Stopping' })
-      : s.finishing
-        ? t({ id: 'export.progress.finishing', message: 'Finishing' })
-        : s.retrying
-          ? t({ id: 'export.progress.retrying', message: 'Trying again' })
-          : s.etaS !== null
-            ? timeLeft(s.etaS)
-            : t({ id: 'export.progress.estimating', message: 'Working out the time left' });
+      : s.pausing
+        ? t({ id: 'export.progress.pausing', message: 'Pausing' })
+        : s.finishing
+          ? t({ id: 'export.progress.finishing', message: 'Finishing' })
+          : s.retrying
+            ? t({ id: 'export.progress.retrying', message: 'Trying again' })
+            : s.etaS !== null
+              ? timeLeft(s.etaS)
+              : t({ id: 'export.progress.estimating', message: 'Working out the time left' });
   return (
     <div className="ex-progress">
       <div className="ex-row">
@@ -78,6 +81,12 @@ export function ExportProgress() {
         <span className="ex-meta">{where}</span>
         {left && <span className="ex-meta">{left}</span>}
       </div>
+      {/* Joining the parts can't pause: Pause says why (`aria-describedby`). */}
+      {s.finishing && !starting && (
+        <p className="ex-meta" id="export-no-pause">
+          {NO_PAUSE_FINISHING}
+        </p>
+      )}
       {s.retries >= 2 && (
         <p className="ex-meta">
           {t({

@@ -3,7 +3,7 @@
 //! near one eased), or who the person or chat chose.
 
 use klipolo_analysis::providers::{TrackedBox, TrackedFrame};
-use klipolo_analysis::subject::path::{PathInput, Talk, focus_path, people};
+use klipolo_analysis::subject::path::{FULL, PathInput, Talk, focus_path, people};
 use klipolo_model::fill_focus::{FocusPath, Keep, KeepRange, Who};
 use klipolo_model::time::Us;
 
@@ -67,6 +67,7 @@ fn path_of(f: &[TrackedFrame], crop: (f64, f64), talk: &[Talk], keep: &Keep) -> 
         crop,
         talk,
         keep,
+        area: FULL,
     };
     let path = focus_path(&input).expect("someone is there");
     assert!(path.is_valid(), "{path:?}");
