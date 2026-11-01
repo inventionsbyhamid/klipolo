@@ -1,6 +1,6 @@
 //! Pipe events through the heal policy, and its actions: a restart (one per outage, with a first-frame grace; never
 //! while the display sleeps), a wait for the app or the device, the mic's fallback, a source stopped for the take, a
-//! stop that saves. The module doc of `rules` lists the carried rules.
+//! stop that saves. The module doc of `rules` lists the finer rules.
 
 use klipolo_model::coded::{CodedError, ErrorParam};
 

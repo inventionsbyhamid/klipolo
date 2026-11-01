@@ -2,11 +2,11 @@
 //! Pure, built on every OS, so every OS's tests run them.
 //! - `NilRun`: no current system cursor is "shape unknown", never hidden; nil for 5 s straight falls back to
 //!   the arrow look.
-//! - `SeedReads`, `SeedTrust` (option 1): Core Graphics' cursor seed, read before each look and peeked at after
+//! - `SeedReads`, `SeedTrust`: Core Graphics' cursor seed, read before each look and peeked at after
 //!   it (a peek leaves a move during the look for the next pass). A new key while the seed stayed put
 //!   both times means it can't be trusted: the take drops it. A look with no key before it (the first, or the first
 //!   after no current cursor) is never a miss. It keeps counting after a drop, so the take's log says how often the
-//!   question ("key changed, same seed").
+//!   key changed while the seed stayed the same.
 //! - `ShapeSends`: each new shape is sent once with its picture; past `MAX_SHAPES` (an
 //!   animated cursor's frames fill it) a new key is never sent, so the cursor keeps its last defined shape, and the
 //!   writer is told once.

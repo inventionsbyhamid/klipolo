@@ -53,7 +53,7 @@ pub struct CursorWriter {
     pub(super) shapes: ShapeStore,
     pub(super) shapes_full: bool,
     pub(super) open: bool,
-    /// The file has its header (a resumed one may not).
+    /// The file has its header (a resumed one may not: a crash before its first durable tick).
     pub(super) header: bool,
     pub(super) clicks: ClickSource,
     pub(super) area: Option<(f32, f32)>,

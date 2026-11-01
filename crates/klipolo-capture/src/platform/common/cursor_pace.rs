@@ -1,8 +1,8 @@
 //! The macOS cursor sampler's schedule and its shapes' sizes. Pure, built on every OS.
 //! - **Passes:** 60 Hz while the cursor moved in the last second, a button is held or a down waits to be judged
-//!   (the self-check's `pressedMouseButtons` edges); 10 Hz while still. The budgets:
+//!   (the self-check's `pressedMouseButtons` edges); 10 Hz while still. The budgets: ≤ 0.1 % of a core still and
 //!   ≤ 0.5 % moving (measured in the cursor's benches).
-//! - **Shape looks** (c9-findings (e), option 1): `currentSystem` costs about 0.3 ms a call, so with Core
+//! - **Shape looks**: `currentSystem` costs about 0.3 ms a call, so with Core
 //!   Graphics' cursor seed (16 ns) a look runs whenever the seed moves, plus a safety look at 1 Hz still and 3 Hz
 //!   moving. Without the seed (option 2), the public look runs at 3 Hz still and 10 Hz moving.
 //! - **The area** every 250 ms (a window's bounds at 4 Hz); a **beat** once 500 ms passed with nothing sent.
