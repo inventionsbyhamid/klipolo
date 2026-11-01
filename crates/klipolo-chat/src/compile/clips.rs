@@ -54,7 +54,12 @@ pub(super) struct Change {
 }
 
 /// The working copy's clips `target` names, by index: every piece of a ref's clip, or every clip.
-fn named(c: &Compiler, work: &Project, tool: &str, target: &ClipRef) -> Result<Vec<usize>, Refused> {
+fn named(
+    c: &Compiler,
+    work: &Project,
+    tool: &str,
+    target: &ClipRef,
+) -> Result<Vec<usize>, Refused> {
     let main = &work.timeline.main;
     let ClipRef::One(short) = target else {
         return Ok((0..main.len()).collect());
