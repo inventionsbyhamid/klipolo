@@ -42,7 +42,7 @@ use klipolo_model::ops::{Op, Origin};
 use klipolo_model::time::{RangeUs, Us};
 use serde_json::{Value, json};
 
-use crate::host::{Host, HostError, OpenProposal, ProposalOutcome, Snapshot};
+use crate::host::{Host, HostError, OpenProposal, ProposalOutcome, Snapshot, Started};
 use crate::rpc::Mcp;
 use crate::session::{Seen, Session};
 use crate::words::{self, fill};
@@ -332,10 +332,18 @@ fn edit(
     }
 
     let mut started = false;
+    let mut done: Option<u64> = None;
     let mut not_started: Vec<String> = Vec::new();
     for job in &out.jobs {
         match start(mcp, client, job) {
-            Ok(()) => started = true,
+            Ok(Started::Later) => started = true,
+            Ok(Started::Done {
+                said: what,
+                revision: left,
+            }) => {
+                said.push(what);
+                done = Some(left);
+            }
             Err(why) if !not_started.contains(&why) => not_started.push(why),
             Err(_) => {}
         }
@@ -347,7 +355,7 @@ fn edit(
             &[("tools", &names(makers.map(|i| &calls[i])))],
         ));
     }
-    if !changed && proposed_as.is_none() && !started && !not_started.is_empty() {
+    if !changed && proposed_as.is_none() && !started && done.is_none() && !not_started.is_empty() {
         return refused(&not_started.join(" "));
     }
     said.extend(not_started);
@@ -359,8 +367,8 @@ fn edit(
             "proposalId": id,
             "removedSec": removed_us as f64 / 1e6,
         }),
-        None if !changed && started => json!({"outcome": "started"}),
-        None => json!({"outcome": "done", "revision": revision}),
+        None if !changed && started && done.is_none() => json!({"outcome": "started"}),
+        None => json!({"outcome": "done", "revision": done.unwrap_or(revision)}),
     };
     if said.is_empty() {
         said.push(words::UNCHANGED.to_owned());
@@ -370,7 +378,7 @@ fn edit(
 
 /// Starts `job` for `client`, within the run's allowance and the app's pace of jobs, only through the host and its own
 /// checks; else why not.
-fn start(mcp: &Mcp, client: &str, job: &Job) -> Result<(), String> {
+fn start(mcp: &Mcp, client: &str, job: &Job) -> Result<Started, String> {
     let host = mcp.host();
     let usd = host.estimate_usd(job);
     match mcp.limits().paid(client, mcp.now(), usd) {

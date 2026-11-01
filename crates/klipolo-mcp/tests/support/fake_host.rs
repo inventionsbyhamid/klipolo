@@ -17,7 +17,9 @@ use klipolo_chat::{
     AnalysisState, Inputs, Job, Library, Moment, Proposal, Refs, SceneLog, SpeakerTurn, ToolCall,
     View,
 };
-use klipolo_mcp::host::{Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot};
+use klipolo_mcp::host::{
+    Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot, Started,
+};
 use klipolo_mcp::limits::undo_shares;
 use klipolo_mcp::words::KLIPOLO_CHAT;
 use klipolo_model::history::{ByApp, HistoryLimits, Maker, Refused};
@@ -518,7 +520,8 @@ impl Host for FakeHost {
         s.usd_per_job
     }
 
-    fn start_paid(&self, client: &str, job: &Job) -> Result<(), HostError> {
+    /// A picture runs on; a follow is done at once, with its cost, as the app's is.
+    fn start_paid(&self, client: &str, job: &Job) -> Result<Started, HostError> {
         let mut s = self.state();
         s.counts.paid_asked += 1;
         if !s.credit {
@@ -529,7 +532,16 @@ impl Host for FakeHost {
         }
         s.counts.paid += 1;
         s.started.push((client.to_owned(), job.clone()));
-        Ok(())
+        if matches!(job, Job::Follow { .. }) {
+            drop(s);
+            return Ok(Started::Done {
+                said: "The vertical version keeps the speaker in frame. Tracking cost $0.02. The person can undo it \
+                       in Klipolo."
+                    .to_owned(),
+                revision: self.revision(),
+            });
+        }
+        Ok(Started::Later)
     }
 
     fn connected(&self, clients: &[String]) {

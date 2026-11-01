@@ -161,3 +161,23 @@ fn too_little_relay_credit_is_told_apart_from_no_key() {
         );
     }
 }
+
+/// Following a subject lands at once in Klipolo: the app is told it is done, what it cost and the revision it left, not
+/// that it started.
+#[test]
+fn a_follow_is_done_at_once_and_says_what_it_cost() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    let result = agent.call("followSubject", json!({"description": "person"}));
+    assert_eq!(result["isError"], false, "{result}");
+    assert_eq!(
+        text(&result),
+        "The vertical version keeps the speaker in frame. Tracking cost $0.02. The person can undo it in Klipolo."
+    );
+    assert_eq!(
+        result["structuredContent"],
+        json!({"outcome": "done", "revision": host.revision()})
+    );
+    assert!(matches!(host.state().started[0], (_, Job::Follow { .. })));
+}
