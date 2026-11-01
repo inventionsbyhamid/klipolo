@@ -372,7 +372,7 @@ struct WireMoment {
     who: String,
     #[serde(default)]
     description: String,
-    /// Absent from answers to the spike's schema.
+    /// Absent from answers to the older schema.
     #[serde(default)]
     on_screen_text: String,
 }
@@ -419,7 +419,7 @@ fn scene_answer(out: ResponseOut, relay: bool) -> Result<SceneAnswer, ProviderEr
     })
 }
 
-/// A kind in Spark's words: this schema's, or the spike's older ones (still read, for saved answers).
+/// A kind in Spark's words: this schema's, or the older schema's (still read, for saved answers).
 fn scene_kind(kind: &str) -> SceneKind {
     match kind {
         "shot" | "scene_cut" | "b_roll" => SceneKind::Shot,
