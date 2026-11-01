@@ -85,7 +85,7 @@ export function AssetRow({
           {title}
         </span>
         <span className="row-meta">
-          <span>{meta ?? formatRowLength(asset.durationUs)}</span>
+          <span title={meta}>{meta ?? formatRowLength(asset.durationUs)}</span>
           {used && <span>{t({ id: 'library.used', message: 'On the timeline' })}</span>}
         </span>
       </span>

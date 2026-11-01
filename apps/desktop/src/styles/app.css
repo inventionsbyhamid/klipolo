@@ -2639,6 +2639,13 @@
   white-space: nowrap;
 }
 
+/* A recording's longer line ("1:00, screen, mic and camera") ends in an ellipsis where the row is narrow. */
+.lib-row .row-meta > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* The row's "+" (and a clip's more menu), over its right end, shown on hover and focus so titles get the width. */
 .row-actions {
   position: absolute;
