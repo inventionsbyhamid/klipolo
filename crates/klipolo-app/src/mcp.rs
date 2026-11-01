@@ -25,7 +25,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use klipolo_app::analysis::AnalysisState;
-use klipolo_app::chat::follow::{NO_CROP, NO_ONE_THERE, phrase_for};
+use klipolo_app::chat::follow::{NO_CROP, NO_ONE_THERE, cost_said, kept_in_frame, phrase_for};
 use klipolo_app::chat::{
     At, ChatReply, ChatSession, Decided, ExternalReply, Findings, Gone, PictureAsk, Projects,
     Waiting, inputs_for, picture_for,
@@ -36,7 +36,9 @@ use klipolo_app::prefs;
 use klipolo_app::speaker::SpeakerEstimate;
 use klipolo_chat::{Job, Moment, Proposal, ToolCall};
 use klipolo_mcp::connection::{self, McpServer};
-use klipolo_mcp::host::{Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot};
+use klipolo_mcp::host::{
+    Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot, Started,
+};
 use klipolo_mcp::{Mcp, words};
 use klipolo_model::Transaction;
 use klipolo_model::coded::{CodedError, ErrorParam};
@@ -200,8 +202,12 @@ impl<S: SessionOf> AppHost<S> {
     /// Follows `description` in every clip that can, in every format whose Fill crops it, as chat's `followSubject`
     /// does, and lands it as one undo step `client` made (told to the page). Waits for the tracking: SAM answers a
     /// short in under a minute. Refused with the sentence chat would say.
-    fn follow_subject(&self, client: &str, description: &str) -> Result<(), HostError> {
+    fn follow_subject(&self, client: &str, description: &str) -> Result<Started, HostError> {
         let speaker = self.chat.speaker().ok_or(HostError::NoCredit)?;
+        // Someone else's proposal waiting would refuse the change: say so before anything is paid for.
+        if someone_else(self.chat.slot().waiting().as_ref(), client) {
+            return Err(HostError::Moved);
+        }
         let estimate = self.follow_estimate(description).ok_or(HostError::Moved)?;
         if estimate.clips.is_empty() {
             return Err(HostError::Refused(NO_CROP.to_owned()));
@@ -245,7 +251,12 @@ impl<S: SessionOf> AppHost<S> {
             .applied(done.patch, undo_label(&tx))
             .on_revision(done.at.revision);
         self.told(client, done.at.opening, applied);
-        Ok(())
+        let kept = kept_in_frame(&p, &p.settings.formats, &phrase);
+        let cost = cost_said(followed.paid_usd);
+        Ok(Started::Done {
+            said: format!("{kept}. {cost} The person can undo it in Klipolo."),
+            revision: self.revisions.of(&done.at),
+        })
     }
 
     /// Whether an access code's credit, as the relay says now, is below `usd` (or the code is turned off). Waits at
@@ -491,7 +502,7 @@ impl<S: SessionOf> Host for AppHost<S> {
         }
     }
 
-    fn start_paid(&self, client: &str, job: &Job) -> Result<(), HostError> {
+    fn start_paid(&self, client: &str, job: &Job) -> Result<Started, HostError> {
         if let Job::Follow { description } = job
             && self.chat.speaker().is_some()
         {
@@ -510,7 +521,7 @@ impl<S: SessionOf> Host for AppHost<S> {
         let at = self.at_now();
         let asked = (reply().picture(picture)).on_revision(at.as_ref().map_or(0, |at| at.revision));
         self.told(client, at.map_or(0, |at| at.opening), asked);
-        Ok(())
+        Ok(Started::Later)
     }
 
     fn connected(&self, clients: &[String]) {

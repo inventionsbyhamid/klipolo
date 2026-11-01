@@ -758,7 +758,15 @@ fn an_apps_follow_subject_tracks_and_lands_as_its_own_step() {
     // Two stretches of one file 11 s apart: 13 s (billed as 50 frames) and 131.04 s (263 frames).
     let usd = r.host.estimate_usd(&follow);
     assert!((usd - (50.0 + 263.0) * 0.0002).abs() < 1e-9, "{usd}");
-    assert_eq!(r.host.start_paid("Example Client", &follow), Ok(()));
+    // Done at once: the app is told what it cost and the revision it left.
+    let Ok(Started::Done { said, revision }) = r.host.start_paid("Example Client", &follow) else {
+        panic!("not done at once")
+    };
+    assert_eq!(
+        said,
+        "The vertical version keeps the speaker in frame. Tracking cost $0.06. The person can undo it in Klipolo."
+    );
+    assert_eq!(revision, r.base());
     let (maker, label, params) = r.newest_step().unwrap();
     assert_eq!(maker, Maker::App("Example Client".into()));
     assert_eq!(label, "chat.followSubject");
@@ -819,7 +827,7 @@ fn low_relay_credit_is_refused_and_a_prompt_is_capped() {
             assert_eq!(said, Err(HostError::LowCredit));
             assert!(r.told().is_empty());
         } else {
-            assert_eq!(said, Ok(()));
+            assert_eq!(said, Ok(Started::Later));
             let told = r.told();
             assert_eq!(told.len(), 1, "{told:#?}");
             let picture = &told[0]["reply"]["reply"]["pictures"][0];

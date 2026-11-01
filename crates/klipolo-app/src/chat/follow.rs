@@ -123,11 +123,7 @@ pub(super) async fn follow_jobs(
             }
             Ok(followed) => {
                 let ops = followed.ops(&target);
-                let cost = if followed.paid_usd > 0.0 {
-                    format!("Tracking cost {}.", dollars(followed.paid_usd))
-                } else {
-                    "No charge: that footage was tracked before.".to_owned()
-                };
+                let cost = cost_said(followed.paid_usd);
                 if ops.is_empty() {
                     follows.said.push(format!("{NO_ONE_THERE} {cost}"));
                     follows.note = format!("No {phrase} was found to follow.");
@@ -143,11 +139,8 @@ pub(super) async fn follow_jobs(
                     } else {
                         "now"
                     };
-                    let (which, keep) = versions(&target, &formats);
-                    follows.said.push(format!(
-                        "The {which} {keep} the {} in frame {when}. {cost}",
-                        shown(&phrase)
-                    ));
+                    let kept = kept_in_frame(&target, &formats, &phrase);
+                    follows.said.push(format!("{kept} {when}. {cost}"));
                     follows.note = format!(
                         "Followed {phrase} ({when}), for {}.",
                         dollars(followed.paid_usd)
@@ -221,6 +214,21 @@ fn attach(out: &mut PlanOut, work: &Project, ops: Vec<Op>, phrase: &str) -> bool
         }
     }
     true
+}
+
+/// "The vertical version keeps the speaker in frame": what a follow of `phrase` in `formats` of `p` did.
+pub fn kept_in_frame(p: &Project, formats: &[FormatKind], phrase: &str) -> String {
+    let (which, keep) = versions(p, formats);
+    format!("The {which} {keep} the {} in frame", shown(phrase))
+}
+
+/// "Tracking cost $0.02.", or that it cost nothing.
+pub fn cost_said(paid_usd: f64) -> String {
+    if paid_usd > 0.0 {
+        format!("Tracking cost {}.", dollars(paid_usd))
+    } else {
+        "No charge: that footage was tracked before.".to_owned()
+    }
 }
 
 /// "vertical version" with "keeps", or "vertical and square versions" with "keep": the formats of `formats` some clip
