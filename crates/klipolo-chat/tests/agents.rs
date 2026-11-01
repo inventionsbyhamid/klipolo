@@ -204,6 +204,7 @@ fn section_returns_one_heading_block() {
                 made_with: None,
             },
             pack: false,
+            tags: Vec::new(),
         }],
     };
     let ctx = build_context(

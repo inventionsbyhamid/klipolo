@@ -124,6 +124,7 @@ fn library_of(project: &Project, pack: Vec<LibraryItem>) -> Library {
             kind,
             asset: asset.clone(),
             pack: false,
+            tags: Vec::new(),
         };
         match asset.kind {
             AssetKind::Audio => {
