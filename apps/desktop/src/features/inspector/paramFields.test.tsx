@@ -135,6 +135,15 @@ describe('settings generated from a schema', () => {
     expect(lastTx()).toEqual({ label: 'effect.change.undo', ops: [{ type: 'rename', name: 'color="#00000066"' }] });
   });
 
+  it('an alpha colour saved without alpha digits takes a swatch as it is, and its own colour commits nothing', async () => {
+    renderFields(def('effect.drop-shadow'), { color: '#ffffff' });
+    const color = screen.getByRole('radiogroup', { name: 'Color' });
+    await userEvent.click(within(color).getByRole('radio', { name: 'White' }));
+    expect(bridge.apply).not.toHaveBeenCalled();
+    await userEvent.click(within(color).getByRole('radio', { name: 'Black' }));
+    expect(lastTx()).toEqual({ label: 'effect.change.undo', ops: [{ type: 'rename', name: 'color="#000000"' }] });
+  });
+
   it('a colour without an alpha has no Opacity, and takes the swatch as it is', async () => {
     renderFields(def('effect.glow'));
     expect(screen.queryByRole('slider', { name: /opacity/ })).toBeNull();

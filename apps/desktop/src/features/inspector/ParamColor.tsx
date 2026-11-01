@@ -23,6 +23,12 @@ function withAlpha(rgb: string, alpha: number): string {
   return `${rgbOf(rgb)}${byte.toString(16).padStart(2, '0').toUpperCase()}`;
 }
 
+/** `rgb` with the alpha digits `base` holds; as it is when `base` has none (it is opaque). */
+const keepAlpha = (rgb: string, base: string) => (base.length === 9 ? `${rgbOf(rgb)}${base.slice(7).toUpperCase()}` : rgbOf(rgb));
+
+/** The same colour, whatever the case of its digits and whether an opaque one spells out its alpha. */
+const sameColor = (a: string, b: string) => withAlpha(a, alphaOf(a)) === withAlpha(b, alphaOf(b));
+
 const percent = (v: number) => `${Math.round(v * 100)}%`;
 
 interface ParamColorProps {
@@ -49,9 +55,9 @@ export function ParamColor({ label, value, alpha, opsFor, commitLabel, valueNow,
   const { t } = useLingui();
   const latest = () => valueNow?.() ?? value;
   /** The colour a `#RRGGBB` pick sets: with the alpha the setting holds then, when it takes one. */
-  const kept = (rgb: string) => (alpha ? withAlpha(rgb, alphaOf(latest())) : rgbOf(rgb));
+  const kept = (rgb: string) => (alpha ? keepAlpha(rgb, latest()) : rgbOf(rgb));
   const pick = (rgb: string) => {
-    if (kept(rgb) === latest().toUpperCase()) return;
+    if (sameColor(kept(rgb), latest())) return;
     void commitLatest(commitLabel, () => opsFor(kept(rgb)));
   };
   return (
