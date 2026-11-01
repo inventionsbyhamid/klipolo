@@ -26,6 +26,8 @@ interface ParamFieldsProps {
   resetOps?: (key: string) => Op[];
   /** The stored values as the project has them when a change goes in (a point keeps its other axis from them). */
   valuesNow?: () => ParamValues;
+  /** What the settings belong to (an effect of a block, a layer): its switches' presses are counted apart. */
+  owner?: string;
 }
 
 /** Focus the setting's control in `el`: a segmented control's or swatches' checked option, else its first control. */
@@ -60,6 +62,7 @@ function ParamField({
   commitLabel,
   resetOps,
   valuesNow,
+  owner,
 }: Omit<ParamFieldsProps, 'def'> & { spec: ParamSpec }) {
   const { t } = useLingui();
   const controlRef = useRef<HTMLDivElement>(null);
@@ -106,6 +109,7 @@ function ParamField({
         opsFor={(value) => opsFor(spec.key, value)}
         commitLabel={commitLabel}
         valueNow={now}
+        toggleId={`${owner ?? ''}:${spec.key}`}
       />
       {reset}
     </div>

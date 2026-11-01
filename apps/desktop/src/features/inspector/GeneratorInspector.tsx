@@ -30,6 +30,7 @@ export function GeneratorInspector({ item, content }: { item: Item; content: Gen
             delete params[key];
             return withParams(params);
           }}
+          owner={item.id}
           valuesNow={() => now().params}
           commitLabel={effectLabels.change(content.source)}
         />

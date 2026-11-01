@@ -8,8 +8,9 @@ import { Tooltip } from '../../design/Tooltip';
 import { Icon } from '../../layout/Icon';
 import { BUILTINS } from '../../lib/contrib';
 import { labelText } from '../../lib/labels';
+import { commitToggle } from '../../state/commit';
 import { effectsNow } from '../../state/latest';
-import { effectLabels, moveEffect, turnEffect, updateEffectOp, type Stack } from './effectOps';
+import { effectLabels, moveEffect, updateEffectOp, type Stack } from './effectOps';
 import { ParamFields } from './ParamFields';
 
 interface EffectRowProps {
@@ -51,11 +52,25 @@ export function EffectRow({ stack, fx, index, name, onRemove }: EffectRowProps) 
     );
   }
   const last = stack.effects.length - 1;
+  /** What the row's switches act on: this effect of this block. */
+  const owner = `${stack.target.id}:${fx.id}`;
   return (
     <li {...ids} className="fx-row">
       <div className="fx-head">
         <Tooltip label={labelText(effectLabels.turn(fx.effect, !fx.enabled))}>
-          <Toggle aria-label={name} checked={fx.enabled} onCheckedChange={(on) => void turnEffect(stack, fx, on)} />
+          <Toggle
+            aria-label={name}
+            checked={fx.enabled}
+            // Each press flips what the project has as it goes in, so two quick presses turn it off and back on.
+            onCheckedChange={() =>
+              void commitToggle(
+                () => effectsNow(stack.target)?.find((e) => e.id === fx.id)?.enabled ?? fx.enabled,
+                (on) => effectLabels.turn(fx.effect, on),
+                (on) => [updateEffectOp(stack.target, fx.id, { enabled: on })],
+                { id: owner },
+              )
+            }
+          />
         </Tooltip>
         <span className="fx-name">{name}</span>
         {def.params.length > 0 && (
@@ -100,6 +115,7 @@ export function EffectRow({ stack, fx, index, name, onRemove }: EffectRowProps) 
             values={fx.params}
             opsFor={(key, value) => [updateEffectOp(stack.target, fx.id, { params: { [key]: value } })]}
             resetOps={(key) => [updateEffectOp(stack.target, fx.id, { reset: [key] })]}
+            owner={owner}
             valuesNow={() => effectsNow(stack.target)?.find((e) => e.id === fx.id)?.params ?? fx.params}
             commitLabel={effectLabels.change(fx.effect)}
           />

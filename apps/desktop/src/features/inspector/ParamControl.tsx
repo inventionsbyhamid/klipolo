@@ -10,6 +10,7 @@ import { Segmented } from '../../design/Segmented';
 import { Toggle } from '../../design/Toggle';
 import { useBundledFamilies } from '../../lib/fonts';
 import type { Label } from '../../lib/labels';
+import { commitToggle } from '../../state/commit';
 import { commitLatest } from '../../state/latest';
 import { useProject } from '../../state/project';
 import { Field, Select } from './fields';
@@ -31,6 +32,8 @@ export interface ParamControlProps {
    * change to one axis after the other doesn't put the first back); `value` when not given.
    */
   valueNow?: () => ParamValue | null;
+  /** What a switch flips, so its quick presses are counted apart from other switches' (`commitToggle`). */
+  toggleId?: string;
 }
 
 const MIDDLE: PointN = { x: 0.5, y: 0.5 };
@@ -47,7 +50,7 @@ const percent = (v: number) => `${Math.round(v * 100)}%`;
  * a pick commits at once. Ops are built when the change goes in (`commitLatest`, a burst's builder), so they build on
  * a change another control has just made.
  */
-export function ParamControl({ spec, value, label, opsFor, commitLabel, valueNow }: ParamControlProps) {
+export function ParamControl({ spec, value, label, opsFor, commitLabel, valueNow, toggleId }: ParamControlProps) {
   const { t } = useLingui();
   const now = fits(spec, value ?? undefined) ? value : defaultOf(spec);
   const pick = (next: ParamValue) => void commitLatest(commitLabel, () => opsFor(next));
@@ -68,7 +71,21 @@ export function ParamControl({ spec, value, label, opsFor, commitLabel, valueNow
       );
     }
     case 'bool':
-      return <Toggle aria-label={label} checked={now === true} onCheckedChange={pick} />;
+      return (
+        <Toggle
+          aria-label={label}
+          checked={now === true}
+          // Each press flips what the project has as it goes in, so two quick presses turn it on and back off.
+          onCheckedChange={() =>
+            void commitToggle(
+              () => (valueNow ? valueNow() : now) === true,
+              () => commitLabel,
+              (on) => opsFor(on),
+              { id: toggleId },
+            )
+          }
+        />
+      );
     case 'point': {
       const point = (now as PointN | null) ?? MIDDLE;
       /** The point as the project has it now: each slider is its own change, keeping the other axis. */
