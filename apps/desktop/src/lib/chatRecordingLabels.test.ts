@@ -21,8 +21,8 @@ describe("chat's labels for a recording's camera and sounds", () => {
   });
 
   it('names the app that made the change', () => {
-    expect(historyAction('undo', 'chat.muteSource', { source: 'videoSound', mute: 'on', client: 'Example Client' })).toBe(
-      'Undo mute the camera sound (from Example Client)',
-    );
+    expect(
+      historyAction('undo', 'chat.muteSource', { source: 'videoSound', mute: 'on', client: 'Example Client' }),
+    ).toBe('Undo mute the camera sound (from Example Client)');
   });
 });
