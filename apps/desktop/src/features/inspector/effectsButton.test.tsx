@@ -53,6 +53,18 @@ describe('Effects on the cards', () => {
     expect(screen.getByRole('button', { name: 'Effects 2' })).toBeInTheDocument();
   });
 
+  it('Escape in the stack closes only the stack, and the card stays', async () => {
+    withLayers({ id: 'logo-layer', content: { type: 'image', assetId: 'logo' }, effects: [fx('fx', 'blur')] });
+    useSelection.setState({ selectedId: 'logo-layer' });
+    renderWithProviders(<Inspector format="landscape" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Effects 1' }));
+    expect(screen.getByRole('dialog', { name: 'Effects' })).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Effects' })).toBeNull());
+    expect(screen.getByRole('complementary', { name: 'Image settings' })).toBeInTheDocument();
+    expect(useSelection.getState().selectedId).toBe('logo-layer');
+  });
+
   it('the clip card has Effects for the clip', async () => {
     onClipA([fx('fx', 'vignette')]);
     useSelection.setState({ selectedId: 'a' });
