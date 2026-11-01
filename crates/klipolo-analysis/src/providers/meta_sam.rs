@@ -1,4 +1,5 @@
-//! SAM 3.1 as the `SubjectTracker`, through the Meta adapter's client and slots: the video is uploaded (Files API),
+//! SAM 3.1 as the `SubjectTracker`, through the Meta adapter's client and slots: the video is uploaded (Files API, or
+//! through the relay its `sam/videos`, which writes its own copy so it knows the frames Meta will bill),
 //! SAM is asked for every match of the phrase on every frame (read from its streamed events to the final usage, as the
 //! relay forwards SAM video calls only streamed; masks one bit a pixel and skipped), and the upload is deleted on every
 //! path, as the scene log's are. A video call holds the device's video slot from its
@@ -8,7 +9,7 @@ use std::path::Path;
 
 use klipolo_meta::{MetaError, ResponseOut, pricing};
 
-use super::meta::{Meta, Upload, provider_error, upload};
+use super::meta::{Meta, Upload, provider_error};
 use super::{
     BoxFuture, ProviderError, SubjectTracker, TrackedBox, TrackedFrame, Tracking, retry_busy,
 };
@@ -37,7 +38,7 @@ impl SubjectTracker for Meta {
     ) -> BoxFuture<'a, Result<Tracking, ProviderError>> {
         Box::pin(async move {
             let _video = self.videos.acquire().await;
-            let id = retry_busy(|| self.call(upload(self.client(), video))).await?;
+            let id = retry_busy(|| self.call(upload_video(self.client(), video))).await?;
             let upload = Upload {
                 meta: self.clone(),
                 id: Some(id),
@@ -48,6 +49,20 @@ impl SubjectTracker for Meta {
             tracking(answer?, self.client().is_relay())
         })
     }
+}
+
+/// Uploads the small copy for SAM (through the relay, the relay makes its own copy of it). A file that can't be read
+/// is named as what it is, not by its temporary name.
+async fn upload_video(
+    client: &klipolo_meta::MetaClient,
+    video: &Path,
+) -> Result<String, MetaError> {
+    client.upload_sam_video(video).await.map_err(|e| match e {
+        MetaError::LocalFile { .. } => MetaError::LocalFile {
+            name: "this clip's small copy".into(),
+        },
+        e => e,
+    })
 }
 
 /// SAM's frame lines as boxes in parts of the picture, priced by the frames it billed; `relay` when it came through

@@ -242,7 +242,7 @@ impl SceneLogger for Meta {
 
 /// Uploads a chunk of the clip's small copy. A file that can't be read is named as what it is, not by its temporary
 /// name.
-pub(super) async fn upload(client: &MetaClient, video: &Path) -> Result<String, MetaError> {
+async fn upload(client: &MetaClient, video: &Path) -> Result<String, MetaError> {
     client
         .upload_file(video, "video/mp4")
         .await

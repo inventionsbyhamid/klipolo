@@ -65,8 +65,14 @@ fn answer_ending(text: &str, frames: u64, status: &str) -> ResponseTemplate {
 }
 
 async fn mount_files(server: &MockServer, prefix: &str, id: &str) {
+    // Through the relay a SAM video goes to its `sam/videos`; with a key, to Meta's Files API.
+    let upload = if prefix == "/meta/v1" {
+        "sam/videos"
+    } else {
+        "files"
+    };
     Mock::given(method("POST"))
-        .and(path(format!("{prefix}/files")))
+        .and(path(format!("{prefix}/{upload}")))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": id, "object": "file"})))
         .mount(server)
         .await;
