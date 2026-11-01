@@ -5,18 +5,21 @@
 //! before `startSec`), `{}` for a tool without arguments, two calls in one answer. The spike's 12 requests come first,
 //! in this tool set's names and words (its `removeFillerWords` is `removeFillers`, `setCaptionStyle` with
 //! `karaoke_highlight` is `setCaptions` with `karaoke`, `setFormat` `9:16` is `portrait`); the rest cover the tools the
-//! spike did not have, the media tools last, with times from the clip A context fixture.
+//! spike did not have, then the media tools with times from the clip A context fixture, then a recording's camera
+//! last.
 
 use std::collections::BTreeSet;
 
 use klipolo_chat::tools::{
-    CHAT_CAPTION_STYLES, FunctionCall, Moment, PictureSize, Position, Problem, TextPreset,
-    ToolCall, tools,
+    BubbleChange, CHAT_CAPTION_STYLES, FunctionCall, Moment, PictureSize, Position, Problem,
+    SizeStep, TextPreset, ToolCall, tools,
 };
 use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
+use klipolo_model::layout::Anchor;
 use klipolo_model::ops::Edge;
 use klipolo_model::project::FormatKind;
 use klipolo_model::time::{RangeUs, secs_to_us};
+use klipolo_model::timeline::{CameraMode, CameraShape};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -201,6 +204,9 @@ fn every_tool_schema_is_strict() {
             "addImage",
             "makeSticker",
             "makeTitleCard",
+            "setCameraMode",
+            "adjustCamera",
+            "detachCamera",
             "undo",
             "askUser",
             "cannotDo",
@@ -242,6 +248,17 @@ fn every_tool_schema_is_strict() {
             "makeSticker.position",
             "makeTitleCard.atSec",
             "makeTitleCard.durationSec",
+            "setCameraMode.clips",
+            "setCameraMode.format",
+            "adjustCamera.border",
+            "adjustCamera.clips",
+            "adjustCamera.format",
+            "adjustCamera.mirror",
+            "adjustCamera.position",
+            "adjustCamera.shape",
+            "adjustCamera.size",
+            "adjustCamera.sizeStep",
+            "detachCamera.clips",
         ]
     );
 }
@@ -463,6 +480,38 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 at_us: None,
                 duration_us: None,
             }],
+        ),
+        (
+            "hide my camera",
+            vec![SetCameraMode {
+                clips: None,
+                mode: CameraMode::Hidden,
+                format: None,
+            }],
+        ),
+        (
+            "make the camera a split screen in vertical",
+            vec![SetCameraMode {
+                clips: None,
+                mode: CameraMode::SplitBottom,
+                format: Some(FormatKind::Portrait),
+            }],
+        ),
+        (
+            "move my bubble to the top left, bigger and square",
+            vec![AdjustCamera {
+                clips: None,
+                change: BubbleChange {
+                    position: Some(Anchor::TopLeft),
+                    size_step: Some(SizeStep::Bigger),
+                    shape: Some(CameraShape::Square),
+                    ..BubbleChange::default()
+                },
+            }],
+        ),
+        (
+            "separate the camera so I can cut it",
+            vec![DetachCamera { clips: None }],
         ),
     ];
     assert_eq!(fixture.answers.len(), expected.len());
@@ -1228,5 +1277,5 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     assert!(prompt_tokens <= 900, "prompt {prompt_tokens} tokens");
-    assert!(tools_tokens <= 2_700, "tools {tools_tokens} tokens");
+    assert!(tools_tokens <= 3_300, "tools {tools_tokens} tokens");
 }

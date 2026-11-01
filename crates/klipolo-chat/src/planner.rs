@@ -16,8 +16,8 @@
 //! call refused in the first answer that the second answer lets go (no new call of its tool for it, counted call by
 //! call, and no question or `cannotDo` instead).
 //!
-//! The reply is the model's text, then the sentences of refusals meant for the person, then what couldn't be done; all
-//! of it without em or en dashes (`sanitize::reply`). When a call was refused for the person beside others that went
+//! The reply is the model's text, then what the edits left as they were (`Compiled::notes`), then the sentences of
+//! refusals meant for the person, then what couldn't be done; all of it without em or en dashes (`sanitize::reply`). When a call was refused for the person beside others that went
 //! through, the model's text, written before that refusal, may claim it: it is left out, and what went through is said
 //! plainly instead ("The music is in."). When nothing came of the answer and a call of it was refused after
 //! the model wrote its text (still refused back, or refused for the person, `cannotDo` aside), that text, which may
@@ -447,6 +447,8 @@ fn finish(
     if told_undone && came_of_it {
         parts.extend(done_sentences(&calls, &compiled));
     }
+    // What the edits left as they were follows what was done.
+    let mut lead = parts.len();
     for r in &compiled.refusals {
         if r.audience == Audience::Person {
             let said = full_stop(r.reason.trim());
@@ -463,6 +465,7 @@ fn finish(
         parts.extend(compiled.questions.iter().map(|q| full_stop(q.trim())));
     }
     if parts.is_empty() {
+        lead = 1;
         parts.push(
             match (compiled.additions.is_some(), compiled.proposal.is_some()) {
                 (true, true) => "Done. The removals are waiting for you to apply them.",
@@ -475,6 +478,11 @@ fn finish(
             .to_owned(),
         );
     }
+    let notes: Vec<String> = (compiled.notes.iter())
+        .map(|n| full_stop(n.trim()))
+        .filter(|n| !n.is_empty() && !parts.contains(n))
+        .collect();
+    parts.splice(lead..lead, notes);
     let reply = sanitize::reply(&parts.join(" "));
     PlanOut {
         note: note(&calls, &compiled, dropped),
@@ -501,6 +509,8 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         ToolCall::FixCaptionWords { .. } => "The words are fixed.",
         ToolCall::SplitAt { .. } => "The clip is split.",
         ToolCall::TrimClip { .. } => "The clip is longer.",
+        ToolCall::SetCameraMode { .. } | ToolCall::AdjustCamera { .. } => "The camera is changed.",
+        ToolCall::DetachCamera { .. } => "The camera is its own layer now.",
         ToolCall::Undo => "Undone.",
         // Shown on their own (moments, questions), or proposed.
         _ => return None,
@@ -556,6 +566,9 @@ fn task(tool: &str) -> &'static str {
         "addImage" => "add the picture",
         "makeSticker" => "make the sticker",
         "makeTitleCard" => "make the title card",
+        "setCameraMode" => "change the camera",
+        "adjustCamera" => "adjust the camera",
+        "detachCamera" => "separate the camera",
         "undo" => "undo the last change",
         _ => "do part of this",
     }

@@ -1,7 +1,8 @@
 //! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
 //! context was built from, out as edits.
-//! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer, and the
-//!   media: `addMusic`, `addSound`, `addText`, `addImage` and `makeTitleCard`'s title) are one `Transaction` the app
+//! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer, the media:
+//!   `addMusic`, `addSound`, `addText`, `addImage` and `makeTitleCard`'s title, and a recording's camera:
+//!   `setCameraMode`, `adjustCamera`, `detachCamera`) are one `Transaction` the app
 //!   applies at once: one undo step. An addition is judged by what its part does, not by its tool: one that takes
 //!   something away (the model's own `removals`, as a format dropped with what was placed in it) is compiled again with
 //!   the removals and proposed.
@@ -32,12 +33,17 @@
 //! edits were compiled against the project before it, so they are refused back to the model.
 //!
 //! Undo labels are message ids with values, worded by the UI: `chat.<tool>` (`chat.cutRange {startUs, endUs}`), and
-//! `chat.andMore {first, more}` for a step of several calls. Splitting by concern: `additions`, `removals`, `trim`
-//! (both), `media` (the library's music, sounds, words and pictures, and the pictures to draw), `map`.
+//! `chat.andMore {first, more}` for a step of several calls. What a recording tool left as it was is a note for the
+//! person (`Compiled::notes`). Splitting by concern: `additions`, `removals`, `trim` (both), `media` (the library's
+//! music, sounds, words and pictures, and the pictures to draw), `recorded` (a recording's camera, in `cameras` and
+//! `bubble`), `map`.
 
 mod additions;
+mod bubble;
+mod cameras;
 mod map;
 mod media;
+mod recorded;
 mod removals;
 mod trim;
 
@@ -145,6 +151,9 @@ pub struct Compiled {
     pub undo: bool,
     /// The additions that went through but changed nothing (a format the video already has), by call index.
     pub unchanged: Vec<usize>,
+    /// What the additions left as they were, one plain sentence each for the person ("Cameras that are their own layer
+    /// were left as they are."), in call order, each once.
+    pub notes: Vec<String>,
 }
 
 /// Removals for the person to approve.
@@ -453,6 +462,8 @@ impl Compiler<'_> {
         // The pictures asked for so far: past `MAX_PICTURES`, the rest are refused before anything is drawn.
         let mut pictures = 0;
         for (i, call) in calls.iter().enumerate() {
+            // A recording tool's notes, said once its edit is kept.
+            let mut notes: Vec<String> = Vec::new();
             if out.undo && is_edit(call) {
                 let reason = format!(
                     "{}: not done, because undo is in the same answer. Call undo on its own, then the other changes.",
@@ -551,6 +562,15 @@ impl Compiler<'_> {
                 | ToolCall::FixCaptionWords { .. } => {
                     (self.addition(&adding.work, call), Removal::Moved(call))
                 }
+                ToolCall::SetCameraMode { .. }
+                | ToolCall::AdjustCamera { .. }
+                | ToolCall::DetachCamera { .. } => {
+                    let edit = recorded::compile(self, &adding.work, call).map(|noted| {
+                        notes = noted.notes;
+                        noted.edit
+                    });
+                    (edit, Removal::Moved(call))
+                }
             };
             let (edit, if_it_removes) = addition;
             let tried = edit.and_then(|edit| {
@@ -562,7 +582,14 @@ impl Compiler<'_> {
                     format_proposed |= matches!(call, ToolCall::SetFormat { .. });
                     waiting.push((i, if_it_removes));
                 }
-                Ok(tried) => adding.keep(tried, i),
+                Ok(tried) => {
+                    adding.keep(tried, i);
+                    for note in notes {
+                        if !out.notes.contains(&note) {
+                            out.notes.push(note);
+                        }
+                    }
+                }
                 Err(r) => refuse(&mut out, i, r),
             }
         }
@@ -710,6 +737,11 @@ impl Compiler<'_> {
                 at_us,
                 duration_us,
             } => media::add_image(self, work, file, (*size, *position), (*at_us, *duration_us)),
+            ToolCall::SetCameraMode { .. }
+            | ToolCall::AdjustCamera { .. }
+            | ToolCall::DetachCamera { .. } => {
+                recorded::compile(self, work, call).map(|noted| noted.edit)
+            }
             other => Err(to_model(format!("{}: not an addition.", other.name()))),
         }
     }

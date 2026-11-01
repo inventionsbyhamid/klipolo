@@ -18,11 +18,13 @@
 //! Adding a tool is one `ToolCall` variant and one entry in `TOOLS`, where its name, description, parameters and reader
 //! sit together; the tests check every schema is strict and every reader reads the fields its schema lists. Splitting
 //! by concern: `schema` (the pieces of a schema, and the words a tool takes), `args` (a call's arguments read field by
-//! field), `error` (why a call couldn't be read), `media` (the media tools and their words).
+//! field), `error` (why a call couldn't be read), `media` (the media tools and their words), `recorded` (a recording's
+//! camera, and its words).
 
 mod args;
 mod error;
 pub mod media;
+pub mod recorded;
 mod schema;
 
 use std::ops::RangeInclusive;
@@ -31,12 +33,14 @@ use klipolo_model::captions::styles::BuiltinCaptionStyle;
 use klipolo_model::ops::Edge;
 use klipolo_model::project::FormatKind;
 use klipolo_model::time::{RangeUs, Us};
+use klipolo_model::timeline::CameraMode;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use args::{Args, kind};
 pub use error::{Problem, ToolError};
 pub use media::{PictureSize, Position, TextPreset};
+pub use recorded::{BubbleChange, BubbleSize, SizeStep};
 use schema::{boolean, list, nullable_number, nullable_words, object, seconds, string, words};
 
 /// One tool call as the model made it, whichever provider ran the model: its adapter maps the provider's call into
@@ -135,6 +139,20 @@ pub enum ToolCall {
         at_us: Option<Us>,
         duration_us: Option<Us>,
     },
+    /// Show the cameras of `clips` (refs from the context, not yet resolved; None: every clip with one) as `mode`, in
+    /// `format` alone or in every format.
+    SetCameraMode {
+        clips: Option<Vec<String>>,
+        mode: CameraMode,
+        format: Option<FormatKind>,
+    },
+    /// Move, resize or restyle the camera bubbles of `clips` (None: every clip with one).
+    AdjustCamera {
+        clips: Option<Vec<String>>,
+        change: BubbleChange,
+    },
+    /// Make the cameras of `clips` (None: every clip with one) layers of their own.
+    DetachCamera { clips: Option<Vec<String>> },
     /// Undo the last change.
     Undo,
     /// Ask the person `question` before doing anything more.
@@ -201,6 +219,9 @@ impl ToolCall {
             ToolCall::AddImage { .. } => "addImage",
             ToolCall::MakeSticker { .. } => "makeSticker",
             ToolCall::MakeTitleCard { .. } => "makeTitleCard",
+            ToolCall::SetCameraMode { .. } => "setCameraMode",
+            ToolCall::AdjustCamera { .. } => "adjustCamera",
+            ToolCall::DetachCamera { .. } => "detachCamera",
             ToolCall::Undo => "undo",
             ToolCall::AskUser { .. } => "askUser",
             ToolCall::CannotDo { .. } => "cannotDo",
@@ -208,8 +229,9 @@ impl ToolCall {
     }
 
     /// Whether the call names a timeline time or a clip ref, which hold only while the main track's clips stay where
-    /// the context put them (`context::timeline_key`): a range, a split, a trim, a moment, or a media tool's start
-    /// when it gives one (None is the playhead). Every tool is listed, so a new one must say.
+    /// the context put them (`context::timeline_key`): a range, a split, a trim, a moment, a media tool's start when it
+    /// gives one (None is the playhead), or a camera tool's clips when it names them (None is every clip). Every tool
+    /// is listed, so a new one must say.
     pub fn names_timeline(&self) -> bool {
         match self {
             ToolCall::CutRange { .. }
@@ -223,6 +245,9 @@ impl ToolCall {
             | ToolCall::AddImage { at_us, .. }
             | ToolCall::MakeSticker { at_us, .. }
             | ToolCall::MakeTitleCard { at_us, .. } => at_us.is_some(),
+            ToolCall::SetCameraMode { clips, .. }
+            | ToolCall::AdjustCamera { clips, .. }
+            | ToolCall::DetachCamera { clips } => clips.is_some(),
             ToolCall::RemoveSilences { .. }
             | ToolCall::RemoveFillers
             | ToolCall::SetFormat { .. }
@@ -261,7 +286,7 @@ pub const CHAT_CAPTION_STYLES: [(BuiltinCaptionStyle, &str); 5] = [
     (BuiltinCaptionStyle::Boxed, "sentences on rounded boxes"),
 ];
 
-/// The formats `setFormat` offers.
+/// The formats `setFormat` offers, and the recording tools' `format`.
 const FORMATS: [FormatKind; 3] = [
     FormatKind::Landscape,
     FormatKind::Portrait,
@@ -547,6 +572,9 @@ const TOOLS: &[Tool] = &[
     media::ADD_IMAGE,
     media::MAKE_STICKER,
     media::MAKE_TITLE_CARD,
+    recorded::SET_CAMERA_MODE,
+    recorded::ADJUST_CAMERA,
+    recorded::DETACH_CAMERA,
     Tool {
         name: "undo",
         description: "Undo the last change.",

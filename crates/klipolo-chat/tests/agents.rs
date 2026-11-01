@@ -10,17 +10,18 @@ use std::path::Path;
 use std::sync::Arc;
 
 use klipolo_chat::context::QUOTED_NOTE;
-use klipolo_chat::tools::{PictureSize, Position, TextPreset};
+use klipolo_chat::tools::{BubbleChange, PictureSize, Position, TextPreset};
 use klipolo_chat::{
     ChatContext, FullTranscript, Library, LibraryItem, MediaKind, Moment, SceneLog, SpeakerTurn,
     ToolCall, View, build_context, full_transcript, timeline_key, tools,
 };
 use klipolo_model::captions::styles::BuiltinCaptionStyle;
+use klipolo_model::layout::Anchor;
 use klipolo_model::ops::Edge;
 use klipolo_model::project::{Asset, AssetKind, FormatKind, Settings};
 use klipolo_model::speech::{Speech, Transcript, Word, WordKind};
 use klipolo_model::time::{RangeUs, Us};
-use klipolo_model::timeline::{Clip, ClipSource};
+use klipolo_model::timeline::{CameraMode, Clip, ClipSource};
 use klipolo_model::{Op, Project, apply_ops, load_project};
 
 fn fixture(name: &str) -> String {
@@ -629,6 +630,25 @@ fn every_call() -> Vec<(ToolCall, bool)> {
             },
             true,
         ),
+        (
+            ToolCall::SetCameraMode {
+                clips: None,
+                mode: CameraMode::Hidden,
+                format: None,
+            },
+            false,
+        ),
+        (
+            ToolCall::AdjustCamera {
+                clips: Some(vec!["c1".into()]),
+                change: BubbleChange {
+                    position: Some(Anchor::TopLeft),
+                    ..BubbleChange::default()
+                },
+            },
+            true,
+        ),
+        (ToolCall::DetachCamera { clips: None }, false),
         (ToolCall::Undo, false),
         (
             ToolCall::AskUser {
