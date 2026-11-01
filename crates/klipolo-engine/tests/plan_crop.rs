@@ -166,13 +166,19 @@ fn the_follow_crop_stays_inside_what_the_crop_leaves() {
     let tall = bx(0.3, 0.1, 0.3, 0.9);
     for centre in [(0.5, 0.5), (0.5, 0.0), (0.5, 1.0), (f64::NAN, f64::NAN)] {
         let c = follow_crop_in(below_a_top_cut, tall, centre, 1.0);
-        assert!((c.y - 0.1).abs() < 1e-9 && (c.h - 0.9).abs() < 1e-9, "{centre:?}: {c:?}");
+        assert!(
+            (c.y - 0.1).abs() < 1e-9 && (c.h - 0.9).abs() < 1e-9,
+            "{centre:?}: {c:?}"
+        );
     }
     // The same across, beside a left cut.
     let beside_a_left_cut = bx(0.2, 0.0, 0.8, 1.0);
     let wide = bx(0.2, 0.3, 0.8, 0.3);
     let c = follow_crop_in(beside_a_left_cut, wide, (0.0, 0.5), 1.0);
-    assert!((c.x - 0.2).abs() < 1e-9 && (c.w - 0.8).abs() < 1e-9, "{c:?}");
+    assert!(
+        (c.x - 0.2).abs() < 1e-9 && (c.w - 0.8).abs() < 1e-9,
+        "{c:?}"
+    );
     // Without a crop it is the frame's follow-crop.
     let whole = follow_crop_in(FULL, base, (0.95, 0.5), 1.0);
     close(
@@ -203,7 +209,10 @@ fn a_screen_take_that_follows_the_cursor_plans_with_its_top_cut() {
     }
     p.timeline.main[0].crop = Some(crop(0.0, 0.1, 0.0, 0.1));
     let (shown, _) = main_at(&p, 2.0, Portrait);
-    assert!(shown.y >= 0.1 - 1e-9 && shown.y + shown.h <= 0.9 + 1e-9, "{shown:?}");
+    assert!(
+        shown.y >= 0.1 - 1e-9 && shown.y + shown.h <= 0.9 + 1e-9,
+        "{shown:?}"
+    );
 }
 
 #[test]
