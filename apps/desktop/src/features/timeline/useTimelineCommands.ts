@@ -1,8 +1,10 @@
 import { useLingui } from '@lingui/react/macro';
 import { useMemo } from 'react';
 import type { Clip } from '../../bindings/Clip';
+import type { Project } from '../../bindings/Project';
+import { recordingCameras } from '../../lib/camera';
 import { labelText } from '../../lib/labels';
-import { findItem, hasOwnSound } from '../../lib/timeline';
+import { findItem, hasOwnSound, itemEndUs } from '../../lib/timeline';
 import { useClipboard } from '../../state/clipboard';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
@@ -12,17 +14,37 @@ import { copy, cut, duplicate, paste, pasteEffects } from './keys/clipboardActio
 import { trackStepOps } from './keys/keyOps';
 import { nudge } from './keys/nudge';
 import { muteLabel } from '../preview';
-import { stepTrack, toggleAttach, toggleSoundMute } from './keys/layerActions';
+import { separateCamera, stepTrack, toggleAttach, toggleSoundMute } from './keys/layerActions';
 import { split, trimToPlayhead } from './keys/timelineActions';
-import { clipIndexAt, mainIndex } from './model/index';
+import { clipIndexAt, mainIndex, type MainIndex } from './model/index';
 import { useTimelineNavCommands } from './useTimelineNavCommands';
 import { useTransitionCommands } from './useTransitionCommands';
 
 const NO_CLIPS: Clip[] = [];
 
 /**
- * The timeline's commands: split, trims to the playhead, nudges, the clipboard, track moves, attaching
- * and a sound or video layer's mute, plus `useTransitionCommands`' (Add transition, ⌘T) and
+ * Main clip `i`'s camera, for Separate camera (what `detachSource` takes): none (no recording camera), separable, or
+ * separated (one of its files already plays in a layer over the clip).
+ */
+function cameraOf(project: Project, index: MainIndex, i: number): 'none' | 'separable' | 'separated' {
+  const clip = project.timeline.main[i];
+  const cameras = recordingCameras(project, clip);
+  if (!clip.camera || cameras.length === 0) return 'none';
+  const shown = project.timeline.tracks.some((track) =>
+    track.items.some(
+      (item) =>
+        item.content.type === 'video' &&
+        cameras.includes(item.content.assetId) &&
+        item.startUs < index.ends[i] &&
+        itemEndUs(item) > index.starts[i],
+    ),
+  );
+  return shown ? 'separated' : 'separable';
+}
+
+/**
+ * The timeline's commands: split, trims to the playhead, nudges, the clipboard, track moves, attaching,
+ * a sound or video layer's mute and Separate camera, plus `useTransitionCommands`' (Add transition, ⌘T) and
  * `useTimelineNavCommands`' (selection steps, edit points, zoom, snapping). Each has a stable id, is `enabled` only
  * when it can act on the selection, and runs the same code from its shortcut, the player bar and the block menu.
  * `useCommands` merges them.
@@ -63,7 +85,9 @@ export function useTimelineCommands(): Command[] {
       down: labelText('undo.trackDown'),
       attach: labelText(found?.item.attach ? 'undo.attach.free' : 'undo.attach.keep'),
       mute: labelText(muteLabel(!mutable?.muted, mutable?.type === 'video' ? 'video' : 'sound')),
+      camera: labelText('undo.separateCamera'),
     };
+    const camera = clip ? cameraOf(project, index, clipAt) : 'none';
 
     const edits: Command[] = [
       {
@@ -218,6 +242,19 @@ export function useTimelineCommands(): Command[] {
         // A sound or video layer's own switch, as the inspector's Mute: its volume stays for when it plays again.
         enabled: layer !== null && mutable !== null,
         run: () => toggleSoundMute(id),
+      },
+      {
+        id: 'separate-camera',
+        action: 'detachSource',
+        group: 'edit',
+        label: label.camera,
+        // A recording clip's camera, once: a camera already in a layer of its own is off, saying so.
+        enabled: camera === 'separable',
+        reason:
+          camera === 'separated'
+            ? t({ id: 'command.separateCamera.done', message: "This clip's camera is already in its own layer." })
+            : undefined,
+        run: () => separateCamera(id),
       },
     ];
     return [...edits, ...transitions, ...nav];
