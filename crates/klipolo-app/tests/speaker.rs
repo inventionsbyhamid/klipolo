@@ -459,7 +459,8 @@ async fn footage_longer_than_the_tracker_takes_goes_in_parts_priced_together() {
     assert!((followed.paid_usd - estimate.usd).abs() < 1e-9);
     // The parts' tracks make one path across the whole clip.
     let next = apply_ops(p, &followed.ops(p)).unwrap();
-    let Some(FillFocus::Speaker { path, .. }) = next.timeline.main[0].fill_focus.get(&Portrait) else {
+    let Some(FillFocus::Speaker { path, .. }) = next.timeline.main[0].fill_focus.get(&Portrait)
+    else {
         panic!()
     };
     for at in [10.0, 600.0, 890.0] {
