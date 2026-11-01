@@ -658,7 +658,15 @@ describe('export dialog', () => {
     emit(progress(30, 10), { type: 'paused', message: null, compatibility: null });
     expect(status()).toHaveTextContent('Export paused.');
     expect(screen.getByText('Everything finished so far is kept.')).toBeInTheDocument();
+    // Discard asks first, in place: Keep deletes nothing.
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    expect(screen.getByRole('group', { name: 'Delete the finished parts?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Keep' })).toHaveFocus();
+    await userEvent.click(screen.getByRole('button', { name: 'Keep' }));
+    expect(exporter.discard).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Discard' })).toHaveFocus();
+    await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(exporter.discard).toHaveBeenCalledWith('job');
     // Back to choosing formats, with nothing kept.
     expect(await screen.findByRole('button', { name: 'Export 1 video' })).toHaveFocus();
@@ -882,15 +890,38 @@ describe('unfinished exports', () => {
     await openWithJobs(2);
     vi.mocked(exporter.jobs).mockResolvedValue([job({ jobId: 'two', projectId: 'p2', projectName: 'Vlog' })]);
     await userEvent.click(screen.getAllByRole('button', { name: 'Discard' })[0]);
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(exporter.discard).toHaveBeenCalledWith('one');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Resume' })).toHaveFocus());
     vi.mocked(exporter.jobs).mockResolvedValue([]);
+    // From the keyboard: Discard asks, on Keep; Tab, then Delete.
     await userEvent.keyboard('{Tab}');
     expect(screen.getByRole('button', { name: 'Discard' })).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    expect(screen.getByRole('button', { name: 'Keep' })).toHaveFocus();
+    expect(exporter.discard).toHaveBeenCalledTimes(1);
+    await userEvent.keyboard('{Tab}');
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveFocus();
     await userEvent.keyboard('{Enter}');
     expect(exporter.discard).toHaveBeenLastCalledWith('two');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Export 1 video' })).toHaveFocus());
     expect(screen.queryByRole('region', { name: 'Unfinished exports' })).toBeNull();
+  });
+
+  it('a row’s Discard asks first, in the row: Keep deletes nothing', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue([job({ bytes: 2_140_000_000 })]);
+    await openWithJobs(1);
+    const row = rowOf('Resume export of Billing tutorial: 3 of 10 parts done');
+    await userEvent.click(within(row).getByRole('button', { name: 'Discard' }));
+    const ask = within(row).getByRole('group', { name: 'Delete the finished parts?' });
+    // What it frees is said with it.
+    expect(ask).toHaveAccessibleDescription(/Uses 2\.1 GB/);
+    expect(within(row).queryByRole('button', { name: 'Resume' })).toBeNull();
+    expect(within(ask).getByRole('button', { name: 'Keep' })).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    expect(exporter.discard).not.toHaveBeenCalled();
+    expect(within(row).getByRole('button', { name: 'Discard' })).toHaveFocus();
+    expect(within(row).getByRole('button', { name: 'Resume' })).toBeInTheDocument();
   });
 
   it('a Discard Rust refuses is said, and the row stays', async () => {
@@ -898,6 +929,7 @@ describe('unfinished exports', () => {
     vi.mocked(exporter.discard).mockRejectedValueOnce(new Error('The export couldn’t be discarded. Try again.'));
     await openWithJobs(1);
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await waitFor(() =>
       expect(useToasts.getState().toasts.map((t) => t.text)).toContain('The export couldn’t be discarded. Try again.'),
     );

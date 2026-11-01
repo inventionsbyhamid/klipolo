@@ -560,3 +560,10 @@
   color: var(--color-ink);
   font-size: var(--text-md);
 }
+
+/* Discard's question in a row, before its Keep and Delete. */
+.ex-job-ask {
+  align-self: center;
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+}

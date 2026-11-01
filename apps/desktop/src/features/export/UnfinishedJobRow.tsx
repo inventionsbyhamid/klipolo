@@ -41,7 +41,8 @@ interface UnfinishedJobRowProps {
 /**
  * One unfinished export: why it stopped, then Resume and Discard (Pause while it runs). When its project changed since,
  * Resume still finishes the version that was exported, and Start over exports the latest changes instead. After
- * repeated hardware failures it can also finish in compatibility mode.
+ * repeated hardware failures it can also finish in compatibility mode. Discard asks first, in the row: "Delete the
+ * finished parts?", Keep or Delete.
  */
 export function UnfinishedJobRow({ job, here, onLeave }: UnfinishedJobRowProps) {
   const id = useId();
@@ -55,6 +56,20 @@ export function UnfinishedJobRow({ job, here, onLeave }: UnfinishedJobRowProps) 
       resumeButton.current?.focus();
     }
   }, [paused, job.state]);
+  /** Discard was pressed: the row asks first, in place, on Keep. */
+  const [asking, setAsking] = useState(false);
+  const discardButton = useRef<HTMLButtonElement>(null);
+  const keepButton = useRef<HTMLButtonElement>(null);
+  /** Keep was pressed: once the question goes, the keyboard goes back to Discard. */
+  const kept = useRef(false);
+  useEffect(() => {
+    if (asking) keepButton.current?.focus();
+    else if (kept.current) {
+      kept.current = false;
+      discardButton.current?.focus();
+    }
+  }, [asking]);
+  const askId = useId();
   const store = useExport.getState;
   const startingOver = useExport((s) => s.startingOver);
   // A yes or no, so an edit that leaves it as it was renders no row again.
@@ -68,14 +83,7 @@ export function UnfinishedJobRow({ job, here, onLeave }: UnfinishedJobRowProps) 
   const resumable = !job.otherBuild;
   const startOver = here && restartable && (job.stale || job.otherBuild);
   const discard = (
-    <Button
-      size="sm"
-      aria-describedby={id}
-      onClick={() => {
-        onLeave();
-        void store().discard(job.jobId);
-      }}
-    >
+    <Button ref={discardButton} size="sm" aria-describedby={id} onClick={() => setAsking(true)}>
       Discard
     </Button>
   );
@@ -93,6 +101,35 @@ export function UnfinishedJobRow({ job, here, onLeave }: UnfinishedJobRowProps) 
         )}{' '}
         {job.bytes > 0 && <span>{`Uses ${formatFileSize(locale, job.bytes)}`}</span>}
       </span>
+      {asking ? (
+        // Discard deletes every finished part: it asks first, saying what it frees (the row's text).
+        <span className="ex-job-actions" role="group" aria-labelledby={askId} aria-describedby={id}>
+          <span className="ex-job-ask" id={askId}>
+            Delete the finished parts?
+          </span>
+          <Button
+            ref={keepButton}
+            size="sm"
+            variant="primary"
+            onClick={() => {
+              kept.current = true;
+              setAsking(false);
+            }}
+          >
+            Keep
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              setAsking(false);
+              onLeave();
+              void store().discard(job.jobId);
+            }}
+          >
+            Delete
+          </Button>
+        </span>
+      ) : (
       <span className="ex-job-actions">
         {job.state === 'running' ? (
           <Button
@@ -146,6 +183,7 @@ export function UnfinishedJobRow({ job, here, onLeave }: UnfinishedJobRowProps) 
           </>
         )}
       </span>
+      )}
     </li>
   );
 }

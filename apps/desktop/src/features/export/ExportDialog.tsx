@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { ExportPlan } from '../../bindings/ExportPlan';
 import type { FormatKind } from '../../bindings/FormatKind';
@@ -611,39 +611,92 @@ function KeptJobActions() {
   );
 }
 
-/** Discard (its kept job and parts), when it has one. */
-function DiscardKept() {
+/**
+ * A kept job's foot: Discard, Close and `primary` (Resume, Try again; none when it can't go on). Discard deletes every
+ * finished part, so it asks first, in place: "Delete the finished parts?", Keep or Delete.
+ */
+function KeptFoot({ onClose, primary }: { onClose: () => void; primary: ReactNode }) {
   const jobId = useExport((s) => s.jobId);
-  if (!jobId) return null;
-  return <Button onClick={() => void useExport.getState().discard(jobId)}>Discard</Button>;
+  const [asking, setAsking] = useState(false);
+  const discardButton = useRef<HTMLButtonElement>(null);
+  const keepButton = useRef<HTMLButtonElement>(null);
+  const kept = useRef(false);
+  useEffect(() => {
+    // The question takes the keyboard on Keep; once it's gone after Keep, focus goes back to Discard.
+    if (asking) keepButton.current?.focus();
+    else if (kept.current) {
+      kept.current = false;
+      discardButton.current?.focus();
+    }
+  }, [asking]);
+  if (asking && jobId) {
+    return (
+      <div className="dialog-foot" role="group" aria-labelledby="export-discard-ask">
+        <span className="left ex-ask" id="export-discard-ask">
+          Delete the finished parts?
+        </span>
+        <Button
+          onClick={() => {
+            setAsking(false);
+            void useExport.getState().discard(jobId);
+          }}
+        >
+          Delete
+        </Button>
+        <Button
+          ref={keepButton}
+          variant="primary"
+          onClick={() => {
+            kept.current = true;
+            setAsking(false);
+          }}
+        >
+          Keep
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="dialog-foot">
+      {jobId && (
+        <Button ref={discardButton} onClick={() => setAsking(true)}>
+          Discard
+        </Button>
+      )}
+      <Button onClick={onClose}>Close</Button>
+      {primary}
+    </div>
+  );
 }
 
 /** Discard, Close, and Resume (in compatibility mode, when the person chose it). */
 function PausedFoot({ onClose }: { onClose: () => void }) {
   const chosen = useExport((s) => shownJob(s)?.compatibility?.chosen ?? false);
   return (
-    <div className="dialog-foot">
-      <DiscardKept />
-      <Button onClick={onClose}>Close</Button>
-      <Button variant="primary" data-primary onClick={() => void useExport.getState().retry()}>
-        <Icon name="export" />
-        {chosen ? 'Resume in compatibility mode' : 'Resume'}
-      </Button>
-    </div>
+    <KeptFoot
+      onClose={onClose}
+      primary={
+        <Button variant="primary" data-primary onClick={() => void useExport.getState().retry()}>
+          <Icon name="export" />
+          {chosen ? 'Resume in compatibility mode' : 'Resume'}
+        </Button>
+      }
+    />
   );
 }
 
 /** Discard, Close, and Try again: it goes on from the kept job's finished parts. */
 function FailedFoot({ onClose }: { onClose: () => void }) {
   return (
-    <div className="dialog-foot">
-      <DiscardKept />
-      <Button onClick={onClose}>Close</Button>
-      <Button variant="primary" data-primary onClick={() => void useExport.getState().retry()}>
-        <Icon name="export" />
-        Try again
-      </Button>
-    </div>
+    <KeptFoot
+      onClose={onClose}
+      primary={
+        <Button variant="primary" data-primary onClick={() => void useExport.getState().retry()}>
+          <Icon name="export" />
+          Try again
+        </Button>
+      }
+    />
   );
 }
 
