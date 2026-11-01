@@ -51,9 +51,13 @@ export const mediaRefusal = {
 /**
  * Asset `assetId` onto the timeline at `target` (or where `target` says, worked out from the project when it runs). A
  * file the project doesn't have, or one too short to play, says so; a read-only project or a block being dragged
- * takes no edit, as for every timeline action.
+ * takes no edit, as for every timeline action. `added` runs once it has gone in.
  */
-export function addMedia(assetId: string, target: DropTarget | ((project: Project) => DropTarget)) {
+export function addMedia(
+  assetId: string,
+  target: DropTarget | ((project: Project) => DropTarget),
+  added?: () => void,
+) {
   keyBurst.after(() => {
     const project = editable();
     if (!project) return;
@@ -61,14 +65,18 @@ export function addMedia(assetId: string, target: DropTarget | ((project: Projec
     if (!asset) return toast.info(mediaRefusal.unknown());
     const at = typeof target === 'function' ? target(project) : target;
     const source = { type: 'asset', id: asset.id } as const;
-    if (asset.kind === 'audio' && isMusicTarget(at)) return void addMusic(source, dropUs(project, at));
-    if (asset.kind !== 'video') return void placeAt([source], at);
+    const then = (ok: boolean) => void (ok && added?.());
+    if (asset.kind === 'audio' && isMusicTarget(at)) return void addMusic(source, dropUs(project, at)).then(then);
+    if (asset.kind !== 'video') return void placeAt([source], at).then(then);
     const ops = dropOps(project, asset, at, project.settings.fps);
     if (ops.length === 0) return toast.info(mediaRefusal.tooShort());
     const placed = ops.at(-1);
     const id =
       placed?.type === 'insertClip' ? placed.clip.id : placed?.type === 'addItem' ? placed.item.id : null;
-    commit('media.add', ops, addedSaid(project, placed, asset.name), () => useSelection.getState().select(id));
+    commit('media.add', ops, addedSaid(project, placed, asset.name), () => {
+      useSelection.getState().select(id);
+      added?.();
+    });
   });
 }
 

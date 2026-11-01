@@ -12,7 +12,7 @@
 //! The cursor is recorded burned in unless `--cursor separate` records it as its own layer, as the app's
 //! preflight does on macOS (this example decides by its flags alone). `--kill-cursor-at <s>` stops
 //! the cursor source `s` seconds after it started, so the watchdog's live fallback shows. Takes are 5-90 s; `--max-secs`
-//! allows up to 300 (Step 5's 3-minute drift and RSS take).
+//! allows up to 300 (a 3-minute take checks the clicks' drift and the resident size).
 //!
 //! `camera` records the Mac's built-in camera alone (never a Continuity camera), at the camera preset.
 //! `--with-camera` records it beside the screen at Camera720; `--shell` runs the real menu-bar item, HUD and keys;

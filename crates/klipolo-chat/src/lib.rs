@@ -23,7 +23,8 @@ pub use compile::{
 };
 pub use context::{
     ChatContext, FullTranscript, MAX_CONTEXT_TOKENS, Refs, SceneEntry, SceneLog, SpeakerTurn,
-    TranscriptLine, View, build_context, estimate_tokens, full_transcript, timeline_key,
+    TranscriptLine, View, build_context, estimate_tokens, full_transcript, layers_key,
+    timeline_key,
 };
 pub use library::{Library, LibraryItem, MediaKind};
 pub use model::{BoxFuture, Item, LanguageModel, ModelError, ModelRequest, ModelResponse};

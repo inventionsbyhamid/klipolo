@@ -2,12 +2,15 @@ import { useLingui } from '@lingui/react/macro';
 import { Volume2, VolumeX } from 'lucide-react';
 import type { Op } from '../../bindings/Op';
 import { IconButton } from '../../design/IconButton';
+import clipSettings from '../../lib/clip-settings.json';
 import { commitToggle } from '../../state/commit';
 import { muteLabel } from '../preview';
 import { Field } from './fields';
 import { ToolSlider } from './ToolSlider';
 
 const percent = (v: number) => `${Math.round(v * 100)}%`;
+/** The model's volume range and step (`klipolo_model::clip_settings`), which chat's setClip takes too. */
+const VOLUME = clipSettings.volume;
 
 interface VolumeControlsProps {
   volume: number;
@@ -45,9 +48,9 @@ export function VolumeControls({ volume, volumeOps, mute: muting, noun }: Volume
           label={label}
           commitLabel="volume.undo"
           value={volume}
-          min={0}
-          max={2}
-          step={0.01}
+          min={VOLUME.min}
+          max={VOLUME.max}
+          step={VOLUME.step}
           format={percent}
           preview={false}
           ops={volumeOps}

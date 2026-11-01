@@ -1,5 +1,6 @@
 import { useLingui } from '@lingui/react/macro';
-import type { KeyboardEvent } from 'react';
+import { useState, type KeyboardEvent } from 'react';
+import { SearchField } from '../design/SearchField';
 import { CaptionsPanel } from '../features/captions/CaptionsPanel';
 import { LooksPanel } from '../features/looks/LooksPanel';
 import { MediaList } from '../features/media/MediaList';
@@ -12,9 +13,10 @@ const TABS: LibraryTab[] = ['clips', 'music', 'sounds', 'images'];
 
 /**
  * The library panel: the Library, Captions and Looks view tabs, Add files, Record your screen (the
- * Clips, Music, Sounds and Images over the files of each (yours first, then Klipolo's pack). The pills scroll sideways
- * in a narrow panel, with a fade at the right edge. The arrow keys move between them. Its Captions tab shows the
- * Captions view in its place, and its Looks tab the looks (`LooksPanel`).
+ * shown, and the filter pills Clips, Music, Sounds and Images over the files of each (yours first, then Klipolo's
+ * pack). The search keeps its words from tab to tab. The pills scroll sideways in a narrow panel, with a fade at the
+ * right edge. The arrow keys move between them. Its Captions tab shows the Captions view in its place,
+ * and its Looks tab the looks (`LooksPanel`).
  */
 export function Library() {
   const { t } = useLingui();
@@ -23,11 +25,18 @@ export function Library() {
   const importMedia = useImportMedia();
   const view = useCaptionsView((s) => s.view);
   const setView = useCaptionsView((s) => s.setView);
+  const [query, setQuery] = useState('');
   const names: Record<LibraryTab, string> = {
     clips: t({ id: 'library.tab.clips', message: 'Clips' }),
     music: t({ id: 'library.tab.music', message: 'Music' }),
     sounds: t({ id: 'library.tab.sounds', message: 'Sounds' }),
     images: t({ id: 'library.tab.images', message: 'Images' }),
+  };
+  const searchLabels: Record<LibraryTab, string> = {
+    clips: t({ id: 'library.search.clips', message: 'Search clips' }),
+    music: t({ id: 'library.search.music', message: 'Search music' }),
+    sounds: t({ id: 'library.search.sounds', message: 'Search sounds' }),
+    images: t({ id: 'library.search.images', message: 'Search images' }),
   };
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
@@ -74,6 +83,7 @@ export function Library() {
         <LooksPanel />
       ) : (
         <>
+          <SearchField className="lib-search" value={query} onChange={setQuery} label={searchLabels[tab]} />
           <div
             className="pills lib-pills"
             role="tablist"
@@ -97,7 +107,7 @@ export function Library() {
             ))}
           </div>
           <div className="lib-scroll" role="tabpanel" id="library-list" aria-labelledby={`library-tab-${tab}`}>
-            <MediaList tab={tab} />
+            <MediaList tab={tab} query={query} />
           </div>
         </>
       )}
