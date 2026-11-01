@@ -2,7 +2,7 @@
 //! added each to a timeline from the library (recently used). Kept in `library.json` in the app's config folder,
 //! `{ "<key>": { "favorite": true, "usedMs": 1761955200000 } }`, each item by what names it in every project:
 //! `pack:<item id>` for Klipolo's pack, `file:<path>` for a person's own file. A file that is missing, unreadable or not
-//! what Klipolo writes reads as no marks.
+//! what Klipolo writes reads as no marks. A favorite stays until its star is taken off, even when its file has moved.
 
 use std::collections::BTreeMap;
 use std::io;

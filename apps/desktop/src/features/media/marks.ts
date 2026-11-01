@@ -23,7 +23,7 @@ export const useMarks = create<{ marks: LibraryMarks; asked: boolean; reads: num
 }));
 
 /**
- * The marks as Rust keeps them, read once per page (asked again by the next library tab when they couldn't be); an
+ * The marks as Rust keeps them, read once per page (asked again when the library shows again, if they couldn't be); an
  * answer with none reads as none.
  */
 export function loadMarks() {
