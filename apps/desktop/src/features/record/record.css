@@ -85,9 +85,12 @@
   line-height: var(--lh-xs);
 }
 
-/* The body scrolls; its own padding keeps focus rings inside the scrolled box. */
+/* The body scrolls; its own padding keeps focus rings inside the scrolled box. Each row is as tall as what is in it:
+   a body too short for its rows scrolls, and never squeezes the 16:9 preview's row (its overflow makes its smallest
+   height 0) so that the cards below climb over it. */
 .record-body {
   display: grid;
+  grid-auto-rows: max-content;
   align-content: start;
   gap: var(--space-8);
   min-height: 0;

@@ -180,6 +180,34 @@ describe('the dialog and its choices', () => {
     expect(fake.armed[0].what).toEqual({ kind: 'app', appId: 'com.apple.Notes', display: 'main' });
   });
 
+  it('one_app_s_cards_sit_below_the_preview_in_their_own_rows', async () => {
+    const dialog = await openOn(
+      recorderSetup({
+        apps: ['Safari', 'Notes', 'Mail', 'Keynote'].map((name) => app(`com.apple.${name}`, name)),
+      }),
+    );
+    await userEvent.click(screen.getByRole('radio', { name: 'One app' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Keynote' }));
+    const preview = dialog.querySelector<HTMLElement>('.record-preview');
+    const group = screen.getByRole('radiogroup', { name: 'Apps' });
+    expect(within(group).getAllByRole('radio')).toHaveLength(4);
+    // The cards come after the preview box, never inside it.
+    expect(preview).not.toBeNull();
+    expect(preview?.contains(group)).toBe(false);
+    expect(preview?.compareDocumentPosition(group)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    const css = readFileSync(resolve(__dirname, 'record.css'), 'utf8');
+    // The body's rows are as tall as what is in them, so a body that has to scroll never squeezes the 16:9 preview's
+    // row and lets the cards' rows climb over it: it scrolls instead.
+    const body = css.match(/\.record-body \{[^}]*\}/)?.[0] ?? '';
+    expect(body).toMatch(/grid-auto-rows: max-content/);
+    expect(body).toMatch(/overflow-y: auto/);
+    // The cards wrap into rows of their own, in the flow: nothing places them over the preview.
+    const cards = css.match(/\.record-cards \{[^}]*\}/)?.[0] ?? '';
+    expect(cards).toMatch(/grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+    for (const rule of css.match(/\.record-(cards|card|section)[^{]*\{[^}]*\}/g) ?? [])
+      expect(rule).not.toMatch(/position: (absolute|fixed)/);
+  });
+
   it('no_open_app_says_so', async () => {
     const dialog = await openOn();
     await userEvent.click(screen.getByRole('radio', { name: 'One app' }));
