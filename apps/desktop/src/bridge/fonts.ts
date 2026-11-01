@@ -3,11 +3,14 @@ import type { Browse } from '../bindings/Browse';
 import type { BrowseAsk } from '../bindings/BrowseAsk';
 import type { BundledFont } from '../bindings/BundledFont';
 import type { CatalogueInfo } from '../bindings/CatalogueInfo';
+import type { CjkFonts } from '../bindings/CjkFonts';
+import type { CjkScript } from '../bindings/CjkScript';
 import type { DownloadedFamily } from '../bindings/DownloadedFamily';
 import type { DownloadedId } from '../bindings/DownloadedId';
 import type { FontRef } from '../bindings/FontRef';
 import type { FontRow } from '../bindings/FontRow';
 import type { GoogleFonts } from '../bindings/GoogleFonts';
+import type { MissingAnswer } from '../bindings/MissingAnswer';
 import type { SearchFilter } from '../bindings/SearchFilter';
 import { call } from './call';
 
@@ -53,4 +56,10 @@ export const fonts = {
   reveal: () => call<void>('fonts_reveal'),
   /** Which Google Fonts list the app ships: its date, or that it is a test build's sample. */
   catalogue: () => call<CatalogueInfo>('fonts_catalogue'),
+  /** The fonts the open project `projectId` uses that aren't here, once this Mac's are read (else `pending`). */
+  missing: (projectId: string) => call<MissingAnswer>('fonts_missing', { projectId }),
+  /** Noto Sans SC, TC, JP and KR: their faces' sizes, and which are here. */
+  cjk: () => call<CjkFonts[]>('fonts_cjk'),
+  /** The Noto Sans of `script` at `weight` (Chinese, Japanese or Korean text's fallback). */
+  downloadCjk: (script: CjkScript, weight: number) => call<FontRef>('fonts_cjk_download', { script, weight }),
 };

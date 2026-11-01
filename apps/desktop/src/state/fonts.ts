@@ -1,6 +1,7 @@
 import { listen } from '@tauri-apps/api/event';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import type { CjkScript } from '../bindings/CjkScript';
 import type { DownloadedId } from '../bindings/DownloadedId';
 import type { FontRef } from '../bindings/FontRef';
 import { fonts } from '../bridge/fonts';
@@ -78,16 +79,23 @@ function dropProgress(family: string) {
  * joined, never fetched twice; one Cancel stops it for every pick waiting on it. A refusal or failure comes as Rust's
  * code.
  */
-export async function downloadFont(
-  family: string,
-  version: string | null,
-  weight: number,
-  italic: boolean,
-): Promise<FontRef> {
-  const key = faceKey(family, weight, italic);
+export function downloadFont(family: string, version: string | null, weight: number, italic: boolean): Promise<FontRef> {
+  return join(family, faceKey(family, weight, italic), () => fonts.download(family, version, weight, italic));
+}
+
+/** The Noto Sans of `script` at `weight`, tracked (and joined) under its family's name. */
+export function downloadCjkFont(script: CjkScript, family: string, weight: number): Promise<FontRef> {
+  return join(family, faceKey(family, weight, false), () => fonts.downloadCjk(script, weight));
+}
+
+/**
+ * The download of `key`: the one running now, joined (one Cancel stops it for all), else `start`'s. The family's
+ * progress entry stays until the last of its downloads ends.
+ */
+async function join(family: string, key: string, start: () => Promise<FontRef>): Promise<FontRef> {
   let held = running.get(key);
   if (!held) {
-    held = { done: fonts.download(family, version, weight, italic), waiters: 0, family };
+    held = { done: start(), waiters: 0, family };
     running.set(key, held);
     let mine = families.get(family);
     if (!mine) {

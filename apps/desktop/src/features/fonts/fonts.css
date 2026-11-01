@@ -315,3 +315,115 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Over the preview while the project uses fonts that aren't on this Mac, as the analysis banner sits. */
+.missing-fonts {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-bay-raised);
+  font-size: var(--text-sm);
+}
+
+.missing-fonts-icon {
+  flex: none;
+  color: var(--color-paper);
+}
+
+.missing-fonts-text {
+  display: grid;
+  flex: 1;
+  gap: var(--space-1);
+  min-width: 160px;
+}
+
+.missing-fonts-text p {
+  margin: 0;
+}
+
+.missing-fonts-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.missing-fonts .font-download,
+.missing-fonts-error {
+  flex-basis: 100%;
+}
+
+.missing-fonts-error {
+  margin: 0;
+  font-size: var(--text-xs);
+}
+
+/* Replace fonts: a row per missing face, each with its font menu. */
+.replace-fonts {
+  display: grid;
+  gap: var(--space-4);
+  width: 340px;
+}
+
+.replace-fonts-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.replace-fonts-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.replace-fonts-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replace-fonts-apply {
+  justify-self: end;
+}
+
+/* Settings' Chinese, Japanese and Korean fonts: a row per script, its language and family above what to download. */
+.cjk-fonts {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.cjk-row {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.cjk-row-name {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cjk-row-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.cjk-row-pick .select {
+  width: auto;
+  max-width: 220px;
+}

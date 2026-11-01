@@ -2,21 +2,29 @@ import { useLingui } from '@lingui/react/macro';
 import { listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { CatalogueInfo } from '../../bindings/CatalogueInfo';
+import type { CjkFonts } from '../../bindings/CjkFonts';
 import type { DownloadedFamily } from '../../bindings/DownloadedFamily';
 import { fonts } from '../../bridge/fonts';
 import { Button } from '../../design/Button';
+import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '../../design/Menu';
 import { Toggle } from '../../design/Toggle';
 import { useIntlLocale } from '../../i18n/react';
 import { errorMessage } from '../../lib/errors';
 import { formatDate, formatDownloadSize } from '../../lib/format';
-import { loadGoogleFonts, removeDownloaded, setGoogleFonts, useFonts } from '../../state/fonts';
+import { Icon } from '../../layout/Icon';
+import { downloadCjkFont, loadGoogleFonts, removeDownloaded, setGoogleFonts, useFonts } from '../../state/fonts';
 import { toast } from '../../state/toasts';
+import { DownloadLine } from './DownloadLine';
+import { GoogleConsent } from './GoogleConsent';
+import { cjkLanguageName, useCjkFonts } from './useCjkFonts';
+import { useGooglePick } from './useGooglePick';
+import { useWeightName } from './WeightMenu';
 import './fonts.css';
 
 /**
  * Settings' Fonts section: the "Google Fonts" switch (off: nothing is fetched from Google, and the font menu lists only
- * what's downloaded), the downloaded fonts with Remove, Show in Finder, and which Google Fonts list Klipolo ships
- * ("Font list from {date}", or "Font list: sample (test build)").
+ * what's downloaded), the downloaded fonts with Remove, Show in Finder, the fonts for Chinese, Japanese and Korean, and
+ * which Google Fonts list Klipolo ships ("Font list from {date}", or "Font list: sample (test build)").
  */
 export function FontsSettings() {
   const { t } = useLingui();
@@ -62,6 +70,7 @@ export function FontsSettings() {
       <Button size="sm" className="fonts-settings-reveal" onClick={() => void fonts.reveal().catch(() => undefined)}>
         {t({ id: 'fontSettings.reveal', message: 'Show in Finder', comment: 'Shows the downloaded fonts’ folder' })}
       </Button>
+      <CjkFontsSettings />
       {info && (
         <p className="hint">
           {info.sample || !date
@@ -234,5 +243,140 @@ export function DownloadedFonts() {
         })}
       </ul>
     </section>
+  );
+}
+
+/**
+ * "Fonts for Chinese, Japanese and Korean": Noto Sans SC, TC, JP and KR, the only faces that text falls back to. Each
+ * downloads a weight at a time: its weights with their sizes, and Download, after the one consent (in place), with its
+ * progress and Cancel. While Google Fonts is off, nothing downloads. Each row is two lines, the language and its family
+ * above what to download, so it fits in any language.
+ */
+export function CjkFontsSettings() {
+  const { t } = useLingui();
+  const title = useId();
+  const list = useCjkFonts();
+  const google = useFonts((s) => s.googleFonts);
+  const pick = useGooglePick();
+  if (!list) return null;
+  return (
+    <section aria-labelledby={title} className="cjk-fonts">
+      <h4 id={title} className="fonts-downloaded-title">
+        {t({ id: 'fontSettings.cjk', message: 'Fonts for Chinese, Japanese and Korean' })}
+      </h4>
+      {pick.asking && (
+        <GoogleConsent bytes={pick.asking.bytes} onDownload={() => void pick.confirm()} onCancel={pick.cancelAsk} />
+      )}
+      {/* Hidden, not gone, while the consent asks: the keyboard goes back to the row's Download after it. */}
+      <div hidden={!!pick.asking} className="cjk-fonts">
+        {list.map((c) => (
+          <CjkRow key={c.script} fonts={c} google={google} onDownload={pick.pick} />
+        ))}
+      </div>
+      <p aria-live="polite" className="font-note font-error">
+        {pick.error}
+      </p>
+    </section>
+  );
+}
+
+function CjkRow({
+  fonts: c,
+  google,
+  onDownload,
+}: {
+  fonts: CjkFonts;
+  google: boolean;
+  onDownload: ReturnType<typeof useGooglePick>['pick'];
+}) {
+  const { t } = useLingui();
+  const locale = useIntlLocale();
+  const name = useWeightName();
+  const missing = c.faces.filter((f) => !f.downloaded);
+  const here = c.faces.filter((f) => f.downloaded).map((f) => name(f.weight, false));
+  const [weight, setWeight] = useState(() => missing.find((f) => f.weight === 400)?.weight ?? missing[0]?.weight);
+  const busy = useFonts((s) => !!s.downloads[c.family]);
+  const chosen = missing.find((f) => f.weight === weight) ?? missing[0];
+  const names = here.join(', ');
+  const family = c.family;
+  const language = cjkLanguageName(c.script, locale);
+  const faceText = (f: { weight: number; bytes: number }) => {
+    const w = name(f.weight, false);
+    const size = formatDownloadSize(locale, f.bytes);
+    return t({
+      id: 'fontSettings.cjk.face',
+      message: `${w} (${size})`,
+      comment: 'A weight of a Noto Sans and what it downloads (“Regular (5.4 MB)”)',
+    });
+  };
+  return (
+    <div className="cjk-row">
+      <p className="cjk-row-name" title={`${language} · ${family}`}>
+        {t({
+          id: 'fontSettings.cjk.row',
+          message: `${language} · ${family}`,
+          comment: '{language} is a language (“Japanese”), {family} the Noto Sans it uses',
+        })}
+      </p>
+      {chosen && (
+        <div className="cjk-row-pick">
+          <Menu>
+            <MenuTrigger asChild>
+              <button
+                type="button"
+                className="select"
+                aria-label={t({
+                  id: 'fontSettings.cjk.weight',
+                  message: `${family} weight: ${faceText(chosen)}`,
+                  comment: '{family} is a Noto Sans; then the weight picked and its size',
+                })}
+              >
+                <span className="select-text">{faceText(chosen)}</span>
+                <Icon name="chev-down" />
+              </button>
+            </MenuTrigger>
+            <MenuContent>
+              <MenuRadioGroup value={String(chosen.weight)} onValueChange={(v) => setWeight(Number(v))}>
+                {missing.map((f) => (
+                  <MenuRadioItem key={f.weight} value={String(f.weight)}>
+                    {faceText(f)}
+                  </MenuRadioItem>
+                ))}
+              </MenuRadioGroup>
+            </MenuContent>
+          </Menu>
+          <Button
+            size="sm"
+            aria-disabled={!google || busy || undefined}
+            aria-label={t({
+              id: 'fontSettings.cjk.download',
+              message: `Download ${family}`,
+              comment: '{family} is a Noto Sans, for Chinese, Japanese or Korean text',
+            })}
+            onClick={(e) => {
+              if (!google || busy) return;
+              void onDownload({
+                family,
+                bytes: chosen.bytes,
+                run: () => downloadCjkFont(c.script, family, chosen.weight),
+                from: e.currentTarget,
+              });
+            }}
+          >
+            {t({ id: 'fontSettings.cjk.downloadShort', message: 'Download' })}
+          </Button>
+        </div>
+      )}
+      <DownloadLine family={family} />
+      {here.length > 0 && (
+        <p className="hint">
+          {t({
+            id: 'fontSettings.cjk.here',
+            message: `Downloaded: ${names}`,
+            comment: 'The weights of a Noto Sans on this Mac (“Regular, Bold”)',
+          })}
+        </p>
+      )}
+    </div>
   );
 }

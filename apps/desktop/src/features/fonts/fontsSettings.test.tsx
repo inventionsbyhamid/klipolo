@@ -29,6 +29,19 @@ function fake(downloaded: DownloadedFamily[]) {
         );
         return null;
       }
+      case 'fonts_cjk':
+        return [
+          {
+            script: 'jp',
+            family: 'Noto Sans JP',
+            faces: [
+              { weight: 400, bytes: 5_440_000, downloaded: false },
+              { weight: 700, bytes: 5_600_000, downloaded: true },
+            ],
+          },
+        ];
+      case 'fonts_cjk_download':
+        return { family: 'Noto Sans JP', source: { type: 'google', version: 'v52' } };
       case 'fonts_catalogue':
         return { date: '2026-10-22', sample: false, families: 1900 };
       default:
@@ -68,5 +81,17 @@ describe('Settings, Fonts', () => {
     await userEvent.click(within(ask).getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(asked).toContainEqual(['fonts_remove', { id: lato.id }]));
     expect(await screen.findByText('No Google fonts downloaded yet.')).toBeInTheDocument();
+  });
+});
+
+describe('Settings, Fonts for Chinese, Japanese and Korean', () => {
+  it('lists each Noto Sans by its language, the weights here, and downloads the weight picked', async () => {
+    const asked = fake([]);
+    renderWithProviders(<FontsSettings />);
+    expect(await screen.findByText('Japanese · Noto Sans JP')).toBeInTheDocument();
+    expect(screen.getByText('Downloaded: Bold')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Noto Sans JP weight: Regular \(5\.4\s?MB\)$/ })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Download Noto Sans JP' }));
+    await waitFor(() => expect(asked).toContainEqual(['fonts_cjk_download', { script: 'jp', weight: 400 }]));
   });
 });
