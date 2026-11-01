@@ -2237,6 +2237,35 @@
   line-height: var(--lh-sm);
 }
 
+/* An item's star: shown on hover and focus with the "+", and kept, filled, while it is a favorite. Its row keeps room
+   for it so the title never runs under it. */
+.favorite[aria-pressed="true"] {
+  opacity: 1;
+  color: var(--color-ink);
+}
+
+.favorite[aria-pressed="true"]::after {
+  content: none;
+}
+
+.favorite[aria-pressed="true"] .ico {
+  fill: currentColor;
+}
+
+.lib-row:not(:hover):not(:focus-within) .favorite[aria-pressed="true"] {
+  background: transparent;
+}
+
+.lib-row.is-favorite .row-text {
+  padding-right: 34px;
+}
+
+/* On a picture, the star sits top left (the "+" is top right). */
+.picture .row-action.favorite {
+  right: auto;
+  left: var(--space-2);
+}
+
 /* Images: a 3-column grid of pictures on a checkerboard (they may be see-through), each named under it. */
 .image-grid {
   display: grid;

@@ -3,6 +3,7 @@ import { useEffect, useRef, type PointerEvent } from 'react';
 import type { Asset } from '../../bindings/Asset';
 import type { PackItem } from '../../bindings/PackItem';
 import type { Project } from '../../bindings/Project';
+import type { LibraryMarks } from '../../bridge/library';
 import { Icon } from '../../layout/Icon';
 import { useProject } from '../../state/project';
 import type { LibraryTab } from '../../state/ui';
@@ -10,6 +11,8 @@ import { beginMediaDrag } from '../timeline/drag/mediaDrag';
 import { addMedia } from './addMedia';
 import { AssetMenu } from './AssetMenu';
 import { AssetRow } from './AssetRow';
+import { FavoriteButton, type Favorite } from './FavoriteButton';
+import { fileKey, loadMarks, marked, packKey, setFavorite, useMarks } from './marks';
 import { addImage, addMusic, addPackItem, addSound, dropPackItem } from './place';
 import { searchLibrary, type Searchable } from './search';
 import { loadPack, packAsset, packAssetId, shelves, useNearView, usePack, usePicture, uses } from './shelves';
@@ -27,19 +30,24 @@ function Group({ title, note, id }: { title: string; note?: string; id?: string 
   );
 }
 
-/** A picture in the Images grid: on a checkerboard (it may be see-through), its name under it; "+" adds it. */
+/**
+ * A picture in the Images grid: on a checkerboard (it may be see-through), its name under it; "+" adds it, and its star
+ * (top left) makes it a favorite.
+ */
 function Picture({
   asset,
   from,
   title,
   onAdd,
   onDrop,
+  favorite,
 }: {
   asset: Asset;
   from: { packId: string } | { path: string };
   title: string;
   onAdd: () => void;
   onDrop: Parameters<typeof beginMediaDrag>[2];
+  favorite: Favorite;
 }) {
   const { t } = useLingui();
   const tile = useRef<HTMLLIElement>(null);
@@ -75,6 +83,7 @@ function Picture({
       >
         <Icon name="plus" />
       </button>
+      <FavoriteButton title={title} favorite={favorite} />
     </li>
   );
 }
@@ -84,12 +93,20 @@ function musicAddLabel(t: ReturnType<typeof useLingui>['t'], name: string): stri
   return t({ id: 'library.add.music', message: `Add ${name} under the whole video`, comment: '{name} is a song’s name' });
 }
 
+/** Item `key`'s star, from the marks. */
+function favoriteOf(marks: LibraryMarks, key: string): Favorite {
+  const on = marks[key]?.favorite ?? false;
+  return { on, toggle: () => setFavorite(key, !on) };
+}
+
 /** The pack's items of one kind, as rows or pictures. */
 function PackItems({ items, project }: { items: PackItem[]; project: Project }) {
   const { t } = useLingui();
+  const marks = useMarks((s) => s.marks);
   const used = uses(project).any;
-  return items.map((item) =>
-    item.category === 'sticker' ? (
+  return items.map((item) => {
+    const favorite = favoriteOf(marks, packKey(item.id));
+    return item.category === 'sticker' ? (
       <Picture
         key={item.id}
         asset={packAsset(item)}
@@ -97,6 +114,7 @@ function PackItems({ items, project }: { items: PackItem[]; project: Project }) 
         title={item.name}
         onAdd={() => void addPackItem(item)}
         onDrop={(target) => void dropPackItem(item, target)}
+        favorite={favorite}
       />
     ) : (
       <AssetRow
@@ -108,9 +126,10 @@ function PackItems({ items, project }: { items: PackItem[]; project: Project }) 
         onAdd={() => void addPackItem(item)}
         addLabel={item.category === 'music' ? musicAddLabel(t, item.name) : undefined}
         onDrop={(target) => void dropPackItem(item, target)}
+        favorite={favorite}
       />
-    ),
-  );
+    );
+  });
 }
 
 /** How the search reads a pack item: its tags, and "Built in". */
@@ -124,28 +143,35 @@ const aboutOwn =
   (category: string, collection: string) =>
   (asset: Asset): Searchable => ({ name: asset.name, tags: [], category, kind: asset.kind, collection });
 
+const ownKey = (asset: Asset) => fileKey(asset.path);
+const packItemKey = (item: PackItem) => packKey(item.id);
+
 /**
  * What the Library shows on one tab: your files first, then Klipolo's pack where it has some. Clips are
  * the project's videos; Music and Sounds the sounds (by how they play, else by length) and the pack's beds and effects;
  * Images a 3-column grid of your pictures, those made with Muse Image, and the pack's stickers. Drag any row onto the
  * lane it belongs to; the "+" adds it at the playhead. `query` (the panel's search) keeps the items it finds, best
- * first (`search.ts`).
+ * first (`search.ts`); in each list, favorites come first (`marks.ts`).
  */
 export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
   const { t } = useLingui();
   const project = useProject((s) => s.snapshot?.project);
   const pack = usePack((s) => s.items);
+  const marks = useMarks((s) => s.marks);
   useEffect(loadPack, []);
+  useEffect(loadMarks, []);
   if (!project) return null;
   const own = shelves(project);
   const used = uses(project).any;
   const builtIn = t({ id: 'library.builtIn', message: 'Built in' });
   const free = t({ id: 'library.builtIn.free', message: 'Free to use' });
+  const found = <T,>(items: T[], about: (item: T) => Searchable, keyOf: (item: T) => string) =>
+    marked(searchLibrary(items, query, about), keyOf, marks);
   const ofPack = (category: PackItem['category']) =>
-    searchLibrary(
+    found(
       pack.filter((item) => item.category === category),
-      query,
       aboutPack,
+      packItemKey,
     );
   const asked = query.trim();
   /** The one line a search that finds nothing on this tab shows. */
@@ -164,6 +190,7 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
       onAdd={add}
       addLabel={art === 'music' ? musicAddLabel(t, asset.name) : undefined}
       onDrop={(target) => addMedia(asset.id, target)}
+      favorite={favoriteOf(marks, ownKey(asset))}
     />
   );
 
@@ -180,7 +207,7 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
           </p>
         </div>
       );
-    const clips = searchLibrary(own.clips, query, aboutOwn('video', 'Your clips'));
+    const clips = found(own.clips, aboutOwn('video', 'Your clips'), ownKey);
     if (clips.length === 0)
       return none(t({ id: 'library.clips.noMatch', message: `No clips match “${asked}”.`, comment: '{asked} is what the person searched for' }));
     return (
@@ -196,6 +223,7 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
             addLabel={t({ id: 'library.add.end', message: `Add ${clip.name} to the end`, comment: '{clip.name} is a file name' })}
             onDrop={(target) => addMedia(clip.id, target)}
             menu={<AssetMenu asset={clip} />}
+            favorite={favoriteOf(marks, ownKey(clip))}
           />
         ))}
       </ul>
@@ -204,10 +232,10 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
 
   if (tab === 'music' || tab === 'sounds') {
     const music = tab === 'music';
-    const mine = searchLibrary(
+    const mine = found(
       music ? own.music : own.sounds,
-      query,
       aboutOwn(music ? 'music' : 'sound', music ? 'Your music' : 'Your sounds'),
+      ownKey,
     );
     const packed = ofPack(music ? 'music' : 'sound');
     return (
@@ -263,10 +291,11 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
       title={asset.name}
       onAdd={() => void addImage({ type: 'asset', id: asset.id })}
       onDrop={(target) => addMedia(asset.id, target)}
+      favorite={favoriteOf(marks, ownKey(asset))}
     />
   );
-  const images = searchLibrary(own.images, query, aboutOwn('photo', 'Your images'));
-  const made = searchLibrary(own.made, query, aboutOwn('photo', 'Made with Muse Image'));
+  const images = found(own.images, aboutOwn('photo', 'Your images'), ownKey);
+  const made = found(own.made, aboutOwn('photo', 'Made with Muse Image'), ownKey);
   const stickers = ofPack('sticker');
   return (
     <>

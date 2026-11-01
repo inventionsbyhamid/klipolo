@@ -11,7 +11,7 @@ import { renderWithProviders } from '../../test/render';
 /*
  * The Library's tabs: Clips, Music, Sounds and Images, your files first and then Klipolo's pack, each
  * row's "+" adding it at the playhead through the media commands, and a sound let go on the Music lane added as music.
- * Its search finds a tab's items by name, tag and related word.
+ * Its search finds a tab's items by name, tag and related word; favorites list first.
  */
 
 const answer = (): Promise<SnapshotPatch> => Promise.resolve(revisionPatch(4));
@@ -23,6 +23,8 @@ const PACK: PackItem[] = [
 ];
 vi.mock('../../bridge/library', () => ({
   library: {
+    marks: vi.fn(() => Promise.resolve({})),
+    setFavorite: vi.fn((key: string, on: boolean) => Promise.resolve({ [key]: { favorite: on, usedMs: 0 } })),
     addMusic: vi.fn(() => answer()),
     addSound: vi.fn(() => answer()),
     addImage: vi.fn(() => answer()),
@@ -42,6 +44,8 @@ const { useUi } = await import('../../state/ui');
 const { useSelection } = await import('../../state/selection');
 const { useAnnouncer } = await import('../timeline/announce');
 const { usePack, loadPack, forgetPictures } = await import('./shelves');
+const { useMarks } = await import('./marks');
+const { useToasts } = await import('../../state/toasts');
 const { useEditorShortcuts } = await import('../command-palette/useEditorShortcuts');
 const { addMedia } = await import('./addMedia');
 const { Library } = await import('../../layout/Library');
@@ -76,8 +80,15 @@ beforeEach(() => {
   usePlayback.setState({ playheadUs: 2_000_000, playing: false });
   useUi.setState({ libraryTab: 'clips' });
   usePack.setState({ items: [], asked: false });
+  useMarks.setState({ marks: {}, asked: false });
   forgetPictures();
 });
+
+/** The names a list shows, in order. */
+const listed = (list: HTMLElement) =>
+  within(list)
+    .getAllByRole('listitem')
+    .map((li) => li.querySelector('.row-title, .picture-name')!.textContent);
 
 describe('the Library', () => {
   it('lists the project’s clips in the order the video plays them, and the arrow keys move between its tabs', async () => {
@@ -361,5 +372,52 @@ describe('the Library', () => {
     expect(useSelection.getState().selectedId).toBe('title');
     expect(usePlayback.getState()).toMatchObject({ playing: false, playheadUs: 2_000_000 });
     expect(useUi.getState().libraryTab).toBe('sounds');
+  });
+
+  it('a star makes an item a favorite for every project, and favorites list first on their tab', async () => {
+    useUi.setState({ libraryTab: 'sounds' });
+    // As Rust kept them: tick.wav starred in another project.
+    vi.mocked(library.marks).mockResolvedValueOnce({ 'file:/media/tick': { favorite: true, usedMs: 0 } });
+    renderWithProviders(<Library />);
+    const panel = screen.getByRole('tabpanel');
+    await screen.findByText('Impact');
+    const yours = within(panel).getByRole('list', { name: 'Your sounds' });
+    await waitFor(() => expect(listed(yours)[0]).toBe('tick.wav'));
+    expect(within(yours).getByRole('button', { name: 'Favorite tick.wav' })).toHaveAttribute('aria-pressed', 'true');
+    let pack = within(panel).getByRole('list', { name: /^Built in/ });
+    expect(listed(pack)).toEqual(['Whoosh', 'Impact']);
+    // Starred: saved app-wide, and first.
+    const star = within(pack).getByRole('button', { name: 'Favorite Impact' });
+    expect(star).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(star);
+    expect(library.setFavorite).toHaveBeenCalledWith('pack:impact', true);
+    expect(listed(pack)).toEqual(['Impact', 'Whoosh']);
+    expect(within(pack).getByRole('button', { name: 'Favorite Impact' })).toHaveAttribute('aria-pressed', 'true');
+    // Starred while searching too.
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search sounds' }), 'hit');
+    expect(within(panel).getByRole('button', { name: 'Favorite Impact' })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.clear(screen.getByRole('searchbox', { name: 'Search sounds' }));
+    // Taken off again (the search emptied the list on its way, so it is a new one).
+    pack = within(panel).getByRole('list', { name: /^Built in/ });
+    await userEvent.click(within(pack).getByRole('button', { name: 'Favorite Impact' }));
+    expect(library.setFavorite).toHaveBeenLastCalledWith('pack:impact', false);
+    expect(listed(pack)).toEqual(['Whoosh', 'Impact']);
+    // Pictures and clips have a star as well.
+    act(() => useUi.setState({ libraryTab: 'images' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Favorite Star' }));
+    expect(library.setFavorite).toHaveBeenLastCalledWith('pack:star', true);
+    act(() => useUi.setState({ libraryTab: 'clips' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Favorite broll.mp4' }));
+    expect(library.setFavorite).toHaveBeenLastCalledWith('file:/media/broll', true);
+  });
+
+  it('a star that couldn’t be saved is taken back, and says so', async () => {
+    useUi.setState({ libraryTab: 'sounds' });
+    vi.mocked(library.setFavorite).mockRejectedValueOnce(new Error("Klipolo couldn't save your favorites."));
+    renderWithProviders(<Library />);
+    const star = await screen.findByRole('button', { name: 'Favorite Impact' });
+    await userEvent.click(star);
+    await waitFor(() => expect(star).toHaveAttribute('aria-pressed', 'false'));
+    expect(useToasts.getState().toasts.at(-1)?.text).toBe("Klipolo couldn't save your favorites.");
   });
 });
