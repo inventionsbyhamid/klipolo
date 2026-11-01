@@ -29,8 +29,8 @@ pub use context::{
 pub use library::{Library, LibraryItem, MediaKind};
 pub use model::{BoxFuture, Item, LanguageModel, ModelError, ModelRequest, ModelResponse};
 pub use planner::{
-    ChatError, ChatErrorKind, DONE_OUTPUT, KEPT_TURNS, PROPOSED_OUTPUT, PlanOut, TOLD_PERSON,
-    TOO_LONG, Turn, plan, remember,
+    ChatError, ChatErrorKind, DONE_OUTPUT, GO_ON, KEPT_TURNS, MAX_STEPS, PROPOSED_OUTPUT, PlanOut,
+    SUM_UP, TOLD_PERSON, TOO_LONG, Turn, plan, remember,
 };
 pub use prompt::system_prompt;
 pub use tools::{FunctionCall, Moment, Problem, ToolCall, ToolError, tools};
