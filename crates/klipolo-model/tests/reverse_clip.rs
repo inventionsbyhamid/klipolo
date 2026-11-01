@@ -145,6 +145,20 @@ fn only_an_imported_clip_plays_backward() {
     assert!(missing.is_err());
 }
 
+/// A reversed clip trimmed out to its copy's end, the copy measured a hair longer than the stretch it holds: played
+/// forward, it starts at its file's start, never before it.
+#[test]
+fn playing_forward_never_starts_before_the_file() {
+    let mut copy = copy_asset();
+    copy.duration_us = secs(10.02);
+    let p = apply_ops(&fixture(), &[Op::AddAssets { assets: vec![copy] }]).unwrap();
+    let mut p = apply_ops(&p, &[reverse("b", Some((0.0, 10.0)))]).unwrap();
+    p.timeline.main[1].source_out_us = secs(10.02);
+    let p = apply_ops(&p, &[reverse("b", None)]).unwrap();
+    let b = &p.timeline.main[1];
+    assert_eq!((b.source_in_us, b.source_out_us), (0, secs(10.0)));
+}
+
 /// The file a reversed clip plays forward from can't be removed while the clip is there.
 #[test]
 fn a_reversed_clip_keeps_its_own_file() {

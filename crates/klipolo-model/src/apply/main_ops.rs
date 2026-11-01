@@ -182,6 +182,7 @@ pub(super) fn freeze_frame(p: &mut Project, at_us: Us, duration_us: Us) -> Resul
 /// becomes `[to - out, to - in)` of the copy), or, reversed already and with no copy, forward from its own file again
 /// (the same turn the other way). Layers anchored to the clip keep their offset into it, so none moves. Refused for a
 /// freeze frame, a recording clip, a copy that doesn't hold the clip's whole range, and a clip with nothing to turn.
+/// Played forward, it never starts before its file's start (a copy measured a hair longer than the stretch it holds).
 pub(super) fn reverse_clip(
     p: &mut Project,
     clip_id: &str,
@@ -225,7 +226,7 @@ pub(super) fn reverse_clip(
     };
     let old_source = clip.source.clone();
     let (old_in, old_out) = (clip.source_in_us, clip.source_out_us);
-    let (new_in, new_out) = (to.saturating_sub(old_out), to.saturating_sub(old_in));
+    let (new_in, new_out) = (to.saturating_sub(old_out).max(0), to.saturating_sub(old_in));
     let new_source = ClipSource::Asset { id: source };
     for item in p
         .timeline
