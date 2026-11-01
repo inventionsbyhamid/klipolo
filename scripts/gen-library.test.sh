@@ -4,17 +4,22 @@
 # 48 kHz 16-bit mono and under 3 s; every music bed is 16 to 30 s and loops at a zero crossing without a click (two
 # copies back to back are as smooth at the join as anywhere else); every sticker is a 1024 x 1024 RGBA PNG with
 # transparent corners; the pack holds the 16 files listed below (8 sounds, 2 music beds, 6 stickers), CC0-1.0, and is
-# under 3 MB.
+# under 3 MB. Then scripts/check-library-sounds.py measures each sound and fails on any out of bounds.
 #   scripts/gen-library.test.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-python3 -I scripts/gen-library.py --out "$tmp/a" >/dev/null
-python3 -I scripts/gen-library.py --out "$tmp/b" >/dev/null
+# Two runs at once: each takes a minute or two.
+python3 -I scripts/gen-library.py --out "$tmp/a" >/dev/null &
+a=$!
+python3 -I scripts/gen-library.py --out "$tmp/b" >/dev/null &
+b=$!
+wait "$a" && wait "$b"
 
-python3 -I - "$tmp/a" "$tmp/b" assets/library <<'PY'
+status=0
+python3 -I - "$tmp/a" "$tmp/b" assets/library <<'PY' || status=1
 import hashlib, json, pathlib, struct, sys, wave, zlib
 
 first, second, committed = (pathlib.Path(p) for p in sys.argv[1:4])
@@ -162,3 +167,8 @@ def _():
 
 sys.exit(1 if failed else 0)
 PY
+
+# Each sound measured (no one listens on the build machine): length, peak, level, DC, clipping and silence.
+echo
+python3 -I scripts/check-library-sounds.py assets/library || status=1
+exit "$status"
