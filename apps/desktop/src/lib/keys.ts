@@ -244,7 +244,8 @@ export function withoutKey(keys: readonly Key[] | undefined, tUs: number, slackU
  * short of its neighbours); a `copy` also keeps the key at `fromUs`. Unchanged when no key is at `fromUs`. */
 export function movedKey(keys: readonly Key[], fromUs: number, toUs: number, lenUs: number, copy = false): Key[] {
   const at = keys.findIndex((k) => k.tUs === fromUs);
-  if (at < 0) return [...keys];
+  // A copy onto a property with every key it may have does nothing (the model would refuse it).
+  if (at < 0 || (copy && keys.length >= MAX_KEYS)) return [...keys];
   const key = keys[at];
   const rest = copy ? [...keys] : keys.filter((_, i) => i !== at);
   let t = Math.round(Math.min(lenUs, Math.max(0, toUs)));
@@ -253,6 +254,22 @@ export function movedKey(keys: readonly Key[], fromUs: number, toUs: number, len
   if (t < 0 || t > lenUs) return [...keys];
   const out = [...rest, { ...key, tUs: t }];
   return out.sort((a, b) => a.tUs - b.tUs);
+}
+
+/**
+ * Every property's key at `fromUs` (a timeline diamond) moved, or copied, to one time near `toUs` that none of them has a
+ * key at: within `[0, lenUs]`, stopping 1 µs short of a key in its way, so the keys stay one diamond. A copy that a
+ * property with 64 keys can't take does nothing.
+ */
+export function movedKeysAt(keys: MotionKeys, fromUs: number, toUs: number, lenUs: number, copy = false): MotionKeys {
+  const names = Object.keys(REST) as (keyof MotionKeys)[];
+  const moving = names.filter((name) => keys[name].some((k) => k.tUs === fromUs));
+  if (copy && moving.some((name) => keys[name].length >= MAX_KEYS)) return keys;
+  const taken = new Set(names.flatMap((name) => keys[name].filter((k) => copy || k.tUs !== fromUs).map((k) => k.tUs)));
+  let t = Math.round(Math.min(lenUs, Math.max(0, toUs)));
+  while (taken.has(t)) t += t < fromUs ? 1 : -1;
+  if (t < 0 || t > lenUs) return keys;
+  return { ...keys, ...Object.fromEntries(moving.map((name) => [name, movedKey(keys[name], fromUs, t, lenUs, copy)])) };
 }
 
 /** The time of the key before `tUs` (more than `slackUs` earlier), or null. */

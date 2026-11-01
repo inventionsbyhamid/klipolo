@@ -8,6 +8,7 @@ import {
   levelAt,
   motionKeyTimes,
   movedKey,
+  movedKeysAt,
   sampleMotion,
   valueAt,
   withKey,
@@ -91,5 +92,17 @@ describe('keys set by hand', () => {
     expect(withMotionKeys(keyed, () => ({ x: [] }))).toEqual({ enter: fade });
     expect(withMotionKeys({ keys: { x: [key(0, 1)], y: [], scale: [], rotation: [], opacity: [] } }, () => ({ x: [] }))).toBeUndefined();
     expect(sampleMotion(keyed, S, 2 * S)).toEqual({ dx: 0.1, dy: 0, scale: 1, rotation: 0, opacity: 1 });
+  });
+});
+
+describe('a diamond’s move', () => {
+  it('moves every key at its time to one free time, and a copy onto a full property does nothing', () => {
+    const keys = { x: [key(2, 0)], y: [], scale: [], rotation: [], opacity: [key(2, 1), key(3, 0)] };
+    // 3 s is taken by an opacity key: every key at 2 s stops at the same time just short of it.
+    const moved = movedKeysAt(keys, 2 * S, 3 * S, 5 * S, false);
+    expect(moved.x.map((k) => k.tUs)).toEqual([3 * S - 1]);
+    expect(moved.opacity.map((k) => k.tUs)).toEqual([3 * S - 1, 3 * S]);
+    const full = Array.from({ length: MAX_KEYS }, (_, i) => key(i * 0.01, 1));
+    expect(movedKey(full, 0, 5 * S, 10 * S, true)).toEqual(full);
   });
 });

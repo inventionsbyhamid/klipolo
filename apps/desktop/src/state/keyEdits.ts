@@ -11,6 +11,7 @@ import {
   keyIndexAt,
   levelAt,
   movedKey,
+  movedKeysAt,
   propertyTimes,
   valueAt,
   withKey,
@@ -100,9 +101,7 @@ const ALL = Object.keys(REST) as (keyof MotionKeys)[];
 export function moveKeysAt(item: Item, fromUs: number, toUs: number, copy: boolean) {
   return commitLatest(copy ? 'keys.copy.undo' : 'keys.move.undo', () => {
     const len = itemNow(item.id)?.durationUs ?? item.durationUs;
-    return motionOps(item, (keys) =>
-      Object.fromEntries(ALL.map((name) => [name, movedKey(keys[name], fromUs, toUs, len, copy)])),
-    );
+    return motionOps(item, (keys) => movedKeysAt(keys, fromUs, toUs, len, copy));
   });
 }
 
