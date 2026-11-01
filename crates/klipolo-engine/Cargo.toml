@@ -10,7 +10,7 @@ description = "Klipolo preview and export engine (wgpu compositor with vendored 
 klipolo-model = { path = "../klipolo-model" }
 # The cursor file and its bounded track, shared with the recorder and chat.
 klipolo-cursor = { path = "../klipolo-cursor" }
-# OS services (PS): clock, durable files, power, QoS, memory pressure, paths, processes, audio route.
+# OS services: clock, durable files, power, QoS, memory pressure, paths, processes, audio route.
 klipolo-platform = { path = "../klipolo-platform" }
 # Fonts: the bundled set, the one face resolver, the fallback chain and the per-run CJK rule (and its
 # `unicode-script`).
