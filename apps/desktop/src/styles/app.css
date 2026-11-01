@@ -212,6 +212,10 @@
   scrollbar-width: none;
 }
 
+.rail-clips::-webkit-scrollbar {
+  display: none;
+}
+
 /* A 56 px target around a 48 px picture, as a row: hover and press wash it, and it grabs like one. */
 .rail-clip {
   display: grid;
