@@ -266,7 +266,8 @@ export function TimelineView() {
           </div>
         </BlockMenu>
         {empty && (
-          <p className="tl-empty">
+          // From the gutter's edge: the lanes' icons, or every track's header.
+          <p className="tl-empty" style={{ left: gutter }}>
             <Trans id="timeline.empty" comment="Shown on the empty timeline">
               Clips line up here in the order you add them.
             </Trans>

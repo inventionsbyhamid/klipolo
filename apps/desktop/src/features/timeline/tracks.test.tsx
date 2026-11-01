@@ -327,6 +327,17 @@ describe('show all tracks', () => {
     expect(document.activeElement).toHaveAttribute('data-block-id', 'song');
   });
 
+  it("the empty timeline's note starts after the gutter, as wide as the headers make it", () => {
+    const snapshot = fixtureSnapshot();
+    snapshot.project.timeline.main = [];
+    snapshot.project.timeline.tracks = snapshot.project.timeline.tracks.map((track) => ({ ...track, items: [] }));
+    useProject.setState({ snapshot });
+    const { container } = renderWithProviders(<Timeline />);
+    expect(container.querySelector<HTMLElement>('.tl-empty')!.style.left).toBe(`${TRACK_HEADER_PX}px`);
+    act(() => useUi.setState({ timelineExpanded: false }));
+    expect(container.querySelector<HTMLElement>('.tl-empty')!.style.left).toBe(`${HEADER_PX}px`);
+  });
+
   it('is a command: Show all tracks, then Show fewer tracks', () => {
     useUi.setState({ timelineExpanded: false });
     let commands: ReturnType<typeof useCommands> = [];
