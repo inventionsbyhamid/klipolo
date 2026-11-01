@@ -183,6 +183,8 @@ pub struct Compiled {
     /// Klipolo's own sentences on why a change the person asked for waits in `proposal`: a new speed that leaves a
     /// transition no room.
     pub waits: Vec<String>,
+    /// Each change in `additions`, by its undo label, in the order asked: what the reply lists under its Undo chip.
+    pub changes: Vec<CodedError>,
     /// How many of `additions`' ops, at its end, fit the music to the video's new end, as every edit of the person's
     /// is fitted (`media::music::with_music_refit`): what the edits do to the music, not the edits themselves. Another
     /// app's batch is judged and committed without them, its host fitting the music as it does for the person.
@@ -394,6 +396,13 @@ impl Phase {
         self.done = done;
         self.ops.extend(tried.edit.ops);
         self.labels.push((call, tried.edit.label));
+    }
+
+    /// Each kept edit's label, in call order.
+    fn changes(&self) -> Vec<CodedError> {
+        let mut labels = self.labels.clone();
+        labels.sort_by_key(|(call, _)| *call);
+        labels.into_iter().map(|(_, label)| label).collect()
     }
 
     /// The phase's ops as one chat transaction, labelled for the first of its calls in the answer (the order the
@@ -839,6 +848,7 @@ impl Compiler<'_> {
         removing.refit_music(&adding.done);
 
         out.additions = adding.transaction();
+        out.changes = adding.changes();
         out.music_refit = if out.additions.is_some() {
             adding.refit_ops
         } else {

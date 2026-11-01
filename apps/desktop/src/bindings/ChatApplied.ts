@@ -3,6 +3,7 @@ import type { CodedError } from "./CodedError";
 import type { SnapshotPatch } from "./SnapshotPatch";
 
 /**
- * Additions applied at once, as one undo step: what changed, and its undo label.
+ * Additions applied at once, as one undo step: what changed, and its undo label; for a step of several changes (a
+ * short's plan), each change's own label, in the order asked, which the reply lists.
  */
-export type ChatApplied = { change: SnapshotPatch, undo: CodedError, };
+export type ChatApplied = { change: SnapshotPatch, undo: CodedError, changes?: Array<CodedError>, };

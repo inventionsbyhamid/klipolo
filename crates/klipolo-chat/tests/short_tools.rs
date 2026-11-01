@@ -670,6 +670,19 @@ fn a_short_planned_in_one_answer_applies_its_look_and_proposes_its_cut() {
     // The look applies at once as one step; the cut waits for the person.
     let tx = out.additions.as_ref().expect("additions");
     assert_eq!(tx.label, "chat.andMore");
+    // The step lists each change it made, in the order asked, for the reply to show.
+    let changes: Vec<&str> = out.changes.iter().map(|c| c.code.as_str()).collect();
+    assert_eq!(
+        changes,
+        [
+            "chat.setFormat",
+            "chat.setCaptions",
+            "chat.addText",
+            "chat.addImage",
+            "chat.animate",
+            "chat.addMusic"
+        ]
+    );
     assert_eq!(out.proposed_calls, vec![1]);
     let proposal = out.proposal.as_ref().expect("the cut is proposed");
     // Applied, the short is the two parts kept (each snapped to the words it stands on), its layers on them.

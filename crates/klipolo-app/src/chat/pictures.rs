@@ -291,10 +291,7 @@ impl Pictures {
         };
         let committed = projects.commit(&now.at, &tx, None)?;
         self.forget(id);
-        let applied = ChatApplied {
-            change: committed.patch,
-            undo,
-        };
+        let applied = ChatApplied::new(committed.patch, undo);
         Ok((applied, committed.at))
     }
 }
