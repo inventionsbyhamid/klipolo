@@ -18,7 +18,7 @@
 //! tools name is the set's own `library` files (as if just imported: not in the project yet) and Klipolo's pack as its
 //! `pack` manifest lists it, each pack file where the manifest says.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -360,6 +360,7 @@ fn run(args: &Args) -> Result<bool, String> {
             speech: fx.speech.clone(),
             scenes: fx.scenes.clone(),
             analysis: HashMap::from([(fx.asset.clone(), AnalysisState::Done)]),
+            time_again: HashSet::new(),
             library: library.clone(),
         };
         let planned = runtime.block_on(plan(

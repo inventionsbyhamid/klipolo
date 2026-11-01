@@ -91,6 +91,7 @@ pub fn inputs_for(
         speech,
         scenes,
         analysis,
+        time_again: HashSet::new(),
         library,
     };
     (inputs, turns)

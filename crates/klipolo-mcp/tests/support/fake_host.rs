@@ -10,7 +10,7 @@
 
 #![allow(dead_code)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use klipolo_chat::{
@@ -361,6 +361,7 @@ impl Host for FakeHost {
                     (a.id.clone(), state.unwrap_or(AnalysisState::Done))
                 })
                 .collect(),
+            time_again: HashSet::new(),
             library: s.library.clone(),
         };
         Some(Snapshot {

@@ -7,7 +7,7 @@
 //! - The library: the person's own music `lofi-beat.mp3` (120 s) and picture `logo.png` (800 x 400), in the project;
 //!   Klipolo's pack: the bed `Soft ambient`, the sound `Whoosh` and the sticker `Heart`, not in the project yet.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use klipolo_chat::tools::{PictureSize, Position, TextPreset};
 use klipolo_chat::{
@@ -212,6 +212,7 @@ fn inputs(p: &Project, message: &str) -> Inputs {
         analysis: (p.assets.iter())
             .map(|a| (a.id.clone(), AnalysisState::Done))
             .collect(),
+        time_again: HashSet::new(),
         library: library(),
     }
 }
