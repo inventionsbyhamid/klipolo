@@ -12,6 +12,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use klipolo_app::analysis::holds::Holds;
 use klipolo_engine::api::{
     EngineEvent, EngineInfo, Presenter, RATE_UNAVAILABLE, ViewRect, ViewSpec, rate_supported,
 };
@@ -24,6 +25,7 @@ use klipolo_model::time::Us;
 use tauri::ipc::Channel;
 use tauri::{State, WebviewWindow};
 
+use crate::commands::analysis::AnalysisHandle;
 use crate::media_jobs::MediaJobs;
 use crate::project::ProjectSessionState;
 use crate::state::EngineState;
@@ -135,6 +137,7 @@ async fn start_engine(
     state: &EngineState,
     feed: FeedRx,
     copies: &MediaJobs,
+    analysis: &Holds,
 ) -> Result<Engine, String> {
     let mut backend = GpuBackend::for_preview(state.take_warm_up()).await?;
     if let (Some(caches), Some(sounds)) = (state.caches(), &state.sounds) {
@@ -163,13 +166,20 @@ async fn start_engine(
     let engine = Engine::start(options, feed, backend).await?;
     tracing::info!(adapter = %engine.info().adapter, "the preview engine started");
     copies.attach(engine.clone(), thumbs);
+    // A new engine isn't playing (one that ended mid-play never said it stopped).
+    analysis.set_playing(false);
     Ok(engine)
 }
 
 /// What the UI hears: every engine event except the crash guard's (Klipolo has no agent-made effects). Editing copies
-/// hear them too (`copies`: when the video plays, a copy the preview couldn't open, a scan that may have ended). The
-/// log notes playback's starts and stops, with the frames the native layer presented.
-fn event_sink(events: Channel<EngineEvent>, copies: Option<MediaJobs>) -> EventSink {
+/// hear them too (`copies`: when the video plays, a copy the preview couldn't open, a scan that may have ended), and so
+/// does analysis (`analysis`: when the video plays and when it falls behind, so its decoding makes way). The log notes
+/// playback's starts and stops, with the frames the native layer presented.
+fn event_sink(
+    events: Channel<EngineEvent>,
+    copies: Option<MediaJobs>,
+    analysis: Option<Arc<Holds>>,
+) -> EventSink {
     let presented = AtomicU64::new(0);
     Arc::new(move |event: EngineEvent| {
         if event.is_guard() {
@@ -177,6 +187,9 @@ fn event_sink(events: Channel<EngineEvent>, copies: Option<MediaJobs>) -> EventS
         }
         if let Some(copies) = &copies {
             copies.on_engine_event(&event);
+        }
+        if let Some(analysis) = &analysis {
+            analysis.on_engine_event(&event);
         }
         match &event {
             EngineEvent::State {
@@ -220,14 +233,16 @@ pub async fn engine_attach(
     state: State<'_, EngineState>,
     projects: State<'_, ProjectSessionState>,
     copies: State<'_, MediaJobs>,
+    analysis: State<'_, AnalysisHandle>,
     events: Channel<EngineEvent>,
 ) -> Result<EngineInfo, String> {
-    let sink = event_sink(events, Some(copies.inner().clone()));
+    let holds = analysis.holds().clone();
+    let sink = event_sink(events, Some(copies.inner().clone()), Some(holds.clone()));
     let setting = std::env::var(PRESENTER_SETTING).ok();
     let feed = projects.subscribe();
     let info = attach(
         &state,
-        || start_engine(&state, feed, &copies),
+        || start_engine(&state, feed, &copies, &holds),
         &WindowHost(&window),
         sink,
         setting.as_deref(),
@@ -513,7 +528,7 @@ mod tests {
                 Ok(())
             })
         };
-        let sink = event_sink(channel, None);
+        let sink = event_sink(channel, None, None);
 
         sink(EngineEvent::FirstDraw {
             contrib: ContribId::builtin("effect.blur"),
@@ -540,6 +555,34 @@ mod tests {
         assert_eq!(sent.len(), 2, "{sent:?}");
         assert!(sent[0].contains(r#""type":"state""#) && sent[0].contains(r#""playing":true"#));
         assert!(sent[1].contains(r#""type":"ready""#));
+    }
+
+    /// Analysis hears from the sink when the video plays and when it falls behind: its decoding makes way.
+    #[test]
+    fn analysis_hears_when_the_video_plays_and_falls_behind() {
+        use std::time::Instant;
+
+        use klipolo_app::analysis::holds::{Held, Holds, Work};
+        use klipolo_engine::api::StateReason;
+
+        let holds = Arc::new(Holds::default());
+        let sink = event_sink(Channel::new(|_| Ok(())), None, Some(holds.clone()));
+        sink(EngineEvent::State {
+            playing: true,
+            at_us: 0,
+            reason: StateReason::Play,
+            rate: 1.0,
+        });
+        assert_eq!(
+            holds.held(Work::Picture, Instant::now()),
+            Some(Held::Playing)
+        );
+        assert_eq!(holds.held(Work::Sound, Instant::now()), None);
+        sink(EngineEvent::FramesLate { at_us: 1_000_000 });
+        assert_eq!(
+            holds.held(Work::Sound, Instant::now()),
+            Some(Held::FramesLate)
+        );
     }
 
     /// A page that loads again while the video plays (a reload) finds it paused, as it shows it: the playback the page

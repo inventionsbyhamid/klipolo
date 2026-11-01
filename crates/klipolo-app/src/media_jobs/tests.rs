@@ -1041,14 +1041,14 @@ fn a_take_s_hold_pauses_copies_until_it_lets_go() {
         })
         .await;
 
-        crate::recorder::hold_background(None, Some(&jobs), true);
+        crate::recorder::hold_background(None, Some(&jobs), None, true);
         stops.notify_one();
         eventually("a's copy waits for the take", &jobs, || {
             reason_of(&jobs, &a).as_deref() == Some("copies.paused.recording")
         })
         .await;
 
-        crate::recorder::hold_background(None, Some(&jobs), false);
+        crate::recorder::hold_background(None, Some(&jobs), None, false);
         eventually("a's copy is made after the take", &jobs, || {
             preview.last().contains_key(&*a.to_string_lossy())
         })

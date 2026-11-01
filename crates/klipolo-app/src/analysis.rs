@@ -483,7 +483,7 @@ impl AnalysisState {
 
     /// What decoding a clip on this Mac makes way for (`holds`): the app tells it when the video plays (and falls
     /// behind), an export runs and a take records.
-    pub fn holds(&self) -> &Holds {
+    pub fn holds(&self) -> &Arc<Holds> {
         &self.holds
     }
 
