@@ -1207,13 +1207,23 @@ class Smooth(Shape):
 
 
 class Within(Shape):
-    """Where every part overlaps (the largest of their distances)."""
+    """Where every part overlaps (the largest of their distances); with `k`, its corners rounded over k px."""
 
-    def __init__(self, *parts):
-        self.parts = parts
+    def __init__(self, *parts, k=0.0):
+        self.parts, self.k = parts, k
 
     def __call__(self, x, y):
-        return max(p(x, y) for p in self.parts)
+        if not self.k:
+            return max(p(x, y) for p in self.parts)
+        d = None
+        for p in self.parts:  # a polynomial smooth maximum, a part at a time
+            v = p(x, y)
+            if d is None:
+                d = v
+            else:
+                h = max(self.k - abs(d - v), 0.0) / self.k
+                d = max(d, v) + h * h * self.k / 4
+        return d
 
 
 class Outside(Shape):
@@ -1372,10 +1382,10 @@ def arrow_head(tip_x, tip_y, dx, dy, length_, width_):
 
 
 def sparkle_star(cx, cy, r):
-    """A four-point sparkle: a square's middle less the four circles round its corners, its points rounded."""
+    """A four-point sparkle: all but the four circles round a square's corners, grown 14 px, then cut to a circle with
+    the cut's corners rounded, so each point ends round."""
     corners = [Outside(Circle(cx + sx * r, cy + sy * r, r)) for sx in (-1, 1) for sy in (-1, 1)]
-    parts = [Box(cx, cy, r, r, 0.0)] + corners
-    return Grown(Within(*parts), 14.0)
+    return Within(Grown(Within(*corners), 14.0), Circle(cx, cy, r + 4.0), k=28.0)
 
 
 def curved_arrow():
