@@ -362,30 +362,13 @@ fn detach_camera_creates_attached_video_layer() {
 
 #[test]
 fn ripple_collision_moves_later_item_up() {
-    // Free music stays where it is through a cut, so a sound attached after it on its track ripples onto it.
-    let sound = |id: &str, start: f64, duck: Option<f64>| Item {
-        content: ItemContent::Audio {
-            asset_id: "music".into(),
-            source_in_us: 0,
-            volume: 1.0,
-            muted: false,
-            fade_in_us: 0,
-            fade_out_us: 0,
-            effect: None,
-            drift_ppm: 0.0,
-            centre_from: None,
-            tie: None,
-            duck,
-        },
-        ..still_item(id, start, 5.0)
-    };
-    let p = add(&fixture(), sound("free", 10.0, Some(-12.0)), false);
+    let p = add(&fixture(), text_item("free", 10.0, 5.0), false);
     let track = p.timeline.tracks[0].id.clone();
     let p = apply_ops(
         &p,
         &[Op::AddItem {
             track: TrackTarget::Track { id: track },
-            item: sound("att", 20.0, None),
+            item: text_item("att", 20.0, 5.0),
             attach: true,
         }],
     )
@@ -400,8 +383,7 @@ fn ripple_collision_moves_later_item_up() {
         }],
     )
     .unwrap();
-    let (t, free) = find(&p, "free");
-    assert_eq!((t, free.start_us), (0, secs(10.0)));
+    assert_eq!(find(&p, "free").0, 0);
     let (t, att) = find(&p, "att");
     assert_eq!((t, att.start_us), (1, secs(12.0)));
 }

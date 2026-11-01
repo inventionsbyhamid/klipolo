@@ -443,8 +443,8 @@ fn music_not_touching_the_end_is_left_alone() {
         spans(&music(&after)),
         [(0.0, 8.0), (8.0, 16.0), (16.0, 20.0)]
     );
-    // The whoosh moves back with the cut's 4 s, still ending with the video.
-    assert_eq!(spans(&[item_by_id(&after, "whoosh")]), [(21.0, 26.0)]);
+    // The free whoosh keeps its time, and is trimmed where the video now ends.
+    assert_eq!(spans(&[item_by_id(&after, "whoosh")]), [(25.0, 26.0)]);
 
     // An edit that leaves the video's end where it was changes no music, even music that reaches it.
     let p = with_music(&video(30.0), "loop", MusicOpts::default());
