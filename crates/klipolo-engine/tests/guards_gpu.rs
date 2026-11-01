@@ -152,8 +152,9 @@ async fn placing_a_checked_effect_compiles_it_and_its_half_size_step_before_a_fr
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]
 async fn the_preview_keeps_every_pipeline_its_project_uses_and_lets_go_of_the_rest() {
-    // The cap is 32 pipelines that aren't built in: a project using 40 keeps all 40 in the preview (none is
-    // compiled again when the playhead comes back to it), and a registry without them lets them go.
+    // The pipeline cache's cap (`MAX_PIPELINES`) is 32 pipelines that aren't built in: a project using 40 keeps all 40
+    // in the preview (none is compiled again when the playhead comes back to it), and a registry without them lets them
+    // go.
     let (p, registry) = project_with_many_checked_filters(40);
     let mut h = Headless::with_mode(registry, RenderMode::Interactive)
         .await
@@ -432,9 +433,9 @@ async fn the_built_ins_compile_on_the_compile_thread_before_any_agent_compile() 
     );
 }
 
-/// A shader preset first needed while an agent's compile runs (the presets wait behind
-/// it on the compile thread) is left out of that frame, as a checked shader is, rather than compiled on the
-/// drawing thread behind the agent's compile (the device's scope lock); once handed back it draws, compiled once.
+/// A shader preset first needed while an agent's compile runs (the presets wait behind it on the compile thread) is
+/// left out of that frame, as a checked shader is, rather than compiled on the drawing thread behind the agent's
+/// compile (the device's scope lock); once handed back it draws, compiled once.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]
 async fn a_preset_first_needed_during_an_agent_compile_never_compiles_on_the_drawing_thread() {
