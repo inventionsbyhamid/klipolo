@@ -260,7 +260,7 @@ describe('another app in chat', () => {
   it('an_older_proposal_from_one_app_leaves_another_apps_alone', async () => {
     const fake = chat();
     renderWithProviders(<ChatPanel />);
-    await tell(external('Example Client', { proposal: teaser() }));
+    await tell(external('Muse Spark agent', { proposal: teaser() }));
     await tell(external('Example Client', { proposal: { ...teaser(), id: 'p2' } }));
     expect(useProposal.getState().proposal?.id).toBe('p1');
     expect(screen.getByText('Replaced by a newer proposal.')).toBeInTheDocument();

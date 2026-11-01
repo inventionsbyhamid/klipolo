@@ -33,4 +33,4 @@ pub use planner::{
     SUM_UP, TOLD_PERSON, TOO_LONG, Turn, plan, remember,
 };
 pub use prompt::system_prompt;
-pub use tools::{FunctionCall, Moment, Problem, ToolCall, ToolError, tools};
+pub use tools::{FollowFocus, FunctionCall, Moment, Problem, ToolCall, ToolError, tools};

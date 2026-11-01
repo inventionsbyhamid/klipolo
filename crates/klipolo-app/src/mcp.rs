@@ -25,7 +25,9 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use klipolo_app::analysis::AnalysisState;
-use klipolo_app::chat::follow::{NO_CROP, NO_ONE_THERE, cost_said, kept_in_frame, phrase_for};
+use klipolo_app::chat::follow::{
+    NO_CROP, NO_ONE_THERE, cost_said, keeps_for, kept_in_frame, phrase_for,
+};
 use klipolo_app::chat::{
     At, ChatReply, ChatSession, Decided, ExternalReply, Findings, Gone, PictureAsk, Projects,
     Waiting, inputs_for, picture_for,
@@ -34,7 +36,7 @@ use klipolo_app::credentials::{AiStatus, Credentials};
 use klipolo_app::mcp_config::{config_json, needs_move};
 use klipolo_app::prefs;
 use klipolo_app::speaker::SpeakerEstimate;
-use klipolo_chat::{Job, Moment, Proposal, ToolCall};
+use klipolo_chat::{FollowFocus, Job, Moment, Proposal, ToolCall};
 use klipolo_mcp::connection::{self, McpServer};
 use klipolo_mcp::host::{
     Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot, Started,
@@ -202,7 +204,12 @@ impl<S: SessionOf> AppHost<S> {
     /// Follows `description` in every clip that can, in every format whose Fill crops it, as chat's `followSubject`
     /// does, and lands it as one undo step `client` made (told to the page). Waits for the tracking: SAM answers a
     /// short in under a minute. Refused with the sentence chat would say.
-    fn follow_subject(&self, client: &str, description: &str) -> Result<Started, HostError> {
+    fn follow_subject(
+        &self,
+        client: &str,
+        description: &str,
+        focus: &[FollowFocus],
+    ) -> Result<Started, HostError> {
         let speaker = self.chat.speaker().ok_or(HostError::NoCredit)?;
         // Someone else's proposal waiting would refuse the change: say so before anything is paid for.
         if someone_else(self.chat.slot().waiting().as_ref(), client) {
@@ -219,8 +226,9 @@ impl<S: SessionOf> AppHost<S> {
         let p = now.project.clone();
         let ids: Vec<String> = p.timeline.main.iter().map(|c| c.id.clone()).collect();
         let phrase = phrase_for(description);
+        let keeps = keeps_for(&p, focus);
         let followed = (self.rt)
-            .block_on(speaker.follow(&p, &ids, &p.settings.formats, &phrase))
+            .block_on(speaker.follow_keeping(&p, &ids, &p.settings.formats, &phrase, &keeps))
             .map_err(HostError::Refused)?;
         let tx = {
             let session = self.projects.session();
@@ -252,7 +260,11 @@ impl<S: SessionOf> AppHost<S> {
             .on_revision(done.at.revision);
         self.told(client, done.at.opening, applied);
         let kept = kept_in_frame(&p, &p.settings.formats, &phrase);
-        let cost = cost_said(followed.paid_usd);
+        let mut cost = cost_said(followed.paid_usd);
+        // Who speaks couldn't be told: said too.
+        if let Some(why) = &followed.note {
+            cost = format!("{cost} {why}");
+        }
         Ok(Started::Done {
             said: format!("{kept}. {cost} The person can undo it in Klipolo."),
             revision: self.revisions.of(&done.at),
@@ -496,17 +508,19 @@ impl<S: SessionOf> Host for AppHost<S> {
             Job::MakeSticker(_) | Job::MakeTitleBackground { .. } => {
                 klipolo_meta::pricing::image_usd(1)
             }
-            Job::Follow { description } => self.follow_estimate(description).map_or(0.0, |e| e.usd),
+            Job::Follow { description, .. } => {
+                self.follow_estimate(description).map_or(0.0, |e| e.usd)
+            }
             // Not in Klipolo yet: nothing runs, nothing is spent.
             Job::Blur { .. } => 0.0,
         }
     }
 
     fn start_paid(&self, client: &str, job: &Job) -> Result<Started, HostError> {
-        if let Job::Follow { description } = job
+        if let Job::Follow { description, focus } = job
             && self.chat.speaker().is_some()
         {
-            return self.follow_subject(client, description);
+            return self.follow_subject(client, description, focus);
         }
         let ask = picture_for(job).map_err(|coming| HostError::Refused(coming.to_owned()))?;
         let ask = capped(ask).ok_or_else(|| HostError::Refused(words::NO_PROMPT.to_owned()))?;

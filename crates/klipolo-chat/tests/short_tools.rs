@@ -842,7 +842,7 @@ fn a_shorts_sticker_goes_to_the_corner_away_from_the_followed_speaker() {
     };
     p.timeline.main[0]
         .fill_focus
-        .insert(FormatKind::Portrait, FillFocus::Speaker { path });
+        .insert(FormatKind::Portrait, FillFocus::speaker(path));
     let out = run(&p, "a heart at 10 s", &[("addImage", heart_at("top-left"))]);
     let b = sticker_box(&p, &out);
     // The right corner is clear of them: there at its size.
@@ -853,7 +853,7 @@ fn a_shorts_sticker_goes_to_the_corner_away_from_the_followed_speaker() {
     };
     p.timeline.main[0]
         .fill_focus
-        .insert(FormatKind::Portrait, FillFocus::Speaker { path });
+        .insert(FormatKind::Portrait, FillFocus::speaker(path));
     let out = run(&p, "a heart at 10 s", &[("addImage", heart_at("top-left"))]);
     let b = sticker_box(&p, &out);
     assert!(b.x < 0.05 && (b.w - 0.28).abs() < 1e-6, "{b:?}");

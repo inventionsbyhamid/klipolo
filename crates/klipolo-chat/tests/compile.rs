@@ -1678,7 +1678,8 @@ fn questions_jobs_and_cannot_do_pass_through() {
         out.jobs,
         vec![
             Job::Follow {
-                description: "woman astronaut".into()
+                description: "woman astronaut".into(),
+                focus: vec![],
             },
             Job::Blur {
                 description: "face".into()
@@ -1686,6 +1687,36 @@ fn questions_jobs_and_cannot_do_pass_through() {
         ]
     );
     assert_eq!((out.additions, out.proposal, out.undo), (None, None, false));
+}
+
+#[test]
+fn a_follow_carries_who_chat_keeps_when_in_timeline_time() {
+    let p = broll(30.0);
+    let out = compile(
+        &p,
+        &inputs(
+            &p,
+            Speech::default(),
+            "keep the guest in frame while the host asks",
+        ),
+        &[call(
+            "followSubject",
+            r#"{"description": "person", "focus": [{"fromSec": 3, "toSec": 7.5, "person": "P2"}]}"#,
+        )],
+    );
+    assert_eq!(
+        out.jobs,
+        vec![Job::Follow {
+            description: "person".into(),
+            focus: vec![klipolo_chat::tools::FollowFocus {
+                range: RangeUs {
+                    start: 3_000_000,
+                    end: 7_500_000,
+                },
+                who: klipolo_model::fill_focus::Who::Person { person: 2 },
+            }],
+        }]
+    );
 }
 
 #[test]

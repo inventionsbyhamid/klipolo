@@ -6,7 +6,7 @@ use klipolo_analysis::providers::{TrackedBox, TrackedFrame};
 use klipolo_analysis::subject::path::{
     DEAD_ZONE, FULL, KEY_STEP_US, PathInput, SPEED, focus_path, main_subject,
 };
-use klipolo_model::fill_focus::FocusPath;
+use klipolo_model::fill_focus::{FocusPath, Keep};
 use klipolo_model::layout::BoxN;
 use klipolo_model::time::Us;
 
@@ -54,6 +54,8 @@ fn input<'a>(
         end_us: (frames.len() as f64 / FPS * 1e6) as Us,
         cuts,
         crop,
+        talk: &[],
+        keep: &Keep::Speaker,
         area: FULL,
     }
 }

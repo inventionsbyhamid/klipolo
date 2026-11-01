@@ -80,7 +80,7 @@ use crate::context::{Refs, SceneLog, View, secs};
 use crate::evidence::{Evidence, Unfounded};
 use crate::library::Library;
 use crate::sanitize;
-use crate::tools::{LayerRef, Moment, PictureSize, Position, ToolCall};
+use crate::tools::{FollowFocus, LayerRef, Moment, PictureSize, Position, ToolCall};
 pub(crate) use cameras::every_camera;
 pub use clips::{NO_ROOM, NO_ROOM_ANYWHERE, NO_TRANSITIONS};
 use map::Map;
@@ -256,8 +256,11 @@ pub struct Proposal {
 /// (Muse Image in the app). A picture's job is never an op until the picture exists: the app places it when it comes.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Job {
+    /// Track what `description` names and follow it; where two or more people are on screen, keep who `focus` names
+    /// over its parts of the timeline (the timeline of the project the message was sent on, before its edits).
     Follow {
         description: String,
+        focus: Vec<FollowFocus>,
     },
     Blur {
         description: String,
@@ -619,9 +622,9 @@ impl Compiler<'_> {
                     refuse(&mut out, i, said);
                     continue;
                 }
-                ToolCall::FollowSubject { description } => {
-                    let description = description.clone();
-                    jobs.push((i, Job::Follow { description }));
+                ToolCall::FollowSubject { description, focus } => {
+                    let (description, focus) = (description.clone(), focus.clone());
+                    jobs.push((i, Job::Follow { description, focus }));
                     continue;
                 }
                 ToolCall::BlurObjects { description } => {

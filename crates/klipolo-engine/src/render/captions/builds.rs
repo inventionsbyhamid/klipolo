@@ -136,7 +136,7 @@ impl CaptionDrawer {
             };
             match reply {
                 Ok(Some(Reply::Pipe(pipe))) => self.pipe = Some(pipe),
-                Ok(Some(Reply::Built(built))) => self.keep(device, *built),
+                Ok(Some(Reply::Built(built))) => self.keep(device, built),
                 Ok(None) => return,
                 Err(Gone) => {
                     self.gone = true;
@@ -149,26 +149,34 @@ impl CaptionDrawer {
         }
     }
 
-    /// Keeps a built page, unless the fonts changed since it was asked (or it is kept already).
-    pub(super) fn keep(&mut self, device: &wgpu::Device, built: Built) {
+    /// Keeps a built page, unless the fonts changed since it was asked (or it is kept already): then the build thread
+    /// frees it, as it frees every atlas.
+    pub(super) fn keep(&mut self, device: &wgpu::Device, built: Box<Built>) {
         let asked = (built.key, built.epoch);
         if let Some(i) = self.in_flight.iter().position(|&k| k == asked) {
             self.in_flight.remove(i);
         }
-        let Some(pipe) = &self.pipe else {
-            return;
+        let pipe = match &self.pipe {
+            Some(pipe) if built.epoch == self.epoch && self.cache.find(&built.key).is_none() => {
+                pipe
+            }
+            _ => return self.worker.unkept(built),
         };
-        if built.epoch != self.epoch || self.cache.find(&built.key).is_some() {
-            return;
-        }
         let bind = pipe.bind(device, &built.atlas.view, &self.buffers.view);
         self.builds += 1;
+        let Built {
+            key,
+            layout,
+            atlas,
+            cjk_missing,
+            ..
+        } = *built;
         self.cache.0.push(Entry {
-            key: built.key,
-            layout: built.layout,
-            atlas: built.atlas,
+            key,
+            layout,
+            atlas,
             bind,
-            cjk_missing: built.cjk_missing,
+            cjk_missing,
             used: self.tick,
         });
     }

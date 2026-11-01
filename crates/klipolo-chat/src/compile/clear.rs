@@ -47,7 +47,7 @@ fn picture_size(p: &Project, source: &ClipSource) -> Option<(f64, f64)> {
 fn person_box(p: &Project, at_us: Us) -> Option<BoxN> {
     let (i, start) = clip_at(&p.timeline.main, at_us)?;
     let clip = &p.timeline.main[i];
-    let FillFocus::Speaker { path } = clip.fill_focus.get(&FormatKind::Portrait)? else {
+    let FillFocus::Speaker { path, .. } = clip.fill_focus.get(&FormatKind::Portrait)? else {
         return None;
     };
     let source_us = clip.source_in_us + ((at_us - start) as f64 * clip.speed) as Us;

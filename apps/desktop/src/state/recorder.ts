@@ -285,6 +285,14 @@ export async function reopenWhereLeft(): Promise<void> {
   void useRecorder.getState().openRecorder();
 }
 
+/**
+ * Record your screen, wherever it is offered (the start screen, the Library's head, an empty project's preview): opens
+ * the Record dialog, as Shift Command R does.
+ */
+export function recordYourScreen() {
+  void useRecorder.getState().openRecorder();
+}
+
 /** Back to as it was at launch: closed, no take, nothing followed, asked or waited for (tests). */
 export function forgetRecorder() {
   takePart.forget();
