@@ -1,6 +1,7 @@
 //! The caption renderer's draw pipeline: `captions.wgsl`'s `quad` and `shade` over a page's atlas,
 //! instanced quads in one buffer (`Instance`), and the frame's uniform (`View`: the output's size and the line boxes).
-//! Made once per drawer, off the render thread (`drawer`); a page's bind group once per atlas.
+//! Made once per drawer, off the render thread (`drawer`); a page's bind group once per atlas. A frame's uploads go
+//! through staging buffers copied in the frame's own encoder, never through the queue (`Buffers`).
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -10,12 +11,15 @@ use bytemuck::{Pod, Zeroable};
 
 use super::draw::MAX_LINE_BOXES;
 
-/// Kept staging buffers for the quads: a frame writes the next one that is mapped (frames in flight hold
-/// the others), copies it in its own encoder, and it is mapped again once the GPU is done with it.
+/// Kept staging buffers for the uniform and the quads: a frame writes the next one that is mapped (frames in flight
+/// hold the others), copies it in its own encoder, and it is mapped again once the GPU is done with it.
 const STAGING: usize = 3;
+/// A staging buffer holds the uniform first, then the quads.
+const VIEW_BYTES: u64 = std::mem::size_of::<View>() as u64;
+const INSTANCE_BYTES: u64 = std::mem::size_of::<Instance>() as u64;
 
-/// One kept staging buffer (the quads' buffer's size: they go when it grows): written while mapped, then copied into
-/// the quads' buffer; `ready` once mapped again.
+/// One kept staging buffer (the uniform and the quads' buffer's size: they go when it grows): written while mapped,
+/// then copied into the uniform and the quads' buffer; `ready` once mapped again.
 struct Staging {
     buffer: wgpu::Buffer,
     ready: Arc<AtomicBool>,
@@ -176,10 +180,12 @@ impl DrawPipe {
 /// Each is uploaded only when it changed: every `queue.write_buffer` makes a staging buffer of its own
 /// (wgpu-core 25: a new GPU buffer, mapped, filled, freed once used), which on Metal was most of the drawer's
 /// render-thread time (about 300 µs a frame on Iris Plus for two writes a frame, where a title's steady frame takes
-/// 15). A frame whose words didn't move uploads nothing. One whose words moved writes its quads into a kept staging
-/// buffer (`STAGING` of them, mapped again after the GPU used them: `after_submit`) and copies them in the frame's own
-/// encoder; only when none is mapped yet does it fall back to a queue write. The uniform (the output size and the line
-/// boxes) is a queue write, only when it changes.
+/// 15). A frame whose words didn't move uploads nothing. One whose words moved, or whose uniform (the output size and
+/// the line boxes) changed, writes them into a kept staging buffer (`STAGING` of them, mapped again after the GPU used
+/// them: `after_submit`) and copies them in the frame's own encoder; only when none is mapped yet does it make one of
+/// its own for that frame. Nothing here touches the queue: a queue write takes wgpu's pending-writes lock, which a page
+/// build's `queue.submit` holds until the driver returns (on lavapipe, once the queue has run the submission before
+/// it).
 pub(super) struct Buffers {
     pub(super) view: wgpu::Buffer,
     instances: Option<(wgpu::Buffer, usize)>,
@@ -189,10 +195,10 @@ pub(super) struct Buffers {
     staging: ArrayVec<Staging, STAGING>,
     /// The staging buffers this frame copied from, to map again once it is submitted.
     used: ArrayVec<usize, STAGING>,
-    /// Uploads made, and those made through a queue write (a staging buffer of wgpu's own): the cost test and the
-    /// perf harness.
+    /// Uploads made (the quads and the uniform each count), and the frames that made them through a staging buffer of
+    /// their own (every kept one in flight): the cost test and the perf harness.
     pub(super) uploads: u64,
-    pub(super) queue_writes: u64,
+    pub(super) one_off_uploads: u64,
 }
 
 impl Buffers {
@@ -200,7 +206,7 @@ impl Buffers {
         Self {
             view: device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("Caption view"),
-                size: std::mem::size_of::<View>() as u64,
+                size: VIEW_BYTES,
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             }),
@@ -210,16 +216,15 @@ impl Buffers {
             staging: ArrayVec::new(),
             used: ArrayVec::new(),
             uploads: 0,
-            queue_writes: 0,
+            one_off_uploads: 0,
         }
     }
 
-    /// Uploads a frame's instances and uniform, those that changed: the instances through a kept staging buffer copied
-    /// in `encoder` (the frame's, before its passes), the uniform with a queue write.
+    /// Uploads a frame's instances and uniform, those that changed, through a staging buffer copied in `encoder` (the
+    /// frame's, before its passes).
     pub(super) fn write(
         &mut self,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         instances: &[Instance],
         view: &View,
@@ -229,7 +234,7 @@ impl Buffers {
             let room = n.next_power_of_two().max(64);
             let buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("Caption instances"),
-                size: (room * std::mem::size_of::<Instance>()) as u64,
+                size: room as u64 * INSTANCE_BYTES,
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
@@ -240,60 +245,76 @@ impl Buffers {
             self.staging.clear();
             self.used.clear();
         }
-        if let Some((buffer, room)) = &self.instances
-            && self.held.as_slice() != instances
+        let Some((buffer, room)) = &self.instances else {
+            return;
+        };
+        let quads: &[u8] = if self.held.as_slice() == instances {
+            &[]
+        } else {
+            bytemuck::cast_slice(instances)
+        };
+        let uniform = self.held_view != Some(*view);
+        if quads.is_empty() && !uniform {
+            return;
+        }
+        let size = VIEW_BYTES + *room as u64 * INSTANCE_BYTES;
+        let kept = match self
+            .staging
+            .iter()
+            .position(|s| s.ready.load(Ordering::Acquire))
         {
-            let data: &[u8] = bytemuck::cast_slice(instances);
-            let bytes = data.len() as u64;
-            let room = (*room * std::mem::size_of::<Instance>()) as u64;
-            let free = self
-                .staging
-                .iter()
-                .position(|s| s.ready.load(Ordering::Acquire));
-            let free = match free {
-                Some(i) => Some(i),
-                None if !self.staging.is_full() && !self.used.is_full() => {
-                    self.staging.push(Staging {
-                        buffer: device.create_buffer(&wgpu::BufferDescriptor {
-                            label: Some("Caption instances staging"),
-                            size: room,
-                            usage: wgpu::BufferUsages::MAP_WRITE | wgpu::BufferUsages::COPY_SRC,
-                            mapped_at_creation: true,
-                        }),
-                        ready: Arc::new(AtomicBool::new(true)),
-                    });
-                    Some(self.staging.len() - 1)
-                }
-                None => None,
-            };
-            match free.filter(|_| bytes > 0 && !self.used.is_full()) {
-                Some(i) => {
-                    let staging = &self.staging[i];
-                    staging
-                        .buffer
-                        .slice(..bytes)
-                        .get_mapped_range_mut()
-                        .copy_from_slice(data);
-                    staging.buffer.unmap();
-                    staging.ready.store(false, Ordering::Release);
-                    encoder.copy_buffer_to_buffer(&staging.buffer, 0, buffer, 0, bytes);
-                    self.used.push(i);
-                }
-                // Every staging buffer still in flight: wgpu's own staging, as before.
-                None => {
-                    queue.write_buffer(buffer, 0, data);
-                    self.queue_writes += 1;
-                }
+            Some(i) => Some(i),
+            None if !self.staging.is_full() => {
+                self.staging.push(Staging {
+                    buffer: staging_buffer(device, "Caption staging", size),
+                    ready: Arc::new(AtomicBool::new(true)),
+                });
+                Some(self.staging.len() - 1)
             }
+            None => None,
+        }
+        .filter(|_| !self.used.is_full());
+        // Every kept one in flight: one of this frame's own, freed once the GPU is done with it.
+        let own;
+        let staging = match kept {
+            Some(i) => &self.staging[i].buffer,
+            None => {
+                own = staging_buffer(device, "Caption staging (one frame's)", size);
+                &own
+            }
+        };
+        let quad_bytes = quads.len() as u64;
+        {
+            let mut mapped = staging
+                .slice(..VIEW_BYTES + quad_bytes)
+                .get_mapped_range_mut();
+            if uniform {
+                mapped[..VIEW_BYTES as usize].copy_from_slice(bytemuck::bytes_of(view));
+            }
+            mapped[VIEW_BYTES as usize..].copy_from_slice(quads);
+        }
+        staging.unmap();
+        if uniform {
+            encoder.copy_buffer_to_buffer(staging, 0, &self.view, 0, VIEW_BYTES);
+        }
+        if quad_bytes > 0 {
+            encoder.copy_buffer_to_buffer(staging, VIEW_BYTES, buffer, 0, quad_bytes);
+        }
+        match kept {
+            Some(i) => {
+                self.staging[i].ready.store(false, Ordering::Release);
+                self.used.push(i);
+            }
+            None => self.one_off_uploads += 1,
+        }
+        if quad_bytes > 0 {
             self.held.clear();
             self.held.extend_from_slice(instances);
             self.uploads += 1;
         }
-        if self.held_view != Some(*view) {
-            queue.write_buffer(&self.view, 0, bytemuck::bytes_of(view));
+        if uniform {
             self.held_view = Some(*view);
             self.uploads += 1;
-            self.queue_writes += 1;
         }
     }
 
@@ -325,4 +346,14 @@ impl Buffers {
     pub(super) fn instances(&self) -> Option<&wgpu::Buffer> {
         self.instances.as_ref().map(|(b, _)| b)
     }
+}
+
+/// A staging buffer of `size` bytes, mapped for writing.
+fn staging_buffer(device: &wgpu::Device, label: &str, size: u64) -> wgpu::Buffer {
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(label),
+        size,
+        usage: wgpu::BufferUsages::MAP_WRITE | wgpu::BufferUsages::COPY_SRC,
+        mapped_at_creation: true,
+    })
 }

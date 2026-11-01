@@ -2633,8 +2633,8 @@ async fn a_steady_caption_frame_uploads_nothing() {
 }
 
 /// A caption frame whose words moved writes its quads into a kept staging buffer, mapped again once the
-/// GPU is done with it, and copies them in its own encoder: no staging buffer of wgpu's own (`queue.write_buffer`
-/// makes, maps and frees one each time). Frames alternate between two moments of a page, every one uploading.
+/// GPU is done with it, and copies them in its own encoder: no staging buffer of its own (made, mapped and freed for
+/// that frame). Frames alternate between two moments of a page, every one uploading.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU"]
 async fn moving_caption_frames_upload_through_kept_staging_buffers() {
@@ -2642,7 +2642,7 @@ async fn moving_caption_frames_upload_through_kept_staging_buffers() {
     d.draw_page("caption.highlight", 3).await;
     assert!(d.preview_at("caption.highlight", 3, 0.2));
     d.settle();
-    let (uploads, writes) = (d.uploads(), d.queue_writes());
+    let (uploads, writes) = (d.uploads(), d.one_off_uploads());
     for k in 0..12 {
         let share = if k % 2 == 0 { 0.8 } else { 0.2 };
         assert!(d.preview_at("caption.highlight", 3, share));
@@ -2650,15 +2650,15 @@ async fn moving_caption_frames_upload_through_kept_staging_buffers() {
     }
     assert_eq!(d.uploads() - uploads, 12, "every frame's quads moved");
     assert_eq!(
-        d.queue_writes() - writes,
+        d.one_off_uploads() - writes,
         0,
         "all through kept staging buffers"
     );
 }
 
 /// Moving caption frames drawn with the GPU's work still in flight (nothing
-/// waited for between them) count every upload once, through a kept staging buffer or, with all of them in flight, a
-/// queue write; once the GPU catches up, uploads go through the kept buffers again.
+/// waited for between them) count every upload once, through a kept staging buffer or, with all of them in flight, one
+/// of the frame's own; once the GPU catches up, uploads go through the kept buffers again.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU"]
 async fn moving_caption_frames_in_flight_count_every_upload_once() {
@@ -2666,37 +2666,37 @@ async fn moving_caption_frames_in_flight_count_every_upload_once() {
     d.draw_page("caption.highlight", 3).await;
     assert!(d.preview_at("caption.highlight", 3, 0.2));
     d.settle();
-    let (uploads, writes) = (d.uploads(), d.queue_writes());
+    let (uploads, writes) = (d.uploads(), d.one_off_uploads());
     for k in 0..12 {
         let share = if k % 2 == 0 { 0.8 } else { 0.2 };
         assert!(d.preview_at("caption.highlight", 3, share));
     }
     assert_eq!(d.uploads() - uploads, 12, "every frame's quads, once each");
     println!(
-        "{} of 12 moving frames in flight fell back to a queue write",
-        d.queue_writes() - writes
+        "{} of 12 moving frames in flight made a staging buffer of their own",
+        d.one_off_uploads() - writes
     );
     d.settle();
-    let writes = d.queue_writes();
+    let writes = d.one_off_uploads();
     assert!(d.preview_at("caption.highlight", 3, 0.8));
     assert_eq!(
-        d.queue_writes() - writes,
+        d.one_off_uploads() - writes,
         0,
         "the GPU caught up: through a kept staging buffer again"
     );
 }
 
 /// With every kept staging buffer in flight (here never mapped again, as the export's frame path once left them), a
-/// moving frame's quads fall back to a queue write, counted once; mapped again, the kept buffers take the uploads
-/// again.
+/// moving frame's quads go through a staging buffer of the frame's own (never the queue), counted once; mapped again,
+/// the kept buffers take the uploads again.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU"]
-async fn with_every_staging_buffer_in_flight_quads_upload_with_a_queue_write() {
+async fn with_every_staging_buffer_in_flight_quads_upload_through_one_of_their_own() {
     let mut d = klipolo_engine::test_support::caption_drawer().await;
     d.draw_page("caption.highlight", 3).await;
     assert!(d.preview_at("caption.highlight", 3, 0.2));
     d.settle();
-    let (uploads, writes) = (d.uploads(), d.queue_writes());
+    let (uploads, writes) = (d.uploads(), d.one_off_uploads());
     d.hold_staging(true);
     for k in 0..5 {
         let share = if k % 2 == 0 { 0.8 } else { 0.2 };
@@ -2704,16 +2704,16 @@ async fn with_every_staging_buffer_in_flight_quads_upload_with_a_queue_write() {
     }
     assert_eq!(d.uploads() - uploads, 5, "every frame's quads moved");
     assert_eq!(
-        d.queue_writes() - writes,
+        d.one_off_uploads() - writes,
         2,
-        "three through the kept staging buffers, then queue writes"
+        "three through the kept staging buffers, then their own"
     );
     d.hold_staging(false);
     d.settle();
-    let writes = d.queue_writes();
+    let writes = d.one_off_uploads();
     assert!(d.preview_at("caption.highlight", 3, 0.2));
     assert_eq!(
-        d.queue_writes() - writes,
+        d.one_off_uploads() - writes,
         0,
         "mapped again: through a kept staging buffer"
     );
@@ -2729,8 +2729,8 @@ const CAPTION_WORDS: [(&str, f64, f64); 4] = [
 
 /// An export's moving caption frames copy their quads from the kept staging
 /// buffers too. Its frame path (`render_formats`, `Compositor::render_yuv`) maps them again after each submit as the
-/// preview's does; it didn't, so from the fourth moving frame on every upload was a queue write again (a staging buffer
-/// of wgpu's own each time). Twelve frames, the highlight moving between two words.
+/// preview's does; it didn't, so from the fourth moving frame on every upload made a staging buffer of its own
+/// again. Twelve frames, the highlight moving between two words.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU"]
 async fn an_exports_moving_caption_frames_upload_through_kept_staging_buffers() {
@@ -2753,7 +2753,7 @@ async fn an_exports_moving_caption_frames_upload_through_kept_staging_buffers() 
         "every frame's quads moved"
     );
     assert_eq!(
-        last.queue_writes - settled.queue_writes,
+        last.one_off_uploads - settled.one_off_uploads,
         0,
         "all through kept staging buffers: {stats:?}"
     );

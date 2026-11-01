@@ -114,15 +114,7 @@ impl TestCaptionDrawer {
         });
         let drawn = self
             .drawer
-            .prepare(
-                device,
-                queue,
-                &mut encoder,
-                layer,
-                self.out,
-                &mut Vec::new(),
-                wait,
-            )
+            .prepare(device, &mut encoder, layer, self.out, &mut Vec::new(), wait)
             .is_some();
         queue.submit([encoder.finish()]);
         if !self.holding {
@@ -140,8 +132,8 @@ impl TestCaptionDrawer {
     }
 
     /// While `on`, frames are submitted without `after_submit`, as a frame path that missed it did:
-    /// the staging buffers they copied from aren't mapped again, so past the kept ones uploads fall back to queue
-    /// writes. Turned off, those buffers are mapped again.
+    /// the staging buffers they copied from aren't mapped again, so past the kept ones each upload makes a staging
+    /// buffer of its own. Turned off, those buffers are mapped again.
     pub fn hold_staging(&mut self, on: bool) {
         if self.holding && !on {
             self.drawer.after_submit();
@@ -149,9 +141,9 @@ impl TestCaptionDrawer {
         self.holding = on;
     }
 
-    /// Uploads made with a queue write, a staging buffer of wgpu's own.
-    pub fn queue_writes(&self) -> u64 {
-        self.drawer.stats().queue_writes
+    /// Frames that uploaded through a staging buffer of their own (every kept one in flight).
+    pub fn one_off_uploads(&self) -> u64 {
+        self.drawer.stats().one_off_uploads
     }
 
     /// Draws page `page` once, the export's way: it waits for the page's build.
@@ -211,7 +203,6 @@ impl TestCaptionDrawer {
             let started = Instant::now();
             std::hint::black_box(self.drawer.prepare(
                 device,
-                queue,
                 &mut encoder,
                 &layer,
                 self.out,

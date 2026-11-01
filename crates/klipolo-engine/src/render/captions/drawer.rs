@@ -54,10 +54,10 @@ pub struct CaptionStats {
     pub builds: u64,
     pub atlases: usize,
     pub atlas_bytes: u64,
-    /// Uploads of the frame's quads and uniform (only when they changed), and those made with a queue
-    /// write (a staging buffer of wgpu's own, made and freed each time; the quads use kept ones).
+    /// Uploads of the frame's quads and uniform (only when they changed), and the frames that made them through a
+    /// staging buffer of their own (made and freed for that frame, every kept one in flight).
     pub uploads: u64,
-    pub queue_writes: u64,
+    pub one_off_uploads: u64,
 }
 
 pub struct CaptionDrawer {
@@ -132,13 +132,13 @@ impl CaptionDrawer {
             atlases: self.cache.0.len(),
             atlas_bytes: self.cache.bytes(),
             uploads: self.buffers.uploads,
-            queue_writes: self.buffers.queue_writes,
+            one_off_uploads: self.buffers.one_off_uploads,
         }
     }
 
     /// The frame `prepare` uploaded into is submitted: the staging buffers it copied from are mapped again.
     /// Every frame path calls it after its submit (`Compositor::frame_submitted`); one that didn't would keep them
-    /// from being reused, and past the kept ones uploads would fall back to queue writes.
+    /// from being reused, and past the kept ones each upload would make a staging buffer of its own.
     pub fn after_submit(&mut self) {
         self.buffers.after_submit();
     }
@@ -162,12 +162,11 @@ impl CaptionDrawer {
     /// that shows are asked for if they aren't kept, and the frame's instances are uploaded. The preview (`!wait`)
     /// draws the page's last atlas while it is being built again, else nothing; an export waits for it. Returns the slot `draw` takes, or None when
     /// there is nothing to draw. Says `frame.fontMissing` for a stand-in face and `frame.cjkFontMissing` for CJK without
-    /// its Noto Sans, as titles do.
-    #[allow(clippy::too_many_arguments)]
+    /// its Noto Sans, as titles do. It takes no queue, so it never waits for the GPU's queue, where a page build's work
+    /// runs: only an export waits, for its page's reply.
     pub fn prepare(
         &mut self,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         layer: &CaptionLayer,
         out: (u32, u32),
@@ -245,7 +244,7 @@ impl CaptionDrawer {
             return None;
         }
         self.buffers
-            .write(device, queue, encoder, &self.instances, &self.view);
+            .write(device, encoder, &self.instances, &self.view);
         self.drawn = Some((index, self.instances.len() as u32));
         Some(index)
     }
