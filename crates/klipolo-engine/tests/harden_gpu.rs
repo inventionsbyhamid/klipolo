@@ -174,8 +174,7 @@ fn the_walk_counts_only_the_hosts_own_check() {
         let m = naga::front::wgsl::parse_str(&module(&check)).unwrap();
         assert_eq!(loop_guards(&m).guarded, guarded, "{check}");
     }
-    // The step's load must be one of this body's own: a load hoisted out of the loop would leave the counter stuck
-    //.
+    // The step's load must be one of this body's own: a load hoisted out of the loop would leave the counter stuck.
     let hoisted = "var<private> kl_trips: u32;\n@fragment fn main() -> @location(0) vec4<f32> { var x = 0.0; let t = kl_trips; loop { if (kl_trips >= 4096u) { break; } kl_trips = t + 1u; x += 1.0; if (x > 9.0) { break; } } return vec4<f32>(x); }";
     let m = naga::front::wgsl::parse_str(hoisted).unwrap();
     assert_eq!(loop_guards(&m).guarded, 0);
@@ -277,8 +276,7 @@ fn diagnostic_filters_are_refused() {
 }
 
 /// naga 25's uniformity analysis treats `break` and `continue` as no disruption, so the counter's `break` leaves an
-/// implicit-derivative sample in a loop valid. This pins it: a naga that adopts WGSL's full analysis turns it red
-/// (review concern 2).
+/// implicit-derivative sample in a loop valid. This pins it: a naga that adopts WGSL's full analysis turns it red.
 #[test]
 fn the_counter_keeps_implicit_derivatives_valid_on_naga_25() {
     let filter = ContribDef::new("lib.k3f9q2ma/effect.taps.v1", ContribKind::Effect, "Taps");
@@ -297,7 +295,7 @@ fn the_counter_keeps_implicit_derivatives_valid_on_naga_25() {
 }
 
 /// A module that stops validating once hardened is refused where the author can find it, and without the uniformity
-/// hint unless that is the cause (review concern 2).
+/// hint unless that is the cause.
 #[test]
 fn a_shader_that_stops_validating_is_refused_at_its_line() {
     use naga::{Scalar, TypeInner};
