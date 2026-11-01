@@ -70,6 +70,27 @@ pub enum SizeStep {
     Smaller,
 }
 
+impl BubbleSize {
+    /// The tool's word for it ("large").
+    pub fn key(self) -> &'static str {
+        match self {
+            BubbleSize::Small => "small",
+            BubbleSize::Medium => "medium",
+            BubbleSize::Large => "large",
+        }
+    }
+}
+
+impl SizeStep {
+    /// The tool's word for it ("bigger").
+    pub fn key(self) -> &'static str {
+        match self {
+            SizeStep::Bigger => "bigger",
+            SizeStep::Smaller => "smaller",
+        }
+    }
+}
+
 /// What `adjustCamera` changes: None leaves it as it is. `format` gives the place and size to that format alone.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BubbleChange {
@@ -175,20 +196,13 @@ impl Word for Anchor {
 
 impl Word for BubbleSize {
     fn word(self) -> &'static str {
-        match self {
-            BubbleSize::Small => "small",
-            BubbleSize::Medium => "medium",
-            BubbleSize::Large => "large",
-        }
+        self.key()
     }
 }
 
 impl Word for SizeStep {
     fn word(self) -> &'static str {
-        match self {
-            SizeStep::Bigger => "bigger",
-            SizeStep::Smaller => "smaller",
-        }
+        self.key()
     }
 }
 
