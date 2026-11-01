@@ -5,11 +5,15 @@ import io
 import json
 import logging
 import secrets
+import subprocess
+import tempfile
 import time
 import uuid
 import wave
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+from pathlib import Path
 
 import anyio
 import httpx
@@ -20,6 +24,7 @@ from fastapi.testclient import TestClient
 from relay import db, proxy
 from relay.app import create_app
 from relay.devices import hash_token
+from relay.errors import RelayError
 
 META = "https://api.meta.ai/v1"
 SPARK_USAGE = {
@@ -37,6 +42,10 @@ BUDGET = {
 NOT_ENOUGH_CREDIT = {
     "error": "budget",
     "message": "This device does not have enough Klipolo credit left for this request. Add your own Meta key in Settings.",
+}
+SAM_TODAY = {
+    "error": "budget",
+    "message": "Klipolo's video tracking is used up for today. Try again tomorrow, or add your own Meta key in Settings.",
 }
 GLOBAL_BUDGET = {
     "error": "budget",
@@ -82,9 +91,18 @@ def with_sam(settings):
     return replace(settings, allowed_models=settings.allowed_models | {"sam-3.1"})
 
 
+def counted(app, device, file_id="file-1", frames=160):
+    """`file_id` as if the relay had made it for `device` (`sam/videos`), with its `frames`."""
+    app.state.video_frames.remember(device.device_id, file_id, frames)
+
+
+def sam_on(file_id):
+    return {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, {"type": "input_video", "file_id": file_id}]}]}
+
+
 @pytest.fixture
 def sam_client(settings):
-    """A relay with SAM switched on, which it is not by default."""
+    """A relay with SAM in its models (as by default)."""
     with TestClient(create_app(with_sam(settings))) as test_client:
         yield test_client
 
@@ -259,15 +277,93 @@ def test_wonder_is_403(client, conn, meta):
     assert not route.called
 
 
-def test_sam_is_403_by_default(client, conn, meta):
+SAM_VIDEO = {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, {"type": "input_video", "file_id": "file-1"}]}]}
+
+
+@pytest.mark.parametrize(("frames", "cost"), [(120, 0.024), (20, 0.01)], ids=["a-60-s-short", "under-the-minimum"])
+def test_sam_is_forwarded_by_default_and_charged_by_its_frames(client, conn, meta, frames, cost):
+    # A 60 s short at 2 frames a second is 120 frames; Meta bills at least 50 a video.
     device = add_device(conn)
+    counted(client.app, device, frames=frames)
+    done = {"type": "response.completed", "response": {"status": "completed", "usage": {"video_frames_processed": frames}}}
+    route = stream_from_meta(meta, MetaStream([sse(CREATED), sse(done)]))
+
+    response = client.post("/meta/v1/responses", json=SAM_VIDEO, headers=device.headers)
+
+    assert response.status_code == 200
+    assert route.called
+    [row] = ledger(conn, device)
+    assert row["model"] == "sam-3.1"
+    assert json.loads(row["usage_json"])["video_frames_processed"] == frames
+    assert row["cost_usd"] == pytest.approx(cost)
+    assert spent(conn, device) == pytest.approx(cost)
+    assert_ledger_matches_spend(conn, device)
+
+
+def test_sam_keeps_to_the_device_budget(client, conn, meta):
+    # A device at its cap is refused before Meta is called.
+    full = add_device(conn, spent=2.00)
+    counted(client.app, full)
     route = meta.post("/responses")
-    body = {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, {"type": "input_video", "file_id": "file-1"}]}]}
 
-    response = client.post("/meta/v1/responses", json=body, headers=device.headers)
+    response = client.post("/meta/v1/responses", json=SAM_VIDEO, headers=full.headers)
 
-    assert response.status_code == 403
-    assert response.json()["error"] == "model_not_allowed"
+    assert response.status_code == 402
+    assert response.json() == BUDGET
+    assert not route.called
+    assert spent(conn, full) == 2.00
+
+
+def test_a_sam_call_reserves_its_uploads_frames_and_is_charged_what_meta_bills(client, conn, meta):
+    # A 60 s short at 2 frames a second: 120 frames, counted from the upload's header as it went up.
+    device = add_device(conn, spent=1.97)
+    counted(client.app, device, "file-short", 120)
+    done = {"type": "response.completed", "response": {"status": "completed", "usage": {"video_frames_processed": 118}}}
+    route = stream_from_meta(meta, MetaStream([sse(CREATED), sse(done)]))
+
+    response = client.post("/meta/v1/responses", json=sam_on("file-short"), headers=device.headers)
+
+    # $0.024 fits the $0.03 left; the charge is what Meta billed.
+    assert response.status_code == 200
+    assert route.called
+    [_, row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(118 * 0.20 / 1000)
+    assert_ledger_matches_spend(conn, device)
+
+
+@pytest.mark.parametrize(
+    ("frames", "status", "error"),
+    [(15_000, 413, "too_large"), (5_000, 402, "budget")],
+    ids=["15000-frames-over-the-whole-cap", "5000-frames-over-what-is-left"],
+)
+def test_a_long_upload_is_refused_on_a_nearly_spent_device(client, conn, meta, frames, status, error):
+    # 15,000 frames ($3.00) is more than a device's whole $2.00 cap; 5,000 ($1.00) more than the $0.50 left. Either is
+    # refused before Meta is called, with the budget's own answers.
+    device = add_device(conn, spent=1.50)
+    counted(client.app, device, "file-long", frames)
+    route = meta.post("/responses")
+
+    response = client.post("/meta/v1/responses", json=sam_on("file-long"), headers=device.headers)
+
+    assert response.status_code == status
+    assert response.json()["error"] == error
+    if status == 402:
+        assert response.json() == NOT_ENOUGH_CREDIT
+    assert not route.called
+    assert spent(conn, device) == 1.50
+
+
+def test_sam_on_a_video_the_relay_did_not_make_is_refused(client, conn, meta):
+    device = add_device(conn)
+    other = add_device(conn, code="othercode")
+    # One the relay never made, and one it made for another device.
+    counted(client.app, other, "file-theirs", 120)
+    route = meta.post("/responses")
+
+    for file_id in ["file-never-made", "file-theirs"]:
+        response = client.post("/meta/v1/responses", json=sam_on(file_id), headers=device.headers)
+        assert response.status_code == 400, file_id
+        assert response.json()["error"] == "unsupported"
     assert not route.called
 
 
@@ -980,6 +1076,7 @@ def test_usage_missing_a_counter_charges_the_reservation(client, conn, meta, usa
 
 def test_sam_video_usage_without_frames_charges_the_reservation(sam_client, conn, meta):
     device = add_device(conn)
+    counted(sam_client.app, device, frames=160)
     done = {"type": "response.completed", "response": {"status": "completed", "usage": {}}}
     stream_from_meta(meta, MetaStream([sse(CREATED), sse(done)]))
     body = {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, {"type": "input_video", "file_id": "file-1"}]}]}
@@ -989,7 +1086,8 @@ def test_sam_video_usage_without_frames_charges_the_reservation(sam_client, conn
     assert response.status_code == 200
     [row] = ledger(conn, device)
     assert json.loads(row["usage_json"])["reserved"] is True
-    assert row["cost_usd"] == pytest.approx(0.75 + 50 * 0.20 / 1000)
+    # The frames its upload holds: the count bounds the cost, so no media amount on top.
+    assert row["cost_usd"] == pytest.approx(160 * 0.20 / 1000)
 
 
 def test_usage_that_breaks_the_parser_charges_the_reservation(client, conn, meta):
@@ -2112,6 +2210,7 @@ def test_last_event_without_a_closing_blank_line_is_still_read(client, conn, met
 
 def test_streamed_sam_call_is_charged_from_frames(sam_client, conn, meta):
     device = add_device(conn)
+    counted(sam_client.app, device, frames=160)
     done = {"type": "response.completed", "response": {"status": "completed", "usage": {"video_frames_processed": 160}}}
     stream_from_meta(meta, MetaStream([sse(CREATED), b'data: {"type":"response.output_text.delta","delta":"<0f>"}\n\n', sse(done)]))
     body = {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, {"type": "input_video", "file_id": "file-1"}]}]}
@@ -2471,6 +2570,7 @@ async def test_drain_that_fails_charges_the_reservation(app, conn, meta):
 async def test_drain_that_fails_for_media_charges_the_media_reservation(sam_app, conn, meta, body):
     app = sam_app
     device = add_device(conn)
+    counted(app, device, frames=160)
     call = AsgiCall(app, "/meta/v1/responses", streamed(body), device.headers)
     upstream = MetaStream(
         [sse(CREATED), sse(DELTA), sse(DELTA)],
@@ -2488,10 +2588,11 @@ async def test_drain_that_fails_for_media_charges_the_media_reservation(sam_app,
     [row] = ledger(conn, device)
     usage = json.loads(row["usage_json"])
     assert usage["reserved"] is True
-    assert usage["media_usd"] == 0.75
     if body["model"] == "sam-3.1":
-        assert row["cost_usd"] == pytest.approx(0.75 + 50 * 0.20 / 1000)
+        # SAM's worst case is its upload's counted frames.
+        assert row["cost_usd"] == pytest.approx(160 * 0.20 / 1000)
     else:
+        assert usage["media_usd"] == 0.75
         assert row["cost_usd"] == pytest.approx(reserved_cost(route.calls.last.request.content, media=True))
     assert_ledger_matches_spend(conn, device)
 
@@ -2656,3 +2757,422 @@ async def test_a_client_that_stops_reading_is_dropped_and_the_stream_still_drain
     assert row["cost_usd"] == pytest.approx(SPARK_COST)
     assert app.state.in_flight.count() == 0
     assert app.state.in_flight.reserved(device.device_id) == (0.0, 0.0)
+
+
+# SAM videos the relay makes: it decodes each upload meant for SAM and writes the file Meta sees (2 frames a second,
+# one video track, no sound), so it knows that file's frames. Generated with the image's ffmpeg.
+
+
+def video(path, seconds=10, fps=25, size="320x180", *extra):
+    """A real MP4 of `seconds` of test picture."""
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", f"testsrc=duration={seconds}:size={size}:rate={fps}",
+         *extra, "-pix_fmt", "yuv420p", "-y", str(path)],
+        check=True,
+    )
+    return Path(path).read_bytes()
+
+
+def packets(data, tmp_path):
+    """The video packets and streams of an MP4, as ffprobe counts them."""
+    path = tmp_path / "sent.mp4"
+    path.write_bytes(data)
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-count_packets", "-show_entries", "stream=codec_type,nb_read_packets,width,height",
+         "-of", "json", str(path)],
+        check=True, capture_output=True, text=True,
+    )
+    return json.loads(out.stdout)["streams"]
+
+
+def make_sam_video(client, device, meta, data, file_id="file-sam"):
+    route = meta.post("/files").respond(200, json={"id": file_id, "object": "file"})
+    response = client.post(
+        "/meta/v1/sam/videos", content=data, headers={**device.headers, "content-type": "video/mp4"}
+    )
+    return response, route
+
+
+def sent_file(route):
+    return parse_multipart(route.calls.last.request)["file"].get_payload(decode=True)
+
+
+def test_a_sam_video_is_made_by_the_relay_and_its_frames_are_its_own(client, conn, meta, tmp_path):
+    device = add_device(conn)
+    response, route = make_sam_video(client, device, meta, video(tmp_path / "talk.mp4", 10, 25, "1280x720"))
+
+    assert response.status_code == 200, response.text
+    assert response.json()["id"] == "file-sam"
+    # Uploaded for the person's own use, and gone after a day even if the app never deletes it.
+    parts = parse_multipart(route.calls.last.request)
+    assert parts["purpose"].get_payload(decode=True) == b"user_data"
+    assert parts["expires_after[anchor]"].get_payload(decode=True) == b"created_at"
+    assert parts["expires_after[seconds]"].get_payload(decode=True) == b"86400"
+    # Meta gets the relay's file: one video track, no sound, 2 frames a second, its long side at most 640.
+    [stream] = packets(sent_file(route), tmp_path)
+    assert stream["codec_type"] == "video"
+    assert (stream["width"], stream["height"]) == (640, 360)
+    frames = int(stream["nb_read_packets"])
+    assert 19 <= frames <= 21
+    assert client.app.state.video_frames.frames(device.device_id, "file-sam") == frames
+    assert ledger(conn) == []
+
+
+def test_a_fake_ftyp_before_the_real_file_never_lowers_the_count(client, conn, meta, tmp_path):
+    device = add_device(conn)
+    decoy = video(tmp_path / "decoy.mp4", 1, 1, "64x64")
+    real = video(tmp_path / "real.mp4", 60, 25)
+    response, route = make_sam_video(client, device, meta, decoy + real)
+
+    # Whatever ffmpeg makes of it, Meta sees only the relay's file, and the relay knows that file's frames.
+    if response.status_code == 200:
+        [stream] = packets(sent_file(route), tmp_path)
+        assert client.app.state.video_frames.frames(device.device_id, "file-sam") == int(stream["nb_read_packets"])
+    else:
+        assert response.status_code == 400
+        assert not route.called
+
+
+def test_a_fragmented_mp4_is_made_whole_and_counted(client, conn, meta, tmp_path):
+    device = add_device(conn)
+    data = video(tmp_path / "frag.mp4", 10, 25, "320x180", "-movflags", "frag_keyframe+empty_moov")
+    response, route = make_sam_video(client, device, meta, data)
+
+    assert response.status_code == 200, response.text
+    [stream] = packets(sent_file(route), tmp_path)
+    frames = client.app.state.video_frames.frames(device.device_id, "file-sam")
+    assert frames == int(stream["nb_read_packets"])
+    assert 19 <= frames <= 21
+
+
+def test_two_video_tracks_become_one(client, conn, meta, tmp_path):
+    device = add_device(conn)
+    first, second = tmp_path / "a.mp4", tmp_path / "b.mp4"
+    video(first, 10)
+    video(second, 30)
+    both = tmp_path / "both.mp4"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(first), "-i", str(second), "-map", "0:v", "-map", "1:v", "-c", "copy",
+         "-y", str(both)],
+        check=True,
+    )
+    response, route = make_sam_video(client, device, meta, both.read_bytes())
+
+    assert response.status_code == 200, response.text
+    streams = packets(sent_file(route), tmp_path)
+    assert len(streams) == 1
+    assert client.app.state.video_frames.frames(device.device_id, "file-sam") == int(streams[0]["nb_read_packets"])
+
+
+def test_a_video_over_ten_minutes_or_one_that_doesnt_decode_is_refused(client, conn, meta, tmp_path):
+    device = add_device(conn)
+    response, route = make_sam_video(client, device, meta, video(tmp_path / "long.mp4", 601, 1, "64x64"))
+    assert response.status_code == 413
+    assert not route.called
+    response, route = make_sam_video(client, device, meta, b"not a video at all")
+    assert response.status_code == 400
+    assert not route.called
+
+
+def test_a_decode_that_takes_too_long_is_stopped(client, conn, meta, tmp_path, monkeypatch):
+    monkeypatch.setattr(proxy, "SAM_VIDEO_TIMEOUT_S", 0.001)
+    device = add_device(conn)
+    response, route = make_sam_video(client, device, meta, video(tmp_path / "talk.mp4", 10))
+
+    assert response.status_code == 504
+    assert response.json()["error"] == "timeout"
+    assert not route.called
+
+
+def test_sam_videos_are_made_two_at_a_time_at_most(client):
+    assert client.app.state.sam_videos.total_tokens == 2
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        # A video anywhere but `input`.
+        "instructions",
+        # A video part with anything but its type and a file the relay made.
+        "fps",
+        "video-url",
+        "file-url",
+        # A file id on another kind of part, or a link that isn't data.
+        "image-file-id",
+        "image-link",
+    ],
+)
+def test_a_sam_request_names_only_videos_the_relay_made(client, conn, meta, content):
+    device = add_device(conn)
+    counted(client.app, device, "file-ok", 120)
+    route = meta.post("/responses")
+    part = {"type": "input_video", "file_id": "file-ok"}
+    text = {"type": "input_text", "text": "person"}
+    body = {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "content": [text, part]}]}
+    if content == "instructions":
+        body["instructions"] = [{"role": "user", "content": [{"type": "input_video", "file_id": "file-ok"}]}]
+    elif content == "fps":
+        part["fps"] = 2
+    elif content == "video-url":
+        part["video_url"] = "https://example.com/long.mp4"
+    elif content == "file-url":
+        part["file_url"] = "https://example.com/long.mp4"
+    elif content == "image-file-id":
+        body["input"][0]["content"].append({"type": "input_image", "file_id": "file-ok"})
+    elif content == "image-link":
+        body["input"][0]["content"].append({"type": "input_image", "image_url": "https://example.com/a.png"})
+
+    response = client.post("/meta/v1/responses", json=body, headers=device.headers)
+
+    assert response.status_code == 400, content
+    assert not route.called
+
+
+def test_meta_billing_more_frames_than_reserved_turns_sam_off_for_the_code(client, conn, meta):
+    device = add_device(conn)
+    other = add_device(conn)
+    counted(client.app, device, "file-1", 120)
+    done = {"type": "response.completed", "response": {"status": "completed", "usage": {"video_frames_processed": 500}}}
+    stream_from_meta(meta, MetaStream([sse(CREATED), sse(done)]))
+
+    response = client.post("/meta/v1/responses", json=sam_on("file-1"), headers=device.headers)
+
+    # Charged what Meta billed; then SAM is off for every device on that code until it is turned back on.
+    assert response.status_code == 200
+    [row] = ledger(conn, device)
+    assert row["cost_usd"] == pytest.approx(500 * 0.20 / 1000)
+    assert conn.execute("SELECT sam_off FROM codes WHERE code = 'testcode'").fetchone()[0] == 1
+    counted(client.app, other, "file-2", 120)
+    sent = meta.calls.call_count
+    refused = client.post("/meta/v1/responses", json=sam_on("file-2"), headers=other.headers)
+    assert refused.status_code == 403
+    assert refused.json()["error"] == "sam_off"
+    assert meta.calls.call_count == sent
+
+
+def test_sam_has_its_own_daily_cap(client, conn, meta):
+    # $4.99 of SAM today on one device: another device's 120 frames ($0.024) would pass the $5.00 a day.
+    spender = add_device(conn)
+    conn.execute(
+        "INSERT INTO ledger (device_id, at, endpoint, model, usage_json, cost_usd) VALUES (?, ?, ?, ?, ?, ?)",
+        (spender.device_id, datetime.now(UTC).isoformat(timespec="seconds"), "responses", "sam-3.1", "{}", 4.99),
+    )
+    device = add_device(conn)
+    counted(client.app, device, "file-1", 120)
+    route = meta.post("/responses")
+
+    response = client.post("/meta/v1/responses", json=sam_on("file-1"), headers=device.headers)
+
+    assert response.status_code == 402
+    assert response.json() == SAM_TODAY
+    assert not route.called
+
+
+def test_each_device_keeps_its_own_counts_and_a_deleted_file_is_forgotten(client, conn, meta):
+    a, b = add_device(conn), add_device(conn)
+    frames = client.app.state.video_frames
+    frames.remember(b.device_id, "file-b", 60)
+    for i in range(proxy.VideoFrames.PER_DEVICE + 8):
+        frames.remember(a.device_id, f"file-a{i}", 60)
+    # One device's uploads never push out another's.
+    assert frames.frames(b.device_id, "file-b") == 60
+    assert frames.frames(a.device_id, "file-a0") is None
+    assert frames.frames(a.device_id, f"file-a{proxy.VideoFrames.PER_DEVICE + 7}") == 60
+    meta.delete("/files/file-b").respond(200, json={"id": "file-b", "deleted": True})
+    assert client.delete("/meta/v1/files/file-b", headers=b.headers).status_code == 200
+    assert frames.frames(b.device_id, "file-b") is None
+
+
+# What making a SAM video may use: formats, picture sizes, threads and memory; uploads, places and space.
+
+
+def test_ffmpeg_reads_only_mov_from_a_file_with_two_threads_and_a_picture_limit(monkeypatch):
+    from relay import samvideo
+
+    seen = []
+
+    async def run(args, timeout_s):
+        seen.append(args)
+        raise RelayError(400, "invalid_request", samvideo.UNREADABLE)
+
+    monkeypatch.setattr(samvideo, "_run", run)
+    with pytest.raises(RelayError):
+        anyio.run(samvideo.make, Path("/nowhere/upload"), Path("/nowhere/out.mp4"), 60.0)
+    probe = seen[0]
+    before_input = probe[: probe.index("-i")]
+    for option in [["-f", "mov"], ["-protocol_whitelist", "file"], ["-probesize", "5M"]]:
+        assert any(before_input[i : i + 2] == option for i in range(len(before_input))), (option, probe)
+
+
+def test_the_encode_takes_mov_only_two_threads_and_pictures_up_to_4k():
+    from relay import samvideo
+
+    args = samvideo.encode_args(Path("/in/upload"), Path("/out/sam.mp4"))
+    before_input = args[: args.index("-i")]
+    for option in [["-f", "mov"], ["-protocol_whitelist", "file"], ["-threads", "2"], ["-max_pixels", "8294400"]]:
+        assert any(before_input[i : i + 2] == option for i in range(len(before_input))), (option, args)
+    after_input = args[args.index("-i") :]
+    assert any(after_input[i : i + 2] == ["-threads", "2"] for i in range(len(after_input))), args
+
+
+def test_the_encodes_filters_run_on_one_thread_whatever_the_hosts_cores():
+    from relay import samvideo
+
+    # ffmpeg sizes its filter thread pool from the host's cores, each thread with its own stack under the memory limit.
+    args = samvideo.encode_args(Path("/in/upload"), Path("/out/sam.mp4"))
+    for option in [["-filter_threads", "1"], ["-filter_complex_threads", "1"]]:
+        assert any(args[i : i + 2] == option for i in range(len(args))), (option, args)
+    assert args.index("-filter_threads") < args.index("-i"), args
+
+
+def test_the_child_runs_low_with_a_memory_limit_and_is_reaped_whatever_ends_the_wait():
+    from relay import samvideo
+
+    # The limits the child starts with.
+    out = anyio.run(samvideo._run, ["python3", "-c", "import resource, os; print(resource.getrlimit(resource.RLIMIT_AS)[0], os.nice(0))"], 10.0)
+    limit, niceness = (int(v) for v in out.split())
+    assert limit == samvideo.MEMORY_LIMIT_BYTES
+    assert niceness >= 10
+
+    # Cancelled part-way, it is killed and reaped, not left running.
+    async def cancelled():
+        with anyio.move_on_after(0.5):
+            await samvideo._run(["sleep", "30"], 60.0)
+
+    started = time.monotonic()
+    anyio.run(cancelled)
+    assert time.monotonic() - started < 5
+    assert not any(cmdline == b"sleep\x0030\x00" for cmdline in _cmdlines())
+
+
+def _cmdlines():
+    """Every process's command line, as /proc has it."""
+    for proc in Path("/proc").iterdir():
+        try:
+            yield (proc / "cmdline").read_bytes()
+        except OSError:
+            continue
+
+
+def test_an_8k_or_huge_png_picture_or_a_playlist_is_refused_in_time(client, conn, meta, tmp_path):
+    device = add_device(conn)
+    huge = tmp_path / "8k.mp4"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=gray:size=7680x4320:rate=1:duration=1",
+         "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-y", str(huge)],
+        check=True,
+    )
+    png = tmp_path / "png.mov"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=gray:size=9000x9000:rate=1:duration=1",
+         "-c:v", "png", "-y", str(png)],
+        check=True,
+    )
+    playlist = b"#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXTINF:10,\nfile:///etc/hostname\n#EXT-X-ENDLIST\n"
+    for data in [huge.read_bytes(), png.read_bytes(), playlist]:
+        started = time.monotonic()
+        response, route = make_sam_video(client, device, meta, data)
+        assert response.status_code == 400, response.text
+        assert not route.called
+        assert time.monotonic() - started < proxy.SAM_VIDEO_TIMEOUT_S
+
+
+def test_a_sam_upload_is_at_most_64_mb(client, conn, meta):
+    device = add_device(conn)
+    response, route = make_sam_video(client, device, meta, b"\0" * (proxy.SAM_UPLOAD_BYTES + 1))
+    assert response.status_code == 413
+    assert response.json() == {"error": "too_large", "message": proxy.SAM_TOO_BIG_MESSAGE}
+    assert not route.called
+
+
+def test_one_sam_upload_a_device_at_a_time(client, conn, meta, tmp_path):
+    device = add_device(conn)
+    client.app.state.sam_uploading.add(device.device_id)
+    response, route = make_sam_video(client, device, meta, video(tmp_path / "talk.mp4", 2))
+    assert response.status_code == 429
+    assert response.json()["message"] == proxy.SAM_ONE_AT_A_TIME_MESSAGE
+    assert not route.called
+
+
+class _NoPlace:
+    """An encode limiter with no place free, ever."""
+
+    async def __aenter__(self):
+        await anyio.sleep_forever()
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+def test_waiting_for_an_encode_place_is_short_then_busy(client, conn, meta, tmp_path, monkeypatch):
+    monkeypatch.setattr(proxy, "SAM_PLACE_WAIT_S", 0.05)
+    client.app.state.sam_videos = _NoPlace()
+    device = add_device(conn)
+    response, route = make_sam_video(client, device, meta, video(tmp_path / "talk.mp4", 2))
+    assert response.status_code == 429
+    assert response.json()["message"] == proxy.SAM_BUSY_MESSAGE
+    assert response.headers["retry-after"]
+    assert not route.called
+    # The device can send another once that one is answered.
+    assert device.device_id not in client.app.state.sam_uploading
+
+
+def test_sam_works_in_its_own_folder_and_says_when_it_is_short_of_space(client, conn, meta, tmp_path, monkeypatch, settings):
+    device = add_device(conn)
+    assert proxy.sam_work_dir(settings) != Path(tempfile.gettempdir())
+    monkeypatch.setattr(proxy.shutil, "disk_usage", lambda _: shutil_usage(free=10 * 1024 * 1024))
+    response, route = make_sam_video(client, device, meta, video(tmp_path / "talk.mp4", 2))
+    assert response.status_code == 503
+    assert response.json() == {"error": "no_space", "message": proxy.SAM_NO_SPACE_MESSAGE}
+    assert not route.called
+
+
+def shutil_usage(free):
+    import shutil
+
+    return shutil._ntuple_diskusage(10**12, 10**12 - free, free)
+
+
+def test_the_breaker_counts_every_sam_call_and_sam_takes_only_known_parts_and_picture_data(client, conn, meta):
+    # A call with no video reserves no frames: any video frames Meta bills for it trip the breaker.
+    device = add_device(conn)
+    image = {"type": "input_image", "image_url": "data:image/png;base64,AAAA"}
+    body = {"model": "sam-3.1", "input": [{"role": "user", "content": [{"type": "input_text", "text": "face"}, image]}]}
+    meta.post("/responses").respond(200, json={"status": "completed", "usage": {"video_frames_processed": 100}})
+    assert client.post("/meta/v1/responses", json=body, headers=device.headers).status_code == 200
+    assert conn.execute("SELECT sam_off FROM codes WHERE code = 'testcode'").fetchone()[0] == 1
+
+    other = add_device(conn, code="othercode")
+    sent = meta.calls.call_count
+    for part in [
+        {"type": "input_image", "image_url": "data:application/octet-stream;base64,AAAA"},
+        {"type": "input_audio", "input_audio": {"data": "AAAA", "format": "wav"}},
+        {"type": "input_file", "file_data": "data:image/png;base64,AAAA"},
+    ]:
+        refused = {"model": "sam-3.1", "input": [{"role": "user", "content": [{"type": "input_text", "text": "x"}, part]}]}
+        response = client.post("/meta/v1/responses", json=refused, headers=other.headers)
+        assert response.status_code == 400, part
+    assert meta.calls.call_count == sent
+
+
+def test_a_video_of_unknown_length_is_refused_and_a_used_up_day_is_said_before_the_upload(client, conn, meta, tmp_path, monkeypatch):
+    from relay import samvideo
+
+    async def no_duration(src, timeout_s):
+        return None
+
+    monkeypatch.setattr(samvideo, "_duration", no_duration)
+    device = add_device(conn)
+    response, route = make_sam_video(client, device, meta, video(tmp_path / "talk.mp4", 2))
+    assert response.status_code == 400
+    assert not route.called
+    monkeypatch.undo()
+
+    conn.execute(
+        "INSERT INTO ledger (device_id, at, endpoint, model, usage_json, cost_usd) VALUES (?, ?, ?, ?, ?, ?)",
+        (device.device_id, datetime.now(UTC).isoformat(timespec="seconds"), "responses", "sam-3.1", "{}", 5.00),
+    )
+    response, route = make_sam_video(client, device, meta, video(tmp_path / "talk2.mp4", 2))
+    assert response.status_code == 402
+    assert response.json() == SAM_TODAY
+    assert not route.called

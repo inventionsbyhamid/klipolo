@@ -52,6 +52,8 @@ fn main() {
         std::process::exit(klipolo_capture::worker::main(&args));
     }
     log::install();
+    // This build, as its export jobs record it, read now: a program replaced while Klipolo runs is never taken for it.
+    let _ = klipolo_engine::export::job::this_build();
     // The engine's fonts, once: the bundled folder in the app's resources (or the repository's in a dev build).
     if let Err(e) = fonts::configure(FontDirs {
         bundled: klipolo_fonts::bundled::bundled_dir(),
@@ -116,18 +118,26 @@ fn main() {
                 credentials.clone(),
                 sounds,
             );
+            // Following the speaker, its tracked footage kept beside the analysis's in the same cache.
+            let speaker =
+                commands::speaker::load(app.handle(), credentials.clone(), analysis.cache_root());
             // Chat over the open project, what analysis found and the same credentials.
             let chat = commands::chat::load(app.handle(), credentials.clone(), analysis.clone());
+            // Chat's followSubject follows with the same speaker following, so its spend counts once.
+            chat.set_speaker(speaker.clone());
             // The person's view as the page last told it, which other apps' calls read as the person's.
             let view: ViewHandle = Arc::new(ViewState::default());
-            // Another project opening (or this one closing) stops analysis, starts chat over and forgets the view, once
-            // the switch is sure.
+            // Another project opening (or this one closing) stops analysis, starts chat over, forgets the view and stops
+            // the clips being reversed, once the switch is sure.
+            let reversing = commands::reverse::ReverseJobs::default();
+            app.manage(reversing.clone());
             let (stopping, forgetting, unseen) = (analysis.clone(), chat.clone(), view.clone());
             app.state::<ProjectSessionState>()
                 .on_switch(Arc::new(move || {
                     stopping.project_changed();
                     forgetting.project_changed();
                     unseen.forget();
+                    reversing.stop_all();
                 }));
             // Other apps (MCP) edit through chat's tools and its proposal slot, listening at launch when the person
             // left it on.
@@ -141,8 +151,12 @@ fn main() {
             app.manage(mcp);
             app.manage(view);
             app.manage(analysis);
+            app.manage(speaker);
             app.manage(chat);
-            app.manage(commands::export::state_at_launch());
+            // Exports: the folders they were written in are remembered in the app's data folder, so a kept job there
+            // is listed after a relaunch.
+            let data = app.path().app_data_dir().ok();
+            app.manage(commands::export::state_at_launch(data.as_deref()));
             // Editing copies of the open project's slow files, beside the thumbnails in the media cache. The preview
             // reads them once made; they wait while an export holds the slot.
             let proxies = app
@@ -208,6 +222,8 @@ fn main() {
             project::project_redo,
             project::project_snapshot,
             commands::framing::clip_framing,
+            commands::speaker::speaker_estimate,
+            commands::speaker::speaker_follow,
             project::project_reveal,
             project::projects_recent,
             media::media_import,
@@ -244,6 +260,9 @@ fn main() {
             commands::media::media_update_item,
             commands::media::media_picture,
             commands::media::media_speech_ranges,
+            commands::reverse::clip_reverse,
+            commands::reverse::clip_reverse_stop,
+            commands::reverse::clip_reverse_discard,
             commands::media::library_pack,
             commands::library::library_marks,
             commands::library::library_set_favorite,
@@ -275,6 +294,10 @@ fn main() {
             commands::export::export_plan,
             commands::export::export_start,
             commands::export::export_cancel,
+            commands::export::export_jobs,
+            commands::export::export_pause,
+            commands::export::export_resume,
+            commands::export::export_discard,
             commands::export::export_reveal,
             commands::export::export_open,
             commands::export::export_share,
@@ -321,8 +344,9 @@ fn main() {
                 if let Some(mcp) = app.try_state::<McpState>() {
                     mcp.stop();
                 }
-                // Every edit is on the disk, then a running export stops, before the app goes. An editing copy being
-                // made keeps its finished segments: its worker sees the app go and is made on at the next launch.
+                // Every edit is on the disk, then a running export pauses to resume next time, before the app goes. An
+                // editing copy being made keeps its finished segments: its worker sees the app go and is made on at the
+                // next launch.
                 commands::export::on_exit(app);
             }
             // The system's appearance changed: the window's colour follows it while the theme is System.

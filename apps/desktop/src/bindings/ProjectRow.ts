@@ -6,6 +6,10 @@ import type { ThumbTile } from "./ThumbTile";
  */
 export type ProjectRow = { 
 /**
+ * The project's id (saved in it): its unfinished exports name it.
+ */
+id: string, 
+/**
  * The project file, for `project_open`.
  */
 path: string, name: string, 

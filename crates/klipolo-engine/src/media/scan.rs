@@ -15,7 +15,7 @@ mod cut;
 mod intra;
 #[cfg(test)]
 mod tests;
-mod tile;
+pub(crate) mod tile;
 
 pub(crate) use tile::{plain_layout, turn};
 

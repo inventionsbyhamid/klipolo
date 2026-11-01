@@ -29,6 +29,11 @@ export const CHAT_LABELS: Record<string, MessageDescriptor> = {
   }),
   'chat.trimClip': msg({ id: 'chat.trimClip', message: 'Trim a clip', comment: 'Undo history entry' }),
   'chat.splitAt': msg({ id: 'chat.splitAt', message: 'Split at {atUs}', comment: 'Undo history entry: a clip split' }),
+  'chat.freezeFrame': msg({
+    id: 'chat.freezeFrame',
+    message: 'Freeze {atUs} for {holdDurationUs}',
+    comment: 'Undo history entry: the frame at {atUs} (e.g. 0:12) holds still for {holdDurationUs} (e.g. 2.0 s)',
+  }),
   'chat.setFormat': msg({
     id: 'chat.setFormat',
     message: '{format, select, portrait {Make it vertical} square {Make it square} other {Make it landscape}}',
@@ -80,6 +85,11 @@ export const CHAT_LABELS: Record<string, MessageDescriptor> = {
     id: 'chat.makeTitleCard',
     message: 'Add the title {title}',
     comment: 'Undo history entry: a title card with these words added',
+  }),
+  'chat.followSubject': msg({
+    id: 'chat.followSubject',
+    message: 'Follow the {description}',
+    comment: 'Undo history entry: the vertical or square crop keeps a person or thing in frame, e.g. "Follow the person"',
   }),
   'chat.makeSticker': msg({
     id: 'chat.makeSticker',

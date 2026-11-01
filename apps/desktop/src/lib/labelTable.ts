@@ -82,6 +82,21 @@ export const TABLE = {
     message: 'Separate camera',
     comment: 'Command and undo history entry',
   }),
+  'undo.sound.separate': msg({
+    id: 'undo.sound.separate',
+    message: 'Separate sound',
+    comment: "Command and undo history entry: an imported clip's own sound becomes a layer of its own",
+  }),
+  'undo.freeze': msg({
+    id: 'undo.freeze',
+    message: 'Freeze frame',
+    comment: 'Command and undo history entry: the frame at the playhead holds still for a while',
+  }),
+  'undo.reverse': msg({
+    id: 'undo.reverse',
+    message: 'Reverse',
+    comment: 'Command and undo history entry: the clip plays backward, or forward again',
+  }),
   // A recording's sources and markers: `{source}` is a source's name, e.g. Mic, Game sound.
   'undo.source.volume': msg({
     id: 'undo.source.volume',
@@ -307,6 +322,21 @@ export const TABLE = {
     id: 'clip.framing.focus.undo',
     message: 'Change fill focus',
     comment: 'Undo history entry: which part of a filled video stays in view',
+  }),
+  'clip.focus.speaker.undo': msg({
+    id: 'clip.focus.speaker.undo',
+    message: 'Follow the speaker',
+    comment: 'Undo history entry: a filled video keeps the person talking in view',
+  }),
+  'clip.focus.fixed.undo': msg({
+    id: 'clip.focus.fixed.undo',
+    message: 'Fix the fill focus',
+    comment: 'Undo history entry: a filled video keeps its focus where it was set',
+  }),
+  'clip.focus.center.undo': msg({
+    id: 'clip.focus.center.undo',
+    message: 'Centre the fill focus',
+    comment: 'Undo history entry: a filled video keeps its middle in view',
   }),
   'crop.undo': msg({ id: 'crop.undo', message: 'Crop video', comment: 'Undo history entry: edges cut off a video' }),
   'crop.reset.undo': msg({

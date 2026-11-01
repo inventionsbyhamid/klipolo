@@ -36,15 +36,20 @@ const APP_CODES: Record<string, string> = {
   'exports.refused.busy': 'An export is already running.',
   'exports.refused.notRunning': "That export isn't running.",
   'exports.refused.otherProject': 'The running export is of {project}, not this project.',
+  'exports.refused.invalid': "That export isn't valid.",
+  'exports.unreadable': "This export's files can't be read. Discard it and export again.",
+  'exports.discardFailed': "The export couldn't be discarded. Try again.",
+  'exports.gone': "That export isn't there any more. Export again.",
+  'exports.otherBuild': 'Another version of Klipolo made this export, so it can’t resume. Start over or discard it.',
   'exports.revealGone': "That video isn't there any more.",
   'exports.shareFailed': "Klipolo couldn't open the share menu. Show the videos in Finder and share them from there.",
-  'exports.diskFull': 'The disk is full. Free up space, then try again.',
+  'exports.diskFull': 'The disk is full. Free up space, then resume.',
   'exports.encoderBusy':
-    'The video encoder is busy. Another app may be using it, like a screen recorder or a video call.',
+    'The video encoder is busy. Another app may be using it, like a screen recorder or a video call. Close it, then resume.',
   'exports.decodeFailed':
-    "A clip couldn't be read. Try again. If it happens again, check that every clip plays in the preview.",
-  'exports.gpuFailed': 'The graphics processor stopped responding.',
-  'exports.stopped': 'The export stopped unexpectedly.',
+    "A clip couldn't be decoded with hardware. Resume to try again, or finish in compatibility mode.",
+  'exports.gpuFailed': 'The graphics processor stopped responding. Resume to try again, or finish in compatibility mode.',
+  'exports.stopped': 'The export stopped unexpectedly. Resume to try again, or finish in compatibility mode.',
   'exports.frame.fontMissing': "A font used at {atUs} isn't on this Mac. Pick another font, then export.",
   'exports.frame.fontMissingNamed': "A font used at {atUs} isn't on this Mac ({names}). Pick another font, then export.",
   'exports.frame.cjkFontMissing': 'Chinese, Japanese or Korean text at {atUs} needs a font Klipolo doesn’t have yet.',
@@ -60,6 +65,12 @@ const APP_CODES: Record<string, string> = {
   'project.libraryFailed': "Klipolo couldn't make its projects folder. Check the disk, then try again.",
   'project.revealGone': "This project's file isn't there any more.",
   'project.revealFailed': "Klipolo couldn't open Finder. Try again.",
+  'reverse.busy': 'This clip is already being reversed.',
+  'reverse.noEncoder': 'This Mac has no video encoder for the reversed copy.',
+  'reverse.hdr': "This clip is HDR, and this computer can't write HDR video, so it can't be reversed.",
+  'reverse.missing': "{name} isn't where it was, so it can't be reversed.",
+  'reverse.failed': "Klipolo couldn't reverse {name}. Check the disk, then try again.",
+  'reverse.stopped': 'Reversing stopped.',
 };
 
 /**

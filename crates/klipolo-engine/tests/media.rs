@@ -5,6 +5,7 @@ use klipolo_engine::media::key::{CacheKind, stem};
 use klipolo_engine::media::sprite::{PER_CHUNK, Sprite, TILE_H, chunks_for, tile_size};
 use klipolo_engine::media::store::{Hold, ThumbStore, Want};
 use klipolo_engine::media::thumbs::{Fill, chunk_path, poster, strip};
+use klipolo_model::timeline::{Clip, ClipSource};
 use klipolo_platform::durable::Os;
 use klipolo_platform::fake::{Fault, RecordingDurable, Step};
 use support::*;
@@ -305,6 +306,27 @@ fn wants_start_under_the_playhead() {
     // The playhead is in "b" (broll): its file first, then the recording's screen and camera.
     let paths: Vec<_> = wants.iter().map(|w| w.path.as_str()).collect();
     assert_eq!(paths, ["/media/broll", "/media/screen", "/media/camera"]);
+}
+
+/// A recording's freeze frame wants the frame it holds, even with its start trimmed (its placeholder range moved on).
+#[test]
+fn a_trimmed_recording_freeze_wants_its_own_frame() {
+    let mut p = project();
+    let mut held = Clip::new(
+        ClipSource::Recording { id: "rec".into() },
+        secs(12.0),
+        secs(14.0),
+    );
+    held.id = "a-freeze".into();
+    held.freeze_at_us = Some(secs(10.0));
+    p.timeline.main = vec![held];
+    let wants = klipolo_engine::media::wants(&p, secs(1.0));
+    let at: Vec<_> = wants.iter().map(|w| (w.path.as_str(), w.at_us)).collect();
+    // The camera starts 0.2 s into the take, so its file is 0.2 s behind.
+    assert_eq!(
+        at,
+        [("/media/screen", secs(10.0)), ("/media/camera", secs(9.8))]
+    );
 }
 
 /// A keyframe index left by an older build (another format) is written again by the next scan, once: a file wanted

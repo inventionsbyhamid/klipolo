@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, HashSet};
 use crate::coded::CodedError;
 use crate::contrib::{AssetPath, Catalog, ContribDef, ContribId, ContribKind};
 use crate::error::{invalid, invalid_with, not_found, ModelError, Result};
+use crate::fill_focus::FillFocus;
 use crate::font::font_ok;
 use crate::layout::{BoxN, Layout};
 use crate::messages::{code, msg};
@@ -495,10 +496,32 @@ fn validate_clip(p: &Project, c: &Clip) -> Result<()> {
     check(
         valid_time(c.source_in_us)
             && valid_time(c.source_out_us)
-            && c.source_in_us < c.source_out_us
-            && c.source_out_us <= source_len.saturating_add(SOURCE_SLACK_US),
+            && c.source_in_us < c.source_out_us,
         code!("model.clip.outsideSource"),
     )?;
+    match c.freeze_at_us {
+        // A freeze frame's range is only its length: the frame it holds is what must be in the file.
+        Some(frame) => check(
+            valid_time(frame) && frame < source_len.max(1),
+            code!("model.freeze.outside"),
+        )?,
+        None => check(
+            c.source_out_us <= source_len.saturating_add(SOURCE_SLACK_US),
+            code!("model.clip.outsideSource"),
+        )?,
+    }
+    if let Some(r) = &c.reversed {
+        // Played forward again, it plays this file's stretch: the file must be there, and the stretch in it.
+        let of = p.asset(&r.of).filter(|a| a.kind == AssetKind::Video);
+        check(
+            of.is_some_and(|a| {
+                valid_time(r.from_us)
+                    && r.from_us < r.to_us
+                    && r.to_us <= a.duration_us.saturating_add(SOURCE_SLACK_US)
+            }),
+            code!("model.reverse.lost"),
+        )?;
+    }
     check(in_range(c.speed, 0.25, 4.0), code!("model.clip.speed"))?;
     check(in_range(c.volume, 0.0, 2.0), code!("model.clip.volume"))?;
     let duration = c.duration_us();
@@ -514,6 +537,10 @@ fn validate_clip(p: &Project, c: &Clip) -> Result<()> {
             .values()
             .all(|f| in_range(f.focus_x, 0.0, 1.0) && in_range(f.focus_y, 0.0, 1.0)),
         code!("model.clip.focus"),
+    )?;
+    check(
+        c.fill_focus.values().all(FillFocus::is_valid),
+        code!("model.clip.fillFocus"),
     )?;
     check(
         c.crop.is_none_or(|crop| crop.is_valid()),

@@ -50,9 +50,9 @@ run "cargo fmt --all --check" cargo fmt --all --check
 # The bundled pack (assets/library): what scripts/gen-library.py writes, the same bytes every run, CC0 and small.
 run "bundled pack" scripts/gen-library.test.sh
 run "cargo check --workspace --all-targets" cargo check --workspace --all-targets --locked
-run "clippy model, cursor, platform, engine, fonts, speech-wire, meta, analysis, chat, mcp, capture" \
+run "clippy model, cursor, platform, engine, fonts, speech-wire, meta, sam, analysis, chat, mcp, capture" \
   cargo clippy -p klipolo-model -p klipolo-cursor -p klipolo-platform -p klipolo-engine -p klipolo-fonts \
-  -p klipolo-speech-wire -p klipolo-meta -p klipolo-analysis -p klipolo-chat -p klipolo-mcp \
+  -p klipolo-speech-wire -p klipolo-meta -p klipolo-sam -p klipolo-analysis -p klipolo-chat -p klipolo-mcp \
   -p klipolo-capture --features klipolo-capture/synthetic --all-targets --locked -- -D warnings
 # The app crate: its non-GUI code (the engine commands, on the blank backend here; no window opens).
 run "clippy app" cargo clippy -p klipolo-app --all-targets --locked -- -D warnings
@@ -64,20 +64,24 @@ run "clippy engine (trial)" cargo clippy -p klipolo-engine --all-targets --featu
 run "check capture (real-capture)" cargo check -p klipolo-capture --features real-capture --locked
 # The Meta client's tests answer from a local mock server; nothing here reaches Meta. The recorder's tests use
 # its synthetic sources and fake backend (the kill sweep included); nothing here captures.
-run "test model, cursor, platform, fonts, speech-wire, meta, analysis, chat, mcp, capture" cargo test \
+run "test model, cursor, platform, fonts, speech-wire, meta, sam, analysis, chat, mcp, capture" cargo test \
   -p klipolo-model -p klipolo-cursor -p klipolo-platform -p klipolo-fonts -p klipolo-speech-wire -p klipolo-meta \
-  -p klipolo-analysis -p klipolo-chat -p klipolo-mcp -p klipolo-capture --features klipolo-capture/synthetic --locked \
+  -p klipolo-sam -p klipolo-analysis -p klipolo-chat -p klipolo-mcp -p klipolo-capture --features klipolo-capture/synthetic --locked \
   --no-fail-fast
 run "test app" cargo test -p klipolo-app --locked --no-fail-fast
 # The fonts crate's download tests against a local server (`test-hosts`); nothing here reaches Google.
 run "test fonts (local download server)" cargo test -p klipolo-fonts --features test-hosts --locked
 # Export tests that need an H.264 encoder skip themselves: the LGPL FFmpeg has none on Linux.
 run "test engine (no GPU)" cargo test -p klipolo-engine --locked --no-fail-fast
-# The fixture tests the default run ignores, on the CPU: FFmpeg software decode, in-process probe, the PCM cache.
+# The fixture tests the default run ignores, on the CPU: FFmpeg software decode, in-process probe, the PCM cache, and
+# reversed copies of H.264 with B-frames, a turned, a variable rate, a full range and an HDR clip, and a long file.
 run "test engine fixtures (no GPU)" cargo test -p klipolo-engine --locked --no-fail-fast \
-  --test decode --test probe --test audio --test video_start -- --ignored --exact \
+  --test decode --test probe --test audio --test video_start --test reversed -- --ignored --exact \
   decodes_a_frame_from_the_fixture unknown_fps_is_probed imports_probe_without_an_ffprobe_tool pcm_cache_keeps_mono_mono \
-  ffmpeg_and_the_stored_index_start_the_picture_at_the_same_place
+  ffmpeg_and_the_stored_index_start_the_picture_at_the_same_place \
+  a_b_frame_source_reverses_every_frame_at_every_window_edge a_turned_clip_reverses_upright \
+  a_variable_rate_clip_keeps_each_frame_s_length a_full_range_bt601_clip_keeps_its_values_and_its_tags \
+  an_hdr_clip_is_written_as_hdr_or_refused a_short_stretch_of_a_long_file_reads_only_near_it
 # The 16 kHz WAV for speech from the fixtures (a clip with sound, a stereo one, one with none).
 run "test analysis fixtures" cargo test -p klipolo-analysis --locked --test audio --test cli -- --ignored
 # Import on the fixtures: unreadable files named with why, a portrait phone video's rotation and an NTSC rate kept.

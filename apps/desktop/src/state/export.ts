@@ -2,17 +2,37 @@ import { create } from 'zustand';
 import type { CaptionFile } from '../bindings/CaptionFile';
 import type { ExportedFile } from '../bindings/ExportedFile';
 import type { ExportEvent } from '../bindings/ExportEvent';
+import type { ExportJobInfo } from '../bindings/ExportJobInfo';
 import type { ExportQuality } from '../bindings/ExportQuality';
 import type { FormatKind } from '../bindings/FormatKind';
+import type { ResumeMode } from '../bindings/ResumeMode';
+import { isCode } from '../bridge/call';
 import { exporter } from '../bridge/exporter';
 import { errorMessage } from '../lib/errors';
 import { flushBursts } from './bursts';
 import { commitsDone } from './commitQueue';
-import { applyEvent, exportedText, idleRun, refusalReason, unsavedFormats, type ExportRun } from './exportRun';
+import {
+  applyEvent,
+  exportedText,
+  idleRun,
+  ownPauseRefusal,
+  pauseRefusal,
+  refusalReason,
+  resuming,
+  unsavedFormats,
+  type ExportRun,
+} from './exportRun';
 import { settled, useProject } from './project';
 import { toast } from './toasts';
 
-export { exportPercent, type ExportPhase } from './exportRun';
+export {
+  canStartOver,
+  exportPercent,
+  NO_PAUSE_FINISHING,
+  shownJob,
+  unfinishedJobs,
+  type ExportPhase,
+} from './exportRun';
 
 /** "Also save captions as a file": whether, and as which kind. Kept on this Mac, whatever the project. */
 export interface CaptionFileChoice {
@@ -24,6 +44,8 @@ export interface CaptionFileChoice {
 export interface StartOptions {
   /** Also save the captions as this kind of file beside the 16:9 video. */
   captionFile?: CaptionFile | null;
+  /** Start over: the unfinished job this export replaces, which Rust discards once the new export is ready to run. */
+  replaces?: string | null;
 }
 
 interface ExportStore extends ExportRun {
@@ -39,6 +61,12 @@ interface ExportStore extends ExportRun {
   formats: FormatKind[];
   runQuality: ExportQuality;
   runCaptionFile: CaptionFile | null;
+  /** Start over's kept job, which this export replaces once Rust has started it: Try again asks the same. */
+  replaces: string | null;
+  /** Unfinished exports on disk (`export_jobs`), newest first. */
+  jobs: ExportJobInfo[];
+  /** A Start over is under way (its plan, then its start): another press is ignored. */
+  startingOver: boolean;
   /** The project the run on screen exports: Try again never exports another one. */
   projectId: string | null;
   /** Where the files go, as the dialog names it ("Movies / Klipolo"), once a plan or Change has said. */
@@ -54,10 +82,26 @@ interface ExportStore extends ExportRun {
   pickFolder: () => Promise<boolean>;
   /** Exports `formats` of the open project, every edit already made included; `captionFile` beside the 16:9 one. */
   start: (formats: FormatKind[], quality?: ExportQuality, options?: StartOptions) => Promise<void>;
-  /** The formats a failed run didn't save, again (a run that never got a job: all of them). */
+  /** Resumes the kept job of a run that failed or paused; a run that never got a job starts again. */
   retry: () => Promise<void>;
   /** Stops the run on screen. Resolves on Rust's answer: null, or why not (worded). */
   cancel: () => Promise<string | null>;
+  /**
+   * Pauses the run on screen, or job `jobId` (a row's Pause, for an export started before a reload). Resolves on Rust's
+   * answer: null, or why not (worded); asked again while it pauses, as the first.
+   */
+  pause: (jobId?: string) => Promise<string | null>;
+  /** Continues a kept job from its finished parts; `compatible` finishes it in compatibility mode. */
+  resume: (jobId: string, mode?: ResumeMode) => Promise<void>;
+  /** Deletes an unfinished job and its parts; false if it couldn't be (said in a toast). */
+  discard: (jobId: string) => Promise<boolean>;
+  /**
+   * A job whose project changed: exports its formats still in the project at its quality, from the project as it is
+   * now, in its place (Rust discards it once the new export is ready to run, never before).
+   */
+  startOver: (job: ExportJobInfo) => Promise<void>;
+  /** Reads the unfinished exports again. */
+  loadJobs: () => Promise<void>;
   onEvent: (event: ExportEvent) => void;
   reset: () => void;
 }
@@ -112,6 +156,10 @@ export function openExported(index: number): Promise<void> {
 
 /** Events of an earlier run are ignored. */
 let batch = 0;
+/** Only the latest job list counts. */
+let listing = 0;
+/** Rust's answer to the run on screen's pause, while it pauses. */
+let ownPause: Promise<string | null> = Promise.resolve(null);
 
 const openProjectId = () => useProject.getState().snapshot?.project.id ?? null;
 const ENDS = new Set<ExportEvent['type']>(['finished', 'paused', 'failed', 'cancelled']);
@@ -137,6 +185,9 @@ export const useExport = create<ExportStore>((set, get) => {
     formats: [],
     runQuality: 'high',
     runCaptionFile: null,
+    replaces: null,
+    jobs: [],
+    startingOver: false,
     projectId: null,
     folder: null,
     written: [],
@@ -147,12 +198,14 @@ export const useExport = create<ExportStore>((set, get) => {
         // starts from the format the preview shows.
         const fresh = get().phase === 'idle';
         set({ open, announcement: '', ...(fresh ? { picked: null } : {}) });
+        void get().loadJobs();
         return;
       }
       set({ open });
-      // A run that ended is put away with the dialog; one still running carries on (the top bar shows it).
+      // A run that ended is put away with the dialog (a kept job joins the unfinished list); one still running carries
+      // on (the top bar shows it).
       const { phase } = get();
-      if (phase === 'done' || phase === 'failed' || phase === 'cancelled') get().reset();
+      if (phase === 'done' || phase === 'failed' || phase === 'cancelled' || phase === 'paused') get().reset();
     },
     setQuality: (quality) => set({ quality }),
     setPicked: (picked) => set({ picked }),
@@ -177,7 +230,7 @@ export const useExport = create<ExportStore>((set, get) => {
         return false;
       }
     },
-    start: async (formats, quality = get().quality, { captionFile = null } = {}) => {
+    start: async (formats, quality = get().quality, { captionFile = null, replaces = null } = {}) => {
       const id = ++batch;
       set({
         ...idleRun,
@@ -185,6 +238,7 @@ export const useExport = create<ExportStore>((set, get) => {
         formats,
         runQuality: quality,
         runCaptionFile: captionFile,
+        replaces,
         projectId: openProjectId(),
         written: [],
       });
@@ -201,9 +255,12 @@ export const useExport = create<ExportStore>((set, get) => {
         if (id !== batch) return;
         // Stopped before it reached Rust: nothing to undo.
         if (get().stopping) return get().onEvent({ type: 'cancelled' });
-        await (captionFile
-          ? exporter.start(formats, quality, listener(id), { captionFile })
+        const asked = { ...(captionFile ? { captionFile } : {}), ...(replaces ? { replaces } : {}) };
+        await (Object.keys(asked).length > 0
+          ? exporter.start(formats, quality, listener(id), asked)
           : exporter.start(formats, quality, listener(id)));
+        // Start over: Rust has discarded the kept job, so its row goes.
+        if (replaces) void get().loadJobs();
         // Stopped while Rust was taking the export slot: said again now that it holds it.
         if (id === batch && get().stopping && get().phase === 'running') void get().cancel();
       } catch (error) {
@@ -214,7 +271,9 @@ export const useExport = create<ExportStore>((set, get) => {
       }
     },
     retry: () => {
-      const { files, ready, formats, projectId, runQuality, runCaptionFile } = get();
+      const { jobId, files, ready, formats, projectId, runQuality, runCaptionFile, replaces } = get();
+      // Its job is kept with every finished part: it goes on from there.
+      if (jobId) return get().resume(jobId);
       // A run that never got a job is its project's: in another project it is gone, not exported again.
       if (projectId !== openProjectId()) {
         get().reset();
@@ -223,9 +282,10 @@ export const useExport = create<ExportStore>((set, get) => {
       // The files already in place stay: only what wasn't saved is made again.
       const again = files.length > 0 ? unsavedFormats({ files, ready }) : formats;
       const next = again.length > 0 ? again : formats;
-      // The captions file goes with the 16:9 video: asked again only when that is made again.
+      // The captions file goes with the 16:9 video: asked again only when that is made again. Start over still
+      // replaces its kept job, which a refused start kept.
       const captionFile = next.includes('landscape') ? runCaptionFile : null;
-      return get().start(next, runQuality, { captionFile });
+      return get().start(next, runQuality, { captionFile, replaces });
     },
     cancel: () => {
       const own = get().phase === 'running';
@@ -242,11 +302,109 @@ export const useExport = create<ExportStore>((set, get) => {
         },
       );
     },
+    pause: (jobId = get().jobId ?? undefined) => {
+      if (!jobId) return Promise.resolve(null);
+      const s = get();
+      const own = jobId === s.jobId && s.phase === 'running';
+      if (own) {
+        const refused = ownPauseRefusal(s);
+        if (refused !== null) return Promise.resolve(refused);
+        if (s.pausing) return ownPause;
+        set({ pausing: true });
+      }
+      const answer = exporter.pause(jobId).then(
+        () => {
+          // Another job's events don't reach this window (it was started before a reload): its row shows it paused
+          // now, and Resume waits for it to finish its current part. The run on screen says so in its own event.
+          if (!own)
+            set((st) => ({ jobs: st.jobs.map((j) => (j.jobId === jobId ? { ...j, state: 'paused' } : j)) }));
+          return null;
+        },
+        (error: unknown) => {
+          // Not paused: Pause is offered again. Another job's list may be out of date (it ended): read again.
+          if (own) set({ pausing: false });
+          else void get().loadJobs();
+          return pauseRefusal(error);
+        },
+      );
+      if (own) ownPause = answer;
+      return answer;
+    },
+    resume: async (jobId, mode) => {
+      const id = ++batch;
+      const s = get();
+      const job = s.jobs.find((j) => j.jobId === jobId);
+      set({
+        ...resuming(s, jobId, job),
+        projectId: job?.projectId ?? s.projectId,
+        formats: job ? job.files.map((f) => f.format) : s.formats,
+        runQuality: job?.quality ?? s.runQuality,
+        written: [],
+      });
+      try {
+        await (mode ? exporter.resume(jobId, listener(id), mode) : exporter.resume(jobId, listener(id)));
+      } catch (error) {
+        if (id !== batch) return;
+        // Gone meanwhile (discarded elsewhere): Try again exports it anew rather than asking for it again.
+        if (isCode(error, 'exports.gone')) set({ jobId: null });
+        // Another build made it: it can only start over or be discarded, never be asked to resume again.
+        if (isCode(error, 'exports.otherBuild')) set({ otherBuild: true });
+        get().onEvent({ type: 'failed', message: errorMessage(error) });
+      }
+    },
+    discard: async (jobId) => {
+      try {
+        await exporter.discard(jobId);
+      } catch (error) {
+        toast.error(errorMessage(error));
+        void get().loadJobs();
+        return false;
+      }
+      if (get().jobId === jobId) get().reset();
+      set((s) => ({ jobs: s.jobs.filter((j) => j.jobId !== jobId) }));
+      void get().loadJobs();
+      return true;
+    },
+    startOver: async (job) => {
+      if (get().startingOver) return;
+      const inProject = useProject.getState().snapshot?.project.settings.formats ?? [];
+      const formats = job.files.map((f) => f.format).filter((f) => inProject.includes(f));
+      // None of its formats is in the project any more: formats are chosen again.
+      if (formats.length === 0) return get().reset();
+      set({ startingOver: true });
+      try {
+        // The plan says whether a captions file can go with it; without an answer nothing is thrown away.
+        let offered: boolean;
+        try {
+          offered = (await exporter.plan(formats, job.quality)).canSaveCaptions;
+        } catch {
+          return get().reset();
+        }
+        await get().start(formats, job.quality, {
+          captionFile: chosenCaptionFile(formats, offered),
+          replaces: job.jobId,
+        });
+      } finally {
+        set({ startingOver: false });
+      }
+    },
+    loadJobs: async () => {
+      const id = ++listing;
+      try {
+        const jobs: unknown = await exporter.jobs();
+        // Only a list counts: anything else lists none.
+        if (id === listing) set({ jobs: Array.isArray(jobs) ? (jobs as ExportJobInfo[]) : [] });
+      } catch {
+        // The list stays as it was.
+      }
+    },
     onEvent: (e) => {
       set((s) => applyEvent(s, e));
       if (!ENDS.has(e.type)) return;
       const s = get();
       if (s.ready.length > 0) void readWritten(batch);
+      // The job is kept, or gone: the list says so.
+      void s.loadJobs();
       // With the dialog open it says so itself; closed, a toast does.
       if (s.open) return;
       if (e.type === 'finished')
@@ -255,10 +413,13 @@ export const useExport = create<ExportStore>((set, get) => {
           actions: [{ label: 'Show in Finder', run: () => void revealExported() }],
         });
       else if (s.phase === 'failed') toast.error(s.announcement);
+      else if (s.phase === 'paused') toast.info(s.announcement);
     },
     reset: () => {
       batch++;
-      set({ ...idleRun, projectId: null, written: [] });
+      set({ ...idleRun, projectId: null, written: [], replaces: null });
+      // The job that was on screen joins the unfinished list as it is now.
+      void get().loadJobs();
     },
   };
 });

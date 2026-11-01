@@ -4,6 +4,7 @@ import type { ProjectRow } from '../../bindings/ProjectRow';
 import type { ThumbTile } from '../../bindings/ThumbTile';
 import { projects } from '../../bridge/projects';
 import { Button } from '../../design/Button';
+import { useExport } from '../../state/export';
 import { newerThan, usePosters } from '../../state/posters';
 import { newProject, useProject } from '../../state/project';
 import { ProjectCard } from './ProjectCard';
@@ -117,6 +118,11 @@ export function StartScreen({ onRecord, takeFocus = false }: StartScreenProps) {
   useEffect(() => {
     const timer = setTimeout(() => setQuiet(false), QUIET_MS);
     return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    // Unfinished exports (after a quit, a crash or a pause) mark their project's card.
+    void useExport.getState().loadJobs();
   }, []);
 
   // As the screen shows: a press that already put the focus somewhere keeps it.

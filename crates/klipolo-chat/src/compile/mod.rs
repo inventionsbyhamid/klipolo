@@ -1,8 +1,8 @@
 //! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
 //! built from, out as edits.
-//! - Additions (`setFormat`, `setCaptions`, `setBackground`, `fixCaptionWords`, `splitAt`, a trim that makes a clip
-//!   longer, the clip tools `setClip` and `setTransition`, the media: `addMusic`, `addSound`, `addText`, `addImage`
-//!   and `makeTitleCard`'s title, and a recording's camera and sounds: `setCameraMode`, `adjustCamera`,
+//! - Additions (`setFormat`, `setCaptions`, `setBackground`, `fixCaptionWords`, `splitAt`, `freezeFrame`, a trim that
+//!   makes a clip longer, the clip tools `setClip` and `setTransition`, the media: `addMusic`, `addSound`, `addText`,
+//!   `addImage` and `makeTitleCard`'s title, and a recording's camera and sounds: `setCameraMode`, `adjustCamera`,
 //!   `detachCamera`, `muteSource`, `setSourceVolume`, `separateSound`) are one `Transaction` the app applies at once:
 //!   one undo step. An addition is judged by what its part does, not by its tool: one that takes something away (the
 //!   model's own `removals`, as a format dropped with what was placed in it) is compiled again with the removals and
@@ -624,6 +624,7 @@ impl Compiler<'_> {
                     }
                 }
                 ToolCall::SplitAt { .. }
+                | ToolCall::FreezeFrame { .. }
                 | ToolCall::SetFormat { .. }
                 | ToolCall::SetCaptions { .. }
                 | ToolCall::FixCaptionWords { .. }
@@ -842,6 +843,9 @@ impl Compiler<'_> {
     fn addition(&self, work: &Project, call: &ToolCall) -> Result<Edit, Refused> {
         match call {
             ToolCall::SplitAt { at_us } => additions::split_at(self, work, *at_us),
+            ToolCall::FreezeFrame { at_us, duration_us } => {
+                additions::freeze_frame(self, work, *at_us, *duration_us)
+            }
             ToolCall::SetFormat {
                 format,
                 keep_others,

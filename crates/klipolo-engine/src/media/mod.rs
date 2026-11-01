@@ -5,7 +5,8 @@
 //! (`proxy`), which also refill the filmstrip from a full decode. Every cache is named by `key::stem`. Also a
 //! recording's cursor data, which Auto zooms follow (`cursor`), and where its screen changed (`activity`, after the
 //! thumbnails). For clip analysis: a small H.264 and AAC copy of part of a clip for a model to
-//! watch (`small_copy`), and every frame of a file as a small grey picture (`luma_frames`).
+//! watch (`small_copy`), and every frame of a file as a small grey picture (`luma_frames`). For a reversed clip: its
+//! footage written backward as a file of its own (`reversed`).
 
 pub mod activity;
 pub mod cursor;
@@ -17,6 +18,7 @@ pub mod luma_frames;
 pub mod open;
 pub mod poster;
 pub mod proxy;
+pub mod reversed;
 pub mod scan;
 pub mod small_copy;
 pub mod sprite;
@@ -31,7 +33,7 @@ use std::path::Path;
 use klipolo_model::project::{Asset, AssetKind, Project};
 use klipolo_model::query::{clip_starts, run_in_clip};
 use klipolo_model::time::Us;
-use klipolo_model::timeline::{ClipSource, ItemContent};
+use klipolo_model::timeline::{Clip, ClipSource, ItemContent};
 
 pub use events::{MediaEvent, MediaKind, MediaSink};
 pub use store::{Hold, ThumbStore, Want};
@@ -69,27 +71,42 @@ pub fn wants(project: &Project, playhead_us: Us) -> Vec<Want> {
     };
     let main = &project.timeline.main;
     for (clip, start) in main.iter().zip(clip_starts(main)) {
+        // A freeze frame wants its frame throughout, wherever its placeholder range was trimmed to.
+        let speed = if clip.is_freeze() { 0.0 } else { clip.speed };
         match &clip.source {
             ClipSource::Asset { id } => {
-                add(id, start, clip.duration_us(), clip.source_in_us, clip.speed)
+                let from = clip.freeze_at_us.unwrap_or(clip.source_in_us);
+                add(id, start, clip.duration_us(), from, speed)
             }
             // Each run of the recording's video sources where it plays inside the clip, at its own time.
             ClipSource::Recording { id } => {
                 let Some(r) = project.recording(id) else {
                     continue;
                 };
+                // A freeze frame: read as a clip starting at its frame, and only the run that holds it.
+                let held;
+                let clip = match clip.freeze_at_us {
+                    Some(frame) => {
+                        held = Clip {
+                            source_in_us: frame,
+                            source_out_us: frame.saturating_add(clip.duration_us()),
+                            ..clip.clone()
+                        };
+                        &held
+                    }
+                    None => clip,
+                };
                 for source in r.sources.iter().filter(|s| s.role.is_video()) {
                     for run in &source.runs {
-                        if let Some(span) = run_in_clip(clip, start, source, run) {
-                            let length = span.end_us - span.start_us;
-                            add(
-                                &run.asset_id,
-                                span.start_us,
-                                length,
-                                span.run_in_us,
-                                clip.speed,
-                            );
-                        }
+                        let Some(span) = run_in_clip(clip, start, source, run) else {
+                            continue;
+                        };
+                        let length = match clip.is_freeze() {
+                            true if span.start_us != start => continue,
+                            true => clip.duration_us(),
+                            false => span.end_us - span.start_us,
+                        };
+                        add(&run.asset_id, span.start_us, length, span.run_in_us, speed);
                     }
                 }
             }

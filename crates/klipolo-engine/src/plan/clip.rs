@@ -35,10 +35,14 @@ pub(super) fn clip_layers(
     let p = &*ctx.project;
     let registry = &*ctx.registry;
     let clip = &p.timeline.main[i];
-    // `min` then `max`, not `clamp`: a limit below 0 (media of unknown length) mustn't panic.
-    let source_us = (clip.source_in_us + unscaled(local_us, clip.speed))
-        .min(source_limit)
-        .max(0);
+    // `min` then `max`, not `clamp`: a limit below 0 (media of unknown length) mustn't panic. A freeze frame holds its
+    // frame, inside a transition too.
+    let source_us = match clip.freeze_at_us {
+        Some(frame) => frame.max(0),
+        None => (clip.source_in_us + unscaled(local_us, clip.speed))
+            .min(source_limit)
+            .max(0),
+    };
     // The zoom follows the timeline: both sides of a transition take this instant's.
     let zoom = ctx.zoom.window(ctx.starts[i] + local_us);
     let local_us = local_us.clamp(0, clip.duration_us());

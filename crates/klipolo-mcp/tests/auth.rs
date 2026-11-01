@@ -22,7 +22,9 @@ use klipolo_chat::{Job, Moment, Proposal, ToolCall};
 use klipolo_mcp::connection::{
     self, ConnectionFile, FILE, McpServer, VERSION, new_token, support_dir_from,
 };
-use klipolo_mcp::host::{Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot};
+use klipolo_mcp::host::{
+    Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot, Started,
+};
 use klipolo_mcp::rpc::{Mcp, listed};
 use klipolo_mcp::server::{
     self, BODY_LIMIT, BODY_TIMEOUT, CONNECTIONS, EXPIRE_EVERY, HEAD_TIMEOUT, Running,
@@ -771,7 +773,7 @@ impl Host for Slow {
     fn estimate_usd(&self, job: &Job) -> f64 {
         self.host.estimate_usd(job)
     }
-    fn start_paid(&self, client: &str, job: &Job) -> Result<(), HostError> {
+    fn start_paid(&self, client: &str, job: &Job) -> Result<Started, HostError> {
         self.host.start_paid(client, job)
     }
     fn connected(&self, clients: &[String]) {

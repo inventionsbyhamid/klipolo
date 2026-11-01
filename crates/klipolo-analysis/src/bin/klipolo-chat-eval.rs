@@ -41,8 +41,8 @@ use serde_json::{Map, Value, json};
 const KEY_ENV: &str = "MODEL_API_KEY";
 const USAGE: &str =
     "usage: klipolo-chat-eval [--cases <cases.json>] [--only <id>]... [--min-pass <n>]";
-/// The planner's target: at least this many of the 37 cases.
-const MIN_PASS: usize = 35;
+/// The planner's target: at least this many of the 38 cases.
+const MIN_PASS: usize = 36;
 /// Loudness of a window with a word said in it, and of one without, in dBFS.
 const SPEECH_DB: f32 = -20.0;
 const QUIET_DB: f32 = -70.0;
@@ -610,6 +610,9 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             json!({"clip": clip, "edge": word(edge), "toSec": s(*to_us)})
         }
         ToolCall::SplitAt { at_us } => json!({"atSec": s(*at_us)}),
+        ToolCall::FreezeFrame { at_us, duration_us } => {
+            json!({"atSec": at_us.map(s), "durationSec": duration_us.map(s)})
+        }
         ToolCall::SetClip {
             clip,
             speed,

@@ -24,6 +24,12 @@ RUN python -c "import torchaudio; torchaudio.pipelines.MMS_FA.get_model(with_sta
 COPY requirements.lock ./
 RUN pip install --no-deps -r requirements.lock && pip check
 
+# ffmpeg makes the video SAM sees (`relay/samvideo.py`): the relay decodes each upload meant for SAM and writes its
+# own copy, so it knows the frames Meta will bill.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY relay ./relay
 RUN python -m compileall -q relay
 

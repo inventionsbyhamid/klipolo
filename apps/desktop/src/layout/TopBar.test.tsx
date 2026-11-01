@@ -39,6 +39,7 @@ const LIBRARY = '/Users/me/Movies/Klipolo';
 
 /** A project in the library as the start screen's list has it; `open`: the one open now. */
 const recentRow = (name: string, open = false): ProjectRow => ({
+  id: name,
   path: `${LIBRARY}/${name}.klipolo`,
   name,
   openedMs: 0,

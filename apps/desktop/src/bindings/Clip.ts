@@ -4,9 +4,11 @@ import type { ClipSource } from "./ClipSource";
 import type { Crop } from "./Crop";
 import type { CursorStyle } from "./CursorStyle";
 import type { EffectInstance } from "./EffectInstance";
+import type { FillFocus } from "./FillFocus";
 import type { FormatKind } from "./FormatKind";
 import type { Framing } from "./Framing";
 import type { Look } from "./Look";
+import type { Reversed } from "./Reversed";
 import type { SourceMix } from "./SourceMix";
 import type { Transition } from "./Transition";
 
@@ -19,6 +21,11 @@ camera: CameraLayout | null,
  * Per-format framing. A format without an entry uses `framing::default_framing`.
  */
 framing: { [key in FormatKind]?: Framing }, 
+/**
+ * Per-format focus of a Fill crop beyond its framing's fixed point: the centre, or the speaker along a path
+ * (`fill_focus`). A format without an entry keeps its framing's `focus_x` and `focus_y`.
+ */
+fillFocus?: { [key in FormatKind]?: FillFocus }, 
 /**
  * The edges cut off its main footage before it is framed, in every format (a camera bubble keeps its whole
  * picture); None keeps the whole picture. Never a crop of nothing (`Crop::is_none`), and left out of the JSON
@@ -41,4 +48,16 @@ sourceMix?: { [key in string]: SourceMix },
 /**
  * This clip's own cursor style; none draws the project's (`Project::cursor_for`).
  */
-cursor?: CursorStyle, };
+cursor?: CursorStyle, 
+/**
+ * A freeze frame (`FreezeFrame`): the clip holds its source's frame at this source time for its whole length (a
+ * recording's every picture and its cursor as they were then) and plays no sound. Its source range only gives its
+ * length and the room its trims have, so it may run past the file, and it holds no footage: its sound, words and
+ * cursor path are nobody's. Left out of the JSON while None.
+ */
+freezeAtUs?: number, 
+/**
+ * The clip plays backward (`ReverseClip`): its source is a copy of this file's stretch written backward, and
+ * Reverse again plays it forward from this file. Left out of the JSON while None.
+ */
+reversed?: Reversed, };

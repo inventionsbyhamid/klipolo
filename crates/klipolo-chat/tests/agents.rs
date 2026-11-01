@@ -486,6 +486,20 @@ fn every_call() -> Vec<(ToolCall, bool)> {
         ),
         (ToolCall::SplitAt { at_us: secs(5.0) }, true),
         (
+            ToolCall::FreezeFrame {
+                at_us: None,
+                duration_us: None,
+            },
+            false,
+        ),
+        (
+            ToolCall::FreezeFrame {
+                at_us: Some(secs(5.0)),
+                duration_us: Some(secs(2.0)),
+            },
+            true,
+        ),
+        (
             ToolCall::SetClip {
                 clip: ClipRef::One("c2".into()),
                 speed: Some(2.0),

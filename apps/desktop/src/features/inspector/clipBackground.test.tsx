@@ -30,8 +30,8 @@ const WIDE = {
   square: { x: 0.21875, y: 0, w: 0.5625, h: 1 },
 };
 const FRAMING: Record<string, ClipFraming> = {
-  a: { framing: { landscape: fit, portrait: fit, square: fit }, follows: false, fillCrop: WIDE },
-  b: { framing: { landscape: fill, portrait: fill, square: fill }, follows: false, fillCrop: WIDE },
+  a: { framing: { landscape: fit, portrait: fit, square: fit }, follows: false, speaker: false, fillCrop: WIDE },
+  b: { framing: { landscape: fill, portrait: fill, square: fill }, follows: false, speaker: false, fillCrop: WIDE },
 };
 vi.mock('../../bridge/framing', () => ({
   clipFraming: vi.fn((clipId: string) => Promise.resolve(FRAMING[clipId])),

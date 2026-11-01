@@ -258,11 +258,14 @@ describe("a recording clip's menu", () => {
     expect(rows.slice(from, from + 5)).toEqual(['Mute Mic in this clip', '|', 'Separate camera', 'Separate Mic', '|']);
   });
 
-  it('an imported clip has none', async () => {
+  it("an imported clip has none, only its own sound's Separate sound", async () => {
     show(fixtureSnapshot());
     menuOf(/^broll\.mp4, clip 2 of 2/);
     await screen.findByRole('menuitem', { name: /^Split at playhead/ });
-    expect(screen.queryByRole('menuitem', { name: /in this clip|^Separate/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /in this clip/ })).toBeNull();
+    expect(screen.getAllByRole('menuitem', { name: /^Separate/ }).map((el) => el.textContent)).toEqual([
+      'Separate sound',
+    ]);
   });
 });
 
