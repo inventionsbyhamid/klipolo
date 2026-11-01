@@ -4,7 +4,7 @@ use common::fake::{FakeCounting, Source, manifest_with, probe_ok};
 use klipolo_capture::backend::{DeviceInfo, Transport};
 use klipolo_capture::import::{clip_for, manifest_peaks, recording_from};
 use klipolo_capture::preflight::setup;
-use klipolo_model::project::SourceRole;
+use klipolo_model::project::{FormatKind, SourceRole};
 
 #[test]
 fn a_finished_take_becomes_a_format_4_recording_with_one_asset_per_run() {
@@ -20,7 +20,7 @@ fn a_finished_take_becomes_a_format_4_recording_with_one_asset_per_run() {
         ("screen", 2, 2)
     );
     assert_eq!(r.duration_us(), 60_000_000);
-    let clip = clip_for(r, true);
+    let clip = clip_for(r, true, FormatKind::Landscape);
     assert_eq!(
         (clip.source_in_us, clip.source_out_us, clip.camera.is_some()),
         (0, 60_000_000, false)
@@ -44,7 +44,11 @@ fn a_camera_that_reconnected_imports_as_two_runs_of_one_source() {
         [33_000, 12_000_000]
     );
     // The camera's layer is mirrored as the take's "Mirror my camera" was.
-    let mirror = |on| clip_for(&imported.recording, on).camera.map(|c| c.mirror);
+    let mirror = |on| {
+        clip_for(&imported.recording, on, FormatKind::Landscape)
+            .camera
+            .map(|c| c.mirror)
+    };
     assert_eq!((mirror(true), mirror(false)), (Some(true), Some(false)));
 }
 
@@ -60,7 +64,11 @@ fn a_camera_only_take_s_footage_is_mirrored_as_the_switch_said() {
     for sources in [screen_failed, camera_only] {
         let (m, dir) = manifest_with(sources);
         let (imported, _) = recording_from(&m, &dir, &manifest_peaks, &mut probe_ok()).unwrap();
-        let mirror = |on| clip_for(&imported.recording, on).camera.map(|c| c.mirror);
+        let mirror = |on| {
+            clip_for(&imported.recording, on, FormatKind::Landscape)
+                .camera
+                .map(|c| c.mirror)
+        };
         assert_eq!((mirror(true), mirror(false)), (Some(true), Some(false)));
     }
 }

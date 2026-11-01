@@ -1,17 +1,9 @@
 import type { Clip } from '../../bindings/Clip';
 import type { Item } from '../../bindings/Item';
 import type { Project } from '../../bindings/Project';
+import { recordingCameras } from '../../lib/camera';
 import type { Label } from '../../lib/labels';
-import { cameraAssets } from '../../lib/recording';
 import { findClip } from '../../lib/timeline';
-
-/** The files of `clip`'s recording camera (one per run; usually one), if it has one. */
-function recordingCameras(project: Project, clip: Clip): string[] {
-  if (clip.source.type !== 'recording') return [];
-  const id = clip.source.id;
-  const recording = project.recordings.find((r) => r.id === id);
-  return recording ? cameraAssets(recording) : [];
-}
 
 /**
  * The clip whose camera this video layer is (a separated camera, attached to its clip), or null. It plays at its clip's

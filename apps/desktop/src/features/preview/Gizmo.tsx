@@ -63,22 +63,25 @@ export function Gizmo({
   const compact = Math.min(current.box.w * canvas.width, current.box.h * canvas.height) < COMPACT_PX;
   const layer = target.name;
   // Only the name it shows is looked up.
+  // The camera is named by its name alone ("Camera").
   const name =
-    target.label === 'text'
-      ? t({ id: 'gizmo.kind.text', message: `Text: ${layer}`, comment: '{layer} is the title’s words' })
-      : target.label === 'scene'
-        ? t({ id: 'gizmo.kind.scene', message: `Title: ${layer}`, comment: '{layer} is the template’s name' })
-        : target.label === 'image'
-          ? t({
-              id: 'gizmo.kind.image',
-              message: `Image: ${layer}`,
-              comment: '{layer} is the image’s file name',
-            })
-          : t({
-              id: 'gizmo.kind.video',
-              message: `Video: ${layer}`,
-              comment: '{layer} is the video’s file name',
-            });
+    target.label === 'camera'
+      ? layer
+      : target.label === 'text'
+        ? t({ id: 'gizmo.kind.text', message: `Text: ${layer}`, comment: '{layer} is the title’s words' })
+        : target.label === 'scene'
+          ? t({ id: 'gizmo.kind.scene', message: `Title: ${layer}`, comment: '{layer} is the template’s name' })
+          : target.label === 'image'
+            ? t({
+                id: 'gizmo.kind.image',
+                message: `Image: ${layer}`,
+                comment: '{layer} is the image’s file name',
+              })
+            : t({
+                id: 'gizmo.kind.video',
+                message: `Video: ${layer}`,
+                comment: '{layer} is the video’s file name',
+              });
   const label = selected
     ? target.locked
       ? t({

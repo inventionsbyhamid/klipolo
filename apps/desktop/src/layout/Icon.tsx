@@ -136,6 +136,12 @@ const PATHS = {
     </>
   ),
   text: <path d="M5 7V5h14v2M12 5v14M9.5 19h5" />,
+  camera: (
+    <>
+      <rect x="3.5" y="6.5" width="12" height="11" rx="2" />
+      <path d="m15.5 10.5 5-3v9l-5-3" />
+    </>
+  ),
   more: (
     <>
       <circle className="ico-fill" cx="6" cy="12" r="1.5" />
