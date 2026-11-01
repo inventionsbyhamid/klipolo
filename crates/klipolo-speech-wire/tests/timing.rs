@@ -53,7 +53,7 @@ fn start_errors_are_absolute_and_the_median_is_of_the_matched_words() {
     assert_eq!((s.matched, s.median_ms, s.p90_ms), (3, 40, 100));
 }
 
-/// The signed median says which way a recognizer leans (Step 6: Parakeet starts late more often than early), and a
+/// The signed median says which way a recognizer leans (one on 80 ms steps starts late more often than early), and a
 /// word heard wrongly or added is never matched.
 #[test]
 fn the_bias_is_signed_and_an_added_or_wrong_word_is_never_matched() {

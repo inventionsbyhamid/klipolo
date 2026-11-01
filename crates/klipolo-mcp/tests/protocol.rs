@@ -629,9 +629,11 @@ fn reading_records_the_timeline_key() {
     let (a, b) = (open(&mcp, "Agent A"), open(&mcp, "Agent B"));
     let seen = |session: &str| mcp.session(session).expect("a session").seen;
     assert_eq!(seen(&a), None);
-    // The proposal says nothing of the timeline.
+    // The proposal says nothing of the timeline, and the summary doesn't count as reading it.
     call(&mcp, &a, "getProposal", json!({}));
     read(&mcp, &a, "klipolo://proposal");
+    call(&mcp, &a, "getSummary", json!({}));
+    read(&mcp, &a, "klipolo://project/summary");
     assert_eq!(seen(&a), None);
 
     let first = Seen {
@@ -639,10 +641,8 @@ fn reading_records_the_timeline_key() {
         key: timeline_key(&host.project()),
     };
     for (name, by_tool) in [
-        ("getSummary", true),
         ("getContext", true),
         ("getTranscript", true),
-        ("klipolo://project/summary", false),
         ("klipolo://context", false),
         ("klipolo://transcript", false),
         ("klipolo://transcript/0-30", false),

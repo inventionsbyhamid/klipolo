@@ -252,7 +252,7 @@ impl Mcp {
         }
         let host = self.host();
         let read = match name {
-            "getSummary" => resources::summary(host, session),
+            "getSummary" => resources::summary(host),
             "getContext" => resources::context(host, session),
             "getTranscript" => match resources::transcript_times(&args) {
                 Ok((from, to)) => resources::transcript(host, session, from, to),

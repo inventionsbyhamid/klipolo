@@ -245,8 +245,8 @@ describe('where a drop lands on the timeline', () => {
     );
     expect(dropRefusal(x(3), 80, 'image')).toBe('Pictures go on the Overlays lane.');
     expect(dropRefusal(x(3), 125, 'image')).toBe('Pictures go on the Overlays lane.');
-    expect(dropRefusal(x(3), 30, 'audio')).toBe('Sounds go on the Sounds or Music lane.');
-    expect(dropRefusal(x(3), 80, 'audio')).toBe('Sounds go on the Sounds or Music lane.');
+    expect(dropRefusal(x(3), 30, 'audio')).toBe('Sounds go on the Sound effects or Music lane.');
+    expect(dropRefusal(x(3), 80, 'audio')).toBe('Sounds go on the Sound effects or Music lane.');
     expect(dropRefusal(x(3), 160, 'video')).toBe('Videos go on the Video or Overlays lane.');
     // Where it lands, off the lanes, or a kind not known: nothing to say.
     expect(dropRefusal(x(3), 30, 'image')).toBeNull();

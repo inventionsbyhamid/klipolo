@@ -39,7 +39,7 @@ export function registerDropTarget(
 
 /** What each lane takes, as the person hears it when something else is let go there. */
 const goesOn = {
-  audio: () => t({ id: 'drop.refused.sound', message: 'Sounds go on the Sounds or Music lane.' }),
+  audio: () => t({ id: 'drop.refused.sound', message: 'Sounds go on the Sound effects or Music lane.' }),
   image: () => t({ id: 'drop.refused.picture', message: 'Pictures go on the Overlays lane.' }),
   video: () => t({ id: 'drop.refused.video', message: 'Videos go on the Video or Overlays lane.' }),
 };

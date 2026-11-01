@@ -17,6 +17,7 @@ const { useProject } = await import('../../state/project');
 const { usePlayback } = await import('../../state/playback');
 const { useSelection } = await import('../../state/selection');
 const { useToasts } = await import('../../state/toasts');
+const { useClipboard } = await import('../../state/clipboard');
 const { useUi } = await import('../../state/ui');
 const { Timeline } = await import('./Timeline');
 const { useEditorShortcuts } = await import('../command-palette/useEditorShortcuts');
@@ -113,5 +114,19 @@ describe("a block's menu", () => {
       label: 'undo.split.clip',
       ops: [{ type: 'split', atUs: 25_000_000 }],
     });
+  });
+
+  it('lists no Paste effects, as nothing shows or removes the effects it would add', async () => {
+    // A block with effects was copied in this project, so Paste effects could run.
+    const blur = { id: 'fx1', effect: 'klipolo.builtin/effect.blur', enabled: true, params: {} };
+    useClipboard.setState({ projectId: fixtureSnapshot().project.id, entry: null, effects: [blur] });
+    renderTimeline();
+    for (const name of [/^broll\.mp4/, /Set up billing/]) {
+      fireEvent.contextMenu(screen.getByRole('button', { name }));
+      expect(await screen.findByRole('menuitem', { name: /^Duplicate/ })).toBeInTheDocument();
+      expect(screen.queryByRole('menuitem', { name: /Paste effects/ })).toBeNull();
+      fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+      await frames();
+    }
   });
 });
