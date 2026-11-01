@@ -1,4 +1,4 @@
-import { Ban } from 'lucide-react';
+import { Ban, RotateCcw } from 'lucide-react';
 import { Fragment, useLayoutEffect, useRef, useState, type FocusEvent, type JSX, type KeyboardEvent } from 'react';
 import { cn } from '../cn';
 import { Tooltip } from '../Tooltip';
@@ -7,10 +7,10 @@ import { sameColor, sameRgb } from './colorMath';
 export interface SwatchOption {
   /** `#RRGGBB(AA)`; null for the none choice. */
   value: string | null;
-  /** What it is announced and tooltipped as: "Yellow", "No outline". */
+  /** What it is announced and tooltipped as: "Yellow", "No outline", "Style's color". */
   name: string;
-  /** A colour (the default) shows its fill; none a ⊘. */
-  kind?: 'color' | 'none';
+  /** A colour (the default) shows its fill; none a ⊘; the style's own a reset arrow. */
+  kind?: 'color' | 'none' | 'inherit';
 }
 
 export interface SwatchGroup {
@@ -145,11 +145,12 @@ export function SwatchList({
           onPointerEnter={() => onPreview(option.value)}
           onClick={() => onPick(option.value)}
           onKeyDown={onKeyDown(at, option)}
-          className={cn('swatch', kind === 'none' && 'none')}
+          className={cn('swatch', kind !== 'color' && 'none')}
           // The fill is a content colour the person can pick, so it's data, not a token.
           style={kind === 'color' && option.value ? { ['--c' as string]: option.value } : undefined}
         >
           {kind === 'none' && <Ban size={12} aria-hidden />}
+          {kind === 'inherit' && <RotateCcw size={12} aria-hidden />}
         </div>
       </Tooltip>
     );

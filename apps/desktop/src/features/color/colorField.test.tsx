@@ -128,3 +128,56 @@ describe('the color field', () => {
     expect(hex).toHaveAccessibleDescription('This setting has no opacity, so the color is used without it.');
   });
 });
+
+describe('the color field for caption words', () => {
+  it('with a style’s colours, the row is the style’s own, those colours and “+”; repeated names are numbered', async () => {
+    const h = handlers();
+    field(h, {
+      label: 'Word color',
+      value: null,
+      inherit: { label: 'Style’s color' },
+      styleColors: ['#FFD02E', '#FCD12A', '#32D74B'],
+    });
+    const radios = within(row('Word color')).getAllByRole('radio');
+    expect(radios.map((r) => r.getAttribute('aria-label'))).toEqual(['Style’s color', 'Yellow', 'Yellow 2', 'Green']);
+    expect(swatch('Style’s color', 'Word color')).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(swatch('Style’s color', 'Word color'));
+    expect(h.onCommit).not.toHaveBeenCalled();
+    await userEvent.click(swatch('Green', 'Word color'));
+    expect(h.onCommit).toHaveBeenCalledExactlyOnceWith('#32D74B');
+  });
+
+  it('words of different colours check no swatch, and every pick commits, the style’s own too', async () => {
+    const h = handlers();
+    field(h, { label: 'Word color', value: null, mixed: true, inherit: { label: 'Style’s color' } });
+    expect(within(row('Word color')).queryByRole('radio', { checked: true })).toBeNull();
+    await userEvent.click(swatch('Style’s color', 'Word color'));
+    expect(h.onCommit).toHaveBeenCalledExactlyOnceWith(null);
+  });
+
+  it('compact, it is one button named by the field and its colour, opening the popover with the Style group first', async () => {
+    const h = handlers();
+    const { unmount } = field(h, {
+      label: 'Word color',
+      value: '#FCD12A',
+      compact: true,
+      inherit: { label: 'Style’s color' },
+      styleColors: ['#FCD12A', '#FFFFFF'],
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Word color: Yellow' }));
+    const dialog = screen.getByRole('dialog', { name: 'Word color' });
+    const names = (group: string) =>
+      within(within(dialog).getByRole('group', { name: group }))
+        .getAllByRole('option')
+        .map((o) => o.getAttribute('aria-label'));
+    expect(names('Style')).toEqual(['Style’s color', 'Yellow', 'White']);
+    // A preset the style already has isn't offered twice.
+    expect(names('Klipolo')).not.toContain('White');
+    expect(
+      within(within(dialog).getByRole('group', { name: 'Style' })).getByRole('option', { name: 'Yellow' }),
+    ).toHaveAttribute('aria-selected', 'true');
+    unmount();
+    field(handlers(), { label: 'Word color', value: null, compact: true, mixed: true, inherit: { label: 'Style’s color' } });
+    expect(screen.getByRole('button', { name: 'Word color: Mixed' })).toBeInTheDocument();
+  });
+});

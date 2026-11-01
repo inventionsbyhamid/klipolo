@@ -6,22 +6,28 @@ import { focusSwatch, SwatchList, type SwatchGroup, type SwatchOption } from '..
 import { PopoverContent } from '../../design/Popover';
 import { nearestColorName } from '../../lib/swatches';
 import { useRecentColors } from '../../state/recentColors';
+import { ContrastNote } from './ContrastNote';
 import { CustomPicker } from './CustomPicker';
 import { EyedropperButton } from './EyedropperButton';
+import { numbered } from './numbered';
 import { projectColorsNow } from './projectColors';
 
 interface ColorPopoverProps {
   label: string;
   value: string | null;
-  /** The colour the swatches select: `value`, without its alpha in a field that has one. */
-  selected: string | null;
+  /** The colour the swatches select: `value`, without its alpha in a field that has one; undefined: none (mixed). */
+  selected: string | null | undefined;
   /** Changes when a pick replaced the picker's keys still settling: it shows `value` again (`CustomPicker`). */
   resync: number;
   alpha: boolean;
   /** The presets, named. */
   presets: SwatchOption[];
-  /** The none swatch, first among the presets, when the setting has one. */
-  none: SwatchOption | null;
+  /** A caption style's own colours, named (null when the setting has none): the Style group, before Klipolo's. */
+  styled: SwatchOption[] | null;
+  /** The style's own (first in Style) or none (first in Klipolo's) swatch. */
+  reset: SwatchOption | null;
+  /** A compact field's colours around its own: the contrast note at the foot. */
+  contrastWith?: readonly string[];
   onPreview(color: string | null): void;
   onPreviewEnd(): void;
   onPick(color: string | null): void;
@@ -36,7 +42,8 @@ interface ColorPopoverProps {
 
 /**
  * The color popover: anchored to the "+" that opened it and non-modal, so the video stays in view and shows each
- * colour live. Klipolo's colours (none first), then the colours this video already uses and the person's recent custom
+ * colour live. A caption style's own colours (its reset first), Klipolo's colours (none first, minus any the style has),
+ * then the colours this video already uses and the person's recent custom
  * picks (each group only when it has a colour, none repeating a colour above it, both as they were when it opened), as
  * one listbox in labelled groups; then the custom picker (area, hue and, with an alpha, opacity), then a hex field,
  * and on a Mac the eyedropper beside it. It opens on the selected swatch, and scrolls on a short window.
@@ -99,7 +106,9 @@ function PopoverBody({
   resync,
   alpha,
   presets,
-  none,
+  styled,
+  reset,
+  contrastWith,
   onPreview,
   onPreviewEnd,
   onPick,
@@ -111,7 +120,10 @@ function PopoverBody({
   picking,
 }: ColorPopoverProps & { picking: RefObject<boolean> }): JSX.Element {
   const { t, i18n } = useLingui();
-  const shown = presets.flatMap((o) => (o.value === null ? [] : [o.value]));
+  const inherit = reset?.kind === 'inherit' ? [reset] : [];
+  const none = reset?.kind === 'none' ? [reset] : [];
+  /** Every colour the Style and Klipolo groups offer: the two groups after them leave these out. */
+  const shown = [...(styled ?? []), ...presets].flatMap((o) => (o.value === null ? [] : [o.value]));
   const { video, recent } = useOpeningColors(shown);
   const word = (name: string, n: number) =>
     t({
@@ -122,10 +134,22 @@ function PopoverBody({
   const named = (hexes: string[]): SwatchOption[] =>
     hexes.map((hex) => ({ value: hex, name: i18n._(nearestColorName(hex)) }));
   const groups: SwatchGroup[] = [
+    ...(inherit.length + (styled?.length ?? 0) > 0
+      ? [
+          {
+            id: 'style',
+            label: t({ id: 'color.group.style', message: 'Style', comment: 'The caption style’s own colors' }),
+            options: numbered([...inherit, ...(styled ?? [])], word),
+          },
+        ]
+      : []),
     {
       id: 'klipolo',
       label: t({ id: 'color.group.klipolo', message: 'Klipolo', comment: 'The app’s own preset colors' }),
-      options: [...(none ? [none] : []), ...presets],
+      options: numbered(
+        [...none, ...presets.filter((p) => !styled?.some((s) => p.value !== null && s.value !== null && sameColor(s.value, p.value)))],
+        word,
+      ),
     },
     ...(video.length > 0
       ? [
@@ -199,16 +223,7 @@ function PopoverBody({
         />
         <EyedropperButton onPick={onCustom} running={picking} />
       </div>
+      {contrastWith && <ContrastNote color={value} against={contrastWith} />}
     </>
   );
-}
-
-/** Swatches that would share a name are told apart by a number: "Yellow", "Yellow 2". */
-function numbered(options: SwatchOption[], word: (name: string, n: number) => string): SwatchOption[] {
-  const seen = new Map<string, number>();
-  return options.map((option) => {
-    const n = (seen.get(option.name) ?? 0) + 1;
-    seen.set(option.name, n);
-    return n === 1 ? option : { ...option, name: word(option.name, n) };
-  });
 }

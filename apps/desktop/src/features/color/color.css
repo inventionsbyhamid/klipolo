@@ -172,3 +172,26 @@
 .eyedropper-status:empty {
   display: none;
 }
+
+/* Compact: one swatch button that opens the popover, in a bar of controls. */
+.select.color-compact {
+  width: auto;
+  max-width: 180px;
+}
+
+.color-compact-dot {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--c, transparent);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink-soft);
+}
+
+/* Several colours at once: the colour wheel. */
+.color-compact-dot.mixed {
+  background: conic-gradient(#ff453a, #ff9f0a, #ffd02e, #32d74b, #0a84ff, #ff375f, #ff453a);
+}
