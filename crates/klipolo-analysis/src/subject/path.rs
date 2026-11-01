@@ -17,9 +17,17 @@
 //!   (the crop's centre goes straight between them, so it draws the same), so a long still talk stays a few keys a
 //!   shot. A shot's first key is a cut, so the crop jumps there and never pans from one shot to the next. A shot with
 //!   nobody in it holds the area's middle.
+//! - **Two or more people** (`people`: the main subject and those framed with them, left to right) who don't all fit
+//!   the crop: it keeps whoever is speaking (`Talk`). A new speaker takes the frame only after `MIN_TALK_US` of talk
+//!   (a "mm-hm" never does), at least `MIN_HOLD_US` after the last switch. Short turns back and forth, or talk over
+//!   each other, frame everyone in it when they fit, else whoever said more there. Silence, or a voice nobody on
+//!   screen has, holds who is framed. A shot opens on its first speaker (else the last one, else its main subject). A
+//!   switch further than `CUT_AWAY` crop widths is a cut at the start of the speech; a nearer one eases. `Keep` can
+//!   name one person, everyone, or who when instead. Without anyone heard, or with everyone fitting, a shot is framed
+//!   as above.
 
 use klipolo_cursor::smooth::step;
-use klipolo_model::fill_focus::{FocusKey, FocusPath};
+use klipolo_model::fill_focus::{FocusKey, FocusPath, Keep, MAX_PEOPLE, Who};
 use klipolo_model::layout::BoxN;
 use klipolo_model::time::Us;
 
@@ -45,6 +53,30 @@ const START_US: Us = 2_000_000;
 const DT_US: Us = 1_000_000 / 30;
 /// Two frames further apart than this aren't moved between: the aim holds.
 const MAX_GAP_US: Us = 1_000_000;
+/// A new speaker takes the frame only after talking this long.
+pub const MIN_TALK_US: Us = 1_500_000;
+/// The crop stays on someone at least this long before it switches to another speaker.
+pub const MIN_HOLD_US: Us = 2_000_000;
+/// A switch to someone further away than this many crop widths is a cut; a nearer one eases.
+pub const CUT_AWAY: f64 = 0.5;
+/// One person's talk with gaps shorter than this is one run.
+const RUN_GAP_US: Us = 300_000;
+/// Short turns and talk over each other this close together are one busy stretch.
+const BUSY_GAP_US: Us = 1_000_000;
+/// Someone takes part in a busy stretch with at least this much talk in it.
+const MIN_SHARE_US: Us = 500_000;
+/// A switch that would leave less of the speech than this isn't made.
+const MIN_LEFT_US: Us = 1_000_000;
+/// People fit together in the crop when they take at most this part of its width.
+const FIT: f64 = 0.9;
+
+/// Someone on screen speaking, in the frames' time: `person` counts from 1 at the left of the shot's `people`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Talk {
+    pub start_us: Us,
+    pub end_us: Us,
+    pub person: u8,
+}
 
 /// What a path is made from.
 #[derive(Clone, Copy, Debug)]
@@ -62,6 +94,10 @@ pub struct PathInput<'a> {
     /// What the clip's crop keeps of the picture, where the file has it (`FULL` when uncropped): the subject is picked
     /// near its middle and the crop stays inside it.
     pub area: BoxN,
+    /// Who on screen speaks when, in the same time; empty when nobody was heard.
+    pub talk: &'a [Talk],
+    /// Who to keep in frame where two or more people are in a shot.
+    pub keep: &'a Keep,
 }
 
 /// The whole picture.
@@ -90,11 +126,45 @@ pub fn focus_path(input: &PathInput) -> Option<FocusPath> {
 
     let mut keys = Vec::new();
     let mut found = false;
+    // Who the last shot with people to choose between ended on.
+    let mut last: Option<u8> = None;
     for (start, end) in shots {
         let in_shot: Vec<(Us, &TrackedFrame)> = (timed.iter())
             .filter(|(t, _)| (start..end).contains(t))
             .copied()
             .collect();
+        let plain: Vec<TrackedFrame> = in_shot.iter().map(|(_, f)| (*f).clone()).collect();
+        let ranked = people_in(&plain, area);
+        let cast = Cast {
+            frames: &in_shot,
+            ranked: &ranked,
+            crop,
+            area,
+        };
+        if let Some(plan) = cast.plan((start, end), input.talk, input.keep, last) {
+            last = plan.last;
+            found = true;
+            // Each leg starts with a cut: the shot's start, or a switch to someone far away.
+            let all = cast.aims(&plan.targets);
+            for &(from, to) in &plan.legs {
+                let own: Vec<(Us, f64, f64)> = all
+                    .iter()
+                    .copied()
+                    .filter(|a| (from..to).contains(&a.0))
+                    .collect();
+                let aims = if own.is_empty() { &all } else { &own };
+                let first = keys.len();
+                if aims.is_empty() {
+                    keys.push(key(from, middle(area)));
+                } else {
+                    follow(aims, (from, to), (crop, area), key_step, &mut keys);
+                }
+                if first > 0 {
+                    keys[first].cut = true;
+                }
+            }
+            continue;
+        }
         let aims = aims(&in_shot, crop, area);
         found |= !aims.is_empty();
         let first = keys.len();
@@ -107,7 +177,486 @@ pub fn focus_path(input: &PathInput) -> Option<FocusPath> {
             keys[first].cut = true;
         }
     }
+    thin(&mut keys);
     found.then_some(FocusPath { keys })
+}
+
+/// `keys` within the path's cap: the budget above counts shots, but far switches add legs of their own, so a very
+/// long, busy talk can go over. Every other key that isn't a cut goes until it fits; the cuts all stay.
+fn thin(keys: &mut Vec<FocusKey>) {
+    while keys.len() > FocusPath::MAX_KEYS {
+        let before = keys.len();
+        let mut keep = false;
+        keys.retain(|k| {
+            keep = k.cut || !keep;
+            keep
+        });
+        if keys.len() == before {
+            break;
+        }
+    }
+}
+
+/// The ids of a shot's people, left to right: its main subject and those framed with them (`companions`), at most
+/// `MAX_PEOPLE` (the largest). None when nobody is there.
+pub fn people(frames: &[TrackedFrame]) -> Vec<u32> {
+    people_in(frames, FULL)
+}
+
+/// [`people`] where the clip's crop keeps `area`: its main subject picked near the area's middle.
+pub fn people_in(frames: &[TrackedFrame], area: BoxN) -> Vec<u32> {
+    let Some(main) = main_subject(frames, area) else {
+        return Vec::new();
+    };
+    let stats = stats(frames);
+    let size = |id: u32| (stats.iter().find(|s| s.id == id)).map_or(0.0, |s| s.area / s.n as f64);
+    let mut others = companions(frames, main);
+    others.sort_by(|a, b| size(*b).total_cmp(&size(*a)).then(a.cmp(b)));
+    others.truncate(usize::from(MAX_PEOPLE) - 1);
+    let mut ids = vec![main];
+    ids.extend(others);
+    let x = |id: u32| (stats.iter().find(|s| s.id == id)).map_or(0.5, |s| s.x / s.n as f64);
+    ids.sort_by(|a, b| x(*a).total_cmp(&x(*b)).then(a.cmp(b)));
+    ids
+}
+
+/// Each id's sure boxes over `frames`: how many, and the sums of their areas and middles across.
+struct Stat {
+    id: u32,
+    n: usize,
+    area: f64,
+    x: f64,
+}
+
+fn stats(frames: &[TrackedFrame]) -> Vec<Stat> {
+    let mut out: Vec<Stat> = Vec::new();
+    for b in frames
+        .iter()
+        .flat_map(|f| f.boxes.iter())
+        .filter(|b| sure(b))
+    {
+        let (area, x) = (b.width() * b.height(), b.centre_x());
+        match out.iter_mut().find(|s| s.id == b.id) {
+            Some(s) => {
+                s.n += 1;
+                s.area += area;
+                s.x += x;
+            }
+            None => out.push(Stat {
+                id: b.id,
+                n: 1,
+                area,
+                x,
+            }),
+        }
+    }
+    out
+}
+
+/// The box around the sure boxes of `ids` on `frame`, if any is there.
+pub fn group_box(frame: &TrackedFrame, ids: &[u32]) -> Option<TrackedBox> {
+    (frame.boxes.iter())
+        .filter(|b| ids.contains(&b.id) && sure(b))
+        .copied()
+        .reduce(|a, b| TrackedBox {
+            left: a.left.min(b.left),
+            top: a.top.min(b.top),
+            right: a.right.max(b.right),
+            bottom: a.bottom.max(b.bottom),
+            ..a
+        })
+}
+
+/// Whether `ids` fit together in a crop `crop_w` wide: on at least half the frames where two or more of them are
+/// there (true when that is never).
+pub fn fit_together(frames: &[TrackedFrame], ids: &[u32], crop_w: f64) -> bool {
+    let (mut together, mut fit) = (0, 0);
+    for f in frames {
+        let there = (f.boxes.iter())
+            .filter(|b| ids.contains(&b.id) && sure(b))
+            .count();
+        if there < 2 {
+            continue;
+        }
+        together += 1;
+        if group_box(f, ids).is_some_and(|g| g.width() <= crop_w * FIT) {
+            fit += 1;
+        }
+    }
+    fit * 2 >= together
+}
+
+/// Who the crop is on: one person or several, by their number from the left (from 1).
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Target {
+    One(u8),
+    Group(Vec<u8>),
+}
+
+/// A shot's plan where it chooses between people: who it frames from when (`targets`, the first at its start), the
+/// stretches between its cuts (`legs`), and who it ends on.
+struct Plan {
+    targets: Vec<(Us, Target)>,
+    legs: Vec<(Us, Us)>,
+    last: Option<u8>,
+}
+
+/// A shot's frames and its people, for a crop.
+struct Cast<'a> {
+    frames: &'a [(Us, &'a TrackedFrame)],
+    ranked: &'a [u32],
+    crop: (f64, f64),
+    area: BoxN,
+}
+
+/// One stretch of speech that may take the frame: from, to, and who wants it (one person, or several talking).
+struct Claim {
+    from: Us,
+    to: Us,
+    who: Vec<u8>,
+    /// Each one's talk in it.
+    said: Vec<(u8, Us)>,
+}
+
+impl Cast<'_> {
+    fn plain(&self) -> Vec<TrackedFrame> {
+        self.frames.iter().map(|(_, f)| (*f).clone()).collect()
+    }
+
+    fn ids(&self, who: &[u8]) -> Vec<u32> {
+        (who.iter())
+            .filter_map(|n| self.ranked.get(usize::from(*n).checked_sub(1)?).copied())
+            .collect()
+    }
+
+    fn fits(&self, who: &[u8]) -> bool {
+        fit_together(&self.plain(), &self.ids(who), self.crop.0)
+    }
+
+    fn everyone(&self) -> Vec<u8> {
+        (1..=self.ranked.len() as u8).collect()
+    }
+
+    /// The shot's plan, or None where it is framed as before: fewer than two people, or whoever speaks with nobody
+    /// heard or everyone fitting.
+    fn plan(
+        &self,
+        (start, end): (Us, Us),
+        talk: &[Talk],
+        keep: &Keep,
+        last: Option<u8>,
+    ) -> Option<Plan> {
+        let n = self.ranked.len() as u8;
+        if n < 2 {
+            return None;
+        }
+        let talk: Vec<Talk> = (talk.iter())
+            .filter(|t| t.person >= 1 && t.person <= n && t.start_us < end && start < t.end_us)
+            .map(|t| Talk {
+                start_us: t.start_us.max(start),
+                end_us: t.end_us.min(end),
+                person: t.person,
+            })
+            .collect();
+        let all_fit = self.fits(&self.everyone());
+        let spans = spans(keep, (start, end));
+        let speaker_only = spans
+            .iter()
+            .all(|(_, _, w)| matches!(self.who(*w), Who::Speaker));
+        if speaker_only && (talk.is_empty() || all_fit) {
+            return None;
+        }
+        let main = main_subject(&self.plain(), self.area)
+            .and_then(|id| self.ranked.iter().position(|r| *r == id))
+            .map_or(1, |i| i as u8 + 1);
+        let mut targets: Vec<(Us, Target)> = Vec::new();
+        let mut cur: Option<Target> = None;
+        let mut last_switch = start;
+        for (from, to, who) in spans {
+            let within: Vec<Talk> = (talk.iter())
+                .filter(|t| t.start_us < to && from < t.end_us)
+                .map(|t| Talk {
+                    start_us: t.start_us.max(from),
+                    end_us: t.end_us.min(to),
+                    person: t.person,
+                })
+                .collect();
+            match self.who(who) {
+                Who::Person { person } => switch(&mut targets, &mut cur, from, Target::One(person)),
+                Who::Both if all_fit => {
+                    switch(&mut targets, &mut cur, from, Target::Group(self.everyone()))
+                }
+                Who::Speaker if all_fit => {
+                    switch(&mut targets, &mut cur, from, Target::Group(self.everyone()))
+                }
+                Who::Both => {
+                    let said = said(&within, (from, to));
+                    let now = cur.clone().or_else(|| last.map(Target::One));
+                    let pick = most(&said, now.as_ref(), main);
+                    switch(&mut targets, &mut cur, from, Target::One(pick));
+                }
+                Who::Speaker => {
+                    let claims = claims(&within);
+                    if cur.is_none() {
+                        // The shot opens on its first speaker, else the last one, else its main subject.
+                        let open = match claims.first() {
+                            Some(c) => self.resolve(c, None, main),
+                            None => Target::One(last.filter(|l| *l <= n).unwrap_or(main)),
+                        };
+                        switch(&mut targets, &mut cur, from, open);
+                    } else if targets.last().is_some_and(|(at, _)| *at < from) {
+                        // An explicit range before: the speaker's rules start over here.
+                        last_switch = last_switch.max(from - MIN_HOLD_US);
+                    }
+                    for c in &claims {
+                        let target = self.resolve(c, cur.as_ref(), main);
+                        if cur.as_ref() == Some(&target) {
+                            continue;
+                        }
+                        let at = c.from.max(last_switch + MIN_HOLD_US);
+                        if c.to - at < MIN_LEFT_US.min(c.to - c.from) || at >= c.to {
+                            continue;
+                        }
+                        switch(&mut targets, &mut cur, at, target);
+                        last_switch = at;
+                    }
+                }
+            }
+        }
+        if targets.is_empty() {
+            targets.push((start, Target::One(main)));
+        }
+        targets[0].0 = start;
+        // A switch to someone far away cuts there; a near one eases within the leg.
+        let mut legs = Vec::new();
+        let mut leg_start = start;
+        for w in targets.windows(2) {
+            let at = w[1].0;
+            let before = self.x_near(&w[0].1, at);
+            let after = self.x_near(&w[1].1, at);
+            if let (Some(a), Some(b)) = (before, after)
+                && (a - b).abs() > CUT_AWAY * self.crop.0
+            {
+                legs.push((leg_start, at));
+                leg_start = at;
+            }
+        }
+        legs.push((leg_start, end));
+        let last = match targets.last().map(|t| &t.1) {
+            Some(Target::One(p)) => Some(*p),
+            _ => last,
+        };
+        Some(Plan {
+            targets,
+            legs,
+            last,
+        })
+    }
+
+    /// `w` as this shot can keep it: a person who isn't there is whoever speaks.
+    fn who(&self, w: Who) -> Who {
+        match w {
+            Who::Person { person } if person == 0 || usize::from(person) > self.ranked.len() => {
+                Who::Speaker
+            }
+            w => w,
+        }
+    }
+
+    /// Who a claim frames: its one speaker; or, for several, all of them where they fit, else whoever said more
+    /// (the one framed now on a tie).
+    fn resolve(&self, c: &Claim, now: Option<&Target>, main: u8) -> Target {
+        match c.who.as_slice() {
+            [one] => Target::One(*one),
+            several if self.fits(several) => Target::Group(several.to_vec()),
+            _ => Target::One(most(&c.said, now, main)),
+        }
+    }
+
+    /// The aim on each frame for who is framed then: (time, x, y).
+    fn aims(&self, targets: &[(Us, Target)]) -> Vec<(Us, f64, f64)> {
+        let mut out = Vec::new();
+        for (t, frame) in self.frames {
+            let n = targets.partition_point(|(at, _)| at <= t);
+            let target = &targets[n.saturating_sub(1)].1;
+            let who = match target {
+                Target::One(p) => vec![*p],
+                Target::Group(ps) => ps.clone(),
+            };
+            let Some(group) = group_box(frame, &self.ids(&who)) else {
+                continue;
+            };
+            let crop = self.crop;
+            let y = if crop.1 >= self.area.h * 0.999 {
+                middle(self.area).1
+            } else {
+                group.top - HEADROOM * crop.1 + crop.1 / 2.0
+            };
+            out.push((*t, group.centre_x(), y));
+        }
+        out
+    }
+
+    /// Where `target` is across near `at`: on the nearest frame that has it.
+    fn x_near(&self, target: &Target, at: Us) -> Option<f64> {
+        let who = match target {
+            Target::One(p) => vec![*p],
+            Target::Group(ps) => ps.clone(),
+        };
+        let ids = self.ids(&who);
+        (self.frames.iter())
+            .filter_map(|(t, f)| Some(((t - at).abs(), group_box(f, &ids)?.centre_x())))
+            .min_by_key(|(d, _)| *d)
+            .map(|(_, x)| x)
+    }
+}
+
+/// `t` framed from `at`, unless it is framed already.
+fn switch(targets: &mut Vec<(Us, Target)>, cur: &mut Option<Target>, at: Us, t: Target) {
+    if cur.as_ref() != Some(&t) {
+        targets.push((at, t.clone()));
+        *cur = Some(t);
+    }
+}
+
+/// `keep` over a shot: (from, to, who) in order, covering it.
+fn spans(keep: &Keep, (start, end): (Us, Us)) -> Vec<(Us, Us, Who)> {
+    let Keep::Ranges { ranges } = keep else {
+        return vec![(start, end, keep.who_at(start))];
+    };
+    let mut out = Vec::new();
+    let mut at = start;
+    for r in ranges
+        .iter()
+        .filter(|r| r.start_us < end && start < r.end_us)
+    {
+        let (from, to) = (r.start_us.max(start), r.end_us.min(end));
+        if from > at {
+            out.push((at, from, Who::Speaker));
+        }
+        out.push((from, to, r.who));
+        at = to;
+    }
+    if at < end {
+        out.push((at, end, Who::Speaker));
+    }
+    out
+}
+
+/// Each person's talk in `talk` within `(from, to)`, by person.
+fn said(talk: &[Talk], (from, to): (Us, Us)) -> Vec<(u8, Us)> {
+    let mut out: Vec<(u8, Us)> = Vec::new();
+    for t in talk {
+        let len = (t.end_us.min(to) - t.start_us.max(from)).max(0);
+        match out.iter_mut().find(|(p, _)| *p == t.person) {
+            Some((_, sum)) => *sum += len,
+            None => out.push((t.person, len)),
+        }
+    }
+    out
+}
+
+/// Who said the most in `said`: the one framed `now` on a tie, else the first to speak; `main` when nobody did.
+fn most(said: &[(u8, Us)], now: Option<&Target>, main: u8) -> u8 {
+    let top = said.iter().map(|(_, len)| *len).max().unwrap_or(0);
+    if top == 0 {
+        return match now {
+            Some(Target::One(p)) => *p,
+            _ => main,
+        };
+    }
+    let tied: Vec<u8> = (said.iter())
+        .filter(|(_, len)| *len == top)
+        .map(|(p, _)| *p)
+        .collect();
+    match now {
+        Some(Target::One(p)) if tied.contains(p) => *p,
+        _ => tied[0],
+    }
+}
+
+/// The stretches of `talk` that may take the frame, in order: one person's run of at least `MIN_TALK_US` alone, and
+/// busy stretches (short turns back and forth, or talk over each other) at least that long, of two or more people who
+/// each say `MIN_SHARE_US` in it, or of one who says `MIN_TALK_US` in short turns.
+fn claims(talk: &[Talk]) -> Vec<Claim> {
+    // Each person's talk joined across short gaps.
+    let mut runs: Vec<Talk> = talk.to_vec();
+    runs.sort_by_key(|t| (t.person, t.start_us));
+    let mut joined: Vec<Talk> = Vec::new();
+    for t in runs {
+        match joined.last_mut() {
+            Some(l) if l.person == t.person && t.start_us <= l.end_us + RUN_GAP_US => {
+                l.end_us = l.end_us.max(t.end_us);
+            }
+            _ => joined.push(t),
+        }
+    }
+    // Pieces between every edge, each with who talks there.
+    let mut edges: Vec<Us> = joined.iter().flat_map(|t| [t.start_us, t.end_us]).collect();
+    edges.sort_unstable();
+    edges.dedup();
+    let mut pieces: Vec<(Us, Us, Vec<u8>)> = Vec::new();
+    for w in edges.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        let mut who: Vec<u8> = (joined.iter())
+            .filter(|t| t.start_us <= a && b <= t.end_us)
+            .map(|t| t.person)
+            .collect();
+        who.sort_unstable();
+        who.dedup();
+        if who.is_empty() {
+            continue;
+        }
+        match pieces.last_mut() {
+            Some(l) if l.1 == a && l.2 == who && who.len() == 1 => l.1 = b,
+            _ => pieces.push((a, b, who)),
+        }
+    }
+    let mut claims = Vec::new();
+    let mut busy: Vec<(Us, Us, Vec<u8>)> = Vec::new();
+    let flush = |busy: &mut Vec<(Us, Us, Vec<u8>)>, claims: &mut Vec<Claim>| {
+        if let (Some(first), Some(last)) = (busy.first(), busy.last()) {
+            let (from, to) = (first.0, last.1);
+            let said = said(talk, (from, to));
+            // Who takes part: an "mm-hm" over someone's short turns doesn't make the stretch theirs too.
+            let who: Vec<u8> = (said.iter())
+                .filter(|(_, len)| *len >= MIN_SHARE_US)
+                .map(|(p, _)| *p)
+                .collect();
+            let alone_enough = who.len() == 1 && said.iter().any(|(_, len)| *len >= MIN_TALK_US);
+            if to - from >= MIN_TALK_US && (who.len() >= 2 || alone_enough) {
+                let mut who = who;
+                who.sort_unstable();
+                claims.push(Claim {
+                    from,
+                    to,
+                    said,
+                    who,
+                });
+            }
+        }
+        busy.clear();
+    };
+    for piece in pieces {
+        let (a, b, who) = &piece;
+        if who.len() == 1 && b - a >= MIN_TALK_US {
+            flush(&mut busy, &mut claims);
+            claims.push(Claim {
+                from: *a,
+                to: *b,
+                who: who.clone(),
+                said: vec![(who[0], b - a)],
+            });
+            continue;
+        }
+        if busy.last().is_some_and(|l| *a > l.1 + BUSY_GAP_US) {
+            flush(&mut busy, &mut claims);
+        }
+        busy.push(piece);
+    }
+    flush(&mut busy, &mut claims);
+    claims.sort_by_key(|c| c.from);
+    claims
 }
 
 /// The id of the shot's main subject in `frames`: the most area near the middle of `area` across the frames (a box's
@@ -164,7 +713,7 @@ fn sane_side(side: f64) -> f64 {
 }
 
 /// The shots between `start` and `end`, split at the cuts strictly inside.
-fn shots(start: Us, end: Us, cuts: &[Us]) -> Vec<(Us, Us)> {
+pub fn shots(start: Us, end: Us, cuts: &[Us]) -> Vec<(Us, Us)> {
     let mut edges = vec![start];
     edges.extend(cuts.iter().copied().filter(|c| *c > start && *c < end));
     edges.sort_unstable();
@@ -315,7 +864,9 @@ fn follow(
     key_step: Us,
     keys: &mut Vec<FocusKey>,
 ) {
-    let early: Vec<&(Us, f64, f64)> = aims.iter().filter(|a| a.0 < start + START_US).collect();
+    let early: Vec<&(Us, f64, f64)> = (aims.iter())
+        .filter(|a| (start..start + START_US).contains(&a.0))
+        .collect();
     let opening = if early.is_empty() {
         (aims[0].1, aims[0].2)
     } else {

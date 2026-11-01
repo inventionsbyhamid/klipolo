@@ -332,7 +332,7 @@ fn fill_focused(
     let centre = match clip.fill_focus.get(&format) {
         None => return crop,
         Some(FillFocus::Center) => (kept.x + kept.w / 2.0, kept.y + kept.h / 2.0),
-        Some(FillFocus::Speaker { path }) => match path.centre_at(source_us) {
+        Some(FillFocus::Speaker { path, .. }) => match path.centre_at(source_us) {
             Some(at) => at,
             None => return crop,
         },

@@ -2689,12 +2689,14 @@ mod follow {
 
     use klipolo_analysis::VideoError;
     use klipolo_analysis::providers::{
-        BoxFuture, ProviderError, SubjectTracker, TrackedBox, TrackedFrame, Tracking,
+        BoxFuture, ProviderError, ProviderErrorKind, ScreenBox, SubjectTracker, TrackedBox,
+        TrackedFrame, Tracking, VoiceAnswer, VoiceMatcher,
     };
+    use klipolo_analysis::subject::voices::VoiceTurn;
     use klipolo_analysis::subject::{SubjectCopy, frames_for};
     use klipolo_app::chat::follow::NO_CROP;
-    use klipolo_app::speaker::{Speaker, Trackers};
-    use klipolo_model::fill_focus::FillFocus;
+    use klipolo_app::speaker::{Speaker, Trackers, UNMATCHED, Voices};
+    use klipolo_model::fill_focus::{FillFocus, Keep, KeepRange, Voice, Who};
     use klipolo_model::project::FormatKind;
     use klipolo_model::time::{RangeUs, Us};
 
@@ -2704,6 +2706,8 @@ mod follow {
     pub struct Sam {
         pub calls: AtomicUsize,
         pub phrases: Mutex<Vec<String>>,
+        /// A second person far to the right, too.
+        pub two: bool,
     }
 
     impl SubjectTracker for Sam {
@@ -2736,11 +2740,22 @@ mod follow {
                     bottom: 1.0,
                     confidence: Some(0.9),
                 };
+                let other = TrackedBox {
+                    id: 2,
+                    left: 0.65,
+                    right: 0.85,
+                    ..person
+                };
+                let boxes = if self.two {
+                    vec![person, other]
+                } else {
+                    vec![person]
+                };
                 Ok(Tracking {
                     frames: (0..frames)
                         .map(|frame| TrackedFrame {
                             frame,
-                            boxes: vec![person],
+                            boxes: boxes.clone(),
                         })
                         .collect(),
                     frames_billed: u64::from(frames),
@@ -2751,7 +2766,7 @@ mod follow {
         }
     }
 
-    struct Pays(Arc<Sam>);
+    struct Pays(Arc<Sam>, Option<Arc<NoAnswer>>);
 
     impl Trackers for Pays {
         fn tracker(&self) -> BoxFuture<'_, Result<Arc<dyn SubjectTracker>, String>> {
@@ -2761,6 +2776,54 @@ mod follow {
 
         fn credit_left(&self) -> BoxFuture<'_, Option<f64>> {
             Box::pin(async { None })
+        }
+
+        fn matcher(&self) -> BoxFuture<'_, Option<Arc<dyn VoiceMatcher>>> {
+            let spark = self.1.clone();
+            Box::pin(async move { spark.map(|s| s as Arc<dyn VoiceMatcher>) })
+        }
+    }
+
+    /// A matcher whose every call fails, as one cut off by the network.
+    pub struct NoAnswer;
+
+    impl VoiceMatcher for NoAnswer {
+        fn model(&self) -> &str {
+            "fake-spark"
+        }
+
+        fn estimate_usd(&self, _seconds: f64) -> f64 {
+            0.003
+        }
+
+        fn who_speaks<'a>(
+            &'a self,
+            _video: &'a Path,
+            _people: &'a [ScreenBox],
+        ) -> BoxFuture<'a, Result<VoiceAnswer, ProviderError>> {
+            Box::pin(async {
+                Err(ProviderError::new(
+                    ProviderErrorKind::Unavailable,
+                    "Meta isn't answering.",
+                ))
+            })
+        }
+    }
+
+    /// The talk's two voices: A to 15 s, B after, in part 0.
+    struct TwoVoices;
+
+    impl Voices for TwoVoices {
+        fn turns(&self, _asset_id: &str) -> Vec<VoiceTurn> {
+            let turn = |from: f64, to: f64, label: &str| VoiceTurn {
+                start_us: secs(from),
+                end_us: secs(to),
+                voice: Voice {
+                    part: 0,
+                    label: label.into(),
+                },
+            };
+            vec![turn(0.0, 15.0, "A"), turn(15.0, 30.0, "B")]
         }
     }
 
@@ -2807,7 +2870,7 @@ mod follow {
         let chat = chat_on(project, model.clone(), Found::done(), Paying::key(model));
         let (sam, copies) = (Arc::new(Sam::default()), Arc::new(Copies::default()));
         let speaker = Speaker::new(
-            Arc::new(Pays(sam.clone())),
+            Arc::new(Pays(sam.clone(), None)),
             copies.clone(),
             dir.path().join("analysis"),
             dir.path().join("work"),
@@ -2837,7 +2900,7 @@ mod follow {
     fn speaker_x(p: &Project, at: f64) -> Option<f64> {
         let clip = p.timeline.main.first()?;
         match clip.fill_focus.get(&FormatKind::Portrait)? {
-            FillFocus::Speaker { path } => path.centre_at(secs(at)).map(|c| c.0),
+            FillFocus::Speaker { path, .. } => path.centre_at(secs(at)).map(|c| c.0),
             FillFocus::Center => None,
         }
     }
@@ -2872,6 +2935,147 @@ mod follow {
         f.chat.project.step(false).unwrap();
         assert!(speaker_x(&f.chat.project.project(), 10.0).is_none());
         assert!(f.chat.session.turns()[0].note.contains("Followed person"));
+    }
+
+    #[tokio::test]
+    async fn who_chat_keeps_in_frame_lands_on_the_clip_in_its_source_time() {
+        let mut project = talk();
+        // The clip plays the talk from 4 s: the timeline's 2 to 8 s is the file's 6 to 12 s.
+        project.timeline.main[0].source_in_us = secs(4.0);
+        let guest = fc(
+            "s",
+            "followSubject",
+            r#"{"description": "person", "focus": [{"fromSec": 2, "toSec": 8, "person": "P2"}]}"#,
+        );
+        let f = following_on(
+            project,
+            vec![answer(
+                "Keeping the guest in frame.",
+                vec![portrait(), guest],
+            )],
+        );
+        let r = reply(
+            &f.chat
+                .session
+                .send(request("keep the guest in frame while the host asks"))
+                .await
+                .unwrap(),
+        );
+        assert!(r["applied"].is_object(), "{r:#}");
+        let p = f.chat.project.project();
+        let Some(FillFocus::Speaker { keep, .. }) =
+            p.timeline.main[0].fill_focus.get(&FormatKind::Portrait)
+        else {
+            panic!("{:?}", p.timeline.main[0].fill_focus)
+        };
+        assert_eq!(
+            *keep,
+            Keep::Ranges {
+                ranges: vec![KeepRange {
+                    start_us: secs(6.0),
+                    end_us: secs(12.0),
+                    who: Who::Person { person: 2 },
+                }],
+            }
+        );
+        // One step, as any follow.
+        assert_eq!(f.chat.project.undo_steps(), 1);
+    }
+
+    #[tokio::test]
+    async fn who_chat_keeps_in_frame_carries_to_the_pieces_a_cut_in_the_same_answer_makes() {
+        let cut = fc("c", "cutRange", r#"{"startSec": 10.0, "endSec": 12.0}"#);
+        let guest = fc(
+            "s",
+            "followSubject",
+            r#"{"description": "person", "focus": [{"fromSec": 2, "toSec": 20, "person": "P2"}]}"#,
+        );
+        let f = following(vec![answer("Done.", vec![portrait(), cut, guest])]);
+        let out = f
+            .chat
+            .session
+            .send(request(
+                "cut 10.0 to 12.0 and keep the guest in frame from 2.0 to 20.0",
+            ))
+            .await
+            .unwrap();
+        f.chat.session.apply(&proposal_id(&out)).unwrap();
+        let p = f.chat.project.project();
+        assert_eq!(p.timeline.main.len(), 2, "{:?}", p.timeline.main);
+        // Both pieces keep the guest over their own part of 2 to 20 s of the file.
+        for clip in &p.timeline.main {
+            let Some(FillFocus::Speaker { keep, .. }) = clip.fill_focus.get(&FormatKind::Portrait)
+            else {
+                panic!("{}: {:?}", clip.id, clip.fill_focus)
+            };
+            assert_eq!(
+                *keep,
+                Keep::Ranges {
+                    ranges: vec![KeepRange {
+                        start_us: secs(2.0),
+                        end_us: secs(20.0),
+                        who: Who::Person { person: 2 },
+                    }],
+                },
+                "{}",
+                clip.id
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn focus_chat_named_that_isnt_used_is_told_in_the_follow_note() {
+        // One person on screen: P3 isn't there; and a range past the video's end touches no clip.
+        let guest = fc(
+            "s",
+            "followSubject",
+            r#"{"description": "person", "focus": [{"fromSec": 2, "toSec": 8, "person": "P3"}, {"fromSec": 50, "toSec": 60, "person": "P1"}]}"#,
+        );
+        let f = following(vec![answer("Done.", vec![portrait(), guest])]);
+        f.chat
+            .session
+            .send(request("keep the third person in frame"))
+            .await
+            .unwrap();
+        let note = &f.chat.session.turns()[0].note;
+        assert!(note.contains("P3 isn't on screen"), "{note}");
+        assert!(note.contains("outside the video"), "{note}");
+    }
+
+    #[tokio::test]
+    async fn the_reply_says_when_who_speaks_could_not_be_told() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut project = talk();
+        let file = dir.path().join("talk.mov");
+        std::fs::write(&file, b"the talk").unwrap();
+        project.assets[0].path = file.to_string_lossy().into_owned();
+        let model = Script::new(vec![answer(
+            "Done.",
+            vec![portrait(), follow_the_speaker()],
+        )]);
+        let chat = chat_on(project, model.clone(), Found::done(), Paying::key(model));
+        let sam = Arc::new(Sam {
+            two: true,
+            ..Sam::default()
+        });
+        let speaker = Speaker::new(
+            Arc::new(Pays(sam, Some(Arc::new(NoAnswer)))),
+            Arc::new(Copies::default()),
+            dir.path().join("analysis"),
+            dir.path().join("work"),
+            Arc::new(|_| {}),
+        )
+        .with_voices(Arc::new(TwoVoices));
+        chat.session.set_speaker(Arc::new(speaker));
+        let r = reply(
+            &chat
+                .session
+                .send(request("make it vertical and keep whoever talks in frame"))
+                .await
+                .unwrap(),
+        );
+        assert!(r["applied"].is_object(), "{r:#}");
+        assert!(r["notes"].to_string().contains(UNMATCHED), "{r:#}");
     }
 
     #[tokio::test]

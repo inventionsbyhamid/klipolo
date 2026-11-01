@@ -13,6 +13,7 @@
 
 use klipolo_model::Project;
 use klipolo_model::coded::ErrorParam;
+use klipolo_model::fill_focus::FillFocus;
 use klipolo_model::framing::{effective_framing, fill_crops};
 use klipolo_model::ops::{ClipPatch, Op};
 use klipolo_model::project::{BackgroundKind, FormatKind};
@@ -81,6 +82,10 @@ pub(super) fn set_background(
                 fit.push(format);
                 fitted[k].clips += 1;
                 fitted[k].followed += usize::from(now.follow.is_some());
+                fitted[k].speaking += usize::from(matches!(
+                    clip.fill_focus.get(&format),
+                    Some(FillFocus::Speaker { .. })
+                ));
             }
             // One change per clip, its formats together.
             let Some(framing) = framed(work, clip, FramingMode::Fit, &fit) else {
@@ -103,13 +108,14 @@ pub(super) fn set_background(
     (edit, (!said.is_empty()).then(|| said.join(" ")))
 }
 
-/// The clips a background set to Fit in one format, and how many of them followed the cursor there before; `version`
-/// names the format when it isn't the main one ("vertical").
+/// The clips a background set to Fit in one format, and how many of them followed the cursor, or the speaker, there
+/// before; `version` names the format when it isn't the main one ("vertical").
 #[derive(Clone, Copy, Debug)]
 struct Fitted {
     version: Option<&'static str>,
     clips: usize,
     followed: usize,
+    speaking: usize,
 }
 
 impl Fitted {
@@ -123,11 +129,13 @@ impl Fitted {
             version,
             clips: 0,
             followed: 0,
+            speaking: 0,
         }
     }
 
     /// "A clip is set to Fit so the background shows round it.", "In the vertical version, 3 clips are set to Fit so
-    /// the background shows round them. One of them no longer follows the cursor."
+    /// the background shows round them. One of them no longer follows the cursor." A clip that followed the speaker is
+    /// named the same way ("It no longer follows the speaker.").
     fn said(self) -> Option<String> {
         let set = match self.clips {
             0 => return None,
@@ -138,14 +146,19 @@ impl Fitted {
             Some(version) => format!("In the {version} version, {set}"),
             None => capitalised(&set),
         };
-        let follow = match (self.clips, self.followed) {
-            (_, 0) => return Some(set),
-            (1, _) => "It no longer follows the cursor.".to_owned(),
-            (n, k) if k == n => "They no longer follow the cursor.".to_owned(),
-            (_, 1) => "One of them no longer follows the cursor.".to_owned(),
-            (_, k) => format!("{k} of them no longer follow the cursor."),
-        };
-        Some(format!("{set} {follow}"))
+        let mut said = set;
+        for (k, what) in [(self.followed, "cursor"), (self.speaking, "speaker")] {
+            let lost = match (self.clips, k) {
+                (_, 0) => continue,
+                (1, _) => format!("It no longer follows the {what}."),
+                (n, k) if k == n => format!("They no longer follow the {what}."),
+                (_, 1) => format!("One of them no longer follows the {what}."),
+                (_, k) => format!("{k} of them no longer follow the {what}."),
+            };
+            said.push(' ');
+            said.push_str(&lost);
+        }
+        Some(said)
     }
 }
 

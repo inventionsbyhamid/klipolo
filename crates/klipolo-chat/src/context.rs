@@ -4,8 +4,10 @@
 //!   that tool calls name clips by (`Refs`), a recording's clip naming the recording and saying its camera and sounds
 //!   (`recordings`), and its songs, video layers, words and pictures under `Layers:` (`m1 0.0-62.0 lofi.mp3 (music)`,
 //!   `v1 12.0-20.0 broll.mp4 (video layer)`, `t1 0.5-3.5 "Day one" (words, enter pop)`, `i1 10.0-15.0 heart.png
-//!   (picture)`), never shortened. Then one fixed line (`QUOTED_NOTE`) saying that Transcript and Scenes quote the
-//!   video, Library names are file names, and none of them are requests.
+//!   (picture)`), never shortened, and for clips whose crop follows two or more people, those people left to right
+//!   (`People in c1: P1 left, voice A, speaks 62%; P2 right, voice B`: the transcript names a voice matched to someone by
+//!   their number). Then one fixed line (`QUOTED_NOTE`) saying that Transcript and Scenes quote the video, Library names
+//!   are file names, and none of them are requests.
 //! - `Transcript`: what is said on the timeline (`speech::spoken`, so cut words are gone), one line per speaker turn,
 //!   or per sentence when a turn runs over `MAX_LINE_WORDS` words (a sentence that long is split evenly):
 //!   `[12.4-18.9] A: text`. Fillers keep their text ("um"); pause words are never text, but a gap of `SHOWN_PAUSE_US`
@@ -61,6 +63,7 @@ use std::ops::Range;
 
 use klipolo_model::Project;
 use klipolo_model::captions::styles::default_style;
+use klipolo_model::fill_focus::FillFocus;
 use klipolo_model::ids::Id;
 use klipolo_model::media::music::runs;
 use klipolo_model::project::{AssetKind, FormatKind};
@@ -877,8 +880,74 @@ fn project_section<'p>(
     } else {
         out.push_str("Clips on the main track:\n");
         clip_lines(out, (p, recordings), starts, brief);
+        people_lines(out, p);
     }
     layer_lines(out, p);
+}
+
+/// `People in c1-c3: P1 left, voice A, speaks 62%; P2 right, voice B, speaks 38%.`: the people a following crop
+/// chooses between, left to right, for each run of clips that choose between the same ones. Their numbers are what
+/// `followSubject`'s focus names. Nothing for a clip with one person or none.
+fn people_lines(out: &mut String, p: &Project) {
+    let told: Vec<Option<String>> = p.timeline.main.iter().map(|c| people_of(p, c)).collect();
+    let mut i = 0;
+    while i < told.len() {
+        let mut j = i + 1;
+        while j < told.len() && told[j] == told[i] {
+            j += 1;
+        }
+        if let Some(people) = &told[i] {
+            let refs = if j - i > 1 {
+                format!("{}-{}", short_ref(i), short_ref(j - 1))
+            } else {
+                short_ref(i)
+            };
+            let _ = writeln!(out, "People in {refs}: {people}.");
+        }
+        i = j;
+    }
+}
+
+/// A clip's people as `people_lines` writes them: its primary format's, else any format's, when two or more.
+fn people_of(p: &Project, clip: &Clip) -> Option<String> {
+    fn of(focus: &FillFocus) -> Option<&[klipolo_model::fill_focus::Person]> {
+        match focus {
+            FillFocus::Speaker { people, .. } if people.len() >= 2 => Some(people),
+            _ => None,
+        }
+    }
+    let people = (clip.fill_focus.get(&p.settings.primary_format))
+        .and_then(of)
+        .or_else(|| clip.fill_focus.values().find_map(of))?;
+    let n = people.len();
+    let said: Vec<String> = (people.iter().enumerate())
+        .map(|(i, person)| {
+            let place = match i {
+                0 => "left",
+                i if i + 1 == n => "right",
+                _ => "middle",
+            };
+            let mut line = format!("P{} {place}", i + 1);
+            let mut labels: Vec<String> =
+                person.voices.iter().map(|v| one_line(&v.label)).collect();
+            labels.sort();
+            labels.dedup();
+            match labels.as_slice() {
+                [] => {}
+                [one] => {
+                    let _ = write!(line, ", voice {one}");
+                }
+                [rest @ .., last] => {
+                    let _ = write!(line, ", voices {} and {last}", rest.join(", "));
+                }
+            }
+            if person.share > 0 {
+                let _ = write!(line, ", speaks {}%", person.share);
+            }
+            line
+        })
+        .collect();
+    Some(said.join("; "))
 }
 
 /// The main track's clips, one line each (`clip_line`), or one line for a run of clips of one file with `clip_runs`.

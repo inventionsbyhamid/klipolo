@@ -155,7 +155,7 @@ fn a_proposal_being_applied_still_waits() {
         Arc::new(NoFindings),
         Arc::new(NoModels),
     ));
-    let id = propose(&chat, &*projects, "Example Client");
+    let id = propose(&chat, &*projects, "Muse Spark agent");
     let applying = {
         let (chat, id) = (chat.clone(), id.clone());
         std::thread::spawn(move || chat.apply(&id))
@@ -167,7 +167,7 @@ fn a_proposal_being_applied_still_waits() {
         let chat = chat.clone();
         std::thread::spawn(move || {
             let mut slot = chat.slot();
-            let _ = said.send((slot.waiting(), slot.decided("Example Client")));
+            let _ = said.send((slot.waiting(), slot.decided("Muse Spark agent")));
         })
     };
     assert!(
@@ -192,22 +192,22 @@ fn what_became_of_an_apps_proposal_is_kept_for_it() {
         Arc::new(MemoryProjects::open(talk(), PathBuf::from("/tmp/talk.klipolo")).unwrap());
     let chat = ChatSession::new(projects.clone(), Arc::new(NoFindings), Arc::new(NoModels));
     assert_eq!(chat.slot().waiting(), None);
-    assert_eq!(chat.slot().decided("Example Client"), None);
+    assert_eq!(chat.slot().decided("Muse Spark agent"), None);
 
     // An app's keepOnly is worded as suggested: the person chose nothing.
     let now = projects.now().unwrap();
     let card = chat
         .slot()
-        .propose("Example Client", &now, &cut(&now.project), &["keepOnly"]);
+        .propose("Muse Spark agent", &now, &cut(&now.project), &["keepOnly"]);
     assert_eq!(card.title(), "Keep only the suggested parts");
     chat.discard(card.id());
 
     // Discarded, by its id only.
-    let id = propose(&chat, &*projects, "Example Client");
+    let id = propose(&chat, &*projects, "Muse Spark agent");
     let waiting = chat.slot().waiting().unwrap();
     assert_eq!(
         (waiting.from.as_deref(), waiting.removed_us),
-        (Some("Example Client"), 1_000_000)
+        (Some("Muse Spark agent"), 1_000_000)
     );
     assert_eq!(
         waiting.ranges,
@@ -220,13 +220,17 @@ fn what_became_of_an_apps_proposal_is_kept_for_it() {
     assert!(chat.slot().waiting().is_some());
     chat.discard(&id);
     assert_eq!(
-        chat.slot().decided("Example Client"),
+        chat.slot().decided("Muse Spark agent"),
         Some((id, Decided::Discarded))
     );
 
     // A hand edit drops it; reading the slot says so, and the dropped one's id.
-    let id = propose(&chat, &*projects, "Example Client");
-    assert_eq!(chat.slot().decided("Example Client"), None, "a new one waits");
+    let id = propose(&chat, &*projects, "Muse Spark agent");
+    assert_eq!(
+        chat.slot().decided("Muse Spark agent"),
+        None,
+        "a new one waits"
+    );
     projects
         .hand_edit(&Transaction {
             label: "Rename".into(),
@@ -238,16 +242,16 @@ fn what_became_of_an_apps_proposal_is_kept_for_it() {
         .unwrap();
     assert_eq!(chat.slot().settle(), Some(id.clone()));
     assert_eq!(
-        chat.slot().decided("Example Client"),
+        chat.slot().decided("Muse Spark agent"),
         Some((id.clone(), Decided::Dropped(Gone::Changed)))
     );
     assert_eq!(chat.apply(&id).unwrap_err(), CommitError::Moved);
 
     // New chat drops it; so does another project.
-    let id = propose(&chat, &*projects, "Example Client");
+    let id = propose(&chat, &*projects, "Muse Spark agent");
     chat.reset();
     assert_eq!(
-        chat.slot().decided("Example Client"),
+        chat.slot().decided("Muse Spark agent"),
         Some((id, Decided::Dropped(Gone::NewChat)))
     );
     let id = propose(&chat, &*projects, "Example Client");

@@ -1,11 +1,14 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Clip } from '../../bindings/Clip';
+import type { Keep } from '../../bindings/Keep';
+import type { Person } from '../../bindings/Person';
 import type { ClipFraming } from '../../bindings/ClipFraming';
 import type { Op } from '../../bindings/Op';
 import type { SnapshotPatch } from '../../bindings/SnapshotPatch';
 import type { SpeakerEstimate } from '../../bindings/SpeakerEstimate';
+import type { SpeakerFollowed } from '../../bindings/SpeakerFollowed';
 import type { SpeakerProgress } from '../../bindings/SpeakerProgress';
 import type { LabelParams } from '../../lib/labels';
 import { fixtureSnapshot } from '../../test/fixtures';
@@ -13,7 +16,9 @@ import { renderWithProviders } from '../../test/render';
 
 /*
  * The clip card's Focus while Fill crops, per format: Speaker (an imported video or a camera take, its price said
- * first, its progress while Rust tracks), Fixed (the Fill focus slider) or Centre. Each is one undo step.
+ * first, its progress while Rust tracks), Fixed (the Fill focus slider) or Centre. Each is one undo step. A clip that
+ * follows two or more people also says who it keeps: whoever is speaking, one of them by position, or both; chat's own
+ * choices show as such, with a reset.
  */
 
 const apply = vi.fn<(label: string, ops: Op[], params?: LabelParams) => Promise<boolean>>(() =>
@@ -40,7 +45,8 @@ let progress: ((p: SpeakerProgress) => void) | null = null;
 vi.mock('../../bridge/speaker', () => ({
   speakerBridge: {
     estimate: vi.fn(() => Promise.resolve({ usd: 0.024, clips: ['b'], cached: false } satisfies SpeakerEstimate)),
-    follow: vi.fn(() => Promise.resolve({} as SnapshotPatch)),
+    follow: vi.fn(() => Promise.resolve({ change: {} as SnapshotPatch } satisfies SpeakerFollowed)),
+    keep: vi.fn(() => Promise.resolve({ baseRevision: 3 } as SnapshotPatch)),
     onProgress: vi.fn((handler: (p: SpeakerProgress) => void) => {
       progress = handler;
       return Promise.resolve(() => {
@@ -53,6 +59,7 @@ const { speakerBridge } = await import('../../bridge/speaker');
 const { useProject } = await import('../../state/project');
 const { useSelection } = await import('../../state/selection');
 const { usePlayback } = await import('../../state/playback');
+const { useToasts } = await import('../../state/toasts');
 const { Inspector } = await import('./Inspector');
 
 const queued = expect.objectContaining({ projectId: 'project', revision: 3 });
@@ -125,7 +132,7 @@ describe('the Focus of a filled clip', () => {
   });
 
   it('Speaker tracks with its progress shown, then takes the change Rust made', async () => {
-    let finish!: (change: SnapshotPatch) => void;
+    let finish!: (followed: SpeakerFollowed) => void;
     const change = { baseRevision: 3 } as SnapshotPatch;
     vi.mocked(speakerBridge.follow).mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
     const user = userEvent.setup();
@@ -138,7 +145,7 @@ describe('the Focus of a filled clip', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Finding the speaker, 40%');
     // Another click while it runs does nothing more.
     expect(screen.getByRole('radio', { name: 'Speaker' })).toBeDisabled();
-    await act(async () => finish(change));
+    await act(async () => finish({ change }));
     await waitFor(() => expect(adopt).toHaveBeenCalledWith(change));
     expect(screen.queryByRole('status')).toBeNull();
     expect(speakerBridge.follow).toHaveBeenCalledTimes(1);
@@ -202,5 +209,105 @@ describe('the Focus of a filled clip', () => {
     vi.mocked(speakerBridge.estimate).mockResolvedValue({ usd: 0, clips: ['b'], cached: true });
     renderWithProviders(<Inspector format="square" />);
     expect(await screen.findByText('Follow the speaker, no charge')).toBeInTheDocument();
+  });
+
+  describe('who a clip following two or more people keeps', () => {
+    const path = { keys: [{ atUs: 0, x: 0.3, y: 0.5 }] };
+    const two = [
+      { voices: [{ part: 0, label: 'A' }], share: 60 },
+      { voices: [{ part: 0, label: 'B' }], share: 40 },
+    ];
+    const following = (keep?: Keep, people: Person[] = two) =>
+      withB({ framing: { portrait: fill }, fillFocus: { portrait: { kind: 'speaker', path, keep, people } } });
+
+    it('keeps whoever is speaking, and offers each by position and both, each one step', async () => {
+      useProject.setState({ snapshot: following() });
+      const user = userEvent.setup();
+      renderWithProviders(<Inspector format="portrait" />);
+      const keep = await screen.findByRole('radiogroup', { name: 'Keep' });
+      const names = within(keep)
+        .getAllByRole('radio')
+        .map((r) => r.textContent);
+      expect(names).toEqual(['Speaking', 'Left', 'Right', 'Both']);
+      expect(within(keep).getByRole('radio', { name: 'Speaking' })).toHaveAttribute('aria-checked', 'true');
+      await user.click(within(keep).getByRole('radio', { name: 'Right' }));
+      expect(speakerBridge.keep).toHaveBeenCalledWith('b', 'portrait', { kind: 'person', person: 2 });
+      await waitFor(() => expect(adopt).toHaveBeenCalledWith({ baseRevision: 3 }));
+      expect(apply).not.toHaveBeenCalled();
+    });
+
+    it('shows one person or both as chosen', async () => {
+      useProject.setState({ snapshot: following({ kind: 'person', person: 1 }) });
+      const { unmount } = renderWithProviders(<Inspector format="portrait" />);
+      const keep = await screen.findByRole('radiogroup', { name: 'Keep' });
+      expect(within(keep).getByRole('radio', { name: 'Left' })).toHaveAttribute('aria-checked', 'true');
+      unmount();
+      useProject.setState({ snapshot: following({ kind: 'both' }) });
+      renderWithProviders(<Inspector format="portrait" />);
+      const again = await screen.findByRole('radiogroup', { name: 'Keep' });
+      expect(within(again).getByRole('radio', { name: 'Both' })).toHaveAttribute('aria-checked', 'true');
+    });
+
+    it("says chat's own choices as custom by chat, with a reset to whoever is speaking", async () => {
+      const ranges = [{ startUs: 2_000_000, endUs: 8_000_000, who: { kind: 'person' as const, person: 2 } }];
+      useProject.setState({ snapshot: following({ kind: 'ranges', ranges }) });
+      const user = userEvent.setup();
+      renderWithProviders(<Inspector format="portrait" />);
+      expect(await screen.findByText('Custom by chat')).toBeInTheDocument();
+      const keep = screen.getByRole('radiogroup', { name: 'Keep' });
+      expect(within(keep).queryByRole('radio', { checked: true })).toBeNull();
+      await user.click(screen.getByRole('button', { name: 'Reset' }));
+      expect(speakerBridge.keep).toHaveBeenCalledWith('b', 'portrait', { kind: 'speaker' });
+    });
+
+    it('names three people left, middle and right, and is not shown for one', async () => {
+      useProject.setState({ snapshot: following(undefined, [...two, { share: 0 }]) });
+      const { unmount } = renderWithProviders(<Inspector format="portrait" />);
+      const keep = await screen.findByRole('radiogroup', { name: 'Keep' });
+      expect(within(keep).getAllByRole('radio').map((r) => r.textContent)).toEqual([
+        'Speaking',
+        'Left',
+        'Middle',
+        'Right',
+        'All',
+      ]);
+      unmount();
+      useProject.setState({ snapshot: following(undefined, []) });
+      renderWithProviders(<Inspector format="portrait" />);
+      await screen.findByRole('radio', { name: 'Speaker', checked: true });
+      expect(screen.queryByRole('radiogroup', { name: 'Keep' })).toBeNull();
+    });
+  });
+
+  it("says why the crop follows the main person when who speaks couldn't be told", async () => {
+    const note = "Klipolo couldn't tell who is speaking, so the crop follows the main person.";
+    vi.mocked(speakerBridge.estimate).mockResolvedValue({ usd: 0.024, clips: ['b'], cached: false });
+    vi.mocked(speakerBridge.follow).mockResolvedValueOnce({ change: { baseRevision: 3 } as SnapshotPatch, note });
+    const user = userEvent.setup();
+    renderWithProviders(<Inspector format="portrait" />);
+    await screen.findByText('Follow the speaker, about $0.02');
+    await user.click(screen.getByRole('radio', { name: 'Speaker' }));
+    await waitFor(() => expect(adopt).toHaveBeenCalledWith({ baseRevision: 3 }));
+    await waitFor(() => expect(useToasts.getState().toasts.map((t) => t.text)).toContain(note));
+  });
+
+  it('a change of who is kept shows no search for the speaker', async () => {
+    let finish!: (change: SnapshotPatch) => void;
+    vi.mocked(speakerBridge.keep).mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+    const path = { keys: [{ atUs: 0, x: 0.3, y: 0.5 }] };
+    const people = [{ share: 60 }, { share: 40 }];
+    useProject.setState({
+      snapshot: withB({ framing: { portrait: fill }, fillFocus: { portrait: { kind: 'speaker', path, people } } }),
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<Inspector format="portrait" />);
+    const keep = await screen.findByRole('radiogroup', { name: 'Keep' });
+    await user.click(within(keep).getByRole('radio', { name: 'Right' }));
+    expect(speakerBridge.keep).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Finding the speaker/)).toBeNull();
+    // Off while it lands, so one change is one step.
+    expect(within(keep).getByRole('radio', { name: 'Left' })).toBeDisabled();
+    await act(async () => finish({ baseRevision: 3 } as SnapshotPatch));
+    await waitFor(() => expect(within(keep).getByRole('radio', { name: 'Left' })).not.toBeDisabled());
   });
 });

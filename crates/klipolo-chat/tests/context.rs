@@ -1425,3 +1425,47 @@ fn clip_a_with_the_whole_pack_stays_small() {
     // About four tokens a name (its words and the comma after it), and a few for the three headings.
     assert!(estimate_tokens(listed) <= 4 * count + 12, "{listed}");
 }
+
+#[test]
+fn clips_with_two_or_more_people_list_them_left_to_right() {
+    use klipolo_model::fill_focus::{FillFocus, FocusPath, Keep, Person, Voice};
+    use klipolo_model::project::FormatKind;
+    let mut inputs = two_clips();
+    let voice = |label: &str| Voice {
+        part: 0,
+        label: label.into(),
+    };
+    let people = vec![
+        Person {
+            voices: vec![voice("A")],
+            share: 62,
+        },
+        Person {
+            voices: vec![voice("B"), voice("C")],
+            share: 38,
+        },
+        Person::default(),
+    ];
+    for clip in &mut inputs.project.timeline.main {
+        clip.fill_focus.insert(
+            FormatKind::Portrait,
+            FillFocus::Speaker {
+                path: FocusPath::default(),
+                keep: Keep::Speaker,
+                people: people.clone(),
+            },
+        );
+    }
+    let text = inputs.context(&view_at(0.0)).text;
+    let project = section(&text, "Project");
+    // Both clips choose between the same people: one line for them.
+    assert!(
+        project.contains(
+            "\nPeople in c1-c2: P1 left, voice A, speaks 62%; P2 middle, voices B and C, speaks 38%; P3 right.\n"
+        ),
+        "{project}"
+    );
+    // One person, or none named: no line.
+    let plain = two_clips().context(&view_at(0.0)).text;
+    assert!(!section(&plain, "Project").contains("People"), "{plain}");
+}
