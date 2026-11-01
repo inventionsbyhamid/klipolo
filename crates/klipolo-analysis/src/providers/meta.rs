@@ -1,5 +1,6 @@
 //! Meta behind the analysis interfaces: Voice Transcribe as the `Transcriber`, the relay's MMS aligner as the
-//! `Aligner` and Muse Spark as the `SceneLogger`, all through one `klipolo_meta::MetaClient`. Whether that client calls
+//! `Aligner`, Muse Spark as the `SceneLogger` and SAM as the `SubjectTracker` (`meta_sam`), all through one
+//! `klipolo_meta::MetaClient`. Whether that client calls
 //! Meta with the person's key or goes through the relay with a device token is the client's business, never the
 //! caller's. Meta's types and errors stop here.
 //!
@@ -83,7 +84,7 @@ pub struct Meta {
     /// Align requests at once: `ALIGN_CALLS`.
     aligns: Arc<Semaphore>,
     /// Video calls at once (upload to answer): `RELAY_VIDEO_CALLS` through the relay, `DIRECT_VIDEO_CALLS` with a key.
-    videos: Arc<Semaphore>,
+    pub(super) videos: Arc<Semaphore>,
     videos_at_once: usize,
 }
 
@@ -241,7 +242,7 @@ impl SceneLogger for Meta {
 
 /// Uploads a chunk of the clip's small copy. A file that can't be read is named as what it is, not by its temporary
 /// name.
-async fn upload(client: &MetaClient, video: &Path) -> Result<String, MetaError> {
+pub(super) async fn upload(client: &MetaClient, video: &Path) -> Result<String, MetaError> {
     client
         .upload_file(video, "video/mp4")
         .await
@@ -257,19 +258,19 @@ async fn upload(client: &MetaClient, video: &Path) -> Result<String, MetaError> 
 /// its own. It owns the id from the moment the upload returns it, with no await in between. A call dropped while its
 /// file is still going up never learns the id, so nothing can delete that file; neither can a failed delete be tried
 /// again: Meta expires uploads after a day.
-struct Upload {
-    meta: Meta,
-    id: Option<String>,
+pub(super) struct Upload {
+    pub(super) meta: Meta,
+    pub(super) id: Option<String>,
 }
 
 impl Upload {
-    fn id(&self) -> &str {
+    pub(super) fn id(&self) -> &str {
         self.id.as_deref().unwrap_or_default()
     }
 
     /// Deletes the file. The id is kept until the delete is answered: dropped before then (waiting for a slot, or for
     /// the answer), the guard sends the delete again (a file already gone counts as deleted).
-    async fn delete(mut self) {
+    pub(super) async fn delete(mut self) {
         if let Some(id) = self.id.clone() {
             let _ = self.meta.call(self.meta.client.delete_file(&id)).await;
             self.id = None;

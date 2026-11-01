@@ -11,6 +11,7 @@ pub mod images;
 pub mod meta;
 pub mod meta_chat;
 pub mod meta_images;
+mod meta_sam;
 
 use std::future::Future;
 use std::path::Path;
