@@ -48,6 +48,11 @@ pub(super) fn nullable_boolean(description: &str) -> Value {
     json!({"type": ["boolean", "null"], "description": description})
 }
 
+/// Text, or null.
+pub(super) fn nullable_string(description: &str) -> Value {
+    json!({"type": ["string", "null"], "description": description})
+}
+
 pub(super) fn string(description: &str) -> Value {
     json!({"type": "string", "description": description})
 }

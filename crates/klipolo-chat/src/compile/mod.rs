@@ -52,8 +52,10 @@ mod sources;
 mod trim;
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use klipolo_model::coded::{CodedError, ErrorParam};
+use klipolo_model::font::FontRef;
 use klipolo_model::ids::Id;
 use klipolo_model::media::music::refit_music_ops;
 use klipolo_model::ops::{Op, Origin, Transaction};
@@ -138,6 +140,49 @@ pub struct Inputs {
     pub time_again: HashSet<String>,
     /// What the media tools name: the project's music, sounds and pictures and Klipolo's pack.
     pub library: Library,
+    /// What `addText`'s `font` names: the app's fonts (none where nothing names fonts).
+    pub fonts: FontNames,
+}
+
+/// A font a name is: the font, the face of it nearest the weight and style asked for, and what downloading it takes
+/// while it isn't on this computer (a Google font: never downloaded by itself, the person downloads it).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NamedFont {
+    pub font: FontRef,
+    pub weight: u16,
+    pub italic: bool,
+    pub download_bytes: Option<u64>,
+}
+
+/// The app's font names: `(name, weight, italic)` to the font it is, from Klipolo's fonts, this computer's, those
+/// downloaded and Google's catalogue (while Google Fonts is on). None knows no font.
+#[derive(Clone, Default)]
+pub struct FontNames(Option<Arc<FontNamer>>);
+
+/// What names a font for `FontNames`.
+pub type FontNamer = dyn Fn(&str, u16, bool) -> Option<NamedFont> + Send + Sync;
+
+impl FontNames {
+    pub fn new(namer: Arc<FontNamer>) -> Self {
+        Self(Some(namer))
+    }
+
+    /// The font `name` is, its face nearest `weight` and `italic`; None when no font has that name.
+    pub fn named(&self, name: &str, weight: u16, italic: bool) -> Option<NamedFont> {
+        self.0
+            .as_ref()
+            .and_then(|namer| namer(name, weight, italic))
+    }
+}
+
+impl std::fmt::Debug for FontNames {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.is_some() {
+            "FontNames"
+        } else {
+            "FontNames(none)"
+        })
+    }
 }
 
 /// What one message's calls compiled to.
@@ -658,6 +703,10 @@ impl Compiler<'_> {
                 Ok((tried, _)) if tried.removes => waiting.push((i, Removal::Moved(call))),
                 Ok((tried, title_id)) => {
                     adding.keep(tried, i);
+                    // A font still to download is named: never downloaded by itself, and the reply says so.
+                    if let Some(said) = media::font_note(self, call) {
+                        notes.push((i, said));
+                    }
                     // The title is in: its background is drawn for it.
                     if let (Some(title_id), ToolCall::MakeTitleCard { prompt, .. }) =
                         (title_id, call)
@@ -797,7 +846,15 @@ impl Compiler<'_> {
                 preset,
                 at_us,
                 duration_us,
-            } => media::add_text(self, work, text, *preset, (*at_us, *duration_us)),
+                font,
+            } => media::add_text(
+                self,
+                work,
+                text,
+                *preset,
+                (*at_us, *duration_us),
+                font.as_deref(),
+            ),
             ToolCall::AddImage {
                 file,
                 size,

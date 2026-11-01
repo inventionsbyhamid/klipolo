@@ -106,6 +106,7 @@ fn inputs(project: &Project, speech: Speech, message: &str) -> Inputs {
             .collect(),
         time_again: HashSet::new(),
         library: Library::default(),
+        fonts: Default::default(),
     }
 }
 
