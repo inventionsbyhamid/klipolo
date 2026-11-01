@@ -183,6 +183,21 @@ describe('the Focus of a filled clip', () => {
     expect(speakerBridge.follow).not.toHaveBeenCalled();
   });
 
+  it('after an edit the old price is gone, and Speaker is off until the new one comes', async () => {
+    vi.mocked(speakerBridge.estimate).mockResolvedValue({ usd: 0.024, clips: ['b'], cached: false });
+    renderWithProviders(<Inspector format="portrait" />);
+    expect(await screen.findByText('Follow the speaker, about $0.02')).toBeInTheDocument();
+    vi.mocked(speakerBridge.estimate).mockReturnValueOnce(new Promise(() => undefined));
+    const snapshot = useProject.getState().snapshot!;
+    act(() =>
+      useProject.setState({
+        snapshot: { ...snapshot, history: { ...snapshot.history, revision: snapshot.history.revision + 1 } },
+      }),
+    );
+    await waitFor(() => expect(screen.queryByText('Follow the speaker, about $0.02')).toBeNull());
+    expect(screen.getByRole('radio', { name: 'Speaker' })).toBeDisabled();
+  });
+
   it('footage tracked before is followed at no charge', async () => {
     vi.mocked(speakerBridge.estimate).mockResolvedValue({ usd: 0, clips: ['b'], cached: true });
     renderWithProviders(<Inspector format="square" />);

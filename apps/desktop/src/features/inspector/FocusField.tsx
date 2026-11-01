@@ -30,13 +30,14 @@ export function focusPatch(clip: Clip, format: FormatKind, focus: FillFocus | nu
 }
 
 /**
- * What following the speaker in `clip` costs in `format`, asked again as the project changes (tracked footage is free);
- * null until Rust answers or when the clip can't follow.
+ * What following the speaker in `clip` costs in `format` on the project as it is now (tracked footage is free); null
+ * until Rust answers for this revision, or when the clip can't follow.
  */
 function useSpeakerEstimate(clipId: string, format: FormatKind, can: boolean): SpeakerEstimate | null {
   const revision = useProject((s) => s.snapshot?.history.revision ?? -1);
   const [answer, setAnswer] = useState<{ key: string; estimate: SpeakerEstimate } | null>(null);
-  const key = `${clipId}:${format}`;
+  // Keyed by the revision too: after an edit the old price is never shown, and Speaker waits for the new one.
+  const key = `${clipId}:${format}:${revision}`;
   useEffect(() => {
     if (!can) return;
     let live = true;
@@ -49,7 +50,7 @@ function useSpeakerEstimate(clipId: string, format: FormatKind, can: boolean): S
     return () => {
       live = false;
     };
-  }, [clipId, format, can, key, revision]);
+  }, [clipId, format, can, key]);
   return can && answer?.key === key ? answer.estimate : null;
 }
 
