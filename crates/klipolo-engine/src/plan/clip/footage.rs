@@ -3,10 +3,12 @@
 //! or split pane. A screen whose framing is Fill with `follow` crops where its take's follow path is at that instant:
 //! the path built from the raw cursor for that crop (`follow_crop_for`), found in the context's snapshot (`Follows`),
 //! or the Fill crop at its focus until it is built (preview only: export loads it first). Follow on a Fit framing is
-//! ignored: it follows the Fill crop.
+//! ignored: it follows the Fill crop. Any other Fill crop keeps the clip's own focus in the format beyond its framing's
+//! fixed point (`Clip::fill_focus`, `fill_focused`): the middle, or the speaker's path at that instant.
 
 use std::sync::Arc;
 
+use klipolo_model::fill_focus::FillFocus;
 use klipolo_model::framing::effective_framing;
 use klipolo_model::layout::BoxN;
 use klipolo_model::motion::{Blend, sample};
@@ -50,7 +52,7 @@ pub(super) fn main_layers(
         ClipSource::Asset { id } => {
             if let Some(asset) = video(id) {
                 let framing = effective_framing(p, clip, format);
-                out.push(Layer::Video(framed(
+                let mut main = framed(
                     VideoRole::Main,
                     main_id,
                     source_at(asset, source_us, media, registry, s),
@@ -58,7 +60,9 @@ pub(super) fn main_layers(
                     framing,
                     format,
                     false,
-                )));
+                );
+                main.crop = fill_focused(clip, format, framing.mode, main.crop, source_us);
+                out.push(Layer::Video(main));
             }
         }
         ClipSource::Recording { id } => {
@@ -71,7 +75,7 @@ pub(super) fn main_layers(
                 if let Some((camera, camera_us)) = footage(p, rec.primary_source(), source_us) {
                     let mirror = clip.camera.as_ref().is_some_and(|c| c.mirror);
                     let framing = effective_framing(p, clip, format);
-                    out.push(Layer::Video(framed(
+                    let mut main = framed(
                         VideoRole::Main,
                         main_id,
                         source_at(camera, camera_us, media, registry, s),
@@ -79,7 +83,9 @@ pub(super) fn main_layers(
                         framing,
                         format,
                         mirror,
-                    )));
+                    );
+                    main.crop = fill_focused(clip, format, framing.mode, main.crop, source_us);
+                    out.push(Layer::Video(main));
                 }
                 return;
             };
@@ -118,6 +124,8 @@ pub(super) fn main_layers(
             );
             if let (FramingMode::Fill, Some(follow)) = (framing.mode, framing.follow) {
                 main.crop = followed(follows, rec, main.crop, follow.closer, source_us);
+            } else {
+                main.crop = fill_focused(clip, format, framing.mode, main.crop, source_us);
             }
             out.push(Layer::Video(main));
             if let Some((asset, camera_us, layout, rect)) = shown {
@@ -207,6 +215,31 @@ fn followed(follows: &Follows, rec: &Recording, base: BoxN, closer: f64, source_
         .and_then(|f| f.centre_at(source_us.saturating_sub(nudge)))
         .unwrap_or((base.x + base.w / 2.0, base.y + base.h / 2.0));
     follow_crop(base, centre, closer)
+}
+
+/// `crop` (a Fill crop at its framing's focus, as `framed` draws it) at `clip`'s own focus in `format` at source time
+/// `source_us` (`Clip::fill_focus`): the middle for Center; for the speaker, centred where their path is then, kept
+/// inside the picture. The path's points are where the file has the speaker, so a mirror doesn't flip them. A Fit
+/// framing, a format without a focus of its own and an empty path keep `crop`. O(log keys), no allocation.
+fn fill_focused(
+    clip: &Clip,
+    format: FormatKind,
+    mode: FramingMode,
+    crop: BoxN,
+    source_us: Us,
+) -> BoxN {
+    if mode != FramingMode::Fill {
+        return crop;
+    }
+    let centre = match clip.fill_focus.get(&format) {
+        None => return crop,
+        Some(FillFocus::Center) => (0.5, 0.5),
+        Some(FillFocus::Speaker { path }) => match path.centre_at(source_us) {
+            Some(at) => at,
+            None => return crop,
+        },
+    };
+    follow_crop(crop, centre, 1.0)
 }
 
 /// Which part of `clip`'s main footage (source-normalised) its Fill shows from the centre in `format`, as
