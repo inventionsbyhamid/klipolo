@@ -448,3 +448,24 @@ fn the_price_before_tracking_covers_a_stretch_cut_by_shots_and_a_file_in_many_cl
     let most = voices::most_usd(&spark, &turns, &pieces);
     assert!((most - PRICE * 3.0).abs() < 1e-9, "{most}");
 }
+
+#[tokio::test]
+async fn cached_answers_alone_settle_voices_without_asking() {
+    let setup = setup();
+    let f = two_apart(20.0);
+    let w = windows_of(&f, &interview(), PORTRAIT);
+    // Nothing asked yet: nothing settled.
+    assert!(voices::cached_voices(Some(&setup.cache), "fake-spark", &w).is_empty());
+    let spark = FakeSpark::new(vec![
+        (0.0, Heard::Person { person: 1 }),
+        (9.0, Heard::Person { person: 2 }),
+    ]);
+    let matched =
+        voices::match_voices(&spark, Arc::new(FakeCopy::default()), &asking(&setup), &w).await;
+    assert_eq!(
+        voices::cached_voices(Some(&setup.cache), "fake-spark", &w),
+        matched.voices
+    );
+    // Another model's answers aren't this one's.
+    assert!(voices::cached_voices(Some(&setup.cache), "other-model", &w).is_empty());
+}

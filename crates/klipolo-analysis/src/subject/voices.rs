@@ -13,7 +13,8 @@
 //! - **The price** comes first: `uncached_usd` for windows known (the tracking is cached), `most_usd` before anything
 //!   is tracked (every voice's windows at the longest). What the cache holds is free.
 //! - **The cache:** each answer, unclear ones too (they were paid for), is kept in the file's analysis cache folder
-//!   (`voices.json`) by model, window and how many people were asked about: never asked again.
+//!   (`voices.json`) by model, window and how many people were asked about: never asked again. `cached_voices` settles
+//!   voices from it alone, never asking.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -240,8 +241,35 @@ fn settled(heard: &[Heard]) -> bool {
 /// The cached answer for `window`, if `model` gave one.
 fn cached(kept: &[Asked], model: &str, window: &Window) -> Option<Heard> {
     (kept.iter())
-        .find(|a| a.model == model && a.range == window.range && a.people == window.people.len())
+        .find(|a| {
+            a.model == model
+                && a.range == window.range
+                && a.people == window.people.len()
+        })
         .map(|a| a.heard)
+}
+
+/// What the cache alone settles of `windows`' voices for `model`: each voice's cached answers voted on (`vote`), never
+/// asking. Blocking (a small read).
+pub fn cached_voices(
+    cache: Option<&Dir>,
+    model: &str,
+    windows: &[Window],
+) -> BTreeMap<Voice, Heard> {
+    let kept: Vec<Asked> = cache.and_then(|d| d.load(CACHE_NAME)).unwrap_or_default();
+    let mut out = BTreeMap::new();
+    let mut voices: Vec<&Voice> = windows.iter().map(|w| &w.voice).collect();
+    voices.dedup();
+    for voice in voices {
+        let heard: Vec<Heard> = (windows.iter())
+            .filter(|w| &w.voice == voice)
+            .filter_map(|w| cached(&kept, model, w))
+            .collect();
+        if let Some(h) = vote(&heard) {
+            out.insert(voice.clone(), h);
+        }
+    }
+    out
 }
 
 /// The windows still to ask about, by voice in the order given: none for a voice its cached answers settle.
