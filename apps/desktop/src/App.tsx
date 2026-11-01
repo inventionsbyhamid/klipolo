@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { Snapshot } from './bindings/Snapshot';
 import { followAiStatus } from './ai/aiStatus';
 import { isCode } from './bridge/call';
 import { bridge } from './bridge/commands';
@@ -59,6 +60,29 @@ async function loadOpenProject() {
   }
 }
 
+/** Which opening of which project is open: a new one each time a project opens, the same through its edits. */
+const openingOf = (snapshot: Snapshot | null) =>
+  snapshot ? `${snapshot.project.id}:${snapshot.opening ?? ''}` : null;
+
+/**
+ * Each project that opens (from a card, Open recent or New project) puts the keyboard on the editor, its preview, so
+ * Space plays at once rather than pressing the button that had the focus (the project's name, whose menu opened it).
+ * Focus left anywhere else (a dialog, a field) stays there. The top bar's buttons are a Shift Tab away.
+ */
+function useKeysOnEditor() {
+  const opening = useProject((s) => openingOf(s.snapshot));
+  useEffect(() => {
+    if (opening === null) return;
+    // After the menu that opened it has given the focus back to its trigger (it does so a moment after it closes).
+    const timer = setTimeout(() => {
+      const active = document.activeElement;
+      const free = !active || active === document.body || active.closest('.topbar') !== null;
+      if (free) document.querySelector<HTMLElement>('.workspace .stage')?.focus({ preventScroll: true });
+    });
+    return () => clearTimeout(timer);
+  }, [opening]);
+}
+
 /**
  * The editor, while a project is open: the library, the preview, the timeline and chat, and the player bar. Finder
  * drops and the editor's keys work only here, and the project's editing copies are followed (the top bar's pill).
@@ -67,6 +91,7 @@ function Editor() {
   const [filesOver, setFilesOver] = useState(false);
   useFinderDrop(setFilesOver);
   useEditorShortcuts();
+  useKeysOnEditor();
   return (
     <>
       <div className="workspace">
@@ -85,18 +110,10 @@ function Editor() {
 const openRecorder = () => void useRecorder.getState().openRecorder();
 
 /**
- * The start screen, until a project opens. The card or button pressed from the keyboard goes with it, so the focus goes
- * on to the project's name in the top bar, where the editor starts. (Its cleanup runs before the screen leaves the page:
- * the focus is still in it.) Coming back from a project (`afterProject`), the focus goes to its title.
+ * The start screen, until a project opens. The card or button pressed from the keyboard goes with it, and the focus
+ * goes on to the editor (`useKeysOnEditor`). Coming back from a project (`afterProject`), the focus goes to its title.
  */
 function Start({ afterProject }: { afterProject: boolean }) {
-  useLayoutEffect(
-    () => () => {
-      if (!document.querySelector('.start-panel')?.contains(document.activeElement)) return;
-      queueMicrotask(() => document.querySelector<HTMLElement>('.topbar .project')?.focus());
-    },
-    [],
-  );
   return <StartScreen onRecord={openRecorder} takeFocus={afterProject} />;
 }
 
