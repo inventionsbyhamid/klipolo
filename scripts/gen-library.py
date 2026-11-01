@@ -714,6 +714,185 @@ def upbeat_loop():
     return seam(normalised(out, 0.8))
 
 
+def loop_lowpass(samples, cutoff):
+    """`samples` through a one-pole low pass as if they had looped for ever: once round to settle it, then again."""
+    a, y, out = 1.0 - exp(-TAU * cutoff / MUSIC_RATE), 0.0, []
+    for x in samples:
+        y += a * (x - y)
+    for x in samples:
+        y += a * (x - y)
+        out.append(y)
+    return out
+
+
+class Bed:
+    """A bed being drawn around the loop: each voice added at a sample, its tail running on into the loop's start."""
+
+    def __init__(self, seed):
+        self.out, self.noise, self.r = [0.0] * LOOP_N, Noise(seed), MUSIC_RATE
+
+    def kick(self, start, level, high=110.0, low=45.0, tau=0.22):
+        phase, glide, env = 0.0, 1.0, level
+        glide_k, env_k = decay(0.035, self.r), decay(tau, self.r)
+        for j in range(int(5 * tau * self.r)):
+            phase += (low + (high - low) * glide) / self.r
+            self.out[(start + j) % LOOP_N] += osc(phase) * env * min(1.0, j / 24)
+            glide *= glide_k
+            env *= env_k
+
+    def snare(self, start, level, tau=0.12):
+        """Noise around 1.7 kHz over a short 185 Hz body."""
+        svf, env, body = Svf(self.r), level, level
+        env_k, body_k = decay(tau, self.r), decay(0.06, self.r)
+        for j in range(int(3 * tau * self.r)):
+            _, band, _ = svf(self.noise(), 1700.0, 0.7)
+            x = 0.9 * band * env + 0.4 * osc(185.0 * j / self.r) * body
+            self.out[(start + j) % LOOP_N] += x * min(1.0, j / 24)
+            env *= env_k
+            body *= body_k
+
+    def clap(self, start, level):
+        """Three quick bursts of noise around 1.6 kHz, then a short tail."""
+        svf = Svf(self.r)
+        for j in range(int(0.25 * self.r)):
+            t = j / self.r
+            _, band, _ = svf(self.noise(), 1600.0, 0.4)
+            burst = max(exp(-max(0.0, t - tap) / 0.012) for tap in (0.0, 0.008, 0.016) if t >= tap)
+            self.out[(start + j) % LOOP_N] += level * band * (0.6 * burst + 0.4 * exp(-t / 0.06))
+
+    def hat(self, start, level, tau=0.025):
+        """Noise with its lows taken out (each sample less the one before), dying away over `tau` seconds."""
+        before, env, env_k = 0.0, level, decay(tau, self.r)
+        for j in range(int(4 * tau * self.r)):
+            x = self.noise()
+            self.out[(start + j) % LOOP_N] += (x - before) * env
+            before = x
+            env *= env_k
+
+    def tone(self, start, length, freq, level, partials, tau, attack=0.005, release=0.04):
+        """A note of `partials` ((ratio, amplitude)), dying away over `tau` seconds, held `length` samples."""
+        env, env_k, rise, fall = level, decay(tau, self.r), attack * self.r, release * self.r
+        for j in range(length + int(fall)):
+            t = j / self.r
+            x = sum(a * osc(freq * ratio * t) for ratio, a in partials)
+            gate = 1.0 if j < length else 1.0 - (j - length) / fall
+            self.out[(start + j) % LOOP_N] += x * env * gate * min(1.0, j / rise)
+            env *= env_k
+
+    def keys(self, start, length, freq, level):
+        """An electric piano note: a sine bent by a fainter sine of its own pitch, brighter as it is struck, with a
+        faint metal tine."""
+        env, bright, tine = level, 1.0, 1.0
+        env_k, bright_k, tine_k = decay(1.4, self.r), decay(0.35, self.r), decay(0.03, self.r)
+        fall = int(0.25 * self.r)
+        for j in range(length + fall):
+            p = freq * j / self.r
+            x = osc(p + 0.22 * bright * osc(p)) + 0.06 * tine * osc(14.0 * p)
+            gate = 1.0 if j < length else 1.0 - (j - length) / fall
+            self.out[(start + j) % LOOP_N] += x * env * gate * min(1.0, j / 72)
+            env *= env_k
+            bright *= bright_k
+            tine *= tine_k
+
+
+CHILL_BARS = [  # 90 BPM, a bar each: the bass's root, then the electric piano's chord
+    ("F2", ["A3", "C4", "E4", "G4"]),
+    ("E2", ["G3", "B3", "D4", "F#4"]),
+    ("D2", ["F3", "A3", "C4", "E4"]),
+    ("C2", ["E3", "G3", "B3", "D4"]),
+    ("F2", ["A3", "C4", "E4", "G4"]),
+    ("G2", ["B3", "D4", "E4", "A4"]),
+]
+
+
+def chill_beat():
+    """A calm lo-fi groove at 90 BPM over six bars (Fmaj9, Em9, Dm9, Cmaj9, Fmaj9, G6/9): a soft electric piano over
+    a softer pad, a round bass, a lazy swung kick, snare and hats, and the crackle of a record, all a little dull, as if
+    from tape."""
+    bed = Bed(17)
+    beat = LOOP_N // 24
+    swing = beat // 12
+    for b, (root, chord) in enumerate(CHILL_BARS):
+        start = b * 4 * beat
+        for at, level in ((0, 0.8), (5 * beat // 2, 0.7)):
+            bed.kick(start + at, level)
+        if b % 2 == 1:
+            bed.kick(start + 7 * beat // 2, 0.45)
+        for at in (beat, 3 * beat):
+            bed.snare(start + at, 0.32)
+        for e in range(8):
+            bed.hat(start + e * beat // 2 + (swing if e % 2 else 0), 0.05 if e % 2 == 0 else 0.032)
+        bass = note(root)
+        bed.tone(start, 3 * beat // 2, bass, 0.34, [(1.0, 1.0), (2.0, 0.25)], 0.8, 0.01, 0.06)
+        bed.tone(start + 5 * beat // 2, 5 * beat // 4, bass, 0.28, [(1.0, 1.0), (2.0, 0.25)], 0.8, 0.01, 0.06)
+        for k, name in enumerate(chord):
+            bed.keys(start + k * 360, 5 * beat // 2 - k * 360, note(name), 0.12)
+            bed.keys(start + 5 * beat // 2 + k * 240, 3 * beat // 2 - k * 240, note(name), 0.08)
+    for _ in range(70):  # the record's crackle: small pops anywhere round the loop
+        at, level = int(unit(bed.noise) * LOOP_N), 0.02 + 0.06 * unit(bed.noise)
+        for j in range(6):
+            bed.out[(at + j) % LOOP_N] += level * bed.noise() * (1 - j / 6)
+    bar, pads = 4 * beat, [[loop_steps(note(n)) for n in chord] for _, chord in CHILL_BARS]
+    for i in range(LOOP_N):  # a soft pad of each bar's chord under it all
+        j = i % bar
+        bed.out[i] += 0.025 * min(1.0, j / 1200, (bar - j) / 1200) * sum(loop_osc(i, f) for f in pads[i // bar])
+    hiss = [x + 0.004 * bed.noise() for x in bed.out]
+    return seam(normalised(loop_lowpass(hiss, 3800.0), 0.7))
+
+
+ENERGY_BARS = [  # 120 BPM, a bar each: the bass's root, then the pad's chord
+    ("A1", ["A3", "C4", "E4"]),
+    ("F1", ["A3", "C4", "F4"]),
+    ("C2", ["G3", "C4", "E4"]),
+    ("G1", ["G3", "B3", "D4"]),
+] * 2
+
+
+def energetic_loop():
+    """A driving 120 BPM groove in A minor (Am, F, C, G, twice): a punchy four-on-the-floor kick, claps on 2 and 4,
+    sixteenth hats with open ones off the beat, a buzzy off-beat bass, a bright pad that ducks under every kick, plucked
+    sixteenth arpeggios, and a snare roll and a rush of noise building through the last bar."""
+    bed = Bed(23)
+    beat, bar = MUSIC_RATE // 2, 2 * MUSIC_RATE
+    sixteenth = beat // 4
+    saw = [(1.0, 1.0), (2.0, 0.5), (3.0, 0.33), (4.0, 0.25), (5.0, 0.2), (6.0, 0.16)]
+    square = [(1.0, 1.0), (3.0, 0.33), (5.0, 0.2)]
+    for b, (root, chord) in enumerate(ENERGY_BARS):
+        start = b * bar
+        for k in range(4):
+            bed.kick(start + k * beat, 0.9, 160.0, 48.0, 0.18)
+            bed.tone(start + k * beat + beat // 2, beat // 3, 2 * note(root), 0.2, saw, 0.12, 0.003, 0.02)
+            bed.tone(start + k * beat + beat // 2, beat // 3, note(root), 0.3, [(1.0, 1.0)], 0.15, 0.003, 0.02)
+            bed.hat(start + k * beat + beat // 2, 0.06, 0.1)
+        for k in (1, 3):
+            bed.clap(start + k * beat, 0.45)
+        tones = [note(n) * 2 for n in chord] + [note(chord[0]) * 4]
+        for s in range(16):
+            if s % 2 == 0 or s % 4 == 3:
+                bed.hat(start + s * sixteenth, 0.045 if s % 4 == 0 else 0.03)
+            if b < 7:
+                bed.tone(start + s * sixteenth, sixteenth, tones[[0, 1, 2, 3, 2, 1, 2, 3][s % 8]], 0.07, square, 0.08,
+                         0.002, 0.02)
+            else:
+                bed.snare(start + s * sixteenth, 0.08 + 0.3 * s / 15, 0.05)
+    out = bed.out
+    pads = [[loop_steps(note(n)) for n in chord] for _, chord in ENERGY_BARS]
+    noise, svf = Noise(29), Svf(MUSIC_RATE)
+    for i in range(LOOP_N):
+        b, j = i // bar, i % bar
+        into = (j % beat) / MUSIC_RATE
+        pump = 1.0 - 0.75 * exp(-into / 0.11)
+        edge = min(1.0, j / 720, (bar - j) / 720)
+        pad = sum(loop_osc(i, f) + loop_osc(i, f + 2) + 0.5 * loop_osc(i, 2 * f) + 0.33 * loop_osc(i, 3 * f)
+                  for f in pads[b])
+        out[i] += 0.045 * pad * pump * edge
+        if b == 7:  # a riser of noise through the last bar
+            t = j / bar
+            _, band, _ = svf(noise(), 500.0 + 5500.0 * t * t, 0.5)
+            out[i] += 0.25 * band * t * t * edge
+    return seam(normalised(out, 0.8))
+
+
 # ---------------------------------------------------------------------------------------------------------- stickers
 
 SIZE = 1024
@@ -1526,6 +1705,8 @@ SOUNDS = [
 MUSIC = [
     ("soft-ambient", "Soft ambient", ["calm", "ambient", "soft", "background", "chill", "loop"], soft_ambient),
     ("upbeat-loop", "Upbeat loop", ["upbeat", "happy", "energetic", "pop", "background", "loop"], upbeat_loop),
+    ("chill-beat", "Chill beat", ["lofi", "chill", "study", "relaxed", "background", "loop"], chill_beat),
+    ("energetic-loop", "Energetic loop", ["energetic", "hype", "fast", "sport", "intense", "loop"], energetic_loop),
 ]
 
 STICKERS = [

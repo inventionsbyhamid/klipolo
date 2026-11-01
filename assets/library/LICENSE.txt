@@ -1,4 +1,4 @@
-Klipolo pack: 25 sound effects, 2 music beds, 27 stickers and 8 backgrounds,
+Klipolo pack: 25 sound effects, 4 music beds, 27 stickers and 8 backgrounds,
 made from code by scripts/gen-library.py. No recordings, samples or outside media were used.
 
 To the extent possible under law, Klipolo has waived all copyright and related or neighbouring rights to these files.

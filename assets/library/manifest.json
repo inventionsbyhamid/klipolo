@@ -440,6 +440,40 @@
       "license": "CC0-1.0"
     },
     {
+      "id": "chill-beat",
+      "name": "Chill beat",
+      "category": "music",
+      "file": "music/chill-beat.wav",
+      "duration_ms": 16000,
+      "tags": [
+        "lofi",
+        "chill",
+        "study",
+        "relaxed",
+        "background",
+        "loop"
+      ],
+      "sha256": "b3e782c02eda7b734ca3719e8c2d42f8788798487d20525b91cf90c548a9d180",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "energetic-loop",
+      "name": "Energetic loop",
+      "category": "music",
+      "file": "music/energetic-loop.wav",
+      "duration_ms": 16000,
+      "tags": [
+        "energetic",
+        "hype",
+        "fast",
+        "sport",
+        "intense",
+        "loop"
+      ],
+      "sha256": "8b6841159837345860e2da4698d52f8e763493aa51d7895d4b3ce9f8cf2f4240",
+      "license": "CC0-1.0"
+    },
+    {
       "id": "heart",
       "name": "Heart",
       "category": "sticker",
