@@ -1331,6 +1331,11 @@ ol {
   border-style: solid;
 }
 
+/* The two boxes read as a pair */
+.soon.is-now + .soon {
+  margin-top: 1.5rem;
+}
+
 /* ---------- Built on Meta's models ---------- */
 
 /* Same dark bay as the editor illustration, in both modes */
