@@ -155,7 +155,9 @@ pub fn follow_crop_in(bounds: BoxN, base: BoxN, centre: (f64, f64), closer: f64)
     );
     let at = |c: f64, side: f64, lo: f64, room: f64| {
         let c = if c.is_finite() { c } else { lo + room / 2.0 };
-        (c - side / 2.0).clamp(lo, lo + room - side)
+        // A window as big as the room: `lo + room - side` can round to just under `lo`.
+        let hi = (lo + room - side).max(lo);
+        (c - side / 2.0).clamp(lo, hi)
     };
     BoxN {
         x: at(centre.0, w, bounds.x, bounds.w),

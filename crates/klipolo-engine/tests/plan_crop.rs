@@ -7,6 +7,7 @@ mod support;
 use klipolo_engine::plan::framing::{FULL, cover_crop, follow_crop_in};
 use klipolo_engine::plan::{VideoRole, fill_crop, frame_plan};
 use klipolo_model::crop::{Crop, within};
+use klipolo_model::cursor_style::{ClickSource, CursorCapture, RecordingCursor};
 use klipolo_model::project::FormatKind::{Landscape, Portrait, Square};
 use klipolo_model::project::{FormatKind, Project, RecordingKind};
 use klipolo_model::timeline::{Framing, FramingMode};
@@ -160,10 +161,47 @@ fn the_follow_crop_stays_inside_what_the_crop_leaves() {
             "{centre:?} {closer}: {c:?}"
         );
     }
+    // A window as tall as what a top crop leaves: the room above it rounds to just under none, never a bad clamp.
+    let below_a_top_cut = bx(0.0, 0.1, 1.0, 0.9);
+    let tall = bx(0.3, 0.1, 0.3, 0.9);
+    for centre in [(0.5, 0.5), (0.5, 0.0), (0.5, 1.0), (f64::NAN, f64::NAN)] {
+        let c = follow_crop_in(below_a_top_cut, tall, centre, 1.0);
+        assert!((c.y - 0.1).abs() < 1e-9 && (c.h - 0.9).abs() < 1e-9, "{centre:?}: {c:?}");
+    }
+    // The same across, beside a left cut.
+    let beside_a_left_cut = bx(0.2, 0.0, 0.8, 1.0);
+    let wide = bx(0.2, 0.3, 0.8, 0.3);
+    let c = follow_crop_in(beside_a_left_cut, wide, (0.0, 0.5), 1.0);
+    assert!((c.x - 0.2).abs() < 1e-9 && (c.w - 0.8).abs() < 1e-9, "{c:?}");
     // Without a crop it is the frame's follow-crop.
     let whole = follow_crop_in(FULL, base, (0.95, 0.5), 1.0);
     close(
         whole,
         klipolo_engine::plan::framing::follow_crop(base, (0.95, 0.5), 1.0),
     );
+}
+
+#[test]
+fn a_screen_take_that_follows_the_cursor_plans_with_its_top_cut() {
+    // A screen take with a cursor track fills and follows in 9:16 and 1:1 by default; the crop cuts the menu bar off.
+    let mut p = project();
+    p.recordings[0].cursor = Some(RecordingCursor {
+        path: "/media/rec/cursor.jsonl".into(),
+        capture: CursorCapture::Separate,
+        clicks: ClickSource::Events,
+    });
+    p.settings.formats = vec![Landscape, Portrait, Square];
+    for top in [0.1, 0.2] {
+        p.timeline.main[0].crop = Some(crop(0.0, top, 0.0, 0.0));
+        for format in [Portrait, Square] {
+            let (shown, _) = main_at(&p, 2.0, format);
+            assert!(
+                shown.y >= top - 1e-9 && shown.y + shown.h <= 1.0 + 1e-9,
+                "{format:?} top {top}: {shown:?}"
+            );
+        }
+    }
+    p.timeline.main[0].crop = Some(crop(0.0, 0.1, 0.0, 0.1));
+    let (shown, _) = main_at(&p, 2.0, Portrait);
+    assert!(shown.y >= 0.1 - 1e-9 && shown.y + shown.h <= 0.9 + 1e-9, "{shown:?}");
 }
