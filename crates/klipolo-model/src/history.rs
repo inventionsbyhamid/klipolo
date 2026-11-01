@@ -787,9 +787,9 @@ impl Document {
 
     /// Folds or drops steps until undo and redo together fit the limits:
     /// 1. apps' steps go first, those in redo (the newest made first), then those in undo (the oldest first): one folds
-    /// into the same app's step next to it (never across a seal), for too many steps or for bytes (a folded patch holds
-    /// each item once, so steps that touch the same items shrink); where none can, one at the far end of its stack
-    /// goes;
+    ///    into the same app's step next to it (never across a seal), for too many steps or for bytes (a folded patch
+    ///    holds each item once, so steps that touch the same items shrink); where none can, one at the far end of its
+    ///    stack goes;
     /// 2. then the person's: the step furthest from the current revision, the oldest undo or the furthest redo, whichever
     ///    stack is longer (undo on a tie), but their redo only once no app's step is left; the person's next undo and
     ///    next redo always stay.
