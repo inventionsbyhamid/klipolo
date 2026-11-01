@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Snapshot } from '../../bindings/Snapshot';
@@ -6,7 +6,7 @@ import { fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 import { twoTakesSnapshot } from '../../test/sounds';
 
-vi.mock('../../bridge/commands', () => ({ bridge: { apply: vi.fn() }, mediaUrl: (p: string) => p }));
+vi.mock('../../bridge/commands', () => ({ bridge: { apply: vi.fn(), undo: vi.fn() }, mediaUrl: (p: string) => p }));
 vi.mock('../../bridge/engine', () => ({
   engine: {
     preview: vi.fn().mockResolvedValue(undefined),
@@ -21,6 +21,8 @@ const { useSelection } = await import('../../state/selection');
 const { useUi } = await import('../../state/ui');
 const { Timeline } = await import('./Timeline');
 const { kindMuteOps, kindVolumeOps } = await import('./keys/sourceMix');
+const { useCommands } = await import('../command-palette/useCommands');
+const { labelText } = await import('../../lib/labels');
 
 /** The last committed batch: (label, ops). */
 const lastApply = async () => {
@@ -147,5 +149,107 @@ describe("a sound lane's header", () => {
         'For every clip, also those with their own setting. Its separated sound keeps its own volume.',
       ),
     ).toBeInTheDocument();
+  });
+});
+
+describe("a recording clip's menu", () => {
+  /** Opens the menu of the clip named so. */
+  const menuOf = (name: RegExp) => fireEvent.contextMenu(screen.getByRole('button', { name }));
+
+  it('lists each recorded sound: its mute in this clip, then Separate', async () => {
+    show(twoTakesSnapshot());
+    menuOf(/^Recording 1, clip 2 of 3/);
+    expect(await screen.findByRole('menuitem', { name: 'Mute Mic in this clip' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Mute Computer sound in this clip' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Separate Mic' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Separate Computer sound' })).toBeInTheDocument();
+    // The screen is the main footage: it has neither.
+    expect(screen.queryByRole('menuitem', { name: /Screen/ })).toBeNull();
+  });
+
+  it("mutes one sound in this clip alone, as the person's mute", async () => {
+    show(twoTakesSnapshot());
+    menuOf(/^Recording 1, clip 2 of 3/);
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Mute Mic in this clip' }));
+    expect((await lastApply()).ops).toEqual([
+      {
+        type: 'setClipSourceMix',
+        clipId: 'c2',
+        sourceId: 'mic',
+        mix: { volume: 0.6, muted: true, effects: [], mutedByPerson: true },
+      },
+    ]);
+  });
+
+  it('Separate makes the sound its own layer, in one step that Undo takes back', async () => {
+    vi.mocked(bridge.undo)
+      .mockReset()
+      .mockImplementation(async () => {
+        const s = useProject.getState().snapshot!;
+        return {
+          baseRevision: s.history.revision,
+          history: { ...s.history, revision: s.history.revision + 1 },
+          patch: { clips: [], items: [] },
+        };
+      });
+    show(twoTakesSnapshot());
+    menuOf(/^Recording 2, clip 3 of 3/);
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Separate Mic' }));
+    expect(await lastApply()).toEqual({
+      label: 'undo.source.separate',
+      params: { source: { code: 'source.role.mic', params: {} } },
+      ops: [{ type: 'detachSource', clipId: 'c3', sourceId: 'mic' }],
+    });
+    expect(labelText({ id: 'undo.source.separate', params: { source: { code: 'source.role.mic', params: {} } } })).toBe(
+      'Separate Mic',
+    );
+    await act(() => useProject.getState().undo());
+    expect(bridge.undo).toHaveBeenCalledTimes(1);
+    expect(bridge.apply).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a separated sound as it is in its clip, and says why', async () => {
+    show(twoTakesSnapshot());
+    menuOf(/^Recording 1, clip 1 of 3/);
+    const mute = await screen.findByRole('menuitem', { name: /^Unmute Mic in this clip/ });
+    expect(mute).toHaveAttribute('aria-disabled', 'true');
+    expect(mute).toHaveTextContent('Mic is on its own track here.');
+    expect(screen.getByRole('menuitem', { name: /^Separate Mic/ })).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('Separate is off on a sped-up clip, which says why', async () => {
+    const snap = twoTakesSnapshot();
+    snap.project.timeline.main[2].speed = 2;
+    show(snap);
+    menuOf(/^Recording 2, clip 3 of 3/);
+    const item = await screen.findByRole('menuitem', { name: /^Separate Mic/ });
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).toHaveTextContent('Set the clip back to normal speed before separating its sound.');
+  });
+
+  it('an imported clip has none', async () => {
+    show(fixtureSnapshot());
+    menuOf(/^broll\.mp4, clip 2 of 2/);
+    await screen.findByRole('menuitem', { name: /^Split at playhead/ });
+    expect(screen.queryByRole('menuitem', { name: /in this clip|^Separate/ })).toBeNull();
+  });
+});
+
+describe('the sound commands', () => {
+  it("are the selected recording clip's, by stable ids, and none without one", () => {
+    const snap = twoTakesSnapshot();
+    useProject.setState({ snapshot: snap, pending: 0 });
+    let ids: string[] = [];
+    function Probe() {
+      ids = useCommands()
+        .map((c) => c.id)
+        .filter((id) => id.startsWith('source-'));
+      return null;
+    }
+    const { rerender } = renderWithProviders(<Probe />);
+    expect(ids).toEqual([]);
+    act(() => useSelection.setState({ selectedId: 'c3' }));
+    rerender(<Probe />);
+    expect(ids).toEqual(['source-mute:mic', 'source-separate:mic']);
   });
 });
