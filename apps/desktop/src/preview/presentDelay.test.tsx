@@ -65,6 +65,15 @@ describe('the present delay', () => {
     expect(note(frame(20))).toBe(20);
   });
 
+  it('starts afresh after a pause: frames from before it never join the next median', () => {
+    const note = presentDelay();
+    for (let i = 0; i < 9; i++) note(frame(400));
+    // A seek's still while paused, then playing again.
+    expect(note(frame(0, false))).toBeNull();
+    for (let i = 0; i < 9; i++) expect(note(frame(30))).toBeNull();
+    expect(note(frame(30))).toBe(30);
+  });
+
   it('the socket preview tells the engine while it plays', () => {
     useEngine.setState({ session: 1 });
     const info: EngineInfo = {
