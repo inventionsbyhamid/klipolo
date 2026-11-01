@@ -4,6 +4,7 @@ Run it next to the server, on the live database:
 
     python -m relay.admin add-code CODE [--note TEXT]
     python -m relay.admin deactivate-code CODE
+    python -m relay.admin enable-sam CODE
     python -m relay.admin list-codes
     python -m relay.admin spend
 
@@ -186,6 +187,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
+def enable_sam(conn: sqlite3.Connection, args: argparse.Namespace, settings: Settings) -> None:
+    """Video tracking back on for a code: the relay turns it off when Meta bills
+    more frames than it reserved, which needs a look first."""
+    code = args.code
+    with db.transaction(conn):
+        if conn.execute("SELECT 1 FROM codes WHERE code = ?", (code,)).fetchone() is None:
+            raise AdminError(f'No code "{code}". Codes are case-sensitive. Run list-codes to see them.')
+        conn.execute("UPDATE codes SET sam_off = 0 WHERE code = ?", (code,))
+    print(f'Video tracking is on again for code "{code}".')
+
+
 def _parser() -> argparse.ArgumentParser:
     db_help = "database file (default: RELAY_DB_PATH, else ./data/relay.db)"
     parser = argparse.ArgumentParser(
@@ -213,6 +225,14 @@ def _parser() -> argparse.ArgumentParser:
     )
     deactivate.add_argument("code", type=_code, help="the code, case-sensitive")
     deactivate.set_defaults(command=deactivate_code)
+
+    sam = commands.add_parser(
+        "enable-sam",
+        parents=[db_option],
+        help="turn video tracking (SAM) back on for a code the relay turned it off for",
+    )
+    sam.add_argument("code", type=_code, help="the code, case-sensitive")
+    sam.set_defaults(command=enable_sam)
 
     listing = commands.add_parser("list-codes", parents=[db_option], help="list all codes")
     listing.set_defaults(command=list_codes)
