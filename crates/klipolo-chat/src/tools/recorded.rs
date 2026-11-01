@@ -303,7 +303,7 @@ fn sound(rest: Vec<(&'static str, Value)>) -> Vec<(&'static str, Value)> {
         "which",
         json!({
             "type": ["string", "null"],
-            "description": "2 for mic 2. Null for all.",
+            "description": "2 for mic 2, when a recording has several.",
         }),
     ));
     out.push(clips("with it"));

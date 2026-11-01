@@ -837,7 +837,7 @@
             "type": "string"
           },
           "which": {
-            "description": "2 for mic 2. Null for all.",
+            "description": "2 for mic 2, when a recording has several.",
             "type": [
               "string",
               "null"
@@ -887,7 +887,7 @@
             "type": "number"
           },
           "which": {
-            "description": "2 for mic 2. Null for all.",
+            "description": "2 for mic 2, when a recording has several.",
             "type": [
               "string",
               "null"
@@ -933,7 +933,7 @@
             "type": "string"
           },
           "which": {
-            "description": "2 for mic 2. Null for all.",
+            "description": "2 for mic 2, when a recording has several.",
             "type": [
               "string",
               "null"
