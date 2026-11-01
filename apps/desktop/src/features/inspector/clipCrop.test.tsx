@@ -94,8 +94,10 @@ describe("the clip card's crop", () => {
     expect(await screen.findByRole('button', { name: 'Crop: Cropped' })).toHaveAttribute('aria-expanded', 'true');
     const left = screen.getByRole('slider', { name: 'Crop left' });
     expect(left).toHaveAttribute('aria-valuetext', '20%');
-    // Left goes at most to 40 %: the right half is cut, and a tenth stays.
-    expect(left).toHaveAttribute('aria-valuemax', '0.4');
+    // Every edge's slider spans the same range, so a knob never jumps when the other edge moves; what goes in is held
+    // so a tenth stays: right goes to 70 % at most while left cuts 20 %.
+    expect(left).toHaveAttribute('aria-valuemax', '0.9');
+    expect(screen.getByRole('slider', { name: 'Crop right' })).toHaveAttribute('aria-valuemax', '0.9');
     dragSlider('Crop right', 100);
     expect(apply).toHaveBeenLastCalledWith(
       'crop.undo',
@@ -112,5 +114,19 @@ describe("the clip card's crop", () => {
         queued,
       ),
     );
+  });
+
+  it('an edge whose opposite cuts 90% still has a slider that works, holding it at none', async () => {
+    withB({ crop: { left: 0, top: 0, right: 0.9, bottom: 0 } });
+    renderWithProviders(<Inspector format="landscape" />);
+    const toggle = await screen.findByRole('button', { name: 'Crop: Cropped' });
+    expect(toggle).toHaveAttribute('aria-controls');
+    expect(document.getElementById(toggle.getAttribute('aria-controls')!)).toContainElement(
+      screen.getByRole('slider', { name: 'Crop left' }),
+    );
+    expect(screen.getByRole('slider', { name: 'Crop left' })).toHaveAttribute('aria-valuemax', '0.9');
+    dragSlider('Crop left', 50);
+    // Held at none, the drag changes nothing: no step goes in.
+    expect(apply.mock.calls.every(([, ops]) => ops.length === 0)).toBe(true);
   });
 });

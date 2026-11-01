@@ -115,7 +115,7 @@ describe("a video layer's picture in its box", () => {
         {
           type: 'updateItem',
           id: 'v1',
-          patch: { content: { ...layer.content, crop: { left: 0, top: 0.2, right: 0, bottom: 0.35 } } },
+          patch: { content: { ...layer.content, crop: { left: 0, top: 0.2, right: 0, bottom: 0.45 } } },
         },
       ],
       undefined,

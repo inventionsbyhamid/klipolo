@@ -1,5 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { Crop } from '../../bindings/Crop';
 import type { Op } from '../../bindings/Op';
 import { Button } from '../../design/Button';
@@ -11,6 +11,8 @@ import { ToolSlider } from './ToolSlider';
 /** The least share of a picture a crop keeps, across and down (`klipolo_model::crop::MIN_KEPT`). */
 export const MIN_KEPT = 0.1;
 export const NO_CROP: Crop = { left: 0, top: 0, right: 0, bottom: 0 };
+/** The most an edge's slider shows: the whole picture but the tenth that is always kept. */
+const MAX_EDGE = 1 - MIN_KEPT;
 
 type Edge = keyof Crop;
 const EDGES: Edge[] = ['left', 'right', 'top', 'bottom'];
@@ -35,9 +37,11 @@ export function withEdge(crop: Crop, edge: Edge, value: number): Crop {
 /**
  * Crop (a clip's footage, a video layer's picture): the edges cut off the picture as it is shown, each a share of its
  * width or height, always leaving a tenth of it each way. Its row says whether it is cropped and opens the Left, Right,
- * Top and Bottom sliders (open from the start while it is), with Reset crop while it is. A drag is dry-run in the
- * preview and commits one undo step on release, built on the crop as the project has it then (`latest`), so another
- * edge's change on its way stays. `ops` makes the change; a crop of nothing takes it off.
+ * Top and Bottom sliders (open from the start while it is), with Reset crop while it is. Every slider spans 0 to 90%,
+ * so a knob never jumps as the other edge moves; what goes in is held so a tenth stays (`withEdge`), and a drag held
+ * at what the edge has changes nothing. A drag is dry-run in the preview and commits one undo step on release, built
+ * on the crop as the project has it then (`latest`), so another edge's change on its way stays. `ops` makes the
+ * change; a crop of nothing takes it off.
  */
 export function CropField({
   crop,
@@ -51,6 +55,13 @@ export function CropField({
   const { t } = useLingui();
   const cropped = !isNoCrop(crop);
   const [open, setOpen] = useState(cropped);
+  const edges = useId();
+  /** The change a slider at `value` makes to `edge`, on the crop as the project has it then; none when held as it is. */
+  const edgeOps = (edge: Edge, value: number) => {
+    const now = latest() ?? NO_CROP;
+    const next = withEdge(now, edge, value);
+    return next[edge] === now[edge] ? [] : ops(next);
+  };
   const shown = crop ?? NO_CROP;
   const names: Record<Edge, [string, string]> = {
     left: [
@@ -77,34 +88,44 @@ export function CropField({
   return (
     <>
       <Field label={label}>
-        <Button size="sm" aria-expanded={open} aria-label={`${label}: ${state}`} onClick={() => setOpen((o) => !o)}>
-          {state}
-          <Icon name="chev-down" />
-        </Button>
-      </Field>
-      {open &&
-        EDGES.map((edge) => (
-          <Field key={edge} label={names[edge][0]}>
-            <ToolSlider
-              label={names[edge][1]}
-              commitLabel="crop.undo"
-              value={shown[edge]}
-              min={0}
-              max={room(shown, edge)}
-              step={0.01}
-              format={percent}
-              ops={(value) => ops(withEdge(latest() ?? NO_CROP, edge, value))}
-            />
-          </Field>
-        ))}
-      {open && cropped && (
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => void commitLatest('crop.reset.undo', () => ops(NO_CROP))}
+        <button
+          type="button"
+          className="select crop-toggle"
+          aria-expanded={open}
+          aria-controls={edges}
+          aria-label={`${label}: ${state}`}
+          onClick={() => setOpen((o) => !o)}
         >
-          {t({ id: 'crop.reset', message: 'Reset crop' })}
-        </Button>
+          <span className="select-text">{state}</span>
+          <Icon name="chev-down" />
+        </button>
+      </Field>
+      {open && (
+        <div id={edges} className="field field-col" role="group" aria-label={label}>
+          {EDGES.map((edge) => (
+            <Field key={edge} label={names[edge][0]}>
+              <ToolSlider
+                label={names[edge][1]}
+                commitLabel="crop.undo"
+                value={shown[edge]}
+                min={0}
+                max={MAX_EDGE}
+                step={0.01}
+                format={percent}
+                ops={(value) => edgeOps(edge, value)}
+              />
+            </Field>
+          ))}
+          {cropped && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => void commitLatest('crop.reset.undo', () => ops(NO_CROP))}
+            >
+              {t({ id: 'crop.reset', message: 'Reset crop' })}
+            </Button>
+          )}
+        </div>
       )}
     </>
   );

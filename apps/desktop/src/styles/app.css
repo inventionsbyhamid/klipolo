@@ -2741,6 +2741,15 @@
   }
 }
 
+/* The Crop row opens its edges' sliders: its chevron turns while they show. */
+.crop-toggle .ico {
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.crop-toggle[aria-expanded="true"] .ico {
+  transform: rotate(180deg);
+}
+
 .field-note {
   margin: 0;
   color: var(--color-ink-soft);
