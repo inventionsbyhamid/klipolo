@@ -2,7 +2,7 @@ import { t } from '@lingui/core/macro';
 import type { ReversedCopy } from '../../../bindings/ReversedCopy';
 import { isCode } from '../../../bridge/call';
 import { reverser } from '../../../bridge/reverse';
-import { clipReverseState, findClip } from '../../../lib/timeline';
+import { assetById, clipReverseState, findClip } from '../../../lib/timeline';
 import { keyBurst } from '../../../state/keyBurst';
 import { useProject } from '../../../state/project';
 import { useReversing } from '../../../state/reversing';
@@ -96,6 +96,17 @@ async function makeBackward(asked: Asked, label: string) {
         return;
       }
       const said = t({ id: 'timeline.key.reversed', message: `${label} plays backward` });
+      // A clip with sound whose copy has none (too long, or its sound unreadable) is told so once it is in.
+      const project = editable();
+      const silent = !copy.asset.hasAudio && !!project && !!assetById(project, asked.source)?.hasAudio;
+      const tell = () =>
+        toast.info(
+          t({
+            id: 'timeline.reverse.silent',
+            message: `${label} plays backward without sound, because its sound couldn't be reversed.`,
+            comment: "A clip written backward whose sound couldn't be; {label} is the clip's name",
+          }),
+        );
       commit(
         'undo.reverse',
         [
@@ -103,7 +114,7 @@ async function makeBackward(asked: Asked, label: string) {
           { type: 'reverseClip', clipId, copy: { assetId: copy.asset.id, fromUs: copy.fromUs, toUs: copy.toUs } },
         ],
         said,
-        undefined,
+        silent ? tell : undefined,
         discard,
       );
     });

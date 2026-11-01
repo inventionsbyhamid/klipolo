@@ -88,6 +88,7 @@ beforeEach(() => {
   usePlayback.setState({ playheadUs: 25 * S, playing: false });
   useUi.setState({ timelineExpanded: false, pxPerSecond: 40, snapping: true });
   useReversing.setState({ jobs: [] });
+  useToasts.setState({ toasts: [] });
   vi.mocked(bridge.apply).mockReset().mockResolvedValue({ ...fixturePatch(reversed(4)), baseRevision: 3 });
   vi.mocked(reverser.make).mockReset();
   vi.mocked(reverser.stop).mockClear();
@@ -248,6 +249,23 @@ describe('Reverse', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Stop reversing' }));
     expect(reverser.stop).toHaveBeenCalledWith('b');
     expect(reverser.stop).toHaveBeenCalledWith('c');
+  });
+
+  it('says so when a clip with sound comes back silent, and only then', async () => {
+    const finish = await startReverse();
+    await finish({ asset: { ...copyAsset, hasAudio: false }, fromUs: 0, toUs: 10 * S });
+    await frames();
+    expect(bridge.apply).toHaveBeenCalled();
+    const silent = "broll.mp4 plays backward without sound, because its sound couldn't be reversed.";
+    expect(useToasts.getState().toasts.map((m) => m.text)).toContain(silent);
+  });
+
+  it('says nothing more when the copy has its sound', async () => {
+    const finish = await startReverse();
+    await finish({ asset: copyAsset, fromUs: 0, toUs: 10 * S });
+    await frames();
+    expect(bridge.apply).toHaveBeenCalled();
+    expect(useToasts.getState().toasts.map((m) => m.text).join(' ')).not.toMatch(/without sound/);
   });
 
   it('throws away a copy the model refuses', async () => {
