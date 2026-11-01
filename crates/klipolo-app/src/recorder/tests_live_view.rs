@@ -60,13 +60,12 @@ fn a_new_size_goes_to_the_running_picture_and_never_opens_another() {
     // The window got narrower: its worker is told once, and the same size again says nothing.
     p.set(live_in(screen(), 1200, 676)).unwrap();
     p.set(live_in(screen(), 1200, 676)).unwrap();
-    let narrower = Command::ViewSize {
-        view: Some(pixels(1200, 676)),
-    };
-    assert_eq!(p.told(view), [narrower.clone()]);
+    let narrower = Some(pixels(1200, 676));
+    assert_eq!(p.told(view), [Command::ViewSize { view: narrower }]);
     // No size any more: the small picture.
     p.set(live(screen())).unwrap();
-    assert_eq!(p.told(view), [narrower, Command::ViewSize { view: None }]);
+    let small = Command::ViewSize { view: None };
+    assert_eq!(p.told(view), [Command::ViewSize { view: narrower }, small]);
     p.advance_ms(500);
     assert_eq!(p.launch.spawned(), 1, "never another worker");
     // Its frames still reach the page.
