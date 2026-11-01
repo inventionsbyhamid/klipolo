@@ -421,7 +421,11 @@ fn run(args: &Args) -> Result<bool, String> {
             refs: ctx.refs.clone(),
             speech: fx.speech.clone(),
             scenes: fx.scenes.clone(),
-            analysis: HashMap::from([(fx.asset.clone(), AnalysisState::Done)]),
+            // Every file counts as analyzed, as a project's would be by the time it is edited.
+            analysis: (project.assets.iter())
+                .map(|a| (a.id.clone(), AnalysisState::Done))
+                .chain([(fx.asset.clone(), AnalysisState::Done)])
+                .collect(),
             time_again: HashSet::new(),
             cursor: (!set.clicks.is_empty())
                 .then(|| Arc::new(Clicks::of(&set.clicks)) as Arc<dyn CursorTakes>),
