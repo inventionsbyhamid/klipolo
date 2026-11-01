@@ -11,7 +11,10 @@
 //! per blur; removals are proposals; media by name from the library, "the song", background music from the start, topic
 //! changes, Muse Image drawing a new picture, a title only in the person's words; a recording by its name and its
 //! clips' camera and sounds, and zooms on their clicks; a short planned whole in one answer from one request, as a
-//! short recipe the model adapts to what was asked, never a fixed macro; `cannotDo` when nothing fits); and how to
+//! short recipe the model adapts to what was asked, never a fixed macro; the layer refs and `last`; when a preset is
+//! enough (`animate`) and when to compose keys, words by unit, a card's fields or an effect; the catalogues those tools
+//! name, kept out of their schemas: the motion presets, the effects with their settings and a clip's looks (a test holds
+//! them to `Catalog::builtin`), the bundled fonts; that volume has no keys; `cannotDo` when nothing fits); and how to
 //! reply (one or two short plain sentences, no markdown, no em or en dashes).
 //! What a tool's own schema says (a null time is the playhead, or the start for music, a title is the person's words, a
 //! plain title goes over the video with addText and only a title card asked for has Muse Image draw its background)
@@ -71,6 +74,18 @@ in the first 2 s of what you keep, in their words or a striking later line said 
 2 to 4 medium pack stickers with addImage at a top corner, each followed by animate last with a pop or bounce and a \
 sound; quiet addMusic under the speech; \
 setTransition only at cuts already there. Place every layer inside the parts you keep.\n\
+- Layers lists words (t1), pictures (i1), video layers (v1) and music (m1). last is the layer the call before added.\n\
+- animate is the quick way for a common move. For anything specific, compose it: setMotion keys (x 1 is a frame's \
+width right, y 1 its height down, scale 1 the layer's size), animateText for words by letter, word or line, setLayer \
+and styleText for a card's fields, setEffects for an effect.\n\
+- Presets: enter or exit fade, slide (left, right, top, bottom), pop, zoom, drop, bounce, blur, typewriter (words); \
+loop float, pulse, shake, wiggle, spin, with a strength from 0 to 2.\n\
+- Effects: blur (radius), pixelate (size), vignette (amount, softness), glow (radius, color, strength), drop-shadow \
+(distance, angle, softness, color), sparkle (spacing, size, speed, amount, color), mask (shape: circle, rounded, \
+square, frame; center \"x,y\", cornerRadius, feather, borderWidth, borderColor). Clips also take a look: warm, cool, \
+mono, vintage, vivid, cinema, romcom (strength 0 to 1).\n\
+- Fonts: Inter, Anton, Bangers, Bebas Neue, Montserrat, TikTok Sans, or any Google font by name.\n\
+- Volume has no keys: to lower music while someone talks, setLayer duck; fades are fadeIn and fadeOut.\n\
 - If no tool can do it, call cannotDo with the reason. A question about the project needs no tool: just answer it.\n\
 \n\
 Reply in one or two short, plain, friendly sentences. No markdown. Never use em dashes or en dashes.";
