@@ -61,6 +61,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.video_frames = proxy.VideoFrames()
     # SAM's copies are made at most two at once.
     app.state.sam_videos = anyio.CapacityLimiter(2)
+    # The devices with a SAM upload under way: one each at a time.
+    app.state.sam_uploading = set()
     app.state.aligner = align.MmsAligner(settings.align_threads)
     app.state.align_in_flight = proxy.InFlight(
         per_device=align.MAX_REQUESTS_PER_DEVICE,

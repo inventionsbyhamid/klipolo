@@ -68,6 +68,7 @@ import json
 import logging
 import math
 import re
+import shutil
 import sqlite3
 import tempfile
 import time
@@ -176,6 +177,16 @@ SAM_OFF_MESSAGE = "Video tracking is off for this access code. Add your own Meta
 SAM_VIDEO_MESSAGE = "Video tracking works on a video Klipolo's relay prepared for this device. Prepare it again."
 # How long making SAM's copy of an upload may take, in all.
 SAM_VIDEO_TIMEOUT_S = 60.0
+# A video sent for SAM: at most this big (the app's ten-minute copy is about 22 MB), one a device at a time, and a
+# short wait for one of the two encode places before the relay says it is busy.
+SAM_UPLOAD_BYTES = 64 * 1024 * 1024
+SAM_PLACE_WAIT_S = 10.0
+SAM_TOO_BIG_MESSAGE = "A video for tracking can be at most 64 MB. Pick a shorter part."
+SAM_ONE_AT_A_TIME_MESSAGE = "A video is already being prepared for this device. Wait for it to finish."
+SAM_BUSY_MESSAGE = "Klipolo's server is preparing other videos. Try again in a moment."
+SAM_NO_SPACE_MESSAGE = "Klipolo's server is short of space for video right now. Try again in a few minutes."
+# Room a SAM upload needs in its folder: the upload and the relay's copy, with some to spare.
+SAM_ROOM_BYTES = 3 * SAM_UPLOAD_BYTES
 # Meta may bill a frame or two more than the copy holds; past this share over the reservation, SAM is turned off.
 SAM_OVERBILL_MARGIN = 1.02
 DEVICE_BUSY_MESSAGE = "Other AI requests from this device are still running. Try again when they finish."
@@ -525,10 +536,11 @@ async def charge(settings: Settings, slot: Slot, meter: Meter, candidates: list[
 async def _check_sam_billing(settings: Settings, slot: Slot, meter: Meter, usage: Mapping[str, Any]) -> None:
     """The breaker: Meta billing more frames than were reserved means the relay's
     count was wrong somewhere, so SAM goes off for the device's access code."""
-    if meter.model != SAM_MODEL or not meter.has_video or usage.get("reserved"):
+    if meter.model != SAM_MODEL or usage.get("reserved"):
         return
     billed = usage.get("video_frames_processed")
-    reserved = max(meter.video_frames, SAM_MIN_FRAMES)
+    # A call with no video reserved no frames: any it is billed for trip the breaker.
+    reserved = max(meter.video_frames, SAM_MIN_FRAMES) if meter.has_video else 0
     if not isinstance(billed, int | float) or billed <= reserved * SAM_OVERBILL_MARGIN:
         return
     logger.error(
@@ -616,23 +628,65 @@ async def upload_file(request: Request, device: RelayDevice, conn: Conn, setting
 
 @router.post("/meta/v1/sam/videos")
 async def make_sam_video(request: Request, device: RelayDevice, conn: Conn, settings: AppSettings) -> Response:
-    """An upload meant for SAM, as the raw video: decoded and written again by
-    the relay (`samvideo`), uploaded to Meta, and its frames kept for a SAM call
-    on it by this device. Meta's answer (with the file id) is passed back."""
+    """An upload meant for SAM, as the raw video (at most `SAM_UPLOAD_BYTES`, one a
+    device at a time): decoded and written again by the relay (`samvideo`) in a
+    folder of its own, uploaded to Meta, and its frames kept for a SAM call on it
+    by this device. Meta's answer (with the file id) is passed back."""
     _check_model("responses", SAM_MODEL, settings)
     await run_in_threadpool(_check_sam_on, conn, device)
+    if await run_in_threadpool(_sam_today, conn) >= settings.sam_daily_cap_usd:
+        raise RelayError(402, "budget", SAM_TODAY_MESSAGE)
     device_id = device["device_id"]
+    uploading: set[str] = request.app.state.sam_uploading
+    if device_id in uploading:
+        raise RelayError(429, "busy", SAM_ONE_AT_A_TIME_MESSAGE, headers={"Retry-After": "5"})
+    uploading.add(device_id)
+    try:
+        return await _sam_video(request, device, conn, settings)
+    finally:
+        uploading.discard(device_id)
+
+
+def sam_work_dir(settings: Settings) -> Path:
+    """Where SAM's uploads and copies are made: a folder of its own, never word timing's `/tmp`."""
+    return settings.sam_work_dir
+
+
+async def _sam_video(request: Request, device: sqlite3.Row, conn: sqlite3.Connection, settings: Settings) -> Response:
     known: VideoFrames = request.app.state.video_frames
-    with tempfile.TemporaryDirectory(prefix="klipolo-sam-") as work:
+    device_id = device["device_id"]
+    root = sam_work_dir(settings)
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        room = shutil.disk_usage(root).free
+    except OSError:
+        raise RelayError(503, "no_space", SAM_NO_SPACE_MESSAGE) from None
+    if room < SAM_ROOM_BYTES:
+        raise RelayError(503, "no_space", SAM_NO_SPACE_MESSAGE)
+    with tempfile.TemporaryDirectory(prefix="sam-", dir=root) as work:
         src, out = Path(work) / "upload", Path(work) / "sam.mp4"
 
         async def prepare() -> Call:
-            _declared_length(request, MAX_UPLOAD_BYTES, "The file is larger than 1 GiB.")
-            async with await anyio.open_file(src, "wb") as file:
-                async for chunk in _limited_stream(request, MAX_UPLOAD_BYTES):
-                    await file.write(chunk)
-            async with request.app.state.sam_videos:
+            _declared_length(request, SAM_UPLOAD_BYTES, SAM_TOO_BIG_MESSAGE)
+            try:
+                async with await anyio.open_file(src, "wb") as file:
+                    async for chunk in _limited_stream(request, SAM_UPLOAD_BYTES, SAM_TOO_BIG_MESSAGE):
+                        await file.write(chunk)
+            except OSError:
+                raise RelayError(503, "no_space", SAM_NO_SPACE_MESSAGE) from None
+            place = request.app.state.sam_videos
+            entered = False
+            with anyio.move_on_after(SAM_PLACE_WAIT_S):
+                await place.__aenter__()
+                entered = True
+            if not entered:
+                raise RelayError(429, "busy", SAM_BUSY_MESSAGE, headers={"Retry-After": "10"})
+            try:
                 frames = await samvideo.make(src, out, SAM_VIDEO_TIMEOUT_S)
+            except OSError:
+                raise RelayError(503, "no_space", SAM_NO_SPACE_MESSAGE) from None
+            finally:
+                await place.__aexit__(None, None, None)
             data = await anyio.Path(out).read_bytes()
 
             def remember(body: bytes) -> None:
@@ -1197,9 +1251,11 @@ async def _read_body(request: Request, limit: int, too_large: str) -> bytes:
     return bytes(body)
 
 
-async def _limited_stream(request: Request, limit: int) -> AsyncIterator[bytes]:
-    """The upload body as it arrives, cut off with 413 past `limit` or with
-    408 past UPLOAD_DEADLINE_S."""
+async def _limited_stream(
+    request: Request, limit: int, too_large: str = "The file is larger than 1 GiB."
+) -> AsyncIterator[bytes]:
+    """The upload body as it arrives, cut off with 413 (`too_large`) past `limit`
+    or with 408 past UPLOAD_DEADLINE_S."""
     deadline = anyio.current_time() + UPLOAD_DEADLINE_S
     chunks = request.stream().__aiter__()
     size = 0
@@ -1214,7 +1270,7 @@ async def _limited_stream(request: Request, limit: int) -> AsyncIterator[bytes]:
             raise _too_slow() from None
         size += len(chunk)
         if size > limit:
-            raise RelayError(413, "too_large", "The file is larger than 1 GiB.")
+            raise RelayError(413, "too_large", too_large)
         yield chunk
 
 
@@ -1259,6 +1315,8 @@ class VideoFrames:
 
 
 _VIDEO_PARTS = ("input_video", "input_file")
+# The only typed items and parts a SAM request may hold.
+_SAM_TYPES = frozenset({"message", "input_text", "input_image", "input_video"})
 
 
 def _sam_frames(known: VideoFrames, device_id: str, payload: dict[str, Any]) -> int:
@@ -1278,8 +1336,12 @@ def _sam_frames(known: VideoFrames, device_id: str, payload: dict[str, Any]) -> 
     for item in _objects(payload):
         if "fps" in item:
             raise refuse("Video tracking sets its own frame rate: leave out fps.")
+        kind = item.get("type")
+        if kind is not None and kind not in _SAM_TYPES:
+            raise refuse("Video tracking takes only text, pictures and the video the relay prepared.")
         for key, value in item.items():
-            if (key == "url" or key.endswith("_url")) and not (isinstance(value, str) and value.startswith("data:")):
+            picture = isinstance(value, str) and value.startswith("data:image/")
+            if (key == "url" or key.endswith("_url")) and not picture:
                 raise refuse("Video tracking takes no links: send the picture itself.")
         if _type(item) in _VIDEO_PARTS:
             file_id = item.get("file_id")
