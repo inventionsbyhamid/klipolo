@@ -635,7 +635,12 @@ impl Speaker {
                 None => Vec::new(),
             };
             let windows = windows_of(p, targets, &file, &own, &turns);
-            usd += voices::uncached_usd(&**matcher, dir.as_ref(), &windows);
+            let matcher = matcher.clone();
+            usd += tokio::task::spawn_blocking(move || {
+                voices::uncached_usd(&*matcher, dir.as_ref(), &windows)
+            })
+            .await
+            .unwrap_or_default();
         }
         usd
     }
