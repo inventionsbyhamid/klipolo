@@ -8,6 +8,7 @@ use klipolo_analysis::subject::clips::{
     clip_path, cropped_formats, follow_op, followable_formats, footage,
 };
 use klipolo_analysis::subject::{FPS, PERSON, SubjectTrack};
+use klipolo_model::crop::Crop;
 use klipolo_model::fill_focus::{FillFocus, FocusKey, FocusPath};
 use klipolo_model::ops::{ClipPatch, Op};
 use klipolo_model::project::FormatKind::{Landscape, Portrait, Square};
@@ -314,6 +315,38 @@ fn a_clip_covered_by_two_tracked_stretches_reads_both() {
     .unwrap();
     assert!((path.centre_at(s(31.0)).unwrap().0 - 0.3).abs() < 0.02);
     assert!(path.centre_at(s(39.5)).unwrap().0 > 0.4, "{path:?}");
+}
+
+#[test]
+fn a_cropped_clips_path_sizes_its_crop_in_the_whole_file() {
+    let mut p = project();
+    // The left half cut off: Fill in 9:16 shows the same share of the file's width as uncropped, not of what is left.
+    p.timeline.main[0].crop = Some(Crop {
+        left: 0.5,
+        top: 0.0,
+        right: 0.0,
+        bottom: 0.0,
+    });
+    let clip = &p.timeline.main[0];
+    let near_edge = track(
+        RangeUs {
+            start: s(30.0),
+            end: s(40.0),
+        },
+        0.8,
+    );
+    let path = clip_path(
+        &p,
+        clip,
+        Portrait,
+        &footage(&p, clip).unwrap(),
+        &[near_edge],
+    )
+    .unwrap();
+    assert!(
+        (path.centre_at(s(35.0)).unwrap().0 - 0.8).abs() < 0.02,
+        "{path:?}"
+    );
 }
 
 #[test]
