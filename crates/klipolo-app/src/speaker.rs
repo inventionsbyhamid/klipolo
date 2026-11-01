@@ -17,7 +17,9 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use klipolo_analysis::cache::{Dir, content_key};
 use klipolo_analysis::providers::{BoxFuture, SubjectTracker};
-use klipolo_analysis::subject::clips::{Footage, clip_path, cropped_formats, follow_op, footage};
+use klipolo_analysis::subject::clips::{
+    Footage, clip_path, follow_op, followable_formats, footage,
+};
 use klipolo_analysis::subject::{self, Ask, FPS, SubjectCopy, SubjectTrack};
 use klipolo_model::fill_focus::FocusPath;
 use klipolo_model::ids::Id;
@@ -28,7 +30,7 @@ use serde::Serialize;
 use ts_rs::TS;
 
 use crate::analysis::NEEDS_KEY;
-use crate::credentials::{AiMode, Credentials};
+use crate::credentials::{AiMode, CODE_INACTIVE, Credentials};
 
 /// The event a follow's progress goes out on.
 pub const PROGRESS_EVENT: &str = "speaker://progress";
@@ -91,6 +93,11 @@ pub trait Trackers: Send + Sync {
 
     /// With an access code: the credit left, when Klipolo's relay says. None with a key.
     fn credit_left(&self) -> BoxFuture<'_, Option<f64>>;
+
+    /// `credit_left`, or why nothing can be paid for now (an access code that was turned off), in one sentence.
+    fn credit(&self) -> BoxFuture<'_, Result<Option<f64>, String>> {
+        Box::pin(async move { Ok(self.credit_left().await) })
+    }
 }
 
 /// SAM through the app's shared Meta adapter (the person's key, or an access code through the relay).
@@ -117,13 +124,23 @@ impl Trackers for MetaTrackers {
     }
 
     fn credit_left(&self) -> BoxFuture<'_, Option<f64>> {
+        Box::pin(async move { self.credit().await.ok().flatten() })
+    }
+
+    fn credit(&self) -> BoxFuture<'_, Result<Option<f64>, String>> {
         Box::pin(async move {
             let status = self.credentials.status().await;
             if status.mode != AiMode::Relay {
-                return None;
+                return Ok(None);
             }
-            let (budget, spent) = (status.budget_usd?, status.spent_usd?);
-            Some((budget - spent).max(0.0))
+            if status.active == Some(false) {
+                return Err(status
+                    .notice
+                    .clone()
+                    .unwrap_or_else(|| CODE_INACTIVE.to_owned()));
+            }
+            Ok((status.budget_usd.zip(status.spent_usd))
+                .map(|(budget, spent)| (budget - spent).max(0.0)))
         })
     }
 }
@@ -138,6 +155,8 @@ pub struct Speaker {
     work_root: PathBuf,
     progress: Arc<dyn Fn(SpeakerProgress) + Send + Sync>,
     spent: Mutex<f64>,
+    /// One follow at a time: a second one then finds what the first tracked in the cache, and pays nothing for it.
+    running: tokio::sync::Mutex<()>,
 }
 
 /// A clip that can follow, and where.
@@ -168,6 +187,7 @@ impl Speaker {
             work_root,
             progress,
             spent: Mutex::new(0.0),
+            running: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -214,9 +234,7 @@ impl Speaker {
             }
         };
         let to_send = self.uncached(&*tracker, &targets, phrase).await;
-        estimate.usd = (to_send.iter())
-            .map(|s| tracker.estimate_usd(subject::frames_for(s.range.end - s.range.start, FPS)))
-            .sum();
+        estimate.usd = price(&*tracker, &to_send);
         estimate.cached = to_send.is_empty() && !targets.is_empty();
         estimate.refusal = self.over_credit(estimate.usd).await;
         estimate
@@ -233,12 +251,10 @@ impl Speaker {
     ) -> Result<Followed, String> {
         let targets = targets(p, clip_ids, formats);
         let tracker = self.trackers.tracker().await?;
+        let _one_at_a_time = self.running.lock().await;
         let stretches = stretches(&targets, tracker.max_frames());
         let to_send = self.uncached(&*tracker, &targets, phrase).await;
-        let usd: f64 = (to_send.iter())
-            .map(|s| tracker.estimate_usd(subject::frames_for(s.range.end - s.range.start, FPS)))
-            .sum();
-        if let Some(refusal) = self.over_credit(usd).await {
+        if let Some(refusal) = self.over_credit(price(&*tracker, &to_send)).await {
             return Err(refusal);
         }
         let ids: Vec<String> = targets.iter().map(|t| t.id.clone()).collect();
@@ -249,7 +265,8 @@ impl Speaker {
             })
         };
         tell(0);
-        let mut tracks: Vec<SubjectTrack> = Vec::new();
+        // Each file's tracked stretches: a clip reads only its own file's.
+        let mut tracks: BTreeMap<String, Vec<SubjectTrack>> = BTreeMap::new();
         let mut paid = 0.0;
         for (i, stretch) in stretches.iter().enumerate() {
             let src = PathBuf::from(&stretch.path);
@@ -268,7 +285,7 @@ impl Speaker {
                 Ok(tracked) => {
                     paid += tracked.paid_usd;
                     self.count(tracked.paid_usd);
-                    tracks.push(tracked.track);
+                    (tracks.entry(stretch.path.clone()).or_default()).extend(tracked.tracks);
                 }
                 Err(e) => {
                     tell(100);
@@ -285,15 +302,11 @@ impl Speaker {
             let Some(clip) = p.timeline.main.iter().find(|c| c.id == target.id) else {
                 continue;
             };
-            let track = (tracks.iter()).find(|t| {
-                t.range.start <= target.footage.range.start
-                    && target.footage.range.end <= t.range.end
-            });
+            let own = tracks
+                .get(&target.footage.path)
+                .map_or(&[][..], Vec::as_slice);
             let paths: BTreeMap<FormatKind, FocusPath> = (target.formats.iter())
-                .filter_map(|f| {
-                    let path = clip_path(p, clip, *f, &target.footage, track?)?;
-                    Some((*f, path))
-                })
+                .filter_map(|f| Some((*f, clip_path(p, clip, *f, &target.footage, own)?)))
                 .collect();
             if paths.is_empty() {
                 followed.not_found.push(target.id.clone());
@@ -305,28 +318,27 @@ impl Speaker {
         Ok(followed)
     }
 
-    /// The stretches of `targets` the cache doesn't hold yet.
+    /// The parts of `targets`' stretches the cache doesn't hold yet: what a follow sends.
     async fn uncached(
         &self,
         tracker: &dyn SubjectTracker,
         targets: &[Target],
         phrase: &str,
-    ) -> Vec<Stretch> {
+    ) -> Vec<RangeUs> {
         let mut out = Vec::new();
         for stretch in stretches(targets, tracker.max_frames()) {
             let dir = cache_dir(&self.cache_root, &PathBuf::from(&stretch.path)).await;
-            let (range, phrase_owned) = (stretch.range, phrase.to_owned());
-            let held = match dir {
+            let (range, model, phrase) =
+                (stretch.range, tracker.model().to_owned(), phrase.to_owned());
+            let missing = match dir {
                 Some(dir) => tokio::task::spawn_blocking(move || {
-                    subject::cached(&dir, &phrase_owned, FPS, range).is_some()
+                    subject::cover(&dir, &model, &phrase, FPS, range).missing
                 })
                 .await
-                .unwrap_or(false),
-                None => false,
+                .unwrap_or_else(|_| vec![range]),
+                None => vec![range],
             };
-            if !held {
-                out.push(stretch);
-            }
+            out.extend(missing);
         }
         out
     }
@@ -336,7 +348,10 @@ impl Speaker {
         if usd <= 0.0 {
             return None;
         }
-        let left = self.trackers.credit_left().await?;
+        let left = match self.trackers.credit().await {
+            Ok(left) => left?,
+            Err(turned_off) => return Some(turned_off),
+        };
         (usd > left).then(|| {
             format!(
                 "Your access code has ${left:.2} left, and following the speaker needs {}. Add your own Meta key in \
@@ -349,6 +364,13 @@ impl Speaker {
     fn count(&self, usd: f64) {
         *self.spent.lock().unwrap_or_else(PoisonError::into_inner) += usd.max(0.0);
     }
+}
+
+/// What sending `parts` costs at `tracker`'s price: each its own request.
+fn price(tracker: &dyn SubjectTracker, parts: &[RangeUs]) -> f64 {
+    (parts.iter())
+        .map(|r| tracker.estimate_usd(subject::frames_for(r.end - r.start, FPS)))
+        .sum()
 }
 
 /// "about $0.02", or "less than $0.01".
@@ -366,7 +388,8 @@ fn targets(p: &Project, clip_ids: &[Id], formats: &[FormatKind]) -> Vec<Target> 
         .filter_map(|id| {
             let clip = p.timeline.main.iter().find(|c| &c.id == id)?;
             let footage = footage(p, clip)?;
-            let formats = cropped_formats(p, clip, formats);
+            // Only where it is on Fill: a format the person set to Fit stays as it is.
+            let formats = followable_formats(p, clip, formats);
             (!formats.is_empty()).then(|| Target {
                 id: id.clone(),
                 footage,

@@ -23,7 +23,7 @@ fn s(seconds: f64) -> Us {
     (seconds * 1e6) as Us
 }
 
-/// Sees one person at `x` on every frame (none when `x` is None), counting its calls.
+/// Sees one person at `x` on every frame (none when `x` is None), or at 0.7 in a copy of "b.mp4", counting its calls.
 struct FakeSam {
     x: Option<f64>,
     calls: AtomicUsize,
@@ -49,12 +49,19 @@ impl SubjectTracker for FakeSam {
     ) -> BoxFuture<'a, Result<Tracking, ProviderError>> {
         Box::pin(async move {
             self.calls.fetch_add(1, Ordering::SeqCst);
-            let frames: u32 = std::fs::read_to_string(video).unwrap().parse().unwrap();
+            let copy = std::fs::read_to_string(video).unwrap();
+            let (frames, src) = copy.split_once(' ').unwrap();
+            let frames: u32 = frames.parse().unwrap();
+            let x = if src.ends_with("b.mp4") {
+                Some(0.7)
+            } else {
+                self.x
+            };
             Ok(Tracking {
                 frames: (0..frames)
                     .map(|frame| TrackedFrame {
                         frame,
-                        boxes: (self.x.iter())
+                        boxes: (x.iter())
                             .map(|x| TrackedBox {
                                 id: 1,
                                 left: x - 0.1,
@@ -68,6 +75,7 @@ impl SubjectTracker for FakeSam {
                     .collect(),
                 frames_billed: u64::from(frames),
                 cost_usd: f64::from(frames.max(50)) * 0.0002,
+                cut_off: false,
             })
         })
     }
@@ -93,7 +101,7 @@ impl Trackers for FakeTrackers {
     }
 }
 
-/// Writes its frame count as the copy.
+/// Writes its frame count and its source as the copy.
 #[derive(Default)]
 struct FakeCopy {
     made: Mutex<Vec<RangeUs>>,
@@ -102,14 +110,15 @@ struct FakeCopy {
 impl SubjectCopy for FakeCopy {
     fn copy(
         &self,
-        _src: &Path,
+        src: &Path,
         range: RangeUs,
         fps: f64,
         out: &Path,
         _cancel: &AtomicBool,
     ) -> Result<Vec<Us>, VideoError> {
         self.made.lock().unwrap().push(range);
-        std::fs::write(out, frames_for(range.end - range.start, fps).to_string()).unwrap();
+        let frames = frames_for(range.end - range.start, fps);
+        std::fs::write(out, format!("{frames} {}", src.display())).unwrap();
         Ok(vec![])
     }
 }
@@ -329,4 +338,62 @@ async fn only_clips_that_can_follow_are_priced() {
         .estimate(&setup.project, &ids, &[Portrait], "person")
         .await;
     assert_eq!(estimate.clips, ["c1"]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn each_clip_follows_the_speaker_of_its_own_file() {
+    // Two files whose clips play overlapping stretches of each: the talk's 60 to 120 s, and "b.mp4"'s 60 to 90 s.
+    let mut setup = setup(Some(0.3));
+    let file = setup._dir.path().join("b.mp4");
+    std::fs::write(&file, b"another video's bytes").unwrap();
+    let mut other = setup.project.assets[0].clone();
+    other.id = "other".into();
+    other.path = file.to_string_lossy().into_owned();
+    setup.project.assets.push(other);
+    let mut clip = Clip::new(ClipSource::Asset { id: "other".into() }, s(60.0), s(90.0));
+    clip.id = "c2".into();
+    setup.project.timeline.main.push(clip);
+    let speaker = speaker(&setup, None, true);
+    let p = &setup.project;
+    let ids = vec!["c1".to_owned(), "c2".to_owned()];
+    let followed = speaker
+        .follow(p, &ids, &[Portrait], "person")
+        .await
+        .unwrap();
+    let next = apply_ops(p, &followed.ops(p)).unwrap();
+    let x = |i: usize, at: f64| match next.timeline.main[i].fill_focus.get(&Portrait) {
+        Some(FillFocus::Speaker { path }) => path.centre_at(s(at)).unwrap().0,
+        other => panic!("{other:?}"),
+    };
+    assert!((x(0, 80.0) - 0.3).abs() < 0.02, "{}", x(0, 80.0));
+    assert!((x(1, 80.0) - 0.7).abs() < 0.02, "{}", x(1, 80.0));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_format_on_fit_is_left_alone() {
+    let mut setup = setup(Some(0.3));
+    setup.project.settings.formats = vec![Landscape, Portrait, Square];
+    let fit = klipolo_model::timeline::Framing {
+        mode: FramingMode::Fit,
+        focus_x: 0.5,
+        focus_y: 0.5,
+        follow: None,
+    };
+    setup.project.timeline.main[0].framing.insert(Square, fit);
+    let speaker = speaker(&setup, None, true);
+    let p = &setup.project;
+    let followed = speaker
+        .follow(
+            p,
+            &["c1".to_owned()],
+            &[Landscape, Portrait, Square],
+            "person",
+        )
+        .await
+        .unwrap();
+    let next = apply_ops(p, &followed.ops(p)).unwrap();
+    let clip = &next.timeline.main[0];
+    assert!(clip.fill_focus.contains_key(&Portrait));
+    assert!(!clip.fill_focus.contains_key(&Square));
+    assert_eq!(clip.framing[&Square].mode, FramingMode::Fit);
 }

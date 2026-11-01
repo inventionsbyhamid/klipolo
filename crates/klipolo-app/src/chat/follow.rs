@@ -11,7 +11,7 @@
 //! Without a follower (tests that don't give one), `followSubject` is said to be coming, as before.
 
 use klipolo_analysis::subject::PERSON;
-use klipolo_analysis::subject::clips::cropped_formats;
+use klipolo_analysis::subject::clips::followable_formats;
 use klipolo_chat::{Job, PlanOut};
 use klipolo_model::apply_ops;
 use klipolo_model::coded::ErrorParam;
@@ -201,7 +201,7 @@ fn attach(out: &mut PlanOut, work: &Project, ops: Vec<Op>, phrase: &str) -> bool
 /// "vertical version", "vertical and square versions": the formats of `formats` that crop some clip of `p`.
 fn versions(p: &Project, formats: &[FormatKind]) -> String {
     let cropped: Vec<&str> = (formats.iter())
-        .filter(|f| (p.timeline.main.iter()).any(|c| !cropped_formats(p, c, &[**f]).is_empty()))
+        .filter(|f| (p.timeline.main.iter()).any(|c| !followable_formats(p, c, &[**f]).is_empty()))
         .map(|f| match f {
             FormatKind::Portrait => "vertical",
             FormatKind::Square => "square",
