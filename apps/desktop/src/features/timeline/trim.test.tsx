@@ -95,7 +95,7 @@ describe('trimming and splitting', () => {
     audio.items = [{ ...audio.items[0], id: 'whoosh', startUs: 21 * S, durationUs: 2 * S }];
     useProject.setState({ snapshot, pending: 0 });
     renderWithProviders(<Timeline />);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     const byId = (id: string) => document.querySelector<HTMLElement>(`[data-block-id="${id}"]`)!;
     // −40 px at 40 px/s: a ends at 19 s, and clip b comes 1 s earlier; the free layers stay.
     fireEvent.pointerDown(edge(a, 'end'), { pointerId: 1, button: 0, clientX: 799, clientY: 10 });
