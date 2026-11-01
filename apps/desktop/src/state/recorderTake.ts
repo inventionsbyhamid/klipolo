@@ -23,6 +23,7 @@ export const NO_TAKE = {
   worker: null,
   countdown: null,
   gate: null,
+  systemAlert: false,
   meterDbfs: null,
 } satisfies Partial<RecorderState>;
 
@@ -263,7 +264,7 @@ export function takeSlice(set: Set, get: Get, went: () => void): TakeSlice {
         if (ev.state === 'idle') return end(id, true);
         if (ev.state === 'recording' || ev.state === 'paused') {
           recorded = id;
-          return set({ worker: ev.state, countdown: null, gate: null, meterDbfs: null });
+          return set({ worker: ev.state, countdown: null, gate: null, systemAlert: false, meterDbfs: null });
         }
         return set({ worker: ev.state });
       case 'countdown':
@@ -271,6 +272,9 @@ export function takeSlice(set: Set, get: Get, went: () => void): TakeSlice {
       case 'gate':
         gateFrom = get().countdown;
         return set({ gate: ev.missing.length > 0 ? ev.missing : null });
+      // Held until the worker says it went (its countdown then starts again from the top).
+      case 'systemAlert':
+        return set({ systemAlert: ev.up });
       case 'meter':
         if (ev.source === MIC) set({ meterDbfs: ev.peakDbfs });
         return;

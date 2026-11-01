@@ -16,15 +16,16 @@
 //! call refused in the first answer that the second answer lets go (no new call of its tool for it, counted call by
 //! call, and no question or `cannotDo` instead).
 //!
-//! The reply is the model's text, then Klipolo's own notes on what the edits did (`Compiled::notes` and `waits`: a
-//! speed that shortens a transition, or waits for the person as it leaves one no room), then the sentences of refusals
-//! meant for the person, then what couldn't be done; all of it without em or en dashes (`sanitize::reply`). When a call
-//! was refused for the person beside others that went through, the model's text, written before that refusal, may
-//! claim it: it is left out, and what went through is said plainly instead ("The music is in."). When nothing came of
-//! the answer and a call of it was refused after the model wrote its text (still refused back, or refused for the
-//! person, `cannotDo` aside), that text, which may claim the edit, is left out. With none of these, the reply is
-//! `askUser`'s questions, else a short sentence on what was done (or, for only work handed to a runner, that it is
-//! under way); otherwise the questions are only in `Compiled::questions`.
+//! The reply is the model's text, then Klipolo's own notes on what the edits did or left as they were
+//! (`Compiled::notes` and `waits`: a speed that shortens a transition, or waits for the person as it leaves one no
+//! room, a camera that is its own layer), then the sentences of refusals meant for the person, then what couldn't be
+//! done; all of it without em or en dashes (`sanitize::reply`). When a call was refused for the person beside others
+//! that went through, the model's text, written before that refusal, may claim it: it is left out, and what went
+//! through is said plainly instead ("The music is in."). When nothing came of the answer and a call of it was refused
+//! after the model wrote its text (still refused back, or refused for the person, `cannotDo` aside), that text, which
+//! may claim the edit, is left out. With none of these, the reply is `askUser`'s questions, else a short sentence on
+//! what was done (or, for only work handed to a runner, that it is under way); otherwise the questions are only in
+//! `Compiled::questions`.
 //!
 //! Errors leave the project untouched: nothing is compiled, and each is one plain sentence (`ChatError`). A project
 //! whose context is over budget (`ChatContext::fits`) is refused before any model call.
@@ -522,6 +523,12 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         ToolCall::SetClip { .. } => "The clip is changed.",
         ToolCall::SetTransition { .. } => "The transitions are changed.",
         ToolCall::TrimClip { .. } => "The clip is longer.",
+        ToolCall::SetCameraMode { .. } | ToolCall::AdjustCamera { .. } => "The camera is changed.",
+        ToolCall::DetachCamera { .. } => "The camera is its own layer now.",
+        ToolCall::MuteSource { muted: true, .. } => "The sound is muted.",
+        ToolCall::MuteSource { muted: false, .. } => "The sound is back on.",
+        ToolCall::SetSourceVolume { .. } => "The volume is changed.",
+        ToolCall::SeparateSound { .. } => "The sound is on its own track now.",
         ToolCall::Undo => "Undone.",
         // Shown on their own (moments, questions), or proposed.
         _ => return None,
@@ -580,6 +587,12 @@ fn task(tool: &str) -> &'static str {
         "addImage" => "add the picture",
         "makeSticker" => "make the sticker",
         "makeTitleCard" => "make the title card",
+        "setCameraMode" => "change the camera",
+        "adjustCamera" => "adjust the camera",
+        "detachCamera" => "separate the camera",
+        "muteSource" => "mute the sound",
+        "setSourceVolume" => "change the volume",
+        "separateSound" => "separate the sound",
         "undo" => "undo the last change",
         _ => "do part of this",
     }

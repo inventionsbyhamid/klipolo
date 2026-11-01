@@ -1,0 +1,200 @@
+{
+  "source": "The planner's eval of a recording's camera and sounds, on project_recordings.json: two screen recordings with a camera bubble each, landscape with a portrait version. c1 plays the first 60 s of Recording 1 (screen, camera, mic and the computer's sound), whose mic carries clip A's transcript, speaker turns and scene log from tests/fixtures; c2 plays Recording 2 (screen, camera and mic) for 45 s. Judged as cases.json's cases are. Run it with --cases.",
+  "project": "project_recordings.json",
+  "asset": "rec1-mic",
+  "transcript": "../tests/fixtures/transcript_clip_a.json",
+  "turns": "../tests/fixtures/turns_clip_a.json",
+  "scenes": "../tests/fixtures/scenes_clip_a.json",
+  "cases": [
+    {
+      "id": "hide-camera",
+      "message": "hide my camera",
+      "expect": [
+        {
+          "calls": [
+            {
+              "name": "setCameraMode",
+              "args": {
+                "mode": "hidden",
+                "format": null
+              }
+            }
+          ],
+          "outcome": {
+            "applied": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "split-vertical",
+      "message": "make the camera a split screen in vertical",
+      "expect": [
+        {
+          "calls": [
+            {
+              "name": "setCameraMode",
+              "args": {
+                "mode": "splitBottom",
+                "format": {
+                  "anyOf": [
+                    "portrait",
+                    null
+                  ]
+                }
+              }
+            }
+          ],
+          "outcome": {
+            "applied": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "bubble-top-left",
+      "message": "move my bubble to the top left",
+      "expect": [
+        {
+          "calls": [
+            {
+              "name": "adjustCamera",
+              "args": {
+                "position": "topLeft"
+              }
+            }
+          ],
+          "outcome": {
+            "applied": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "bubble-bigger-square",
+      "message": "make the bubble bigger and square",
+      "expect": [
+        {
+          "calls": [
+            {
+              "name": "adjustCamera",
+              "args": {
+                "sizeStep": "bigger",
+                "shape": "square"
+              }
+            }
+          ],
+          "outcome": {
+            "applied": true
+          }
+        },
+        {
+          "calls": [
+            {
+              "name": "adjustCamera",
+              "args": {
+                "size": "large",
+                "shape": "square"
+              }
+            }
+          ],
+          "outcome": {
+            "applied": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "mute-second-mic",
+      "message": "mute the mic in the second recording",
+      "expect": [
+        {
+          "calls": [
+            {
+              "name": "muteSource",
+              "args": {
+                "source": "mic",
+                "muted": true,
+                "clips": [
+                  "c2"
+                ]
+              }
+            }
+          ],
+          "outcome": {
+            "applied": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "system-down",
+      "message": "turn the system sound down",
+      "expect": [
+        {
+          "calls": [
+            {
+              "name": "setSourceVolume",
+              "args": {
+                "source": "computerSound",
+                "volume": {
+                  "min": 5,
+                  "max": 90
+                }
+              }
+            }
+          ],
+          "outcome": {
+            "applied": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "separate-camera",
+      "message": "separate the camera so I can cut it",
+      "expect": [
+        {
+          "calls": [
+            {
+              "name": "detachCamera"
+            }
+          ],
+          "outcome": {
+            "applied": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "separate-sound",
+      "message": "separate the sound",
+      "note": "the first recording has a mic and the computer's sound: the mic, or a question",
+      "expect": [
+        {
+          "calls": [
+            {
+              "name": "separateSound",
+              "args": {
+                "source": "mic"
+              }
+            }
+          ],
+          "outcome": {
+            "applied": true
+          }
+        },
+        {
+          "calls": [
+            {
+              "name": "askUser"
+            }
+          ],
+          "outcome": {
+            "asked": true
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -19,13 +19,15 @@
 //! sit together; the tests check every schema is strict and every reader reads the fields its schema lists. Splitting
 //! by concern: `schema` (the pieces of a schema, and the words a tool takes), `args` (a call's arguments read field by
 //! field), `error` (why a call couldn't be read), `media` (the media tools and their words), `clips` (the clip and
-//! transition tools and their words), `background` (the background tool and its words).
+//! transition tools and their words), `background` (the background tool and its words), `recorded` (a recording's
+//! camera and recorded sounds, and their words).
 
 mod args;
 pub mod background;
 pub mod clips;
 mod error;
 pub mod media;
+pub mod recorded;
 mod schema;
 
 use std::ops::RangeInclusive;
@@ -34,7 +36,7 @@ use klipolo_model::captions::styles::BuiltinCaptionStyle;
 use klipolo_model::ops::Edge;
 use klipolo_model::project::FormatKind;
 use klipolo_model::time::{RangeUs, Us};
-use klipolo_model::timeline::FramingMode;
+use klipolo_model::timeline::{CameraMode, FramingMode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
@@ -43,6 +45,7 @@ pub use background::BackgroundChoice;
 pub use clips::{ClipRef, TransitionKind};
 pub use error::{Problem, ToolError};
 pub use media::{PictureSize, Position, TextPreset};
+pub use recorded::{BubbleChange, BubbleSize, SizeStep, Sound};
 use schema::{boolean, list, nullable_number, nullable_words, object, seconds, string, words};
 
 /// One tool call as the model made it, whichever provider ran the model: its adapter maps the provider's call into
@@ -169,6 +172,41 @@ pub enum ToolCall {
         at_us: Option<Us>,
         duration_us: Option<Us>,
     },
+    /// Show the cameras of `clips` (refs from the context, not yet resolved; None: every clip with one) as `mode`, in
+    /// `format` alone or in every format.
+    SetCameraMode {
+        clips: Option<Vec<String>>,
+        mode: CameraMode,
+        format: Option<FormatKind>,
+    },
+    /// Move, resize or restyle the camera bubbles of `clips` (None: every clip with one).
+    AdjustCamera {
+        clips: Option<Vec<String>>,
+        change: BubbleChange,
+    },
+    /// Make the cameras of `clips` (None: every clip with one) layers of their own.
+    DetachCamera { clips: Option<Vec<String>> },
+    /// Mute or unmute the recorded `source` (the one `which` names when a recording has several, None: all of them) in
+    /// `clips`, or everywhere when None.
+    MuteSource {
+        source: Sound,
+        muted: bool,
+        which: Option<String>,
+        clips: Option<Vec<String>>,
+    },
+    /// Play the recorded `source` at `volume` (the model's gain: 1 is as recorded, at most 2), as `MuteSource` names it.
+    SetSourceVolume {
+        source: Sound,
+        volume: f64,
+        which: Option<String>,
+        clips: Option<Vec<String>>,
+    },
+    /// Put the recorded `source` of `clips` (None: every clip that plays it) on a track of its own.
+    SeparateSound {
+        source: Sound,
+        which: Option<String>,
+        clips: Option<Vec<String>>,
+    },
     /// Undo the last change.
     Undo,
     /// Ask the person `question` before doing anything more.
@@ -238,6 +276,12 @@ impl ToolCall {
             ToolCall::AddImage { .. } => "addImage",
             ToolCall::MakeSticker { .. } => "makeSticker",
             ToolCall::MakeTitleCard { .. } => "makeTitleCard",
+            ToolCall::SetCameraMode { .. } => "setCameraMode",
+            ToolCall::AdjustCamera { .. } => "adjustCamera",
+            ToolCall::DetachCamera { .. } => "detachCamera",
+            ToolCall::MuteSource { .. } => "muteSource",
+            ToolCall::SetSourceVolume { .. } => "setSourceVolume",
+            ToolCall::SeparateSound { .. } => "separateSound",
             ToolCall::Undo => "undo",
             ToolCall::AskUser { .. } => "askUser",
             ToolCall::CannotDo { .. } => "cannotDo",
@@ -252,8 +296,8 @@ impl ToolCall {
 
     /// Whether the call names a timeline time or a clip ref, which hold only while the main track's clips stay where
     /// the context put them (`context::timeline_key`): a range, a split, a trim, a moment, a clip tool's ref (not
-    /// `all`), or a media tool's start when it gives one (None is the playhead). Every tool is listed, so a new one
-    /// must say.
+    /// `all`), a media tool's start when it gives one (None is the playhead), or a recording tool's clips when it names
+    /// them (None is every clip). Every tool is listed, so a new one must say.
     pub fn names_timeline(&self) -> bool {
         match self {
             ToolCall::CutRange { .. }
@@ -269,6 +313,12 @@ impl ToolCall {
             | ToolCall::AddImage { at_us, .. }
             | ToolCall::MakeSticker { at_us, .. }
             | ToolCall::MakeTitleCard { at_us, .. } => at_us.is_some(),
+            ToolCall::SetCameraMode { clips, .. }
+            | ToolCall::AdjustCamera { clips, .. }
+            | ToolCall::DetachCamera { clips }
+            | ToolCall::MuteSource { clips, .. }
+            | ToolCall::SetSourceVolume { clips, .. }
+            | ToolCall::SeparateSound { clips, .. } => clips.is_some(),
             ToolCall::RemoveSilences { .. }
             | ToolCall::RemoveFillers
             | ToolCall::SetFormat { .. }
@@ -308,7 +358,7 @@ pub const CHAT_CAPTION_STYLES: [(BuiltinCaptionStyle, &str); 5] = [
     (BuiltinCaptionStyle::Boxed, "sentences on rounded boxes"),
 ];
 
-/// The formats `setFormat` offers, and `setClip`'s framing names.
+/// The formats `setFormat` offers, `setClip`'s framing names, and the recording tools' `format`.
 const FORMATS: [FormatKind; 3] = [
     FormatKind::Landscape,
     FormatKind::Portrait,
@@ -597,6 +647,12 @@ const TOOLS: &[Tool] = &[
     media::ADD_IMAGE,
     media::MAKE_STICKER,
     media::MAKE_TITLE_CARD,
+    recorded::SET_CAMERA_MODE,
+    recorded::ADJUST_CAMERA,
+    recorded::DETACH_CAMERA,
+    recorded::MUTE_SOURCE,
+    recorded::SET_SOURCE_VOLUME,
+    recorded::SEPARATE_SOUND,
     Tool {
         name: "undo",
         description: "Undo the last change.",
