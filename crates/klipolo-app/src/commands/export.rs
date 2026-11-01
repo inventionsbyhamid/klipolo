@@ -49,11 +49,13 @@ fn folder(state: &ExportState) -> Result<PathBuf, Said> {
     state.folder().map_or_else(export::default_folder, Ok)
 }
 
-/// Where unfinished exports are kept: `.jobs` in the folder the person picked and in `Movies / Klipolo`.
+/// Where unfinished exports are kept: `.jobs` in the folder the person picked, in `Movies / Klipolo`, and in every
+/// folder an export was written in before (remembered across launches).
 fn job_roots(state: &ExportState) -> Vec<PathBuf> {
     jobs::roots(
         state.folder().as_deref(),
         export::default_folder().ok().as_deref(),
+        &state.kept_folders(),
     )
 }
 
@@ -247,7 +249,10 @@ pub(crate) fn export_jobs(
     session: State<'_, ProjectSessionState>,
 ) -> Vec<ExportJobInfo> {
     let mut judge = Judge::new(open_feed(&session).ok());
-    jobs::list(&job_roots(&state), |job| judge.stale(job))
+    let listed = jobs::list(&job_roots(&state), |job| judge.stale(job));
+    // A folder whose jobs are all gone needn't be looked in again.
+    state.forget_folders_without_jobs();
+    listed
 }
 
 /// What unfinished jobs are judged by: their project as it is now, looked up once per project however many of its
@@ -657,18 +662,29 @@ async fn pause_then_exit(app: AppHandle, exit_code: i32) {
 /// of its slot.
 const EXIT_WAIT: Duration = Duration::from_secs(2);
 
-/// The export state at launch, the usual export folder swept of what a crash cut off while a job was written or
-/// discarded (`export::sweep_folder`: kept jobs stay to resume), on a thread of its own.
-pub(crate) fn state_at_launch() -> ExportState {
-    if let Ok(dir) = export::default_folder() {
-        let swept = std::thread::Builder::new()
-            .name("klipolo-export-sweep".into())
-            .spawn(move || export::sweep_folder(&dir));
-        if let Err(error) = swept {
-            tracing::warn!(%error, "export: the export folder couldn't be swept");
-        }
+/// Where the folders exports were written in are remembered, in the app's data folder.
+const KEPT_FOLDERS: &str = "export-folders.json";
+
+/// The export state at launch: the folders exports were written in remembered in `data` (the app's data folder), and
+/// the usual export folder and those swept of what a crash cut off while a job was written or discarded
+/// (`export::sweep_folder`: kept jobs stay to resume), on a thread of its own.
+pub(crate) fn state_at_launch(data: Option<&Path>) -> ExportState {
+    let state = ExportState::default();
+    if let Some(data) = data {
+        state.remember_in(data.join(KEPT_FOLDERS));
     }
-    ExportState::default()
+    let folders: Vec<PathBuf> = export::default_folder()
+        .ok()
+        .into_iter()
+        .chain(state.kept_folders())
+        .collect();
+    let swept = std::thread::Builder::new()
+        .name("klipolo-export-sweep".into())
+        .spawn(move || folders.iter().for_each(|dir| export::sweep_folder(dir)));
+    if let Err(error) = swept {
+        tracing::warn!(%error, "export: the export folders couldn't be swept");
+    }
+    state
 }
 
 #[cfg(test)]

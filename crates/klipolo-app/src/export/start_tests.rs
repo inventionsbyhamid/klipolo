@@ -489,3 +489,41 @@ async fn two_resumes_at_once_are_refused() {
     );
     assert!(!state.is_running(), "never took the slot");
 }
+
+/// The folder an export's job is written in is remembered (in the app's data folder): after a relaunch, with another
+/// folder picked or none, its kept job is still listed, to resume or discard. A folder whose jobs are all gone is
+/// forgotten.
+#[tokio::test]
+async fn a_job_in_a_folder_picked_before_is_listed_after_a_relaunch() {
+    let data = tempfile::tempdir().unwrap();
+    let remembered = data.path().join("export-folders.json");
+    let state = ExportState::default();
+    state.remember_in(remembered.clone());
+    let (prepared, dir) = batch();
+    let started = start_on_slot(&state, &portrait(), &Steps::preparing(Ok(prepared)))
+        .await
+        .unwrap();
+    let Started::Run(job, _) = started else {
+        panic!("it runs");
+    };
+    drop(state);
+
+    let relaunched = ExportState::default();
+    relaunched.remember_in(remembered);
+    let usual = tempfile::tempdir().unwrap();
+    let kept = relaunched.kept_folders();
+    assert_eq!(kept, [dir.path().join("exports")]);
+    let roots = super::jobs::roots(None, Some(usual.path()), &kept);
+    let listed = super::jobs::list(&roots, |_| false);
+    assert_eq!(
+        listed.iter().map(|j| j.job_id.as_str()).collect::<Vec<_>>(),
+        [job.job_id.as_str()]
+    );
+    // Still there: it stays remembered. Discarded: forgotten.
+    relaunched.forget_folders_without_jobs();
+    assert_eq!(relaunched.kept_folders().len(), 1);
+    super::jobs::discard(&roots, &job.job_id).unwrap();
+    relaunched.forget_folders_without_jobs();
+    assert!(relaunched.kept_folders().is_empty());
+}
+

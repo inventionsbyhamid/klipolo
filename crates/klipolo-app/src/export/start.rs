@@ -102,6 +102,10 @@ pub async fn start_on_slot(
     // The slot's job from now on: a Cancel naming it reaches it before its first event, and Quit pauses it rather than
     // stopping it.
     state.set_job(job.job_id.clone());
+    // Its folder is remembered, so a kept job there is listed after a relaunch whatever folder is picked then.
+    if let Some(folder) = job.dir.parent().and_then(Path::parent) {
+        state.remember_folder(folder);
+    }
     if *cancel.borrow() {
         steps.drop_new(&job);
         state.release();

@@ -5,8 +5,9 @@
 //! over with the latest changes: an export naming the job it replaces (`start`), which discards it only once the new
 //! export is ready to run.
 //!
-//! A job is kept in `.jobs` beside its files: in the usual folder (`Movies / Klipolo`) and in the one the person picked
-//! for exports, so both are looked in (`roots`).
+//! A job is kept in `.jobs` beside its files: in the usual folder (`Movies / Klipolo`), the one the person picked for
+//! exports, and every folder an export was written in before (remembered across launches: `ExportState::kept_folders`),
+//! so all of them are looked in (`roots`).
 
 use std::path::{Path, PathBuf};
 
@@ -21,10 +22,12 @@ use super::run::coded;
 /// An id that isn't a job's.
 const INVALID: &str = "exports.refused.invalid";
 
-/// The `.jobs` folders an unfinished job may be in: the picked export folder's, then the usual one's, each once.
-pub fn roots(picked: Option<&Path>, usual: Option<&Path>) -> Vec<PathBuf> {
+/// The `.jobs` folders an unfinished job may be in: the picked export folder's, the usual one's, then those of the
+/// folders exports were written in before (`kept`), each once.
+pub fn roots(picked: Option<&Path>, usual: Option<&Path>, kept: &[PathBuf]) -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
-    for dir in [picked, usual].into_iter().flatten() {
+    let earlier = kept.iter().map(PathBuf::as_path);
+    for dir in [picked, usual].into_iter().flatten().chain(earlier) {
         let root = jobs_root(dir);
         if !roots.contains(&root) {
             roots.push(root);
@@ -210,21 +213,30 @@ mod tests {
     }
 
     fn roots_of(dir: &Path) -> Vec<PathBuf> {
-        roots(None, Some(dir))
+        roots(None, Some(dir), &[])
     }
 
     #[test]
-    fn jobs_are_looked_for_in_the_picked_folder_and_the_usual_one() {
+    fn jobs_are_looked_for_in_the_picked_folder_the_usual_one_and_those_used_before() {
         let usual = Path::new("/Users/rosa/Movies/Klipolo");
         let picked = Path::new("/Volumes/Card/Exports");
+        let earlier = PathBuf::from("/Volumes/Old/Exports");
         assert_eq!(
-            roots(Some(picked), Some(usual)),
-            [picked.join(".jobs"), usual.join(".jobs")]
+            roots(
+                Some(picked),
+                Some(usual),
+                &[earlier.clone(), picked.to_path_buf()]
+            ),
+            [
+                picked.join(".jobs"),
+                usual.join(".jobs"),
+                earlier.join(".jobs")
+            ]
         );
-        assert_eq!(roots(Some(usual), Some(usual)), [usual.join(".jobs")]);
-        assert_eq!(roots(None, None), Vec::<PathBuf>::new());
+        assert_eq!(roots(Some(usual), Some(usual), &[]), [usual.join(".jobs")]);
+        assert_eq!(roots(None, None, &[]), Vec::<PathBuf>::new());
         assert_eq!(
-            find(&roots(None, Some(usual)), "../elsewhere"),
+            find(&roots(None, Some(usual), &[]), "../elsewhere"),
             Err(Said::code(INVALID)),
             "never a path out of .jobs"
         );
@@ -351,7 +363,9 @@ mod tests {
         let (_, older) = crashed_job(usual.path()).await;
         std::thread::sleep(Duration::from_millis(5));
         let (_, newer) = crashed_job(picked.path()).await;
-        let listed = list(&roots(Some(picked.path()), Some(usual.path())), |_| false);
+        let listed = list(&roots(Some(picked.path()), Some(usual.path()), &[]), |_| {
+            false
+        });
         let ids: Vec<&str> = listed.iter().map(|j| j.job_id.as_str()).collect();
         assert_eq!(ids, [newer.job_id.as_str(), older.job_id.as_str()]);
     }

@@ -140,7 +140,10 @@ fn main() {
             app.manage(view);
             app.manage(analysis);
             app.manage(chat);
-            app.manage(commands::export::state_at_launch());
+            // Exports: the folders they were written in are remembered in the app's data folder, so a kept job there
+            // is listed after a relaunch.
+            let data = app.path().app_data_dir().ok();
+            app.manage(commands::export::state_at_launch(data.as_deref()));
             // Editing copies of the open project's slow files, beside the thumbnails in the media cache. The preview
             // reads them once made; they wait while an export holds the slot.
             let proxies = app

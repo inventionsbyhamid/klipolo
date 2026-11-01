@@ -1,7 +1,7 @@
 //! The one export slot (a single export runs at a time) and what the run on it has reported: its job, the files it
 //! put in place, and whether it has ended. Start and Resume wait briefly for a run that is winding down.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
@@ -19,6 +19,9 @@ pub struct ExportState {
     files: Mutex<Vec<PathBuf>>,
     /// The folder the person picked for exports (Change); None: `Movies / Klipolo`.
     folder: Mutex<Option<PathBuf>>,
+    /// Where the folders exports were written in are remembered across launches (`export-folders.json` in the app's
+    /// data folder), so a kept job in a folder picked before is still listed. None: they aren't (tests).
+    kept: Mutex<Option<PathBuf>>,
     /// The quit guard is on screen.
     asking: AtomicBool,
     /// The person chose Quit: the next exit request goes through.
@@ -258,6 +261,45 @@ impl ExportState {
         *lock(&self.folder) = Some(folder);
     }
 
+    /// Remembers the folders exports were written in, in `file`, across launches.
+    pub fn remember_in(&self, file: PathBuf) {
+        *lock(&self.kept) = Some(file);
+    }
+
+    /// The folders exports were written in before, as remembered (none when nothing is, or the file can't be read).
+    pub fn kept_folders(&self) -> Vec<PathBuf> {
+        lock(&self.kept)
+            .as_deref()
+            .map(read_folders)
+            .unwrap_or_default()
+    }
+
+    /// Remembers `dir` as a folder an export's job was written in (once).
+    pub fn remember_folder(&self, dir: &Path) {
+        let kept = lock(&self.kept);
+        let Some(file) = kept.as_deref() else {
+            return;
+        };
+        let mut folders = read_folders(file);
+        if !folders.iter().any(|f| f == dir) {
+            folders.push(dir.to_path_buf());
+            write_folders(file, &folders);
+        }
+    }
+
+    /// Forgets the remembered folders that hold no job any more (or are gone).
+    pub fn forget_folders_without_jobs(&self) {
+        let kept = lock(&self.kept);
+        let Some(file) = kept.as_deref() else {
+            return;
+        };
+        let folders = read_folders(file);
+        let holding: Vec<PathBuf> = folders.iter().filter(|f| holds_jobs(f)).cloned().collect();
+        if holding.len() != folders.len() {
+            write_folders(file, &holding);
+        }
+    }
+
     /// Whether the quit guard is on screen; `asking(true)` returns whether it already was.
     pub fn asking(&self, now: bool) -> bool {
         self.asking.swap(now, Ordering::SeqCst)
@@ -271,6 +313,45 @@ impl ExportState {
     pub fn set_quitting(&self) {
         self.quitting.store(true, Ordering::SeqCst);
     }
+}
+
+/// The folders remembered in `file`; none when it can't be read.
+fn read_folders(file: &Path) -> Vec<PathBuf> {
+    std::fs::read(file)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+/// Writes `folders` to `file`, atomically; a failure is logged (the folders are then looked in only this session).
+fn write_folders(file: &Path, folders: &[PathBuf]) {
+    let written = serde_json::to_vec(folders)
+        .map_err(std::io::Error::other)
+        .and_then(|json| {
+            if let Some(dir) = file.parent() {
+                std::fs::create_dir_all(dir)?;
+            }
+            klipolo_platform::durable::write_atomic(
+                file,
+                &json,
+                klipolo_platform::durable::Durability::Ordered,
+            )
+        });
+    if let Err(error) = written {
+        tracing::warn!(%error, "export: the export folders couldn't be remembered");
+    }
+}
+
+/// Whether the export folder `dir` holds a job (a folder in its `.jobs` named by a job id).
+fn holds_jobs(dir: &Path) -> bool {
+    std::fs::read_dir(klipolo_engine::export::jobs::jobs_root(dir))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .any(|entry| {
+            entry.path().is_dir()
+                && klipolo_engine::export::jobs::valid_job_id(&entry.file_name().to_string_lossy())
+        })
 }
 
 /// Lets go of the slot when dropped. The run's task holds one, so a panic in it (the runner, an event's `emit`) still
