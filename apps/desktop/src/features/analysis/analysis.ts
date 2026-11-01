@@ -1,4 +1,5 @@
 import type { AnalysisStep } from '../../bindings/AnalysisStep';
+import type { AssetState } from '../../bindings/AssetState';
 import type { Estimate } from '../../bindings/Estimate';
 
 /** The steps in order, as the step dots show them. */
@@ -63,6 +64,39 @@ export function offerText(estimate: Estimate, videos: boolean): string {
   else if (estimate.creditLeftUsd != null)
     parts.push(`You have ${dollars(estimate.creditLeftUsd)} left on your access code.`);
   return parts.join(' ');
+}
+
+/** `ids` as the clips the person counts, in order: a take's files (`takes`, from `useTakes`) are its one clip. */
+export function byTake(ids: string[], takes: ReadonlyMap<string, string>): string[] {
+  return [...new Set(ids.map((id) => takes.get(id) ?? id))];
+}
+
+/** `estimate` as the offer counts it: a take's files are one clip (`byTake`). What is sent stays by file. */
+export function counted(estimate: Estimate, takes: ReadonlyMap<string, string>): Estimate {
+  return { ...estimate, clips: byTake(estimate.clips, takes), cached: byTake(estimate.cached, takes) };
+}
+
+const NOT_ANALYSED: AssetState = { state: 'none' };
+
+/**
+ * A take's state, as its one row shows it, from its files': running while any runs (the least far along, so the row
+ * never runs ahead), else failed while any failed; else not analysed. One of `states` itself, so a store selector can
+ * return it.
+ */
+export function takeState(states: AssetState[]): AssetState {
+  let shown = NOT_ANALYSED;
+  for (const s of states) {
+    if (s.state === 'running') {
+      const behind =
+        shown.state !== 'running' ||
+        STEPS.indexOf(s.step) < STEPS.indexOf(shown.step) ||
+        (s.step === shown.step && s.pct < shown.pct);
+      if (behind) shown = s;
+    } else if (s.state === 'failed' && shown.state === 'none') {
+      shown = s;
+    }
+  }
+  return shown;
 }
 
 /** The title over clips whose file is gone, when nothing else is offered: "Klipolo can't find 2 clips". */

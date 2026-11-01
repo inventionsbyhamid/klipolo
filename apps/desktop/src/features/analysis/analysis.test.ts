@@ -271,6 +271,13 @@ describe('the store', () => {
     expect(whyNoWords({ a: silent, b: silent }, ['a', 'b'])).toBe('noSpeechMany');
     expect(whyNoWords({ a: timed }, ['a'])).toBeNull();
     expect(whyNoWords({}, [])).toBeNull();
+    // A take's two files with no speech are one clip with none.
+    const takes = new Map([
+      ['mic', 'take'],
+      ['mic2', 'take'],
+    ]);
+    expect(whyNoWords({ mic: silent, mic2: silent }, ['mic', 'mic2'], takes)).toBe('noSpeechOne');
+    expect(whyNoWords({ mic: silent, mic2: silent, b: silent }, ['mic', 'mic2', 'b'], takes)).toBe('noSpeechMany');
   });
 
   it('retries a failed clip, and puts the offer off with Not now', async () => {

@@ -26,7 +26,7 @@ use klipolo_app::credentials::{
 use klipolo_engine::audio::pcm::PcmStore;
 use klipolo_engine::render::probe::{MediaKind, probe_media};
 use klipolo_meta::SecretString;
-use klipolo_model::project::{Asset, AssetKind};
+use klipolo_model::project::{Asset, AssetKind, Project};
 use klipolo_model::speech::WordKind;
 use klipolo_model::time::secs_to_us;
 
@@ -72,7 +72,9 @@ async fn run() -> Result<(), String> {
     println!("paying with: {paying}");
     println!("cache: {}", folder.display());
 
-    let estimate = state.estimate(&assets).await;
+    // Files imported on their own: no recording, so each is analysed in full.
+    let project = Project::new("Analyze");
+    let estimate = state.estimate(&project, &assets).await;
     println!(
         "estimate: ${:.4} for {:.1} s of {} clip(s); cached: {}",
         estimate.usd,
@@ -87,7 +89,7 @@ async fn run() -> Result<(), String> {
         println!("  refused: {refusal}");
     }
 
-    let started = state.start(&assets).await;
+    let started = state.start(&project, &assets).await;
     if let Some(reason) = &started.refused {
         println!("not started: {reason}");
     }
