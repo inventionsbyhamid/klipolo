@@ -1,4 +1,4 @@
-//! Check camera (UX decision 8) with the fake backend: a Cancel the app sends right after the press opens nothing,
+//! Check camera with the fake backend: a Cancel the app sends right after the press opens nothing,
 //! whether it lands while the preview is built or while the camera's start waits on the system (macOS's prompt); and
 //! every frame the preview pipe paces reaches the app.
 #![cfg(feature = "synthetic")]

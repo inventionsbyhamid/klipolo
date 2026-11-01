@@ -1,6 +1,6 @@
 /*
- * How the editor's shortcuts read a keydown (`useEditorShortcuts`): the app's
- * modifier, the letter a ⌃⌘ key stands for, and whether an open menu or dialog has the keyboard.
+ * How the editor's shortcuts read a keydown (`useEditorShortcuts`): the app's modifier, the letter a ⌃⌘ key stands
+ * for, and whether an open menu or dialog has the keyboard.
  */
 
 /**

@@ -30,7 +30,7 @@ use klipolo_app::chat::{
 };
 use klipolo_app::credentials::{AiStatus, Credentials};
 use klipolo_app::mcp_config::{config_json, needs_move};
-use klipolo_app::prefs::{self, Prefs};
+use klipolo_app::prefs;
 use klipolo_chat::{Job, Moment, Proposal, ToolCall};
 use klipolo_mcp::connection::{self, McpServer};
 use klipolo_mcp::host::{Applied, Host, HostError, OpenProposal, ProposalOutcome, Snapshot};
@@ -524,7 +524,7 @@ impl McpState {
         } else {
             self.stop();
         }
-        if let Err(error) = prefs::save(&dir, &Prefs { mcp_enabled: on }) {
+        if let Err(error) = prefs::update(&dir, |p| p.mcp_enabled = on) {
             tracing::warn!(%error, "the MCP switch couldn't be saved");
         }
         Ok(self.status())

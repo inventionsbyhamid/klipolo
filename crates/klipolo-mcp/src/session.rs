@@ -18,12 +18,15 @@ pub const MAX_SESSIONS: usize = 32;
 /// A session unused this long goes; its app opens a new one when it comes back.
 pub const IDLE: Duration = Duration::from_secs(10 * 60);
 
-/// What of the project a session last read: which project, and where its main track's clips were
-/// (`klipolo_chat::timeline_key`). A call naming times or clip refs needs it to match the project as it is.
+/// What of the project a session last read: which project, where its main track's clips were
+/// (`klipolo_chat::timeline_key`) and which layers its song and video layer refs named (`klipolo_chat::layers_key`). A
+/// call naming times or clip refs needs the first two to match the project as it is, and one naming a layer ref the
+/// layers too.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Seen {
     pub project_id: String,
     pub key: u64,
+    pub layers: u64,
 }
 
 /// One app's session.

@@ -4,6 +4,7 @@
 //!    app's own newest step and nothing else (`Host::undo_own`), once no one else's proposal waits.
 //! 2. The open project (`NO_PROJECT` without one). A call naming times or clip refs needs the app to have read the
 //!    project's main track as it is now (`Seen`): `READ_FIRST` when it never read, `STALE` when the clips moved since.
+//!    One naming a song or a video layer by its ref needs its layers as they are too (`STALE` when one came or went).
 //! 3. `findMoments` only points the person at moments (it is read-only): it compiles alone and is shown.
 //! 4. The proposal slot, shared with Klipolo's chat: while a proposal that isn't the app's own waits, every edit is
 //!    refused (`WAITING_OTHER`). The app's own absorbs the call: it compiles after the calls the proposal holds
@@ -24,14 +25,16 @@
 //! The only commit is `Host::apply` of additions that `needs_review` passes, and the only other change the app's own
 //! undo: no path here cuts footage.
 //!
-//! A result is one text and `structuredContent`: `{"outcome": "done" | "proposed" | "shown" | "started" | "refused",
-//! "revision"?, "proposalId"?, "removedSec"?}`, the outcome what changed most (a proposal, then the project, then a
-//! job started). `isError` is true exactly when nothing was done; when part was, the text says what wasn't.
+//! A result's text says what was done, with chat's own notes on it (a new speed that shortens a transition, as the clip
+//! card says it), what was proposed and what wasn't done. A result is one text and `structuredContent`: `{"outcome":
+//! "done" | "proposed" | "shown" | "started" | "refused", "revision"?, "proposalId"?, "removedSec"?}`, the outcome what
+//! changed most (a proposal, then the project, then a job started). `isError` is true exactly when nothing was done;
+//! when part was, the text says what wasn't.
 
 use klipolo_chat::{
     ANALYZE_FIRST, Audience, Compiled, FunctionCall, Job, Moment, ROUGH_FILLERS,
     ROUGH_FILLERS_STAY, Refusal, STILL_LISTENING, STILL_WATCHING, ToolCall, compile_for_app,
-    timeline_key,
+    layers_key, timeline_key,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
@@ -82,6 +85,15 @@ pub fn run(mcp: &Mcp, session: &mut Session, call: &FunctionCall) -> Value {
         && let Err(said) = read_as_it_is(session.seen.as_ref(), &snap)
     {
         return refused(said);
+    }
+    // A layer ref names a layer by its place among the layers the app read: never a different one since.
+    if new.names_layer()
+        && session
+            .seen
+            .as_ref()
+            .is_some_and(|seen| seen.layers != layers_key(&snap.project))
+    {
+        return refused(words::STALE);
     }
     if matches!(new, ToolCall::FindMoments { .. }) {
         return show(host, client, &snap, new);
@@ -211,7 +223,14 @@ fn edit(
     // The waiting proposal the additions' commit dropped, if one waited.
     let mut dropped: Option<String> = None;
     if let Some(additions) = &out.additions {
-        let tx = from_app(additions, client);
+        // The music's refit is the host's to make, as for every edit of the person's: the app's edits are judged and
+        // committed without it, so a shorter video cutting the music isn't a removal of the app's.
+        let own = additions.ops.len().saturating_sub(out.music_refit);
+        let edits = Transaction {
+            ops: additions.ops[..own].to_vec(),
+            ..additions.clone()
+        };
+        let tx = from_app(&edits, client);
         if tx.needs_review(Some(&snap.project)) {
             return refused(words::REMOVES);
         }
@@ -236,6 +255,8 @@ fn edit(
             words::DONE,
             &[("tools", &names(applied.map(|i| &calls[i])))],
         ));
+        // What the additions did beyond what was asked: a new speed that shortens a transition.
+        said.extend(out.notes.iter().cloned());
     }
 
     // The commit dropped no proposal of the app's: the person decided on it while this call ran (a Discard), and their
@@ -276,6 +297,8 @@ fn edit(
                 } else {
                     fill(words::PROPOSED_NO_FOOTAGE, &[("tools", &tools)])
                 });
+                // Why a change the app asked for waits: a speed that leaves a transition no room.
+                said.extend(out.waits.iter().cloned());
                 // Remembered only while the slot holds this proposal: another session of the app may have put its own
                 // in its place since, and that one's calls are what its next call joins. The calls were made on the
                 // snapshot's clips, even when they wait on top of additions now.

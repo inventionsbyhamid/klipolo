@@ -201,7 +201,7 @@ impl VtEncoder {
     }
 
     /// The probe's flat-out run: `RealTime` off, so the encoder runs as fast as it can rather than at the frame rate
-    /// (a measurement found it so).
+    /// (measured so).
     pub(super) fn flat_out(&mut self) {
         let no = cf::Boolean::value_false().as_type_ref();
         if let Err(e) = self.session.set_prop(keys::real_time(), Some(no)) {
