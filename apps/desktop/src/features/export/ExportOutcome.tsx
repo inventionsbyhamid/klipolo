@@ -1,17 +1,19 @@
 import { Button } from '../../design/Button';
 import { Icon } from '../../layout/Icon';
-import { exportedTitle } from '../../state/exportRun';
-import { revealExported, useExport } from '../../state/export';
+import { captionFailure, exportedTitle } from '../../state/exportRun';
+import { revealExported, shareExported, useExport } from '../../state/export';
 import { ExportFiles } from './ExportFiles';
 import { ExportIcon } from './icons';
 
 /**
  * The finished export: a paper check, "Exported 2 videos", where they were saved, one row per
- * file, then Done and Show in Finder (their folder, the first file selected).
+ * file (a captions file saved beside a video too, or why it wasn't), then Done, Share… (the Mac's share menu with every
+ * file, beside the button) and Show in Finder (their folder, the first file selected).
  */
 export function ExportOutcome({ onClose }: { onClose: () => void }) {
   const count = useExport((s) => s.ready.length);
   const folder = useExport((s) => s.folder);
+  const captionFailed = useExport((s) => s.captionFailed);
   return (
     <>
       <div className="dialog-head">
@@ -29,10 +31,18 @@ export function ExportOutcome({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <ExportFiles />
+      {/* The video is in place; its captions file isn't. */}
+      {captionFailed && (
+        <p className="ex-note">
+          <Icon name="info" />
+          <span>{captionFailure(captionFailed)}</span>
+        </p>
+      )}
       <div className="dialog-foot">
         <Button data-primary onClick={onClose}>
           Done
         </Button>
+        <Button onClick={(e) => void shareExported(e.currentTarget)}>Share…</Button>
         <Button variant="primary" onClick={() => void revealExported()}>
           <ExportIcon name="folder" />
           Show in Finder

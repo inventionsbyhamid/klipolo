@@ -13,6 +13,7 @@ import { Stage } from '../features/preview/Stage';
 import { Icon } from '../layout/Icon';
 import { useDockHold } from '../state/dockHold';
 import { useEngine } from '../state/engine';
+import { useFullScreen } from '../state/fullScreen';
 import { useProject } from '../state/project';
 import { useSelection } from '../state/selection';
 
@@ -60,12 +61,12 @@ function useSteadyDock(wanted: boolean): boolean {
 
 /**
  * The preview panel: the format pills, Add title, the safe area menu (9:16 only), Full screen (F; it
- * it works), and the engine's frames fitted to the panel in the chosen format with the layers there selectable and
- * editable (`Stage`), under the analysis banner; the inspector shows at the right under the banner while a main clip, a
- * transition or a layer it has fields for is selected (never mid-press or mid-walk on the timeline: `useSteadyDock`).
- * Selecting never resizes or moves the frame: the card goes in a slot of its own beside it, or over its right side when
- * a slot would cost the frame too much of its size (`stageLayout`). An empty slot says what goes there. With no clip
- * yet, the drop zone.
+ * fills the screen with this panel, and Escape or the same button leaves), and the engine's frames fitted to the panel
+ * in the chosen format with the layers there selectable and editable (`Stage`), under the analysis banner; the inspector
+ * shows at the right under the banner while a main clip, a transition or a layer it has fields for is selected (never
+ * mid-press or mid-walk on the timeline: `useSteadyDock`; never in full screen). Selecting never resizes or moves the
+ * frame: the card goes in a slot of its own beside it, or over its right side when a slot would cost the frame too much
+ * of its size (`stageLayout`). An empty slot says what goes there. With no clip yet, the drop zone.
  * `filesOver`: files from Finder are held over the window.
  */
 export function Preview({ filesOver = false }: { filesOver?: boolean }) {
@@ -77,7 +78,9 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
   const inspected = useInspected();
   const transition = useInspectedTransition();
   const native = useEngine((s) => s.presenter === 'native' && !!s.info);
-  const docked = useSteadyDock(inspected !== null || transition !== null) && hasVideo;
+  const full = useFullScreen((s) => s.on);
+  // Full screen is for watching: the card stays out of the way until it ends.
+  const docked = useSteadyDock(inspected !== null || transition !== null) && hasVideo && !full;
   const nothingSelected = useSelection((s) => s.selectedId === null);
   return (
     <main className={native && hasVideo ? 'panel stage has-hole' : 'panel stage'} aria-label="Preview">
@@ -88,6 +91,28 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
         <RoughCaptionsNote />
         <AddTitleMenu disabled={!hasVideo} />
         <SafeAreaMenu />
+        {/* Off until there is a video to watch (focusable, so its tooltip says why). */}
+        <button
+          className="icon-btn"
+          aria-label={
+            full
+              ? t({ id: 'preview.full.leave', message: 'Leave full screen' })
+              : t({ id: 'preview.full', message: 'Full screen preview' })
+          }
+          title={
+            full
+              ? t({ id: 'preview.full.leave.tip', message: 'Leave full screen (Esc)' })
+              : hasVideo
+                ? t({ id: 'preview.full.tip', message: 'Full screen preview (F)' })
+                : t({ id: 'preview.full.off', message: 'Add a video to watch it full screen' })
+          }
+          aria-disabled={(!hasVideo && !full) || undefined}
+          onClick={() => {
+            if (hasVideo || full) void useFullScreen.getState().toggle();
+          }}
+        >
+          <Icon name={full ? 'full-exit' : 'full'} />
+        </button>
       </div>
       <div className={docked ? 'stage-body has-inspector' : 'stage-body'}>
         {hasVideo && <AnalysisBanner />}
@@ -96,7 +121,7 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
           {hasVideo ? <Stage /> : <DropZone over={filesOver} />}
           {docked && <Inspector format={format} />}
           {/* Drawn in the slot only (app.css): over the frame it would cover the video. */}
-          {hasVideo && !docked && nothingSelected && (
+          {hasVideo && !docked && !full && nothingSelected && (
             <p className="stage-hint">
               {t({ id: 'preview.hint.select', message: 'Select something on the video to change it.' })}
             </p>

@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use klipolo_analysis::VideoError;
@@ -18,6 +18,7 @@ use klipolo_analysis::proxy::{ProxyChunk, ProxyInfo};
 use klipolo_analysis::scenes::{SceneItem, SceneLog};
 use klipolo_analysis::transcript::{ROUGH_WORDS, Timing, TranscriptOut, Turn, finish};
 use klipolo_app::analysis::chat::{scene_entries, speaker_turns};
+use klipolo_app::analysis::holds::SETTLE;
 use klipolo_app::analysis::media::{EngineMedia, Media};
 use klipolo_app::analysis::{
     AnalysisDone, AnalysisEvent, AnalysisFailed, AnalysisState, AnalysisStep, AnalysisStopped,
@@ -29,14 +30,18 @@ use klipolo_app::credentials::{
 };
 use klipolo_engine::audio::pcm::{PcmKey, PcmStore};
 use klipolo_meta::{ExposeSecret, SecretString, pricing};
-use klipolo_model::project::{Asset, AssetKind};
-use klipolo_model::speech::{Levels, Speech, Word, WordKind};
+use klipolo_model::project::{
+    Asset, AssetKind, Project, Recording, RecordingKind, RecordingSource, SourceMix, SourceRole,
+    SourceRun,
+};
+use klipolo_model::speech::{Levels, Speech, Word, WordKind, run_spans, spoken};
 use klipolo_model::time::{RangeUs, Us};
+use klipolo_model::timeline::{Clip, ClipSource};
 use serde_json::{Value, json};
 use wiremock::matchers::{any, body_string_contains, header, method, path};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
-const KEY: &str = "sk-analysis-test-key-0123456789";
+const KEY: &str = "test-meta-key-not-real";
 const TOKEN: &str = "relay-analysis-token-0123456789";
 const NEW_TOKEN: &str = "relay-analysis-new-token-9876543";
 const CODE: &str = "KLIP-TEST-0003";
@@ -146,7 +151,9 @@ impl Media for FakeMedia {
         _src: &Path,
         out: &Path,
         _cancel: &AtomicBool,
+        between: &mut dyn FnMut(),
     ) -> Result<AudioInfo, AudioError> {
+        between();
         self.sounds.fetch_add(1, Ordering::SeqCst);
         std::fs::write(out, wav_of(&tone(self.seconds)))?;
         Ok(AudioInfo {
@@ -220,6 +227,9 @@ fn asset(id: &str, kind: AssetKind, file: &Path, seconds: f64) -> Asset {
         made_with: None,
     }
 }
+
+/// The project of files imported on their own: no recording, so each clip asked for is analysed in full.
+static IMPORTED: LazyLock<Project> = LazyLock::new(|| Project::new("Imported files"));
 
 // ---------------------------------------------------------------------------------------------------------------------
 // The app's analysis, with what it tells
@@ -605,13 +615,16 @@ async fn cached_asset_makes_no_network_call() {
     dir.store("transcript", &transcript).unwrap();
     dir.store("scenes", &cached_scenes()).unwrap();
 
-    let estimate = h.state.estimate(std::slice::from_ref(&clip)).await;
+    let estimate = h
+        .state
+        .estimate(&IMPORTED, std::slice::from_ref(&clip))
+        .await;
     assert_eq!(estimate.cached, ["clip-a"]);
     assert!(estimate.clips.is_empty());
     assert_eq!((estimate.usd, estimate.seconds), (0.0, 0.0));
     assert_eq!(estimate.refusal, None);
 
-    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
     assert_eq!(started.refused, None);
     started.finished().await;
     server.verify().await;
@@ -663,7 +676,7 @@ async fn estimate_matches_pricing_formula() {
         .store("transcript", &cached_transcript())
         .unwrap();
 
-    let estimate = h.state.estimate(&[a, b, c, d, e]).await;
+    let estimate = h.state.estimate(&IMPORTED, &[a, b, c, d, e]).await;
 
     let expected = asr_usd(155.04) + scene_usd(155.04) + asr_usd(60.0) + scene_usd(20.0);
     assert!(
@@ -702,7 +715,7 @@ async fn relay_402_stops_and_keeps_finished_steps() {
     let file = h.clip("a.mp4", 1);
     let clip = asset("clip-a", AssetKind::Video, &file, SECONDS);
 
-    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
     assert_eq!(started.refused, None);
     started.finished().await;
 
@@ -756,7 +769,7 @@ async fn turn_level_captions_publish_before_alignment() {
     let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 7), SECONDS);
 
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -839,7 +852,7 @@ async fn cancel_stops_after_current_request() {
     let file = h.clip("a.mp4", 1);
     let clip = asset("clip-a", AssetKind::Video, &file, SECONDS);
 
-    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
     let deadline = Instant::now() + Duration::from_secs(20);
     while watched.load(Ordering::SeqCst) == 0 {
         assert!(Instant::now() < deadline, "the scene log never started");
@@ -929,7 +942,7 @@ async fn a_relay_401_registers_again_once_and_retries() {
     let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 2), SECONDS);
 
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -957,7 +970,7 @@ async fn a_refused_key_says_so_and_never_registers() {
     let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 2), SECONDS);
 
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -989,7 +1002,7 @@ async fn a_code_whose_device_cannot_register_says_why() {
     let h = harness(&server, store, FakeMedia::whole(SECONDS));
     let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 2), SECONDS);
 
-    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
     assert_eq!(
         started.refused.as_deref(),
         Some("Klipolo's server is busy right now. Try again in a moment.")
@@ -1009,7 +1022,7 @@ async fn a_code_whose_device_cannot_register_says_why() {
         .unwrap();
     let cached = asset("cached", AssetKind::Video, &file, SECONDS);
     let fresh = asset("fresh", AssetKind::Audio, &empty.clip("b.m4a", 3), SECONDS);
-    let started = empty.state.start(&[cached, fresh]).await;
+    let started = empty.state.start(&IMPORTED, &[cached, fresh]).await;
     assert_eq!(started.refused.as_deref(), Some(NEEDS_KEY));
     started.finished().await;
     assert_eq!(empty.state.state_of("cached"), timed());
@@ -1031,13 +1044,16 @@ async fn an_estimate_over_the_credit_left_is_refused() {
     let h = harness(&server, code_store(), media.clone());
     let clip = asset("long", AssetKind::Video, &h.clip("long.mov", 1), 155.04);
 
-    let estimate = h.state.estimate(std::slice::from_ref(&clip)).await;
+    let estimate = h
+        .state
+        .estimate(&IMPORTED, std::slice::from_ref(&clip))
+        .await;
     let refusal = "Your access code has $0.02 left, and this needs about $0.07. Analyze fewer or shorter files, or add \
                    your own Meta key in Settings.";
     assert!((estimate.credit_left_usd.unwrap() - 0.02).abs() < 1e-9);
     assert_eq!(estimate.refusal.as_deref(), Some(refusal));
 
-    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
     assert_eq!(started.refused.as_deref(), Some(refusal));
     started.finished().await;
     assert_eq!(h.state.state_of("long"), AssetState::None);
@@ -1061,7 +1077,7 @@ async fn a_clip_without_sound_still_gets_its_scene_log() {
     clip.has_audio = false;
 
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -1110,9 +1126,15 @@ impl Watched {
 }
 
 impl Media for Watched {
-    fn sound(&self, src: &Path, out: &Path, cancel: &AtomicBool) -> Result<AudioInfo, AudioError> {
+    fn sound(
+        &self,
+        src: &Path,
+        out: &Path,
+        cancel: &AtomicBool,
+        between: &mut dyn FnMut(),
+    ) -> Result<AudioInfo, AudioError> {
         self.note();
-        self.inner.sound(src, out, cancel)
+        self.inner.sound(src, out, cancel, between)
     }
 
     fn levels(&self, src: &Path, cancel: &AtomicBool) -> Option<Levels> {
@@ -1164,7 +1186,7 @@ async fn whoever_waits_for_analysis_hears_when_it_decodes() {
     clip.has_audio = false;
 
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -1189,6 +1211,88 @@ async fn whoever_waits_for_analysis_hears_when_it_decodes() {
         !decoding.load(Ordering::SeqCst),
         "off once analysis is done"
     );
+}
+
+/// Waits up to 5 s for `done`.
+async fn until(done: impl Fn() -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !done() {
+        assert!(Instant::now() < deadline, "timed out");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
+/// Playback and exports come first. An export holds every decode of a clip before it starts; once it ends while the
+/// video plays, the clip's sound decodes beside playback, but its small copy waits until playback has stopped for a
+/// moment (`SETTLE`); then the clip is analysed in full.
+#[tokio::test(flavor = "multi_thread")]
+async fn analysis_decoding_makes_way_for_playback_and_exports() {
+    let server = MockServer::start().await;
+    let media = FakeMedia::whole(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    mount_speech(&server, "/v1", &h.aligns, Duration::ZERO).await;
+    mount_scenes(
+        &server,
+        "/v1",
+        ResponseTemplate::new(200).set_body_json(spark_answer()),
+    )
+    .await;
+    nothing_else(&server).await;
+    let clip = asset("talk", AssetKind::Video, &h.clip("talk.mp4", 9), SECONDS);
+    let holds = h.state.holds();
+    holds.set_exporting(true);
+
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let decoded =
+        || [&media.levels, &media.sounds, &media.copies].map(|n| n.load(Ordering::SeqCst));
+    assert_eq!(decoded(), [0, 0, 0], "an export holds every decode");
+
+    holds.set_playing(true);
+    holds.set_exporting(false);
+    until(|| media.sounds.load(Ordering::SeqCst) == 1).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(
+        media.copies.load(Ordering::SeqCst),
+        0,
+        "the sound decoded beside playback; the small copy waits while the video plays"
+    );
+
+    holds.set_playing(false);
+    let stopped = Instant::now();
+    started.finished().await;
+    assert_eq!(decoded(), [1, 1, 1]);
+    assert!(stopped.elapsed() >= SETTLE, "and a moment after it stops");
+    assert!(matches!(h.state.state_of("talk"), AssetState::Done { .. }));
+    server.verify().await;
+}
+
+/// Frames late during playback hold a clip's sound too, for the rest of that playback: it decodes once playback stops.
+#[tokio::test(flavor = "multi_thread")]
+async fn frames_late_during_playback_hold_the_sound_until_it_stops() {
+    let server = MockServer::start().await;
+    let media = FakeMedia::whole(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    mount_speech(&server, "/v1", &h.aligns, Duration::ZERO).await;
+    nothing_else(&server).await;
+    let clip = asset("voice", AssetKind::Audio, &h.clip("voice.m4a", 11), SECONDS);
+    let holds = h.state.holds();
+    holds.set_playing(true);
+    holds.frames_late();
+
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(
+        media.levels.load(Ordering::SeqCst) + media.sounds.load(Ordering::SeqCst),
+        0,
+        "held while playback is behind"
+    );
+
+    holds.set_playing(false);
+    started.finished().await;
+    assert_eq!(media.sounds.load(Ordering::SeqCst), 1);
+    assert_eq!(h.state.state_of("voice"), timed());
+    server.verify().await;
 }
 
 /// With an access code every call goes through Klipolo's relay: a relay that can't answer is named as Klipolo's server,
@@ -1224,7 +1328,7 @@ async fn a_failure_names_the_service_the_call_went_to() {
         let h = harness(&server, store, FakeMedia::whole(SECONDS));
         let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 2), SECONDS);
         h.state
-            .start(std::slice::from_ref(&clip))
+            .start(&IMPORTED, std::slice::from_ref(&clip))
             .await
             .finished()
             .await;
@@ -1261,7 +1365,7 @@ async fn word_timing_that_fails_names_klipolos_server() {
     let clip = asset("talk", AssetKind::Audio, &file, SECONDS);
 
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -1378,8 +1482,8 @@ async fn a_clip_started_twice_at_once_is_analysed_once() {
     let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 2), SECONDS);
 
     let (first, second) = tokio::join!(
-        h.state.start(std::slice::from_ref(&clip)),
-        h.state.start(std::slice::from_ref(&clip))
+        h.state.start(&IMPORTED, std::slice::from_ref(&clip)),
+        h.state.start(&IMPORTED, std::slice::from_ref(&clip))
     );
     first.finished().await;
     second.finished().await;
@@ -1400,7 +1504,10 @@ async fn a_cached_transcript_shows_before_the_rest_is_analysed() {
     h.cache_dir(&file).store("transcript", &transcript).unwrap();
     let clip = asset("clip-a", AssetKind::Video, &file, SECONDS);
 
-    let estimate = h.state.estimate(std::slice::from_ref(&clip)).await;
+    let estimate = h
+        .state
+        .estimate(&IMPORTED, std::slice::from_ref(&clip))
+        .await;
 
     assert_eq!(estimate.clips, ["clip-a"]);
     assert!((estimate.usd - scene_usd(SECONDS)).abs() < 1e-12);
@@ -1436,7 +1543,10 @@ async fn one_file_imported_twice_is_analysed_and_priced_once() {
     let first = asset("first", AssetKind::Audio, &file, SECONDS);
     let second = asset("second", AssetKind::Audio, &file, SECONDS);
 
-    let estimate = h.state.estimate(&[first.clone(), second.clone()]).await;
+    let estimate = h
+        .state
+        .estimate(&IMPORTED, &[first.clone(), second.clone()])
+        .await;
     assert_eq!(estimate.clips, ["first", "second"]);
     assert!(
         (estimate.usd - asr_usd(SECONDS)).abs() < 1e-12,
@@ -1445,7 +1555,11 @@ async fn one_file_imported_twice_is_analysed_and_priced_once() {
     );
     assert!((estimate.seconds - SECONDS).abs() < 1e-9);
 
-    h.state.start(&[first, second]).await.finished().await;
+    h.state
+        .start(&IMPORTED, &[first, second])
+        .await
+        .finished()
+        .await;
 
     let speech = h.last_speech();
     for id in ["first", "second"] {
@@ -1502,13 +1616,19 @@ async fn a_second_start_counts_the_credit_the_first_promised() {
     let each = asr_usd(155.04) + scene_usd(155.04);
     assert!(each < 0.1 && 2.0 * each > 0.1, "{each}");
 
-    let started = h.state.start(std::slice::from_ref(&first)).await;
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&first)).await;
     assert_eq!(started.refused, None);
     let refusal = "Your access code has $0.03 left, and this needs about $0.07. Analyze fewer or shorter files, or add \
                    your own Meta key in Settings.";
-    let estimate = h.state.estimate(std::slice::from_ref(&second)).await;
+    let estimate = h
+        .state
+        .estimate(&IMPORTED, std::slice::from_ref(&second))
+        .await;
     assert_eq!(estimate.refusal.as_deref(), Some(refusal));
-    let refused = h.state.start(std::slice::from_ref(&second)).await;
+    let refused = h
+        .state
+        .start(&IMPORTED, std::slice::from_ref(&second))
+        .await;
     assert_eq!(refused.refused.as_deref(), Some(refusal));
     refused.finished().await;
     started.finished().await;
@@ -1516,7 +1636,10 @@ async fn a_second_start_counts_the_credit_the_first_promised() {
     assert_eq!(h.state.state_of("first"), timed());
     assert_eq!(h.state.state_of("second"), AssetState::None);
     // The first's promise is released: the second fits again (the mock's spend doesn't move).
-    let estimate = h.state.estimate(std::slice::from_ref(&second)).await;
+    let estimate = h
+        .state
+        .estimate(&IMPORTED, std::slice::from_ref(&second))
+        .await;
     assert_eq!(estimate.refusal, None);
     assert!((estimate.credit_left_usd.unwrap() - 0.1).abs() < 1e-9);
     server.verify().await;
@@ -1538,7 +1661,10 @@ async fn the_estimate_says_why_a_code_cannot_pay_yet() {
     let h = harness(&server, store, FakeMedia::whole(SECONDS));
     let clip = asset("long", AssetKind::Video, &h.clip("long.mov", 1), 155.04);
 
-    let estimate = h.state.estimate(std::slice::from_ref(&clip)).await;
+    let estimate = h
+        .state
+        .estimate(&IMPORTED, std::slice::from_ref(&clip))
+        .await;
 
     assert_eq!(
         estimate.problem.as_deref(),
@@ -1548,7 +1674,10 @@ async fn the_estimate_says_why_a_code_cannot_pay_yet() {
     // Nothing to pay with: nothing to ask for, and no problem to report (the page asks for a key or code).
     let none = harness(&server, MemoryStore::default(), FakeMedia::whole(SECONDS));
     let other = asset("other", AssetKind::Audio, &none.clip("b.m4a", 2), SECONDS);
-    let estimate = none.state.estimate(std::slice::from_ref(&other)).await;
+    let estimate = none
+        .state
+        .estimate(&IMPORTED, std::slice::from_ref(&other))
+        .await;
     assert_eq!((estimate.problem, estimate.usd), (None, 0.0));
     server.verify().await;
 }
@@ -1563,7 +1692,7 @@ async fn another_project_stops_analysis_and_starts_with_no_speech() {
     nothing_else(&server).await;
     let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 2), SECONDS);
 
-    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
     let deadline = Instant::now() + Duration::from_secs(20);
     while h.aligns.load(Ordering::SeqCst) == 0 {
         assert!(Instant::now() < deadline, "word timing never started");
@@ -1617,7 +1746,7 @@ async fn rough_words_are_timed_again_for_free_once_word_timing_is_back() {
     let clip = asset("talk", AssetKind::Audio, &file, SECONDS);
 
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -1632,7 +1761,7 @@ async fn rough_words_are_timed_again_for_free_once_word_timing_is_back() {
     assert!(rough.approximate);
 
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -1687,12 +1816,12 @@ async fn rough_words_say_why_and_whether_timing_them_again_can_help() {
     let odd = asset("odd", AssetKind::Audio, &h.clip("odd.m4a", 2), SECONDS);
 
     h.state
-        .start(std::slice::from_ref(&down))
+        .start(&IMPORTED, std::slice::from_ref(&down))
         .await
         .finished()
         .await;
     h.state
-        .start(std::slice::from_ref(&odd))
+        .start(&IMPORTED, std::slice::from_ref(&odd))
         .await
         .finished()
         .await;
@@ -1747,13 +1876,13 @@ async fn time_words_again_is_not_offered_while_other_words_are_being_timed() {
     let down = asset("down", AssetKind::Audio, &h.clip("down.m4a", 1), SECONDS);
     let song = asset("song", AssetKind::Audio, &h.clip("song.m4a", 2), SECONDS);
     h.state
-        .start(std::slice::from_ref(&down))
+        .start(&IMPORTED, std::slice::from_ref(&down))
         .await
         .finished()
         .await;
     assert!(Findings::time_again(&*h.state, "down"));
 
-    let started = h.state.start(std::slice::from_ref(&song)).await;
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&song)).await;
     let deadline = Instant::now() + Duration::from_secs(20);
     while !matches!(
         h.state.state_of("song"),
@@ -1801,7 +1930,7 @@ async fn cancel_during_word_timing_keeps_what_was_heard() {
     let file = h.clip("talk.m4a", 2);
     let clip = asset("talk", AssetKind::Audio, &file, SECONDS);
 
-    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
     let deadline = Instant::now() + Duration::from_secs(20);
     while h.aligns.load(Ordering::SeqCst) == 0 {
         assert!(Instant::now() < deadline, "word timing never started");
@@ -1819,7 +1948,7 @@ async fn cancel_during_word_timing_keeps_what_was_heard() {
     );
 
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -1873,7 +2002,7 @@ async fn a_quit_during_word_timing_keeps_the_paid_transcript() {
         let (state, clip) = (h.state.clone(), clip.clone());
         quitting.spawn(async move {
             state
-                .start(std::slice::from_ref(&clip))
+                .start(&IMPORTED, std::slice::from_ref(&clip))
                 .await
                 .finished()
                 .await
@@ -1910,13 +2039,15 @@ async fn a_quit_during_word_timing_keeps_the_paid_transcript() {
         Arc::new(|_| {}),
         Arc::new(|_| {}),
     );
-    let estimate = relaunched.estimate(std::slice::from_ref(&clip)).await;
+    let estimate = relaunched
+        .estimate(&IMPORTED, std::slice::from_ref(&clip))
+        .await;
     assert_eq!(
         (estimate.cached, estimate.usd),
         (vec!["talk".to_owned()], 0.0)
     );
     relaunched
-        .start_as(std::slice::from_ref(&clip), Asked::Page)
+        .start_as(&IMPORTED, std::slice::from_ref(&clip), Asked::Page)
         .await
         .finished()
         .await;
@@ -1950,7 +2081,7 @@ async fn a_video_with_no_picture_is_analysed_once() {
     let clip = asset("voice", AssetKind::Video, &file, SECONDS);
 
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -1960,11 +2091,14 @@ async fn a_video_with_no_picture_is_analysed_once() {
         .load("scenes")
         .expect("an empty scene log is cached");
     assert!(log.items.is_empty() && log.cost_usd == 0.0);
-    let estimate = h.state.estimate(std::slice::from_ref(&clip)).await;
+    let estimate = h
+        .state
+        .estimate(&IMPORTED, std::slice::from_ref(&clip))
+        .await;
     assert_eq!(estimate.cached, ["voice"]);
     assert!(estimate.clips.is_empty() && estimate.usd == 0.0);
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -1985,7 +2119,7 @@ async fn a_missing_file_is_not_priced_or_offered() {
     std::fs::remove_file(&gone_file).unwrap();
     let gone = asset("gone", AssetKind::Video, &gone_file, 155.04);
 
-    let estimate = h.state.estimate(&[here, gone.clone()]).await;
+    let estimate = h.state.estimate(&IMPORTED, &[here, gone.clone()]).await;
     assert_eq!(estimate.clips, ["here"]);
     assert_eq!(estimate.missing, ["gone"]);
     assert!(
@@ -1995,7 +2129,7 @@ async fn a_missing_file_is_not_priced_or_offered() {
     );
     assert!((estimate.seconds - SECONDS).abs() < 1e-9);
 
-    let started = h.state.start(std::slice::from_ref(&gone)).await;
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&gone)).await;
     assert_eq!(started.refused, None);
     started.finished().await;
     assert_eq!(
@@ -2020,7 +2154,7 @@ async fn cached_levels_need_no_decode() {
     let clip = asset("talk", AssetKind::Audio, &file, SECONDS);
 
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -2028,7 +2162,7 @@ async fn cached_levels_need_no_decode() {
     assert!(h.cache_dir(&file).load::<Value>("levels").is_some());
 
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -2081,7 +2215,7 @@ async fn cancelled_word_timing_does_not_start_again_by_itself() {
     nothing_else(&server).await;
     let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 2), SECONDS);
 
-    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
     let deadline = Instant::now() + Duration::from_secs(20);
     while h.aligns.load(Ordering::SeqCst) == 0 {
         assert!(Instant::now() < deadline, "word timing never started");
@@ -2103,7 +2237,7 @@ async fn cancelled_word_timing_does_not_start_again_by_itself() {
 
     // The page loads the project's cached clips on its own: nothing is timed again.
     h.state
-        .start_as(std::slice::from_ref(&clip), Asked::Page)
+        .start_as(&IMPORTED, std::slice::from_ref(&clip), Asked::Page)
         .await
         .finished()
         .await;
@@ -2122,7 +2256,7 @@ async fn cancelled_word_timing_does_not_start_again_by_itself() {
 
     // The person asks: the words are timed again.
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -2159,7 +2293,7 @@ async fn the_page_times_rough_words_again_once_per_app_run() {
 
     for _ in 0..3 {
         h.state
-            .start_as(std::slice::from_ref(&clip), Asked::Page)
+            .start_as(&IMPORTED, std::slice::from_ref(&clip), Asked::Page)
             .await
             .finished()
             .await;
@@ -2224,7 +2358,7 @@ async fn a_retime_that_times_nothing_more_says_why_now() {
     let clip = asset("talk", AssetKind::Audio, &file, SECONDS);
 
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -2233,7 +2367,7 @@ async fn a_retime_that_times_nothing_more_says_why_now() {
     assert_eq!(cached.approximate_reason.as_deref(), Some(quota));
 
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -2265,11 +2399,11 @@ async fn a_start_the_project_switch_overtook_does_nothing() {
 
     let starting = {
         let (state, clip) = (h.state.clone(), clip.clone());
-        tokio::spawn(async move { state.start(std::slice::from_ref(&clip)).await })
+        tokio::spawn(async move { state.start(&IMPORTED, std::slice::from_ref(&clip)).await })
     };
     let estimating = {
         let (state, clip) = (h.state.clone(), clip.clone());
-        tokio::spawn(async move { state.estimate(std::slice::from_ref(&clip)).await })
+        tokio::spawn(async move { state.estimate(&IMPORTED, std::slice::from_ref(&clip)).await })
     };
     tokio::time::sleep(Duration::from_millis(150)).await;
     h.state.project_changed();
@@ -2292,7 +2426,10 @@ async fn a_start_the_project_switch_overtook_does_nothing() {
     );
     // Nothing was promised: the next project's estimate has the whole credit.
     let next = asset("new", AssetKind::Video, &h.clip("new.mov", 2), 155.04);
-    let estimate = h.state.estimate(std::slice::from_ref(&next)).await;
+    let estimate = h
+        .state
+        .estimate(&IMPORTED, std::slice::from_ref(&next))
+        .await;
     assert!((estimate.credit_left_usd.unwrap() - 2.0).abs() < 1e-9);
     server.verify().await;
 }
@@ -2319,7 +2456,7 @@ async fn a_task_that_panics_still_ends_and_lets_go() {
     let clip = asset("talk", AssetKind::Audio, &h.clip("talk.m4a", 2), SECONDS);
 
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -2330,13 +2467,16 @@ async fn a_task_that_panics_still_ends_and_lets_go() {
             reason: "Klipolo's analysis stopped unexpectedly. Try again.".into()
         }
     );
-    let estimate = h.state.estimate(std::slice::from_ref(&clip)).await;
+    let estimate = h
+        .state
+        .estimate(&IMPORTED, std::slice::from_ref(&clip))
+        .await;
     assert!(
         (estimate.credit_left_usd.unwrap() - 2.0).abs() < 1e-9,
         "nothing stays promised"
     );
     h.state
-        .start(std::slice::from_ref(&clip))
+        .start(&IMPORTED, std::slice::from_ref(&clip))
         .await
         .finished()
         .await;
@@ -2356,7 +2496,7 @@ async fn a_removed_asset_is_forgotten_and_its_twin_keeps_its_analysis() {
     let first = asset("first", AssetKind::Audio, &file, SECONDS);
     let second = asset("second", AssetKind::Audio, &file, SECONDS);
     h.state
-        .start(&[first.clone(), second.clone()])
+        .start(&IMPORTED, &[first.clone(), second.clone()])
         .await
         .finished()
         .await;
@@ -2364,7 +2504,7 @@ async fn a_removed_asset_is_forgotten_and_its_twin_keeps_its_analysis() {
     h.state.forget(&["second".to_owned()]);
     let told = h.events.lock().unwrap().len();
     h.state
-        .start(std::slice::from_ref(&first))
+        .start(&IMPORTED, std::slice::from_ref(&first))
         .await
         .finished()
         .await;
@@ -2411,7 +2551,7 @@ async fn a_video_stopped_during_word_timing_goes_back_to_not_analysed() {
     let file = h.clip("talk.mp4", 3);
     let clip = asset("talk", AssetKind::Video, &file, SECONDS);
 
-    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
     let deadline = Instant::now() + Duration::from_secs(20);
     while h.aligns.load(Ordering::SeqCst) == 0 {
         assert!(Instant::now() < deadline, "word timing never started");
@@ -2449,11 +2589,16 @@ async fn assets_read_for_an_opening_left_behind_start_nothing() {
     h.state.project_changed();
     let estimate = h
         .state
-        .estimate_at(opening, std::slice::from_ref(&clip))
+        .estimate_at(opening, &IMPORTED, std::slice::from_ref(&clip))
         .await;
     let started = h
         .state
-        .start_at(opening, std::slice::from_ref(&clip), Asked::Person)
+        .start_at(
+            opening,
+            &IMPORTED,
+            std::slice::from_ref(&clip),
+            Asked::Person,
+        )
         .await;
     started.finished().await;
 
@@ -2489,7 +2634,7 @@ async fn chat_reads_a_clip_whose_scene_log_is_being_made_as_watched() {
         .unwrap();
     let clip = asset("clip-a", AssetKind::Video, &file, SECONDS);
 
-    let started = h.state.start(std::slice::from_ref(&clip)).await;
+    let started = h.state.start(&IMPORTED, std::slice::from_ref(&clip)).await;
     let deadline = Instant::now() + Duration::from_secs(20);
     while watched.load(Ordering::SeqCst) == 0 {
         assert!(Instant::now() < deadline, "the scene log never started");
@@ -2512,4 +2657,300 @@ async fn chat_reads_a_clip_whose_scene_log_is_being_made_as_watched() {
         klipolo_chat::AnalysisState::Done
     );
     server.verify().await;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// A recording: one clip, its files analysed for their words only
+
+/// How long after the screen a take's mic started recording.
+const MIC_LATE_US: Us = 250_000;
+
+/// A source of a take: one run of file `asset`, from `offset_us` on the recording clock.
+fn source(asset: &Asset, role: SourceRole, offset_us: Us) -> RecordingSource {
+    RecordingSource {
+        id: asset.id.clone(),
+        role,
+        label: format!("capture.source.{role:?}").to_lowercase(),
+        runs: vec![SourceRun {
+            asset_id: asset.id.clone(),
+            offset_us,
+            duration_us: asset.duration_us,
+            drift_ppm: 0.0,
+            file_in_us: 0,
+        }],
+        nudge_us: 0,
+        mix: SourceMix::default(),
+        synced: None,
+    }
+}
+
+/// A project whose main track plays one take whole: its screen (the main footage) and its camera, each a video with
+/// sound, and its mic when there is one, which started `MIC_LATE_US` after the screen.
+fn take(screen: &Asset, camera: &Asset, mic: Option<&Asset>) -> Project {
+    let mut p = Project::new("Take");
+    p.assets = [Some(screen), Some(camera), mic]
+        .into_iter()
+        .flatten()
+        .cloned()
+        .collect();
+    let mut sources = vec![
+        source(screen, SourceRole::Screen, 0),
+        source(camera, SourceRole::Camera, 0),
+    ];
+    sources.extend(mic.map(|mic| source(mic, SourceRole::Mic, MIC_LATE_US)));
+    p.recordings = vec![Recording {
+        id: "take".into(),
+        kind: RecordingKind::Screen,
+        sources,
+        primary: screen.id.clone(),
+        cursor: None,
+        markers: Vec::new(),
+        game: None,
+    }];
+    p.timeline.main = vec![Clip::new(
+        ClipSource::Recording { id: "take".into() },
+        0,
+        us(SECONDS),
+    )];
+    p
+}
+
+/// Whether any step of `told` was the scene log's.
+fn watched(told: &[AnalysisEvent]) -> bool {
+    told.iter()
+        .any(|e| matches!(e, AnalysisEvent::Progress(p) if p.step == AnalysisStep::Scenes))
+}
+
+/// A take's voice is analysed for its words alone, with no scene log: its estimate is its transcript's price, and no
+/// small copy is made or uploaded. With no mic, the voice is the camera's sound (as `speech::voice_runs` picks it): a
+/// video file, analysed for its words all the same.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_recordings_voice_gets_words_and_no_scene_log() {
+    let server = MockServer::start().await;
+    let media = FakeMedia::whole(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    mount_speech(&server, "/v1", &h.aligns, Duration::ZERO).await;
+    nothing_else(&server).await;
+    let screen = asset(
+        "screen",
+        AssetKind::Video,
+        &h.clip("screen.mov", 1),
+        SECONDS,
+    );
+    let camera = asset(
+        "camera",
+        AssetKind::Video,
+        &h.clip("camera.mov", 2),
+        SECONDS,
+    );
+    let project = take(&screen, &camera, None);
+
+    let estimate = h
+        .state
+        .estimate(&project, std::slice::from_ref(&camera))
+        .await;
+    assert_eq!(estimate.clips, ["camera"]);
+    assert!(
+        (estimate.usd - asr_usd(SECONDS)).abs() < 1e-12,
+        "{} is the transcript's {} alone",
+        estimate.usd,
+        asr_usd(SECONDS)
+    );
+
+    let started = h.state.start(&project, std::slice::from_ref(&camera)).await;
+    assert_eq!(started.refused, None);
+    started.finished().await;
+    server.verify().await;
+
+    assert_eq!(h.state.state_of("camera"), timed());
+    let found = h.state.analysis_for("camera").unwrap();
+    assert!(found.transcript.is_some(), "its words");
+    assert!(found.scenes.is_none(), "no scene log");
+    assert_eq!(media.copies.load(Ordering::SeqCst), 0, "no small copy");
+    assert!(requests(&server, "POST", "/v1/files").await.is_empty());
+    assert!(requests(&server, "POST", "/v1/responses").await.is_empty());
+    assert!(!watched(&h.events_for("camera")));
+}
+
+/// Every file of a take asked for (the page offers only its voice, but the commands take any file a main-track clip
+/// plays) is analysed for its words only (`words_only`): the screen and the camera are never copied for a scene log or
+/// uploaded, and the estimate is the transcripts' price alone.
+#[tokio::test(flavor = "multi_thread")]
+async fn every_file_of_a_recording_is_analysed_for_words_only() {
+    let server = MockServer::start().await;
+    let media = FakeMedia::whole(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    mount_speech(&server, "/v1", &h.aligns, Duration::ZERO).await;
+    nothing_else(&server).await;
+    let screen = asset(
+        "screen",
+        AssetKind::Video,
+        &h.clip("screen.mov", 1),
+        SECONDS,
+    );
+    let camera = asset(
+        "camera",
+        AssetKind::Video,
+        &h.clip("camera.mov", 2),
+        SECONDS,
+    );
+    let mic = asset("mic", AssetKind::Audio, &h.clip("mic.m4a", 3), SECONDS);
+    let project = take(&screen, &camera, Some(&mic));
+    let files = [screen, camera, mic];
+
+    let estimate = h.state.estimate(&project, &files).await;
+    assert_eq!(estimate.clips, ["screen", "camera", "mic"]);
+    assert!((estimate.usd - 3.0 * asr_usd(SECONDS)).abs() < 1e-12);
+
+    h.state.start(&project, &files).await.finished().await;
+    server.verify().await;
+
+    for id in ["screen", "camera", "mic"] {
+        assert_eq!(h.state.state_of(id), timed(), "{id}");
+        assert!(h.state.analysis_for(id).unwrap().scenes.is_none(), "{id}");
+        assert!(!watched(&h.events_for(id)), "{id}");
+    }
+    assert_eq!(media.copies.load(Ordering::SeqCst), 0, "no small copy");
+}
+
+/// A take's captions are its voice's words where the take plays them: a transcript on its mic's file (cached, as an
+/// earlier analysis left it) lands on the timeline through the clip's run (`speech::run_spans`), counting the mic's
+/// late start and the clip before the take. Its screen and camera files have no sound, as a take Klipolo records has
+/// them, so the mic's run is the clip's only one, and no words are found for them.
+#[tokio::test(flavor = "multi_thread")]
+async fn captions_follow_a_recording_clip() {
+    // A clip imported on its own plays before the take.
+    const INTRO_US: Us = 2_000_000;
+    let server = MockServer::start().await;
+    nothing_else(&server).await;
+    let h = harness(&server, MemoryStore::default(), FakeMedia::whole(SECONDS));
+    let screen = asset(
+        "screen",
+        AssetKind::Video,
+        &h.clip("screen.mov", 1),
+        SECONDS,
+    );
+    let camera = asset(
+        "camera",
+        AssetKind::Video,
+        &h.clip("camera.mov", 2),
+        SECONDS,
+    );
+    let (screen, camera) = (
+        Asset {
+            has_audio: false,
+            ..screen
+        },
+        Asset {
+            has_audio: false,
+            ..camera
+        },
+    );
+    let mic_file = h.clip("mic.m4a", 3);
+    let mic = asset("mic", AssetKind::Audio, &mic_file, SECONDS);
+    let heard = cached_transcript();
+    h.cache_dir(&mic_file).store("transcript", &heard).unwrap();
+    let mut project = take(&screen, &camera, Some(&mic));
+    project.assets.push(asset(
+        "intro",
+        AssetKind::Video,
+        &h.clip("intro.mov", 4),
+        2.0,
+    ));
+    let intro = Clip::new(ClipSource::Asset { id: "intro".into() }, 0, INTRO_US);
+    project.timeline.main.insert(0, intro);
+
+    h.state
+        .start(&project, std::slice::from_ref(&mic))
+        .await
+        .finished()
+        .await;
+    server.verify().await;
+
+    let speech = h.last_speech();
+    assert_eq!(speech.transcripts.keys().collect::<Vec<_>>(), ["mic"]);
+    let take_clip = &project.timeline.main[1].id;
+    let spans = run_spans(&project);
+    let heard_in_take: Vec<&str> = (spans.iter())
+        .filter(|s| &s.clip == take_clip)
+        .map(|s| s.asset.as_str())
+        .collect();
+    assert_eq!(heard_in_take, ["mic"], "{spans:?}");
+    let words = spoken(&project, &speech);
+    let said: Vec<(&str, Us, Us)> = words
+        .shown(&project, &speech)
+        .filter(|(w, _)| w.kind == WordKind::Word)
+        .map(|(w, text)| (text, w.start_us, w.end_us))
+        .collect();
+    let later = MIC_LATE_US + INTRO_US;
+    let expected: Vec<(&str, Us, Us)> = (heard.transcript.words.iter())
+        .filter(|w| w.kind == WordKind::Word)
+        .map(|w| (w.text.as_str(), w.start_us + later, w.end_us + later))
+        .collect();
+    assert_eq!(expected.len(), 3);
+    assert_eq!(said, expected);
+}
+
+/// A take's file imported again (the same file, by its path) is heard for its words only, as the take's own is. So is a
+/// copy of it elsewhere (the same content) asked for with the take's own, whichever comes first: a take's picture is
+/// never copied for a scene log or uploaded, however it is asked for.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_takes_file_imported_again_gets_no_scene_log() {
+    let server = MockServer::start().await;
+    let media = FakeMedia::whole(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    mount_speech(&server, "/v1", &h.aligns, Duration::ZERO).await;
+    nothing_else(&server).await;
+    let screen = asset(
+        "screen",
+        AssetKind::Video,
+        &h.clip("screen.mov", 1),
+        SECONDS,
+    );
+    let camera = asset(
+        "camera",
+        AssetKind::Video,
+        &h.clip("camera.mov", 2),
+        SECONDS,
+    );
+    let mut project = take(&screen, &camera, None);
+    let again = Asset {
+        id: "again".into(),
+        ..screen.clone()
+    };
+    let copy = asset("copy", AssetKind::Video, &h.clip("copy.mov", 1), SECONDS);
+    project.assets.extend([again.clone(), copy.clone()]);
+
+    let alone = h
+        .state
+        .estimate(&project, std::slice::from_ref(&again))
+        .await;
+    assert!(
+        (alone.usd - asr_usd(SECONDS)).abs() < 1e-12,
+        "{}",
+        alone.usd
+    );
+    let together = h
+        .state
+        .estimate(&project, &[copy.clone(), screen.clone()])
+        .await;
+    assert_eq!(together.clips, ["copy", "screen"]);
+    assert!(
+        (together.usd - asr_usd(SECONDS)).abs() < 1e-12,
+        "{}",
+        together.usd
+    );
+
+    h.state
+        .start(&project, &[copy, again, screen])
+        .await
+        .finished()
+        .await;
+    server.verify().await;
+
+    for id in ["copy", "again", "screen"] {
+        assert_eq!(h.state.state_of(id), timed(), "{id}");
+        assert!(h.state.analysis_for(id).unwrap().scenes.is_none(), "{id}");
+    }
+    assert_eq!(media.copies.load(Ordering::SeqCst), 0, "no small copy");
 }

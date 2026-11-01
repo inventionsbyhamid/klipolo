@@ -10,6 +10,7 @@ import { useMedia } from '../../state/media';
 import { sendSeek, usePlayback } from '../../state/playback';
 import { toast } from '../../state/toasts';
 import { useUi } from '../../state/ui';
+import { sendVolume } from '../../state/volume';
 import { resendEditing } from './textEdit';
 
 /** What the page does with an event from the preview engine (exported for its tests). */
@@ -82,6 +83,8 @@ export function useEngineSession() {
         // Editing copies follow the person's setting (Rust starts with them on). Fire and forget: without Tauri, or
         // with the browser's stand-in backend, nothing answers, and that is never an unhandled rejection.
         mediaJobs.setAuto(useUi.getState().autoCopies).catch(() => undefined);
+        // The player bar's volume: a new engine plays at full volume until told.
+        sendVolume();
         if (info.port === 0) store.setStatus('unavailable');
         onVisibility(); // the engine only listens once attached
       },

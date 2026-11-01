@@ -29,6 +29,7 @@ const rec = () => useRecorder.getState();
 const state = (s: WorkerState): CaptureEvent => ({ ev: 'state', state: s, elapsedUs: 0 });
 const countdown = (leftS: number): CaptureEvent => ({ ev: 'countdown', leftS });
 const gate = (...missing: string[]): CaptureEvent => ({ ev: 'gate', missing });
+const systemAlert = (up: boolean): CaptureEvent => ({ ev: 'systemAlert', up });
 const meter = (source: string, peakDbfs: number): CaptureEvent => ({ ev: 'meter', source, peakDbfs });
 const failed = (code: string): CaptureEvent => ({ ev: 'failed', error: { code, params: {} } });
 
@@ -178,6 +179,34 @@ describe('the dialog and its choices', () => {
     expect(recordButton()).not.toHaveAttribute('aria-disabled');
     await userEvent.click(recordButton());
     expect(fake.armed[0].what).toEqual({ kind: 'app', appId: 'com.apple.Notes', display: 'main' });
+  });
+
+  it('one_app_s_cards_sit_below_the_preview_in_their_own_rows', async () => {
+    const dialog = await openOn(
+      recorderSetup({
+        apps: ['Safari', 'Notes', 'Mail', 'Keynote'].map((name) => app(`com.apple.${name}`, name)),
+      }),
+    );
+    await userEvent.click(screen.getByRole('radio', { name: 'One app' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Keynote' }));
+    const preview = dialog.querySelector<HTMLElement>('.record-preview');
+    const group = screen.getByRole('radiogroup', { name: 'Apps' });
+    expect(within(group).getAllByRole('radio')).toHaveLength(4);
+    // The cards come after the preview box, never inside it.
+    expect(preview).not.toBeNull();
+    expect(preview?.contains(group)).toBe(false);
+    expect(preview?.compareDocumentPosition(group)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    const css = readFileSync(resolve(__dirname, 'record.css'), 'utf8');
+    // The body's rows are as tall as what is in them, so a body that has to scroll never squeezes the 16:9 preview's
+    // row and lets the cards' rows climb over it: it scrolls instead.
+    const body = css.match(/\.record-body \{[^}]*\}/)?.[0] ?? '';
+    expect(body).toMatch(/grid-auto-rows: max-content/);
+    expect(body).toMatch(/overflow-y: auto/);
+    // The cards wrap into rows of their own, in the flow: nothing places them over the preview.
+    const cards = css.match(/\.record-cards \{[^}]*\}/)?.[0] ?? '';
+    expect(cards).toMatch(/grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+    for (const rule of css.match(/\.record-(cards|card|section)[^{]*\{[^}]*\}/g) ?? [])
+      expect(rule).not.toMatch(/position: (absolute|fixed)/);
   });
 
   it('no_open_app_says_so', async () => {
@@ -705,6 +734,30 @@ describe('countdown, saving and failure', () => {
     expect(fake.sent.at(-1)).toEqual({ take: 'take-1', command: { cmd: 'withoutSource', source: 'camera' } });
     expect(dialog).not.toHaveTextContent("Camera isn't sending anything yet.");
     expect(dialog).toHaveTextContent("Mic isn't sending anything yet.");
+  });
+
+  it('macos_asking_holds_the_countdown_until_it_is_answered', async () => {
+    const dialog = await pressRecord();
+    emit('take-1', countdown(2));
+    emit('take-1', systemAlert(true));
+    emit('take-1', countdown(2));
+    const asking = 'macOS is asking you something. Answer it, and the countdown starts again.';
+    // The question is said in the countdown's place, and no number shows while it holds.
+    expect(dialog).toHaveTextContent(asking);
+    expect(within(dialog).getAllByRole('status').some((s) => s.textContent === asking)).toBe(true);
+    expect(dialog).not.toHaveTextContent('Recording starts in');
+    expect(dialog.querySelector('.record-count')).toBeNull();
+    // Nothing to press but Cancel, which keeps the keyboard.
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    expect(yellows(dialog)).toEqual([]);
+    // Answered: the countdown starts again from the top (the worker says its number first), and is said again.
+    emit('take-1', countdown(3));
+    emit('take-1', systemAlert(false));
+    expect(dialog).not.toHaveTextContent(asking);
+    expect(dialog.querySelector('.record-count')).toHaveTextContent('3');
+    expect(within(dialog).getAllByRole('status').some((s) => s.textContent === 'Recording starts in 3 s.')).toBe(true);
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(fake.calls.at(-1)).toBe('send:cancel');
   });
 
   it('the_dialog_hides_while_recording_and_saving', async () => {

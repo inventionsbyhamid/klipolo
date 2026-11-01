@@ -7,6 +7,7 @@ import type { Asset } from '../../bindings/Asset';
 import type { Estimate } from '../../bindings/Estimate';
 import type { Item } from '../../bindings/Item';
 import type { Snapshot } from '../../bindings/Snapshot';
+import type { SourceRole } from '../../bindings/SourceRole';
 import { renderWithProviders } from '../../test/render';
 
 vi.mock('../../bridge/analysis', () => ({
@@ -19,7 +20,7 @@ vi.mock('../../bridge/analysis', () => ({
   },
 }));
 const { analysisBridge } = await import('../../bridge/analysis');
-const { useAnalysis } = await import('../../state/analysis');
+const { offerAgain, useAnalysis } = await import('../../state/analysis');
 const { useAi } = await import('../../ai/aiStatus');
 const { useProject } = await import('../../state/project');
 const { AnalysisBanner } = await import('./AnalysisBanner');
@@ -350,5 +351,179 @@ describe('the analysis banner', () => {
     renderWithProviders(<AnalysisBanner />);
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findByText(refusal)).toBeInTheDocument();
+  });
+});
+
+describe('a recording', () => {
+  /** A take's files: its screen (the main footage) and camera, each a video with sound, and its mic. */
+  const SCREEN = clip('screen', 'screen.mov');
+  const CAMERA = clip('camera', 'camera.mov');
+  const MIC = clip('mic', 'mic.m4a', 'audio');
+
+  /**
+   * A project whose main track plays one take of `sources` (each a role and its files, one run after another; the
+   * first source is the main footage), whole, and each file of `alone` again as a clip of its own.
+   */
+  function showTake(sources: [SourceRole, ...Asset[]][], { alone = [] as string[] } = {}) {
+    const recording = {
+      id: 'take',
+      kind: 'screen',
+      sources: sources.map(([role, ...files]) => ({
+        id: role,
+        role,
+        label: `capture.source.${role}`,
+        runs: files.map((file, k) => ({
+          assetId: file.id,
+          offsetUs: k * file.durationUs,
+          durationUs: file.durationUs,
+          driftPpm: 0,
+        })),
+        nudgeUs: 0,
+        mix: { volume: 1, muted: false, effects: [] },
+      })),
+      primary: sources[0][0],
+      markers: [],
+    };
+    const assets = sources.flatMap(([, ...files]) => files);
+    const end = Math.max(...sources.map(([, ...files]) => files.reduce((sum, file) => sum + file.durationUs, 0)));
+    const whole = { sourceInUs: 0, sourceOutUs: end };
+    const main = [
+      { id: 'clip-take', source: { type: 'recording', id: 'take' }, ...whole },
+      ...alone.map((id) => ({ id: `clip-${id}`, source: { type: 'asset', id }, ...whole })),
+    ];
+    const snapshot = {
+      project: { assets, recordings: [recording], timeline: { main, tracks: [] } },
+    } as unknown as Snapshot;
+    useProject.setState({ snapshot });
+  }
+
+  /** Every asset id the page sent to Rust to estimate or analyse. */
+  function sent(): string[] {
+    return [...bridge.estimate.mock.calls, ...bridge.start.mock.calls].flatMap(([ids]) => ids);
+  }
+
+  it('a_recording_counts_as_one_clip_in_the_offer', async () => {
+    bridge.estimate.mockResolvedValue(offer({ usd: 0.01, clips: ['mic'] }));
+    showTake([
+      ['screen', SCREEN],
+      ['camera', CAMERA],
+      ['mic', MIC],
+    ]);
+    renderWithProviders(<AnalysisBanner />);
+
+    expect(await screen.findByText('Analyze 1 clip for about $0.01')).toBeInTheDocument();
+    expect(bridge.estimate).toHaveBeenCalledTimes(1);
+    expect(bridge.estimate).toHaveBeenCalledWith(['mic']);
+    // Its words only: a take's footage isn't watched.
+    expect(screen.getByText(/^Klipolo transcribes it and times each word\./)).toBeInTheDocument();
+
+    // While it runs, its row is the take, named as its clip is.
+    act(() => useAnalysis.setState({ states: { mic: { state: 'running', step: 'words', pct: 40 } } }));
+    expect(screen.getByText('Analyzing 1 clip')).toBeInTheDocument();
+    expect(screen.getByText('Recording 1')).toBeInTheDocument();
+    expect(screen.getByText('Timing words')).toBeInTheDocument();
+  });
+
+  it('screen_and_camera_files_are_never_sent', async () => {
+    bridge.estimate.mockResolvedValue(offer({ usd: 0.01, clips: ['mic'] }));
+    showTake([
+      ['screen', SCREEN],
+      ['camera', CAMERA],
+      ['mic', MIC],
+    ]);
+    const { container } = renderWithProviders(<AnalysisBanner />);
+
+    expect(await screen.findByText('Analyze 1 clip for about $0.01')).toBeInTheDocument();
+    // Analyze from the Captions panel or chat offers the same.
+    await act(() => offerAgain());
+    expect(bridge.estimate).toHaveBeenLastCalledWith(['mic']);
+    await userEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    expect(bridge.start).toHaveBeenCalledWith(['mic']);
+    // Once its voice is analysed, the take has nothing left to offer.
+    act(() => useAnalysis.setState({ states: { mic: { state: 'done', approximate: false } } }));
+    await act(async () => undefined);
+    expect(container).toBeEmptyDOMElement();
+
+    expect(sent().length).toBeGreaterThan(0);
+    expect(sent()).not.toContain('screen');
+    expect(sent()).not.toContain('camera');
+  });
+
+  it('a_take_with_no_mic_offers_the_camera_s_words_only', async () => {
+    bridge.estimate.mockResolvedValue(offer({ usd: 0.01, clips: ['camera'] }));
+    showTake([
+      ['screen', { ...SCREEN, hasAudio: false }],
+      ['camera', CAMERA],
+    ]);
+    renderWithProviders(<AnalysisBanner />);
+
+    expect(await screen.findByText('Analyze 1 clip for about $0.01')).toBeInTheDocument();
+    expect(bridge.estimate).toHaveBeenCalledWith(['camera']);
+    expect(screen.getByText(/^Klipolo transcribes it and times each word\./)).toBeInTheDocument();
+  });
+
+  it('a_file_of_a_take_placed_on_its_own_is_offered_for_its_words', async () => {
+    bridge.estimate.mockResolvedValue(offer({ usd: 0.02, clips: ['screen', 'mic'] }));
+    showTake(
+      [
+        ['screen', SCREEN],
+        ['camera', CAMERA],
+        ['mic', MIC],
+      ],
+      { alone: ['screen'] },
+    );
+    renderWithProviders(<AnalysisBanner />);
+
+    expect(await screen.findByText('Analyze 2 clips for about $0.02')).toBeInTheDocument();
+    expect(bridge.estimate).toHaveBeenCalledWith(['screen', 'mic']);
+    expect(screen.getByText(/^Klipolo transcribes them and times each word\./)).toBeInTheDocument();
+
+    // Its row is named as the timeline names that clip.
+    act(() => useAnalysis.setState({ states: { screen: { state: 'running', step: 'audio', pct: 0 } } }));
+    expect(screen.getByText('Screen of Recording 1')).toBeInTheDocument();
+  });
+
+  it('a_take_in_two_files_counts_and_lists_as_one_clip', async () => {
+    // The mic reconnected into a second file: still one take, one clip.
+    const MIC2 = clip('mic2', 'mic-2.m4a', 'audio');
+    bridge.estimate.mockResolvedValue(offer({ usd: 0.02, clips: ['mic', 'mic2'] }));
+    showTake([
+      ['screen', { ...SCREEN, hasAudio: false }],
+      ['mic', MIC, MIC2],
+    ]);
+    renderWithProviders(<AnalysisBanner />);
+
+    expect(await screen.findByText('Analyze 1 clip for about $0.02')).toBeInTheDocument();
+    expect(bridge.estimate).toHaveBeenCalledWith(['mic', 'mic2']);
+    expect(screen.getByText(/^Klipolo transcribes it and times each word\./)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    expect(bridge.start).toHaveBeenCalledWith(['mic', 'mic2']);
+
+    // One row, at the step of its least advanced file, and the screen reader hears the name the row shows.
+    act(() =>
+      useAnalysis.setState({
+        states: {
+          mic: { state: 'running', step: 'words', pct: 80 },
+          mic2: { state: 'running', step: 'transcript', pct: 30 },
+        },
+      }),
+    );
+    expect(screen.getByText('Analyzing 1 clip')).toBeInTheDocument();
+    expect(screen.getAllByText('Recording 1')).toHaveLength(1);
+    expect(screen.getByText('Transcribing')).toBeInTheDocument();
+    expect(screen.getByText('30%')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Recording 1: Transcribing, 25%');
+
+    // One file failed and the other is done: one take couldn't finish, and Retry asks for its failed file.
+    const busy = 'Meta is busy right now. Try again in a moment.';
+    act(() =>
+      useAnalysis.setState({
+        states: { mic: { state: 'done', approximate: false }, mic2: { state: 'failed', reason: busy } },
+      }),
+    );
+    expect(screen.getByText("Couldn't finish 1 clip")).toBeInTheDocument();
+    expect(screen.getAllByText('Recording 1')).toHaveLength(1);
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(bridge.start).toHaveBeenLastCalledWith(['mic2']);
   });
 });

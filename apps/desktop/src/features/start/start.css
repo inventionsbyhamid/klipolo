@@ -56,6 +56,8 @@
 .start-card {
   display: flex;
   flex-direction: column;
+  /* Its parts as wide as the card: a button keeps them at their own width in some WebKit builds. */
+  align-items: stretch;
   gap: var(--space-1);
   width: 100%;
   padding: var(--space-4);
@@ -66,6 +68,27 @@
 
 .start-card:hover {
   background: var(--color-bay-hover);
+}
+
+/* A card's More button sits over its picture's top right corner, shown while the card is hovered or has the focus. */
+.start-item {
+  position: relative;
+}
+
+.start-more {
+  position: absolute;
+  top: calc(var(--space-4) + var(--space-3));
+  right: calc(var(--space-4) + var(--space-3));
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-1);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.start-item:hover .start-more,
+.start-item:focus-within .start-more,
+.start-more[data-state="open"] {
+  opacity: 1;
 }
 
 /* Opening: pressed, with a spinner over its picture. Meta text is soft on the press colour. */
@@ -93,6 +116,8 @@
   position: relative;
   display: grid;
   place-items: center;
+  /* The whole card's width by its own rule, so the 16:9 box never shrinks to the clip art. */
+  width: 100%;
   aspect-ratio: 16 / 9;
   margin-bottom: var(--space-4);
   overflow: hidden;

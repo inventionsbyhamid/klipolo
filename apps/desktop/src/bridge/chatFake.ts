@@ -133,6 +133,7 @@ export function proposal(id: string, baseRevision: number, parts: Partial<ChatPr
       markers: [],
       sounds: [],
       formats: [],
+      moved: [],
     },
     removedUs: 0,
     tags: [],

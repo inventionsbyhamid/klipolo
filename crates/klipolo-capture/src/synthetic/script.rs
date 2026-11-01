@@ -69,6 +69,8 @@ pub struct Script {
     pub still_fails: Vec<(Target, u32, PipeError)>,
     /// The sound pipes add the sync blips to `sound` (default true; off for a pure tone, as the mic meter's test reads).
     pub sync_blips: bool,
+    /// While a system alert is on the screen (`Backend::system_alert`): (from ms, to ms) after the backend was made.
+    pub system_alerts: Vec<(u32, u32)>,
 }
 
 impl Default for Script {
@@ -109,6 +111,7 @@ impl Default for Script {
             live_view_refuses: 0,
             still_fails: vec![],
             sync_blips: true,
+            system_alerts: vec![],
             caps: CaptureCaps {
                 screen: ScreenApi::ScreenCaptureKit,
                 app_audio: AppAudioApi::ScreenCaptureKit,

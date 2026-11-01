@@ -11,7 +11,7 @@ import { renderWithProviders } from '../../test/render';
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('../../bridge/commands', () => ({
-  bridge: { createProject: vi.fn(), openProject: vi.fn(), snapshot: vi.fn() },
+  bridge: { createProject: vi.fn(), openProject: vi.fn(), duplicateProject: vi.fn(), snapshot: vi.fn() },
   mediaUrl: (path: string) => `asset://localhost${path}`,
 }));
 const { bridge } = await import('../../bridge/commands');
@@ -30,6 +30,7 @@ const ROWS: ProjectRow[] = [
     durationUs: 252_000_000,
     clips: 3,
     thumb: { sprite: '/cache/media/thumbs/tour/c-00000.k.jpg', tileW: 128, tileH: 72, cols: 8 },
+    open: false,
   },
   {
     path: '/Users/me/Movies/Klipolo/Untitled project.klipolo',
@@ -38,6 +39,7 @@ const ROWS: ProjectRow[] = [
     durationUs: 0,
     clips: 0,
     thumb: null,
+    open: false,
   },
   {
     path: '/Users/me/Movies/Klipolo/Kiln vlog.klipolo',
@@ -47,6 +49,7 @@ const ROWS: ProjectRow[] = [
     clips: 1,
     // A phone video: a tall tile, drawn whole in the middle of the 16:9 picture.
     thumb: { sprite: '/cache/media/thumbs/kiln/c-00000.k.jpg', tileW: 40, tileH: 72, cols: 8 },
+    open: false,
   },
 ];
 
@@ -60,8 +63,26 @@ function recentAnswers(...answers: (ProjectRow[] | Error)[]) {
   });
 }
 
-const cards = () => within(screen.getByRole('list')).getAllByRole('button');
+// The cards themselves, not their More buttons.
+const cards = () =>
+  within(screen.getByRole('list'))
+    .getAllByRole('button')
+    .filter((button) => button.classList.contains('start-card'));
 const card = (name: string) => cards().find((c) => c.textContent?.includes(name))!;
+
+/** The declarations of the rule for exactly `selector` in `start.css` (comments left out). */
+function cssRule(selector: string): Record<string, string> {
+  const css = readFileSync(resolve(__dirname, 'start.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const body = new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+  return Object.fromEntries(
+    body
+      .split(';')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => [line.slice(0, line.indexOf(':')).trim(), line.slice(line.indexOf(':') + 1).trim()]),
+  );
+}
 
 beforeEach(() => {
   vi.spyOn(Date, 'now').mockReturnValue(NOW);
@@ -76,6 +97,7 @@ afterEach(() => {
   invoke.mockReset();
   vi.mocked(bridge.createProject).mockReset();
   vi.mocked(bridge.openProject).mockReset();
+  vi.mocked(bridge.duplicateProject).mockReset();
 });
 
 describe('StartScreen', () => {
@@ -168,6 +190,43 @@ describe('StartScreen', () => {
     expect(art.querySelector('.start-pic svg.ico')).not.toBeNull();
   });
 
+  it('card_picture_is_a_16_9_box_as_wide_as_the_card', async () => {
+    // The card is a button: its picture takes the card's whole width by its own rule, not by the button's alignment,
+    // so it is the same 16:9 box (240 points wide at 1440, four to a row) in every WebKit.
+    expect(cssRule('.start-card')).toMatchObject({
+      display: 'flex',
+      'flex-direction': 'column',
+      'align-items': 'stretch',
+    });
+    expect(cssRule('.start-pic')).toMatchObject({
+      width: '100%',
+      'aspect-ratio': '16 / 9',
+      'border-radius': 'var(--radius-sm)',
+      background: 'var(--color-clip-deep)',
+    });
+    expect(cssRule('.start-grid')['grid-template-columns']).toBe('repeat(auto-fill, minmax(208px, 1fr))');
+
+    // A picture written for the card (one picture, not a sheet of tiles) is drawn whole.
+    const poster: ProjectRow = {
+      ...ROWS[0],
+      thumb: { sprite: '/cache/media/thumbs/tour/poster-480x270.jpg', tileW: 480, tileH: 270, cols: 1 },
+    };
+    recentAnswers([poster, ROWS[1]]);
+    renderWithProviders(<StartScreen />);
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    const pic = card('Studio tour').querySelector('.start-pic')!;
+    const tile = pic.querySelector<HTMLElement>('.start-tile')!;
+    expect(tile.style.backgroundImage).toBe('url("asset://localhost/cache/media/thumbs/tour/poster-480x270.jpg")');
+    expect(tile.style.backgroundSize).toMatch(/^100%( auto)?$/);
+    expect([tile.style.width, tile.style.height]).toEqual(['100%', '100%']);
+    // None yet: the same box, with the film clip art in its middle.
+    const none = card('Untitled project').querySelector('.start-pic')!;
+    expect(none.querySelector('.start-tile')).toBeNull();
+    expect(none.querySelector('svg.ico')).not.toBeNull();
+    // The picture stays out of the card's name.
+    expect(screen.getByRole('button', { name: 'Studio tour' })).toBeInTheDocument();
+  });
+
   it('opening_a_card_opens_its_project', async () => {
     recentAnswers(ROWS);
     renderWithProviders(<StartScreen />);
@@ -188,6 +247,41 @@ describe('StartScreen', () => {
     expect(bridge.openProject).toHaveBeenLastCalledWith('/Users/me/Movies/Klipolo/Kiln vlog.klipolo');
     expect(bridge.openProject).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(useProject.getState().pending).toBe(0));
+  });
+
+  it("a card's menu duplicates its project and opens the copy", async () => {
+    recentAnswers(ROWS);
+    const copy = fixtureSnapshot();
+    copy.project = { ...copy.project, id: 'copy', name: 'Studio tour copy' };
+    vi.mocked(bridge.duplicateProject).mockResolvedValue({ ...copy, opening: 1 });
+    renderWithProviders(<StartScreen />);
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    // From the keyboard: the card's More button is the next stop after it.
+    act(() => card('Studio tour').focus());
+    await userEvent.tab();
+    const more = screen.getByRole('button', { name: 'More for Studio tour' });
+    expect(more).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Duplicate' }));
+    expect(bridge.duplicateProject).toHaveBeenCalledWith('/Users/me/Movies/Klipolo/Studio tour.klipolo');
+    await waitFor(() => expect(useProject.getState().snapshot?.project.name).toBe('Studio tour copy'));
+    expect(bridge.openProject).not.toHaveBeenCalled();
+  });
+
+  it('a copy that fails says why and lists the projects again', async () => {
+    recentAnswers(ROWS);
+    vi.mocked(bridge.duplicateProject).mockRejectedValue(
+      new Error("Klipolo couldn't create the project. Check the disk, then try again."),
+    );
+    renderWithProviders(<StartScreen />);
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    await userEvent.click(screen.getByRole('button', { name: 'More for Kiln vlog' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Duplicate' }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
+    expect(useToasts.getState().toasts.map((toast) => toast.text)).toEqual([
+      "Klipolo couldn't create the project. Check the disk, then try again.",
+    ]);
+    expect(useProject.getState().snapshot).toBeNull();
   });
 
   it('opens one project at a time', async () => {

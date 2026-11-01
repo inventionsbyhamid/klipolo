@@ -29,6 +29,8 @@ export const engine = {
   setRect: (rect: ViewRect | null) => call<void>('engine_view', { rect }),
   /** Hidden or minimised (false): the engine pauses with silence and lets its decoders go; shown again (true). */
   setVisible: (visible: boolean) => call<void>('engine_set_visible', { visible }),
+  /** How loud the preview plays for the person, 0 (silent) to 1: the player bar's volume, never an export's. */
+  setVolume: (volume: number) => call<void>('engine_set_volume', { volume }),
   seek: (atUs: number, seq: number) => call<void>('engine_seek', { atUs, seq }),
   /**
    * Rust owns the clock and the sound; frames carry their time and `state` events report stops. `rate`: -2, -1, 1 or 2

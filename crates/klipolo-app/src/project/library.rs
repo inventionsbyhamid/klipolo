@@ -24,16 +24,23 @@ pub(crate) fn library_dir() -> Result<PathBuf, Said> {
     Ok(dir)
 }
 
-/// A file for a new project named `name` in `library`: `<name>.klipolo`, or `<name> 2.klipolo` and so on when that is
-/// taken. The name is made safe as a file name, so it can't reach outside the library.
-pub(crate) fn new_file(library: &Path, name: &str) -> PathBuf {
+/// A file for a new project named `name` in `library`, and the name the project takes with it: `<name>.klipolo` and
+/// `name`, or `<name> 2.klipolo` and `<name> 2` and so on when that is taken, so the project and its file say the same
+/// number. The file's name is made safe as a file name, so it can't reach outside the library.
+pub(crate) fn new_file(library: &Path, name: &str) -> (PathBuf, String) {
     let stem = safe_file_name(name);
     (1..)
         .map(|n| match n {
-            1 => library.join(format!("{stem}.{PROJECT_EXTENSION}")),
-            n => library.join(format!("{stem} {n}.{PROJECT_EXTENSION}")),
+            1 => (
+                library.join(format!("{stem}.{PROJECT_EXTENSION}")),
+                name.to_owned(),
+            ),
+            n => (
+                library.join(format!("{stem} {n}.{PROJECT_EXTENSION}")),
+                format!("{name} {n}"),
+            ),
         })
-        .find(|file| !file.exists())
+        .find(|(file, _)| !file.exists())
         .expect("a free name")
 }
 

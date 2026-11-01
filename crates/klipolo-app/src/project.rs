@@ -13,6 +13,7 @@ mod apps;
 mod chat;
 mod create;
 mod disk;
+mod duplicate;
 mod library;
 mod recent;
 mod saver;
@@ -41,7 +42,7 @@ use klipolo_model::history::{Change, Document, HistoryLimits, Snapshot, Snapshot
 use klipolo_model::project::{AssetKind, FormatKind, Project};
 use klipolo_platform::pressure::{self, Pressure};
 pub(crate) use library::{library_dir, read};
-use recent::{ProjectRow, RECENT_FILE, RECENT_LIMIT, recent_in};
+use recent::{ProjectRow, RECENT_FILE, RECENT_LIMIT, mark_open, recent_in};
 pub(crate) use saver::{SaveStatus, Saver, Version};
 pub(crate) use session::ProjectSessionState;
 #[cfg(test)]
@@ -169,13 +170,25 @@ pub fn project_open(state: State<'_, ProjectSessionState>, path: String) -> Resu
     open_in(&state, Path::new(&path))
 }
 
-/// The start screen's recent projects (`recent::recent_in`): the library's project files, last opened first. Nothing is
-/// opened. Each card's thumbnail sprite is let through the asset protocol (the cache folder's scope holds it already).
-/// A projects folder that can't be listed fails as `project.libraryFailed`, never as an empty library.
+/// Duplicates a project into the library and opens the copy, "<name> copy" (`duplicate`): the open project as it stands
+/// (`path` left out), or the project file at `path` (a start screen card). The open one is saved and closed first.
+#[tauri::command(async)]
+pub fn project_duplicate(
+    state: State<'_, ProjectSessionState>,
+    path: Option<String>,
+) -> Result<Snapshot, Said> {
+    duplicate::duplicate_in(&state, &library_dir()?, path.as_deref().map(Path::new))
+}
+
+/// The start screen's and the project menu's recent projects (`recent::recent_in`): the library's project files, last
+/// opened first, the one open now marked (`recent::mark_open`). Nothing is opened. Each card's picture is let through
+/// the asset protocol (the cache folder's scope holds it already). A projects folder that can't be listed fails as
+/// `project.libraryFailed`, never as an empty library.
 #[tauri::command(async)]
 pub fn projects_recent(
     app: AppHandle,
     engine: State<'_, EngineState>,
+    state: State<'_, ProjectSessionState>,
 ) -> Result<Vec<ProjectRow>, Said> {
     // Without an app data folder nothing was stamped: the list goes by last save.
     let stamps = app
@@ -189,6 +202,8 @@ pub fn projects_recent(
             tracing::warn!(%error, "the projects folder couldn't be listed");
             Said::code("project.libraryFailed")
         })?;
+    let open = lock(&state).as_ref().map(|open| open.file.clone());
+    mark_open(&mut rows, open.as_deref());
     let scope = app.asset_protocol_scope();
     for row in &mut rows {
         // A sprite that can't be let through goes: the card shows the clip art instead.

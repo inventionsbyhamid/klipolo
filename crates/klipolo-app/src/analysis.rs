@@ -2,6 +2,9 @@
 //! shown first, progress as it goes, results cached per file, and a clean stop when the credit runs out. Captions and
 //! chat read what it finds.
 //!
+//! A recording is one clip: its files (screen, camera, mic) are analysed for their words only, never watched for a
+//! scene log (`words_only`).
+//!
 //! - **Estimate** (`AnalysisState::estimate`): what analysing the clips asked for costs at Meta's list prices (the
 //!   providers' own estimates: `transcript::estimate_usd`, `scenes::estimate_usd`), how long they are, and which are
 //!   cached already (they cost nothing). A clip whose file can't be found or opened is neither priced nor offered
@@ -12,7 +15,9 @@
 //!   pipeline, all at once (the Meta adapter keeps the device's request slots): its sound (step `audio`), its speaker
 //!   turns (`transcript`, published at once as turn-level captions), its word times (`words`), then its scene log
 //!   (`scenes`) for a video. Decoding (the sound, the scene log's small copy) runs one clip at a time on a thread of
-//!   utility priority, and one video call runs at a time. Editing copies wait while it decodes (`on_decoding`).
+//!   utility priority, and one video call runs at a time. Editing copies wait while it decodes (`on_decoding`), and it
+//!   makes way for playback, an export and a take (`holds`): the small copy waits while the video plays, the sound once
+//!   frames come late, and both while an export runs or a take records.
 //! - **Results** go into the engine's `Speech` (a new `Arc<Speech>` for the open revision: the captions update live),
 //!   with each clip's sound levels (`Speech::levels`, from the sound cache's energies), and are kept here for chat
 //!   (`AnalysisState::analysis_for`). Each finished step is cached (`klipolo_analysis::cache`): `transcript.json` as
@@ -30,6 +35,7 @@
 mod calls;
 pub mod chat;
 mod decoding;
+pub mod holds;
 pub mod media;
 mod run;
 
@@ -41,7 +47,7 @@ use klipolo_analysis::providers::meta::Meta;
 use klipolo_analysis::scenes::{self, SceneLog};
 use klipolo_analysis::transcript::{self, TranscriptOut, Turn};
 use klipolo_model::contrib::AssetPath;
-use klipolo_model::project::{Asset, AssetKind};
+use klipolo_model::project::{Asset, AssetKind, Project};
 use klipolo_model::speech::{Levels, Speech, Transcript};
 use klipolo_model::time::Us;
 use serde::{Deserialize, Serialize};
@@ -50,6 +56,7 @@ use tokio::task::JoinHandle;
 use ts_rs::TS;
 
 use crate::credentials::{AiMode, AiStatus, CODE_INACTIVE, Credentials};
+use holds::Holds;
 pub use media::{EngineMedia, Media};
 use run::{Outcome, Run};
 
@@ -302,21 +309,30 @@ pub type EventSink = Arc<dyn Fn(AnalysisEvent) + Send + Sync>;
 /// Where each new `Speech` goes (the engine's feed, for the open revision).
 pub type SpeechSink = Arc<dyn Fn(Arc<Speech>) + Send + Sync>;
 
-/// A clip as analysis sees it: an imported video or sound file on this Mac.
+/// Whether `asset_id` is a file of one of `project`'s recordings, in any of its sources' runs, or the same file (by its
+/// path) imported again: such a file is analysed for its words only, never watched for a scene log
+/// (`analysed::words_only`).
+pub fn words_only(project: &Project, asset_id: &str) -> bool {
+    klipolo_model::analysed::words_only(project, asset_id)
+}
+
+/// A clip as analysis sees it: a video or sound file on this Mac.
 #[derive(Clone, Debug)]
 pub(crate) struct Clip {
     pub id: String,
     pub path: PathBuf,
+    /// Watched for a scene log after its words: a video imported on its own, never a recording's file.
     pub video: bool,
     pub has_audio: bool,
     pub duration_us: Us,
 }
 
 impl Clip {
-    /// `asset` when Klipolo analyses it: a local video or sound file.
-    fn of(asset: &Asset) -> Option<Self> {
+    /// `asset` of `project` when Klipolo analyses it: a local video or sound file. A recording's file, video or not, is
+    /// analysed for its words only (`words_only`).
+    fn of(project: &Project, asset: &Asset) -> Option<Self> {
         let video = match asset.kind {
-            AssetKind::Video => true,
+            AssetKind::Video => !words_only(project, &asset.id),
             AssetKind::Audio => false,
             AssetKind::Image => return None,
         };
@@ -432,6 +448,8 @@ pub struct AnalysisState {
     local: Semaphore,
     /// Told when that decoding starts and stops (`on_decoding`).
     decoding: Arc<decoding::Decoding>,
+    /// What that decoding makes way for: playback, an export, a take.
+    holds: Arc<Holds>,
     /// One video call at a time, whatever the mode.
     videos: Arc<Semaphore>,
 }
@@ -463,6 +481,7 @@ impl AnalysisState {
             inner: Mutex::default(),
             local: Semaphore::new(1),
             decoding: Arc::default(),
+            holds: Arc::default(),
             videos: Arc::new(Semaphore::new(1)),
         })
     }
@@ -472,6 +491,12 @@ impl AnalysisState {
     /// stops, from a few milliseconds up to about a second), and no copy starts until the step has ended.
     pub fn on_decoding(&self, f: impl Fn(bool) + Send + Sync + 'static) {
         self.decoding.listen(Box::new(f));
+    }
+
+    /// What decoding a clip on this Mac makes way for (`holds`): the app tells it when the video plays (and falls
+    /// behind), an export runs and a take records.
+    pub fn holds(&self) -> &Arc<Holds> {
+        &self.holds
     }
 
     /// The project switch count now (`Inner::generation`).
@@ -484,18 +509,31 @@ impl AnalysisState {
         Opening(self.generation())
     }
 
-    /// `assets` as contents: each analysable clip's cache read, its asset put on its content (`on_content`), and the
-    /// clips on one content grouped, in the order asked. None once the project changed since `generation`.
-    async fn contents(&self, assets: &[Asset], generation: u64) -> Vec<(Content, Vec<String>)> {
+    /// `assets` of `project` as contents: each analysable clip's cache read, its asset put on its content
+    /// (`on_content`), and the clips on one content grouped, in the order asked; a content with a take's file on it is
+    /// heard for its words only. None once the project changed since `generation`.
+    async fn contents(
+        &self,
+        project: &Project,
+        assets: &[Asset],
+        generation: u64,
+    ) -> Vec<(Content, Vec<String>)> {
         let mut contents: Vec<(Content, Vec<String>)> = Vec::new();
-        for clip in clips_of(assets) {
+        for clip in clips_of(project, assets) {
             let cached = self.look(&clip).await;
             let key = key_of(&clip, &cached);
             if !self.on_content(&clip.id, &key, generation) {
                 return Vec::new();
             }
             match contents.iter_mut().find(|(c, _)| c.key == key) {
-                Some((_, ids)) => ids.push(clip.id),
+                Some((content, ids)) => {
+                    // An asset on the content isn't watched (a take's file, a copy of which came first): none is.
+                    if !clip.video && content.clip.video {
+                        content.clip.video = false;
+                        content.cached.scenes = None;
+                    }
+                    ids.push(clip.id);
+                }
                 None => {
                     let id = clip.id.clone();
                     contents.push((Content { key, clip, cached }, vec![id]));
@@ -508,21 +546,27 @@ impl AnalysisState {
         contents
     }
 
-    /// What analysing `assets` costs (see the module notes): each content once, however many assets are on it. Reads
-    /// each file's two ends for its cache key and shows what its cache holds (`show_cached`). When some need paying
-    /// for, gets the adapter as a start would (`Credentials::ready`, which registers the device the first time; why it
-    /// can't is `Estimate::problem`) and, with an access code, asks the relay for the credit left.
+    /// What analysing `assets` of `project` costs (see the module notes): each content once, however many assets are on
+    /// it, and a recording's files for their words only. Reads each file's two ends for its cache key and shows what
+    /// its cache holds (`show_cached`). When some need paying for, gets the adapter as a start would
+    /// (`Credentials::ready`, which registers the device the first time; why it can't is `Estimate::problem`) and, with
+    /// an access code, asks the relay for the credit left.
     /// An estimate the project switch overtook is empty.
-    pub async fn estimate(&self, assets: &[Asset]) -> Estimate {
-        self.estimate_at(self.opening(), assets).await
+    pub async fn estimate(&self, project: &Project, assets: &[Asset]) -> Estimate {
+        self.estimate_at(self.opening(), project, assets).await
     }
 
     /// `estimate`, for assets read during `opening`: empty when the project has changed since.
-    pub async fn estimate_at(&self, opening: Opening, assets: &[Asset]) -> Estimate {
+    pub async fn estimate_at(
+        &self,
+        opening: Opening,
+        project: &Project,
+        assets: &[Asset],
+    ) -> Estimate {
         let generation = opening.0;
         let mut estimate = Estimate::default();
         let mut paid = Vec::new();
-        for (content, ids) in self.contents(assets, generation).await {
+        for (content, ids) in self.contents(project, assets, generation).await {
             if content.cached.key.is_none() {
                 estimate.missing.extend(ids);
             } else if content.cached.complete(&content.clip) {
@@ -553,33 +597,40 @@ impl AnalysisState {
         estimate
     }
 
-    /// Starts analysing `assets` (see the module notes): one pipeline per content, whose state and results reach every
-    /// asset on it. A content another start took on is left to it (the assets asked for now hear it too). Cached
-    /// contents load whatever else happens; the others start only when something can pay for them and, with an access
-    /// code, their estimate is within the credit left (`Started::refused` says why not; what of them is cached shows
-    /// all the same). Asked by the person (`start_as` tells the page's own starts apart).
-    pub async fn start(self: &Arc<Self>, assets: &[Asset]) -> Started {
-        self.start_as(assets, Asked::Person).await
+    /// Starts analysing `assets` of `project` (see the module notes): one pipeline per content, whose state and results
+    /// reach every asset on it; a recording's files for their words only. A content another start took on is left to
+    /// it (the assets asked for now hear it too). Cached contents load whatever else happens; the others start only
+    /// when something can pay for them and, with an access code, their estimate is within the credit left
+    /// (`Started::refused` says why not; what of them is cached shows all the same). Asked by the person (`start_as`
+    /// tells the page's own starts apart).
+    pub async fn start(self: &Arc<Self>, project: &Project, assets: &[Asset]) -> Started {
+        self.start_as(project, assets, Asked::Person).await
     }
 
     /// `start`, asked by `asked`: cached words timed roughly are timed again when the person asks, and when the page
     /// asks only for a content not timed again (nor stopped by the person) in this app run.
     /// A start the project switch overtook (its assets belong to the project no longer open) does nothing and
     /// promises no credit.
-    pub async fn start_as(self: &Arc<Self>, assets: &[Asset], asked: Asked) -> Started {
-        self.start_at(self.opening(), assets, asked).await
+    pub async fn start_as(
+        self: &Arc<Self>,
+        project: &Project,
+        assets: &[Asset],
+        asked: Asked,
+    ) -> Started {
+        self.start_at(self.opening(), project, assets, asked).await
     }
 
     /// `start_as`, for assets read during `opening`: nothing starts when the project has changed since.
     pub async fn start_at(
         self: &Arc<Self>,
         opening: Opening,
+        project: &Project,
         assets: &[Asset],
         asked: Asked,
     ) -> Started {
         let generation = opening.0;
         let contents: Vec<Content> = {
-            let looked = self.contents(assets, generation).await;
+            let looked = self.contents(project, assets, generation).await;
             let mut inner = lock(&self.inner);
             if inner.generation != generation {
                 return Started::none();
@@ -999,10 +1050,10 @@ fn event_for(asset_id: &str, state: &AssetState) -> Option<AnalysisEvent> {
     })
 }
 
-/// The analysable clips among `assets`, each once, in order.
-fn clips_of(assets: &[Asset]) -> Vec<Clip> {
+/// The analysable clips among `assets` of `project`, each once, in order.
+fn clips_of(project: &Project, assets: &[Asset]) -> Vec<Clip> {
     let mut clips: Vec<Clip> = Vec::new();
-    for clip in assets.iter().filter_map(Clip::of) {
+    for clip in assets.iter().filter_map(|asset| Clip::of(project, asset)) {
         if !clips.iter().any(|c| c.id == clip.id) {
             clips.push(clip);
         }
@@ -1128,6 +1179,72 @@ mod tests {
         state.let_go(&[], &[content("paid")], false);
         let inner = lock(&state.inner);
         assert!(!inner.claimed.contains("paid") && inner.reserved.is_empty());
+    }
+
+    /// Any file of a recording, in any of its sources' runs, is analysed for its words only: a video one is heard, never
+    /// watched. A file imported on its own is analysed in full.
+    #[test]
+    fn a_recordings_files_are_analysed_for_words_only() {
+        use klipolo_model::project::{
+            Recording, RecordingKind, RecordingSource, SourceRole, SourceRun,
+        };
+
+        let file = |id: &str, kind: AssetKind| Asset {
+            id: id.into(),
+            kind,
+            path: format!("/clips/{id}"),
+            name: id.into(),
+            duration_us: 1_000_000,
+            width: 1920,
+            height: 1080,
+            fps: 30.0,
+            rotation: None,
+            has_audio: true,
+            audio_lead_us: None,
+            made_with: None,
+        };
+        let run = |id: &str| SourceRun {
+            asset_id: id.into(),
+            offset_us: 0,
+            duration_us: 1_000_000,
+            drift_ppm: 0.0,
+            file_in_us: 0,
+        };
+        let source = |role: SourceRole, runs: Vec<SourceRun>| RecordingSource {
+            id: format!("{role:?}"),
+            role,
+            label: String::new(),
+            runs,
+            nudge_us: 0,
+            mix: Default::default(),
+            synced: None,
+        };
+        let mut p = Project::new("Take");
+        p.recordings = vec![Recording {
+            id: "take".into(),
+            kind: RecordingKind::Screen,
+            // The screen was recorded in two files (its encoder started again).
+            sources: vec![
+                source(SourceRole::Screen, vec![run("screen-1"), run("screen-2")]),
+                source(SourceRole::Camera, vec![run("camera")]),
+                source(SourceRole::Mic, vec![run("mic")]),
+            ],
+            primary: "Screen".into(),
+            cursor: None,
+            markers: Vec::new(),
+            game: None,
+        }];
+        for id in ["screen-1", "screen-2", "camera", "mic"] {
+            assert!(words_only(&p, id), "{id}");
+        }
+        assert!(!words_only(&p, "broll"));
+
+        let heard = |id: &str, kind| Clip::of(&p, &file(id, kind)).map(|c| c.video);
+        assert_eq!(heard("screen-2", AssetKind::Video), Some(false));
+        assert_eq!(heard("camera", AssetKind::Video), Some(false));
+        assert_eq!(heard("mic", AssetKind::Audio), Some(false));
+        assert_eq!(heard("broll", AssetKind::Video), Some(true));
+        assert_eq!(heard("logo", AssetKind::Image), None);
     }
 
     #[test]

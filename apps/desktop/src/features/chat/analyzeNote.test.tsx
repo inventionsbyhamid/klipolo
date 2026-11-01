@@ -10,8 +10,11 @@ import { fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 import { MessageList } from './MessageList';
 
-/** The files the fixture project's main-track clips play (`fixtureProject`): its song is a layer, not analysed. */
-const CLIPS = ['screen', 'camera', 'mic', 'broll'];
+/**
+ * What the fixture project (`fixtureProject`) offers for analysis: its recording, by its voice (the mic), and the
+ * b-roll. Its song is a layer, and its screen and camera aren't offered: the recording's words are the mic's.
+ */
+const CLIPS = ['mic', 'broll'];
 let estimated: unknown[] = [];
 
 beforeEach(() => {
@@ -42,14 +45,14 @@ describe('the empty chat’s analysis note', () => {
   it('has no Analyze when every clip not done failed: the banner’s Retry is the way on', () => {
     const done = { state: 'done', approximate: false } as const;
     const failed = { state: 'failed', reason: 'Klipolo could not read this clip.' } as const;
-    useAnalysis.setState({ states: { screen: failed, camera: done, mic: done, music: done, broll: done } });
+    useAnalysis.setState({ states: { screen: done, camera: done, mic: failed, music: done, broll: done } });
     renderWithProviders(<MessageList />);
     expect(screen.getByText(/Analyze the clips first/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Analyze' })).toBeNull();
   });
 
   it('has no Analyze while the clips are being analysed', () => {
-    useAnalysis.setState({ states: { screen: { state: 'running', step: 'words', pct: 40 } } });
+    useAnalysis.setState({ states: { mic: { state: 'running', step: 'words', pct: 40 } } });
     renderWithProviders(<MessageList />);
     expect(screen.getByText(/still listening/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Analyze' })).toBeNull();
@@ -58,7 +61,7 @@ describe('the empty chat’s analysis note', () => {
   it('says cuts work while the clips are only being watched (their words are in)', () => {
     const done = { state: 'done', approximate: false } as const;
     useAnalysis.setState({
-      states: { screen: { state: 'running', step: 'scenes', pct: 60 }, camera: done, mic: done, music: done, broll: done },
+      states: { screen: done, camera: done, mic: done, music: done, broll: { state: 'running', step: 'scenes', pct: 60 } },
     });
     renderWithProviders(<MessageList />);
     expect(
@@ -73,8 +76,8 @@ describe('the empty chat’s analysis note', () => {
   it('says it is still listening while any clip’s words are still to come', () => {
     useAnalysis.setState({
       states: {
-        screen: { state: 'running', step: 'scenes', pct: 60 },
-        camera: { state: 'running', step: 'transcript', pct: 10 },
+        broll: { state: 'running', step: 'scenes', pct: 60 },
+        mic: { state: 'running', step: 'transcript', pct: 10 },
       },
     });
     renderWithProviders(<MessageList />);

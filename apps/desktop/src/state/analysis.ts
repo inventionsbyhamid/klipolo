@@ -4,7 +4,7 @@ import type { AssetState } from '../bindings/AssetState';
 import type { Estimate } from '../bindings/Estimate';
 import { refreshAiStatus, useAi } from '../ai/aiStatus';
 import { analysisBridge, type AnalysisEvent, type UnlistenFn } from '../bridge/analysis';
-import { analysedAssets } from '../lib/analysed';
+import { analysable, voices } from '../lib/analysed';
 import { useProject } from './project';
 
 interface AnalysisStore {
@@ -118,7 +118,7 @@ export function forgetRemovedClips(): () => void {
 let asked = 0;
 
 /**
- * The clips `assetIds` (the files the main-track clips play) as the banner offers them: the ones not analysed are
+ * The clips `assetIds` (what analysis offers, `analysable`) as the banner offers them: the ones not analysed are
  * estimated; those cached load at once, at no cost (`analysis_start`), and the offer is for the rest. A new offer
  * starts without the last one's sentence. When nothing can pay yet (the device isn't registered), the estimate says
  * why (`Estimate.problem`) and has no price: the banner shows that, and Retry asks again.
@@ -182,11 +182,12 @@ export function notNow() {
 const NO_ASSETS: Asset[] = [];
 
 /**
- * The open project's clips analysis is for (`analysedAssets`: the videos and sounds its main-track clips play, never
- * music, sounds or pictures on layers, nor files never placed). The same array until they change.
+ * The open project's clips analysis is for (`analysable`: the videos and sounds its main-track clips play, a recording
+ * counted as one clip by its voice; never music, sounds or pictures on layers, nor files never placed). The same array
+ * until they change.
  */
 export function useAnalysedClips(): Asset[] {
-  return useProject((s) => (s.snapshot ? analysedAssets(s.snapshot.project) : NO_ASSETS));
+  return useProject((s) => (s.snapshot ? analysable(s.snapshot.project) : NO_ASSETS));
 }
 
 /**
@@ -198,10 +199,10 @@ export function useSomeNotAnalysed(): boolean {
   return useAnalysis((s) => clips.some((a) => stateOf(s.states, a.id).state === 'none'));
 }
 
-/** The open project's clips analysis is for, by id (`analysedAssets`). */
+/** The open project's clips analysis is for, by id (`analysable`). */
 function projectClipIds(): string[] {
   const project = useProject.getState().snapshot?.project;
-  return project ? analysedAssets(project).map((a) => a.id) : [];
+  return project ? analysable(project).map((a) => a.id) : [];
 }
 
 /**
@@ -223,19 +224,32 @@ export function offerAgainOnAiModeChange(): () => void {
   });
 }
 
+/** No take: each clip counts as itself. */
+const NO_TAKES: ReadonlyMap<string, string> = new Map();
+
+/**
+ * The open project's take voice files, each by the recording it is the voice of (`voices`): a take's files count as
+ * one clip. The same map until they change.
+ */
+export function useTakes(): ReadonlyMap<string, string> {
+  return useProject((s) => (s.snapshot ? voices(s.snapshot.project) : NO_TAKES));
+}
+
 /**
  * Why the open project has no caption words, for the Captions panel: clips not analysed yet (the panel offers
  * Analyze), or clips heard with no speech in them (one, or more); null while clips are being analysed, or with no
- * clips.
+ * clips. A take's files (`takes`, from `useTakes`) count as one clip.
  */
 export function whyNoWords(
   states: Record<string, AssetState>,
   clipIds: string[],
+  takes: ReadonlyMap<string, string> = NO_TAKES,
 ): 'notAnalysed' | 'noSpeechOne' | 'noSpeechMany' | null {
   const all = clipIds.map((id) => stateOf(states, id));
   if (all.some((s) => s.state === 'running')) return null;
   if (all.some((s) => s.state === 'none')) return 'notAnalysed';
-  const silent = all.filter((s) => s.state === 'done' && !!s.emptyReason).length;
+  const heardNone = (s: AssetState) => s.state === 'done' && !!s.emptyReason;
+  const silent = new Set(clipIds.filter((_, k) => heardNone(all[k])).map((id) => takes.get(id) ?? id)).size;
   if (silent === 0) return null;
   return silent === 1 ? 'noSpeechOne' : 'noSpeechMany';
 }
