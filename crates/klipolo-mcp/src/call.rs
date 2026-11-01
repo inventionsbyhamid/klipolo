@@ -443,8 +443,9 @@ const CHAT_ASK: &str = " with askUser";
 /// A refusal's reason, as a sentence an app can act on. Chat words some for its own model and the person in its panel;
 /// an app reads them in its own terms:
 /// - a clip not analyzed yet is the person's to analyze (`NOT_ANALYZED`); one still being analyzed is for later
-///   (`LISTENING`, `WATCHING`); roughly timed words are the person's to time again (`ROUGH_WORDS`): chat's own say
-///   "ask me again" to the person;
+///   (`LISTENING`, `WATCHING`); roughly timed words are the person's to time again with the button above the video
+///   while it shows (`ROUGH_WORDS`), and only said to be rough when it doesn't (`ROUGH_WORDS_STAY`): chat's own say
+///   "ask me" to the person;
 /// - a time must stand on the reads an app has, never its own words (`TIMES_FROM`);
 /// - it asks its own person, not through `askUser`.
 ///
@@ -454,7 +455,8 @@ fn reason(r: &Refusal) -> String {
         ANALYZE_FIRST => Some(words::NOT_ANALYZED),
         STILL_LISTENING => Some(words::LISTENING),
         STILL_WATCHING => Some(words::WATCHING),
-        ROUGH_FILLERS | ROUGH_FILLERS_STAY => Some(words::ROUGH_WORDS),
+        ROUGH_FILLERS => Some(words::ROUGH_WORDS),
+        ROUGH_FILLERS_STAY => Some(words::ROUGH_WORDS_STAY),
         _ => None,
     };
     if r.audience == Audience::Person

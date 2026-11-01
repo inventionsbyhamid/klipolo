@@ -22,7 +22,7 @@ use klipolo_mcp::rpc::{Handled, Mcp};
 use klipolo_mcp::words::{
     DECIDED, DONE, KLIPOLO_CHAT, MOVED, NO_CREDIT, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS,
     NOTHING_TO_UNDO, OVER_SHARE, OWN_CHANGED, OWN_MOVED, OWN_WAITING, PROPOSED_NO_FOOTAGE,
-    PUSHES_OUT, READ_FIRST, REDO_WAITS, ROUGH_WORDS, STALE, STARTED, UNCHANGED, UNDO_DROPPED,
+    PUSHES_OUT, READ_FIRST, REDO_WAITS, ROUGH_WORDS_STAY, STALE, STARTED, UNCHANGED, UNDO_DROPPED,
     UNDONE, WAITING_OTHER, fill,
 };
 use klipolo_model::Transaction;
@@ -448,12 +448,23 @@ fn rough_filler_refusal_asks_the_person_to_time_the_words_again() {
         let w = &mut t.words[0];
         (w.text, w.kind, w.confidence) = ("um".into(), WordKind::Filler, 0.0);
     }
-    let said = fill(ROUGH_WORDS, &[("clip", "c1")]);
-    // Whether or not the preview offers Time words again for the clip, an app reads its own sentence.
-    for offered in [HashSet::new(), HashSet::from(["clip-a".to_owned()])] {
-        host.state().time_again = offered;
-        assert_refused(&agent.call("removeFillers", json!({})), &said);
-    }
+    // The preview offers Time words again for the clip: the app asks the person to press it.
+    host.state().time_again = HashSet::from(["clip-a".to_owned()]);
+    assert_refused(
+        &agent.call("removeFillers", json!({})),
+        "Some words in this clip (c1) are only roughly timed, so Klipolo can't cut filler words exactly. Ask the \
+         person to press Time words again above the video in Klipolo, then try again.",
+    );
+    // Not offered (timing again can't help, or another file's words are being timed): no button is named.
+    host.state().time_again = HashSet::new();
+    assert_refused(
+        &agent.call("removeFillers", json!({})),
+        "Some words in this clip (c1) are only roughly timed, so Klipolo can't cut filler words exactly.",
+    );
+    assert_eq!(
+        fill(ROUGH_WORDS_STAY, &[("clip", "c1")]),
+        "Some words in this clip (c1) are only roughly timed, so Klipolo can't cut filler words exactly."
+    );
     assert!(host.state().slot.is_none());
 }
 
@@ -592,6 +603,7 @@ fn agent_words_are_exact() {
         LISTENING,
         WATCHING,
         ROUGH_WORDS,
+        ROUGH_WORDS_STAY,
         TIMES_FROM,
         NO_PROMPT,
         DROPPED_CHANGED,
