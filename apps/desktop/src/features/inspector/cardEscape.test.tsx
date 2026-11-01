@@ -72,7 +72,7 @@ describe('Escape in a card’s menu closes only the menu', () => {
       menu: "the video layer's Speed",
       snapshot: withVideoLayer,
       selected: 'v1',
-      card: 'Video settings',
+      card: 'Video layer settings',
       button: 'Speed: 1×',
     },
     {

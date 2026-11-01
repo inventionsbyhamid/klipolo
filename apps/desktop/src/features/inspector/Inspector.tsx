@@ -101,7 +101,7 @@ export function Inspector({ format }: { format: FormatKind }) {
           : kind === 'sound'
             ? t({ id: 'inspector.sound', message: 'Sound' })
             : kind === 'video'
-              ? t({ id: 'inspector.video', message: 'Video' })
+              ? t({ id: 'inspector.video', message: 'Video layer' })
               : content.type === 'generator'
                 ? contribLabel(content.source, 'scene')
                 : '';
