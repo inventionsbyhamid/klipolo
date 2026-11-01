@@ -1,14 +1,13 @@
-//! The scene text build thread: every instance's
-//! text is laid out and its atlas drawn here, never on the render thread. It keeps a font system of its own (the
-//! exception to the shared font system, as the caption thread's), made on its first build and refreshed by the fonts'
-//! generation before each one; an export's build (`wait`) first waits for this computer's fonts here, on this thread
-//!, and the preview's never does. It builds its own copy of the instance from the compiled scene and the layer's
-//! settings (cheap beside the shaping and the raster), uploads its atlas into textures of its own (the
-//! queue orders the writes before the render thread's next frame, as the caption thread's), and answers in order,
-//! firing the redraw signal after each so the preview draws the text once it lands. The render thread only makes the
-//! draws' buffers (`text_builds.rs`). A moving scene without text asks it for its survey alone, so its
-//! first frame packs only itself. A dropped drawer drops the request channel, and the thread ends after its current
-//! build.
+//! The scene text build thread (as the caption thread builds caption pages): every instance's text is laid out and its
+//! atlas drawn here, never on the render thread. It keeps a font system of its own (an exception to the one shared font
+//! system, as the caption thread's), made on its first build and refreshed by the fonts' generation before each one; an
+//! export's build (`wait`) first waits for this computer's fonts here, on this thread, and the preview's never does. It
+//! builds its own copy of the instance from the compiled scene and the layer's settings (cheap beside the shaping and
+//! the raster), uploads its atlas into textures of its own (the queue orders the writes before the render thread's next
+//! frame, as the caption thread's), and answers in order, firing the redraw signal after each so the preview draws the
+//! text once it lands. The render thread only makes the draws' buffers (`text_builds.rs`). A moving scene without text
+//! asks it for its survey alone, so its first frame packs only itself. A dropped drawer drops the request channel, and
+//! the thread ends after its current build.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

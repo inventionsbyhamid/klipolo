@@ -120,8 +120,7 @@ impl SceneDrawer {
         }
         if let Some(h) = entry.held {
             // Covered first: a hold that ends gives its target back before this frame takes one. A part of the layer
-            // held while the layer since took an effect or corners (they read its whole target) isn't this frame
-            //.
+            // held while the layer since took an effect or corners (they read its whole target) isn't this frame.
             let whole = h.rect == [0, 0, at.size.0, at.size.1];
             if (whole || shrinks(layer))
                 && target::covers(&h, t, |from| static_until(&entry.inst, from))

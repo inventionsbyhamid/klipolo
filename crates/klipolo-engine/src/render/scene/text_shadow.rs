@@ -64,7 +64,7 @@ pub(super) struct ShadowImage {
 }
 
 /// The shadow cells of the atlas `atlas`'s cells `which` (each with its Gaussian in atlas texels), blurred (small past
-/// six texels: `text_shadow_blur.rs`), in the order asked; a cell asked twice with the same Gaussian is drawn once
+/// six texels: `text_shadow_blur.rs`), in the order asked; a cell asked twice with the same Gaussian is drawn once.
 /// None when nothing is asked, or when they would take more than `budget` bytes or a side past `max_side` (the
 /// device's).
 pub(super) fn bake(

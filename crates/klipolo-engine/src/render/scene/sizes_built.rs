@@ -1,4 +1,4 @@
-//! A scene's survey, and the one made on the text build thread
+//! A scene's survey, and the one made on the text build thread (the timeline's pack kept off the frame that needs
 //! it): when its text is laid out, or alone for a
 //! scene without text that moves, an instance whose boxes need nothing only the render thread has
 //! (path meshes, its pictures' sizes, the frame under a backdrop) is packed across its timeline there, as the render

@@ -1,7 +1,6 @@
 //! A scene's text on the CPU alone (the engine's test builds, `test-support`): its instance built and its text laid out
 //! as the build thread does it, then frames evaluated and packed by the drawer's own `Packed::pack`,
 //! with no GPU. What the per-frame allocation and layout tests count, and what the caps and the atlas say.
-//! 21).
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

@@ -8,7 +8,7 @@
 //! deviation, and its passes cost the same at any deviation: at most [`MAX_FETCHES`] a texel, where the brute-force
 //! blur it replaces took up to 129, at full resolution. A blur is clamped in 1080p pixels, so a 4K
 //! export blurs as its preview does. Regions are packed in shelves across the scratch targets, whose height is the
-//! smallest row class that holds them; a piece wider than the targets at its step is drawn at a coarser one
+//! smallest row class that holds them; a piece wider than the targets at its step is drawn at a coarser one (a long
 //! line blurs to the end of its blur-in); one that doesn't fit, or past [`MAX_BLUR_PIECES`], draws sharp
 //! and the frame says `frame.sceneReduced`. Arithmetic into fixed room: nothing allocates.
 
@@ -22,7 +22,7 @@ pub(super) const MAX_BLUR_PIECES: usize = 24;
 /// The scratch targets' width, and their heights (row classes: few sizes, so the pool keeps them).
 pub(super) const BLUR_WIDTH: u32 = 2048;
 pub(super) const BLUR_ROWS: [u32; 5] = [64, 128, 256, 512, 1024];
-/// The largest blur a letter draws, a Gaussian in 1080p pixels (m8: the same at every resolution).
+/// The largest blur a letter draws, a Gaussian in 1080p pixels (the same at every resolution).
 pub(super) const MAX_BLUR_PX: f64 = 24.0;
 /// The largest deviation drawn, in atlas texels (a 4K frame under a layer scaled twice).
 const MAX_SIGMA: f32 = 96.0;

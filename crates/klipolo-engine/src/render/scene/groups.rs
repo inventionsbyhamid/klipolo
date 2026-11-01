@@ -5,12 +5,11 @@
 //! clips a draw), or a fill under a stroke drawn apart at fractional opacity (it would show through the stroke).
 //!
 //! Inside, the node and its children draw at full opacity and unclipped into a pooled target of its own box
-//! `bounds.rs`, `sizes.rs`; `SceneBytes` counts it at its size); its effects run in CSS's order (blur, its shadow under
-//! it, its mask) and it is laid back with its opacity, blend, clips and tilt (`composite.rs`), or as a quad
-//! (`quad_lay.rs`). At most [`MAX_GROUPS`] groups and
-//! [`MAX_OTHERS`] other nodes a frame, past which one draws in place without its effect and the frame says
-//! `frame.sceneTooManyGroups` once per scene; nesting is bounded by the same counts. Deciding is arithmetic on the
-//! frame's values: nothing allocates.
+//! (`bounds.rs`, `sizes.rs`; `SceneBytes` counts it at its size); its effects run in CSS's order (blur, its shadow
+//! under it, its mask) and it is laid back with its opacity, blend, clips and tilt (`composite.rs`), or as a quad
+//! (`quad_lay.rs`). At most [`MAX_GROUPS`] groups and [`MAX_OTHERS`] other nodes a frame, past which one draws in place
+//! without its effect and the frame says `frame.sceneTooManyGroups` once per scene; nesting is bounded by the same
+//! counts. Deciding is arithmetic on the frame's values: nothing allocates.
 
 use klipolo_model::motion::Blend;
 use klipolo_model::scene::NodeType;
