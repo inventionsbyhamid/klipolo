@@ -2352,7 +2352,7 @@
   inset: 0;
 }
 
-/* The rotate knob: a round paper handle on a paper stem above the top edge's handle. It turns with the layer. */
+/* The rotate knob: a round handle on a paper stem above the top edge's handle. It turns with the layer. */
 .gizmo-stem {
   position: absolute;
   bottom: calc(100% + 10px);
@@ -2363,23 +2363,14 @@
   pointer-events: none;
 }
 
-.gizmo-knob {
-  position: absolute;
+.gizmo-handle.is-rotate {
   bottom: calc(100% + 24px);
   left: calc(50% - 5px);
-  width: 10px;
-  height: 10px;
   border-radius: 50%;
-  background: var(--color-paper);
-  box-shadow: 0 0 0 1.5px var(--color-navy);
   cursor: grab;
 }
 
-/* Taken 4 px past what it draws, as the other handles are. */
-.gizmo-knob::after {
-  content: "";
-  position: absolute;
-  inset: -4px;
+.gizmo-handle.is-rotate::after {
   border-radius: 50%;
 }
 

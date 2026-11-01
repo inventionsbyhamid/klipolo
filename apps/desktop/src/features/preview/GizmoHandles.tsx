@@ -31,7 +31,7 @@ export function GizmoHandles({ compact, rotatable }: GizmoHandlesProps) {
       {rotatable && (
         <>
           <span aria-hidden className="gizmo-stem" />
-          <span data-handle="rotate" aria-hidden className="gizmo-knob" />
+          <span data-handle="rotate" aria-hidden className="gizmo-handle is-rotate" />
         </>
       )}
     </>
