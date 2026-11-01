@@ -4,9 +4,10 @@
 
 use klipolo_analysis::providers::{TrackedBox, TrackedFrame};
 use klipolo_analysis::subject::path::{
-    DEAD_ZONE, KEY_STEP_US, PathInput, SPEED, focus_path, main_subject,
+    DEAD_ZONE, FULL, KEY_STEP_US, PathInput, SPEED, focus_path, main_subject,
 };
 use klipolo_model::fill_focus::FocusPath;
+use klipolo_model::layout::BoxN;
 use klipolo_model::time::Us;
 
 /// A 16:9 picture filling 9:16 shows this share of its width, all of its height.
@@ -53,6 +54,7 @@ fn input<'a>(
         end_us: (frames.len() as f64 / FPS * 1e6) as Us,
         cuts,
         crop,
+        area: FULL,
     }
 }
 
@@ -146,15 +148,40 @@ fn the_main_subject_is_the_largest_most_central_person() {
     let f = frames(4.0, |_| {
         vec![person(1, 0.5, 0.08, 0.6), person(2, 0.25, 0.3, 0.1)]
     });
-    assert_eq!(main_subject(&f), Some(2));
+    assert_eq!(main_subject(&f, FULL), Some(2));
     // Two the same size: the one nearer the middle.
     let f = frames(4.0, |_| {
         vec![person(1, 0.15, 0.2, 0.1), person(2, 0.6, 0.2, 0.1)]
     });
-    assert_eq!(main_subject(&f), Some(2));
+    assert_eq!(main_subject(&f, FULL), Some(2));
     // Nobody.
     let f = frames(4.0, |_| vec![]);
-    assert_eq!(main_subject(&f), None);
+    assert_eq!(main_subject(&f, FULL), None);
+}
+
+#[test]
+fn inside_a_cropped_area_the_subject_is_picked_near_its_middle_and_the_crop_stays_in_it() {
+    // The right half kept: of two the same size, the one nearer its middle (0.75), not the picture's.
+    let right = BoxN {
+        x: 0.5,
+        y: 0.0,
+        w: 0.5,
+        h: 1.0,
+    };
+    let f = frames(4.0, |_| {
+        vec![person(1, 0.55, 0.1, 0.1), person(2, 0.85, 0.1, 0.1)]
+    });
+    assert_eq!(main_subject(&f, FULL), Some(1));
+    assert_eq!(main_subject(&f, right), Some(2));
+    // Someone near its inner edge: the crop goes no further left than the area's edge.
+    let f = frames(4.0, |_| vec![person(1, 0.55, 0.1, 0.1)]);
+    let at = timed(&f, 0);
+    let mut i = input(&at, &[], PORTRAIT);
+    i.area = right;
+    let path = focus_path(&i).unwrap();
+    for k in &path.keys {
+        assert!((k.x - (0.5 + PORTRAIT.0 / 2.0)).abs() < 1e-9, "{k:?}");
+    }
 }
 
 #[test]

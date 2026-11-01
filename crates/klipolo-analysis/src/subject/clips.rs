@@ -9,9 +9,11 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use klipolo_engine::plan::fill_crop;
+use klipolo_engine::plan::framing::as_shown;
 use klipolo_model::fill_focus::{FillFocus, FocusPath};
 use klipolo_model::framing::effective_framing;
 use klipolo_model::ids::Id;
+use klipolo_model::layout::BoxN;
 use klipolo_model::ops::{ClipPatch, Op};
 use klipolo_model::project::{AssetKind, FormatKind, Project};
 use klipolo_model::time::{RangeUs, Us};
@@ -19,7 +21,7 @@ use klipolo_model::timeline::{Clip, ClipSource, FramingMode};
 
 use super::SubjectTrack;
 use super::path::{PathInput, focus_path};
-use crate::providers::TrackedFrame;
+use crate::providers::{TrackedBox, TrackedFrame};
 
 /// A Fill crop at least this share of the picture on both sides crops nothing.
 const WHOLE: f64 = 0.999;
@@ -95,8 +97,9 @@ pub fn followable_formats(p: &Project, clip: &Clip, formats: &[FormatKind]) -> V
 }
 
 /// `clip`'s speaker path in `format` from the tracked stretches of its file (`tracks`, from one or several requests,
-/// in any order), over just the footage it plays, in its source time. None when nobody was found there, or Fill crops
-/// nothing.
+/// in any order), over just the footage it plays, in its source time. Only people whose middle is inside what the
+/// clip's crop keeps count, and the path stays inside it (`kept_in_file`). None when nobody was found there, or Fill
+/// crops nothing.
 pub fn clip_path(
     p: &Project,
     clip: &Clip,
@@ -105,12 +108,12 @@ pub fn clip_path(
     tracks: &[SubjectTrack],
 ) -> Option<FocusPath> {
     // Fill's crop is in what the clip's crop leaves; the path is in the whole file.
-    let kept = clip.crop.unwrap_or_default().kept();
+    let kept = kept_in_file(clip);
     let crop = fill_crop(p, clip, format)?;
     let crop = (crop.w * kept.w, crop.h * kept.h);
     let shift = footage.shift_us;
     let (from, to) = (footage.range.start, footage.range.end);
-    let mut frames: Vec<(Us, &TrackedFrame)> = Vec::new();
+    let mut frames: Vec<(Us, TrackedFrame)> = Vec::new();
     let mut cuts: Vec<Us> = Vec::new();
     for t in tracks
         .iter()
@@ -122,7 +125,7 @@ pub fn clip_path(
             // A second either side, so the crop eases in toward the clip's first and last frames.
             (from - MARGIN_US..to + MARGIN_US)
                 .contains(&at)
-                .then_some((at + shift, f))
+                .then(|| (at + shift, kept_boxes(f, kept)))
         }));
         cuts.extend(
             t.cuts
@@ -135,14 +138,36 @@ pub fn clip_path(
     frames.dedup_by_key(|(at, _)| *at);
     cuts.sort_unstable();
     cuts.dedup();
+    let frames: Vec<(Us, &TrackedFrame)> = frames.iter().map(|(at, f)| (*at, f)).collect();
     let input = PathInput {
         frames: &frames,
         start_us: from + shift,
         end_us: to + shift,
         cuts: &cuts,
         crop,
+        area: kept,
     };
     focus_path(&input)
+}
+
+/// What `clip`'s crop keeps of its footage, where the file has it: a mirrored camera take's crop is on the picture as
+/// shown, so it is flipped back, as the engine draws it (`fill_focused`). The whole picture when uncropped.
+fn kept_in_file(clip: &Clip) -> BoxN {
+    let mirror = matches!(clip.source, ClipSource::Recording { .. })
+        && clip.camera.as_ref().is_some_and(|c| c.mirror);
+    as_shown(mirror, clip.crop.unwrap_or_default().kept())
+}
+
+/// `frame` with only the boxes whose middle is inside `kept`.
+fn kept_boxes(frame: &TrackedFrame, kept: BoxN) -> TrackedFrame {
+    let inside = |b: &&TrackedBox| {
+        let (x, y) = (b.centre_x(), (b.top + b.bottom) / 2.0);
+        (kept.x..=kept.x + kept.w).contains(&x) && (kept.y..=kept.y + kept.h).contains(&y)
+    };
+    TrackedFrame {
+        frame: frame.frame,
+        boxes: frame.boxes.iter().filter(inside).copied().collect(),
+    }
 }
 
 /// The op that makes `clip` follow its speaker in each of `paths`' formats: Fill there (the framing's own focus point
