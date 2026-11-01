@@ -173,3 +173,105 @@ async fn a_download_is_never_removed_under_a_running_export_nor_one_that_isnt_th
     assert!(host.changed.lock().unwrap().is_empty());
     assert!(downloads::list(&downloads).is_empty());
 }
+
+/// Fonts whose catalogue is one family the local server serves, everything else in.
+fn serving(fam: klipolo_fonts::google::GoogleFamily) -> Fonts {
+    let fonts = Fonts::for_tests(FontIndex::shipped(klipolo_fonts::bundled::bundled_dir()));
+    fonts.publish_catalogue(Arc::new(klipolo_fonts::google::Catalogue {
+        date: "2026-10-22".into(),
+        sample: true,
+        families: vec![fam],
+    }));
+    fonts.downloads_started();
+    fonts
+}
+
+fn registered(family: &str) -> bool {
+    klipolo_engine::render::fonts::downloads()
+        .iter()
+        .any(|d| d.family == family)
+}
+
+#[tokio::test]
+async fn a_finished_download_is_registered_with_the_engine_and_the_page_hears_it() {
+    let server = klipolo_fonts::test_server::Server::start();
+    let fam = klipolo_fonts::test_server::family_on(
+        &server,
+        "Testa Here",
+        &[
+            (400, false, "Inter/Inter-Regular.ttf"),
+            (700, false, "Inter/Inter-Bold.ttf"),
+        ],
+    );
+    let fonts = serving(fam);
+    let dir = tempfile::tempdir().unwrap();
+    let downloads = Downloads::open(Some(dir.path()));
+    let host = FakeHost::with(on_and_consented());
+    let font = downloads::download(
+        host.clone(),
+        &fonts,
+        &downloads,
+        "Testa Here",
+        None,
+        700,
+        false,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        font,
+        FontRef {
+            family: "Testa Here".into(),
+            source: FontSource::Google {
+                version: "v1".into()
+            }
+        }
+    );
+    assert!(
+        registered("Testa Here"),
+        "the engine draws it, and an export records it"
+    );
+    assert_eq!(*host.changed.lock().unwrap(), ["Testa Here"]);
+    assert_eq!(downloads::list(&downloads).len(), 1, "Settings lists it");
+}
+
+#[tokio::test]
+async fn cancel_stops_a_running_download_and_nothing_is_registered() {
+    let server = klipolo_fonts::test_server::Server::start();
+    // Each answer waits: the download is still running when Cancel comes.
+    server.delay(300);
+    let fam = klipolo_fonts::test_server::family_on(
+        &server,
+        "Testa Gone",
+        &[
+            (400, false, "Inter/Inter-Regular.ttf"),
+            (700, false, "Inter/Inter-Bold.ttf"),
+        ],
+    );
+    let fonts = serving(fam);
+    let dir = tempfile::tempdir().unwrap();
+    let downloads = Downloads::open(Some(dir.path()));
+    let host = FakeHost::with(on_and_consented());
+    let (got, ()) = tokio::join!(
+        downloads::download(
+            host.clone(),
+            &fonts,
+            &downloads,
+            "Testa Gone",
+            None,
+            400,
+            false
+        ),
+        async {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            downloads.cancel("Testa Gone");
+        }
+    );
+    assert_eq!(
+        got,
+        Err(klipolo_fonts::download::FontError::Cancelled.code())
+    );
+    assert!(!registered("Testa Gone"));
+    assert!(host.changed.lock().unwrap().is_empty());
+    assert!(downloads::list(&downloads).is_empty());
+}
