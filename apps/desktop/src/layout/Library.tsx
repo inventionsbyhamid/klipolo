@@ -3,9 +3,10 @@ import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { SearchField } from '../design/SearchField';
 import { SpriteIcon } from '../design/SpriteIcon';
 import { CaptionsPanel } from '../features/captions/CaptionsPanel';
+import { LooksPanel } from '../features/looks/LooksPanel';
 import { MediaList } from '../features/media/MediaList';
 import { useImportMedia } from '../features/media/useImportMedia';
-import { useCaptionsView } from '../state/captionsView';
+import { useCaptionsView, type LeftView } from '../state/captionsView';
 import { useLibraryPanel } from '../state/libraryPanel';
 import { useUi, type LibraryTab } from '../state/ui';
 import { Icon } from './Icon';
@@ -16,20 +17,21 @@ const TABS: LibraryTab[] = ['clips', 'music', 'sounds', 'images'];
 export const LIBRARY_BODY_ID = 'library-body';
 
 /**
- * The library panel (9.16): the Library and Captions view tabs, Add files, a search over the tab shown, and
- * the filter pills Clips, Music, Sounds and Images over the files of each (yours first, then Klipolo's pack). The
- * search keeps its words from tab to tab. The pills scroll sideways in a narrow panel, with a fade at the right edge.
- * The arrow keys move between them. Its Captions tab shows the Captions view in its place. Control
- * Command S folds it to its rail (`useLibraryPanel`), whose Open library opens it again; folded, it stays mounted
- * (`hidden` and `inert`), and a fold with the keyboard inside puts it on the rail.
+ * The library panel: the Library, Captions and Looks view tabs, Add files, Record your screen (the
+ * shown, and the filter pills Clips, Music, Sounds and Images over the files of each (yours first, then Klipolo's
+ * pack). The search keeps its words from tab to tab. The pills scroll sideways in a narrow panel, with a fade at the
+ * right edge. The arrow keys move between them. Its Captions tab shows the Captions view in its place,
+ * and its Looks tab the looks (`LooksPanel`). Control Command S folds it to its rail (`useLibraryPanel`), whose Open
+ * library opens it again; folded, it stays mounted (`hidden` and `inert`), and a fold with the keyboard inside puts it
+ * on the rail.
  */
 export function Library() {
   const { t } = useLingui();
   const tab = useUi((s) => s.libraryTab);
   const setTab = useUi((s) => s.setLibraryTab);
   const importMedia = useImportMedia();
-  const captions = useCaptionsView((s) => s.open);
-  const setCaptions = useCaptionsView((s) => s.setOpen);
+  const view = useCaptionsView((s) => s.view);
+  const setView = useCaptionsView((s) => s.setView);
   const [query, setQuery] = useState('');
   const collapsed = useLibraryPanel((s) => s.collapsed);
   const rail = useRef<HTMLButtonElement>(null);
@@ -67,11 +69,18 @@ export function Library() {
   };
   const libraryLabel = t({ id: 'library.label', message: 'Library' });
   const captionsLabel = t({ id: 'library.captions', message: 'Captions' });
+  const looksLabel = t({ id: 'library.looks', message: 'Looks', comment: 'The left panel’s view of colour looks' });
+  const viewLabels = { library: libraryLabel, captions: captionsLabel, looks: looksLabel };
+  const viewTab = (to: LeftView, name: string) => (
+    <button className="view-tab" role="tab" aria-selected={view === to} onClick={() => setView(to)}>
+      {name}
+    </button>
+  );
   return (
     <aside
       className="panel library"
-      aria-label={captions ? captionsLabel : libraryLabel}
-      data-view={captions ? 'captions' : 'library'}
+      aria-label={viewLabels[view]}
+      data-view={view}
       data-tab={tab}
       data-collapsed={collapsed}
     >
@@ -121,12 +130,9 @@ export function Library() {
       >
         <div className="panel-head">
           <div className="view-tabs" role="tablist">
-            <button className="view-tab" role="tab" aria-selected={!captions} onClick={() => setCaptions(false)}>
-              {t({ id: 'library.view', message: 'Library' })}
-            </button>
-            <button className="view-tab" role="tab" aria-selected={captions} onClick={() => setCaptions(true)}>
-              {captionsLabel}
-            </button>
+            {viewTab('library', t({ id: 'library.view', message: 'Library' }))}
+            {viewTab('captions', captionsLabel)}
+            {viewTab('looks', looksLabel)}
           </div>
           <button
             className="icon-btn"
@@ -137,8 +143,10 @@ export function Library() {
             <Icon name="plus" />
           </button>
         </div>
-        {captions ? (
+        {view === 'captions' ? (
           <CaptionsPanel />
+        ) : view === 'looks' ? (
+          <LooksPanel />
         ) : (
           <>
             <SearchField className="lib-search" value={query} onChange={setQuery} label={searchLabels[tab]} />

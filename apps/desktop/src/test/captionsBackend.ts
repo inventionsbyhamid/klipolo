@@ -91,7 +91,7 @@ export async function resetCaptions() {
   // A dry run another test left sent: the same ops on the same revision would be skipped.
   clearPreview();
   useUi.setState({ previewFormat: 'portrait', pxPerSecond: 40 });
-  useCaptionsView.setState({ open: false });
+  useCaptionsView.setState({ view: 'library', open: false });
   usePlayback.setState({ playheadUs: 0, playing: false });
 }
 

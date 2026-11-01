@@ -77,6 +77,12 @@ const PATHS = {
       <path d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11" />
     </>
   ),
+  'volume-off': (
+    <>
+      <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+      <path d="m15.5 9.5 5 5M20.5 9.5l-5 5" />
+    </>
+  ),
   plus: <path d="M12 5v14M5 12h14" />,
   'chev-down': <path d="m6 9 6 6 6-6" />,
   film: (
@@ -120,6 +126,7 @@ const PATHS = {
     </>
   ),
   full: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,
+  'full-exit': <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />,
   check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
   info: (
     <>

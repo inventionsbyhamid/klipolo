@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent } from 'react';
 import { flushBursts } from '../../state/bursts';
+import { useFullScreen } from '../../state/fullScreen';
 import { useRange } from '../../state/range';
 import { useSelection } from '../../state/selection';
 import type { RunOptions } from './command';
@@ -46,7 +47,8 @@ export const CONTROL_COMMAND: Readonly<Record<string, string>> = { i: 'toggle-ch
  * fit the timeline; 1 / 2 / 3 the format the preview shows; N snapping on or off; M a marker at the playhead (on a
  * recording); Escape clears the selection. With a clip or layer selected: Q / W trim its start or end to the playhead;
  * , and . move it a frame (⇧ ten) or a clip a place; ⌘C ⌘X ⌘V ⌘D copy, cut, paste, duplicate; ⌥⌘V paste effects;
- * ⌥↑ / ⌥↓ the track above or below.
+ * ⌥↑ / ⌥↓ the track above or below. ⌘L turns Loop on or off; F shows the preview full screen, and Escape leaves it
+ * (before it clears anything).
  * (On a focused timeline block the arrows, Home, End, Enter and Space move between blocks: `useRovingFocus`.)
  * Everything but ⌘K, ⌘↩ and the ⌃⌘ keys (`CONTROL_COMMAND`) is ignored while typing in a field; everything while a
  * menu, list or dialog is open, and when a focused control already handled the key.
@@ -116,6 +118,7 @@ export function useEditorShortcuts() {
       v: 'paste',
       d: 'duplicate',
       t: 'add-transition',
+      l: 'loop',
     };
     if (mod) {
       const id = withMod[key];
@@ -127,8 +130,16 @@ export function useEditorShortcuts() {
       e.preventDefault();
       run(id);
     } else if (e.key === 'Escape') {
+      // In full screen, Escape leaves it first; the selection stays for the next press.
+      if (useFullScreen.getState().on) {
+        if (!inPopup(e.target)) void useFullScreen.getState().leave();
+        return;
+      }
       useSelection.getState().select(null);
       useRange.getState().clear();
+    } else if (key === 'f' && !e.shiftKey && !e.repeat) {
+      // Held, it would go in and out with each repeat while the window's own animation runs.
+      run('full-screen');
     } else if (key === 'k' && !e.shiftKey) {
       run('pause');
     } else if ((key === 'j' || key === 'l') && !e.shiftKey) {
