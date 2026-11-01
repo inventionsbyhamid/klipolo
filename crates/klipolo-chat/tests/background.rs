@@ -469,3 +469,32 @@ fn a_vertical_version_that_followed_the_cursor_says_it_no_longer_does() {
         ]
     );
 }
+
+#[test]
+fn a_clip_that_followed_the_speaker_says_it_no_longer_does() {
+    use klipolo_model::fill_focus::{FillFocus, FocusPath};
+    let mut p = vertical(wide());
+    let mut second = p.timeline.main[0].clone();
+    second.id = "w2".into();
+    p.timeline.main.push(second);
+    p.timeline.main[0].fill_focus.insert(
+        FormatKind::Portrait,
+        FillFocus::speaker(FocusPath::default()),
+    );
+    let out = compile(&p, &inputs(&p), &[call(BLUR)]);
+    assert_eq!(
+        out.notes,
+        [
+            "2 clips are set to Fit so the background shows round them. One of them no longer follows the speaker."
+        ]
+    );
+    // One clip: it.
+    p.timeline.main.pop();
+    let out = compile(&p, &inputs(&p), &[call(BLUR)]);
+    assert_eq!(
+        out.notes,
+        [
+            "A clip is set to Fit so the background shows round it. It no longer follows the speaker."
+        ]
+    );
+}
