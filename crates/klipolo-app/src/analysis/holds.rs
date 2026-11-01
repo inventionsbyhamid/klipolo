@@ -260,10 +260,11 @@ mod tests {
     fn a_held_step_waits_until_let_go_or_cancelled() {
         let holds = Arc::new(Holds::default());
         holds.set_exporting(true);
+        // The clock starts before the thread does, so a slow start can't make the wait look shorter than the hold.
+        let started = Instant::now();
         let waiting = {
             let holds = holds.clone();
             std::thread::spawn(move || {
-                let started = Instant::now();
                 let waited = holds.wait(Work::Sound, &AtomicBool::new(false));
                 (waited, started.elapsed())
             })
