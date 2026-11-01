@@ -55,8 +55,8 @@ the relay.
   holds every cut to something the model was shown, like a word, a pause or a
   scene change.
 - **The relay** (`services/relay`, at `api.klipolo.com`): registers each
-  device, gives an access code its capped budget, forwards only an allowlist of
-  Meta models, and runs the MMS aligner for every device.
+  device, gives each Mac on an access code a capped budget, forwards only an
+  allowlist of Meta models, and runs the MMS aligner for every device.
 - **The MCP server** (`crates/klipolo-mcp`): lets other apps edit with chat's
   tools. `scripts/mcp-demo-agent` is a Muse Spark agent that drives it.
 
