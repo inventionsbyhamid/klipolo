@@ -220,6 +220,11 @@ const NAMES: Record<string, MessageDescriptor> = {
     message: 'Zoom',
     comment: 'An animation: the layer grows in or shrinks out',
   }),
+  'klipolo.builtin/scene.kinetic-title': msg({
+    id: 'contrib.scene.kinetic-title',
+    message: 'Kinetic title',
+    comment: 'A title template: big words whose letters rise in one by one',
+  }),
   'klipolo.builtin/scene.lower-third': msg({
     id: 'contrib.scene.lower-third',
     message: 'Lower third',
