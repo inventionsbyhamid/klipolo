@@ -31,6 +31,7 @@ use klipolo_model::transitions::{
     MIN_TRANSITION_US, default_transition_us, max_transition_us, transition_length_us,
 };
 
+use super::additions::format_word;
 use super::{Compiler, Edit, Refused, Tried, label, to_model, to_person};
 use crate::context::secs;
 use crate::tools::{ClipRef, TransitionKind};
@@ -52,10 +53,10 @@ pub(super) struct Change {
     pub framing: Option<(FramingMode, Option<FormatKind>)>,
 }
 
-/// The working copy's clips `named` names, by index: every piece of a ref's clip, or every clip.
-fn named(c: &Compiler, work: &Project, tool: &str, named: &ClipRef) -> Result<Vec<usize>, Refused> {
+/// The working copy's clips `target` names, by index: every piece of a ref's clip, or every clip.
+fn named(c: &Compiler, work: &Project, tool: &str, target: &ClipRef) -> Result<Vec<usize>, Refused> {
     let main = &work.timeline.main;
-    let ClipRef::One(short) = named else {
+    let ClipRef::One(short) = target else {
         return Ok((0..main.len()).collect());
     };
     let Some(id) = c.inputs.refs.clip(short) else {
@@ -179,14 +180,6 @@ fn framed(
         }
     }
     any.then_some(framing)
-}
-
-fn format_word(format: FormatKind) -> &'static str {
-    match format {
-        FormatKind::Landscape => "landscape",
-        FormatKind::Portrait => "portrait",
-        FormatKind::Square => "square",
-    }
 }
 
 /// What a speed change did to transitions, once the model refitted them: how many went and how many got shorter.
