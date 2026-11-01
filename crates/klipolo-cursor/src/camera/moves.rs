@@ -1,8 +1,9 @@
-//! The schedule and the keys. A glide ends exactly at the next shot's settle time (its
-//! first event less the pre-roll); an out-and-in goes out at the earlier shot's hold end and comes in to arrive then;
-//! out of the person's own zoom, or out of a shot that must zoom out after its hold when the next isn't the
-//! person's zoom (never reached early from an Auto shot), the move starts as that hold ends. Each move eases from one view to the next and the view holds between moves, so the plan is sampled by one
-//! binary search over its keys, with no allocation.
+//! The schedule and the keys. A glide ends exactly at the next shot's settle time (its first event less the pre-roll);
+//! an out-and-in goes out at the earlier shot's hold end and comes in to arrive then; out of the person's own zoom, or
+//! out of a shot that must zoom out after its hold (to show a dropped action) when the next isn't the person's zoom
+//! (never reached early from an Auto shot), the move starts as that hold ends. Each move eases from one view to the
+//! next and the view holds between moves, so the plan is sampled by one binary search over its keys, with no
+//! allocation.
 
 use super::safe::box_of;
 use super::shots::{Cand, Kind};
@@ -67,8 +68,8 @@ pub(crate) fn out_and_in(
 }
 
 /// From the span's start into its first shot when no move fits before the shot's pre-roll: as soon as the move allows,
-/// arriving after the shot's first event. The span's start is the person's, as its end is:
-/// a zoom whose click comes right at its start still zooms on it, late.
+/// arriving after the shot's first event. The span's start is the person's, as its end is: a zoom whose click comes
+/// right at its start still zooms on it, late.
 pub(crate) fn late(a: &Cand, (va, vb): (View, View), n: Us) -> Link {
     Link {
         moves: [Move::new(a.to, a.to.saturating_add(n), va, vb), None],

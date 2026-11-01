@@ -165,7 +165,7 @@ fn an_auto_zoom_without_using_keeps_its_old_json_and_styling_is_additive() {
 
 #[test]
 fn a_project_saved_before_the_cursor_layer_keeps_its_cursor_file_and_saves_the_new_shape() {
-    // An early version wrote the take's cursor file as `cursorPath`: it reads as a burned-in take.
+    // An early recorder build wrote the take's cursor file as `cursorPath`: it reads as a burned-in take.
     let mut earlier = serde_json::to_value(fixture()).unwrap();
     earlier["recordings"][0]["cursorPath"] = "/media/rec/cursor.jsonl".into();
     let p = klipolo_model::load_project(&earlier.to_string()).unwrap();

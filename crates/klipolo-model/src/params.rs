@@ -1,8 +1,8 @@
-//! Parameters of contributions. A contribution declares a schema ([`ParamSpec`]); a
-//! project stores values ([`ParamValue`]) by key. Values are plain JSON (`12`, `true`, `"#00E5FF"`,
-//! `{"x": 0.5, "y": 0.5}`) and the schema gives them meaning, so chat and plugins can write them easily. Keys a
-//! schema doesn't know are kept, because a newer version of the effect may use them. Keyframes will arrive as one
-//! more value shape (`{"keys": […]}`) without breaking these.
+//! Parameters of contributions. A contribution declares a schema ([`ParamSpec`]); a project stores values
+//! ([`ParamValue`]) by key. Values are plain JSON (`12`, `true`, `"#00E5FF"`, `{"x": 0.5, "y": 0.5}`) and the schema
+//! gives them meaning, so chat and plugins can write them easily. Keys a schema doesn't know are kept, because a newer
+//! version of the effect may use them. Keyframes will arrive as one more value shape (`{"keys": […]}`) without breaking
+//! these.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;

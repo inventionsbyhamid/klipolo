@@ -15,7 +15,7 @@ volume: number, muted: boolean,
 effects: Array<EffectInstance>, 
 /**
  * Play only this channel of the source's files (0 is the first), on both sides at the level a one-channel file
- * plays at; None plays them as recorded. A mic on one input of a two-input interface records [voice, silence]
+ * plays at; None plays them as recorded. A mic on one input of a two-input interface records [voice, silence]:
  * import sets this when the other channel stayed silent for the whole take. The files keep
  * every channel, and a one-channel file plays centred either way. Under `validate::PLAYED_CHANNELS`; left out of
  * the JSON while None.
@@ -29,7 +29,7 @@ centreFrom?: number,
  */
 fillsGaps?: boolean, 
 /**
- * The person muted it (`set_muted`: chat, a lane, a clip), not Sync (its camera sound, muted, filling the gaps): the
+ * The person muted it (`set_muted`: chat, a lane, a clip), not Sync (its camera sound, muted, filling the gaps):
  * the person's mute wins, so `fillGaps` never fills it. Unmuting clears it; left out while false.
  */
 mutedByPerson?: boolean, };

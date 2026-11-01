@@ -4,7 +4,7 @@
 //! scrambles write into the frame's fixed buffers; holds, text keys and tween texts pick one of the instance's texts.
 //! The renderer lays texts out and draws units from glyph sets; nothing here measures text.
 //!
-//! The frame also counts what it draws ([`FrameCounts`], the runtime caps): blurred
+//! The frame also counts what it draws ([`FrameCounts`], against the runtime caps): blurred
 //! units on visible text, characters per node and per scene, drawn instances, live particles and groups drawn
 //! offscreen. The evaluator itself never goes past the instance and particle caps (the rest isn't built or written);
 //! the renderer degrades the rest: units past 12 draw unblurred, characters past 500 a node or

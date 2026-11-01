@@ -10,8 +10,8 @@ use klipolo_model::Project;
 use super::common::{self, secs};
 use super::{run, synced, SURE};
 
-/// The interview synced: c1 and c2 play r9; i9 (the mic from its 100 s under c1, at 70 % with a 0.5 s fade in) is
-/// tied to the mic, as Sync leaves a layer it lined up; i10 plays the mic from its 500 s over c2 (a reused stretch),
+/// The imported interview synced: c1 and c2 play r9; i9 (the mic from its 100 s under c1, at 70 % with a 0.5 s fade in)
+/// is tied to the mic, as Sync leaves a layer it lined up; i10 plays the mic from its 500 s over c2 (a reused stretch),
 /// tied to nothing.
 fn with_layers() -> Project {
     let mut p = common::imported();

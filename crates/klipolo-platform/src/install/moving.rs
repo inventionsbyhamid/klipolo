@@ -90,7 +90,7 @@ enum Judged {
     /// Nothing: the copy takes the name.
     Empty,
     /// This very version of Klipolo, ready to open: already moved, so nothing is copied or trashed. A copy still
-    /// copy still quarantined (put there by `cp` or an unarchiver) would run translocated, so it counts as Older.
+    /// quarantined (put there by `cp` or an unarchiver) would run translocated, so it counts as Older.
     Same,
     /// An older Klipolo, or one whose version can't be read: it goes to the Trash.
     Older,
@@ -99,7 +99,7 @@ enum Judged {
 /// Copies `bundle` into `dir` as Klipolo.app. A Klipolo already there (the bundle id `id`) is replaced when `than` says
 /// its version is older than this one (or it can't be read: it goes to the Trash, so nothing is lost), kept when it
 /// is newer (an older disk image never replaces a newer install), and simply opened when it is this very version.
-/// version. Anything else with the name stays. A disk without room for the copy is refused before
+/// Anything else with the name stays. A disk without room for the copy is refused before anything is written. Moving a
 /// copy onto itself changes nothing.
 pub(crate) fn move_into(
     m: &dyn Mover,

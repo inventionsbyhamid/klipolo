@@ -1,10 +1,10 @@
-//! One ranked search for the font menu and chat: exact, then prefix, then word-prefix, then substring, then
-//! in-order letters. Within a band, a tie breaks as a name resolves: the bundled set, then
-//! Google families downloaded here, then this computer's, then Google's not downloaded; each in the index's order (the
-//! bundled order, Google's popularity, this computer's names). The query is lower-cased once; names are compared case-insensitively through
-//! char iterators, so nothing is allocated per name. "Covers my text" reads coverage bits: computed at scan time for
-//! installed families, from the subsets when the catalogue is read for Google's. No file is read here, except the
-//! bundled files' coverage, once per process.
+//! One ranked search for the font menu and chat: exact, then prefix, then word-prefix, then substring, then in-order
+//! letters. Within a band, a tie breaks as a name resolves: the bundled set, then Google families downloaded here, then
+//! this computer's, then Google's not downloaded; each in the index's order (the bundled order, Google's popularity,
+//! this computer's names). The query is lower-cased once; names are compared case-insensitively through char iterators,
+//! so nothing is allocated per name. "Covers my text" reads coverage bits: computed at scan time for installed
+//! families, from the subsets when the catalogue is read for Google's. No file is read here, except the bundled files'
+//! coverage, once per process.
 //!
 //! Cost: O(families × name length) per query, about 1,900 Google names and 300 to 2,300 installed ones (the release
 //! test's budget is 5 ms a query). The rows it returns are capped by `limit` for each source on its own (bundled,
@@ -247,8 +247,8 @@ pub(crate) fn row(index: &FontIndex, hit: Hit, (weight, italic): (u16, bool)) ->
         }
         Hit::Google(g) => {
             // Downloaded here (the download store): picked, it draws at once. At the catalogue's version when that one
-            // else the newest version downloaded, which is what a pick stores (as chat's `styleText` does),
-            // never the newer one that isn't here.
+            // is, else the newest version downloaded, which is what a pick stores (as chat's `styleText` does), never
+            // the newer one that isn't here.
             let download = index.download_of(&g.family, &g.version);
             let (source, faces) = match download {
                 Some(d) => (

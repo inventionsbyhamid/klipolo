@@ -4,13 +4,11 @@
 //! `Asset::lead_us`; a sound file's own time), so cuts, trims, speed changes and reorders never change it. It is
 //! immutable and lives outside the project, keyed by the file's content. The person's corrections are
 //! project data (`Project::word_fixes`, `Op::FixWords`) in the same sound time, so they follow the words through every
-//! edit and undo. `map` puts words on the timeline for one revision; `silence` finds pauses from loudness alone;
-//! `route` says which family of speech models, and so which engine, hears a language. The caption pages the
-//! engine draws are made from them in `crate::captions`.
+//! edit and undo. `map` puts words on the timeline for one revision; `silence` finds pauses from loudness alone. The
+//! caption pages the engine draws are made from them in `crate::captions`.
 
 mod fill;
 pub mod map;
-pub mod route;
 pub mod silence;
 
 use std::collections::HashMap;
@@ -68,7 +66,7 @@ pub struct Word {
 #[ts(export)]
 pub struct Transcript {
     pub key: SpeechKey,
-    /// Whisper's language code ("en", "de", "ja").
+    /// The language's ISO 639-1 style code ("en", "de", "ja").
     pub language: String,
     /// The speech model's pin id.
     pub model: String,
@@ -80,7 +78,7 @@ pub struct Transcript {
 }
 
 /// A person's correction of the words heard in `[start_us, end_us)` of `asset_id` (its sound time): captions, the
-/// Script view and chat's snippets read `text` instead (the transcript-derived text override).
+/// Script view and chat's snippets read `text` instead (a text override on what the transcript heard).
 // `Eq`, so the project's shared list compares by pointer first (`Arc`'s `==`): an edit that leaves it alone diffs it in
 // O(1).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS, schemars::JsonSchema)]

@@ -51,8 +51,8 @@ pub struct PlatformCaps {
     /// - Linux: `/proc/cpuinfo`'s `physical id` and `cpu cores`. Arm Linux lists neither, so there it counts logical
     ///   CPUs (what this process may use).
     pub physical_cores: u32,
-    /// The render worker can sandbox itself here (`process::sandbox_self`: macOS's Seatbelt). Windows and Linux get
-    /// theirs at W and L; until then agent-made code is never checked there, so the Make tools are off.
+    /// The render worker can sandbox itself here (`process::sandbox_self`: macOS's Seatbelt). Windows and Linux have no
+    /// worker sandbox yet, so agent-made code is never checked there and the Make tools are off.
     pub worker_sandbox: bool,
 }
 
@@ -106,7 +106,7 @@ mod tests {
         assert_eq!(
             caps.worker_sandbox,
             cfg!(target_os = "macos"),
-            "macOS only until W and L"
+            "macOS only, until Windows and Linux have a worker sandbox"
         );
         let fake = crate::fake::fake_caps(OsFamily::Windows, false);
         assert_eq!(fake.os.family, OsFamily::Windows);

@@ -7,7 +7,7 @@ publish = false
 description = "Klipolo's fonts: the bundled set, aliases, CSS face matching, the one resolver, the fallback chain, the font index and search, the Google catalogue and its download store"
 
 [features]
-# A local server stands in for Google's hosts in this crate's and the app's download tests. Nothing else turns it on.
+# A local server stands in for Google's hosts in this crate's download tests. Nothing else can turn it on.
 test-hosts = []
 
 [dependencies]

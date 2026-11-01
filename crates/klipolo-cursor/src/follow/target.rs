@@ -1,9 +1,8 @@
-//! What the crop looks at, step by step: a click due within the pre-roll, else what is being typed,
-//! else a dwell, else the raw cursor. With it comes what the crop may speed up for (`Look::pull`
-//! past the dead zone): the text being typed, or the raw cursor under a dwell or itself; never a click still to come,
-//! where the cursor isn't yet. That catch-up fades out over the 0.3 s before a click comes due (`Look::boost`, the
-//! C7 fix), so the crop slows to its limit before turning to the click instead of in one step. Every list
-//! is walked forward once, so a build is O(steps + events).
+//! What the crop looks at, step by step: a click due within the pre-roll, else what is being typed, else a dwell, else
+//! the raw cursor. With it comes what the crop may speed up for (`Look::pull`): the text being typed, or the raw cursor
+//! under a dwell or itself; never a click still to come, where the cursor isn't yet. That catch-up fades out over the
+//! 0.3 s before a click comes due (`Look::boost`), so the crop slows to its limit before turning to the click instead
+//! of in one step. Every list is walked forward once, so a build is O(steps + events).
 //!
 //! **Typing before a dwell.** Typing needs the cursor still, so a typing span lies inside one still run, and a dwell
 //! over it covers all of it. Clicking a field and typing leaves no dwell (no travel since the press), but clicking it

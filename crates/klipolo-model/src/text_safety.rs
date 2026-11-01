@@ -12,9 +12,8 @@ pub const MADE_BY_CHARS: usize = 60;
 
 /// Characters that change no letter's look: zero-width ones, joiners, direction marks and overrides, the soft hyphen,
 /// the byte-order mark, tags (Unicode's format characters, Cf); and the ones that draw nothing or only pick a glyph's
-/// variant: variation selectors, the combining grapheme joiner, Hangul fillers and the blank Braille pattern (security
-/// review). The MCP server drops them from app names; the shader guard refuses them in code; the
-/// library drops them from names.
+/// variant: variation selectors, the combining grapheme joiner, Hangul fillers and the blank Braille pattern. The MCP
+/// server drops them from app names; the shader guard refuses them in code; the library drops them from names.
 pub fn invisible(c: char) -> bool {
     matches!(c as u32,
         0xAD | 0x34F | 0x600..=0x605 | 0x61C | 0x6DD | 0x70F | 0x8E2 | 0x115F | 0x1160 | 0x180B..=0x180F

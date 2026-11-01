@@ -1,5 +1,5 @@
-//! Caption files for long-form exports: SRT or WebVTT beside a landscape
-//! video, from Clean's pages (its lines and line length: 2 of at most 42 columns, Netflix timing) whatever style is
+//! Caption files for long-form exports: SRT or WebVTT beside a landscape video, from Clean's pages (its lines and line
+//! length: 2 of at most 42 columns, Netflix timing) whatever style is burned in, with the person's fixes and looks.
 //! Hidden words stay in the pages and out of the file.
 //!
 //! One source of truth with what is drawn:

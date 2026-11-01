@@ -6,8 +6,8 @@ import type { Synced } from "./Synced";
 
 /**
  * One source of a recording: its own file(s) and lane. A clean take has one run; a reattached device, a rebuilt
- * a rebuilt encoder or a resumed recorder starts another. Runs lie on the recording clock (the recorder's session clock:
- * host time since the start gate, pauses left out), in order and never overlapping.
+ * encoder or a resumed recorder starts another. Runs lie on the recording clock (the recorder's session clock: host
+ * time since the start gate, pauses left out), in order and never overlapping.
  */
 export type RecordingSource = { 
 /**
@@ -15,7 +15,7 @@ export type RecordingSource = {
  */
 id: string, role: SourceRole, 
 /**
- * A `capture.source.<role>` code for a name Klipolo made ("capture.source.mic"), or the person's own text once they
+ * A `capture.source.<role>` code for a name Klipolo made ("capture.source.mic"), or the person's own text once
  * they rename it. The UI words a code with `wordCode`; chat's summary words it in English.
  */
 label: string, runs: Array<SourceRun>, 

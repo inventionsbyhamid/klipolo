@@ -136,7 +136,7 @@ fn app_rename(doc: &mut Document, name: &str, shares: &[Share<'_>]) -> Result<Ch
     by_app(doc, next, shares)
 }
 
-/// MCP security: on a large project, an app's batch whose reverse patch is big would push the person's
+/// On a large project, an app's batch whose reverse patch is big would push the person's
 /// own steps out by the byte budget. `commit_tx_keeping` refuses it, changes nothing and hands the project back, where
 /// `commit_tx` would have dropped them.
 #[test]
@@ -170,8 +170,8 @@ fn an_apps_batch_never_pushes_out_the_persons_steps_by_bytes() {
     assert_eq!(doc.undo_steps(), 1);
 }
 
-/// M-1 by the step limit: room is made from the app's own steps (folded, or its oldest at the oldest end); never the
-/// person's, nor the person's redo steps (any commit drops them).
+/// The same by the step limit: room is made from the app's own steps (folded, or its oldest at the oldest end); never
+/// the person's, nor the person's redo steps (any commit drops them).
 #[test]
 fn an_apps_batch_makes_room_only_from_its_own_steps() {
     let mut doc = Document::new(fixture()).unwrap();
@@ -242,7 +242,7 @@ fn share(steps: usize, bytes: usize) -> [Share<'static>; 1] {
     }]
 }
 
-/// MCP security (undoing a big addition): an app's step is charged at the larger of its undo and redo
+/// Undoing a big addition: an app's step is charged at the larger of its undo and redo
 /// patches. An addition whose undo patch is small but whose redo patch is over the app's share is refused; without the
 /// share it commits, and undoing it pushes the person's steps out.
 #[test]
@@ -354,7 +354,7 @@ fn the_persons_later_edits_never_push_out_their_steps_for_an_app() {
     assert!(edit(&[]) < 10);
 }
 
-/// MCP security: a mark says which steps came since, exactly, while the history reaches back to it: not
+/// A mark says which steps came since, exactly, while the history reaches back to it: not
 /// once its newest step was undone, nor (with none then) once an undo step was dropped.
 #[test]
 fn a_mark_lists_the_steps_since_only_while_the_history_reaches_back() {
@@ -398,7 +398,7 @@ fn a_mark_lists_the_steps_since_only_while_the_history_reaches_back() {
     assert_eq!(doc3.since(empty), None);
 }
 
-/// MCP security (by step count): an app's steps count against its share by who made them, so it holds
+/// By step count: an app's steps count against its share by who made them, so it holds
 /// at most `steps` of them. Steps split by the person's can't fold, so its next change past the share is refused.
 #[test]
 fn an_apps_steps_are_counted_against_its_share() {
@@ -490,10 +490,10 @@ fn the_limits_take_an_apps_redo_and_undo_steps_before_the_persons() {
     assert_eq!((apps_steps(&doc), doc.redo_steps()), (11, 39));
 }
 
-/// At its share, an app's own oldest steps that sit next to each other fold into
-/// one ("<app>'s earlier changes") rather than make its change wait. 60 of the app's edits after 20 of the person's: all
-/// commit within a share of 12, the person's 20 stay, and undoing the folded step gives the project as it was before the
-/// app's edits; redo gives it all back. Steps of the app's split by the person's don't fold, so that change waits.
+/// At its share, an app's own oldest steps that sit next to each other fold into one ("<app>'s earlier changes") rather
+/// than make its change wait. 60 of the app's edits after 20 of the person's: all commit within a share of 12, the
+/// person's 20 stay, and undoing the folded step gives the project as it was before the app's edits; redo gives it all
+/// back. Steps of the app's split by the person's don't fold, so that change waits.
 #[test]
 fn an_apps_own_oldest_steps_fold_to_make_room_in_its_share() {
     let mut doc = Document::new(fixture()).unwrap();
@@ -592,8 +592,8 @@ fn a_refused_commit_keeps_none_of_its_folds() {
     assert_eq!(doc.undo_steps(), 3);
 }
 
-/// A fold never crosses a seal (a Keep, or where a restore point was taken). The app's one step, sealed, then two
-/// more past a share of two: the later two fold, never the sealed one with the next; and a mark at the sealed step still
+/// A fold never crosses a seal (a Keep, or where a restore point was taken). The app's one step, sealed, then two more
+/// past a share of two: the later two fold, never the sealed one with the next; and a mark at the sealed step still
 /// lists exactly what came since.
 #[test]
 fn no_fold_crosses_a_seal() {

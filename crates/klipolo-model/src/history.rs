@@ -1,5 +1,5 @@
 //! A project plus bounded undo/redo. Each successful transaction is one undo step. A step holds the reverse patch
-//!, not a copy of the project, and every edit, undo and redo reports the forward patch it made.
+//! not a copy of the project, and every edit, undo and redo reports the forward patch it made.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
@@ -122,8 +122,8 @@ struct Step {
     bytes: usize,
     /// Which change this is, the same while it moves between undo and redo: a later change has a larger number.
     seq: u64,
-    /// What it may hold either way, undone or redone: the larger of its two patches, and a folded step at least both its
-    /// parts. A [`Share`] is charged so (undoing an addition stores the added layers whole).
+    /// What it may hold either way, undone or redone: the larger of its two patches, and a folded step at least both
+    /// its parts. A [`Share`] is charged so (undoing an addition stores the added layers whole).
     charge: usize,
     /// Who made it: only steps of one maker ever fold together.
     maker: Maker,
@@ -216,8 +216,8 @@ impl Whose<'_> {
 }
 
 /// A share of the history that one app's steps, or all apps' together, may hold: at most `steps` of them, and `bytes`,
-/// each charged at the larger of its undo and redo patches, a folded step at the sum of its parts (MCP security
-/// rules: counted by maker, never by label).
+/// each charged at the larger of its undo and redo patches, a folded step at the sum of its parts (counted by maker,
+/// never by label).
 pub struct Share<'a> {
     pub of: Whose<'a>,
     pub steps: usize,
@@ -362,12 +362,11 @@ impl Document {
     /// An app's batch, which its level applies at once, as one undo step it made (`by.app`). Room is made only from the
     /// app's own steps: past a share's steps, its own oldest steps that sit next to each other fold into one (labelled
     /// as [`Document::set_folded_label`] says, charged both its parts, never across a seal); past the history's limits,
-    /// judged with every app step at its charge, its own steps fold (by count) or its own oldest step
-    /// goes (at the oldest end). It is refused when making room
-    /// would push out another's step (the person's or another app's, in undo or, since any commit drops them, in redo)
-    /// or would make a share it belongs to hold more than its steps or bytes (bytes are never
-    /// made room for). A refused commit changes nothing, its folds included, and `next`
-    /// comes back. O(steps × shares), plus a patch composed per fold.
+    /// judged with every app step at its charge, its own steps fold (by count) or its own oldest step goes (at the
+    /// oldest end). It is refused when making room would push out another's step (the person's or another app's, in
+    /// undo or, since any commit drops them, in redo), or would make a share it belongs to hold more than its steps or
+    /// bytes (bytes are never made room for). A refused commit changes nothing, its folds included, and `next` comes
+    /// back. O(steps × shares), plus a patch composed per fold.
     pub fn commit_tx_keeping(
         &mut self,
         tx: &Transaction,
@@ -461,8 +460,8 @@ impl Document {
             return Err(NoRoom::OverShare(n));
         }
         // The limits, as the history will be once the redo steps go and `step` is the newest undo step, with every app
-        // step at its charge: what it holds once undone or redone, so undoing it later never needs room the person's steps
-        // hold. The app's own steps fold (too many steps) or go from the oldest end; another's never.
+        // step at its charge: what it holds once undone or redone, so undoing it later never needs room the person's
+        // steps hold. The app's own steps fold (too many steps) or go from the oldest end; another's never.
         let reserved = |doc: &Self| {
             let held: usize = doc
                 .undo
@@ -606,8 +605,8 @@ impl Document {
         Some(old)
     }
 
-    /// The person kept an app's changes here (or a restore point was taken): no fold ever joins the newest undo step with
-    /// a later one, so Undo never takes back past this state in one step, and a mark here stays reachable.
+    /// The person kept an app's changes here (or a restore point was taken): no fold ever joins the newest undo step
+    /// with a later one, so Undo never takes back past this state in one step, and a mark here stays reachable.
     pub fn seal(&mut self) {
         if let Some(top) = self.undo.back_mut() {
             top.sealed = true;
@@ -788,9 +787,9 @@ impl Document {
 
     /// Folds or drops steps until undo and redo together fit the limits:
     /// 1. apps' steps go first, those in redo (the newest made first), then those in undo (the oldest first): one folds
-    ///    into the same app's step next to it (never across a seal), for too many steps or for bytes (a folded patch holds
-    ///    each item once, so steps that touch the same items shrink); where none can, one at the far
-    ///    end of its stack goes;
+    ///    into the same app's step next to it (never across a seal), for too many steps or for bytes (a folded patch
+    ///    holds each item once, so steps that touch the same items shrink); where none can, one at the far end of its
+    ///    stack goes;
     /// 2. then the person's: the step furthest from the current revision, the oldest undo or the furthest redo, whichever
     ///    stack is longer (undo on a tie), but their redo only once no app's step is left; the person's next undo and
     ///    next redo always stay.

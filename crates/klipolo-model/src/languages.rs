@@ -1,8 +1,9 @@
-//! The languages transcription knows, by their Whisper codes, with their English names: how Rust's English (MCP
-//! replies, logs, the prompt's examples) names a language a code carries ("in German", never "in de").
-//! The UI names them in the person's language (`languageName`, `Intl.DisplayNames`).
+//! The languages transcription knows, by the ISO 639-1 style codes the transcriber uses ("de"; "haw" or "yue" for a
+//! language with no two-letter code), with their English names: how Rust's English (MCP replies, logs, the prompt's
+//! examples) names a language a code carries ("in German", never "in de"). The UI names them in the person's language
+//! (`languageName`, `Intl.DisplayNames`).
 
-/// Whisper's language codes and their English names, sorted by code (a binary search finds one).
+/// The transcriber's language codes and their English names, sorted by code (a binary search finds one).
 const NAMES: &[(&str, &str)] = &[
     ("af", "Afrikaans"),
     ("am", "Amharic"),
@@ -106,7 +107,7 @@ const NAMES: &[(&str, &str)] = &[
     ("zh", "Chinese"),
 ];
 
-/// The English name of the language with Whisper code `code` ("de" → "German"); None for a code it doesn't know.
+/// The English name of the language with code `code` ("de" → "German"); None for a code it doesn't know.
 pub fn english_name(code: &str) -> Option<&'static str> {
     NAMES
         .binary_search_by(|(c, _)| (*c).cmp(code))
@@ -114,12 +115,19 @@ pub fn english_name(code: &str) -> Option<&'static str> {
         .map(|i| NAMES[i].1)
 }
 
-/// Whisper's own spelling of `code`, in any case ("EN" → "en"); None for a code it doesn't know.
+/// The transcriber's own spelling of `code`, in any case ("EN" → "en"); None for a code it doesn't know.
 pub fn known_code(code: &str) -> Option<&'static str> {
     NAMES
         .binary_search_by(|(c, _)| c.bytes().cmp(code.bytes().map(|b| b.to_ascii_lowercase())))
         .ok()
         .map(|i| NAMES[i].0)
+}
+
+/// `tag`'s language without its region or script, in its own spelling: "pt-BR" is "pt", "zh-Hans" is "zh", "EN" is
+/// "en" (a code transcription doesn't know comes back as written).
+pub fn base_language(tag: &str) -> &str {
+    let base = tag.split(['-', '_']).next().unwrap_or_default();
+    known_code(base).unwrap_or(base)
 }
 
 /// Every language transcription knows, by its code, in code order.
@@ -137,9 +145,17 @@ mod tests {
     }
 
     #[test]
+    fn a_tag_counts_as_its_base_language() {
+        assert_eq!(super::base_language("pt-BR"), "pt");
+        assert_eq!(super::base_language("zh-Hans"), "zh");
+        assert_eq!(super::base_language("EN"), "en");
+        assert_eq!(super::base_language("xx-YY"), "xx");
+    }
+
+    #[test]
     fn the_names_are_sorted_by_code_each_once() {
         assert!(super::NAMES.windows(2).all(|w| w[0].0 < w[1].0));
-        assert_eq!(super::NAMES.len(), 100, "Whisper's languages");
+        assert_eq!(super::NAMES.len(), 100, "the transcriber's languages");
         assert_eq!(super::codes().count(), 100);
     }
 }

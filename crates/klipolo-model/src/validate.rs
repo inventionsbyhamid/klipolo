@@ -127,9 +127,8 @@ fn check_layout(l: &Layout, codes: &LayoutCodes) -> Result<()> {
 }
 
 /// Motion and blend: on visual layers (any blend but normal also needs a picture of its own, so not on an adjustment
-/// adjustment layer), and keys only on the camera bubble. `len_us` is a layer's
-/// length. A layer's presets are checked against the catalogue: a built-in's settings against its schema, while an
-/// id this build doesn't know is kept.
+/// layer), and keys only on the camera bubble. `len_us` is a layer's length. A layer's presets are checked against the
+/// catalogue: a built-in's settings against its schema, while an id this build doesn't know is kept.
 fn check_motion(p: &Project, layout: &Layout, owner: Owner, len_us: Us) -> Result<()> {
     let moving = layout.motion.as_ref().is_some_and(|m| !m.is_empty());
     let blended = layout.blend_mode() != Blend::Normal;

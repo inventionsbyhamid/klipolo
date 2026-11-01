@@ -71,7 +71,7 @@ fn the_fixture_is_marked_as_a_sample() {
     assert!(fixture().sample);
 }
 
-// More cases.
+// More catalogue cases: ordering, picks, downloads and the snapshot's rules.
 
 use klipolo_fonts::index::{Downloaded, DownloadedFace, FontIndex, InstalledFamily};
 use klipolo_fonts::search::{RowState, SearchFilter, search};
@@ -87,9 +87,8 @@ fn google(family: &str, version: &str) -> FontRef {
 }
 
 /// The empty query's order, a tie at one rank: the bundled set, then this computer's, then Google's families not
-/// downloaded, by popularity (none Klipolo bundles). A tie breaks bundled, downloaded Google,
-/// installed, then Google not downloaded (the menu's sections show no change).
-/// A query ranks by match first, then the same order.
+/// downloaded, by popularity (none Klipolo bundles). A tie breaks bundled, downloaded Google, installed, then Google
+/// not downloaded (the menu's sections show the same order). A query ranks by match first, then the same order.
 #[test]
 fn an_empty_query_lists_bundled_then_this_macs_then_google_by_popularity() {
     let ix = index().with_installed(vec![InstalledFamily {
@@ -246,7 +245,7 @@ fn a_snapshot_that_breaks_a_rule_is_refused() {
     }
 }
 
-/// The compiled-in snapshot reads and is either the labelled sample or a real one (Step 6), never anything else.
+/// The compiled-in snapshot reads and is either the labelled sample or a real one, never anything else.
 #[test]
 fn the_shipped_snapshot_parses() {
     let shipped = Catalogue::from_gz(include_bytes!("../catalogue/google-fonts.json.gz")).unwrap();

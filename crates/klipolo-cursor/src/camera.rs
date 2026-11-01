@@ -1,5 +1,5 @@
-//! The smart camera: Auto zooms planned for a whole span ahead of time,
-//! pure, on one time axis. The engine plans its Auto zoom layers with it and chat plans the layers it makes
+//! The smart camera: Auto zooms planned for a whole span ahead of time, pure, on one time axis. The engine plans its
+//! Auto zoom layers with it and chat plans the layers it makes, both from `focus_from` over the same `TimelineFacts`,
 //! so chat's zooms play as it planned them.
 //!
 //! `plan` turns the focus into shots (`shots`), places them with legal moves only (`legal`: a glide, a wider view, an

@@ -1,5 +1,5 @@
-//! What a read keeps and tells beyond the lines themselves: one sample a time,
-//! impossible values and times refused and counted, the header count and each kind's last time.
+//! What a read keeps and tells beyond the lines themselves: one sample a time, impossible values and times refused and
+//! counted, the header count and each kind's last time.
 
 mod common;
 

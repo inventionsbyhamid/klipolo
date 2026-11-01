@@ -343,7 +343,7 @@ pub(super) fn update_clip(
 
 /// Whether a sound layer of one of `clip`'s recording's sound sources plays over `[start, end)` (its timeline span):
 /// its sound was separated there (`DetachSource`). Sound layers have no speed, so the clip's speed can't change under
-/// them without the two drifting apart: `update_clip` refuses it. O(layers × the recording's sound
+/// them without the two drifting apart (sync must hold): `update_clip` refuses it. O(layers × the recording's sound
 /// files), no allocation.
 pub(crate) fn sound_separated(p: &Project, clip: &Clip, start: Us, end: Us) -> bool {
     let ClipSource::Recording { id } = &clip.source else {

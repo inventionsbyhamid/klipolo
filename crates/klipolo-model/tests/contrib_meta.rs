@@ -1,4 +1,4 @@
-//! What contributions say about themselves: the new definition fields, padding, table settings, font
+//! What contributions say about themselves: the definition fields, padding, table settings, font
 //! settings that hold a `FontRef`, library ids, JSON schemas, and `scenes@1` in a project's requirements.
 mod common;
 
@@ -207,7 +207,7 @@ fn a_font_setting_holds_a_font_ref_and_round_trips() {
         .is_err());
 }
 
-/// A definition's padding is finite and never negative (the size caps, checked where definitions load).
+/// A definition's padding is finite and never negative (capped, and checked where definitions load).
 #[test]
 fn a_padding_that_isnt_finite_or_is_negative_is_refused() {
     let def = |padding| ContribDef {

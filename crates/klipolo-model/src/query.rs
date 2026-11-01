@@ -258,7 +258,7 @@ pub fn run_in_clip(
 }
 
 /// `run_in_clip` over the clip's recording-time stretch `[from, to)` only: a true gap the camera's sound fills. None
-/// S12b). None when the run has nothing there.
+/// when the run has nothing there.
 pub fn run_within(
     clip: &Clip,
     clip_start_us: Us,

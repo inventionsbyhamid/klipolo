@@ -55,8 +55,8 @@ pub(crate) fn install_dock_menu(items: DockItems, click: DockClick) {
         )
     };
     // AppKit may note which optional methods a delegate answers when it is set, and tao set it before these were added:
-    // set again (nil, then the same object, which tao keeps alive), it is asked afresh. On the main
-    // loop's next turn, so it never runs inside the launch notification tao's setup is called from.
+    // set again (nil, then the same object, which tao keeps alive), it is asked afresh. On the main loop's next turn,
+    // so it never runs inside the launch notification tao's setup is called from.
     drop(owner);
     cidre::dispatch::Queue::main().async_mut(|| {
         let Some(mtm) = MainThreadMarker::new() else {

@@ -1,8 +1,7 @@
-//! Google's font catalogue: a compact snapshot of the Web
-//! Fonts Developer API list, built at release time by `scripts/build-font-catalogue.mjs` (joined with licence folders
-//! and file sizes), committed gzipped and compiled in. Browsing it is offline and sends nothing. Only a download
-//! (`download`) reaches Google, at `GSTATIC` and a file's tail: the host is fixed there, and the snapshot holds tails
-//! only.
+//! Google's font catalogue: a compact snapshot of the Web Fonts Developer API list, built at release time by
+//! `scripts/build-font-catalogue.mjs` (joined with licence folders and file sizes), committed gzipped and compiled in.
+//! Browsing it is offline and sends nothing. Only a download (`download`) reaches Google, at `GSTATIC` and a file's
+//! tail: the host is fixed there, and the snapshot holds tails only.
 //!
 //! The catalogue is a value in a `FontIndex` (`FontIndex::with_catalogue`): nothing reads a global, and
 //! tests pass their own. `shipped()` decodes the compiled-in snapshot once, on first use, and shares it; the app asks
@@ -31,7 +30,7 @@ pub use snapshot::subsets_coverage;
 /// Where a file's tail is fetched from.
 pub const GSTATIC: &str = "https://fonts.gstatic.com/s/";
 /// A family whose files total more than this is downloaded a weight at a time (Chinese, Japanese, Korean and a few
-/// Noto families); any other downloads whole (the fonts research, "Downloading a family").
+/// Noto families); any other downloads whole.
 pub const WHOLE_FAMILY_MAX: u64 = 15_000_000;
 /// The most a snapshot may unpack to: the real one is about 740 KB.
 const MAX_RAW: u64 = 16 << 20;
@@ -40,8 +39,8 @@ const MAX_RAW: u64 = 16 << 20;
 pub struct Catalogue {
     /// The day the snapshot was built (`2026-10-22`).
     pub date: String,
-    /// The labelled sample (`google-fonts.fixture.json`), until an API key builds the real one: Settings says so,
-    /// and the release scanner refuses it outside a test build.
+    /// The labelled sample (`google-fonts.fixture.json`), until a Google Fonts API key builds the real one: Settings
+    /// says so, and the release scanner refuses it outside a test build.
     pub sample: bool,
     /// By popularity, most popular first.
     pub families: Vec<GoogleFamily>,

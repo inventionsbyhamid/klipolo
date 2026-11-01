@@ -188,10 +188,10 @@ pub fn cjk_segments(text: &str, language: &str, cover: CjkCover) -> Vec<(Range<u
 
 /// CJK punctuation standing outside every segment ("Hello！", "「Hello」", a full-width space), when the text's own face
 /// doesn't cover Han (byte ranges, each with the text language's Han script). It needs no download, so it raises no
-/// raises no code; but it must draw the same everywhere: once installed CJK
-/// families are barred as fallbacks, the engine has no system face for it, while WebKit would reach PingFang. So the
-/// engine and the webview both draw it in that script's downloaded Noto Sans, else in Adobe NotDef's box, as the
-/// preview, the canvas and the export all show it. Never a system face either side picks for itself.
+/// code; but it must draw the same everywhere: once installed CJK families are barred as fallbacks, the engine has no
+/// system face for it, while WebKit would reach PingFang. So the engine and the webview both draw it in that script's
+/// downloaded Noto Sans, else in Adobe NotDef's box, as the preview, the canvas and the export all show it. Never a
+/// system face either side picks for itself.
 pub fn lone_marks(text: &str, language: &str, cover: CjkCover) -> Vec<(Range<usize>, CjkScript)> {
     if cover.han || !has_cjk(text) {
         return Vec::new();

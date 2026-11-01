@@ -1,6 +1,5 @@
-//! The glide: inside each Auto shot, from its first event until its view stops
-//! holding, the view follows the RAW cursor at 60 Hz, only when the cursor leaves the safe zone and only as far as
-//! needed. The person's own zooms never glide.
+//! The glide: inside each Auto shot, from its first event until its view stops holding, the view follows the RAW cursor
+//! at 60 Hz, only when the cursor leaves the safe zone and only as far as needed. The person's own zooms never glide.
 //!
 //! - **The wanted centre** stays put while the cursor is inside the safe zone, else shifts the least that puts it
 //!   back. It is kept where every event still to come in the shot stays in the safe zone, and every dropped action

@@ -1,6 +1,6 @@
-//! The follow-crop's harder inputs: a
-//! hidden or burned-in cursor held, inputs out of range that never panic, event times past the take left out, and a file
-//! with no area measured on the take's picture. The typed part is `follow_typed.rs`'s.
+//! The follow-crop's harder inputs: a hidden or burned-in cursor held, inputs out of range that never panic, event
+//! times past the take left out, and a file with no area measured on the take's picture. The typed part is
+//! `follow_typed.rs`'s.
 
 mod common;
 
@@ -189,8 +189,8 @@ fn inputs_out_of_range_never_panic_and_the_crop_stays_inside() {
 #[test]
 fn a_file_with_no_area_measures_speed_on_the_takes_picture() {
     // A format-1 file (no area) of a take whose picture is 1.6 wide. The cursor jumps 0.1 down, inside a crop 1.5×
-    // closer that can move both ways; rules that chase it hard (no dead zone, ω 20) make the limit bind. Measured on the
-    // picture, a move down covers up to 1.6 times the share of the height a square would allow.
+    // closer that can move both ways; rules that chase it hard (no dead zone, ω 20) make the limit bind. Measured on
+    // the picture, a move down covers up to 1.6 times the share of the height a square would allow.
     let still = |t0: Us, y: f32| {
         (0..=20).map(move |k| Line::Move {
             t: t0 + k * 100_000,

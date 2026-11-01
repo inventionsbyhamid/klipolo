@@ -1,7 +1,6 @@
-//! Fonts the OS decides: the colour emoji face at the end of the fallback chain, where
-//! The bundled fonts sit beside the app, and the font files a font manager activated. Shared code names no
-//! OS family. There is deliberately no list of system CJK families: system CJK faces are never fallbacks, only drawn
-//! when the person picks one.
+//! Fonts the OS decides: the colour emoji face at the end of the fallback chain, where the bundled fonts sit beside
+//! the app, and the font files a font manager activated. Shared code names no OS family. There is deliberately no list
+//! of system CJK families: system CJK faces are never fallbacks, only drawn when the person picks one.
 
 use std::path::{Path, PathBuf};
 

@@ -177,7 +177,8 @@ pub fn render<'a>(e: &CodedError, lookup: &dyn Fn(&str) -> Option<&'a str>) -> S
             }
             Some(ErrorParam::Number(n)) if name.ends_with("Bytes") => out.push_str(&file_size(*n)),
             Some(ErrorParam::Number(n)) => out.push_str(&number(*n)),
-            // A language is a Whisper code ("de"): its English name, as the UI names it in the person's language.
+            // A language is its ISO 639-1 style code ("de"): its English name, as the UI names it in the person's
+            // language.
             Some(ErrorParam::Text(t)) if name == "language" => {
                 out.push_str(crate::languages::english_name(t).unwrap_or(t.as_str()))
             }

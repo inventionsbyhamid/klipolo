@@ -1,5 +1,5 @@
 //! Processes on Windows: whether stdin is the parent's pipe, another process's state, memory, start and executable,
-//! stopping one (W), and the flags the export and recorder workers start with.
+//! stopping one (later), and the flags the export and recorder workers start with.
 
 use std::io;
 use std::path::PathBuf;
@@ -78,19 +78,19 @@ pub(crate) fn process_memory(pid: u32) -> Option<crate::process::ProcessMemory> 
     })
 }
 
-/// W: `GetProcessTimes`' creation time (a FILETIME, stable for the process's life), as µs since 1970. Unknown until
+/// Later: `GetProcessTimes`' creation time (a FILETIME, stable for the process's life), as µs since 1970. Unknown until
 /// then, so nothing matches a pidfile and a sweep stops nothing.
 pub(crate) fn start_time(_pid: u32) -> Option<u64> {
     None
 }
 
-/// W: `GetProcessTimes` against `started`. Never, until then (no start time to match).
+/// Later: `GetProcessTimes` against `started`. Never, until then (no start time to match).
 pub(crate) fn still_running(_pid: u32, _started: u64) -> bool {
     false
 }
 
-/// W: `OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION)`, `GetProcessTimes` against `started`, then
-/// `TerminateProcess` on the same handle, so the check can't race (sidecars live in a Job Object with
+/// Later: `OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION)`, `GetProcessTimes` against `started`,
+/// then `TerminateProcess` on the same handle, so the check can't race (sidecars live in a Job Object with
 /// `KILL_ON_JOB_CLOSE`, so they also end with the app).
 pub(crate) fn terminate(_pid: u32, _started: u64) -> io::Result<()> {
     Err(io::Error::new(
@@ -99,7 +99,7 @@ pub(crate) fn terminate(_pid: u32, _started: u64) -> io::Result<()> {
     ))
 }
 
-/// W: `TerminateProcess` on a handle whose `GetProcessTimes` matches `started`.
+/// Later: `TerminateProcess` on a handle whose `GetProcessTimes` matches `started`.
 pub(crate) fn kill(_pid: u32, _started: u64) -> io::Result<()> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
@@ -131,16 +131,16 @@ pub(crate) fn exe_path(pid: u32) -> Option<PathBuf> {
     ok.then(|| PathBuf::from(std::ffi::OsString::from_wide(&buf[..len as usize])))
 }
 
-/// W: on a handle whose `GetProcessTimes` matches `started`, `SetPriorityClass(IDLE_PRIORITY_CLASS)` (the background
-/// mode only applies to the calling process) and EcoQoS through `SetProcessInformation(ProcessPowerThrottling)`.
-/// Nothing yet.
+/// Later: on a handle whose `GetProcessTimes` matches `started`, `SetPriorityClass(IDLE_PRIORITY_CLASS)` (the
+/// background mode only applies to the calling process) and EcoQoS through
+/// `SetProcessInformation(ProcessPowerThrottling)`. Nothing yet.
 pub(crate) fn set_background(_pid: u32, _started: u64, _on: bool) -> io::Result<()> {
     Ok(())
 }
 
 /// The boot time from `NtQuerySystemInformation(SystemTimeOfDayInformation)`, in 100 ns since 1601. The struct is
 /// opaque in `winternl.h`; its first field has been the boot time since NT 4 (Process Hacker and others read it).
-/// Untried until W: if the call fails there is no boot id, so nothing matches a pidfile.
+/// Untried on Windows so far: if the call fails there is no boot id, so nothing matches a pidfile.
 pub(crate) fn boot_id() -> Option<String> {
     use windows_sys::Wdk::System::SystemInformation::{
         NtQuerySystemInformation, SystemTimeOfDayInformation,
@@ -188,7 +188,7 @@ pub(crate) fn ask_to_stop(_child: &std::process::Child) -> io::Result<()> {
     Ok(())
 }
 
-/// W: a Toolhelp snapshot (`CreateToolhelp32Snapshot`) with `QueryFullProcessImageNameW` for each process, and its
+/// Later: a Toolhelp snapshot (`CreateToolhelp32Snapshot`) with `QueryFullProcessImageNameW` for each process, and its
 /// mode from the command line. `Unsupported` until then (never "nothing runs"), and `install::place` answers Unknown on
 /// Windows.
 pub(crate) fn running_from(_bundle: &std::path::Path) -> io::Result<Vec<crate::process::Running>> {

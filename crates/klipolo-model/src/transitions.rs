@@ -92,8 +92,7 @@ pub struct TransitionWindow {
 }
 
 /// Every transition's window, in timeline order (valid projects only: each has a clip after it). It allocates on
-/// every call (the clip starts and the result), so it isn't for per-frame use: the engine builds it once per plan
-///.
+/// every call (the clip starts and the result), so it isn't for per-frame use: the engine builds it once per plan.
 pub fn windows(main: &[Clip]) -> Vec<TransitionWindow> {
     let starts = clip_starts(main);
     main.iter()

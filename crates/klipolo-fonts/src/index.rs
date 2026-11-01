@@ -210,9 +210,8 @@ impl FontIndex {
     }
 
     /// A family name as people type it, case-insensitively. A name never resolves to a Google family not downloaded
-    /// while one of that name is here: bundled first, then a Google
-    /// family downloaded here, then this computer's, then Google's catalogue at its version (to be downloaded).
-    /// Adobe NotDef is never one.
+    /// while one of that name is here: bundled first, then a Google family downloaded here, then this computer's, then
+    /// Google's catalogue at its version (to be downloaded). Adobe NotDef is never one.
     pub fn resolve_family(&self, name: &str) -> Option<FontRef> {
         let want = name.trim().to_lowercase();
         if let Some(b) = BUNDLED

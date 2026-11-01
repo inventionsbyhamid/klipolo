@@ -26,7 +26,7 @@ pub struct Drawn<'a> {
 }
 
 /// Calls `each` with every word of `page` that is drawn, in order: hidden words stay in the pages and out of this
-///. Allocates nothing.
+/// (the word list can still show them). Allocates nothing.
 pub fn drawn_words<'a>(pages: &'a Pages, page: &Page, mut each: impl FnMut(Drawn<'a>)) {
     let mut pending = false;
     let mut first = true;

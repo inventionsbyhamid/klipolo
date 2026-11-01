@@ -117,8 +117,8 @@ fn files(runs: &[SourceRun]) -> impl Iterator<Item = &str> {
 
 /// Sets the source's runs and its `synced`, and resets its nudge to 0. The new runs name exactly the old
 /// runs' files, every one of them, in file order (a file may gain or lose a split at a pause), so no sound is
-/// lost and the patch stays Additive. The layers tied to the source follow (`slip::follow_runs`
-/// 1–2, I2 and N2: their cuts, fades and volume kept; a layer nothing tied, such as a reused stretch, left alone). Refused for a picture
+/// lost and the patch stays Additive. The layers tied to the source follow (`slip::follow_runs`: their cuts, fades
+/// and volume kept; a layer nothing tied, such as a reused stretch, left alone). Refused for a picture
 /// source (the clock), and when a tied layer can't follow (a locked track, nothing left to play). Returns the layers
 /// cut at their start.
 pub(super) fn retime(
