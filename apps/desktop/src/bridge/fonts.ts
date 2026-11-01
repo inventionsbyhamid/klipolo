@@ -2,6 +2,9 @@ import { invoke } from '@tauri-apps/api/core';
 import type { Browse } from '../bindings/Browse';
 import type { BrowseAsk } from '../bindings/BrowseAsk';
 import type { BundledFont } from '../bindings/BundledFont';
+import type { CatalogueInfo } from '../bindings/CatalogueInfo';
+import type { DownloadedFamily } from '../bindings/DownloadedFamily';
+import type { DownloadedId } from '../bindings/DownloadedId';
 import type { FontRef } from '../bindings/FontRef';
 import type { FontRow } from '../bindings/FontRow';
 import type { GoogleFonts } from '../bindings/GoogleFonts';
@@ -42,4 +45,12 @@ export const fonts = {
   cancel: (family: string) => call<void>('fonts_cancel', { family }),
   /** The online preview of a Google family's name (after the consent): a small font file. */
   preview: (family: string) => invoke<ArrayBuffer>('fonts_preview', { family }),
+  /** The downloaded families, with their sizes (Settings). */
+  downloaded: () => call<DownloadedFamily[]>('fonts_downloaded'),
+  /** Removes a downloaded family by its id; refused while an export runs. */
+  remove: (id: DownloadedId) => call<void>('fonts_remove', { id }),
+  /** Shows the downloaded fonts' folder in Finder. */
+  reveal: () => call<void>('fonts_reveal'),
+  /** Which Google Fonts list the app ships: its date, or that it is a test build's sample. */
+  catalogue: () => call<CatalogueInfo>('fonts_catalogue'),
 };

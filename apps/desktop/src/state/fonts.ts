@@ -1,6 +1,7 @@
 import { listen } from '@tauri-apps/api/event';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import type { DownloadedId } from '../bindings/DownloadedId';
 import type { FontRef } from '../bindings/FontRef';
 import { fonts } from '../bridge/fonts';
 import { forgetFamily, forgetPreview } from '../lib/fonts';
@@ -119,9 +120,30 @@ export async function downloadFont(
  * pick made while they end asks Rust afresh, never ends as this cancel.
  */
 export function cancelDownload(family: string): void {
+  forgetDownloads(family);
+  void fonts.cancel(family).catch(() => undefined);
+}
+
+/** `family`'s downloads let go: the picks waiting on them still hear how they end; a new pick starts afresh. */
+function forgetDownloads(family: string): void {
   for (const [key, held] of running) if (held.family === family) running.delete(key);
   if (families.delete(family)) dropProgress(family);
-  void fonts.cancel(family).catch(() => undefined);
+}
+
+/**
+ * Settings' switch, as Rust saved it. Off stops the downloads running now, so they are let go here too: a pick once it
+ * is on again asks Rust afresh, never ends as that cancel.
+ */
+export async function setGoogleFonts(enabled: boolean): Promise<void> {
+  if (!enabled) for (const family of [...families.keys()]) forgetDownloads(family);
+  const g = await fonts.setGoogle(enabled);
+  useFonts.setState({ googleFonts: g.enabled, googleConsented: g.consented, googleLoaded: true });
+}
+
+/** Settings' Remove of a downloaded family (Rust stops its download first): let go here too, as a Cancel is. */
+export function removeDownloaded(id: DownloadedId): Promise<void> {
+  forgetDownloads(id.family);
+  return fonts.remove(id);
 }
 
 /** No download is running (tests: one a test left waiting is never joined by the next). */
