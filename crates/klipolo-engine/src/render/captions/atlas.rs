@@ -29,12 +29,13 @@ use crate::vendor::cap::rendering::layers::text::TextLayer as GlyphLayer;
 use crate::vendor::cap::rendering::text::{PreparedText, TextAlign, TextBackgroundStyle};
 
 thread_local! {
-    /// Tests: this thread draws frames and must never build a page (`forbid_builds_on_this_thread`).
+    /// Tests: this thread draws frames and must never build a page, nor free one's atlas
+    /// (`forbid_builds_on_this_thread`).
     static NO_BUILDS: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Tests: a page built on this thread from now on panics, so a test proves the render thread never builds (pages are
-/// built on the caption build thread).
+/// Tests: a page built, or a page's atlas freed, on this thread from now on panics, so a test proves the render thread
+/// does neither (pages are built, and their atlases freed, on the caption build thread).
 #[doc(hidden)]
 pub fn forbid_builds_on_this_thread() {
     NO_BUILDS.set(true);
@@ -46,6 +47,15 @@ pub struct PageAtlas {
     pub view: wgpu::TextureView,
     pub size: (u32, u32),
     pub bytes: u64,
+}
+
+impl Drop for PageAtlas {
+    fn drop(&mut self) {
+        assert!(
+            !NO_BUILDS.get() || std::thread::panicking(),
+            "a caption page's atlas was freed on a thread that draws frames"
+        );
+    }
 }
 
 /// What builds atlases: the glyph layer the words are drawn with and the pack and blur pipelines, made once (the

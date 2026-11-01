@@ -62,8 +62,14 @@ impl Atlases {
             .map(|e| e.key)
     }
 
-    /// Evicts `format`'s least recently used atlases past `PER_FORMAT` or `FORMAT_BYTES`, never `keep`'s.
-    pub(super) fn evict(&mut self, format: FormatKind, keep: [Option<Key>; 2]) {
+    /// Evicts `format`'s least recently used atlases past `PER_FORMAT` or `FORMAT_BYTES`, never `keep`'s, into `out`
+    /// (the drawer hands them to the build thread, which frees them).
+    pub(super) fn evict(
+        &mut self,
+        format: FormatKind,
+        keep: [Option<Key>; 2],
+        out: &mut Vec<Entry>,
+    ) {
         loop {
             let (count, bytes) = self
                 .0
@@ -81,7 +87,7 @@ impl Atlases {
                 .min_by_key(|(_, e)| e.used)
                 .map(|(i, _)| i);
             match victim {
-                Some(i) => drop(self.0.swap_remove(i)),
+                Some(i) => out.push(self.0.swap_remove(i)),
                 None => return,
             }
         }
