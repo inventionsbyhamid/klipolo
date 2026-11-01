@@ -41,6 +41,9 @@ describe('undo labels as message ids', () => {
       'removeFillers',
       'trimClip',
       'splitAt',
+      'setClip',
+      'setClip.note',
+      'setTransition',
       'setFormat',
       'setCaptions',
       'fixCaptionWords',
@@ -57,6 +60,36 @@ describe('undo labels as message ids', () => {
     expect(historyAction('undo', 'chat.addText', { text: 'Day 1 in Lisbon', preset: 'title' })).toBe(
       'Undo add the words Day 1 in Lisbon',
     );
+  });
+
+  it("words chat's clip and transition changes as the cards' own entries, with a speed's note", () => {
+    const clip = (change: string) => historyAction('undo', 'chat.setClip', { clip: 'c2', change });
+    expect(['speed', 'volume', 'mute', 'unmute', 'fit', 'fill', 'several'].map(clip)).toEqual([
+      'Undo change speed',
+      'Undo change volume',
+      'Undo mute clip',
+      'Undo unmute clip',
+      'Undo fit video',
+      'Undo fill video',
+      'Undo change clip',
+    ]);
+    const note = (removed: number, shortened: number) =>
+      historyAction('undo', 'chat.setClip.note', {
+        clip: 'c2',
+        change: 'speed',
+        note: { code: 'timeline.refit', params: { removed, shortened } },
+      });
+    expect(note(1, 0)).toBe('Undo change speed. A transition is removed.');
+    expect(note(0, 2)).toBe('Undo change speed. 2 transitions are shortened.');
+    expect(note(2, 1)).toBe('Undo change speed. 2 transitions are removed and one is shortened.');
+    const cut = (change: string, count: number) =>
+      historyAction('undo', 'chat.setTransition', { after: 'all', change, count });
+    expect([cut('add', 1), cut('add', 3), cut('change', 1), cut('remove', 2)]).toEqual([
+      'Undo add transition',
+      'Undo add 3 transitions',
+      'Undo change transition',
+      'Undo remove 2 transitions',
+    ]);
   });
 
   it('names built-in contributions from their id, never their English name', () => {

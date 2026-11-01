@@ -44,6 +44,23 @@ export const CHAT_LABELS: Record<string, MessageDescriptor> = {
     message: 'Change {find} to {replace}',
     comment: 'Undo history entry: a word in the captions corrected',
   }),
+  'chat.setClip': msg({
+    id: 'chat.setClip',
+    message:
+      '{change, select, speed {Change speed} volume {Change volume} mute {Mute clip} unmute {Unmute clip} fit {Fit video} fill {Fill video} other {Change clip}}',
+    comment: 'Undo history entry: chat changed a clip as its card does (the same words as the card’s own entries)',
+  }),
+  'chat.setClip.note': msg({
+    id: 'chat.setClip.note',
+    message: '{change, select, speed {Change speed} other {Change clip}}. {note}',
+    comment: 'Undo history entry; {note} says what it did to transitions, e.g. “A transition is shortened.”',
+  }),
+  'chat.setTransition': msg({
+    id: 'chat.setTransition',
+    message:
+      '{change, select, add {{count, plural, =1 {Add transition} other {Add # transitions}}} remove {{count, plural, =1 {Remove transition} other {Remove # transitions}}} other {{count, plural, =1 {Change transition} other {Change # transitions}}}}',
+    comment: 'Undo history entry: chat added, changed or removed the transitions at cuts',
+  }),
   'chat.addMusic': msg({ id: 'chat.addMusic', message: 'Add {file}', comment: 'Undo history entry: music added' }),
   'chat.addSound': msg({ id: 'chat.addSound', message: 'Add {name}', comment: 'Undo history entry: a sound added' }),
   'chat.addImage': msg({ id: 'chat.addImage', message: 'Add {file}', comment: 'Undo history entry: a picture added' }),
