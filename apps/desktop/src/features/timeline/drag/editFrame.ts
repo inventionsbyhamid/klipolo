@@ -107,7 +107,13 @@ export function frameEdit(s: Session, g: Edit, project: Project, dtUs: number): 
       : g.edit === 'slip'
         ? t({ id: 'timeline.slip.tip', message: `Slip ${amount}`, comment: "Tip while slipping a clip's footage" })
         : t({ id: 'timeline.slide.tip', message: `Slide ${amount}`, comment: 'Tip while sliding a clip' });
-  const note = held === null ? '' : limitNote(held, heldName(project, g.edit, i, wanted, held));
+  // No room at all: a slide of the first or last clip, which has no clip on one side.
+  const note =
+    room === null
+      ? t({ id: 'timeline.slide.alone', message: 'Only a clip with a clip on each side can slide' })
+      : held === null
+        ? ''
+        : limitNote(held, heldName(project, g.edit, i, wanted, held));
   s.view.showTip(note ? `${edit} · ${note}` : edit, s.last.x);
   // The two frames that meet at the edit show beside the preview's, with its change (`EditFrames`).
   showEditFrames(editPair(project, g.edit, i, by), g.edit === 'slip', edit);

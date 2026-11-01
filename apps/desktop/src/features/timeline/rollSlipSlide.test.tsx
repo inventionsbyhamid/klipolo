@@ -166,6 +166,18 @@ describe('slipping and sliding a clip', () => {
     });
   });
 
+  it('⌥⇧-dragging the first clip says a slide needs a clip each side, and changes nothing', async () => {
+    renderWithProviders(<Editor />);
+    const a = block(/^Recording 1, clip 1/);
+    fireEvent.pointerDown(a, { pointerId: 1, button: 0, clientX: 300, clientY: 10, altKey: true, shiftKey: true });
+    fireEvent.pointerMove(a, { pointerId: 1, clientX: 340, clientY: 10, altKey: true, shiftKey: true });
+    await frames();
+    expect(screen.getByText('Slide 0.0 s · Only a clip with a clip on each side can slide')).toBeInTheDocument();
+    fireEvent.pointerUp(a, { pointerId: 1, clientX: 340, clientY: 10 });
+    await frames();
+    expect(bridge.apply).not.toHaveBeenCalled();
+  });
+
   it('⌥⇧, slips the clip under the playhead a frame earlier, and says when there is no more footage', async () => {
     usePlayback.setState({ playheadUs: 20 * S });
     renderWithProviders(<Editor />);
