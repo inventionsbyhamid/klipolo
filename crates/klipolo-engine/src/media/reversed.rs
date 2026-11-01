@@ -14,8 +14,8 @@
 //! - **Sound:** the range's sound (the engine's decode, 48 kHz, its first two channels) held whole and written last
 //!   sample first as AAC, placed by the source's `audio_lead_us` as the preview plays it. Past `MAX_SOUND_SECONDS`, or
 //!   for a source without sound, the copy has none.
-//! - **Writing:** a temporary file beside `out`, renamed into place once whole and removed on failure or stop. `cancel`
-//!   is checked between packets and frames; `progress` hears 0 to 1 as frames are written.
+//! - **Writing:** a hidden temporary file of its own beside `out`, renamed into place once whole and removed on failure
+//!   or stop. `cancel` is checked between packets and frames; `progress` hears 0 to 1 as frames are written.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -121,12 +121,18 @@ pub fn write(
     written
 }
 
-/// `<out>.partial.mov`: the same container, so the muxer is the same.
+/// `.<out>.<random>.partial.mov` beside `out`: hidden, this write's own (two writes to one name never share it), and
+/// the same container, so the muxer is the same. A crash's leftovers end in `PARTIAL_SUFFIX` for a sweep to find.
 fn partial_path(out: &Path) -> PathBuf {
-    let mut name = out.file_name().unwrap_or_default().to_os_string();
-    name.push(".partial.mov");
-    out.with_file_name(name)
+    let name = out.file_name().unwrap_or_default().to_string_lossy();
+    out.with_file_name(format!(
+        ".{name}.{}{PARTIAL_SUFFIX}",
+        uuid::Uuid::new_v4().simple()
+    ))
 }
+
+/// How a partial copy's name ends (`partial_path`).
+pub const PARTIAL_SUFFIX: &str = ".partial.mov";
 
 /// The codec the copy is written in: H.264 where this computer has an encoder for it, else ProRes.
 fn codec() -> Option<VideoCodec> {

@@ -322,3 +322,43 @@ fn a_stopped_copy_leaves_nothing_behind() {
         .collect();
     assert_eq!(names.len(), 1, "{names:?}");
 }
+
+/// Two copies written at once under one name each write a partial of their own: neither reads the other's half-written
+/// file, and nothing but the copy is left.
+#[test]
+fn two_copies_at_once_never_share_a_partial() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("ramp.mov");
+    ramp(&src, false);
+    let out = dir.path().join("same.mov");
+    let range = RangeUs {
+        start: 0,
+        end: 1_000_000,
+    };
+    std::thread::scope(|s| {
+        let runs: Vec<_> = (0..2)
+            .map(|_| {
+                s.spawn(|| {
+                    write(
+                        &src,
+                        &out,
+                        &spec(range),
+                        &AtomicBool::new(false),
+                        &mut |_| {},
+                    )
+                })
+            })
+            .collect();
+        for run in runs {
+            assert!(run.join().unwrap().is_ok());
+        }
+    });
+    let want: Vec<u8> = levels(&src).into_iter().rev().collect();
+    assert!(near(&levels(&out), &want));
+    let names: Vec<_> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name())
+        .collect();
+    assert_eq!(names.len(), 2, "{names:?}");
+}
