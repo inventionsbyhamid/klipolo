@@ -175,6 +175,7 @@ impl SessionCore {
             return fx;
         }
         self.countdown.alert = up;
+        tracing::info!(up, state = ?self.state, "core: a system alert is on the screen (up) or went");
         if !up {
             let c = &mut self.countdown;
             (c.done_ns, c.running_since) = (0, None);
