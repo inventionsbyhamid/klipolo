@@ -2681,9 +2681,9 @@ async fn a_recordings_voice_gets_words_and_no_scene_log() {
     assert!(!watched(&h.events_for("camera")));
 }
 
-/// Every file of a take asked for (a Retry, or a page that offered them before a take counted as one clip) is analysed
-/// for its words only (`words_only`): the screen and the camera are never copied for a scene log or uploaded, and the
-/// estimate is the transcripts' price alone.
+/// Every file of a take asked for (the page offers only its voice, but the commands take any file a main-track clip
+/// plays) is analysed for its words only (`words_only`): the screen and the camera are never copied for a scene log or
+/// uploaded, and the estimate is the transcripts' price alone.
 #[tokio::test(flavor = "multi_thread")]
 async fn every_file_of_a_recording_is_analysed_for_words_only() {
     let server = MockServer::start().await;
