@@ -13,8 +13,8 @@
 //! - **The price** comes first: `uncached_usd` for windows known (the tracking is cached), `most_usd` before anything
 //!   is tracked (every voice's windows at the longest). What the cache holds is free.
 //! - **The cache:** each answer, unclear ones too (they were paid for), is kept in the file's analysis cache folder
-//!   (`voices.json`) by model, window and how many people were asked about: never asked again. `cached_voices` settles
-//!   voices from it alone, never asking.
+//!   (`voices.json`) by model, window and the people asked about (their boxes to the nearest `BOX_STEP`): never asked
+//!   again. `cached_voices` settles voices from it alone, never asking.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -73,8 +73,22 @@ struct Asked {
     model: String,
     range: RangeUs,
     people: usize,
+    /// Who was asked about: each person's box to the nearest `BOX_STEP` (none in answers kept before they were).
+    #[serde(default)]
+    boxes: Vec<[i32; 4]>,
     heard: Heard,
     cost_usd: f64,
+}
+
+/// The step a cached answer's boxes are kept to: people who moved less than this are the same people.
+const BOX_STEP: f64 = 0.05;
+
+/// `people`'s boxes as the cache keys them.
+fn boxes_key(people: &[ScreenBox]) -> Vec<[i32; 4]> {
+    let step = |v: f64| (v / BOX_STEP).round() as i32;
+    (people.iter())
+        .map(|b| [step(b.left), step(b.top), step(b.right), step(b.bottom)])
+        .collect()
 }
 
 /// Where a file's windows are copied from, cached and made.
@@ -240,11 +254,13 @@ fn settled(heard: &[Heard]) -> bool {
 
 /// The cached answer for `window`, if `model` gave one.
 fn cached(kept: &[Asked], model: &str, window: &Window) -> Option<Heard> {
+    let boxes = boxes_key(&window.people);
     (kept.iter())
         .find(|a| {
             a.model == model
                 && a.range == window.range
                 && a.people == window.people.len()
+                && a.boxes == boxes
         })
         .map(|a| a.heard)
 }
@@ -372,6 +388,7 @@ pub async fn match_voices(
                 model: model.clone(),
                 range: window.range,
                 people: window.people.len(),
+                boxes: boxes_key(&window.people),
                 heard: answer.heard,
                 cost_usd: answer.cost_usd,
             });

@@ -469,3 +469,33 @@ async fn cached_answers_alone_settle_voices_without_asking() {
     // Another model's answers aren't this one's.
     assert!(voices::cached_voices(Some(&setup.cache), "other-model", &w).is_empty());
 }
+
+#[tokio::test]
+async fn an_answer_about_other_people_in_the_same_window_is_asked_again() {
+    let setup = setup();
+    let f = two_apart(20.0);
+    let w = windows_of(&f, &interview(), PORTRAIT);
+    let spark = FakeSpark::new(vec![(0.0, Heard::Person { person: 1 })]);
+    voices::match_voices(
+        &spark,
+        Arc::new(FakeCopy::default()),
+        &asking(&setup),
+        &w[..1],
+    )
+    .await;
+    assert_eq!(spark.asked(), 1);
+    // The same stretch, two people again, but standing elsewhere (another crop of the clip keeps others).
+    let mut moved = w[0].clone();
+    for b in &mut moved.people {
+        b.left += 0.1;
+        b.right += 0.1;
+    }
+    voices::match_voices(
+        &spark,
+        Arc::new(FakeCopy::default()),
+        &asking(&setup),
+        &[moved],
+    )
+    .await;
+    assert_eq!(spark.asked(), 2);
+}
