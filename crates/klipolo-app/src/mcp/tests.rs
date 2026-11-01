@@ -637,6 +637,7 @@ fn start_paid_without_key_or_code_is_no_credit() {
     // Following and blurring answer as chat does, whatever pays.
     let follow = Job::Follow {
         description: "the dog".into(),
+        focus: vec![],
     };
     let blur = Job::Blur {
         description: "faces".into(),
@@ -754,6 +755,7 @@ fn an_apps_follow_subject_tracks_and_lands_as_its_own_step() {
         )));
     let follow = Job::Follow {
         description: "the speaker".into(),
+        focus: vec![],
     };
     // Two stretches of one file 11 s apart: 13 s (billed as 50 frames) and 131.04 s (263 frames).
     let usd = r.host.estimate_usd(&follow);

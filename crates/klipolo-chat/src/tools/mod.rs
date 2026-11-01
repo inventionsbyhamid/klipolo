@@ -31,6 +31,7 @@ mod schema;
 use std::ops::RangeInclusive;
 
 use klipolo_model::captions::styles::BuiltinCaptionStyle;
+use klipolo_model::fill_focus::Who;
 use klipolo_model::ops::Edge;
 use klipolo_model::project::FormatKind;
 use klipolo_model::time::{RangeUs, Us};
@@ -43,7 +44,9 @@ pub use clips::{ClipRef, TransitionKind};
 pub use error::{Problem, ToolError};
 pub use media::{PictureSize, Position, TextPreset};
 pub use recorded::{BubbleChange, BubbleSize, SizeStep, Sound};
-use schema::{boolean, list, nullable_number, nullable_words, object, seconds, string, words};
+use schema::{
+    boolean, list, nullable_list, nullable_number, nullable_words, object, seconds, string, words,
+};
 
 /// One tool call as the model made it, whichever provider ran the model: its adapter maps the provider's call into
 /// this.
@@ -63,6 +66,59 @@ pub struct Moment {
     pub range: RangeUs,
     /// May be empty.
     pub label: String,
+}
+
+/// Who `followSubject` keeps in frame over `range` of the timeline.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FollowFocus {
+    pub range: RangeUs,
+    pub who: Who,
+}
+
+/// The words `followSubject`'s focus takes for who to keep, in the schema's order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FocusWord {
+    Speaker,
+    Both,
+    P1,
+    P2,
+    P3,
+    P4,
+}
+
+const FOCUS_WORDS: [FocusWord; 6] = [
+    FocusWord::Speaker,
+    FocusWord::Both,
+    FocusWord::P1,
+    FocusWord::P2,
+    FocusWord::P3,
+    FocusWord::P4,
+];
+
+impl schema::Word for FocusWord {
+    fn word(self) -> &'static str {
+        match self {
+            Self::Speaker => "speaker",
+            Self::Both => "both",
+            Self::P1 => "P1",
+            Self::P2 => "P2",
+            Self::P3 => "P3",
+            Self::P4 => "P4",
+        }
+    }
+}
+
+impl FocusWord {
+    fn who(self) -> Who {
+        match self {
+            Self::Speaker => Who::Speaker,
+            Self::Both => Who::Both,
+            Self::P1 => Who::Person { person: 1 },
+            Self::P2 => Who::Person { person: 2 },
+            Self::P3 => Who::Person { person: 3 },
+            Self::P4 => Who::Person { person: 4 },
+        }
+    }
 }
 
 /// What the model asked for, its arguments read and their shape checked. Times are timeline microseconds, from
@@ -117,8 +173,12 @@ pub enum ToolCall {
     FixCaptionWords { find: String, replace: String },
     /// Point the person at `moments` (none when nothing matched `query`); the edit doesn't change.
     FindMoments { query: String, moments: Vec<Moment> },
-    /// Keep the crop on the one subject `description` names (a short noun phrase).
-    FollowSubject { description: String },
+    /// Keep the crop on the one subject `description` names (a short noun phrase); where two or more people are on
+    /// screen, on who `focus` names over its parts of the timeline (whoever speaks elsewhere).
+    FollowSubject {
+        description: String,
+        focus: Vec<FollowFocus>,
+    },
     /// Blur the one kind of thing `description` names (a short noun phrase) wherever it shows.
     BlurObjects { description: String },
     /// Play the library's music `file` (a name, not yet resolved) from `at_us` (None: the playhead) to the video's
@@ -598,16 +658,35 @@ const TOOLS: &[Tool] = &[
         name: "followSubject",
         description: "Keep the vertical and square crops on one person or thing. For a short or the speaker, use person.",
         parameters: || {
-            vec![(
-                "description",
-                string(
-                    "One short noun phrase naming who or what to follow, such as woman astronaut.",
+            vec![
+                (
+                    "description",
+                    string(
+                        "One short noun phrase naming who or what to follow, such as woman astronaut.",
+                    ),
                 ),
-            )]
+                (
+                    "focus",
+                    nullable_list(
+                        object(vec![
+                            ("fromSec", seconds("Timeline seconds.")),
+                            ("toSec", seconds("Timeline seconds.")),
+                            ("person", words(&FOCUS_WORDS, "P1 is the leftmost person.")),
+                        ]),
+                        "Who to keep in frame when, where People lists two or more. Null: whoever speaks.",
+                    ),
+                ),
+            ]
         },
         read: |a| {
             Ok(ToolCall::FollowSubject {
                 description: a.phrase("description")?,
+                focus: a.nullable_each("focus", |item| {
+                    Ok(FollowFocus {
+                        range: item.range("fromSec", "toSec")?,
+                        who: item.word("person", &FOCUS_WORDS)?.who(),
+                    })
+                })?,
             })
         },
     },

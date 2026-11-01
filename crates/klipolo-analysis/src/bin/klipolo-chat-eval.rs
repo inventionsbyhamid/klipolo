@@ -648,9 +648,19 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
                 r
             }).collect::<Vec<_>>(),
         }),
-        ToolCall::FollowSubject { description } | ToolCall::BlurObjects { description } => {
-            json!({"description": description})
-        }
+        ToolCall::FollowSubject { description, focus } => json!({
+            "description": description,
+            "focus": focus.iter().map(|f| json!({
+                "fromSec": s(f.range.start),
+                "toSec": s(f.range.end),
+                "person": match f.who {
+                    klipolo_model::fill_focus::Who::Speaker => "speaker".to_owned(),
+                    klipolo_model::fill_focus::Who::Both => "both".to_owned(),
+                    klipolo_model::fill_focus::Who::Person { person } => format!("P{person}"),
+                },
+            })).collect::<Vec<_>>(),
+        }),
+        ToolCall::BlurObjects { description } => json!({"description": description}),
         ToolCall::AddMusic {
             file,
             volume,

@@ -561,6 +561,7 @@ fn every_call() -> Vec<(ToolCall, bool)> {
         (
             ToolCall::FollowSubject {
                 description: "woman astronaut".into(),
+                focus: vec![],
             },
             false,
         ),

@@ -371,6 +371,19 @@ impl Args {
         Ok(out)
     }
 
+    /// A nullable list of objects ([`Self::each`]): empty when null or left out.
+    pub(super) fn nullable_each<T>(
+        &mut self,
+        key: &str,
+        read: fn(&mut Args) -> Result<T, ToolError>,
+    ) -> Result<Vec<T>, ToolError> {
+        if self.map.get(key).is_none_or(Value::is_null) {
+            self.map.remove(key);
+            return Ok(Vec::new());
+        }
+        self.each(key, read)
+    }
+
     /// Refuses the first field left unread.
     pub(super) fn finish(self) -> Result<(), ToolError> {
         match self.map.keys().next() {

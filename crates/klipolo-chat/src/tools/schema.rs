@@ -72,6 +72,11 @@ pub(super) fn list(items: Value, description: &str) -> Value {
     json!({"type": "array", "items": items, "description": description})
 }
 
+/// A list, or null.
+pub(super) fn nullable_list(items: Value, description: &str) -> Value {
+    json!({"type": ["array", "null"], "items": items, "description": description})
+}
+
 /// A closed object: every property required, no others.
 pub(super) fn object(properties: Vec<(&'static str, Value)>) -> Value {
     let required: Vec<&str> = properties.iter().map(|(name, _)| *name).collect();
