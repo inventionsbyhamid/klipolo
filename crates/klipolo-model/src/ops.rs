@@ -5,6 +5,7 @@ use ts_rs::TS;
 
 use crate::coded::ErrorParam;
 use crate::cursor_style::CursorStyle;
+use crate::fill_focus::FillFocus;
 use crate::ids::Id;
 use crate::layout::Layout;
 use crate::params::ParamValue;
@@ -320,6 +321,10 @@ pub struct ClipPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub framing: Option<BTreeMap<FormatKind, Framing>>,
+    /// Replaces every format's Fill focus (`Clip::fill_focus`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub fill_focus: Option<BTreeMap<FormatKind, FillFocus>>,
     /// Replaces the whole effect stack (paste attributes).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]

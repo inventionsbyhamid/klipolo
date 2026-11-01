@@ -3,6 +3,7 @@ import type { CameraLayout } from "./CameraLayout";
 import type { ClipSource } from "./ClipSource";
 import type { CursorStyle } from "./CursorStyle";
 import type { EffectInstance } from "./EffectInstance";
+import type { FillFocus } from "./FillFocus";
 import type { FormatKind } from "./FormatKind";
 import type { Framing } from "./Framing";
 import type { Look } from "./Look";
@@ -18,6 +19,11 @@ camera: CameraLayout | null,
  * Per-format framing. A format without an entry uses `framing::default_framing`.
  */
 framing: { [key in FormatKind]?: Framing }, 
+/**
+ * Per-format focus of a Fill crop beyond its framing's fixed point: the centre, or the speaker along a path
+ * (`fill_focus`). A format without an entry keeps its framing's `focus_x` and `focus_y`.
+ */
+fillFocus?: { [key in FormatKind]?: FillFocus }, 
 /**
  * The main footage's effects, in order. The camera bubble isn't affected.
  */

@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, HashSet};
 use crate::coded::CodedError;
 use crate::contrib::{AssetPath, Catalog, ContribDef, ContribId, ContribKind};
 use crate::error::{invalid, invalid_with, not_found, ModelError, Result};
+use crate::fill_focus::FillFocus;
 use crate::font::font_ok;
 use crate::layout::{BoxN, Layout};
 use crate::messages::{code, msg};
@@ -514,6 +515,10 @@ fn validate_clip(p: &Project, c: &Clip) -> Result<()> {
             .values()
             .all(|f| in_range(f.focus_x, 0.0, 1.0) && in_range(f.focus_y, 0.0, 1.0)),
         code!("model.clip.focus"),
+    )?;
+    check(
+        c.fill_focus.values().all(FillFocus::is_valid),
+        code!("model.clip.fillFocus"),
     )?;
     validate_look(p, &c.look)?;
     validate_effects(p, &c.effects)?;

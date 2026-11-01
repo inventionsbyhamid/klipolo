@@ -8,6 +8,7 @@ pub mod contrib;
 pub mod cursor_style;
 pub mod ease_names;
 pub mod error;
+pub mod fill_focus;
 pub mod fit;
 pub mod font;
 pub mod framing;

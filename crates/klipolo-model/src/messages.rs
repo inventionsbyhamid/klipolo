@@ -156,6 +156,7 @@ pub const MESSAGES: Messages = &[
     ("model.clip.tooShort", "A clip is too short."),
     ("model.clip.fades", "Clip fades can't be longer than the clip."),
     ("model.clip.focus", "A clip's framing focus must be between 0 and 1."),
+    ("model.clip.fillFocus", "A clip's speaker path must keep its points in time order and inside the picture, at most 20,000 of them."),
     ("model.camera.noCamera", "Only recordings with a camera can have camera settings."),
     ("model.transition.noNextClip", "A transition needs a clip after this one."),
     ("model.transition.length", "A transition's length is out of range."),

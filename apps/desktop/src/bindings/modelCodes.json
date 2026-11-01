@@ -672,6 +672,11 @@
     "params": []
   },
   {
+    "code": "model.clip.fillFocus",
+    "message": "A clip's speaker path must keep its points in time order and inside the picture, at most 20,000 of them.",
+    "params": []
+  },
+  {
     "code": "model.camera.noCamera",
     "message": "Only recordings with a camera can have camera settings.",
     "params": []
