@@ -63,7 +63,11 @@ export function CameraFields({
   const layouts: { value: CameraMode; label: string; tooltip: string }[] = [
     {
       value: 'bubble',
-      label: t({ id: 'camera.layout.bubble', message: 'Bubble', comment: 'Camera layout: a small camera over the video' }),
+      label: t({
+        id: 'camera.layout.bubble',
+        message: 'Bubble',
+        comment: 'Camera layout: a small camera over the video',
+      }),
       tooltip: t({ id: 'camera.layout.bubble.tip', message: 'A small camera over the video' }),
     },
     ...(format === 'portrait' || mode === 'splitBottom'
@@ -96,7 +100,9 @@ export function CameraFields({
           value={mode}
           options={layouts}
           fill
-          onChange={(next) => editCamera('camera.layout.undo', clip, camera, (now) => cameraModePatch(now, next, format))}
+          onChange={(next) =>
+            editCamera('camera.layout.undo', clip, camera, (now) => cameraModePatch(now, next, format))
+          }
         />
       </Field>
       {mode === 'bubble' && (
@@ -151,7 +157,9 @@ export function ClipCameraFields({ project, clip, format }: { project: Project; 
     return (
       <Field label={label}>
         <div className="insp-note">
-          <p className="field-note">{t({ id: 'clip.camera.layer.note', message: 'The camera is its own layer now.' })}</p>
+          <p className="field-note">
+            {t({ id: 'clip.camera.layer.note', message: 'The camera is its own layer now.' })}
+          </p>
           <button
             type="button"
             className="btn btn-secondary btn-sm"

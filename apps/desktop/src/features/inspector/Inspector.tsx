@@ -105,7 +105,11 @@ export function Inspector({ format }: { format: FormatKind }) {
   if (inspected.kind === 'clip') return <ClipInspector key={inspected.clip.id} clip={inspected.clip} format={format} />;
   if (inspected.kind === 'camera') {
     const { clip } = inspected;
-    return clip.camera && <CameraInspector key={`camera:${clip.id}`} clip={clip} camera={clip.camera} format={format} />;
+    return (
+      clip.camera && (
+        <CameraInspector key={`camera:${clip.id}`} clip={clip} camera={clip.camera} format={format} />
+      )
+    );
   }
   const { item, track, kind } = inspected;
   // A layer goes a track up or down only when one of its kind is there to take it (not on a locked track).

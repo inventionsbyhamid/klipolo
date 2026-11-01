@@ -85,7 +85,7 @@ beforeEach(() => {
 });
 
 describe('Separate camera', () => {
-  it("is on a recording clip's menu: one step that makes the camera its own layer, said in the live region", async () => {
+  it("is on a recording clip's menu: one step making the camera its own layer, said in the live region", async () => {
     vi.mocked(bridge.apply).mockResolvedValue({ ...fixturePatch(separated(4)), baseRevision: 3 });
     renderWithProviders(
       <>
