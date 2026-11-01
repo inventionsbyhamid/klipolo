@@ -34,6 +34,7 @@ export function copySelection(project: Project, id: string): ClipboardEntry | nu
   useClipboard.setState({
     projectId: project.id,
     entry,
+    group: null,
     effects: stack.length > 0 ? structuredClone(stack) : null,
   });
   return entry;

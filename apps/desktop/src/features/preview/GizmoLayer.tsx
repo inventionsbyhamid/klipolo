@@ -5,7 +5,7 @@ import { useLocale } from '../../i18n/react';
 import type { Size } from '../../lib/geometry';
 import { itemEndUs } from '../../lib/timeline';
 import { usePlayback } from '../../state/playback';
-import { useSelection } from '../../state/selection';
+import { selectionOf, useSelection } from '../../state/selection';
 import { Gizmo } from './Gizmo';
 import { gizmoTargets } from './gizmoTargets';
 import { SafeArea } from './SafeArea';
@@ -25,10 +25,13 @@ interface GizmoLayerProps {
  * Hit boxes for everything pickable at the playhead, in the engine's draw order (later is on top), over whatever
  * draws the pixels, with the 9:16 safe area under them and snap guides over them. Boxes come from the TS layout
  * functions pinned to the engine (the layout parity test). A title being typed has the canvas editor over it instead
- * of its box.
+ * of its box. Every layer of a group selected on the timeline draws selected.
  */
 export function GizmoLayer({ project, format, playheadUs, canvas }: GizmoLayerProps) {
   const selectedId = useSelection((s) => s.selectedId);
+  const selectedIds = useSelection((s) => s.selectedIds);
+  // A group selected on the timeline is selected here too: each of its layers at the playhead draws selected.
+  const selection = useMemo(() => new Set(selectionOf({ selectedId, selectedIds })), [selectedId, selectedIds]);
   const playing = usePlayback((s) => s.playing);
   // The targets' names ("Missing media") are in the language shown.
   const locale = useLocale();
@@ -58,7 +61,7 @@ export function GizmoLayer({ project, format, playheadUs, canvas }: GizmoLayerPr
             key={t.id}
             target={t}
             others={targets}
-            selected={t.id === selectedId}
+            selected={selection.has(t.id)}
             canvas={canvas}
             format={format}
             primary={project.settings.primaryFormat}

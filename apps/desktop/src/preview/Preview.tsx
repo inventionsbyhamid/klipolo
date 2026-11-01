@@ -11,6 +11,7 @@ import { useImportMedia } from '../features/media/useImportMedia';
 import { AddTitleMenu } from '../features/preview/AddTitleMenu';
 import { SafeAreaMenu } from '../features/preview/SafeAreaMenu';
 import { Stage } from '../features/preview/Stage';
+import { EditFrames } from '../features/timeline/commands';
 import { Icon } from '../layout/Icon';
 import { useDockHold } from '../state/dockHold';
 import { useEngine } from '../state/engine';
@@ -122,6 +123,8 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
         {/* Under the banners: the frame, and the inspector at its right (in the slot, or over the frame). */}
         <div className="stage-main">
           {hasVideo ? <Stage /> : <DropZone over={filesOver} />}
+          {/* A roll's, slip's or slide's two frames at the edit, while one is dragged. */}
+          {hasVideo && <EditFrames />}
           {docked && <Inspector format={format} />}
           {/* The empty slot's outline, drawn in the slot only (app.css): over the frame it would cover the video. It
               says what goes there while nothing is selected; a selection waiting for its card leaves it blank. */}
