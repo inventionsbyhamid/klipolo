@@ -6,7 +6,7 @@ import { CLIP_INNER_PX, FILM_SHARE, HEADER_PX } from '../layout';
 import { windowSpanUs } from '../useViewport';
 import { anchorCanvas } from './anchor';
 import { paintBlock } from './paint';
-import { onThemeChange, themeVersion } from './resolveToken';
+import { onThemeChange, themeVersion } from '../../../lib/resolveToken';
 import { wholeFile, type BlockRuns, type FileRuns } from './runs';
 import { ViewportContext, ZoomRestContext } from './ViewportContext';
 

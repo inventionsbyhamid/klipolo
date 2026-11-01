@@ -2,7 +2,7 @@
 //! writer's queue, the stall and drop rules, the mic rules, the heal policy's waits, the read-back), the heal policy's
 //! actions, pause and resume, and what the shell reports (focus, power, the game quitting, the parent going).
 //!
-//! Carried rules:
+//! Finer rules:
 //! - The mic rules and the rate meter run on a clock that stops while the take is paused (`rules_clock`).
 //! - The heal policy's timed checks (`device_still_missing`, `still_blank`) are polled once a second; the low-disk note
 //!   is given when its level changes, not every tick.
@@ -153,7 +153,7 @@ impl SessionCore {
         }
     }
 
-    /// The stall and drop rules for a live video source, and the S8 keyframe ask.
+    /// The stall and drop rules for a live video source, and the keyframe ask after dropped packets.
     fn video_check(
         &mut self,
         i: usize,

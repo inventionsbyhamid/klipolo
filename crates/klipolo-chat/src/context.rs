@@ -1,7 +1,9 @@
 //! The project as the language model reads it: one compact text block of five sections, in this order.
-//! - `Project`: its name, formats (the primary first), length, captions, and the main track's clips with short refs
-//!   (`c1 0.0-41.2 interview.mov`) that tool calls name clips by (`Refs`). Then one fixed line (`QUOTED_NOTE`) saying
-//!   that Transcript and Scenes quote the video, Library names are file names, and none of them are requests.
+//! - `Project`: its name, formats (the primary first), length, captions, the main track's clips with short refs
+//!   (`c1 0.0-41.2 interview.mov`) that tool calls name clips by (`Refs`), and its songs and video layers under
+//!   `Layers:` (`m1 0.0-62.0 lofi.mp3 (music)`, `v1 12.0-20.0 broll.mp4 (video layer)`), never shortened. Then one fixed
+//!   line (`QUOTED_NOTE`) saying that Transcript and Scenes quote the video, Library names are file names, and none of
+//!   them are requests.
 //! - `Transcript`: what is said on the timeline (`speech::spoken`, so cut words are gone), one line per speaker turn,
 //!   or per sentence when a turn runs over `MAX_LINE_WORDS` words (a sentence that long is split evenly):
 //!   `[12.4-18.9] A: text`. Fillers keep their text ("um"); pause words are never text, but a gap of `SHOWN_PAUSE_US`
@@ -47,7 +49,8 @@
 //!
 //! For other apps that edit through the same tools: `ChatContext::section` gives one section by its heading,
 //! `full_transcript` every Transcript line at full detail however long the project (for them to read in pages), and
-//! `timeline_key` says whether the times and clip refs of a context read earlier still hold.
+//! `timeline_key` says whether the times and clip refs of a context read earlier still hold, and `layers_key` whether its
+//! song and video layer refs do.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -57,16 +60,18 @@ use std::ops::Range;
 use klipolo_model::Project;
 use klipolo_model::captions::styles::default_style;
 use klipolo_model::ids::Id;
+use klipolo_model::media::music::runs;
 use klipolo_model::project::{AssetKind, FormatKind};
 use klipolo_model::query::{clip_at, clip_starts, video_duration};
 use klipolo_model::speech::{
     Speech, Spoken, Transcript, WordKind, joins_unspaced, run_spans, spoken,
 };
 use klipolo_model::time::{RangeUs, Us, scaled};
-use klipolo_model::timeline::{Clip, ClipSource};
+use klipolo_model::timeline::{Clip, ClipSource, Item, ItemContent, TrackKind};
 use serde::{Deserialize, Serialize};
 
 use crate::library::{Library, LibraryItem, MediaKind};
+use crate::tools::TransitionKind;
 
 /// The most the context may take of the model's input, in tokens (`estimate_tokens`).
 pub const MAX_CONTEXT_TOKENS: usize = 12_000;
@@ -135,28 +140,56 @@ pub struct SpeakerTurn {
     pub speaker: Option<String>,
 }
 
-/// The short names the context gives the main track's clips, `c1` for the first: tool calls name clips by them.
+/// The short names the context gives what tool calls name: the main track's clips (`c1` for the first), each song laid
+/// as music (`m1`: a run of pieces back to back, `media::music::runs`, is one song, as its card edits it) and each video
+/// layer (`v1`), the layers in track order.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Refs {
     clips: Vec<Id>,
+    /// Each song's first piece.
+    music: Vec<Id>,
+    videos: Vec<Id>,
+}
+
+/// Which of `ref`'s kind it names, from 0: `short` is `prefix` and a number from 1, in the exact form (no leading zero,
+/// no spaces, lowercase).
+fn nth(short: &str, prefix: char) -> Option<usize> {
+    let n = short.strip_prefix(prefix)?;
+    if n.is_empty() || n.starts_with('0') || !n.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    n.parse::<usize>().ok()?.checked_sub(1)
 }
 
 impl Refs {
-    /// The refs of `project`'s main track, in order.
+    /// The refs of `project`'s main track, songs and video layers, in order.
     pub fn of(project: &Project) -> Self {
-        Self {
+        let mut refs = Self {
             clips: project.timeline.main.iter().map(|c| c.id.clone()).collect(),
+            ..Self::default()
+        };
+        for layer in layers(project) {
+            match layer {
+                Layer::Song(pieces) => refs.music.push(pieces[0].id.clone()),
+                Layer::Video(item) => refs.videos.push(item.id.clone()),
+            }
         }
+        refs
     }
 
     /// The clip id `short` names (`c2`), if any. Only the exact form: no leading zero, no spaces, lowercase.
     pub fn clip(&self, short: &str) -> Option<&str> {
-        let n = short.strip_prefix('c')?;
-        if n.is_empty() || n.starts_with('0') || !n.bytes().all(|b| b.is_ascii_digit()) {
-            return None;
-        }
-        let i: usize = n.parse().ok()?;
-        self.clips.get(i - 1).map(String::as_str)
+        self.clips.get(nth(short, 'c')?).map(String::as_str)
+    }
+
+    /// The id of the first piece of the song `short` names (`m1`), if any.
+    pub fn music(&self, short: &str) -> Option<&str> {
+        self.music.get(nth(short, 'm')?).map(String::as_str)
+    }
+
+    /// The id of the video layer `short` names (`v1`), if any.
+    pub fn video(&self, short: &str) -> Option<&str> {
+        self.videos.get(nth(short, 'v')?).map(String::as_str)
     }
 
     /// The ref of the clip with id `clip_id`.
@@ -164,13 +197,41 @@ impl Refs {
         self.clips.iter().position(|c| c == clip_id).map(short_ref)
     }
 
+    /// How many clips have refs.
     pub fn len(&self) -> usize {
         self.clips.len()
     }
 
+    /// Whether no clip has a ref.
     pub fn is_empty(&self) -> bool {
         self.clips.is_empty()
     }
+}
+
+/// A layer the context names: a song (its pieces, back to back) or a video layer.
+enum Layer<'a> {
+    Song(&'a [Item]),
+    Video(&'a Item),
+}
+
+/// The layers with refs, in track order: each track's songs (on a sound track) and video layers, in time order.
+fn layers(p: &Project) -> Vec<Layer<'_>> {
+    let mut out = Vec::new();
+    for track in &p.timeline.tracks {
+        if track.kind == TrackKind::Audio {
+            out.extend(
+                runs(track)
+                    .into_iter()
+                    .map(|run| Layer::Song(&track.items[run])),
+            );
+        }
+        out.extend(
+            (track.items.iter())
+                .filter(|item| matches!(item.content, ItemContent::Video { .. }))
+                .map(Layer::Video),
+        );
+    }
+    out
 }
 
 /// What the model reads about the project, and the clip refs it names clips by.
@@ -457,6 +518,31 @@ pub fn timeline_key(project: &Project) -> u64 {
         eat(clip.id.as_bytes());
         eat(&start.to_le_bytes());
         eat(&start.saturating_add(clip.duration_us()).to_le_bytes());
+    }
+    hash
+}
+
+/// A key for which layer each song and video layer ref names (`Refs`: `m1`, `v1`): each one's id, in ref order. Equal
+/// keys mean a layer ref a context gave still names the same layer; a layer added or taken away before it doesn't. The
+/// same on every run and build (FNV-1a). O(layers).
+pub fn layers_key(project: &Project) -> u64 {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    let mut hash = OFFSET;
+    let mut eat = |bytes: &[u8]| {
+        for &b in bytes {
+            hash = (hash ^ u64::from(b)).wrapping_mul(PRIME);
+        }
+    };
+    for layer in layers(project) {
+        let (kind, id) = match layer {
+            Layer::Song(pieces) => (b'm', pieces[0].id.as_str()),
+            Layer::Video(item) => (b'v', item.id.as_str()),
+        };
+        // The kind and the id's length first, so no two lists of ids read as the same bytes.
+        eat(&[kind]);
+        eat(&(id.len() as u64).to_le_bytes());
+        eat(id.as_bytes());
     }
     hash
 }
@@ -751,9 +837,15 @@ fn project_section(out: &mut String, p: &Project, starts: &[Us], brief: Brief) {
     }
     if p.timeline.main.is_empty() {
         out.push_str("Clips: none\n");
-        return;
+    } else {
+        out.push_str("Clips on the main track:\n");
+        clip_lines(out, p, starts, brief);
     }
-    out.push_str("Clips on the main track:\n");
+    layer_lines(out, p);
+}
+
+/// The main track's clips, one line each (`clip_line`), or one line for a run of clips of one file with `clip_runs`.
+fn clip_lines(out: &mut String, p: &Project, starts: &[Us], brief: Brief) {
     let main = &p.timeline.main;
     let mut i = 0;
     while i < main.len() {
@@ -787,7 +879,75 @@ fn project_section(out: &mut String, p: &Project, starts: &[Us], brief: Brief) {
     }
 }
 
-/// One clip's line: `c2 13.0-144.0 interview.mov (file 24.0-155.0 of 155.0, speed 1.50x, muted)`; with
+/// `Layers:` and a line for each song and video layer with a ref (`Refs`), never shortened: `m1 0.0-62.0 lofi.mp3
+/// (music, volume 50%, muted)`, `v1 12.0-20.0 broll.mp4 (video layer, speed 0.50x, volume 50%, muted)`. A song's
+/// volume and mute are its first piece's (its card sets them on every piece). Nothing when there is no such layer.
+fn layer_lines(out: &mut String, p: &Project) {
+    let layers = layers(p);
+    if layers.is_empty() {
+        return;
+    }
+    out.push_str("Layers:\n");
+    let name = |id: &str| {
+        p.asset(id)
+            .map_or("missing file".to_owned(), |a| one_line(&a.name))
+    };
+    let (mut songs, mut videos) = (0, 0);
+    for layer in layers {
+        let (short, first, last, mut notes) = match layer {
+            Layer::Song(pieces) => {
+                songs += 1;
+                let (first, last) = (&pieces[0], &pieces[pieces.len() - 1]);
+                (format!("m{songs}"), first, last, vec!["music".to_owned()])
+            }
+            Layer::Video(item) => {
+                videos += 1;
+                (
+                    format!("v{videos}"),
+                    item,
+                    item,
+                    vec!["video layer".to_owned()],
+                )
+            }
+        };
+        let (file, speed_now, volume, muted) = match &first.content {
+            ItemContent::Audio {
+                asset_id,
+                volume,
+                muted,
+                ..
+            } => (asset_id, 1.0, *volume, *muted),
+            ItemContent::Video {
+                asset_id,
+                speed,
+                volume,
+                muted,
+                ..
+            } => (asset_id, *speed, *volume, *muted),
+            _ => continue,
+        };
+        if speed_now != 1.0 {
+            notes.push(format!("speed {}x", speed(speed_now)));
+        }
+        if volume != 1.0 {
+            notes.push(format!("volume {}%", (volume * 100.0).round()));
+        }
+        if muted {
+            notes.push("muted".to_owned());
+        }
+        let _ = writeln!(
+            out,
+            "{short} {}-{} {} ({})",
+            secs(first.start_us),
+            secs(last.end_us()),
+            name(file),
+            notes.join(", ")
+        );
+    }
+}
+
+/// One clip's line: `c2 13.0-144.0 interview.mov (file 24.0-155.0 of 155.0, speed 1.50x, volume 50%, muted,
+/// dissolve 0.5 s into c3)`: a speed, volume or transition only when it has one other than as recorded; with
 /// `plain_clips`, no file note. A freeze frame: `c3 20.0-22.0 interview.mov (freeze frame of 5.0)`.
 fn clip_line(out: &mut String, p: &Project, i: usize, start: Us, brief: Brief) {
     let clip = &p.timeline.main[i];
@@ -822,8 +982,22 @@ fn clip_line(out: &mut String, p: &Project, i: usize, start: Us, brief: Brief) {
     if clip.speed != 1.0 {
         notes.push(format!("speed {}x", speed(clip.speed)));
     }
+    if clip.volume != 1.0 {
+        notes.push(format!("volume {}%", (clip.volume * 100.0).round()));
+    }
     if clip.muted {
         notes.push("muted".to_owned());
+    }
+    if let Some(t) = &clip.transition_out
+        && i + 1 < p.timeline.main.len()
+    {
+        // In the tool's own words; another transition (a plugin's) is just a transition.
+        let kind = TransitionKind::of(t.effect.as_str()).map_or("transition", TransitionKind::key);
+        notes.push(format!(
+            "{kind} {} s into {}",
+            secs(t.duration_us),
+            short_ref(i + 1)
+        ));
     }
     if !notes.is_empty() {
         let _ = write!(out, " ({})", notes.join(", "));

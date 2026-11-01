@@ -13,6 +13,8 @@ const PATHS = {
     </>
   ),
   x: <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />,
+  /** A favorite: filled while on (`.is-favorite`). */
+  star: <path d="M12 4l2.06 5.77 6.12.17-4.85 3.74 1.72 5.88L12 16.1l-5.05 3.46 1.72-5.88-4.85-3.74 6.12-.17z" />,
   range: <path d="M5 5v14M19 5v14M8.5 12h7M8.5 12l2-2M8.5 12l2 2M15.5 12l-2-2M15.5 12l-2 2" />,
   text: <path d="M5 7V5h14v2M12 5v14M9.5 19h5" />,
   retry: (

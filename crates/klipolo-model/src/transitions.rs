@@ -6,7 +6,7 @@
 
 use crate::project::Project;
 use crate::query::{clip_starts, source_duration_us};
-use crate::time::{scaled, Us};
+use crate::time::{scaled, Us, US_PER_SEC};
 use crate::timeline::Clip;
 
 pub const MIN_TRANSITION_US: Us = 100_000;
@@ -86,6 +86,58 @@ pub fn max_transition_us(p: &Project, i: usize) -> Us {
         .as_ref()
         .map_or(0, |t| split(t.duration_us).0);
     fit_us(p, i, incoming_after, next_before)
+}
+
+/// How long `frames` frames at `fps` last, to the µs (the engine's frame starts; half a µs rounds up).
+fn frames_us(frames: Us, fps: Us) -> Us {
+    (2 * frames * US_PER_SEC + fps) / (2 * fps)
+}
+
+/// The whole numbers of frames a transition at `fps` can last where it may be up to `max_us`: (first, last), from the
+/// first at least `MIN_TRANSITION_US` long. None fits when first > last.
+fn frame_range(max_us: Us, fps: u32) -> (Us, Us) {
+    if fps == 0 {
+        return (1, 0);
+    }
+    let fps = Us::from(fps);
+    let mut first = (MIN_TRANSITION_US * fps + US_PER_SEC - 1) / US_PER_SEC;
+    while frames_us(first, fps) < MIN_TRANSITION_US {
+        first += 1;
+    }
+    let mut last = (max_us.max(0) * fps) / US_PER_SEC;
+    // A frame count's length is rounded to the µs, so it can land a µs past the limit.
+    while last > 0 && frames_us(last, fps) > max_us {
+        last -= 1;
+    }
+    (first, last)
+}
+
+/// A new transition's length at `main[i]`'s cut (⌘T, a cut's Add transition, chat's `setTransition`): half a second on
+/// the frame grid at `fps`, or the longest whole number of frames that fits there (`max_transition_us`); 0 when none
+/// does. The page's `defaultTransitionUs` is pinned to it by transition-parity.json.
+pub fn default_transition_us(p: &Project, i: usize, fps: u32) -> Us {
+    let (first, last) = frame_range(max_transition_us(p, i), fps);
+    let frames = last.min(DEFAULT_TRANSITION_US * Us::from(fps) / US_PER_SEC);
+    if frames >= first {
+        frames_us(frames, Us::from(fps))
+    } else {
+        0
+    }
+}
+
+/// `us` on the frame grid at `fps`, within what a transition can last where it may be up to `max_us`: the nearest whole
+/// number of frames, never under the first frame count of at least `MIN_TRANSITION_US`, never past `max_us` (the
+/// transition card's Length, chat's `setTransition` length once it is within the cut's room). 0 when no length fits.
+/// The page's `transitionLengthUs` is pinned to it by transition-parity.json.
+pub fn transition_length_us(us: Us, max_us: Us, fps: u32) -> Us {
+    let (first, last) = frame_range(max_us, fps);
+    if first > last {
+        return 0;
+    }
+    let fps = Us::from(fps);
+    // Rounded half up, as the page's Math.round.
+    let nearest = (2 * us * fps + US_PER_SEC).div_euclid(2 * US_PER_SEC);
+    frames_us(nearest.clamp(first, last), fps)
 }
 
 /// Where a transition runs on the timeline.

@@ -218,6 +218,27 @@ describe('the dialog and its choices', () => {
     expect(rec().picks.camera).toBeNull();
   });
 
+  it('each_camera_toggle_is_named_by_its_label_and_flips_its_pick', async () => {
+    await openOn(recorderSetup({ cameras: [device('FaceTime HD Camera')] }));
+    await choose('Camera: No camera', 'FaceTime HD Camera');
+    const show = screen.getByRole('switch', { name: 'Show me on screen while recording' });
+    await userEvent.click(show);
+    expect(rec().picks.showCamera).toBe(false);
+    expect(show).toHaveAttribute('aria-checked', 'false');
+    // A click on the label flips it too.
+    await userEvent.click(screen.getByText('Show me on screen while recording'));
+    expect(rec().picks.showCamera).toBe(true);
+    expect(show).toHaveAttribute('aria-checked', 'true');
+    const mirror = screen.getByRole('switch', { name: 'Mirror my camera' });
+    mirror.focus();
+    await userEvent.keyboard(' ');
+    expect(rec().picks.mirror).toBe(false);
+    expect(mirror).toHaveAttribute('aria-checked', 'false');
+    await userEvent.click(screen.getByText('Mirror my camera'));
+    expect(rec().picks.mirror).toBe(true);
+    expect(mirror).toHaveAttribute('aria-checked', 'true');
+  });
+
   it('the_mic_list_ends_with_no_microphone', async () => {
     await openOn(recorderSetup({ mics: [device('MacBook Pro Microphone'), device('MV7')] }));
     await userEvent.click(screen.getByRole('button', { name: 'Microphone: MacBook Pro Microphone' }));

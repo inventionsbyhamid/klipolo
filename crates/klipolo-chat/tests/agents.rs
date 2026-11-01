@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use klipolo_chat::context::QUOTED_NOTE;
-use klipolo_chat::tools::{PictureSize, Position, TextPreset};
+use klipolo_chat::tools::{ClipRef, PictureSize, Position, TextPreset, TransitionKind};
 use klipolo_chat::{
     ChatContext, FullTranscript, Library, LibraryItem, MediaKind, Moment, SceneLog, SpeakerTurn,
     ToolCall, View, build_context, full_transcript, timeline_key, tools,
@@ -204,6 +204,7 @@ fn section_returns_one_heading_block() {
                 made_with: None,
             },
             pack: false,
+            tags: Vec::new(),
         }],
     };
     let ctx = build_context(
@@ -493,6 +494,42 @@ fn every_call() -> Vec<(ToolCall, bool)> {
                 duration_us: Some(secs(2.0)),
             },
             true,
+        ),
+        (
+            ToolCall::SetClip {
+                clip: ClipRef::One("c2".into()),
+                speed: Some(2.0),
+                volume: None,
+                muted: None,
+                framing: None,
+            },
+            true,
+        ),
+        (
+            ToolCall::SetClip {
+                clip: ClipRef::All,
+                speed: None,
+                volume: None,
+                muted: Some(true),
+                framing: None,
+            },
+            false,
+        ),
+        (
+            ToolCall::SetTransition {
+                after: ClipRef::One("c1".into()),
+                kind: Some(TransitionKind::Dissolve),
+                duration_us: None,
+            },
+            true,
+        ),
+        (
+            ToolCall::SetTransition {
+                after: ClipRef::All,
+                kind: None,
+                duration_us: None,
+            },
+            false,
         ),
         (
             ToolCall::SetFormat {

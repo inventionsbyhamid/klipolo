@@ -94,7 +94,8 @@ pub(super) fn prepare(
                     SessionCore::resumed(cfg, backend.mics(), from, now).with_cursor_clicks(clicks);
                 return Prepared::Record(lock, Box::new(core), early);
             }
-            // The person stopped it before anything opened: journal the Stop and finish, as for C-1.
+            // The person stopped it before anything opened: journal the Stop and finish, as for a take already
+            // stopped when it resumed.
             let stop = Entry::StopRequested {
                 at_us: from.clock.elapsed_us(host_ns()),
                 reason: None,

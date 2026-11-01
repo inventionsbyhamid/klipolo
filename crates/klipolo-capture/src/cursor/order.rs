@@ -27,7 +27,7 @@ impl Default for Reorder {
 }
 
 impl Reorder {
-    /// Above the p99 delivery lag.
+    /// Above the p99 delivery lag measured on macOS.
     pub const WINDOW_US: Us = 50_000;
 
     pub fn new() -> Self {

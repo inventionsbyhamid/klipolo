@@ -285,16 +285,9 @@ fn separable_files(p: &Project, clip: &Clip) -> Vec<Id> {
     })
 }
 
-/// The camera files of a recording clip, one per run of its camera (usually one); none for other clips.
+/// The camera files of a recording clip (`query::camera_files`).
 fn camera_assets(p: &Project, clip: &Clip) -> Vec<Id> {
-    match &clip.source {
-        ClipSource::Recording { id } => p
-            .recording(id)
-            .and_then(|r| r.camera())
-            .map(|s| s.runs.iter().map(|r| r.asset_id.clone()).collect())
-            .unwrap_or_default(),
-        ClipSource::Asset { .. } => Vec::new(),
-    }
+    crate::query::camera_files(p, clip)
 }
 
 pub(super) fn delete_ranges(p: &mut Project, ranges: &[RangeUs]) -> Result<()> {

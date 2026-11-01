@@ -26,7 +26,7 @@ use crate::context::{secs, within_video};
 use crate::tools::FREEZE_DEFAULT_US;
 
 /// The format's word, as the tool takes it.
-fn format_word(format: FormatKind) -> &'static str {
+pub(super) fn format_word(format: FormatKind) -> &'static str {
     match format {
         FormatKind::Landscape => "landscape",
         FormatKind::Portrait => "portrait",

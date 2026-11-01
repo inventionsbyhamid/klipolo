@@ -3,9 +3,10 @@
 use std::cmp::Reverse;
 use std::collections::HashMap;
 
+use crate::ids::Id;
 use crate::project::{Project, Recording, RecordingSource, SourceRun};
 use crate::time::{scaled, unscaled, Us, OVERLAP_TOLERANCE_US};
-use crate::timeline::{Attach, Clip, ClipSource, Item, Timeline, Track};
+use crate::timeline::{Attach, Clip, ClipSource, Item, ItemContent, Timeline, Track};
 
 pub fn clip_starts(main: &[Clip]) -> Vec<Us> {
     let mut t: Us = 0;
@@ -231,6 +232,58 @@ pub fn sound_sources<'a>(
     r: &'a Recording,
 ) -> impl Iterator<Item = &'a RecordingSource> + 'a {
     r.sources.iter().filter(move |s| makes_sound(p, s))
+}
+
+/// The camera files of a recording clip, one per run of its camera (usually one); none for other clips. A video layer
+/// of one of them attached to the clip is its separated camera (`camera_clip_of`).
+pub fn camera_files(p: &Project, clip: &Clip) -> Vec<Id> {
+    match &clip.source {
+        ClipSource::Recording { id } => p
+            .recording(id)
+            .and_then(|r| r.camera())
+            .map(|s| s.runs.iter().map(|r| r.asset_id.clone()).collect())
+            .unwrap_or_default(),
+        ClipSource::Asset { .. } => Vec::new(),
+    }
+}
+
+/// The main clip, by index, whose camera video layer `item` is: a separated camera attached to its clip, which plays
+/// at the clip's speed so the lips stay in sync with the mic. The video layer card's Speed changes that clip's
+/// (the page's `cameraClipOf` reads it the same way); None for any other layer.
+pub fn camera_clip_of(p: &Project, item: &Item) -> Option<usize> {
+    let ItemContent::Video { asset_id, .. } = &item.content else {
+        return None;
+    };
+    let attach = item.attach.as_ref()?;
+    let i = p
+        .timeline
+        .main
+        .iter()
+        .position(|c| c.id == attach.clip_id)?;
+    camera_files(p, &p.timeline.main[i])
+        .contains(asset_id)
+        .then_some(i)
+}
+
+/// Whether layer `item` plays sound of its own, which its Mute silences: a sound layer, or a video layer whose file has
+/// sound (the page's `hasOwnSound` reads it the same way). The cards offer Volume and Mute only then.
+pub fn has_own_sound(p: &Project, item: &Item) -> bool {
+    match &item.content {
+        ItemContent::Audio { .. } => true,
+        ItemContent::Video { asset_id, .. } => p.asset(asset_id).is_some_and(|a| a.has_audio),
+        _ => false,
+    }
+}
+
+/// Whether main clip `clip` has sound for the clip card's Volume and Mute (and chat's `setClip`): its file's, or its
+/// recording's sound sources (`sound_sources`). The page's `clipHasSound` reads the project the same way.
+pub fn clip_has_sound(p: &Project, clip: &Clip) -> bool {
+    match &clip.source {
+        ClipSource::Asset { id } => p.asset(id).is_some_and(|a| a.has_audio),
+        ClipSource::Recording { id } => {
+            (p.recording(id)).is_some_and(|r| sound_sources(p, r).next().is_some())
+        }
+    }
 }
 
 /// Where one run of a recording's source plays inside a clip: its timeline span and the run's own time at its start.
