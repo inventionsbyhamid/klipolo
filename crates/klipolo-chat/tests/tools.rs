@@ -10,8 +10,8 @@
 use std::collections::BTreeSet;
 
 use klipolo_chat::tools::{
-    CHAT_CAPTION_STYLES, FunctionCall, Moment, PictureSize, Position, Problem, TextPreset,
-    ToolCall, tools,
+    CHAT_CAPTION_STYLES, ClipRef, FunctionCall, Moment, PictureSize, Position, Problem, TextPreset,
+    ToolCall, TransitionKind, tools,
 };
 use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
 use klipolo_model::ops::Edge;
@@ -189,6 +189,8 @@ fn every_tool_schema_is_strict() {
             "removeFillers",
             "trimClip",
             "splitAt",
+            "setClip",
+            "setTransition",
             "setFormat",
             "setCaptions",
             "fixCaptionWords",
@@ -227,6 +229,12 @@ fn every_tool_schema_is_strict() {
         nullable,
         [
             "removeSilences.minPauseSec",
+            "setClip.framing",
+            "setClip.framingFormat",
+            "setClip.muted",
+            "setClip.speed",
+            "setClip.volume",
+            "setTransition.durationSec",
             "setCaptions.style",
             "addMusic.atSec",
             "addMusic.duck",
@@ -410,6 +418,33 @@ fn parses_each_tool_from_spike_shaped_calls() {
             vec![SetFormat {
                 format: FormatKind::Portrait,
                 keep_others: false,
+            }],
+        ),
+        (
+            "slow the intro down to half speed and mute the b-roll",
+            vec![
+                SetClip {
+                    clip: ClipRef::One("c1".into()),
+                    speed: Some(0.5),
+                    volume: None,
+                    muted: None,
+                    framing: None,
+                },
+                SetClip {
+                    clip: ClipRef::One("c3".into()),
+                    speed: None,
+                    volume: None,
+                    muted: Some(true),
+                    framing: None,
+                },
+            ],
+        ),
+        (
+            "add a crossfade between the two clips",
+            vec![SetTransition {
+                after: ClipRef::One("c1".into()),
+                kind: Some(TransitionKind::Dissolve),
+                duration_us: None,
             }],
         ),
         (
@@ -1228,5 +1263,6 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     assert!(prompt_tokens <= 900, "prompt {prompt_tokens} tokens");
-    assert!(tools_tokens <= 2_700, "tools {tools_tokens} tokens");
+    // About 380 of them are the clip tools' (setClip, setTransition): every value is nullable and described.
+    assert!(tools_tokens <= 3_100, "tools {tools_tokens} tokens");
 }

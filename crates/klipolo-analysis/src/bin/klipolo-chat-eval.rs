@@ -598,6 +598,29 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             json!({"clip": clip, "edge": word(edge), "toSec": s(*to_us)})
         }
         ToolCall::SplitAt { at_us } => json!({"atSec": s(*at_us)}),
+        ToolCall::SetClip {
+            clip,
+            speed,
+            volume,
+            muted,
+            framing,
+        } => json!({
+            "clip": clip.word(),
+            "speed": speed,
+            "volume": volume,
+            "muted": muted,
+            "framing": framing.map(|(mode, _)| word(&mode)),
+            "framingFormat": framing.and_then(|(_, format)| format).map(|f| word(&f)),
+        }),
+        ToolCall::SetTransition {
+            after,
+            kind,
+            duration_us,
+        } => json!({
+            "after": after.word(),
+            "kind": kind.map_or("none", |k| k.key()),
+            "durationSec": duration_us.map(s),
+        }),
         ToolCall::SetFormat {
             format,
             keep_others,
