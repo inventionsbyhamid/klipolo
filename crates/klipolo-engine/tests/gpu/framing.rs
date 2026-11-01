@@ -247,3 +247,81 @@ async fn a_fitted_clip_has_its_own_picture_blurred_and_dimmed_round_it() {
         }
     }
 }
+
+/// The blurred background is drawn small and blurred (the blur hides the size it is drawn at): preview and export draw
+/// it the same, over picture content that isn't flat (the bars), above and below the fitted clip.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs a GPU and scripts/gen-engine-fixtures.sh"]
+async fn the_blurred_background_is_the_same_in_preview_and_export() {
+    use klipolo_model::timeline::{Clip, ClipSource, Framing, FramingMode};
+    let mut p = project();
+    use_fixture(&mut p, "broll", "bars-30fps-0.5gop.mp4", 4.0);
+    let mut clip = Clip::new(ClipSource::Asset { id: "broll".into() }, 0, secs(4.0));
+    clip.framing.insert(
+        FormatKind::Portrait,
+        Framing {
+            mode: FramingMode::Fit,
+            focus_x: 0.5,
+            focus_y: 0.5,
+            follow: None,
+        },
+    );
+    p.timeline.main = vec![clip];
+    p.timeline.tracks.clear();
+    p.background.kind = BackgroundKind::Blur;
+    let mut frames = Vec::new();
+    for export in [false, true] {
+        let mut backend = if export {
+            GpuBackend::for_export().await.unwrap()
+        } else {
+            GpuBackend::new(klipolo_engine::render::mode::RenderMode::Contained)
+                .await
+                .unwrap()
+                .wait_for_assets()
+        };
+        let plan = frame_plan(
+            &PlanContext::new(Arc::new(p.clone())),
+            secs(1.0),
+            FormatKind::Portrait,
+        );
+        let request = RenderRequest {
+            plan,
+            width: 360,
+            height: 640,
+            output: Output::Rgba,
+        };
+        let frame = backend
+            .render(request)
+            .await
+            .unwrap()
+            .finish()
+            .await
+            .unwrap();
+        assert!(frame.warnings.is_empty(), "{:?}", frame.warnings);
+        frames.push(frame);
+    }
+    let (preview, export) = (&frames[0], &frames[1]);
+    let points = [
+        (30, 40),
+        (180, 40),
+        (330, 40),
+        (30, 600),
+        (180, 600),
+        (330, 600),
+        (2, 2),
+        (357, 637),
+    ];
+    let at = |f: &klipolo_engine::session::RenderedRgba, (x, y): (u32, u32)| {
+        pixel(&f.bytes, f.stride, x, y)
+    };
+    for point in points {
+        let (a, b) = (at(preview, point), at(export, point));
+        assert!(near(a, b, 8), "{point:?}: preview {a:?}, export {b:?}");
+    }
+    // Not flat: the bars' colours show through the blur, so the agreement means something.
+    let colours: Vec<[u8; 3]> = points.iter().map(|&point| at(preview, point)).collect();
+    assert!(
+        colours.iter().any(|c| !near(*c, colours[0], 12)),
+        "the background is one flat colour: {colours:?}"
+    );
+}

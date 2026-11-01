@@ -11,7 +11,7 @@ use klipolo_model::motion::Blend;
 
 use super::frame::FrameCtx;
 use super::{Compositor, Draw, Overlaid, blend};
-use crate::plan::{AdjustmentLayer, EffectPass, VideoLayer};
+use crate::plan::{AdjustmentLayer, EffectPass, VideoLayer, VideoRole};
 use crate::render::effects::{FrameInfo, Input, PixelRect, Withheld, protects};
 use crate::render::uniforms::quad_for;
 use crate::render::video::VideoDraw;
@@ -141,7 +141,9 @@ impl Compositor {
 
     /// A video layer drawn alone (`VideoLayer::drawn_alone`) at its drawn size through the composite pipeline (its
     /// crop, mirror, look and LUT included), through its effects (the main footage's clip effects), then placed like an
-    /// image, mixed by its blend. The camera, and footage without effects, keep the composite path.
+    /// image, mixed by its blend. The camera, and footage without effects, keep the composite path. The blurred
+    /// backdrop is drawn at a quarter of its size each way (a sixteenth of the pixels): its blur hides the size, and
+    /// `kl.px` shrinks with it, so the blur reaches as far against the frame.
     pub(super) async fn video_alone(
         &mut self,
         f: &mut FrameCtx<'_>,
@@ -156,7 +158,10 @@ impl Compositor {
             blend: v.blend,
             ..quad_for(v.dest, v.rotation, v.opacity, v.radius, f.size)
         };
-        let at = effect_size(&quad, 1.0);
+        let at = match v.role {
+            VideoRole::Backdrop => effect_size(&quad, 1.0).halved().halved(),
+            _ => effect_size(&quad, 1.0),
+        };
         let local = at.size;
         let alone = v.alone();
         let Some(VideoDraw::Composite(index)) = self.video.prepare(
