@@ -1,7 +1,8 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Item } from '../../bindings/Item';
 import { builtinId } from '../../lib/contrib';
-import { fixtureSnapshot } from '../../test/fixtures';
+import { fixtureSnapshot, titleItem } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 
 vi.mock('../../bridge/commands', () => ({ bridge: { apply: vi.fn() }, mediaUrl: (p: string) => p }));
@@ -84,6 +85,41 @@ describe('trimming and splitting', () => {
     expect(a.style.width).toBe('800px');
     expect(a.dataset.trimming).toBeUndefined();
     expect(b.style.transform).toBe('');
+  });
+
+  it("a clip's end trimmed shorter slides the free layers after it too, music aside; a longer one leaves them", async () => {
+    const S = 1_000_000;
+    const snapshot = fixtureSnapshot();
+    const [overlays, audio] = snapshot.project.timeline.tracks;
+    // After clip a's end (20 s): a free card at 22 s and a free whoosh at 21 s. The song from 25 s ducks, so it is
+    // music, which stays where it is through a cut (its refit fits it to the new end).
+    overlays.items.push({ ...titleItem, id: 'card', startUs: 22 * S, durationUs: S, attach: null });
+    const [song] = audio.items;
+    audio.items = [
+      { ...song, id: 'whoosh', startUs: 21 * S, durationUs: 2 * S },
+      { ...song, startUs: 25 * S, durationUs: 5 * S, content: { ...song.content, duck: -12 } as Item['content'] },
+    ];
+    useProject.setState({ snapshot, pending: 0 });
+    renderWithProviders(<Timeline />);
+    const a = block(/^screen\.mp4/);
+    const byId = (id: string) => document.querySelector<HTMLElement>(`[data-block-id="${id}"]`)!;
+    // −40 px at 40 px/s: a ends at 19 s, and what follows it comes 1 s earlier.
+    fireEvent.pointerDown(edge(a, 'end'), { pointerId: 1, button: 0, clientX: 799, clientY: 10 });
+    fireEvent.pointerMove(a, { pointerId: 1, clientX: 759, clientY: 10 });
+    await frames();
+    expect(byId('card').style.transform).toContain('-40px');
+    expect(byId('whoosh').style.transform).toContain('-40px');
+    expect(byId('song').style.transform).toBe('');
+    // +40 px: the clips after it move on, but a longer clip takes nothing away, so free layers stay.
+    fireEvent.pointerMove(a, { pointerId: 1, clientX: 839, clientY: 10 });
+    await frames();
+    expect(block(/^broll\.mp4/).style.transform).toContain('40px');
+    expect(byId('card').style.transform).toBe('');
+    expect(byId('whoosh').style.transform).toBe('');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.pointerUp(a, { pointerId: 1, clientX: 839, clientY: 10 });
+    await frames();
+    expect(bridge.apply).not.toHaveBeenCalled();
   });
 
   it("a layer's edge trims to the frame, shows its new length and change, and commits one trimItem", async () => {

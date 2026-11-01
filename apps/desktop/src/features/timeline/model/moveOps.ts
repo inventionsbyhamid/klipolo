@@ -2,6 +2,7 @@ import type { Item } from '../../../bindings/Item';
 import type { Op } from '../../../bindings/Op';
 import type { Track } from '../../../bindings/Track';
 import type { TrackKind } from '../../../bindings/TrackKind';
+import { isMusic } from '../lanes/audioRole';
 
 export function moveClipOps(clipId: string, from: number, to: number): Op[] {
   return from === to ? [] : [{ type: 'moveClip', id: clipId, index: to }];
@@ -36,6 +37,31 @@ export function attachedTo(tracks: Track[]): Map<string, string[]> {
     cache.set(tracks, map);
   }
   return map;
+}
+
+/** Free layers by start: `ids[k]` starts at `starts[k]`. */
+export interface FreeLayers {
+  starts: Float64Array;
+  ids: string[];
+}
+
+const freeCache = new WeakMap<Track[], FreeLayers>();
+
+/**
+ * The free layers a cut moves, in start order: every layer attached to no clip but music, which stays where it is and
+ * is fitted to the new end. A clip's end trimmed shorter slides those after it back, as the model's ripple does.
+ */
+export function freeLayers(tracks: Track[]): FreeLayers {
+  let found = freeCache.get(tracks);
+  if (!found) {
+    const free = tracks
+      .flatMap((track) => track.items)
+      .filter((item) => !item.attach && !isMusic(item))
+      .sort((a, b) => a.startUs - b.startUs);
+    found = { starts: Float64Array.from(free, (item) => item.startUs), ids: free.map((item) => item.id) };
+    freeCache.set(tracks, found);
+  }
+  return found;
 }
 
 /** The same ops, compared whole and deeply (a trim's ops differ only in their times, a patch's in nested fields). */
