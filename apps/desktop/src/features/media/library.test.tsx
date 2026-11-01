@@ -15,9 +15,9 @@ import { renderWithProviders } from '../../test/render';
 
 const answer = (): Promise<SnapshotPatch> => Promise.resolve(revisionPatch(4));
 const PACK: PackItem[] = [
-  { id: 'whoosh', name: 'Whoosh', category: 'sound', durationUs: 900_000, width: 0, height: 0 },
-  { id: 'soft-ambient', name: 'Soft ambient', category: 'music', durationUs: 16_000_000, width: 0, height: 0 },
-  { id: 'star', name: 'Star', category: 'sticker', durationUs: 0, width: 1024, height: 1024 },
+  { id: 'whoosh', name: 'Whoosh', category: 'sound', durationUs: 900_000, width: 0, height: 0, tags: ['transition', 'swipe'] },
+  { id: 'soft-ambient', name: 'Soft ambient', category: 'music', durationUs: 16_000_000, width: 0, height: 0, tags: ['calm'] },
+  { id: 'star', name: 'Star', category: 'sticker', durationUs: 0, width: 1024, height: 1024, tags: ['star', 'gold'] },
 ];
 vi.mock('../../bridge/library', () => ({
   library: {
