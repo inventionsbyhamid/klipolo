@@ -505,8 +505,8 @@ async fn text_layer_draws_glyphs_inside_its_box() {
     assert_eq!(pixel(&f.bytes, f.stride, 10, 10), [0, 0, 0]);
 }
 
-/// An empty project with a Waves layer and a text (0–10 s each) draws both at 5 s, not black
-/// (its export's frame count: `canvas.rs`).
+/// A video as long as its layers: an empty project with a Waves layer and a text (0–10 s each) draws both at 5 s, not
+/// black (its export's frame count: `canvas.rs`).
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU"]
 async fn a_canvas_of_only_layers_draws_them_at_five_seconds() {
@@ -1249,7 +1249,7 @@ async fn a_title_keyed_up_is_laid_out_once_at_its_largest_size() {
     assert!(f64::from(first.unwrap().height()) >= 3.0 * box_h);
 }
 
-/// The camera bubble turns with its rotation keys (review: draw them), in its one composite pass: a square bubble
+/// The camera bubble turns with its rotation keys, in its one composite pass: a square bubble
 /// turned 45° leaves its corners to the screen under it, and its centre is still the camera.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU and scripts/gen-engine-fixtures.sh"]
@@ -2537,10 +2537,10 @@ async fn builds_in_flight_never_soften_a_title_on_screen() {
     assert!(drawer.stats().bytes <= MAX_TEXT_BYTES);
 }
 
-/// A frame that stops waiting for a title's build ahead (250 ms) builds it itself and
-/// drops the late build, which still holds its texture's bytes on the title build thread, so they stay counted until
-/// it lands; then it is let go, and only the title the frame built is held. The drawer doesn't wait here at all, so
-/// the late path runs however fast the machine builds.
+/// A frame that stops waiting for a title's build ahead (250 ms) builds it itself and drops the late build, which still
+/// holds its texture's bytes on the title build thread, so they stay counted until it lands; then it is let go, and
+/// only the title the frame built is held. The drawer doesn't wait here at all, so the late path runs however fast the
+/// machine builds.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU"]
 async fn a_build_a_frame_stopped_waiting_for_counts_until_it_lands() {
@@ -2681,9 +2681,9 @@ async fn moving_caption_frames_in_flight_count_every_upload_once() {
     );
 }
 
-/// With every kept staging buffer in flight (here never mapped again, as the
-/// export's frame path left them), a moving frame's quads fall back to a queue write, counted once; mapped
-/// again, the kept buffers take the uploads again.
+/// With every kept staging buffer in flight (here never mapped again, as the export's frame path once left them), a
+/// moving frame's quads fall back to a queue write, counted once; mapped again, the kept buffers take the uploads
+/// again.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU"]
 async fn with_every_staging_buffer_in_flight_quads_upload_with_a_queue_write() {
