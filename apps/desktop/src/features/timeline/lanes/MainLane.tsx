@@ -11,6 +11,7 @@ import { transitionClipId } from '../../../state/selection';
 import { ClipBlock } from '../blocks/ClipBlock';
 import { CutMarker } from '../blocks/CutMarker';
 import { CutTip } from '../blocks/CutTip';
+import { RollHandle, type PressRoll } from '../blocks/RollHandle';
 import { useDragged } from '../drag/controller';
 import type { PressBlock, PressTrim } from '../drag/useBlockDrag';
 import { cutClipId, cutId } from '../keys/laneOrder';
@@ -97,6 +98,8 @@ interface MainLaneProps {
   /** A clip's inside (px): the Video lane takes the timeline's spare height. */
   innerPx?: number;
   selectedId: string | null;
+  /** Every selected block (a group's, or the one block): each draws selected. */
+  selection: ReadonlySet<string>;
   /** The block in the Tab order (roving focus). */
   tabStopId: string | null;
   /** Blocks that stay mounted and never band: selected, focused, dragged. */
@@ -104,7 +107,12 @@ interface MainLaneProps {
   onPick: (id: string) => void;
   onPress: PressBlock;
   onTrimPress: PressTrim;
+  /** A press on a cut's roll handle (`blockPress`'s `onRollPress`). */
+  onRollPress?: PressRoll;
 }
+
+/** Both clips at a cut are at least this wide (px) for its roll handle to draw, so it never covers a narrow clip. */
+const ROLL_MIN_PX = 24;
 
 /**
  * The main track's clips in the window, back to back, with a 1 px seam where two meet; clips narrower than a clip
@@ -122,11 +130,13 @@ export const MainLane = memo(function MainLane({
   toUs,
   innerPx = CLIP_INNER_PX,
   selectedId,
+  selection,
   tabStopId,
   keep,
   onPick,
   onPress,
   onTrimPress,
+  onRollPress,
 }: MainLaneProps) {
   // Labels like "Missing media" are in the language shown: a switch re-renders the lane.
   useLocale();
@@ -174,7 +184,7 @@ export const MainLane = memo(function MainLane({
         transitionOutPx={tintPx(main, i, 'out', cutsAt, pps)}
         innerPx={innerPx}
         pps={pps}
-        selected={clip.id === selectedId}
+        selected={selection.has(clip.id)}
         tabbable={clip.id === tabStopId}
         onPick={onPick}
         onPress={onPress}
@@ -213,7 +223,25 @@ export const MainLane = memo(function MainLane({
       );
     }
   }
+  // Each cut between two clips wide enough has a roll handle, even mid-drag: a roll's own handle holds its pointer.
+  const rolls: ReactNode[] = [];
+  if (onRollPress) {
+    const minUs = pxToUs(ROLL_MIN_PX, pps);
+    for (let i = Math.max(0, first - 1); i < Math.min(end, main.length - 1); i++) {
+      const wide = index.ends[i] - index.starts[i] >= minUs && index.ends[i + 1] - index.starts[i + 1] >= minUs;
+      if (wide || keep.has(main[i].id))
+        rolls.push(
+          <RollHandle
+            key={`roll:${main[i].id}`}
+            clipId={main[i].id}
+            cutUs={index.ends[i]}
+            pps={pps}
+            onRollPress={onRollPress}
+          />,
+        );
+    }
+  }
   // Bands first: a kept clip drawn wider than its time (16 px) stays on top of the band after it. The cut markers
-  // last, over the clips' edges.
-  return [...bands, ...blocks, ...cuts, <CutTip key="cut-tip" />];
+  // and roll handles last, over the clips' edges.
+  return [...bands, ...blocks, ...cuts, ...rolls, <CutTip key="cut-tip" />];
 });

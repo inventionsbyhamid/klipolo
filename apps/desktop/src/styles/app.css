@@ -1383,6 +1383,94 @@
   cursor: ew-resize;
 }
 
+/* A roll's, slip's or slide's two frames at the edit, side by side over the bottom of the preview while dragged. */
+.edit-frames {
+  position: absolute;
+  bottom: 36px;
+  left: 50%;
+  z-index: 20;
+  display: flex;
+  gap: 4px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.edit-frame {
+  margin: 0;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: var(--color-night);
+  box-shadow: var(--shadow-1);
+}
+
+.edit-frame canvas {
+  display: block;
+  width: 168px;
+  height: auto;
+}
+
+.edit-frames-change {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: var(--radius-xs);
+  background: var(--color-night);
+  color: var(--color-ink);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.edit-frame figcaption {
+  padding: 2px 6px;
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  color: var(--color-ink-soft);
+}
+
+/* The box a drag over empty lane space draws: what it touches is selected. */
+.tl-box {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  border: 1px solid var(--color-paper);
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-paper) 12%, transparent);
+}
+
+/* The cut between two clips: a drag rolls it. A thin strip over the clips' trim pads, clear of the cut's marker along
+   the lane's bottom; a line on hover. */
+.tl-roll {
+  position: absolute;
+  top: 0;
+  bottom: 20px;
+  z-index: 8;
+  width: 6px;
+  margin-left: -3px;
+  cursor: col-resize;
+}
+
+.tl-roll::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+  background: var(--color-paper);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.tl-roll:hover::after,
+.tl-roll[data-dragging="true"]::after {
+  opacity: 1;
+}
+
 .tl-trim[data-trim="start"] {
   left: -4px;
 }
