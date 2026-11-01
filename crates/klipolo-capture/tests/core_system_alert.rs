@@ -149,3 +149,26 @@ fn cancel_while_an_alert_holds_the_countdown_leaves_no_take() {
     assert!(h.effects().iter().any(|e| matches!(e, Effect::Exit(3))));
     assert!(!h.core.watches_system_alerts());
 }
+
+#[test]
+fn an_alert_read_as_the_countdown_runs_out_holds_it_before_the_gate() {
+    let mut h = Harness::new(cfg(&[Src::Screen, Src::Mic], 3));
+    h.command(Command::Start);
+    h.feed(0.0, 2.9);
+    assert!(!h.core.gate_due(h.now), "still counting");
+    // The countdown ran out at 3 s and no input came since: the next one opens the gate, so the threads layer reads the
+    // alerts first, and one that came in the last moment holds it.
+    h.now = h.base + 3_050_000_000;
+    assert!(h.core.gate_due(h.now));
+    h.system_alert(true);
+    assert_eq!(h.state(), WorkerState::Countdown, "held at the gate");
+    assert!(!h.core.gate_due(h.now), "nothing is due while it holds");
+    h.feed(3.05, 8.0);
+    assert_eq!(h.state(), WorkerState::Countdown);
+    assert!(h.file_keys().is_empty(), "nothing is written");
+    h.system_alert(false);
+    h.feed(8.0, 11.5);
+    assert_eq!(h.state(), WorkerState::Recording);
+    let t0 = h.gate_s();
+    assert!((11.0..11.1).contains(&t0), "{t0}");
+}
