@@ -17,6 +17,7 @@ use klipolo_platform::qos::{self, Qos};
 use serde::{Deserialize, Serialize};
 
 use super::calls::{Calls, Meter};
+use super::holds::{Holds, Work};
 use super::{
     AnalysisState, AnalysisStep, AssetState, Cached, Clip, Content, Media, NEEDS_KEY, UNREADABLE,
     lock,
@@ -55,6 +56,19 @@ impl Run {
     /// Whether new clips may still join this run.
     pub(crate) fn open(&self) -> bool {
         !self.cancelled() && self.stopped().is_none()
+    }
+}
+
+/// A local step's way of making way (`holds`): `wait` blocks while its kind of work is held, until its run is cancelled.
+pub(crate) struct Pace {
+    holds: Arc<Holds>,
+    kind: Work,
+    run: Arc<Run>,
+}
+
+impl Pace {
+    pub(crate) fn wait(&self) {
+        self.holds.wait(self.kind, &self.run.cancel);
     }
 }
 
@@ -253,7 +267,9 @@ impl AnalysisState {
         if clip.has_audio && cached.levels.is_none() {
             let (src, run) = (clip.path.clone(), run.clone());
             if let Ok(Some(levels)) = self
-                .local(move |media| media.levels(&src, &run.cancel))
+                .local(Work::Sound, run.clone(), move |media, _| {
+                    media.levels(&src, &run.cancel)
+                })
                 .await
             {
                 let file = LevelsFile {
@@ -340,8 +356,10 @@ impl AnalysisState {
             let wav = work.join("sound.wav");
             let made = {
                 let (src, wav, run) = (clip.path.clone(), wav.clone(), run.clone());
-                self.local(move |media| media.sound(&src, &wav, &run.cancel))
-                    .await
+                self.local(Work::Sound, run.clone(), move |media, pace| {
+                    media.sound(&src, &wav, &run.cancel, &mut || pace.wait())
+                })
+                .await
             };
             let info = made
                 .map_err(Outcome::Failed)?
@@ -470,8 +488,10 @@ impl AnalysisState {
         let wav = work.join("sound.wav");
         let made = {
             let (src, wav, run) = (clip.path.clone(), wav.clone(), run.clone());
-            self.local(move |media| media.sound(&src, &wav, &run.cancel))
-                .await
+            self.local(Work::Sound, run.clone(), move |media, pace| {
+                media.sound(&src, &wav, &run.cancel, &mut || pace.wait())
+            })
+            .await
         };
         let Ok(Ok(info)) = made else {
             return Ok(found);
@@ -559,9 +579,10 @@ impl AnalysisState {
                 run.clone(),
             );
             let duration = clip.duration_us.max(1);
-            self.local(move |media| {
+            self.local(Work::Picture, run.clone(), move |media, pace| {
                 let mut furthest = 0;
                 media.small_copy(&src, &out, &run.cancel, &mut |at| {
+                    pace.wait();
                     if at > furthest {
                         furthest = at.min(duration);
                         let pct = (furthest as f64 / duration as f64 * 50.0).floor() as u8;
@@ -624,23 +645,34 @@ impl AnalysisState {
     }
 
     /// `work` on a thread of its own at utility priority, one clip at a time: decoding is heavy, and the editor runs
-    /// beside it. A thread of its own, so the class never stays with a pooled thread.
+    /// beside it. A thread of its own, so the class never stays with a pooled thread. It starts once nothing holds
+    /// `kind` (`holds`: playback, an export, a take), and `work` waits there again with its `Pace` between the blocks or
+    /// frames it decodes; a cancel of `run` ends a wait.
     pub(crate) async fn local<T: Send + 'static>(
         &self,
-        work: impl FnOnce(&dyn Media) -> T + Send + 'static,
+        kind: Work,
+        run: Arc<Run>,
+        work: impl FnOnce(&dyn Media, &Pace) -> T + Send + 'static,
     ) -> Result<T, String> {
         let stopped = || "Klipolo's analysis stopped. Try again.".to_owned();
         let _turn = self.local.acquire().await.map_err(|_| stopped())?;
         let media = self.media.clone();
+        let decoding = self.decoding.clone();
+        let pace = Pace {
+            holds: self.holds.clone(),
+            kind,
+            run,
+        };
         let (tx, rx) = tokio::sync::oneshot::channel();
-        // What waits for analysis (editing copies) hears the decode start now and end with the work itself, before its
-        // answer goes back, even when the pipeline stopped waiting for it.
-        let decoding = self.decoding.begin();
         std::thread::Builder::new()
             .name("klipolo-analysis".into())
             .spawn(move || {
                 qos::set_current(Qos::Utility);
-                let out = work(&*media);
+                pace.wait();
+                // What waits for analysis (editing copies) hears the decode start now and end with the work itself,
+                // before its answer goes back, even when the pipeline stopped waiting for it.
+                let decoding = decoding.begin();
+                let out = work(&*media, &pace);
                 drop(decoding);
                 let _ = tx.send(out);
             })

@@ -15,12 +15,38 @@ export function formatSize(format: FormatKind, size?: { width: number; height: n
 export interface QualityOption {
   value: ExportQuality;
   label: MessageDescriptor;
+  /** What it is for, said under the choice. */
+  description: MessageDescriptor;
 }
 
-/** One quality for every file of the export: High, or a smaller file that uploads well. */
+/**
+ * One quality for every file of the export: a smaller file that uploads well, High, Maximum (HEVC, near-lossless) or
+ * Master (ProRes in a .mov, for another editor).
+ */
 export const QUALITIES: QualityOption[] = [
-  { value: 'standard', label: msg({ id: 'export.quality.standard', message: 'Smaller file' }) },
-  { value: 'high', label: msg({ id: 'export.quality.high', message: 'High' }) },
+  {
+    value: 'standard',
+    label: msg({ id: 'export.quality.standard', message: 'Smaller file' }),
+    description: msg({ id: 'export.quality.standard.detail', message: 'Smaller files that upload well.' }),
+  },
+  {
+    value: 'high',
+    label: msg({ id: 'export.quality.high', message: 'High' }),
+    description: msg({ id: 'export.quality.high.detail', message: 'Best for YouTube and social.' }),
+  },
+  {
+    value: 'maximum',
+    label: msg({ id: 'export.quality.maximum', message: 'Maximum' }),
+    description: msg({ id: 'export.quality.maximum.detail', message: 'Near-lossless HEVC for archiving.' }),
+  },
+  {
+    value: 'master',
+    label: msg({ id: 'export.quality.master', message: 'Master' }),
+    description: msg({
+      id: 'export.quality.master.detail',
+      message: 'ProRes for another editor. Very large files.',
+    }),
+  },
 ];
 
 /** "1 video", "2 videos". */

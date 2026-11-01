@@ -68,6 +68,8 @@ pub struct FakeBackend {
     stills: Arc<Mutex<Vec<(Target, u32)>>>,
     /// The mic's permission now (`Script::mic_permission` at first).
     mic_permission: Arc<Mutex<Permission>>,
+    /// The host time of each read of the system's alerts (`system_alert`), in order.
+    alert_reads: Arc<Mutex<Vec<u64>>>,
 }
 
 impl FakeBackend {
@@ -90,7 +92,13 @@ impl FakeBackend {
             cursor_plans: Arc::default(),
             stills: Arc::default(),
             mic_permission,
+            alert_reads: Arc::default(),
         }
+    }
+
+    /// When the system's alerts were read so far (host ns), in order.
+    pub fn alert_reads(&self) -> Arc<Mutex<Vec<u64>>> {
+        self.alert_reads.clone()
     }
 
     /// Each still asked for so far, in order: its target and width.
@@ -291,6 +299,18 @@ impl Backend for FakeBackend {
             ],
             took_ms: 0,
         }
+    }
+
+    /// Up while the script says (`Script::system_alerts`); each read is kept (`alert_reads`).
+    fn system_alert(&self) -> bool {
+        let now = host_ns();
+        (self
+            .alert_reads
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner))
+        .push(now);
+        let ms = u32::try_from(now.saturating_sub(self.epoch_ns) / 1_000_000).unwrap_or(u32::MAX);
+        (self.script.system_alerts.iter()).any(|(from, to)| (*from..*to).contains(&ms))
     }
 
     /// Counted (`screen_requests`); nothing is asked.

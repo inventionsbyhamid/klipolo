@@ -256,6 +256,58 @@ fn thumb_is_the_first_clips_cached_tile_or_none() {
     assert_eq!(rows[1].thumb, None, "no clip, no picture");
 }
 
+/// Once a scan has written the first clip's poster (its first picture, bigger than a tile), the card shows that: the
+/// whole picture, one to its sheet. A cache from before posters keeps showing the first tile.
+#[test]
+fn thumb_is_the_first_clips_poster_once_there_is_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, root) = folders(dir.path());
+    let first = media_file(dir.path(), "first.mp4");
+    let mut project = Project::new("One clip");
+    project.assets = vec![asset("first", AssetKind::Video, &first)];
+    project.timeline.main = vec![clip(of_asset("first"), 0, 2_000_000)];
+    saved(&library, &project, 2_000);
+    let sprite = cache_chunk(&root, &first, 0, (16, 10));
+    let thumb = || {
+        recent_in(&library, &stamps, Some(&root), RECENT_LIMIT).unwrap()[0]
+            .thumb
+            .clone()
+    };
+    assert_eq!(
+        thumb(),
+        Some(ThumbTile {
+            sprite,
+            tile_w: 16,
+            tile_h: 10,
+            cols: 8,
+        }),
+        "no poster yet: the first tile"
+    );
+
+    let stem = stem(first.to_str().unwrap(), &CacheKind::Thumbs).unwrap();
+    let (luma, chroma) = (vec![128; 32 * 18], vec![128; 16 * 9]);
+    thumbs::write_poster(
+        &Os,
+        &root,
+        &stem,
+        (32, 18),
+        [&luma, &chroma, &chroma],
+        [32, 16, 16],
+    )
+    .unwrap();
+    assert_eq!(
+        thumb(),
+        Some(ThumbTile {
+            sprite: thumbs::poster_path(&root, &stem, (32, 18))
+                .to_string_lossy()
+                .into_owned(),
+            tile_w: 32,
+            tile_h: 18,
+            cols: 1,
+        })
+    );
+}
+
 /// A recording's card shows its main footage, the screen: not the camera, not the first source listed.
 #[test]
 fn a_recording_project_uses_its_screen_file_for_the_thumb() {
@@ -360,6 +412,47 @@ fn listing_never_opens_a_project() {
     assert_eq!(rows[1].path, other.to_string_lossy());
     assert_eq!((session(&state), on_disk()), before);
     assert!(!root.exists(), "nothing was scanned");
+}
+
+/// The project open now is marked, so the project menu's Open recent can leave it out: by its file as written, or by
+/// another way to the same file (a link to the folder). Listing alone, or with none open, marks none.
+#[test]
+fn the_open_project_is_marked() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, _) = folders(dir.path());
+    let open = saved(&library, &Project::new("Open now"), 2_000);
+    saved(&library, &Project::new("Another"), 1_000);
+    let marked = |rows: &[ProjectRow]| {
+        rows.iter()
+            .map(|row| (row.name.clone(), row.open))
+            .collect::<Vec<_>>()
+    };
+    let none = [
+        ("Open now".to_owned(), false),
+        ("Another".to_owned(), false),
+    ];
+    let mut rows = recent_in(&library, &stamps, None, RECENT_LIMIT).unwrap();
+    assert_eq!(marked(&rows), none);
+    mark_open(&mut rows, None);
+    assert_eq!(marked(&rows), none);
+
+    mark_open(&mut rows, Some(&open));
+    assert_eq!(
+        marked(&rows),
+        [("Open now".to_owned(), true), ("Another".to_owned(), false)]
+    );
+
+    #[cfg(unix)]
+    {
+        let link = dir.path().join("Library link");
+        std::os::unix::fs::symlink(&library, &link).unwrap();
+        mark_open(&mut rows, None);
+        mark_open(&mut rows, Some(&link.join("Open now.klipolo")));
+        assert_eq!(
+            marked(&rows),
+            [("Open now".to_owned(), true), ("Another".to_owned(), false)]
+        );
+    }
 }
 
 /// `recent.json` as it is on the disk.

@@ -16,4 +16,12 @@ seconds: number,
 /**
  * Where the files go, as the dialog says it: "Movies / Klipolo".
  */
-folder: string, };
+folder: string, 
+/**
+ * Master's ProRes is encoded on the CPU here (no media engine: an Intel Mac, Windows, Linux), so it is slower.
+ */
+slowMaster: boolean, 
+/**
+ * Some file of the project has its words heard in full: a landscape file can also save its captions as a file.
+ */
+canSaveCaptions: boolean, };

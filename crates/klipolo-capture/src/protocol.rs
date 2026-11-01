@@ -65,13 +65,18 @@ pub enum Event {
         state: WorkerState,
         elapsed_us: Us,
     },
-    /// Seconds left before the start gate; held while the gate or a mic rule asks.
+    /// Seconds left before the start gate; held while the gate or a mic rule asks, or a system alert is up.
     Countdown {
         left_s: u32,
     },
     /// These sources aren't sending anything yet: "Record without it" (`WithoutSource`) or "Cancel".
     Gate {
         missing: Vec<SourceId>,
+    },
+    /// A system alert came on the screen (`up`) or went, from the start until the gate: the countdown waits while one
+    /// is up, and starts again from the top once it went (`capture.gate.systemAlert`).
+    SystemAlert {
+        up: bool,
     },
     /// A source's peak over the last 100 ms: during the countdown (the mic meter), and from the Record dialog's mic meter
     /// before a take (`run::meter`).

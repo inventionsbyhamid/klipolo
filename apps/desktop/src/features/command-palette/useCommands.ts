@@ -10,6 +10,7 @@ import { openProposal } from '../../state/chatMessages';
 import { useProject } from '../../state/project';
 import { useExport } from '../../state/export';
 import { useRange } from '../../state/range';
+import { openRecent, useOpenRecent } from '../../state/recentProjects';
 import { transitionClipId, useSelection } from '../../state/selection';
 import { useUi } from '../../state/ui';
 import { switchFormat } from '../editor/formats';
@@ -43,6 +44,26 @@ export function useCommands(): Command[] {
   const sounds = useSourceCommands();
   const transport = useTransportCommands();
   const effects = useEffectCommands();
+  const recent = useOpenRecent();
+
+  // The project menu's Open recent, as commands: the same projects (once its list is read), opened the same way.
+  const recentCommands = useMemo(
+    (): Command[] =>
+      recent.map((row, i) => ({
+        id: `open-recent-${i + 1}`,
+        action: 'openProject',
+        group: 'project',
+        label: t({
+          id: 'command.openRecent',
+          message: `Open ${row.name}`,
+          comment: 'Command: open a project opened lately, by its name',
+        }),
+        keywords: searchWords(t({ id: 'command.openRecent.keywords', message: 'open recent, switch project' })),
+        enabled: true,
+        run: () => void openRecent(row.path),
+      })),
+    [t, recent],
+  );
 
   const own = useMemo(() => {
     if (!snapshot) return null;
@@ -172,8 +193,18 @@ export function useCommands(): Command[] {
   return useMemo(
     () =>
       own
-        ? [...own.head, own.remove, ...transport, ...own.view, ...own.projectCommands, ...timeline, ...sounds, ...effects]
+        ? [
+            ...own.head,
+            own.remove,
+            ...transport,
+            ...own.view,
+            ...own.projectCommands,
+            ...recentCommands,
+            ...timeline,
+            ...sounds,
+            ...effects,
+          ]
         : [],
-    [own, transport, timeline, sounds, effects],
+    [own, transport, recentCommands, timeline, sounds, effects],
   );
 }
