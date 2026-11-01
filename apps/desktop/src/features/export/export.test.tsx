@@ -167,6 +167,50 @@ describe('export dialog', () => {
     expect(exporter.start).toHaveBeenCalledWith(['landscape'], 'standard', expect.any(Function));
   });
 
+  it('offers Maximum and Master, says what each is for, and that Master is slower here', async () => {
+    renderExport();
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    const quality = within(dialog()).getByRole('radiogroup', { name: 'Quality' });
+    expect(within(quality).getAllByRole('radio').map((r) => r.textContent)).toEqual([
+      'Smaller file',
+      'High',
+      'Maximum',
+      'Master',
+    ]);
+    expect(screen.getByText('Best for YouTube and social.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Smaller file' }));
+    expect(screen.getByText('Smaller files that upload well.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Maximum' }));
+    expect(screen.getByText('Near-lossless HEVC for archiving.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Master' }));
+    expect(
+      await screen.findByText('ProRes for another editor. Very large files. Slower on this computer.'),
+    ).toBeInTheDocument();
+    expect(exporter.plan).toHaveBeenLastCalledWith(['landscape'], 'master');
+    // The arrow keys walk all four, round from the last to the first.
+    await userEvent.keyboard('{ArrowRight}');
+    expect(screen.getByRole('radio', { name: 'Smaller file' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Smaller file' })).toHaveFocus();
+    await userEvent.keyboard('{ArrowLeft}{ArrowLeft}');
+    expect(screen.getByRole('radio', { name: 'Maximum' })).toBeChecked();
+    await userEvent.keyboard('{ArrowRight}');
+    await userEvent.click(screen.getByRole('button', { name: 'Export 1 video' }));
+    expect(exporter.start).toHaveBeenCalledWith(['landscape'], 'master', expect.any(Function));
+  });
+
+  it('Master on a computer with a media engine says nothing about speed', async () => {
+    const fast = async (formats: string[], quality: string) => ({
+      ...(await planned(formats, quality)),
+      slowMaster: false,
+    });
+    vi.mocked(exporter.plan).mockImplementation(fast as typeof exporter.plan);
+    useExport.setState({ quality: 'master' });
+    renderExport();
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(await screen.findByText('ProRes for another editor. Very large files.')).toBeInTheDocument();
+    expect(screen.queryByText(/Slower on this computer/)).toBeNull();
+  });
+
   it('Change picks the folder the files go to, and the dialog says it', async () => {
     renderExport();
     await userEvent.click(screen.getByRole('button', { name: 'Export' }));

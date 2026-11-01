@@ -238,6 +238,26 @@
   font-size: var(--text-md);
 }
 
+/* A label beside a choice with a line under it: level with the choice, not the pair. */
+.ex-opts dt.ex-dt-top {
+  align-self: start;
+  padding-top: var(--space-4);
+}
+
+/* Quality: the segmented choice, and under it what the picked one is for. */
+.ex-quality {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.ex-quality-note {
+  margin: 0;
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+}
+
 .ex-path {
   display: inline-flex;
   align-items: center;

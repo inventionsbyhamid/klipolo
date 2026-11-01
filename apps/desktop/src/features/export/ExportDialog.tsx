@@ -199,7 +199,7 @@ function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () =
         locked={view !== 'choose'}
         onToggle={toggle}
       />
-      {view === 'choose' && <Options folder={plan?.folder ?? folder} />}
+      {view === 'choose' && <Options folder={plan?.folder ?? folder} slowMaster={plan?.slowMaster ?? false} />}
       {view === 'choose' && making > 0 && <CaptionsNote count={making} />}
       {view === 'running' && <ExportProgress />}
       {view === 'failed' && <Failed />}
@@ -245,13 +245,13 @@ function CaptionsNote({ count }: { count: number }) {
   );
 }
 
-/** Quality and where the files go. */
-function Options({ folder }: { folder: string | null }) {
+/** Quality (what it is for under it; `slowMaster`: Master is slower here) and where the files go. */
+function Options({ folder, slowMaster }: { folder: string | null; slowMaster: boolean }) {
   return (
     <dl className="ex-opts">
-      <dt>Quality</dt>
+      <dt className="ex-dt-top">Quality</dt>
       <dd>
-        <QualityPicker />
+        <QualityPicker slowMaster={slowMaster} />
       </dd>
       <dt>Save to</dt>
       <dd>

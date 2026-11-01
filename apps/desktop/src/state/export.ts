@@ -16,7 +16,7 @@ export { exportPercent, type ExportPhase } from './exportRun';
 interface ExportStore extends ExportRun {
   /** The export dialog is on screen. */
   open: boolean;
-  /** The quality the dialog has picked: High unless the person picks Smaller file. */
+  /** The quality the dialog has picked: High unless the person picks another. */
   quality: ExportQuality;
   /** The formats the person checked in the dialog; null: the format the preview shows, until they pick. */
   picked: FormatKind[] | null;
