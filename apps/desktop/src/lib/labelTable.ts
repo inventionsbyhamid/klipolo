@@ -308,6 +308,12 @@ export const TABLE = {
     message: 'Change fill focus',
     comment: 'Undo history entry: which part of a filled video stays in view',
   }),
+  'crop.undo': msg({ id: 'crop.undo', message: 'Crop video', comment: 'Undo history entry: edges cut off a video' }),
+  'crop.reset.undo': msg({
+    id: 'crop.reset.undo',
+    message: 'Remove crop',
+    comment: 'Undo history entry: a video shown whole again',
+  }),
   // The background behind the video where it doesn't fill the frame.
   'background.kind.undo': msg({
     id: 'background.kind.undo',
