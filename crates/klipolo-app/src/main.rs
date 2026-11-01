@@ -233,6 +233,8 @@ fn main() {
             commands::export::export_pick_folder,
             recorder::commands::recorder_setup,
             recorder::commands::recorder_arm,
+            commands::window::window_full_screen,
+            commands::window::window_is_full_screen,
             recorder::commands::recorder_send,
             recorder::commands::recorder_stop_running,
             recorder::commands::recorder_allow_screen,
