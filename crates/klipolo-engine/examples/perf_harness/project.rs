@@ -252,6 +252,8 @@ pub fn one_hour_project(scratch: &Path) -> Project {
                 volume: 1.0,
                 muted: true,
                 mirror: false,
+                fill: false,
+                crop: None,
                 tie: None,
             },
         ));

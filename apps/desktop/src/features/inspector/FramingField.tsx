@@ -7,6 +7,8 @@ import type { FramingMode } from '../../bindings/FramingMode';
 import { Segmented } from '../../design/Segmented';
 import { clipOp } from '../../lib/ops';
 import { clipNow, editClip } from '../../state/latest';
+import { useProject } from '../../state/project';
+import { BackgroundField } from './BackgroundField';
 import { framingPatch } from './clipOps';
 import { Field } from './fields';
 import { ToolSlider } from './ToolSlider';
@@ -25,11 +27,14 @@ const WHOLE = 0.999;
  * (`fillCrop`): across for a video wider than the frame, down for a taller one, none when it fits. Each change is one
  * undo step built at its turn on the clip's framing as the project has it then, so another format's change still on
  * its way stays; without a framing of its own in this format, Rust's. A mode change keeps the rest, follow too (Fit
- * ignores it; Fill follows again). A focus drag is dry-run in the preview and commits once on release.
+ * ignores it; Fill follows again). A focus drag is dry-run in the preview and commits once on release. While Fit shows
+ * it (or the background's padding is set, which shows it round Fill too), what shows behind the video and the padding
+ * follow (`BackgroundField`).
  */
 export function FramingField({ clip, format }: { clip: Clip; format: FormatKind }) {
   const { t } = useLingui();
   const rust = useClipFraming(clip.id);
+  const padded = useProject((s) => (s.snapshot?.project.background.padding ?? 0) > 0);
   const rustNow = useRef(rust);
   rustNow.current = rust;
   // What it draws in this format: its own framing, else Rust's answer (none shows as chosen until it comes).
@@ -94,6 +99,7 @@ export function FramingField({ clip, format }: { clip: Clip; format: FormatKind 
           />
         </Field>
       )}
+      {(framing?.mode === 'fit' || padded) && <BackgroundField />}
     </>
   );
 }

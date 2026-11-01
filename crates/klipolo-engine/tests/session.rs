@@ -859,6 +859,8 @@ async fn overlay_video_decoders_open_before_the_overlay_starts() {
                 volume: 1.0,
                 muted: false,
                 mirror: false,
+                fill: false,
+                crop: None,
                 tie: None,
             },
         )],

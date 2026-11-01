@@ -66,10 +66,12 @@ pub(super) fn clip_layers(
             v.look = look.clone();
             if v.role == VideoRole::Main {
                 // A zoom's target is where the person sees it: on mirrored footage, zoomed as shown, then put back.
+                // It stays inside what the clip's crop leaves (as shown too).
                 if let Some(window) = zoom {
+                    let kept = clip.crop.unwrap_or_default().kept();
                     v.crop = as_shown(
                         v.mirror,
-                        zoom::zoom_crop(as_shown(v.mirror, v.crop), window),
+                        zoom::zoom_crop_in(kept, as_shown(v.mirror, v.crop), window),
                     );
                 }
                 v.effects = clip_effects.take().unwrap_or_default();

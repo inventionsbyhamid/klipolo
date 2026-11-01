@@ -11,7 +11,7 @@ use klipolo_model::motion::Blend;
 
 use super::frame::FrameCtx;
 use super::{Compositor, Draw, Overlaid, blend};
-use crate::plan::{AdjustmentLayer, EffectPass, VideoLayer};
+use crate::plan::{AdjustmentLayer, EffectPass, VideoLayer, VideoRole};
 use crate::render::effects::{FrameInfo, Input, PixelRect, Withheld, protects};
 use crate::render::uniforms::quad_for;
 use crate::render::video::VideoDraw;
@@ -139,9 +139,13 @@ impl Compositor {
         }
     }
 
-    /// The main footage alone at its drawn size (its look and LUT included), through its clip's effects, then
-    /// placed like an image. The camera keeps the composite path.
-    pub(super) async fn main_with_effects(
+    /// A video layer drawn alone (`VideoLayer::drawn_alone`) at its drawn size through the composite pipeline (its
+    /// crop, mirror, look and LUT included), through its effects (the main footage's clip effects), then placed like an
+    /// image, mixed by its blend. The camera, and footage without effects, keep the composite path. The blurred
+    /// backdrop is drawn at a quarter of its size each way (a sixteenth of the pixels): its blur hides the size, and
+    /// `kl.px` shrinks with it, so the blur reaches as far against the frame. A layer whose motion grows it is drawn
+    /// at the largest size it reaches (`reach`), so its target keeps one size through the motion.
+    pub(super) async fn video_alone(
         &mut self,
         f: &mut FrameCtx<'_>,
         draws: &mut Vec<Draw>,
@@ -151,8 +155,14 @@ impl Compositor {
     ) {
         let dev = self.dev.clone();
         let (device, queue) = (&dev.device, &dev.queue);
-        let quad = quad_for(v.dest, v.rotation, v.opacity, v.radius, f.size);
-        let at = effect_size(&quad, 1.0);
+        let quad = ImageQuad {
+            blend: v.blend,
+            ..quad_for(v.dest, v.rotation, v.opacity, v.radius, f.size)
+        };
+        let at = match v.role {
+            VideoRole::Backdrop => effect_size(&quad, 1.0).halved().halved(),
+            _ => effect_size(&quad, v.reach),
+        };
         let local = at.size;
         let alone = v.alone();
         let Some(VideoDraw::Composite(index)) = self.video.prepare(
@@ -200,7 +210,12 @@ impl Compositor {
         }
         // Its effects (in a grown target from its first padded filter on: `padded.rs`), placed; not drawn at all when
         // its protection couldn't run.
-        self.through_padded(f, draws, target, at, &v.effects, quad, v.pad_px, 1.0);
+        let reach = if v.role == VideoRole::Backdrop {
+            1.0
+        } else {
+            v.reach
+        };
+        self.through_padded(f, draws, target, at, &v.effects, quad, v.pad_px, reach);
     }
 
     /// An adjustment layer: what's drawn under `a.dest` so far (in `frame`), through its effects, as a quad draw
