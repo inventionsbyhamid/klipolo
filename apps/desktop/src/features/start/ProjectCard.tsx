@@ -12,8 +12,9 @@ import { formatDuration } from '../../lib/time';
 const PICTURE_ASPECT = 16 / 9;
 
 /**
- * Tile 0 of a thumbnail sprite, whole and centred in the 16:9 picture: as wide as the picture for a wide tile, as tall
- * for a tall one. The sheet is drawn `cols` times the tile's width from its top left, so the tile fills the box.
+ * Tile 0 of a thumbnail sprite (or a poster: a sheet of one), whole and centred in the 16:9 picture: as wide as the
+ * picture for a wide tile, as tall for a tall one. The sheet is drawn `cols` times the tile's width from its top left,
+ * so the tile fills the box.
  */
 function tileStyle(thumb: ThumbTile): CSSProperties {
   const aspect = thumb.tileW / thumb.tileH;

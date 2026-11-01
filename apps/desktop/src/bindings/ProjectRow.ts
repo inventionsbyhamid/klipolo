@@ -22,6 +22,6 @@ durationUs: number,
  */
 clips: number, 
 /**
- * Its first clip's first cached thumbnail; None until the clip has been scanned.
+ * Its first clip's picture: its poster, else its first cached thumbnail; None until the clip has been scanned.
  */
 thumb: ThumbTile | null, };

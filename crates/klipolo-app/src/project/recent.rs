@@ -35,12 +35,12 @@ pub struct ProjectRow {
     pub duration_us: Us,
     /// Clips on the main track.
     pub clips: u32,
-    /// Its first clip's first cached thumbnail; None until the clip has been scanned.
+    /// Its first clip's picture: its poster, else its first cached thumbnail; None until the clip has been scanned.
     pub thumb: Option<ThumbTile>,
 }
 
-/// The first tile of a sprite sheet of thumbnails: the top left `tile_w` by `tile_h` of the JPEG at `sprite` (read
-/// through the asset protocol).
+/// A card's picture: the top left `tile_w` by `tile_h` of the JPEG at `sprite` (read through the asset protocol), a
+/// sheet of thumbnails `cols` tiles wide, or a poster (`cols` 1: the picture alone).
 #[derive(Clone, Debug, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -264,8 +264,17 @@ fn first_file(project: &Project) -> Option<&str> {
     project.asset(asset_id).map(|asset| asset.path.as_str())
 }
 
-/// The first tile of `file`'s thumbnails in the cache at `root` (chunk 0), once a scan has written it.
+/// `file`'s picture in the cache at `root`, once a scan has written it: its poster (its first picture, sharp at a card's
+/// size), else the first tile of its thumbnails (chunk 0; a cache from before posters).
 fn first_tile(root: &Path, file: &str) -> Option<ThumbTile> {
+    if let Some(poster) = klipolo_engine::media::thumbs::poster(root, file) {
+        return Some(ThumbTile {
+            sprite: poster.path,
+            tile_w: poster.w,
+            tile_h: poster.h,
+            cols: 1,
+        });
+    }
     let strip = klipolo_engine::media::thumbs::strip(root, file)?;
     let chunk = strip.chunks.into_iter().find(|chunk| chunk.index == 0)?;
     Some(ThumbTile {

@@ -256,6 +256,58 @@ fn thumb_is_the_first_clips_cached_tile_or_none() {
     assert_eq!(rows[1].thumb, None, "no clip, no picture");
 }
 
+/// Once a scan has written the first clip's poster (its first picture, bigger than a tile), the card shows that: the
+/// whole picture, one to its sheet. A cache from before posters keeps showing the first tile.
+#[test]
+fn thumb_is_the_first_clips_poster_once_there_is_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let (library, stamps, root) = folders(dir.path());
+    let first = media_file(dir.path(), "first.mp4");
+    let mut project = Project::new("One clip");
+    project.assets = vec![asset("first", AssetKind::Video, &first)];
+    project.timeline.main = vec![clip(of_asset("first"), 0, 2_000_000)];
+    saved(&library, &project, 2_000);
+    let sprite = cache_chunk(&root, &first, 0, (16, 10));
+    let thumb = || {
+        recent_in(&library, &stamps, Some(&root), RECENT_LIMIT).unwrap()[0]
+            .thumb
+            .clone()
+    };
+    assert_eq!(
+        thumb(),
+        Some(ThumbTile {
+            sprite,
+            tile_w: 16,
+            tile_h: 10,
+            cols: 8,
+        }),
+        "no poster yet: the first tile"
+    );
+
+    let stem = stem(first.to_str().unwrap(), &CacheKind::Thumbs).unwrap();
+    let (luma, chroma) = (vec![128; 32 * 18], vec![128; 16 * 9]);
+    thumbs::write_poster(
+        &Os,
+        &root,
+        &stem,
+        (32, 18),
+        [&luma, &chroma, &chroma],
+        [32, 16, 16],
+    )
+    .unwrap();
+    assert_eq!(
+        thumb(),
+        Some(ThumbTile {
+            sprite: thumbs::poster_path(&root, &stem, (32, 18))
+                .to_string_lossy()
+                .into_owned(),
+            tile_w: 32,
+            tile_h: 18,
+            cols: 1,
+        })
+    );
+}
+
 /// A recording's card shows its main footage, the screen: not the camera, not the first source listed.
 #[test]
 fn a_recording_project_uses_its_screen_file_for_the_thumb() {

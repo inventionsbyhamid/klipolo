@@ -4,7 +4,7 @@ import { call } from './call';
 /** The start screen's and the project menu's commands (`crates/klipolo-app/src/project.rs`). */
 export const projects = {
   /**
-   * The projects in `~/Movies/Klipolo`, last opened first (at most 30): each one's name, length and first thumbnail.
+   * The projects in `~/Movies/Klipolo`, last opened first (at most 30): each one's name, length and picture.
    * Reads the files; opens nothing.
    */
   recent: () => call<ProjectRow[]>('projects_recent'),
