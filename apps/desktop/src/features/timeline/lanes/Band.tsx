@@ -12,7 +12,7 @@ interface BandProps {
 }
 
 /** The lane a band is on, which gives it its colour (`.tl-band.is-*` in app.css). */
-export type BandLook = 'video' | 'overlay' | 'sound' | 'music';
+export type BandLook = 'video' | 'overlay' | 'sound' | 'music' | 'source';
 
 /**
  * Blocks too narrow to draw one by one (an hour zoomed out), drawn as one strip, or a row's run of such strips as one

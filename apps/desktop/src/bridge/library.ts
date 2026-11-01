@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { DropOnto } from '../bindings/DropOnto';
 import type { ItemPatch } from '../bindings/ItemPatch';
+import type { Mark } from '../bindings/Mark';
 import type { MediaSource } from '../bindings/MediaSource';
 import type { PackItem } from '../bindings/PackItem';
 import type { PlaceAnswer } from '../bindings/PlaceAnswer';
@@ -9,6 +10,9 @@ import type { SnapshotPatch } from '../bindings/SnapshotPatch';
 import type { TextKind } from '../bindings/TextKind';
 import { applyBase } from './applyBase';
 import { call } from './call';
+
+/** The library's favorites and recently used items, by key (`pack:<id>`, `file:<path>`). */
+export type LibraryMarks = Partial<Record<string, Mark>>;
 
 /**
  * The media commands (`crates/klipolo-app/src/commands/media.rs`): Rust builds the ops (music that fits the video, a
@@ -34,6 +38,12 @@ export const library = {
     call<SnapshotPatch>('media_update_item', { id, patch, label, ...applyBase() }),
   /** Klipolo's pack: its sounds, music beds and stickers. */
   pack: () => call<PackItem[]>('library_pack'),
+  /** The library's favorites and recently used items, kept for every project. */
+  marks: () => call<LibraryMarks>('library_marks'),
+  /** Stars item `key` or takes its star off; the marks as saved. */
+  setFavorite: (key: string, on: boolean) => call<LibraryMarks>('library_set_favorite', { key, on }),
+  /** Notes that the library just added item `key` to the timeline; the marks as saved. */
+  markUsed: (key: string) => call<LibraryMarks>('library_mark_used', { key }),
   /** A picture's bytes: a pack sticker (`packId`) or one the open project uses (`path`). */
   picture: (from: { packId: string } | { path: string }) =>
     invoke<ArrayBuffer>('media_picture', 'packId' in from ? { packId: from.packId } : { path: from.path }),

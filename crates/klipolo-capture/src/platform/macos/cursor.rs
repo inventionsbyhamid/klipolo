@@ -53,7 +53,7 @@ struct Link {
     /// Host ns of the main queue's last run of the sampler's block (the monitor's handler runs there too).
     main_alive: AtomicU64,
     /// The take's first and last monitor downs: (the event's own time, its time on the host clock), for the drift check
-    /// (Step 5: the last click's file time minus its event time equals the first's within 1 ms).
+    /// (the last click's file time minus its event time equals the first's within 1 ms).
     first_down: [AtomicU64; 2],
     last_down: [AtomicU64; 2],
     /// The monitor events' smallest lag (host ns at delivery minus their own time): the event clock against the host's.
@@ -103,7 +103,7 @@ impl Link {
 /// A down the monitor delivered (its own time, its button), for the self-check.
 type Down = (u64, u8);
 
-/// This process's resident size in MB (the take's RSS check, Step 5: flat within 1 MB over 3 minutes).
+/// This process's resident size in MB (the take's RSS check: flat within 1 MB over 3 minutes).
 fn resident_mb() -> f64 {
     // SAFETY: a plain struct of integers, filled by the call for its own flavour.
     let mut info: libc::rusage_info_v2 = unsafe { std::mem::zeroed() };

@@ -1,4 +1,4 @@
-//! Check camera (UX decision 8): a framing preview of the camera alone, no mic, nothing written. It runs only on the
+//! Check camera: a framing preview of the camera alone, no mic, nothing written. It runs only on the
 //! person's Check camera press (`worker --check-camera`), and stops on Cancel, Disarm or Stop, or when the app goes:
 //! unlike a take, it has no orphan mode. Frames arrive as JPEG from the backend (nothing is re-encoded here), about 15 a
 //! second as the preview pipe paces them (`pace`), and each goes to the app as a `Preview` event (`preview_loop`).

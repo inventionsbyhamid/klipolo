@@ -1,4 +1,4 @@
-//! Per-game profiles (UX decision 9): choosing a game remembers how it was recorded (capture mode, quality, sound,
+//! Per-game profiles: choosing a game remembers how it was recorded (capture mode, quality, sound,
 //! cursor, auto-pause, the HUD's corner and, on Linux, the portal's restore token), so the next take of that game starts
 //! the same way. The app keeps them at `<app data>/recorder/profiles.json`: at most 200 games, the least recently
 //! updated dropped first. Settings, not media: a missing or damaged file starts over with none.
@@ -68,7 +68,7 @@ pub struct GameProfile {
 }
 
 impl Default for GameProfile {
-    /// A game's defaults (UX decisions 2 and 9): its app's windows at the quality best for this computer, with its sound
+    /// A game's defaults: its app's windows at the quality best for this computer, with its sound
     /// and auto-pause on, no cursor, and the HUD top right.
     fn default() -> Self {
         Self {
