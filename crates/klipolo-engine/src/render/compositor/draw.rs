@@ -135,8 +135,8 @@ impl Compositor {
         self.prepare_layers(&plan.layers, frames, &mut f, &mut draws)
             .await;
         // Titles built ahead that landed this frame are touched once, a second or so before they enter: one draw of one
-        // F-1): one draw of one pixel at zero opacity each, so the GPU has their textures resident and sampled before
-        // their first frame. Nothing changes on screen.
+        // pixel at zero opacity each, so the GPU has their textures resident and sampled before their first frame.
+        // Nothing changes on screen.
         if self.texts.is_some() {
             // The drawer's own work for the perf harness's timing.
             let timed = self.text_timing_starts(&mut draws);

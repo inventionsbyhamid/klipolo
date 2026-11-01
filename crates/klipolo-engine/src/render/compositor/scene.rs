@@ -1,13 +1,13 @@
-//! The compositor's scene layers: a motion graphic drawn into its own target by the scene drawer
-//! (`render::scene`) at the layer's drawn size (its motion's reach included, as a generator's is), then run through the
-//! layer's effects (padded ones in a grown target, as a generator's are: `padded.rs`) and placed by the image quad with
-//! the layer's rotation, opacity, radius and blend; one that draws only part of its layer (a lower third in a
-//! full-frame layer) draws into a target of that part, placed as that part of the quad (`part_of`). Its images are decoded by the image cache first (an export waits
-//! for them), and the playback lookahead prepares a scene before its first frame (`warm_scene`). Its text is laid out
-//! for the largest scale the layer's motion reaches (`TextAt`), on the scene drawer's text build thread:
-//! the preview never waits for it, an export does, and so does the render worker, whose builds take the
-//! fonts it was given and never wait for the font scan. A layer scaled to under half a pixel draws nothing.
-//! One with a backdrop waits for the frame under it (`backdrop.rs`).
+//! The compositor's scene layers: a motion graphic drawn into its own target by the scene drawer (`render::scene`) at
+//! the layer's drawn size (its motion's reach included, as a generator's is), then run through the layer's effects
+//! (padded ones in a grown target, as a generator's are: `padded.rs`) and placed by the image quad with the layer's
+//! rotation, opacity, radius and blend; one that draws only part of its layer (a lower third in a full-frame layer)
+//! draws into a target of that part, placed as that part of the quad (`part_of`). Its images are decoded by the image
+//! cache first (an export waits for them), and the playback lookahead prepares a scene before its first frame
+//! (`warm_scene`). Its text is laid out for the largest scale the layer's motion reaches (`TextAt`), on the scene
+//! drawer's text build thread: the preview never waits for it, an export does, and so does
+//! the render worker, whose builds take the fonts it was given and never wait for the font scan. A layer scaled to
+//! under half a pixel draws nothing. One with a backdrop waits for the frame under it (`backdrop.rs`).
 
 use std::path::Path;
 
@@ -145,7 +145,7 @@ impl Compositor {
         self.scenes.stats()
     }
 
-    /// Whether a scene text build for a frame that waits (`wait`) waits for this computer's fonts: an export's does
+    /// Whether a scene text build for a frame that waits (`wait`) waits for this computer's fonts: an export's does;
     /// the worker's takes the fonts it was given, as its titles do, so a request never pays for the scan.
     fn fonts_wait(&self, wait: bool) -> bool {
         wait && !self.fonts_given

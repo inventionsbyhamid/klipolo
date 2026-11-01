@@ -167,7 +167,7 @@ impl Compositor {
                 unreachable!("prepare_layers sends transitions to Compositor::transition")
             }
             // Into its own slot, over its footage. A strict frame (export, headless) loads a shape it still
-            // misses first, so it never draws the stand-in. Until C24 every take is burned in: no frame has one yet.
+            // misses first, so it never draws the stand-in. For now every take is burned in: no frame has one yet.
             Layer::Cursor(c) => {
                 let (target, strict) = (f.target, f.wait);
                 let cursor = self.cursor_pass();
