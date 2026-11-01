@@ -1,5 +1,6 @@
 import { useLingui } from '@lingui/react/macro';
 import { useEffect, useRef, useState } from 'react';
+import type { ProjectRow } from '../bindings/ProjectRow';
 import icon from '../styles/klipolo-icon.svg';
 import { openSettings } from '../ai/aiStatus';
 import { projects } from '../bridge/projects';
@@ -10,7 +11,7 @@ import { errorMessage } from '../lib/errors';
 import { historyAction } from '../lib/history';
 import { AiChip } from '../settings/AiChip';
 import { newProject, useProject } from '../state/project';
-import { openRecent, readRecentIfStale, useOpenRecent } from '../state/recentProjects';
+import { openRecent, openRecentNow, readRecent, readRecentIfStale } from '../state/recentProjects';
 import { saveStateOf, useSaving } from '../state/saving';
 import { toast } from '../state/toasts';
 import { Icon } from './Icon';
@@ -65,6 +66,12 @@ function RenameField({ name, onDone }: { name: string; onDone: (refocus: boolean
 }
 
 /**
+ * How long the project menu waits for Open recent's list the first time it opens for a project: long enough for a read,
+ * short enough that the menu still opens at once.
+ */
+const HOLD_MS = 200;
+
+/**
  * The project menu, opened from the project's name: New project, All projects (closes the project once
  * its edits are saved, back to the start screen), Open recent (up to five other projects, last opened first: one opens
  * as its start screen card does), Rename (the name turns into a field), Duplicate (a copy with the same footage and
@@ -75,7 +82,11 @@ function ProjectMenu({ name }: { name: string }) {
   const { t } = useLingui();
   const switching = useProject((s) => s.switching);
   const readOnly = useProject((s) => s.snapshot?.readOnly != null);
-  const recent = useOpenRecent();
+  const [open, setOpen] = useState(false);
+  /** Open recent as the menu opened: it never changes while the menu is open, so nothing moves under the pointer. */
+  const [recent, setRecent] = useState<ProjectRow[]>([]);
+  /** The latest open asked for (a close, or an open that showed, moves it on). */
+  const asked = useRef(0);
   const [renaming, setRenaming] = useState(false);
   const nameButton = useRef<HTMLButtonElement>(null);
   /** The rename ended from the keyboard: the focus goes back to the name once it shows again. */
@@ -88,6 +99,34 @@ function ProjectMenu({ name }: { name: string }) {
   /** Runs `action` unless a switch is under way (a press that reached the item before it turned off). */
   const once = (action: () => void) => () => {
     if (!useProject.getState().switching) action();
+  };
+  /**
+   * Opens the menu with Open recent as read for this project. The first time, its list isn't read yet: the menu waits
+   * for it, `HOLD_MS` at most, so the group is there from the first paint (a slower read shows it the next time).
+   */
+  const openMenu = () => {
+    const ask = ++asked.current;
+    const show = () => {
+      if (asked.current !== ask) return;
+      asked.current++;
+      setRecent(openRecentNow() ?? []);
+      setOpen(true);
+    };
+    if (openRecentNow() !== null) {
+      readRecentIfStale();
+      show();
+      return;
+    }
+    const timer = setTimeout(show, HOLD_MS);
+    void readRecent().then(() => {
+      clearTimeout(timer);
+      show();
+    });
+  };
+  const onOpenChange = (next: boolean) => {
+    if (next) return openMenu();
+    asked.current++;
+    setOpen(false);
   };
   const showInFinder = () => void projects.reveal().catch((error: unknown) => toast.error(errorMessage(error)));
   if (renaming)
@@ -102,7 +141,7 @@ function ProjectMenu({ name }: { name: string }) {
     );
   return (
     // The list is read as the menu is about to open (the pointer or the focus on the name) and as it opens.
-    <Menu onOpenChange={(open) => open && readRecentIfStale()}>
+    <Menu open={open} onOpenChange={onOpenChange}>
       <MenuTrigger asChild onPointerEnter={readRecentIfStale} onFocus={readRecentIfStale}>
         <button ref={nameButton} type="button" className="project" title={name}>
           <span className="project-name">{name}</span>

@@ -72,6 +72,12 @@ export function readRecentIfStale(): void {
   if (readFor !== openingOf(useProject.getState().snapshot) || Date.now() - readAt > FRESH_MS) void readRecent();
 }
 
+/** Open recent's projects for the project open now, as read so far: null until its list has been read. */
+export function openRecentNow(): ProjectRow[] | null {
+  const { rows, readFor } = useRecentProjects.getState();
+  return readFor !== null && readFor === openingOf(useProject.getState().snapshot) ? rows : null;
+}
+
 const NONE: ProjectRow[] = [];
 
 /** Open recent's projects for the project open now: none until its list has been read. */

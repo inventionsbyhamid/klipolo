@@ -474,4 +474,39 @@ describe('TopBar', () => {
     await userEvent.hover(name);
     await waitFor(() => expect(projects.recent).toHaveBeenCalledTimes(2));
   });
+
+  it('the_menu_waits_briefly_for_the_list_so_open_recent_is_there_as_it_opens', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    let answer!: (rows: ProjectRow[]) => void;
+    vi.mocked(projects.recent).mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    render(<TopBar />);
+    await userEvent.click(screen.getByRole('button', { name: 'Billing tutorial' }));
+    // The list for this project isn't read yet: the menu waits for it, a moment at most.
+    expect(screen.queryByRole('menu')).toBeNull();
+    act(() => answer([recentRow('Billing tutorial', true), recentRow('Kiln vlog')]));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getByRole('group', { name: 'Open recent' })).toBeInTheDocument();
+  });
+
+  it('a_slow_list_never_moves_the_items_while_the_menu_is_open', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    let answer!: (rows: ProjectRow[]) => void;
+    vi.mocked(projects.recent).mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    render(<TopBar />);
+    await userEvent.click(screen.getByRole('button', { name: 'Billing tutorial' }));
+    // A read that takes longer than that: the menu opens without the group.
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).queryByRole('group')).toBeNull();
+    const items = () => within(menu).getAllByRole('menuitem').map((item) => item.textContent);
+    const before = items();
+    // It lands while the menu is open: nothing moves under the pointer.
+    await act(async () => answer([recentRow('Billing tutorial', true), recentRow('Kiln vlog')]));
+    await waitFor(() => expect(useRecentProjects.getState().rows).toHaveLength(1));
+    expect(items()).toEqual(before);
+    expect(within(menu).queryByRole('group')).toBeNull();
+    // The next time it opens, the group is there.
+    await userEvent.keyboard('{Escape}');
+    const again = await openMenu('Billing tutorial');
+    expect(within(again).getByRole('group', { name: 'Open recent' })).toBeInTheDocument();
+  });
 });
