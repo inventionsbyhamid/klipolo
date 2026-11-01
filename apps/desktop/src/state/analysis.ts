@@ -4,7 +4,7 @@ import type { AssetState } from '../bindings/AssetState';
 import type { Estimate } from '../bindings/Estimate';
 import { refreshAiStatus, useAi } from '../ai/aiStatus';
 import { analysisBridge, type AnalysisEvent, type UnlistenFn } from '../bridge/analysis';
-import { analysedAssets } from '../lib/analysed';
+import { analysable } from '../lib/analysed';
 import { useProject } from './project';
 
 interface AnalysisStore {
@@ -118,7 +118,7 @@ export function forgetRemovedClips(): () => void {
 let asked = 0;
 
 /**
- * The clips `assetIds` (the files the main-track clips play) as the banner offers them: the ones not analysed are
+ * The clips `assetIds` (what analysis offers, `analysable`) as the banner offers them: the ones not analysed are
  * estimated; those cached load at once, at no cost (`analysis_start`), and the offer is for the rest. A new offer
  * starts without the last one's sentence. When nothing can pay yet (the device isn't registered), the estimate says
  * why (`Estimate.problem`) and has no price: the banner shows that, and Retry asks again.
@@ -182,11 +182,12 @@ export function notNow() {
 const NO_ASSETS: Asset[] = [];
 
 /**
- * The open project's clips analysis is for (`analysedAssets`: the videos and sounds its main-track clips play, never
- * music, sounds or pictures on layers, nor files never placed). The same array until they change.
+ * The open project's clips analysis is for (`analysable`: the videos and sounds its main-track clips play, a recording
+ * counted as one clip by its voice; never music, sounds or pictures on layers, nor files never placed). The same array
+ * until they change.
  */
 export function useAnalysedClips(): Asset[] {
-  return useProject((s) => (s.snapshot ? analysedAssets(s.snapshot.project) : NO_ASSETS));
+  return useProject((s) => (s.snapshot ? analysable(s.snapshot.project) : NO_ASSETS));
 }
 
 /**
@@ -198,10 +199,10 @@ export function useSomeNotAnalysed(): boolean {
   return useAnalysis((s) => clips.some((a) => stateOf(s.states, a.id).state === 'none'));
 }
 
-/** The open project's clips analysis is for, by id (`analysedAssets`). */
+/** The open project's clips analysis is for, by id (`analysable`). */
 function projectClipIds(): string[] {
   const project = useProject.getState().snapshot?.project;
-  return project ? analysedAssets(project).map((a) => a.id) : [];
+  return project ? analysable(project).map((a) => a.id) : [];
 }
 
 /**
