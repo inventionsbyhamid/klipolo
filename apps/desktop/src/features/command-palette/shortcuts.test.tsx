@@ -11,7 +11,12 @@ vi.mock('../../bridge/engine', () => ({
     seek: vi.fn().mockResolvedValue(undefined),
   },
 }));
+vi.mock('../../bridge/appWindow', () => ({
+  appWindow: { fullScreen: vi.fn(() => Promise.resolve(false)), isFullScreen: vi.fn(() => Promise.resolve(true)) },
+}));
 const { bridge } = await import('../../bridge/commands');
+const { appWindow } = await import('../../bridge/appWindow');
+const { useFullScreen } = await import('../../state/fullScreen');
 const { useProject } = await import('../../state/project');
 const { usePlayback } = await import('../../state/playback');
 const { useRange } = await import('../../state/range');
@@ -104,5 +109,22 @@ describe('playback keys', () => {
     expect(usePlayback.getState().playing).toBe(false);
     fireEvent.keyDown(document.body, { key: 'l', metaKey: true });
     expect(useLoop.getState().on).toBe(false);
+  });
+
+  it('F shows the preview full screen; Escape leaves it first, then clears the selection', async () => {
+    renderWithProviders(<Editor />);
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'f' });
+    expect(useFullScreen.getState().on).toBe(false);
+    fireEvent.keyDown(document.body, { key: 'f' });
+    expect(useFullScreen.getState().on).toBe(true);
+    await vi.waitFor(() => expect(appWindow.fullScreen).toHaveBeenLastCalledWith(true));
+    // Escape in an open menu closes the menu, not full screen.
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Rename' }), { key: 'Escape' });
+    expect(useFullScreen.getState().on).toBe(true);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(useFullScreen.getState().on).toBe(false);
+    expect(useSelection.getState().selectedId).toBe('title');
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(useSelection.getState().selectedId).toBeNull();
   });
 });

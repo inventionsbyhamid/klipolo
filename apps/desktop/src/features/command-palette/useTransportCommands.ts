@@ -2,6 +2,7 @@ import { useLingui } from '@lingui/react/macro';
 import { useMemo } from 'react';
 import { stepFrames } from '../../lib/time';
 import { videoDurationUs } from '../../lib/timeline';
+import { useFullScreen } from '../../state/fullScreen';
 import { useLoop } from '../../state/loop';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
@@ -9,11 +10,11 @@ import { useRange } from '../../state/range';
 import { searchWords, type Command } from './command';
 
 /**
- * The transport: play and pause, the J/L shuttle (backward and forward, again for double speed), Loop and frame steps.
- * The palette, the keys (Space, J/K/L, K held with J/L, ⌘L, ← and →) and the transport's buttons all run these. Frame
- * steps go by frame index on the engine's grid, so each shows the next frame exactly once. It re-renders on play, pause,
- * a speed change, Loop, a time range coming or going, or a new frame rate or length, never per frame: the playhead is
- * read when a command runs.
+ * The transport: play and pause, the J/L shuttle (backward and forward, again for double speed), Loop, full screen and
+ * frame steps. The palette, the keys (Space, J/K/L, K held with J/L, ⌘L, F and Escape, ← and →) and the transport's
+ * buttons all run these. Frame steps go by frame index on the engine's grid, so each shows the next frame exactly once.
+ * It re-renders on play, pause, a speed change, Loop, full screen, a time range coming or going, or a new frame rate or
+ * length, never per frame: the playhead is read when a command runs.
  */
 export function useTransportCommands(): Command[] {
   const { t } = useLingui();
@@ -23,6 +24,7 @@ export function useTransportCommands(): Command[] {
   const rate = usePlayback((s) => s.rate);
   const looping = useLoop((s) => s.on);
   const ranged = useRange((s) => s.range !== null);
+  const full = useFullScreen((s) => s.on);
   return useMemo((): Command[] => {
     const hasVideo = durationUs > 0;
     /** One frame (⇧ one second) back or on, within the video's frames. */
@@ -131,6 +133,24 @@ export function useTransportCommands(): Command[] {
         run: () => useLoop.getState().toggle(),
       },
       {
+        id: 'full-screen',
+        action: 'fullScreen',
+        group: 'view',
+        label: full
+          ? t({ id: 'command.fullScreen.leave', message: 'Leave full screen' })
+          : t({ id: 'command.fullScreen', message: 'Full screen preview' }),
+        shortcut: full ? 'Esc' : 'F',
+        keywords: searchWords(
+          t({
+            id: 'command.fullScreen.keywords',
+            message: 'watch, big, whole screen',
+            comment: 'Comma-separated search words for Full screen preview',
+          }),
+        ),
+        enabled: hasVideo || full,
+        run: () => void useFullScreen.getState().toggle(),
+      },
+      {
         id: 'frame-back',
         action: 'goTo',
         group: 'playback',
@@ -151,5 +171,5 @@ export function useTransportCommands(): Command[] {
         run: (options) => stepFrame(1, options?.large),
       },
     ];
-  }, [t, fps, durationUs, playing, rate, looping, ranged]);
+  }, [t, fps, durationUs, playing, rate, looping, ranged, full]);
 }

@@ -30,6 +30,7 @@ import {
 } from './state/analysis';
 import { followApps } from './state/chat';
 import { followEditorView } from './state/editorView';
+import { followFullScreen, useFullScreen } from './state/fullScreen';
 import { keepLooping } from './state/loop';
 import { useProject } from './state/project';
 import { clearProposalOnProjectSwitch } from './state/proposal';
@@ -121,6 +122,8 @@ export function App() {
     keepLooping();
     // The player bar's volume reaches the preview as it changes.
     followVolume();
+    // Full screen preview ends with the project, or when the window leaves full screen by itself.
+    followFullScreen();
     clearRangeOnProjectSwitch();
     clearProposalOnProjectSwitch();
     // Other apps' calls read the person's view (the selection, the playhead) as Klipolo last heard it.
@@ -141,6 +144,7 @@ export function App() {
   useEngineSession();
   useRecordShortcut();
   const open = useProject((s) => s.snapshot !== null);
+  const full = useFullScreen((s) => s.on);
   // A project has been open in this page: the start screen shows after All projects, not at launch.
   const [hadProject, setHadProject] = useState(false);
   useEffect(() => {
@@ -148,7 +152,7 @@ export function App() {
   }, [open]);
   return (
     <TooltipProvider>
-      <div className={cn('app', !open && 'is-start')}>
+      <div className={cn('app', !open && 'is-start', open && full && 'is-full')}>
         <TopBar />
         {open ? <Editor /> : asked && <Start afterProject={hadProject} />}
         <SettingsDialog />
