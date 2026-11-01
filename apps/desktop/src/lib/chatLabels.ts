@@ -164,6 +164,12 @@ export const CHAT_LABELS: Record<string, MessageDescriptor> = {
       '{layer, select, words {Change the words} title {Change the title} video {Change the video layer} clip {Change the clip} music {Change the music} other {Change the picture}}',
     comment: 'Undo history entry: chat changed a layer’s place, size, look, order or fades',
   }),
+  'chat.removeLayer': msg({
+    id: 'chat.removeLayer',
+    message:
+      '{layer, select, words {Remove the words} title {Remove the title} video {Remove the video layer} music {Remove the music} other {Remove the picture}}',
+    comment: 'Undo history entry: chat took a layer away',
+  }),
   'chat.styleText': msg({
     id: 'chat.styleText',
     message: 'Restyle the words',

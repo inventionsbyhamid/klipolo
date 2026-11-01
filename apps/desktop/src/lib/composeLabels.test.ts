@@ -12,6 +12,8 @@ describe("chat's labels for the tools that compose an edit", () => {
     expect(historyAction('undo', 'chat.setLayer', { layer: 'clip' })).toBe('Undo change the clip');
     expect(historyAction('undo', 'chat.setLayer', { layer: 'music' })).toBe('Undo change the music');
     expect(historyAction('undo', 'chat.styleText', {})).toBe('Undo restyle the words');
+    expect(historyAction('undo', 'chat.removeLayer', { layer: 'picture' })).toBe('Undo remove the picture');
+    expect(historyAction('undo', 'chat.removeLayer', { layer: 'music' })).toBe('Undo remove the music');
     expect(historyAction('undo', 'chat.setEffects', { target: 'clip' })).toBe('Undo change the clip’s effects');
     expect(historyAction('undo', 'chat.setEffects', { target: 'title' })).toBe('Undo change the title’s effects');
   });
