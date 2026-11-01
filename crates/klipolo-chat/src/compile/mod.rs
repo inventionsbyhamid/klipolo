@@ -155,6 +155,10 @@ pub struct Compiled {
     /// Klipolo's own sentences on why a change the person asked for waits in `proposal`: a new speed that leaves a
     /// transition no room.
     pub waits: Vec<String>,
+    /// How many of `additions`' ops, at its end, fit the music to the video's new end, as every edit of the person's
+    /// is fitted (`media::music::with_music_refit`): what the edits do to the music, not the edits themselves. Another
+    /// app's batch is judged and committed without them, its host fitting the music as it does for the person.
+    pub music_refit: usize,
 }
 
 /// Removals for the person to approve.
@@ -309,6 +313,8 @@ struct Phase {
     labels: Vec<(usize, CodedError)>,
     /// The calls whose edits held no ops: they went through and changed nothing.
     unchanged: Vec<usize>,
+    /// How many of `ops`, at their end, are the music's refit (`refit_music`).
+    refit_ops: usize,
 }
 
 impl Phase {
@@ -319,6 +325,7 @@ impl Phase {
             ops: Vec::new(),
             labels: Vec::new(),
             unchanged: Vec::new(),
+            refit_ops: 0,
         }
     }
 
@@ -685,6 +692,11 @@ impl Compiler<'_> {
         removing.refit_music(&adding.done);
 
         out.additions = adding.transaction();
+        out.music_refit = if out.additions.is_some() {
+            adding.refit_ops
+        } else {
+            0
+        };
         out.unchanged = adding.unchanged.clone();
         out.unchanged.sort_unstable();
         notes.sort_by_key(|(i, _)| *i);
@@ -903,6 +915,7 @@ impl Phase {
         }
         self.work = work;
         self.done = done;
+        self.refit_ops = refit.len();
         self.ops.extend(refit);
     }
 }

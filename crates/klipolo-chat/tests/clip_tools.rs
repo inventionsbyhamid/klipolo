@@ -335,7 +335,10 @@ fn applied(p: &Project, out: &Compiled) -> (Vec<Op>, String, Project) {
     assert_eq!(out.refusals, vec![], "{:#?}", out.refusals);
     let tx = out.additions.clone().expect("additions");
     assert_eq!(tx.origin, Some(Origin::Chat));
-    assert!(!tx.needs_review(Some(p)), "an addition");
+    // Judged as an app's batch is: the edits, the music's refit aside.
+    let mut edits = tx.clone();
+    edits.ops.truncate(tx.ops.len() - out.music_refit);
+    assert!(!edits.needs_review(Some(p)), "an addition");
     let after = apply_ops(p, &tx.ops).unwrap();
     (tx.ops, tx.label, after)
 }
@@ -855,4 +858,63 @@ fn the_context_shows_a_clips_volume_and_its_transition_and_the_prompt_the_tools(
         "setClip sets a clip's speed, volume, mute, or Fit or Fill; setTransition adds, changes or removes the \
          transition at a cut. Use all for every clip or cut."
     ));
+}
+
+/// A 300 s song, as the person's own music file.
+fn song() -> Asset {
+    Asset {
+        id: "song".into(),
+        kind: AssetKind::Audio,
+        path: "/media/song.mp3".into(),
+        name: "song.mp3".into(),
+        duration_us: secs(300.0),
+        width: 0,
+        height: 0,
+        fps: 0.0,
+        rotation: None,
+        has_audio: true,
+        audio_lead_us: None,
+        made_with: None,
+    }
+}
+
+/// `p` with the song laid from the start to the video's end, as addMusic lays it.
+fn with_music(p: &Project) -> Project {
+    let mut p = p.clone();
+    p.assets.push(song());
+    let ops = klipolo_model::media::music::add_music_ops(
+        &p,
+        &song(),
+        klipolo_model::media::music::MusicOpts::default(),
+    )
+    .unwrap();
+    apply_ops(&p, &ops).unwrap()
+}
+
+#[test]
+fn a_speed_up_cuts_the_music_at_the_new_end_as_the_card_does_and_says_which_ops_that_is() {
+    let p = with_music(&clips());
+    let out = run(&p, &[("setClip", set_clip("c3", json!({"speed": 2})))]);
+    let (ops, _, after) = applied(&p, &out);
+    let by_hand = card(
+        "c",
+        ClipPatch {
+            speed: Some(2.0),
+            ..ClipPatch::default()
+        },
+    );
+    // The card's op, then the music's refit, as every hand edit is fitted.
+    let card_done =
+        klipolo_model::media::music::apply_with_music_refit(&p, vec![by_hand.clone()]).unwrap();
+    assert!(card_done.ops.len() > 1, "the music is refitted");
+    assert_eq!(ops, card_done.ops);
+    assert_eq!(after, card_done.project);
+    assert_eq!(out.music_refit, ops.len() - 1);
+    // Without the refit, the edit alone takes nothing away: it is what an app's batch is judged on.
+    let edit = klipolo_model::Transaction {
+        ops: vec![by_hand],
+        origin: Some(Origin::Chat),
+        ..Default::default()
+    };
+    assert!(!edit.needs_review(Some(&p)));
 }
