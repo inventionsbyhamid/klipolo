@@ -1327,6 +1327,21 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "topic and shot items",
         "Muse Image draw a new picture",
         "If the person gave no title words, ask for them",
+        // A short from one prompt: the whole plan in one answer, adapted to what was asked.
+        "A short (",
+        "in one answer",
+        "findMoments",
+        "keepOnly",
+        "setFormat portrait",
+        "followSubject",
+        "word-pop or bold-box",
+        "in the first 2 s of what you keep",
+        "a line said in the video",
+        "animate last",
+        "a sound",
+        "addMusic",
+        "setTransition only at cuts already there",
+        "Place every layer inside the parts you keep",
         "one or two short, plain, friendly sentences",
         "No markdown",
         "Never use em dashes or en dashes",
@@ -1397,9 +1412,11 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let prompt_tokens = klipolo_chat::estimate_tokens(prompt);
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
-    // 914 measured with the clip tools' line and the recordings' line.
-    assert!(prompt_tokens <= 920, "prompt {prompt_tokens} tokens");
+    // 914 measured with the clip tools' line and the recordings' line; 1,092 with autoZoom's line and the short's
+    // recipe.
+    assert!(prompt_tokens <= 1_100, "prompt {prompt_tokens} tokens");
     // 4,099 measured with the clip tools (setClip, setTransition) and the recording tools (the camera's three and the
-    // recorded sounds' three, about 1,010 of them); 4,381 with animate and the words' entrance.
+    // recorded sounds' three, about 1,010 of them); 4,507 with animate, the words' entrance, autoZoom and the shorts'
+    // two caption styles.
     assert!(tools_tokens <= 4_700, "tools {tools_tokens} tokens");
 }
