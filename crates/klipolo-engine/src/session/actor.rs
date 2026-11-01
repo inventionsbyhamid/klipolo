@@ -510,7 +510,7 @@ impl<B: PreviewBackend> Actor<B> {
     }
 
     /// What the backend's crash guard has for the app since the last frame, and when an open draw mark
-    /// next runs out of time (its 2 s, closed then even if no frame draws).
+    /// next runs out of time (its 2 s: closed then even if no frame draws).
     pub(super) fn emit_guard_events(&mut self) {
         for event in self.p.backend.take_guard_events() {
             self.emit(event.into_event());

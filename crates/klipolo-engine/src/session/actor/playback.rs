@@ -260,7 +260,7 @@ impl<B: PreviewBackend> Actor<B> {
         let mut plan = frame_plan(&cur.ctx, at_us, view.format);
         hide_edited(&mut plan, self.editing.as_deref());
         // On screen when its sound is heard: `at_us` is ahead of what is heard now by up to the lead (the
-        // the presenter holds it until then). While the sound is on its way the picture holds, shown at once.
+        // presenter holds it until then). While the sound is on its way the picture holds, shown at once.
         let due_ms = match play.clock {
             Clock::Waiting { .. } => 0.0,
             _ => now_ms() + (at_us - heard).max(0) as f64 / 1000.0,
