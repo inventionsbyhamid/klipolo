@@ -71,16 +71,41 @@ pub struct ParseError {
 /// fails the whole parse. If a frame appears on two lines, the later line's
 /// objects replace earlier ones with the same id.
 pub fn parse_frames(text: &str) -> Result<Vec<FrameObjects>, ParseError> {
+    let (frames, mut skipped) = read(text, true);
+    match skipped.pop() {
+        Some(error) => Err(error),
+        None => Ok(frames),
+    }
+}
+
+/// [`parse_frames`] that skips a line it can't read (one cut off part-way, say) and keeps every other: the frames
+/// read, and why each skipped line was.
+pub fn parse_frames_lenient(text: &str) -> (Vec<FrameObjects>, Vec<ParseError>) {
+    read(text, false)
+}
+
+/// The frames on the lines that read, and the lines that don't; `strict` stops at the first of those.
+fn read(text: &str, strict: bool) -> (Vec<FrameObjects>, Vec<ParseError>) {
     let mut frames: BTreeMap<u32, Vec<Obj>> = BTreeMap::new();
+    let mut skipped = Vec::new();
     for (index, raw) in text.split('\n').enumerate() {
         let line = raw.trim();
         if line.is_empty() {
             continue;
         }
-        let (frame, objects) = parse_line(line).map_err(|reason| ParseError {
-            line: index + 1,
-            reason,
-        })?;
+        let (frame, objects) = match parse_line(line) {
+            Ok(read) => read,
+            Err(reason) => {
+                skipped.push(ParseError {
+                    line: index + 1,
+                    reason,
+                });
+                if strict {
+                    break;
+                }
+                continue;
+            }
+        };
         let slot = frames.entry(frame).or_default();
         for obj in objects {
             match slot.iter_mut().find(|o| o.id == obj.id) {
@@ -89,10 +114,11 @@ pub fn parse_frames(text: &str) -> Result<Vec<FrameObjects>, ParseError> {
             }
         }
     }
-    Ok(frames
+    let frames = frames
         .into_iter()
         .map(|(frame, objects)| FrameObjects { frame, objects })
-        .collect())
+        .collect();
+    (frames, skipped)
 }
 
 fn parse_line(line: &str) -> Result<(u32, Vec<Obj>), String> {

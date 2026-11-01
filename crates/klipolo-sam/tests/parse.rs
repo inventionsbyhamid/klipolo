@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use klipolo_sam::{parse_frames, BoxPx, FrameObjects};
+use klipolo_sam::{parse_frames, parse_frames_lenient, BoxPx, FrameObjects};
 
 const PERSON_TEXT: &str = include_str!("fixtures/person_concept_one_bit.txt");
 const PERSON_BOXES: &str = include_str!("fixtures/person_concept_one_bit.boxes.json");
@@ -292,4 +292,24 @@ fn malformed_records_are_errors_on_their_line() {
         let err = parse_frames(&text).expect_err(name);
         assert_eq!(err.line, 2, "{name}: {err}");
     }
+}
+
+#[test]
+fn a_lenient_read_skips_bad_lines_and_keeps_the_rest() {
+    let good = |frame| line(frame, &[&record(0, BOX_A, "!a")]);
+    // A line cut off mid-record, as an answer that stopped part-way ends.
+    let text = format!(
+        "{}\n<1f>0<|box;x1=1;y1=1\n{}\nnot a frame\n{}",
+        good(0),
+        good(2),
+        good(3)
+    );
+    let (frames, skipped) = parse_frames_lenient(&text);
+    let order: Vec<u32> = frames.iter().map(|f| f.frame).collect();
+    assert_eq!(order, [0, 2, 3]);
+    let lines: Vec<usize> = skipped.iter().map(|e| e.line).collect();
+    assert_eq!(lines, [2, 4]);
+    // The real answer reads whole either way.
+    let (all, none) = parse_frames_lenient(PERSON_TEXT);
+    assert_eq!((all.len(), none.len()), (160, 0));
 }
