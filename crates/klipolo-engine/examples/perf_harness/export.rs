@@ -1,5 +1,5 @@
-//! Export scenario: a 60 s 1080p30 project (`screen-60s-1080p30.mp4`)
-//! exported by a real worker process (`--export-worker`, as the app runs it) in one format and in all three,
+//! Export scenario: a 60 s 1080p30 project (`screen-60s-1080p30.mp4`, from `scripts/gen-engine-fixtures.sh`) exported
+//! by a real worker process (`--export-worker`, as the app runs it) in one format and in all three, at Standard and
 //! High, in segments of `KLIPOLO_EXPORT_SEGMENT_S` seconds (default 30). Reports wall time, the
 //! realtime factor, CPU (the worker plus VideoToolbox's decoder and encoder services, which do their work out of
 //! process) and peak footprints.
