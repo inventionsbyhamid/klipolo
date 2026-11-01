@@ -46,9 +46,14 @@ pub const NO_ONE: &str = "Klipolo couldn't find a person to follow in this clip.
 /// Said when matching voices to people stopped partway: no voice is used.
 pub const UNMATCHED: &str =
     "Klipolo couldn't tell who is speaking, so the crop follows the main person.";
+/// Said when an access code has too little credit left for the relay to take a call with video.
+pub const LOW_CREDIT_VOICES: &str = "Your access code has too little credit left to tell who is speaking, so the crop follows the main person.";
 /// Said when who to keep can't be made from what was tracked before: the tracking isn't in the cache any more.
 pub const NOT_TRACKED: &str =
     "This footage isn't tracked any more. Follow the speaker again first.";
+/// What the relay holds back of an access code's credit for each call with a video until it is answered: Muse Spark
+/// isn't asked whose a voice is with less than this left.
+pub const MEDIA_RESERVE_USD: f64 = 0.76;
 
 /// What following the speaker costs before it runs.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, TS)]
@@ -87,7 +92,7 @@ pub struct Followed {
     pub not_found: Vec<Id>,
     /// What the run cost (0 for footage tracked before).
     pub paid_usd: f64,
-    /// Why no voice could be matched to the people (`UNMATCHED`), to say to the person.
+    /// Why no voice could be matched to the people (`UNMATCHED`, `LOW_CREDIT_VOICES`), to say to the person.
     pub note: Option<String>,
 }
 
@@ -463,7 +468,7 @@ impl Speaker {
                     let src = PathBuf::from(&file);
                     let dir = cache_dir(&self.cache_root, &src).await;
                     match (&matcher, paying) {
-                        (None, _) => {}
+                        (None, _) => note = Some(LOW_CREDIT_VOICES.to_owned()),
                         (Some(m), false) => {
                             let model = m.model().to_owned();
                             matched = tokio::task::spawn_blocking(move || {
@@ -546,9 +551,16 @@ impl Speaker {
         Ok(followed)
     }
 
-    /// The matcher, when following a person and there are voices to match (and false: nothing holds it back).
+    /// The matcher, when following a person and there are voices to match; none, and true, when an access code has
+    /// less credit left than the relay holds back for a call with video (`MEDIA_RESERVE_USD`).
     async fn matcher(&self, phrase: &str) -> (Option<Arc<dyn VoiceMatcher>>, bool) {
-        (self.cache_matcher(phrase).await, false)
+        let Some(matcher) = self.cache_matcher(phrase).await else {
+            return (None, false);
+        };
+        match self.trackers.credit().await {
+            Ok(Some(left)) if left < MEDIA_RESERVE_USD => (None, true),
+            _ => (Some(matcher), false),
+        }
     }
 
     /// The matcher whose cached answers count, when following a person and there are voices: never called by a keep.

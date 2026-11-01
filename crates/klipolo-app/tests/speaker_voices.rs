@@ -595,4 +595,18 @@ async fn the_card_keeps_from_the_tracking_alone_and_never_pays() {
     assert_eq!(speaker.spent_usd(), spent);
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn an_access_code_too_low_for_a_media_call_skips_matching_and_says_so() {
+    let setup = setup(usize::MAX);
+    let speaker = speaker_with(&setup, true, Some(0.5), ("A", "B"));
+    let p = &setup.project;
+    let estimate = speaker.estimate(p, &ids(), &[Portrait], "person").await;
+    assert!((estimate.usd - ONE_MINUTE).abs() < 1e-9, "{estimate:?}");
+    let followed = speaker
+        .follow(p, &ids(), &[Portrait], "person")
+        .await
+        .unwrap();
+    assert_eq!(setup.spark.asked.load(Ordering::SeqCst), 0);
+    assert_eq!(followed.note.as_deref(), Some(LOW_CREDIT_VOICES));
+}
 
