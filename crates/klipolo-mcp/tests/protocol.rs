@@ -724,3 +724,21 @@ fn crate_has_no_vendor_dependency() {
     }
     let _: Arc<dyn klipolo_mcp::host::Host> = FakeHost::empty();
 }
+
+/// The demo agent's tests read Klipolo's tools from `scripts/mcp-demo-agent/tests/fixtures/tools_list.json`: it is what
+/// `tools/list` answers now (`UPDATE_GOLDEN=1` writes it again).
+#[test]
+fn the_demo_agents_tool_list_is_what_klipolo_lists() {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/mcp-demo-agent/tests/fixtures/tools_list.json");
+    let listed = serde_json::to_string_pretty(&listed("tools/list").unwrap()).unwrap() + "\n";
+    if std::env::var_os("UPDATE_GOLDEN").is_some() {
+        std::fs::write(&path, &listed).unwrap();
+    }
+    let stored = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        stored == listed,
+        "{} is not what tools/list answers: run with UPDATE_GOLDEN=1",
+        path.display()
+    );
+}
