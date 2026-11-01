@@ -133,7 +133,7 @@ describe('the dock holds still through a timeline press', () => {
 
   it('a release lost to another app lets the dock follow the selection once the window loses focus', async () => {
     renderWithProviders(<Editor />);
-    const a = block(/^screen\.mp4/);
+    const a = block(/^Recording 1/);
     press(a, 100);
     expect(useSelection.getState().selectedId).toBe('a');
     expect(docked()).toBe(false);
