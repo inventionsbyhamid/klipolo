@@ -167,6 +167,20 @@ describe('the folded library’s thumbnails', () => {
     expect(names()).toEqual(['broll.mp4', 'Recording 1']);
   });
 
+  it('a drag that comes back to where it began adds nothing on letting go', async () => {
+    vi.mocked(bridge.apply).mockResolvedValue(revisionPatch(4));
+    renderWithProviders(<Library />);
+    act(() => useLibraryPanel.getState().setCollapsed(true));
+    const broll = within(railClips()).getByRole('button', { name: 'broll.mp4' });
+    fireEvent.pointerDown(broll, { button: 0, pointerId: 1, clientX: 20, clientY: 200 });
+    // Lifted past the slop, then brought back and let go a pixel from the start (or put down with Escape there).
+    fireEvent.pointerMove(broll, { pointerId: 1, clientX: 60, clientY: 200 });
+    fireEvent.pointerMove(broll, { pointerId: 1, clientX: 21, clientY: 200 });
+    fireEvent.click(broll, { clientX: 21, clientY: 200, detail: 1 });
+    await act(() => new Promise((r) => setTimeout(r, 20)));
+    expect(bridge.apply).not.toHaveBeenCalled();
+  });
+
   it('a drag puts the clip on the timeline as its row’s does, and adds nothing on letting go', async () => {
     vi.mocked(bridge.apply).mockResolvedValue(revisionPatch(4));
     renderWithProviders(<Library />);

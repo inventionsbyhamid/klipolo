@@ -16,31 +16,37 @@ const MAC = typeof navigator !== 'undefined' && /^Mac/.test(navigator.platform);
  * One clip's thumbnail on the folded library's rail: a button named by the clip (its tooltip too), its first frame
  * over the clip art (which shows until the frame is here). A press adds it to the end, as its row's "+" does; pressed
  * and moved, it drags onto the timeline as its row does (a whole recording onto the Video lane only), and the press
- * that let go of a drag adds nothing more.
+ * that let go of a drag (wherever it was let go, or put down with Escape) adds nothing more.
  */
 function RailClip({ clip }: { clip: ShelfClip }) {
   const art = useRef<HTMLSpanElement>(null);
   const tile = useClipPicture(clip.asset.path, useNearView(art));
-  /** Where the press began, so the click that ends a drag adds nothing. */
-  const pressedAt = useRef<{ x: number; y: number } | null>(null);
+  /** The press under way: where it began, and whether it went past the slop (so it lifted into a drag). */
+  const press = useRef<{ x: number; y: number; lifted: boolean } | null>(null);
   const add = (target: Parameters<typeof addClip>[1]) =>
     addClip(clip.source, target, () => clip.key && markUsed(clip.key));
+  const past = (e: { clientX: number; clientY: number }, from: { x: number; y: number }) =>
+    Math.hypot(e.clientX - from.x, e.clientY - from.y) >= DRAG_SLOP_PX;
   const onPointerDown = (e: PointerEvent<HTMLButtonElement>) => {
-    pressedAt.current = null;
+    press.current = null;
     if (e.button !== 0 || (MAC && e.ctrlKey)) return;
-    pressedAt.current = { x: e.clientX, y: e.clientY };
+    press.current = { x: e.clientX, y: e.clientY, lifted: false };
     // No text selection and no native image drag; the button keeps the pointer wherever it goes.
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
     beginMediaDrag(e, clip.asset, add, clip.source.type === 'recording' ? 'main' : 'any');
   };
+  const onPointerMove = (e: PointerEvent<HTMLButtonElement>) => {
+    const now = press.current;
+    if (now && !now.lifted && past(e, now)) now.lifted = true;
+  };
   const onClick = (e: MouseEvent<HTMLButtonElement>) => {
-    const from = pressedAt.current;
-    pressedAt.current = null;
+    const from = press.current;
+    press.current = null;
     // Control-click on a Mac is a right-click: it adds nothing.
     if (MAC && e.ctrlKey) return;
     // From the keyboard (no pointer), or a press that never became a drag.
-    const dragged = e.detail > 0 && from !== null && Math.hypot(e.clientX - from.x, e.clientY - from.y) >= DRAG_SLOP_PX;
+    const dragged = e.detail > 0 && from !== null && (from.lifted || past(e, from));
     if (!dragged) add(toTheEnd);
   };
   return (
@@ -54,6 +60,7 @@ function RailClip({ clip }: { clip: ShelfClip }) {
         title={clip.name}
         data-recording-id={clip.source.type === 'recording' ? clip.source.id : undefined}
         onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
         onClick={onClick}
         onDragStart={(e) => e.preventDefault()}
       >
