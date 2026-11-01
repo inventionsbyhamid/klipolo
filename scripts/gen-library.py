@@ -256,6 +256,318 @@ def sparkle():
     return out
 
 
+# ------------------------------------------------------------------------------------------- more sound effects
+
+
+def finished(samples, fade_in, fade_out, rate=SR):
+    """A sound as the pack ships it: its DC offset taken out (a 10 Hz high pass), the near silence before and after it
+    (under a thousandth of its peak) trimmed, and short fades so it starts and ends at silence."""
+    k = 1.0 - TAU * 10.0 / rate
+    out, x1, y1 = [], 0.0, 0.0
+    for x in samples:
+        y1 = x - x1 + k * y1
+        x1 = x
+        out.append(y1)
+    top = max(abs(v) for v in out)
+    heard = [i for i, v in enumerate(out) if abs(v) * 1000 >= top]
+    return edges(out[heard[0]:heard[-1] + 1], fade_in, fade_out, rate)
+
+
+def soft(x):
+    """A soft clip: about x when small, never past 1 either way (a rational tanh)."""
+    if x >= 3.0:
+        return 1.0
+    if x <= -3.0:
+        return -1.0
+    return x * (27.0 + x * x) / (27.0 + 9.0 * x * x)
+
+
+def unit(noise):
+    """The next of `noise`'s numbers as a share in [0, 1)."""
+    return (noise() + 1) / 2
+
+
+def impact():
+    """A heavy hit: a sine thump whose pitch falls from 110 Hz to 38 Hz, a burst of noise closing from bright to dull,
+    and a low rumble after it, pushed a little into a soft clip for weight."""
+    n, noise, deep = int(1.6 * SR), Noise(101), Noise(163)
+    burst, rumble = Svf(SR), Svf(SR)
+    out, phase = [], 0.0
+    glide, body, level, tail = 1.0, 1.0, 1.0, 1.0
+    glide_k, body_k, level_k, tail_k = decay(0.07), decay(0.45), decay(0.16), decay(0.6)
+    for i in range(n):
+        phase += (38.0 + 72.0 * glide) / SR
+        lo, _, _ = burst(noise(), 180.0 + 3800.0 * glide, 0.9)
+        low, _, _ = rumble(deep(), 90.0, 0.8)
+        x = 1.1 * osc(phase) * body + 0.9 * lo * level + 6.0 * low * tail
+        out.append(soft(1.6 * x) * min(1.0, i / (0.001 * SR)))
+        glide *= glide_k
+        body *= body_k
+        level *= level_k
+        tail *= tail_k
+    return finished(out, 0.0005, 0.08)
+
+
+def bass_drop():
+    """A deep drop: a sine gliding from 160 Hz down to 34 Hz over two seconds, warmed by a soft clip so small speakers
+    carry it too, with a click of noise as it starts."""
+    n, noise, out, phase = int(2.3 * SR), Noise(107), [], 0.0
+    glide, click = 1.0, 1.0
+    glide_k, click_k = decay(0.55), decay(0.004)
+    for i in range(n):
+        t = i / SR
+        phase += (34.0 + 126.0 * glide) / SR
+        env = min(1.0, i / (0.004 * SR)) * (1.0 if t < 1.6 else cos(PI / 2 * (t - 1.6) / 0.7) ** 2)
+        out.append(0.8 * soft(2.2 * osc(phase)) * env + 0.5 * noise() * click)
+        glide *= glide_k
+        click *= click_k
+    return finished(out, 0.0005, 0.05)
+
+
+def long_riser():
+    """A long build to a moment: noise through a band pass sweeping from 200 Hz to 7 kHz, and two detuned buzzy tones
+    gliding up an octave and a half, both growing to the end under a tremolo that speeds up."""
+    n, noise, svf, out = int(2.9 * SR), Noise(109), Svf(SR), []
+    glide, glide_k = 1.0, exp(1.5 * LN2 / n)
+    cutoff, cutoff_k = 200.0, exp(3.5553480614894135 / n)  # 200 Hz times 35
+    phases, wobble = [0.0, 0.0], 0.0
+    for i in range(n):
+        t = i / n
+        tone = 0.0
+        for k, detune in enumerate((1.0, 1.007)):
+            phases[k] += 130.0 * detune * glide / SR
+            tone += sum(osc(phases[k] * h) / h for h in range(1, 6))
+        wobble += (4.0 + 14.0 * t * t) / SR
+        _, band, _ = svf(noise(), cutoff, 0.6)
+        tremolo = 1.0 - 0.3 * t * (0.5 + 0.5 * osc(wobble))
+        out.append((0.25 * tone + 1.2 * band) * t * t * tremolo)
+        glide *= glide_k
+        cutoff *= cutoff_k
+    return finished(out, 0.001, 0.03)
+
+
+def swipe(up, seed):
+    """A quick swipe: a third of a second of noise through a band pass sweeping from 600 Hz to 4.2 kHz, or back down,
+    as it swells and fades."""
+    n, noise, svf, out = int(0.32 * SR), Noise(seed), Svf(SR), []
+    for i in range(n):
+        t = i / n
+        _, band, _ = svf(noise(), 600.0 * exp((t if up else 1 - t) * 1.9459101090932196), 0.35)  # up to 7 times
+        out.append(band * swell(t, 0.45))
+    return finished(out, 0.001, 0.01)
+
+
+def glitch():
+    """A digital glitch: 14 cuts of 15 to 55 ms, each a buzzing square tone, a burst of crushed noise, a gap, or the
+    cut before it again."""
+    noise, out, last = Noise(149), [], []
+    for _ in range(14):
+        length = int((0.015 + 0.04 * unit(noise)) * SR)
+        kind = int(unit(noise) * 4)
+        if kind == 3 and last:
+            cut = last[:]
+        elif kind in (0, 3):
+            f = 180.0 + 1400.0 * unit(noise) ** 2
+            cut = [0.5 if osc(f * j / SR) >= 0 else -0.5 for j in range(length)]
+        elif kind == 1:
+            hold, step, cut = 0.0, 1 + int(unit(noise) * 12), []
+            for j in range(length):
+                if j % step == 0:
+                    hold = round(noise() * 4) / 4
+                cut.append(0.7 * hold)
+        else:
+            cut = [0.0] * (length // 2)
+        cut = edges(cut, 0.0005, 0.0005)
+        out.extend(cut)
+        last = cut
+    return finished(out, 0.0005, 0.005)
+
+
+def record_scratch():
+    """A record scratched back and forth and then stopped: a buzzy tone and grainy noise, as if cut in the groove,
+    played at the hand's speed, backwards and forwards, louder and brighter the faster it moves."""
+    grain, groove, smooth = Noise(113), [], 0.0
+    for _ in range(SR):
+        smooth += 0.35 * (grain() - smooth)
+        groove.append(smooth)
+    strokes = [(0.0, 0.11, -6.0), (0.11, 0.2, 5.0), (0.2, 0.3, -6.5), (0.3, 0.62, 3.0)]
+    n, svf, out, at = int(0.62 * SR), Svf(SR), [], 0.3
+    for i in range(n):
+        t = i / SR
+        speed = next(v * sin(PI * (t - a) / (b - a)) for a, b, v in strokes if t < b)
+        at += speed / SR
+        tone = sum(osc(180.0 * h * at) / h for h in range(1, 6))
+        where = at * SR % SR
+        j = int(where)
+        g = groove[j] + (groove[(j + 1) % SR] - groove[j]) * (where - j)
+        lo, _, _ = svf(0.5 * tone + 2.0 * g, 300.0 + 2500.0 * min(abs(speed), 2.0), 0.6)
+        out.append(lo * min(1.0, abs(speed)))
+    return finished(out, 0.001, 0.02)
+
+
+def shutter():
+    """A camera's shutter: two quick mechanical clacks 70 ms apart, each a snap of filtered noise over a small thud,
+    with a faint ring of metal."""
+    out = [0.0] * int(0.26 * SR)
+    for start, level, seed in ((0.0, 1.0, 127), (0.07, 0.75, 129)):
+        noise, svf, begin = Noise(seed), Svf(SR), int(start * SR)
+        snap, thud, ring = 1.0, 1.0, 1.0
+        snap_k, thud_k, ring_k = decay(0.006), decay(0.018), decay(0.012)
+        for j in range(len(out) - begin):
+            _, band, _ = svf(noise(), 3200.0, 0.5)
+            x = 1.2 * band * snap + 0.5 * osc(170.0 * j / SR) * thud + 0.12 * osc(4300.0 * j / SR) * ring
+            out[begin + j] += x * level * min(1.0, j / (0.0003 * SR))
+            snap *= snap_k
+            thud *= thud_k
+            ring *= ring_k
+    return finished(out, 0.0003, 0.01)
+
+
+def key_press(out, start, level, centre, body, noise):
+    """Adds one key at `start` seconds: a click of noise around `centre` Hz over a short thock at `body` Hz."""
+    svf, begin = Svf(SR), int(start * SR)
+    click, thock = 1.0, 1.0
+    click_k, thock_k = decay(0.004), decay(0.012)
+    for j in range(min(int(0.06 * SR), len(out) - begin)):
+        _, band, _ = svf(noise(), centre, 0.6)
+        out[begin + j] += level * (band * click + 0.45 * osc(body * j / SR) * thock) * min(1.0, j / 12)
+        click *= click_k
+        thock *= thock_k
+
+
+def typing():
+    """Typing on a keyboard: 13 keys at an uneven pace, each a click over a small thock and a softer click as it comes
+    back up; the tenth is a deeper space bar."""
+    noise, times, t = Noise(131), [], 0.0
+    for k in range(13):
+        times.append(t)
+        t += 0.085 + 0.09 * unit(noise) + (0.12 if k == 6 else 0.0)
+    out = [0.0] * int((times[-1] + 0.2) * SR)
+    for k, start in enumerate(times):
+        level = 0.75 + 0.25 * unit(noise)
+        centre = 1800.0 + 1600.0 * unit(noise)
+        body = 150.0 if k == 9 else 260.0 + 120.0 * unit(noise)
+        key_press(out, start, level, centre, body, noise)
+        key_press(out, start + 0.05 + 0.03 * unit(noise), 0.35 * level, 1.2 * centre, 1.3 * body, noise)
+    return finished(out, 0.0003, 0.02)
+
+
+def notification():
+    """A friendly two-note alert, E6 then B6, each a soft marimba-like strike."""
+    out = [0.0] * int(1.0 * SR)
+    for start, name in ((0.0, "E6"), (0.11, "B6")):
+        bell(out, start, note(name), [(1.0, 1.0, 0.22), (3.93, 0.12, 0.03), (2.0, 0.08, 0.08)], 1.0, 0.0015)
+    return finished(out, 0.0005, 0.05)
+
+
+def success():
+    """A level-up flourish: C5, E5, G5 and C6 played quickly upwards as bright square-ish plucks, the last held a
+    moment longer."""
+    out = [0.0] * int(1.3 * SR)
+    for k, name in enumerate(["C5", "E5", "G5", "C6"]):
+        f, begin = note(name), int(0.075 * k * SR)
+        level, level_k = 1.0, decay(0.09 if k < 3 else 0.45)
+        for j in range(len(out) - begin):
+            t = j / SR
+            x = osc(f * t) + 0.25 * osc(2 * f * t) + 0.2 * osc(3 * f * t) + 0.08 * osc(5 * f * t)
+            out[begin + j] += 0.6 * x * level * min(1.0, j / (0.002 * SR))
+            level *= level_k
+            if level < 1e-5:
+                break
+    return finished(out, 0.0005, 0.06)
+
+
+def error_buzz():
+    """A wrong-answer buzz: two short low buzzes, each two square-ish tones (110 Hz and 117 Hz, odd harmonics to the
+    ninth) beating against each other."""
+    out = []
+    for seconds in (0.2, 0.32):
+        buzz = []
+        for j in range(int(seconds * SR)):
+            t = j / SR
+            buzz.append(0.35 * sum(osc(h * f * t) / h for f in (110.0, 117.0) for h in (1, 3, 5, 7, 9)))
+        out.extend(edges(buzz, 0.004, 0.012))
+        out.extend([0.0] * int(0.07 * SR))
+    return finished(out, 0.0005, 0.01)
+
+
+def popped(out, start, low, rise, level, sweep_tau, level_tau, seconds):
+    """Adds a pop at `start` seconds: a sine whose pitch drops fast from `low` + `rise` Hz to `low`."""
+    begin, phase, sweep, env = int(start * SR), 0.0, 1.0, level
+    sweep_k, level_k = decay(sweep_tau), decay(level_tau)
+    for j in range(min(int(seconds * SR), len(out) - begin)):
+        phase += (low + rise * sweep) / SR
+        out[begin + j] += osc(phase) * env * min(1.0, j / (0.001 * SR))
+        sweep *= sweep_k
+        env *= level_k
+
+
+def pop_high():
+    """A small bright pop, higher and quicker than Pop."""
+    out = [0.0] * int(0.1 * SR)
+    popped(out, 0.0, 520.0, 1500.0, 1.0, 0.008, 0.025, 0.1)
+    return finished(out, 0.0003, 0.005)
+
+
+def bubbles():
+    """Four quick pops of bubbles, at uneven moments and pitches."""
+    out = [0.0] * int(0.42 * SR)
+    for start, low, level in ((0.0, 300.0, 1.0), (0.09, 420.0, 0.8), (0.15, 360.0, 0.9), (0.27, 560.0, 0.75)):
+        popped(out, start, low, 3.2 * low, level, 0.01, 0.035, 0.14)
+    return finished(out, 0.0003, 0.01)
+
+
+def boing():
+    """A cartoon spring: a tone wobbling fast around a pitch that bends up from 150 Hz to 260 Hz, the wobble and the
+    tone dying away together."""
+    n, out, phase, wobble = int(0.95 * SR), [], 0.0, 0.0
+    depth, level, bend = 1.0, 1.0, 1.0
+    depth_k, level_k, bend_k = decay(0.3), decay(0.32), decay(0.12)
+    for i in range(n):
+        wobble += 13.0 / SR
+        phase += (260.0 - 110.0 * bend) * (1.0 + 0.22 * depth * osc(wobble)) / SR
+        x = osc(phase) + 0.35 * osc(2 * phase) + 0.15 * osc(3 * phase)
+        out.append(x * level * min(1.0, i / (0.004 * SR)))
+        depth *= depth_k
+        level *= level_k
+        bend *= bend_k
+    return finished(out, 0.0005, 0.04)
+
+
+def drum_hit():
+    """One big drum hit: a kick's thump falling from 150 Hz to 55 Hz under a snare's crack of filtered noise and its
+    shell's ring at 190 Hz."""
+    n, noise, svf, out, phase = int(0.7 * SR), Noise(151), Svf(SR), [], 0.0
+    glide, kick, snare, shell = 1.0, 1.0, 1.0, 1.0
+    glide_k, kick_k, snare_k, shell_k = decay(0.03), decay(0.2), decay(0.13), decay(0.07)
+    for i in range(n):
+        phase += (55.0 + 95.0 * glide) / SR
+        _, band, high = svf(noise(), 1900.0, 0.8)
+        x = 0.9 * osc(phase) * kick + (0.6 * band + 0.25 * high) * snare + 0.3 * osc(190.0 * i / SR) * shell
+        out.append(soft(1.3 * x) * min(1.0, i / (0.0008 * SR)))
+        glide *= glide_k
+        kick *= kick_k
+        snare *= snare_k
+        shell *= shell_k
+    return finished(out, 0.0003, 0.05)
+
+
+def tick_tock():
+    """A clock: tick, tock, tick, tock, half a second apart, each a woodblock knock (a short ping over a click), the
+    tock lower."""
+    out, noise = [0.0] * int(1.68 * SR), Noise(157)
+    for k in range(4):
+        f, begin, svf = 2350.0 if k % 2 == 0 else 1650.0, int(0.5 * k * SR), Svf(SR)
+        ping, click = 1.0, 1.0
+        ping_k, click_k = decay(0.018), decay(0.002)
+        for j in range(int(0.15 * SR)):
+            _, band, _ = svf(noise(), 1.4 * f, 0.7)
+            out[begin + j] += (0.8 * osc(f * j / SR) * ping + 0.5 * band * click) * min(1.0, j / 10)
+            ping *= ping_k
+            click *= click_k
+    return finished(out, 0.0003, 0.02)
+
+
 # ---------------------------------------------------------------------------------------------------------- music
 
 MUSIC_RATE = 24000
@@ -561,6 +873,24 @@ SOUNDS = [
     ("rise", "Rise", ["riser", "build up", "tension", "transition", "intro"], lambda: edges(rise(), 0.01, 0.06), 0.5),
     ("sparkle", "Sparkle", ["sparkle", "magic", "shine", "twinkle", "reveal"],
      lambda: edges(sparkle(), 0.001, 0.3), 0.45),
+    ("impact", "Impact", ["impact", "boom", "hit", "cinematic", "transition"], impact, 0.4),
+    ("bass-drop", "Bass drop", ["bass drop", "drop", "bass", "boom", "beat"], bass_drop, 0.35),
+    ("long-riser", "Long riser", ["riser", "build up", "tension", "suspense", "intro"], long_riser, 0.5),
+    ("swipe-left", "Swipe left", ["swipe", "left", "slide", "transition", "quick"], lambda: swipe(False, 139), 0.5),
+    ("swipe-right", "Swipe right", ["swipe", "right", "slide", "transition", "quick"], lambda: swipe(True, 137), 0.5),
+    ("glitch", "Glitch", ["glitch", "digital", "error", "tech", "transition"], glitch, 0.35),
+    ("record-scratch", "Record scratch", ["record scratch", "scratch", "stop", "rewind", "funny"],
+     record_scratch, 0.6),
+    ("shutter", "Camera shutter", ["camera", "shutter", "photo", "snap", "picture"], shutter, 0.68),
+    ("typing", "Keyboard typing", ["typing", "keyboard", "keys", "text", "computer"], typing, 0.68),
+    ("notification", "Notification", ["notification", "message", "alert", "phone", "ping"], notification, 0.5),
+    ("success", "Success", ["success", "win", "level up", "correct", "game"], success, 0.5),
+    ("error", "Error buzz", ["error", "wrong", "buzz", "fail", "no"], error_buzz, 0.33),
+    ("pop-high", "High pop", ["pop", "high", "appear", "cute", "short"], pop_high, 0.55),
+    ("bubbles", "Bubble pops", ["bubbles", "pop", "popping", "appear", "fun"], bubbles, 0.55),
+    ("boing", "Cartoon boing", ["boing", "bounce", "spring", "cartoon", "funny"], boing, 0.42),
+    ("drum-hit", "Drum hit", ["drum", "hit", "punch", "beat", "snare"], drum_hit, 0.45),
+    ("tick-tock", "Tick tock", ["clock", "tick tock", "timer", "countdown", "waiting"], tick_tock, 0.55),
 ]
 
 MUSIC = [
