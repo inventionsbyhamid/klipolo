@@ -6,6 +6,7 @@ import type { EffectInstance } from "./EffectInstance";
 import type { FormatKind } from "./FormatKind";
 import type { Framing } from "./Framing";
 import type { Look } from "./Look";
+import type { Reversed } from "./Reversed";
 import type { SourceMix } from "./SourceMix";
 import type { Transition } from "./Transition";
 
@@ -41,4 +42,9 @@ cursor?: CursorStyle,
  * length and the room its trims have, so it may run past the file, and it holds no footage: its sound, words and
  * cursor path are nobody's. Left out of the JSON while None.
  */
-freezeAtUs?: number, };
+freezeAtUs?: number, 
+/**
+ * The clip plays backward (`ReverseClip`): its source is a copy of this file's stretch written backward, and
+ * Reverse again plays it forward from this file. Left out of the JSON while None.
+ */
+reversed?: Reversed, };
