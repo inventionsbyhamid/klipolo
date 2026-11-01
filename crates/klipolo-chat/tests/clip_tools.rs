@@ -1012,6 +1012,8 @@ fn video_layer(id: &str, asset: &str, start: f64, length: f64) -> klipolo_model:
             volume: 1.0,
             muted: false,
             mirror: false,
+            fill: false,
+            crop: None,
             tie: None,
         },
         effects: Vec::new(),

@@ -17,6 +17,7 @@ import { ClipFadesField } from './ClipFadesField';
 import { EffectsButton } from './EffectsButton';
 import { setClipSpeed } from './clipSpeed';
 import { cardEscape } from './common';
+import { CropField } from './CropField';
 import { FramingField } from './FramingField';
 import { LookField } from './LookField';
 import { SourceMixTools } from './SourceMixTools';
@@ -27,7 +28,8 @@ import { VolumeControls } from './VolumeControls';
  * The clip card: the inspector for a selected main-track clip, in the left column like the others. Its header has the
  * film icon and the clip's name (its file's, or a recording's own: "Recording 1"), a more menu (Duplicate, Delete: the
  * timeline's own commands; a main clip has no layer order) and a close button. Its fields: Fit or Fill in the format
- * shown, and the Fill focus while Fill crops (`FramingField`); Speed (0.5x to 2x, the clip's length follows); when
+ * shown, the Fill focus while Fill crops, and while Fit shows it the background behind it and the padding
+ * (`FramingField`); its crop, in every format (`CropField`); Speed (0.5x to 2x, the clip's length follows); when
  * the clip has sound, Volume (0 to 200%) and Mute; its look (`LookField`, which opens the Looks view); its effects
  * (`EffectsButton`); its fades from and to black (`ClipFadesField`); and for a recording clip its Sounds, each recorded
  * sound's own mute, volume and sync and the camera's sync (`SourceMixTools`), then its camera's layout, shape, border
@@ -79,6 +81,11 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
       </div>
       <div className="insp-body">
         <FramingField clip={clip} format={format} />
+        <CropField
+          crop={clip.crop}
+          latest={() => clipNow(clip.id)?.crop}
+          ops={(crop) => [clipOp(clip, { crop })]}
+        />
         <SpeedField speed={clip.speed} onPick={setSpeed} />
         {clipHasSound(project, clip) && (
           <VolumeControls

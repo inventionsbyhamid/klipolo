@@ -19,9 +19,11 @@
 //! sit together; the tests check every schema is strict and every reader reads the fields its schema lists. Splitting
 //! by concern: `schema` (the pieces of a schema, and the words a tool takes), `args` (a call's arguments read field by
 //! field), `error` (why a call couldn't be read), `media` (the media tools and their words), `clips` (the clip and
-//! transition tools and their words), `recorded` (a recording's camera and recorded sounds, and their words).
+//! transition tools and their words), `background` (the background tool and its words), `recorded` (a recording's
+//! camera and recorded sounds, and their words).
 
 mod args;
+pub mod background;
 pub mod clips;
 mod error;
 pub mod media;
@@ -39,6 +41,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use args::{Args, kind};
+pub use background::BackgroundChoice;
 pub use clips::{ClipRef, TransitionKind};
 pub use error::{Problem, ToolError};
 pub use media::{PictureSize, Position, TextPreset};
@@ -102,6 +105,15 @@ pub enum ToolCall {
         after: ClipRef,
         kind: Option<TransitionKind>,
         duration_us: Option<Us>,
+    },
+    /// Set what shows behind the video where it doesn't fill the frame (`kind`, its colours), and the inset round it
+    /// (`padding`, a share of the frame's shorter side); None leaves each as the project has it, and at least one is
+    /// set. The background card's fields, but for a picture.
+    SetBackground {
+        kind: Option<BackgroundChoice>,
+        color: Option<String>,
+        color_end: Option<String>,
+        padding: Option<f64>,
     },
     /// Make `format` the main format, keeping the others too when `keep_others`.
     SetFormat {
@@ -253,6 +265,7 @@ impl ToolCall {
             ToolCall::SplitAt { .. } => "splitAt",
             ToolCall::SetClip { .. } => "setClip",
             ToolCall::SetTransition { .. } => "setTransition",
+            ToolCall::SetBackground { .. } => "setBackground",
             ToolCall::SetFormat { .. } => "setFormat",
             ToolCall::SetCaptions { .. } => "setCaptions",
             ToolCall::FixCaptionWords { .. } => "fixCaptionWords",
@@ -312,6 +325,7 @@ impl ToolCall {
             | ToolCall::RemoveFillers
             | ToolCall::SetFormat { .. }
             | ToolCall::SetCaptions { .. }
+            | ToolCall::SetBackground { .. }
             | ToolCall::FixCaptionWords { .. }
             | ToolCall::FollowSubject { .. }
             | ToolCall::BlurObjects { .. }
@@ -488,6 +502,7 @@ const TOOLS: &[Tool] = &[
     },
     clips::SET_CLIP,
     clips::SET_TRANSITION,
+    background::SET_BACKGROUND,
     Tool {
         name: "setFormat",
         description: "Set the video's shape. It becomes the main format.",

@@ -259,12 +259,26 @@ impl ZoomTrack {
 /// Zoom inside a framing crop: same shape as `base`, scaled by the window's zoom, centred on the window, kept inside
 /// the source frame.
 pub fn zoom_crop(base: BoxN, window: BoxN) -> BoxN {
+    zoom_crop_in(super::framing::FULL, base, window)
+}
+
+/// [`zoom_crop`] kept inside `bounds` (source-normalised: what a clip's crop leaves, `FULL` for the whole frame) rather
+/// than the frame, so a zoom never shows what the crop cut off. `base` is inside `bounds`.
+pub fn zoom_crop_in(bounds: BoxN, base: BoxN, window: BoxN) -> BoxN {
     let scale = (1.0 / window.w).max(1.0);
-    let (w, h) = (base.w / scale, base.h / scale);
+    let (w, h) = (
+        (base.w / scale).min(bounds.w),
+        (base.h / scale).min(bounds.h),
+    );
     let (cx, cy) = (window.x + window.w / 2.0, window.y + window.h / 2.0);
+    // A window as big as the room: `lo + room - side` can round to just under `lo`.
+    let at = |c: f64, side: f64, lo: f64, room: f64| {
+        let hi = (lo + room - side).max(lo);
+        (c - side / 2.0).clamp(lo, hi)
+    };
     BoxN {
-        x: (cx - w / 2.0).clamp(0.0, 1.0 - w),
-        y: (cy - h / 2.0).clamp(0.0, 1.0 - h),
+        x: at(cx, w, bounds.x, bounds.w),
+        y: at(cy, h, bounds.y, bounds.h),
         w,
         h,
     }
