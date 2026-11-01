@@ -40,6 +40,16 @@ pub struct FrameCosts {
     /// The first frame's `prepare` (the page asked of the build thread), µs, and how long until it showed, ms.
     pub first_us: f64,
     pub shown_after_ms: f64,
+    /// The first frame's submit, µs: the frame's, not the captions'. It waits for the GPU's queue, which on lavapipe
+    /// runs on the CPU, until the work before it has run, a page build's included.
+    pub first_submit_us: f64,
+}
+
+/// One frame: whether the page is drawn, and the drawer's `prepare` and the frame's submit, µs.
+struct Frame {
+    drawn: bool,
+    prepare_us: f64,
+    submit_us: f64,
 }
 
 /// See `TestCaptionDrawer` (1080 × 1920).
@@ -108,22 +118,35 @@ impl TestCaptionDrawer {
     /// `prepare` as the export (`wait`: then the GPU's work is waited for too) or the preview calls it, its uploads
     /// submitted as a frame's are: whether the page is drawn.
     fn prepare(&mut self, layer: &CaptionLayer, wait: bool) -> bool {
+        self.frame(layer, wait).drawn
+    }
+
+    /// `prepare`, with the drawer's `prepare` and the frame's submit timed.
+    fn frame(&mut self, layer: &CaptionLayer, wait: bool) -> Frame {
         let (device, queue) = (&self.dev.device, &self.dev.queue);
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Test captions"),
         });
+        let started = Instant::now();
         let drawn = self
             .drawer
             .prepare(device, &mut encoder, layer, self.out, &mut Vec::new(), wait)
             .is_some();
+        let prepare_us = started.elapsed().as_secs_f64() * 1e6;
+        let started = Instant::now();
         queue.submit([encoder.finish()]);
+        let submit_us = started.elapsed().as_secs_f64() * 1e6;
         if !self.holding {
             self.drawer.after_submit();
         }
         if wait {
             let _ = device.poll(wgpu::PollType::Wait);
         }
-        drawn
+        Frame {
+            drawn,
+            prepare_us,
+            submit_us,
+        }
     }
 
     /// Waits for the GPU (and the staging buffers' mapping, as the device's poll thread does each frame).
@@ -172,15 +195,19 @@ impl TestCaptionDrawer {
 
     /// The render thread's cost of page `page` in `style`, the preview's way (never waiting): the first frame asks the
     /// build thread for it, frames are prepared about every millisecond until it shows, then `frames` frames 1 ms of
-    /// the timeline apart (the page kept, the next page built ahead on the build thread).
+    /// the timeline apart (the page kept, the next page built ahead on the build thread). The first frame and the
+    /// others are timed alike, the drawer's `prepare`; the first frame's submit is timed apart (`first_submit_us`).
     pub fn time_frames(&mut self, style: &str, page: usize, frames: u32) -> FrameCosts {
         let ctx = self.context(style);
         let from = self.captions.pages[&FormatKind::Portrait].pages[page].start_us;
         let at = |t| caption_layer(&ctx, t, FormatKind::Portrait, &mut Vec::new());
         let first = at(from).expect("a caption");
         let started = Instant::now();
-        let mut shown = self.prepare(&first, false);
-        let first_us = started.elapsed().as_secs_f64() * 1e6;
+        let Frame {
+            drawn: mut shown,
+            prepare_us: first_us,
+            submit_us: first_submit_us,
+        } = self.frame(&first, false);
         while !shown {
             assert!(
                 started.elapsed() < Duration::from_secs(30),
@@ -223,6 +250,7 @@ impl TestCaptionDrawer {
             slowest_us: prepare.last().copied().unwrap_or(0.0),
             first_us,
             shown_after_ms,
+            first_submit_us,
         }
     }
 
