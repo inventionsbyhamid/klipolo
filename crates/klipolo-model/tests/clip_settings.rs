@@ -71,3 +71,32 @@ fn export_bindings_clip_settings() {
     )
     .unwrap();
 }
+
+#[test]
+fn a_separated_camera_is_its_clips_and_a_layer_has_sound_of_its_own() {
+    use klipolo_model::query::{camera_clip_of, has_own_sound};
+    use klipolo_model::Op;
+    // The screen recording's camera, separated: a video layer attached to clip "a".
+    let p = klipolo_model::apply_ops(
+        &fixture(),
+        &[Op::DetachSource {
+            clip_id: "a".into(),
+            source_id: "camera".into(),
+        }],
+    )
+    .unwrap();
+    let camera = (p.timeline.tracks.iter())
+        .flat_map(|t| &t.items)
+        .find(|i| matches!(&i.content, klipolo_model::timeline::ItemContent::Video { asset_id, .. } if asset_id == "camera"))
+        .expect("the separated camera");
+    assert_eq!(camera_clip_of(&p, camera), Some(0));
+    // Its file has no sound; "broll" as a layer has its own.
+    assert!(!has_own_sound(&p, camera));
+    let mut broll = camera.clone();
+    broll.attach = None;
+    if let klipolo_model::timeline::ItemContent::Video { asset_id, .. } = &mut broll.content {
+        *asset_id = "broll".into();
+    }
+    assert!(has_own_sound(&p, &broll));
+    assert_eq!(camera_clip_of(&p, &broll), None);
+}
