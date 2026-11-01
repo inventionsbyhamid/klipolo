@@ -59,6 +59,23 @@ describe('the color field', () => {
     expect(h.onCommit).toHaveBeenCalledExactlyOnceWith('#FFD02E');
   });
 
+  it('Escape after a run of arrow keys commits nothing and checks the colour the setting has again', () => {
+    vi.useFakeTimers();
+    const h = handlers();
+    field(h);
+    act(() => swatch('White').focus());
+    fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' });
+    expect(swatch('Navy')).toHaveAttribute('aria-checked', 'true');
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(h.onPreviewEnd).toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(400));
+    expect(h.onCommit).not.toHaveBeenCalled();
+    expect(swatch('White')).toHaveAttribute('aria-checked', 'true');
+    // Leaving the row afterwards commits nothing either.
+    act(() => (document.activeElement as HTMLElement).blur());
+    expect(h.onCommit).not.toHaveBeenCalled();
+  });
+
   it('a none swatch comes first, named, and checked while there is no colour', async () => {
     const h = handlers();
     field(h, { label: 'Outline', value: null, none: { label: 'No outline' } });

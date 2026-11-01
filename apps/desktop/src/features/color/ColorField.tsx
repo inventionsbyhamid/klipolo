@@ -115,6 +115,8 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Escape') {
+      // The arrow keys' run is dropped before the video is put back: it never lands after.
+      keys.cancel();
       onPreviewEnd();
       return;
     }

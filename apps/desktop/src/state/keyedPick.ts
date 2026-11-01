@@ -39,5 +39,11 @@ export function useKeyedPick<T>(value: T, onPick: (value: T) => void) {
   const onBlur = (e: FocusEvent<HTMLElement>) => {
     if (!e.currentTarget.contains(e.relatedTarget as Node | null)) settle();
   };
-  return { shown: keyed ? keyed.value : value, key, pick, onBlur, settle };
+  /** Escape: the run is dropped, nothing is picked, and the value shows checked again. */
+  const cancel = () => {
+    clearTimeout(timer.current);
+    pending.current = null;
+    setKeyed(null);
+  };
+  return { shown: keyed ? keyed.value : value, key, pick, onBlur, settle, cancel };
 }
