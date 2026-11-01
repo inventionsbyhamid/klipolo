@@ -30,6 +30,7 @@ use crate::timeline::{
     MAX_FREEZE_US,
 };
 use crate::transitions::{max_transition_us, MIN_TRANSITION_US};
+use crate::volume;
 
 use super::generator_pieces;
 use super::item_ops::{advance_source, end_at, fit_fades};
@@ -61,10 +62,12 @@ fn clip_span(main: &[Clip], i: usize) -> (Us, Us) {
     (start, start.saturating_add(main[i].duration_us()))
 }
 
+/// The clip's fades shrink to fit it (the fade-in keeps priority), and its volume keys fit it.
 pub(super) fn clamp_fades(c: &mut Clip) {
     let d = c.duration_us().max(0);
     c.fade_in_us = c.fade_in_us.clamp(0, d);
     c.fade_out_us = c.fade_out_us.clamp(0, d.saturating_sub(c.fade_in_us));
+    volume::fit(&mut c.volume_keys, d);
 }
 
 pub(super) fn insert_clip(p: &mut Project, clip: &Clip, index: Option<usize>) -> Result<()> {
@@ -101,14 +104,17 @@ pub(super) fn split(p: &mut Project, at_us: Us) -> Result<()> {
         .source_in_us
         .saturating_add(unscaled(at_us.saturating_sub(start), clip.speed));
     let mut ids = IdPool::of(p);
+    let (first_keys, second_keys) = volume::split(&clip.volume_keys, at_us.saturating_sub(start));
     let mut first = clip.clone();
     first.source_out_us = cut;
     first.fade_out_us = 0;
     first.transition_out = None;
+    first.volume_keys = first_keys;
     let mut second = clip;
     second.id = ids.derive(&first.id);
     second.source_in_us = cut;
     second.fade_in_us = 0;
+    second.volume_keys = second_keys;
     clamp_fades(&mut first);
     clamp_fades(&mut second);
     trim_to_clip(&mut first);
@@ -179,6 +185,7 @@ pub(super) fn freeze_frame(p: &mut Project, at_us: Us, duration_us: Us) -> Resul
     held.source_out_us = frame.saturating_add(duration_us);
     held.speed = 1.0;
     held.muted = true;
+    held.volume_keys = Vec::new();
     held.fade_in_us = 0;
     held.fade_out_us = 0;
     held.transition_out = None;
@@ -335,6 +342,13 @@ fn split_source_layers(p: &mut Project, first: &Clip, second: &Clip, start: Us, 
             {
                 item.layout.motion = motion::kept(a);
                 part.layout.motion = motion::kept(b);
+            }
+            let (a, b) = volume::split(item.content.volume_keys(), left);
+            if let Some(keys) = item.content.volume_keys_mut() {
+                *keys = a;
+            }
+            if let Some(keys) = part.content.volume_keys_mut() {
+                *keys = b;
             }
             part.attach = Some(Attach {
                 clip_id: second.id.clone(),
@@ -538,9 +552,19 @@ fn spans(main: &[Clip]) -> Origins {
         .collect()
 }
 
+/// The clip's in or out point moves to `source_us`; its volume keys stay on their footage.
 fn set_edge(clip: &mut Clip, edge: Edge, source_us: Us) {
+    let was = clip.duration_us();
     match edge {
-        Edge::Start => clip.source_in_us = source_us,
+        Edge::Start => {
+            clip.source_in_us = source_us;
+            let now = clip.duration_us();
+            if now < was {
+                volume::trim_start(&mut clip.volume_keys, was.saturating_sub(now));
+            } else {
+                volume::extend_start(&mut clip.volume_keys, now.saturating_sub(was));
+            }
+        }
         Edge::End => clip.source_out_us = source_us,
     }
     clamp_fades(clip);
@@ -600,10 +624,17 @@ pub(super) fn update_clip_at(
 ) {
     let clip = &mut p.timeline.main[i];
     if let Some(v) = patch.speed {
+        // Its volume keys stay on the same footage (a patch that sets them sets them on the new speed).
+        let was = clip.speed;
         clip.speed = v;
+        let len = clip.duration_us();
+        volume::rescale(&mut clip.volume_keys, was, v, len);
     }
     if let Some(v) = patch.volume {
         clip.volume = v;
+    }
+    if let Some(v) = &patch.volume_keys {
+        clip.volume_keys = v.clone();
     }
     if let Some(v) = patch.muted {
         clip.muted = v;
@@ -803,6 +834,11 @@ fn cut_main(main: &mut Vec<Clip>, removed: &Ripple, ids: &mut IdPool) -> Origins
             } else {
                 0
             };
+            piece.volume_keys = volume::piece(
+                &clip.volume_keys,
+                part.start.saturating_sub(start),
+                part.len(),
+            );
             // The transition stays with the last piece even when the clip's end was cut away (as trimming the end
             // keeps it); `transitions::normalize` refits it or drops it.
             piece.transition_out = if n == last {
@@ -938,8 +974,10 @@ fn ripple_item(item: Item, removed: &Ripple, video_end: Us, ids: &mut IdPool) ->
                 fade_in_us,
                 fade_out_us,
                 drift_ppm,
+                volume_keys,
                 ..
             } => {
+                *volume_keys = volume::piece(volume_keys, offset, part.len());
                 *source_in_us = source_in_us.saturating_add(drifted(offset, *drift_ppm));
                 if !(n == 0 && part.start == s) {
                     *fade_in_us = 0;

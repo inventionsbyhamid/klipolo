@@ -9,14 +9,14 @@
 
 use crate::error::{invalid, not_found, Result};
 use crate::messages::code;
-use crate::motion;
 use crate::project::Project;
 use crate::query::{anchor_at, clip_starts, locate_one, source_duration_us};
 use crate::time::{drifted, unscaled, Us, MAX_TIME_US, MIN_DURATION_US};
 use crate::timeline::{Attach, Clip, Item, ItemContent};
 use crate::transitions::refitted;
+use crate::volume;
 
-use super::item_ops::{advance_source, end_at, fit_fades};
+use super::item_ops::{advance_source, end_at, fit_fades, start_moved};
 use super::main_ops::clamp_fades;
 use super::places::Places;
 
@@ -84,6 +84,12 @@ fn across(before: &Clip, after: &Clip, by: Us) -> (Clip, Clip) {
         }
     }
     let (mut b, mut a) = best.map_or_else(|| (before.clone(), after.clone()), |(b, a, _)| (b, a));
+    // Volume keys stay on their footage: the clip after the cut starts that much later (earlier when negative).
+    let now_after = a.duration_us();
+    volume::trim_start(&mut a.volume_keys, was_after.saturating_sub(now_after));
+    if now_after > was_after {
+        volume::extend_start(&mut a.volume_keys, now_after.saturating_sub(was_after));
+    }
     clamp_fades(&mut b);
     clamp_fades(&mut a);
     (b, a)
@@ -247,10 +253,7 @@ fn retime(p: &mut Project, clips: Vec<(usize, Clip)>, slipped: Option<(usize, Us
                     advance_source(&mut item.content, offset);
                     item.start_us = start;
                     item.duration_us = len;
-                    item.layout.motion = item.layout.motion.take().and_then(|mut m| {
-                        m.trim_start(offset, len);
-                        motion::kept(m)
-                    });
+                    start_moved(item, offset);
                     item.attach = anchor_at(main, start);
                     fit_fades(item);
                 }
