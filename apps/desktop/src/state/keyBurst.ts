@@ -87,9 +87,9 @@ export const keyBurst = {
    * Runs `action` once what is settling here, and any commit in flight (a drop's, another edit's), has gone in: now
    * when nothing is. An edit built from positions (a trim, a duplicate, a nudge) then builds on where they put things.
    * A burst another waiting press started meanwhile (not `key`'s own, which a nudge adds to) goes in first too, and
-   * `action` then runs as soon as it lands, before anything that waited after it. `kept`: the hold an
-   * edit took when it was asked for, before it awaited something (`keepAtClose`): a close waits for it
-   * in its turn and says it by its label, rather than counting it.
+   * `action` then runs as soon as it lands, before anything that waited after it. `kept`: the hold an edit took when
+   * it was asked for, before it awaited something (`keepAtClose`): a close waits for it in its turn and says it by its
+   * label, rather than counting it.
    */
   after(action: () => void, key?: string, kept: KeptHold | null = null) {
     flush();
