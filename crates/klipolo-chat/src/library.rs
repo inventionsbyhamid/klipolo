@@ -5,8 +5,10 @@
 //! A name is found leniently but never guessed (`Library::find`): case, a file's extension and punctuation don't count
 //! ("soft-ambient" is "Soft ambient", "lofi" is "lofi.mp3"), then a name holding the words asked for, or held in them
 //! ("lofi" is "lofi-beat.mp3"), when only one does. The last word asked for may be cut short, as Library shows a long
-//! name, when at least `MIN_PREFIX` of its characters are left ("holiday in lis" is "Holiday in Lisbon.jpg"). "The
-//! song" and the like (`is_generic`) are the person's one music file, when they have exactly one.
+//! name, when at least `MIN_PREFIX` of its characters are left ("holiday in lis" is "Holiday in Lisbon.jpg"). When no
+//! name fits, a pack item's tags do, whole, read as names are ("boom" and "a boom sound" are the sound tagged boom), again
+//! only when one item has them. "The song" and the like (`is_generic`) are the person's one music file, when they have
+//! exactly one.
 
 use klipolo_model::project::Asset;
 
@@ -43,6 +45,9 @@ pub struct LibraryItem {
     pub asset: Asset,
     /// From Klipolo's bundled pack, not the person's own.
     pub pack: bool,
+    /// Words for what it is or suits ("transition", "boom"): it is found by them when no name fits. The pack's items
+    /// have them; the person's own files have none.
+    pub tags: Vec<String>,
 }
 
 /// The project's own media and the pack, in the order the app lists them (the context keeps it).
@@ -136,7 +141,8 @@ impl Library {
     }
 
     /// The item `asked` names among `kinds`, tried in that order: one whose name reads the same (the person's own over
-    /// the pack's when both do), else the one name holding those words or held in them.
+    /// the pack's when both do), else the one name holding those words or held in them; when no name of any of those
+    /// kinds does, the one item with a tag that reads the same or that `asked` holds whole (`tagged`).
     pub(crate) fn find(&self, asked: &str, kinds: &[MediaKind]) -> Found<'_> {
         let want = plain(asked);
         if want.is_empty() {
@@ -163,6 +169,26 @@ impl Library {
                 [one] => return Found::One(one),
                 [] => {}
                 _ => return Found::Several(near),
+            }
+        }
+        self.tagged(&want, kinds)
+    }
+
+    /// The item of `kinds` (tried in that order) with a tag that reads as `want` (`plain`) or that `want` holds, whole:
+    /// "a boom sound" holds "boom". More than one such item: all of them, for the person to pick.
+    fn tagged(&self, want: &str, kinds: &[MediaKind]) -> Found<'_> {
+        for &kind in kinds {
+            let found: Vec<&LibraryItem> = (self.of_kind(kind, false).into_iter())
+                .filter(|i| {
+                    (i.tags.iter())
+                        .map(|tag| plain(tag))
+                        .any(|tag| tag == want || holds(want, &tag, false))
+                })
+                .collect();
+            match found.as_slice() {
+                [one] => return Found::One(one),
+                [] => {}
+                _ => return Found::Several(found),
             }
         }
         Found::None
@@ -196,7 +222,57 @@ mod tests {
             kind: MediaKind::Image,
             asset,
             pack: false,
+            tags: Vec::new(),
         }
+    }
+
+    /// A pack item of `kind` with `tags`.
+    fn tagged(name: &str, kind: MediaKind, tags: &[&str]) -> LibraryItem {
+        LibraryItem {
+            kind,
+            pack: true,
+            tags: tags.iter().map(|&t| t.to_owned()).collect(),
+            ..item(name)
+        }
+    }
+
+    #[test]
+    fn a_tag_finds_an_item_when_no_name_does() {
+        let library = Library {
+            items: vec![
+                LibraryItem {
+                    kind: MediaKind::Sound,
+                    ..item("swipe.wav")
+                },
+                tagged(
+                    "Whoosh",
+                    MediaKind::Sound,
+                    &["transition", "topic change", "swipe"],
+                ),
+                tagged("Impact", MediaKind::Sound, &["boom", "hit"]),
+                tagged("Thud", MediaKind::Sound, &["hit", "low"]),
+                tagged("Burst", MediaKind::Image, &["boom", "comic"]),
+            ],
+        };
+        let found = |asked: &str| match library.find(asked, &[MediaKind::Sound]) {
+            Found::One(i) => Ok(i.name.as_str()),
+            Found::Several(items) => Err(items.iter().map(|i| i.name.as_str()).collect()),
+            Found::None => Err(Vec::new()),
+        };
+        // "Add a boom sound": the sound tagged boom, read as names are (case and punctuation don't count), and asked
+        // for in a few words.
+        assert_eq!(found("boom"), Ok("Impact"));
+        assert_eq!(found("Boom!"), Ok("Impact"));
+        assert_eq!(found("a boom sound"), Ok("Impact"));
+        // A tag of several words, whole.
+        assert_eq!(found("topic change"), Ok("Whoosh"));
+        // A name comes before a tag: the person's swipe.wav, not the Whoosh tagged swipe.
+        assert_eq!(found("swipe"), Ok("swipe.wav"));
+        // Two sounds tagged alike: both, for the model to ask which. Never guessed.
+        assert_eq!(found("hit"), Err(vec!["Impact", "Thud"]));
+        // A tag is never cut short, and a picture's tag doesn't find a sound.
+        assert_eq!(found("boo"), Err(vec![]));
+        assert_eq!(found("comic"), Err(vec![]));
     }
 
     #[test]

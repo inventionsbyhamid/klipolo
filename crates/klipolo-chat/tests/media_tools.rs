@@ -110,6 +110,7 @@ fn item(name: &str, kind: MediaKind, asset: Asset, pack: bool) -> LibraryItem {
         kind,
         asset,
         pack,
+        tags: Vec::new(),
     }
 }
 
@@ -592,6 +593,32 @@ fn invented_time_for_a_sound_is_refused() {
     assert!(
         reason.starts_with("addSound: atSec[1] 25.5 is not within 0.3 s of a word"),
         "{reason}"
+    );
+}
+
+#[test]
+fn a_sound_asked_for_by_a_tag_is_the_pack_sound_tagged_so() {
+    let p = project();
+    let mut i = inputs(&p, "add a boom sound when we went flying");
+    let impact = asset("pack-impact", "audio", "impact.wav", 0.6, (0, 0), true);
+    i.library.items.push(LibraryItem {
+        tags: vec!["boom".into(), "hit".into(), "impact".into()],
+        ..item("Impact", MediaKind::Sound, impact, true)
+    });
+    let out = compile(
+        &p,
+        &i,
+        &[call("addSound", json!({"name": "boom", "atSec": [12.0]}))],
+    );
+    let tx = out.additions.as_ref().expect("additions");
+    assert_eq!(assets_added(&tx.ops), ["pack-impact"]);
+    let sounds = layers(&applied(&p, &out), TrackKind::Audio);
+    let ItemContent::Audio { asset_id, .. } = &sounds[0].content else {
+        unreachable!()
+    };
+    assert_eq!(
+        (sounds.len(), sounds[0].start_us, asset_id.as_str()),
+        (1, secs(12.0), "pack-impact")
     );
 }
 

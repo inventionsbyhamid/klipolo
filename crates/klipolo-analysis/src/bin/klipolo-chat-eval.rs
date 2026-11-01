@@ -93,6 +93,9 @@ struct PackItem {
     width: Option<u32>,
     #[serde(default)]
     height: Option<u32>,
+    /// What chat finds it by besides its name ("boom").
+    #[serde(default)]
+    tags: Vec<String>,
 }
 
 /// One message, and what it should come to.
@@ -264,6 +267,7 @@ fn library(dir: &Path, set: &EvalSet) -> Result<Library, String> {
             kind,
             asset,
             pack: false,
+            tags: Vec::new(),
         });
     }
     if let Some(manifest) = &set.pack {
@@ -286,6 +290,7 @@ fn library(dir: &Path, set: &EvalSet) -> Result<Library, String> {
                 kind,
                 asset,
                 pack: true,
+                tags: it.tags,
             });
         }
     }
