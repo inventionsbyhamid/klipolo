@@ -19,6 +19,10 @@ import { Stage } from './Stage';
 import { useTextEdit } from './textEdit';
 import { queueCommit } from './toolbar/toolOps';
 
+/** The card's Highlight: its navy is the box behind the words. */
+const highlightNavy = () =>
+  within(screen.getByRole('radiogroup', { name: 'Highlight' })).getByRole('radio', { name: 'Navy' });
+
 /**
  * Words typed on the canvas, or in the inspector's field, and not yet saved as the project closes: the edit waits its
  * turn behind a change to the same title still on its way, and is built on it, never putting it back. The inspector's
@@ -111,17 +115,17 @@ it('words typed in the inspector’s field and not left go in, as the project cl
   });
 });
 
-it('a one-shot press (Background: Box) made while a commit is on its way goes in, in its turn, as the project closes', async () => {
+it('a one-shot press (Highlight: Navy) made while a commit is on its way goes in, in its turn, as the project closes', async () => {
   const { rust } = rustHoldingColour();
   useSelection.setState({ selectedId: 'title' });
   renderOpen(<Inspector format="landscape" />);
   // Another commit is on its way (a slider let go just before): the press waits its turn; closing never drops it.
   const end = beginCommit();
-  await userEvent.click(screen.getByRole('radio', { name: 'Box' }));
+  await userEvent.click(highlightNavy());
   expect(heard.applied).toEqual([]);
   await closeThenLand(end);
-  expect(heard.applied.map((tx) => tx.label)).toEqual(['text.background.undo']);
-  expect(titleIn(rust.project).content).toMatchObject({ style: { background: BOX_COLOR, shadow: false } });
+  expect(heard.applied.map((tx) => tx.label)).toEqual(['text.highlight.add.undo']);
+  expect(titleIn(rust.project).content).toMatchObject({ style: { background: BOX_COLOR } });
 });
 
 it('a canvas edit with nothing to commit settles as the project closes behind a commit on its way: the title shows again', async () => {
@@ -160,42 +164,42 @@ it('a canvas edit whose title went meanwhile puts its words on the clipboard as 
  */
 const labels = () => heard.applied.map((tx) => tx.label);
 
-it('a larger size, then Box before the size settles: the title ends a size larger with its box, both kept', async () => {
+it('a larger size, then a highlight before the size settles: the title ends a size larger with its highlight, both kept', async () => {
   const { rust } = rustHoldingColour();
   useSelection.setState({ selectedId: 'title' });
   renderOpen(<Inspector format="landscape" />);
   // A key on the size slider settles as a burst; a click that doesn't move focus (as in WKWebView) goes in meanwhile.
   fireEvent.keyDown(screen.getByRole('slider', { name: 'Size' }), { key: 'ArrowRight' });
-  fireEvent.click(screen.getByRole('radio', { name: 'Box' }));
+  fireEvent.click(highlightNavy());
   await act(() => new Promise((r) => setTimeout(r, SETTLE_MS + 50)));
   await waitFor(() => expect(heard.applied).toHaveLength(2));
-  expect(labels()).toEqual(['text.background.undo', 'text.size.undo']);
-  // The fixture title is 72: one step up is 73, and Box gave it its box.
+  expect(labels()).toEqual(['text.highlight.add.undo', 'text.size.undo']);
+  // The fixture title is 72: one step up is 73, and the highlight gave it its box.
   expect(titleIn(rust.project).content).toMatchObject({ style: { size: 73, background: BOX_COLOR } });
 });
 
-it('Box pressed while a colour change to the title is on its way keeps the colour', async () => {
+it('a highlight picked while a colour change to the title is on its way keeps the colour', async () => {
   const { rust, release } = rustHoldingColour();
   useSelection.setState({ selectedId: 'title' });
   renderOpen(<Inspector format="landscape" />);
   colourOnItsWay();
-  await userEvent.click(screen.getByRole('radio', { name: 'Box' }));
+  await userEvent.click(highlightNavy());
   expect(labels()).toEqual(['text.color.undo']);
   await act(async () => release());
   await waitFor(() => expect(heard.applied).toHaveLength(2));
-  expect(labels()).toEqual(['text.color.undo', 'text.background.undo']);
+  expect(labels()).toEqual(['text.color.undo', 'text.highlight.add.undo']);
   expect(titleIn(rust.project).content).toMatchObject({ style: { color: '#FF0000', background: BOX_COLOR } });
 });
 
-it('a text colour picked while Box is on its way keeps the box', async () => {
-  const { rust, release } = rustHoldingColour('text.background.undo');
+it('a text colour picked while a highlight is on its way keeps the highlight', async () => {
+  const { rust, release } = rustHoldingColour('text.highlight.add.undo');
   useSelection.setState({ selectedId: 'title' });
   renderOpen(<Inspector format="landscape" />);
-  await userEvent.click(screen.getByRole('radio', { name: 'Box' }));
+  await userEvent.click(highlightNavy());
   await userEvent.click(within(screen.getByRole('radiogroup', { name: 'Text color' })).getByRole('radio', { name: 'Yellow' }));
-  expect(labels()).toEqual(['text.background.undo']);
+  expect(labels()).toEqual(['text.highlight.add.undo']);
   await act(async () => release());
   await waitFor(() => expect(heard.applied).toHaveLength(2));
-  expect(labels()).toEqual(['text.background.undo', 'text.color.undo']);
+  expect(labels()).toEqual(['text.highlight.add.undo', 'text.color.undo']);
   expect(titleIn(rust.project).content).toMatchObject({ style: { color: '#FFD02E', background: BOX_COLOR } });
 });

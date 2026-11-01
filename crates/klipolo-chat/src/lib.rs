@@ -17,9 +17,9 @@ pub mod sanitize;
 pub mod tools;
 
 pub use compile::{
-    ANALYZE_FIRST, AnalysisState, Audience, Compiled, Inputs, Job, MakeSticker, NO_FILLERS,
-    Proposal, ROUGH_FILLERS, ROUGH_FILLERS_STAY, Refusal, STILL_LISTENING, STILL_WATCHING, compile,
-    compile_for_app, sticker_ops, sticker_placement,
+    ANALYZE_FIRST, AnalysisState, Audience, Compiled, FontNamer, FontNames, Inputs, Job,
+    MakeSticker, NO_FILLERS, NamedFont, Proposal, ROUGH_FILLERS, ROUGH_FILLERS_STAY, Refusal,
+    STILL_LISTENING, STILL_WATCHING, compile, compile_for_app, sticker_ops, sticker_placement,
 };
 pub use context::{
     ChatContext, FullTranscript, MAX_CONTEXT_TOKENS, Refs, SceneEntry, SceneLog, SpeakerTurn,
