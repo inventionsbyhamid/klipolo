@@ -1,8 +1,10 @@
 import { useLingui } from '@lingui/react/macro';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { ProjectRow } from '../../bindings/ProjectRow';
+import type { ThumbTile } from '../../bindings/ThumbTile';
 import { projects } from '../../bridge/projects';
 import { Button } from '../../design/Button';
+import { newerThan, usePosters } from '../../state/posters';
 import { newProject, useProject } from '../../state/project';
 import { ProjectCard } from './ProjectCard';
 import './start.css';
@@ -42,7 +44,7 @@ function StartIcon({ name }: { name: keyof typeof ICONS }) {
 /** What the screen shows: the list on its way, the list, or that it couldn't be read (`retrying`: asked again). */
 type Load =
   | { status: 'loading' }
-  | { status: 'ready'; rows: ProjectRow[] }
+  | { status: 'ready'; rows: ProjectRow[]; heardBefore: number }
   | { status: 'failed'; retrying: boolean };
 
 /**
@@ -51,6 +53,9 @@ type Load =
  * card that went), which hands it to the first card, else New project.
  */
 type FocusPlace = { action: number } | 'card';
+
+/** `row` with `poster` as its picture, when there is one. */
+const withPoster = (row: ProjectRow, poster: ThumbTile | null): ProjectRow => (poster ? { ...row, thumb: poster } : row);
 
 /** What has the focus in `main`, as a `FocusPlace`; null when it is elsewhere. */
 function focusPlace(main: HTMLElement | null): FocusPlace | null {
@@ -86,13 +91,14 @@ export function StartScreen({ onRecord, takeFocus = false }: StartScreenProps) {
   const titleRef = useRef<HTMLHeadingElement>(null);
   const refocus = useRef<FocusPlace | null>(null);
 
-  /** Reads the list; what is shown stays until it lands. */
+  /** Reads the list; what is shown stays until it lands. Posters heard from here on are newer than it. */
   const list = useCallback(() => {
+    const heardBefore = usePosters.getState().heard;
     projects.recent().then(
       (rows) => {
         if (!mounted.current) return;
         refocus.current = focusPlace(mainRef.current);
-        setLoad({ status: 'ready', rows });
+        setLoad({ status: 'ready', rows, heardBefore });
       },
       () => {
         if (mounted.current) setLoad({ status: 'failed', retrying: false });
@@ -193,6 +199,8 @@ export function StartScreen({ onRecord, takeFocus = false }: StartScreenProps) {
       )}
     </div>
   );
+  // A card's poster made since its list was read: the card swaps to it (`usePosters` keeps it once it has loaded).
+  const landed = usePosters((s) => s.landed);
   const empty = load.status === 'ready' && load.rows.length === 0;
   const waiting = load.status === 'loading' && quiet;
   const nowMs = Date.now();
@@ -250,7 +258,7 @@ export function StartScreen({ onRecord, takeFocus = false }: StartScreenProps) {
             {load.rows.map((row) => (
               <ProjectCard
                 key={row.path}
-                row={row}
+                row={withPoster(row, newerThan(landed, row.path, load.heardBefore))}
                 nowMs={nowMs}
                 busy={opening === row.path}
                 onOpen={openProject}

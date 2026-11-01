@@ -34,6 +34,7 @@ import { followApps } from './state/chat';
 import { followEditorView } from './state/editorView';
 import { followFullScreen, useFullScreen } from './state/fullScreen';
 import { keepLooping } from './state/loop';
+import { followPosters } from './state/posters';
 import { useProject } from './state/project';
 import { clearProposalOnProjectSwitch } from './state/proposal';
 import { clearRangeOnProjectSwitch } from './state/range';
@@ -136,6 +137,8 @@ export function App() {
     startFontsFeed();
     // The Music lane's dips: where someone speaks, asked again as the project changes.
     followSpeech();
+    // The start screen's posters, made in the background: each card swaps to its own as it lands.
+    void followPosters();
     // Development builds only: Control Shift P a stand-in chat, Control Shift W sample words (`dev/devChat`).
     if (import.meta.env.DEV) void import('./dev/devChat').then((dev) => dev.listenForDevKeys());
     // Until a clip's analysis feeds speech: Control Shift S shows sample speech under the music (development only).

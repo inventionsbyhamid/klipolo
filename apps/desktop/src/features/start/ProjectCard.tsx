@@ -15,17 +15,24 @@ const PICTURE_ASPECT = 16 / 9;
 /**
  * Tile 0 of a thumbnail sprite (or a poster: a sheet of one), whole and centred in the 16:9 picture: as wide as the
  * picture for a wide tile, as tall for a tall one. The sheet is drawn `cols` times the tile's width from its top left,
- * so the tile fills the box.
+ * so the tile fills the box. A poster shows what the first clip's crop keeps of it, as the project does.
  */
 function tileStyle(thumb: ThumbTile): CSSProperties {
-  const aspect = thumb.tileW / thumb.tileH;
+  const crop = thumb.cols === 1 ? thumb.crop : undefined;
+  const kept = crop
+    ? { x: crop.left, y: crop.top, w: 1 - crop.left - crop.right, h: 1 - crop.top - crop.bottom }
+    : { x: 0, y: 0, w: 1, h: 1 };
+  const aspect = (thumb.tileW * kept.w) / (thumb.tileH * kept.h);
   const wide = aspect >= PICTURE_ASPECT;
+  const percent = (value: number) => `${Math.round(value * 1000) / 1000}%`;
+  // A background position in % puts that share of the picture at the same share of the box.
+  const at = (start: number, size: number) => percent(size < 1 ? (start / (1 - size)) * 100 : 0);
   return {
     width: wide ? '100%' : `${(aspect / PICTURE_ASPECT) * 100}%`,
     height: wide ? `${(PICTURE_ASPECT / aspect) * 100}%` : '100%',
     backgroundImage: `url("${mediaUrl(thumb.sprite)}")`,
-    backgroundSize: `${thumb.cols * 100}% auto`,
-    backgroundPosition: '0px 0px',
+    backgroundSize: crop ? `${percent(100 / kept.w)} ${percent(100 / kept.h)}` : `${thumb.cols * 100}% auto`,
+    backgroundPosition: crop ? `${at(kept.x, kept.w)} ${at(kept.y, kept.h)}` : '0px 0px',
   };
 }
 
