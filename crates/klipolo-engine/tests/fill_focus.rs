@@ -47,15 +47,13 @@ fn with_focus(format: FormatKind, focus: FillFocus) -> Project {
 
 /// The speaker moving right over the first 5 s of the source, then a new shot at 8 s with them on the left.
 fn speaker() -> FillFocus {
-    FillFocus::Speaker {
-        path: FocusPath {
-            keys: vec![
-                key(0.0, 0.3, 0.5, false),
-                key(5.0, 0.7, 0.5, false),
-                key(8.0, 0.2, 0.5, true),
-            ],
-        },
-    }
+    FillFocus::speaker(FocusPath {
+        keys: vec![
+            key(0.0, 0.3, 0.5, false),
+            key(5.0, 0.7, 0.5, false),
+            key(8.0, 0.2, 0.5, true),
+        ],
+    })
 }
 
 /// The main footage's crop the frame plan draws at `t` seconds on the timeline.
@@ -126,11 +124,9 @@ fn a_mirrored_camera_only_clip_follows_the_speaker_where_the_file_has_them() {
     // The path is where the tracker saw the speaker in the file, before the mirror.
     a.fill_focus.insert(
         Portrait,
-        FillFocus::Speaker {
-            path: FocusPath {
-                keys: vec![key(0.0, 0.25, 0.5, false)],
-            },
-        },
+        FillFocus::speaker(FocusPath {
+            keys: vec![key(0.0, 0.25, 0.5, false)],
+        }),
     );
     let v = videos(&frame_plan(&ctx(p), secs(2.0), Portrait))[0].clone();
     assert_eq!(v.source.asset_id.as_ref(), "camera");

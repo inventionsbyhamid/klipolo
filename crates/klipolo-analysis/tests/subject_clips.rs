@@ -281,7 +281,7 @@ fn the_follow_op_fills_each_format_with_its_path_and_keeps_the_rest() {
         }
     );
     assert!(!framing.contains_key(&Square));
-    assert_eq!(focus[&Portrait], FillFocus::Speaker { path });
+    assert_eq!(focus[&Portrait], FillFocus::speaker(path));
     assert_eq!(focus[&Landscape], FillFocus::Center);
 }
 

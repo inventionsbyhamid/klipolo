@@ -151,7 +151,7 @@ pub fn follow_op(p: &Project, clip: &Clip, paths: &BTreeMap<FormatKind, FocusPat
         let mut own = effective_framing(p, clip, *format);
         own.mode = FramingMode::Fill;
         framing.insert(*format, own);
-        focus.insert(*format, FillFocus::Speaker { path: path.clone() });
+        focus.insert(*format, FillFocus::speaker(path.clone()));
     }
     Op::UpdateClip {
         id: clip.id.clone(),

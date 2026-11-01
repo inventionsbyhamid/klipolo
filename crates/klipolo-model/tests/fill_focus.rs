@@ -2,7 +2,9 @@ mod common;
 use std::collections::BTreeMap;
 
 use common::*;
-use klipolo_model::fill_focus::{FillFocus, FocusKey, FocusPath};
+use klipolo_model::fill_focus::{
+    FillFocus, FocusKey, FocusPath, Keep, KeepRange, Person, Voice, Who, MAX_PEOPLE,
+};
 use klipolo_model::ops::ClipPatch;
 use klipolo_model::project::{FormatKind, Project};
 use klipolo_model::{apply_ops, Op};
@@ -24,8 +26,26 @@ fn cut(at_s: f64, x: f64, y: f64) -> FocusKey {
 }
 
 fn speaker(keys: Vec<FocusKey>) -> FillFocus {
-    FillFocus::Speaker {
-        path: FocusPath { keys },
+    FillFocus::speaker(FocusPath { keys })
+}
+
+fn person(voices: &[(u32, &str)], share: u8) -> Person {
+    Person {
+        voices: (voices.iter())
+            .map(|(part, label)| Voice {
+                part: *part,
+                label: (*label).to_owned(),
+            })
+            .collect(),
+        share,
+    }
+}
+
+fn range(from_s: f64, to_s: f64, who: Who) -> KeepRange {
+    KeepRange {
+        start_us: secs(from_s),
+        end_us: secs(to_s),
+        who,
     }
 }
 
@@ -139,7 +159,7 @@ fn a_split_keeps_the_path_on_both_halves_in_source_time() {
     assert_eq!(right.fill_focus, focus);
     assert_eq!(right.source_in_us, secs(4.0));
     // The right half's first frame shows the path where it was at source 4 s.
-    let FillFocus::Speaker { path } = &right.fill_focus[&FormatKind::Portrait] else {
+    let FillFocus::Speaker { path, .. } = &right.fill_focus[&FormatKind::Portrait] else {
         panic!()
     };
     let x = path.centre_at(right.source_in_us).unwrap().0;
@@ -180,12 +200,13 @@ fn split_pieces_keep_only_their_own_part_of_the_path() {
     let json = serde_json::to_string(&cut).unwrap();
     assert!(json.len() < 1_000_000, "{} bytes", json.len());
     // Each piece still draws the crop it did: its part of the path, from the key before its first frame.
-    let FillFocus::Speaker { path: whole } = &p.timeline.main[1].fill_focus[&FormatKind::Portrait]
+    let FillFocus::Speaker { path: whole, .. } =
+        &p.timeline.main[1].fill_focus[&FormatKind::Portrait]
     else {
         panic!()
     };
     for piece in &cut.timeline.main[1..] {
-        let FillFocus::Speaker { path } = &piece.fill_focus[&FormatKind::Portrait] else {
+        let FillFocus::Speaker { path, .. } = &piece.fill_focus[&FormatKind::Portrait] else {
             panic!()
         };
         assert!(path.keys.len() <= 32, "{}", path.keys.len());
@@ -199,4 +220,118 @@ fn split_pieces_keep_only_their_own_part_of_the_path() {
             assert!((a.0 - b.0).abs() < 1e-9, "at {at}: {a:?} vs {b:?}");
         }
     }
+}
+
+#[test]
+fn a_speaker_focus_keeps_who_it_frames_and_its_people() {
+    let p = fixture();
+    let focus = FillFocus::Speaker {
+        path: FocusPath {
+            keys: vec![key(0.0, 0.3, 0.4)],
+        },
+        keep: Keep::Ranges {
+            ranges: vec![
+                range(1.0, 4.0, Who::Person { person: 2 }),
+                range(6.0, 8.0, Who::Both),
+            ],
+        },
+        people: vec![person(&[(0, "A")], 62), person(&[(0, "B"), (1, "A")], 38)],
+    };
+    let one = BTreeMap::from([(FormatKind::Portrait, focus.clone())]);
+    let next = apply_ops(&p, &[set("b", one)]).unwrap();
+    let json = serde_json::to_value(&next).unwrap();
+    let back: Project = serde_json::from_value(json.clone()).unwrap();
+    assert_eq!(
+        back.timeline.main[1].fill_focus[&FormatKind::Portrait],
+        focus
+    );
+    let written = &json["timeline"]["main"][1]["fillFocus"]["portrait"];
+    assert_eq!(written["keep"]["kind"], "ranges");
+    assert_eq!(
+        written["keep"]["ranges"][0]["who"],
+        serde_json::json!({"kind": "person", "person": 2})
+    );
+    assert_eq!(
+        written["people"][1]["voices"][1],
+        serde_json::json!({"part": 1, "label": "A"})
+    );
+
+    // Whoever is speaking, with nobody to choose between, writes neither; a path saved before them loads that way.
+    let plain = serde_json::to_value(speaker(vec![key(0.0, 0.3, 0.4)])).unwrap();
+    assert!(
+        plain.get("keep").is_none() && plain.get("people").is_none(),
+        "{plain}"
+    );
+    let old: FillFocus = serde_json::from_value(serde_json::json!({
+        "kind": "speaker",
+        "path": {"keys": [{"atUs": 0, "x": 0.3, "y": 0.4}]},
+    }))
+    .unwrap();
+    assert_eq!(old, speaker(vec![key(0.0, 0.3, 0.4)]));
+}
+
+#[test]
+fn a_keep_says_who_is_framed_at_each_moment() {
+    let ranges = Keep::Ranges {
+        ranges: vec![
+            range(1.0, 4.0, Who::Person { person: 2 }),
+            range(6.0, 8.0, Who::Both),
+        ],
+    };
+    assert_eq!(ranges.who_at(secs(0.5)), Who::Speaker);
+    assert_eq!(ranges.who_at(secs(1.0)), Who::Person { person: 2 });
+    assert_eq!(ranges.who_at(secs(4.0)), Who::Speaker);
+    assert_eq!(ranges.who_at(secs(7.0)), Who::Both);
+    assert_eq!(Keep::Speaker.who_at(secs(3.0)), Who::Speaker);
+    assert_eq!(Keep::Both.who_at(secs(3.0)), Who::Both);
+    assert_eq!(
+        Keep::Person { person: 1 }.who_at(secs(3.0)),
+        Who::Person { person: 1 }
+    );
+}
+
+#[test]
+fn a_bad_keep_or_too_many_people_is_refused() {
+    let p = fixture();
+    let code = |focus: FillFocus| {
+        let one = BTreeMap::from([(FormatKind::Portrait, focus)]);
+        apply_ops(&p, &[set("b", one)]).map_err(|e| e.coded().code)
+    };
+    let with = |keep: Keep, people: Vec<Person>| FillFocus::Speaker {
+        path: FocusPath::default(),
+        keep,
+        people,
+    };
+    let bad = "model.clip.fillFocus".to_owned();
+    // No one is person 0, nor past the most people a crop chooses between.
+    for keep in [
+        Keep::Person { person: 0 },
+        Keep::Person {
+            person: MAX_PEOPLE + 1,
+        },
+        Keep::Ranges {
+            ranges: vec![range(1.0, 2.0, Who::Person { person: 0 })],
+        },
+        // Ranges out of order, overlapping or empty.
+        Keep::Ranges {
+            ranges: vec![range(3.0, 4.0, Who::Both), range(1.0, 2.0, Who::Both)],
+        },
+        Keep::Ranges {
+            ranges: vec![range(1.0, 3.0, Who::Both), range(2.0, 4.0, Who::Both)],
+        },
+        Keep::Ranges {
+            ranges: vec![range(2.0, 2.0, Who::Both)],
+        },
+    ] {
+        assert_eq!(code(with(keep, Vec::new())), Err(bad.clone()));
+    }
+    let crowd = vec![person(&[], 0); usize::from(MAX_PEOPLE) + 1];
+    assert_eq!(code(with(Keep::Speaker, crowd)), Err(bad.clone()));
+    let loud = vec![person(&[(0, "A")], 101)];
+    assert_eq!(code(with(Keep::Speaker, loud)), Err(bad));
+    let fine = with(
+        Keep::Person { person: 2 },
+        vec![person(&[(0, "A")], 50), person(&[(0, "B")], 50)],
+    );
+    assert!(code(fine).is_ok());
 }

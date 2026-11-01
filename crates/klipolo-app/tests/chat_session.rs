@@ -2837,7 +2837,7 @@ mod follow {
     fn speaker_x(p: &Project, at: f64) -> Option<f64> {
         let clip = p.timeline.main.first()?;
         match clip.fill_focus.get(&FormatKind::Portrait)? {
-            FillFocus::Speaker { path } => path.centre_at(secs(at)).map(|c| c.0),
+            FillFocus::Speaker { path, .. } => path.centre_at(secs(at)).map(|c| c.0),
             FillFocus::Center => None,
         }
     }
