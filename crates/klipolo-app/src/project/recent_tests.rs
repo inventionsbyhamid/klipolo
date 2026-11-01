@@ -251,6 +251,7 @@ fn thumb_is_the_first_clips_cached_tile_or_none() {
             tile_w: 16,
             tile_h: 10,
             cols: 8,
+            crop: None,
         })
     );
     assert_eq!(rows[1].thumb, None, "no clip, no picture");
@@ -280,6 +281,7 @@ fn thumb_is_the_first_clips_poster_once_there_is_one() {
             tile_w: 16,
             tile_h: 10,
             cols: 8,
+            crop: None,
         }),
         "no poster yet: the first tile"
     );
@@ -304,6 +306,7 @@ fn thumb_is_the_first_clips_poster_once_there_is_one() {
             tile_w: 32,
             tile_h: 18,
             cols: 1,
+            crop: None,
         })
     );
 }
@@ -368,6 +371,7 @@ fn a_recording_project_uses_its_screen_file_for_the_thumb() {
             tile_w: 16,
             tile_h: 10,
             cols: 8,
+            crop: None,
         })
     );
 }
