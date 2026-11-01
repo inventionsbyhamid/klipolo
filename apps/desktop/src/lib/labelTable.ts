@@ -329,6 +329,14 @@ export const TABLE = {
     message: 'Change how close it follows',
     comment: 'Undo history entry: how far the following crop zooms in',
   }),
+  // What an edit does to transitions, said after it: aloud, and at the end of a speed change's entry (a chat
+  // change's names it as a value, `chat.setClip.note`).
+  'timeline.refit': msg({
+    id: 'timeline.refit',
+    message:
+      '{removed, plural, =0 {{shortened, plural, =0 {} =1 {A transition is shortened.} other {# transitions are shortened.}}} =1 {A transition is removed{shortened, plural, =0 {.} =1 { and one is shortened.} other { and # are shortened.}}} other {# transitions are removed{shortened, plural, =0 {.} =1 { and one is shortened.} other { and # are shortened.}}}}',
+    comment: 'What an edit does to transitions, said after what it did, e.g. “2 transitions are removed and one is shortened.”',
+  }),
   'speed.undo': msg({ id: 'speed.undo', message: 'Change speed', comment: 'Undo history entry' }),
   'speed.undo.note': msg({
     id: 'speed.undo.note',
