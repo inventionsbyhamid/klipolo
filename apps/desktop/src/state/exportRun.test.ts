@@ -91,6 +91,7 @@ describe('export run', () => {
       stale: false,
       createdMs: 0,
       bytes: 0,
+      otherBuild: false,
       compatibility: null,
     };
     const fromList = { ...idleRun, ...resuming(idleRun, 'kept', listed) };

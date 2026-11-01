@@ -623,6 +623,9 @@ pub struct ExportJobInfo {
     pub created_ms: u64,
     /// What its folder takes on the disk (its finished parts, sound and manifest): Discard frees it.
     pub bytes: u64,
+    /// Another build of Klipolo made it: it can't resume (its file would mix parts drawn by two builds), only start over
+    /// or be discarded.
+    pub other_build: bool,
     /// Set when it paused because the hardware path kept failing: it may finish in compatibility mode.
     pub compatibility: Option<ExportCompatibility>,
 }

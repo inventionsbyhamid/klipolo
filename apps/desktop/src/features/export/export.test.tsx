@@ -109,6 +109,7 @@ function job(patch: Partial<ExportJobInfo> = {}): ExportJobInfo {
     stale: false,
     createdMs: 0,
     bytes: 0,
+    otherBuild: false,
     compatibility: null,
     ...patch,
   };
@@ -949,6 +950,30 @@ describe('unfinished exports', () => {
     expect(within(kept).getByText('Uses 2.1 GB')).toBeInTheDocument();
     expect(within(kept).getByRole('button', { name: 'Discard' })).toHaveAccessibleDescription(/Uses 2\.1 GB/);
     expect(within(fresh).queryByText(/^Uses /)).toBeNull();
+  });
+
+  it('a job another build of Klipolo made offers Start over and Discard, never Resume', async () => {
+    vi.mocked(exporter.jobs).mockResolvedValue([
+      job({ otherBuild: true, message: coded('exports.diskFull') }),
+      job({ jobId: 'vlog', projectId: 'p2', projectName: 'Vlog', otherBuild: true }),
+    ]);
+    await openWithJobs(2);
+    const here = rowOf('Unfinished export of Billing tutorial: 3 of 10 parts done');
+    expect(
+      within(here).getByText('Another version of Klipolo made this export, so it can’t resume.'),
+    ).toBeInTheDocument();
+    expect(within(here).queryByRole('button', { name: /^Resume/ })).toBeNull();
+    expect(within(here).queryByRole('button', { name: 'Finish in compatibility mode' })).toBeNull();
+    expect(within(here).getByRole('button', { name: 'Discard' })).toBeInTheDocument();
+    // Another project's: Discard only, from here.
+    const other = rowOf('Unfinished export of Vlog: 3 of 10 parts done');
+    expect(within(other).getAllByRole('button').map((b) => b.textContent)).toEqual(['Discard']);
+    await userEvent.click(within(here).getByRole('button', { name: 'Start over with your latest changes' }));
+    await waitFor(() =>
+      expect(exporter.start).toHaveBeenCalledWith(['landscape'], 'maximum', expect.any(Function), {
+        replaces: 'old',
+      }),
+    );
   });
 
   it('an earlier project’s job that can’t be read can only be discarded', async () => {

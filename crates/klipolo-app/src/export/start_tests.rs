@@ -527,3 +527,19 @@ async fn a_job_in_a_folder_picked_before_is_listed_after_a_relaunch() {
     assert!(relaunched.kept_folders().is_empty());
 }
 
+/// A job another build of Klipolo made is never resumed, so a file never mixes parts drawn by two builds: Resume is
+/// refused (`exports.otherBuild`) without taking the slot.
+#[tokio::test]
+async fn a_job_another_build_made_never_resumes() {
+    let state = ExportState::default();
+    let (prepared, _dir) = batch();
+    let job = create_job(prepared).await.unwrap();
+    let mut older = ExportJob::open(&job.dir).unwrap();
+    older.build = Some("an earlier build".into());
+    older.save().unwrap();
+    assert_eq!(
+        resume_on_slot(&state, &job.dir, &job.job_id).await.err(),
+        Some(Said::code("exports.otherBuild"))
+    );
+    assert!(!state.is_running(), "never took the slot");
+}

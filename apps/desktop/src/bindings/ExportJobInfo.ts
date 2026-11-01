@@ -20,6 +20,11 @@ stale: boolean, createdMs: number,
  */
 bytes: number, 
 /**
+ * Another build of Klipolo made it: it can't resume (its file would mix parts drawn by two builds), only start over
+ * or be discarded.
+ */
+otherBuild: boolean, 
+/**
  * Set when it paused because the hardware path kept failing: it may finish in compatibility mode.
  */
 compatibility: ExportCompatibility | null, };

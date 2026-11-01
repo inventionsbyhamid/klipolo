@@ -122,7 +122,8 @@ pub async fn start_on_slot(
 
 /// Takes the slot to resume the kept job `job` in `dir`, its project the slot's from now on. Refused as busy while
 /// another export runs, or this job runs already (Resume pressed twice, or from two places); a job still pausing is
-/// waited for (`ExportState::take_slot`). A job that can't be read is `exports.unreadable`, and never takes the slot.
+/// waited for (`ExportState::take_slot`). A job that can't be read is `exports.unreadable`, and one another build made
+/// is `exports.otherBuild` (Start over or Discard it); neither takes the slot.
 pub async fn resume_on_slot(
     state: &ExportState,
     dir: &Path,
@@ -136,6 +137,10 @@ pub async fn resume_on_slot(
             tracing::warn!(%job, %reason, "export: the job to resume can't be read");
             Said::code("exports.unreadable")
         })?;
+    // Another build's job never resumes: its file would mix parts drawn by two builds.
+    if opened.build.as_deref() != Some(klipolo_engine::export::job::this_build()) {
+        return Err(Said::code("exports.otherBuild"));
+    }
     let cancel = state.take_slot(Some(job.to_owned())).await?;
     state.set_project(opened.project_id, opened.project_name);
     if klipolo_engine::export::runner::is_running(job) {

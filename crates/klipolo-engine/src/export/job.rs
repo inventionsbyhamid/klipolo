@@ -176,6 +176,10 @@ pub struct ExportJob {
     /// finishes (`ExportEvent::CaptionFileEmpty`).
     #[serde(default)]
     pub captions_empty: bool,
+    /// The build of Klipolo that made it (`this_build`): another build never resumes it, so a file never mixes parts
+    /// drawn by two builds. None for a job from before builds were recorded.
+    #[serde(default)]
+    pub build: Option<String>,
     /// `project.json`.
     #[serde(skip, default = "blank_project")]
     pub project: Project,
@@ -184,6 +188,25 @@ pub struct ExportJob {
     pub captions: Arc<Captions>,
     #[serde(skip)]
     pub dir: PathBuf,
+}
+
+/// This build of Klipolo, as a job records it: the size and last change of the program running now, which is also the
+/// export worker. An update or a new build replaces the program, so its jobs from before read as another build's.
+pub fn this_build() -> &'static str {
+    static BUILD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    BUILD.get_or_init(|| {
+        std::env::current_exe()
+            .and_then(std::fs::metadata)
+            .map(|meta| {
+                let changed = meta
+                    .modified()
+                    .ok()
+                    .and_then(|at| at.duration_since(UNIX_EPOCH).ok())
+                    .map_or(0, |d| d.as_nanos());
+                format!("{}-{changed}", meta.len())
+            })
+            .unwrap_or_default()
+    })
 }
 
 fn blank_project() -> Project {
@@ -284,6 +307,7 @@ impl ExportJob {
             captions_empty: batch.caption_file.is_some()
                 && caption_file.is_none()
                 && outputs_have_landscape,
+            build: Some(this_build().to_owned()),
             project: batch.project.clone(),
             captions: Arc::new(captions),
             dir: staging.clone(),

@@ -125,6 +125,7 @@ const unfinished = (projectId: string, state: ExportJobInfo['state']): ExportJob
   stale: false,
   createdMs: 0,
   bytes: 0,
+  otherBuild: false,
   compatibility: null,
 });
 

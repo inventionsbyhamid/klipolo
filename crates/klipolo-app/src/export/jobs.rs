@@ -92,6 +92,7 @@ fn unreadable(job_id: String, bytes: u64) -> ExportJobInfo {
         stale: true,
         created_ms: 0,
         bytes,
+        other_build: false,
         compatibility: None,
     }
 }
@@ -377,6 +378,19 @@ mod tests {
         let unreadable = &list(&roots_of(dir.path()), |_| false)[0];
         assert_eq!(unreadable.project_name, "");
         assert!(unreadable.bytes >= 4096, "{}", unreadable.bytes);
+    }
+
+    /// A job another build of Klipolo made can't resume (its file would mix parts drawn by two builds): its row says
+    /// so, and it is offered Start over and Discard only.
+    #[tokio::test]
+    async fn a_job_another_build_made_is_listed_as_such() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_, job) = crashed_job(dir.path()).await;
+        assert!(!list(&roots_of(dir.path()), |_| false)[0].other_build);
+        let mut older = ExportJob::open(&job.dir).unwrap();
+        older.build = Some("an earlier build".into());
+        older.save().unwrap();
+        assert!(list(&roots_of(dir.path()), |_| false)[0].other_build);
     }
 
     /// Jobs in the picked folder and the usual one are listed together, newest first.

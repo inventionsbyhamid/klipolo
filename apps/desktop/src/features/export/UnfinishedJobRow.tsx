@@ -14,12 +14,19 @@ export const STALE = 'This project changed since the export started.';
 /** What Resume does for such a job: it finishes the version that was exported. */
 export const STALE_RESUME = 'Resume finishes the version from when you started.';
 
-/** "Resume export of Launch: 3 of 10 parts done", or "Exporting Launch: …" while it runs. */
+/** What a row says of a job another build of Klipolo made: it can't resume. */
+export const OTHER_BUILD = 'Another version of Klipolo made this export, so it can’t resume.';
+
+/**
+ * "Resume export of Launch: 3 of 10 parts done", "Exporting Launch: …" while it runs, and "Unfinished export of Launch:
+ * …" when another build made it.
+ */
 export function jobText(job: ExportJobInfo): string {
   const parts = `${job.segmentsDone} of ${job.segmentsTotal} parts done`;
-  const name = job.projectName;
-  if (job.state === 'running') return name ? `Exporting ${name}: ${parts}` : `Exporting an earlier project: ${parts}`;
-  return name ? `Resume export of ${name}: ${parts}` : `Resume export of an earlier project: ${parts}`;
+  const name = job.projectName || 'an earlier project';
+  if (job.state === 'running') return `Exporting ${name}: ${parts}`;
+  if (job.otherBuild) return `Unfinished export of ${name}: ${parts}`;
+  return `Resume export of ${name}: ${parts}`;
 }
 
 interface UnfinishedJobRowProps {
@@ -44,13 +51,16 @@ export function UnfinishedJobRow({ job, here, onLeave }: UnfinishedJobRowProps) 
   const restartable = useProject((s) => canStartOver(job, s.snapshot?.project.settings.formats ?? []));
   // An unreadable job has no project name (its reason is technical): it can only be discarded.
   const unreadable = !job.projectName;
-  // Why it paused or failed, always; a changed project is a line beside it, never instead of it.
+  // Why it paused or failed, always; a changed project or another build is a line beside it, never instead of it.
   const note = unreadable
     ? 'This export can’t be read, so it can only be discarded.'
     : job.message === null
       ? null
       : saidText(job.message);
   const chosen = job.compatibility?.chosen ?? false;
+  // Another build's job never resumes: Start over (this project's, with one of its formats still in it) or Discard.
+  const resumable = !job.otherBuild;
+  const startOver = here && restartable && (job.stale || job.otherBuild);
   const discard = (
     <Button
       size="sm"
@@ -68,7 +78,8 @@ export function UnfinishedJobRow({ job, here, onLeave }: UnfinishedJobRowProps) 
       <span id={id} className="ex-job-text">
         <span className="ex-job-name">{jobText(job)}</span>
         {note && <span>{note}</span>}
-        {job.stale && !unreadable && (
+        {job.otherBuild && !unreadable && <span>{OTHER_BUILD}</span>}
+        {job.stale && !unreadable && resumable && (
           <>
             <span>{STALE}</span>
             <span>{STALE_RESUME}</span>
@@ -93,14 +104,21 @@ export function UnfinishedJobRow({ job, here, onLeave }: UnfinishedJobRowProps) 
           discard
         ) : (
           <>
-            <Button size="sm" variant="primary" aria-describedby={id} onClick={() => void store().resume(job.jobId)}>
-              {/* Chosen already: Resume continues in compatibility mode, so it is the one action offered. */}
-              {chosen ? 'Resume in compatibility mode' : 'Resume'}
-            </Button>
-            {job.compatibility && !chosen && (
+            {resumable && (
+              <Button
+                size="sm"
+                variant="primary"
+                aria-describedby={id}
+                onClick={() => void store().resume(job.jobId)}
+              >
+                {/* Chosen already: Resume continues in compatibility mode, so it is the one action offered. */}
+                {chosen ? 'Resume in compatibility mode' : 'Resume'}
+              </Button>
+            )}
+            {resumable && job.compatibility && !chosen && (
               <CompatibilityButton jobId={job.jobId} partsToRedo={job.compatibility.partsToRedo} />
             )}
-            {job.stale && here && restartable && (
+            {startOver && (
               <Button
                 size="sm"
                 aria-describedby={id}
