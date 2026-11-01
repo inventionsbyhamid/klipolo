@@ -10,6 +10,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use klipolo_model::crop::Crop;
+use klipolo_model::history::ListedAs;
 use klipolo_model::project::Project;
 use klipolo_model::query::main_track_duration;
 use klipolo_model::time::Us;
@@ -37,10 +39,14 @@ pub struct ProjectRow {
     pub duration_us: Us,
     /// Clips on the main track.
     pub clips: u32,
-    /// Its first clip's picture: its poster, else its first cached thumbnail; None until the clip has been scanned.
+    /// Its first clip's picture: its poster, else its first cached thumbnail; None until either is made.
     pub thumb: Option<ThumbTile>,
     /// It is the project open now (`mark_open`): the project menu's Open recent leaves it out.
     pub open: bool,
+    /// The file its first clip shows, and that clip's crop: what its poster is made from (`poster_wants`).
+    #[serde(skip)]
+    #[ts(skip)]
+    pub(crate) first: Option<(String, Option<Crop>)>,
 }
 
 /// A card's picture: the top left `tile_w` by `tile_h` of the JPEG at `sprite` (read through the asset protocol), a
@@ -54,6 +60,10 @@ pub struct ThumbTile {
     pub tile_h: u32,
     /// Tiles per sprite row.
     pub cols: u32,
+    /// The first clip's crop, which the card shows its picture with; left out while it cuts nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub crop: Option<Crop>,
 }
 
 /// The most projects the start screen lists.
@@ -239,6 +249,20 @@ fn name_shared_names_by_file(rows: &mut [ProjectRow]) {
     }
 }
 
+/// The name the project in `file`, named `name`, is listed by in its folder when that isn't its own (`recent_in`'s rule:
+/// a name another listed project shares shows as the file's name), with `stamps` ordering the list as the start screen
+/// does; None while it is listed by its own name. Reads the folder's project files.
+pub(crate) fn listed_as(file: &Path, stamps: &Path, name: &str) -> Option<ListedAs> {
+    let rows = recent_in(file.parent()?, stamps, None, RECENT_LIMIT).ok()?;
+    let row = rows
+        .iter()
+        .find(|row| Path::new(&row.path).file_name() == file.file_name())?;
+    (row.name != name).then(|| ListedAs {
+        name: name.to_owned(),
+        file_name: row.name.clone(),
+    })
+}
+
 /// Marks the row of `open`, the project open now (None: no project is open). A path names it as written, or by another
 /// way to the same file (a link to its folder).
 pub(crate) fn mark_open(rows: &mut [ProjectRow], open: Option<&Path>) {
@@ -255,6 +279,15 @@ pub(crate) fn mark_open(rows: &mut [ProjectRow], open: Option<&Path>) {
 /// `project`, read from `file`, as a row.
 fn row(file: &Path, opened_ms: u64, project: &Project, thumbs: Option<&Path>) -> ProjectRow {
     let main = &project.timeline.main;
+    let crop = main
+        .first()
+        .and_then(|clip| clip.crop)
+        .filter(|c| !c.is_none());
+    let first = first_file(project).map(|path| (path.to_owned(), crop));
+    let thumb = thumbs
+        .zip(first.as_ref())
+        .and_then(|(root, (path, _))| first_tile(root, path))
+        .map(|tile| ThumbTile { crop, ..tile });
     ProjectRow {
         id: project.id.clone(),
         path: file.to_string_lossy().into_owned(),
@@ -262,9 +295,39 @@ fn row(file: &Path, opened_ms: u64, project: &Project, thumbs: Option<&Path>) ->
         opened_ms,
         duration_us: main_track_duration(main),
         clips: u32::try_from(main.len()).unwrap_or(u32::MAX),
-        thumb: thumbs.and_then(|root| first_tile(root, first_file(project)?)),
+        thumb,
         open: false,
+        first,
     }
+}
+
+/// One file whose poster isn't made yet (or is an older one), and the cards that show it: each project's file and its
+/// first clip's crop.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct PosterWant {
+    pub(crate) file: String,
+    pub(crate) cards: Vec<(String, Option<Crop>)>,
+}
+
+/// The posters `rows`' cards wait for, in the list's order, one per file: the first files whose card shows no current
+/// poster (`thumbs`: the engine's thumbnail folder).
+pub(crate) fn poster_wants(rows: &[ProjectRow], thumbs: &Path) -> Vec<PosterWant> {
+    let mut wants: Vec<PosterWant> = Vec::new();
+    for row in rows {
+        let Some((file, crop)) = &row.first else {
+            continue;
+        };
+        let card = (row.path.clone(), *crop);
+        if let Some(want) = wants.iter_mut().find(|want| want.file == *file) {
+            want.cards.push(card);
+        } else if klipolo_engine::media::thumbs::poster(thumbs, file).is_none_or(|p| !p.current) {
+            wants.push(PosterWant {
+                file: file.clone(),
+                cards: vec![card],
+            });
+        }
+    }
+    wants
 }
 
 /// The file the first main clip shows: its file, or a recording's main footage (its primary source's first file).
@@ -283,8 +346,8 @@ fn first_file(project: &Project) -> Option<&str> {
     project.asset(asset_id).map(|asset| asset.path.as_str())
 }
 
-/// `file`'s picture in the cache at `root`, once a scan has written it: its poster (its first picture, sharp at a card's
-/// size), else the first tile of its thumbnails (chunk 0; a cache from before posters).
+/// `file`'s picture in the cache at `root`: its poster (sharp at a card's size; an older one until its current one is
+/// made), else the first tile of its thumbnails (chunk 0, once its project has been opened and scanned).
 fn first_tile(root: &Path, file: &str) -> Option<ThumbTile> {
     if let Some(poster) = klipolo_engine::media::thumbs::poster(root, file) {
         return Some(ThumbTile {
@@ -292,6 +355,7 @@ fn first_tile(root: &Path, file: &str) -> Option<ThumbTile> {
             tile_w: poster.w,
             tile_h: poster.h,
             cols: 1,
+            crop: None,
         });
     }
     let strip = klipolo_engine::media::thumbs::strip(root, file)?;
@@ -301,6 +365,7 @@ fn first_tile(root: &Path, file: &str) -> Option<ThumbTile> {
         tile_w: strip.tile_w,
         tile_h: strip.tile_h,
         cols: strip.cols,
+        crop: None,
     })
 }
 

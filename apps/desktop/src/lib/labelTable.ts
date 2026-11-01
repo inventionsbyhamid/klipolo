@@ -550,6 +550,68 @@ export const TABLE = {
     message: 'Trim layer',
     comment: 'Undo history entry',
   }),
+  // Footage moved across a cut or through a clip, the video's length kept.
+  'timeline.roll.undo': msg({
+    id: 'timeline.roll.undo',
+    message: 'Roll',
+    comment: 'Undo history entry: the cut between two clips moved, one clip longer and the other shorter',
+  }),
+  'timeline.slip.undo': msg({
+    id: 'timeline.slip.undo',
+    message: 'Slip',
+    comment: "Undo history entry: a clip shows other footage of its file, keeping its place and length",
+  }),
+  'timeline.slide.undo': msg({
+    id: 'timeline.slide.undo',
+    message: 'Slide',
+    comment: 'Undo history entry: a clip moved between its neighbours, which got longer and shorter to make room',
+  }),
+  // A selected group's edits: `{count}` is how many clips and layers.
+  'timeline.group.delete': msg({
+    id: 'timeline.group.delete',
+    message: '{count, plural, one {Delete # item} other {Delete # items}}',
+    comment: 'Command and undo history entry: several selected clips and layers deleted at once',
+  }),
+  'timeline.group.move': msg({
+    id: 'timeline.group.move',
+    message: '{count, plural, one {Move # item} other {Move # items}}',
+    comment: 'Undo history entry: several selected layers moved together',
+  }),
+  'timeline.group.paste': msg({
+    id: 'timeline.group.paste',
+    message: '{count, plural, one {Paste # item} other {Paste # items}}',
+    comment: 'Undo history entry',
+  }),
+  'timeline.group.duplicate': msg({
+    id: 'timeline.group.duplicate',
+    message: '{count, plural, one {Duplicate # item} other {Duplicate # items}}',
+    comment: 'Undo history entry',
+  }),
+  'timeline.group.cut': msg({
+    id: 'timeline.group.cut',
+    message: '{count, plural, one {Cut # item} other {Cut # items}}',
+    comment: 'Undo history entry: several selected clips and layers cut to the clipboard',
+  }),
+  'timeline.group.mute': msg({
+    id: 'timeline.group.mute',
+    message: '{count, plural, one {Mute # item} other {Mute # items}}',
+    comment: 'Undo history entry',
+  }),
+  'timeline.group.unmute': msg({
+    id: 'timeline.group.unmute',
+    message: '{count, plural, one {Unmute # item} other {Unmute # items}}',
+    comment: 'Undo history entry',
+  }),
+  'timeline.group.volume': msg({
+    id: 'timeline.group.volume',
+    message: '{count, plural, one {Change the volume of # item} other {Change the volume of # items}}',
+    comment: 'Undo history entry',
+  }),
+  'timeline.group.pasteEffects': msg({
+    id: 'timeline.group.pasteEffects',
+    message: '{count, plural, one {Paste effects onto # item} other {Paste effects onto # items}}',
+    comment: 'Undo history entry',
+  }),
   'timeline.track.add': msg({
     id: 'timeline.track.add',
     message: 'Add track',

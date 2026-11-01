@@ -10,7 +10,7 @@ import { Icon, type IconName } from '../../layout/Icon';
 import { contribLabel } from '../../lib/contrib';
 import { findClip, findItem } from '../../lib/timeline';
 import { useProject } from '../../state/project';
-import { cameraClipId, useSelection } from '../../state/selection';
+import { cameraClipId, groupOf, useSelection } from '../../state/selection';
 import { deleteBlock, duplicate, stepTrack, trackStepOps } from '../timeline/commands';
 import { AdjustmentInspector } from './AdjustmentInspector';
 import { AudioInspector } from './AudioInspector';
@@ -18,6 +18,7 @@ import { CameraInspector } from './CameraInspector';
 import { ClipInspector } from './ClipInspector';
 import { cardEscape } from './common';
 import { GeneratorInspector } from './GeneratorInspector';
+import { GroupInspector } from './GroupInspector';
 import { ImageInspector } from './ImageInspector';
 import { commitLatest } from '../../state/latest';
 import { TemplateInspector } from './TemplateInspector';
@@ -122,6 +123,11 @@ export function Inspector({ format }: { format: FormatKind }) {
   const transition = useInspectedTransition();
   const primary = useProject((s) => s.snapshot?.project.settings.primaryFormat ?? 'landscape');
   const project = useProject((s) => s.snapshot?.project);
+  const selectedId = useSelection((s) => s.selectedId);
+  const selectedIds = useSelection((s) => s.selectedIds);
+  // Several clips and layers selected: the card for all of them (`GroupInspector`).
+  const group = groupOf({ selectedId, selectedIds });
+  if (group) return <GroupInspector key={group.join(' ')} ids={group} />;
   // A transition selected at a cut: its own card (`TransitionInspector`).
   if (transition) return <TransitionInspector key={transition.clip.id} {...transition} />;
   if (!inspected) return null;

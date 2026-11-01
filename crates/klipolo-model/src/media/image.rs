@@ -12,7 +12,7 @@ use crate::ids::new_id;
 use crate::layout::{Anchor, BoxN, Layout};
 use crate::messages::code;
 use crate::ops::{Op, TrackTarget};
-use crate::project::{Asset, AssetKind, FormatKind, Project};
+use crate::project::{Asset, AssetKind, Background, BackgroundKind, FormatKind, Project};
 use crate::query::main_track_duration;
 use crate::time::Us;
 use crate::timeline::{Item, ItemContent};
@@ -160,6 +160,28 @@ pub fn image_layout(
 /// with it when the project doesn't have it yet. Refused for a file that isn't a picture.
 pub fn add_image_ops(p: &Project, asset: &Asset, at_us: Us) -> Result<Vec<Op>> {
     add_image_ops_at(p, asset, at_us, IMAGE_SIZE, Spot::Center)
+}
+
+/// The project's background set to `asset`'s picture, keeping its colours and padding; the file comes into the project
+/// with it when the project doesn't have it. Refused for a file that isn't a picture.
+pub fn background_picture_ops(p: &Project, asset: &Asset) -> Result<Vec<Op>> {
+    if asset.kind != AssetKind::Image {
+        return Err(invalid(code!("model.image.notImage")));
+    }
+    let mut ops = Vec::new();
+    if p.asset(&asset.id).is_none() {
+        ops.push(Op::AddAssets {
+            assets: vec![asset.clone()],
+        });
+    }
+    ops.push(Op::SetBackground {
+        background: Background {
+            kind: BackgroundKind::Image,
+            asset_id: Some(asset.id.clone()),
+            ..p.background.clone()
+        },
+    });
+    Ok(ops)
 }
 
 /// [`add_image_ops`] at `share` of the width in `spot` ([`image_layout`]).

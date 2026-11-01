@@ -13,7 +13,7 @@ import { formatTime } from '../../player/time';
 import { stateOf, useAnalysis } from '../../state/analysis';
 import { canStartOver, chosenCaptionFile, exportPercent, shownJob, useExport } from '../../state/export';
 import { failedText } from '../../state/exportRun';
-import { useProject } from '../../state/project';
+import { shownName, useProject } from '../../state/project';
 import { toast } from '../../state/toasts';
 import { CaptionFileChoice } from './CaptionFileChoice';
 import { CompatibilityButton } from './CompatibilityButton';
@@ -146,7 +146,7 @@ function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () =
   const locale = useIntlLocale();
   const { name, durationUs, primaryFormat } = useProject(
     useShallow((s) => ({
-      name: s.snapshot?.project.name ?? '',
+      name: s.snapshot ? shownName(s.snapshot) : '',
       durationUs: s.snapshot ? videoDurationUs(s.snapshot.project.timeline) : 0,
       primaryFormat: s.snapshot?.project.settings.primaryFormat ?? 'landscape',
     })),

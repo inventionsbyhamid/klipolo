@@ -17,6 +17,8 @@ mod intra;
 mod tests;
 pub(crate) mod tile;
 
+pub(crate) use tile::{plain_layout, turn};
+
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
