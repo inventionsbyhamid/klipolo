@@ -8,6 +8,7 @@ import { MediaList } from '../features/media/MediaList';
 import { useImportMedia } from '../features/media/useImportMedia';
 import { useCaptionsView, type LeftView } from '../state/captionsView';
 import { useLibraryPanel } from '../state/libraryPanel';
+import { recordYourScreen } from '../state/recorder';
 import { useUi, type LibraryTab } from '../state/ui';
 import { Icon } from './Icon';
 
@@ -18,6 +19,7 @@ export const LIBRARY_BODY_ID = 'library-body';
 
 /**
  * The library panel: the Library, Captions and Looks view tabs, Add files, Record your screen (the
+ * Record dialog, as from the start screen and Shift Command R), a search over the tab
  * shown, and the filter pills Clips, Music, Sounds and Images over the files of each (yours first, then Klipolo's
  * pack). The search keeps its words from tab to tab. The pills scroll sideways in a narrow panel, with a fade at the
  * right edge. The arrow keys move between them. Its Captions tab shows the Captions view in its place,
@@ -148,6 +150,15 @@ export function Library() {
             onClick={() => void importMedia()}
           >
             <Icon name="plus" />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={t({ id: 'library.record', message: 'Record your screen' })}
+            title={t({ id: 'library.record.tip', message: 'Record your screen (Shift Command R)' })}
+            onClick={recordYourScreen}
+          >
+            <Icon name="record" />
           </button>
           <button
             type="button"

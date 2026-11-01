@@ -37,7 +37,7 @@ import { keepLooping } from './state/loop';
 import { useProject } from './state/project';
 import { clearProposalOnProjectSwitch } from './state/proposal';
 import { clearRangeOnProjectSwitch } from './state/range';
-import { followRecorder, reopenWhereLeft, useRecorder } from './state/recorder';
+import { followRecorder, recordYourScreen, reopenWhereLeft } from './state/recorder';
 import { followSaves } from './state/saving';
 import { toast } from './state/toasts';
 import { keepPlayheadInVideo, keepPlayheadOnReload, restorePlayhead } from './state/transport';
@@ -80,9 +80,6 @@ function Editor() {
   );
 }
 
-/** Record your screen (the start screen's): opens the Record dialog. */
-const openRecorder = () => void useRecorder.getState().openRecorder();
-
 /**
  * The start screen, until a project opens. The card or button pressed from the keyboard goes with it, so the focus goes
  * on to the project's name in the top bar, where the editor starts. (Its cleanup runs before the screen leaves the page:
@@ -96,7 +93,7 @@ function Start({ afterProject }: { afterProject: boolean }) {
     },
     [],
   );
-  return <StartScreen onRecord={openRecorder} takeFocus={afterProject} />;
+  return <StartScreen onRecord={recordYourScreen} takeFocus={afterProject} />;
 }
 
 /**

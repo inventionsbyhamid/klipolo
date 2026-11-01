@@ -6,8 +6,8 @@ import { renderWithProviders } from '../test/render';
 
 /*
  * A recording in the Library: one row named as the timeline names it ("Recording 1"), its length and its sources, and
- * none of its files on their own. Record your screen opens the Record dialog from the Library's head, as from the start
- * screen.
+ * none of its files on their own. Record your screen opens the Record dialog from the Library's head and from an empty
+ * project's preview, as from the start screen.
  */
 
 vi.mock('../bridge/commands', () => ({ bridge: { apply: vi.fn() }, mediaUrl: (p: string) => p }));
@@ -19,14 +19,26 @@ vi.mock('../bridge/library', () => ({
     speechRanges: vi.fn(() => Promise.resolve([])),
   },
 }));
+vi.mock('../bridge/engine', () => ({
+  engine: { seek: vi.fn(() => Promise.resolve()), setView: vi.fn(() => Promise.resolve()) },
+}));
+vi.mock('../bridge/appWindow', () => ({
+  appWindow: { fullScreen: vi.fn(() => Promise.resolve(false)), isFullScreen: vi.fn(() => Promise.resolve(false)) },
+}));
 const { useProject } = await import('../state/project');
 const { useUi } = await import('../state/ui');
+const { useRecorder } = await import('../state/recorder');
 const { recordingFiles, recordingRows } = await import('../features/media/recordings');
 const { Library } = await import('./Library');
+const { Preview } = await import('../preview/Preview');
+
+const openRecorder = vi.fn(() => Promise.resolve());
 
 beforeEach(() => {
+  openRecorder.mockClear();
   useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
   useUi.setState({ libraryTab: 'clips' });
+  useRecorder.setState({ openRecorder });
 });
 
 /** The names a list shows, in order. */
@@ -91,3 +103,30 @@ describe('a recording in the Library', () => {
   });
 });
 
+
+describe('Record your screen', () => {
+  it('record_button_opens_the_recorder', async () => {
+    renderWithProviders(<Library />);
+    const record = screen.getByRole('button', { name: 'Record your screen' });
+    expect(record).toHaveAttribute('title', 'Record your screen (Shift Command R)');
+    // In the head, after Add files.
+    expect(screen.getByRole('button', { name: 'Add files' }).nextElementSibling).toBe(record);
+    await userEvent.click(record);
+    expect(openRecorder).toHaveBeenCalledTimes(1);
+  });
+
+  it('empty_preview_offers_record_your_screen_as_secondary', async () => {
+    const snapshot = useProject.getState().snapshot!;
+    snapshot.project.timeline.main = [];
+    const { container } = renderWithProviders(<Preview />);
+    const choose = screen.getByRole('button', { name: 'Choose files' });
+    const record = screen.getByRole('button', { name: 'Record your screen' });
+    expect(choose).toHaveClass('btn-primary', 'btn-lg');
+    expect(record).toHaveClass('btn-secondary', 'btn-lg');
+    expect(choose.nextElementSibling).toBe(record);
+    // Still one yellow.
+    expect(container.querySelectorAll('.btn-primary')).toHaveLength(1);
+    await userEvent.click(record);
+    expect(openRecorder).toHaveBeenCalledTimes(1);
+  });
+});

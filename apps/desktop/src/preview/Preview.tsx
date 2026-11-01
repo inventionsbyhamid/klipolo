@@ -16,6 +16,7 @@ import { useDockHold } from '../state/dockHold';
 import { useEngine } from '../state/engine';
 import { useFullScreen } from '../state/fullScreen';
 import { useProject } from '../state/project';
+import { recordYourScreen } from '../state/recorder';
 import { useSelection } from '../state/selection';
 
 /** The format the preview shows (it lives with the format switch). */
@@ -23,9 +24,11 @@ export { useShownFormat };
 
 /**
  * An empty project's drop zone: drop videos anywhere on the window, or choose them (the one red), or
- * files are held over the window.
+ * record your screen (the Record dialog, as from the start screen). It turns paper while files are held over the
+ * window.
  */
 function DropZone({ over }: { over: boolean }) {
+  const { t } = useLingui();
   const importMedia = useImportMedia();
   return (
     <div className={over ? 'drop is-over' : 'drop'}>
@@ -40,8 +43,12 @@ function DropZone({ over }: { over: boolean }) {
         <button className="btn btn-primary btn-lg" onClick={() => void importMedia()}>
           Choose files
         </button>
+        <button type="button" className="btn btn-secondary btn-lg" onClick={recordYourScreen}>
+          <Icon name="record" />
+          {t({ id: 'preview.empty.record', message: 'Record your screen' })}
+        </button>
         <span>
-          or press <kbd>&#8984;</kbd> <kbd>O</kbd>
+          or press <kbd>&#8984;</kbd> <kbd>O</kbd> to choose files
         </span>
       </div>
     </div>
