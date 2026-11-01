@@ -3,7 +3,7 @@ import { useLingui } from '@lingui/react/macro';
 import { Fragment } from 'react';
 import { ContextMenuItem, ContextMenuSeparator } from '../../../design/ContextMenu';
 import { recordingCameras } from '../../../lib/camera';
-import { clipLabel, findClip, findItem, hasOwnSound, isFreeze, itemLabel } from '../../../lib/timeline';
+import { clipLabel, clipSoundState, findClip, findItem, hasOwnSound, isFreeze, itemLabel } from '../../../lib/timeline';
 import { useProject } from '../../../state/project';
 import { useSelection } from '../../../state/selection';
 import type { Command } from '../../command-palette/command';
@@ -45,6 +45,8 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   // A recording clip with a camera beside its footage: Separate camera (off, saying why, once it is a layer).
   const hasCamera =
     at >= 0 && !!project && !!main[at].camera && !isFreeze(main[at]) && recordingCameras(project, main[at]).length > 0;
+  // An imported clip whose file has sound: Separate sound (off, saying why, once it is a layer or while sped up).
+  const hasSound = at >= 0 && !!project && clipSoundState(project, at) !== 'none';
 
   // A sound layer, or a video layer whose file has sound, has Mute.
   const mutes = !!project && !!found && hasOwnSound(project, found.item);
@@ -78,6 +80,7 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
           sounds,
           [
             ...(hasCamera ? [{ id: 'separate-camera' }] : []),
+            ...(hasSound ? [{ id: 'separate-sound' }] : []),
             ...separates,
           ],
           [{ id: 'delete' }],

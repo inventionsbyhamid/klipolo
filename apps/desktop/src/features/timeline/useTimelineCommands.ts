@@ -1,9 +1,10 @@
 import { useLingui } from '@lingui/react/macro';
 import { useMemo } from 'react';
 import type { Clip } from '../../bindings/Clip';
+import { codedMessage } from '../../bridge/call';
 import { cameraState } from '../../lib/camera';
 import { labelText } from '../../lib/labels';
-import { findItem, hasOwnSound, isFreeze } from '../../lib/timeline';
+import { clipSoundState, findItem, hasOwnSound, isFreeze } from '../../lib/timeline';
 import { useClipboard } from '../../state/clipboard';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
@@ -13,7 +14,7 @@ import { copy, cut, duplicate, paste, pasteEffects } from './keys/clipboardActio
 import { trackStepOps } from './keys/keyOps';
 import { nudge } from './keys/nudge';
 import { muteLabel } from '../preview';
-import { separateCamera, stepTrack, toggleAttach, toggleSoundMute } from './keys/layerActions';
+import { separateCamera, separateSound, stepTrack, toggleAttach, toggleSoundMute } from './keys/layerActions';
 import { freezeFrame, nothingToFreeze, split, trimToPlayhead } from './keys/timelineActions';
 import { clipIndexAt, mainIndex } from './model/index';
 import { useTimelineNavCommands } from './useTimelineNavCommands';
@@ -23,10 +24,10 @@ const NO_CLIPS: Clip[] = [];
 
 /**
  * The timeline's commands: split, freeze frame, trims to the playhead, nudges, the clipboard, track moves, attaching,
- * a sound or video layer's mute and Separate camera, plus `useTransitionCommands`' (Add transition, ⌘T) and
- * `useTimelineNavCommands`' (selection steps, edit points, zoom, snapping). Each has a stable id, is `enabled` only
- * when it can act on the selection, and runs the same code from its shortcut, the player bar and the block menu.
- * `useCommands` merges them.
+ * a sound or video layer's mute, Separate camera and an imported clip's Separate sound, plus `useTransitionCommands`'
+ * (Add transition, ⌘T) and `useTimelineNavCommands`' (selection steps, edit points, zoom, snapping). Each has a stable
+ * id, is `enabled` only when it can act on the selection, and runs the same code from its shortcut, the player bar and
+ * the block menu. `useCommands` merges them.
  */
 export function useTimelineCommands(): Command[] {
   const { t } = useLingui();
@@ -67,11 +68,14 @@ export function useTimelineCommands(): Command[] {
       attach: labelText(found?.item.attach ? 'undo.attach.free' : 'undo.attach.keep'),
       mute: labelText(muteLabel(!mutable?.muted, mutable?.type === 'video' ? 'video' : 'sound')),
       camera: labelText('undo.separateCamera'),
+      sound: labelText('undo.sound.separate'),
       freeze: labelText('undo.freeze'),
     };
     // A recording clip's camera, as the cards see it (`cameraState`).
     // A freeze frame's camera holds still with its screen: it has no footage to separate.
     const camera = clip && !isFreeze(main[clipAt]) ? cameraState(project, main[clipAt]) : 'none';
+    // An imported clip's own sound, for Separate sound.
+    const sound = clip ? clipSoundState(project, clipAt) : 'none';
 
     const edits: Command[] = [
       {
@@ -239,6 +243,28 @@ export function useTimelineCommands(): Command[] {
             ? t({ id: 'command.separateCamera.done', message: "This clip's camera is already in its own layer." })
             : undefined,
         run: () => separateCamera(id),
+      },
+      {
+        id: 'separate-sound',
+        action: 'detachSound',
+        group: 'edit',
+        label: label.sound,
+        keywords: searchWords(
+          t({
+            id: 'command.separateSound.keywords',
+            message: 'detach, audio, own track, split audio, layer',
+            comment: "Comma-separated search words for Separate sound (an imported clip's own sound)",
+          }),
+        ),
+        // An imported clip's own sound, once: off while it plays from a layer of its own, or the clip is sped up.
+        enabled: sound === 'separable',
+        reason:
+          sound === 'separated'
+            ? t({ id: 'command.separateSound.done', message: "This clip's sound is already in its own layer." })
+            : sound === 'sped'
+              ? codedMessage({ code: 'model.source.detachSpeed', params: {} })
+              : undefined,
+        run: () => separateSound(id),
       },
       {
         id: 'freeze-frame',

@@ -82,6 +82,11 @@ export const TABLE = {
     message: 'Separate camera',
     comment: 'Command and undo history entry',
   }),
+  'undo.sound.separate': msg({
+    id: 'undo.sound.separate',
+    message: 'Separate sound',
+    comment: "Command and undo history entry: an imported clip's own sound becomes a layer of its own",
+  }),
   'undo.freeze': msg({
     id: 'undo.freeze',
     message: 'Freeze frame',

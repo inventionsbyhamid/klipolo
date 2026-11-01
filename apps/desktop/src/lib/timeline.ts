@@ -189,6 +189,34 @@ export function clipHasSound(project: Sources, clip: Clip): boolean {
 }
 
 /**
+ * Whether imported clip `main[i]`'s own sound can go on a layer of its own (Separate sound, `detachSound`): 'none' for a
+ * recording clip (its sounds go one by one), a freeze frame or a file without sound; 'sped' at a speed other than 1×,
+ * which the model refuses; 'separated' while a sound layer of its file plays over it; else 'separable'. O(clips +
+ * layers).
+ */
+export function clipSoundState(
+  project: Pick<Project, 'assets' | 'timeline'>,
+  i: number,
+): 'none' | 'sped' | 'separated' | 'separable' {
+  const clip = project.timeline.main[i];
+  const source = clip?.source;
+  if (!clip || source.type !== 'asset' || isFreeze(clip) || !assetById(project, source.id)?.hasAudio) return 'none';
+  if (clip.speed !== 1) return 'sped';
+  const startUs = clipStarts(project.timeline.main)[i];
+  const endUs = startUs + clipDurationUs(clip);
+  const heard = project.timeline.tracks.some((track) =>
+    track.items.some(
+      (item) =>
+        item.content.type === 'audio' &&
+        item.content.assetId === source.id &&
+        item.startUs < endUs &&
+        itemEndUs(item) > startUs,
+    ),
+  );
+  return heard ? 'separated' : 'separable';
+}
+
+/**
  * The names below are in the active language: a component that shows them re-renders on a language switch only if it
  * reads the language itself (`useLingui`, `useLocale`).
  */
