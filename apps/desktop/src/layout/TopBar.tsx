@@ -6,6 +6,7 @@ import { projects } from '../bridge/projects';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../design/Menu';
 import { ExportButton } from '../features/export/ExportButton';
 import { MediaJobsPill } from '../features/media-jobs/MediaJobsPill';
+import { ReversingPill } from '../features/media-jobs/ReversingPill';
 import { errorMessage } from '../lib/errors';
 import { historyAction } from '../lib/history';
 import { AiChip } from '../settings/AiChip';
@@ -180,6 +181,7 @@ export function TopBar() {
         </>
       )}
       <div className="topbar-right" data-tauri-drag-region>
+        {snapshot && <ReversingPill />}
         {snapshot && <MediaJobsPill focusAfter={settings} />}
         <AiChip />
         <button
