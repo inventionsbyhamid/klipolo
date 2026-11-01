@@ -305,13 +305,11 @@ pub type EventSink = Arc<dyn Fn(AnalysisEvent) + Send + Sync>;
 /// Where each new `Speech` goes (the engine's feed, for the open revision).
 pub type SpeechSink = Arc<dyn Fn(Arc<Speech>) + Send + Sync>;
 
-/// Whether `asset_id` is a file of one of `project`'s recordings, in any of its sources' runs: such a file is analysed
-/// for its words only, never watched for a scene log.
+/// Whether `asset_id` is a file of one of `project`'s recordings, in any of its sources' runs, or the same file (by its
+/// path) imported again: such a file is analysed for its words only, never watched for a scene log
+/// (`analysed::words_only`).
 pub fn words_only(project: &Project, asset_id: &str) -> bool {
-    project
-        .recordings
-        .iter()
-        .any(|r| r.asset_ids().any(|id| id == asset_id))
+    klipolo_model::analysed::words_only(project, asset_id)
 }
 
 /// A clip as analysis sees it: a video or sound file on this Mac.
@@ -499,8 +497,8 @@ impl AnalysisState {
     }
 
     /// `assets` of `project` as contents: each analysable clip's cache read, its asset put on its content
-    /// (`on_content`), and the clips on one content grouped, in the order asked. None once the project changed since
-    /// `generation`.
+    /// (`on_content`), and the clips on one content grouped, in the order asked; a content with a take's file on it is
+    /// heard for its words only. None once the project changed since `generation`.
     async fn contents(
         &self,
         project: &Project,
@@ -515,7 +513,14 @@ impl AnalysisState {
                 return Vec::new();
             }
             match contents.iter_mut().find(|(c, _)| c.key == key) {
-                Some((_, ids)) => ids.push(clip.id),
+                Some((content, ids)) => {
+                    // An asset on the content isn't watched (a take's file, a copy of which came first): none is.
+                    if !clip.video && content.clip.video {
+                        content.clip.video = false;
+                        content.cached.scenes = None;
+                    }
+                    ids.push(clip.id);
+                }
                 None => {
                     let id = clip.id.clone();
                     contents.push((Content { key, clip, cached }, vec![id]));

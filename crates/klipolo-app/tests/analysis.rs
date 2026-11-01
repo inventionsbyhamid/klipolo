@@ -2789,3 +2789,67 @@ async fn captions_follow_a_recording_clip() {
     assert_eq!(expected.len(), 3);
     assert_eq!(said, expected);
 }
+
+/// A take's file imported again (the same file, by its path) is heard for its words only, as the take's own is. So is a
+/// copy of it elsewhere (the same content) asked for with the take's own, whichever comes first: a take's picture is
+/// never copied for a scene log or uploaded, however it is asked for.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_takes_file_imported_again_gets_no_scene_log() {
+    let server = MockServer::start().await;
+    let media = FakeMedia::whole(SECONDS);
+    let h = harness(&server, key_store(), media.clone());
+    mount_speech(&server, "/v1", &h.aligns, Duration::ZERO).await;
+    nothing_else(&server).await;
+    let screen = asset(
+        "screen",
+        AssetKind::Video,
+        &h.clip("screen.mov", 1),
+        SECONDS,
+    );
+    let camera = asset(
+        "camera",
+        AssetKind::Video,
+        &h.clip("camera.mov", 2),
+        SECONDS,
+    );
+    let mut project = take(&screen, &camera, None);
+    let again = Asset {
+        id: "again".into(),
+        ..screen.clone()
+    };
+    let copy = asset("copy", AssetKind::Video, &h.clip("copy.mov", 1), SECONDS);
+    project.assets.extend([again.clone(), copy.clone()]);
+
+    let alone = h
+        .state
+        .estimate(&project, std::slice::from_ref(&again))
+        .await;
+    assert!(
+        (alone.usd - asr_usd(SECONDS)).abs() < 1e-12,
+        "{}",
+        alone.usd
+    );
+    let together = h
+        .state
+        .estimate(&project, &[copy.clone(), screen.clone()])
+        .await;
+    assert_eq!(together.clips, ["copy", "screen"]);
+    assert!(
+        (together.usd - asr_usd(SECONDS)).abs() < 1e-12,
+        "{}",
+        together.usd
+    );
+
+    h.state
+        .start(&project, &[copy, again, screen])
+        .await
+        .finished()
+        .await;
+    server.verify().await;
+
+    for id in ["copy", "again", "screen"] {
+        assert_eq!(h.state.state_of(id), timed(), "{id}");
+        assert!(h.state.analysis_for(id).unwrap().scenes.is_none(), "{id}");
+    }
+    assert_eq!(media.copies.load(Ordering::SeqCst), 0, "no small copy");
+}

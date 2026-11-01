@@ -6,7 +6,7 @@ mod common;
 use std::path::PathBuf;
 
 use common::*;
-use klipolo_model::analysed::analysed_assets;
+use klipolo_model::analysed::{analysed_assets, words_only};
 use klipolo_model::layout::{Anchor, BoxN, Layout};
 use klipolo_model::project::{Asset, AssetKind};
 use klipolo_model::timeline::{Clip, ClipSource, Item, ItemContent, Track, TrackKind};
@@ -128,4 +128,20 @@ fn analysed_parity_json_is_current() {
             .join("../../apps/desktop/src/lib/analysed-parity.json"),
         &sorted_keys(json!({ "cases": cases })),
     );
+}
+
+/// Every file of a recording is heard for its words only, in any of its sources' runs, and so is the same file imported
+/// again (by its path): neither is ever watched for a scene log. A file imported on its own is watched.
+#[test]
+fn a_recordings_files_and_the_same_files_imported_again_are_words_only() {
+    let mut p = fixture();
+    let mut again = p.asset("screen").unwrap().clone();
+    again.id = "screen-again".into();
+    p.assets.push(again);
+    for id in ["screen", "camera", "mic", "screen-again"] {
+        assert!(words_only(&p, id), "{id}");
+    }
+    for id in ["broll", "music", "logo", "gone"] {
+        assert!(!words_only(&p, id), "{id}");
+    }
 }
