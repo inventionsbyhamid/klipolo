@@ -20,6 +20,7 @@ def test_defaults_match_the_documented_caps():
         "muse-spark-1.2",
         "muse-voice-transcribe-1.0",
         "muse-image-1.0",
+        "sam-3.1",
     }
 
 

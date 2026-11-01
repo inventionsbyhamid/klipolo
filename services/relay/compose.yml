@@ -14,7 +14,7 @@ services:
       ALIGN_THREADS: "3"
       DEVICE_CAP_USD: ${DEVICE_CAP_USD:-2.00}
       GLOBAL_CAP_USD: ${GLOBAL_CAP_USD:-40.00}
-      ALLOWED_MODELS: ${ALLOWED_MODELS:-muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0,muse-image-1.0}
+      ALLOWED_MODELS: ${ALLOWED_MODELS:-muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0,muse-image-1.0,sam-3.1}
       # Empty until the owner sets it: proxied calls answer 503 "Relay not configured."
       META_API_KEY: ${META_API_KEY:-}
     volumes:

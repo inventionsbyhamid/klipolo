@@ -2,8 +2,9 @@
 
 `/meta/v1/{path}` forwards to `https://api.meta.ai/v1/{path}` with the relay's
 own key, for an allowlist of endpoints and of models (ALLOWED_MODELS: Spark
-1.3 and 1.2 and Voice Transcribe by default; SAM 3.1 only when listed, and
-then its video calls must stream):
+1.3 and 1.2, Voice Transcribe, Muse Image and SAM 3.1 by default; SAM's
+video calls must stream, and are charged by the frames Meta bills, at least
+50 a video):
 
     POST   responses        JSON, at most 2 MiB, known fields only
     POST   files            multipart upload, streamed, at most 1 GiB

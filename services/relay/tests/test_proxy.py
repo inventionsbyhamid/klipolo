@@ -84,7 +84,7 @@ def with_sam(settings):
 
 @pytest.fixture
 def sam_client(settings):
-    """A relay with SAM switched on, which it is not by default."""
+    """A relay with SAM in its models (as by default)."""
     with TestClient(create_app(with_sam(settings))) as test_client:
         yield test_client
 
@@ -259,16 +259,39 @@ def test_wonder_is_403(client, conn, meta):
     assert not route.called
 
 
-def test_sam_is_403_by_default(client, conn, meta):
+SAM_VIDEO = {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, {"type": "input_video", "file_id": "file-1"}]}]}
+
+
+@pytest.mark.parametrize(("frames", "cost"), [(120, 0.024), (20, 0.01)], ids=["a-60-s-short", "under-the-minimum"])
+def test_sam_is_forwarded_by_default_and_charged_by_its_frames(client, conn, meta, frames, cost):
+    # A 60 s short at 2 frames a second is 120 frames; Meta bills at least 50 a video.
     device = add_device(conn)
+    done = {"type": "response.completed", "response": {"status": "completed", "usage": {"video_frames_processed": frames}}}
+    route = stream_from_meta(meta, MetaStream([sse(CREATED), sse(done)]))
+
+    response = client.post("/meta/v1/responses", json=SAM_VIDEO, headers=device.headers)
+
+    assert response.status_code == 200
+    assert route.called
+    [row] = ledger(conn, device)
+    assert row["model"] == "sam-3.1"
+    assert json.loads(row["usage_json"])["video_frames_processed"] == frames
+    assert row["cost_usd"] == pytest.approx(cost)
+    assert spent(conn, device) == pytest.approx(cost)
+    assert_ledger_matches_spend(conn, device)
+
+
+def test_sam_keeps_to_the_device_budget(client, conn, meta):
+    # A device at its cap is refused before Meta is called.
+    full = add_device(conn, spent=2.00)
     route = meta.post("/responses")
-    body = {"model": "sam-3.1", "stream": True, "input": [{"role": "user", "content": [{"type": "input_text", "text": "person"}, {"type": "input_video", "file_id": "file-1"}]}]}
 
-    response = client.post("/meta/v1/responses", json=body, headers=device.headers)
+    response = client.post("/meta/v1/responses", json=SAM_VIDEO, headers=full.headers)
 
-    assert response.status_code == 403
-    assert response.json()["error"] == "model_not_allowed"
+    assert response.status_code == 402
+    assert response.json() == BUDGET
     assert not route.called
+    assert spent(conn, full) == 2.00
 
 
 def test_wonder_and_contributors_stay_refused_even_if_listed(settings, conn, meta):

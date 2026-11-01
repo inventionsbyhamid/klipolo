@@ -2,9 +2,9 @@
 
 META_API_KEY is held for the proxy and is never logged or shown in repr.
 ALLOWED_MODELS is the comma-separated list of Meta models the proxy forwards
-(Spark 1.3 and 1.2, Voice Transcribe and Muse Image by default); SAM is off
-unless listed. Models the relay never forwards (Muse Wonder, the
-*-contributor tiers) stay refused even when listed.
+(Spark 1.3 and 1.2, Voice Transcribe, Muse Image and SAM 3.1 by default).
+Models the relay never forwards (Muse Wonder, the *-contributor tiers) stay
+refused even when listed.
 """
 
 import math
@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-DEFAULT_ALLOWED_MODELS = "muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0,muse-image-1.0"
+DEFAULT_ALLOWED_MODELS = "muse-spark-1.3,muse-spark-1.2,muse-voice-transcribe-1.0,muse-image-1.0,sam-3.1"
 
 
 @dataclass(frozen=True)
