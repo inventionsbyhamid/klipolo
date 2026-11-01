@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Project } from '../bindings/Project';
 import { fixtureProject } from '../test/fixtures';
-import { analysable } from './analysed';
+import { analysable, recordingOf, voiceOf } from './analysed';
 
 const ids = (project: Project) => analysable(project).map((a) => a.id);
 
@@ -17,6 +17,9 @@ describe('what analysis offers', () => {
   it('counts a recording as one clip, by its voice: the mic first', () => {
     // The fixture's take (screen, camera, mic) and the b-roll; its song is a layer.
     expect(ids(fixtureProject())).toEqual(['mic', 'broll']);
+    expect(voiceOf(fixtureProject(), 'mic')).toBe('rec');
+    expect(voiceOf(fixtureProject(), 'screen')).toBeNull();
+    expect(voiceOf(fixtureProject(), 'broll')).toBeNull();
   });
 
   it('takes a sounding camera, then the screen, when there is no mic', () => {
@@ -35,6 +38,7 @@ describe('what analysis offers', () => {
     const [take, broll] = project.timeline.main;
     project.timeline.main = [broll, { ...broll, id: 'c', source: { type: 'asset', id: 'screen' } }];
     expect(ids(project)).toEqual(['screen', 'broll']);
+    expect(voiceOf(project, 'screen')).toBeNull();
     project.timeline.main = [take];
     expect(ids(project)).toEqual(['mic']);
   });
@@ -43,5 +47,10 @@ describe('what analysis offers', () => {
     const project = fixtureProject();
     expect(analysable(project)).toBe(analysable({ ...project }));
     expect(analysable({ ...project, recordings: [...project.recordings] })).not.toBe(analysable(project));
+  });
+
+  it('knows every file of a recording, analysed for its words only', () => {
+    for (const id of ['screen', 'camera', 'mic']) expect(recordingOf(fixtureProject(), id)).toBe('rec');
+    expect(recordingOf(fixtureProject(), 'broll')).toBeNull();
   });
 });

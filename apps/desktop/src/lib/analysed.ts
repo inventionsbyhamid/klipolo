@@ -85,9 +85,24 @@ function offerOf(project: AnalysedScope): Offer {
  * play (`analysedAssets`), each one a clip plays on its own, and each recording's voice: the files of its first source
  * with a file that has sound, in the order mic, camera, screen, as the model's `speech::voice_runs` picks it (its
  * captions read their words). A recording's other files (its screen and camera beside a mic) are never offered, so
- * they are never sent. The app analyses any file of a recording for its words only. The same array for the same main
- * track, assets and recordings, so a store selector can return it.
+ * they are never sent. The app analyses any file of a recording for its words only (`recordingOf`). The same array for
+ * the same main track, assets and recordings, so a store selector can return it.
  */
 export function analysable(project: AnalysedScope): Asset[] {
   return offerOf(project).out;
+}
+
+/** The recording whose voice `assetId` is (`analysable`), or null: its analysis is the take's, so it reads as one. */
+export function voiceOf(project: AnalysedScope, assetId: string): string | null {
+  return offerOf(project).voices.get(assetId) ?? null;
+}
+
+/**
+ * The recording whose files hold `assetId` (its screen, camera or a sound), or null for a file imported on its own.
+ * The app analyses such a file for its words only, never watching it for a scene log (the model's `words_only`).
+ */
+export function recordingOf(project: Pick<AnalysedScope, 'recordings'>, assetId: string): string | null {
+  const recordings = project.recordings ?? NO_RECORDINGS;
+  const holder = recordings.find((r) => r.sources.some((s) => s.runs.some((run) => run.assetId === assetId)));
+  return holder?.id ?? null;
 }

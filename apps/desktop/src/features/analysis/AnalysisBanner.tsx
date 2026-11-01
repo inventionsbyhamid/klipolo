@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 import type { Asset } from '../../bindings/Asset';
+import type { Project } from '../../bindings/Project';
 import { openSettings, useAi, useNeedsKey } from '../../ai/aiStatus';
+import { recordingOf, voiceOf } from '../../lib/analysed';
+import { assetName, recordingName } from '../../lib/timeline';
 import {
   analyze,
   cancelAnalysis,
@@ -11,6 +14,7 @@ import {
   useAnalysedClips,
   useAnalysis,
 } from '../../state/analysis';
+import { useProject } from '../../state/project';
 import { Icon } from '../../layout/Icon';
 import {
   FILE_MISSING,
@@ -49,8 +53,13 @@ function BannerIcon({ name }: { name: keyof typeof ICONS }) {
   );
 }
 
-/** The files the project's main-track clips play: what analysis is for (`useAnalysedClips`). */
+/**
+ * What analysis offers (`useAnalysedClips`): the files the project's main-track clips play, a recording counted as one
+ * clip by its voice.
+ */
 const useClips = useAnalysedClips;
+
+const NO_RECORDINGS: Project['recordings'] = [];
 
 /**
  * Asks for the offer whenever the clips not analysed change (an import, another project, a Cancel) or the way to pay
@@ -69,15 +78,26 @@ function useOffer(clips: Asset[]) {
   }, [ids, mode]);
 }
 
-/** A clip's art and name, as each row of the banner starts. */
+/**
+ * A clip's art and name, as each row of the banner starts. A recording's voice is the take: it reads as the timeline
+ * names the take's clip ("Recording 1"), with a film's art. A recording's file placed on its own reads as that clip
+ * does ("Screen of Recording 1").
+ */
 function ClipName({ clip }: { clip: Asset }) {
+  const take = useProject((s) => (s.snapshot ? voiceOf(s.snapshot.project, clip.id) : null));
+  const name = useProject((s) => {
+    const project = s.snapshot?.project;
+    if (!project) return clip.name;
+    return take ? recordingName(project, take) : assetName(project, clip);
+  });
+  const film = clip.kind === 'video' || take !== null;
   return (
     <>
-      <span className={clip.kind === 'video' ? 'art-clip' : 'art-clip is-sound'} aria-hidden>
-        {clip.kind === 'video' ? <Icon name="film" /> : <BannerIcon name="wave" />}
+      <span className={film ? 'art-clip' : 'art-clip is-sound'} aria-hidden>
+        {film ? <Icon name="film" /> : <BannerIcon name="wave" />}
       </span>
-      <span className="analysis-job-name" title={clip.name}>
-        {clip.name}
+      <span className="analysis-job-name" title={name}>
+        {name}
       </span>
     </>
   );
@@ -150,6 +170,7 @@ export function AnalysisBanner() {
   const error = useAnalysis((s) => s.error);
   const dismissed = useAnalysis((s) => s.dismissed);
   const busy = useAnalysis((s) => s.busy);
+  const recordings = useProject((s) => s.snapshot?.project.recordings ?? NO_RECORDINGS);
   const needsKey = useNeedsKey();
 
   const running = clips.filter((c) => stateOf(states, c.id).state === 'running');
@@ -229,7 +250,10 @@ export function AnalysisBanner() {
       </section>
     );
   }
-  const videos = clips.some((c) => c.kind === 'video' && estimate.clips.includes(c.id));
+  // Footage is watched only for a video imported on its own: a recording's files are analysed for their words only.
+  const videos = clips.some(
+    (c) => c.kind === 'video' && !recordingOf({ recordings }, c.id) && estimate.clips.includes(c.id),
+  );
   const refused = !!estimate.refusal;
   // Retry asks for the estimate again (the price may have changed), never starts a run unseen.
   const pending = clips.filter((c) => stateOf(states, c.id).state === 'none').map((c) => c.id);
