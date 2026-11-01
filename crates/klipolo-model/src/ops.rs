@@ -110,7 +110,9 @@ pub enum Op {
     Split {
         at_us: Us,
     },
-    /// Remove timeline ranges from the main track; gaps close and attached layers follow.
+    /// Remove timeline ranges from the main track; gaps close and attached layers follow. Free layers keep their time,
+    /// those left past the video's new end are trimmed to it or removed (music is fitted to it), and those placed after
+    /// the end move with it.
     DeleteRanges {
         ranges: Vec<RangeUs>,
     },

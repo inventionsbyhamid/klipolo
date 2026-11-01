@@ -1803,6 +1803,11 @@
   white-space: nowrap;
 }
 
+/* A project's name (Open recent): a long one is cut, so the menu doesn't widen for it. */
+.menu-item-text.is-name {
+  max-width: 280px;
+}
+
 .menu-key {
   color: var(--color-ink-faint);
   font-size: var(--text-xs);

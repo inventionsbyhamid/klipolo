@@ -13,7 +13,7 @@ use crate::media::key::{CacheKind, stem};
 use crate::media::keyframes;
 use crate::media::scan::{ScanEnd, scan_thumbs};
 use crate::media::sprite::{chunk_of, chunks_for, slot_of};
-use crate::media::thumbs::strip;
+use crate::media::thumbs::{poster, strip};
 
 /// How a job left its file.
 enum Outcome {
@@ -127,6 +127,14 @@ impl ThumbStore {
         let mut missing: Vec<u32> = (0..chunks_for(want.duration_us))
             .filter(|c| !have.contains(c))
             .collect();
+        // No poster yet counts as no chunk 0 (`Cutter::attach` cuts it again for the poster): a cache from before
+        // posters, or an editing copy that wrote chunk 0 first.
+        if chunks_for(want.duration_us) > 0
+            && !missing.contains(&0)
+            && poster(root, &want.path).is_none()
+        {
+            missing.push(0);
+        }
         // The chunk under the playhead first, then on to the end, then the start.
         missing.sort_by_key(|&c| (c < at, c));
         let strip_file = root.join(&key).join(STRIP_FILE);
@@ -158,9 +166,12 @@ impl ThumbStore {
         if scanned.wrote {
             self.tidy();
         }
+        // With its poster too: a file whose poster can't be made gives up for this opening, rather than being cut again
+        // on every edit.
         let complete = || {
             strip(root, &want.path)
                 .is_some_and(|s| s.chunks.len() >= chunks_for(want.duration_us) as usize)
+                && poster(root, &want.path).is_some()
         };
         outcome(&scanned.end, gone, complete, strip_file)
     }

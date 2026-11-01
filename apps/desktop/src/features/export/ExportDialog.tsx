@@ -11,10 +11,11 @@ import { FORMAT_SHORT } from '../../lib/layout';
 import { videoDurationUs } from '../../lib/timeline';
 import { formatTime } from '../../player/time';
 import { stateOf, useAnalysis } from '../../state/analysis';
-import { useExport } from '../../state/export';
+import { chosenCaptionFile, useExport } from '../../state/export';
 import { failedText } from '../../state/exportRun';
 import { useProject } from '../../state/project';
 import { toast } from '../../state/toasts';
+import { CaptionFileChoice } from './CaptionFileChoice';
 import { ExportFiles } from './ExportFiles';
 import { ExportOutcome } from './ExportOutcome';
 import { ExportProgress } from './ExportProgress';
@@ -150,6 +151,8 @@ function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () =
   const folder = useExport((s) => s.folder);
   const [plan, setPlan] = useState<ExportPlan | null>(null);
   const making = useCaptionsBeingMade();
+  // A clip's analysis finished: its words may be new, so the plan (a captions file has words to save) is asked again.
+  const heard = useAnalysis((s) => Object.values(s.states).filter((a) => a.state === 'done').length);
   const checked: FormatKind[] =
     view === 'choose'
       ? FORMATS.filter((f) => (run.picked ?? [primaryFormat]).includes(f))
@@ -157,6 +160,8 @@ function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () =
         ? run.files.map((f) => f.format)
         : run.formats;
   const key = checked.join();
+  // "Also save captions as a file": once some clip's words are heard, beside a 16:9 video.
+  const offerCaptions = view === 'choose' && !!plan?.canSaveCaptions && checked.includes('landscape');
 
   useEffect(() => {
     if (view !== 'choose') return;
@@ -173,7 +178,7 @@ function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () =
     return () => {
       current = false;
     };
-  }, [view, key, quality, folder]);
+  }, [view, key, quality, folder, heard]);
 
   const toggle = (format: FormatKind) =>
     useExport.getState().setPicked(checked.includes(format) ? checked.filter((f) => f !== format) : [...checked, format]);
@@ -199,11 +204,23 @@ function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () =
         locked={view !== 'choose'}
         onToggle={toggle}
       />
-      {view === 'choose' && <Options folder={plan?.folder ?? folder} />}
+      {view === 'choose' && (
+        <Options folder={plan?.folder ?? folder} slowMaster={plan?.slowMaster ?? false} captions={offerCaptions} />
+      )}
       {view === 'choose' && making > 0 && <CaptionsNote count={making} />}
       {view === 'running' && <ExportProgress />}
       {view === 'failed' && <Failed />}
-      {view === 'choose' && <ChooseFoot count={checked.length} bytes={plan?.bytes ?? null} formats={checked} onClose={onClose} locale={locale} captions={making > 0} />}
+      {view === 'choose' && (
+        <ChooseFoot
+          count={checked.length}
+          bytes={plan?.bytes ?? null}
+          formats={checked}
+          onClose={onClose}
+          locale={locale}
+          captions={making > 0}
+          offersCaptionFile={offerCaptions}
+        />
+      )}
       {view === 'running' && <RunningFoot />}
       {view === 'failed' && <FailedFoot onClose={onClose} />}
     </>
@@ -245,14 +262,25 @@ function CaptionsNote({ count }: { count: number }) {
   );
 }
 
-/** Quality and where the files go. */
-function Options({ folder }: { folder: string | null }) {
+/**
+ * Quality (what it is for under it; `slowMaster`: Master is slower here), the captions file once `captions` offers it,
+ * and where the files go.
+ */
+function Options({ folder, slowMaster, captions }: { folder: string | null; slowMaster: boolean; captions: boolean }) {
   return (
     <dl className="ex-opts">
-      <dt>Quality</dt>
+      <dt className="ex-dt-top">Quality</dt>
       <dd>
-        <QualityPicker />
+        <QualityPicker slowMaster={slowMaster} />
       </dd>
+      {captions && (
+        <>
+          <dt>Captions</dt>
+          <dd>
+            <CaptionFileChoice />
+          </dd>
+        </>
+      )}
       <dt>Save to</dt>
       <dd>
         <span className="ex-path">
@@ -280,6 +308,7 @@ function ChooseFoot({
   onClose,
   locale,
   captions,
+  offersCaptionFile,
 }: {
   count: number;
   bytes: number | null;
@@ -288,6 +317,8 @@ function ChooseFoot({
   locale: string;
   /** The captions note is shown: Export is described by it. */
   captions: boolean;
+  /** "Also save captions as a file" is offered: the file goes with the export when it is on. */
+  offersCaptionFile: boolean;
 }) {
   const none = count === 0;
   const stopped = useExport((s) => s.phase === 'cancelled');
@@ -307,7 +338,11 @@ function ChooseFoot({
         data-primary
         aria-disabled={none || undefined}
         aria-describedby={none ? 'export-summary' : captions ? 'export-captions-note' : undefined}
-        onClick={() => !none && void useExport.getState().start(formats)}
+        onClick={() => {
+          if (none) return;
+          const captionFile = chosenCaptionFile(formats, offersCaptionFile);
+          void useExport.getState().start(formats, undefined, { captionFile });
+        }}
       >
         <Icon name="export" />
         {none ? 'Export' : `Export ${videos(count)}`}
