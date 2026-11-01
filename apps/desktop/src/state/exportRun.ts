@@ -41,6 +41,8 @@ export interface ExportRun {
   retries: number;
   /** A retry that hasn't measured its own time left yet. */
   retrying: boolean;
+  /** Pause was pressed: the export stops at its next part. */
+  pausing: boolean;
   /** Cancel export was pressed. */
   stopping: boolean;
   /** Indexes of files that are in place. */
@@ -69,6 +71,7 @@ export const idleRun: ExportRun = {
   finishing: false,
   retries: 0,
   retrying: false,
+  pausing: false,
   stopping: false,
   ready: [],
   captionFiles: [],
@@ -83,6 +86,7 @@ const stopped = {
   etaS: null,
   finishing: false,
   retrying: false,
+  pausing: false,
   stopping: false,
 };
 
@@ -290,6 +294,18 @@ function refusalCode(error: unknown): { code: string; params: CodedError['params
   if (typeof cause === 'object' && cause !== null && typeof (cause as CodedError).code === 'string')
     return cause as CodedError;
   return { code: '', params: {} };
+}
+
+/** Joining the finished parts into the files can't be paused: the run's note, and a pause's refusal. */
+export const NO_PAUSE_FINISHING = 'It can’t pause while it finishes.';
+
+/**
+ * Why the run on screen (`s`) can't pause now, or null: it is finishing (joining its parts can't pause) or stopping.
+ */
+export function ownPauseRefusal(s: Pick<ExportRun, 'finishing' | 'stopping'>): string | null {
+  if (s.finishing) return t({ id: 'export.pauseRefused.finishing', message: 'The export can’t pause while it finishes.' });
+  if (s.stopping) return t({ id: 'export.pauseRefused.stopping', message: 'The export is stopping.' });
+  return null;
 }
 
 /** Why Rust didn't pause an export (`error` from the bridge), in words, by Rust's code; else a generic one. */

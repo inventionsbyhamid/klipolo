@@ -581,6 +581,76 @@ describe('export dialog', () => {
     expect(status()).toHaveTextContent('Export resumed.');
   });
 
+  it('Pause, then Paused with Resume focused and announced, then Resume continues the job', async () => {
+    await openAndExport();
+    emit(progress(30, 10));
+    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    expect(exporter.pause).toHaveBeenCalledWith('job');
+    expect(screen.getByText('Pausing')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pause' })).toHaveAttribute('aria-disabled', 'true');
+    emit({ type: 'paused', message: null, compatibility: null });
+    expect(screen.getByText('Export paused')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Resume' })).toHaveFocus());
+    expect(status()).toHaveTextContent('Export paused.');
+    await userEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    expect(exporter.resume).toHaveBeenCalledWith('job', expect.any(Function));
+    expect(exporter.start).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Pause' })).toHaveFocus());
+    expect(status()).toHaveTextContent('Export resumed.');
+  });
+
+  it('Cancel export asks before deleting finished parts: Keep paused pauses, Delete stops', async () => {
+    await openAndExport();
+    emit({ ...progress(60, 20), segmentsDone: 1 } as ExportEvent);
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel export' }));
+    expect(screen.getByRole('group', { name: 'Stop and delete the finished parts?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Keep paused' })).toHaveFocus();
+    expect(exporter.cancel).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Keep paused' }));
+    expect(exporter.pause).toHaveBeenCalledWith('job');
+    expect(screen.getByRole('button', { name: 'Pause' })).toHaveFocus();
+    // Asked again, from the keyboard: Delete stops it and deletes its parts.
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel export' }));
+    await userEvent.keyboard('{Shift>}{Tab}{/Shift}');
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    expect(exporter.cancel).toHaveBeenCalledWith('job');
+    // Stopping: Pause does nothing now.
+    act(() => useExport.setState({ pausing: false }));
+    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    expect(exporter.pause).toHaveBeenCalledTimes(1);
+  });
+
+  it('with nothing finished yet, Cancel export stops at once; while it finishes, it can only be kept going', async () => {
+    await openAndExport();
+    emit(progress(10, 20));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel export' }));
+    expect(exporter.cancel).toHaveBeenCalledWith('job');
+    act(() => useExport.setState({ stopping: false }));
+    emit({ ...progress(100, 0), segmentsDone: 1 } as ExportEvent, { type: 'finishing' });
+    const pause = screen.getByRole('button', { name: 'Pause' });
+    expect(pause).toHaveAttribute('aria-disabled', 'true');
+    expect(pause).toHaveAccessibleDescription('It can’t pause while it finishes.');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel export' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Keep exporting' }));
+    expect(exporter.pause).not.toHaveBeenCalled();
+    expect(exporter.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('a Pause Rust refuses is said, and Pause is offered again', async () => {
+    await openAndExport();
+    vi.mocked(exporter.pause).mockRejectedValueOnce(
+      new Error('', { cause: coded('exports.refused.notRunning') }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    await waitFor(() =>
+      expect(useToasts.getState().toasts.map((t) => t.text)).toContain(
+        'The export didn’t pause. It isn’t running any more.',
+      ),
+    );
+    expect(screen.getByRole('button', { name: 'Pause' })).not.toHaveAttribute('aria-disabled', 'true');
+  });
+
   it('a pause with no reason says everything finished so far is kept, and Discard deletes the kept job', async () => {
     await openAndExport();
     emit(progress(30, 10), { type: 'paused', message: null, compatibility: null });
@@ -721,7 +791,7 @@ describe('unfinished exports', () => {
     // It shows its progress as it was at once, and goes on from there.
     expect(screen.getByRole('progressbar', { name: 'Export progress' })).toHaveAttribute('aria-valuenow', '30');
     expect(useExport.getState()).toMatchObject({ phase: 'running', jobId: 'old', runQuality: 'maximum' });
-    expect(screen.getByRole('button', { name: 'Cancel export' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Pause' })).toHaveFocus();
   });
 
   it('a changed project still resumes the version it exported, or starts over, or is discarded', async () => {

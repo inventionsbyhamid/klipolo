@@ -395,12 +395,34 @@ function ChooseFoot({
   );
 }
 
-/** The formats already in place, Cancel export, and the primary turned "Exporting" with a spinner. */
+/**
+ * The formats already in place, Cancel export, Pause, and the primary turned "Exporting" with a spinner. Cancel export
+ * deletes the finished parts, so once there are some it asks first, in place: Keep paused (Keep exporting while it
+ * finishes, which can't pause) or Delete.
+ */
 function RunningFoot() {
   const done = useExport(
     useShallow((s) => s.files.filter((_, i) => s.ready.includes(i)).map((f) => FORMAT_SHORT[f.format])),
   );
-  const stopping = useExport((s) => s.stopping);
+  const { stopping, pausing, finishing, starting, kept } = useExport(
+    useShallow((s) => ({
+      stopping: s.stopping,
+      pausing: s.pausing,
+      finishing: s.finishing,
+      starting: !s.jobId,
+      kept: s.segmentsDone > 0,
+    })),
+  );
+  const [asking, setAsking] = useState(false);
+  const pauseButton = useRef<HTMLButtonElement>(null);
+  const keepButton = useRef<HTMLButtonElement>(null);
+  const asked = useRef(false);
+  useEffect(() => {
+    // The question takes the keyboard on Keep; once it's gone, focus goes back to Pause.
+    if (asking) keepButton.current?.focus();
+    else if (asked.current) pauseButton.current?.focus();
+    asked.current = asking;
+  }, [asking]);
   const cancel = () =>
     void useExport
       .getState()
@@ -408,6 +430,42 @@ function RunningFoot() {
       .then((refused) => {
         if (refused !== null) toast.error(refused);
       });
+  const pause = () =>
+    void useExport
+      .getState()
+      .pause()
+      .then((refused) => {
+        if (refused !== null) toast.error(refused);
+      });
+  if (asking) {
+    return (
+      <div className="dialog-foot" role="group" aria-labelledby="export-stop-ask">
+        <span className="left ex-ask" id="export-stop-ask">
+          Stop and delete the finished parts?
+        </span>
+        <Button
+          onClick={() => {
+            setAsking(false);
+            cancel();
+          }}
+        >
+          Delete
+        </Button>
+        <Button
+          ref={keepButton}
+          variant="primary"
+          onClick={() => {
+            setAsking(false);
+            // Joining the parts can't pause: keeping it means letting it finish.
+            if (!finishing) pause();
+          }}
+        >
+          {finishing ? 'Keep exporting' : 'Keep paused'}
+        </Button>
+      </div>
+    );
+  }
+  const still = pausing || stopping || finishing;
   return (
     <div className="dialog-foot">
       <span className="left">
@@ -418,9 +476,28 @@ function RunningFoot() {
           </span>
         )}
       </span>
-      <Button data-primary aria-disabled={stopping || undefined} onClick={() => !stopping && cancel()}>
+      <Button
+        data-primary={starting || undefined}
+        aria-disabled={stopping || undefined}
+        onClick={() => {
+          if (stopping) return;
+          if (kept) setAsking(true);
+          else cancel();
+        }}
+      >
         Cancel export
       </Button>
+      {!starting && (
+        <Button
+          ref={pauseButton}
+          data-primary
+          aria-disabled={still || undefined}
+          aria-describedby={finishing ? 'export-no-pause' : undefined}
+          onClick={() => !still && pause()}
+        >
+          Pause
+        </Button>
+      )}
       <Button variant="primary" disabled>
         <span className="ex-spinner" aria-hidden />
         Exporting

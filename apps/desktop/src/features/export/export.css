@@ -554,3 +554,9 @@
   border-radius: 50%;
   background: currentColor;
 }
+
+/* Cancel export's question, in place of the foot's summary. */
+.export-dialog .dialog-foot .ex-ask {
+  color: var(--color-ink);
+  font-size: var(--text-md);
+}

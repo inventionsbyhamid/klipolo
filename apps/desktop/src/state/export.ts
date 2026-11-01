@@ -15,6 +15,7 @@ import {
   applyEvent,
   exportedText,
   idleRun,
+  ownPauseRefusal,
   pauseRefusal,
   refusalReason,
   resuming,
@@ -24,7 +25,14 @@ import {
 import { settled, useProject } from './project';
 import { toast } from './toasts';
 
-export { canStartOver, exportPercent, shownJob, unfinishedJobs, type ExportPhase } from './exportRun';
+export {
+  canStartOver,
+  exportPercent,
+  NO_PAUSE_FINISHING,
+  shownJob,
+  unfinishedJobs,
+  type ExportPhase,
+} from './exportRun';
 
 /** "Also save captions as a file": whether, and as which kind. Kept on this Mac, whatever the project. */
 export interface CaptionFileChoice {
@@ -78,8 +86,11 @@ interface ExportStore extends ExportRun {
   retry: () => Promise<void>;
   /** Stops the run on screen. Resolves on Rust's answer: null, or why not (worded). */
   cancel: () => Promise<string | null>;
-  /** Pauses the running job `jobId` (a row's Pause). Resolves on Rust's answer: null, or why not (worded). */
-  pause: (jobId: string) => Promise<string | null>;
+  /**
+   * Pauses the run on screen, or job `jobId` (a row's Pause, for an export started before a reload). Resolves on Rust's
+   * answer: null, or why not (worded); asked again while it pauses, as the first.
+   */
+  pause: (jobId?: string) => Promise<string | null>;
   /** Continues a kept job from its finished parts; `compatible` finishes it in compatibility mode. */
   resume: (jobId: string, mode?: ResumeMode) => Promise<void>;
   /** Deletes an unfinished job and its parts; false if it couldn't be (said in a toast). */
@@ -147,6 +158,8 @@ export function openExported(index: number): Promise<void> {
 let batch = 0;
 /** Only the latest job list counts. */
 let listing = 0;
+/** Rust's answer to the run on screen's pause, while it pauses. */
+let ownPause: Promise<string | null> = Promise.resolve(null);
 
 const openProjectId = () => useProject.getState().snapshot?.project.id ?? null;
 const ENDS = new Set<ExportEvent['type']>(['finished', 'paused', 'failed', 'cancelled']);
@@ -289,20 +302,34 @@ export const useExport = create<ExportStore>((set, get) => {
         },
       );
     },
-    pause: (jobId) =>
-      exporter.pause(jobId).then(
+    pause: (jobId = get().jobId ?? undefined) => {
+      if (!jobId) return Promise.resolve(null);
+      const s = get();
+      const own = jobId === s.jobId && s.phase === 'running';
+      if (own) {
+        const refused = ownPauseRefusal(s);
+        if (refused !== null) return Promise.resolve(refused);
+        if (s.pausing) return ownPause;
+        set({ pausing: true });
+      }
+      const answer = exporter.pause(jobId).then(
         () => {
-          // Its events don't reach this window (it was started before a reload): its row shows it paused now, and
-          // Resume waits for it to finish its current part.
-          set((s) => ({ jobs: s.jobs.map((j) => (j.jobId === jobId ? { ...j, state: 'paused' } : j)) }));
+          // Another job's events don't reach this window (it was started before a reload): its row shows it paused
+          // now, and Resume waits for it to finish its current part. The run on screen says so in its own event.
+          if (!own)
+            set((st) => ({ jobs: st.jobs.map((j) => (j.jobId === jobId ? { ...j, state: 'paused' } : j)) }));
           return null;
         },
         (error: unknown) => {
-          // The list may be out of date (it ended): it is read again.
-          void get().loadJobs();
+          // Not paused: Pause is offered again. Another job's list may be out of date (it ended): read again.
+          if (own) set({ pausing: false });
+          else void get().loadJobs();
           return pauseRefusal(error);
         },
-      ),
+      );
+      if (own) ownPause = answer;
+      return answer;
+    },
     resume: async (jobId, mode) => {
       const id = ++batch;
       const s = get();
