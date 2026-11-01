@@ -111,7 +111,8 @@ export function useEditorShortcuts() {
       }
       useSelection.getState().select(null);
       useRange.getState().clear();
-    } else if (key === 'f' && !e.shiftKey) {
+    } else if (key === 'f' && !e.shiftKey && !e.repeat) {
+      // Held, it would go in and out with each repeat while the window's own animation runs.
       run('full-screen');
     } else if (key === 'k' && !e.shiftKey) {
       run('pause');

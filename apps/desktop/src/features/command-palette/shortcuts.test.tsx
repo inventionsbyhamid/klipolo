@@ -111,6 +111,17 @@ describe('playback keys', () => {
     expect(useLoop.getState().on).toBe(false);
   });
 
+  it('holding F turns full screen on once: its repeats do nothing', async () => {
+    useFullScreen.setState({ on: false });
+    vi.mocked(appWindow.fullScreen).mockClear();
+    renderWithProviders(<Editor />);
+    fireEvent.keyDown(document.body, { key: 'f' });
+    for (let i = 0; i < 3; i++) fireEvent.keyDown(document.body, { key: 'f', repeat: true });
+    expect(useFullScreen.getState().on).toBe(true);
+    await vi.waitFor(() => expect(appWindow.fullScreen).toHaveBeenCalledTimes(1));
+    await useFullScreen.getState().leave();
+  });
+
   it('F shows the preview full screen; Escape leaves it first, then clears the selection', async () => {
     renderWithProviders(<Editor />);
     fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'f' });
