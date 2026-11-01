@@ -145,12 +145,15 @@ describe('Volume keys in the clip card', () => {
     expect(screen.getByRole('button', { name: 'Previous volume key' })).toBeDisabled();
   });
 
-  it('a key at the playhead is taken away by the same button', async () => {
+  it('a key at the playhead is taken away by the same button; the last one leaves the clip at its level', async () => {
     clip([key(1, 0.5)]);
     usePlayback.setState({ playheadUs: 21 * S });
     renderWithProviders(<Inspector format="landscape" />);
     await userEvent.click(screen.getByRole('button', { name: 'Remove volume key' }));
     expect(apply.mock.calls[0][0]).toBe('volumeKeys.remove.undo');
-    expect((apply.mock.calls[0][1][0] as Extract<Op, { type: 'updateClip' }>).patch.volumeKeys).toEqual([]);
+    const { patch } = apply.mock.calls[0][1][0] as Extract<Op, { type: 'updateClip' }>;
+    expect(patch.volumeKeys).toEqual([]);
+    // Not back to a volume from before the keys: it stays where its line was.
+    expect(patch.volume).toBe(0.5);
   });
 });

@@ -140,13 +140,16 @@ export function levelNow(target: Leveled): { keys: Key[]; volume: number; lenUs:
 
 /** The ops setting its volume keys to `keys` (an empty list takes them off). */
 export function volumeKeyOps(target: Leveled, keys: Key[]): Op[] {
+  // The last key taken away leaves it at that key's level, not at a volume from before its keys.
+  const was = levelNow(target).keys;
+  const volume = keys.length === 0 && was.length > 0 ? { volume: was[was.length - 1].v } : {};
   if (target.kind === 'clip') {
     const now = clipNow(target.id);
-    return now ? [clipOp(now, { volumeKeys: keys })] : [];
+    return now ? [clipOp(now, { volumeKeys: keys, ...volume })] : [];
   }
   const now = itemNow(target.id);
   if (!now || now.content.type !== 'audio') return [];
-  return [itemOp(now, { content: { ...now.content, volumeKeys: keys } })];
+  return [itemOp(now, { content: { ...now.content, volumeKeys: keys, ...volume } })];
 }
 
 /** Commits what `change` makes of its volume keys now, as `label`; nothing when it is unchanged. */
