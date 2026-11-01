@@ -1802,6 +1802,67 @@
   color: var(--color-ink);
 }
 
+/* ---------- Toggle ---------- */
+
+/* A 36 x 20 track. Off: raised, a line-strong edge (ink-soft under the pointer) and an ink-soft knob. On: paper with
+   an on-paper knob. Disabled: an empty track with a faint edge. Styled from aria-checked, not data-state: a tooltip
+   trigger sets its own data-state on the same element. */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  width: 36px;
+  height: 20px;
+  flex: none;
+  padding: 0 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-bay-raised);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.toggle:not(:disabled):hover {
+  box-shadow: inset 0 0 0 1px var(--color-ink-soft);
+}
+
+.toggle-knob {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-ink-soft);
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+.toggle[aria-checked="true"] {
+  background: var(--color-paper);
+  box-shadow: none;
+}
+
+.toggle[aria-checked="true"] .toggle-knob {
+  background: var(--color-on-paper);
+  transform: translateX(16px);
+}
+
+.toggle:disabled {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-line);
+}
+
+.toggle:disabled .toggle-knob {
+  background: var(--color-ink-disabled);
+}
+
+/* The knob jumps instead of sliding. */
+@media (prefers-reduced-motion: reduce) {
+  .toggle-knob {
+    transition: background-color var(--dur-fast) var(--ease-out);
+  }
+}
+
 /* ---------- Player bar ---------- */
 
 .playerbar {
