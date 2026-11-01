@@ -69,7 +69,7 @@ const KINDS = new Set(['music', 'sound', 'video', 'photo', 'background', 'sticke
 const tokens = (value: string) =>
   value
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .match(/[\p{L}\p{N}]+/gu) ?? [];
 /** A plural read as its one: "sounds" is "sound". */
