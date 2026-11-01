@@ -30,6 +30,28 @@ pub fn stdin_is_pipe() -> bool {
     crate::imp::stdin_is_pipe()
 }
 
+/// Whether a read of `fd` would return at once: bytes wait in it, or its writer closed it (or it isn't open). `wait`:
+/// blocks until it would (`poll`), so a reader waits for bytes without reading them.
+#[cfg(unix)]
+pub fn readable(fd: std::os::fd::RawFd, wait: bool) -> bool {
+    let mut probe = libc::pollfd {
+        fd,
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    loop {
+        // SAFETY: one pollfd, as the count says; it only reads the descriptor's state.
+        let n = unsafe { libc::poll(&raw mut probe, 1, if wait { -1 } else { 0 }) };
+        if n >= 0 {
+            return n > 0 && probe.revents != 0;
+        }
+        if io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
+            // A descriptor poll can't read: a read would fail at once.
+            return true;
+        }
+    }
+}
+
 /// Takes an exclusive lock on `file` without waiting (std's `File::try_lock`: `flock` on macOS and Linux,
 /// `LockFileEx` on Windows). It is released when the file closes, on any exit. `WouldBlock`: another process holds
 /// it.
