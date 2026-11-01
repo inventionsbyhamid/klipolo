@@ -35,7 +35,7 @@ fn source(path: &str, start: i64, end: i64, source_in: i64) -> AudioSource {
     }
 }
 
-/// A large project's shape at a small scale: 1,500 recording clips, each a mic and a system source (3,000), with splits
+/// A 2-hour project's shape at a small scale: 1,500 recording clips, each a mic and a system source (3,000), with splits
 /// that play through their cut, fades, crossfades into the next clip, and a music bed under all of it.
 fn plan() -> AudioPlan {
     let mut sources = Vec::new();

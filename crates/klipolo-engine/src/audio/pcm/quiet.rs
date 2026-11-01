@@ -1,8 +1,7 @@
-//! Quiet sound from the cache's 100 ms energy windows, for the cursor's idle stretches and
+//! Quiet sound from the cache's 100 ms energy windows, for the cursor's idle stretches and dead time. A channel's
 //! level is its K-weighted mean square in dB (`10·log10`), the definition the transcript's pauses use
 //! (`klipolo_model::speech::silence`, `10·log10(power / 2)` of the same windows). This is a fixed threshold, a second
-//! `speech::silence::pauses` (with its threshold that adapts to each file) is on this branch, `quiet_spans` calls it
-//! instead of keeping a second definition of a pause.
+//! definition of a pause beside `speech::silence::pauses` (whose threshold adapts to each file).
 
 use klipolo_model::time::Us;
 

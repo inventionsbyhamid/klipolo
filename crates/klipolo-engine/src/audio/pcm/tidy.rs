@@ -61,7 +61,7 @@ pub(super) fn tidy(
             "tmp" if startup && !in_progress(&name, &meta) => {
                 let _ = fs::remove_file(&path);
             }
-            // The per-speed stereo f32 files.
+            // Per-speed stereo f32 files from an older cache format.
             "f32" if startup => {
                 let _ = fs::remove_file(&path);
             }
