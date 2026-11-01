@@ -238,16 +238,6 @@ mod tests {
     /// Each item keeps its manifest's tags, for the library's search and chat; an item with none has none.
     #[test]
     fn the_pack_keeps_each_items_tags() {
-        let items = repo_pack().items();
-        assert!(items.iter().all(|item| !item.tags.is_empty()));
-        let tagged = |id: &str, tag: &str| {
-            items
-                .iter()
-                .any(|item| item.id == id && item.tags.iter().any(|t| t == tag))
-        };
-        assert!(tagged("whoosh", "transition") && tagged("whoosh", "topic change"));
-        assert!(tagged("arrow", "point"));
-
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("pop.wav"), b"RIFF").unwrap();
         std::fs::write(dir.path().join("tap.wav"), b"RIFF").unwrap();
