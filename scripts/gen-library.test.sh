@@ -86,7 +86,7 @@ def _():
                   "impact", "bass-drop", "long-riser", "swipe-left", "swipe-right", "glitch", "record-scratch",
                   "shutter", "typing", "notification", "success", "error", "pop-high", "bubbles", "boing", "drum-hit",
                   "tick-tock"],
-        "music": ["soft-ambient", "upbeat-loop"],
+        "music": ["soft-ambient", "upbeat-loop", "chill-beat", "energetic-loop"],
         "sticker": ["heart", "star", "arrow", "circle", "check", "bubble",
                     "arrow-curved", "arrow-pointer", "circle-drawn", "underline", "x-mark", "question", "exclamation",
                     "number-1", "number-2", "number-3", "number-4", "number-5", "thought-bubble", "shout-bubble",
@@ -95,7 +95,7 @@ def _():
                     "paper-9x16"],
     }
     assert {k: [i["id"] for i in of(k)] for k in want} == want, [i["id"] for i in items]
-    assert len(items) == 62 and manifest["license"] == "CC0-1.0" and manifest["creator"] == "Klipolo"
+    assert len(items) == 64 and manifest["license"] == "CC0-1.0" and manifest["creator"] == "Klipolo"
     for i in items:
         assert i["license"] == "CC0-1.0", i["id"]
         assert i["name"] and not any(d in i["name"] for d in "–—"), i["id"]
