@@ -107,7 +107,7 @@ async fn a_take_loads_with_its_smoothings_off_the_render_thread_and_wakes_the_se
 
 #[test]
 fn preview_and_export_hold_the_same_takes_under_the_budget() {
-    // The test, over takes: a budget of three and a half takes, each with its Medium path.
+    // The cursor files' budget test, over takes: a budget of three and a half takes, each with its Medium path.
     let dir = tempfile::tempdir().unwrap();
     let p = cursor_takes(6, dir.path(), CursorCapture::Separate);
     let wants = wanted(&p);
@@ -169,8 +169,8 @@ fn a_style_change_builds_one_more_variant_and_a_variant_no_clip_uses_goes() {
     let off = ready(&p);
     assert_eq!(off.variants(), 0);
     assert!(off.bytes() < with_medium);
-    // The rest scan goes with its last path, so this take counts what export's fresh one does (the same
-    // prefix of takes at the budget's edge).
+    // The rest scan goes with its last path, so this take counts what export's fresh one does (the same prefix of takes
+    // at the budget's edge).
     let fresh = load_take(&cursor_file(dir.path(), 1)).unwrap();
     fresh.prepare(&[]);
     assert_eq!(off.bytes(), fresh.bytes());
@@ -178,8 +178,8 @@ fn a_style_change_builds_one_more_variant_and_a_variant_no_clip_uses_goes() {
 
 #[test]
 fn a_style_change_draws_the_path_held_until_the_new_one_lands() {
-    // While Strong builds, the take still holds Medium (until `keep`), and that is what draws, so a
-    // paused frame never steps to the raw path and back.
+    // While Strong builds, the take still holds Medium (until `keep`), and that is what draws, so a paused frame never
+    // steps to the raw path and back.
     let dir = tempfile::tempdir().unwrap();
     cursor_takes(1, dir.path(), CursorCapture::Separate);
     let take = load_take(&cursor_file(dir.path(), 1)).unwrap();
