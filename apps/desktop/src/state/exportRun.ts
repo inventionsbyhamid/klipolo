@@ -8,6 +8,13 @@ import { codedMessage } from '../bridge/call';
 import { FORMAT_SHORT } from '../lib/layout';
 
 export type ExportPhase = 'idle' | 'running' | 'done' | 'failed' | 'cancelled';
+/** Why a finished export has no captions file beside its video: a full disk, another failure, or no words in it. */
+export type CaptionFailure = 'diskFull' | 'failed' | 'empty';
+/** A captions file in place beside a video: its `fileReady` index (past the videos') and its name. */
+export interface CaptionFileReady {
+  index: number;
+  name: string;
+}
 
 /**
  * One export run as the dialog shows it. Klipolo doesn't resume an export: one that stops before every file is in place
@@ -36,6 +43,10 @@ export interface ExportRun {
   stopping: boolean;
   /** Indexes of files that are in place. */
   ready: number[];
+  /** Captions files in place beside the videos. */
+  captionFiles: CaptionFileReady[];
+  /** The video is in place but its captions file isn't: why. */
+  captionFailed: CaptionFailure | null;
   /** Why it failed, in words. */
   message: string | null;
   /** Saving the latest edits before the export takes a moment. */
@@ -58,6 +69,8 @@ export const idleRun: ExportRun = {
   retrying: false,
   stopping: false,
   ready: [],
+  captionFiles: [],
+  captionFailed: null,
   message: null,
   saving: false,
   announcement: '',
@@ -87,6 +100,32 @@ export function exportedTitle(count: number): string {
     id: 'export.done.title',
     message: plural(count, { one: 'Exported # video', other: 'Exported # videos' }),
   });
+}
+
+/** Why the captions file isn't beside the video, plainly, with what to do. */
+export function captionFailure(why: CaptionFailure): string {
+  if (why === 'empty')
+    return t({
+      id: 'export.captionFile.empty',
+      message: 'There were no captions to save: none of the transcribed words are in your video.',
+      comment: 'A captions file was asked for, but the words transcribed were all cut from the video',
+    });
+  return why === 'diskFull'
+    ? t({
+        id: 'export.captionFile.diskFull',
+        message:
+          'The captions file couldn’t be saved because the disk is full. Your video is ready. Free up space, then export again to save it.',
+      })
+    : t({
+        id: 'export.captionFile.failed',
+        message: 'The captions file couldn’t be saved. Your video is ready. Export again to save it.',
+      });
+}
+
+/** "Exported 1 video.", and why its captions file isn't beside it when it isn't. */
+export function exportedText(s: Pick<ExportRun, 'files' | 'captionFailed'>): string {
+  const title = `${exportedTitle(s.files.length)}.`;
+  return s.captionFailed ? `${title} ${captionFailure(s.captionFailed)}` : title;
 }
 
 /** The formats of the run's files that aren't in place. */
@@ -153,15 +192,30 @@ export function applyEvent(s: ExportRun, e: ExportEvent): Partial<ExportRun> {
     case 'retrying':
       return { retries: s.retries + 1, retrying: true, finishing: false, etaS: null };
     case 'fileReady':
-      // Past the videos: a caption file beside one of them (Klipolo asks for none).
-      if (e.index >= s.files.length) return {};
+      // Past the videos: the captions file beside one of them.
+      if (e.index >= s.files.length)
+        return {
+          captionFiles: [
+            ...s.captionFiles.filter((c) => c.index !== e.index),
+            { index: e.index, name: fileName(e.path) },
+          ],
+        };
       // A name taken since planning gets the next free one: the row shows the file as it is on disk.
       return {
         files: s.files.map((f, i) => (i === e.index ? { ...f, path: e.path, name: fileName(e.path) } : f)),
         ready: s.ready.includes(e.index) ? s.ready : [...s.ready, e.index],
       };
+    case 'captionFileFailed':
+      return { captionFailed: e.diskFull ? 'diskFull' : 'failed' };
+    case 'captionFileEmpty':
+      return { captionFailed: 'empty' };
     case 'finished':
-      return { ...stopped, phase: 'done', announcement: exportedTitle(s.files.length) };
+      // Why there's no captions file is heard with the title, not only shown.
+      return {
+        ...stopped,
+        phase: 'done',
+        announcement: s.captionFailed ? exportedText(s) : exportedTitle(s.files.length),
+      };
     case 'paused':
       // Rust says a run that stopped keeping its parts as a failure; one that still arrives as a pause is one too.
       return failed(s, e.message ?? t({ id: 'export.failed.stopped', message: 'The export stopped.' }));
@@ -174,7 +228,7 @@ export function applyEvent(s: ExportRun, e: ExportEvent): Partial<ExportRun> {
         jobId: null,
         announcement: t({ id: 'export.announce.stopped', message: 'Export stopped. Nothing was saved.' }),
       };
-    // Notes, the screens' analysis and caption files are about recordings and caption files Klipolo doesn't make.
+    // Notes and the screens' analysis aren't shown in this dialog.
     default:
       return {};
   }

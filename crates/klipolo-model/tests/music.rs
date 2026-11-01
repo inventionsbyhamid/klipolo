@@ -443,7 +443,8 @@ fn music_not_touching_the_end_is_left_alone() {
         spans(&music(&after)),
         [(0.0, 8.0), (8.0, 16.0), (16.0, 20.0)]
     );
-    assert_eq!(item_by_id(&after, "whoosh").end_us(), secs(30.0));
+    // The free whoosh keeps its time, and is trimmed where the video now ends.
+    assert_eq!(spans(&[item_by_id(&after, "whoosh")]), [(25.0, 26.0)]);
 
     // An edit that leaves the video's end where it was changes no music, even music that reaches it.
     let p = with_music(&video(30.0), "loop", MusicOpts::default());
@@ -867,6 +868,25 @@ fn music_crossing_the_new_end_is_cut_there_with_its_fade_out() {
     assert_eq!(spans(&m), [(0.0, 8.0), (8.0, 15.0)]);
     assert_one_bed(&short, "loop");
     assert_eq!(fade_out(m[1]), 2.0);
+}
+
+#[test]
+fn music_left_past_the_new_end_goes() {
+    // A bed from 1:40 to 3:20 of a 3:37.5 video doesn't reach the end. Keeping only 0–25.5 s leaves it past the new
+    // end, so it goes in the cut's own step, and the proposal names it.
+    let opts = MusicOpts {
+        start_us: secs(100.0),
+        end_us: Some(secs(200.0)),
+        ..MusicOpts::default()
+    };
+    let p = with_music(&video(217.5), "song", opts);
+    let bed = music(&p)[0].id.clone();
+    assert_eq!(spans(&music(&p)), [(100.0, 200.0)]);
+    let ops = with_music_refit(&p, vec![cut(25.5, 217.5)]).unwrap();
+    let short = apply_ops(&p, &ops).unwrap();
+    assert_eq!(video_duration(&short.timeline), secs(25.5));
+    assert!(music(&short).is_empty(), "{:?}", spans(&music(&short)));
+    assert_eq!(tx(ops).review(&p).unwrap().removals.items, [bed]);
 }
 
 #[test]
