@@ -127,7 +127,12 @@ pub(crate) async fn speaker_keep(
     let keeps = BTreeMap::from([(clip_id.clone(), keep)]);
     // From what the follow tracked and matched only: it never pays.
     let followed = speaker
-        .keep(&now.project, std::slice::from_ref(&clip_id), &[format], &keeps)
+        .keep(
+            &now.project,
+            std::slice::from_ref(&clip_id),
+            &[format],
+            &keeps,
+        )
         .await
         .map_err(Said::Text)?;
     build_and_apply(&projects, Some(&now.project.id), None, KEEP_UNDO, |p| {

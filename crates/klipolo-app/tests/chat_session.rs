@@ -2984,11 +2984,7 @@ mod follow {
 
     #[tokio::test]
     async fn who_chat_keeps_in_frame_carries_to_the_pieces_a_cut_in_the_same_answer_makes() {
-        let cut = fc(
-            "c",
-            "cutRange",
-            r#"{"startSec": 10.0, "endSec": 12.0}"#,
-        );
+        let cut = fc("c", "cutRange", r#"{"startSec": 10.0, "endSec": 12.0}"#);
         let guest = fc(
             "s",
             "followSubject",
