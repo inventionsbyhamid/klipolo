@@ -16,19 +16,42 @@ import { renderWithProviders } from '../../test/render';
 const apply = vi.fn<(label: string, ops: Op[], params?: LabelParams) => Promise<boolean>>(() =>
   Promise.resolve(true),
 );
-// Rust's bundled families: the Font menu lists these once they are in.
-vi.mock('../../bridge/fonts', () => ({
-  fonts: {
-    bundled: vi.fn(() =>
-      Promise.resolve([
-        { family: 'Inter', weight: 400, italic: false },
-        { family: 'Inter', weight: 700, italic: false },
-        { family: 'Anton', weight: 400, italic: false },
-      ]),
-    ),
-    face: vi.fn(() => Promise.reject(new Error('no faces in tests'))),
-  },
-}));
+// Rust's fonts: the Font menu browses these two bundled families.
+vi.mock('../../bridge/fonts', () => {
+  const family = (name: string, faces: [number, boolean][]) => ({
+    family: name,
+    source: { type: 'bundled' },
+    category: 'sans',
+    faces,
+    snapped: faces[faces.length - 1],
+    state: 'bundled',
+    sizeBytes: null,
+    moreFaces: [],
+    defaultWeightOnly: false,
+    systemName: null,
+    stretch: 5,
+    tooLarge: false,
+  });
+  const rows = [
+    family('Inter', [
+      [400, false],
+      [700, false],
+    ]),
+    family('Anton', [[400, false]]),
+  ];
+  return {
+    fonts: {
+      bundled: vi.fn(() => Promise.resolve([])),
+      face: vi.fn(() => Promise.reject(new Error('no faces in tests'))),
+      faceOf: vi.fn(() => Promise.reject(new Error('no faces in tests'))),
+      browse: vi.fn(() => Promise.resolve({ sections: [['bundled', rows.length]], value: 0 })),
+      browseRows: vi.fn((_ask: unknown, from: number, to: number) => Promise.resolve(rows.slice(from, to))),
+      search: vi.fn(() => Promise.resolve(rows)),
+      row: vi.fn((font: { family: string }) => Promise.resolve(rows.find((r) => r.family === font.family) ?? null)),
+      google: vi.fn(() => Promise.resolve({ enabled: true, consented: false })),
+    },
+  };
+});
 vi.mock('../../bridge/engine', () => ({
   engine: { preview: vi.fn(() => Promise.resolve()), previewClear: vi.fn(() => Promise.resolve()) },
 }));
@@ -415,7 +438,7 @@ describe('the inspector', () => {
     expect(apply).not.toHaveBeenCalled();
   });
 
-  it('the Font menu lists Rust’s bundled families, and the size goes from 8 to 400', async () => {
+  it('the Font menu lists Rust’s families, the bundled first, and a pick is one change; the size goes from 8 to 400', async () => {
     useSelection.setState({ selectedId: 'title' });
     renderWithProviders(<Inspector format="landscape" />);
     const size = screen.getByRole('slider', { name: 'Size' });
@@ -423,8 +446,20 @@ describe('the inspector', () => {
     expect(size).toHaveAttribute('aria-valuemax', '400');
     await userEvent.click(screen.getByRole('button', { name: 'Font: Inter' }));
     await waitFor(() =>
-      expect(screen.getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual(['Inter', 'Anton']),
+      expect(screen.getAllByRole('option').map((o) => o.getAttribute('title') ?? o.textContent)).toEqual([
+        expect.stringContaining('Inter'),
+        expect.stringContaining('Anton'),
+      ]),
     );
+    expect(screen.getByText('Included with Klipolo')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('option', { name: /Anton/ }));
+    await act(async () => undefined);
+    expect(apply.mock.calls.map(([label]) => label)).toEqual(['text.font.undo']);
+    expect(styleOf(apply.mock.calls[0])).toMatchObject({
+      font: { family: 'Anton', source: { type: 'bundled' } },
+      weight: 400,
+      italic: false,
+    });
   });
 
   it('a run of arrow keys on the colours or the position is one change, made once the keys stop', async () => {

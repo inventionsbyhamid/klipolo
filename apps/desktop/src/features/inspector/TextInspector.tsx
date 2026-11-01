@@ -10,16 +10,18 @@ import { IconButton } from '../../design/IconButton';
 import { Segmented } from '../../design/Segmented';
 import { Toggle } from '../../design/Toggle';
 import type { Label } from '../../lib/labels';
-import { useBundledFamilies } from '../../lib/fonts';
 import { BOX_COLOR, OUTLINE_STEPS, outlineStep, outlineWidth, scaledStyle, type TextLook } from '../../lib/textLook';
 import { TEXT_SWATCHES } from '../../lib/swatches';
 import { itemOp } from '../../lib/ops';
 import { commitToggle } from '../../state/commit';
+import { useRecentFonts } from '../../state/fonts';
 import { commitLatest, contentNow } from '../../state/latest';
+import { clearPreview, dropPendingPreview, previewOps } from '../../state/livePreview';
 import { ColorField, type Swatch } from '../color/ColorField';
 import { useColorCommit } from '../color/useColorCommit';
+import { FontMenu } from '../fonts/FontMenu';
 import { AnimationField, PositionField, TimingField } from './common';
-import { Field, Select } from './fields';
+import { Field } from './fields';
 import { TextField } from './TextField';
 import { TextLooks } from './TextLooks';
 import { ToolSlider } from './ToolSlider';
@@ -35,24 +37,6 @@ export const MAX_TEXT_SIZE = 400;
 const BOLD = 700;
 const REGULAR = 400;
 
-/**
- * The 12 bundled families a text can use, in the Font menu's order (`klipolo_fonts::bundled::BUNDLED`): the menu shows
- * these until Rust's own list (`fonts_bundled`) is in.
- */
-export const FAMILIES = [
-  'Inter',
-  'TikTok Sans',
-  'Montserrat',
-  'Anton',
-  'Bangers',
-  'Oswald',
-  'Rubik',
-  'Bebas Neue',
-  'Luckiest Guy',
-  'Playfair Display',
-  'Caveat',
-  'JetBrains Mono',
-];
 
 /** The text colours offered, then "+" for any other. */
 export function textSwatches(t: (d: { id: string; message?: string }) => string): Swatch[] {
@@ -96,7 +80,6 @@ export function TextInspector({
   const setStyle = (label: Label, change: (now: TextStyle) => TextStyle) =>
     void commitLatest(label, () => styleOps(change));
   const sizeLabel = t({ id: 'text.size', message: 'Size' });
-  const families = useBundledFamilies(FAMILIES);
   const colorLabel = t({ id: 'text.color', message: 'Text color' });
   const highlightLabel = t({ id: 'text.highlight', message: 'Highlight', comment: 'A color band behind text' });
   const outlineLabel = t({ id: 'text.outline', message: 'Outline', comment: 'A line around the letters' });
@@ -138,15 +121,22 @@ export function TextInspector({
     <>
       <TextField key={content.text} id={item.id} content={content} locked={locked} />
       <Field label={t({ id: 'text.font', message: 'Font' })}>
-        <Select
+        <FontMenu
           label={t({ id: 'text.font', message: 'Font' })}
-          value={style.font.family}
-          choices={(families.includes(style.font.family) ? families : [style.font.family, ...families]).map(
-            (family) => ({ value: family, label: family }),
-          )}
-          onPick={(family) =>
-            setStyle('text.font.undo', (now) => ({ ...now, font: { family, source: { type: 'bundled' } } }))
+          value={style.font}
+          weight={style.weight}
+          italic={style.italic}
+          text={content.text}
+          // Arrow keys and a resting hover show a font on the title (a dry run); Escape puts it back.
+          onPreview={(font, weight, italic) =>
+            font ? previewOps(() => styleOps((now) => ({ ...now, font, weight, italic }))) : clearPreview()
           }
+          onPick={(font, weight, italic) => {
+            // The pick is committed as the dry run showed it: the new revision replaces the dry run, no flicker.
+            dropPendingPreview();
+            useRecentFonts.getState().push(font);
+            setStyle('text.font.undo', (now) => ({ ...now, font, weight, italic }));
+          }}
         />
       </Field>
       <Field label={sizeLabel}>
