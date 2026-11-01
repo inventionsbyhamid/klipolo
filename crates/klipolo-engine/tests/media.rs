@@ -206,11 +206,11 @@ fn a_long_gop_file_writes_every_chunk_and_is_not_scanned_again() {
     );
 }
 
-/// A file scanned before posters (its chunks and keyframe index cached, no poster) gets one on its next want, from a
-/// new store as after a relaunch: chunk 0 counts as missing until the poster is there. The chunk on disk is kept as it
-/// was, from keyframes or from an editing copy that wrote it first. Once the poster is there, nothing is scanned again.
+/// A file whose chunks and keyframe index are cached has nothing left to scan on its next want, from a new store as
+/// after a relaunch, whether chunk 0 came from keyframes or from an editing copy: the poster isn't the scan's (the start
+/// screen's poster maker makes it), so its absence cuts nothing again.
 #[test]
-fn a_file_scanned_before_posters_gets_one_on_its_next_want() {
+fn a_scanned_file_without_a_poster_is_not_scanned_again() {
     for fill in [Fill::Keys, Fill::Full] {
         let root = tempfile::tempdir().unwrap();
         let video = fixture("bars-30fps-0.5gop.mp4")
@@ -225,8 +225,7 @@ fn a_file_scanned_before_posters_gets_one_on_its_next_want() {
         first.want(vec![want.clone()]);
         wait_until(|| !first.pending());
         let key = stem(&video, &CacheKind::Thumbs).unwrap();
-        // The cache as it was before posters: no poster, and chunk 0 from keyframes or an editing copy's full decode.
-        std::fs::remove_file(poster(root.path(), &video).expect("a scan writes one").path).unwrap();
+        assert_eq!(poster(root.path(), &video), None, "{fill:?}");
         if fill == Fill::Full {
             std::fs::rename(
                 chunk_path(root.path(), &key, 0, Fill::Keys),
@@ -238,37 +237,20 @@ fn a_file_scanned_before_posters_gets_one_on_its_next_want() {
         let kept = std::fs::metadata(&chunk).unwrap().modified().unwrap();
 
         let again = ThumbStore::new(root.path().to_path_buf(), Arc::new(Os));
-        again.want(vec![want.clone()]);
-        wait_until(|| !again.pending());
-        let found = poster(root.path(), &video).expect("written on the next want");
-        assert_eq!((found.w, found.h), (480, 270), "{fill:?}");
-        assert_eq!(
-            std::fs::metadata(&chunk).unwrap().modified().unwrap(),
-            kept,
-            "{fill:?}: chunk 0 is kept"
-        );
-        assert_eq!(
-            strip(root.path(), &video).unwrap().chunks.len(),
-            1,
-            "{fill:?}"
-        );
-        assert_eq!(
-            strip(root.path(), &video).unwrap().chunks[0].full,
-            fill == Fill::Full,
-            "{fill:?}: no other chunk 0 beside it"
-        );
-
-        // Then there is nothing left to scan, after another relaunch too.
-        let later = ThumbStore::new(root.path().to_path_buf(), Arc::new(Os));
         let events = Arc::new(Mutex::new(Vec::new()));
         let seen = events.clone();
-        later.set_sink(Arc::new(move |e| seen.lock().unwrap().push(e)));
-        later.want(vec![want]);
-        wait_until(|| !later.pending());
+        again.set_sink(Arc::new(move |e| seen.lock().unwrap().push(e)));
+        again.want(vec![want]);
+        wait_until(|| !again.pending());
         assert!(
             events.lock().unwrap().is_empty(),
             "{fill:?}: {:?}",
             events.lock().unwrap()
+        );
+        assert_eq!(
+            std::fs::metadata(&chunk).unwrap().modified().unwrap(),
+            kept,
+            "{fill:?}: chunk 0 is kept"
         );
     }
 }
