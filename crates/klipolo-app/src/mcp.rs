@@ -260,7 +260,11 @@ impl<S: SessionOf> AppHost<S> {
             .on_revision(done.at.revision);
         self.told(client, done.at.opening, applied);
         let kept = kept_in_frame(&p, &p.settings.formats, &phrase);
-        let cost = cost_said(followed.paid_usd);
+        let mut cost = cost_said(followed.paid_usd);
+        // Who speaks couldn't be told: said too.
+        if let Some(why) = &followed.note {
+            cost = format!("{cost} {why}");
+        }
         Ok(Started::Done {
             said: format!("{kept}. {cost} The person can undo it in Klipolo."),
             revision: self.revisions.of(&done.at),

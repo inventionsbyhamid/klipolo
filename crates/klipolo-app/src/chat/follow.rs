@@ -158,6 +158,12 @@ pub(super) async fn follow_jobs(
                         dollars(followed.paid_usd)
                     );
                 }
+                // Who speaks couldn't be told: the person hears why the crop follows the main person.
+                if let Some(why) = &followed.note {
+                    follows.said.push(why.clone());
+                    follows.note.push(' ');
+                    follows.note.push_str(why);
+                }
             }
         }
         if asked.len() > 1 {

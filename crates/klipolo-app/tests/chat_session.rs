@@ -3028,6 +3028,42 @@ mod follow {
     }
 
     #[tokio::test]
+    async fn the_reply_says_when_who_speaks_could_not_be_told() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut project = talk();
+        let file = dir.path().join("talk.mov");
+        std::fs::write(&file, b"the talk").unwrap();
+        project.assets[0].path = file.to_string_lossy().into_owned();
+        let model = Script::new(vec![answer(
+            "Done.",
+            vec![portrait(), follow_the_speaker()],
+        )]);
+        let chat = chat_on(project, model.clone(), Found::done(), Paying::key(model));
+        let sam = Arc::new(Sam {
+            two: true,
+            ..Sam::default()
+        });
+        let speaker = Speaker::new(
+            Arc::new(Pays(sam, Some(Arc::new(NoAnswer)))),
+            Arc::new(Copies::default()),
+            dir.path().join("analysis"),
+            dir.path().join("work"),
+            Arc::new(|_| {}),
+        )
+        .with_voices(Arc::new(TwoVoices));
+        chat.session.set_speaker(Arc::new(speaker));
+        let r = reply(
+            &chat
+                .session
+                .send(request("make it vertical and keep whoever talks in frame"))
+                .await
+                .unwrap(),
+        );
+        assert!(r["applied"].is_object(), "{r:#}");
+        assert!(r["notes"].to_string().contains(UNMATCHED), "{r:#}");
+    }
+
+    #[tokio::test]
     async fn a_short_tracks_only_what_its_cut_keeps_and_follows_once_applied() {
         let keep = fc(
             "k",
