@@ -1,9 +1,22 @@
-//! The bundled fonts for the page: the families the Font menu offers, and a face's bytes, so a title typed on the canvas
-//! (and measured for its handles) is drawn in the very file the engine draws it with. Only the bundled files are ever
-//! read: a family and weight name one of them, never a path.
+//! The fonts for the page: the bundled families and their faces' bytes (a title typed on the canvas, and measured for
+//! its handles, is drawn in the very file the engine draws it with), and the Font menu's search, browse and Google
+//! Fonts downloads over `klipolo_app::fonts`. Only files the font index holds are ever read: a family and weight name
+//! one of them, never a path.
 
+use std::sync::Arc;
+
+use klipolo_app::fonts::downloads::{self, Downloads, Host};
+use klipolo_app::fonts::google::{self, GoogleFonts};
+use klipolo_app::fonts::{Fonts, face_bytes};
+use klipolo_fonts::browse::{Browse, BrowseAsk, browse, browse_rows, row_for};
 use klipolo_fonts::bundled::{BUNDLED, BundledFace, bundled_dir, fallback_only};
+use klipolo_fonts::search::{FontRow, SearchFilter};
+use klipolo_mcp::connection::support_dir;
+use klipolo_model::coded::{CodedError, Said};
+use klipolo_model::font::FontRef;
 use serde::Serialize;
+use serde_json::json;
+use tauri::{AppHandle, Emitter, Manager, State};
 use ts_rs::TS;
 
 /// One face of a bundled family.
@@ -53,6 +66,197 @@ pub fn fonts_face(
             tracing::warn!(%error, file = face.file, "a bundled font couldn't be read");
             "Klipolo couldn't read that font. Try again, or reinstall Klipolo.".to_string()
         })
+}
+
+/// The app as the downloads' host: Google Fonts' setting file in the support folder, and events to the page.
+#[derive(Clone)]
+pub(crate) struct AppHost(pub AppHandle);
+
+impl Host for AppHost {
+    fn google(&self) -> GoogleFonts {
+        support_dir()
+            .map(|dir| google::load(&dir))
+            .unwrap_or_default()
+    }
+
+    fn set_google(&self, change: &dyn Fn(&mut GoogleFonts)) -> Result<GoogleFonts, CodedError> {
+        let dir = support_dir().ok_or_else(klipolo_fonts::english::save_failed)?;
+        let mut now = google::load(&dir);
+        change(&mut now);
+        google::save(&dir, &now).map_err(|error| {
+            tracing::warn!(%error, "fonts: Google Fonts' setting couldn't be saved");
+            klipolo_fonts::english::save_failed()
+        })?;
+        Ok(now)
+    }
+
+    fn progress(&self, family: &str, done: u64, total: u64) {
+        let _ = self.0.emit(
+            "fonts-download",
+            json!({ "family": family, "done": done, "total": total }),
+        );
+    }
+
+    fn changed(&self, family: &str) {
+        let _ = self.0.emit("fonts-changed", json!({ "family": family }));
+    }
+}
+
+/// The families matching `query`, best first: the bundled set, this computer's and Google's (none needing a download
+/// while Google Fonts is off).
+#[tauri::command]
+pub async fn fonts_search(
+    app: AppHandle,
+    fonts: State<'_, Fonts>,
+    query: String,
+    mut filter: SearchFilter,
+) -> Result<Vec<FontRow>, Said> {
+    filter.google_off = !AppHost(app).google().enabled;
+    Ok(fonts.search_after_scan(&query, filter).await)
+}
+
+/// The menu's browse (an empty query): its sections' counts, the 12 bundled families first; the rows come by window.
+#[tauri::command]
+pub async fn fonts_browse(
+    app: AppHandle,
+    fonts: State<'_, Fonts>,
+    mut ask: BrowseAsk,
+) -> Result<Browse, Said> {
+    ask.filter.google_off = !AppHost(app).google().enabled;
+    fonts.after_scan().await;
+    Ok(browse(&fonts.index(), &ask))
+}
+
+/// The browse's rows `from..to`, at most 200 at a time.
+#[tauri::command]
+pub async fn fonts_browse_rows(
+    app: AppHandle,
+    fonts: State<'_, Fonts>,
+    mut ask: BrowseAsk,
+    from: u32,
+    to: u32,
+) -> Result<Vec<FontRow>, Said> {
+    ask.filter.google_off = !AppHost(app).google().enabled;
+    fonts.after_scan().await;
+    Ok(browse_rows(
+        &fonts.index(),
+        &ask,
+        from,
+        to.min(from.saturating_add(200)),
+    ))
+}
+
+/// The row of exactly `font` (else a family of its name), for the menu's button and its Weight menu.
+#[tauri::command]
+pub async fn fonts_row(
+    fonts: State<'_, Fonts>,
+    font: FontRef,
+    weight: u16,
+    italic: bool,
+) -> Result<Option<FontRow>, Said> {
+    fonts.after_scan().await;
+    Ok(row_for(&fonts.index(), &font, (weight, italic)))
+}
+
+/// The bytes of the face `font` draws with at `weight` and `italic` (bundled, downloaded or this computer's), as the
+/// engine resolves it: the canvas draws a title in the very file the engine does.
+#[tauri::command]
+pub async fn fonts_face_of(
+    fonts: State<'_, Fonts>,
+    font: FontRef,
+    weight: u16,
+    italic: bool,
+) -> Result<tauri::ipc::Response, Said> {
+    let index = fonts.index();
+    let bytes =
+        tauri::async_runtime::spawn_blocking(move || face_bytes(&index, &font, weight, italic))
+            .await
+            .map_err(|_| klipolo_fonts::english::missing(""))??;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Google Fonts' switch and the person's one consent, as saved.
+#[tauri::command(async)]
+pub fn fonts_google(app: AppHandle) -> GoogleFonts {
+    AppHost(app).google()
+}
+
+/// The person confirmed "Download from Google Fonts?" once.
+#[tauri::command(async)]
+pub fn fonts_consent(app: AppHandle) -> Result<GoogleFonts, Said> {
+    Ok(downloads::consent(&AppHost(app))?)
+}
+
+/// Settings' "Google Fonts" switch; off stops the downloads running now.
+#[tauri::command(async)]
+pub fn fonts_set_google(
+    app: AppHandle,
+    downloads: State<'_, Downloads>,
+    enabled: bool,
+) -> Result<GoogleFonts, Said> {
+    Ok(downloads::set_enabled(&AppHost(app), &downloads, enabled)?)
+}
+
+/// Downloads a Google family for a text at `weight` and `italic` (`version`: a project's own, else the catalogue's).
+/// Progress comes as `fonts-download`, the end as `fonts-changed`. The family's `FontRef`.
+#[tauri::command]
+pub async fn fonts_download(
+    app: AppHandle,
+    fonts: State<'_, Fonts>,
+    downloads: State<'_, Downloads>,
+    family: String,
+    version: Option<String>,
+    weight: u16,
+    italic: bool,
+) -> Result<FontRef, Said> {
+    let host: Arc<dyn Host> = Arc::new(AppHost(app));
+    Ok(downloads::download(
+        host,
+        &fonts,
+        &downloads,
+        &family,
+        version.as_deref(),
+        weight,
+        italic,
+    )
+    .await?)
+}
+
+/// Stops `family`'s download (its finished files stay).
+#[tauri::command]
+pub fn fonts_cancel(downloads: State<'_, Downloads>, family: String) {
+    downloads.cancel(&family);
+}
+
+/// The online preview of `family`'s name, as a binary response: only after the consent, never while off.
+#[tauri::command]
+pub async fn fonts_preview(
+    app: AppHandle,
+    fonts: State<'_, Fonts>,
+    downloads: State<'_, Downloads>,
+    family: String,
+) -> Result<tauri::ipc::Response, Said> {
+    let bytes = downloads::preview(&AppHost(app), &fonts, &downloads, &family).await?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// The fonts' start: Google's catalogue decoded and the downloads registered with the engine, each on a blocking
+/// thread, never the main one.
+pub(crate) fn start(app: &tauri::App) {
+    let data = app.path().app_data_dir().ok();
+    let downloads = Downloads::open(data.as_deref());
+    app.manage(Fonts::new());
+    app.manage(downloads.clone());
+    let starting = app.handle().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        klipolo_app::fonts::downloads::start(&starting.state::<Fonts>(), &downloads);
+    });
+    let decoding = app.handle().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        decoding
+            .state::<Fonts>()
+            .publish_catalogue(klipolo_fonts::google::shipped());
+    });
 }
 
 #[cfg(test)]

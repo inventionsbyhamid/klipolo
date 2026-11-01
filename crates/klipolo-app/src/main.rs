@@ -72,6 +72,8 @@ fn main() {
         .setup(move |app| {
             let cache = app.path().app_cache_dir().ok();
             app.manage(EngineState::new(Some(warm), cache));
+            // The Font menu's fonts: Google's catalogue and the downloads, each read off the main thread.
+            commands::fonts::start(app);
             let projects = ProjectSessionState::default();
             // Klipolo's pack where this install has it; a project's pack files point here as it opens.
             projects.set_pack(
@@ -220,6 +222,17 @@ fn main() {
             commands::media::library_pack,
             commands::fonts::fonts_bundled,
             commands::fonts::fonts_face,
+            commands::fonts::fonts_face_of,
+            commands::fonts::fonts_search,
+            commands::fonts::fonts_browse,
+            commands::fonts::fonts_browse_rows,
+            commands::fonts::fonts_row,
+            commands::fonts::fonts_google,
+            commands::fonts::fonts_consent,
+            commands::fonts::fonts_set_google,
+            commands::fonts::fonts_download,
+            commands::fonts::fonts_cancel,
+            commands::fonts::fonts_preview,
             commands::screen_color::screen_color_pick,
             commands::captions::captions_pages,
             commands::captions::captions_find,
