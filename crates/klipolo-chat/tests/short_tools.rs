@@ -870,3 +870,42 @@ fn a_landscape_picture_keeps_its_corner_and_size() {
     let b = sticker_box(&p, &out);
     assert!((b.w - 0.35).abs() < 1e-6, "{b:?}");
 }
+
+#[test]
+fn the_text_null_reads_as_null_where_a_field_may_be_null() {
+    // As Muse Spark sometimes writes it.
+    let read = call(
+        "animate",
+        json!({"layer": "last", "enter": "pop", "exit": "null", "emphasis": " NULL ", "sound": "null"}),
+    );
+    assert_eq!(
+        read,
+        ToolCall::Animate {
+            layer: LayerRef::Last,
+            enter: Some(Entrance::Pop),
+            exit: None,
+            emphasis: None,
+            sound: None,
+        }
+    );
+    let read = call(
+        "addText",
+        json!({"text": "Day one", "preset": "title", "atSec": "null", "durationSec": null, "animation": "null",
+               "font": "null"}),
+    );
+    assert!(matches!(
+        read,
+        ToolCall::AddText {
+            at_us: None,
+            animation: None,
+            font: None,
+            ..
+        }
+    ));
+    // Words that must be given stay as written.
+    let read = call(
+        "addText",
+        json!({"text": "null", "preset": "title", "atSec": null, "durationSec": null, "animation": null, "font": null}),
+    );
+    assert!(matches!(read, ToolCall::AddText { ref text, .. } if text == "null"));
+}

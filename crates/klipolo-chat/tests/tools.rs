@@ -1371,6 +1371,7 @@ fn system_prompt_explains_the_context_and_the_rules() {
         "a hook title with addText, kinetic or pop",
         "in the first 2 s of what you keep",
         "a striking later line said in the video, never the opening words",
+        "never the text \"null\"",
         "medium pack stickers",
         "at a top corner",
         "animate last",
