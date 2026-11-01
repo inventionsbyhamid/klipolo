@@ -10,8 +10,7 @@ use super::FontError;
 use crate::coverage::{Coverage, coverage_of};
 
 /// Whether a face whose OS/2 weight is `file` is the catalogue's `named` weight. Google's static files keep Thin at 250
-/// and ExtraLight at 275 (fontbakery's usWeightClass rule, for Windows GDI): those are 100 and 200 (review
-/// A I2).
+/// and ExtraLight at 275 (fontbakery's usWeightClass rule, for Windows GDI): those are 100 and 200.
 pub fn weight_ok(file: u16, named: u16) -> bool {
     file == named || (named == 100 && file == 250) || (named == 200 && file == 275)
 }

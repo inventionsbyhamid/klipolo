@@ -1,5 +1,5 @@
-//! The licence a Google Fonts download keeps beside its faces (never fetched, so
-//! a download asks Google alone, as its consent says). The texts ship in the app (`licences/`):
+//! The licence a Google Fonts download keeps beside its faces (never fetched, so a download asks Google alone, as its
+//! consent says). The texts ship in the app (`licences/`):
 //! - `OFL-1.1.txt`: the SIL Open Font License 1.1 as the bundled families carry it (Inter's `OFL.txt` without its
 //!   copyright line);
 //! - `Apache-2.0.txt`: the Apache License 2.0 (Luckiest Guy's `LICENSE.txt`);

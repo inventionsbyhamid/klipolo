@@ -1,5 +1,5 @@
-//! The font menu's browse, windowed: section counts, then only the rows drawn; the
-//! pinned sections list a font only while it is that very font; Google Fonts off lists only what's downloaded.
+//! The font menu's browse, windowed: section counts, then only the rows drawn; the pinned sections list a font only
+//! while it is that very font; Google Fonts off lists only what's downloaded.
 
 use std::sync::Arc;
 
@@ -53,7 +53,7 @@ fn a_browse_says_its_sections_counts_and_sends_only_the_rows_asked_for() {
         project: vec![
             FontRef::bundled("Anton"),
             google("Lato", "v25"),
-            // Another version than the one listed: not "In this project" (it's missing).
+            // Another version than the one listed: not "In this project" (the missing-font check says it's missing).
             google("Poppins", "v1"),
         ],
         recent: vec![FontRef::bundled("Inter")],

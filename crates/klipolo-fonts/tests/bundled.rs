@@ -45,7 +45,7 @@ fn every_bundled_face_is_the_pinned_static_file_named_as_its_family() {
     }
 }
 
-/// cosmic-text takes glyph 0 as missing, so the missing-glyph boxes need Adobe NotDef to map CJK (and
+/// Cosmic-text takes glyph 0 as missing, so the boxes the last CJK fallback draws need Adobe NotDef to map CJK (and
 /// every other code point) to a real glyph.
 #[test]
 fn adobe_notdef_maps_cjk_to_a_real_glyph() {

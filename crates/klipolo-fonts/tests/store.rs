@@ -86,8 +86,8 @@ fn a_downloaded_family_is_listed_removed_by_its_id_and_never_by_a_folder_it_does
     store.remove(&id).unwrap();
     assert!(store.list().is_empty());
     assert!(!dir.path().join("testa").exists());
-    // A file missing makes a manifest incomplete: never used, and nothing else of it deleted by itself
-    // `tidy` removes only what a quit left half-done or no longer checks out; the next download fetches the rest).
+    // A file missing makes a manifest incomplete: never used, and nothing else of it deleted by itself (`tidy` removes
+    // only what a quit left half-done or no longer checks out; the next download fetches the rest).
     installed(dir.path(), "Testa", "testa");
     std::fs::write(dir.path().join("testa/v1/Testa-700.ttf.part"), b"half").unwrap();
     std::fs::remove_file(dir.path().join("testa/v1/Testa-400.ttf")).unwrap();

@@ -1,7 +1,7 @@
-//! The fonts that ship with Klipolo ("Fonts to bundle"): Google's static TTFs
-//! of twelve open families, fetched once by `scripts/fetch-bundled-fonts.mjs` and pinned here by size and SHA-256 (the
-//! tests check every file, and `scripts/check-release.mjs` reads these rows to check the app's copies). A thirteenth,
-//! Adobe NotDef, is the last CJK fallback only: no menu, search, name lookup or project ever names it.
+//! The fonts that ship with Klipolo: Google's static TTFs of twelve open families, fetched once by
+//! `scripts/fetch-bundled-fonts.mjs` and pinned here by size and SHA-256 (the tests check every file, and
+//! `scripts/check-release.mjs` reads these rows to check the app's copies). A thirteenth, Adobe NotDef, is the last CJK
+//! fallback only: no menu, search, name lookup or project ever names it.
 
 use std::path::PathBuf;
 
