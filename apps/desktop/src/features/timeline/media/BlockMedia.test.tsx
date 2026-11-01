@@ -8,7 +8,7 @@ import { clearShifts, registerBlock, sizeBlock } from '../drag/registry';
 import { CACHED_SPRITES } from './drawFilmstrip';
 import { BlockMedia } from './BlockMedia';
 import type { BlockRuns } from './runs';
-import { themeChanged } from './resolveToken';
+import { themeChanged } from '../../../lib/resolveToken';
 import { createZoomRest, type ZoomRest } from './zoomRest';
 import { ViewportContext, ZoomRestContext } from './ViewportContext';
 
