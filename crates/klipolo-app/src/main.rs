@@ -117,6 +117,8 @@ fn main() {
                 commands::speaker::load(app.handle(), credentials.clone(), analysis.cache_root());
             // Chat over the open project, what analysis found and the same credentials.
             let chat = commands::chat::load(app.handle(), credentials.clone(), analysis.clone());
+            // Chat's followSubject follows with the same speaker following, so its spend counts once.
+            chat.set_speaker(speaker.clone());
             // The person's view as the page last told it, which other apps' calls read as the person's.
             let view: ViewHandle = Arc::new(ViewState::default());
             // Another project opening (or this one closing) stops analysis, starts chat over and forgets the view, once

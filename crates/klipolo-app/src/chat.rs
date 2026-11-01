@@ -15,6 +15,7 @@
 //!   app's change comes to the panel as an `ExternalReply`.
 
 mod describe;
+pub mod follow;
 mod inputs;
 mod jobs;
 mod media_jobs;

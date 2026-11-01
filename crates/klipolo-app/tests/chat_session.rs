@@ -2679,3 +2679,291 @@ async fn a_speed_that_leaves_a_transition_no_room_waits_for_apply_then_undoes_as
     chat.project.step(false).unwrap();
     assert_eq!(*chat.project.project(), *p);
 }
+
+// Following the speaker from chat (`chat::follow`): a fake SAM that sees one person at 0.3, a fake small copy.
+
+mod follow {
+    use std::path::Path;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    use klipolo_analysis::VideoError;
+    use klipolo_analysis::providers::{
+        BoxFuture, ProviderError, SubjectTracker, TrackedBox, TrackedFrame, Tracking,
+    };
+    use klipolo_analysis::subject::{SubjectCopy, frames_for};
+    use klipolo_app::chat::follow::NO_CROP;
+    use klipolo_app::speaker::{Speaker, Trackers};
+    use klipolo_model::fill_focus::FillFocus;
+    use klipolo_model::project::FormatKind;
+    use klipolo_model::time::{RangeUs, Us};
+
+    use super::*;
+
+    #[derive(Default)]
+    pub struct Sam {
+        pub calls: AtomicUsize,
+        pub phrases: Mutex<Vec<String>>,
+    }
+
+    impl SubjectTracker for Sam {
+        fn model(&self) -> &str {
+            "fake-sam"
+        }
+
+        fn max_frames(&self) -> u64 {
+            15_000
+        }
+
+        fn estimate_usd(&self, frames: u64) -> f64 {
+            frames.max(50) as f64 * 0.0002
+        }
+
+        fn track<'a>(
+            &'a self,
+            video: &'a Path,
+            phrase: &'a str,
+        ) -> BoxFuture<'a, Result<Tracking, ProviderError>> {
+            Box::pin(async move {
+                self.calls.fetch_add(1, Ordering::SeqCst);
+                self.phrases.lock().unwrap().push(phrase.to_owned());
+                let frames: u32 = std::fs::read_to_string(video).unwrap().parse().unwrap();
+                let person = TrackedBox {
+                    id: 1,
+                    left: 0.2,
+                    top: 0.1,
+                    right: 0.4,
+                    bottom: 1.0,
+                    confidence: Some(0.9),
+                };
+                Ok(Tracking {
+                    frames: (0..frames)
+                        .map(|frame| TrackedFrame {
+                            frame,
+                            boxes: vec![person],
+                        })
+                        .collect(),
+                    frames_billed: u64::from(frames),
+                    cost_usd: f64::from(frames.max(50)) * 0.0002,
+                })
+            })
+        }
+    }
+
+    struct Pays(Arc<Sam>);
+
+    impl Trackers for Pays {
+        fn tracker(&self) -> BoxFuture<'_, Result<Arc<dyn SubjectTracker>, String>> {
+            let sam = self.0.clone();
+            Box::pin(async move { Ok(sam as Arc<dyn SubjectTracker>) })
+        }
+
+        fn credit_left(&self) -> BoxFuture<'_, Option<f64>> {
+            Box::pin(async { None })
+        }
+    }
+
+    #[derive(Default)]
+    pub struct Copies(pub Mutex<Vec<RangeUs>>);
+
+    impl SubjectCopy for Copies {
+        fn copy(
+            &self,
+            _src: &Path,
+            range: RangeUs,
+            fps: f64,
+            out: &Path,
+            _cancel: &AtomicBool,
+        ) -> Result<Vec<Us>, VideoError> {
+            self.0.lock().unwrap().push(range);
+            std::fs::write(out, frames_for(range.end - range.start, fps).to_string()).unwrap();
+            Ok(vec![])
+        }
+    }
+
+    pub struct Following {
+        pub chat: Chat,
+        pub sam: Arc<Sam>,
+        pub copies: Arc<Copies>,
+        _dir: tempfile::TempDir,
+    }
+
+    /// A chat on "talk.mov" (its file a real one, so its tracking is cached) that follows with the fake SAM.
+    pub fn following(answers: Vec<Result<ModelResponse, ModelError>>) -> Following {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("talk.mov");
+        std::fs::write(&file, b"the talk").unwrap();
+        let mut project = talk();
+        project.assets[0].path = file.to_string_lossy().into_owned();
+        let model = Script::new(answers);
+        let chat = chat_on(project, model.clone(), Found::done(), Paying::key(model));
+        let (sam, copies) = (Arc::new(Sam::default()), Arc::new(Copies::default()));
+        let speaker = Speaker::new(
+            Arc::new(Pays(sam.clone())),
+            copies.clone(),
+            dir.path().join("analysis"),
+            dir.path().join("work"),
+            Arc::new(|_| {}),
+        );
+        chat.session.set_speaker(Arc::new(speaker));
+        Following {
+            chat,
+            sam,
+            copies,
+            _dir: dir,
+        }
+    }
+
+    fn portrait() -> FunctionCall {
+        fc(
+            "v",
+            "setFormat",
+            r#"{"format": "portrait", "keepOthers": true}"#,
+        )
+    }
+
+    fn follow_the_speaker() -> FunctionCall {
+        fc("s", "followSubject", r#"{"description": "the speaker"}"#)
+    }
+
+    fn speaker_x(p: &Project, at: f64) -> Option<f64> {
+        let clip = p.timeline.main.first()?;
+        match clip.fill_focus.get(&FormatKind::Portrait)? {
+            FillFocus::Speaker { path } => path.centre_at(secs(at)).map(|c| c.0),
+            FillFocus::Center => None,
+        }
+    }
+
+    #[tokio::test]
+    async fn a_vertical_version_that_follows_the_speaker_is_one_step_and_says_its_price() {
+        let f = following(vec![answer(
+            "Done.",
+            vec![portrait(), follow_the_speaker()],
+        )]);
+        let r = reply(
+            &f.chat
+                .session
+                .send(request("make it vertical and keep me in frame"))
+                .await
+                .unwrap(),
+        );
+        assert!(r["applied"].is_object(), "{r:#}");
+        // 30 s at 2 frames a second: 60 frames, $0.012. SAM looked for a person, not a loudspeaker.
+        assert_eq!(
+            r["notes"],
+            serde_json::json!([
+                "The vertical version keeps the speaker in frame now. Tracking cost $0.01."
+            ])
+        );
+        assert_eq!(*f.sam.phrases.lock().unwrap(), ["person"]);
+        let p = f.chat.project.project();
+        assert_eq!(p.settings.primary_format, FormatKind::Portrait);
+        assert!((speaker_x(&p, 10.0).unwrap() - 0.3).abs() < 0.02);
+        // One step back takes the format and the follow together.
+        assert_eq!(f.chat.project.undo_steps(), 1);
+        f.chat.project.step(false).unwrap();
+        assert!(speaker_x(&f.chat.project.project(), 10.0).is_none());
+        assert!(f.chat.session.turns()[0].note.contains("Followed person"));
+    }
+
+    #[tokio::test]
+    async fn a_short_tracks_only_what_its_cut_keeps_and_follows_once_applied() {
+        let keep = fc(
+            "k",
+            "keepOnly",
+            r#"{"ranges": [{"startSec": 0.0, "endSec": 7.8}]}"#,
+        );
+        let f = following(vec![answer(
+            "Here is the short.",
+            vec![portrait(), keep, follow_the_speaker()],
+        )]);
+        let out = f
+            .chat
+            .session
+            .send(request("make a vertical short of the first sentence"))
+            .await
+            .unwrap();
+        let r = reply(&out);
+        assert!(r["proposal"].is_object(), "{r:#}");
+        // Only the 8 s or so the cut keeps (to its frame) was sent: 16 frames, billed as 50.
+        let sent = f.copies.0.lock().unwrap().clone();
+        assert_eq!(sent.len(), 1, "{sent:?}");
+        assert_eq!(sent[0].start, 0);
+        assert!((secs(7.8)..secs(8.0)).contains(&sent[0].end), "{sent:?}");
+        let notes = r["notes"].to_string();
+        assert!(
+            notes.contains("once you apply this") && notes.contains("$0.01"),
+            "{notes}"
+        );
+        // The vertical version is in; the follow lands with the cut.
+        assert!(speaker_x(&f.chat.project.project(), 5.0).is_none());
+        f.chat.session.apply(&proposal_id(&out)).unwrap();
+        assert!((speaker_x(&f.chat.project.project(), 5.0).unwrap() - 0.3).abs() < 0.02);
+    }
+
+    #[tokio::test]
+    async fn chats_new_vertical_version_offers_to_follow_with_its_price_and_follows_free_footage() {
+        let f = following(vec![
+            answer("It's vertical now.", vec![portrait()]),
+            answer("Following.", vec![follow_the_speaker()]),
+            answer("Back to 16:9.", vec![fc("u", "undo", "{}")]),
+            answer("Vertical again.", vec![portrait()]),
+        ]);
+        let r = reply(
+            &f.chat
+                .session
+                .send(request("make it vertical"))
+                .await
+                .unwrap(),
+        );
+        assert_eq!(
+            r["notes"],
+            serde_json::json!([
+                "To keep the speaker in frame, say follow the speaker. It costs about $0.01."
+            ])
+        );
+        assert_eq!(
+            f.sam.calls.load(Ordering::SeqCst),
+            0,
+            "offering sends nothing"
+        );
+        let r = reply(
+            &f.chat
+                .session
+                .send(request("follow the speaker"))
+                .await
+                .unwrap(),
+        );
+        assert!(r["applied"].is_object(), "{r:#}");
+        assert_eq!(r["applied"]["undo"]["code"], "chat.followSubject");
+        assert_eq!(f.sam.calls.load(Ordering::SeqCst), 1);
+        // Tracked once: the next vertical version of that footage follows at no charge.
+        f.chat.session.send(request("undo")).await.unwrap();
+        f.chat.project.step(false).unwrap();
+        let r = reply(
+            &f.chat
+                .session
+                .send(request("vertical again"))
+                .await
+                .unwrap(),
+        );
+        assert!(r["notes"].to_string().contains("at no charge"), "{r:#}");
+        assert_eq!(f.sam.calls.load(Ordering::SeqCst), 1);
+        assert!(speaker_x(&f.chat.project.project(), 5.0).is_some());
+    }
+
+    #[tokio::test]
+    async fn following_in_a_16_9_video_asks_for_a_vertical_version_first() {
+        let f = following(vec![answer("Done.", vec![follow_the_speaker()])]);
+        let r = reply(
+            &f.chat
+                .session
+                .send(request("follow the speaker"))
+                .await
+                .unwrap(),
+        );
+        assert_eq!(r["notes"], serde_json::json!([NO_CROP]));
+        assert_eq!(f.sam.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(f.chat.project.revision(), 0);
+    }
+}
