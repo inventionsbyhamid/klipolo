@@ -2654,6 +2654,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "klipolo-sam"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "klipolo-speech-wire"
 version = "0.1.0"
 dependencies = [
