@@ -212,6 +212,27 @@ describe("a recording clip's card", () => {
     expect(useSelection.getState().selectedId).toBe('a-camera');
   });
 
+  it('counts a camera layer freed from its clip but still over it as separated, as Separate camera does', async () => {
+    const snapshot = separated();
+    snapshot.project.timeline.tracks[0].items.find((i) => i.id === 'a-camera')!.attach = null;
+    useProject.setState({ snapshot });
+    renderWithProviders(<Inspector format="landscape" />);
+    expect(screen.queryByRole('radiogroup', { name: 'Camera layout' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Select camera layer' }));
+    expect(useSelection.getState().selectedId).toBe('a-camera');
+  });
+
+  it('gives the camera its controls back once its layer is moved off the clip', () => {
+    const snapshot = separated();
+    const layer = snapshot.project.timeline.tracks[0].items.find((i) => i.id === 'a-camera')!;
+    // Freed, and moved past both clips (0 to 20 s, 20 to 30 s).
+    Object.assign(layer, { attach: null, startUs: 30_000_000 });
+    useProject.setState({ snapshot });
+    renderWithProviders(<Inspector format="landscape" />);
+    expect(group('Camera layout')).toBeInTheDocument();
+    expect(screen.queryByText('The camera is its own layer now.')).toBeNull();
+  });
+
   it('of a take of the camera alone mirrors it, with no layout to pick', async () => {
     const snapshot = fixtureSnapshot();
     const rec = snapshot.project.recordings[0];

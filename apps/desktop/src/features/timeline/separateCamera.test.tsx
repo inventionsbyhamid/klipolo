@@ -136,6 +136,20 @@ describe('Separate camera', () => {
     });
   });
 
+  it('stays off while a freed camera layer is still over the clip, and is on once it is moved off', () => {
+    const over = separated(4);
+    const layer = over.project.timeline.tracks.at(-1)!.items[0];
+    layer.attach = null;
+    useProject.setState({ snapshot: over });
+    useSelection.setState({ selectedId: 'a' });
+    renderWithProviders(<Commands />);
+    expect(separate()).toMatchObject({ enabled: false, reason: "This clip's camera is already in its own layer." });
+    const off = separated(5);
+    Object.assign(off.project.timeline.tracks.at(-1)!.items[0], { attach: null, startUs: 30_000_000 });
+    act(() => useProject.setState({ snapshot: off }));
+    expect(separate()).toMatchObject({ enabled: true, reason: undefined });
+  });
+
   it("isn't on an imported clip's menu", async () => {
     renderWithProviders(<Timeline />);
     await menuOf(/^broll\.mp4/);

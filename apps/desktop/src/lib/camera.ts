@@ -6,7 +6,7 @@ import type { Item } from '../bindings/Item';
 import type { Project } from '../bindings/Project';
 import type { Recording } from '../bindings/Recording';
 import { cameraAssets, cameraSource, firstAsset, primarySource, screenSource } from './recording';
-import { assetById } from './timeline';
+import { assetById, clipDurationUs, itemEndUs } from './timeline';
 
 /** A recording clip's camera: where the engine draws it, and what the canvas and the clip card offer for it. */
 
@@ -38,18 +38,50 @@ export function recordingCameras(project: Project, clip: Clip): string[] {
   return recording ? cameraAssets(recording) : [];
 }
 
-/** The (first) layer `clip`'s camera was separated into, or null. */
-export function separatedCamera(project: Project, clip: Clip): Item | null {
+/** Where `clip` plays on the main track, in µs, or null when it isn't there. O(clips). */
+function spanOf(project: Project, clip: Clip): [number, number] | null {
+  let start = 0;
+  for (const c of project.timeline.main) {
+    const end = start + clipDurationUs(c);
+    if (c.id === clip.id) return [start, end];
+    start = end;
+  }
+  return null;
+}
+
+/**
+ * The layer that plays `clip`'s recording camera over the clip: one of its files, on any track, kept with the clip or
+ * freed from it, meeting the clip's time. The camera is its own layer then, as Rust's `DetachSource` decides when it
+ * refuses to separate it again; showing the clip's own camera as well would draw it twice. Null when none does.
+ * O(clips + layers).
+ */
+export function cameraLayer(project: Project, clip: Clip): Item | null {
   const cameras = recordingCameras(project, clip);
-  if (cameras.length === 0) return null;
+  const span = cameras.length > 0 ? spanOf(project, clip) : null;
+  if (!span) return null;
+  const [start, end] = span;
   for (const track of project.timeline.tracks) {
     for (const item of track.items) {
       const content = item.content;
-      if (content.type === 'video' && cameras.includes(content.assetId) && item.attach?.clipId === clip.id)
+      if (
+        (content.type === 'video' || content.type === 'audio') &&
+        cameras.includes(content.assetId) &&
+        item.startUs < end &&
+        itemEndUs(item) > start
+      )
         return item;
     }
   }
   return null;
+}
+
+/**
+ * `clip`'s camera, for Separate camera and the cards: none (no camera layout or no recording camera beside the
+ * footage), separable, or separated (`cameraLayer`). One answer for the command, the menu and both cards.
+ */
+export function cameraState(project: Project, clip: Clip): 'none' | 'separable' | 'separated' {
+  if (!clip.camera || recordingCameras(project, clip).length === 0) return 'none';
+  return cameraLayer(project, clip) ? 'separated' : 'separable';
 }
 
 /**

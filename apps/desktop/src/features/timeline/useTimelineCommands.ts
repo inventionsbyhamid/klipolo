@@ -1,10 +1,9 @@
 import { useLingui } from '@lingui/react/macro';
 import { useMemo } from 'react';
 import type { Clip } from '../../bindings/Clip';
-import type { Project } from '../../bindings/Project';
-import { recordingCameras } from '../../lib/camera';
+import { cameraState } from '../../lib/camera';
 import { labelText } from '../../lib/labels';
-import { findItem, hasOwnSound, itemEndUs } from '../../lib/timeline';
+import { findItem, hasOwnSound } from '../../lib/timeline';
 import { useClipboard } from '../../state/clipboard';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
@@ -16,31 +15,11 @@ import { nudge } from './keys/nudge';
 import { muteLabel } from '../preview';
 import { separateCamera, stepTrack, toggleAttach, toggleSoundMute } from './keys/layerActions';
 import { split, trimToPlayhead } from './keys/timelineActions';
-import { clipIndexAt, mainIndex, type MainIndex } from './model/index';
+import { clipIndexAt, mainIndex } from './model/index';
 import { useTimelineNavCommands } from './useTimelineNavCommands';
 import { useTransitionCommands } from './useTransitionCommands';
 
 const NO_CLIPS: Clip[] = [];
-
-/**
- * Main clip `i`'s camera, for Separate camera (what `detachSource` takes): none (no recording camera), separable, or
- * separated (one of its files already plays in a layer over the clip).
- */
-function cameraOf(project: Project, index: MainIndex, i: number): 'none' | 'separable' | 'separated' {
-  const clip = project.timeline.main[i];
-  const cameras = recordingCameras(project, clip);
-  if (!clip.camera || cameras.length === 0) return 'none';
-  const shown = project.timeline.tracks.some((track) =>
-    track.items.some(
-      (item) =>
-        item.content.type === 'video' &&
-        cameras.includes(item.content.assetId) &&
-        item.startUs < index.ends[i] &&
-        itemEndUs(item) > index.starts[i],
-    ),
-  );
-  return shown ? 'separated' : 'separable';
-}
 
 /**
  * The timeline's commands: split, trims to the playhead, nudges, the clipboard, track moves, attaching, a sound or
@@ -87,7 +66,8 @@ export function useTimelineCommands(): Command[] {
       mute: labelText(muteLabel(!mutable?.muted, mutable?.type === 'video' ? 'video' : 'sound')),
       camera: labelText('undo.separateCamera'),
     };
-    const camera = clip ? cameraOf(project, index, clipAt) : 'none';
+    // A recording clip's camera, as the cards see it (`cameraState`).
+    const camera = clip ? cameraState(project, main[clipAt]) : 'none';
 
     const edits: Command[] = [
       {

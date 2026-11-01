@@ -6,7 +6,7 @@ import type { Clip } from '../../bindings/Clip';
 import type { FormatKind } from '../../bindings/FormatKind';
 import type { Project } from '../../bindings/Project';
 import { Segmented } from '../../design/Segmented';
-import { cameraModePatch, hasCameraOverlay, isCameraOnly, separatedCamera } from '../../lib/camera';
+import { cameraLayer, cameraModePatch, hasCameraOverlay, isCameraOnly } from '../../lib/camera';
 import type { Label } from '../../lib/labels';
 import { cameraModeFor } from '../../lib/layout';
 import { cameraOps, commitLatest, type PatchOf } from '../../state/latest';
@@ -141,9 +141,9 @@ export function CameraFields({
 
 /**
  * A recording clip's camera on its card: the camera's controls while it shows beside the screen (the way back to a
- * camera hidden in the format shown), the way to its layer once it is a layer of its own (its controls are that
- * layer's then), and Mirror for a take of the camera alone (the camera is the clip's footage). Nothing for any other
- * clip.
+ * camera hidden in the format shown), the way to its layer once it is a layer of its own (`cameraLayer`: its controls
+ * are that layer's then), and Mirror for a take of the camera alone (the camera is the clip's footage). Nothing for any
+ * other clip.
  */
 export function ClipCameraFields({ project, clip, format }: { project: Project; clip: Clip; format: FormatKind }) {
   const { t } = useLingui();
@@ -152,7 +152,7 @@ export function ClipCameraFields({ project, clip, format }: { project: Project; 
   if (isCameraOnly(project, clip)) return <CameraMirror clip={clip} camera={camera} />;
   if (!hasCameraOverlay(project, clip)) return null;
   const label = t({ id: 'layer.camera', message: 'Camera', comment: 'A recording’s camera picture' });
-  const layer = separatedCamera(project, clip);
+  const layer = cameraLayer(project, clip);
   if (layer)
     return (
       <Field label={label}>
