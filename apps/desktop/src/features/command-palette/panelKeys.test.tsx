@@ -95,11 +95,23 @@ describe('the panel keys', () => {
     expect(useLibraryPanel.getState().collapsed).toBe(false);
   });
 
+  it('Command B folds and opens the library too, but never while typing in a field', async () => {
+    renderWithProviders(<Harness />);
+    fireEvent.keyDown(window, { key: 'b', code: 'KeyB', metaKey: true });
+    expect(useLibraryPanel.getState().collapsed).toBe(true);
+    fireEvent.keyDown(window, { key: 'b', code: 'KeyB', metaKey: true });
+    expect(useLibraryPanel.getState().collapsed).toBe(false);
+    const field = screen.getByRole('textbox', { name: 'Project name' });
+    await userEvent.click(field);
+    await userEvent.keyboard('{Meta>}b{/Meta}');
+    expect(useLibraryPanel.getState().collapsed).toBe(false);
+  });
+
   it('are commands that say what a press does, with their keys', () => {
     const { result } = renderHook(() => usePanelCommands(), { wrapper: TestProviders });
     const byId = (id: string) => result.current.find((c) => c.id === id)!;
     expect(byId('toggle-chat')).toMatchObject({ label: 'Collapse chat', shortcut: '⌃⌘I', enabled: true });
-    expect(byId('toggle-side-panel')).toMatchObject({ label: 'Collapse library', shortcut: '⌃⌘S', enabled: true });
+    expect(byId('toggle-side-panel')).toMatchObject({ label: 'Collapse library', shortcut: '⌘B', enabled: true });
     act(() => byId('toggle-chat').run());
     act(() => byId('toggle-side-panel').run());
     expect(byId('toggle-chat').label).toBe('Open chat');

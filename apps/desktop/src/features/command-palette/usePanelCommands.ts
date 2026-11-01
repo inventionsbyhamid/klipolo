@@ -7,7 +7,8 @@ import { searchWords, type Command } from './command';
 
 /**
  * The panels' commands: Control Command I folds chat to its strip or opens it with the cursor in its composer, as
- * Command K does; Control Command S folds the library to its rail or opens it. Each label says what a press does.
+ * Command K does; Command B (or Control Command S) folds the library to its rail or opens it. Each label says what a
+ * press does.
  */
 export function usePanelCommands(): Command[] {
   const { t } = useLingui();
@@ -43,7 +44,8 @@ export function usePanelCommands(): Command[] {
         label: libraryFolded
           ? t({ id: 'library.open', message: 'Open library' })
           : t({ id: 'library.collapse', message: 'Collapse library' }),
-        shortcut: '⌃⌘S',
+        // Control Command S works too (`CONTROL_COMMAND`).
+        shortcut: '⌘B',
         keywords: searchWords(
           t({
             id: 'command.library.keywords',

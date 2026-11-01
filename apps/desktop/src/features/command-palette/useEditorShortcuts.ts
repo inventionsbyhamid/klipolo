@@ -38,7 +38,7 @@ export const CONTROL_COMMAND: Readonly<Record<string, string>> = { i: 'toggle-ch
 /**
  * Editor keyboard shortcuts, with ⌘ on a Mac and Ctrl on Windows and Linux; ⌃ alone on a Mac (the field's
  * own keys, such as ⌃K) and the Windows or Super key alone run none (`otherAlone`). ⌘K puts the cursor in the chat;
- * ⌃⌘I folds or opens chat; ⌃⌘S folds or opens the library; ⌘↩ applies the proposal chat has open;
+ * ⌃⌘I folds or opens chat; ⌘B or ⌃⌘S folds or opens the library; ⌘↩ applies the proposal chat has open;
  * ⌘Z undo; ⇧⌘Z redo; ⌘O add files; ⌘E export; ⌘T add a transition (after the selected clip, at a focused cut, else
  * at the cut nearest the playhead); S split; Space play/pause; J / L play backward / forward (pressed again while
  * playing that way: double speed); K pause; with K held, J / L one frame; Delete or Backspace delete (the selected
@@ -119,10 +119,14 @@ export function useEditorShortcuts() {
       d: 'duplicate',
       t: 'add-transition',
       l: 'loop',
+      // The design's key for the library, beside the Control Command S the panels take.
+      b: 'toggle-side-panel',
     };
     if (mod) {
       const id = withMod[key];
       if (!id) return;
+      // A held Command B folds or opens the library once.
+      if (id === 'toggle-side-panel' && (e.repeat || e.shiftKey)) return;
       if (OPTIONAL.has(id)) {
         if (run(id)) e.preventDefault();
         return;

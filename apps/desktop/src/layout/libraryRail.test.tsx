@@ -49,6 +49,8 @@ describe('the library folded', () => {
   it('Collapse library in its head folds it, as chat has Collapse chat, and the rail keeps the keyboard', async () => {
     renderWithProviders(<Library />);
     const collapse = screen.getByRole('button', { name: 'Collapse library' });
+    expect(collapse).toHaveAttribute('title', 'Collapse library (Command B)');
+    expect(screen.queryByRole('button', { name: 'Open library' })).toBeNull();
     await userEvent.click(collapse);
     expect(useLibraryPanel.getState().collapsed).toBe(true);
     expect(screen.getByRole('button', { name: 'Open library' })).toHaveFocus();

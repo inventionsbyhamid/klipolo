@@ -21,9 +21,9 @@ export const LIBRARY_BODY_ID = 'library-body';
  * shown, and the filter pills Clips, Music, Sounds and Images over the files of each (yours first, then Klipolo's
  * pack). The search keeps its words from tab to tab. The pills scroll sideways in a narrow panel, with a fade at the
  * right edge. The arrow keys move between them. Its Captions tab shows the Captions view in its place,
- * and its Looks tab the looks (`LooksPanel`). Its head's Collapse library, Control Command S or a double click on its
- * edge folds it to its rail (`useLibraryPanel`), whose Open library (or the edge) opens it again; folded, it stays
- * mounted (`hidden` and `inert`), and a fold with the keyboard inside puts it on the rail.
+ * and its Looks tab the looks (`LooksPanel`). Its head's Collapse library, Command B (or Control Command S), or a
+ * double click on its edge folds it to its rail (`useLibraryPanel`), whose Open library (or the edge) opens it again;
+ * folded, it stays mounted (`hidden` and `inert`), and a fold with the keyboard inside puts it on the rail.
  */
 export function Library() {
   const { t } = useLingui();
@@ -98,7 +98,7 @@ export function Library() {
             type="button"
             className="icon-btn"
             aria-label={t({ id: 'library.open', message: 'Open library' })}
-            title={t({ id: 'library.open.tip', message: 'Open library (Control Command S)' })}
+            title={t({ id: 'library.open.tip', message: 'Open library (Command B)' })}
             aria-expanded={false}
             aria-controls={LIBRARY_BODY_ID}
             onClick={() => {
@@ -153,7 +153,7 @@ export function Library() {
             type="button"
             className="icon-btn"
             aria-label={t({ id: 'library.collapse', message: 'Collapse library' })}
-            title={t({ id: 'library.collapse.tip', message: 'Collapse library (Control Command S)' })}
+            title={t({ id: 'library.collapse.tip', message: 'Collapse library (Command B)' })}
             aria-expanded
             aria-controls={LIBRARY_BODY_ID}
             onClick={() => useLibraryPanel.getState().setCollapsed(true)}
