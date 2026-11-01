@@ -1365,6 +1365,12 @@ ol {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 3rem 2.5rem;
   }
+
+  /* Names and descriptions share rows, so a two line name keeps both descriptions in its row level */
+  .model {
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+  }
 }
 
 .model {
