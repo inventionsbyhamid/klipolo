@@ -394,6 +394,12 @@
   color: var(--color-on-paper);
 }
 
+/* An option that can't be chosen now (a note beside it says why): disabled ink, no hover. */
+.seg button:disabled:not([aria-checked="true"]) {
+  color: var(--color-ink-disabled);
+  cursor: default;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -522,6 +528,22 @@
 
 .view-tab[aria-selected="true"] {
   color: var(--color-ink);
+}
+
+/* Library, Captions and Looks beside Add files take 284 px at 20 px: in a narrower panel the titles are 16 px. */
+.library {
+  container-type: inline-size;
+}
+
+@container (max-width: 289px) {
+  .view-tabs {
+    gap: var(--space-5);
+  }
+
+  .view-tab {
+    font-size: var(--text-lg);
+    line-height: var(--lh-lg);
+  }
 }
 
 .lib-pills {
