@@ -61,6 +61,18 @@ describe('colour tokens', () => {
     }
   });
 
+  it('every shadow has a light and a dark colour', () => {
+    const shadows = [...css.matchAll(/--shadow-([a-z0-9-]+):([^;]*);/g)].filter(([, , value]) => value.trim() !== 'none');
+    expect(shadows.length).toBeGreaterThan(3);
+    for (const [, name, value] of shadows) {
+      const colours = value.match(/rgba?\(|#[0-9a-f]{3,8}\b|light-dark\(/gi) ?? [];
+      expect(colours.length, `--shadow-${name}`).toBeGreaterThan(0);
+      // Each colour is a light-dark pair: plain rgb() only inside one.
+      const plain = value.replace(/light-dark\((?:[^()]|\([^()]*\))*\)/g, '');
+      expect(plain, `--shadow-${name}`).not.toMatch(/rgba?\(|#[0-9a-f]{3,8}\b/i);
+    }
+  });
+
   it('text reaches AA (4.5:1) on every surface in both themes', () => {
     expectContrast('ink', SURFACES, 4.5);
     expectContrast('ink-soft', SURFACES, 4.5);
