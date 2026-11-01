@@ -373,6 +373,7 @@ fn run(args: &Args) -> Result<bool, String> {
             scenes: fx.scenes.clone(),
             analysis: HashMap::from([(fx.asset.clone(), AnalysisState::Done)]),
             time_again: HashSet::new(),
+            cursor: None,
             library: library.clone(),
         };
         let planned = runtime.block_on(plan(
@@ -763,6 +764,7 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             which,
             clips,
         } => json!({"source": source.key(), "which": which, "clips": clips}),
+        ToolCall::AutoZoom { on, scale } => json!({"on": on, "scale": scale}),
         ToolCall::AskUser { question } => json!({"question": question}),
         ToolCall::CannotDo { reason } => json!({"reason": reason}),
     };

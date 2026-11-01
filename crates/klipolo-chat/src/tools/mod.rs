@@ -210,6 +210,9 @@ pub enum ToolCall {
         which: Option<String>,
         clips: Option<Vec<String>>,
     },
+    /// Zoom in on the clicks of every recording on the main track, at most `scale` (None: the camera's own most), or
+    /// take the auto zooms over them away (`on` false).
+    AutoZoom { on: bool, scale: Option<f64> },
     /// Undo the last change.
     Undo,
     /// Ask the person `question` before doing anything more.
@@ -285,6 +288,7 @@ impl ToolCall {
             ToolCall::MuteSource { .. } => "muteSource",
             ToolCall::SetSourceVolume { .. } => "setSourceVolume",
             ToolCall::SeparateSound { .. } => "separateSound",
+            ToolCall::AutoZoom { .. } => "autoZoom",
             ToolCall::Undo => "undo",
             ToolCall::AskUser { .. } => "askUser",
             ToolCall::CannotDo { .. } => "cannotDo",
@@ -337,6 +341,7 @@ impl ToolCall {
             | ToolCall::FollowSubject { .. }
             | ToolCall::BlurObjects { .. }
             | ToolCall::Animate { .. }
+            | ToolCall::AutoZoom { .. }
             | ToolCall::Undo
             | ToolCall::AskUser { .. }
             | ToolCall::CannotDo { .. } => false,
@@ -671,6 +676,7 @@ const TOOLS: &[Tool] = &[
     recorded::MUTE_SOURCE,
     recorded::SET_SOURCE_VOLUME,
     recorded::SEPARATE_SOUND,
+    recorded::AUTO_ZOOM,
     Tool {
         name: "undo",
         description: "Undo the last change.",

@@ -726,6 +726,13 @@ fn every_call() -> Vec<(ToolCall, bool)> {
             },
             false,
         ),
+        (
+            ToolCall::AutoZoom {
+                on: true,
+                scale: Some(1.5),
+            },
+            false,
+        ),
         (ToolCall::Undo, false),
         (
             ToolCall::AskUser {

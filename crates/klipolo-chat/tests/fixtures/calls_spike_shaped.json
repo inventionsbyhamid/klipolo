@@ -169,8 +169,12 @@
       "calls": [{"name": "separateSound", "call_id": "call_37", "arguments": "{\"source\": \"mic\", \"which\": null, \"clips\": null}"}]
     },
     {
+      "request": "zoom in on my clicks",
+      "calls": [{"name": "autoZoom", "call_id": "call_38", "arguments": "{\"on\": true, \"scale\": null}"}]
+    },
+    {
       "request": "make the heart pop in with a pop sound",
-      "calls": [{"name": "animate", "call_id": "call_38", "arguments": "{\"sound\": \"Pop\", \"layer\": \"i1\", \"enter\": \"pop\", \"exit\": null, \"emphasis\": null}"}]
+      "calls": [{"name": "animate", "call_id": "call_39", "arguments": "{\"sound\": \"Pop\", \"layer\": \"i1\", \"enter\": \"pop\", \"exit\": null, \"emphasis\": null}"}]
     }
   ]
 }

@@ -3,10 +3,11 @@
 //! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer, the clip
 //!   tools `setClip` and `setTransition`, the media: `addMusic`, `addSound`, `addText`, `addImage`, `makeTitleCard`'s
 //!   title and a layer's animation (`animate`), and a recording's camera and sounds: `setCameraMode`, `adjustCamera`,
-//!   `detachCamera`, `muteSource`, `setSourceVolume`, `separateSound`) are one `Transaction` the app applies at once:
-//!   one undo step. An addition is judged by what its part does, not by its tool: one that takes something away (the
-//!   model's own `removals`, as a format dropped with what was placed in it) is compiled again with the removals and
-//!   proposed: a speed that leaves a transition no room, or a transition taken away.
+//!   `detachCamera`, `muteSource`, `setSourceVolume`, `separateSound`, and zooms on its clicks: `autoZoom`) are one
+//!   `Transaction` the app applies at once: one undo step. An addition is judged by what its part does, not by its
+//!   tool: one that takes something away (the model's own `removals`, as a format dropped with what was placed in it)
+//!   is compiled again with the removals and proposed: a speed that leaves a transition no room, or a transition taken
+//!   away. Auto zooms taken away are the one exception: they are Klipolo's own, so that is applied at once too.
 //! - Removals (`cutRange`, `keepOnly`, `removeSilences`, `removeFillers`, a trim that makes a clip shorter) are one
 //!   `Proposal`: a `Transaction` for the project as the additions leave it, judged by the model's own review (what it
 //!   takes away, on the timeline), applied as one undo step when the person says so.
@@ -39,7 +40,7 @@
 //! `removals`, `trim` (both), `media` (the library's music, sounds, words and pictures, and the pictures to draw),
 //! `clips` (a clip's speed, volume, mute and framing, and the transitions at its cuts), `recorded` (a recording's
 //! camera, in `cameras` and `bubble`, and its sounds, in `sources`), `animate` (a layer's animation, with its sound),
-//! `map`.
+//! `zooms` (a recording's clicks as auto zooms), `map`.
 
 mod additions;
 mod animate;
@@ -52,15 +53,18 @@ mod recorded;
 mod removals;
 mod sources;
 mod trim;
+mod zooms;
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
+use klipolo_cursor::timeline::TakeFacts;
 use klipolo_model::coded::{CodedError, ErrorParam};
 use klipolo_model::ids::Id;
 use klipolo_model::media::music::refit_music_ops;
 use klipolo_model::motion::Motion;
 use klipolo_model::ops::{Op, Origin, Transaction};
-use klipolo_model::project::{Asset, AssetKind, FormatKind};
+use klipolo_model::project::{Asset, AssetKind, FormatKind, Recording};
 use klipolo_model::risk::{Review, removals};
 use klipolo_model::speech::{Speech, run_spans};
 use klipolo_model::time::{RangeUs, Us};
@@ -141,6 +145,14 @@ pub struct Inputs {
     pub time_again: HashSet<String>,
     /// What the media tools name: the project's music, sounds and pictures and Klipolo's pack.
     pub library: Library,
+    /// Each recording's cursor facts, for `autoZoom`; None knows no clicks.
+    pub cursor: Option<Arc<dyn CursorTakes>>,
+}
+
+/// A recording's cursor facts on its own clock (its clicks), as the app reads them from its take's cursor file: what
+/// `autoZoom` plans zooms from. None when it kept no cursor, or its file can't be read.
+pub trait CursorTakes: Send + Sync + std::fmt::Debug {
+    fn facts(&self, recording: &Recording) -> Option<Arc<TakeFacts>>;
 }
 
 /// What one message's calls compiled to.
@@ -615,6 +627,10 @@ impl Compiler<'_> {
                     });
                     (edit, Removal::Moved(call))
                 }
+                ToolCall::AutoZoom { on, scale } => (
+                    zooms::auto_zoom(self, &adding.work, *on, *scale),
+                    Removal::Moved(call),
+                ),
                 ToolCall::SetCameraMode { .. }
                 | ToolCall::AdjustCamera { .. }
                 | ToolCall::DetachCamera { .. }
@@ -633,8 +649,9 @@ impl Compiler<'_> {
                 (adding.try_edit(edit)).map_err(|e| to_model(format!("{}: {e}", call.name())))
             });
             match tried {
-                // Judged by what it does, not by its tool: proposed with the removals.
-                Ok(tried) if tried.removes => {
+                // Judged by what it does, not by its tool: proposed with the removals. Auto zooms taken away are
+                // Klipolo's own, never the person's: applied at once.
+                Ok(tried) if tried.removes && !matches!(call, ToolCall::AutoZoom { .. }) => {
                     format_proposed |= matches!(call, ToolCall::SetFormat { .. });
                     waiting.push((i, if_it_removes));
                 }

@@ -1172,6 +1172,34 @@
       "annotations": {
         "readOnlyHint": false
       },
+      "description": "Zoom in on the clicks of the screen recordings, or take those zooms away.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "description": "False takes the auto zooms away.",
+            "type": "boolean"
+          },
+          "scale": {
+            "description": "How far, 1.25 to 3. Null for 2.",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "on",
+          "scale"
+        ],
+        "type": "object"
+      },
+      "name": "autoZoom"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
       "description": "Undo the last change.",
       "inputSchema": {
         "additionalProperties": false,

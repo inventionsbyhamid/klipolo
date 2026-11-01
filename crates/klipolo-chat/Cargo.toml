@@ -7,6 +7,8 @@ publish = false
 description = "Chat with a project: what the language model reads about it, the tools it calls and how they become edits"
 
 [dependencies]
+# A recording's clicks, planned into zooms as the engine and a take's auto zoom plan them (`autoZoom`).
+klipolo-cursor = { path = "../klipolo-cursor" }
 # The project, its speech on the timeline (`speech::spoken`) and the time helpers.
 klipolo-model = { path = "../klipolo-model" }
 # The neutral inputs (scene items, speaker turns) read from what the analysis stored.

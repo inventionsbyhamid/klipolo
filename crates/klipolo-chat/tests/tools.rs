@@ -213,6 +213,7 @@ fn every_tool_schema_is_strict() {
             "muteSource",
             "setSourceVolume",
             "separateSound",
+            "autoZoom",
             "undo",
             "askUser",
             "cannotDo",
@@ -282,6 +283,7 @@ fn every_tool_schema_is_strict() {
             "setSourceVolume.which",
             "separateSound.clips",
             "separateSound.which",
+            "autoZoom.scale",
         ]
     );
 }
@@ -588,6 +590,13 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 source: Sound::Mic,
                 which: None,
                 clips: None,
+            }],
+        ),
+        (
+            "zoom in on my clicks",
+            vec![AutoZoom {
+                on: true,
+                scale: None,
             }],
         ),
         (
@@ -1121,7 +1130,8 @@ fn every_tool_in_the_schema_has_a_reader_that_reads_it() {
     for tool in tool_list() {
         let name = tool["name"].as_str().unwrap();
         let params = &tool["parameters"];
-        let mut next = -0.5;
+        // Numbers count up from 0.5; a zoom's scale starts at 1.25.
+        let mut next = if name == "autoZoom" { 1.0 } else { -0.5 };
         let args = sample(params, &mut next);
         let parsed = ToolCall::parse(&call(name, &args.to_string()))
             .unwrap_or_else(|e| panic!("{name} {args}: {e}"));

@@ -529,6 +529,8 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         ToolCall::MuteSource { muted: false, .. } => "The sound is back on.",
         ToolCall::SetSourceVolume { .. } => "The volume is changed.",
         ToolCall::SeparateSound { .. } => "The sound is on its own track now.",
+        ToolCall::AutoZoom { on: true, .. } => "The zooms are in.",
+        ToolCall::AutoZoom { on: false, .. } => "The zooms are gone.",
         ToolCall::Undo => "Undone.",
         // Shown on their own (moments, questions), or proposed.
         _ => return None,
