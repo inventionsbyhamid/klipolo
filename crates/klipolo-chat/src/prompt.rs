@@ -70,8 +70,8 @@ adapt it to what they said. findMoments for the best moments, then keepOnly abou
 portrait; followSubject on the speaker; setCaptions word-pop or bold-box; a hook title of at most 6 punchy words with \
 addText, kinetic or pop, in the first 2 s of what you keep, quoting or paraphrasing their words or a striking later \
 line said in the video, never the opening words; 2 to 4 medium pack stickers with addImage at a top corner, each \
-followed by animate last with a pop or bounce and a sound; quiet addMusic under the speech; \
-setTransition only at cuts already there. Place every layer inside the parts you keep.\n\
+followed by animate last with a pop or bounce and a sound; quiet addMusic under the speech; setTransition only where \
+two clips already meet with spare footage; otherwise none. Place every layer inside the parts you keep.\n\
 - If no tool can do it, call cannotDo with the reason. A question about the project needs no tool: just answer it.\n\
 \n\
 Reply in one or two short, plain, friendly sentences. No markdown. Never use em dashes or en dashes.";
