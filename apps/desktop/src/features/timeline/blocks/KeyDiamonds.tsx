@@ -96,9 +96,10 @@ export const KeyDiamonds = memo(function KeyDiamonds({
       return pick(us);
     }
     if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-    // The key, not its layer.
+    // The key, not its layer; once gone, Delete acts on the selection again.
     e.preventDefault();
     e.stopPropagation();
+    useKeyPick.getState().clear();
     const item = itemNow(id);
     if (item && !locked) void deleteKeysAt(item, us);
   };

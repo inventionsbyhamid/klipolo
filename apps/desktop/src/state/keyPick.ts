@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { deleteKeysAt, deleteVolumeKey, type Leveled } from './keyEdits';
+import { deleteKeysAt, deleteVolumeKey, levelNow, type Leveled } from './keyEdits';
+import { useSelection } from './selection';
 import { itemNow } from './latest';
 
 /**
@@ -26,11 +27,22 @@ export function isPicked(picked: PickedKey | null, owner: string, tUs: number): 
   return picked.kind === 'motion' ? picked.itemId === owner : picked.target.id === owner;
 }
 
-/** Delete on the picked key: it goes (one undo step) and is let go. False when no key is picked. */
+/** Whether the picked key is still there: a key at its time on its layer, or a point at its time on its line. */
+function stillThere(picked: PickedKey): boolean {
+  if (picked.kind === 'volume') return levelNow(picked.target).keys.some((k) => k.tUs === picked.tUs);
+  const keys = itemNow(picked.itemId)?.layout.motion?.keys;
+  return !!keys && Object.values(keys).some((list) => list.some((k) => k.tUs === picked.tUs));
+}
+
+/**
+ * Delete on the picked key: it goes (one undo step) and is let go. False when no key is picked, or the one picked is
+ * gone (deleted by its own Delete, or by an edit): Delete then acts on the selection.
+ */
 export function deletePickedKey(): boolean {
   const { picked, clear } = useKeyPick.getState();
   if (!picked) return false;
   clear();
+  if (!stillThere(picked)) return false;
   if (picked.kind === 'volume') {
     void deleteVolumeKey(picked.target, picked.tUs);
   } else {
@@ -39,6 +51,11 @@ export function deletePickedKey(): boolean {
   }
   return true;
 }
+
+// Another selection (a click, the keys, chat) lets a picked key go.
+useSelection.subscribe((s, was) => {
+  if (s.selectedId !== was.selectedId && useKeyPick.getState().picked) useKeyPick.getState().clear();
+});
 
 // A press anywhere but on a key lets the picked key go: Delete then acts on the selection again.
 if (typeof window !== 'undefined')

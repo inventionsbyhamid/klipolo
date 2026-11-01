@@ -97,9 +97,13 @@ describe('motion keys on the timeline', () => {
     moving();
     renderWithProviders(<Timeline />);
     const [first] = diamonds();
+    fireEvent.pointerDown(first, { button: 0, pointerId: 1, clientX: 150 });
+    fireEvent.pointerUp(first, { pointerId: 1, clientX: 150 });
     fireEvent.keyDown(first, { key: 'Delete' });
     await act(async () => undefined);
     expect(apply).toHaveBeenCalledTimes(1);
+    const { useKeyPick } = await import('../../state/keyPick');
+    expect(useKeyPick.getState().picked).toBeNull();
     expect(apply.mock.calls[0][0]).toBe('keys.delete.undo');
     expect(layoutOf(apply.mock.calls[0]).motion!.keys!.x).toEqual([key(2, 0.2)]);
     await act(async () => void (await clearMotionKeys('title')));
@@ -171,6 +175,9 @@ describe('volume keys on the timeline', () => {
     await act(async () => undefined);
     expect(apply.mock.calls[1][0]).toBe('volumeKeys.remove.undo');
     expect(contentOf(apply.mock.calls[1]).volumeKeys).toEqual([key(2, 0.5)]);
+    // A key gone by its own Delete is let go: the next Delete acts on the selection again.
+    const { useKeyPick } = await import('../../state/keyPick');
+    expect(useKeyPick.getState().picked).toBeNull();
     // Up the lane: every key louder.
     const grip = document.querySelector('.tl-volume-grip')!;
     fireEvent.pointerDown(grip, { button: 0, pointerId: 2, clientX: 500, clientY: 30 });
@@ -202,5 +209,11 @@ describe('a picked key', () => {
     fireEvent.pointerDown(document.body, { button: 0, pointerId: 3 });
     expect(useKeyPick.getState().picked).toBeNull();
     expect(deletePickedKey()).toBe(false);
+    // A pick of a key that is gone does nothing, and another selection lets a pick go.
+    useKeyPick.getState().pick({ kind: 'motion', itemId: 'title', tUs: 7 * S });
+    expect(deletePickedKey()).toBe(false);
+    useKeyPick.getState().pick({ kind: 'motion', itemId: 'title', tUs: 2 * S });
+    act(() => useSelection.getState().select('b'));
+    expect(useKeyPick.getState().picked).toBeNull();
   });
 });
