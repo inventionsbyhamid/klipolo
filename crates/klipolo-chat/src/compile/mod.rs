@@ -49,11 +49,16 @@ mod background;
 mod bubble;
 mod cameras;
 mod clips;
+mod effects;
+mod layer;
 mod map;
 mod media;
+mod motion;
 mod recorded;
 mod removals;
 mod sources;
+mod style;
+mod text_motion;
 mod trim;
 mod zooms;
 
@@ -66,7 +71,7 @@ use klipolo_model::font::FontRef;
 use klipolo_model::ids::Id;
 use klipolo_model::media::music::refit_music_ops;
 use klipolo_model::motion::Motion;
-use klipolo_model::ops::{Op, Origin, Transaction};
+use klipolo_model::ops::{EffectTarget, Op, Origin, Transaction};
 use klipolo_model::project::{Asset, AssetKind, FormatKind, Recording};
 use klipolo_model::risk::{Review, removals};
 use klipolo_model::speech::{Speech, run_spans};
@@ -78,7 +83,9 @@ use crate::context::{Refs, SceneLog, View, secs};
 use crate::evidence::{Evidence, Unfounded};
 use crate::library::Library;
 use crate::sanitize;
-use crate::tools::{LayerRef, Moment, PictureSize, Position, ToolCall};
+use crate::tools::{
+    EffectChange, KeyIn, LayerRef, Moment, PictureSize, Position, PresetIn, ToolCall,
+};
 pub(crate) use cameras::every_camera;
 pub use clips::{NO_ROOM, NO_ROOM_ANYWHERE, NO_TRANSITIONS};
 use map::Map;
@@ -504,6 +511,24 @@ struct Animated {
     sound: Option<Asset>,
 }
 
+/// A layer tool's edit (`Compiler::layer_tool`), with a sentence for the reply once it is kept (a font still to download)
+/// and, for `setEffects`, its target, should taking an effect off send it to the removals.
+struct Done {
+    edit: Edit,
+    note: Option<String>,
+    effects: Option<effects::Target>,
+}
+
+impl Done {
+    fn edit(edit: Edit) -> Self {
+        Done {
+            edit,
+            note: None,
+            effects: None,
+        }
+    }
+}
+
 /// A call waiting for the removals' phase.
 enum Removal<'c> {
     /// A removal tool.
@@ -514,6 +539,8 @@ enum Removal<'c> {
     Moved(&'c ToolCall),
     /// A trim that makes a clip longer and takes something away.
     Longer(Trim),
+    /// `setEffects` taking an effect off: its target, resolved when it was tried, and its changes.
+    Effects(effects::Target, &'c [EffectChange]),
 }
 
 struct Compiler<'a> {
@@ -640,7 +667,11 @@ impl Compiler<'_> {
                 | ToolCall::AddText { .. }
                 | ToolCall::AddImage { .. }
                 | ToolCall::MakeTitleCard { .. }
-                | ToolCall::Animate { .. } => {
+                | ToolCall::Animate { .. }
+                | ToolCall::SetMotion { .. }
+                | ToolCall::AnimateText { .. }
+                | ToolCall::SetLayer { .. }
+                | ToolCall::SetEffects { .. } => {
                     layers.push((i, call));
                     continue;
                 }
@@ -752,6 +783,36 @@ impl Compiler<'_> {
             .collect();
         let mut animated: HashMap<usize, Animated> = HashMap::new();
         for (i, call) in layers {
+            if let Some(done) = self.layer_tool(calls, i, call, &added, &mut animated, &adding.work)
+            {
+                let done = match done {
+                    Ok(Some(done)) => done,
+                    // A sticker still to be drawn: its job takes the motion.
+                    Ok(None) => continue,
+                    Err(r) => {
+                        refuse(&mut out, i, r);
+                        continue;
+                    }
+                };
+                let tried = (adding.try_edit(done.edit))
+                    .map_err(|e| to_model(format!("{}: {e}", call.name())));
+                match (tried, done.effects) {
+                    // An effect taken off is a removal: proposed, as every removal is.
+                    (Ok(tried), Some(target)) if tried.removes => {
+                        if let ToolCall::SetEffects { effects, .. } = call {
+                            waiting.push((i, Removal::Effects(target, effects)));
+                        }
+                    }
+                    (Ok(tried), _) => {
+                        if let Some(said) = done.note.filter(|_| tried.after.is_some()) {
+                            notes.push((i, said));
+                        }
+                        adding.keep(tried, i);
+                    }
+                    (Err(r), _) => refuse(&mut out, i, r),
+                }
+                continue;
+            }
             if let ToolCall::Animate {
                 layer,
                 enter,
@@ -765,7 +826,7 @@ impl Compiler<'_> {
                     exit: *exit,
                     emphasis: *emphasis,
                 };
-                let target = self.animated_layer(calls, layer, i, &added);
+                let target = self.animated_layer(("animate", "animate"), calls, layer, i, &added);
                 let edit = match target {
                     Ok(Added::Sticker(j)) => {
                         match self.animate_sticker(calls, j, &change, sound.as_deref(), &animated) {
@@ -890,6 +951,9 @@ impl Compiler<'_> {
                 Removal::Shorter(t) => ("trimClip", trim::shorten(self, work, &t)),
                 Removal::Moved(call) => (call.name(), self.addition(work, call)),
                 Removal::Longer(t) => ("trimClip", trim::lengthen(self, work, &t)),
+                Removal::Effects(t, changes) => {
+                    ("setEffects", effects::set_effects(work, &t, changes))
+                }
             };
             let added = edit.and_then(|edit| {
                 let mut tried =
@@ -949,11 +1013,12 @@ impl Compiler<'_> {
         out
     }
 
-    /// The layer `animate` call `i` names: by its ref from the context, or the one the last call before it that adds a
-    /// layer (`addText`, `addImage`, `makeTitleCard`, `makeSticker`) added (`added`, by call index): none when that call
-    /// was refused, never an earlier one.
+    /// The layer call `i` (of `tool`, which would `verb` it) names: by its ref from the context, or the one the last call
+    /// before it that adds a layer (`addText`, `addImage`, `makeTitleCard`, `makeSticker`) added (`added`, by call index):
+    /// none when that call was refused, never an earlier one.
     fn animated_layer(
         &self,
+        (tool, verb): (&str, &str),
         calls: &[ToolCall],
         layer: &LayerRef,
         i: usize,
@@ -971,18 +1036,17 @@ impl Compiler<'_> {
                     )
                 };
                 let Some(j) = (0..i).rev().find(|&j| calls.get(j).is_some_and(adds)) else {
-                    return Err(to_model(
-                        "animate: no layer was added before it in this answer. Name one by its ref from Layers, \
+                    return Err(to_model(format!(
+                        "{tool}: no layer was added before it in this answer. Name one by its ref from Layers, \
                          such as t1 or i1."
-                            .to_owned(),
-                    ));
+                    )));
                 };
                 (added.iter())
                     .find(|(k, _)| *k == j)
                     .map(|(_, a)| a.clone())
                     .ok_or_else(|| {
                         to_model(format!(
-                            "animate: {} was not done, so there is no layer to animate.",
+                            "{tool}: {} was not done, so there is no layer to {verb}.",
                             calls[j].name()
                         ))
                     })
@@ -994,9 +1058,156 @@ impl Compiler<'_> {
                     .or_else(|| refs.picture(r))
                     .or_else(|| refs.video(r)))
                 .map(|id| Added::Item(id.to_owned()))
-                .ok_or_else(|| to_model(format!("animate: there is no layer {r}.")))
+                .ok_or_else(|| to_model(format!("{tool}: there is no layer {r}.")))
             }
         }
+    }
+
+    /// The edit of one of the layer tools (`setMotion`, `animateText`, `setLayer`, `styleText`, `setEffects`) call `i`
+    /// makes on `work`, the layer it names found as `animate` finds one; None for any other tool. `Ok(None)`: a sticker
+    /// still to be drawn took the motion into its job (`move_sticker`). `setEffects` names a clip by its ref too.
+    fn layer_tool(
+        &self,
+        calls: &[ToolCall],
+        i: usize,
+        call: &ToolCall,
+        added: &[(usize, Added)],
+        animated: &mut HashMap<usize, Animated>,
+        work: &Project,
+    ) -> Option<Result<Option<Done>, Refused>> {
+        let tool = call.name();
+        let layer = match call {
+            ToolCall::SetMotion { layer, .. }
+            | ToolCall::AnimateText { layer, .. }
+            | ToolCall::SetLayer { layer, .. } => layer,
+            ToolCall::SetEffects { target, .. } => target,
+            _ => return None,
+        };
+        let said = match layer {
+            LayerRef::Last => "last",
+            LayerRef::One(r) => r.as_str(),
+        };
+        let done = |edit| Some(Done::edit(edit));
+        if let (
+            ToolCall::SetEffects {
+                effects: changes, ..
+            },
+            LayerRef::One(r),
+        ) = (call, layer)
+            && let Some(id) = self.inputs.refs.clip(r)
+        {
+            let target = effects::Target {
+                target: EffectTarget::Clip { id: id.to_owned() },
+                said: r.clone(),
+            };
+            let edit = effects::set_effects(work, &target, changes);
+            return Some(edit.map(|edit| {
+                Some(Done {
+                    effects: Some(target),
+                    ..Done::edit(edit)
+                })
+            }));
+        }
+        // A clip's fades, or a song's fades and ducking.
+        if let (ToolCall::SetLayer { change, style, .. }, LayerRef::One(r)) = (call, layer) {
+            let refs = &self.inputs.refs;
+            if let Some(id) = refs.clip(r) {
+                return Some(
+                    layer::set_clip_fades(
+                        work,
+                        (&id.to_owned(), r),
+                        (change.as_ref(), style.as_ref()),
+                    )
+                    .map(done),
+                );
+            }
+            if let Some(first) = refs.music(r) {
+                return Some(
+                    layer::set_song_sound(work, (first, r), (change.as_ref(), style.as_ref()))
+                        .map(done),
+                );
+            }
+        }
+        let id = match self.animated_layer((tool, "change"), calls, layer, i, added) {
+            Ok(Added::Item(id)) => id,
+            Ok(Added::Sticker(j)) => {
+                return Some(match call {
+                    ToolCall::SetMotion { keys, presets, .. } => {
+                        (self.move_sticker(calls, j, keys.as_deref(), presets, animated))
+                            .map(|()| None)
+                    }
+                    _ => Err(to_model(format!(
+                        "{tool}: the sticker isn't drawn yet, so in this answer only setMotion and animate can change \
+                         it. Ask again once it is in."
+                    ))),
+                });
+            }
+            Err(r) => return Some(Err(r)),
+        };
+        let target = (&id, said);
+        Some(match call {
+            ToolCall::SetMotion { keys, presets, .. } => {
+                motion::set_motion(work, target, keys.as_deref(), presets).map(done)
+            }
+            ToolCall::AnimateText { motion: m, .. } => {
+                text_motion::animate_text(work, target, m).map(done)
+            }
+            ToolCall::SetLayer { change, style, .. } => {
+                layer::set_layer(self, work, target, (change.as_ref(), style.as_ref())).map(
+                    |(edit, download)| {
+                        Some(Done {
+                            note: download.map(|family| style::font_note(&family)),
+                            ..Done::edit(edit)
+                        })
+                    },
+                )
+            }
+            ToolCall::SetEffects {
+                effects: changes, ..
+            } => {
+                let target = effects::Target {
+                    target: EffectTarget::Item { id: id.clone() },
+                    said: said.to_owned(),
+                };
+                let edit = effects::set_effects(work, &target, changes);
+                edit.map(|edit| {
+                    Some(Done {
+                        effects: Some(target),
+                        ..Done::edit(edit)
+                    })
+                })
+            }
+            _ => return None,
+        })
+    }
+
+    /// `setMotion`'s `keys` and `presets` for the sticker call `j` asks for, on top of what earlier calls gave it: its job
+    /// takes them (`Animated`), keeping its sound.
+    fn move_sticker(
+        &self,
+        calls: &[ToolCall],
+        j: usize,
+        keys: Option<&[KeyIn]>,
+        presets: &[PresetIn],
+        animated: &mut HashMap<usize, Animated>,
+    ) -> Result<(), Refused> {
+        let length = match calls.get(j) {
+            Some(ToolCall::MakeSticker { duration_us, .. }) => {
+                duration_us.unwrap_or(klipolo_model::media::image::IMAGE_US)
+            }
+            _ => klipolo_model::media::image::IMAGE_US,
+        };
+        let before = animated.remove(&j);
+        let now = before.as_ref().and_then(|b| b.motion.clone());
+        let moved = motion::moved(now, keys, presets, length, false).map_err(to_model)?;
+        animated.insert(
+            j,
+            Animated {
+                motion: moved,
+                sound: before.and_then(|b| b.sound),
+            },
+        );
+        Ok(())
     }
 
     /// `change` and `sound` for the sticker call `j` asks for, on top of what earlier calls gave it (`so_far`): a

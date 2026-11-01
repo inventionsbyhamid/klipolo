@@ -164,10 +164,15 @@ fn words_of(item: &Item) -> Option<&str> {
     }
 }
 
-/// What a layer is, as the undo label says it.
-fn noun(item: &Item) -> &'static str {
+/// What a layer is, as the undo label says it: animated words are words.
+pub(super) fn noun(item: &Item) -> &'static str {
     match &item.content {
         ItemContent::Text { .. } => "words",
+        ItemContent::Generator { source, .. }
+            if source.as_str() == klipolo_model::media::text_motion::SOURCE =>
+        {
+            "words"
+        }
         ItemContent::Generator { .. } => "title",
         ItemContent::Video { .. } => "video",
         _ => "picture",

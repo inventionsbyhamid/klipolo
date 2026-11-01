@@ -183,6 +183,22 @@
     {
       "request": "make the heart pop in with a pop sound",
       "calls": [{"name": "animate", "call_id": "call_45", "arguments": "{\"sound\": \"Pop\", \"layer\": \"i1\", \"enter\": \"pop\", \"exit\": null, \"emphasis\": null}"}]
+    },
+    {
+      "request": "slide the title in from the left with a little overshoot",
+      "calls": [{"name": "setMotion", "call_id": "call_46", "arguments": "{\"layer\": \"t1\", \"keys\": [{\"property\": \"x\", \"atSec\": 0, \"value\": -0.6, \"ease\": null}, {\"atSec\": 0.6, \"property\": \"x\", \"value\": 0, \"ease\": \"spring 0.3\"}], \"presets\": null}"}]
+    },
+    {
+      "request": "make each word pop in one by one",
+      "calls": [{"name": "animateText", "call_id": "call_47", "arguments": "{\"layer\": \"t1\", \"set\": [{\"key\": \"by\", \"value\": \"word\"}, {\"key\": \"scale\", \"value\": 0}, {\"key\": \"opacity\", \"value\": 0}, {\"key\": \"ease\", \"value\": \"spring 0.5\"}]}"}]
+    },
+    {
+      "request": "put the logo in the top right corner, a bit see-through",
+      "calls": [{"name": "setLayer", "call_id": "call_48", "arguments": "{\"set\": [{\"key\": \"box\", \"value\": \"0.78 0.04 0.18 0.18\"}, {\"key\": \"opacity\", \"value\": 0.8}], \"layer\": \"i1\"}"}]
+    },
+    {
+      "request": "add a soft glow to the logo",
+      "calls": [{"name": "setEffects", "call_id": "call_49", "arguments": "{\"target\": \"i1\", \"name\": \"glow\", \"set\": []}"}]
     }
   ]
 }

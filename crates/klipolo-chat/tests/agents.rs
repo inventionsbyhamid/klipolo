@@ -460,6 +460,16 @@ fn timeline_key_ignores_format_captions_and_word_fixes_but_not_a_cut_or_split() 
 }
 
 /// One call of every tool, with and without times where a time is optional, and whether it names the timeline.
+/// A call as the model writes it.
+fn parsed(name: &str, arguments: &str) -> ToolCall {
+    ToolCall::parse(&klipolo_chat::FunctionCall {
+        name: name.into(),
+        call_id: "call_1".into(),
+        arguments: arguments.into(),
+    })
+    .unwrap()
+}
+
 fn every_call() -> Vec<(ToolCall, bool)> {
     let span = RangeUs {
         start: secs(1.0),
@@ -757,6 +767,49 @@ fn every_call() -> Vec<(ToolCall, bool)> {
                 on: true,
                 scale: Some(1.5),
             },
+            false,
+        ),
+        // The tools that compose any edit: a layer by its ref holds while the layers do; a clip's ref names the timeline.
+        (
+            parsed(
+                "setMotion",
+                r#"{"layer": "t1", "keys": [], "presets": null}"#,
+            ),
+            false,
+        ),
+        (
+            parsed(
+                "animateText",
+                r#"{"layer": "last", "set": [{"key": "y", "value": 40}]}"#,
+            ),
+            false,
+        ),
+        (
+            parsed(
+                "setLayer",
+                r#"{"layer": "c1", "set": [{"key": "fadeIn", "value": 1}]}"#,
+            ),
+            true,
+        ),
+        (
+            parsed(
+                "setLayer",
+                r#"{"layer": "i1", "set": [{"key": "opacity", "value": 1}]}"#,
+            ),
+            false,
+        ),
+        (
+            parsed(
+                "setEffects",
+                r#"{"target": "c2", "name": "blur", "set": []}"#,
+            ),
+            true,
+        ),
+        (
+            parsed(
+                "setEffects",
+                r#"{"target": "v1", "name": "blur", "set": []}"#,
+            ),
             false,
         ),
         (ToolCall::Undo, false),

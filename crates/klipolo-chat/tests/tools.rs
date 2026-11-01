@@ -11,12 +11,14 @@
 use std::collections::BTreeSet;
 
 use klipolo_chat::tools::{
-    BackgroundChoice, BubbleChange, CHAT_CAPTION_STYLES, ClipRef, Entrance, FunctionCall, LayerRef,
-    Moment, PictureSize, Position, Problem, SizeStep, Sound, TextPreset, ToolCall, TransitionKind,
-    tools,
+    BackgroundChoice, BubbleChange, CHAT_CAPTION_STYLES, ClipRef, EffectChange, Entrance,
+    FunctionCall, KeyIn, LayerChange, LayerRef, Moment, PictureSize, Position, Problem, Property,
+    SizeStep, Sound, TextPreset, ToolCall, TransitionKind, tools,
 };
 use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
 use klipolo_model::layout::Anchor;
+use klipolo_model::layout::BoxN;
+use klipolo_model::media::text_motion::{From, TextMotion, Unit};
 use klipolo_model::ops::Edge;
 use klipolo_model::project::FormatKind;
 use klipolo_model::time::{RangeUs, secs_to_us};
@@ -210,6 +212,10 @@ fn every_tool_schema_is_strict() {
             "makeSticker",
             "makeTitleCard",
             "animate",
+            "setMotion",
+            "animateText",
+            "setLayer",
+            "setEffects",
             "setCameraMode",
             "adjustCamera",
             "detachCamera",
@@ -276,6 +282,8 @@ fn every_tool_schema_is_strict() {
             "animate.enter",
             "animate.exit",
             "animate.sound",
+            "setMotion.keys",
+            "setMotion.presets",
             "setCameraMode.clips",
             "setCameraMode.format",
             "adjustCamera.border",
@@ -634,6 +642,75 @@ fn parses_each_tool_from_spike_shaped_calls() {
                 exit: None,
                 emphasis: None,
                 sound: Some("Pop".into()),
+            }],
+        ),
+        (
+            "slide the title in from the left with a little overshoot",
+            vec![SetMotion {
+                layer: LayerRef::One("t1".into()),
+                keys: Some(vec![
+                    KeyIn {
+                        property: Property::X,
+                        at_us: 0,
+                        value: -0.6,
+                        ease: None,
+                    },
+                    KeyIn {
+                        property: Property::X,
+                        at_us: secs_to_us(0.6),
+                        value: 0.0,
+                        ease: Some(klipolo_chat::tools::motion::spring(0.3)),
+                    },
+                ]),
+                presets: Vec::new(),
+            }],
+        ),
+        (
+            "make each word pop in one by one",
+            vec![AnimateText {
+                layer: LayerRef::One("t1".into()),
+                motion: TextMotion {
+                    unit: Unit::Word,
+                    from: From {
+                        scale: Some(0.0),
+                        opacity: Some(0.0),
+                        ..From::default()
+                    },
+                    unit_secs: None,
+                    ease: Some(klipolo_chat::tools::motion::spring(0.5)),
+                    stagger_secs: None,
+                    order: None,
+                    exit: false,
+                },
+            }],
+        ),
+        (
+            "put the logo in the top right corner, a bit see-through",
+            vec![SetLayer {
+                layer: LayerRef::One("i1".into()),
+                change: Box::new(LayerChange {
+                    rect: Some(BoxN {
+                        x: 0.78,
+                        y: 0.04,
+                        w: 0.18,
+                        h: 0.18,
+                    }),
+                    opacity: Some(0.8),
+                    ..LayerChange::default()
+                }),
+                style: Box::default(),
+            }],
+        ),
+        (
+            "add a soft glow to the logo",
+            vec![SetEffects {
+                target: LayerRef::One("i1".into()),
+                effects: vec![EffectChange {
+                    name: "glow".into(),
+                    at: None,
+                    remove: false,
+                    settings: Vec::new(),
+                }],
             }],
         ),
     ];
@@ -1165,7 +1242,16 @@ fn every_tool_in_the_schema_has_a_reader_that_reads_it() {
         let params = &tool["parameters"];
         // Numbers count up from 0.5; a zoom's scale starts at 1.25.
         let mut next = if name == "autoZoom" { 1.0 } else { -0.5 };
-        let args = sample(params, &mut next);
+        let mut args = sample(params, &mut next);
+        // Words the composing tools read by their form: an ease, presets, keys they take.
+        match name {
+            "setMotion" => {
+                args["keys"][0]["ease"] = json!("out");
+                args["presets"] = json!("enter fade");
+            }
+            "animateText" | "setLayer" => args["set"] = json!([{"key": "opacity", "value": 0.5}]),
+            _ => {}
+        }
         let parsed = ToolCall::parse(&call(name, &args.to_string()))
             .unwrap_or_else(|e| panic!("{name} {args}: {e}"));
         assert_eq!(parsed.name(), name);
@@ -1451,6 +1537,8 @@ fn the_prompt_is_one_fixed_text_and_small() {
     assert!(prompt_tokens <= 1_100, "prompt {prompt_tokens} tokens");
     // 4,438 measured with the clip tools (setClip, setTransition), setBackground (about 210), freezeFrame (about 105),
     // addText's font (about 25) and the recording tools (the camera's three and the recorded sounds' three, about 1,010);
-    // 4,831 with animate, the words' entrance, autoZoom and the shorts' two caption styles (about 390).
-    assert!(tools_tokens <= 4_850, "tools {tools_tokens} tokens");
+    // 4,831 with animate, the words' entrance, autoZoom and the shorts' two caption styles (about 390); 5,478 with the
+    // tools that compose any edit (setMotion, animateText, setLayer, setEffects: about 645), whose keys and words the
+    // prompt lists.
+    assert!(tools_tokens <= 5_500, "tools {tools_tokens} tokens");
 }
