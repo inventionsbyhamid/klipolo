@@ -1,6 +1,6 @@
 //! `setBackground`: what shows behind the video where it doesn't fill the frame (a wide video fitted in a vertical
 //! frame, or round the inset), and that inset. One entry of `TOOLS`; the words it takes for a background are here.
-//! Every value may be left null to keep the project's own, so "add some padding" keeps the blur.
+//! Every value may be left null to keep the project's own, so "add some padding" keeps the blur; at least one is set.
 
 use std::ops::RangeInclusive;
 
@@ -119,11 +119,24 @@ pub(super) const SET_BACKGROUND: Tool = Tool {
         ]
     },
     read: |a| {
+        let kind = a.nullable_word("kind", &BACKGROUNDS)?;
+        let color = colour(a, "color")?;
+        let color_end = colour(a, "colorEnd")?;
+        let padding = (a.nullable_number("padding", &PADDINGS)?).map(|percent| percent / 100.0);
+        if kind.is_none() && color.is_none() && color_end.is_none() && padding.is_none() {
+            return Err(ToolError {
+                tool: a.tool.to_owned(),
+                field: None,
+                problem: Problem::NoChange {
+                    fields: "kind, color, colorEnd or padding",
+                },
+            });
+        }
         Ok(ToolCall::SetBackground {
-            kind: a.nullable_word("kind", &BACKGROUNDS)?,
-            color: colour(a, "color")?,
-            color_end: colour(a, "colorEnd")?,
-            padding: (a.nullable_number("padding", &PADDINGS)?).map(|percent| percent / 100.0),
+            kind,
+            color,
+            color_end,
+            padding,
         })
     },
 };

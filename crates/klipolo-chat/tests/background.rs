@@ -114,6 +114,13 @@ fn the_model_names_a_background_and_leaves_the_rest_null() {
         matches!(not_text.problem, Problem::WrongType { .. }),
         "{not_text}"
     );
+    // A call that sets nothing is sent back.
+    let nothing =
+        read(r#"{"kind": null, "color": null, "colorEnd": null, "padding": null}"#).unwrap_err();
+    assert!(
+        matches!(nothing.problem, Problem::NoChange { .. }),
+        "{nothing}"
+    );
 }
 
 #[test]
