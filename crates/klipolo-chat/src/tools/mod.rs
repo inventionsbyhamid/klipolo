@@ -149,6 +149,8 @@ pub enum ToolCall {
         preset: TextPreset,
         at_us: Option<Us>,
         duration_us: Option<Us>,
+        /// A font by name; None: the preset's.
+        font: Option<String>,
     },
     /// Show the library's picture `file`; None for what the person left unsaid.
     AddImage {

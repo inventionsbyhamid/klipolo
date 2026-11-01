@@ -1,36 +1,39 @@
 //! The export dialog's commands, thin layers over `klipolo_app::export`: plan the files with what they
 //! cost, start an export on the one slot (its progress on a Channel), cancel it, open or show its files, pick the
-//! folder they go to; and the quit guard, which asks before a running export is stopped by quitting. Errors are codes
-//! the page words (`bridge/call.ts`).
+//! folder they go to; list the unfinished exports, pause, resume and discard them; and the quit guard, which asks
+//! before quitting pauses a running export to resume next time. Errors are codes the page words (`bridge/call.ts`).
 
+use std::collections::HashMap;
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use klipolo_app::export::jobs::{self, Owner};
 use klipolo_app::export::{
     self, ExportPlan, ExportState, ExportedFile, Releases, StartSteps, Started,
 };
-use klipolo_engine::api::{ExportEvent, ExportQuality, ExportRequest};
+use klipolo_engine::api::{ExportEvent, ExportJobInfo, ExportQuality, ExportRequest, ResumeMode};
 use klipolo_engine::export::job::ExportJob;
 use klipolo_engine::export::quality;
 use klipolo_engine::export::runner::{Batch, ProcessLauncher, discard_job};
 use klipolo_engine::render::fonts;
 use klipolo_engine::session::ProjectFeed;
 use klipolo_model::coded::Said;
+use klipolo_model::project::Project;
 use serde::Deserialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, RunEvent, State, WebviewWindow, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
-use crate::project::ProjectSessionState;
+use crate::project::{PROJECT_EXTENSION, ProjectSessionState, library_dir, read};
 use crate::state::EngineState;
 
 /// How long a start waits for this Mac's fonts to be read before checking them: past it nothing is called missing,
 /// and the worker still stops on a frame it would draw with a stand-in.
 const FONTS_WAIT: Duration = Duration::from_secs(2);
-/// How long Quit waits for a stopped export to let go of its slot before the app goes anyway.
-const STOP_WAIT: Duration = Duration::from_secs(10);
+/// How long Quit waits for a paused export to stop at its part and let go of its slot before the app goes anyway.
+const PAUSE_WAIT: Duration = Duration::from_secs(10);
 
 /// The open project as the engine sees it (the latest edit in), with what was said and its text's language.
 fn open_feed(session: &ProjectSessionState) -> Result<ProjectFeed, Said> {
@@ -44,6 +47,16 @@ fn open_feed(session: &ProjectSessionState) -> Result<ProjectFeed, Said> {
 /// Where the files go: the folder the person picked, else `Movies / Klipolo`.
 fn folder(state: &ExportState) -> Result<PathBuf, Said> {
     state.folder().map_or_else(export::default_folder, Ok)
+}
+
+/// Where unfinished exports are kept: `.jobs` in the folder the person picked, in `Movies / Klipolo`, and in every
+/// folder an export was written in before (remembered across launches).
+fn job_roots(state: &ExportState) -> Vec<PathBuf> {
+    jobs::roots(
+        state.folder().as_deref(),
+        export::default_folder().ok().as_deref(),
+        &state.kept_folders(),
+    )
 }
 
 /// This Mac has a media engine (asked once).
@@ -94,8 +107,16 @@ impl StartSteps for AppSteps<'_> {
         prepare(self.app.clone(), req.clone(), self.dir.clone())
     }
 
+    fn owner(&self, job: &str) -> Owner {
+        jobs::owner(&job_roots(&self.app.state::<ExportState>()), job)
+    }
+
     fn create(&self, batch: Batch) -> impl Future<Output = Result<ExportJob, Said>> + Send {
         export::create_job(batch)
+    }
+
+    fn discard(&self, job: &str) -> Result<(), Said> {
+        jobs::discard(&job_roots(&self.app.state::<ExportState>()), job)
     }
 
     fn drop_new(&self, job: &ExportJob) {
@@ -122,7 +143,7 @@ async fn prepare(app: AppHandle, req: ExportRequest, dir: PathBuf) -> Result<Bat
     fonts_checked(&feed, req.allow_stand_ins).await?;
     // A folder Klipolo can't write in is named now, rather than failing as the job is written.
     export::make_folder(&dir)?;
-    // Jobs an export cut off by a crash left behind go now (only Klipolo's: `export::tidy_jobs`).
+    // What a crash cut off while a job was written or discarded goes now; kept jobs stay (`export::tidy_jobs`).
     let tidied = dir.clone();
     let _ = tauri::async_runtime::spawn_blocking(move || export::tidy_jobs(&tidied)).await;
     // Decoded sound comes from (and goes to) the preview's own cache, under its budget: the files the open project
@@ -155,12 +176,18 @@ async fn fonts_checked(feed: &ProjectFeed, allow_stand_ins: bool) -> Result<(), 
     export::refuse_missing(&missing, allow_stand_ins)
 }
 
-/// Runs `job` in the background on the slot it holds, telling the page on `events`, and lets go of the slot when it
+/// What a run does: a new job (written as it started), or a kept job continued from its finished parts.
+enum Work {
+    Start(Box<ExportJob>),
+    Resume(PathBuf, ResumeMode),
+}
+
+/// Runs `work` in the background on the slot it holds, telling the page on `events`, and lets go of the slot when it
 /// ends.
 fn spawn_run(
     app: &AppHandle,
     launcher: ProcessLauncher,
-    job: ExportJob,
+    work: Work,
     cancel: tokio::sync::watch::Receiver<bool>,
     events: Channel<ExportEvent>,
 ) {
@@ -173,9 +200,19 @@ fn spawn_run(
             state.record(&event);
             let _ = events.send(event);
         };
-        let outcome = export::run(&launcher, job, cancel, &emit).await;
+        let outcome = match work {
+            Work::Start(job) => export::run(&launcher, *job, cancel, &emit).await,
+            Work::Resume(dir, mode) => export::resume(&launcher, dir, mode, cancel, &emit).await,
+        };
         tracing::info!(?outcome, "an export ended");
     });
+}
+
+/// The export worker: this app's own binary.
+fn launcher() -> Result<ProcessLauncher, Said> {
+    std::env::current_exe()
+        .map(ProcessLauncher::export)
+        .map_err(|_| Said::code("exports.notStarted"))
 }
 
 /// Starts exporting `req`'s formats of the open project and returns once it has started; progress arrives on
@@ -191,21 +228,163 @@ pub(crate) async fn export_start(
     if req.formats.is_empty() {
         return Err(Said::code("exports.noFormat"));
     }
-    // The worker is this app's own binary.
-    let launcher = std::env::current_exe()
-        .map(ProcessLauncher::export)
-        .map_err(|_| Said::code("exports.notStarted"))?;
+    let launcher = launcher()?;
     let steps = AppSteps {
         app: &app,
         dir: folder(&state)?,
     };
     match export::start_on_slot(&state, &req, &steps).await? {
-        Started::Run(job, cancel) => spawn_run(&app, launcher, *job, cancel, events),
+        Started::Run(job, cancel) => spawn_run(&app, launcher, Work::Start(job), cancel, events),
         Started::Cancelled => {
             let _ = events.send(ExportEvent::Cancelled);
         }
     }
     Ok(())
+}
+
+/// Unfinished exports, newest first, with their progress and whether their project changed since (`judge`).
+#[tauri::command(async)]
+pub(crate) fn export_jobs(
+    state: State<'_, ExportState>,
+    session: State<'_, ProjectSessionState>,
+) -> Vec<ExportJobInfo> {
+    let mut judge = Judge::new(open_feed(&session).ok());
+    let listed = jobs::list(&job_roots(&state), |job| judge.stale(job));
+    // A folder whose jobs are all gone needn't be looked in again.
+    state.forget_folders_without_jobs();
+    listed
+}
+
+/// What unfinished jobs are judged by: their project as it is now, looked up once per project however many of its
+/// jobs are listed. The open project (its latest edits) with what was said in its files; another project from its file
+/// in the library, found by the id stored in it (`SavedProjects`), with the words its job froze (what was said in a
+/// project's files is heard again only while it is open). A project that's gone counts as changed.
+struct Judge {
+    open: Option<ProjectFeed>,
+    library: Option<PathBuf>,
+    saved: HashMap<String, Option<Project>>,
+}
+
+/// The library's projects as last read, by file, with when each file last changed: a closed project's jobs are judged
+/// without reading every project file each time the list is asked for, only those that changed since.
+#[derive(Default)]
+pub(crate) struct SavedProjects {
+    read: std::sync::Mutex<HashMap<PathBuf, (std::time::SystemTime, Option<Project>)>>,
+}
+
+impl SavedProjects {
+    /// The project with id `id` as saved in the library `dir` (its `.klipolo` files), reading (with `read`) only the
+    /// files that changed since they were last read. A file that isn't a project is passed over.
+    pub(crate) fn find(
+        &self,
+        dir: &Path,
+        id: &str,
+        read: &dyn Fn(&Path) -> Result<Project, Said>,
+    ) -> Option<Project> {
+        let files: Vec<(PathBuf, std::time::SystemTime)> = std::fs::read_dir(dir)
+            .ok()?
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().is_some_and(|e| e == PROJECT_EXTENSION))
+            .filter_map(|path| {
+                let changed = std::fs::metadata(&path).and_then(|m| m.modified()).ok()?;
+                Some((path, changed))
+            })
+            .collect();
+        let mut known = self
+            .read
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // Files that went are forgotten.
+        known.retain(|path, _| files.iter().any(|(file, _)| file == path));
+        let mut found = None;
+        for (path, changed) in files {
+            let fresh = known.get(&path).is_some_and(|(at, _)| *at == changed);
+            if !fresh {
+                known.insert(path.clone(), (changed, read(&path).ok()));
+            }
+            if found.is_none()
+                && let Some((_, Some(project))) = known.get(&path)
+                && project.id == id
+            {
+                found = Some(project.clone());
+            }
+        }
+        found
+    }
+}
+
+/// The library's projects as last read, for the whole app.
+fn saved_projects() -> &'static SavedProjects {
+    static SAVED: OnceLock<SavedProjects> = OnceLock::new();
+    SAVED.get_or_init(SavedProjects::default)
+}
+
+impl Judge {
+    fn new(open: Option<ProjectFeed>) -> Self {
+        Self {
+            open,
+            library: library_dir().ok(),
+            saved: HashMap::new(),
+        }
+    }
+
+    /// `job`'s project changed since it started, its caption pages included, or is gone.
+    fn stale(&mut self, job: &ExportJob) -> bool {
+        if let Some(feed) = self
+            .open
+            .as_ref()
+            .filter(|f| f.project.id == job.project_id)
+        {
+            let speech = export::export_speech(&feed.speech, &feed.project);
+            return !job.is_current(&feed.project, &speech);
+        }
+        let library = self.library.as_deref();
+        self.saved
+            .entry(job.project_id.clone())
+            .or_insert_with(|| {
+                library.and_then(|dir| saved_projects().find(dir, &job.project_id, &read))
+            })
+            .as_ref()
+            .is_none_or(|project| !job.is_current_as_saved(project))
+    }
+}
+
+/// Pauses the running export `job`: it stops at its next part, keeping every finished part.
+#[tauri::command(async)]
+pub(crate) fn export_pause(state: State<'_, ExportState>, job: String) -> Result<(), Said> {
+    state.pause(&job)
+}
+
+/// Continues the unfinished export `job` from its finished parts; progress arrives on `events` (as for `export_start`).
+/// A job whose project changed since still resumes: it finishes the version from when the export started. `mode`
+/// `compatible` finishes it in compatibility mode (offered after hardware failures); the default is `auto`. Refused as
+/// busy while another export runs or this one runs already.
+#[tauri::command]
+pub(crate) async fn export_resume(
+    app: AppHandle,
+    state: State<'_, ExportState>,
+    job: String,
+    mode: Option<ResumeMode>,
+    events: Channel<ExportEvent>,
+) -> Result<(), Said> {
+    let dir = jobs::find(&job_roots(&state), &job)?.ok_or_else(|| Said::code("exports.gone"))?;
+    let launcher = launcher()?;
+    let cancel = export::resume_on_slot(&state, &dir, &job).await?;
+    spawn_run(
+        &app,
+        launcher,
+        Work::Resume(dir, mode.unwrap_or_default()),
+        cancel,
+        events,
+    );
+    Ok(())
+}
+
+/// Deletes the unfinished export `job` and its parts (a running one is stopped first).
+#[tauri::command(async)]
+pub(crate) fn export_discard(state: State<'_, ExportState>, job: String) -> Result<(), Said> {
+    jobs::discard(&job_roots(&state), &job)
 }
 
 /// Stops the running export and deletes its job and parts. `job` names it (the run on screen); without it only the
@@ -429,8 +608,8 @@ pub(crate) fn guard_menu_quit(_app: &tauri::App) -> tauri::Result<()> {
 }
 
 /// The quit guard: quitting (Command Q, or closing the window) while an export runs asks first. Keep exporting goes
-/// back to it; Quit stops it (its job and parts deleted, as Cancel does), then quits. A quit that can't be asked about
-/// still stops it and deletes its job on the way out (`on_exit`). True when it held the exit or the close.
+/// back to it; Quit pauses it (its finished parts kept, to resume next time), then quits. A quit that can't be asked
+/// about pauses it too on the way out (`on_exit`). True when it held the exit or the close.
 pub(crate) fn guard_quit(app: &AppHandle, event: &RunEvent) -> bool {
     match event {
         RunEvent::ExitRequested { api, code, .. } => {
@@ -454,17 +633,18 @@ pub(crate) fn guard_quit(app: &AppHandle, event: &RunEvent) -> bool {
     }
 }
 
-/// The exit's two steps, in order: `flush` puts every edit onto the disk, then `clear` stops a running export and
-/// deletes its job (waiting up to `EXIT_WAIT` for it). The edits go first: macOS gives a quitting app little time, and
-/// they are what the person would lose.
-fn exit_steps(flush: impl FnOnce(), clear: impl FnOnce()) {
+/// The exit's two steps, in order: `flush` puts every edit onto the disk, then `pause` pauses a running export, its
+/// finished parts kept (waiting up to `EXIT_WAIT` for it). The edits go first: macOS gives a quitting app little time,
+/// and they are what the person would lose.
+fn exit_steps(flush: impl FnOnce(), pause: impl FnOnce()) {
     flush();
-    clear();
+    pause();
 }
 
 /// As the app exits (`RunEvent::Exit`), however it quits: the open project's edits are saved, then a running export
-/// stops and its job goes, before the process ends. A quit nothing could ask before (the Dock's Quit, logging out, an
-/// AppleScript quit: a Mac app gets no exit request for those) reaches only this.
+/// pauses, to resume next time, before the process ends. A quit nothing could ask before (the Dock's Quit, logging out,
+/// the Mac shutting down, an AppleScript quit: a Mac app gets no exit request for those) reaches only this. Past the
+/// wait the worker stops with the app, and its job still resumes from its finished parts.
 pub(crate) fn on_exit(app: &AppHandle) {
     exit_steps(
         || {
@@ -477,7 +657,7 @@ pub(crate) fn on_exit(app: &AppHandle) {
         },
         || {
             if let Some(state) = app.try_state::<ExportState>() {
-                export::clear_on_quit(&state, EXIT_WAIT);
+                export::pause_on_quit(&state, EXIT_WAIT);
             }
         },
     );
@@ -496,7 +676,7 @@ fn asks_first(app: &AppHandle, exit_code: i32) -> bool {
     }
     let handle = app.clone();
     app.dialog()
-        .message("Quitting stops it, and the video being exported isn't saved.")
+        .message("Quit now and resume it next time?")
         .title("An export is running")
         .buttons(MessageDialogButtons::OkCancelCustom(
             "Quit".into(),
@@ -507,53 +687,112 @@ fn asks_first(app: &AppHandle, exit_code: i32) -> bool {
             state.asking(false);
             if quit {
                 state.set_quitting();
-                tauri::async_runtime::spawn(stop_then_exit(handle.clone(), exit_code));
+                tauri::async_runtime::spawn(pause_then_exit(handle.clone(), exit_code));
             }
         });
     true
 }
 
-/// Stops the running export and deletes its job here, waiting (briefly) for its run to let go of the slot, then quits:
-/// nothing is left to a background delete the exit could cut off.
-async fn stop_then_exit(app: AppHandle, exit_code: i32) {
+/// Pauses the running export, waiting (briefly) for it to stop at its part and let go of the slot, then quits. Past the
+/// wait the app quits anyway: its worker stops with it, and the job resumes from its finished parts.
+async fn pause_then_exit(app: AppHandle, exit_code: i32) {
     let handle = app.clone();
     let _ = tauri::async_runtime::spawn_blocking(move || {
-        export::clear_on_quit(&handle.state::<ExportState>(), STOP_WAIT);
+        export::pause_on_quit(&handle.state::<ExportState>(), PAUSE_WAIT);
     })
     .await;
     app.exit(exit_code);
 }
 
-/// How long a quit nothing could hold (the Dock's Quit, logging out) waits for a stopped export to let go of its slot.
+/// How long a quit nothing could hold (the Dock's Quit, logging out, a shutdown) waits for a paused export to let go
+/// of its slot.
 const EXIT_WAIT: Duration = Duration::from_secs(2);
 
-/// The export state at launch, with the usual export folder swept of jobs a crash left (`export::sweep_folder`) on a
-/// thread of its own.
-pub(crate) fn state_at_launch() -> ExportState {
-    if let Ok(dir) = export::default_folder() {
-        let swept = std::thread::Builder::new()
-            .name("klipolo-export-sweep".into())
-            .spawn(move || export::sweep_folder(&dir));
-        if let Err(error) = swept {
-            tracing::warn!(%error, "export: the leftover jobs couldn't be swept");
-        }
+/// Where the folders exports were written in are remembered, in the app's data folder.
+const KEPT_FOLDERS: &str = "export-folders.json";
+
+/// The export state at launch: the folders exports were written in remembered in `data` (the app's data folder), and
+/// the usual export folder and those swept of what a crash cut off while a job was written or discarded
+/// (`export::sweep_folder`: kept jobs stay to resume), on a thread of its own.
+pub(crate) fn state_at_launch(data: Option<&Path>) -> ExportState {
+    let state = ExportState::default();
+    if let Some(data) = data {
+        state.remember_in(data.join(KEPT_FOLDERS));
     }
-    ExportState::default()
+    let folders: Vec<PathBuf> = export::default_folder()
+        .ok()
+        .into_iter()
+        .chain(state.kept_folders())
+        .collect();
+    let swept = std::thread::Builder::new()
+        .name("klipolo-export-sweep".into())
+        .spawn(move || folders.iter().for_each(|dir| export::sweep_folder(dir)));
+    if let Err(error) = swept {
+        tracing::warn!(%error, "export: the export folders couldn't be swept");
+    }
+    state
 }
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
+    use std::path::Path;
+    use std::time::{Duration, SystemTime};
 
-    use super::exit_steps;
+    use klipolo_model::coded::Said;
+    use klipolo_model::project::Project;
+
+    use super::{SavedProjects, exit_steps};
+
+    /// A closed project's job is judged by its file in the library, found by the id saved in it: each file is read once
+    /// while it is unchanged, and again once it changes. A file that isn't a project is passed over.
+    #[test]
+    fn the_library_is_read_again_only_where_a_file_changed() {
+        let library = tempfile::tempdir().unwrap();
+        let file = |name: &str| {
+            let path = library.path().join(format!("{name}.klipolo"));
+            std::fs::write(&path, name).unwrap();
+            path
+        };
+        let (kiln, tour) = (file("Kiln vlog"), file("Studio tour"));
+        file("Broken");
+        std::fs::write(library.path().join("notes.txt"), "not a project").unwrap();
+        let reads = Cell::new(0);
+        let read = |path: &Path| -> Result<Project, Said> {
+            reads.set(reads.get() + 1);
+            let name = std::fs::read_to_string(path).unwrap();
+            if name == "Broken" {
+                return Err(Said::code("model.unreadable"));
+            }
+            let mut project = Project::new(&name);
+            project.id = name;
+            Ok(project)
+        };
+        let saved = SavedProjects::default();
+        let found = saved.find(library.path(), "Studio tour", &read);
+        assert_eq!(found.map(|p| p.name), Some("Studio tour".into()));
+        assert_eq!(reads.get(), 3, "each project file once");
+        assert!(saved.find(library.path(), "Kiln vlog", &read).is_some());
+        assert_eq!(reads.get(), 3, "unchanged: none read again");
+        let later = SystemTime::now() + Duration::from_secs(5);
+        std::fs::File::options()
+            .write(true)
+            .open(&tour)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
+        assert!(saved.find(library.path(), "Gone", &read).is_none());
+        assert_eq!(reads.get(), 4, "only the file that changed");
+        let _ = kiln;
+    }
 
     #[test]
-    fn at_exit_the_edits_are_saved_before_the_export_is_cleared() {
+    fn at_exit_the_edits_are_saved_before_the_export_is_paused() {
         let done = RefCell::new(Vec::new());
         exit_steps(
             || done.borrow_mut().push("flush"),
-            || done.borrow_mut().push("clear"),
+            || done.borrow_mut().push("pause"),
         );
-        assert_eq!(done.into_inner(), ["flush", "clear"]);
+        assert_eq!(done.into_inner(), ["flush", "pause"]);
     }
 }

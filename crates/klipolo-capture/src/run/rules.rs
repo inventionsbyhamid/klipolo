@@ -246,6 +246,7 @@ impl SessionCore {
             let id = src.id.clone();
             self.countdown.held_by = Some(id.clone());
             self.countdown.held_note = Some(note.coded());
+            self.countdown.asked_aloud = true;
             fx.push(Effect::Emit(Event::Gate { missing: vec![id] }));
         }
         self.health(note, warning, flash, fx);

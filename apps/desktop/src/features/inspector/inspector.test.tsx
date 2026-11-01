@@ -16,19 +16,42 @@ import { renderWithProviders } from '../../test/render';
 const apply = vi.fn<(label: string, ops: Op[], params?: LabelParams) => Promise<boolean>>(() =>
   Promise.resolve(true),
 );
-// Rust's bundled families: the Font menu lists these once they are in.
-vi.mock('../../bridge/fonts', () => ({
-  fonts: {
-    bundled: vi.fn(() =>
-      Promise.resolve([
-        { family: 'Inter', weight: 400, italic: false },
-        { family: 'Inter', weight: 700, italic: false },
-        { family: 'Anton', weight: 400, italic: false },
-      ]),
-    ),
-    face: vi.fn(() => Promise.reject(new Error('no faces in tests'))),
-  },
-}));
+// Rust's fonts: the Font menu browses these two bundled families.
+vi.mock('../../bridge/fonts', () => {
+  const family = (name: string, faces: [number, boolean][]) => ({
+    family: name,
+    source: { type: 'bundled' },
+    category: 'sans',
+    faces,
+    snapped: faces[faces.length - 1],
+    state: 'bundled',
+    sizeBytes: null,
+    moreFaces: [],
+    defaultWeightOnly: false,
+    systemName: null,
+    stretch: 5,
+    tooLarge: false,
+  });
+  const rows = [
+    family('Inter', [
+      [400, false],
+      [700, false],
+    ]),
+    family('Anton', [[400, false]]),
+  ];
+  return {
+    fonts: {
+      bundled: vi.fn(() => Promise.resolve([])),
+      face: vi.fn(() => Promise.reject(new Error('no faces in tests'))),
+      faceOf: vi.fn(() => Promise.reject(new Error('no faces in tests'))),
+      browse: vi.fn(() => Promise.resolve({ sections: [['bundled', rows.length]], value: 0 })),
+      browseRows: vi.fn((_ask: unknown, from: number, to: number) => Promise.resolve(rows.slice(from, to))),
+      search: vi.fn(() => Promise.resolve(rows)),
+      row: vi.fn((font: { family: string }) => Promise.resolve(rows.find((r) => r.family === font.family) ?? null)),
+      google: vi.fn(() => Promise.resolve({ enabled: true, consented: false })),
+    },
+  };
+});
 vi.mock('../../bridge/engine', () => ({
   engine: { preview: vi.fn(() => Promise.resolve()), previewClear: vi.fn(() => Promise.resolve()) },
 }));
@@ -46,12 +69,28 @@ beforeEach(() => {
   usePlayback.setState({ playheadUs: 2_000_000, playing: false });
 });
 
-afterEach(() => vi.useRealTimers());
+// A dry run a test left for the next frame runs before the real clock is back: else the next test's never starts.
+afterEach(() => {
+  if (vi.isFakeTimers()) vi.runOnlyPendingTimers();
+  vi.useRealTimers();
+});
 
 type StylePatch = { patch: { content: { style: TextStyle } } };
 /** Where a change through the commit queue was asked for (`useProject.apply`'s `built`): every edit goes in that way. */
 const queued = expect.objectContaining({ projectId: 'project', revision: 3 });
 const styleOf = (call: Parameters<typeof apply>) => (call[1][0] as unknown as StylePatch).patch.content.style;
+
+/** The fixture with its title's style changed: a copy of the title, which the fixtures share between tests. */
+function withTitleStyle(patch: Partial<TextStyle>) {
+  const snapshot = fixtureSnapshot();
+  for (const track of snapshot.project.timeline.tracks)
+    track.items = track.items.map((i) =>
+      i.id === 'title' && i.content.type === 'text'
+        ? { ...i, content: { ...i.content, style: { ...i.content.style, ...patch } } }
+        : i,
+    );
+  return snapshot;
+}
 type AudioContent = Extract<ItemContent, { type: 'audio' }>;
 const contentOf = (call: Parameters<typeof apply>) =>
   (call[1][0] as unknown as { patch: { content: AudioContent } }).patch.content;
@@ -98,7 +137,14 @@ describe('the inspector', () => {
     expect(screen.getByRole('textbox', { name: 'Text' })).toHaveValue('Set up billing');
     expect(screen.getByRole('button', { name: 'Font: Inter' })).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: 'Size' })).toHaveAttribute('aria-valuenow', '72');
-    expect(screen.getByRole('radiogroup', { name: 'Background' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Bold' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('radio', { name: 'Align center' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('group', { name: 'Looks' })).toBeInTheDocument();
+    // The fixture title is white with a shadow: the Clean look.
+    expect(screen.getByRole('button', { name: 'Clean' })).toHaveAttribute('aria-pressed', 'true');
+    for (const name of ['Highlight', 'Outline'])
+      expect(screen.getByRole('radiogroup', { name })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Shadow' })).toBeChecked();
     expect(screen.getByRole('radio', { name: 'Top' })).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByRole('button', { name: 'In: Fade' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Out: Fade' })).toBeInTheDocument();
@@ -219,6 +265,31 @@ describe('the inspector', () => {
     );
   });
 
+  it('quick presses of Larger text step through the sizes and are one change, the outline growing with the text', () => {
+    vi.useFakeTimers();
+    useProject.setState({ snapshot: withTitleStyle({ outline: { color: '#000000', width: 2.88 } }) });
+    useSelection.setState({ selectedId: 'title' });
+    renderWithProviders(<Inspector format="landscape" />);
+    const larger = screen.getByRole('button', { name: 'Larger text' });
+    for (let i = 0; i < 3; i++) fireEvent.click(larger);
+    // Shown at once; nothing is committed while the presses go on.
+    expect(screen.getByRole('slider', { name: 'Size' })).toHaveAttribute('aria-valuenow', '112');
+    expect(apply).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(400));
+    expect(apply.mock.calls.map(([label]) => label)).toEqual(['text.size.undo']);
+    expect(styleOf(apply.mock.calls[0])).toMatchObject({ size: 112, outline: { color: '#000000', width: 4.48 } });
+  });
+
+  it('Smaller text stops at the smallest size', () => {
+    useProject.setState({ snapshot: withTitleStyle({ size: 8 }) });
+    useSelection.setState({ selectedId: 'title' });
+    renderWithProviders(<Inspector format="landscape" />);
+    const smaller = screen.getByRole('button', { name: 'Smaller text' });
+    expect(smaller).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(smaller);
+    expect(screen.getByRole('slider', { name: 'Size' })).toHaveAttribute('aria-valuenow', '8');
+  });
+
   it('quick size keys and a custom colour typed in the colour popover are one change each', async () => {
     vi.useFakeTimers();
     useSelection.setState({ selectedId: 'title' });
@@ -243,11 +314,16 @@ describe('the inspector', () => {
     expect(styleOf(apply.mock.calls[1]).color).toBe('#778899');
   });
 
-  it('the background, position and timing are one labelled change each', async () => {
+  it('the highlight, position and timing are one labelled change each', async () => {
+    const snapshot = withTitleStyle({ background: '#FFD02E' });
+    useProject.setState({ snapshot });
     useSelection.setState({ selectedId: 'title' });
     renderWithProviders(<Inspector format="landscape" />);
-    await userEvent.click(screen.getByRole('radio', { name: 'Box' }));
-    await userEvent.click(screen.getByRole('radio', { name: 'None' }));
+    const highlight = () => within(screen.getByRole('radiogroup', { name: 'Highlight' }));
+    // Its navy is the see-through box behind the words; a swatch keeps the highlight's opacity.
+    await userEvent.click(highlight().getByRole('radio', { name: 'Navy' }));
+    await act(async () => undefined);
+    await userEvent.click(highlight().getByRole('radio', { name: 'No highlight' }));
     await userEvent.click(screen.getByRole('radio', { name: 'Bottom left' }));
     const starts = screen.getByRole('textbox', { name: 'Starts' });
     await userEvent.clear(starts);
@@ -256,14 +332,15 @@ describe('the inspector', () => {
     await userEvent.clear(lasts);
     await userEvent.type(lasts, '2{Enter}');
     expect(apply.mock.calls.map(([label]) => label)).toEqual([
-      'text.background.undo',
-      'text.background.undo',
+      'text.highlight.color.undo',
+      'text.highlight.remove.undo',
       'layout.position.undo',
       'timing.start.undo',
       'timing.length.undo',
     ]);
-    expect(styleOf(apply.mock.calls[0])).toMatchObject({ background: BOX_COLOR, shadow: false });
-    expect(styleOf(apply.mock.calls[1])).toMatchObject({ background: null, shadow: false });
+    // The highlight never touches the shadow.
+    expect(styleOf(apply.mock.calls[0])).toMatchObject({ background: BOX_COLOR, shadow: true });
+    expect(styleOf(apply.mock.calls[1])).toMatchObject({ background: null, shadow: true });
     const placed = (apply.mock.calls[2][1][0] as unknown as { patch: { layout: { rect: { x: number; y: number } } } })
       .patch.layout;
     // 4 % of the 1080 px short side in from the left and the bottom of the 16:9 frame; the anchor follows.
@@ -272,6 +349,71 @@ describe('the inspector', () => {
     expect(placed).toMatchObject({ anchor: 'bottomLeft' });
     expect(apply.mock.calls[3][1]).toEqual([{ type: 'moveItem', id: 'title', trackId: null, startUs: 5_500_000 }]);
     expect(apply.mock.calls[4][1]).toEqual([{ type: 'updateItem', id: 'title', patch: { durationUs: 2_000_000 } }]);
+  });
+
+  it('text style: outline width, outline, highlight, shadow, a look, bold and alignment are one labelled change each', async () => {
+    const snapshot = withTitleStyle({ outline: { color: '#000000', width: 2.88 } }); // Thin at size 72
+    useProject.setState({ snapshot });
+    useSelection.setState({ selectedId: 'title' });
+    renderWithProviders(<Inspector format="landscape" />);
+    expect(screen.getByRole('radio', { name: 'Thin' })).toHaveAttribute('aria-checked', 'true');
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Thick' }));
+    await userEvent.click(
+      within(screen.getByRole('radiogroup', { name: 'Outline' })).getByRole('radio', { name: 'No outline' }),
+    );
+    await userEvent.click(
+      within(screen.getByRole('radiogroup', { name: 'Highlight' })).getByRole('radio', { name: 'Yellow' }),
+    );
+    await userEvent.click(screen.getByRole('switch', { name: 'Shadow' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Pop' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Bold' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Align left' }));
+    await act(async () => undefined);
+
+    expect(apply.mock.calls.map(([label]) => label)).toEqual([
+      'text.outline.width.undo',
+      'text.outline.remove.undo',
+      'text.highlight.add.undo',
+      'text.shadow.remove.undo',
+      'text.look.apply.undo',
+      'text.regular.undo',
+      'text.align.undo',
+    ]);
+    // The look by its own id, worded in the language shown.
+    expect(apply.mock.calls[4][2]).toEqual({ style: { code: 'text.look.pop', params: {} } });
+    const styles = apply.mock.calls.map(styleOf);
+    expect(styles[0].outline).toEqual({ color: '#000000', width: 7.2 });
+    expect(styles[1].outline).toBeNull();
+    expect(styles[2].background).toBe('#FFD02E');
+    expect(styles[3].shadow).toBe(false);
+    expect(styles[4]).toMatchObject({
+      color: '#FFD02E',
+      background: null,
+      outline: { color: '#000000', width: 5.04 },
+      shadow: false,
+      size: 72,
+      font: { family: 'Inter', source: { type: 'bundled' } },
+    });
+    expect(styles[5].weight).toBe(400);
+    expect(styles[6].align).toBe('left');
+  });
+
+  it('a hovered color dry-runs on the video and leaving puts it back; the text color says when it is hard to read', async () => {
+    const snapshot = withTitleStyle({ background: '#FFFFFF' });
+    useProject.setState({ snapshot });
+    useSelection.setState({ selectedId: 'title' });
+    renderWithProviders(<Inspector format="landscape" />);
+    // White words on a white highlight.
+    expect(screen.getByText('Hard to read: too close to the color around it.')).toBeInTheDocument();
+    const colors = screen.getByRole('radiogroup', { name: 'Text color' });
+    await userEvent.hover(within(colors).getByRole('radio', { name: 'Navy' }));
+    await waitFor(() => expect(engine.preview).toHaveBeenCalled());
+    const ops = vi.mocked(engine.preview).mock.calls.at(-1)![2] as unknown as StylePatch[];
+    expect(ops[0].patch.content.style.color).toBe('#121A33');
+    await userEvent.unhover(colors);
+    expect(engine.previewClear).toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
   });
 
   it('Escape in the text field puts the saved words back and commits nothing; the input method keeps Return', async () => {
@@ -321,7 +463,7 @@ describe('the inspector', () => {
     expect(apply).not.toHaveBeenCalled();
   });
 
-  it('the Font menu lists Rust’s bundled families, and the size goes from 8 to 400', async () => {
+  it('the Font menu lists Rust’s families, the bundled first, and a pick is one change; the size goes from 8 to 400', async () => {
     useSelection.setState({ selectedId: 'title' });
     renderWithProviders(<Inspector format="landscape" />);
     const size = screen.getByRole('slider', { name: 'Size' });
@@ -329,19 +471,31 @@ describe('the inspector', () => {
     expect(size).toHaveAttribute('aria-valuemax', '400');
     await userEvent.click(screen.getByRole('button', { name: 'Font: Inter' }));
     await waitFor(() =>
-      expect(screen.getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual(['Inter', 'Anton']),
+      expect(screen.getAllByRole('option').map((o) => o.getAttribute('title') ?? o.textContent)).toEqual([
+        expect.stringContaining('Inter'),
+        expect.stringContaining('Anton'),
+      ]),
     );
+    expect(screen.getByText('Included with Klipolo')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('option', { name: /Anton/ }));
+    await act(async () => undefined);
+    expect(apply.mock.calls.map(([label]) => label)).toEqual(['text.font.undo']);
+    expect(styleOf(apply.mock.calls[0])).toMatchObject({
+      font: { family: 'Anton', source: { type: 'bundled' } },
+      weight: 400,
+      italic: false,
+    });
   });
 
   it('a run of arrow keys on the colours or the position is one change, made once the keys stop', async () => {
     vi.useFakeTimers();
     useSelection.setState({ selectedId: 'title' });
     renderWithProviders(<Inspector format="landscape" />);
-    const white = screen.getByRole('radio', { name: 'White' });
+    const white = within(screen.getByRole('radiogroup', { name: 'Text color' })).getByRole('radio', { name: 'White' });
     act(() => white.focus());
     for (let i = 0; i < 3; i++) fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' });
     // The ring moves at once; nothing is committed yet.
-    expect(screen.getByRole('radio', { name: 'Blue' })).toHaveAttribute('aria-checked', 'true');
+    expect(within(screen.getByRole('radiogroup', { name: 'Text color' })).getByRole('radio', { name: 'Blue' })).toHaveAttribute('aria-checked', 'true');
     expect(apply).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(400));
     expect(apply).toHaveBeenCalledTimes(1);

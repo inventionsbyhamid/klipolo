@@ -11,32 +11,54 @@ use std::time::Instant;
 
 use klipolo_platform::durable::free_space;
 
+use super::command_source::{CommandFence, CommandSource};
 use super::threads::{Input, POLL, TICK};
 use crate::protocol::{self, Command, Event};
 use crate::session::SessionDir;
 use crate::shell::ShellInput;
 
 /// The app's commands, one per line, into `core`. A Stop, Cancel or Disarm sets `stop_seen` before it is passed on, so
-/// no device opens from then on, whatever is still on its way to the core.
+/// no device opens from then on, whatever is still on its way to the core. Lines are read under `fence`, all that
+/// already wait at once (`CommandFence`), so a resumed take's decision sees every command the app had sent.
 pub(super) fn read_commands(
-    input: Box<dyn BufRead + Send>,
+    mut input: Box<dyn CommandSource>,
     core: SyncSender<Input>,
     stop_seen: Arc<AtomicBool>,
+    fence: Arc<CommandFence>,
 ) -> impl FnOnce() + Send {
     move || {
-        for line in input.lines() {
-            let Ok(line) = line else { break };
-            let Some(cmd) = protocol::decode_command(&line) else {
-                continue;
-            };
-            if matches!(cmd, Command::Stop | Command::Cancel | Command::Disarm) {
-                stop_seen.store(true, Ordering::Release);
+        loop {
+            fence.wait_for_bytes(input.buffered());
+            let (read, ended) = fence.reading(|| {
+                let mut read = Vec::new();
+                loop {
+                    let mut line = String::new();
+                    if !matches!(input.read_line(&mut line), Ok(n) if n > 0) {
+                        return ((read, true), true);
+                    }
+                    if let Some(cmd) = protocol::decode_command(&line) {
+                        if matches!(cmd, Command::Stop | Command::Cancel | Command::Disarm) {
+                            stop_seen.store(true, Ordering::Release);
+                        }
+                        read.push(cmd);
+                    }
+                    if !fence.more(input.buffered()) {
+                        return ((read, false), false);
+                    }
+                }
+            });
+            for cmd in read {
+                if core.send(Input::Command(cmd)).is_err() {
+                    // Nothing more is read: no decision waits on this input any more (its pipe closes with it).
+                    fence.reading(|| ((), true));
+                    return;
+                }
             }
-            if core.send(Input::Command(cmd)).is_err() {
+            if ended {
+                let _ = core.send(Input::ParentGone);
                 return;
             }
         }
-        let _ = core.send(Input::ParentGone);
     }
 }
 

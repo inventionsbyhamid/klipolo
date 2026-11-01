@@ -1,4 +1,5 @@
 import { plural, select, t } from '@lingui/core/macro';
+import { create } from 'zustand';
 import type { Track } from '../../../bindings/Track';
 import type { TrackKind } from '../../../bindings/TrackKind';
 import { newId } from '../../../lib/defaults';
@@ -7,6 +8,8 @@ import { findItem, itemLabel } from '../../../lib/timeline';
 import { keyBurst } from '../../../state/keyBurst';
 import { useProject } from '../../../state/project';
 import { toast } from '../../../state/toasts';
+import { useUi } from '../../../state/ui';
+import { laneFlag, laneTracks, setLaneOps, type LaneId } from '../model/laneOps';
 import { moveItemOps } from '../model/moveOps';
 import {
   addTrackOps,
@@ -21,13 +24,34 @@ import {
 import { announce } from '../announce';
 import { beginCommit } from '../../../state/commitQueue';
 import { commit, editable } from './timelineActions';
-import { trackToggleId } from './trackLabels';
+import { laneName, laneToggleLabel, toggledSaid, trackToggleId } from './trackLabels';
 
 /*
- * What the track commands do (a sound layer's track muted, a layer's own track): each reads the project when it runs,
- * builds its ops with `model/trackOps`, commits them as one undo step through `useProject.apply` in the timeline's
- * commit queue, and says what it did in the live region. Klipolo shows no track headers; the model's tracks stay.
+ * What the track and lane commands do (a track's header and options, a lane's, a sound layer's track muted, a layer's
+ * own track): each reads the project when it runs, builds its ops with `model/trackOps` or `model/laneOps`, commits
+ * them as one undo step through `useProject.apply` in the timeline's commit queue, and says what it did in the live
+ * region.
  */
+
+/** The track whose name is a field in its header now (Rename), if any. */
+export const useTrackRename = create<{ id: string | null }>(() => ({ id: null }));
+
+/** Track `id`'s name becomes a field in its header: every track shows, so its header does. */
+export function startRename(id: string) {
+  useUi.getState().setTimelineExpanded(true);
+  useTrackRename.setState({ id });
+}
+
+// A name being edited is dropped when the headers go (fewer tracks shown, another project): it never reopens later.
+const endRename = () => {
+  if (useTrackRename.getState().id !== null) useTrackRename.setState({ id: null });
+};
+useUi.subscribe((u, prev) => {
+  if (prev.timelineExpanded && !u.timelineExpanded) endRename();
+});
+useProject.subscribe((p, prev) => {
+  if (p.snapshot?.project.id !== prev.snapshot?.project.id) endRename();
+});
 
 const trackIn = (id: string) => {
   const project = editable();
@@ -126,39 +150,25 @@ export function setTrackFlag(id: string, field: TrackToggle, to?: boolean) {
     if (!found) return;
     const { track } = found;
     const value = to ?? !trackFlag(track, field);
-    const name = track.name;
-    const state =
-      field === 'hidden'
-        ? value
-          ? 'hidden'
-          : 'shown'
-        : field === 'muted'
-          ? value
-            ? 'muted'
-            : 'unmuted'
-          : field === 'solo'
-            ? value
-              ? 'soloed'
-              : 'unsoloed'
-            : value
-              ? 'locked'
-              : 'unlocked';
-    const said = t({
-      id: 'timeline.track.toggled',
-      message: select(state, {
-        hidden: `${name} is hidden`,
-        shown: `${name} is shown`,
-        muted: `${name} is muted`,
-        unmuted: `${name} is unmuted`,
-        soloed: `${name} is soloed: only soloed tracks play`,
-        unsoloed: `${name} is no longer soloed`,
-        locked: `${name} is locked`,
-        other: `${name} is unlocked`,
-      }),
-      comment: 'Screen-reader note after a track’s toggle; {name} is the track’s name',
-    });
+    const said = toggledSaid(track.name, field, value);
     // The undo entry says what changed, as the button that does it says it ("Hide track").
     commit(trackToggleId(track, field), setTrackOps(track, field, value), said);
+  });
+}
+
+/**
+ * Hide or show, mute or unmute, solo or unsolo, lock or unlock every track lane `lane` draws (its header and options),
+ * as one undo step: `value` is the state they end in; without one, the other state from the lane's at its turn (on
+ * when not every track has it). A lane without a track `field` applies to does nothing.
+ */
+export function setLaneFlag(lane: LaneId, field: TrackToggle, to?: boolean) {
+  keyBurst.after(() => {
+    const project = editable();
+    if (!project) return;
+    const on = laneTracks(project.timeline.tracks, lane);
+    const value = to ?? !laneFlag(on, field);
+    const ops = setLaneOps(on, field, value);
+    commit(laneToggleLabel(lane, field, value), ops, toggledSaid(laneName(lane), field, value));
   });
 }
 

@@ -18,6 +18,7 @@ vi.mock('../../player/PlayerBar', () => ({ PlayerBar: () => <footer aria-label="
 const LIBRARY = '/Users/me/Movies/Klipolo';
 
 const row = (name: string, openedMs: number): ProjectRow => ({
+  id: name,
   path: `${LIBRARY}/${name}.klipolo`,
   name,
   openedMs,

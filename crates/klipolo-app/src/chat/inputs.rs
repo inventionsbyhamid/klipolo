@@ -97,6 +97,7 @@ pub fn inputs_for(
         analysis,
         time_again,
         library,
+        fonts: crate::fonts::names(),
     };
     (inputs, turns)
 }

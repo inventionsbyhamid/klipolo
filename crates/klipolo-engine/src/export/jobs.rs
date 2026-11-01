@@ -9,7 +9,7 @@ use klipolo_model::query::video_duration;
 use klipolo_model::speech::Speech;
 use klipolo_model::time::RangeUs;
 
-use super::caption_file::job_captions;
+use super::caption_file::{frozen_name, job_captions};
 use super::job::{AUDIO_BITRATE, ExportJob, JobOutput, JobState, PartStatus};
 use crate::api::{ExportCompatibility, ExportJobInfo, ExportJobState, ExportQuality, PlannedFile};
 use crate::audio::plan::ducking_speech;
@@ -93,8 +93,8 @@ pub fn discarded_name(job_id: &str) -> String {
 }
 
 /// Removes the staging folders of job creations a crash or a force quit cut off (app start), and the folders of
-/// discards one cut off (`discarded_name`): their process is gone, or, with no id in the name, they haven't changed for
-/// 10 minutes. A live creation or discard is never touched.
+/// discards one cut off (`discarded_name`): only Klipolo's own, `<job id>.<pid>.new` or `.gone`, and only once that
+/// process is gone. A live creation or discard is never touched, nor a folder of any other name.
 pub fn tidy_staging(jobs_root: &Path) {
     let Ok(entries) = std::fs::read_dir(jobs_root) else {
         return;
@@ -107,12 +107,33 @@ pub fn tidy_staging(jobs_root: &Path) {
         else {
             continue;
         };
-        let pid = stem.rsplit_once('.').and_then(|(_, pid)| pid.parse().ok());
-        let modified = entry.metadata().ok().and_then(|m| m.modified().ok());
-        if entry.path().is_dir() && klipolo_platform::process::is_leftover(pid, modified) {
+        let Some((job, pid)) = stem
+            .rsplit_once('.')
+            .and_then(|(job, pid)| Some((job, pid.parse::<u32>().ok()?)))
+        else {
+            continue;
+        };
+        if valid_job_id(job)
+            && entry.path().is_dir()
+            && klipolo_platform::process::is_leftover(Some(pid), None)
+        {
             let _ = std::fs::remove_dir_all(entry.path());
         }
     }
+}
+
+/// The bytes the files in `dir` take, and those in its folders (a job's format folders hold its parts).
+pub fn folder_bytes(dir: &Path) -> u64 {
+    std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| match entry.metadata() {
+            Ok(meta) if meta.is_dir() => folder_bytes(&entry.path()),
+            Ok(meta) => meta.len(),
+            Err(_) => 0,
+        })
+        .sum()
 }
 
 /// Job folders live here, inside the exports folder (same volume: finished files are renamed into place).
@@ -235,6 +256,33 @@ impl ExportJob {
         })
     }
 
+    /// Whether `saved` (a project as saved now, one that isn't open) still makes what this job renders, judged with the
+    /// words the job froze: what was said in a project's files is heard again only while it is open, so a closed
+    /// project's job is changed exactly when the project's saved content is. A job whose frozen pages or caption file
+    /// can't be read is never current.
+    pub fn is_current_as_saved(&self, saved: &Project) -> bool {
+        let Ok(captions) = std::fs::read(self.dir.join(super::job::CAPTIONS_FILE)) else {
+            return false;
+        };
+        let file = match self.caption_file {
+            None => None,
+            Some(kind) => match std::fs::read_to_string(self.dir.join(frozen_name(kind))) {
+                Ok(text) => Some((kind, text)),
+                Err(_) => return false,
+            },
+        };
+        let hash = settings_hash(
+            saved,
+            &captions,
+            file.as_ref(),
+            &self.speech_ranges,
+            self.fps,
+            self.quality,
+            &self.outputs,
+        );
+        hash == self.settings_hash
+    }
+
     /// For `export_jobs`: `running` when a worker of this app is on it, `stale` from `is_current`.
     pub fn info(&self, running: bool, stale: bool) -> ExportJobInfo {
         let state = match (self.state, running) {
@@ -257,6 +305,8 @@ impl ExportJob {
             segments_total: self.segments_total(),
             stale,
             created_ms: self.created_ms,
+            bytes: folder_bytes(&self.dir),
+            other_build: !super::job::is_this_build(self.build.as_deref()),
             compatibility: (self.state == JobState::Paused && self.offer_compatible).then(|| {
                 ExportCompatibility {
                     parts_to_redo: self.outputs.iter().map(JobOutput::parts_to_redo).sum(),

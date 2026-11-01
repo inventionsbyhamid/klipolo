@@ -1,3 +1,5 @@
+import { useUi } from '../../state/ui';
+
 /** The timeline's fixed sizes (px) and the empty time after the video (µs). */
 
 /** The id of the hint every block points screen readers to (`aria-describedby`): how to move between blocks. */
@@ -5,6 +7,15 @@ export const BLOCK_HINT_ID = 'timeline-block-keys';
 
 /** The gutter on the left that holds each lane's icon (`--timeline-gutter`). */
 export const HEADER_PX = 40;
+/** The gutter while every track shows: each track's header, with its name (`TrackHeader`). */
+export const TRACK_HEADER_PX = 128;
+
+/** The gutter's width in the track view `expanded` is or isn't. */
+export const headerPx = (expanded: boolean): number => (expanded ? TRACK_HEADER_PX : HEADER_PX);
+/** The gutter's width now, for what reads it when it runs (a drag, a drop, a reveal). */
+export const gutterPx = (): number => headerPx(useUi.getState().timelineExpanded);
+/** The gutter's width, for what renders with it. */
+export const useGutterPx = (): number => useUi((s) => headerPx(s.timelineExpanded));
 /** The ruler's height: proposed cuts and the time range start just under it. */
 export const RULER_PX = 24;
 /**
@@ -53,5 +64,12 @@ export const CUT_MIN_PX = 40;
  * (but not banded ones) it shows as a tint at the clips' edges (`ClipBlock`), no element of its own.
  */
 export const CHIP_MIN_PX = 30;
+/**
+ * While every track shows: an overlay or zoom track's row, an audio track's, and the new-track zone a dragged layer can
+ * be dropped on (`lanes/NewTrackZone`).
+ */
+export const TRACK_ROW_PX = 28;
+export const AUDIO_TRACK_PX = 34;
+export const NEW_TRACK_PX = 24;
 /** Room after the video to drop and drag into. */
 export const TAIL_US = 10_000_000;

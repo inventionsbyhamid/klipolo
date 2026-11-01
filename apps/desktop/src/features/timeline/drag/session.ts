@@ -11,7 +11,7 @@ import { changedSince, type Built } from '../../../state/editBase';
 import { usePlayback } from '../../../state/playback';
 import { captureBase, useProject } from '../../../state/project';
 import { useUi } from '../../../state/ui';
-import { HEADER_PX } from '../layout';
+import { gutterPx } from '../layout';
 import { mainIndex } from '../model/index';
 import { pxToUs } from '../scale';
 import { blockElement, clearShifts } from './registry';
@@ -68,6 +68,11 @@ export interface Session {
   ops: Op[];
   /** The undo label of `ops` (null until a frame has made some). */
   label: LabelId | null;
+  /**
+   * The dry run when it isn't `ops` alone (null: `ops`): a clip's trim beside a transition leaves out the transition at
+   * that edge, so the preview shows the clip's own frame there, never the blend. Its commit keeps the transition.
+   */
+  dryOps: Op[] | null;
   /** A trim's edge frame, in its dry run: what the preview shows while it trims (null: a move). */
   edgeUs: number | null;
   /** The edge frame the preview was last asked to show (null: it shows the playhead's). */
@@ -113,7 +118,7 @@ export function newSession(
     revision: snapshot.history.revision,
     pps,
     // Before the first layout (jsdom) a 1200 px view, as `useViewport` assumes.
-    viewUs: pxToUs((view.scroller.clientWidth || 1200) - HEADER_PX, pps),
+    viewUs: pxToUs((view.scroller.clientWidth || 1200) - gutterPx(), pps),
     fps: snapshot.project.settings.fps,
     expanded,
     playheadUs,
@@ -123,6 +128,7 @@ export function newSession(
     shifted: new Set(),
     ops: [],
     label: null,
+    dryOps: null,
     edgeUs: null,
     shownUs: null,
     said: '',
@@ -144,7 +150,8 @@ export function newSession(
  * it carries on from the new project. A change from elsewhere (chat's, merged mid-drag) makes it `outdated`: it stops,
  * and its release is refused, never added to where that change put things. A zoom or the other track view redraws
  * every block under it (cancelled); snapping on or off (N) redraws the drag. Playback starting ends a trim's edge
- * display: playback draws from the playhead, and a paused trim shows its edge again at its next frame.
+ * display: playback draws from the playhead, and a paused trim shows its edge again. Either redraws the drag, so its
+ * dry run plays with the transitions it keeps and shows the edge without them (`dryOps`).
  */
 export function watchSession(
   s: Session,
@@ -171,7 +178,9 @@ export function watchSession(
     else if (u.snapping !== prev.snapping) redraw();
   });
   const offPlayback = usePlayback.subscribe((p, prev) => {
-    if (live() && p.playing && !prev.playing) s.shownUs = null;
+    if (!live() || p.playing === prev.playing) return;
+    if (p.playing) s.shownUs = null;
+    redraw();
   });
   return () => {
     offProject();

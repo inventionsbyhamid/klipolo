@@ -4,9 +4,8 @@ import type { Theme } from '../bindings/Theme';
 import { SAFE_AREA_IDS, type SafeAreaId } from '../lib/safeAreas';
 
 /**
- * The view settings the editor reads: the timeline's zoom and snapping, the format the preview shows, and the theme. Panel
- * widths and heights live in Klipolo's layout (the CSS grid's variables), not here. The timeline always shows its four
- * lanes (`timelineExpanded` is never on).
+ * The view settings the editor reads: the timeline's zoom, snapping and track view, the format the preview shows, and
+ * the theme. Panel widths and heights live in Klipolo's layout (the CSS grid's variables), not here.
  */
 interface UiStore {
   /** Timeline zoom: pixels per second of video. Any zoom pays a fit still owed (`fitOwed`): the person's stays. */
@@ -21,7 +20,9 @@ interface UiStore {
   /** Dragged blocks snap to the playhead, cuts and edges. */
   snapping: boolean;
   setSnapping: (snapping: boolean) => void;
-  readonly timelineExpanded: false;
+  /** Show all tracks: every track in a row of its own with its header, instead of the four lanes. */
+  timelineExpanded: boolean;
+  setTimelineExpanded: (expanded: boolean) => void;
   /** The format the preview shows; null: the project's primary one. */
   previewFormat: FormatKind | null;
   setPreviewFormat: (format: FormatKind | null) => void;
@@ -117,6 +118,7 @@ export const useUi = create<UiStore>((set) => ({
   snapping: true,
   setSnapping: (snapping) => set({ snapping }),
   timelineExpanded: false,
+  setTimelineExpanded: (timelineExpanded) => set({ timelineExpanded }),
   previewFormat: null,
   setPreviewFormat: (previewFormat) => set({ previewFormat }),
   chatFocus: 0,

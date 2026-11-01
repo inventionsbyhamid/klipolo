@@ -369,6 +369,7 @@ impl Host for FakeHost {
                 .collect(),
             time_again: s.time_again.clone(),
             library: s.library.clone(),
+            fonts: Default::default(),
         };
         Some(Snapshot {
             revision: doc.revision(),

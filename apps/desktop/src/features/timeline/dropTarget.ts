@@ -3,13 +3,15 @@ import { create } from 'zustand';
 import type { AssetKind } from '../../bindings/AssetKind';
 import { kindOfPath } from '../../lib/mediaKinds';
 import type { Project } from '../../bindings/Project';
+import type { Track } from '../../bindings/Track';
 import { snapToFrame } from '../../lib/time';
 import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { useUi } from '../../state/ui';
 import { startAutoscroll } from './drag/autoscroll';
+import { isMusic } from './lanes/audioRole';
 import { SNAP_PX } from './drag/session';
-import { HEADER_PX } from './layout';
+import { gutterPx } from './layout';
 import { nearestCut, type DropTarget } from './model/dropOps';
 import { snapEdges, snapTargets } from './model/snap';
 import { pxToUs } from './scale';
@@ -46,14 +48,34 @@ const goesOn = {
 
 /**
  * Why media of `kind` let go at this point goes nowhere: it is over a lane that won't take it (a picture on the Video
- * or a sound lane, a sound on the Video or Overlays lane, a video on a sound lane). Null where it would land, off the
- * lanes, in a read-only project, or when the kind isn't known.
+ * or a sound lane, a sound on the Video or Overlays lane, a video on a sound lane), or, while every track shows, a
+ * track that won't (locked, hidden, a zoom track, another kind's, or one holding music for a sound). Null where it
+ * would land, off the lanes, in a read-only project, or when the kind isn't known.
  */
 export function dropRefusal(clientX: number, clientY: number, kind: AssetKind | null): string | null {
   // A read-only project takes nothing anywhere: no lane is the wrong one.
   if (!kind || useProject.getState().snapshot?.readOnly || dropTargetAt(clientX, clientY, kind)) return null;
   const lane = laneAt?.(clientX, clientY) ?? null;
-  return lane ? goesOn[kind]() : null;
+  if (!lane) return null;
+  // While every track shows, a track's own row says why it takes nothing.
+  const track = useProject.getState().snapshot?.project.timeline.tracks.find((tr) => tr.id === lane);
+  return track ? trackRefusal(track, kind) : goesOn[kind]();
+}
+
+/** Why a track's own row (every track showing) takes no media of `kind`. */
+function trackRefusal(track: Track, kind: AssetKind): string {
+  if (track.locked) return t({ id: 'drop.refused.locked', message: 'This track is locked.' });
+  if (track.hidden) return t({ id: 'drop.refused.hidden', message: 'This track is hidden.' });
+  if (track.kind === 'zoom') return t({ id: 'drop.refused.zoom', message: 'A zoom track takes no media.' });
+  if (track.kind === 'audio' && kind === 'audio')
+    return t({
+      id: 'drop.refused.musicTrack',
+      message: 'This track holds music. Sound effects go on a track without it.',
+    });
+  if (kind === 'audio') return t({ id: 'drop.refused.soundTrack', message: 'Sounds go on an audio track.' });
+  return kind === 'image'
+    ? t({ id: 'drop.refused.pictureTrack', message: 'Pictures go on an overlay track.' })
+    : t({ id: 'drop.refused.videoTrack', message: 'Videos go on the Video lane or an overlay track.' });
 }
 
 /** What Finder is dragging, by the files' extensions: one kind when they are all of it, else null (any lane). */
@@ -87,10 +109,11 @@ export function dropAutoscroll(pointer: () => { x: number; y: number }, onScroll
   // The lanes don't move during a drag: one layout read.
   const box = scroller.getBoundingClientRect();
   const middle = box.left + box.width / 2;
-  const lanesLeft = box.left + HEADER_PX;
+  const gutter = gutterPx();
+  const lanesLeft = box.left + gutter;
   return startAutoscroll(
     scroller,
-    HEADER_PX,
+    gutter,
     () => {
       const { x, y } = pointer();
       return y >= box.top && y < box.bottom && x >= lanesLeft ? x : middle;
@@ -138,8 +161,9 @@ function edgesOf(project: Project): Float64Array {
 
 /**
  * Over `scroller`'s lanes (below its ruler, `headBottom`): the main lane gives the cut nearest the pointer's time; the
- * Overlays lane a picture layer there; the Sounds lane a sound effect and the Music lane music. A layer's start keeps to the frame grid, and
- * holds to a cut, a layer's edge or the playhead within 8 px while snapping is on: O(log edges) a frame.
+ * Overlays lane a picture layer there; the Sounds lane a sound effect and the Music lane music; while every track
+ * shows, a track's row a layer on that track. A layer's start keeps to the frame grid, and holds to a cut, a layer's
+ * edge or the playhead within 8 px while snapping is on: O(log edges) a frame.
  *
  * Null elsewhere: the ruler, outside the lanes, a read-only project, a zoom, hidden or locked track, and a row that
  * won't take what is dragged (`kind`: a sound over a picture row, a picture over a sound row, a sound or a picture over
@@ -165,7 +189,7 @@ export function timelineTargetAt(
   const { project } = snapshot;
   const { pxPerSecond: pps, snapping } = useUi.getState();
   // Over the track headers: the lanes' left edge.
-  const px = Math.max(0, clientX - box.left - HEADER_PX) + scroller.scrollLeft;
+  const px = Math.max(0, clientX - box.left - gutterPx()) + scroller.scrollLeft;
   const pointerUs = Math.max(0, pxToUs(px, pps));
   const atUs = () => {
     const at = snapToFrame(pointerUs, project.settings.fps);
@@ -188,6 +212,17 @@ export function timelineTargetAt(
   for (const row of scroller.querySelectorAll<HTMLElement>('[data-lane]')) {
     if (!within(row)) continue;
     const lane = row.dataset.lane;
+    // While every track shows, a track's own row: media goes onto that track, never a hidden or locked one or a zoom
+    // track.
+    const trackId = row.dataset.trackId;
+    if (trackId) {
+      const track = project.timeline.tracks.find((tr) => tr.id === trackId);
+      if (!track || track.hidden || track.locked || track.kind === 'zoom') return null;
+      if (track.kind === 'overlay') return kind === 'audio' ? null : { lane: 'picture', trackId, atUs: atUs() };
+      // A sound let go on a track's row is a sound effect on that track, which a track holding music never takes.
+      if (kind === 'video' || kind === 'image' || track.items.some(isMusic)) return null;
+      return { lane: 'sound', trackId, atUs: atUs(), row: 'sounds' };
+    }
     // The main track takes videos (and files from Finder of mixed kinds); a sound or a picture goes on its own lane.
     if (lane === 'main')
       return kind === 'audio' || kind === 'image'

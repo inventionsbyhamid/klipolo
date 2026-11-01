@@ -7,7 +7,7 @@ import { useTimelineFocus } from '../../../state/timelineFocus';
 import { dragging } from '../drag/controller';
 import { blockElement } from '../drag/registry';
 import { cutClipId } from '../keys/laneOrder';
-import { HEADER_PX } from '../layout';
+import { gutterPx } from '../layout';
 import { BlockMenuItems, blockMenuLabel } from './BlockMenuItems';
 import { setKeyboardMenu } from './menuKeyboard';
 
@@ -31,7 +31,7 @@ export function openBlockMenu(el: HTMLElement, scroller: HTMLElement | null) {
   const r = el.getBoundingClientRect();
   const view = scroller?.getBoundingClientRect();
   let x = r.left + r.width / 2;
-  if (view && view.width > 0) x = Math.min(Math.max(x, view.left + HEADER_PX + 8), view.right - 8);
+  if (view && view.width > 0) x = Math.min(Math.max(x, view.left + gutterPx() + 8), view.right - 8);
   fromKeyboard = true;
   try {
     el.dispatchEvent(

@@ -48,6 +48,14 @@ impl Core {
         }
         for input in rx {
             let now = host_ns();
+            // The system's alerts first, before an input that may open the gate: at each tick and poll, and whenever the
+            // countdown has run out, so one that came in the last moment before the gate still holds it.
+            if matches!(input, Input::Tick { .. } | Input::Poll) || self.core.gate_due(now) {
+                let fx = self.system_alert(now);
+                if let Some(code) = self.apply(fx) {
+                    return code;
+                }
+            }
             let fx = match input {
                 Input::Command(cmd) => self.core.command(cmd, now),
                 Input::ParentGone => self.core.shell(ShellInput::ParentGone, now),
@@ -60,9 +68,7 @@ impl Core {
                         .unwrap_or_default();
                     self.pipes.stats_into(&mut self.stats);
                     let awake = self.backend.display_awake();
-                    let mut fx = self.core.tick(now, &snap, free, &self.stats, awake);
-                    fx.extend(self.system_alert(now));
-                    fx
+                    self.core.tick(now, &snap, free, &self.stats, awake)
                 }
                 Input::ReadBack(problems) => self.core.read_back(problems, now),
                 Input::Started {
@@ -92,11 +98,7 @@ impl Core {
                 Input::CursorInFrames { ok, host_ns } => {
                     self.core.cursor_in_frames(ok, host_ns, now)
                 }
-                Input::Poll => {
-                    let mut fx = self.core.poll(now);
-                    fx.extend(self.system_alert(now));
-                    fx
-                }
+                Input::Poll => self.core.poll(now),
                 Input::Event {
                     src,
                     start_no,
@@ -115,8 +117,9 @@ impl Core {
         1
     }
 
-    /// From the start until the gate, whether a system alert is on the screen, as the backend reads it now: read at each
-    /// tick and poll (ten times a second while a separate cursor is watched, as on a Mac's screen take), never after.
+    /// From the start until the gate, whether a system alert is on the screen, as the backend reads it now: read before
+    /// each tick and poll (ten times a second while a separate cursor is watched, as on a Mac's screen take) and before
+    /// the input that would open the gate (`SessionCore::gate_due`), never after.
     fn system_alert(&mut self, now: u64) -> Vec<Effect> {
         if !self.core.watches_system_alerts() {
             return vec![];

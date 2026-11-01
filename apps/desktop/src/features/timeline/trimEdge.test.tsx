@@ -1,5 +1,6 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TRANSITION_DISSOLVE } from '../../lib/transitions';
 import { fixtureSnapshot, revisionPatch } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 
@@ -308,6 +309,107 @@ describe('playback started mid-trim', () => {
     nextFrame();
     expect(seeks().at(-1)?.[0]).toBe(PLAYHEAD);
     expect(usePlayback.getState().playheadUs).toBe(PLAYHEAD);
+    await frames();
+  });
+});
+
+describe('a trim beside a transition shows the clip, never the blend', () => {
+  /** Clip b starts 2 s into broll, so it has footage before it, with a one-second dissolve from a into it. */
+  const withDissolve = () => {
+    const s = fixtureSnapshot();
+    const [a, b] = s.project.timeline.main;
+    s.project.timeline.main = [
+      { ...a, transitionOut: { effect: TRANSITION_DISSOLVE, durationUs: 1_000_000, params: {} } },
+      { ...b, sourceInUs: 2_000_000 },
+    ];
+    return s;
+  };
+  const dryRun = () => vi.mocked(engine.preview).mock.calls.at(-1)?.[2];
+  const UNBLEND = { type: 'setTransition', clipId: 'a', transition: null };
+
+  beforeEach(() => {
+    useProject.setState({ snapshot: withDissolve(), pending: 0 });
+    vi.mocked(engine.preview).mockClear();
+  });
+
+  it("a start trim after a transition shows the clip's own first frame; the transition stays", async () => {
+    renderWithProviders(<Timeline />);
+    const b = block(/^broll\.mp4/);
+    // b runs 20 to 28 s; its start 1 s later takes a second off its front, and it still starts at 20 s.
+    press(edge(b, 'start'), 800);
+    move(b, 840);
+    await shows(20_000_000);
+    await vi.waitFor(() =>
+      expect(dryRun()).toEqual([{ type: 'trimClip', id: 'b', edge: 'start', sourceUs: 3_000_000 }, UNBLEND]),
+    );
+    release(b, 840);
+    await shows(PLAYHEAD);
+    await frames();
+    expect(bridge.apply).toHaveBeenCalledWith({
+      label: 'timeline.trim.clip.undo',
+      ops: [{ type: 'trimClip', id: 'b', edge: 'start', sourceUs: 3_000_000 }],
+    });
+  });
+
+  it("an end trim before a transition shows the clip's own last frame", async () => {
+    renderWithProviders(<Timeline />);
+    const a = block(/^Recording 1/);
+    press(edge(a, 'end'), 799);
+    move(a, 759);
+    await shows(18_966_667);
+    await vi.waitFor(() =>
+      expect(dryRun()).toEqual([{ type: 'trimClip', id: 'a', edge: 'end', sourceUs: 19_000_000 }, UNBLEND]),
+    );
+    release(a, 759);
+    await frames();
+    expect(bridge.apply).toHaveBeenCalledWith({
+      label: 'timeline.trim.clip.undo',
+      ops: [{ type: 'trimClip', id: 'a', edge: 'end', sourceUs: 19_000_000 }],
+    });
+  });
+
+  it('held where it began, the edge still shows without the blend, and nothing is committed', async () => {
+    renderWithProviders(<Timeline />);
+    const b = block(/^broll\.mp4/);
+    press(edge(b, 'start'), 800);
+    move(b, 840);
+    await shows(20_000_000);
+    move(b, 800);
+    await vi.waitFor(() => expect(dryRun()).toEqual([UNBLEND]));
+    release(b, 800);
+    await shows(PLAYHEAD);
+    await frames();
+    expect(bridge.apply).not.toHaveBeenCalled();
+    expect(engine.previewClear).toHaveBeenCalled();
+  });
+
+  it("the edge away from the transition doesn't touch it", async () => {
+    renderWithProviders(<Timeline />);
+    const b = block(/^broll\.mp4/);
+    // b's end, 28 s (1120 px): the dissolve is at its start.
+    press(edge(b, 'end'), 1119);
+    move(b, 1079);
+    await vi.waitFor(() =>
+      expect(dryRun()).toEqual([{ type: 'trimClip', id: 'b', edge: 'end', sourceUs: 9_000_000 }]),
+    );
+    release(b, 1079);
+    await frames();
+  });
+
+  it('while playing, the trim plays with the transition, and paused again shows the clip alone', async () => {
+    renderWithProviders(<Timeline />);
+    const b = block(/^broll\.mp4/);
+    press(edge(b, 'start'), 800);
+    move(b, 840);
+    await vi.waitFor(() => expect(dryRun()).toContainEqual(UNBLEND));
+    act(() => usePlayback.setState({ playing: true }));
+    await vi.waitFor(() =>
+      expect(dryRun()).toEqual([{ type: 'trimClip', id: 'b', edge: 'start', sourceUs: 3_000_000 }]),
+    );
+    act(() => usePlayback.setState({ playing: false }));
+    await vi.waitFor(() => expect(dryRun()).toContainEqual(UNBLEND));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    release(b, 840);
     await frames();
   });
 });

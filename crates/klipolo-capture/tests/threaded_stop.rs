@@ -20,7 +20,7 @@ use klipolo_capture::manifest::Manifest;
 use klipolo_capture::media::AudioFormat;
 use klipolo_capture::pipe::{AudioOut, AudioPipe, AudioStats, PipeError, PipeEvent};
 use klipolo_capture::protocol::Command;
-use klipolo_capture::run::threads::{run_session, run_with};
+use klipolo_capture::run::threads::{CommandSource, Waiting, run_session, run_with};
 use klipolo_capture::shell::{MenuAction, Shell, ShellInput};
 use klipolo_capture::synthetic::{FakeBackend, FakeShell, Script, VideoFeed};
 
@@ -123,6 +123,82 @@ fn a_stop_sent_while_a_resumed_worker_prepares_opens_nothing() {
     for s in &manifest(&t.dir).sources {
         assert_eq!(s.runs.len(), 1, "{}: only what was recorded", s.id);
     }
+}
+
+/// The app's commands in memory, whose reader is slow to its first read (its thread starved on a busy computer).
+struct LateReader {
+    lines: std::io::Cursor<Vec<u8>>,
+    late: bool,
+}
+
+impl std::io::Read for LateReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = std::io::BufRead::fill_buf(self)?.read(buf)?;
+        std::io::BufRead::consume(self, n);
+        Ok(n)
+    }
+}
+
+impl std::io::BufRead for LateReader {
+    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+        if std::mem::take(&mut self.late) {
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        self.lines.fill_buf()
+    }
+
+    fn consume(&mut self, n: usize) {
+        self.lines.consume(n);
+    }
+}
+
+impl CommandSource for LateReader {
+    fn waiting(&self) -> Waiting {
+        Waiting::Memory
+    }
+
+    fn buffered(&self) -> bool {
+        self.lines.position() < self.lines.get_ref().len() as u64
+    }
+}
+
+#[test]
+fn a_stop_already_sent_opens_nothing_however_late_its_reader_is() {
+    // The same, with the command reader's first read half a second late: the worker still decides only once it has
+    // read what the app already sent, so the order holds whatever the timing.
+    let root = tempfile::tempdir().unwrap();
+    let crashed = common::take::Take {
+        finalize: false,
+        cut_last_fragment: true,
+        ..common::take::Take::default()
+    };
+    let t = common::take::write_take(root.path(), "take", crashed);
+    let fixture =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/gop-h264.mp4");
+    let backend = FakeBackend::new(Script {
+        video: VideoFeed::Fixture(fixture, 30),
+        ..Script::default()
+    });
+    let opened = backend.opened();
+    let mut stop = serde_json::to_vec(&Command::Stop).unwrap();
+    stop.push(b'\n');
+    let input = LateReader {
+        lines: std::io::Cursor::new(stop),
+        late: true,
+    };
+    let code = run_session(
+        Box::new(backend),
+        t.dir.clone(),
+        true,
+        Box::new(input),
+        Box::new(std::io::sink()),
+    );
+    assert_eq!(code, 0, "the take is finished");
+    assert_eq!(
+        opened.load(std::sync::atomic::Ordering::Relaxed),
+        0,
+        "no device opened"
+    );
 }
 
 #[test]

@@ -394,7 +394,8 @@ fn paused(
     emit: &(dyn Fn(ExportEvent) + Send + Sync),
 ) -> Outcome {
     job.state = JobState::Paused;
-    job.message = message.clone().map(Said::Text);
+    let message = message.map(Said::Text);
+    job.message = message.clone();
     job.offer_compatible = compatible || job.chosen_compatible;
     // On a full disk this may not save: the job then shows as interrupted, and still resumes.
     let _ = job.save();

@@ -482,10 +482,10 @@ pub enum ExportEvent {
         notes: Option<Vec<Said>>,
     },
     /// Stopped with every finished part kept: the user paused, or `message` says why (a full disk, a hardware
-    /// failure). `export_resume` continues from there; `compatibility` is set when it may also finish in compatibility
-    /// mode (the hardware path kept failing).
+    /// failure: English from the engine, which the app may say as its own code). `export_resume` continues from there;
+    /// `compatibility` is set when it may also finish in compatibility mode (the hardware path kept failing).
     Paused {
-        message: Option<String>,
+        message: Option<Said>,
         compatibility: Option<ExportCompatibility>,
     },
     /// The export can't go on (`message` says why, such as a missing file: English, or a code such as
@@ -621,6 +621,11 @@ pub struct ExportJobInfo {
     /// exported); "Start over with your latest changes" is offered beside it.
     pub stale: bool,
     pub created_ms: u64,
+    /// What its folder takes on the disk (its finished parts, sound and manifest): Discard frees it.
+    pub bytes: u64,
+    /// Another build of Klipolo made it: it can't resume (its file would mix parts drawn by two builds), only start over
+    /// or be discarded.
+    pub other_build: bool,
     /// Set when it paused because the hardware path kept failing: it may finish in compatibility mode.
     pub compatibility: Option<ExportCompatibility>,
 }

@@ -1,13 +1,14 @@
 import { plural, t } from '@lingui/core/macro';
 import type { CodedError } from '../bindings/CodedError';
 import type { ExportEvent } from '../bindings/ExportEvent';
+import type { ExportJobInfo } from '../bindings/ExportJobInfo';
 import type { FormatKind } from '../bindings/FormatKind';
 import type { PlannedFile } from '../bindings/PlannedFile';
 import type { Said } from '../bindings/Said';
 import { codedMessage } from '../bridge/call';
 import { FORMAT_SHORT } from '../lib/layout';
 
-export type ExportPhase = 'idle' | 'running' | 'done' | 'failed' | 'cancelled';
+export type ExportPhase = 'idle' | 'running' | 'paused' | 'done' | 'failed' | 'cancelled';
 /** Why a finished export has no captions file beside its video: a full disk, another failure, or no words in it. */
 export type CaptionFailure = 'diskFull' | 'failed' | 'empty';
 /** A captions file in place beside a video: its `fileReady` index (past the videos') and its name. */
@@ -17,12 +18,13 @@ export interface CaptionFileReady {
 }
 
 /**
- * One export run as the dialog shows it. Klipolo doesn't resume an export: one that stops before every file is in place
- * has failed, its job and parts deleted, and the files already in place stay listed.
+ * One export run as the dialog shows it. An export that stops before every file is in place keeps its job and every
+ * finished part: paused (Pause, Quit, a full disk, a busy encoder) or failed, it resumes from there, and the files
+ * already in place stay listed.
  */
 export interface ExportRun {
   phase: ExportPhase;
-  /** The run's job (from `started`): Cancel export names it. */
+  /** The run's job (from `started`, or the one resumed): Cancel export, Resume, Try again and Discard act on it. */
   jobId: string | null;
   files: PlannedFile[];
   /** Every format's frames done and to do (two formats of a 900-frame video: 1800). */
@@ -39,6 +41,8 @@ export interface ExportRun {
   retries: number;
   /** A retry that hasn't measured its own time left yet. */
   retrying: boolean;
+  /** Pause was pressed: the export stops at its next part. */
+  pausing: boolean;
   /** Cancel export was pressed. */
   stopping: boolean;
   /** Indexes of files that are in place. */
@@ -53,6 +57,8 @@ export interface ExportRun {
   saving: boolean;
   /** What the dialog's status region says: done, failed, stopped. */
   announcement: string;
+  /** Its Resume was refused because another build of Klipolo made the job: it can only start over or be discarded. */
+  otherBuild: boolean;
 }
 
 export const idleRun: ExportRun = {
@@ -67,6 +73,7 @@ export const idleRun: ExportRun = {
   finishing: false,
   retries: 0,
   retrying: false,
+  pausing: false,
   stopping: false,
   ready: [],
   captionFiles: [],
@@ -74,6 +81,7 @@ export const idleRun: ExportRun = {
   message: null,
   saving: false,
   announcement: '',
+  otherBuild: false,
 };
 
 /** Every way a run stops clears what was in flight. */
@@ -81,6 +89,7 @@ const stopped = {
   etaS: null,
   finishing: false,
   retrying: false,
+  pausing: false,
   stopping: false,
 };
 
@@ -216,9 +225,18 @@ export function applyEvent(s: ExportRun, e: ExportEvent): Partial<ExportRun> {
         phase: 'done',
         announcement: s.captionFailed ? exportedText(s) : exportedTitle(s.files.length),
       };
-    case 'paused':
-      // Rust says a run that stopped keeping its parts as a failure; one that still arrives as a pause is one too.
-      return failed(s, e.message ?? t({ id: 'export.failed.stopped', message: 'The export stopped.' }));
+    case 'paused': {
+      // Paused by the person (Pause, Quit), or why: a full disk, a busy encoder. Calm, not a failure: it resumes.
+      const why = e.message === null ? null : saidText(e.message);
+      return {
+        ...stopped,
+        phase: 'paused',
+        message: why,
+        announcement: why
+          ? t({ id: 'export.announce.pausedWhy', message: `Export paused. ${why}` })
+          : t({ id: 'export.announce.paused', message: 'Export paused.' }),
+      };
+    }
     case 'failed':
       return failed(s, saidText(e.message));
     case 'cancelled':
@@ -234,12 +252,71 @@ export function applyEvent(s: ExportRun, e: ExportEvent): Partial<ExportRun> {
   }
 }
 
+/**
+ * The run shown while job `jobId` resumes, until its `started` arrives: what the job list says (`job`), or what was on
+ * screen (`s`, when it showed that job).
+ */
+export function resuming(s: ExportRun, jobId: string, job?: ExportJobInfo): Partial<ExportRun> {
+  const shown = s.jobId === jobId ? s : idleRun;
+  return {
+    ...idleRun,
+    phase: 'running',
+    jobId,
+    files: job?.files ?? shown.files,
+    // The files already in place stay listed.
+    ready: shown.ready,
+    captionFiles: shown.captionFiles,
+    frame: job?.frame ?? shown.frame,
+    totalFrames: job?.totalFrames ?? shown.totalFrames,
+    segmentsDone: job?.segmentsDone ?? shown.segmentsDone,
+    segmentsTotal: job?.segmentsTotal ?? shown.segmentsTotal,
+    announcement: t({ id: 'export.announce.resumed', message: 'Export resumed.' }),
+  };
+}
+
+/** What the dialog reads to show the run and the unfinished jobs: the run on screen and the jobs Rust listed. */
+type JobsView = Pick<ExportRun, 'jobId'> & { jobs: ExportJobInfo[] };
+
+/** The job on screen, as `export_jobs` last listed it. */
+export function shownJob(s: JobsView): ExportJobInfo | undefined {
+  return s.jobId ? s.jobs.find((j) => j.jobId === s.jobId) : undefined;
+}
+
+/** Unfinished exports other than the one on screen. */
+export function unfinishedJobs(s: JobsView): ExportJobInfo[] {
+  return s.jobs.filter((j) => j.jobId !== s.jobId);
+}
+
+/** Whether any of `job`'s formats is still in the project, so Start over has something to export. */
+export const canStartOver = (job: ExportJobInfo, inProject: readonly FormatKind[]) =>
+  job.files.some((f) => inProject.includes(f.format));
+
 /** Rust's code for a refusal (`exports.refused.*`), from the error the bridge threw; '' for any other. */
 function refusalCode(error: unknown): { code: string; params: CodedError['params'] } {
   const cause: unknown = error instanceof Error ? error.cause : undefined;
   if (typeof cause === 'object' && cause !== null && typeof (cause as CodedError).code === 'string')
     return cause as CodedError;
   return { code: '', params: {} };
+}
+
+/** Joining the finished parts into the files can't be paused: the run's note, and a pause's refusal. */
+export const NO_PAUSE_FINISHING = 'It can’t pause while it finishes.';
+
+/**
+ * Why the run on screen (`s`) can't pause now, or null: it is finishing (joining its parts can't pause) or stopping.
+ */
+export function ownPauseRefusal(s: Pick<ExportRun, 'finishing' | 'stopping'>): string | null {
+  if (s.finishing) return t({ id: 'export.pauseRefused.finishing', message: 'The export can’t pause while it finishes.' });
+  if (s.stopping) return t({ id: 'export.pauseRefused.stopping', message: 'The export is stopping.' });
+  return null;
+}
+
+/** Why Rust didn't pause an export (`error` from the bridge), in words, by Rust's code; else a generic one. */
+export function pauseRefusal(error: unknown): string {
+  const { code } = refusalCode(error);
+  if (code === 'exports.refused.notRunning')
+    return t({ id: 'export.pauseRefused.notRunning', message: 'The export didn’t pause. It isn’t running any more.' });
+  return t({ id: 'export.pauseRefused.other', message: 'The export didn’t pause. Try again in a moment.' });
 }
 
 /**

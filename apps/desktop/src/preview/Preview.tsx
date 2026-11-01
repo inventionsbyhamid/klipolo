@@ -1,6 +1,7 @@
 import { useLingui } from '@lingui/react/macro';
 import { useState } from 'react';
 import { AnalysisBanner } from '../features/analysis/AnalysisBanner';
+import { MissingFontsBanner } from '../features/fonts/MissingFontsBanner';
 import { RoughCaptionsNote } from '../features/analysis/RoughCaptionsNote';
 import { FormatPills } from '../features/editor/FormatPills';
 import { useShownFormat } from '../features/editor/formats';
@@ -116,7 +117,8 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
       </div>
       <div className={docked ? 'stage-body has-inspector' : 'stage-body'}>
         {hasVideo && <AnalysisBanner />}
-        {/* Under the banner: the frame, and the inspector at its right (in the slot, or over the frame). */}
+        <MissingFontsBanner />
+        {/* Under the banners: the frame, and the inspector at its right (in the slot, or over the frame). */}
         <div className="stage-main">
           {hasVideo ? <Stage /> : <DropZone over={filesOver} />}
           {docked && <Inspector format={format} />}
