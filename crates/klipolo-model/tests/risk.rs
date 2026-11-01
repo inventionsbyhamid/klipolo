@@ -248,7 +248,7 @@ fn the_op_schema_lists_every_op_and_tags_match_the_json() {
     // The first 34, then `fixWords`, then five recording ops in place of `detachCamera`, then `setWordLook`, then
     // `setCursorStyle`, then `useRecording` and `addRecordingSource`, then `detachSound`, `freezeFrame` and
     // `reverseClip`, then `roll`, `slip` and `slide`.
-    assert_eq!(tags.len(), 34 + 1 + 4 + 1 + 1 + 2 + 3, "{tags:?}");
+    assert_eq!(tags.len(), 34 + 1 + 4 + 1 + 1 + 2 + 3 + 3, "{tags:?}");
     for op in [
         Op::Split { at_us: 0 },
         Op::RemoveClip { id: "a".into() },
