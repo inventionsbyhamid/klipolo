@@ -139,9 +139,10 @@ impl Compositor {
         }
     }
 
-    /// The main footage alone at its drawn size (its look and LUT included), through its clip's effects, then
-    /// placed like an image. The camera keeps the composite path.
-    pub(super) async fn main_with_effects(
+    /// A video layer drawn alone (`VideoLayer::drawn_alone`) at its drawn size through the composite pipeline (its
+    /// crop, mirror, look and LUT included), through its effects (the main footage's clip effects), then placed like an
+    /// image, mixed by its blend. The camera, and footage without effects, keep the composite path.
+    pub(super) async fn video_alone(
         &mut self,
         f: &mut FrameCtx<'_>,
         draws: &mut Vec<Draw>,
@@ -151,7 +152,10 @@ impl Compositor {
     ) {
         let dev = self.dev.clone();
         let (device, queue) = (&dev.device, &dev.queue);
-        let quad = quad_for(v.dest, v.rotation, v.opacity, v.radius, f.size);
+        let quad = ImageQuad {
+            blend: v.blend,
+            ..quad_for(v.dest, v.rotation, v.opacity, v.radius, f.size)
+        };
         let at = effect_size(&quad, 1.0);
         let local = at.size;
         let alone = v.alone();

@@ -75,6 +75,16 @@ pub struct VideoLayer {
 }
 
 impl VideoLayer {
+    /// Whether it is drawn by itself in a target of its own first, then placed like an image
+    /// (`Compositor::video_alone`): footage with effects, and an overlay showing part of its picture (the image quad
+    /// draws a whole picture).
+    pub fn drawn_alone(&self) -> bool {
+        match self.role {
+            VideoRole::Overlay => self.crop != crate::plan::framing::FULL,
+            _ => !self.effects.is_empty(),
+        }
+    }
+
     /// This layer drawn by itself, filling its own target (the effect stage then places the result).
     pub fn alone(&self) -> VideoLayer {
         VideoLayer {

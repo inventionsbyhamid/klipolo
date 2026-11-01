@@ -1,6 +1,9 @@
 //! GPU pixel tests (run by hand: `cargo test -p klipolo-engine --test gpu -- --ignored`). One per layer kind at most.
 
 mod support;
+// Video layers showing part of their picture.
+#[path = "gpu/framing.rs"]
+mod framing;
 // Mirrored video layers.
 #[path = "gpu/mirror.rs"]
 mod mirror;
