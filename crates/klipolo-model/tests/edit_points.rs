@@ -214,6 +214,19 @@ fn a_separated_sound_follows_its_clips_end() {
 }
 
 #[test]
+fn a_separated_sound_follows_its_clips_start() {
+    let mut p = abc();
+    p.timeline.main.swap(0, 1);
+    // b is 0 to 6 s; a follows, playing the recording 2 to 20 s, and its mic's layer with it.
+    let p = separated(&p, "mic");
+    assert_eq!(played(item(&p, "a-mic")), (6.0, 18.0, 2.0));
+    let later = apply_ops(&p, &[roll("b", 1.0)]).unwrap();
+    assert_eq!(played(item(&later, "a-mic")), (7.0, 17.0, 3.0));
+    let earlier = apply_ops(&p, &[roll("b", -1.0)]).unwrap();
+    assert_eq!(played(item(&earlier, "a-mic")), (5.0, 19.0, 1.0));
+}
+
+#[test]
 fn a_slip_moves_the_footage_through_the_clip_in_place() {
     let p = abc();
     let later = apply_ops(&p, &[slip("b", 1.0)]).unwrap();
