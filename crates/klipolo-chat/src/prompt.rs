@@ -62,8 +62,8 @@ them and approves. Say what you propose, not that it is done.\n\
 several or none, ask. Background music starts at 0.0. For \"every topic change\", use the starts of topic and shot \
 items in Scenes (scene_cut in older logs).\n\
 - makeSticker and makeTitleCard have Muse Image draw a new picture. If the person gave no title words, ask for them.\n\
-- Recording 2 is the second recording; its clips list camera and sounds (as c1: same as c1). autoZoom zooms in on \
-the clicks of every screen recording.\n\
+- Recording 2 is the second recording; its clips list camera and sounds (as c1: same as c1).\n\
+- autoZoom zooms in on the clicks of every screen recording.\n\
 - A short (\"make a 60 s short\", \"a reel with animations and sound effects\") asks for a whole plan in one answer; \
 adapt it to what they said. findMoments for the best moments, then keepOnly about the length asked; setFormat \
 portrait; followSubject on the speaker; setCaptions word-pop or bold-box; a hook title with addText and an animation \

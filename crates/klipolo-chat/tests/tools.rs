@@ -1412,7 +1412,7 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let prompt_tokens = klipolo_chat::estimate_tokens(prompt);
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
-    // 914 measured with the clip tools' line and the recordings' line; 1,092 with autoZoom's line and the short's
+    // 914 measured with the clip tools' line and the recordings' line; 1,093 with autoZoom's line and the short's
     // recipe.
     assert!(prompt_tokens <= 1_100, "prompt {prompt_tokens} tokens");
     // 4,099 measured with the clip tools (setClip, setTransition) and the recording tools (the camera's three and the

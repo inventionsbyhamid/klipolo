@@ -626,7 +626,8 @@ fn a_short_planned_in_one_answer_applies_its_look_and_proposes_its_cut() {
     // As the recipe plans it: the best part kept, vertical, word pop captions, a hook title and a popping sticker with a
     // sound inside the part kept, music under it.
     let p = project();
-    let message = "turn this into a 15 second short with nice animations, sound effects and text animations";
+    let message =
+        "turn this into a 15 second short with nice animations, sound effects and text animations";
     let out = run(
         &p,
         message,
@@ -639,7 +640,10 @@ fn a_short_planned_in_one_answer_applies_its_look_and_proposes_its_cut() {
                 "keepOnly",
                 json!({"ranges": [{"startSec": 0.5, "endSec": 2.0}, {"startSec": 9.85, "endSec": 13.0}]}),
             ),
-            ("setFormat", json!({"format": "portrait", "keepOthers": false})),
+            (
+                "setFormat",
+                json!({"format": "portrait", "keepOthers": false}),
+            ),
             ("setCaptions", json!({"on": true, "style": "word-pop"})),
             (
                 "addText",
@@ -649,8 +653,17 @@ fn a_short_planned_in_one_answer_applies_its_look_and_proposes_its_cut() {
                 "addImage",
                 json!({"file": "Heart", "size": "small", "position": "top-right", "atSec": 10.0, "durationSec": 2.0}),
             ),
-            ("animate", animate("last", json!({"enter": "bounce", "emphasis": "pulse", "sound": "Pop"}))),
-            ("addMusic", json!({"file": "Upbeat loop", "volume": null, "duck": null, "atSec": null})),
+            (
+                "animate",
+                animate(
+                    "last",
+                    json!({"enter": "bounce", "emphasis": "pulse", "sound": "Pop"}),
+                ),
+            ),
+            (
+                "addMusic",
+                json!({"file": "Upbeat loop", "volume": null, "duck": null, "atSec": null}),
+            ),
         ],
     );
     assert_eq!(out.refusals, vec![], "{:#?}", out.refusals);
@@ -663,7 +676,10 @@ fn a_short_planned_in_one_answer_applies_its_look_and_proposes_its_cut() {
     let short = proposal.review.after.clone();
     let length = klipolo_model::query::video_duration(&short.timeline);
     assert!((secs(4.5)..secs(6.0)).contains(&length), "{length}");
-    assert_eq!(short.settings.formats, vec![klipolo_model::project::FormatKind::Portrait]);
+    assert_eq!(
+        short.settings.formats,
+        vec![klipolo_model::project::FormatKind::Portrait]
+    );
     assert!(short.captions.enabled);
     let overlays = layers(&short, TrackKind::Overlay);
     assert_eq!(overlays.len(), 2, "{overlays:#?}");
@@ -674,7 +690,9 @@ fn a_short_planned_in_one_answer_applies_its_look_and_proposes_its_cut() {
     assert!((second..length).contains(&sticker.start_us), "{sticker:?}");
     let sounds: Vec<Item> = layers(&short, TrackKind::Audio)
         .into_iter()
-        .filter(|i| matches!(&i.content, ItemContent::Audio { asset_id, .. } if asset_id == "pack-pop"))
+        .filter(
+            |i| matches!(&i.content, ItemContent::Audio { asset_id, .. } if asset_id == "pack-pop"),
+        )
         .collect();
     assert_eq!(sounds.len(), 1);
     assert_eq!(sounds[0].start_us, sticker.start_us);
