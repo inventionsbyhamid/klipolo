@@ -20,4 +20,8 @@ folder: string,
 /**
  * Master's ProRes is encoded on the CPU here (no media engine: an Intel Mac, Windows, Linux), so it is slower.
  */
-slowMaster: boolean, };
+slowMaster: boolean, 
+/**
+ * Some file of the project has its words heard in full: a landscape file can also save its captions as a file.
+ */
+canSaveCaptions: boolean, };

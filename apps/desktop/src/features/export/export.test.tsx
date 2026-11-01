@@ -25,6 +25,7 @@ const planned = vi.hoisted(
       seconds: 30,
       folder: 'Movies / Klipolo',
       slowMaster: true,
+      canSaveCaptions: false,
     }),
 );
 vi.mock('../../bridge/exporter', () => ({
@@ -222,6 +223,7 @@ describe('export dialog', () => {
         seconds: 30,
         folder: 'Desktop / Clips',
         slowMaster: false,
+        canSaveCaptions: false,
       }),
     );
     await userEvent.click(screen.getByRole('button', { name: 'Change folder' }));

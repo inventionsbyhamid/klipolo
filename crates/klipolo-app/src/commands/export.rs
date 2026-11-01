@@ -60,6 +60,7 @@ pub(crate) fn export_plan(
     let feed = open_feed(&session)?;
     Ok(export::plan(
         &feed.project,
+        &feed.speech,
         &req,
         &folder(&state)?,
         apple_silicon(),
