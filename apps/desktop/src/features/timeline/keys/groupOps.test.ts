@@ -49,18 +49,20 @@ describe("a group's edits", () => {
     expect(groupMoveOps(p, membersOf(p, ['title', 'second']), S)).toBe('locked');
   });
 
-  it('carries its clips together to the nearest place on the main track, and the others close up', () => {
+  it('carries its clips together to the nearest other place on the main track, and the others close up', () => {
     const p = fixtureProject();
     const [a] = p.timeline.main;
     p.timeline.main.push({ ...a, id: 'c', sourceInUs: 30 * S, sourceOutUs: 40 * S });
-    const moved = groupReorderOps(p, membersOf(p, ['a', 'c']), 5 * S);
-    expect(moved).toEqual({
-      ops: [{ type: 'moveClip', id: 'c', index: 1 }],
+    // 5 s later, a would still go first: nothing changes, and a and c stay apart.
+    expect(groupReorderOps(p, membersOf(p, ['a', 'c']), 5 * S)).toEqual({ ops: [], shifts: new Map(), deltaUs: 0 });
+    // 8 s later, after b: a and c go there together.
+    expect(groupReorderOps(p, membersOf(p, ['a', 'c']), 8 * S)).toEqual({
+      ops: [{ type: 'moveClip', id: 'b', index: 0 }],
       shifts: new Map([
-        ['c', -10 * S],
-        ['b', 10 * S],
+        ['b', -20 * S],
+        ['a', 10 * S],
       ]),
-      deltaUs: 0,
+      deltaUs: 10 * S,
     });
   });
 
@@ -69,7 +71,8 @@ describe("a group's edits", () => {
     const m = membersOf(p, ['title', 'second']);
     const [ops, ids] = groupPasteOps(p, groupEntries(p, m), 10 * S);
     expect(ids).toHaveLength(2);
-    expect(ops.map((op) => (op.type === 'addItem' ? op.item.startUs : -1))).toEqual([10 * S, 15 * S]);
+    // The latest first, so no copy passes through another.
+    expect(ops.map((op) => (op.type === 'addItem' ? op.item.startUs : -1))).toEqual([15 * S, 10 * S]);
     const [copies] = groupDuplicateOps(p, m);
     // The group runs 1 to 7 s: the copies go 6 s later, the latest first.
     expect(copies.map((op) => (op.type === 'addItem' ? op.item.startUs : -1))).toEqual([12 * S, 7 * S]);

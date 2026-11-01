@@ -1,4 +1,5 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixturePatch, fixtureSnapshot, titleItem } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
@@ -20,6 +21,8 @@ const { usePlayback } = await import('../../state/playback');
 const { useRange } = await import('../../state/range');
 const { selectionOf, useSelection } = await import('../../state/selection');
 const { useUi } = await import('../../state/ui');
+const { useClipboard } = await import('../../state/clipboard');
+const { itemsWord } = await import('./keys/groupActions');
 const { Timeline } = await import('./Timeline');
 const { Inspector } = await import('../inspector/Inspector');
 const { useEditorShortcuts } = await import('../command-palette/useEditorShortcuts');
@@ -38,6 +41,16 @@ function Editor() {
     </>
   );
 }
+
+/** `withSecond`, with "c" (the recording 30 to 40 s) after b: a 0 to 20 s, b 20 to 30 s, c 30 to 40 s. */
+function withC() {
+  const snapshot = withSecond();
+  const [a] = snapshot.project.timeline.main;
+  snapshot.project.timeline.main.push({ ...a, id: 'c', sourceInUs: 30 * S, sourceOutUs: 40 * S });
+  return snapshot;
+}
+
+const settle = () => act(() => new Promise((r) => setTimeout(r, 450)));
 
 /** The fixture with a second title at 6 s, free, on the title's track. */
 function withSecond() {
@@ -188,25 +201,101 @@ describe("a group's edits", () => {
     });
   });
 
-  it('the arrows nudge the group a frame, ⇧ a second, and the playhead stays', async () => {
+  it('a group with clips apart moves them together only once it reaches a new place, and says so', async () => {
+    useProject.setState({ snapshot: withC(), pending: 0 });
+    useSelection.getState().selectMany(['a', 'c']);
+    renderWithProviders(<Editor />);
+    const a = block(/^Recording 1, clip 1/);
+    // A few pixels: a would still go first, so nothing changes and no step is added.
+    fireEvent.pointerDown(a, { pointerId: 1, button: 0, clientX: 400, clientY: 5 });
+    fireEvent.pointerMove(a, { pointerId: 1, clientX: 410, clientY: 5 });
+    await frames();
+    fireEvent.pointerUp(a, { pointerId: 1, clientX: 410, clientY: 5 });
+    await frames();
+    expect(bridge.apply).not.toHaveBeenCalled();
+    // 15 s later: past b, so a and c go together after it.
+    fireEvent.pointerDown(a, { pointerId: 2, button: 0, clientX: 400, clientY: 5 });
+    fireEvent.pointerMove(a, { pointerId: 2, clientX: 1000, clientY: 5 });
+    await frames();
+    expect(screen.getByText('Moves 2 clips together')).toBeInTheDocument();
+    fireEvent.pointerUp(a, { pointerId: 2, clientX: 1000, clientY: 5 });
+    await frames();
+    expect(bridge.apply).toHaveBeenCalledWith({
+      label: 'timeline.group.move',
+      params: { count: 2 },
+      ops: [{ type: 'moveClip', id: 'b', index: 0 }],
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('Moves 2 clips together');
+  });
+
+  it('held, the arrows nudge the group as one step: a frame each, ⇧ a second; the playhead stays', async () => {
     useSelection.getState().selectMany(['title', 'second']);
     renderWithProviders(<Editor />);
     fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'ArrowRight', repeat: true });
+    fireEvent.keyDown(window, { key: '.', code: 'Period', repeat: true });
     await frames();
+    expect(bridge.apply).not.toHaveBeenCalled();
+    await settle();
+    expect(bridge.apply).toHaveBeenCalledTimes(1);
     expect(bridge.apply).toHaveBeenLastCalledWith({
       label: 'timeline.group.move',
       params: { count: 2 },
       ops: [
-        { type: 'moveItem', id: 'second', trackId: null, startUs: 6 * S + 33_333 },
-        { type: 'moveItem', id: 'title', trackId: null, startUs: S + 33_333 },
+        { type: 'moveItem', id: 'second', trackId: null, startUs: 6 * S + 100_000 },
+        { type: 'moveItem', id: 'title', trackId: null, startUs: S + 100_000 },
       ],
     });
     fireEvent.keyDown(window, { key: 'ArrowLeft', shiftKey: true });
-    await frames();
+    await settle();
     expect(bridge.apply).toHaveBeenLastCalledWith(
       expect.objectContaining({ ops: [expect.objectContaining({ id: 'title', startUs: 0 }), expect.anything()] }),
     );
     expect(usePlayback.getState().playheadUs).toBe(0);
+  });
+
+  it('⇧Enter adds the focused block or takes it out; with a group, the arrows move focus and keep the group', () => {
+    useSelection.getState().selectMany(['title', 'second']);
+    renderWithProviders(<Editor />);
+    const b = block(/^broll\.mp4/);
+    act(() => b.focus());
+    fireEvent.keyDown(b, { key: 'Enter', shiftKey: true });
+    expect(selected()).toEqual(['b', 'second', 'title']);
+    fireEvent.keyDown(b, { key: 'ArrowLeft' });
+    expect(selected()).toEqual(['b', 'second', 'title']);
+    expect(document.activeElement).not.toBe(b);
+    act(() => b.focus());
+    fireEvent.keyDown(b, { key: 'Enter', shiftKey: true });
+    expect(selected()).toEqual(['second', 'title']);
+  });
+
+  it('duplicate and paste put the clips in first, and a title on a copied clip lands on its copy', async () => {
+    useSelection.getState().selectMany(['a', 'title']);
+    renderWithProviders(<Editor />);
+    // a is 0 to 20 s with the title 1 s into it: the copy goes right after a, the title's copy 1 s into it.
+    fireEvent.keyDown(window, { key: 'd', metaKey: true });
+    await frames();
+    const [dup] = vi.mocked(bridge.apply).mock.calls.at(-1)!;
+    expect(dup.ops.map((op) => op.type)).toEqual(['insertClip', 'addItem']);
+    expect(dup.ops[0]).toMatchObject({ index: 1 });
+    expect(dup.ops[1]).toMatchObject({ item: { startUs: 21 * S }, attach: true });
+    // Copied, then pasted with the playhead in b (20 to 30 s): after b, from 30 s, the title at 31 s. (The copies the
+    // duplicate selected aren't in this test's project, which the mocked Rust leaves as it is.)
+    act(() => useSelection.getState().selectMany(['a', 'title']));
+    fireEvent.keyDown(window, { key: 'c', metaKey: true });
+    usePlayback.setState({ playheadUs: 25 * S });
+    fireEvent.keyDown(window, { key: 'v', metaKey: true });
+    await frames();
+    const [pasted] = vi.mocked(bridge.apply).mock.calls.at(-1)!;
+    expect(pasted.ops.map((op) => op.type)).toEqual(['insertClip', 'addItem']);
+    expect(pasted.ops[0]).toMatchObject({ index: 2 });
+    expect(pasted.ops[1]).toMatchObject({ item: { startUs: 31 * S }, attach: true });
+    expect(useClipboard.getState().group).toHaveLength(2);
+  });
+
+  it('says how many in the words for one and for many', () => {
+    expect(itemsWord(1)).toBe('1 item');
+    expect(itemsWord(3)).toBe('3 items');
   });
 
   it("the group's card mutes every sound of it in one step", async () => {
@@ -214,6 +303,12 @@ describe("a group's edits", () => {
     renderWithProviders(<Editor />);
     const card = screen.getByRole('complementary', { name: '2 items settings' });
     expect(card).toHaveTextContent('Volume');
+    // a plays at 100 % and the song at 40 %: the card says they differ.
+    expect(within(card).getByText('Mixed')).toBeInTheDocument();
+    await userEvent.click(within(card).getByRole('button', { name: 'More' }));
+    for (const name of ['Copy', 'Cut', 'Paste', 'Duplicate', 'Delete'])
+      expect(screen.getByRole('menuitem', { name })).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
     fireEvent.click(within(card).getByRole('button', { name: 'Mute' }));
     await frames();
     expect(bridge.apply).toHaveBeenCalledWith(

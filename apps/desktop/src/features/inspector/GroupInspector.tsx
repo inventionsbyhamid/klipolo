@@ -13,6 +13,7 @@ import {
   allSound,
   copyGroup,
   countOf,
+  cutGroup,
   deleteGroup,
   duplicateGroup,
   groupMuted,
@@ -21,6 +22,7 @@ import {
   itemsWord,
   membersOf,
   muteGroup,
+  pasteClipboard,
   pasteEffectsGroup,
 } from '../timeline/commands';
 import { cardEscape } from './common';
@@ -33,9 +35,9 @@ const VOLUME = clipSettings.volume;
 
 /**
  * The card for several selected clips and layers ("3 items"): only the fields they all share. Volume and Mute when
- * every one of them makes sound (volumes that differ show 100 % until one is set for all), Effects when every one can
- * carry effects (Paste effects puts the copied stack on each), and in its more menu Copy, Duplicate and Delete. Each
- * change is one undo step for the whole group ("Mute 3 items").
+ * every one of them makes sound (volumes that differ read Mixed until one is set for all), Effects when every one can
+ * carry effects (Paste effects puts the copied stack on each), and in its more menu Copy, Cut, Paste, Duplicate and
+ * Delete. Each change is one undo step for the whole group ("Mute 3 items").
  */
 export function GroupInspector({ ids }: { ids: readonly string[] }) {
   const { t } = useLingui();
@@ -49,7 +51,13 @@ export function GroupInspector({ ids }: { ids: readonly string[] }) {
   const effects = allEffects(m);
   const muted = sound && groupMuted(project, m);
   const volume = sound ? (groupVolume(project, m) ?? null) : null;
-  const pastable = clipboard.projectId === project.id && clipboard.effects !== null;
+  const mixed = t({
+    id: 'inspector.group.mixed',
+    message: 'Mixed',
+    comment: 'The selected sounds have different volumes',
+  });
+  const pastable = clipboard.projectId === project.id && clipboard.entry !== null;
+  const effectsPastable = clipboard.projectId === project.id && clipboard.effects !== null;
   const close = () => useSelection.getState().select(null);
   /** The group's volume ops, built from the project as it is when the change goes in. */
   const volumeOps = (v: number) => {
@@ -75,6 +83,12 @@ export function GroupInspector({ ids }: { ids: readonly string[] }) {
           </MenuTrigger>
           <MenuContent align="end">
             <MenuItem onSelect={copyGroup}>{t({ id: 'timeline.copy', message: 'Copy', comment: 'Command' })}</MenuItem>
+            <MenuItem onSelect={cutGroup}>
+              {t({ id: 'inspector.group.cut', message: 'Cut', comment: 'Menu item' })}
+            </MenuItem>
+            <MenuItem onSelect={pasteClipboard} disabled={!pastable}>
+              {t({ id: 'inspector.group.paste', message: 'Paste', comment: 'Menu item' })}
+            </MenuItem>
             <MenuItem onSelect={duplicateGroup}>{t({ id: 'inspector.duplicate', message: 'Duplicate' })}</MenuItem>
             <MenuSeparator />
             <MenuItem onSelect={deleteGroup}>{t({ id: 'inspector.delete', message: 'Delete' })}</MenuItem>
@@ -99,7 +113,8 @@ export function GroupInspector({ ids }: { ids: readonly string[] }) {
                 min={VOLUME.min}
                 max={VOLUME.max}
                 step={VOLUME.step}
-                format={percent}
+                // Volumes that differ read Mixed until one is set for all.
+                format={(v) => (volume === null && v === 1 ? mixed : percent(v))}
                 preview={false}
                 ops={volumeOps}
               />
@@ -126,13 +141,13 @@ export function GroupInspector({ ids }: { ids: readonly string[] }) {
           >
             <Button
               size="sm"
-              aria-disabled={!pastable || undefined}
+              aria-disabled={!effectsPastable || undefined}
               title={
-                pastable
+                effectsPastable
                   ? undefined
                   : t({ id: 'timeline.pasteEffects.none', message: 'Copy a clip or layer that has effects first.' })
               }
-              onClick={() => pastable && pasteEffectsGroup()}
+              onClick={() => effectsPastable && pasteEffectsGroup()}
             >
               {t({ id: 'inspector.group.pasteEffects', message: 'Paste effects' })}
             </Button>

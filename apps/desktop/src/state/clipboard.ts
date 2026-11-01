@@ -5,10 +5,15 @@ import type { Item } from '../bindings/Item';
 
 export type ClipboardEntry = { kind: 'clip'; clip: Clip } | { kind: 'item'; item: Item };
 
-/** One block of a copied group, with how far after the group's first block it starts. */
+/**
+ * One block of a copied group, and where it goes from: a layer on one of the group's clips (`onClip`, its place among
+ * them) from that clip's start; any other block from the group's first clip, or from its first block when it has no
+ * clips.
+ */
 export interface GroupEntry {
   entry: ClipboardEntry;
   offsetUs: number;
+  onClip?: number;
 }
 
 interface Clipboard {

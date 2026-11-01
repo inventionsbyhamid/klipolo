@@ -16,7 +16,15 @@ import { useUi } from '../../state/ui';
 import { switchFormat } from '../editor/formats';
 import { useEffectCommands } from '../inspector/useEffectCommands';
 import { importFiles } from '../media/useImportMedia';
-import { deleteBlock, deleteGroup, deleteRange, removeTransition, useTimelineCommands } from '../timeline/commands';
+import {
+  deleteBlock,
+  deletedCount,
+  deleteGroup,
+  deleteRange,
+  membersOf,
+  removeTransition,
+  useTimelineCommands,
+} from '../timeline/commands';
 import { useSourceCommands } from '../timeline/useSourceCommands';
 import { searchWords, type Command } from './command';
 import { usePanelCommands } from './usePanelCommands';
@@ -90,7 +98,7 @@ export function useCommands(): Command[] {
     const deleteLabel = range
       ? 'undo.delete.range'
       : group
-        ? { id: 'timeline.group.delete' as const, params: { count: group.length } }
+        ? { id: 'timeline.group.delete' as const, params: { count: deletedCount(membersOf(project, group)) } }
       : selectedTransition
         ? 'transition.remove'
         : selectedClip

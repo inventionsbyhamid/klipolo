@@ -29,7 +29,7 @@ import {
   type LaneKey,
 } from './laneOrder';
 import { blockOf, inProject, neighbour, pageFocused } from './focusHelpers';
-import { selectEveryBlock } from './groupActions';
+import { selectEveryBlock, toggleBlock } from './groupActions';
 import { isMarker, markerFocusedIn, markerFor } from './markers';
 import { reveal, revealRow } from './reveal';
 import { focusStep, moveFocusTo } from './timelineActions';
@@ -42,8 +42,9 @@ const MAC = typeof navigator === 'undefined' || !/^(Win|Linux)/.test(navigator.p
 /**
  * Roving focus over the timeline's blocks: one block is in the Tab order (`tabStopId`: the one last focused or
  * selected, else the first clip in view); ← / → move along its lane, ↑ / ↓ between lanes, Home / End to a lane's ends
- * (selection follows; the Video lane stops at each cut between clips), Enter picks (selects and seeks; on a cut it
- * selects its transition, adds one, or says why it can't), Space plays, Shift+F10 or the Menu key opens its menu.
+ * (selection follows, unless several blocks are selected: then the group stays; the Video lane stops at each cut
+ * between clips), Enter picks (selects and seeks; on a cut it selects its transition, adds one, or says why it can't),
+ * Shift+Enter adds the block to the selection or takes it out, Space plays, Shift+F10 or the Menu key opens its menu.
  *
  * The tab stop is kept mounted and out of bands (`keep`), so a focused block survives scrolling and zooming, and off-
  * window or banded blocks are reachable. Focus never drops to the page: a focused block that goes (deleted, cut,
@@ -196,16 +197,19 @@ export function useRovingFocus(
       return moveFocusTo(now, next);
     }
     if (!el || !id) return;
-    // With several blocks selected, ← and → nudge them (the window's shortcut), and focus stays where it is.
-    const sideways = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
-    if (sideways && groupOf(useSelection.getState())) return;
     if (MOVES.has(e.key) && !e.shiftKey) {
       // The window's shortcuts (a frame, an edit point, the start or end) don't also run.
       e.preventDefault();
       const next = focusStep(now, id, e.key as LaneKey);
       if (next === null || next === id) return;
       if (scrollRef.current) reveal(scrollRef.current, laneOrder(now), next, pps);
-      moveFocusTo(now, next);
+      // With several blocks selected, focus moves and the group stays (⇧Enter adds or takes out the block there).
+      if (groupOf(useSelection.getState())) useTimelineFocus.getState().focus(next, true);
+      else moveFocusTo(now, next);
+    } else if (e.key === 'Enter' && e.shiftKey && cutClipId(id) === null) {
+      // ⇧Enter: the focused clip or layer joins the selection, or leaves it.
+      e.preventDefault();
+      toggleBlock(id);
     } else if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       // On a cut: its transition is selected, or one is added, or it says why not.

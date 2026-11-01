@@ -1,10 +1,10 @@
-import { t } from '@lingui/core/macro';
+import { plural, t } from '@lingui/core/macro';
 import type { Project } from '../../../bindings/Project';
 import { activeIntlLocale } from '../../../i18n';
 import { formatSeconds } from '../../../lib/format';
 import { snapToFrame } from '../../../lib/time';
 import { findItem, sourceLabel } from '../../../lib/timeline';
-import { moveRefusal } from '../keys/groupActions';
+import { clipsTogether, moveRefusal } from '../keys/groupActions';
 import { countOf, groupMoveOps, groupReorderOps, membersOf } from '../keys/groupOps';
 import { mainIndex } from '../model/index';
 import { attachedTo } from '../model/moveOps';
@@ -35,6 +35,11 @@ function limitNote(held: EditLimit, name: string): string {
   if (held === 'transition')
     return t({ id: 'timeline.edit.transition', message: 'A transition needs the rest of that footage' });
   if (held === 'freeze') return t({ id: 'timeline.edit.freeze', message: 'A freeze frame has no footage to slip' });
+  if (held === 'separated')
+    return t({
+      id: 'timeline.edit.separated',
+      message: 'A separated sound or camera starts in the footage this would hide',
+    });
   return t({ id: 'timeline.edit.locked', message: 'A layer on a locked track would move' });
 }
 
@@ -186,7 +191,13 @@ export function frameGroup(s: Session, g: Group, project: Project, dtUs: number,
   s.ops = ops;
   const count = countOf(m);
   s.labelParams = { count };
-  s.said = t({ id: 'timeline.group.moved', message: `Moved ${count} items` });
-  s.view.showTip(change(moved), s.last.x);
+  // Clips of the group go to their new place side by side (the main track is magnetic): the tip and the note say so.
+  const together = m.clips.length > 1 && ops.length > 0 ? clipsTogether(m.clips.length) : null;
+  s.said =
+    together ?? t({
+      id: 'timeline.group.moved',
+      message: plural(count, { one: 'Moved # item', other: 'Moved # items' }),
+    });
+  s.view.showTip(together ?? change(moved), s.last.x);
   return true;
 }

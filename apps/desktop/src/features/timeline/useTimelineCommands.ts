@@ -155,7 +155,9 @@ export function useTimelineCommands(): Command[] {
         enabled: block || many,
         // ⇧: ten frames (a clip still moves one place); a group's layers a frame, or with ⇧ a second.
         run: (options) =>
-          many ? nudgeGroup(-1, !!options?.large) : nudge(id, clip || !options?.large ? -1 : -10, options?.repeat),
+          many
+            ? nudgeGroup(-1, !!options?.large, options?.repeat)
+            : nudge(id, clip || !options?.large ? -1 : -10, options?.repeat),
       },
       {
         id: 'nudge-forward',
@@ -169,7 +171,9 @@ export function useTimelineCommands(): Command[] {
         shortcut: '.',
         enabled: block || many,
         run: (options) =>
-          many ? nudgeGroup(1, !!options?.large) : nudge(id, clip || !options?.large ? 1 : 10, options?.repeat),
+          many
+            ? nudgeGroup(1, !!options?.large, options?.repeat)
+            : nudge(id, clip || !options?.large ? 1 : 10, options?.repeat),
       },
       {
         id: 'roll-back',

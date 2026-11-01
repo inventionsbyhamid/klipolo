@@ -4,6 +4,7 @@ import type { Item } from '../../../bindings/Item';
 import type { Op } from '../../../bindings/Op';
 import type { Project } from '../../../bindings/Project';
 import type { Track } from '../../../bindings/Track';
+import type { TrackTarget } from '../../../bindings/TrackTarget';
 import { newId } from '../../../lib/defaults';
 import { snapToFrame } from '../../../lib/time';
 import { clipDurationUs, clipHasSound, findItem, hasOwnSound, itemEndUs } from '../../../lib/timeline';
@@ -97,8 +98,8 @@ export interface GroupReorder {
 /**
  * A group with clips in it, dragged `dtUs`: its clips go together, in their order, to the place on the main track
  * nearest where their first one would start (the main track is magnetic, so the others close up around them), and its
- * layers that don't follow one of its clips move as far as the clips did, so they keep their places beside them.
- * Refused as a layers-only move is (`groupMoveOps`).
+ * layers that don't follow one of its clips move as far as the clips did, so they keep their places beside them. A drag
+ * that doesn't reach another place changes nothing. Refused as a layers-only move is (`groupMoveOps`).
  */
 export function groupReorderOps(project: Project, m: Members, dtUs: number): GroupReorder | MoveRefusal {
   const main = project.timeline.main;
@@ -114,6 +115,9 @@ export function groupReorderOps(project: Project, m: Members, dtUs: number): Gro
     if (Math.abs(start - want) < Math.abs(best.startUs - want)) best = { k, startUs: start };
     if (k < rest.length) start += clipDurationUs(rest[k]);
   }
+  // Still in the place it began (every clip before the first of it isn't the group's): nothing moves, and clips of it
+  // that aren't together stay apart.
+  if (best.k === m.clips[0].index) return { ops: [], shifts: new Map(), deltaUs: 0 };
   const block = m.clips.map(({ clip }) => clip);
   const order = [...rest.slice(0, best.k), ...block, ...rest.slice(best.k)];
   const deltaUs = best.startUs - from;
@@ -143,23 +147,28 @@ export function groupReorderOps(project: Project, m: Members, dtUs: number): Gro
   return { ops: [...ops, ...moves], shifts, deltaUs };
 }
 
-/** Its blocks for the clipboard, deep copies, each at its distance from the earliest one (clips in their order). */
+/**
+ * Its blocks for the clipboard, deep copies, each with where it goes from (`GroupEntry`): clips in their order, then
+ * layers.
+ */
 export function groupEntries(project: Project, m: Members): GroupEntry[] {
   const index = mainIndex(project.timeline.main);
-  const starts = [
-    ...m.clips.map(({ index: i }) => index.starts[i]),
-    ...m.layers.map(({ item }) => item.startUs),
-  ];
-  const first = Math.min(...starts);
+  const clipStart = (i: number) => index.starts[m.clips[i].index];
+  const first =
+    m.clips.length > 0 ? clipStart(0) : Math.min(...m.layers.map(({ item }) => item.startUs));
   return [
     ...m.clips.map(({ clip, index: i }) => ({
       entry: { kind: 'clip' as const, clip: structuredClone(clip) },
       offsetUs: index.starts[i] - first,
     })),
-    ...m.layers.map(({ item }) => ({
-      entry: { kind: 'item' as const, item: structuredClone(item) },
-      offsetUs: item.startUs - first,
-    })),
+    ...m.layers.map(({ item }) => {
+      const on = m.clips.findIndex(({ clip }) => clip.id === item.attach?.clipId);
+      return {
+        entry: { kind: 'item' as const, item: structuredClone(item) },
+        offsetUs: item.startUs - (on >= 0 ? clipStart(on) : first),
+        ...(on >= 0 && { onClip: on }),
+      };
+    }),
   ];
 }
 
@@ -170,63 +179,100 @@ function clipCopy(clip: Clip): Clip {
   return copy;
 }
 
+/** Where a group's copies go: its clips' place on the main track and their start, or `atUs` for a group of layers. */
+interface Landing {
+  /** The index the first clip copy goes in at. */
+  index: number;
+  /** Where the first clip copy starts (a group with clips), or where the group's first layer goes (one without). */
+  startUs: number;
+  /** A layer copy's track: the first free one of its kind (a paste), or its own (a duplicate). */
+  track: (from: Track | null) => TrackTarget;
+  /** Whether a layer copy that isn't on a clip of the group is attached where it lands. */
+  attach: (item: Item, startUs: number, mainEndUs: number) => boolean;
+}
+
 /**
- * Paste a copied group at the playhead: its layers at the playhead plus their offsets (each on the first free track of
- * its kind, a picture over the video attached there), its clips after the clip under the playhead, in their order.
- * Returns the ops and the new blocks' ids.
+ * The copies of `entries` landing at `to`: the clips go in first, in their order, then each layer from its clip's copy
+ * (so a title on a copied clip lands on its copy, attached) or from the first clip's copy, latest first so no copy
+ * passes through another. Returns the ops and the copies' ids.
  */
-export function groupPasteOps(project: Project, entries: GroupEntry[], playheadUs: number): [Op[], string[]] {
-  const at = snapToFrame(playheadUs, project.settings.fps);
-  const index = mainIndex(project.timeline.main);
-  const under = clipIndexAt(index, at);
-  let place = under >= 0 ? under + 1 : project.timeline.main.length;
+function landCopies(
+  project: Project,
+  entries: readonly (GroupEntry & { track?: Track })[],
+  to: Landing,
+): [Op[], string[]] {
+  const fps = project.settings.fps;
   const ops: Op[] = [];
   const ids: string[] = [];
-  for (const { entry, offsetUs } of entries) {
-    if (entry.kind === 'clip') {
-      const clip = clipCopy(entry.clip);
-      ops.push({ type: 'insertClip', clip, index: place++ });
-      ids.push(clip.id);
-      continue;
-    }
-    const startUs = snapToFrame(at + offsetUs, project.settings.fps);
+  const starts: number[] = [];
+  let [place, at] = [to.index, to.startUs];
+  for (const { entry } of entries) {
+    if (entry.kind !== 'clip') continue;
+    const clip = clipCopy(entry.clip);
+    ops.push({ type: 'insertClip', clip, index: place++ });
+    ids.push(clip.id);
+    starts.push(at);
+    at += clipDurationUs(clip);
+  }
+  const mainEndUs = mainIndex(project.timeline.main).mainEndUs + (at - to.startUs);
+  const from = (e: GroupEntry) => (e.onClip !== undefined ? starts[e.onClip] : to.startUs);
+  const layers = entries
+    .filter((e) => e.entry.kind === 'item')
+    .map((e) => ({ ...e, startUs: Math.max(0, snapToFrame(from(e) + e.offsetUs, fps)) }))
+    .sort((a, b) => b.startUs - a.startUs);
+  for (const { entry, onClip, startUs, track } of layers) {
+    if (entry.kind !== 'item') continue;
     const item = { ...structuredClone(entry.item), id: newId(), startUs, attach: null };
-    const attach = item.content.type !== 'audio' && startUs < index.mainEndUs;
-    ops.push({ type: 'addItem', track: { type: 'auto' }, item, attach });
+    const attach = onClip !== undefined || to.attach(entry.item, startUs, mainEndUs);
+    ops.push({ type: 'addItem', track: to.track(track ?? null), item, attach });
     ids.push(item.id);
   }
   return [ops, ids];
 }
 
 /**
- * Duplicate: a copy of each layer right after the group, on its own track (attached like it), and of each clip right
- * after the group's last clip, in their order. Layers on locked tracks aren't copied. Returns the ops and the copies'
- * ids.
+ * Paste a copied group: its clips after the clip under the playhead (at the end past it), in their order, and its
+ * layers from there as they were from its first clip, a layer on one of its clips on that clip's copy; a group of
+ * layers alone at the playhead, offsets kept. Each layer goes on the first free track of its kind, a picture over the
+ * video attached there. Returns the ops and the new blocks' ids.
+ */
+export function groupPasteOps(project: Project, entries: GroupEntry[], playheadUs: number): [Op[], string[]] {
+  const at = snapToFrame(playheadUs, project.settings.fps);
+  const index = mainIndex(project.timeline.main);
+  const under = clipIndexAt(index, at);
+  const clips = entries.some((e) => e.entry.kind === 'clip');
+  return landCopies(project, entries, {
+    index: under >= 0 ? under + 1 : project.timeline.main.length,
+    startUs: !clips ? at : under >= 0 ? index.ends[under] : index.mainEndUs,
+    track: () => ({ type: 'auto' }),
+    attach: (item, startUs, mainEndUs) => item.content.type !== 'audio' && startUs < mainEndUs,
+  });
+}
+
+/**
+ * Duplicate: copies of its clips right after its last clip, in their order, and of its layers from there as they were
+ * from its first clip (a layer on one of its clips on that clip's copy); a group of layers alone right after itself.
+ * Each layer copy goes on its own track, attached as it was. Layers on locked tracks aren't copied. Returns the ops and
+ * the copies' ids.
  */
 export function groupDuplicateOps(project: Project, m: Members): [Op[], string[]] {
   const index = mainIndex(project.timeline.main);
-  const spans = [
-    ...m.clips.map(({ index: i }) => [index.starts[i], index.ends[i]]),
-    ...m.layers.map(({ item }) => [item.startUs, itemEndUs(item)]),
-  ];
-  const span = Math.max(...spans.map(([, e]) => e)) - Math.min(...spans.map(([s]) => s));
-  const ops: Op[] = [];
-  const ids: string[] = [];
-  const free = m.layers.filter(({ track }) => !track.locked);
-  // Latest first, so a copy never lands where a copy before it in the batch would bump it.
-  free.sort((a, b) => b.item.startUs - a.item.startUs);
-  for (const { item, track } of free) {
-    const copy = { ...structuredClone(item), id: newId(), startUs: item.startUs + span, attach: null };
-    ops.push({ type: 'addItem', track: { type: 'track', id: track.id }, item: copy, attach: item.attach !== null });
-    ids.push(copy.id);
-  }
-  let place = (m.clips.at(-1)?.index ?? -1) + 1;
-  for (const { clip } of m.clips) {
-    const copy = clipCopy(clip);
-    ops.push({ type: 'insertClip', clip: copy, index: place++ });
-    ids.push(copy.id);
-  }
-  return [ops, ids];
+  const kept: Members = { clips: m.clips, layers: m.layers.filter(({ track }) => !track.locked) };
+  if (countOf(kept) === 0) return [[], []];
+  const tracks = new Map(kept.layers.map(({ item, track }) => [item.id, track]));
+  const entries = groupEntries(project, kept).map((e) => ({
+    ...e,
+    track: e.entry.kind === 'item' ? tracks.get(e.entry.item.id) : undefined,
+  }));
+  const last = kept.clips.at(-1);
+  // Its clips' copies right after its last clip; a group of layers alone right after its last layer ends.
+  const startUs = last ? index.ends[last.index] : Math.max(...kept.layers.map(({ item }) => itemEndUs(item)));
+  return landCopies(project, entries, {
+    index: last ? last.index + 1 : project.timeline.main.length,
+    startUs,
+    track: (from) => (from ? { type: 'track', id: from.id } : { type: 'auto' }),
+    attach: (item) => item.attach !== null,
+  });
 }
 
 /** A group's blocks that make sound and have a volume of their own: clips with sound, sound and video layers. */
