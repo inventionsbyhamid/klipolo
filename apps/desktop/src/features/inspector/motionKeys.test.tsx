@@ -116,6 +116,17 @@ describe('Volume keys in the clip card', () => {
     expect(op.patch.volumeKeys).toEqual([key(0, 1), key(1, 0.75), key(4, 0)]);
   });
 
+  it('the volume keys before and after the playhead put the playhead on them', async () => {
+    clip([key(0.5, 1), key(4, 0)]);
+    usePlayback.setState({ playheadUs: 22 * S });
+    renderWithProviders(<Inspector format="landscape" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Next volume key' }));
+    expect(usePlayback.getState().playheadUs).toBe(24 * S);
+    await userEvent.click(screen.getByRole('button', { name: 'Previous volume key' }));
+    expect(usePlayback.getState().playheadUs).toBe(20.5 * S);
+    expect(screen.getByRole('button', { name: 'Previous volume key' })).toBeDisabled();
+  });
+
   it('a key at the playhead is taken away by the same button', async () => {
     clip([key(1, 0.5)]);
     usePlayback.setState({ playheadUs: 21 * S });
