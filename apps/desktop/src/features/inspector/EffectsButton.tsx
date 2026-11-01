@@ -58,6 +58,10 @@ export function EffectsButton({ target, effects }: EffectsButtonProps) {
         side="bottom"
         align="end"
         className="fx-pop"
+        // Escape in a setting's words not yet kept puts them back first; the next Escape closes the popover.
+        onEscapeKeyDown={(e) => {
+          if (e.target instanceof Element && e.target.closest('[data-draft]')) e.preventDefault();
+        }}
         // Focus the panel, not its first control, so opening it doesn't pop a tooltip; Tab goes on to the controls.
         onOpenAutoFocus={(e) => {
           e.preventDefault();

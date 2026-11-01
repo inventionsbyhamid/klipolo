@@ -192,6 +192,8 @@ function WordsSetting({
       className="input input-sm"
       aria-label={label}
       value={draft ?? value}
+      // Words not yet kept: Escape puts them back before it closes anything around them.
+      data-draft={draft !== null && draft !== value ? '' : undefined}
       maxLength={maxLen}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={done}
