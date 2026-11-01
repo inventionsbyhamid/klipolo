@@ -1094,9 +1094,86 @@ fn the_context_names_each_recording_with_its_camera_and_sounds() {
     // A mode for a format the video has is said; one for a format it doesn't is not.
     assert_eq!(
         clip_lines(&with_portrait())[0],
-        "c1 0.0-30.0 Recording 1 (camera bubble bottomRight circle, border on, mirrored, portrait splitBottom; sounds mic, \
+        "c1 0.0-30.0 Recording 1 (camera bubble bottomRight circle, portrait splitBottom, border on, mirrored; sounds mic, \
          computer sound)"
     );
+}
+
+#[test]
+fn the_context_leads_with_what_the_main_format_shows() {
+    // Vertical only: the camera shows as a split, so no bubble, place, shape or border is said.
+    let mut p = two_takes();
+    p.settings.formats = vec![FormatKind::Portrait];
+    p.settings.primary_format = FormatKind::Portrait;
+    assert_eq!(
+        clip_lines(&p)[0],
+        "c1 0.0-30.0 Recording 1 (camera splitBottom, mirrored; sounds mic, computer sound)"
+    );
+    // Vertical first, landscape too.
+    p.settings.formats = vec![FormatKind::Portrait, FormatKind::Landscape];
+    assert_eq!(
+        clip_lines(&p)[0],
+        "c1 0.0-30.0 Recording 1 (camera splitBottom, landscape bubble bottomRight circle, border on, mirrored; sounds \
+         mic, computer sound)"
+    );
+}
+
+#[test]
+fn the_context_says_a_recordings_camera_and_sounds_once_however_cut() {
+    // Recording 1 in 80 pieces, half a second each, as removing pauses leaves a take; then the b-roll and Recording 2.
+    let mut p = two_takes();
+    let a = p.timeline.main.remove(0);
+    let pieces = (0..80).map(|i| {
+        let from = secs(f64::from(i) * 0.7);
+        let mut piece = Clip {
+            source_in_us: from,
+            source_out_us: from + secs(0.5),
+            ..a.clone()
+        };
+        piece.id = if i == 0 {
+            "a".into()
+        } else {
+            format!("a-{}", i + 1)
+        };
+        piece
+    });
+    p.timeline.main.splice(0..0, pieces);
+    let lines = clip_lines(&p);
+    assert_eq!(
+        lines[0],
+        "c1 0.0-0.5 Recording 1 (camera bubble bottomRight circle, border on, mirrored; sounds mic, computer sound)"
+    );
+    assert_eq!(lines[1], "c2 0.5-1.0 Recording 1 (as c1)");
+    assert!(
+        lines[1..80]
+            .iter()
+            .all(|l| l.ends_with(" Recording 1 (as c1)")),
+        "{lines:?}"
+    );
+    // Another recording says its own.
+    assert_eq!(
+        lines[81],
+        "c82 50.0-70.0 Recording 2 (camera bubble bottomRight circle, border on, mirrored; sounds mic)"
+    );
+    // A piece that plays its sound otherwise says so.
+    let p = after(&p, &[mute(json!(["c2"]), true)]);
+    assert_eq!(
+        clip_lines(&p)[1],
+        "c2 0.5-1.0 Recording 1 (camera bubble bottomRight circle, border on, mirrored; sounds mic muted, computer sound)"
+    );
+    assert_eq!(clip_lines(&p)[2], "c3 1.0-1.5 Recording 1 (as c1)");
+    // Folded, the 80 pieces stay well within the context's budget, every line at full detail.
+    let ctx = build_context(
+        &p,
+        &Default::default(),
+        &HashMap::new(),
+        &HashMap::new(),
+        &View::default(),
+        &Default::default(),
+    );
+    let project = ctx.section("Project").unwrap();
+    assert!(klipolo_chat::estimate_tokens(project) <= 1_000, "{project}");
+    assert!(ctx.fits());
 }
 
 #[test]
@@ -1165,10 +1242,10 @@ fn the_prompt_names_a_recording_and_says_its_clips_list_its_camera_and_sounds() 
     let line = (prompt.lines())
         .find(|l| l.contains("Recording 2"))
         .expect("a line on recordings");
-    for needle in ["second recording", "camera and sounds"] {
+    for needle in ["second recording", "camera and sounds", "as c1"] {
         assert!(line.contains(needle), "{line:?} says {needle:?}");
     }
     // One short line, in the rules' style.
     assert!(line.starts_with("- "), "{line:?}");
-    assert!(klipolo_chat::estimate_tokens(line) <= 25, "{line:?}");
+    assert!(klipolo_chat::estimate_tokens(line) <= 30, "{line:?}");
 }

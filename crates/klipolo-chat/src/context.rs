@@ -68,7 +68,7 @@ use klipolo_model::timeline::{Clip, ClipSource};
 use serde::{Deserialize, Serialize};
 
 use crate::library::{Library, LibraryItem, MediaKind};
-use recordings::{Recordings, recording_name};
+use recordings::{Recordings, Told, recording_name};
 
 mod recordings;
 
@@ -735,10 +735,10 @@ fn speed(speed: f64) -> String {
     }
 }
 
-fn project_section(
+fn project_section<'p>(
     out: &mut String,
-    p: &Project,
-    (starts, recordings): (&[Us], &Recordings),
+    p: &'p Project,
+    (starts, recordings): (&[Us], &Recordings<'p>),
     brief: Brief,
 ) {
     let primary = p.settings.primary_format;
@@ -765,6 +765,8 @@ fn project_section(
     }
     out.push_str("Clips on the main track:\n");
     let main = &p.timeline.main;
+    // What the lines so far said of each recording, so a cut take's pieces say `as c1`.
+    let mut told = Told::new();
     let mut i = 0;
     while i < main.len() {
         // With `clip_runs`, clips i..j play one file (or recording) back to back: one line for them all.
@@ -785,18 +787,18 @@ fn project_section(
                 j - i
             );
         } else {
-            clip_line(out, (p, recordings), i, starts[i], brief);
+            clip_line(out, (p, recordings, &mut told), i, starts[i], brief);
         }
         i = j;
     }
 }
 
 /// One clip's line: `c2 13.0-144.0 interview.mov (file 24.0-155.0 of 155.0, speed 1.50x, muted)`, or a recording's
-/// `c1 0.0-30.0 Recording 1 (speed 2x; camera bubble bottomRight circle; sounds mic muted)`; with `plain_clips`, no
-/// file notes and no camera or sounds.
-fn clip_line(
+/// `c1 0.0-30.0 Recording 1 (speed 2x; camera hidden; sounds mic muted)` (`c4 ... Recording 1 (as c1)` when it reads
+/// as an earlier one); with `plain_clips`, no file notes and no camera or sounds.
+fn clip_line<'p>(
     out: &mut String,
-    (p, recordings): (&Project, &Recordings),
+    (p, recordings, told): (&'p Project, &Recordings<'p>, &mut Told<'p>),
     i: usize,
     start: Us,
     brief: Brief,
@@ -836,7 +838,7 @@ fn clip_line(
         parts.push(notes.join(", "));
     }
     if !brief.plain_clips {
-        parts.extend(recordings.notes(clip, start));
+        parts.extend(recordings.told(clip, (&short_ref(i), start), told));
     }
     if !parts.is_empty() {
         let _ = write!(out, " ({})", parts.join("; "));

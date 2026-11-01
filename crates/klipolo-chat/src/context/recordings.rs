@@ -1,19 +1,23 @@
 //! What the context says of a recording's clip, in the recording tools' words: the recording's name ("Recording 2", by
 //! its place among the project's recordings, as Klipolo names it everywhere), how its camera shows and what its sounds
 //! play there.
-//! - The camera: `camera bubble bottomRight circle` (its mode, and for a bubble its place and shape), its border
-//!   (`border on`) while a format of the video shows the bubble, its mirror (`mirrored`, `not mirrored`) while one shows
-//!   the camera, then each format of the video that shows it another way (`portrait splitBottom`); `camera on its own
-//!   layer` once it is separated, and `camera only, mirrored` when it is the clip's footage.
+//! - The camera: how the main format shows it (`camera bubble bottomRight circle`: for a bubble, its place and shape),
+//!   then each other format of the video that shows it another way (`landscape splitBottom`), its border (`border on`)
+//!   while a format shows the bubble, and its mirror (`mirrored`, `not mirrored`) while one shows the camera; `camera on
+//!   its own layer` once it is separated, and `camera only, mirrored` when it is the clip's footage.
 //! - The sounds the tools name, in the recording's order, a second one of a kind numbered (`mic 2`, as `which` takes
 //!   it): each `at 50%` when it isn't as recorded and `muted` when it is, both as the clip plays it (its own mix, else
 //!   the source's), or `on its own track` once separated there.
+//!
+//! A cut take is many clips of one recording that mostly read the same: a clip whose camera and sounds read as an
+//! earlier clip's of the same recording says `as c1` (`Told`), so a take in 80 pieces costs a few words a piece.
 //!
 //! `camera on its own layer` and `on its own track` read the compiler's own tests (`every_camera`, `OwnTrack`), so the
 //! context says what the tools will find. Built once per context: O(clips + layers), plus a binary search per clip and
 //! source.
 
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use klipolo_model::Project;
 use klipolo_model::ids::Id;
@@ -31,6 +35,9 @@ enum Camera {
     Separate,
     Footage,
 }
+
+/// What the clip lines written so far said of each recording: the first clip's ref for each reading, by recording id.
+pub(super) type Told<'p> = HashMap<(&'p str, String), String>;
 
 /// The recordings of one project, read once for every clip line.
 pub(super) struct Recordings<'p> {
@@ -77,9 +84,30 @@ impl<'p> Recordings<'p> {
         Self { p, cameras, sounds }
     }
 
+    /// What the line of clip `clip` (ref `short`, starting at `start`) says of its recording: its camera and sounds
+    /// (`notes`), or `as c1` when an earlier line of the same recording (in `said`) read the same.
+    pub(super) fn told(
+        &self,
+        clip: &'p Clip,
+        (short, start): (&str, Us),
+        told: &mut Told<'p>,
+    ) -> Vec<String> {
+        let ClipSource::Recording { id } = &clip.source else {
+            return Vec::new();
+        };
+        let notes = self.notes(clip, start);
+        match told.entry((id.as_str(), notes.join("; "))) {
+            Entry::Occupied(first) => vec![format!("as {}", first.get())],
+            Entry::Vacant(first) => {
+                first.insert(short.to_owned());
+                notes
+            }
+        }
+    }
+
     /// What clip `clip` (starting at `start`) shows of its recording's camera and plays of its sounds, each part on its
     /// own (`camera ...`, `sounds ...`); nothing for a clip that isn't a recording's.
-    pub(super) fn notes(&self, clip: &Clip, start: Us) -> Vec<String> {
+    fn notes(&self, clip: &Clip, start: Us) -> Vec<String> {
         let ClipSource::Recording { id } = &clip.source else {
             return Vec::new();
         };
@@ -110,7 +138,8 @@ impl<'p> Recordings<'p> {
         out
     }
 
-    /// `camera bubble bottomRight circle, portrait splitBottom`, `camera on its own layer` or `camera only`.
+    /// `camera bubble bottomRight circle, portrait splitBottom, border on, mirrored`, `camera on its own layer` or
+    /// `camera only, mirrored`.
     fn camera(&self, clip: &Clip) -> Option<String> {
         let layout = clip.camera.as_ref()?;
         let mirror = if layout.mirror {
@@ -132,10 +161,15 @@ impl<'p> Recordings<'p> {
             other => mode_word(other).to_owned(),
         };
         let formats = &self.p.settings.formats;
-        let shows = |mode: CameraMode| {
-            layout.mode == mode || formats.iter().any(|f| layout.mode_for(*f) == mode)
-        };
-        let mut parts = vec![shown(layout.mode)];
+        let shows = |mode: CameraMode| formats.iter().any(|f| layout.mode_for(*f) == mode);
+        let main = layout.mode_for(self.p.settings.primary_format);
+        let mut parts = vec![shown(main)];
+        for f in formats {
+            let mode = layout.mode_for(*f);
+            if mode != main {
+                parts.push(format!("{} {}", format_word(*f), shown(mode)));
+            }
+        }
         if shows(CameraMode::Bubble) {
             parts.push(
                 if layout.border {
@@ -148,12 +182,6 @@ impl<'p> Recordings<'p> {
         }
         if shows(CameraMode::Bubble) || shows(CameraMode::SplitBottom) {
             parts.push(mirror.to_owned());
-        }
-        for f in formats {
-            let mode = layout.mode_for(*f);
-            if mode != layout.mode {
-                parts.push(format!("{} {}", format_word(*f), shown(mode)));
-            }
         }
         Some(format!("camera {}", parts.join(", ")))
     }

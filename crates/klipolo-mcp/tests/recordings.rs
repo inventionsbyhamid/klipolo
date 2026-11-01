@@ -155,7 +155,13 @@ fn an_app_names_a_recordings_clips_once_it_has_read_them() {
     assert_refused(&separate(), READ_FIRST);
     let context = agent.call("getContext", json!({}));
     assert!(
-        text(&context).contains("c3 144.0-154.0 Recording 1 (camera bubble bottomRight circle, border on, mirrored, portrait splitBottom; sounds mic)"),
+        text(&context).contains("c3 144.0-154.0 Recording 1 (camera splitBottom, landscape bubble bottomRight circle, border on, mirrored; sounds mic)"),
+        "{}",
+        text(&context)
+    );
+    // Its second clip reads the same.
+    assert!(
+        text(&context).contains("c4 154.0-164.0 Recording 1 (as c3)"),
         "{}",
         text(&context)
     );
