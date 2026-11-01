@@ -14,6 +14,7 @@
 //! - `reply`: the shapes the chat panel reads, every model-written text cleaned of dashes as they are built; another
 //!   app's change comes to the panel as an `ExternalReply`.
 
+mod cursor;
 mod describe;
 mod inputs;
 mod jobs;
