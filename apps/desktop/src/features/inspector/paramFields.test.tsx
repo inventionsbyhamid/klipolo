@@ -209,3 +209,13 @@ describe('settings generated from a schema', () => {
     expect(screen.getByRole('slider', { name: 'Amount' })).toHaveFocus();
   });
 });
+
+describe('a point set past the frame', () => {
+  it('shows where it is, its slider reaching that far', () => {
+    renderFields(def('effect.mask'), { center: { x: 1.5, y: -0.25 } });
+    const across = screen.getByRole('slider', { name: 'Center across' });
+    expect(across).toHaveAttribute('aria-valuetext', '150%');
+    expect(across).toHaveAttribute('aria-valuemax', '1.5');
+    expect(screen.getByRole('slider', { name: 'Center down' })).toHaveAttribute('aria-valuemin', '-0.25');
+  });
+});

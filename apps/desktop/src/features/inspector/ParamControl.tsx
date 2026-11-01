@@ -99,8 +99,9 @@ export function ParamControl({ spec, value, label, opsFor, commitLabel, valueNow
             label={name}
             commitLabel={commitLabel}
             value={point[axis]}
-            min={0}
-            max={1}
+            // A point chat set past the frame (the model takes -1 to 2) shows where it is.
+            min={Math.min(0, point[axis])}
+            max={Math.max(1, point[axis])}
             step={0.01}
             format={percent}
             ops={(v) => opsFor({ ...latest(), [axis]: v })}
