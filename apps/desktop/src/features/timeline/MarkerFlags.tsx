@@ -22,6 +22,8 @@ interface Flags {
   at: Float64Array;
   recording: string[];
   marker: Marker[];
+  /** The clip each plays in: a flag's key is its clip's and its marker's ids, so a copied clip's flags are its own. */
+  clip: string[];
 }
 
 /** A recording's markers in time order (the model keeps them so; a hand-made file may not): sorted once if not. */
@@ -51,6 +53,7 @@ function flagsOf(main: Clip[], recordings: Recording[]): Flags {
   const at: number[] = [];
   const recording: string[] = [];
   const marker: Marker[] = [];
+  const clipIds: string[] = [];
   main.forEach((clip, i) => {
     const source = clip.source;
     const list = source.type === 'recording' ? markers.get(source.id) : undefined;
@@ -66,9 +69,10 @@ function flagsOf(main: Clip[], recordings: Recording[]): Flags {
       at.push(starts[i] + playedUs(list[k].atUs - clip.sourceInUs, clip.speed));
       recording.push(source.id);
       marker.push(list[k]);
+      clipIds.push(clip.id);
     }
   });
-  flags = { at: Float64Array.from(at), recording, marker };
+  flags = { at: Float64Array.from(at), recording, marker, clip: clipIds };
   byRecordings.set(recordings, flags);
   return flags;
 }
@@ -136,7 +140,9 @@ export const MarkerFlags = memo(function MarkerFlags({ recordings, main, fps, pp
           comment: "A marker's flag on the timeline, for screen readers; {time} is where it plays, e.g. 2:05",
         });
     const ghost = ghosted?.has(marker.id) ?? false;
-    const key = `${recording}:${marker.id}`;
+    const key = `${flags.clip[i]}:${marker.id}`;
+    /** The marker itself, which plays in every clip that holds its moment. */
+    const which = `${recording}:${marker.id}`;
     const onClick = (e: MouseEvent<HTMLButtonElement>) => {
       // Never reaches the lane, which would seek to the pointer and deselect.
       e.stopPropagation();
@@ -151,9 +157,15 @@ export const MarkerFlags = memo(function MarkerFlags({ recordings, main, fps, pp
         // The window's Delete (the selected clip) doesn't also run.
         e.preventDefault();
         e.stopPropagation();
-        // Focus goes on to the flag after it (else the one before) once it has gone.
-        const then = ((after ?? before) as HTMLElement | null)?.dataset.marker ?? null;
-        removeMarker(recording, marker.id, () => requestAnimationFrame(() => focusFlag(then)));
+        // Focus goes on to the next flag of another marker (else the one before) once it has gone: the marker's flags
+        // in its other clips go with it.
+        const other = (el: Element | null, step: 'nextElementSibling' | 'previousElementSibling') => {
+          let at = el as HTMLElement | null;
+          while (at && at.dataset.markerId === which) at = at[step] as HTMLElement | null;
+          return at;
+        };
+        const then = (other(after, 'nextElementSibling') ?? other(before, 'previousElementSibling'))?.dataset.marker;
+        removeMarker(recording, marker.id, () => requestAnimationFrame(() => focusFlag(then ?? null)));
       } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         e.preventDefault();
         e.stopPropagation();
@@ -170,6 +182,7 @@ export const MarkerFlags = memo(function MarkerFlags({ recordings, main, fps, pp
         type="button"
         className="tl-marker"
         data-marker={key}
+        data-marker-id={which}
         data-ghost={ghost || undefined}
         aria-label={name}
         title={named || t({ id: 'marker.tip', message: 'Marker', comment: "A marker's tooltip when it has no label" })}

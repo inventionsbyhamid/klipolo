@@ -127,6 +127,23 @@ describe('marker flags', () => {
     expect(screen.getByRole('button', { name: 'Marker at 6:40' })).not.toHaveAttribute('data-ghost');
   });
 
+  it("a copied clip's flags are its own: Delete goes on to the next marker, not the copy's of the same", async () => {
+    const snapshot = twoTakes();
+    const { main } = snapshot.project.timeline;
+    // c1 twice, then c2: m1 plays at 2:05 and again at 7:05; m2 at 11:40.
+    main.splice(1, 0, { ...main[0], id: 'c1b' });
+    useProject.setState({ snapshot, pending: 0 });
+    renderWithProviders(<Timeline />);
+    const keys = [...document.querySelectorAll<HTMLElement>('[data-marker]')].map((el) => el.dataset.marker);
+    expect(keys).toHaveLength(3);
+    expect(new Set(keys).size).toBe(3);
+    const first = screen.getByRole('button', { name: 'Marker at 2:05' });
+    await userEvent.click(first);
+    await userEvent.keyboard('{Delete}');
+    await lastApply();
+    await vi.waitFor(() => expect(document.activeElement).toHaveAccessibleName('Marker at 11:40'));
+  });
+
   it('a marker with a label says it', () => {
     const snapshot = twoTakes();
     snapshot.project.recordings[0].markers[0] = { ...snapshot.project.recordings[0].markers[0], label: 'Clutch' };
