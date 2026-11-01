@@ -23,7 +23,8 @@ function RailClip({ clip }: { clip: ShelfClip }) {
   const tile = useClipPicture(clip.asset.path, useNearView(art));
   /** Where the press began, so the click that ends a drag adds nothing. */
   const pressedAt = useRef<{ x: number; y: number } | null>(null);
-  const add = (target: Parameters<typeof addClip>[1]) => addClip(clip.source, target, () => markUsed(clip.key));
+  const add = (target: Parameters<typeof addClip>[1]) =>
+    addClip(clip.source, target, () => clip.key && markUsed(clip.key));
   const onPointerDown = (e: PointerEvent<HTMLButtonElement>) => {
     pressedAt.current = null;
     if (e.button !== 0 || (MAC && e.ctrlKey)) return;
@@ -77,7 +78,7 @@ export function ClipRail() {
   const order = useSettledMarks('rail');
   useEffect(loadMarks, []);
   if (!project) return null;
-  const clips = marked(shelves(project).clips, (clip) => clip.key, order.marks);
+  const clips = marked(shelves(project).clips, (clip) => clip.key ?? '', order.marks);
   if (clips.length === 0) return null;
   return (
     <ul

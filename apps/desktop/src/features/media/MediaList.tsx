@@ -181,7 +181,8 @@ function addToTheEndLabel(t: ReturnType<typeof useLingui>['t'], name: string): s
 }
 
 const ownKey = (asset: Asset) => fileKey(asset.path);
-const clipKey = (clip: ShelfClip) => clip.key;
+/** A Clips item's mark key; one with no file to mark has none ('' is never marked). */
+const clipKey = (clip: ShelfClip) => clip.key ?? '';
 const packItemKey = (item: PackItem) => packKey(item.id);
 
 /**
@@ -270,8 +271,9 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
     return lists(
       <ul className="lib-list" aria-label={t({ id: 'library.clips', message: 'Your clips' })}>
         {clips.map((clip) => {
-          const { source } = clip;
+          const { source, key } = clip;
           const recording = source.type === 'recording' ? source.id : undefined;
+          const added = () => key && markUsed(key);
           return (
             <AssetRow
               key={`${source.type}:${source.id}`}
@@ -281,11 +283,11 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
               meta={clip.meta}
               recording={recording}
               used={recording ? timelineUses.recordings.has(recording) : used.has(source.id)}
-              onAdd={() => addClip(source, toTheEnd, () => markUsed(clip.key))}
+              onAdd={() => addClip(source, toTheEnd, added)}
               addLabel={addToTheEndLabel(t, clip.name)}
-              onDrop={(target) => addClip(source, target, () => markUsed(clip.key))}
+              onDrop={(target) => addClip(source, target, added)}
               menu={recording ? undefined : <AssetMenu asset={clip.asset} />}
-              favorite={favoriteOf(marks, clip.key)}
+              favorite={key ? favoriteOf(marks, key) : undefined}
             />
           );
         })}

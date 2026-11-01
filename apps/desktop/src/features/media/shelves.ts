@@ -81,8 +81,11 @@ export interface ShelfClip {
   meta?: string;
   /** Words a search finds it by besides its name: a recording's sources ("Screen", "Mic"). */
   tags: string[];
-  /** Its favorite and recently used mark: its file's, a recording's main footage's. */
-  key: string;
+  /**
+   * Its favorite and recently used mark: its file's, a recording's main footage's; none for a recording whose main
+   * footage is gone (no file to mark, so no star).
+   */
+  key?: string;
 }
 
 const fileClip = (asset: Asset): ShelfClip => ({
@@ -106,7 +109,7 @@ function recordingClip(row: RecordingRow, recording: Recording, footage: Asset |
     asset,
     meta: row.meta,
     tags: recording.sources.map((s) => codedMessage({ code: s.label, params: {} }) || s.label),
-    key: fileKey(asset.path),
+    key: footage ? fileKey(footage.path) : undefined,
   };
 }
 

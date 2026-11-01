@@ -128,6 +128,17 @@ describe('a recording in the Library', () => {
     expect(within(screen.getByRole('tabpanel')).queryByText(/Mic/)).toBeNull();
   });
 
+  it('a recording whose main footage is gone has no star to set, as no file is there to mark', () => {
+    const snapshot = useProject.getState().snapshot!;
+    snapshot.project.assets = snapshot.project.assets.filter((a) => a.id !== 'screen');
+    renderWithProviders(<Library />);
+    const take = screen.getByText('Recording 1').closest('li')!;
+    expect(within(take).queryByRole('button', { name: /^Favorite/ })).toBeNull();
+    // A file's row keeps its star.
+    const broll = screen.getByText('broll.mp4').closest('li')!;
+    expect(within(broll).getByRole('button', { name: 'Favorite broll.mp4' })).toBeInTheDocument();
+  });
+
   it('a search finds a recording by its name and by its sources', async () => {
     renderWithProviders(<Library />);
     const search = screen.getByRole('searchbox', { name: 'Search clips' });
