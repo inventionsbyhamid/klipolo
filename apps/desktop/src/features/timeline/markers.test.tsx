@@ -3,12 +3,13 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Project } from '../../bindings/Project';
 import type { Snapshot } from '../../bindings/Snapshot';
+import { fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
 import parity from './keys/source-mix-parity.json';
 
 /*
- * A recording's markers on the timeline: a flag where each plays on the video, which seeks and which Delete removes.
- * Two takes from `source-mix-parity.json`: r1, with markers
+ * A recording's markers on the timeline: a flag where each plays on the video, which seeks and which Delete removes;
+ * M marks the moment under the playhead on its recording. Two takes from `source-mix-parity.json`: r1, with markers
  * 2:05 (m1) and 7:40 (m2) into it, played by c1 (0:00 to 5:00 of it) and c2 (6:00 to 12:00 of it, from 5:00).
  */
 
@@ -26,7 +27,10 @@ const { useProject } = await import('../../state/project');
 const { usePlayback } = await import('../../state/playback');
 const { useProposal, noRemovals } = await import('../../state/proposal');
 const { useSelection } = await import('../../state/selection');
+const { useToasts } = await import('../../state/toasts');
 const { useUi } = await import('../../state/ui');
+const { useEditorShortcuts } = await import('../command-palette/useEditorShortcuts');
+const { useCommands } = await import('../command-palette/useCommands');
 const { Timeline } = await import('./Timeline');
 
 const twoTakes = (): Snapshot => ({
@@ -41,11 +45,26 @@ const lastApply = async () => {
   return { label: tx.label, ops: tx.ops };
 };
 
+function Keys() {
+  useEditorShortcuts();
+  return null;
+}
+
+function Editor() {
+  return (
+    <>
+      <Timeline />
+      <Keys />
+    </>
+  );
+}
+
 beforeEach(() => {
   useProject.setState({ snapshot: twoTakes(), pending: 0 });
   usePlayback.setState({ playheadUs: 0, playing: false });
   useSelection.setState({ selectedId: null });
   useProposal.setState({ proposal: null, arrivedAt: 0 });
+  useToasts.setState({ toasts: [] });
   // Zoomed out enough that both markers are in the window.
   useUi.setState({ pxPerSecond: 2, snapping: true });
   vi.mocked(engine.seek).mockClear();
@@ -101,7 +120,8 @@ describe('marker flags', () => {
   });
 
   it('a marker a waiting proposal removes is drawn as going', () => {
-    act(() => useProposal.getState().show({ id: 'p', baseRevision: 3, tags: [], removals: { ...noRemovals(), markers: ['m1'] } }));
+    const removals = { ...noRemovals(), markers: ['m1'] };
+    act(() => useProposal.getState().show({ id: 'p', baseRevision: 3, tags: [], removals }));
     renderWithProviders(<Timeline />);
     expect(screen.getByRole('button', { name: 'Marker at 2:05' })).toHaveAttribute('data-ghost', 'true');
     expect(screen.getByRole('button', { name: 'Marker at 6:40' })).not.toHaveAttribute('data-ghost');
@@ -113,5 +133,64 @@ describe('marker flags', () => {
     useProject.setState({ snapshot, pending: 0 });
     renderWithProviders(<Timeline />);
     expect(screen.getByRole('button', { name: 'Clutch, marker at 2:05' })).toBeInTheDocument();
+  });
+});
+
+describe('M', () => {
+  it('marks the moment under the playhead on its recording', async () => {
+    usePlayback.setState({ playheadUs: 310_000_000 });
+    renderWithProviders(<Editor />);
+    await userEvent.keyboard('m');
+    expect(await lastApply()).toEqual({
+      label: 'undo.marker.add',
+      // 5:10 on the video is 6:10 of the take (c2), and m1 and m2 are taken.
+      ops: [{ type: 'addMarker', recordingId: 'r1', marker: { id: 'm3', atUs: 370_000_000, kind: 'manual' } }],
+    });
+  });
+
+  it('held, adds one marker, not one per key repeat', async () => {
+    usePlayback.setState({ playheadUs: 310_000_000 });
+    renderWithProviders(<Editor />);
+    fireEvent.keyDown(window, { key: 'm', code: 'KeyM' });
+    fireEvent.keyDown(window, { key: 'm', code: 'KeyM', repeat: true });
+    fireEvent.keyDown(window, { key: 'm', code: 'KeyM', repeat: true });
+    fireEvent.keyUp(window, { key: 'm', code: 'KeyM' });
+    await lastApply();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(bridge.apply).toHaveBeenCalledTimes(1);
+  });
+
+  it('over a clip that is no recording, says where markers go and adds none', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
+    // 25 s is in b, an imported clip.
+    usePlayback.setState({ playheadUs: 25_000_000 });
+    renderWithProviders(<Editor />);
+    await userEvent.keyboard('m');
+    await vi.waitFor(() =>
+      expect(useToasts.getState().toasts.map((toast) => toast.text)).toContain(
+        'Markers go on a recording. Move the playhead over one.',
+      ),
+    );
+    expect(bridge.apply).not.toHaveBeenCalled();
+  });
+
+  it('is the Add marker command, off without a recording in the video', () => {
+    let commands: ReturnType<typeof useCommands> = [];
+    function Probe() {
+      commands = useCommands();
+      return null;
+    }
+    const { unmount } = renderWithProviders(<Probe />);
+    expect(commands.find((c) => c.id === 'marker-add')).toMatchObject({
+      label: 'Add marker',
+      shortcut: 'M',
+      enabled: true,
+    });
+    unmount();
+    const snapshot = fixtureSnapshot();
+    snapshot.project.timeline.main = snapshot.project.timeline.main.filter((c) => c.source.type === 'asset');
+    useProject.setState({ snapshot, pending: 0 });
+    renderWithProviders(<Probe />);
+    expect(commands.find((c) => c.id === 'marker-add')?.enabled).toBe(false);
   });
 });

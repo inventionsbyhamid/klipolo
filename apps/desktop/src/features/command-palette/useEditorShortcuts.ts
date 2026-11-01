@@ -43,9 +43,10 @@ export const CONTROL_COMMAND: Readonly<Record<string, string>> = { i: 'toggle-ch
  * playing that way: double speed); K pause; with K held, J / L one frame; Delete or Backspace delete (the selected
  * time range, else the selected transition, clip or layer); I / O the time range's start or end at the playhead; ← / →
  * one frame (⇧ one second); ↑ / ↓ the previous or next edit; Home / End the start or end; ⌘= / ⌘− timeline zoom; ⇧Z
- * fit the timeline; 1 / 2 / 3 the format the preview shows; N snapping on or off; Escape clears the selection. With a
- * clip or layer selected: Q / W trim its start or end to the playhead; , and . move it a frame (⇧ ten) or a clip a
- * place; ⌘C ⌘X ⌘V ⌘D copy, cut, paste, duplicate; ⌥⌘V paste effects; ⌥↑ / ⌥↓ the track above or below.
+ * fit the timeline; 1 / 2 / 3 the format the preview shows; N snapping on or off; M a marker at the playhead (on a
+ * recording); Escape clears the selection. With a clip or layer selected: Q / W trim its start or end to the playhead;
+ * , and . move it a frame (⇧ ten) or a clip a place; ⌘C ⌘X ⌘V ⌘D copy, cut, paste, duplicate; ⌥⌘V paste effects;
+ * ⌥↑ / ⌥↓ the track above or below.
  * (On a focused timeline block the arrows, Home, End, Enter and Space move between blocks: `useRovingFocus`.)
  * Everything but ⌘K, ⌘↩ and the ⌃⌘ keys (`CONTROL_COMMAND`) is ignored while typing in a field; everything while a
  * menu, list or dialog is open, and when a focused control already handled the key.
@@ -151,6 +152,9 @@ export function useEditorShortcuts() {
       run('zoom-fit');
     } else if (key === 'n' && !e.shiftKey) {
       run('snapping');
+    } else if (key === 'm' && !e.shiftKey) {
+      // Holding the key doesn't stack markers at the same moment.
+      if (!e.repeat) run('marker-add');
     } else if ((key === 'i' || key === 'o') && !e.shiftKey) {
       markRange(key === 'i' ? 'in' : 'out');
     } else if (['1', '2', '3'].includes(e.key) && !e.shiftKey) {

@@ -1,6 +1,7 @@
 import { t } from '@lingui/core/macro';
 import type { Clip } from '../../../bindings/Clip';
 import type { ErrorParam } from '../../../bindings/ErrorParam';
+import type { Marker } from '../../../bindings/Marker';
 import type { Op } from '../../../bindings/Op';
 import type { Project } from '../../../bindings/Project';
 import type { RecordingSource } from '../../../bindings/RecordingSource';
@@ -11,10 +12,13 @@ import { deepEqual } from '../../../lib/equal';
 import { labelText, type Label, type LabelId } from '../../../lib/labels';
 import { mixFor } from '../../../lib/recording';
 import { soundParam, sourceParam } from '../../../lib/sourceNames';
-import { findClip } from '../../../lib/timeline';
+import { formatTime, snapToFrame } from '../../../lib/time';
+import { clipAt, findClip } from '../../../lib/timeline';
 import { keepAtClose } from '../../../state/commitQueue';
 import { keyBurst } from '../../../state/keyBurst';
+import { usePlayback } from '../../../state/playback';
 import { useProject } from '../../../state/project';
+import { toast } from '../../../state/toasts';
 import {
   changesNothing,
   kindCentreOps,
@@ -30,7 +34,7 @@ import { commit, editable } from './timelineActions';
 
 /*
  * What a recording's sounds and markers do: a source lane's header (a kind of sound in every recording: `sourceMix`),
- * a clip's menu, the clip card's Sounds and the marker flags. Each is built from the project when it runs (after a
+ * a clip's menu, the clip card's Sounds, M and the marker flags. Each is built from the project when it runs (after a
  * change still settling has gone in: `keyBurst.after`), and is one undo step through `useProject.apply`, said in the
  * timeline's live region.
  */
@@ -263,5 +267,41 @@ export function removeMarker(recordingId: string, id: string, then?: () => void)
       labelText('undo.marker.remove'),
       then,
     );
+  });
+}
+
+/** The next free marker id of a recording: one past its highest `m<n>`, as the recorder numbers them. */
+function nextMarkerId(markers: Marker[]): string {
+  let highest = 0;
+  for (const m of markers) {
+    const n = /^m(\d+)$/.exec(m.id);
+    if (n) highest = Math.max(highest, Number(n[1]));
+  }
+  return `m${highest + 1}`;
+}
+
+/** Add marker (M): a marker at the playhead, on the recording the clip there plays; says why when there is none. */
+export function addMarkerAtPlayhead() {
+  keyBurst.after(() => {
+    const project = editable();
+    if (!project) return;
+    const at = snapToFrame(usePlayback.getState().playheadUs, project.settings.fps);
+    const found = clipAt(project.timeline.main, at);
+    const source = found?.clip.source;
+    const recording =
+      source?.type === 'recording' ? project.recordings.find((r) => r.id === source.id) : undefined;
+    if (!found || !recording) {
+      toast.info(t({ id: 'marker.add.none', message: 'Markers go on a recording. Move the playhead over one.' }));
+      return;
+    }
+    const atUs = Math.round(found.clip.sourceInUs + (at - found.startUs) * found.clip.speed);
+    const marker: Marker = { id: nextMarkerId(recording.markers), atUs, kind: 'manual' };
+    const time = formatTime(at);
+    const said = t({
+      id: 'marker.add.said',
+      message: `Marker added at ${time}`,
+      comment: 'Screen-reader note; the time is where it is on the video, e.g. 2:05',
+    });
+    commit('undo.marker.add', [{ type: 'addMarker', recordingId: recording.id, marker }], said);
   });
 }
