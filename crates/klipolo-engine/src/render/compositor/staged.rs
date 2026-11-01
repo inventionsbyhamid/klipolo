@@ -143,7 +143,8 @@ impl Compositor {
     /// crop, mirror, look and LUT included), through its effects (the main footage's clip effects), then placed like an
     /// image, mixed by its blend. The camera, and footage without effects, keep the composite path. The blurred
     /// backdrop is drawn at a quarter of its size each way (a sixteenth of the pixels): its blur hides the size, and
-    /// `kl.px` shrinks with it, so the blur reaches as far against the frame.
+    /// `kl.px` shrinks with it, so the blur reaches as far against the frame. A layer whose motion grows it is drawn
+    /// at the largest size it reaches (`reach`), so its target keeps one size through the motion.
     pub(super) async fn video_alone(
         &mut self,
         f: &mut FrameCtx<'_>,
@@ -160,7 +161,7 @@ impl Compositor {
         };
         let at = match v.role {
             VideoRole::Backdrop => effect_size(&quad, 1.0).halved().halved(),
-            _ => effect_size(&quad, 1.0),
+            _ => effect_size(&quad, v.reach),
         };
         let local = at.size;
         let alone = v.alone();
@@ -209,7 +210,12 @@ impl Compositor {
         }
         // Its effects (in a grown target from its first padded filter on: `padded.rs`), placed; not drawn at all when
         // its protection couldn't run.
-        self.through_padded(f, draws, target, at, &v.effects, quad, v.pad_px, 1.0);
+        let reach = if v.role == VideoRole::Backdrop {
+            1.0
+        } else {
+            v.reach
+        };
+        self.through_padded(f, draws, target, at, &v.effects, quad, v.pad_px, reach);
     }
 
     /// An adjustment layer: what's drawn under `a.dest` so far (in `frame`), through its effects, as a quad draw
