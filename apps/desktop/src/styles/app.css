@@ -643,19 +643,50 @@
   color: var(--color-ink);
 }
 
-/* Library, Captions and Looks beside Add files take 284 px at 20 px: in a narrower panel the titles are 16 px. */
+/* Library, Captions and Looks beside Add files, Record your screen and Collapse library take 347 px at 20 px: in a
+   narrower panel the titles are 16 px (294 px in all), and narrower still they scroll sideways under a fade, as the
+   pills do, so the buttons always show. The buttons sit 2 px apart. */
 .library {
   container-type: inline-size;
 }
 
-@container (max-width: 289px) {
-  .view-tabs {
-    gap: var(--space-5);
+.library .panel-head {
+  gap: var(--space-1);
+  padding-right: var(--space-4);
+}
+
+.library .view-tabs {
+  min-width: 0;
+  /* Room for a tab's focus ring inside the scroller. */
+  margin: calc(-1 * var(--space-2)) auto calc(-1 * var(--space-2)) calc(-1 * var(--space-2));
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.library .view-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.library .view-tab {
+  flex: none;
+}
+
+@container (max-width: 349px) {
+  .library .view-tabs {
+    gap: var(--space-4);
   }
 
-  .view-tab {
+  .library .view-tab {
     font-size: var(--text-lg);
     line-height: var(--lh-lg);
+  }
+}
+
+@container (max-width: 293px) {
+  .library .view-tabs {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
   }
 }
 
