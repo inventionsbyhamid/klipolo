@@ -222,3 +222,35 @@ fn a_layer_of_animated_words_is_one_a_project_takes() {
     let after = apply_ops(&p, &ops).expect("valid");
     assert_eq!(after.timeline.tracks[0].items.len(), 1);
 }
+
+/// Words that become animated words keep what they showed: the review takes nothing away (a restyle), while a picture
+/// that becomes words would.
+#[test]
+fn words_that_become_animated_words_are_no_removal() {
+    let p = Project::new("p");
+    let ops = klipolo_model::media::text::add_text_ops(
+        &p,
+        klipolo_model::media::text::TextPreset::Title,
+        "Day one",
+        0,
+    )
+    .unwrap();
+    let before = apply_ops(&p, &ops).unwrap();
+    let item = before.timeline.tracks[0].items[0].clone();
+    let ItemContent::Text { text, style } = &item.content else {
+        panic!()
+    };
+    let content = ItemContent::generator(
+        text_motion::source(),
+        text_motion::params(text, style, &pop_in(Unit::Word)),
+    );
+    let animated = [Op::UpdateItem {
+        id: item.id.clone(),
+        patch: klipolo_model::ops::ItemPatch {
+            content: Some(content),
+            ..Default::default()
+        },
+    }];
+    let after = apply_ops(&before, &animated).unwrap();
+    assert!(klipolo_model::risk::removals(&before, &after).is_empty());
+}
