@@ -50,7 +50,7 @@ const { useUi } = await import('../../state/ui');
 const { useSelection } = await import('../../state/selection');
 const { useAnnouncer } = await import('../timeline/announce');
 const { usePack, loadPack, forgetPictures } = await import('./shelves');
-const { useMarks } = await import('./marks');
+const { useMarks, markUsed } = await import('./marks');
 const { useToasts } = await import('../../state/toasts');
 const { beginMediaDrag } = await import('../timeline/drag/mediaDrag');
 const { useEditorShortcuts } = await import('../command-palette/useEditorShortcuts');
@@ -399,6 +399,9 @@ describe('the Library', () => {
     expect(star).toHaveAttribute('aria-pressed', 'false');
     await userEvent.click(star);
     expect(library.setFavorite).toHaveBeenCalledWith('pack:impact', true);
+    // First once the pointer has left the list.
+    expect(listed(pack)).toEqual(['Whoosh', 'Impact']);
+    fireEvent.pointerLeave(pack);
     expect(listed(pack)).toEqual(['Impact', 'Whoosh']);
     expect(within(pack).getByRole('button', { name: 'Favorite Impact' })).toHaveAttribute('aria-pressed', 'true');
     // Starred while searching too.
@@ -409,6 +412,7 @@ describe('the Library', () => {
     pack = within(panel).getByRole('list', { name: /^Built in/ });
     await userEvent.click(within(pack).getByRole('button', { name: 'Favorite Impact' }));
     expect(library.setFavorite).toHaveBeenLastCalledWith('pack:impact', false);
+    fireEvent.pointerLeave(pack);
     expect(listed(pack)).toEqual(['Whoosh', 'Impact']);
     // Pictures and clips have a star as well.
     act(() => useUi.setState({ libraryTab: 'images' }));
@@ -462,9 +466,11 @@ describe('the Library', () => {
     // Added with its "+": used now, so first.
     await userEvent.click(within(pack).getByRole('button', { name: 'Add Impact at the playhead' }));
     await waitFor(() => expect(library.markUsed).toHaveBeenCalledWith('pack:impact'));
+    fireEvent.pointerLeave(pack);
     expect(listed(pack)).toEqual(['Impact', 'Whoosh']);
     await userEvent.click(within(yours).getByRole('button', { name: 'Add kiln-door.wav at the playhead' }));
     await waitFor(() => expect(library.markUsed).toHaveBeenLastCalledWith('file:/media/kiln-door'));
+    fireEvent.pointerLeave(yours);
     expect(listed(yours)).toEqual(['tick.wav', 'kiln-door.wav', 'music.mp3']);
     // An add that didn't go in uses nothing.
     vi.mocked(library.addSound).mockRejectedValueOnce(new Error('busy'));
@@ -488,5 +494,70 @@ describe('the Library', () => {
     act(() => useUi.setState({ libraryTab: 'clips' }));
     act(() => drop(screen.getByText('broll.mp4').closest('li')!)({ lane: 'main', index: 0 }));
     await waitFor(() => expect(library.markUsed).toHaveBeenLastCalledWith('file:/media/broll'));
+  });
+
+  it('a star or a "+" moves no row while the pointer is on the list, so the same place clicks the same item', async () => {
+    useUi.setState({ libraryTab: 'sounds' });
+    vi.mocked(library.addSound).mockResolvedValueOnce(revisionPatch(4)).mockResolvedValueOnce(revisionPatch(5));
+    renderWithProviders(<Library />);
+    const panel = screen.getByRole('tabpanel');
+    await screen.findByText('Impact');
+    const pack = within(panel).getByRole('list', { name: /^Built in/ });
+    const moves = new MutationObserver(() => undefined);
+    moves.observe(pack, { childList: true });
+    const second = () => within(pack).getAllByRole('listitem')[1];
+    await userEvent.click(within(second()).getByRole('button', { name: /^Favorite/ }));
+    expect(within(second()).getByRole('button', { name: 'Favorite Impact' })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(within(second()).getByRole('button', { name: /^Add/ }));
+    await waitFor(() => expect(library.markUsed).toHaveBeenCalledWith('pack:impact'));
+    await userEvent.click(within(second()).getByRole('button', { name: /^Add/ }));
+    await waitFor(() => expect(library.addSound).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(library.addSound).mock.calls.map(([source]) => source)).toEqual([
+      { type: 'pack', id: 'impact' },
+      { type: 'pack', id: 'impact' },
+    ]);
+    expect(moves.takeRecords()).toHaveLength(0);
+    moves.disconnect();
+    expect(listed(pack)).toEqual(['Whoosh', 'Impact']);
+    // Once the pointer leaves, the list catches up: the favorite first.
+    fireEvent.pointerLeave(pack);
+    expect(listed(pack)).toEqual(['Impact', 'Whoosh']);
+  });
+
+  it('taking a star off with the keyboard keeps the row and the focus where they are', async () => {
+    useUi.setState({ libraryTab: 'sounds' });
+    vi.mocked(library.marks).mockResolvedValueOnce({ 'file:/media/tick': { favorite: true, usedMs: 0 } });
+    renderWithProviders(<Library />);
+    const yours = await screen.findByRole('list', { name: 'Your sounds' });
+    await waitFor(() => expect(listed(yours)[0]).toBe('tick.wav'));
+    const star = within(yours).getByRole('button', { name: 'Favorite tick.wav' });
+    act(() => star.focus());
+    await userEvent.keyboard(' ');
+    expect(library.setFavorite).toHaveBeenCalledWith('file:/media/tick', false);
+    expect(star).toHaveAttribute('aria-pressed', 'false');
+    expect(listed(yours)[0]).toBe('tick.wav');
+    expect(star).toHaveFocus();
+    // Focus leaving the list lets it catch up.
+    act(() => star.blur());
+    expect(listed(yours)).toEqual(['music.mp3', 'kiln-door.wav', 'tick.wav']);
+  });
+
+  it('a drag from the list goes on while an add lands and moves no row', async () => {
+    useUi.setState({ libraryTab: 'sounds' });
+    renderWithProviders(<Library />);
+    await screen.findByText('Impact');
+    const pack = within(screen.getByRole('tabpanel')).getByRole('list', { name: /^Built in/ });
+    const whoosh = within(pack).getByText('Whoosh').closest('li')!;
+    const moves = new MutationObserver(() => undefined);
+    moves.observe(pack, { childList: true });
+    // Whoosh is grabbed; meanwhile an earlier add of Impact lands and marks it used.
+    fireEvent.pointerDown(whoosh, { button: 0, pointerId: 1 });
+    const drop = vi.mocked(beginMediaDrag).mock.calls.at(-1)![2];
+    act(() => markUsed('pack:impact'));
+    expect(moves.takeRecords()).toHaveLength(0);
+    expect(whoosh.isConnected).toBe(true);
+    act(() => drop({ lane: 'sound', trackId: null, atUs: 4_000_000, row: 'sounds' }));
+    await waitFor(() => expect(library.place).toHaveBeenCalledWith([{ type: 'pack', id: 'whoosh' }], 4_000_000, { type: 'auto' }));
+    moves.disconnect();
   });
 });

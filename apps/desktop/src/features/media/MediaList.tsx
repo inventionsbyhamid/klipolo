@@ -1,5 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
-import { useEffect, useRef, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import type { Asset } from '../../bindings/Asset';
 import type { PackItem } from '../../bindings/PackItem';
 import type { Project } from '../../bindings/Project';
@@ -150,26 +150,62 @@ const ownKey = (asset: Asset) => fileKey(asset.path);
 const packItemKey = (item: PackItem) => packKey(item.id);
 
 /**
+ * The marks a tab's lists are in order by: as they were when the tab, the search or the marks read from Rust last
+ * changed, or when the pointer or the focus last left the lists (`settle`). A star or an add shows on its own row at
+ * once but moves no row while the person is on the list, so the next click lands on the item they aimed at, focus
+ * stays on the star they pressed, and a drag that began meanwhile goes on.
+ */
+function useSettledMarks(tab: LibraryTab, query: string) {
+  const reads = useMarks((s) => s.reads);
+  const key = `${tab}\n${query}\n${reads}`;
+  const [settled, setSettled] = useState(() => ({ key, marks: useMarks.getState().marks }));
+  let marks = settled.marks;
+  if (settled.key !== key) {
+    marks = useMarks.getState().marks;
+    setSettled({ key, marks });
+  }
+  const settle = () => {
+    const now = useMarks.getState().marks;
+    setSettled((s) => (s.marks === now ? s : { key: s.key, marks: now }));
+  };
+  return { marks, settle };
+}
+
+/**
  * What the Library shows on one tab: your files first, then Klipolo's pack where it has some. Clips are
  * the project's videos; Music and Sounds the sounds (by how they play, else by length) and the pack's beds and effects;
  * Images a 3-column grid of your pictures, those made with Muse Image, and the pack's stickers. Drag any row onto the
  * lane it belongs to; the "+" adds it at the playhead. `query` (the panel's search) keeps the items it finds, best
  * first (`search.ts`); in each list, favorites come first, then what the library added most recently (`marks.ts`).
+ * The order follows the marks once the person has left the list (`useSettledMarks`).
  */
 export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
   const { t } = useLingui();
   const project = useProject((s) => s.snapshot?.project);
   const pack = usePack((s) => s.items);
   const marks = useMarks((s) => s.marks);
+  const order = useSettledMarks(tab, query);
   useEffect(loadPack, []);
   useEffect(loadMarks, []);
   if (!project) return null;
+  /** The tab's lists: the order catches up with the marks when the pointer or the focus leaves them. */
+  const lists = (content: ReactNode) => (
+    <div
+      className="lib-lists"
+      onPointerLeave={order.settle}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) order.settle();
+      }}
+    >
+      {content}
+    </div>
+  );
   const own = shelves(project);
   const used = uses(project).any;
   const builtIn = t({ id: 'library.builtIn', message: 'Built in' });
   const free = t({ id: 'library.builtIn.free', message: 'Free to use' });
   const found = <T,>(items: T[], about: (item: T) => Searchable, keyOf: (item: T) => string) =>
-    marked(searchLibrary(items, query, about), keyOf, marks);
+    marked(searchLibrary(items, query, about), keyOf, order.marks);
   const ofPack = (category: PackItem['category']) =>
     found(
       pack.filter((item) => item.category === category),
@@ -199,7 +235,7 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
 
   if (tab === 'clips') {
     if (own.clips.length === 0)
-      return (
+      return lists(
         <div className="lib-empty">
           <p className="lib-empty-title">{t({ id: 'library.clips.empty', message: 'No clips yet' })}</p>
           <p>
@@ -212,8 +248,10 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
       );
     const clips = found(own.clips, aboutOwn('video', 'Your clips'), ownKey);
     if (clips.length === 0)
-      return none(t({ id: 'library.clips.noMatch', message: `No clips match “${asked}”.`, comment: '{asked} is what the person searched for' }));
-    return (
+      return lists(
+        none(t({ id: 'library.clips.noMatch', message: `No clips match “${asked}”.`, comment: '{asked} is what the person searched for' })),
+      );
+    return lists(
       <ul className="lib-list" aria-label={t({ id: 'library.clips', message: 'Your clips' })}>
         {clips.map((clip) => (
           <AssetRow
@@ -243,7 +281,7 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
       ownKey,
     );
     const packed = ofPack(music ? 'music' : 'sound');
-    return (
+    return lists(
       <>
         {mine.length > 0 && (
           <>
@@ -300,7 +338,7 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
   const images = found(own.images, aboutOwn('photo', 'Your images'), ownKey);
   const made = found(own.made, aboutOwn('photo', 'Made with Muse Image'), ownKey);
   const stickers = ofPack('sticker');
-  return (
+  return lists(
     <>
       {images.length > 0 && (
         <>

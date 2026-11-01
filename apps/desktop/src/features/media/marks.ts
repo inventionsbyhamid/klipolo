@@ -15,7 +15,12 @@ export const packKey = (id: string) => `pack:${id}`;
 /** A file's key: its path, the same in every project that has it. */
 export const fileKey = (path: string) => `file:${path}`;
 
-export const useMarks = create<{ marks: LibraryMarks; asked: boolean }>(() => ({ marks: {}, asked: false }));
+/** The marks, and how many times they were read from Rust (a list takes them in order again then). */
+export const useMarks = create<{ marks: LibraryMarks; asked: boolean; reads: number }>(() => ({
+  marks: {},
+  asked: false,
+  reads: 0,
+}));
 
 /**
  * The marks as Rust keeps them, read once per page (asked again by the next library tab when they couldn't be); an
@@ -26,7 +31,7 @@ export function loadMarks() {
   useMarks.setState({ asked: true });
   void library
     .marks()
-    .then((marks) => useMarks.setState({ marks: marks ?? {} }))
+    .then((marks) => useMarks.setState((s) => ({ marks: marks ?? {}, reads: s.reads + 1 })))
     .catch(() => useMarks.setState({ asked: false }));
 }
 
