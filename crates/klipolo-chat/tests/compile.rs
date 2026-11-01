@@ -106,6 +106,7 @@ fn inputs(project: &Project, speech: Speech, message: &str) -> Inputs {
             .map(|a| (a.id.clone(), AnalysisState::Done))
             .collect(),
         time_again: HashSet::new(),
+        cursor: None,
         library: Library::default(),
         fonts: Default::default(),
     }

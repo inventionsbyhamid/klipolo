@@ -392,13 +392,15 @@
             "type": "boolean"
           },
           "style": {
-            "description": "clean: calm subtitles, a sentence at a time. bold: up to three big uppercase words that pop in one by one; no word lights up. karaoke: a line of words where each word lights up as it is said, word by word. highlight: up to four big uppercase words where a coloured box lights up each word as it is said, word by word. boxed: sentences on rounded boxes. Null keeps the current style.",
+            "description": "clean: calm subtitles, a sentence at a time. bold: up to three big uppercase words that pop in one by one; no word lights up. karaoke: a line of words where each word lights up as it is said, word by word. highlight: up to four big uppercase words where a coloured box lights up each word as it is said, word by word. boxed: sentences on rounded boxes. word-pop: for shorts: words pop in as said, the said one coloured. bold-box: for shorts: heavy words on a rounded box. Null keeps the current style.",
             "enum": [
               "clean",
               "bold",
               "karaoke",
               "highlight",
               "boxed",
+              "word-pop",
+              "bold-box",
               null
             ],
             "type": [
@@ -609,6 +611,28 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
+          "animation": {
+            "description": "Null: fade.",
+            "enum": [
+              "pop",
+              "fade",
+              "zoom",
+              "bounce",
+              "blur",
+              "typewriter",
+              "kinetic",
+              "fromLeft",
+              "fromRight",
+              "fromTop",
+              "fromBottom",
+              "none",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "atSec": {
             "description": "Start. Null for the playhead.",
             "type": [
@@ -650,6 +674,7 @@
           "preset",
           "atSec",
           "durationSec",
+          "animation",
           "font"
         ],
         "type": "object"
@@ -814,6 +839,91 @@
         "type": "object"
       },
       "name": "makeTitleCard"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Animate a layer, with a sound. Null keeps; none removes.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "emphasis": {
+            "description": "While shown.",
+            "enum": [
+              "pulse",
+              "shake",
+              "wiggle",
+              "none",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enter": {
+            "description": "typewriter: words only. kinetic: addText only.",
+            "enum": [
+              "pop",
+              "fade",
+              "zoom",
+              "bounce",
+              "blur",
+              "typewriter",
+              "kinetic",
+              "fromLeft",
+              "fromRight",
+              "fromTop",
+              "fromBottom",
+              "none",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exit": {
+            "description": "How it leaves.",
+            "enum": [
+              "pop",
+              "fade",
+              "zoom",
+              "toLeft",
+              "toRight",
+              "toTop",
+              "toBottom",
+              "none",
+              null
+            ],
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "layer": {
+            "description": "last for the layer just added, or a ref: t1, i1, v1.",
+            "type": "string"
+          },
+          "sound": {
+            "description": "A Library sound, as it comes in.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "layer",
+          "enter",
+          "exit",
+          "emphasis",
+          "sound"
+        ],
+        "type": "object"
+      },
+      "name": "animate"
     },
     {
       "annotations": {
@@ -1152,6 +1262,34 @@
         "type": "object"
       },
       "name": "separateSound"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Zoom in on screen recordings' clicks, or take those zooms away.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "description": "False removes them.",
+            "type": "boolean"
+          },
+          "scale": {
+            "description": "How far: 1.25 to 3. Null: 2.",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "on",
+          "scale"
+        ],
+        "type": "object"
+      },
+      "name": "autoZoom"
     },
     {
       "annotations": {

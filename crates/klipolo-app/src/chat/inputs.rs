@@ -5,6 +5,7 @@
 //! Another app's calls (MCP) compile against inputs built the same way (`inputs_for`), with no message.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use klipolo_chat::{
     AnalysisState as ChatAnalysis, ChatContext, Inputs, Library, LibraryItem, MediaKind, Refs,
@@ -17,6 +18,7 @@ use klipolo_model::speech::Speech;
 use klipolo_model::time::Us;
 use klipolo_model::timeline::ItemContent;
 
+use super::cursor::CursorFiles;
 use super::sources::Findings;
 use crate::analysis::chat::{scene_entries, speaker_turns};
 
@@ -97,6 +99,8 @@ pub fn inputs_for(
         analysis,
         time_again,
         library,
+        // A take's clicks are read only when `autoZoom` asks.
+        cursor: Some(Arc::new(CursorFiles)),
         fonts: crate::fonts::names(),
     };
     (inputs, turns)

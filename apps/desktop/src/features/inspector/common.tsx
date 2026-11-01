@@ -8,10 +8,13 @@ import { formatPrecise } from '../../lib/time';
 import { Field, PositionGrid, Select, ValueField } from './fields';
 import {
   animationOf,
+  emphasisOf,
   parseTime,
   positionOf,
   positionedLayout,
   withAnimation,
+  withEmphasis,
+  type EmphasisChoice,
   type InChoice,
   type OutChoice,
 } from './inspectorOps';
@@ -67,32 +70,58 @@ export function PositionField({ item, format, primary }: { item: Item; format: F
   );
 }
 
-/** Animation: how it comes in and goes out (the In and Out selects), one undo step each. */
+/**
+ * Animation: how it comes in and goes out (the In and Out selects) and how it moves while it shows (Loop), as chat's
+ * `animate` sets them, one undo step each. A preset the selects don't offer reads "Other".
+ */
 export function AnimationField({ item, typewriter }: { item: Item; typewriter: boolean }) {
   const { t } = useLingui();
   const none = t({ id: 'animation.none', message: 'None', comment: 'No animation' });
   const fade = t({ id: 'animation.fade', message: 'Fade' });
   const pop = t({ id: 'animation.pop', message: 'Pop' });
+  const zoom = t({ id: 'animation.zoom', message: 'Zoom' });
+  const slides = [
+    { value: 'slideUp' as const, label: t({ id: 'animation.slideUp', message: 'Slide up' }) },
+    { value: 'slideDown' as const, label: t({ id: 'animation.slideDown', message: 'Slide down' }) },
+    { value: 'slideLeft' as const, label: t({ id: 'animation.slideLeft', message: 'Slide left' }) },
+    { value: 'slideRight' as const, label: t({ id: 'animation.slideRight', message: 'Slide right' }) },
+  ];
   const ins: { value: InChoice; label: string }[] = [
     { value: 'none', label: none },
     { value: 'fade', label: fade },
     { value: 'pop', label: pop },
-    { value: 'slideUp', label: t({ id: 'animation.slideUp', message: 'Slide up' }) },
+    { value: 'zoom', label: zoom },
+    { value: 'bounce', label: t({ id: 'animation.bounce', message: 'Bounce' }) },
+    { value: 'blur', label: t({ id: 'animation.blur', message: 'Blur', comment: 'Comes in sharpening from a blur' }) },
+    ...slides,
     ...(typewriter ? [{ value: 'typewriter' as const, label: t({ id: 'animation.typewriter', message: 'Typewriter' }) }] : []),
   ];
   const outs: { value: OutChoice; label: string }[] = [
     { value: 'none', label: none },
     { value: 'fade', label: fade },
     { value: 'pop', label: pop },
-    { value: 'slideDown', label: t({ id: 'animation.slideDown', message: 'Slide down' }) },
+    { value: 'zoom', label: zoom },
+    ...slides,
+  ];
+  const loops: { value: EmphasisChoice; label: string }[] = [
+    { value: 'none', label: none },
+    { value: 'pulse', label: t({ id: 'animation.pulse', message: 'Pulse' }) },
+    { value: 'shake', label: t({ id: 'animation.shake', message: 'Shake' }) },
+    { value: 'wiggle', label: t({ id: 'animation.wiggle', message: 'Wiggle' }) },
   ];
   const other = t({ id: 'animation.other', message: 'Other', comment: 'An animation set from chat' });
   const set = (end: 'enter' | 'exit', choice: InChoice | OutChoice) =>
     void editLayout('text.animation.undo', item, (layout) => ({
       motion: withAnimation(layout, end, choice, item.durationUs),
     }));
+  const setLoop = (choice: EmphasisChoice) =>
+    void editLayout('text.animation.undo', item, (layout) => ({
+      motion: withEmphasis(layout, choice, item.durationUs),
+    }));
   const enter = animationOf(item.layout.motion, 'enter');
   const exit = animationOf(item.layout.motion, 'exit');
+  const loop = emphasisOf(item.layout.motion);
+  const loopLabel = t({ id: 'animation.loop', message: 'Loop', comment: 'How it moves while it shows' });
   return (
     <Field label={t({ id: 'inspector.animation', message: 'Animation' })} stack>
       <div className="two">
@@ -111,6 +140,13 @@ export function AnimationField({ item, typewriter }: { item: Item; typewriter: b
           onPick={(v) => set('exit', v)}
         />
       </div>
+      <Select
+        label={loopLabel}
+        prefix={loopLabel}
+        value={(loop ?? 'other') as EmphasisChoice}
+        choices={loop === null ? [...loops, { value: 'other' as EmphasisChoice, label: other }] : loops}
+        onPick={(v) => setLoop(v)}
+      />
     </Field>
   );
 }

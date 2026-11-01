@@ -63,6 +63,10 @@ builtin_styles! {
     Clean = "clean",
     /// Condensed glowing capitals for gameplay.
     Arcade = "arcade",
+    /// Big uppercase words that pop in one by one as they're said, the word being said in colour.
+    WordPop = "word-pop",
+    /// Heavy uppercase words on a rounded box that hugs each line.
+    BoldBox = "bold-box",
 }
 
 impl BuiltinCaptionStyle {

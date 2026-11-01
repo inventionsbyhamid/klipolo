@@ -90,13 +90,28 @@ pub struct ExternalReply {
     pub reply: ChatReply,
 }
 
-/// Additions applied at once, as one undo step: what changed, and its undo label.
+/// Additions applied at once, as one undo step: what changed, and its undo label; for a step of several changes (a
+/// short's plan), each change's own label, in the order asked, which the reply lists.
 #[derive(Clone, Debug, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct ChatApplied {
     pub change: SnapshotPatch,
     pub undo: CodedError,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub changes: Option<Vec<CodedError>>,
+}
+
+impl ChatApplied {
+    /// One step's change and undo label, listing no changes of its own.
+    pub fn new(change: SnapshotPatch, undo: CodedError) -> Self {
+        Self {
+            change,
+            undo,
+            changes: None,
+        }
+    }
 }
 
 /// Removals waiting for the person: red on the timeline and a card in chat. Apply is one undo step.
@@ -209,7 +224,7 @@ impl ChatReply {
     }
 
     pub fn applied(mut self, change: SnapshotPatch, undo: CodedError) -> Self {
-        self.applied = Some(ChatApplied { change, undo });
+        self.applied = Some(ChatApplied::new(change, undo));
         self
     }
 

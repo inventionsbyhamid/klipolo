@@ -1,0 +1,28 @@
+{
+  "id": "klipolo.builtin/scene.kinetic-title",
+  "kind": "scene",
+  "name": "Kinetic title",
+  "params": [
+    {
+      "key": "title",
+      "label": "Title",
+      "type": "text",
+      "default": "Your title",
+      "maxLen": 60
+    }
+  ],
+  "description": "Big words whose letters rise in one by one, near the top, over the video. It fills the frame.",
+  "tags": [
+    "title",
+    "kinetic",
+    "hook",
+    "intro",
+    "letters",
+    "text"
+  ],
+  "provenance": {
+    "madeBy": "Klipolo",
+    "createdAtMs": 1793318400000,
+    "license": "original"
+  }
+}

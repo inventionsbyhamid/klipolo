@@ -1,0 +1,42 @@
+{
+  "source": "The planner's eval of a short from a screen recording, and of zooming in on its clicks, on project_recordings_clicks.json: project_recordings.json's two takes (c1 plays Recording 1 for 60 s with clip A's transcript, speaker turns and scene log on its mic; c2 plays Recording 2 for 45 s), each keeping a cursor file, with the clicks below on their own clocks. The library is Klipolo's pack. Judged as shorts_cases.json's cases are. Run it with --cases.",
+  "project": "project_recordings_clicks.json",
+  "asset": "rec1-mic",
+  "transcript": "../tests/fixtures/transcript_clip_a.json",
+  "turns": "../tests/fixtures/turns_clip_a.json",
+  "scenes": "../tests/fixtures/scenes_clip_a.json",
+  "pack": "../../../assets/library/manifest.json",
+  "clicks": {
+    "rec-1": [[4.0, 0.30, 0.40], [4.8, 0.32, 0.42], [21.0, 0.80, 0.70], [21.5, 0.81, 0.71], [40.0, 0.50, 0.20]],
+    "rec-2": [[6.0, 0.20, 0.80], [30.0, 0.70, 0.30]]
+  },
+  "cases": [
+    {
+      "id": "short-recording",
+      "message": "Convert this long video into a 60 second short with nice animations, sound effects and text animations",
+      "expect": [
+        {
+          "partial": true,
+          "calls": [
+            {"name": "keepOnly", "args": {"ranges": {"minItems": 1}}},
+            {"name": "setFormat", "args": {"format": "portrait"}},
+            {"name": "setCaptions", "args": {"on": true}},
+            {"name": "addText"},
+            {"name": "animate"}
+          ],
+          "outcome": {"applied": true, "proposed": true, "keptSec": {"min": 40.0, "max": 75.0}}
+        }
+      ]
+    },
+    {
+      "id": "zoom-clicks",
+      "message": "zoom in on my clicks",
+      "expect": [
+        {
+          "calls": [{"name": "autoZoom", "args": {"on": true}}],
+          "outcome": {"applied": true}
+        }
+      ]
+    }
+  ]
+}

@@ -1,11 +1,12 @@
 //! The recording tools: how a recording's camera shows (`setCameraMode`), where its bubble sits and how it looks
-//! (`adjustCamera`), the camera made a layer of its own (`detachCamera`), and its recorded sounds muted, turned up or
-//! down, or put on a track of their own (`muteSource`, `setSourceVolume`, `separateSound`). Each is one entry of
-//! `TOOLS`. The words they take are the model's own (`CameraMode`, `CameraShape`, `Anchor`, `FormatKind`), the
-//! bubble's sizes and steps, and the sounds by kind (`Sound`).
+//! (`adjustCamera`), the camera made a layer of its own (`detachCamera`), its recorded sounds muted, turned up or
+//! down, or put on a track of their own (`muteSource`, `setSourceVolume`, `separateSound`), and zooms on its clicks
+//! (`autoZoom`). Each is one entry of `TOOLS`. The words they take are the model's own (`CameraMode`, `CameraShape`,
+//! `Anchor`, `FormatKind`), the bubble's sizes and steps, and the sounds by kind (`Sound`).
 //!
-//! Each takes `clips`, the refs of the clips it changes (`c2`, or `c3-c41` for a run as the context folds it), or null
-//! for every clip that has the camera or the sound; whether a ref names a clip is the compiler's to judge.
+//! Each camera and sound tool takes `clips`, the refs of the clips it changes (`c2`, or `c3-c41` for a run as the
+//! context folds it), or null for every clip that has the camera or the sound; whether a ref names a clip is the
+//! compiler's to judge. `autoZoom` works on every recording on the main track.
 
 use std::ops::RangeInclusive;
 
@@ -16,7 +17,7 @@ use serde_json::{Value, json};
 
 use super::args::{Args, kind};
 use super::error::{Problem, ToolError};
-use super::schema::{Word, boolean, nullable_boolean, nullable_words, words};
+use super::schema::{Word, boolean, nullable_boolean, nullable_number, nullable_words, words};
 use super::{FORMATS, Tool, ToolCall};
 
 /// The volumes a recorded sound takes, in percent of how it was recorded: the model's 0 to 200 %.
@@ -420,6 +421,26 @@ pub(super) const SET_SOURCE_VOLUME: Tool = Tool {
             volume: a.percent("volume", &SOURCE_VOLUMES)?,
             which: a.nullable_text("which")?,
             clips: a.clip_refs("clips")?,
+        })
+    },
+};
+
+/// The scales `autoZoom` takes: 1 is no zoom.
+pub const ZOOM_SCALES: RangeInclusive<f64> = 1.25..=3.0;
+
+pub(super) const AUTO_ZOOM: Tool = Tool {
+    name: "autoZoom",
+    description: "Zoom in on screen recordings' clicks, or take those zooms away.",
+    parameters: || {
+        vec![
+            ("on", boolean("False removes them.")),
+            ("scale", nullable_number("How far: 1.25 to 3. Null: 2.")),
+        ]
+    },
+    read: |a| {
+        Ok(ToolCall::AutoZoom {
+            on: a.flag("on")?,
+            scale: a.nullable_number("scale", &ZOOM_SCALES)?,
         })
     },
 };

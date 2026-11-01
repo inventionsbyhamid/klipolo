@@ -884,6 +884,27 @@ describe('chat: one proposal at a time, moments of their revision, and the keys'
     expect(await screen.findByRole('button', { name: 'Undo make it vertical, and 1 more' })).toBeInTheDocument();
   });
 
+  it('a step of several changes lists each under the reply, in the order asked', async () => {
+    const changes = [
+      code('chat.setFormat', { format: 'portrait', others: 'dropped' }),
+      code('chat.setCaptions', { on: 'on', style: 'word-pop' }),
+      code('chat.addText', { text: 'Day 1', preset: 'title' }),
+      code('chat.animate', { layer: 'picture', sound: 'Pop' }),
+    ];
+    const undo = code('chat.andMore', { first: changes[0], more: 3 });
+    chat({ reply: (r) => reply(r.id, 'Here is your short.', { applied: { change: changed(4, undo), undo, changes } }) });
+    renderWithProviders(<ChatPanel />);
+    await userEvent.type(message(), 'make a short{Enter}');
+    const list = await screen.findByRole('list', { name: 'Changes' });
+    expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Make it vertical',
+      'Turn on captions',
+      'Add the words Day 1',
+      'Animate the picture',
+    ]);
+    expect(screen.getByRole('button', { name: 'Undo make it vertical, and 3 more' })).toBeInTheDocument();
+  });
+
   it('Apply waits behind a change still on its way, and is no undo step; the chip’s undo is one', async () => {
     const title = code('chat.removeFillers');
     const fake = chat({

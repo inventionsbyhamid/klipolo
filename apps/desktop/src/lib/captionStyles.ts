@@ -16,10 +16,18 @@ const STYLES = data as unknown as CaptionStyleDef[];
 const BY_ID = new Map(STYLES.map((s) => [s.id, s]));
 
 /**
- * The styles the Captions panel shows, in its order (after "Off"). Each is an existing builtin; Loud and
- * Arcade stay hidden (a project that has one still draws it).
+ * The styles the Captions panel shows, in its order (after "Off"): the five, then the shorts' two. Each is
+ * an existing builtin; Loud and Arcade stay hidden (a project that has one still draws it).
  */
-export const STYLE_ORDER: readonly BuiltinCaptionStyle[] = ['clean', 'bold', 'karaoke', 'highlight', 'boxed'];
+export const STYLE_ORDER: readonly BuiltinCaptionStyle[] = [
+  'clean',
+  'bold',
+  'karaoke',
+  'highlight',
+  'boxed',
+  'word-pop',
+  'bold-box',
+];
 
 export const styleId = (key: BuiltinCaptionStyle) => `klipolo.builtin/caption.${key}`;
 
@@ -47,6 +55,8 @@ export const STYLE_NAMES: Partial<Record<BuiltinCaptionStyle, MessageDescriptor>
   karaoke: msg({ id: 'captions.style.karaoke', message: 'Karaoke' }),
   highlight: msg({ id: 'captions.style.highlight', message: 'Highlight' }),
   boxed: msg({ id: 'captions.style.boxed', message: 'Boxed' }),
+  'word-pop': msg({ id: 'captions.style.wordPop', message: 'Word pop' }),
+  'bold-box': msg({ id: 'captions.style.boldBox', message: 'Bold box' }),
 };
 
 /**
@@ -63,6 +73,11 @@ export const STYLE_TIPS: Partial<Record<BuiltinCaptionStyle, MessageDescriptor>>
     message: 'Big words, with a colored box that lights up each word as it is said',
   }),
   boxed: msg({ id: 'captions.style.boxed.tip', message: 'Sentences on rounded boxes' }),
+  'word-pop': msg({
+    id: 'captions.style.wordPop.tip',
+    message: 'For shorts: big words pop in as they are said, the said one in color',
+  }),
+  'bold-box': msg({ id: 'captions.style.boldBox.tip', message: 'For shorts: heavy words on a rounded box' }),
 };
 
 /** A style's key (`bold`); null for a style that isn't a builtin. */

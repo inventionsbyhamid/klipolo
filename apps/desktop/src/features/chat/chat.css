@@ -108,6 +108,15 @@
   gap: var(--space-3);
 }
 
+/* Each change of a step of several (a short's plan), quiet under the reply, before its Undo chip. */
+.msg-changes {
+  margin: 0;
+  padding-left: var(--space-5);
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
 .msg-row .chip,
 .suggestions .chip,
 .moments + .msg-row .chip {

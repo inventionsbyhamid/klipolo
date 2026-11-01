@@ -593,10 +593,7 @@ impl ChatSession {
                 talk.last_change = Some(c.at.clone());
                 talk.noted(id, APPLIED_NOTE);
                 slot.decide(&stored, Decided::Applied);
-                Ok(ChatApplied {
-                    change: c.patch,
-                    undo: undo_label(&stored.tx),
-                })
+                Ok(ChatApplied::new(c.patch, undo_label(&stored.tx)))
             }
             Err(CommitError::Moved) => {
                 talk.noted(id, DROPPED_NOTE);
@@ -857,6 +854,7 @@ impl ChatSession {
                     landed.applied = Some(ChatApplied {
                         change: c.patch,
                         undo: undo_label(tx),
+                        changes: (compiled.changes.len() > 1).then(|| compiled.changes.clone()),
                     });
                     (at, base) = (c.at, c.project);
                     landed.at = at.clone();

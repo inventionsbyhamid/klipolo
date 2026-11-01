@@ -67,8 +67,11 @@ macro_rules! scene {
 /// The motion graphic presets' scenes (the title templates), in `klipolo_model::presets::SCENE_PRESETS`'s order:
 /// built-ins, compiled once into every registry (`build_builtin`), so the preview and an export both draw them. A
 /// layer showing one is placed with `Layout::full_frame()` (see `SCENE_PRESETS`).
-pub const SCENE_BODIES: [(&str, &str); 2] =
-    [scene!("scene.lower-third"), scene!("scene.title-card")];
+pub const SCENE_BODIES: [(&str, &str); 3] = [
+    scene!("scene.lower-third"),
+    scene!("scene.title-card"),
+    scene!("scene.kinetic-title"),
+];
 
 /// The class each motion graphic preset claims (none yet: a claim follows a measurement on the Intel Mac).
 pub const SCENE_CLAIMED: [(&str, CostClass); 0] = [];

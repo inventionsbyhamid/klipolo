@@ -1,0 +1,28 @@
+{
+  "scene": 1,
+  "duration": 3,
+  "segments": { "in": 1.0, "out": 0.4 },
+  "params": [
+    { "key": "title", "label": "Title", "type": "text", "default": "Your title", "maxLen": 60 }
+  ],
+  "nodes": [
+    {
+      "id": "title",
+      "type": "text",
+      "text": "$title",
+      "box": [0.13, 0.2, 0.74, "220px"],
+      "font": "Inter",
+      "size": 120,
+      "weight": 900,
+      "fill": "#FFFFFF",
+      "align": "center",
+      "shadow": { "y": 4, "blur": 16, "color": "#00000080" },
+      "split": "chars",
+      "fit": "shrink"
+    }
+  ],
+  "timeline": [
+    { "from": "#title", "at": 0, "dur": 0.45, "ease": "power3.out", "y": "60px", "opacity": 0, "stagger": 0.04 },
+    { "to": "#title", "at": "out", "dur": 0.35, "ease": "power2.in", "opacity": 0 }
+  ]
+}

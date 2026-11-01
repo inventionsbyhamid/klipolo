@@ -135,7 +135,11 @@ export const useChat = create<ChatStore>((set, get) => {
         if (outcome.type === 'reply' && sameProject()) {
           if (outcome.applied) {
             await useProject.getState().adopt(outcome.applied.change);
-            applied = { undo: outcome.applied.undo, revision: outcome.applied.change.history.revision };
+            applied = {
+              undo: outcome.applied.undo,
+              revision: outcome.applied.change.history.revision,
+              changes: outcome.applied.changes,
+            };
           }
           if (outcome.undone) await useProject.getState().adopt(outcome.undone);
         }

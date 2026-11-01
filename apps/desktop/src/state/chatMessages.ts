@@ -91,8 +91,11 @@ export type Message =
       revision: number;
       /** The project changed since it landed: its moments still seek, but can't be kept only (their times moved). */
       momentsStale: boolean;
-      /** Additions applied at once: their undo label and the revision they made (the Undo chip). */
-      applied: { undo: CodedError; revision: number } | null;
+      /**
+       * Additions applied at once: their undo label and the revision they made (the Undo chip), and for a step of
+       * several changes, each one's label in the order asked (listed under the reply).
+       */
+      applied: { undo: CodedError; revision: number; changes?: CodedError[] } | null;
       proposal: ProposalPart | null;
       /** The pictures it asked for (stickers, title card backgrounds). */
       pictures: PicturePart[];

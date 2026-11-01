@@ -214,6 +214,7 @@ fn inputs(p: &Project, message: &str) -> Inputs {
             .map(|a| (a.id.clone(), AnalysisState::Done))
             .collect(),
         time_again: HashSet::new(),
+        cursor: None,
         library: library(),
         fonts: Default::default(),
     }
@@ -1333,6 +1334,8 @@ fn make_sticker_becomes_a_job_not_an_op() {
             position: Position::TopRight,
             size: PictureSize::Medium,
             anchor: Some(talk_at(12.0)),
+            motion: None,
+            sound: None,
         })]
     );
     // The prompt names the picture in the library too: no dashes.
