@@ -4,7 +4,7 @@
  */
 export { duplicate } from './keys/clipboardActions';
 export { trackStepOps } from './keys/keyOps';
-export { stepTrack } from './keys/layerActions';
+export { noteMutedTrack, stepTrack } from './keys/layerActions';
 export { deleteBlock, deleteRange, markRange } from './keys/timelineActions';
 export { speedNote } from './model/refit';
 export { removeTransition, transitionName, transitionNow, transitionOp } from './keys/transitionActions';

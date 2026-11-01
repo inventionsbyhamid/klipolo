@@ -6,10 +6,12 @@ import { Timecode } from '../features/preview/Timecode';
 import { useZoomTarget, zoomRange, zoomTo, zoomViewUs } from '../features/timeline/commands';
 import { Icon } from '../layout/Icon';
 import { useEngine } from '../state/engine';
+import { useLoop } from '../state/loop';
 import { usePlayback } from '../state/playback';
 import { skip, useDurationUs } from '../state/transport';
 import { useUi } from '../state/ui';
 import { formatTime } from './time';
+import { VolumeControl } from './VolumeControl';
 
 /** The zoom as the slider shows it: 0 (the whole video) to 1 (the closest), on a log scale. */
 function zoomShare(pps: number, range: [number, number] | null): number {
@@ -110,10 +112,9 @@ function BarButton({
 }
 
 /**
- * The player bar: Split and Delete on the left, the transport centred on the window, the timeline's zoom and Fit on the
- * right. Split, Delete, the zoom and Fit run the same commands as their keys; every control says what it
- * does and its key in a tooltip. Loop and the volume come when they work: none of its controls looks live
- * and does nothing.
+ * The player bar: Split and Delete on the left, the transport (with Loop) centred on the window, the timeline's zoom,
+ * Fit and the preview's volume on the right. Split, Delete, Loop, the zoom and Fit run the same commands
+ * as their keys; every control says what it does and its key in a tooltip, and none looks live and does nothing.
  */
 export function PlayerBar() {
   const duration = useDurationUs();
@@ -123,6 +124,8 @@ export function PlayerBar() {
   const command = (id: string) => commands.find((c) => c.id === id);
   const split = command('split');
   const remove = command('delete');
+  const loop = command('loop');
+  const looping = useLoop((s) => s.on);
   const run = (id: string) => {
     const c = command(id);
     if (c?.enabled) c.run();
@@ -185,6 +188,16 @@ export function PlayerBar() {
           disabled={!ready}
           onClick={() => skip(5_000_000, duration)}
         />
+        <IconButton
+          icon={<Icon name="loop" />}
+          label="Loop"
+          tooltip={loop?.label}
+          shortcut="⌘L"
+          active={looping}
+          // A way of playing, not playback itself: it can be set before the preview is ready.
+          disabled={!loop?.enabled}
+          onClick={() => run('loop')}
+        />
         <span className="time time-total">{formatTime(duration)}</span>
       </div>
       <div className="pb-right">
@@ -217,6 +230,7 @@ export function PlayerBar() {
             Fit
           </button>
         </Tooltip>
+        <VolumeControl />
       </div>
     </footer>
   );

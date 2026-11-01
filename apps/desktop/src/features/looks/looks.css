@@ -1,0 +1,88 @@
+/* The Looks view of the left panel: the looks as cards in two columns, and a line on what they apply to. Tokens only;
+   a swatch's own colours come from the look (`--look-from`, `--look-to`). */
+
+.looks-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: var(--space-5);
+  padding: var(--space-2) var(--space-6) var(--space-6);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-bay-press) transparent;
+}
+
+.look-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5) var(--space-4);
+}
+
+.look-card {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  text-align: left;
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+}
+
+.look-card:focus-visible {
+  outline: 2px solid var(--color-paper);
+  outline-offset: 2px;
+}
+
+.look-card:disabled {
+  color: var(--color-ink-disabled);
+  cursor: default;
+}
+
+.look-swatch {
+  aspect-ratio: 2 / 1;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--look-from), var(--look-to));
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.look-card:not(:disabled):hover .look-swatch {
+  transform: translateY(-2px);
+}
+
+.look-card:disabled .look-swatch {
+  opacity: 0.4;
+}
+
+.look-card[aria-checked="true"] .look-swatch {
+  box-shadow: 0 0 0 2px var(--color-bay), 0 0 0 4px var(--color-paper);
+}
+
+.look-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--lh-sm);
+}
+
+.look-check {
+  display: inline-grid;
+  flex: none;
+}
+
+.look-check .ico {
+  width: 14px;
+  height: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .look-swatch {
+    transition: none;
+  }
+
+  .look-card:not(:disabled):hover .look-swatch {
+    transform: none;
+  }
+}

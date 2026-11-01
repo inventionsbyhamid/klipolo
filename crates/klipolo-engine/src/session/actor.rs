@@ -447,6 +447,7 @@ impl<B: PreviewBackend> Actor<B> {
                 self.presenter.set_visible(false);
                 self.p.backend.release();
             }
+            Cmd::Volume(volume) => self.p.backend.set_volume(volume),
             Cmd::Play {
                 from_us,
                 rate,

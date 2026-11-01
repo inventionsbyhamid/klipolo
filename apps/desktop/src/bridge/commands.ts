@@ -25,6 +25,11 @@ export const bridge = {
   createProject: (name: string, formats: FormatKind[]) => call<Snapshot>('project_create', { name, formats }),
   /** The project file at `path`, opened (the open one is saved and closed first). */
   openProject: (path: string) => call<Snapshot>('project_open', { path }),
+  /**
+   * A copy of a project, "<name> copy", in `~/Movies/Klipolo`, opened (the open one is saved and closed first): of the
+   * file at `path`, or without one of the open project as it stands.
+   */
+  duplicateProject: (path?: string) => call<Snapshot>('project_duplicate', path === undefined ? {} : { path }),
   /** Closes the open project once it's saved. */
   closeProject: () => call<void>('project_close'),
   /**

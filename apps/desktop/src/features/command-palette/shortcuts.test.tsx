@@ -11,10 +11,16 @@ vi.mock('../../bridge/engine', () => ({
     seek: vi.fn().mockResolvedValue(undefined),
   },
 }));
+vi.mock('../../bridge/appWindow', () => ({
+  appWindow: { fullScreen: vi.fn(() => Promise.resolve(false)), isFullScreen: vi.fn(() => Promise.resolve(true)) },
+}));
 const { bridge } = await import('../../bridge/commands');
+const { appWindow } = await import('../../bridge/appWindow');
+const { useFullScreen } = await import('../../state/fullScreen');
 const { useProject } = await import('../../state/project');
 const { usePlayback } = await import('../../state/playback');
 const { useRange } = await import('../../state/range');
+const { useLoop } = await import('../../state/loop');
 const { useSelection } = await import('../../state/selection');
 const { Timeline } = await import('../timeline/Timeline');
 const { useEditorShortcuts } = await import('./useEditorShortcuts');
@@ -89,5 +95,47 @@ describe("the editor's keys leave fields, dialogs and menus alone", () => {
     fireEvent.keyDown(document.body, { key: 's' });
     await frames();
     expect(bridge.apply).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('playback keys', () => {
+  it('⌘L turns Loop on and off without playing; typed in a field it does nothing', () => {
+    useLoop.setState({ on: false });
+    renderWithProviders(<Editor />);
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Name' }), { key: 'l', metaKey: true });
+    expect(useLoop.getState().on).toBe(false);
+    fireEvent.keyDown(document.body, { key: 'l', metaKey: true });
+    expect(useLoop.getState().on).toBe(true);
+    expect(usePlayback.getState().playing).toBe(false);
+    fireEvent.keyDown(document.body, { key: 'l', metaKey: true });
+    expect(useLoop.getState().on).toBe(false);
+  });
+
+  it('holding F turns full screen on once: its repeats do nothing', async () => {
+    useFullScreen.setState({ on: false });
+    vi.mocked(appWindow.fullScreen).mockClear();
+    renderWithProviders(<Editor />);
+    fireEvent.keyDown(document.body, { key: 'f' });
+    for (let i = 0; i < 3; i++) fireEvent.keyDown(document.body, { key: 'f', repeat: true });
+    expect(useFullScreen.getState().on).toBe(true);
+    await vi.waitFor(() => expect(appWindow.fullScreen).toHaveBeenCalledTimes(1));
+    await useFullScreen.getState().leave();
+  });
+
+  it('F shows the preview full screen; Escape leaves it first, then clears the selection', async () => {
+    renderWithProviders(<Editor />);
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'f' });
+    expect(useFullScreen.getState().on).toBe(false);
+    fireEvent.keyDown(document.body, { key: 'f' });
+    expect(useFullScreen.getState().on).toBe(true);
+    await vi.waitFor(() => expect(appWindow.fullScreen).toHaveBeenLastCalledWith(true));
+    // Escape in an open menu closes the menu, not full screen.
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Rename' }), { key: 'Escape' });
+    expect(useFullScreen.getState().on).toBe(true);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(useFullScreen.getState().on).toBe(false);
+    expect(useSelection.getState().selectedId).toBe('title');
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(useSelection.getState().selectedId).toBeNull();
   });
 });
