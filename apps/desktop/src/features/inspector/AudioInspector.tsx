@@ -1,14 +1,18 @@
 import { useLingui } from '@lingui/react/macro';
+import type { ContribId } from '../../bindings/ContribId';
 import type { Item } from '../../bindings/Item';
 import type { ItemContent } from '../../bindings/ItemContent';
 import { Segmented } from '../../design/Segmented';
+import { builtinsOf, contribLabel, isInstalled } from '../../lib/contrib';
 import { musicRunOf } from '../../lib/musicRuns';
 import { useProject } from '../../state/project';
+import { noteMutedTrack } from '../timeline/commands';
 import { useSpeech } from '../timeline/media/speech';
 import { TimingField } from './common';
-import { Field } from './fields';
-import { commitLatest, contentOps, runContentOps } from '../../state/latest';
+import { Field, Select } from './fields';
+import { commitLatest, contentNow, contentOps, runContentOps } from '../../state/latest';
 import { ToolSlider } from './ToolSlider';
+import { VolumeControls } from './VolumeControls';
 
 export type AudioContent = Extract<ItemContent, { type: 'audio' }>;
 
@@ -21,7 +25,8 @@ const SHALLOWEST_DB = 1;
 const lastDepth = new Map<string, number>();
 /** Fade lengths offered (µs), each kept to half the layer so the two always fit. */
 const FADES = [0, 500_000, 1_000_000, 2_000_000];
-const percent = (v: number) => `${Math.round(v * 100)}%`;
+/** The sound effect select's values are strings: "none" stands for no sound effect, the rest are contribution ids. */
+const NO_EFFECT = 'none';
 
 /**
  * The fade choices for a layer `durationUs` long: None to 2 s, each at most half of it, without repeats, and the fade
@@ -35,12 +40,14 @@ export function fadeChoices(durationUs: number, currentUs: number): number[] {
 }
 
 /**
- * A sound layer's fields: its Volume (committed on release; sound isn't dry-run), its fades, and for music its ducking
+ * A sound layer's fields: its Volume (committed on release; sound isn't dry-run) and its own Mute (the volume stays,
+ * for when it plays again; unmuted on a muted track, a note says why, with Unmute track), its fades, its sound effect
+ * (None or an audio effect: Telephone, Voice, Warm; one this version lacks stays listed), and for music its ducking
  * under speech (on or off, and how deep, 1 to 30 dB). Turning ducking off keeps the layer music (0 dB, never none), and
  * turning it back on goes back to the depth it had. Each change sets
  * the whole content, built at its turn from the layer as the project has it then, so a quick second change keeps the
- * first. A song laid in pieces back to back (`musicRunOf`) is one: its volume and ducking go on every piece, its fade
- * in on the first and its fade out on the last.
+ * first. A song laid in pieces back to back (`musicRunOf`) is one: its volume, mute, sound effect and ducking go on
+ * every piece, its fade in on the first and its fade out on the last.
  */
 export function AudioInspector({ item, content }: { item: Item; content: AudioContent }) {
   const { t } = useLingui();
@@ -63,24 +70,42 @@ export function AudioInspector({ item, content }: { item: Item; content: AudioCo
           ? t({ id: 'clip.fades.none', message: 'None', comment: 'No fade' })
           : `${(us / 1_000_000).toFixed(1).replace(/\.0$/, '')} s`,
     }));
-  const volume = t({ id: 'volume.label', message: 'Volume' });
   const depth = t({ id: 'music.duck.depth', message: 'How much quieter' });
   const ducking = music && (content.duck ?? 0) < 0;
+  const effect = content.effect;
+  const effectLabel = t({
+    id: 'sound.effect',
+    message: 'Sound effect',
+    comment: 'How a sound layer sounds: Voice, Telephone, Warm',
+  });
+  const effects: { value: string; label: string; title?: string }[] = [
+    { value: NO_EFFECT, label: t({ id: 'sound.effect.none', message: 'None', comment: 'No sound effect' }) },
+    ...builtinsOf('audioEffect').map((def) => ({ value: def.id, label: contribLabel(def.id, 'audioEffect') })),
+  ];
+  // One this version lacks stays listed, named as missing with its id as a tooltip, so the select shows what is set.
+  if (effect !== null && !isInstalled(effect))
+    effects.push({ value: effect, label: contribLabel(effect, 'audioEffect'), title: effect });
+  const pickEffect = (value: string) => {
+    const next: ContribId | null = value === NO_EFFECT ? null : value;
+    void commitLatest('sound.effect.undo', () => runContentOps(item.id, content, { effect: next }));
+  };
   return (
     <>
-      <Field label={volume}>
-        <ToolSlider
-          label={volume}
-          commitLabel="volume.undo"
-          value={content.volume}
-          min={0}
-          max={2}
-          step={0.01}
-          format={percent}
-          preview={false}
-          ops={(v) => runContentOps(item.id, content, { volume: v })}
-        />
-      </Field>
+      <VolumeControls
+        volume={content.volume}
+        noun="sound"
+        volumeOps={(v) => runContentOps(item.id, content, { volume: v })}
+        mute={{
+          id: item.id,
+          muted: !!content.muted,
+          latest: () => !!contentNow(item.id, content).muted,
+          ops: (muted) => runContentOps(item.id, content, { muted }),
+          // Unmuted on a muted track, it is still silent: a note says why, with Unmute track.
+          landed: (muted) => {
+            if (!muted) noteMutedTrack(item.id);
+          },
+        }}
+      />
       {music && (
         <>
           <Field label={t({ id: 'music.duck', message: 'Ducking' })} narrowStack>
@@ -140,6 +165,9 @@ export function AudioInspector({ item, content }: { item: Item; content: AudioCo
           fill
           onChange={(v) => setFade(last, ofLast, { fadeOutUs: Number(v) })}
         />
+      </Field>
+      <Field label={effectLabel}>
+        <Select label={effectLabel} value={effect ?? NO_EFFECT} choices={effects} onPick={pickEffect} />
       </Field>
       <TimingField item={item} />
     </>

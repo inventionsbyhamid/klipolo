@@ -16,6 +16,11 @@ export interface ProjectStore {
   create: (name: string, formats: FormatKind[]) => Promise<boolean>;
   /** The project file at `path`: every edit made in the open one goes in first, and it is saved and closed. */
   open: (path: string) => Promise<boolean>;
+  /**
+   * A copy of the project in `path` (without one, the open project, every edit made in it in), opened as "<name> copy":
+   * the open one is saved and closed, as for any switch.
+   */
+  duplicate: (path?: string) => Promise<boolean>;
   /** Every edit made goes in first (`commitsDone`), then the project closes once it's saved. */
   close: () => Promise<void>;
   /**

@@ -249,7 +249,10 @@ export function PositionGrid({
   );
 }
 
-/** A select: a 30 px button with a chevron that opens a menu of choices; `prefix` reads "In: Pop". */
+/**
+ * A select: a 30 px button with a chevron that opens a menu of choices; `prefix` reads "In: Pop". A choice's
+ * `title` is its tooltip (the id of one this version lacks).
+ */
 export function Select<T extends string>({
   label,
   value,
@@ -259,7 +262,7 @@ export function Select<T extends string>({
 }: {
   label: string;
   value: T;
-  choices: { value: T; label: string }[];
+  choices: { value: T; label: string; title?: string }[];
   onPick: (value: T) => void;
   prefix?: string;
 }) {
@@ -276,7 +279,7 @@ export function Select<T extends string>({
         <MenuRadioGroup label={label} value={value} onValueChange={(v) => onPick(v as T)}>
           {choices.map((c) => (
             <MenuRadioItem key={c.value} value={c.value}>
-              {c.label}
+              {c.title ? <span title={c.title}>{c.label}</span> : c.label}
             </MenuRadioItem>
           ))}
         </MenuRadioGroup>

@@ -176,6 +176,8 @@ export const useProject = create<ProjectStore>((set, get) => {
     switching: false,
     create: (name, formats) => switchTo(() => bridge.createProject(name, formats)),
     open: (path) => switchTo(() => bridge.openProject(path)),
+    duplicate: (path) =>
+      switchTo(() => (path === undefined ? bridge.duplicateProject() : bridge.duplicateProject(path))),
     load: (snapshot) => {
       if (get().snapshot?.project.id !== snapshot.project.id) return run(async () => snapshot, true);
       // As `adopt`: what is still settling goes first (Rust refuses it: it was built on the copy before), and it holds
