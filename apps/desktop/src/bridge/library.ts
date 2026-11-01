@@ -32,6 +32,8 @@ export const library = {
    */
   place: (sources: MediaSource[], atUs: number, onto: DropOnto) =>
     call<PlaceAnswer>('media_place', { sources, atUs, onto, ...applyBase() }),
+  /** `source`, a picture, behind the video: the project's background (a file it doesn't have comes in with it). */
+  setBackground: (source: MediaSource) => call<SnapshotPatch>('media_set_background', { source, ...applyBase() }),
   addText: (kind: TextKind, atUs: number, text: string | null = null) =>
     call<SnapshotPatch>('media_add_text', { kind, atUs, text, ...applyBase() }),
   updateItem: (id: string, patch: ItemPatch, label: string) =>
