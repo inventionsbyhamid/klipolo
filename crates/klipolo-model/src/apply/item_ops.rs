@@ -438,14 +438,22 @@ pub(super) fn trim_item(
             if at_us.saturating_sub(start) < MIN_DURATION_US {
                 return Err(invalid(TOO_SHORT));
             }
-            item.duration_us = at_us.saturating_sub(start);
-            generator_pieces::end_moved(&mut item.content, at_us.saturating_sub(end));
-            fit_motion(&mut item);
+            end_at(&mut item, at_us);
         }
     }
     fit_fades(&mut item);
     place(p, t, item, places);
     Ok(())
+}
+
+/// The layer ends at `at_us` (after its start): a generator's piece and its motion fit the new length, and a sound's
+/// fades fit it.
+pub(super) fn end_at(item: &mut Item, at_us: Us) {
+    let end = item.end_us();
+    item.duration_us = at_us.saturating_sub(item.start_us);
+    generator_pieces::end_moved(&mut item.content, at_us.saturating_sub(end));
+    fit_motion(item);
+    fit_fades(item);
 }
 
 /// Returns the second part's id.
