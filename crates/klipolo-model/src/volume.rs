@@ -57,14 +57,6 @@ pub fn fit(keys: &mut Vec<Key>, len_us: Us) {
     motion::cut_end(keys, len_us, REST, LIMITS);
 }
 
-/// The clip or layer was `old_len_us` long and lost the sorted, disjoint `cuts` (in its own time): keys keep their
-/// place on what stays, and the level holds at each join where keys were cut away (`Motion::cut`). It is now `len_us`
-/// long.
-pub fn cut(keys: &mut Vec<Key>, cuts: &[(Us, Us)], old_len_us: Us, len_us: Us) {
-    motion::cut_ranges(keys, cuts, old_len_us, REST, LIMITS);
-    fit(keys, len_us);
-}
-
 /// The part of the line from `from_us`, `len_us` long, for a piece of the clip or layer a cut kept.
 pub fn piece(keys: &[Key], from_us: Us, len_us: Us) -> Vec<Key> {
     let mut part = keys.to_vec();

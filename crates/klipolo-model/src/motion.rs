@@ -492,7 +492,7 @@ pub(crate) fn cut_start(keys: &mut Vec<Key>, by_us: Us, rest: f64, limits: (f64,
 /// One property of a layer `old_len_us` long whose sorted, disjoint `cuts` (in its time) were taken out: the keys
 /// left keep their place on the content, and where a cut took keys away, keys at the join hold the values on each
 /// side of it (1 µs apart). Without room for those (`MAX_KEYS`), the keys left are only moved.
-pub(crate) fn cut_ranges(
+fn cut_ranges(
     keys: &mut Vec<Key>,
     cuts: &[(Us, Us)],
     old_len_us: Us,
