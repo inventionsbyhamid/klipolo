@@ -4,13 +4,11 @@
 //! `Asset::lead_us`; a sound file's own time), so cuts, trims, speed changes and reorders never change it. It is
 //! immutable and lives outside the project, keyed by the file's content. The person's corrections are
 //! project data (`Project::word_fixes`, `Op::FixWords`) in the same sound time, so they follow the words through every
-//! edit and undo. `map` puts words on the timeline for one revision; `silence` finds pauses from loudness alone;
-//! `route` says which family of speech models, and so which engine, hears a language. The caption pages the
-//! engine draws are made from them in `crate::captions`.
+//! edit and undo. `map` puts words on the timeline for one revision; `silence` finds pauses from loudness alone. The
+//! caption pages the engine draws are made from them in `crate::captions`.
 
 mod fill;
 pub mod map;
-pub mod route;
 pub mod silence;
 
 use std::collections::HashMap;

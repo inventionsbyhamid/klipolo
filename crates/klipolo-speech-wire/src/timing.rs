@@ -7,7 +7,7 @@
 //! - `wer` and `wer_normalised`: the word error rate, plain or with fillers dropped and numbers written one way, which
 //!   is the one a timing comparison or a per-language choice reads.
 
-use klipolo_model::speech::route::base_language;
+use klipolo_model::languages::base_language;
 use klipolo_model::time::Us;
 
 use crate::words::RawWord;

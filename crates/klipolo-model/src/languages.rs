@@ -122,6 +122,13 @@ pub fn known_code(code: &str) -> Option<&'static str> {
         .map(|i| NAMES[i].0)
 }
 
+/// `tag`'s language without its region or script, in its own spelling: "pt-BR" is "pt", "zh-Hans" is "zh", "EN" is
+/// "en" (a code transcription doesn't know comes back as written).
+pub fn base_language(tag: &str) -> &str {
+    let base = tag.split(['-', '_']).next().unwrap_or_default();
+    known_code(base).unwrap_or(base)
+}
+
 /// Every language transcription knows, by its code, in code order.
 pub fn codes() -> impl Iterator<Item = &'static str> {
     NAMES.iter().map(|(code, _)| *code)
@@ -134,6 +141,14 @@ mod tests {
         assert_eq!(super::known_code("EN"), Some("en"));
         assert_eq!(super::known_code("yue"), Some("yue"));
         assert_eq!(super::known_code("xx"), None);
+    }
+
+    #[test]
+    fn a_tag_counts_as_its_base_language() {
+        assert_eq!(super::base_language("pt-BR"), "pt");
+        assert_eq!(super::base_language("zh-Hans"), "zh");
+        assert_eq!(super::base_language("EN"), "en");
+        assert_eq!(super::base_language("xx-YY"), "xx");
     }
 
     #[test]
