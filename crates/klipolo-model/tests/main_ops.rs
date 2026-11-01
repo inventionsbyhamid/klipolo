@@ -90,7 +90,7 @@ fn split_keeps_source_contiguous() {
 }
 
 #[test]
-fn delete_range_ripples_attached_but_not_detached() {
+fn delete_range_ripples_attached_and_free_layers() {
     let p = with_items(
         fixture(),
         vec![
@@ -108,7 +108,9 @@ fn delete_range_ripples_attached_but_not_detached() {
     assert_eq!(main_track_duration(&p.timeline.main), secs(25.0));
     assert_eq!(p.timeline.main[0].id, "a", "first piece keeps the id");
     assert_eq!(item(&p, "att").unwrap().start_us, secs(10.0));
-    assert_eq!(item(&p, "free").unwrap().start_us, secs(18.0));
+    let free = item(&p, "free").unwrap();
+    assert_eq!(free.start_us, secs(13.0));
+    assert_eq!(free.attach, None, "it moves with the cut and stays free");
 }
 
 #[test]
@@ -199,7 +201,10 @@ fn deleting_everything_leaves_valid_empty_timeline() {
     .unwrap();
     assert!(p.timeline.main.is_empty());
     assert!(item(&p, "t").is_none());
-    assert!(item(&p, "free").is_some());
+    assert!(
+        item(&p, "free").is_none(),
+        "a free layer goes with the footage too"
+    );
 }
 
 #[test]
@@ -440,17 +445,37 @@ fn attached_layers_ripple_from_their_anchor_even_if_the_stored_start_is_stale() 
 
 // --- Derived pieces get deterministic ids ---
 
+/// A sound layer of the "music" file, `start` to `start + len` seconds; music when it ducks.
+fn sound_item(id: &str, start: f64, len: f64, duck: Option<f64>) -> Item {
+    Item {
+        content: ItemContent::Audio {
+            asset_id: "music".into(),
+            source_in_us: 0,
+            volume: 1.0,
+            muted: false,
+            fade_in_us: 0,
+            fade_out_us: 0,
+            effect: None,
+            drift_ppm: 0.0,
+            centre_from: None,
+            tie: None,
+            duck,
+        },
+        ..still_item(id, start, len)
+    }
+}
+
 #[test]
 fn same_ops_give_identical_projects() {
-    let p = with_items(
-        fixture(),
-        vec![
-            (video_item("v", 2.0, 6.0, 1.0), true),
-            (text_item("free", 13.5, 1.0), false),
-            (text_item("att", 15.0, 2.0), true),
-        ],
-    );
-    // The cut splits clip a and layer v, and ripples "att" onto "free", bumping it to a new track.
+    let mut p = with_items(fixture(), vec![(video_item("v", 2.0, 6.0, 1.0), true)]);
+    let mut sounds = Track::new(TrackKind::Audio, "Audio 1");
+    sounds.id = "sounds".into();
+    let mut att = sound_item("att", 15.0, 2.0, None);
+    att.attach = anchor_at(&p.timeline.main, att.start_us);
+    sounds.items = vec![sound_item("bed", 13.5, 1.0, Some(-12.0)), att];
+    p.timeline.tracks.push(sounds);
+    // The cut splits clip a and layer v, and ripples "att" onto the music "bed" (free music stays where it is),
+    // bumping it to a new track.
     let ops = [
         Op::DeleteRanges {
             ranges: vec![range(4.0, 5.0)],
@@ -466,8 +491,8 @@ fn same_ops_give_identical_projects() {
     let clips: Vec<&str> = once.timeline.main.iter().map(|c| c.id.as_str()).collect();
     assert_eq!(clips, vec!["a", "a-3", "a-2", "b"]);
     assert!(item(&once, "v-2").is_some());
-    assert_eq!(once.timeline.tracks[1].id, "att-track");
-    assert_eq!(once.timeline.tracks[1].items[0].id, "att");
+    assert_eq!(once.timeline.tracks[2].id, "att-track");
+    assert_eq!(once.timeline.tracks[2].items[0].id, "att");
 }
 
 #[test]

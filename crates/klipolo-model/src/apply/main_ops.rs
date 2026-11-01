@@ -1,4 +1,5 @@
-//! Main-track edits. Deletions ripple: gaps close and attached layers follow their content.
+//! Main-track edits. Deletions ripple: gaps close, attached layers follow their content and free ones move with the
+//! cut (free music aside, which its refit fits to the new end).
 //!
 //! Layers move by timeline lengths but are re-anchored in source time against the main track as
 //! it was before the cut, so rounding at non-unit speeds can never hand a layer to a neighbouring
@@ -9,6 +10,7 @@
 
 use crate::error::{invalid, invalid_with, not_found, Result};
 use crate::ids::Id;
+use crate::media::music::is_music;
 use crate::messages::{code, msg};
 use crate::motion::{self, Motion};
 use crate::ops::{ClipPatch, Edge};
@@ -580,8 +582,10 @@ fn cut_main(main: &mut Vec<Clip>, removed: &Ripple, ids: &mut IdPool) -> Origins
     origins
 }
 
-/// Ripple attached layers through the removal of `removed` (sorted, merged; main track not yet
-/// cut). Returns where each layer (piece) of the tracks, in order, now starts (`None`: a layer
+/// Ripple the layers through the removal of `removed` (sorted, merged; main track not yet cut), attached and free
+/// alike: a layer inside a removed range goes with it, one after it moves back, one across a cut keeps what stays
+/// ([`ripple_item`]). Free music stays where it is: cuts never chop it, and its refit fits it to the new end
+/// (`media::music`). Returns where each layer (piece) of the tracks, in order, now starts (`None`: a free layer, or one
 /// that doesn't follow the main track), for [`reanchor`] after the cut.
 fn ripple_items(p: &mut Project, removed: &Ripple, ids: &mut IdPool) -> Vec<Option<LayerStart>> {
     let layers: usize = p.timeline.tracks.iter().map(|t| t.items.len()).sum();
@@ -590,8 +594,23 @@ fn ripple_items(p: &mut Project, removed: &Ripple, ids: &mut IdPool) -> Vec<Opti
     for track in p.timeline.tracks.iter_mut() {
         let mut next = Vec::with_capacity(track.items.len());
         for mut item in std::mem::take(&mut track.items) {
-            // Detached layers never move; anchors that no longer resolve are left for
-            // `normalize` to detach.
+            if item.attach.is_none() {
+                if is_music(&item) {
+                    next.push(item);
+                    starts.push(None);
+                    continue;
+                }
+                // Free: it moves in timeline time and stays free.
+                let pieces = ripple_item(item, removed, ids);
+                next.reserve(pieces.len());
+                starts.reserve(pieces.len());
+                for (piece, _) in pieces {
+                    next.push(piece);
+                    starts.push(None);
+                }
+                continue;
+            }
+            // Anchors that no longer resolve are left for `normalize` to detach.
             let located = item
                 .attach
                 .clone()
