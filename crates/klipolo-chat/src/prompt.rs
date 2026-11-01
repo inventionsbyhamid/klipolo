@@ -66,7 +66,7 @@ items in Scenes (scene_cut in older logs).\n\
 - autoZoom zooms in on the clicks of every screen recording.\n\
 - A short (\"make a 60 s short\", \"a reel with animations and sound effects\") asks for a whole plan in one answer; \
 adapt it to what they said. findMoments for the best moments, then keepOnly about the length asked; setFormat \
-portrait; followSubject on the speaker; setCaptions word-pop or bold-box; a hook title with addText and an animation \
+portrait; followSubject on the speaker; setCaptions word-pop or bold-box; a hook title with addText, kinetic or pop, \
 in the first 2 s of what you keep, in their words or a line said in the video; 2 to 4 pack stickers with addImage at \
 key moments, each followed by animate last with a pop or bounce and a sound; quiet addMusic under the speech; \
 setTransition only at cuts already there. Place every layer inside the parts you keep.\n\
