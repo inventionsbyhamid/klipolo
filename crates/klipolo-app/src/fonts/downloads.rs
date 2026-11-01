@@ -14,12 +14,14 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use klipolo_fonts::download::{FontError, download_family, fetch_preview, which_for};
+use klipolo_fonts::download::{FontError, Which, download_family, fetch_preview, which_for};
 use klipolo_fonts::english::{google_off, needs_consent, unknown_google, version_gone};
+use klipolo_fonts::fallback::cjk_family;
 use klipolo_fonts::google::GoogleFamily;
 use klipolo_fonts::store::{DownloadedFamily, DownloadedId, FontStore};
 use klipolo_model::coded::CodedError;
 use klipolo_model::font::FontRef;
+use klipolo_model::text_language::CjkScript;
 
 use super::Fonts;
 use super::google::GoogleFonts;
@@ -216,6 +218,46 @@ pub async fn download(
         return Err(version_gone(&fam.family, v));
     }
     let which = which_for(&fam, weight, italic);
+    fetch(host, fonts, downloads, fam, which).await
+}
+
+/// The Noto Sans of `script` (SC, TC, JP or KR) at `weight`: its one face nearest it, as each is over 15 MB as a
+/// family. Then the engine has that script's fallback (`kl:fallback:<script>`), so its text draws in it, in the preview
+/// and an export.
+pub async fn download_cjk(
+    host: Arc<dyn Host>,
+    fonts: &Fonts,
+    downloads: &Downloads,
+    script: CjkScript,
+    weight: u16,
+) -> Result<FontRef, CodedError> {
+    allowed(&*host)?;
+    fonts.catalogue_ready().await;
+    let fam = find(fonts, cjk_family(script))?;
+    let which = match which_for(&fam, weight, false) {
+        Which::All => {
+            let faces = fam.faces();
+            let i = klipolo_fonts::matching::nearest(&faces, weight, false)
+                .ok_or_else(|| unknown_google(&fam.family))?;
+            Which::One {
+                weight: faces[i].0,
+                italic: faces[i].1,
+            }
+        }
+        one => one,
+    };
+    fetch(host, fonts, downloads, fam, which).await
+}
+
+/// Downloads `which` of `fam` into the store, one download of a family at a time and cancellable, then registers the
+/// family's faces with the engine and tells the page.
+async fn fetch(
+    host: Arc<dyn Host>,
+    fonts: &Fonts,
+    downloads: &Downloads,
+    fam: GoogleFamily,
+    which: Which,
+) -> Result<FontRef, CodedError> {
     let store = downloads
         .store()
         .cloned()

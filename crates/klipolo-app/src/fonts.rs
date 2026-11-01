@@ -6,6 +6,7 @@
 //! A search or a browse waits for the scan, the catalogue and start-up's registration of the downloads (at most
 //! `SCAN_WAIT` for all), so it never misses this computer's fonts or Google's.
 
+pub mod cjk;
 pub mod downloads;
 pub mod google;
 
@@ -17,11 +18,15 @@ use std::time::Duration;
 
 use klipolo_fonts::google::Catalogue;
 use klipolo_fonts::index::FontIndex;
+use klipolo_fonts::missing::{MissingFont, missing_in};
 use klipolo_fonts::resolve::resolve;
 use klipolo_fonts::search::{FontRow, SearchFilter, search};
 use klipolo_model::coded::CodedError;
 use klipolo_model::font::FontRef;
+use klipolo_model::project::Project;
+use serde::Serialize;
 use tokio::sync::watch;
+use ts_rs::TS;
 
 /// The most rows a typed search answers from each source (bundled, Google's, this computer's). Browsing (an empty
 /// query) answers every family, in sections, windowed in the page.
@@ -147,6 +152,45 @@ impl Fonts {
         };
         search(&self.index(), query, &filter, limit)
     }
+
+    /// Whether this computer's fonts, Google's catalogue and the downloads are all in the index.
+    fn settled(&self) -> bool {
+        let scanned = match self.base {
+            Base::Engine => *klipolo_engine::render::fonts::subscribe_scanned().borrow(),
+            Base::Fixed(_) => true,
+        };
+        scanned && *self.catalogue_ready.borrow() && *self.downloads_ready.borrow()
+    }
+
+    /// The fonts `project` (its text in `text_language`) uses that aren't here, once this computer's fonts, the catalogue
+    /// and the downloads are in: an installed font is never called missing because the scan hadn't finished. Still not
+    /// in after the wait (`SCAN_WAIT`): `Pending`, and the page asks again.
+    pub async fn missing_after_scan(
+        &self,
+        project: &Project,
+        text_language: &str,
+    ) -> MissingAnswer {
+        self.after_scan().await;
+        if !self.settled() {
+            return MissingAnswer::Pending;
+        }
+        MissingAnswer::Ready {
+            fonts: missing_in(&self.index(), project, text_language),
+        }
+    }
+}
+
+/// The open project's missing fonts, once this computer's are read (`fonts_missing`); `Pending` while they aren't.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+#[ts(export)]
+pub enum MissingAnswer {
+    Pending,
+    Ready { fonts: Vec<MissingFont> },
 }
 
 impl Default for Fonts {

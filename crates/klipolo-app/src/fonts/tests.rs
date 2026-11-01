@@ -275,3 +275,129 @@ async fn cancel_stops_a_running_download_and_nothing_is_registered() {
     assert!(host.changed.lock().unwrap().is_empty());
     assert!(downloads::list(&downloads).is_empty());
 }
+
+/// A project whose one title is in `font`.
+fn titled(font: FontRef) -> klipolo_model::project::Project {
+    use klipolo_model::layout::{Anchor, BoxN, Layout};
+    use klipolo_model::timeline::{Item, ItemContent, TextStyle, Track, TrackKind};
+    let (mut p, _) = klipolo_engine::test_support::captions_project("caption.bold", &[]);
+    p.captions.enabled = false;
+    let mut titles = Track::new(TrackKind::Overlay, "Titles");
+    titles.items = vec![Item {
+        id: "title".into(),
+        start_us: 0,
+        duration_us: 1_000_000,
+        attach: None,
+        layout: Layout::new(
+            Anchor::TopLeft,
+            BoxN {
+                x: 0.1,
+                y: 0.3,
+                w: 0.8,
+                h: 0.4,
+            },
+        ),
+        content: ItemContent::Text {
+            text: "A day at the studio".into(),
+            style: TextStyle {
+                font,
+                ..TextStyle::default()
+            },
+        },
+        effects: Vec::new(),
+    }];
+    p.timeline.tracks = vec![titles];
+    p
+}
+
+#[tokio::test]
+async fn the_missing_fonts_name_a_font_not_here_with_what_downloading_it_takes() {
+    let fonts = fonts();
+    let mac_only = FontRef {
+        family: "Nowhere Sans".into(),
+        source: FontSource::Installed,
+    };
+    let super::MissingAnswer::Ready { fonts: missing } = fonts
+        .missing_after_scan(&titled(mac_only.clone()), "en")
+        .await
+    else {
+        panic!("everything is in")
+    };
+    assert_eq!(missing.len(), 1);
+    assert_eq!(missing[0].font, mac_only);
+    assert_eq!(missing[0].layers, ["title"]);
+    assert_eq!(
+        missing[0].download_bytes, None,
+        "nothing to download for a font only another Mac has"
+    );
+    let lato = klipolo_fonts::google::catalogue().find("lato").unwrap();
+    let super::MissingAnswer::Ready { fonts: missing } =
+        fonts.missing_after_scan(&titled(lato.font()), "en").await
+    else {
+        panic!("everything is in")
+    };
+    assert!(
+        missing[0].download_bytes.is_some_and(|b| b > 0),
+        "Download (size)"
+    );
+    let super::MissingAnswer::Ready { fonts: missing } = fonts
+        .missing_after_scan(&titled(FontRef::bundled("Anton")), "en")
+        .await
+    else {
+        panic!("everything is in")
+    };
+    assert!(missing.is_empty(), "a bundled font is always here");
+}
+
+#[test]
+fn the_cjk_fonts_list_each_script_s_upright_weights_and_none_downloaded_yet() {
+    let index = FontIndex::shipped(klipolo_fonts::bundled::bundled_dir())
+        .with_catalogue(klipolo_fonts::google::shipped());
+    let all = super::cjk::cjk_fonts(&index);
+    assert_eq!(
+        all.iter().map(|c| c.family.as_str()).collect::<Vec<_>>(),
+        [
+            "Noto Sans SC",
+            "Noto Sans TC",
+            "Noto Sans JP",
+            "Noto Sans KR"
+        ]
+    );
+    let jp = &all[2];
+    assert!(jp.faces.iter().any(|f| f.weight == 400 && f.bytes > 0));
+    assert!(jp.faces.iter().all(|f| !f.downloaded));
+    assert!(jp.faces.windows(2).all(|w| w[0].weight < w[1].weight));
+}
+
+#[tokio::test]
+async fn a_cjk_download_fetches_one_face_and_becomes_the_script_s_fallback() {
+    use klipolo_model::text_language::CjkScript;
+    let server = klipolo_fonts::test_server::Server::start();
+    let fam = klipolo_fonts::test_server::family_on(
+        &server,
+        "Noto Sans KR",
+        &[
+            (400, false, "Inter/Inter-Regular.ttf"),
+            (700, false, "Inter/Inter-Bold.ttf"),
+        ],
+    );
+    let fonts = serving(fam);
+    let dir = tempfile::tempdir().unwrap();
+    let downloads = Downloads::open(Some(dir.path()));
+    let fresh = FakeHost::with(GoogleFonts::default());
+    assert_eq!(
+        downloads::download_cjk(fresh, &fonts, &downloads, CjkScript::Kr, 400).await,
+        Err(needs_consent())
+    );
+    let host = FakeHost::with(on_and_consented());
+    let font = downloads::download_cjk(host.clone(), &fonts, &downloads, CjkScript::Kr, 700)
+        .await
+        .unwrap();
+    assert_eq!(font.family, "Noto Sans KR");
+    assert_eq!(server.requests("Inter-Bold"), 1, "only the face asked for");
+    assert_eq!(server.requests("Inter-Regular"), 0);
+    assert!(klipolo_engine::render::fonts::cjk_registered(CjkScript::Kr));
+    assert_eq!(*host.changed.lock().unwrap(), ["Noto Sans KR"]);
+    // The engine's fonts are the process's: the other tests never see this stand-in Noto.
+    klipolo_engine::render::fonts::unregister(&klipolo_fonts::alias::alias(&font));
+}

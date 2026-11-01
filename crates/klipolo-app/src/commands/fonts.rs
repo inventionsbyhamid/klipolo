@@ -5,10 +5,12 @@
 
 use std::sync::Arc;
 
+use crate::project::ProjectSessionState;
 use klipolo_app::export::ExportState;
+use klipolo_app::fonts::cjk::{CjkFonts, cjk_fonts};
 use klipolo_app::fonts::downloads::{self, Downloads, Host};
 use klipolo_app::fonts::google::{self, GoogleFonts};
-use klipolo_app::fonts::{Fonts, face_bytes};
+use klipolo_app::fonts::{Fonts, MissingAnswer, face_bytes};
 use klipolo_fonts::browse::{Browse, BrowseAsk, browse, browse_rows, row_for};
 use klipolo_fonts::bundled::{BUNDLED, BundledFace, bundled_dir, fallback_only};
 use klipolo_fonts::google::CatalogueInfo;
@@ -17,6 +19,7 @@ use klipolo_fonts::store::{DownloadedFamily, DownloadedId};
 use klipolo_mcp::connection::support_dir;
 use klipolo_model::coded::{CodedError, Said};
 use klipolo_model::font::FontRef;
+use klipolo_model::text_language::CjkScript;
 use serde::Serialize;
 use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -284,6 +287,46 @@ pub async fn fonts_catalogue() -> CatalogueInfo {
             sample: true,
             families: 0,
         })
+}
+
+/// The fonts the open project `project_id` uses that aren't here, once this computer's are read (else `pending`): the
+/// banner's, the badges' and Replace fonts' one list. None for another project than the open one.
+#[tauri::command]
+pub async fn fonts_missing(
+    fonts: State<'_, Fonts>,
+    session: State<'_, ProjectSessionState>,
+    project_id: String,
+) -> Result<MissingAnswer, Said> {
+    let open = session
+        .subscribe()
+        .borrow()
+        .as_ref()
+        .filter(|feed| feed.project_id == project_id)
+        .map(|feed| (feed.project.clone(), feed.text_language.clone()));
+    let Some((project, text_language)) = open else {
+        return Ok(MissingAnswer::Ready { fonts: Vec::new() });
+    };
+    Ok(fonts.missing_after_scan(&project, &text_language).await)
+}
+
+/// Noto Sans SC, TC, JP and KR: their faces' sizes, and which are here (Settings).
+#[tauri::command]
+pub async fn fonts_cjk(fonts: State<'_, Fonts>) -> Result<Vec<CjkFonts>, Said> {
+    fonts.catalogue_ready().await;
+    Ok(cjk_fonts(&fonts.index()))
+}
+
+/// The Noto Sans of `script` at `weight`, Chinese, Japanese or Korean text's fallback.
+#[tauri::command]
+pub async fn fonts_cjk_download(
+    app: AppHandle,
+    fonts: State<'_, Fonts>,
+    downloads: State<'_, Downloads>,
+    script: CjkScript,
+    weight: u16,
+) -> Result<FontRef, Said> {
+    let host: Arc<dyn Host> = Arc::new(AppHost(app));
+    Ok(downloads::download_cjk(host, &fonts, &downloads, script, weight).await?)
 }
 
 /// The fonts' start: Google's catalogue decoded and the downloads registered with the engine, each on a blocking
