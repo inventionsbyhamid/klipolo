@@ -2,6 +2,8 @@
 //! save", so the person can mark or stop when the item is hidden behind the notch. The fake backend and fake workers
 //! only.
 
+use std::time::{Duration, Instant};
+
 use klipolo_capture::protocol::Command;
 use klipolo_capture::shell::WorkerState::*;
 
@@ -81,4 +83,40 @@ fn the_dock_menu_is_empty_without_a_running_take() {
     rec.settle();
     assert!(ids(&rec).is_empty(), "stopping: nothing to mark or stop");
     assert_eq!(rec.launch.commands(), [Command::Start]);
+}
+
+/// The Dock menu runs on the main thread, which never waits for the recorder's lock (it covers file work): while the
+/// lock is held, the menu shows the OS's own items only, and a click goes in from a thread of its own once it is free.
+#[test]
+fn the_dock_menu_never_waits_for_the_recorders_lock() {
+    let rec = fixture();
+    rec.arm(options_screen()).unwrap();
+    rec.send(Command::Start).unwrap();
+    for s in [Armed, Starting, Countdown, Recording] {
+        rec.launch.emit(state(s));
+    }
+    rec.settle();
+    let recorder = rec.rec().clone();
+    let held = recorder.lock();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let menu = recorder.clone();
+    std::thread::spawn(move || {
+        let items = menu.dock_items();
+        menu.dock_click("klipolo.marker");
+        let _ = tx.send(items.len());
+    });
+    let shown = rx
+        .recv_timeout(Duration::from_secs(2))
+        .expect("the Dock menu answered while the lock was held");
+    assert_eq!(shown, 0, "busy: the OS's own items only");
+    drop(held);
+    let started = Instant::now();
+    while !rec.launch.commands().contains(&Command::Marker) {
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "the click went in once the lock was free"
+        );
+        std::thread::yield_now();
+    }
+    assert_eq!(rec.launch.commands(), [Command::Start, Command::Marker]);
 }

@@ -48,21 +48,6 @@ impl Recorder {
         Ok(())
     }
 
-    /// `cmd` to whichever take runs, if its worker is there (the app's own: the Dock icon's menu). The person's Stop,
-    /// Cancel or Disarm is never followed by a resume.
-    pub(super) fn send_current(&self, cmd: Command) {
-        let mut slot = self.lock();
-        let Some(current) = slot.take.as_mut() else {
-            return;
-        };
-        if matches!(cmd, Command::Stop | Command::Cancel | Command::Disarm) {
-            current.sup.stop_requested();
-        }
-        if let Some(worker) = current.worker.as_mut() {
-            write_line(worker, &cmd);
-        }
-    }
-
     /// "Stop the running recording": Stop for whatever take the recorder runs, whichever id the page lost. Its id and
     /// whether it had started (only then is it saved), or None when there is no take. Stop is safe in every state: it
     /// never starts capture.
@@ -83,6 +68,20 @@ impl Recorder {
             stop_in(&mut slot);
         }
         true
+    }
+}
+
+/// `cmd` to take `take`'s worker, if it is the slot's and its worker is there (the app's own: the Dock icon's menu).
+/// The person's Stop is never followed by a resume.
+pub(super) fn send_to_take(slot: &mut Slot, take: &str, cmd: &Command) {
+    let Some(current) = slot.take.as_mut().filter(|t| t.cfg.id == take) else {
+        return;
+    };
+    if matches!(cmd, Command::Stop | Command::Cancel | Command::Disarm) {
+        current.sup.stop_requested();
+    }
+    if let Some(worker) = current.worker.as_mut() {
+        write_line(worker, cmd);
     }
 }
 
