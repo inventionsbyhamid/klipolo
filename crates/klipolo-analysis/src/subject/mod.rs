@@ -13,6 +13,7 @@
 //!   never paid for again. A failed or stopped request stores nothing.
 //! - **Times:** frame n of a stretch is at its start plus n / `fps` on the file's clock; the cuts are on that clock too.
 
+pub mod clips;
 pub mod path;
 
 use std::path::{Path, PathBuf};
