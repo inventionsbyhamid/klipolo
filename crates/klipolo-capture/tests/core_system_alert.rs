@@ -60,6 +60,17 @@ fn an_alert_holds_the_countdown_and_its_answer_starts_it_again_from_the_top() {
     let before = h.events().len();
     h.system_alert(false);
     assert_eq!(held(&h), None);
+    assert!(
+        matches!(
+            h.events()[before..],
+            [
+                Event::Countdown { left_s: 3 },
+                Event::SystemAlert { up: false }
+            ]
+        ),
+        "the count from the top is said before the alert's end: {:?}",
+        &h.events()[before..]
+    );
     h.feed(20.0, 22.9);
     assert_eq!(
         h.state(),

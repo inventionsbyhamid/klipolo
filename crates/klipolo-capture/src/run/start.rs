@@ -175,13 +175,14 @@ impl SessionCore {
             return fx;
         }
         self.countdown.alert = up;
-        fx.push(Effect::Emit(Event::SystemAlert { up }));
         if !up {
             let c = &mut self.countdown;
             (c.done_ns, c.running_since) = (0, None);
         }
-        // A countdown held or let go says so (its number and the status); one still starting, once it begins.
+        // A countdown held or let go says so first (its number and the status; one still starting, once it begins), so
+        // the page has the count from the top by the time it hears the alert went.
         self.advance(now_ns, &mut fx);
+        fx.push(Effect::Emit(Event::SystemAlert { up }));
         fx
     }
 
