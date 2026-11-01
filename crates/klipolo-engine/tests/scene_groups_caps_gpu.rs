@@ -1,6 +1,6 @@
 //! Scene groups' caps and costs on the GPU (lavapipe in CI): at most four groups offscreen at once (a fifth draws in
 //! place and is said once), untrusted scenes held to every cap, and a warm frame of every group feature making no GPU
-//! GPU object (what a scene holds is `scene_memory_gpu.rs`).
+//! object (what a scene holds is `scene_memory_gpu.rs`).
 
 mod support;
 use std::sync::Arc;
