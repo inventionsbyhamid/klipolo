@@ -146,11 +146,9 @@ function layersGhosts(proposal: Proposal, tracks: Track[]): Ghosts {
 function trackGhosts(proposal: Proposal, track: Track, rowPx: number): Ghosts {
   const gone = affectedBy(proposal);
   return ghostsFor(proposal, `track:${rowPx}`, track, () => {
-    const boxOf = (id: string) => {
-      const item = track.items.find((i) => i.id === id);
-      return track.kind === 'audio' && item ? audioBox(audioRole(item), rowPx) : rowBox(rowPx);
-    };
-    return layerGhosts(track.items, gone, boxOf);
+    if (track.kind !== 'audio') return layerGhosts(track.items, gone, () => rowBox(rowPx));
+    const items = new Map(track.items.map((item) => [item.id, item]));
+    return layerGhosts(track.items, gone, (id) => audioBox(audioRole(items.get(id)!), rowPx));
   });
 }
 

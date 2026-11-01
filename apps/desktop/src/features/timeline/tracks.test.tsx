@@ -338,6 +338,19 @@ describe('show all tracks', () => {
     expect(container.querySelector<HTMLElement>('.tl-empty')!.style.left).toBe(`${HEADER_PX}px`);
   });
 
+  it("a waiting proposal outlines what it removes in the track's own row, a sound as its lane draws it", async () => {
+    const { useProposal, noRemovals } = await import('../../state/proposal');
+    const removals = { ...noRemovals(), items: ['song', 'title'] };
+    act(() => useProposal.getState().show({ id: 'p', baseRevision: 3, tags: [], removals }));
+    renderWithProviders(<Timeline />);
+    const ghost = (track: string) =>
+      document.querySelector<HTMLElement>(`[data-track-id="${track}"] [data-ghost="layer"]`)!;
+    // The title fills its 28 px row 4 px in; the sound effect its 34 px row 2 px in.
+    expect([ghost('t1').style.top, ghost('t1').style.height]).toEqual(['4px', '20px']);
+    expect([ghost('t2').style.top, ghost('t2').style.height]).toEqual(['2px', '30px']);
+    act(() => useProposal.getState().show(null));
+  });
+
   it('is a command: Show all tracks, then Show fewer tracks', () => {
     useUi.setState({ timelineExpanded: false });
     let commands: ReturnType<typeof useCommands> = [];
