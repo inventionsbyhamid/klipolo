@@ -11,7 +11,7 @@ same bytes. It writes, into assets/library or --out DIR:
   backgrounds/<id>.png  1920 x 1080 or 1080 x 1920 RGB, to fill a 16:9 or 9:16 frame (listed as stickers: pictures)
   manifest.json       each item's id, name, category, file, length or size, tags, sha256 and licence
   LICENSE.txt         the CC0 dedication
-Usage: python3 scripts/gen-library.py [--out DIR]
+Usage: python3 scripts/gen-library.py [--out DIR] [--workers N]
 scripts/gen-library.test.sh checks that two runs write the same bytes as the committed assets/library.
 """
 
@@ -1815,13 +1815,14 @@ def main():
     parser = argparse.ArgumentParser(description="Write Klipolo's bundled CC0 pack.")
     default = pathlib.Path(__file__).resolve().parents[1] / "assets" / "library"
     parser.add_argument("--out", type=pathlib.Path, default=default, help=f"where to write it (default {default})")
-    out = parser.parse_args().out
-    files = build()
+    parser.add_argument("--workers", type=int, help="processes making items at once (default: one a CPU, at most 8)")
+    args = parser.parse_args()
+    files = build(args.workers)
     for path, data in files.items():
-        target = out / path
+        target = args.out / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
-    print(f"Wrote {len(files)} files, {sum(len(d) for d in files.values())} bytes, into {out}")
+    print(f"Wrote {len(files)} files, {sum(len(d) for d in files.values())} bytes, into {args.out}")
 
 
 if __name__ == "__main__":

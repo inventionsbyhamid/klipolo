@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
-# The bundled pack's checks (Python 3 stdlib only): scripts/gen-library.py run twice into temporary folders writes the
-# same bytes both times, and the same bytes as assets/library, whose manifest lists each file's SHA-256; every item has a
-# file, a name and 3 to 6 tags, and every file an item; every sound is
-# 48 kHz 16-bit mono and under 3 s; every music bed is 16 to 30 s and loops at a zero crossing without a click (two
+# The bundled pack's checks (Python 3 stdlib only): scripts/gen-library.py run twice into temporary folders, with
+# different numbers of worker processes, writes the same bytes both times, and the same bytes as assets/library, whose
+# manifest lists each file's SHA-256; every item has a file, a name and 3 to 6 tags, and every file an item; every sound
+# is 48 kHz 16-bit mono and under 3 s; every music bed is 16 to 30 s and loops at a zero crossing without a click (two
 # copies back to back are as smooth at the join as anywhere else); every sticker is a 1024 x 1024 RGBA PNG with
-# transparent corners; the pack holds the items listed below, CC0-1.0, and is under 10.5 MB. Then scripts/check-library-sounds.py measures each sound and fails on any out of bounds.
+# transparent corners; every background an RGB PNG that fills a 16:9 or 9:16 frame, each in both; the pack holds the
+# items listed below, CC0-1.0, and is under 10.5 MB. Then scripts/check-library-sounds.py measures each sound and fails
+# on any out of bounds.
 #   scripts/gen-library.test.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-# Two runs at once: each takes a minute or two.
+# Two runs at once, each a minute or two, by different numbers of processes.
 python3 -I scripts/gen-library.py --out "$tmp/a" >/dev/null &
 a=$!
-python3 -I scripts/gen-library.py --out "$tmp/b" >/dev/null &
+python3 -I scripts/gen-library.py --out "$tmp/b" --workers 3 >/dev/null &
 b=$!
 wait "$a" && wait "$b"
 
