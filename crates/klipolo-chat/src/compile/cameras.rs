@@ -6,7 +6,8 @@
 //!   again; another mode for it is refused, or noted when other cameras take the mode.
 //! - `detachCamera`: one `DetachSource` of its camera per clip whose camera shows in every format; the model makes the
 //!   layers. A camera that is its own layer already is left as it is, a hidden one stays in its clip (its layer would
-//!   show it everywhere), and a camera that is its clip's footage has nothing to separate: each is noted.
+//!   show it everywhere), one that recorded nothing during its clip stays too (the model would refuse the whole call),
+//!   and a camera that is its clip's footage has nothing to separate: each is noted.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -15,7 +16,7 @@ use klipolo_model::coded::ErrorParam;
 use klipolo_model::ids::{Id, new_id};
 use klipolo_model::ops::{ClipPatch, Op, TrackPatch};
 use klipolo_model::project::FormatKind;
-use klipolo_model::time::Us;
+use klipolo_model::time::{MIN_DURATION_US, Us};
 use klipolo_model::timeline::{CameraMode, ClipSource, ItemContent};
 
 use super::recorded::{Noted, clip_recording, has_format, named, noted};
@@ -32,6 +33,9 @@ pub const LAYER_FORMATS: &str =
 pub const SEPARATE: &str = "That camera is its own layer now, so it can't go back into its clip.";
 /// Said when separating a camera that is its own layer already.
 pub const ALREADY_SEPARATE: &str = "That camera is already its own layer.";
+/// Said when a camera recorded nothing during a clip it is asked to leave.
+pub const NOTHING_RECORDED: &str =
+    "A camera that recorded nothing during its clip was left as it is.";
 /// Said when a camera hidden in some format is asked to become its own layer.
 pub const HIDDEN_STAYS: &str =
     "A hidden camera stays hidden in its clip. Show it first to make it its own layer.";
@@ -322,7 +326,7 @@ pub(super) fn detach(
         ));
     }
     let formats = &work.settings.formats;
-    let mut hidden = false;
+    let (mut hidden, mut nothing) = (false, false);
     let mut ops = Vec::with_capacity(cams.on_clips.len());
     for clip_id in &cams.on_clips {
         let Some(clip) = clip_of(work, clip_id) else {
@@ -338,16 +342,27 @@ pub(super) fn detach(
                 .iter()
                 .all(|f| cam.mode_for(*f) != CameraMode::Hidden)
         });
+        // At least the model's shortest layer of its footage plays during the clip.
+        let recorded = |s: &klipolo_model::project::RecordingSource| {
+            s.runs.iter().any(|r| {
+                let (from, to) = r.rec_span(s.nudge_us);
+                to.min(clip.source_out_us) - from.max(clip.source_in_us) >= MIN_DURATION_US
+            })
+        };
         match source {
-            Some(source) if shows => ops.push(Op::DetachSource {
+            Some(source) if shows && recorded(source) => ops.push(Op::DetachSource {
                 clip_id: clip_id.clone(),
                 source_id: source.id.clone(),
             }),
+            Some(_) if shows => nothing = true,
             _ => hidden = true,
         }
     }
     if hidden {
         notes.push(HIDDEN_STAYS.to_owned());
+    }
+    if nothing {
+        notes.push(NOTHING_RECORDED.to_owned());
     }
     if ops.is_empty() && notes.is_empty() {
         return Err(to_model(format!("{TOOL}: no camera there to separate.")));

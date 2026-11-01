@@ -719,6 +719,34 @@ fn separate_the_camera_makes_it_a_layer_of_its_own() {
 }
 
 #[test]
+fn a_camera_that_recorded_nothing_during_a_clip_stays_in_it() {
+    // Recording 2's camera started 30 s in; its clip plays the first 20 s.
+    let mut p = two_takes();
+    p.recordings[1].sources[1].runs[0].offset_us = secs(30.0);
+    let out = compiled(&p, &[call("detachCamera", json!({"clips": null}))]);
+    assert_eq!(out.refusals, vec![]);
+    assert_eq!(
+        out.additions.unwrap().ops,
+        vec![Op::DetachSource {
+            clip_id: "a".into(),
+            source_id: "camera".into()
+        }]
+    );
+    assert_eq!(
+        out.notes,
+        vec!["A camera that recorded nothing during its clip was left as it is."]
+    );
+    // Alone, the person is told.
+    assert_eq!(
+        refused(&p, &[call("detachCamera", json!({"clips": ["c3"]}))]),
+        (
+            "A camera that recorded nothing during its clip was left as it is.".to_owned(),
+            Audience::Person
+        )
+    );
+}
+
+#[test]
 fn a_hidden_camera_stays_in_its_clip() {
     let p = after(&two_takes(), &[mode(json!(["c3"]), "hidden", json!(null))]);
     let out = compiled(&p, &[call("detachCamera", json!({"clips": null}))]);
