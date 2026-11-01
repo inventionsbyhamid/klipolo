@@ -232,6 +232,12 @@ impl ToolCall {
         }
     }
 
+    /// Whether the call names a song or a video layer by its ref (`m1`, `v1`), which holds only while the layers stay
+    /// as the context named them (`context::layers_key`).
+    pub fn names_layer(&self) -> bool {
+        matches!(self, ToolCall::SetClip { clip: ClipRef::One(r), .. } if r.starts_with(['m', 'v']))
+    }
+
     /// Whether the call names a timeline time or a clip ref, which hold only while the main track's clips stay where
     /// the context put them (`context::timeline_key`): a range, a split, a trim, a moment, a clip tool's ref (not
     /// `all`), or a media tool's start when it gives one (None is the playhead). Every tool is listed, so a new one

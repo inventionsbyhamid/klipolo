@@ -49,7 +49,8 @@
 //!
 //! For other apps that edit through the same tools: `ChatContext::section` gives one section by its heading,
 //! `full_transcript` every Transcript line at full detail however long the project (for them to read in pages), and
-//! `timeline_key` says whether the times and clip refs of a context read earlier still hold.
+//! `timeline_key` says whether the times and clip refs of a context read earlier still hold, and `layers_key` whether its
+//! song and video layer refs do.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -517,6 +518,31 @@ pub fn timeline_key(project: &Project) -> u64 {
         eat(clip.id.as_bytes());
         eat(&start.to_le_bytes());
         eat(&start.saturating_add(clip.duration_us()).to_le_bytes());
+    }
+    hash
+}
+
+/// A key for which layer each song and video layer ref names (`Refs`: `m1`, `v1`): each one's id, in ref order. Equal
+/// keys mean a layer ref a context gave still names the same layer; a layer added or taken away before it doesn't. The
+/// same on every run and build (FNV-1a). O(layers).
+pub fn layers_key(project: &Project) -> u64 {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    let mut hash = OFFSET;
+    let mut eat = |bytes: &[u8]| {
+        for &b in bytes {
+            hash = (hash ^ u64::from(b)).wrapping_mul(PRIME);
+        }
+    };
+    for layer in layers(project) {
+        let (kind, id) = match layer {
+            Layer::Song(pieces) => (b'm', pieces[0].id.as_str()),
+            Layer::Video(item) => (b'v', item.id.as_str()),
+        };
+        // The kind and the id's length first, so no two lists of ids read as the same bytes.
+        eat(&[kind]);
+        eat(&(id.len() as u64).to_le_bytes());
+        eat(id.as_bytes());
     }
     hash
 }
