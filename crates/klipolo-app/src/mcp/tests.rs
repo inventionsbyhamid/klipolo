@@ -836,7 +836,11 @@ fn switch_off_removes_the_connection_file() {
     assert!(off.connected.is_empty());
     assert!(!file.exists(), "the connection file goes");
     assert!(!prefs::load(dir.path()).mcp_enabled, "saved off");
-    assert_eq!(prefs::load(dir.path()).theme, prefs::Theme::Dark, "the theme stays");
+    assert_eq!(
+        prefs::load(dir.path()).theme,
+        prefs::Theme::Dark,
+        "the theme stays"
+    );
     // The port closes once the accept loop hears the stop.
     let closed = Instant::now();
     while TcpStream::connect(("127.0.0.1", port)).is_ok() {
