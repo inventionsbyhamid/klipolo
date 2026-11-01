@@ -196,6 +196,18 @@ describe('loop playback', () => {
     expect(usePlayback.getState().playheadUs).toBe(5_000_000);
   });
 
+  it("the frame that took the loop back doesn't leave the playhead past the range's end", () => {
+    stop = keepLooping();
+    useLoop.setState({ on: true });
+    useRange.getState().select(5_000_000, 8_000_000);
+    usePlayback.setState({ playheadUs: 7_900_000, playing: true, rate: 1 });
+    const seq = usePlayback.getState().seq;
+    usePlayback.getState().onFrame({ timeUs: 7_900_000, seq, playback: true, atMs: performance.now() });
+    // Drawn late, past the end: the clock re-anchors there, and the loop goes back at once.
+    usePlayback.getState().onFrame({ timeUs: 8_040_000, seq, playback: true, atMs: performance.now() - 50 });
+    expect(usePlayback.getState().playheadUs).toBe(5_000_000);
+  });
+
   it('a range that ends with the video loops at the end, as the whole video does', () => {
     stop = keepLooping();
     useLoop.setState({ on: true });

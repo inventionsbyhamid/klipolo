@@ -200,6 +200,8 @@ export const usePlayback = create<PlaybackStore>((set, get) => ({
     const frameEndUs = frameStartUs(frameIndexAt(frame.timeUs, fps) + 1, fps) - 1;
     const anchorUs = s.rate >= 0 ? frame.timeUs : held.running ? frameEndUs : Math.min(frameEndUs, held.us);
     reportFrame(anchorUs, frame.atMs ?? performance.now(), s.rate);
+    // The clock's move sent the playhead elsewhere (Loop went back to the range's start): this frame is the run before.
+    if (get().seq !== s.seq) return;
     set({ playheadUs: frame.timeUs });
   },
   onState: ({ playing, atUs, rate, reason }) => {
