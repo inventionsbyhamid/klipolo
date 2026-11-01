@@ -26,7 +26,8 @@
 //!
 //! A result is one text and `structuredContent`: `{"outcome": "done" | "proposed" | "shown" | "started" | "refused",
 //! "revision"?, "proposalId"?, "removedSec"?}`, the outcome what changed most (a proposal, then the project, then a
-//! job started). `isError` is true exactly when nothing was done; when part was, the text says what wasn't.
+//! job started). `isError` is true exactly when nothing was done; when part was, the text says what wasn't, and what
+//! the additions left as they were follows what was done (`Compiled::notes`).
 
 use klipolo_chat::{
     ANALYZE_FIRST, Audience, Compiled, FunctionCall, Job, Moment, ROUGH_FILLERS,
@@ -236,6 +237,8 @@ fn edit(
             words::DONE,
             &[("tools", &names(applied.map(|i| &calls[i])))],
         ));
+        // What the additions left as they were (a camera that is its own layer), as chat says it after its reply.
+        said.extend(out.notes.iter().cloned());
     }
 
     // The commit dropped no proposal of the app's: the person decided on it while this call ran (a Discard), and their
