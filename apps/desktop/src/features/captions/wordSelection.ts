@@ -2,14 +2,14 @@ import type { CaptionPagesView } from '../../bindings/CaptionPagesView';
 import type { WordView } from '../../bindings/WordView';
 
 /**
- * The word list's selection as plain functions
- * How a word is named, how a selection's words are found in an answer, and found again after an edit.
+ * The word list's selection as plain functions: how a word is named, how a selection's words are found in an answer,
+ * and found again after an edit.
  */
 
 /**
  * A word of the list by its file words (file, start and end in its file: a correction never shares its first word's
- * name) and its place on the timeline. It survives a refetch (a look leaves all of it as it is), and
- * The copies of a clip, which play the same file words, stay apart.
+ * name) and its place on the timeline. It survives a refetch (a look leaves all of it as it is), and the copies of a
+ * clip, which play the same file words, stay apart.
  */
 export const wordKey = (w: WordView) => `${w.assetId}@${w.sourceStartUs}-${w.sourceEndUs}@${w.startUs}`;
 
@@ -29,7 +29,7 @@ export interface Listed {
 /**
  * The anchor and the focus of a selection, each by key and by its page's row, and the words the person picked for
  * them, kept as picked: what the selection falls back on when the words it holds can't be found (a pick an edit
- * overtook, or undo of a correction it followed into).
+ * overtook; undo of a correction it followed into).
  */
 export interface Sel {
   anchor: string;
@@ -203,7 +203,7 @@ function onlyOf(l: Listed[], index: Index, from: number, to: number, old: Listed
  *   first answer that has them all; it lets go (null) when a section of them moved away;
  * - else, or when they aren't all there, the run between the words the person picked, found again in the answer where
  *   they lie nearest where they were picked (a copy can be in the other): a pick an edit overtook, or words cut from
- *   from inside it (an "um"). Unless a pick came since, it lets go when that run holds words it didn't;
+ *   inside it (an "um"). Unless a pick came since, it lets go when that run holds words it didn't;
  * - `missing` when the picks aren't in these answers either.
  */
 export function findAgain(
