@@ -131,7 +131,7 @@ function ProjectMenu({ name }: { name: string }) {
             >
               {recent.map((row) => (
                 <MenuItem key={row.path} onSelect={once(() => void openRecent(row.path))} disabled={switching}>
-                  <span className="menu-item-text" title={row.name}>
+                  <span className="menu-item-text is-name" title={row.name}>
                     {row.name}
                   </span>
                 </MenuItem>

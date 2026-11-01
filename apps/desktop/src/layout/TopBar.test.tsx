@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
@@ -306,9 +308,11 @@ describe('TopBar', () => {
     );
     const group = within(menu).getByRole('group', { name: 'Open recent' });
     expect(within(group).getAllByRole('menuitem')).toHaveLength(5);
-    // Each is named by its project's name, whole in its tooltip when it is cut.
+    // Each is named by its project's name: a long one is cut (the menu doesn't widen for it), whole in its tooltip.
     const kiln = within(group).getByRole('menuitem', { name: 'Kiln vlog' });
-    expect(kiln.querySelector('.menu-item-text')).toHaveAttribute('title', 'Kiln vlog');
+    expect(kiln.querySelector('.menu-item-text.is-name')).toHaveAttribute('title', 'Kiln vlog');
+    const css = readFileSync(resolve(__dirname, '../styles/app.css'), 'utf8');
+    expect(css).toMatch(/\.menu-item-text\.is-name \{\s*max-width: 280px;/);
     expect(menu.textContent).not.toMatch(/[–—]/);
   });
 
