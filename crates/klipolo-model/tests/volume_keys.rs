@@ -488,3 +488,109 @@ fn a_separated_sound_takes_its_clip_s_keys() {
     .unwrap();
     assert_eq!(sound_keys(&p, "b-sound"), [(2.0, 1.0), (6.0, 0.0)]);
 }
+
+#[test]
+fn a_separated_recording_source_takes_its_clip_s_keys_at_its_mix_s_volume() {
+    let mut p = fixture();
+    p.timeline.main[0].volume_keys = vec![key(0.0, 1.0), key(10.0, 0.0)];
+    p.recordings[0].sources[2].mix.volume = 0.5;
+    let p = apply_ops(
+        &p,
+        &[Op::DetachSource {
+            clip_id: "a".into(),
+            source_id: "mic".into(),
+        }],
+    )
+    .unwrap();
+    assert_eq!(sound_keys(&p, "a-mic"), [(0.0, 0.5), (10.0, 0.0)]);
+}
+
+/// The page draws keys with its own evaluator (`keys.ts` in `apps/desktop/src/lib`): the canvas places a keyed layer and
+/// the timeline draws a volume line where the engine plays them. `apps/desktop/src/lib/keys-parity.json`, written here
+/// with `UPDATE_GOLDEN=1`, pins it to `motion::value_at` for every ease, at eleven points between two keys.
+#[test]
+fn keys_parity_json_is_current() {
+    let eases: Vec<Ease> = [
+        "linear",
+        "ease",
+        "easeIn",
+        "easeOut",
+        "easeInOut",
+        "power1In",
+        "power1Out",
+        "power1InOut",
+        "power2In",
+        "power2Out",
+        "power2InOut",
+        "power3In",
+        "power3Out",
+        "power3InOut",
+        "power4In",
+        "power4Out",
+        "power4InOut",
+        "backIn",
+        "backOut",
+        "backInOut",
+        "elasticIn",
+        "elasticOut",
+        "elasticInOut",
+        "bounceIn",
+        "bounceOut",
+        "bounceInOut",
+        "sineIn",
+        "sineOut",
+        "sineInOut",
+        "expoIn",
+        "expoOut",
+        "expoInOut",
+        "circIn",
+        "circOut",
+        "circInOut",
+        "hold",
+    ]
+    .iter()
+    .map(|name| serde_json::from_value(serde_json::json!(name)).unwrap())
+    .chain([
+        Ease::CubicBezier {
+            x1: 0.3,
+            y1: -0.5,
+            x2: 0.6,
+            y2: 1.8,
+        },
+        Ease::Steps { n: 5 },
+        Ease::Spring {
+            stiffness: 100.0,
+            damping: 10.0,
+            mass: 1.0,
+        },
+        Ease::Spring {
+            stiffness: 50.0,
+            damping: 40.0,
+            mass: 2.0,
+        },
+    ])
+    .collect();
+    let cases: Vec<serde_json::Value> = eases
+        .into_iter()
+        .map(|ease| {
+            let keys = vec![
+                key(1.0, 0.25),
+                Key {
+                    ease: Some(ease),
+                    ..key(3.0, 1.75)
+                },
+            ];
+            let at: Vec<i64> = (0..=10).map(|i| secs(1.0) + i * 200_000).collect();
+            let values: Vec<f64> = at
+                .iter()
+                .map(|&t| klipolo_model::motion::value_at(&keys, t, 0.0))
+                .collect();
+            serde_json::json!({ "keys": keys, "at": at, "values": values })
+        })
+        .collect();
+    assert_golden(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/desktop/src/lib/keys-parity.json"),
+        &sorted_keys(serde_json::json!({ "cases": cases })),
+    );
+}
