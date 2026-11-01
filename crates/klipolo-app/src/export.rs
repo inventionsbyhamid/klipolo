@@ -42,7 +42,7 @@ use ts_rs::TS;
 
 pub use captions::export_speech;
 pub use cleanup::{clear_on_quit, sweep_folder, tidy_jobs};
-pub use estimate::{Estimate, apple_silicon, estimate};
+pub use estimate::{Estimate, apple_silicon, estimate, screen_share};
 pub use fonts::{missing_fonts, refuse_missing};
 pub use naming::{format_word, plan_files};
 pub use run::{run, said};
@@ -123,6 +123,7 @@ pub fn plan(
         project.settings.fps,
         video_duration(&project.timeline),
         apple_silicon,
+        screen_share(project),
     );
     ExportPlan {
         files,
