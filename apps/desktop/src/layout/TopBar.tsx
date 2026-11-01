@@ -10,7 +10,7 @@ import { MediaJobsPill } from '../features/media-jobs/MediaJobsPill';
 import { errorMessage } from '../lib/errors';
 import { historyAction } from '../lib/history';
 import { AiChip } from '../settings/AiChip';
-import { newProject, useProject } from '../state/project';
+import { newProject, shownName, useProject } from '../state/project';
 import { openRecent, openRecentNow, readRecent, readRecentIfStale } from '../state/recentProjects';
 import { saveStateOf, useSaving } from '../state/saving';
 import { toast } from '../state/toasts';
@@ -217,7 +217,7 @@ export function TopBar() {
       <img className="app-icon" src={icon} alt="Klipolo" width={26} height={26} />
       {snapshot && (
         <>
-          <ProjectMenu name={snapshot.project.name} />
+          <ProjectMenu name={shownName(snapshot)} />
           <span className="save-state" title={saving.failing ?? undefined}>
             {state === 'failing' ? 'Not saved' : state === 'saving' ? 'Saving…' : 'Saved'}
           </span>
