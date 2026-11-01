@@ -2,10 +2,10 @@ import { create } from 'zustand';
 import { SETTLE_MS } from './bursts';
 
 /**
- * Whether the preview keeps its dock (the card beside the frame, or none) as it is for now: while a timeline press or
- * drag is under way (`press`), the frame never changes size under the pointer, or under the edge frame a trim shows;
- * while the keyboard walks the lanes (`walk`), it doesn't change size at every bare cut on the way. The preview docks
- * as the selection says once nothing holds it.
+ * Whether the preview keeps its dock (the card at the frame's right, or none) as it is for now: while a timeline press
+ * or drag is under way (`press`), the card never comes or goes under the pointer, or over the edge frame a trim shows;
+ * while the keyboard walks the lanes (`walk`), it doesn't come and go at every bare cut on the way. The preview docks
+ * as the selection says once nothing holds it. The frame keeps its size either way (`stageLayout`).
  */
 export const useDockHold = create<{ press: boolean; walk: boolean }>(() => ({ press: false, walk: false }));
 

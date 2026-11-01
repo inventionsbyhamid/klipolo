@@ -102,6 +102,11 @@ impl Supervisor {
         }
     }
 
+    /// What the current worker last said it was doing; None before its first `State`.
+    pub fn state(&self) -> Option<WorkerState> {
+        self.state
+    }
+
     /// The take passed the start gate, so it is saved when it stops.
     pub fn started(&self) -> bool {
         self.started

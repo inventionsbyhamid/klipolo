@@ -100,6 +100,8 @@ fn main() {
             app.manage(projects);
             // Screen recording: off in a test run (`KLIPOLO_TEST`), where it makes no backend and launches no worker.
             app.manage(recorder::RecorderState::new(app.handle()));
+            // While a take records, the Dock icon's menu pauses, marks a moment or stops it.
+            recorder::install_dock(app.handle());
             // How Klipolo pays for Meta's models (the Keychain), and this Mac's id with the relay (app support).
             let support = app.path().data_dir().ok().map(|dir| dir.join("Klipolo"));
             let credentials = commands::settings::load(support.as_deref());
@@ -188,6 +190,7 @@ fn main() {
             engine::engine_preview_clear,
             engine::engine_play,
             engine::engine_pause,
+            engine::engine_present_delay,
             engine::engine_set_editing,
             project::project_create,
             project::project_open,

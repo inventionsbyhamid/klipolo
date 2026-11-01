@@ -25,8 +25,8 @@ afterAll(() => width && Object.defineProperty(HTMLElement.prototype, 'clientWidt
 beforeEach(() => {
   useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
   useSelection.setState({ selectedId: null });
-  usePlayback.setState({ playheadUs: 0, playing: false });
-  useUi.setState({ pxPerSecond: 40 });
+  usePlayback.setState({ playheadUs: 0, playing: false, rate: 1 });
+  useUi.setState({ pxPerSecond: 40, snapping: true });
   useLoop.setState({ on: false });
   useRange.getState().clear();
 });
@@ -84,6 +84,39 @@ describe('the player bar', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Stop looping the selection');
     await userEvent.click(loop);
     expect(useLoop.getState().on).toBe(false);
+  });
+
+  it('the snapping switch shows whether snapping is on and turns it off and on, as N does', async () => {
+    renderWithProviders(<Editor />);
+    const snap = screen.getByRole('button', { name: 'Snapping' });
+    expect(snap).toHaveAttribute('aria-pressed', 'true');
+    act(() => snap.focus());
+    const tip = await screen.findByRole('tooltip');
+    expect(within(tip).getByText('N').tagName).toBe('KBD');
+    await userEvent.click(snap);
+    expect(useUi.getState().snapping).toBe(false);
+    expect(snap).toHaveAttribute('aria-pressed', 'false');
+    act(() => useUi.getState().setSnapping(true));
+    expect(snap).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('while playing backward or faster the play button shows which way and how fast, and says it', () => {
+    const { container } = renderWithProviders(<Editor />);
+    const badge = () => container.querySelector<HTMLElement>('.transport [data-rate-badge]')!;
+    expect(badge()).toHaveAttribute('role', 'status');
+    expect(badge()).toBeEmptyDOMElement();
+    act(() => usePlayback.setState({ playing: true, rate: 2 }));
+    expect(badge()).toHaveTextContent('Playing at 2×');
+    expect(badge().querySelector('[aria-hidden="true"]')).toHaveTextContent(/^2×$/);
+    act(() => usePlayback.setState({ rate: -2 }));
+    expect(badge()).toHaveTextContent('Playing backward at 2×');
+    act(() => usePlayback.setState({ rate: -1 }));
+    expect(badge()).toHaveTextContent('Playing backward at 1×');
+    // Forward at normal speed, or stopped: nothing.
+    act(() => usePlayback.setState({ rate: 1 }));
+    expect(badge()).toBeEmptyDOMElement();
+    act(() => usePlayback.setState({ playing: false, rate: 2 }));
+    expect(badge()).toBeEmptyDOMElement();
   });
 
   it('the zoom slider says its value and steps 1 or 10 with the arrows', async () => {

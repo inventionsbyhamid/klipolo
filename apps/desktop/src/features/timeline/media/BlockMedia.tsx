@@ -2,7 +2,7 @@ import { memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useSyncE
 import { useShallow } from 'zustand/react/shallow';
 import { cn } from '../../../design/cn';
 import { useMedia } from '../../../state/media';
-import { CLIP_INNER_PX, FILM_SHARE, HEADER_PX } from '../layout';
+import { CLIP_INNER_PX, FILM_SHARE, gutterPx } from '../layout';
 import { windowSpanUs } from '../useViewport';
 import { anchorCanvas } from './anchor';
 import { paintBlock } from './paint';
@@ -116,7 +116,7 @@ export const BlockMedia = memo(function BlockMedia({
   const b = Math.min(startUs + durationUs, toUs);
   // How far a zoomed-out filmstrip's chunk groups reach: the window's length at this zoom in source time (the same at
   // every step); each run takes at most its file's.
-  const spanUs = windowSpanUs(widthPx, pps, HEADER_PX) * speed;
+  const spanUs = windowSpanUs(widthPx, pps, gutterPx()) * speed;
 
   // Before the browser paints a zoom's or an edit's render: the old picture follows its time.
   useLayoutEffect(() => {

@@ -3,6 +3,7 @@ import type { Item } from '../../../bindings/Item';
 import type { Project } from '../../../bindings/Project';
 import { findClip } from '../../../lib/timeline';
 import { transitionClipId, transitionSelection } from '../../../state/selection';
+import { useUi } from '../../../state/ui';
 import { audioLines } from '../lanes/audioRole';
 import { mainIndex } from '../model/index';
 import { packRows } from '../model/packRows';
@@ -30,7 +31,8 @@ export interface Lane {
 }
 
 type Timeline = Project['timeline'];
-const cachedLanes = new WeakMap<Timeline, Lane[]>();
+const compactLanes = new WeakMap<Timeline, Lane[]>();
+const expandedLanes = new WeakMap<Timeline, Lane[]>();
 const places = new WeakMap<Lane[], Map<string, readonly [number, number]>>();
 
 function lane(id: string, items: readonly Item[]): Lane {
@@ -43,23 +45,37 @@ function lane(id: string, items: readonly Item[]): Lane {
 }
 
 /**
- * The lanes top to bottom, as they draw (cached per timeline object): `layers` (the overlays the lane draws, by start;
- * those counted in a "+N" aren't drawn), `main`, then `sounds` and `music` (the sound layers of each, by start).
- * `expanded` is never on in Klipolo (every lane always shows); it is kept for the callers that pass the setting.
+ * The lanes top to bottom, as they draw (cached per timeline object and track view):
+ * - the four lanes: `layers` (the overlays the lane draws, by start; those counted in a "+N" aren't drawn), `main`,
+ *   then `sounds` and `music` (the sound layers of each, by start);
+ * - every track shown (`expanded`, the view now unless given): the overlay and zoom tracks top first, `main`, then the
+ *   audio tracks (each lane is its track's id).
  */
-export function laneOrder(project: Project, _expanded = false): Lane[] {
+export function laneOrder(project: Project, expanded = useUi.getState().timelineExpanded): Lane[] {
   const { timeline } = project;
-  let lanes = cachedLanes.get(timeline);
+  const cache = expanded ? expandedLanes : compactLanes;
+  let lanes = cache.get(timeline);
   if (lanes) return lanes;
   const { main, tracks } = timeline;
-  const byStart = (a: Item, b: Item) => a.startUs - b.startUs;
-  const packing = packRows(tracks);
-  const drawn = tracks.flatMap((t) => (t.kind === 'audio' ? [] : t.items.filter((i) => packing.row.has(i.id))));
-  // Equal starts go top row first, as they draw.
-  drawn.sort((a, b) => byStart(a, b) || packing.row.get(a.id)! - packing.row.get(b.id)!);
-  const audio = audioLines(tracks);
-  lanes = [lane('layers', drawn), mainLane(main), lane('sounds', audio.sounds.items), lane('music', audio.music.items)];
-  cachedLanes.set(timeline, lanes);
+  if (expanded) {
+    const visual = tracks.filter((t) => t.kind !== 'audio').reverse();
+    const audio = tracks.filter((t) => t.kind === 'audio');
+    lanes = [...visual.map((t) => lane(t.id, t.items)), mainLane(main), ...audio.map((t) => lane(t.id, t.items))];
+  } else {
+    const byStart = (a: Item, b: Item) => a.startUs - b.startUs;
+    const packing = packRows(tracks);
+    const drawn = tracks.flatMap((t) => (t.kind === 'audio' ? [] : t.items.filter((i) => packing.row.has(i.id))));
+    // Equal starts go top row first, as they draw.
+    drawn.sort((a, b) => byStart(a, b) || packing.row.get(a.id)! - packing.row.get(b.id)!);
+    const audio = audioLines(tracks);
+    lanes = [
+      lane('layers', drawn),
+      mainLane(main),
+      lane('sounds', audio.sounds.items),
+      lane('music', audio.music.items),
+    ];
+  }
+  cache.set(timeline, lanes);
   return lanes;
 }
 

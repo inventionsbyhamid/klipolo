@@ -580,6 +580,54 @@ export const TABLE = {
     message: 'Unsolo track',
     comment: 'Button and undo history entry: every track plays again',
   }),
+  // A lane's header and options act on every track the lane draws: `{lane}` is the lane's name, a nested code.
+  'timeline.lane.overlays': msg({
+    id: 'timeline.lane.overlays',
+    message: 'Overlays',
+    comment: 'The lane of titles, pictures and video layers',
+  }),
+  'timeline.lane.sounds': msg({ id: 'timeline.lane.sounds', message: 'Sound effects' }),
+  'timeline.lane.music': msg({ id: 'timeline.lane.music', message: 'Music' }),
+  'timeline.lane.hide': msg({
+    id: 'timeline.lane.hide',
+    message: 'Hide {lane}',
+    comment: "Button, menu item and undo history entry; {lane} is a timeline lane's name, e.g. Overlays",
+  }),
+  'timeline.lane.show': msg({
+    id: 'timeline.lane.show',
+    message: 'Show {lane}',
+    comment: "Button, menu item and undo history entry; {lane} is a timeline lane's name, e.g. Overlays",
+  }),
+  'timeline.lane.mute': msg({
+    id: 'timeline.lane.mute',
+    message: 'Mute {lane}',
+    comment: "Button, menu item and undo history entry; {lane} is a timeline lane's name, e.g. Music",
+  }),
+  'timeline.lane.unmute': msg({
+    id: 'timeline.lane.unmute',
+    message: 'Unmute {lane}',
+    comment: "Button, menu item and undo history entry; {lane} is a timeline lane's name, e.g. Music",
+  }),
+  'timeline.lane.solo': msg({
+    id: 'timeline.lane.solo',
+    message: 'Solo {lane}',
+    comment: "Menu item and undo history entry: only soloed lanes play and show; {lane} is a timeline lane's name",
+  }),
+  'timeline.lane.unsolo': msg({
+    id: 'timeline.lane.unsolo',
+    message: 'Unsolo {lane}',
+    comment: "Menu item and undo history entry: every lane plays again; {lane} is a timeline lane's name",
+  }),
+  'timeline.lane.lock': msg({
+    id: 'timeline.lane.lock',
+    message: 'Lock {lane}',
+    comment: "Menu item and undo history entry; {lane} is a timeline lane's name, e.g. Music",
+  }),
+  'timeline.lane.unlock': msg({
+    id: 'timeline.lane.unlock',
+    message: 'Unlock {lane}',
+    comment: "Menu item and undo history entry; {lane} is a timeline lane's name, e.g. Music",
+  }),
   'timeline.track.soloOff': msg({
     id: 'timeline.track.soloOff',
     message: 'Turn off solo',
