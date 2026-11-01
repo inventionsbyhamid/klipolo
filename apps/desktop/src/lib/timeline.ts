@@ -296,9 +296,9 @@ export function clipLabel(project: Sources, clip: Clip): string {
 }
 
 /**
- * A file's name on the timeline and in its card: a recording's files by their source and their recording ("Screen of
- * Recording 1", "Camera of Recording 1"), as each plays that source alone (only the recording's own clip is "Recording
- * 1", and the Library lists the take as one row of that name); any other file by its own name.
+ * A file's name on the timeline, in its card and in the Library: a recording's files by their source and their
+ * recording ("Screen of Recording 1", "Camera of Recording 1"), as each plays that source alone (only the recording's
+ * own clip is "Recording 1", and the Library lists the take as one row of that name); any other file by its own name.
  */
 export function assetName(project: Sources, asset: Asset): string {
   for (const recording of project.recordings) {

@@ -9,7 +9,7 @@ import { codedMessage } from '../../bridge/call';
 import { library } from '../../bridge/library';
 import { IMAGE_US } from '../../lib/placement';
 import { firstAsset, primarySource } from '../../lib/recording';
-import { assetById } from '../../lib/timeline';
+import { assetById, assetName } from '../../lib/timeline';
 import { useProject } from '../../state/project';
 import { fileKey } from './marks';
 import { recordingFiles, recordingRows, type RecordingRow } from './recordings';
@@ -31,6 +31,11 @@ export interface Uses {
   music: Set<string>;
   sounds: Set<string>;
   recordings: Set<string>;
+  /**
+   * The files played on their own: a main clip or a layer of the file itself, not a recording's source separated onto
+   * a track (a layer tied to its recording).
+   */
+  alone: Set<string>;
 }
 
 const usesOf = new WeakMap<Project['timeline'], Uses>();
@@ -39,21 +44,30 @@ const usesOf = new WeakMap<Project['timeline'], Uses>();
 export function uses(project: Project): Uses {
   let found = usesOf.get(project.timeline);
   if (found) return found;
-  found = { any: new Set(), music: new Set(), sounds: new Set(), recordings: new Set() };
-  for (const clip of project.timeline.main)
-    (clip.source.type === 'asset' ? found.any : found.recordings).add(clip.source.id);
+  found = { any: new Set(), music: new Set(), sounds: new Set(), recordings: new Set(), alone: new Set() };
+  for (const clip of project.timeline.main) {
+    if (clip.source.type === 'recording') found.recordings.add(clip.source.id);
+    else {
+      found.any.add(clip.source.id);
+      found.alone.add(clip.source.id);
+    }
+  }
   for (const track of project.timeline.tracks)
     for (const item of track.items) {
       const c = item.content;
       if (!('assetId' in c)) continue;
       found.any.add(c.assetId);
+      if (!('tie' in c && c.tie)) found.alone.add(c.assetId);
       if (c.type === 'audio') (typeof c.duck === 'number' ? found.music : found.sounds).add(c.assetId);
     }
   usesOf.set(project.timeline, found);
   return found;
 }
 
-/** One item on the Clips tab: a video file, or a whole recording (whose files are never listed on their own). */
+/**
+ * One item on the Clips tab: a video file, or a whole recording (whose files are listed on their own only while the
+ * video plays one alone).
+ */
 export interface ShelfClip {
   /** What it is: the file, or the recording. */
   source: ClipSource;
@@ -98,14 +112,18 @@ function recordingClip(row: RecordingRow, recording: Recording, footage: Asset |
 
 /**
  * The person's own files on each tab: videos and recordings on Clips, a recording as one item for the
- * whole take (`recordingFiles` are listed nowhere on their own); a sound on Music when it plays as music or is long
- * enough to be a song, on Sounds when it plays as an effect or is short (both, if it plays as both); pictures on
- * Images. The pack's own files are listed with the pack, not here.
+ * whole take; a sound on Music when it plays as music or is long enough to be a song, on Sounds when it plays as an
+ * effect or is short (both, if it plays as both); pictures on Images. A recording's files (`recordingFiles`) are
+ * listed only while the video plays one on its own (a clip or a layer of that file, not its source separated onto a
+ * track), named by their source and recording ("Camera of Recording 1"). The pack's own files are listed with the
+ * pack, not here.
  */
 export function shelves(project: Project) {
   const taken = recordingFiles(project);
-  const own = project.assets.filter((a) => !a.id.startsWith('klipolo-pack-') && !taken.has(a.id));
   const used = uses(project);
+  const own = project.assets
+    .filter((a) => !a.id.startsWith('klipolo-pack-') && (!taken.has(a.id) || used.alone.has(a.id)))
+    .map((a) => (taken.has(a.id) ? { ...a, name: assetName(project, a) } : a));
   const audio = own.filter((a) => a.kind === 'audio');
   // Clips in the order the video plays them (first use), then those not on it yet, as imported (a recording where its
   // first file came in).

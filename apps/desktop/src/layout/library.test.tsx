@@ -92,6 +92,42 @@ describe('a recording in the Library', () => {
     expect(within(row('Recording 3')).getByText('1:00, screen')).toBeInTheDocument();
   });
 
+  it('a recording’s file the video uses on its own keeps its row, named by its source, with its menu and mark', () => {
+    const snapshot = useProject.getState().snapshot!;
+    const { main, tracks } = snapshot.project.timeline;
+    // The camera added as a clip of its own, and the mic as a sound of its own: both play that file alone.
+    main.push({ ...main[1], id: 'c', source: { type: 'asset', id: 'camera' }, sourceOutUs: 5_000_000 });
+    const song = tracks[1].items[0];
+    if (song.content.type !== 'audio') throw new Error('the fixture’s song is a sound');
+    tracks[1].items.push({ ...song, id: 'alone', startUs: 40_000_000, content: { ...song.content, assetId: 'mic' } });
+    renderWithProviders(<Library />);
+    const clips = screen.getByRole('list', { name: 'Your clips' });
+    expect(listed(clips)).toEqual(['Recording 1', 'broll.mp4', 'Camera of Recording 1']);
+    const camera = within(clips).getByText('Camera of Recording 1').closest('li')!;
+    expect(within(camera).getByText('On the timeline')).toBeInTheDocument();
+    expect(within(camera).getByRole('button', { name: 'More for Camera of Recording 1' })).toBeInTheDocument();
+    expect(within(camera).getByRole('button', { name: 'Add Camera of Recording 1 to the end' })).toBeInTheDocument();
+    // The screen plays only in the recording's own clip: still hidden.
+    expect(within(clips).queryByText('Screen of Recording 1')).toBeNull();
+    act(() => useUi.setState({ libraryTab: 'sounds' }));
+    const mic = within(screen.getByRole('tabpanel')).getByText('Mic of Recording 1').closest('li')!;
+    expect(within(mic).getByText('On the timeline')).toBeInTheDocument();
+  });
+
+  it('a recording’s sound separated onto its own track (tied to its recording) stays hidden', () => {
+    const snapshot = useProject.getState().snapshot!;
+    const song = snapshot.project.timeline.tracks[1].items[0];
+    if (song.content.type !== 'audio') throw new Error('the fixture’s song is a sound');
+    snapshot.project.timeline.tracks[1].items.push({
+      ...song,
+      id: 'separated',
+      content: { ...song.content, assetId: 'mic', tie: { recording: 'rec', source: 'mic' } },
+    });
+    useUi.setState({ libraryTab: 'sounds' });
+    renderWithProviders(<Library />);
+    expect(within(screen.getByRole('tabpanel')).queryByText(/Mic/)).toBeNull();
+  });
+
   it('a search finds a recording by its name and by its sources', async () => {
     renderWithProviders(<Library />);
     const search = screen.getByRole('searchbox', { name: 'Search clips' });
