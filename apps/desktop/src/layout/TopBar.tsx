@@ -3,13 +3,14 @@ import { useEffect, useRef, useState } from 'react';
 import icon from '../styles/klipolo-icon.svg';
 import { openSettings } from '../ai/aiStatus';
 import { projects } from '../bridge/projects';
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../design/Menu';
+import { Menu, MenuContent, MenuGroup, MenuItem, MenuSeparator, MenuTrigger } from '../design/Menu';
 import { ExportButton } from '../features/export/ExportButton';
 import { MediaJobsPill } from '../features/media-jobs/MediaJobsPill';
 import { errorMessage } from '../lib/errors';
 import { historyAction } from '../lib/history';
 import { AiChip } from '../settings/AiChip';
 import { newProject, useProject } from '../state/project';
+import { openRecent, readRecentIfStale, useOpenRecent } from '../state/recentProjects';
 import { saveStateOf, useSaving } from '../state/saving';
 import { toast } from '../state/toasts';
 import { Icon } from './Icon';
@@ -65,13 +66,15 @@ function RenameField({ name, onDone }: { name: string; onDone: (refocus: boolean
 
 /**
  * The project menu, opened from the project's name: New project, All projects (closes the project once
- * its edits are saved, back to the start screen), Rename (the name turns into a field) and Show in Finder (its file,
- * selected). One at a time: while a new project is made or the project closes, its items are off.
+ * its edits are saved, back to the start screen), Open recent (up to five other projects, last opened first: one opens
+ * as its start screen card does), Rename (the name turns into a field) and Show in Finder (its file, selected). One at
+ * a time: while a new project is made, another opens or the project closes, its items are off.
  */
 function ProjectMenu({ name }: { name: string }) {
   const { t } = useLingui();
   const switching = useProject((s) => s.switching);
   const readOnly = useProject((s) => s.snapshot?.readOnly != null);
+  const recent = useOpenRecent();
   const [renaming, setRenaming] = useState(false);
   const nameButton = useRef<HTMLButtonElement>(null);
   /** The rename ended from the keyboard: the focus goes back to the name once it shows again. */
@@ -97,8 +100,9 @@ function ProjectMenu({ name }: { name: string }) {
       />
     );
   return (
-    <Menu>
-      <MenuTrigger asChild>
+    // The list is read as the menu is about to open (the pointer or the focus on the name) and as it opens.
+    <Menu onOpenChange={(open) => open && readRecentIfStale()}>
+      <MenuTrigger asChild onPointerEnter={readRecentIfStale} onFocus={readRecentIfStale}>
         <button ref={nameButton} type="button" className="project" title={name}>
           <span className="project-name">{name}</span>
           <Icon name="chev-down" />
@@ -115,6 +119,26 @@ function ProjectMenu({ name }: { name: string }) {
             comment: 'Project menu item: closes the project and goes back to the start screen',
           })}
         </MenuItem>
+        {recent.length > 0 && (
+          <>
+            <MenuSeparator />
+            <MenuGroup
+              label={t({
+                id: 'project.menu.recent',
+                message: 'Open recent',
+                comment: 'Project menu: the heading over the projects opened lately, each named by its name',
+              })}
+            >
+              {recent.map((row) => (
+                <MenuItem key={row.path} onSelect={once(() => void openRecent(row.path))} disabled={switching}>
+                  <span className="menu-item-text" title={row.name}>
+                    {row.name}
+                  </span>
+                </MenuItem>
+              ))}
+            </MenuGroup>
+          </>
+        )}
         <MenuSeparator />
         <MenuItem onSelect={once(() => setRenaming(true))} disabled={switching || readOnly}>
           {t({ id: 'project.menu.rename', message: 'Rename', comment: 'Project menu item: the name becomes a field' })}

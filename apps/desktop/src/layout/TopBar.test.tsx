@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import type { ProjectRow } from '../bindings/ProjectRow';
 import type { Snapshot } from '../bindings/Snapshot';
 import { fixturePatch, fixtureSnapshot } from '../test/fixtures';
 
@@ -11,6 +12,7 @@ vi.mock('../bridge/commands', () => ({
     redo: vi.fn(),
     snapshot: vi.fn(),
     createProject: vi.fn(),
+    openProject: vi.fn(),
     closeProject: vi.fn(),
   },
 }));
@@ -18,6 +20,7 @@ vi.mock('../bridge/projects', () => ({ projects: { recent: vi.fn(), reveal: vi.f
 const { bridge } = await import('../bridge/commands');
 const { projects } = await import('../bridge/projects');
 const { useProject } = await import('../state/project');
+const { useRecentProjects } = await import('../state/recentProjects');
 const { useSaving } = await import('../state/saving');
 const { useToasts } = await import('../state/toasts');
 const { TopBar } = await import('./TopBar');
@@ -27,6 +30,25 @@ const { useExport } = await import('../state/export');
 function emptySnapshot(): Snapshot {
   const snapshot = fixtureSnapshot();
   return { ...snapshot, project: { ...snapshot.project, timeline: { main: [], tracks: [] } } };
+}
+
+const LIBRARY = '/Users/me/Movies/Klipolo';
+
+/** A project in the library as the start screen's list has it; `open`: the one open now. */
+const recentRow = (name: string, open = false): ProjectRow => ({
+  path: `${LIBRARY}/${name}.klipolo`,
+  name,
+  openedMs: 0,
+  durationUs: 0,
+  clips: 1,
+  thumb: null,
+  open,
+});
+
+/** The fixture, as Rust opens the project `name`. */
+function openedAs(name: string, opening: number): Snapshot {
+  const snapshot = fixtureSnapshot();
+  return { ...snapshot, project: { ...snapshot.project, id: `id ${name}`, name }, opening };
 }
 
 /** The project menu, opened from the project's name. */
@@ -40,8 +62,11 @@ beforeEach(() => {
   useSaving.setState({ failing: null, saved: null });
   useToasts.setState({ toasts: [] });
   vi.mocked(bridge.createProject).mockReset();
+  vi.mocked(bridge.openProject).mockReset();
   vi.mocked(bridge.closeProject).mockReset();
   vi.mocked(projects.reveal).mockReset();
+  vi.mocked(projects.recent).mockReset().mockResolvedValue([]);
+  useRecentProjects.setState({ rows: [], readFor: null, readAt: 0 });
 });
 
 describe('TopBar', () => {
@@ -250,5 +275,154 @@ describe('TopBar', () => {
         "This project's file isn't there any more.",
       ]),
     );
+  });
+
+  it('open_recent_lists_the_recent_projects_without_the_open_one', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    vi.mocked(projects.recent).mockResolvedValue([
+      recentRow('Kiln vlog'),
+      recentRow('Billing tutorial', true),
+      recentRow('Studio tour'),
+      recentRow('Banner'),
+      recentRow('Untitled project'),
+      recentRow('Untitled project 2'),
+      recentRow('Older'),
+    ]);
+    render(<TopBar />);
+    const menu = await openMenu('Billing tutorial');
+    // The five last opened, in the start screen's order, between All projects and Rename; the open one left out.
+    await waitFor(() =>
+      expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+        'New project',
+        'All projects',
+        'Kiln vlog',
+        'Studio tour',
+        'Banner',
+        'Untitled project',
+        'Untitled project 2',
+        'Rename',
+        'Show in Finder',
+      ]),
+    );
+    const group = within(menu).getByRole('group', { name: 'Open recent' });
+    expect(within(group).getAllByRole('menuitem')).toHaveLength(5);
+    // Each is named by its project's name, whole in its tooltip when it is cut.
+    const kiln = within(group).getByRole('menuitem', { name: 'Kiln vlog' });
+    expect(kiln.querySelector('.menu-item-text')).toHaveAttribute('title', 'Kiln vlog');
+    expect(menu.textContent).not.toMatch(/[–—]/);
+  });
+
+  it('open_recent_is_hidden_without_another_project', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    vi.mocked(projects.recent).mockResolvedValue([recentRow('Billing tutorial', true)]);
+    render(<TopBar />);
+    const menu = await openMenu('Billing tutorial');
+    await waitFor(() => expect(useRecentProjects.getState().readFor).not.toBeNull());
+    expect(within(menu).queryByRole('group')).toBeNull();
+    expect(within(menu).queryByText('Open recent')).toBeNull();
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(4);
+    expect(menu.querySelectorAll('.menu-sep')).toHaveLength(1);
+    await userEvent.keyboard('{Escape}');
+
+    // A list that can't be read leaves it out too, quietly.
+    useRecentProjects.setState({ rows: [], readFor: null, readAt: 0 });
+    vi.mocked(projects.recent).mockRejectedValue(new Error("Klipolo couldn't read your projects folder."));
+    const again = await openMenu('Billing tutorial');
+    await waitFor(() => expect(vi.mocked(projects.recent).mock.calls.length).toBeGreaterThan(1));
+    await act(() => Promise.resolve());
+    expect(within(again).getAllByRole('menuitem')).toHaveLength(4);
+    expect(useToasts.getState().toasts).toEqual([]);
+  });
+
+  it('picking_a_recent_project_opens_it', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    vi.mocked(projects.recent).mockResolvedValue([recentRow('Billing tutorial', true), recentRow('Kiln vlog')]);
+    vi.mocked(bridge.openProject).mockResolvedValue(openedAs('Kiln vlog', 2));
+    render(<TopBar />);
+    const menu = await openMenu('Billing tutorial');
+    await userEvent.click(await within(menu).findByRole('menuitem', { name: 'Kiln vlog' }));
+    expect(bridge.openProject).toHaveBeenCalledWith(`${LIBRARY}/Kiln vlog.klipolo`);
+    await waitFor(() => expect(useProject.getState().snapshot?.project.name).toBe('Kiln vlog'));
+    expect(screen.getByRole('button', { name: 'Kiln vlog' })).toBeInTheDocument();
+
+    // The list read for the project before isn't this one's: it is read again, and leaves this one out.
+    vi.mocked(projects.recent).mockResolvedValue([recentRow('Kiln vlog', true), recentRow('Billing tutorial')]);
+    const next = await openMenu('Kiln vlog');
+    expect(await within(next).findByRole('menuitem', { name: 'Billing tutorial' })).toBeInTheDocument();
+    expect(within(next).queryByRole('menuitem', { name: 'Kiln vlog' })).toBeNull();
+  });
+
+  it('a_recent_project_that_went_says_why_and_leaves_the_list', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    vi.mocked(projects.recent).mockResolvedValue([
+      recentRow('Billing tutorial', true),
+      recentRow('Kiln vlog'),
+      recentRow('Banner'),
+    ]);
+    // The file went (moved or deleted) after the list was read.
+    vi.mocked(bridge.openProject).mockImplementation(async () => {
+      vi.mocked(projects.recent).mockResolvedValue([recentRow('Billing tutorial', true), recentRow('Banner')]);
+      throw new Error("That project isn't there any more.");
+    });
+    render(<TopBar />);
+    const menu = await openMenu('Billing tutorial');
+    await userEvent.click(await within(menu).findByRole('menuitem', { name: 'Kiln vlog' }));
+    // It says why, as a start screen card does; the project open stays open.
+    await waitFor(() =>
+      expect(useToasts.getState().toasts.map((toast) => toast.text)).toEqual([
+        "That project isn't there any more.",
+      ]),
+    );
+    expect(useProject.getState().snapshot?.project.name).toBe('Billing tutorial');
+    // The list is read again: the one that went is gone from it.
+    await waitFor(() => expect(useRecentProjects.getState().rows.map((row) => row.name)).toEqual(['Banner']));
+    const again = await openMenu('Billing tutorial');
+    expect(within(again).getByRole('menuitem', { name: 'Banner' })).toBeInTheDocument();
+    expect(within(again).queryByRole('menuitem', { name: 'Kiln vlog' })).toBeNull();
+  });
+
+  it('the_arrow_keys_and_return_work_through_open_recent', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    vi.mocked(projects.recent).mockResolvedValue([
+      recentRow('Billing tutorial', true),
+      recentRow('Kiln vlog'),
+      recentRow('Banner'),
+    ]);
+    vi.mocked(bridge.openProject).mockResolvedValue(openedAs('Banner', 2));
+    render(<TopBar />);
+    // The focus reaching the name reads the list, so it is there as the menu opens.
+    act(() => screen.getByRole('button', { name: 'Billing tutorial' }).focus());
+    await waitFor(() => expect(useRecentProjects.getState().rows).toHaveLength(2));
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'New project' })).toHaveFocus());
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'Kiln vlog' })).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'Banner' })).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'Rename' })).toHaveFocus();
+    await userEvent.keyboard('{ArrowUp}');
+    expect(screen.getByRole('menuitem', { name: 'Banner' })).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    expect(bridge.openProject).toHaveBeenCalledWith(`${LIBRARY}/Banner.klipolo`);
+    await waitFor(() => expect(useProject.getState().snapshot?.project.name).toBe('Banner'));
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('open_recent_waits_while_another_switch_is_under_way', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    vi.mocked(projects.recent).mockResolvedValue([recentRow('Billing tutorial', true), recentRow('Kiln vlog')]);
+    let land!: (snapshot: Snapshot) => void;
+    vi.mocked(bridge.createProject).mockImplementation(() => new Promise((resolve) => (land = resolve)));
+    render(<TopBar />);
+    await userEvent.click(within(await openMenu('Billing tutorial')).getByRole('menuitem', { name: 'New project' }));
+    const menu = await openMenu('Billing tutorial');
+    const kiln = await within(menu).findByRole('menuitem', { name: 'Kiln vlog' });
+    expect(kiln).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(kiln);
+    expect(bridge.openProject).not.toHaveBeenCalled();
+    await userEvent.keyboard('{Escape}');
+    land(openedAs('Untitled project', 2));
+    await waitFor(() => expect(useProject.getState().snapshot?.project.name).toBe('Untitled project'));
   });
 });
