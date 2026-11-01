@@ -18,6 +18,7 @@ import { gutterPx } from '../layout';
 import { attachedTo, sameOps } from '../model/moveOps';
 import { pxToUs } from '../scale';
 import { startAutoscroll } from './autoscroll';
+import { pickBlock } from './blockPress';
 import { frameClip, frameItem } from './moveFrame';
 import { blockElement, clearShifts, shiftBlock } from './registry';
 import {
@@ -33,6 +34,7 @@ import {
   type PointerLike,
   type Session,
 } from './session';
+import { frameEdit, frameGroup } from './editFrame';
 import { frameTrim } from './trimFrame';
 
 export { DRAG_SLOP_PX, SNAP_PX, useDragged } from './session';
@@ -143,8 +145,11 @@ function lift(s: Session): boolean {
   }
   s.started = true;
   const id = draggedId(g);
-  const attached = g.kind === 'clip' ? (attachedTo(project.timeline.tracks).get(id) ?? NONE) : NONE;
-  setLifted([id, ...attached], g.kind === 'item' ? g.trackKind : null);
+  const attached =
+    g.kind === 'clip' || (g.kind === 'edit' && g.edit === 'slide')
+      ? (attachedTo(project.timeline.tracks).get(id) ?? NONE)
+      : NONE;
+  setLifted(g.kind === 'group' ? g.ids : [id, ...attached], g.kind === 'item' ? g.trackKind : null);
   return true;
 }
 
@@ -217,7 +222,11 @@ function draw(s: Session): boolean {
       ? frameClip(s, g, project, dxPx, dtUs, now)
       : g.kind === 'item'
         ? frameItem(s, g, project, dtUs, now)
-        : frameTrim(s, g, project, dtUs, now));
+        : g.kind === 'edit'
+          ? frameEdit(s, g, project, dtUs)
+          : g.kind === 'group'
+            ? frameGroup(s, g, project, dtUs, now)
+            : frameTrim(s, g, project, dtUs, now));
   if (!ok) return false;
   for (const id of s.shifted) if (!now.has(id)) shiftBlock(id, 0);
   s.shifted = now;
@@ -232,7 +241,12 @@ export function endDrag(e: PointerLike) {
   const s = session;
   if (!s || e.pointerId !== s.pointerId) return;
   s.last = { x: e.clientX, y: e.clientY, meta: Boolean(e.metaKey) };
-  if (!s.started && !pastSlop(s)) return finish(); // a click: the press already selected
+  if (!s.started && !pastSlop(s)) {
+    finish();
+    // A click on a block of the selected group (no drag) selects that block alone; the press already selected others.
+    if (s.gesture.kind === 'group') pickBlock(s.gesture.grabId);
+    return;
+  }
   detach(s);
   s.scrollAt = s.view.scroller.scrollLeft;
   if (!held()) return commit(s);
@@ -258,7 +272,7 @@ function commit(s: Session): void {
     if (s.sent) clearPreview();
     return next();
   }
-  const { ops, said } = s;
+  const { ops, said, labelParams } = s;
   const label = s.label!;
   dropPendingPreview();
   const end = beginCommit();
@@ -281,7 +295,7 @@ function commit(s: Session): void {
   // eslint-disable-next-line no-restricted-syntax -- a drop sent at its turn (`held`, `next`), holding the commit queue
   void useProject
     .getState()
-    .apply(label, ops, undefined, s.built)
+    .apply(label, ops, labelParams, s.built)
     .then(done, () => done(false))
     .catch((error: unknown) => console.error(error));
 }

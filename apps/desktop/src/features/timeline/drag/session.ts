@@ -15,7 +15,8 @@ import { gutterPx } from '../layout';
 import { mainIndex } from '../model/index';
 import { pxToUs } from '../scale';
 import { blockElement, clearShifts } from './registry';
-import type { LabelId } from '../../../lib/labels';
+import type { LabelId, LabelParams } from '../../../lib/labels';
+import type { EditKind, EditRoom } from '../model/editRoom';
 
 /** A press that travels less than this (CSS px) is a click, not a drag. */
 export const DRAG_SLOP_PX = 3;
@@ -26,7 +27,11 @@ export type Gesture =
   | { kind: 'clip'; clipId: string; label: string; grabUs: number }
   | { kind: 'item'; itemId: string; label: string; trackId: string; trackKind: TrackKind }
   | { kind: 'trim'; target: 'clip'; clipId: string; edge: Edge; label: string }
-  | { kind: 'trim'; target: 'item'; itemId: string; trackId: string; edge: Edge; label: string };
+  | { kind: 'trim'; target: 'item'; itemId: string; trackId: string; edge: Edge; label: string }
+  /** A roll of the cut after clip `clipId`, or a slip or slide of that clip (`drag/editFrame`). */
+  | { kind: 'edit'; edit: EditKind; clipId: string; label: string }
+  /** The selected group's layers, moved together by a press on `grabId`, one of them. */
+  | { kind: 'group'; grabId: string; ids: readonly string[]; label: string };
 
 export type RowHit = { trackId: string; dy: number } | { newTrack: { index: number }; dy: number };
 
@@ -66,8 +71,11 @@ export interface Session {
   targets: Float64Array | null;
   shifted: Set<string>;
   ops: Op[];
-  /** The undo label of `ops` (null until a frame has made some). */
+  /** The undo label of `ops` (null until a frame has made some), and its values ("Move 3 items"). */
   label: LabelId | null;
+  labelParams?: LabelParams;
+  /** A roll's, slip's or slide's room, worked out once per main track (`editRoom`; null: it can't act there). */
+  room?: EditRoom | null;
   /**
    * The dry run when it isn't `ops` alone (null: `ops`): a clip's trim beside a transition leaves out the transition at
    * that edge, so the preview shows the clip's own frame there, never the blend. Its commit keeps the transition.
@@ -199,7 +207,8 @@ export function setLifted(ids: readonly string[], itemKind: TrackKind | null) {
   useDragState.setState({ itemKind });
 }
 
-export const draggedId = (g: Gesture) => ('clipId' in g ? g.clipId : g.itemId);
+export const draggedId = (g: Gesture) =>
+  g.kind === 'group' ? g.grabId : 'clipId' in g ? g.clipId : g.itemId;
 
 /** Puts down what `s` lifted; its shifts stay while they are being committed (until the new revision draws them). */
 export function lower(s: Session, keepShifts: boolean) {

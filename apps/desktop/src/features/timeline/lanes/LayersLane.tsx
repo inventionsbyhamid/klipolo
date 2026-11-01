@@ -37,6 +37,7 @@ interface LayersLaneProps {
   fromUs: number;
   toUs: number;
   selectedId: string | null;
+  selection: ReadonlySet<string>;
   tabStopId: string | null;
   keep: ReadonlySet<string>;
   onPick: (id: string) => void;

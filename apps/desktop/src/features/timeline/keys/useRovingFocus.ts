@@ -29,12 +29,15 @@ import {
   type LaneKey,
 } from './laneOrder';
 import { blockOf, inProject, neighbour, pageFocused } from './focusHelpers';
+import { selectEveryBlock } from './groupActions';
 import { isMarker, markerFocusedIn, markerFor } from './markers';
 import { reveal, revealRow } from './reveal';
 import { focusStep, moveFocusTo } from './timelineActions';
 import { enterCut } from './transitionActions';
 
 const MOVES = new Set<string>(Object.values(LANE_KEYS));
+/** A Mac, where ⌘ selects everything; Windows and Linux use Ctrl (as the editor's shortcuts read it). */
+const MAC = typeof navigator === 'undefined' || !/^(Win|Linux)/.test(navigator.platform);
 
 /**
  * Roving focus over the timeline's blocks: one block is in the Tab order (`tabStopId`: the one last focused or
@@ -175,6 +178,12 @@ export function useRovingFocus(
     const el = blockOf(e.target);
     const id = el?.dataset.blockId;
     const now = useProject.getState().snapshot?.project;
+    // ⌘A (Ctrl A off a Mac) while the timeline has focus: every clip and layer.
+    const all = (MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey) && !e.altKey && !e.shiftKey;
+    if (now && all && e.key.toLowerCase() === 'a') {
+      e.preventDefault();
+      return selectEveryBlock();
+    }
     if (!now || e.metaKey || e.ctrlKey || e.altKey) return;
     const held = hidden.current;
     if (held && isMarker(e.target) && MOVES.has(e.key) && !e.shiftKey) {

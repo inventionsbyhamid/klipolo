@@ -11,12 +11,12 @@ import { useProject } from '../../state/project';
 import { useExport } from '../../state/export';
 import { useRange } from '../../state/range';
 import { openRecent, useOpenRecent } from '../../state/recentProjects';
-import { transitionClipId, useSelection } from '../../state/selection';
+import { groupOf, transitionClipId, useSelection } from '../../state/selection';
 import { useUi } from '../../state/ui';
 import { switchFormat } from '../editor/formats';
 import { useEffectCommands } from '../inspector/useEffectCommands';
 import { importFiles } from '../media/useImportMedia';
-import { deleteBlock, deleteRange, removeTransition, useTimelineCommands } from '../timeline/commands';
+import { deleteBlock, deleteGroup, deleteRange, removeTransition, useTimelineCommands } from '../timeline/commands';
 import { useSourceCommands } from '../timeline/useSourceCommands';
 import { searchWords, type Command } from './command';
 import { usePanelCommands } from './usePanelCommands';
@@ -39,6 +39,7 @@ export function useCommands(): Command[] {
   const { t } = useLingui();
   const snapshot = useProject((s) => s.snapshot);
   const selectedId = useSelection((s) => s.selectedId);
+  const selectedIds = useSelection((s) => s.selectedIds);
   const range = useRange((s) => s.range);
   /** The message whose proposal chat has open, if any (Command Enter applies it). */
   const proposalOpen = useChat((s) => openProposal(s.messages)?.message.id ?? null);
@@ -77,13 +78,19 @@ export function useCommands(): Command[] {
     // Delete with a transition selected removes it (Remove transition, one undo step).
     const transitionOf = transitionClipId(selectedId);
     const selectedTransition = transitionOf !== null && !!findClip(project, transitionOf)?.transitionOut;
+    // Several clips and layers selected: Delete takes them all out in one step.
+    const group = groupOf({ selectedId, selectedIds });
     // A layer on a locked track can't be deleted: the action is unavailable rather than failing with a toast.
     const deletable =
-      range !== null || Boolean((selectedItem && !selectedItem.track.locked) || selectedClip || selectedTransition);
+      range !== null ||
+      group !== null ||
+      Boolean((selectedItem && !selectedItem.track.locked) || selectedClip || selectedTransition);
     // A project of layers alone is a video too.
     const hasVideo = videoDurationUs(project.timeline) > 0;
     const deleteLabel = range
       ? 'undo.delete.range'
+      : group
+        ? { id: 'timeline.group.delete' as const, params: { count: group.length } }
       : selectedTransition
         ? 'transition.remove'
         : selectedClip
@@ -148,7 +155,9 @@ export function useCommands(): Command[] {
       id: 'delete',
       action: range
         ? 'deleteRanges'
-        : selectedTransition
+        : group
+          ? 'deleteRanges'
+          : selectedTransition
           ? 'setTransition'
           : selectedClip
             ? 'removeClip'
@@ -162,8 +171,9 @@ export function useCommands(): Command[] {
       run: () => {
         const now = useRange.getState().range;
         if (now) deleteRange(now);
+        else if (group) deleteGroup();
         else if (transitionOf !== null) removeTransition(transitionOf);
-        else if (selectedId) deleteBlock(selectedId, deleteLabel);
+        else if (selectedId && typeof deleteLabel === 'string') deleteBlock(selectedId, deleteLabel);
       },
     };
     const view: Command[] = FORMAT_KEYS.map((format, i) => ({
@@ -191,7 +201,7 @@ export function useCommands(): Command[] {
       },
     ];
     return { head, remove, view, projectCommands };
-  }, [t, snapshot, selectedId, range, proposalOpen]);
+  }, [t, snapshot, selectedId, selectedIds, range, proposalOpen]);
 
   return useMemo(
     () =>

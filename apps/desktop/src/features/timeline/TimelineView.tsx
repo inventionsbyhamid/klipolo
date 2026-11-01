@@ -7,13 +7,14 @@ import { usePlayback } from '../../state/playback';
 import { useProject } from '../../state/project';
 import { keyBurst } from '../../state/keyBurst';
 import { useRange } from '../../state/range';
-import { useSelection } from '../../state/selection';
+import { selectionOf, useSelection } from '../../state/selection';
 import { useUi } from '../../state/ui';
 import { BlockMenu } from './blocks/BlockMenu';
 import { blockPressHandlers } from './drag/blockPress';
 import { cancelDrag, useDragged } from './drag/controller';
 import { DropIndicator } from './DropIndicator';
 import { registerDropTarget, timelineLaneAt, timelineTargetAt } from './dropTarget';
+import { forgetGoneBlocks } from './keys/groupActions';
 import { forgetGoneTransition } from './keys/transitionActions';
 import { useRovingFocus } from './keys/useRovingFocus';
 import { cancelRangeDrag, RangeSelection, rangeDragJustEnded, startRangeDrag } from './lanes/RangeSelection';
@@ -84,6 +85,12 @@ export function TimelineView() {
   const gutter = useGutterPx();
   const seek = usePlayback((s) => s.seek);
   const selectedId = useSelection((s) => s.selectedId);
+  const selectedIds = useSelection((s) => s.selectedIds);
+  // Every selected block, a group's or the one: each draws selected, and stays mounted.
+  const selection = useMemo(
+    () => new Set(selectionOf({ selectedId, selectedIds })),
+    [selectedId, selectedIds],
+  );
   const select = useSelection((s) => s.select);
   const dragged = useDragged((s) => s.ids);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -92,7 +99,7 @@ export function TimelineView() {
   const tipRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
   // The blocks' pick and press handlers: one set for the timeline's lifetime, so a `memo` block never re-renders.
-  const [{ onPick, onPress, onTrimPress }] = useState(() =>
+  const [{ onPick, onPress, onTrimPress, onRollPress }] = useState(() =>
     blockPressHandlers(scrollRef, [guideRef, rulerGuideRef], tipRef),
   );
   // A zoom's render puts its anchor back under its x as soon as the new width is laid out. Declared before
@@ -110,8 +117,8 @@ export function TimelineView() {
   // Selected, focused (the tab stop) and dragged blocks stay mounted and never band: a drag keeps its element through
   // autoscroll, focus never drops to the page, and the keyboard reaches blocks off-window or in a band.
   const keep = useMemo(
-    () => new Set([selectedId, tabStopId, ...dragged].filter((id) => id !== null)),
-    [selectedId, tabStopId, dragged],
+    () => new Set([...selection, tabStopId, ...dragged].filter((id) => id !== null)),
+    [selection, tabStopId, dragged],
   );
 
   useLayoutEffect(() => {
@@ -154,11 +161,13 @@ export function TimelineView() {
       }),
     [],
   );
-  // A selected transition that goes (removed, its add undone) is no longer selected.
+  // A selected transition that goes (removed, its add undone) is no longer selected; a group keeps what is still there.
   useEffect(
     () =>
       useProject.subscribe((s, prev) => {
-        if (s.snapshot?.project !== prev.snapshot?.project) forgetGoneTransition(s.snapshot?.project);
+        if (s.snapshot?.project === prev.snapshot?.project) return;
+        forgetGoneTransition(s.snapshot?.project);
+        forgetGoneBlocks(s.snapshot?.project);
       }),
     [],
   );
@@ -196,11 +205,13 @@ export function TimelineView() {
     fromUs: viewport.fromUs,
     toUs: viewport.toUs,
     selectedId,
+    selection,
     tabStopId,
     keep,
     onPick,
     onPress,
     onTrimPress,
+    onRollPress,
   };
   return (
     <section
@@ -222,7 +233,7 @@ export function TimelineView() {
             // A press on empty lane space starts a time range (blocks and their handles take their own presses).
             onPointerDown={(e) => {
               const lane = (e.target as Element).closest<HTMLElement>('.tl-lane');
-              if (lane && e.target === lane) startRangeDrag(e, lane);
+              if (lane && e.target === lane) startRangeDrag(e, lane, true);
             }}
             className="tl-scroll overflow-auto"
           >

@@ -3,6 +3,8 @@
  * here, not from the timeline's internals.
  */
 export { duplicate } from './keys/clipboardActions';
+export { deleteGroup, duplicateGroup, copyGroup, itemsWord, muteGroup, pasteEffectsGroup, setGroupVolume } from './keys/groupActions';
+export { allEffects, allSound, countOf, groupMuted, groupVolume, groupVolumeOps, membersOf } from './keys/groupOps';
 export { trackStepOps } from './keys/keyOps';
 export { noteMutedTrack, stepTrack } from './keys/layerActions';
 export { deleteBlock, deleteRange, markRange } from './keys/timelineActions';
