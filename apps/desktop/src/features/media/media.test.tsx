@@ -1,6 +1,7 @@
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Asset } from '../../bindings/Asset';
+import type { PackItem } from '../../bindings/PackItem';
 import { fixturePatch, fixtureSnapshot } from '../../test/fixtures';
 import { longProject } from '../../test/longProject';
 
@@ -31,6 +32,7 @@ const { registerDropTarget, timelineTargetAt, timelineLaneAt, dropAutoscroll, dr
 const { library } = await import('../../bridge/library');
 
 beforeEach(() => {
+  useUi.setState({ timelineExpanded: false });
   useProject.setState({ snapshot: fixtureSnapshot(), pending: 0 });
   useSelection.setState({ selectedId: null });
   usePlayback.setState({ playheadUs: 2_000_000 });
@@ -216,6 +218,117 @@ describe('where a drop lands on the timeline', () => {
     // Snapping on, a layer's start holds to a cut within 8 px (0.8 s here).
     useUi.setState({ snapping: true });
     expect(at(20.5, 125)).toMatchObject({ atUs: 20_000_000 });
+  });
+
+  it('while every track shows, media goes onto the track whose row it is over', () => {
+    useUi.setState({ pxPerSecond: 10, snapping: false, timelineExpanded: true });
+    const scroller = row({}, 0, 300);
+    scroller.append(
+      row({ 'data-lane': 't1', 'data-track-id': 't1', 'data-track-kind': 'overlay' }, 20, 28),
+      row({ 'data-lane': 'main' }, 53, 68),
+      row({ 'data-lane': 't2', 'data-track-id': 't2', 'data-track-kind': 'audio' }, 126, 34),
+    );
+    // The tracks' headers take 128 px.
+    const at = (s: number, y: number, kind: Asset['kind']) => timelineTargetAt(scroller, 20, 128 + s * 10, y, kind);
+    expect(at(3, 30, 'image')).toEqual({ lane: 'picture', trackId: 't1', atUs: 3_000_000 });
+    expect(at(3, 140, 'audio')).toEqual({ lane: 'sound', trackId: 't2', atUs: 3_000_000, row: 'sounds' });
+    expect(at(3, 30, 'audio')).toBeNull();
+    expect(at(3, 140, 'video')).toBeNull();
+    expect(at(24, 80, 'video')).toEqual({ lane: 'main', index: 1 });
+    // A locked or hidden track takes nothing: the indicator shows only where media really lands.
+    const snapshot = fixtureSnapshot();
+    snapshot.project.timeline.tracks[0].locked = true;
+    snapshot.project.timeline.tracks[1].hidden = true;
+    useProject.setState({ snapshot });
+    expect(at(3, 30, 'image')).toBeNull();
+    useUi.setState({ timelineExpanded: false });
+  });
+
+  it('while every track shows, a track that holds music takes no sound effect, so nothing lands elsewhere', () => {
+    useUi.setState({ pxPerSecond: 10, snapping: false, timelineExpanded: true });
+    const snapshot = fixtureSnapshot();
+    const song = snapshot.project.timeline.tracks[1].items[0];
+    if (song.content.type === 'audio') song.content = { ...song.content, duck: 0 };
+    useProject.setState({ snapshot });
+    const scroller = row({}, 0, 300);
+    scroller.append(row({ 'data-lane': 't2', 'data-track-id': 't2', 'data-track-kind': 'audio' }, 20, 34));
+    registerDropTarget(
+      (cx, cy, kind) => timelineTargetAt(scroller, 10, cx, cy, kind),
+      scroller,
+      (cx, cy) => timelineLaneAt(scroller, 10, cx, cy),
+    );
+    // Over Audio 1, which holds music: no target, and letting go says why.
+    expect(timelineTargetAt(scroller, 10, 128 + 30, 30, 'audio')).toBeNull();
+    expect(dropRefusal(128 + 30, 30, 'audio')).toBe(
+      'This track holds music. Sound effects go on a track without it.',
+    );
+    useUi.setState({ timelineExpanded: false });
+  });
+
+  it("while every track shows, a track's row says why it takes nothing", () => {
+    useUi.setState({ pxPerSecond: 10, snapping: false, timelineExpanded: true });
+    const snapshot = fixtureSnapshot();
+    const [overlay, audio] = snapshot.project.timeline.tracks;
+    snapshot.project.timeline.tracks = [
+      { ...overlay, locked: true },
+      { ...overlay, id: 't3', hidden: true, items: [] },
+      { ...overlay, id: 'z', kind: 'zoom', items: [] },
+      audio,
+    ];
+    useProject.setState({ snapshot });
+    const scroller = row({}, 0, 300);
+    const track = (id: string, kind: string, top: number) =>
+      row({ 'data-lane': id, 'data-track-id': id, 'data-track-kind': kind }, top, 28);
+    scroller.append(
+      track('t1', 'overlay', 20),
+      track('t3', 'overlay', 50),
+      track('z', 'zoom', 80),
+      track('t2', 'audio', 110),
+    );
+    registerDropTarget(
+      (cx, cy, kind) => timelineTargetAt(scroller, 10, cx, cy, kind),
+      scroller,
+      (cx, cy) => timelineLaneAt(scroller, 10, cx, cy),
+    );
+    const why = (y: number, kind: Asset['kind']) => dropRefusal(128 + 30, y, kind);
+    expect(why(30, 'image')).toBe('This track is locked.');
+    expect(why(60, 'image')).toBe('This track is hidden.');
+    expect(why(90, 'image')).toBe('A zoom track takes no media.');
+    expect(why(120, 'image')).toBe('Pictures go on an overlay track.');
+    expect(why(120, 'video')).toBe('Videos go on the Video lane or an overlay track.');
+    expect(why(60, 'audio')).toBe('This track is hidden.');
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    expect(why(30, 'audio')).toBe('Sounds go on an audio track.');
+  });
+
+  it("a sound or a pack sound let go on a track's row lands there as a sound effect, never as music", async () => {
+    const { addMedia } = await import('./addMedia');
+    const { dropPackItem } = await import('./place');
+    vi.mocked(library.place).mockClear();
+    vi.mocked(library.addMusic).mockClear();
+    // A target on a track names that track, whatever its row: the music path takes no track.
+    const onTrack = { lane: 'sound', trackId: 't2', atUs: 4_000_000, row: 'music' } as const;
+    act(() => addMedia('music', onTrack));
+    await vi.waitFor(() => expect(library.place).toHaveBeenCalledTimes(1));
+    expect(library.place).toHaveBeenLastCalledWith([{ type: 'asset', id: 'music' }], 4_000_000, {
+      type: 'track',
+      id: 't2',
+    });
+    const whoosh: PackItem = {
+      id: 'whoosh',
+      name: 'Whoosh',
+      category: 'sound',
+      durationUs: 900_000,
+      width: 0,
+      height: 0,
+      tags: [],
+    };
+    await act(() => dropPackItem(whoosh, onTrack));
+    expect(library.place).toHaveBeenLastCalledWith([{ type: 'pack', id: 'whoosh' }], 4_000_000, {
+      type: 'track',
+      id: 't2',
+    });
+    expect(library.addMusic).not.toHaveBeenCalled();
   });
 
   it('only a lane that takes what is dragged is a target, so the indicator shows where it really lands', () => {
