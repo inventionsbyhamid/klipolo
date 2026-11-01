@@ -42,6 +42,8 @@ export const library = {
   marks: () => call<LibraryMarks>('library_marks'),
   /** Stars item `key` or takes its star off; the marks as saved. */
   setFavorite: (key: string, on: boolean) => call<LibraryMarks>('library_set_favorite', { key, on }),
+  /** Notes that the library just added item `key` to the timeline; the marks as saved. */
+  markUsed: (key: string) => call<LibraryMarks>('library_mark_used', { key }),
   /** A picture's bytes: a pack sticker (`packId`) or one the open project uses (`path`). */
   picture: (from: { packId: string } | { path: string }) =>
     invoke<ArrayBuffer>('media_picture', 'packId' in from ? { packId: from.packId } : { path: from.path }),

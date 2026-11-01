@@ -11,7 +11,7 @@ import { renderWithProviders } from '../../test/render';
 /*
  * The Library's tabs: Clips, Music, Sounds and Images, your files first and then Klipolo's pack, each
  * row's "+" adding it at the playhead through the media commands, and a sound let go on the Music lane added as music.
- * Its search finds a tab's items by name, tag and related word; favorites list first.
+ * Its search finds a tab's items by name, tag and related word; favorites and recently used items list first.
  */
 
 const answer = (): Promise<SnapshotPatch> => Promise.resolve(revisionPatch(4));
@@ -25,6 +25,7 @@ vi.mock('../../bridge/library', () => ({
   library: {
     marks: vi.fn(() => Promise.resolve({})),
     setFavorite: vi.fn((key: string, on: boolean) => Promise.resolve({ [key]: { favorite: on, usedMs: 0 } })),
+    markUsed: vi.fn((key: string) => Promise.resolve({ [key]: { favorite: false, usedMs: Date.now() } })),
     addMusic: vi.fn(() => answer()),
     addSound: vi.fn(() => answer()),
     addImage: vi.fn(() => answer()),
@@ -36,6 +37,11 @@ vi.mock('../../bridge/library', () => ({
   },
 }));
 vi.mock('../../bridge/commands', () => ({ bridge: { apply: vi.fn() }, mediaUrl: (p: string) => p }));
+// A row's drag hands its drop to the test, which lets go where it likes.
+vi.mock('../timeline/drag/mediaDrag', async (original) => ({
+  ...(await original<typeof import('../timeline/drag/mediaDrag')>()),
+  beginMediaDrag: vi.fn(),
+}));
 const { bridge } = await import('../../bridge/commands');
 const { library } = await import('../../bridge/library');
 const { useProject } = await import('../../state/project');
@@ -46,6 +52,7 @@ const { useAnnouncer } = await import('../timeline/announce');
 const { usePack, loadPack, forgetPictures } = await import('./shelves');
 const { useMarks } = await import('./marks');
 const { useToasts } = await import('../../state/toasts');
+const { beginMediaDrag } = await import('../timeline/drag/mediaDrag');
 const { useEditorShortcuts } = await import('../command-palette/useEditorShortcuts');
 const { addMedia } = await import('./addMedia');
 const { Library } = await import('../../layout/Library');
@@ -419,5 +426,51 @@ describe('the Library', () => {
     await userEvent.click(star);
     await waitFor(() => expect(star).toHaveAttribute('aria-pressed', 'false'));
     expect(useToasts.getState().toasts.at(-1)?.text).toBe("Klipolo couldn't save your favorites.");
+  });
+
+  it('an item the library adds to the timeline is recently used, and lists first after the favorites', async () => {
+    useUi.setState({ libraryTab: 'sounds' });
+    vi.mocked(library.marks).mockResolvedValueOnce({
+      'file:/media/tick': { favorite: true, usedMs: 0 },
+      'file:/media/music': { favorite: false, usedMs: 1_000 },
+      'pack:whoosh': { favorite: false, usedMs: 2_000 },
+    });
+    // Each add moves the project on a revision.
+    vi.mocked(library.addSound).mockResolvedValueOnce(revisionPatch(4)).mockResolvedValueOnce(revisionPatch(5));
+    renderWithProviders(<Library />);
+    const panel = screen.getByRole('tabpanel');
+    await screen.findByText('Impact');
+    const yours = within(panel).getByRole('list', { name: 'Your sounds' });
+    await waitFor(() => expect(listed(yours)).toEqual(['tick.wav', 'music.mp3', 'kiln-door.wav']));
+    const pack = within(panel).getByRole('list', { name: /^Built in/ });
+    // Added with its "+": used now, so first.
+    await userEvent.click(within(pack).getByRole('button', { name: 'Add Impact at the playhead' }));
+    await waitFor(() => expect(library.markUsed).toHaveBeenCalledWith('pack:impact'));
+    expect(listed(pack)).toEqual(['Impact', 'Whoosh']);
+    await userEvent.click(within(yours).getByRole('button', { name: 'Add kiln-door.wav at the playhead' }));
+    await waitFor(() => expect(library.markUsed).toHaveBeenLastCalledWith('file:/media/kiln-door'));
+    expect(listed(yours)).toEqual(['tick.wav', 'kiln-door.wav', 'music.mp3']);
+    // An add that didn't go in uses nothing.
+    vi.mocked(library.addSound).mockRejectedValueOnce(new Error('busy'));
+    await userEvent.click(within(pack).getByRole('button', { name: 'Add Whoosh at the playhead' }));
+    await waitFor(() => expect(library.addSound).toHaveBeenCalledTimes(3));
+    await act(() => new Promise((r) => setTimeout(r, 20)));
+    expect(library.markUsed).toHaveBeenCalledTimes(2);
+  });
+
+  it('an item dragged from the library onto the timeline is recently used too', async () => {
+    useUi.setState({ libraryTab: 'sounds' });
+    vi.mocked(bridge.apply).mockResolvedValueOnce(revisionPatch(5));
+    renderWithProviders(<Library />);
+    const drop = (row: HTMLElement) => {
+      fireEvent.pointerDown(row, { button: 0, pointerId: 1 });
+      return vi.mocked(beginMediaDrag).mock.calls.at(-1)![2];
+    };
+    const whoosh = (await screen.findByText('Whoosh')).closest('li')!;
+    act(() => drop(whoosh)({ lane: 'sound', trackId: null, atUs: 4_000_000, row: 'sounds' }));
+    await waitFor(() => expect(library.markUsed).toHaveBeenCalledWith('pack:whoosh'));
+    act(() => useUi.setState({ libraryTab: 'clips' }));
+    act(() => drop(screen.getByText('broll.mp4').closest('li')!)({ lane: 'main', index: 0 }));
+    await waitFor(() => expect(library.markUsed).toHaveBeenLastCalledWith('file:/media/broll'));
   });
 });

@@ -12,7 +12,7 @@ import { addMedia } from './addMedia';
 import { AssetMenu } from './AssetMenu';
 import { AssetRow } from './AssetRow';
 import { FavoriteButton, type Favorite } from './FavoriteButton';
-import { fileKey, loadMarks, marked, packKey, setFavorite, useMarks } from './marks';
+import { fileKey, loadMarks, marked, markUsed, markWhenAdded, packKey, setFavorite, useMarks } from './marks';
 import { addImage, addMusic, addPackItem, addSound, dropPackItem } from './place';
 import { searchLibrary, type Searchable } from './search';
 import { loadPack, packAsset, packAssetId, shelves, useNearView, usePack, usePicture, uses } from './shelves';
@@ -99,21 +99,24 @@ function favoriteOf(marks: LibraryMarks, key: string): Favorite {
   return { on, toggle: () => setFavorite(key, !on) };
 }
 
-/** The pack's items of one kind, as rows or pictures. */
+/** The pack's items of one kind, as rows or pictures. Each one the library adds is recently used. */
 function PackItems({ items, project }: { items: PackItem[]; project: Project }) {
   const { t } = useLingui();
   const marks = useMarks((s) => s.marks);
   const used = uses(project).any;
   return items.map((item) => {
-    const favorite = favoriteOf(marks, packKey(item.id));
+    const key = packKey(item.id);
+    const favorite = favoriteOf(marks, key);
+    const add = () => void markWhenAdded(key, addPackItem(item));
+    const drop = (target: Parameters<typeof dropPackItem>[1]) => void markWhenAdded(key, dropPackItem(item, target));
     return item.category === 'sticker' ? (
       <Picture
         key={item.id}
         asset={packAsset(item)}
         from={{ packId: item.id }}
         title={item.name}
-        onAdd={() => void addPackItem(item)}
-        onDrop={(target) => void dropPackItem(item, target)}
+        onAdd={add}
+        onDrop={drop}
         favorite={favorite}
       />
     ) : (
@@ -123,9 +126,9 @@ function PackItems({ items, project }: { items: PackItem[]; project: Project }) 
         art={item.category === 'music' ? 'music' : 'sound'}
         title={item.name}
         used={used.has(packAssetId(item.id))}
-        onAdd={() => void addPackItem(item)}
+        onAdd={add}
         addLabel={item.category === 'music' ? musicAddLabel(t, item.name) : undefined}
-        onDrop={(target) => void dropPackItem(item, target)}
+        onDrop={drop}
         favorite={favorite}
       />
     );
@@ -151,7 +154,7 @@ const packItemKey = (item: PackItem) => packKey(item.id);
  * the project's videos; Music and Sounds the sounds (by how they play, else by length) and the pack's beds and effects;
  * Images a 3-column grid of your pictures, those made with Muse Image, and the pack's stickers. Drag any row onto the
  * lane it belongs to; the "+" adds it at the playhead. `query` (the panel's search) keeps the items it finds, best
- * first (`search.ts`); in each list, favorites come first (`marks.ts`).
+ * first (`search.ts`); in each list, favorites come first, then what the library added most recently (`marks.ts`).
  */
 export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
   const { t } = useLingui();
@@ -180,16 +183,16 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
       {text}
     </p>
   );
-  const row = (asset: Asset, art: 'music' | 'sound', add: () => void) => (
+  const row = (asset: Asset, art: 'music' | 'sound', add: () => Promise<boolean>) => (
     <AssetRow
       key={asset.id}
       asset={asset}
       art={art}
       title={asset.name}
       used={used.has(asset.id)}
-      onAdd={add}
+      onAdd={() => void markWhenAdded(ownKey(asset), add())}
       addLabel={art === 'music' ? musicAddLabel(t, asset.name) : undefined}
-      onDrop={(target) => addMedia(asset.id, target)}
+      onDrop={(target) => addMedia(asset.id, target, () => markUsed(ownKey(asset)))}
       favorite={favoriteOf(marks, ownKey(asset))}
     />
   );
@@ -219,9 +222,11 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
             art="clip"
             title={clip.name}
             used={used.has(clip.id)}
-            onAdd={() => addMedia(clip.id, { lane: 'main', index: project.timeline.main.length })}
+            onAdd={() =>
+              addMedia(clip.id, { lane: 'main', index: project.timeline.main.length }, () => markUsed(ownKey(clip)))
+            }
             addLabel={t({ id: 'library.add.end', message: `Add ${clip.name} to the end`, comment: '{clip.name} is a file name' })}
-            onDrop={(target) => addMedia(clip.id, target)}
+            onDrop={(target) => addMedia(clip.id, target, () => markUsed(ownKey(clip)))}
             menu={<AssetMenu asset={clip} />}
             favorite={favoriteOf(marks, ownKey(clip))}
           />
@@ -248,9 +253,7 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
             />
             <ul className="lib-list" aria-labelledby={`lib-${tab}-yours`}>
               {mine.map((asset) =>
-                row(asset, music ? 'music' : 'sound', () =>
-                  void (music ? addMusic : addSound)({ type: 'asset', id: asset.id }),
-                ),
+                row(asset, music ? 'music' : 'sound', () => (music ? addMusic : addSound)({ type: 'asset', id: asset.id })),
               )}
             </ul>
           </>
@@ -289,8 +292,8 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
       asset={asset}
       from={{ path: asset.path }}
       title={asset.name}
-      onAdd={() => void addImage({ type: 'asset', id: asset.id })}
-      onDrop={(target) => addMedia(asset.id, target)}
+      onAdd={() => void markWhenAdded(ownKey(asset), addImage({ type: 'asset', id: asset.id }))}
+      onDrop={(target) => addMedia(asset.id, target, () => markUsed(ownKey(asset)))}
       favorite={favoriteOf(marks, ownKey(asset))}
     />
   );
