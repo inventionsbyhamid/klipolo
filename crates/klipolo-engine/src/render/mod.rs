@@ -40,7 +40,7 @@ pub use klipolo_platform::pressure;
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use tokio::sync::{Notify, oneshot};
 
@@ -52,7 +52,7 @@ use klipolo_model::time::Us;
 use mode::RenderMode;
 use pool::{DecodedSet, DecoderPool};
 
-use crate::audio::output::AudioOutput;
+use crate::audio::output::{AudioOutput, MasterGain};
 use crate::audio::pcm::PcmStore;
 use crate::audio::plan::AudioPlan;
 use crate::decode_wait::DecodeBeat;
@@ -86,8 +86,8 @@ pub struct GpuBackend {
     /// The newest `start_audio`, and whether it is sounding (a silent plan opens nothing).
     request: u64,
     sounding: bool,
-    /// The loudness target's master gain (f32 bits), read by the mixer every block.
-    gain: Arc<AtomicU32>,
+    /// The loudness target's gain times the listening volume, read by the mixer every block.
+    gain: MasterGain,
     /// Notified when the sound is mapped onto the clock or the device fails.
     audio_wake: Arc<Notify>,
     /// Fired when an image, LUT or the font scan finished loading in the background (the actor redraws the still).
@@ -170,7 +170,7 @@ impl GpuBackend {
             audio: None,
             request: 0,
             sounding: false,
-            gain: Arc::new(AtomicU32::new(1f32.to_bits())),
+            gain: MasterGain::default(),
             audio_wake: Arc::new(Notify::new()),
             redraw,
             wait_for_assets: false,
@@ -521,7 +521,7 @@ impl PreviewBackend for GpuBackend {
             return false;
         }
         let open =
-            |b: &Self| AudioOutput::open(b.pcm.clone(), b.gain.clone(), b.audio_wake.clone());
+            |b: &Self| AudioOutput::open(b.pcm.clone(), b.gain.shared(), b.audio_wake.clone());
         if !self.audio.as_ref().is_some_and(AudioOutput::is_alive) {
             self.audio = Some(open(self));
         }
@@ -575,7 +575,11 @@ impl PreviewBackend for GpuBackend {
     }
 
     fn set_master_gain(&mut self, gain: f32) {
-        self.gain.store(gain.to_bits(), Ordering::Relaxed);
+        self.gain.set_loudness(gain);
+    }
+
+    fn set_volume(&mut self, volume: f32) {
+        self.gain.set_volume(volume);
     }
 
     fn pcm(&self) -> Option<Arc<PcmStore>> {

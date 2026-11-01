@@ -173,6 +173,8 @@ pub trait PreviewBackend: Send + 'static {
     fn prepare_audio(&mut self, _plan: Arc<AudioPlan>, _at_us: Us) {}
     /// The loudness target's gain on the whole mix (1.0: none).
     fn set_master_gain(&mut self, _gain: f32) {}
+    /// The person's listening volume on top of it, 0 (silent) to 1: the preview's alone, never an export's.
+    fn set_volume(&mut self, _volume: f32) {}
     /// The PCM cache, for measuring loudness (None: the backend has no sound).
     fn pcm(&self) -> Option<Arc<PcmStore>> {
         None

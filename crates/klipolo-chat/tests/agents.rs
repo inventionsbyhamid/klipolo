@@ -10,17 +10,20 @@ use std::path::Path;
 use std::sync::Arc;
 
 use klipolo_chat::context::QUOTED_NOTE;
-use klipolo_chat::tools::{ClipRef, PictureSize, Position, TextPreset, TransitionKind};
+use klipolo_chat::tools::{
+    BubbleChange, ClipRef, PictureSize, Position, Sound, TextPreset, TransitionKind,
+};
 use klipolo_chat::{
     ChatContext, FullTranscript, Library, LibraryItem, MediaKind, Moment, SceneLog, SpeakerTurn,
     ToolCall, View, build_context, full_transcript, timeline_key, tools,
 };
 use klipolo_model::captions::styles::BuiltinCaptionStyle;
+use klipolo_model::layout::Anchor;
 use klipolo_model::ops::Edge;
 use klipolo_model::project::{Asset, AssetKind, FormatKind, Settings};
 use klipolo_model::speech::{Speech, Transcript, Word, WordKind};
 use klipolo_model::time::{RangeUs, Us};
-use klipolo_model::timeline::{Clip, ClipSource};
+use klipolo_model::timeline::{CameraMode, Clip, ClipSource};
 use klipolo_model::{Op, Project, apply_ops, load_project};
 
 fn fixture(name: &str) -> String {
@@ -665,6 +668,51 @@ fn every_call() -> Vec<(ToolCall, bool)> {
                 duration_us: None,
             },
             true,
+        ),
+        (
+            ToolCall::SetCameraMode {
+                clips: None,
+                mode: CameraMode::Hidden,
+                format: None,
+            },
+            false,
+        ),
+        (
+            ToolCall::AdjustCamera {
+                clips: Some(vec!["c1".into()]),
+                change: BubbleChange {
+                    position: Some(Anchor::TopLeft),
+                    ..BubbleChange::default()
+                },
+            },
+            true,
+        ),
+        (ToolCall::DetachCamera { clips: None }, false),
+        (
+            ToolCall::MuteSource {
+                source: Sound::Mic,
+                muted: true,
+                which: None,
+                clips: Some(vec!["c3".into()]),
+            },
+            true,
+        ),
+        (
+            ToolCall::SetSourceVolume {
+                source: Sound::ComputerSound,
+                volume: 0.5,
+                which: None,
+                clips: None,
+            },
+            false,
+        ),
+        (
+            ToolCall::SeparateSound {
+                source: Sound::Mic,
+                which: Some("2".into()),
+                clips: None,
+            },
+            false,
         ),
         (ToolCall::Undo, false),
         (

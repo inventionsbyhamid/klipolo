@@ -323,6 +323,15 @@ pub(crate) fn page_origin(webview: &NSView) -> NSPoint {
     NSPoint::new(left.max(0.0), top.max(0.0))
 }
 
+/// `page_origin` of the WKWebView `webview` (Tauri's), as (x, y): for something native placed at a rect the page names
+/// (the export's share menu beside its button). None without a webview. Main thread only.
+pub fn page_origin_in(webview: *mut c_void) -> Option<(f64, f64)> {
+    // SAFETY: Tauri hands us its live WKWebView (an NSView); retaining it keeps it valid while it is read.
+    let webview: Retained<NSView> = unsafe { Retained::retain(webview.cast()) }?;
+    let origin = page_origin(&webview);
+    Some((origin.x, origin.y))
+}
+
 /// Places the preview view over the UI's preview hole (`None`, or an empty rect, hides it). The rect is in the page's
 /// coordinates (CSS px at page zoom 1, top-left origin), which start at `page_origin` in the webview. False when called
 /// off the main thread (nothing was done: call it again there).

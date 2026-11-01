@@ -26,8 +26,11 @@ interface PlaybackStore {
   /** Sequence of the latest seek; frames rendered before the engine applied it are ignored. */
   seq: number;
   seek: (us: number) => void;
-  /** Plays from the playhead at `rate` (1 by default). Sound plays at 1× only. */
-  play: (rate?: number) => void;
+  /**
+   * Plays from the playhead at `rate` (1 by default); while looping a time range, forward from its start when the
+   * playhead is outside it, unless `here` (a moment chat points at plays from where it starts). Sound plays at 1× only.
+   */
+  play: (rate?: number, opts?: { here?: boolean }) => void;
   pause: () => void;
   toggle: () => void;
   /** J and L: start in `direction`, or double the speed when already going that way (2× at most). */
@@ -42,6 +45,19 @@ interface PlaybackStore {
 let frameRate = () => 30;
 export function setFrameRateSource(source: () => number) {
   frameRate = source;
+}
+
+/**
+ * How playback loops (`loop.ts` registers it: it reads the time range and the project, which import this store): where
+ * a forward run asked to start at `us` starts, and whether a run that reached the end at `rate` plays again.
+ */
+export interface LoopRule {
+  startAt: (us: number) => number;
+  again: (rate: number) => boolean;
+}
+let loopRule: LoopRule = { startAt: (us) => us, again: () => false };
+export function setLoopRule(rule: LoopRule) {
+  loopRule = rule;
 }
 
 let pendingSeek: number | null = null;
@@ -87,6 +103,16 @@ function dropShown(): boolean {
   return true;
 }
 
+/**
+ * A forward run starts where the loop says (the time range's start, when the playhead is outside it). True when that
+ * moved it: a seek still waiting to go is dropped, and the run takes a new sequence, as `dropShown` does.
+ */
+function movedToLoop(from: number, to: number): boolean {
+  if (from === to) return false;
+  pendingSeek = null;
+  return true;
+}
+
 export const usePlayback = create<PlaybackStore>((set, get) => ({
   playheadUs: 0,
   playing: false,
@@ -100,13 +126,15 @@ export const usePlayback = create<PlaybackStore>((set, get) => ({
     set((s) => ({ playheadUs, seq: s.seq + 1 }));
     sendSeek(playheadUs);
   },
-  play: (rate = 1) => {
+  play: (rate = 1, opts) => {
     if (get().playing) return;
+    const asked = get().playheadUs;
+    const from = rate > 0 && !opts?.here ? loopRule.startAt(asked) : asked;
     // The clock starts with the first playback frame (the sound may take a moment to open).
-    holdClock(get().playheadUs);
-    const fresh = dropShown();
-    set((s) => ({ playing: true, rate, seq: fresh ? s.seq + 1 : s.seq }));
-    engine.play(get().playheadUs, rate, get().seq).catch((error: unknown) => {
+    holdClock(from);
+    const fresh = dropShown() || movedToLoop(asked, from);
+    set((s) => ({ playing: true, rate, playheadUs: from, seq: fresh ? s.seq + 1 : s.seq }));
+    engine.play(from, rate, get().seq).catch((error: unknown) => {
       set({ playing: false, rate: 1 });
       toast.error(errorMessage(error));
     });
@@ -134,7 +162,9 @@ export const usePlayback = create<PlaybackStore>((set, get) => ({
   shuttle: (direction) => {
     const { playing, rate } = get();
     // As `play()` does: the clock only while playing (its anchor is stale when stopped), else the playhead.
-    const from = playing ? Math.round(clockUs()) : get().playheadUs;
+    const at = playing ? Math.round(clockUs()) : get().playheadUs;
+    // From a stop, forward starts where the loop says.
+    const from = !playing && direction > 0 ? loopRule.startAt(at) : at;
     const next =
       playing && Math.sign(rate) === direction ? Math.min(2, Math.abs(rate) * 2) * direction : direction;
     if (playing && next === rate) return;
@@ -142,7 +172,7 @@ export const usePlayback = create<PlaybackStore>((set, get) => ({
     if (!playing && direction < 0 && from <= 0) return;
     holdClock(from);
     // A new run while playing: frames of the previous one still on their way carry the old sequence and are dropped.
-    const fresh = dropShown() || playing;
+    const fresh = dropShown() || playing || movedToLoop(at, from);
     set((s) => ({ playing: true, rate: next, playheadUs: from, seq: fresh ? s.seq + 1 : s.seq }));
     engine.play(from, next, get().seq).catch((error: unknown) => {
       set({ playing: false, rate: 1 });
@@ -170,13 +200,18 @@ export const usePlayback = create<PlaybackStore>((set, get) => ({
     const frameEndUs = frameStartUs(frameIndexAt(frame.timeUs, fps) + 1, fps) - 1;
     const anchorUs = s.rate >= 0 ? frame.timeUs : held.running ? frameEndUs : Math.min(frameEndUs, held.us);
     reportFrame(anchorUs, frame.atMs ?? performance.now(), s.rate);
+    // The clock's move sent the playhead elsewhere (Loop went back to the range's start): this frame is the run before.
+    if (get().seq !== s.seq) return;
     set({ playheadUs: frame.timeUs });
   },
-  onState: ({ playing, atUs, rate }) => {
+  onState: ({ playing, atUs, rate, reason }) => {
     // A stop the UI asked for already moved the playhead (pause); only the engine's own stops (end, hidden, error,
     // another project) and starts move it here.
     if (!playing && !get().playing) return;
+    const was = get().rate;
     holdClock(atUs);
     set({ playing, rate: playing ? rate : 1, playheadUs: atUs });
+    // Looping: a forward run that reached the end plays again, at its speed.
+    if (!playing && reason === 'ended' && was > 0 && loopRule.again(was)) get().play(was);
   },
 }));

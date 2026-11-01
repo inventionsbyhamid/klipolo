@@ -11,7 +11,7 @@ import { renderWithProviders } from '../../test/render';
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('../../bridge/commands', () => ({
-  bridge: { createProject: vi.fn(), openProject: vi.fn(), snapshot: vi.fn() },
+  bridge: { createProject: vi.fn(), openProject: vi.fn(), duplicateProject: vi.fn(), snapshot: vi.fn() },
   mediaUrl: (path: string) => `asset://localhost${path}`,
 }));
 const { bridge } = await import('../../bridge/commands');
@@ -60,7 +60,11 @@ function recentAnswers(...answers: (ProjectRow[] | Error)[]) {
   });
 }
 
-const cards = () => within(screen.getByRole('list')).getAllByRole('button');
+// The cards themselves, not their More buttons.
+const cards = () =>
+  within(screen.getByRole('list'))
+    .getAllByRole('button')
+    .filter((button) => button.classList.contains('start-card'));
 const card = (name: string) => cards().find((c) => c.textContent?.includes(name))!;
 
 beforeEach(() => {
@@ -76,6 +80,7 @@ afterEach(() => {
   invoke.mockReset();
   vi.mocked(bridge.createProject).mockReset();
   vi.mocked(bridge.openProject).mockReset();
+  vi.mocked(bridge.duplicateProject).mockReset();
 });
 
 describe('StartScreen', () => {
@@ -188,6 +193,41 @@ describe('StartScreen', () => {
     expect(bridge.openProject).toHaveBeenLastCalledWith('/Users/me/Movies/Klipolo/Kiln vlog.klipolo');
     expect(bridge.openProject).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(useProject.getState().pending).toBe(0));
+  });
+
+  it("a card's menu duplicates its project and opens the copy", async () => {
+    recentAnswers(ROWS);
+    const copy = fixtureSnapshot();
+    copy.project = { ...copy.project, id: 'copy', name: 'Studio tour copy' };
+    vi.mocked(bridge.duplicateProject).mockResolvedValue({ ...copy, opening: 1 });
+    renderWithProviders(<StartScreen />);
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    // From the keyboard: the card's More button is the next stop after it.
+    act(() => card('Studio tour').focus());
+    await userEvent.tab();
+    const more = screen.getByRole('button', { name: 'More for Studio tour' });
+    expect(more).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Duplicate' }));
+    expect(bridge.duplicateProject).toHaveBeenCalledWith('/Users/me/Movies/Klipolo/Studio tour.klipolo');
+    await waitFor(() => expect(useProject.getState().snapshot?.project.name).toBe('Studio tour copy'));
+    expect(bridge.openProject).not.toHaveBeenCalled();
+  });
+
+  it('a copy that fails says why and lists the projects again', async () => {
+    recentAnswers(ROWS);
+    vi.mocked(bridge.duplicateProject).mockRejectedValue(
+      new Error("Klipolo couldn't create the project. Check the disk, then try again."),
+    );
+    renderWithProviders(<StartScreen />);
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    await userEvent.click(screen.getByRole('button', { name: 'More for Kiln vlog' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Duplicate' }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
+    expect(useToasts.getState().toasts.map((toast) => toast.text)).toEqual([
+      "Klipolo couldn't create the project. Check the disk, then try again.",
+    ]);
+    expect(useProject.getState().snapshot).toBeNull();
   });
 
   it('opens one project at a time', async () => {
