@@ -135,7 +135,7 @@ export function PositionGrid({
 
 /**
  * A select: a 30 px button with a chevron that opens a menu of choices; `prefix` reads "In: Pop". A choice's
- * `title` is its tooltip (the id of one this version lacks).
+ * `title` is its tooltip (the id of one this version lacks). `placeholder` reads while no choice is the value.
  */
 export function Select<T extends string>({
   label,
@@ -143,14 +143,16 @@ export function Select<T extends string>({
   choices,
   onPick,
   prefix,
+  placeholder,
 }: {
   label: string;
   value: T;
   choices: { value: T; label: string; title?: string }[];
   onPick: (value: T) => void;
   prefix?: string;
+  placeholder?: string;
 }) {
-  const shown = choices.find((c) => c.value === value)?.label ?? value;
+  const shown = choices.find((c) => c.value === value)?.label ?? placeholder ?? value;
   return (
     <Menu>
       <MenuTrigger asChild>

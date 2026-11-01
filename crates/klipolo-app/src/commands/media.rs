@@ -12,10 +12,11 @@ use image::{ExtendedColorType, ImageEncoder};
 use klipolo_engine::render::image_load::decode_rgba;
 use klipolo_model::coded::{CodedError, Said};
 use klipolo_model::history::SnapshotPatch;
+use klipolo_model::media::image::{add_image_ops, background_picture_ops};
 use klipolo_model::media::music::{MusicOpts, add_music_ops};
 use klipolo_model::media::place::{Onto, place_ops};
+use klipolo_model::media::sound::add_sound_ops;
 use klipolo_model::media::text::{TextPreset, TitleTemplate, add_template_ops, add_text_ops};
-use klipolo_model::media::{image::add_image_ops, sound::add_sound_ops};
 use klipolo_model::ops::{ItemPatch, Op};
 use klipolo_model::params::ParamValue;
 use klipolo_model::project::{Asset, AssetKind, Project};
@@ -248,6 +249,25 @@ pub fn media_place(
     })
     .map_err(|e| e.said())?;
     Ok(PlaceAnswer { patch, unplaced })
+}
+
+/// Picture `source` behind the video: the project's background, its file brought in when the project doesn't have it
+/// (`background_picture_ops`): a picture the project has, the library's, or one chosen from this Mac.
+#[tauri::command(async)]
+pub fn media_set_background(
+    state: State<'_, ProjectSessionState>,
+    source: MediaSource,
+    base_revision: Option<u64>,
+    project_id: Option<String>,
+) -> Result<SnapshotPatch, Said> {
+    place(
+        &state,
+        "background.picture.undo",
+        &source,
+        base_revision,
+        project_id,
+        |p, asset| background_picture_ops(p, asset).map_err(coded),
+    )
 }
 
 /// Picture `source` at `at_us`: medium, centred, for 5 s, moving with the clip under it (`add_image_ops`).

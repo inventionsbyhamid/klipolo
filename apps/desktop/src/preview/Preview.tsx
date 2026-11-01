@@ -92,7 +92,8 @@ export function Preview({ filesOver = false }: { filesOver?: boolean }) {
   const docked = useSteadyDock(inspected !== null || transition !== null) && hasVideo && !full;
   const nothingSelected = useSelection((s) => s.selectedId === null);
   return (
-    <main className={native && hasVideo ? 'panel stage has-hole' : 'panel stage'} aria-label="Preview">
+    // Focusable from code only: a project that opens puts the keyboard here, so Space plays (`useKeysOnEditor`).
+    <main className={native && hasVideo ? 'panel stage has-hole' : 'panel stage'} aria-label="Preview" tabIndex={-1}>
       <div className="stage-head">
         <FormatPills />
         <span className="spacer" />

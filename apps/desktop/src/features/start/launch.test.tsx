@@ -10,7 +10,9 @@ import { fixtureSnapshot, revisionPatch } from '../../test/fixtures';
 // The editor's panels stand in for themselves: these tests are about which screen the window shows, not what the
 // editor draws.
 vi.mock('../../layout/Library', () => ({ Library: () => <aside aria-label="Library" /> }));
-vi.mock('../../preview/Preview', () => ({ Preview: () => <main aria-label="Preview" /> }));
+vi.mock('../../preview/Preview', () => ({
+  Preview: () => <main className="stage" aria-label="Preview" tabIndex={-1} />,
+}));
 vi.mock('../../features/timeline/Timeline', () => ({ Timeline: () => <section aria-label="Timeline" /> }));
 vi.mock('../../layout/Chat', () => ({ Chat: () => <aside aria-label="Chat" /> }));
 vi.mock('../../player/PlayerBar', () => ({ PlayerBar: () => <footer aria-label="Player" /> }));
@@ -153,16 +155,48 @@ describe('launch', () => {
     rust.rows = [row('Studio tour', Date.now() - 60_000)];
     await launch();
     await screen.findByRole('button', { name: 'Studio tour' });
-    // From the keyboard: Enter on the card. The card goes with the start screen, and the focus goes on to the
-    // project's name in the top bar.
+    // From the keyboard: Enter on the card. The card goes with the start screen, and the keyboard goes on to the
+    // editor's preview, so Space plays at once.
     act(() => card('Studio tour').focus());
     await userEvent.keyboard('{Enter}');
-    expect(await screen.findByRole('main', { name: 'Preview' })).toBeInTheDocument();
+    const preview = await screen.findByRole('main', { name: 'Preview' });
     expect(startScreen()).toBeNull();
     expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(rust.heard).toContain('project_open');
-    const name = within(topBar()).getByRole('button', { name: 'Studio tour' });
-    await waitFor(() => expect(name).toHaveFocus());
+    await waitFor(() => expect(preview).toHaveFocus());
+    await userEvent.keyboard(' ');
+    await waitFor(() => expect(rust.heard).toContain('engine_play'));
+    expect(screen.queryByRole('menu')).toBeNull();
+    // The top bar's buttons stay a Shift Tab away.
+    await userEvent.tab({ shift: true });
+    expect(topBar().contains(document.activeElement)).toBe(true);
+  });
+
+  it('a_project_opened_from_the_project_menu_puts_the_keyboard_on_the_editor', async () => {
+    rust.rows = [row('Studio tour', Date.now() - 60_000), row('Kiln vlog', Date.now() - 120_000)];
+    await launch();
+    await userEvent.click(await screen.findByRole('button', { name: 'Studio tour' }));
+    const preview = await screen.findByRole('main', { name: 'Preview' });
+    // Open recent from the keyboard: the menu gives the focus back to the project's name as it closes.
+    act(() => within(topBar()).getByRole('button', { name: 'Studio tour' }).focus());
+    await userEvent.keyboard('{Enter}');
+    const group = await screen.findByRole('group', { name: 'Open recent' });
+    act(() => within(group).getByRole('menuitem', { name: 'Kiln vlog' }).focus());
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(within(topBar()).getByRole('button', { name: 'Kiln vlog' })).toBeInTheDocument());
+    await waitFor(() => expect(preview).toHaveFocus());
+    // New project from the menu, the same way.
+    act(() => within(topBar()).getByRole('button', { name: 'Kiln vlog' }).focus());
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'New project' })).toHaveFocus());
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(within(topBar()).getByRole('button', { name: 'Untitled project' })).toBeInTheDocument());
+    await waitFor(() => expect(preview).toHaveFocus());
+    // Space plays; it doesn't open the project menu, nor pick New project from it.
+    await userEvent.keyboard(' ');
+    await waitFor(() => expect(rust.heard).toContain('engine_play'));
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(rust.heard.filter((cmd) => cmd === 'project_create')).toHaveLength(1);
   });
 
   it('a_reload_of_the_page_shows_the_project_rust_has_open', async () => {
