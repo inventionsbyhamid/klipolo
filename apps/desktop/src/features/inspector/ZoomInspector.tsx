@@ -1,4 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
+import { useRef } from 'react';
 import type { BoxN } from '../../bindings/BoxN';
 import type { FocusKind } from '../../bindings/FocusKind';
 import type { Item } from '../../bindings/Item';
@@ -52,6 +53,9 @@ export function ZoomInspector({ item, content }: { item: Item; content: ZoomCont
   const now = () => contentNow(item.id, content);
   const rectOf = (c: ZoomContent) => (c.target.type === 'rect' ? c.target.rect : null);
   const rect = rectOf(content);
+  /** The smart target this zoom had last (chat may have narrowed what it plans from): Smart puts it back. */
+  const lastSmart = useRef<ZoomTarget>({ type: 'auto' });
+  if (content.target.type === 'auto') lastSmart.current = content.target;
   const centre = (r: BoxN) => [r.x + r.w / 2, r.y + r.h / 2] as const;
   /** The area kept round its centre at the new scale. */
   const scaled = (c: ZoomContent, scale: number): ZoomTarget => {
@@ -105,7 +109,8 @@ export function ZoomInspector({ item, content }: { item: Item; content: ZoomCont
           onChange={(mode) =>
             void commitLatest(label, () => {
               const c = now();
-              return op({ ...c, target: mode === 'area' ? { type: 'rect', rect: zoomArea(c.scale) } : { type: 'auto' } });
+              const smart = c.target.type === 'auto' ? c.target : lastSmart.current;
+              return op({ ...c, target: mode === 'area' ? { type: 'rect', rect: zoomArea(c.scale) } : smart });
             })
           }
         />

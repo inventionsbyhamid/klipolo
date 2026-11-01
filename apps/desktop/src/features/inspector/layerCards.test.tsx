@@ -191,3 +191,13 @@ describe("a generator layer's card", () => {
     expect(screen.getByRole('button', { name: 'Effects' })).toBeInTheDocument();
   });
 });
+
+describe('zoom and other layers', () => {
+  it('Smart after Area brings back what chat narrowed the smart zoom to', async () => {
+    withZoom({ type: 'auto', using: ['pauses'] });
+    renderWithProviders(<Inspector format="landscape" />);
+    await userEvent.click(screen.getByRole('radio', { name: 'Area' }));
+    await userEvent.click(await screen.findByRole('radio', { name: 'Smart' }));
+    expect(lastTx().ops).toEqual([zoomOp({ scale: 2, target: { type: 'auto', using: ['pauses'] } })]);
+  });
+});
