@@ -450,7 +450,10 @@ fn call_without_session_is_no_session() {
 fn client_name_is_cleaned_and_klipolo_lookalike_is_unnamed() {
     let name = |raw: Value| client_name(&json!({"clientInfo": {"name": raw}}));
     assert_eq!(name(json!("  Muse\u{200B} \n Desktop\t")), "Muse Desktop");
-    assert_eq!(name(json!("Cur\u{202E}sor\u{0007}")), "Example Client");
+    assert_eq!(
+        name(json!("Example\u{202E} Client\u{0007}")),
+        "Example Client"
+    );
     assert_eq!(
         name(json!("Muse Spark demo agent")),
         "Muse Spark demo agent"
