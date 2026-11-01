@@ -2,13 +2,13 @@
 //! - **Small** (`None`: no view size was given): the target fitted to 640 × 640, 10 frames a second.
 //! - **Big** (the view's own size in device pixels, as the Record dialog's preview box gives it): the target fitted
 //!   inside the view, never above its own pixels (the display's size) nor 1080p (1920 × 1080, turned to the view's
-//!   shape), at 15 to 30 frames a second within this computer's pixels a second (`big_pixel_rate`): each JPEG costs by
-//!   its pixels, so the rate bounds a big view's cost whatever its size. Where 15 frames a second would pass it, the
-//!   picture gets smaller instead.
-//!   - Apple silicon (and anything not an Intel Mac): 1080p at 15 (`BIG_PIXEL_RATE`): 1080p gets 15, a 16:10 display's
-//!     1728 × 1080 16, 1280 × 800 or less 30.
-//!   - An Intel Mac, whose JPEGs are made on its CPU: about 720p at 15 (`INTEL_MAC_PIXEL_RATE`): a 16:10 display's
-//!     picture is 1212 × 758 at 15, 1024 × 640 at 21.
+//!   shape), at this computer's frames a second within its pixels a second (`big_view_budget`): each JPEG costs by
+//!   its pixels, so the rate bounds a big view's cost whatever its size. Where the fewest frames a second would pass
+//!   it, the picture gets smaller instead.
+//!   - Apple silicon (and anything not an Intel Mac): 1080p at 15 (`BIG_PIXEL_RATE`), 15 to 30 frames a second:
+//!     1080p gets 15, a 16:10 display's 1728 × 1080 16, 1280 × 800 or less 30.
+//!   - An Intel Mac, whose JPEGs are made on its CPU: about 720p at 15 (`INTEL_MAC_PIXEL_RATE`), 15 to 30 frames a
+//!     second: a 16:10 display's picture is 1212 × 758 at 15, 1024 × 640 at 21.
 //! - A view no bigger than the small picture gets the small one, at its rate: a big view's cost only when it shows more.
 
 use serde::{Deserialize, Serialize};
@@ -30,18 +30,41 @@ pub const BIG_PIXEL_RATE: u64 = 1920 * 1080 * 15;
 /// An Intel Mac's: 720p at 15 frames a second (about 14 Mpx/s).
 pub const INTEL_MAC_PIXEL_RATE: u64 = 1280 * 720 * 15;
 
-/// A big view's most pixels a second on a computer of `os` and `arch` (`std::env::consts`'s words).
-pub fn big_pixel_rate(os: &str, arch: &str) -> u64 {
+/// What a big view may send on a computer: its most pixels a second, and its fewest and most frames a second. A picture
+/// whose pixels at its fewest frames would pass the rate gets smaller instead.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BigViewBudget {
+    pub pixel_rate: u64,
+    pub min_fps: u32,
+    pub max_fps: u32,
+}
+
+/// Apple silicon's (and anything not an Intel Mac's): 1080p at 15, up to 30 frames a second.
+pub const BIG_VIEW: BigViewBudget = BigViewBudget {
+    pixel_rate: BIG_PIXEL_RATE,
+    min_fps: BIG_MIN_FPS,
+    max_fps: BIG_MAX_FPS,
+};
+
+/// An Intel Mac's, whose JPEGs are made on its CPU: about 720p at 15, up to 30 frames a second.
+pub const INTEL_MAC_VIEW: BigViewBudget = BigViewBudget {
+    pixel_rate: INTEL_MAC_PIXEL_RATE,
+    min_fps: BIG_MIN_FPS,
+    max_fps: BIG_MAX_FPS,
+};
+
+/// A big view's budget on a computer of `os` and `arch` (`std::env::consts`'s words).
+pub fn big_view_budget(os: &str, arch: &str) -> BigViewBudget {
     if os == "macos" && arch == "x86_64" {
-        INTEL_MAC_PIXEL_RATE
+        INTEL_MAC_VIEW
     } else {
-        BIG_PIXEL_RATE
+        BIG_VIEW
     }
 }
 
-/// This computer's (`big_pixel_rate`).
-pub fn this_computer_s_pixel_rate() -> u64 {
-    big_pixel_rate(std::env::consts::OS, std::env::consts::ARCH)
+/// This computer's (`big_view_budget`).
+pub fn this_computer_s_budget() -> BigViewBudget {
+    big_view_budget(std::env::consts::OS, std::env::consts::ARCH)
 }
 
 /// A view's size in device pixels, as the UI measures it (its CSS size times the display's scale).
@@ -59,9 +82,13 @@ pub struct LiveFrame {
     pub fps: u32,
 }
 
-/// The live view's picture of a target of `source` pixels for `view` (None: the small view), within `rate` pixels a
-/// second (`big_pixel_rate`).
-pub fn live_frame(view: Option<ViewPixels>, source: (u32, u32), rate: u64) -> LiveFrame {
+/// The live view's picture of a target of `source` pixels for `view` (None: the small view), within `budget`
+/// (`big_view_budget`).
+pub fn live_frame(
+    view: Option<ViewPixels>,
+    source: (u32, u32),
+    budget: BigViewBudget,
+) -> LiveFrame {
     let small = LiveFrame {
         size: fit_size(SMALL_BOX, source),
         fps: LIVE_VIEW_FPS,
@@ -75,8 +102,10 @@ pub fn live_frame(view: Option<ViewPixels>, source: (u32, u32), rate: u64) -> Li
         (BIG_MOST.1, BIG_MOST.0)
     };
     let mut size = fit_inside((view.width.min(most.0), view.height.min(most.1)), source);
-    // Never so many pixels that the rate falls below `BIG_MIN_FPS`: the picture gets smaller, in its own shape.
-    let most_pixels = rate / u64::from(BIG_MIN_FPS);
+    // Never so many pixels that the rate falls below the fewest frames a second: the picture gets smaller, in its own
+    // shape.
+    let rate = budget.pixel_rate;
+    let most_pixels = rate / u64::from(budget.min_fps);
     if pixels(size) > most_pixels {
         let k = (most_pixels as f64 / pixels(size) as f64).sqrt();
         let room = (f64::from(size.0) * k, f64::from(size.1) * k);
@@ -85,10 +114,10 @@ pub fn live_frame(view: Option<ViewPixels>, source: (u32, u32), rate: u64) -> Li
     if size.0 <= small.size.0 && size.1 <= small.size.1 {
         return small;
     }
-    let fps = (rate / pixels(size)).clamp(u64::from(BIG_MIN_FPS), u64::from(BIG_MAX_FPS));
+    let fps = (rate / pixels(size)).clamp(u64::from(budget.min_fps), u64::from(budget.max_fps));
     LiveFrame {
         size,
-        fps: u32::try_from(fps).unwrap_or(BIG_MAX_FPS),
+        fps: u32::try_from(fps).unwrap_or(budget.max_fps),
     }
 }
 
@@ -123,29 +152,30 @@ mod tests {
             size: (640, 400),
             fps: 10,
         };
-        assert_eq!(live_frame(None, RETINA, BIG_PIXEL_RATE), small);
+        assert_eq!(live_frame(None, RETINA, BIG_VIEW), small);
         // A view no bigger than the small picture costs what it does.
-        assert_eq!(live_frame(view(704, 396), RETINA, BIG_PIXEL_RATE), small);
-        assert_eq!(live_frame(view(300, 200), RETINA, BIG_PIXEL_RATE), small);
+        assert_eq!(live_frame(view(704, 396), RETINA, BIG_VIEW), small);
+        assert_eq!(live_frame(view(300, 200), RETINA, BIG_VIEW), small);
+        assert_eq!(live_frame(view(300, 200), RETINA, INTEL_MAC_VIEW), small);
     }
 
     #[test]
     fn a_big_view_s_picture_follows_its_size_within_the_caps() {
         // The view's own size, in the target's shape.
         assert_eq!(
-            live_frame(view(1280, 800), RETINA, BIG_PIXEL_RATE),
+            live_frame(view(1280, 800), RETINA, BIG_VIEW),
             LiveFrame {
                 size: (1280, 800),
                 fps: 30
             }
         );
         assert_eq!(
-            live_frame(view(1400, 700), RETINA, BIG_PIXEL_RATE).size,
+            live_frame(view(1400, 700), RETINA, BIG_VIEW).size,
             (1120, 700)
         );
         // Never above 1080p: a 2880 × 1800 view of a 16:10 display gets 1728 × 1080, at 16 frames a second.
         assert_eq!(
-            live_frame(view(2880, 1800), RETINA, BIG_PIXEL_RATE),
+            live_frame(view(2880, 1800), RETINA, BIG_VIEW),
             LiveFrame {
                 size: (1728, 1080),
                 fps: 16
@@ -153,7 +183,7 @@ mod tests {
         );
         // A 16:9 display at 1080p: 15 frames a second.
         assert_eq!(
-            live_frame(view(3840, 2160), (3840, 2160), BIG_PIXEL_RATE),
+            live_frame(view(3840, 2160), (3840, 2160), BIG_VIEW),
             LiveFrame {
                 size: (1920, 1080),
                 fps: 15
@@ -161,17 +191,17 @@ mod tests {
         );
         // Never above the display's own pixels.
         assert_eq!(
-            live_frame(view(2880, 1800), (1440, 900), BIG_PIXEL_RATE).size,
+            live_frame(view(2880, 1800), (1440, 900), BIG_VIEW).size,
             (1440, 900)
         );
         // A portrait view's 1080p is 1080 × 1920.
         assert_eq!(
-            live_frame(view(1200, 2400), (1080, 1920), BIG_PIXEL_RATE).size,
+            live_frame(view(1200, 2400), (1080, 1920), BIG_VIEW).size,
             (1080, 1920)
         );
         // A tall window in a wide view fits its height.
         assert_eq!(
-            live_frame(view(2400, 1200), (900, 1600), BIG_PIXEL_RATE).size,
+            live_frame(view(2400, 1200), (900, 1600), BIG_VIEW).size,
             (606, 1080)
         );
     }
@@ -185,13 +215,13 @@ mod tests {
             (2000, 1200),
             (5000, 3000),
         ] {
-            for rate in [BIG_PIXEL_RATE, INTEL_MAC_PIXEL_RATE] {
-                let frame = live_frame(view(w, h), RETINA, rate);
+            for budget in [BIG_VIEW, INTEL_MAC_VIEW] {
+                let frame = live_frame(view(w, h), RETINA, budget);
                 let small = frame.fps == LIVE_VIEW_FPS && frame.size == (640, 400);
-                let big = (BIG_MIN_FPS..=BIG_MAX_FPS).contains(&frame.fps);
+                let big = (budget.min_fps..=budget.max_fps).contains(&frame.fps);
                 assert!(small || big, "{frame:?}");
                 assert!(
-                    small || pixels(frame.size) * u64::from(frame.fps) <= rate,
+                    small || pixels(frame.size) * u64::from(frame.fps) <= budget.pixel_rate,
                     "{frame:?}"
                 );
                 assert!(frame.size.0 <= 1920 && frame.size.1 <= 1080, "{frame:?}");
@@ -203,13 +233,13 @@ mod tests {
     fn the_record_dialog_s_box_gets_its_own_pixels_on_both_computers() {
         // The dialog's 16:9 box is 672 × 378 points: 1344 × 756 device pixels on a 2x display.
         let dialog = view(1344, 756);
-        let intel = big_pixel_rate("macos", "x86_64");
-        let apple = big_pixel_rate("macos", "aarch64");
+        let intel = big_view_budget("macos", "x86_64");
+        let apple = big_view_budget("macos", "aarch64");
         // A 16:10 display fills the box's height, a pixel for each of the box's: about twice the small picture's
         // width. An Intel Mac sends fewer frames a second, within its pixels a second.
-        for (rate, fps) in [(apple, 30), (intel, 15)] {
+        for (budget, fps) in [(apple, 30), (intel, 15)] {
             assert_eq!(
-                live_frame(dialog, RETINA, rate),
+                live_frame(dialog, RETINA, budget),
                 LiveFrame {
                     size: (1208, 756),
                     fps
@@ -236,9 +266,9 @@ mod tests {
 
     #[test]
     fn an_intel_mac_s_big_view_is_about_720p_at_15() {
-        let intel = big_pixel_rate("macos", "x86_64");
-        assert_eq!(intel, INTEL_MAC_PIXEL_RATE);
-        assert_eq!(big_pixel_rate("macos", "aarch64"), BIG_PIXEL_RATE);
+        let intel = big_view_budget("macos", "x86_64");
+        assert_eq!(intel, INTEL_MAC_VIEW);
+        assert_eq!(big_view_budget("macos", "aarch64"), BIG_VIEW);
         // Full screen on a 16:10 Retina display: smaller rather than below 15 frames a second.
         assert_eq!(
             live_frame(view(2880, 1800), RETINA, intel),

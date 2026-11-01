@@ -17,8 +17,8 @@
 //! **A new view size** (`resize`) is applied to the running stream (`updateConfiguration:`), never by opening another:
 //! a smaller picture's lower rate at once, a bigger one's higher rate once the stream has taken it. One the stream
 //! didn't answer in time leaves its picture unknown, so the worker's next try always applies it (never
-//! left big while the view is small). The big pictures' pixels a second are this computer's
-//! (`live_view_size::this_computer_s_pixel_rate`: about 720p at 15 on an Intel Mac).
+//! left big while the view is small). The big pictures' pixels and frames a second are this computer's
+//! (`live_view_size::this_computer_s_budget`).
 //!
 //! **Its end:** a stream that stops by itself, or whose target goes, drops the frames' sender (shared through an
 //! `Option` that its callbacks take), so the worker's loop ends and the UI never keeps its last frame as live.
@@ -41,7 +41,9 @@ use super::jpeg::Jpeg;
 use super::screen::{start_error, status_of};
 use crate::backend::{PreviewFrame, PreviewPipe, Target};
 use crate::guard::assert_real_capture_allowed;
-use crate::live_view_size::{LiveFrame, ViewPixels, live_frame, this_computer_s_pixel_rate};
+use crate::live_view_size::{
+    BigViewBudget, LiveFrame, ViewPixels, live_frame, this_computer_s_budget,
+};
 use crate::pace::PreviewPacer;
 use crate::pipe::{PipeError, StopFlag};
 use crate::vendor::cap::sck::{Capturer, Frame, StreamCfgBuilder};
@@ -60,8 +62,8 @@ pub struct MacLiveView {
     target: Target,
     /// The view it shows in (None: the recorder's small view), as the app last said it.
     view: Option<ViewPixels>,
-    /// A big picture's most pixels a second on this computer.
-    rate: u64,
+    /// What a big picture may send on this computer.
+    budget: BigViewBudget,
     running: Option<Running>,
 }
 
@@ -87,7 +89,7 @@ impl MacLiveView {
         Ok(Self {
             target: target.clone(),
             view: None,
-            rate: this_computer_s_pixel_rate(),
+            budget: this_computer_s_budget(),
             running: None,
         })
     }
@@ -112,7 +114,7 @@ impl PreviewPipe for MacLiveView {
         let picked = filter::pick(&content, &self.target)?;
         drop(content);
         let (source, window) = (picked.pixels, picked.window);
-        let frame = live_frame(self.view, source, self.rate);
+        let frame = live_frame(self.view, source, self.budget);
         let cfg = stream_config(frame, window);
         let jpeg = Jpeg::new()?;
         let fps = Arc::new(AtomicU32::new(frame.fps));
@@ -182,7 +184,7 @@ impl PreviewPipe for MacLiveView {
         let Some(running) = self.running.as_mut() else {
             return true;
         };
-        let next = live_frame(view, running.source, self.rate);
+        let next = live_frame(view, running.source, self.budget);
         if running.frame == Some(next) {
             return true;
         }
