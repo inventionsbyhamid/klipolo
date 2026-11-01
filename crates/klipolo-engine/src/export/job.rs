@@ -191,7 +191,9 @@ pub struct ExportJob {
 }
 
 /// This build of Klipolo, as a job records it: the size and last change of the program running now, which is also the
-/// export worker. An update or a new build replaces the program, so its jobs from before read as another build's.
+/// export worker. An update or a new build replaces the program, so its jobs from before read as another build's. Read
+/// once, and the app reads it as it launches: a program replaced while it runs is never taken for this one. Empty when
+/// it can't be read (`same_build` then matches nothing).
 pub fn this_build() -> &'static str {
     static BUILD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     BUILD.get_or_init(|| {
@@ -207,6 +209,17 @@ pub fn this_build() -> &'static str {
             })
             .unwrap_or_default()
     })
+}
+
+/// Whether a job of `build` (as recorded) resumes in the build `now`: only in the build that made it. A build that
+/// couldn't be read (empty) matches none, nor does a job from before builds were recorded.
+pub fn same_build(build: Option<&str>, now: &str) -> bool {
+    !now.is_empty() && build == Some(now)
+}
+
+/// Whether this build of Klipolo made a job of `build` (`same_build`).
+pub fn is_this_build(build: Option<&str>) -> bool {
+    same_build(build, this_build())
 }
 
 fn blank_project() -> Project {
@@ -400,5 +413,20 @@ impl ExportJob {
     /// The manifest the worker is started with.
     pub fn manifest_path(&self) -> PathBuf {
         self.dir.join(JOB_FILE)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::same_build;
+
+    /// A job resumes only in the build that made it; a build that couldn't be read (an empty id) matches none, nor does
+    /// a job from before builds were recorded.
+    #[test]
+    fn only_the_build_that_made_a_job_resumes_it() {
+        assert!(same_build(Some("4096-17"), "4096-17"));
+        assert!(!same_build(Some("4096-17"), "4096-18"));
+        assert!(!same_build(Some(""), ""), "neither build could be read");
+        assert!(!same_build(None, "4096-17"));
     }
 }

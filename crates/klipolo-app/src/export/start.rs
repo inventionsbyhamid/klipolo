@@ -138,7 +138,7 @@ pub async fn resume_on_slot(
             Said::code("exports.unreadable")
         })?;
     // Another build's job never resumes: its file would mix parts drawn by two builds.
-    if opened.build.as_deref() != Some(klipolo_engine::export::job::this_build()) {
+    if !klipolo_engine::export::job::is_this_build(opened.build.as_deref()) {
         return Err(Said::code("exports.otherBuild"));
     }
     let cancel = state.take_slot(Some(job.to_owned())).await?;

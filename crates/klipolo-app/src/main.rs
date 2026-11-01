@@ -52,6 +52,8 @@ fn main() {
         std::process::exit(klipolo_capture::worker::main(&args));
     }
     log::install();
+    // This build, as its export jobs record it, read now: a program replaced while Klipolo runs is never taken for it.
+    let _ = klipolo_engine::export::job::this_build();
     // The engine's fonts, once: the bundled folder in the app's resources (or the repository's in a dev build).
     if let Err(e) = fonts::configure(FontDirs {
         bundled: klipolo_fonts::bundled::bundled_dir(),

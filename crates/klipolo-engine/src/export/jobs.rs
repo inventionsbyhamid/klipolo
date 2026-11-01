@@ -306,7 +306,7 @@ impl ExportJob {
             stale,
             created_ms: self.created_ms,
             bytes: folder_bytes(&self.dir),
-            other_build: self.build.as_deref() != Some(super::job::this_build()),
+            other_build: !super::job::is_this_build(self.build.as_deref()),
             compatibility: (self.state == JobState::Paused && self.offer_compatible).then(|| {
                 ExportCompatibility {
                     parts_to_redo: self.outputs.iter().map(JobOutput::parts_to_redo).sum(),
