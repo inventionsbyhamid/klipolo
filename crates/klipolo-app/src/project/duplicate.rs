@@ -9,18 +9,16 @@ use klipolo_model::coded::Said;
 use klipolo_model::history::Snapshot;
 use klipolo_model::ids::new_id;
 use klipolo_model::project::Project;
-use klipolo_platform::paths::safe_file_name;
+use klipolo_platform::paths::{FILE_NAME_MAX, safe_file_name};
 
 use super::{
     PROJECT_EXTENSION, ProjectSessionState, create_in, is_read_only, lock, read, read_only_refusal,
 };
 
-/// The most characters a project's name has (the model's limit).
-const MAX_NAME: usize = 200;
-
 /// The name a copy of `name` takes in `library`: "<name> copy", else "<name> copy 2" and on, the first whose file isn't
 /// there yet. A copy of a copy counts on from what it copied ("Trip copy" makes "Trip copy 2", never "Trip copy copy").
-/// A long name is shortened, never the word, so the copy's stays within 200 characters.
+/// A long name is shortened, never the word, to the 100 characters a file's name keeps (`FILE_NAME_MAX`): each name
+/// tried then has a file of its own, so the search ends.
 pub(crate) fn copy_name(library: &Path, name: &str) -> String {
     let base = copy_base(name.trim());
     (1..)
@@ -31,7 +29,7 @@ pub(crate) fn copy_name(library: &Path, name: &str) -> String {
             };
             let kept: String = base
                 .chars()
-                .take(MAX_NAME.saturating_sub(ending.chars().count()))
+                .take(FILE_NAME_MAX.saturating_sub(ending.chars().count()))
                 .collect();
             format!("{}{ending}", kept.trim_end())
         })
@@ -97,6 +95,9 @@ pub(crate) fn duplicate_in(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::time::Duration;
+
     use klipolo_model::Op;
     use klipolo_model::project::{Asset, AssetKind};
     use klipolo_model::{Transaction, history::Document};
@@ -261,7 +262,7 @@ mod tests {
         assert_eq!(copy_name(dir.path(), "Trip copy 12"), "Trip copy");
         let long = "a".repeat(200);
         let copy = copy_name(dir.path(), &long);
-        assert_eq!(copy.chars().count(), 200);
+        assert_eq!(copy.chars().count(), 100, "as long as a file name can be");
         assert!(copy.ends_with("a copy"));
         // A name made safe for its file still finds the free one.
         std::fs::write(
@@ -271,5 +272,37 @@ mod tests {
         )
         .unwrap();
         assert_eq!(copy_name(dir.path(), "a/b"), "a/b copy 2");
+    }
+
+    /// A file's name keeps 100 characters of a project's: a copy's ending stays in it, so a long name is copied, and
+    /// copied again, each into a file of its own (the search for a free name never runs out).
+    #[test]
+    fn a_long_name_is_copied_again_each_into_its_own_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = Arc::new(ProjectSessionState::default());
+        create_in(&state, dir.path(), Project::new("a".repeat(200))).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (copier, library) = (state.clone(), dir.path().to_path_buf());
+        std::thread::spawn(move || {
+            for _ in 0..2 {
+                let copy = duplicate_in(&copier, &library, None).map(|s| s.project.name);
+                let _ = tx.send(copy);
+            }
+        });
+        let names: Vec<String> = (0..2)
+            .map(|_| {
+                rx.recv_timeout(Duration::from_secs(20))
+                    .expect("a copy within 20 s")
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(
+            names,
+            [
+                format!("{} copy", "a".repeat(95)),
+                format!("{} copy 2", "a".repeat(93))
+            ]
+        );
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 3);
     }
 }
