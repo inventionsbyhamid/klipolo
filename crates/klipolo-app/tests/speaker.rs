@@ -397,3 +397,25 @@ async fn a_format_on_fit_is_left_alone() {
     assert!(!clip.fill_focus.contains_key(&Square));
     assert_eq!(clip.framing[&Square].mode, FramingMode::Fit);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_format_turned_to_fit_while_tracking_stays_fit() {
+    let setup = setup(Some(0.3));
+    let speaker = speaker(&setup, None, true);
+    let p = &setup.project;
+    let followed = speaker
+        .follow(p, &["c1".to_owned()], &[Portrait], "person")
+        .await
+        .unwrap();
+    // The person turned the vertical version to Fit while it tracked: landing leaves it so.
+    let mut now = p.clone();
+    let fit = klipolo_model::timeline::Framing {
+        mode: FramingMode::Fit,
+        focus_x: 0.5,
+        focus_y: 0.5,
+        follow: None,
+    };
+    now.timeline.main[0].framing.insert(Portrait, fit);
+    assert!(followed.ops(&now).is_empty());
+    assert_eq!(followed.ops(p).len(), 1);
+}
