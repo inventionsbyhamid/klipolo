@@ -68,7 +68,7 @@ export function ParamControl({ spec, value, label, opsFor, commitLabel, valueNow
       );
     }
     case 'bool':
-      return <Toggle aria-label={label} checked={now === true} onChange={pick} />;
+      return <Toggle aria-label={label} checked={now === true} onCheckedChange={pick} />;
     case 'point': {
       const point = (now as PointN | null) ?? MIDDLE;
       /** The point as the project has it now: each slider is its own change, keeping the other axis. */

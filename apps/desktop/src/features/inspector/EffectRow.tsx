@@ -55,7 +55,7 @@ export function EffectRow({ stack, fx, index, name, onRemove }: EffectRowProps) 
     <li {...ids} className="fx-row">
       <div className="fx-head">
         <Tooltip label={labelText(effectLabels.turn(fx.effect, !fx.enabled))}>
-          <Toggle aria-label={name} checked={fx.enabled} onChange={(on) => void turnEffect(stack, fx, on)} />
+          <Toggle aria-label={name} checked={fx.enabled} onCheckedChange={(on) => void turnEffect(stack, fx, on)} />
         </Tooltip>
         <span className="fx-name">{name}</span>
         {def.params.length > 0 && (
