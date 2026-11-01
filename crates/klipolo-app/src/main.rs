@@ -74,6 +74,8 @@ fn main() {
             commands::appearance::at_launch(app.handle());
             let cache = app.path().app_cache_dir().ok();
             app.manage(EngineState::new(Some(warm), cache));
+            // The Font menu's fonts: Google's catalogue and the downloads, each read off the main thread.
+            commands::fonts::start(app);
             // The library's favorites and recently used items, for every project, in the app's config folder.
             app.manage(commands::library::LibraryMarksState::new(
                 app.path().app_config_dir().ok(),
@@ -245,6 +247,25 @@ fn main() {
             commands::library::library_mark_used,
             commands::fonts::fonts_bundled,
             commands::fonts::fonts_face,
+            commands::fonts::fonts_face_of,
+            commands::fonts::fonts_search,
+            commands::fonts::fonts_browse,
+            commands::fonts::fonts_browse_rows,
+            commands::fonts::fonts_row,
+            commands::fonts::fonts_google,
+            commands::fonts::fonts_consent,
+            commands::fonts::fonts_set_google,
+            commands::fonts::fonts_download,
+            commands::fonts::fonts_cancel,
+            commands::fonts::fonts_preview,
+            commands::fonts::fonts_downloaded,
+            commands::fonts::fonts_remove,
+            commands::fonts::fonts_reveal,
+            commands::fonts::fonts_catalogue,
+            commands::fonts::fonts_missing,
+            commands::fonts::fonts_cjk,
+            commands::fonts::fonts_cjk_download,
+            commands::screen_color::screen_color_pick,
             commands::captions::captions_pages,
             commands::captions::captions_find,
             commands::captions::dev_fixture_speech,

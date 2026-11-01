@@ -4,6 +4,7 @@ import { closeSettings, openSettings, refreshAiStatus, useAi } from '../ai/aiSta
 import { AiIcon } from '../ai/icons';
 import { CopiesSettings } from '../features/media-jobs/CopiesSettings';
 import { Icon } from '../layout/Icon';
+import { FontsSettings } from '../features/fonts/FontsSettings';
 import { AppearanceSettings } from './AppearanceSettings';
 import { FieldError, Note } from './FieldNotes';
 import { OtherApps } from './OtherApps';
@@ -25,7 +26,8 @@ const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), [tabindex="0"]';
 /**
  * Settings: how Klipolo pays for Meta's models, an access code or the person's own key,
  * whether other apps may edit the open project (`OtherApps`), whether editing copies are made by themselves
- * (`CopiesSettings`, the same switch as the top bar's pill), and the theme (`AppearanceSettings`).
+ * (`CopiesSettings`, the same switch as the top bar's pill), Google Fonts and the downloaded fonts (`FontsSettings`), and
+ * the theme (`AppearanceSettings`).
  * Mounted once; opens from the top bar, NeedsKey or Command comma. Esc and the close button close it, and focus goes
  * back where it was. The key is sent to Rust and never shown again: only "Saved" and its last 4 characters.
  */
@@ -126,6 +128,7 @@ function Settings() {
         {choice === 'code' ? <CodeSection status={status} /> : <KeySection status={status} />}
         <OtherApps />
         <CopiesSettings />
+        <FontsSettings />
         <AppearanceSettings />
         <div className="dialog-foot">
           <span className="left">Audio and low-resolution video go to Meta's model API.</span>

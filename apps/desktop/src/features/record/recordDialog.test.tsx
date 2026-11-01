@@ -760,6 +760,33 @@ describe('countdown, saving and failure', () => {
     expect(fake.calls.at(-1)).toBe('send:cancel');
   });
 
+  it('the_gate_s_question_takes_the_keyboard_back_once_macos_is_answered', async () => {
+    const dialog = await pressRecord(recorderSetup({ cameras: [device('FaceTime HD Camera')] }));
+    const camera = "Camera isn't sending anything yet.";
+    emit('take-1', countdown(1));
+    emit('take-1', gate('camera'));
+    expect(screen.getByRole('button', { name: 'Record without it' })).toHaveFocus();
+    // macOS asks over the question: the keyboard goes to Cancel, the one control left.
+    emit('take-1', countdown(1));
+    emit('take-1', systemAlert(true));
+    expect(screen.queryByRole('button', { name: 'Record without it' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    // Answered with the camera still silent: the worker says the question again, and it has the keyboard again.
+    emit('take-1', countdown(3));
+    emit('take-1', gate('camera'));
+    emit('take-1', systemAlert(false));
+    expect(dialog).toHaveTextContent(camera);
+    expect(screen.getByRole('button', { name: 'Record without it' })).toHaveFocus();
+    // Asked again, and the camera answered meanwhile: the question goes with macOS's, and the count shows.
+    emit('take-1', systemAlert(true));
+    emit('take-1', countdown(3));
+    emit('take-1', gate());
+    emit('take-1', systemAlert(false));
+    expect(dialog).not.toHaveTextContent(camera);
+    expect(dialog.querySelector('.record-count')).toHaveTextContent('3');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+  });
+
   it('the_dialog_hides_while_recording_and_saving', async () => {
     await pressRecord();
     emit('take-1', countdown(1));

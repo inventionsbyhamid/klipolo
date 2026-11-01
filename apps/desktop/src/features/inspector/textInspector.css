@@ -1,0 +1,89 @@
+/* The text card's style rows: Bold and alignment, the looks, the outline's width. Colours are tokens; a look's sample
+   draws the look's own colours (content, not UI). */
+
+.text-style-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.seg .seg-icon {
+  display: grid;
+  place-items: center;
+  padding: 0 var(--space-3);
+}
+
+.text-looks {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.text-look {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: stretch;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  color: var(--color-ink-soft);
+  font-size: 11px;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.text-look:hover {
+  background: var(--color-bay-hover);
+  color: var(--color-ink);
+}
+
+.text-look[aria-pressed="true"] {
+  color: var(--color-ink);
+  box-shadow: inset 0 0 0 2px var(--color-paper);
+}
+
+.text-look:focus-visible {
+  outline: 2px solid var(--color-paper);
+  outline-offset: 2px;
+}
+
+/* A look's sample is shown as over video, dark in both themes, as the caption style cards are. */
+.text-look-sample {
+  color-scheme: dark;
+  display: grid;
+  place-items: center;
+  height: 32px;
+  overflow: hidden;
+  border-radius: var(--radius-xs, 4px);
+  background: linear-gradient(160deg, var(--color-bay-press), var(--color-clip-deep) 55%, var(--color-night));
+}
+
+.text-look-name {
+  overflow-wrap: anywhere;
+}
+
+.outline-field {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* The font menu, and under it a note while the title's font isn't on this Mac. */
+.font-field {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* Size: − and + either side of the slider. */
+.text-size-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.text-size-row .slider-row {
+  flex: 1;
+  min-width: 0;
+}
