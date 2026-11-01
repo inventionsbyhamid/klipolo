@@ -467,7 +467,7 @@ function ToggleRow({
 }) {
   return (
     <div className="record-toggle">
-      <Toggle id={id} checked={checked} onChange={onChange} />
+      <Toggle id={id} checked={checked} onCheckedChange={onChange} />
       <label htmlFor={id}>{label}</label>
     </div>
   );

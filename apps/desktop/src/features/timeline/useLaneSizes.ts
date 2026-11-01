@@ -1,14 +1,23 @@
 import { useSyncExternalStore } from 'react';
-import { MUSIC_LANE_PX, SHORT_MUSIC_LANE_PX, SHORT_SOUNDS_LANE_PX, SHORT_WINDOW, SOUNDS_LANE_PX } from './layout';
+import {
+  MUSIC_LANE_PX,
+  SHORT_MUSIC_LANE_PX,
+  SHORT_SOUNDS_LANE_PX,
+  SHORT_SOURCE_LANE_PX,
+  SHORT_WINDOW,
+  SOUNDS_LANE_PX,
+  SOURCE_LANE_PX,
+} from './layout';
 
-/** The Sounds and Music lanes' heights (px). */
+/** The heights (px) of the Sounds and Music lanes and of each recorded sound's lane under Video. */
 export interface LaneSizes {
   sounds: number;
   music: number;
+  source: number;
 }
 
-const TALL: LaneSizes = { sounds: SOUNDS_LANE_PX, music: MUSIC_LANE_PX };
-const SHORT: LaneSizes = { sounds: SHORT_SOUNDS_LANE_PX, music: SHORT_MUSIC_LANE_PX };
+const TALL: LaneSizes = { sounds: SOUNDS_LANE_PX, music: MUSIC_LANE_PX, source: SOURCE_LANE_PX };
+const SHORT: LaneSizes = { sounds: SHORT_SOUNDS_LANE_PX, music: SHORT_MUSIC_LANE_PX, source: SHORT_SOURCE_LANE_PX };
 
 function subscribe(changed: () => void): () => void {
   const query = window.matchMedia(SHORT_WINDOW);

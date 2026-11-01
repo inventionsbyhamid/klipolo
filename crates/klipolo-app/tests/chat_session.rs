@@ -2563,3 +2563,119 @@ async fn a_proposal_made_before_the_words_were_timed_again_is_dropped() {
         "{note}"
     );
 }
+
+/// "talk.mov" played to `spare` s before its end, then a b-roll clip with 2 s of footage before its in point, joined by
+/// a dissolve as long as fits (2 s with 1 s spare; 0.16 s with 0.08 s spare). At 2x the talk's spare footage halves.
+fn talk_into_broll(spare: f64) -> Project {
+    let mut p = talk();
+    let mut broll = p.assets[0].clone();
+    broll.id = "broll".into();
+    broll.name = "broll.mov".into();
+    broll.has_audio = false;
+    p.assets.push(broll);
+    p.timeline.main[0].source_out_us = secs(30.0 - spare);
+    let mut b = Clip::new(
+        ClipSource::Asset { id: "broll".into() },
+        secs(2.0),
+        secs(12.0),
+    );
+    b.id = "b".into();
+    p.timeline.main.push(b);
+    let dissolve = klipolo_model::timeline::Transition {
+        effect: klipolo_model::contrib::builtin::TRANSITION_DISSOLVE.into(),
+        duration_us: secs(2.0_f64.min(spare * 2.0)),
+        params: Default::default(),
+    };
+    let set = Op::SetTransition {
+        clip_id: "t".into(),
+        transition: Some(dissolve),
+    };
+    klipolo_model::apply_ops(&p, &[set]).unwrap()
+}
+
+/// The clip card's speed change of clip "t", as the person makes it by hand.
+fn speed_by_hand(p: &Project, speed: f64) -> Project {
+    let patch = klipolo_model::ops::ClipPatch {
+        speed: Some(speed),
+        ..Default::default()
+    };
+    let op = Op::UpdateClip {
+        id: "t".into(),
+        patch,
+    };
+    klipolo_model::apply_ops(p, &[op]).unwrap()
+}
+
+#[tokio::test]
+async fn a_speed_that_shortens_a_transition_applies_at_once_and_says_so_as_the_card_does() {
+    let model = Script::new(vec![answer(
+        "Sped up the talk.",
+        vec![fc("s", "setClip", r#"{"clip": "c1", "speed": 2}"#)],
+    )]);
+    let p = talk_into_broll(1.0);
+    let chat = chat_on(p, model.clone(), Found::done(), Paying::key(model));
+    let p = chat.project.project().clone();
+    let out = chat
+        .session
+        .send(request("speed up the talk 2x"))
+        .await
+        .unwrap();
+    let r = reply(&out);
+    assert_eq!(r["text"], "Sped up the talk. A transition is shortened.");
+    assert!(r["proposal"].is_null());
+    // As the card's `speed.undo.note`: the change, then the page's note on the transitions.
+    assert_eq!(r["applied"]["undo"]["code"], "chat.setClip.note");
+    assert_eq!(
+        r["applied"]["undo"]["params"]["note"],
+        serde_json::json!({"code": "timeline.refit", "params": {"removed": 0.0, "shortened": 1.0}})
+    );
+    assert_eq!(chat.project.undo_steps(), 1);
+    // The project is the hand edit's, origin aside.
+    assert_eq!(*chat.project.project(), speed_by_hand(&p, 2.0));
+    let shortened = chat.project.project().timeline.main[0]
+        .transition_out
+        .clone();
+    assert_eq!(shortened.map(|t| t.duration_us), Some(secs(1.0)));
+    chat.project.step(false).unwrap();
+    assert_eq!(*chat.project.project(), *p);
+}
+
+#[tokio::test]
+async fn a_speed_that_leaves_a_transition_no_room_waits_for_apply_then_undoes_as_one_step() {
+    let model = Script::new(vec![answer(
+        "",
+        vec![fc("s", "setClip", r#"{"clip": "c1", "speed": 2}"#)],
+    )]);
+    let p = talk_into_broll(0.08);
+    let chat = chat_on(p, model.clone(), Found::done(), Paying::key(model));
+    let p = chat.project.project().clone();
+    let out = chat
+        .session
+        .send(request("speed up the talk 2x"))
+        .await
+        .unwrap();
+    let r = reply(&out);
+    assert!(r["applied"].is_null(), "it takes a transition away");
+    assert_eq!(
+        r["text"],
+        "Here is what I would remove. Apply it or discard it. At that speed a transition no longer fits, so the \
+         change waits for Apply."
+    );
+    assert_eq!(r["proposal"]["title"], "Remove 1 transition");
+    assert_eq!(
+        r["proposal"]["removals"]["transitions"],
+        serde_json::json!(["t"])
+    );
+    let applied = chat.session.apply(&proposal_id(&out)).unwrap();
+    assert_eq!(applied.undo.code, "chat.setClip.note");
+    let note = serde_json::to_value(&applied.undo.params["note"]).unwrap();
+    assert_eq!(
+        note,
+        serde_json::json!({"code": "timeline.refit", "params": {"removed": 1.0, "shortened": 0.0}})
+    );
+    assert_eq!(chat.project.undo_steps(), 1);
+    assert_eq!(*chat.project.project(), speed_by_hand(&p, 2.0));
+    assert_eq!(chat.project.project().timeline.main[0].transition_out, None);
+    chat.project.step(false).unwrap();
+    assert_eq!(*chat.project.project(), *p);
+}

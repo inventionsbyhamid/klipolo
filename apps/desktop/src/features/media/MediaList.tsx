@@ -202,7 +202,8 @@ export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
       {content}
     </div>
   );
-  // A recording's files are named by their source and recording ("Screen of Recording 1"), as the timeline names them.
+  // A recording's files are named by their source and recording ("Screen of Recording 1"), as the timeline names them,
+  // and a search finds them by that name.
   const named = (asset: Asset): Asset => ({ ...asset, name: assetName(project, asset) });
   const shelved = shelves(project);
   const own = {

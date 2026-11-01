@@ -11,7 +11,7 @@ interface TrimHandlesProps {
 /**
  * A block's two edges: drag one to trim it. Each is a 12 px pad (at most a quarter of the block, so a narrow one still
  * moves) over the labels; a selected block shows its grips there (paper on clips, on-paper ink on a
- * overlay). Pointer only, hidden from screen readers: the keyboard trims with Q and W.
+ * selected overlay). Pointer only, hidden from screen readers: the keyboard trims with Q and W.
  */
 export function TrimHandles({ selected, onTrimPress }: TrimHandlesProps) {
   return EDGES.map((edge) => (

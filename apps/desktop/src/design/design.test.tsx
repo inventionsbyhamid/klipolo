@@ -40,7 +40,7 @@ describe('design primitives', () => {
     renderWithProviders(
       <>
         <label htmlFor="safe">Show safe area</label>
-        <Toggle id="safe" checked={false} onChange={flipped} />
+        <Toggle id="safe" checked={false} onCheckedChange={flipped} />
       </>,
     );
     const toggle = screen.getByRole('switch', { name: 'Show safe area' });

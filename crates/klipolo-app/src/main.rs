@@ -70,6 +70,8 @@ fn main() {
             }
         })
         .setup(move |app| {
+            // First, before the page loads: the window's colour is the saved theme's.
+            commands::appearance::at_launch(app.handle());
             let cache = app.path().app_cache_dir().ok();
             app.manage(EngineState::new(Some(warm), cache));
             // The library's favorites and recently used items, for every project, in the app's config folder.
@@ -190,6 +192,7 @@ fn main() {
             project::project_reveal,
             project::projects_recent,
             media::media_import,
+            commands::appearance::appearance_set,
             commands::settings::settings_get,
             commands::settings::settings_set_key,
             commands::settings::settings_set_code,
@@ -211,6 +214,7 @@ fn main() {
             view::editor_view,
             media_cache::media_peaks_info,
             media_cache::media_peaks,
+            media_cache::media_channel_peaks,
             media_cache::media_thumbs,
             commands::media::media_add_music,
             commands::media::media_add_sound,
@@ -279,6 +283,11 @@ fn main() {
                 // made keeps its finished segments: its worker sees the app go and is made on at the next launch.
                 commands::export::on_exit(app);
             }
+            // The system's appearance changed: the window's colour follows it while the theme is System.
+            RunEvent::WindowEvent {
+                event: WindowEvent::ThemeChanged(system),
+                ..
+            } => commands::appearance::system_changed(app, system),
             // Back in front: a source exported again elsewhere meanwhile must not keep showing its old editing copy.
             RunEvent::WindowEvent {
                 event: WindowEvent::Focused(true),

@@ -4,7 +4,7 @@ import { placeDrawn, viewPps } from './anchor';
 import { chunkFiles, drawFilmstrip, filmTiles, type FilmMap } from './drawFilmstrip';
 import { drawWaveform, peakLevel, type WaveStyle } from './drawWaveform';
 import { loadWave, type Wave } from './peaksCache';
-import { resolveToken } from './resolveToken';
+import { resolveToken } from '../../../lib/resolveToken';
 import { fileUs, runParts, runsKey, soundUs, sourceAtUs, type BlockRuns, type RunPart } from './runs';
 import { spriteCache, stripOf } from './spriteCache';
 import type { ZoomRest } from './zoomRest';

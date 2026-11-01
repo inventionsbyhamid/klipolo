@@ -23,7 +23,7 @@ use super::{Compiler, Edit, Refused, label, to_model, us};
 use crate::context::secs;
 
 /// The format's word, as the tool takes it.
-fn format_word(format: FormatKind) -> &'static str {
+pub(super) fn format_word(format: FormatKind) -> &'static str {
     match format {
         FormatKind::Landscape => "landscape",
         FormatKind::Portrait => "portrait",

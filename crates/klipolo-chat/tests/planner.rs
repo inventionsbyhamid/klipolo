@@ -1105,3 +1105,47 @@ fn a_media_call_refused_twice_is_named_by_what_it_does() {
         "{output}"
     );
 }
+
+/// "talk.mov" as two clips, the first 1 s short of the file's end, with a 2 s dissolve into a b-roll clip that has 2 s
+/// of footage before its in point: at 2x the first clip's spare footage halves, so the dissolve shortens to 1 s.
+fn with_dissolve() -> Project {
+    let (mut p, _) = talk();
+    let mut broll = p.assets[0].clone();
+    broll.id = "broll".into();
+    broll.name = "broll.mov".into();
+    broll.has_audio = false;
+    p.assets.push(broll);
+    p.timeline.main[0].source_out_us = secs(29.0);
+    let mut b = Clip::new(
+        ClipSource::Asset { id: "broll".into() },
+        secs(2.0),
+        secs(12.0),
+    );
+    b.id = "b".into();
+    p.timeline.main.push(b);
+    let dissolve = klipolo_model::timeline::Transition {
+        effect: klipolo_model::contrib::builtin::TRANSITION_DISSOLVE.into(),
+        duration_us: secs(2.0),
+        params: Default::default(),
+    };
+    let set = klipolo_model::Op::SetTransition {
+        clip_id: p.timeline.main[0].id.clone(),
+        transition: Some(dissolve),
+    };
+    klipolo_model::apply_ops(&p, &[set]).unwrap()
+}
+
+#[test]
+fn the_reply_says_what_a_new_speed_did_to_a_transition_after_the_models_words() {
+    let p = with_dissolve();
+    let i = inputs(&p, talk().1);
+    let speed = || fc("s", "setClip", r#"{"clip": "c1", "speed": 2}"#);
+    let model = Fake::new(vec![answer("Sped up the talk.", vec![speed()], 0.001)]);
+    let out = send(&model, &[], "speed up the talk 2x", &i, &p).unwrap();
+    assert!(out.compiled.additions.is_some());
+    assert_eq!(out.reply, "Sped up the talk. A transition is shortened.");
+    // With no words of the model's, after the short sentence.
+    let model = Fake::new(vec![answer("", vec![speed()], 0.001)]);
+    let out = send(&model, &[], "speed up the talk 2x", &i, &p).unwrap();
+    assert_eq!(out.reply, "Done. A transition is shortened.");
+}

@@ -1,6 +1,6 @@
 //! The preflight's smoke run on a Mac: the real backend's preflight (caps, devices, permissions, the battery), timed,
 //! with no capture and no prompt. It prints counts, transports, sizes and timings only, never a device's or an app's
-//! name (for privacy). Run by hand, never in tests (the consent guard refuses under `KLIPOLO_TEST`):
+//! name (the person's privacy). Run by hand, never in tests (the consent guard refuses under `KLIPOLO_TEST`):
 //! `cargo run -p klipolo-capture --features real-capture --example preflight_smoke`.
 
 fn main() {

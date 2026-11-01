@@ -7,16 +7,17 @@
 //! ```
 //!
 //! It calls Meta for real with `MODEL_API_KEY` (a Meta key) from the environment, never from a file, and never prints
-//! it. `KLIPOLO_SPEND_LEDGER` (a CSV file), when set, gets one row per model call; `KLIPOLO_META_BASE` points the
-//! calls elsewhere. It exits 0 when at least `--min-pass` cases pass (16 by default, or every case run with `--only`),
-//! 1 when fewer do, 2 when it could not run.
+//! it. `KLIPOLO_SPEND_LEDGER` (a CSV file), when set, gets one row per model call; `KLIPOLO_META_BASE` points the calls
+//! elsewhere. It exits 0 when at least `--min-pass` cases pass (`MIN_PASS` by default, or every case run with
+//! `--only`), 1 when fewer do, 2 when it could not run.
 //!
 //! The eval set names a project, its one asset and that asset's transcript, speaker turns and scene log (paths beside
-//! `cases.json`). Every file counts as analyzed, and its loudness is made from the transcript: speech where a word is
-//! said, quiet elsewhere, so pause removal finds the transcript's pauses. Each case is one message on that project, on
-//! the conversation it gives, with the playhead at 0 and no selection unless it says otherwise. The library the media
-//! tools name is the set's own `library` files (as if just imported: not in the project yet) and Klipolo's pack as its
-//! `pack` manifest lists it, each pack file where the manifest says.
+//! `cases.json`); a case may name a project of its own that plays the same asset (clip A in clips, beside a song, under
+//! music and a b-roll layer). Every file counts as analyzed, and its loudness is made from the transcript: speech where
+//! a word is said, quiet elsewhere, so pause removal finds the transcript's pauses. Each case is one message on that
+//! project, on the conversation it gives, with the playhead at 0 and no selection unless it says otherwise. The library
+//! the media tools name is the set's own `library` files (as if just imported: not in the project yet) and Klipolo's
+//! pack as its `pack` manifest lists it, each pack file where the manifest says.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -40,8 +41,8 @@ use serde_json::{Map, Value, json};
 const KEY_ENV: &str = "MODEL_API_KEY";
 const USAGE: &str =
     "usage: klipolo-chat-eval [--cases <cases.json>] [--only <id>]... [--min-pass <n>]";
-/// The planner's target: at least this many of the 27 cases.
-const MIN_PASS: usize = 25;
+/// The planner's target: at least this many of the 37 cases.
+const MIN_PASS: usize = 35;
 /// Loudness of a window with a word said in it, and of one without, in dBFS.
 const SPEECH_DB: f32 = -20.0;
 const QUIET_DB: f32 = -70.0;
@@ -111,6 +112,9 @@ struct Case {
     /// [start, end] in timeline seconds.
     #[serde(default)]
     selection: Option<[f64; 2]>,
+    /// The case's own project (beside the set's file), playing the set's asset; None for the set's project.
+    #[serde(default)]
+    project: Option<String>,
     /// Alternatives: the case passes when one of them matches.
     expect: Vec<Expect>,
 }
@@ -324,6 +328,14 @@ fn run(args: &Args) -> Result<bool, String> {
     let dir = args.cases.parent().unwrap_or(Path::new("."));
     let fx = fixture(dir, &set)?;
     let library = library(dir, &set)?;
+    // The cases' own projects, each read once.
+    let mut projects: HashMap<String, Project> = HashMap::new();
+    for name in set.cases.iter().filter_map(|c| c.project.as_ref()) {
+        if !projects.contains_key(name) {
+            let project = load_project(&read(dir, name)?).map_err(|e| format!("{name}: {e}"))?;
+            projects.insert(name.clone(), project);
+        }
+    }
     let cases: Vec<&Case> = (set.cases.iter())
         .filter(|c| args.only.is_empty() || args.only.contains(&c.id))
         .collect();
@@ -343,6 +355,7 @@ fn run(args: &Args) -> Result<bool, String> {
 
     let (mut passed, mut cost, mut model_calls) = (0, 0.0, 0);
     for case in &cases {
+        let project = (case.project.as_ref()).map_or(&fx.project, |name| &projects[name]);
         let view = View {
             playhead_us: secs_to_us(case.playhead),
             selection: case.selection.map(|[a, b]| RangeUs {
@@ -350,14 +363,7 @@ fn run(args: &Args) -> Result<bool, String> {
                 end: secs_to_us(b),
             }),
         };
-        let ctx = build_context(
-            &fx.project,
-            &fx.speech,
-            &fx.turns,
-            &fx.scenes,
-            &view,
-            &library,
-        );
+        let ctx = build_context(project, &fx.speech, &fx.turns, &fx.scenes, &view, &library);
         let inputs = Inputs {
             message: case.message.clone(),
             view,
@@ -374,7 +380,7 @@ fn run(args: &Args) -> Result<bool, String> {
             &ctx,
             &case.message,
             &inputs,
-            &fx.project,
+            project,
         ));
         let (verdict, spent, calls_made) = match &planned {
             Ok(out) => (judge(case, out), out.usage_usd, out.answers.len()),
@@ -603,6 +609,29 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             json!({"clip": clip, "edge": word(edge), "toSec": s(*to_us)})
         }
         ToolCall::SplitAt { at_us } => json!({"atSec": s(*at_us)}),
+        ToolCall::SetClip {
+            clip,
+            speed,
+            volume,
+            muted,
+            framing,
+        } => json!({
+            "clip": clip.word(),
+            "speed": speed,
+            "volume": volume,
+            "muted": muted,
+            "framing": framing.map(|(mode, _)| word(&mode)),
+            "framingFormat": framing.and_then(|(_, format)| format).map(|f| word(&f)),
+        }),
+        ToolCall::SetTransition {
+            after,
+            kind,
+            duration_us,
+        } => json!({
+            "after": after.word(),
+            "kind": kind.map_or("none", |k| k.key()),
+            "durationSec": duration_us.map(s),
+        }),
         ToolCall::SetFormat {
             format,
             keep_others,
