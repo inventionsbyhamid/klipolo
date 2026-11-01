@@ -46,6 +46,10 @@ pub fn op_risk(op: &Op) -> OpRisk {
         | Op::RemoveAsset { .. }
         | Op::RemoveLut { .. }
         | Op::TrimClip { .. }
+        // Each hides footage the clip showed, as a trim does (the length stays).
+        | Op::Roll { .. }
+        | Op::Slip { .. }
+        | Op::Slide { .. }
         | Op::TrimItem { .. }
         | Op::RemoveEffect { .. }
         | Op::RemoveMarker { .. } => OpRisk::Removal,

@@ -57,7 +57,7 @@ fn clip_span(main: &[Clip], i: usize) -> (Us, Us) {
     (start, start.saturating_add(main[i].duration_us()))
 }
 
-fn clamp_fades(c: &mut Clip) {
+pub(super) fn clamp_fades(c: &mut Clip) {
     let d = c.duration_us().max(0);
     c.fade_in_us = c.fade_in_us.clamp(0, d);
     c.fade_out_us = c.fade_out_us.clamp(0, d.saturating_sub(c.fade_in_us));

@@ -228,6 +228,12 @@ pub const MESSAGES: Messages = &[
     ("model.clip.splitEdge", "That's too close to the edge of a clip to split."),
     ("model.clip.nothingToRemove", "Nothing to remove in that range."),
     ("model.clip.minLength", "A clip can't be trimmed shorter than 10 ms."),
+    ("model.roll.noCut", "There's no cut after this clip to roll."),
+    ("model.slide.alone", "Only a clip with a clip on each side can slide."),
+    ("model.edit.noFootage", "There's no more footage that way."),
+    ("model.edit.transition", "A transition needs the footage this edit would use. Shorten or remove it first."),
+    ("model.edit.locked", "A layer on a locked track would move. Unlock its track first."),
+    ("model.edit.separated", "A separated sound or camera starts in the footage this edit hides. Trim it first."),
     ("model.transition.noRoom", "There isn't enough extra footage at this cut for a transition."),
     ("model.transition.tooShort", "A transition can't be shorter than 0.1 s."),
     // `maxDurationUs`: the longest that fits, floored to a tenth of a second.

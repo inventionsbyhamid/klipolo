@@ -92,6 +92,9 @@ pub fn may_change_sound(p: &Project, op: &Op) -> bool {
         | Op::InsertClip { .. }
         | Op::MoveClip { .. }
         | Op::TrimClip { .. }
+        | Op::Roll { .. }
+        | Op::Slip { .. }
+        | Op::Slide { .. }
         | Op::Split { .. }
         | Op::DeleteRanges { .. }
         | Op::RemoveClip { .. }

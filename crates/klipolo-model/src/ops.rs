@@ -107,6 +107,24 @@ pub enum Op {
         edge: Edge,
         source_us: Us,
     },
+    /// Roll the cut after main-track clip `clip_id` by `by_us` of timeline, later when positive: the clip's out point and
+    /// the next clip's in point move together, so nothing after the cut moves and the video keeps its length.
+    Roll {
+        clip_id: Id,
+        by_us: Us,
+    },
+    /// Slip a main-track clip's footage by `by_us` of timeline, later footage when positive: its in and out points move
+    /// together through its source, and its place and length stay.
+    Slip {
+        clip_id: Id,
+        by_us: Us,
+    },
+    /// Slide a main-track clip `by_us` of timeline, later when positive, between the clips either side, which trim to
+    /// make room: the one before ends later and the one after starts later. The clip and the video keep their length.
+    Slide {
+        clip_id: Id,
+        by_us: Us,
+    },
     /// Split the main-track clip playing at `at_us` into two.
     Split {
         at_us: Us,
@@ -474,6 +492,9 @@ impl Op {
             Op::InsertClip { .. } => "insertClip",
             Op::MoveClip { .. } => "moveClip",
             Op::TrimClip { .. } => "trimClip",
+            Op::Roll { .. } => "roll",
+            Op::Slip { .. } => "slip",
+            Op::Slide { .. } => "slide",
             Op::Split { .. } => "split",
             Op::DeleteRanges { .. } => "deleteRanges",
             Op::RemoveClip { .. } => "removeClip",
