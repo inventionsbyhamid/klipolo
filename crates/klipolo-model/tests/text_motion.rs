@@ -5,13 +5,13 @@ use klipolo_model::contrib::Catalog;
 use klipolo_model::font::FontRef;
 use klipolo_model::layout::{Anchor, BoxN, Layout};
 use klipolo_model::media::text_motion::{
-    self, From, MAX_LETTERS, Order, SOURCE, TextMotion, Unit, problem, scene, scene_of,
+    self, problem, scene, scene_of, From, Order, TextMotion, Unit, MAX_LETTERS, SOURCE,
 };
 use klipolo_model::motion::Ease;
 use klipolo_model::ops::{Op, TrackTarget};
-use klipolo_model::scene::{Split, check_scene};
+use klipolo_model::scene::{check_scene, Split};
 use klipolo_model::timeline::{Item, ItemContent, Outline, TextAlign, TextStyle};
-use klipolo_model::{Project, apply_ops};
+use klipolo_model::{apply_ops, Project};
 
 fn pop_in(unit: Unit) -> TextMotion {
     TextMotion {
@@ -65,11 +65,16 @@ fn settings_read_back_as_they_were_stored() {
     assert_eq!(style, styled());
     assert_eq!(read, motion);
     // Every setting is one the definition lists, and each value is one it takes.
-    let def = Catalog::builtin().get(&text_motion::source()).expect("in the catalogue");
+    let def = Catalog::builtin()
+        .get(&text_motion::source())
+        .expect("in the catalogue");
     assert_eq!(def.id.as_str(), SOURCE);
     for (key, value) in &params {
-        let spec = def.param(key).unwrap_or_else(|| panic!("{key} is not a setting"));
-        spec.check(value, &Project::new("p")).unwrap_or_else(|e| panic!("{key}: {e:?}"));
+        let spec = def
+            .param(key)
+            .unwrap_or_else(|| panic!("{key} is not a setting"));
+        spec.check(value, &Project::new("p"))
+            .unwrap_or_else(|e| panic!("{key}: {e:?}"));
     }
 }
 
@@ -81,8 +86,14 @@ fn settings_left_out_or_unreadable_take_the_defaults() {
     assert_eq!(motion.unit, Unit::Word);
     assert!(motion.from.is_rest());
     let mut params = text_motion::params("Hi", &TextStyle::default(), &pop_in(Unit::Letter));
-    params.insert("fromScale".into(), klipolo_model::params::ParamValue::Number(99.0));
-    params.insert("ease".into(), klipolo_model::params::ParamValue::Text("wobbly".into()));
+    params.insert(
+        "fromScale".into(),
+        klipolo_model::params::ParamValue::Number(99.0),
+    );
+    params.insert(
+        "ease".into(),
+        klipolo_model::params::ParamValue::Text("wobbly".into()),
+    );
     let (_, _, motion) = text_motion::read(&params);
     assert_eq!(motion.from.scale, Some(10.0), "held to its range");
     assert_eq!(motion.ease, None);
@@ -150,7 +161,10 @@ fn a_text_too_long_to_draw_letter_by_letter_is_refused_with_what_to_do() {
     assert!(said.contains("stagger"), "{said}");
     // What a stored layer asks past it still draws, by word.
     let mut params = text_motion::params(&long, &TextStyle::default(), &pop_in(Unit::Letter));
-    params.insert("by".into(), klipolo_model::params::ParamValue::Text("letter".into()));
+    params.insert(
+        "by".into(),
+        klipolo_model::params::ParamValue::Text("letter".into()),
+    );
     let s = scene_of(&params);
     assert_eq!(s.nodes[0].props.split, Some(Split::Words));
     check_scene(&s, Catalog::builtin()).unwrap();
@@ -167,7 +181,11 @@ fn too_many_letters_blurring_at_once_is_what_the_scene_check_refuses() {
         stagger_secs: Some(0.02),
         ..pop_in(Unit::Letter)
     };
-    let s = scene("A long line of letters that blur in", &TextStyle::default(), &blurred);
+    let s = scene(
+        "A long line of letters that blur in",
+        &TextStyle::default(),
+        &blurred,
+    );
     let problems = check_scene(&s, Catalog::builtin()).unwrap_err();
     assert!(
         problems.iter().any(|p| p.message.contains("blur")),

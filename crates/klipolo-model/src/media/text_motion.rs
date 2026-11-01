@@ -364,7 +364,10 @@ pub fn params(text: &str, style: &TextStyle, motion: &TextMotion) -> BTreeMap<St
     }
     put("sec", ParamValue::Number(motion.unit_secs()));
     put("stagger", ParamValue::Number(motion.stagger_secs()));
-    put("ease", ParamValue::Text(motion.ease.unwrap_or(Ease::Power2Out).name()));
+    put(
+        "ease",
+        ParamValue::Text(motion.ease.unwrap_or(Ease::Power2Out).name()),
+    );
     put(
         "order",
         ParamValue::Text(motion.order.unwrap_or(Order::Start).word().to_owned()),
@@ -570,7 +573,11 @@ pub fn definition_params() -> Vec<ParamSpec> {
             },
         ),
         choice("order", "First", &ORDERS.map(Order::word), "start"),
-        spec("exit", "Leave the same way", ParamKind::Bool { default: false }),
+        spec(
+            "exit",
+            "Leave the same way",
+            ParamKind::Bool { default: false },
+        ),
         spec(
             "font",
             "Font",

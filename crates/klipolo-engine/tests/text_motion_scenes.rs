@@ -34,7 +34,10 @@ fn animated_words_draw_the_scene_their_settings_make_once() {
     let params = words("Each word in turn", Unit::Word);
     let first = reg.scene_for(&source, &params).expect("a scene");
     let again = reg.scene_for(&source, &params).expect("a scene");
-    assert!(Arc::ptr_eq(&first, &again), "compiled once for the same settings");
+    assert!(
+        Arc::ptr_eq(&first, &again),
+        "compiled once for the same settings"
+    );
     assert!(first.facts.animates);
     assert_eq!(first.nodes.len(), 1);
     let segments = first.segments.expect("in and out");
@@ -42,7 +45,10 @@ fn animated_words_draw_the_scene_their_settings_make_once() {
     let other = reg
         .scene_for(&source, &words("Each word in turn", Unit::Letter))
         .expect("a scene");
-    assert!(!Arc::ptr_eq(&first, &other), "other settings, another scene");
+    assert!(
+        !Arc::ptr_eq(&first, &other),
+        "other settings, another scene"
+    );
 }
 
 #[test]
@@ -52,5 +58,8 @@ fn other_sources_are_the_registrys_own_scenes() {
     let none = Default::default();
     let mine = reg.scene_for(&title, &none).expect("the title card");
     assert!(Arc::ptr_eq(&mine, reg.scene(&title).unwrap()));
-    assert!(reg.scene_for(&ContribId::builtin("scene.nope"), &none).is_none());
+    assert!(
+        reg.scene_for(&ContribId::builtin("scene.nope"), &none)
+            .is_none()
+    );
 }
