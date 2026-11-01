@@ -1,13 +1,12 @@
 import { t } from '@lingui/core/macro';
-import { memo, useCallback, useRef, type KeyboardEvent, type PointerEvent } from 'react';
+import { memo, useCallback, useEffect, useRef, type PointerEvent } from 'react';
 import type { ItemContent } from '../../../bindings/ItemContent';
 import type { RangeUs } from '../../../bindings/RangeUs';
 import { commitLatest } from '../../../state/commit';
 import type { Op } from '../../../bindings/Op';
-import { levelAt as keyLevel, movedKey } from '../../../lib/keys';
-import { formatPrecise } from '../../../lib/time';
-import { addVolumeKey, deleteVolumeKey, editVolumeKeys, moveVolumeKey, type Leveled } from '../../../state/keyEdits';
-import { isPicked, useKeyPick } from '../../../state/keyPick';
+import type { Key } from '../../../bindings/Key';
+import { levelAt as keyLevel } from '../../../lib/keys';
+import { addVolumeKey, editVolumeKeys, type Leveled } from '../../../state/keyEdits';
 import { registerFollower } from '../drag/registry';
 import { useSpeech } from '../media/speech';
 import { usToPx } from '../scale';
@@ -111,10 +110,12 @@ export function levelPoints(durationUs: number, startUs: number, content: LineLe
 }
 
 interface VolumeLineProps {
+  /** The block it draws in: its points (`VolumePoints`, beside the block) redraw it while one is dragged. */
+  id: string;
   startUs: number;
   durationUs: number;
   content: LineLevel;
-  /** Whose keys a click or a point changes: the clip, or the sound layer. */
+  /** Whose keys a click adds to: the clip, or the sound layer. */
   target: Leveled;
   /** The ops a drag of the line without keys sets the volume with (music: every piece of the song). */
   volumeOps: (volume: number) => Op[];
@@ -129,7 +130,7 @@ interface VolumeLineProps {
 /** A piece narrower than this draws no "Quieter while people talk" tag: it would cover the line. */
 const TAG_MIN_PX = 240;
 
-/** A press on the line or on one of its points. */
+/** A press on the line. */
 interface Press {
   x: number;
   y: number;
@@ -137,20 +138,36 @@ interface Press {
   duck: number;
   deep: boolean;
   pointerId: number;
-  /** The key a point's press moves, by its time. */
-  point: number | null;
 }
 
 /** A press that travels less than this (CSS px) is a click: it adds a key, not drags the line. */
 const CLICK_SLOP = 3;
 
 /**
+ * Each drawn line's redraw while one of its points is dragged, by block: the keys as they would be, or null for the
+ * project's own again.
+ */
+const previews = new Map<string, (keys: Key[] | null) => void>();
+
+/** Redraws block `id`'s volume line with `keys` (a point's drag), or as the project has it (null). */
+export function previewLine(id: string, keys: Key[] | null) {
+  previews.get(id)?.(keys);
+}
+
+/** The lane px a level is drawn at in a block `height` px high, with music's dips and the fades at `us` (`levelPoints`). */
+export function pointY(points: [number, number][], us: number, height: number): number {
+  const at = points.find(([t]) => t === us);
+  return levelY(at ? at[1] : 0) * height;
+}
+
+/**
  * A volume line: 2 px, at the level the mix plays, dipping where music ducks under speech (its tag is
- * `DuckTag`, beside the block), with a point at each volume key. A click on the line adds a key there at its level; a
- * drag of the line changes the volume, or with keys moves the whole line up or down; Option drag changes how deep music
- * ducks. A point drags to another time and level, and Delete takes it away. Each is one undo step, committed on release.
+ * `DuckTag`, beside the block). Its keys' points are buttons beside the block (`VolumePoints`). A click on the line adds a
+ * key there at its level; a drag of the line changes the volume, or with keys moves the whole line up or down; Option
+ * drag changes how deep music ducks. Each is one undo step, committed on release.
  */
 export const VolumeLine = memo(function VolumeLine({
+  id,
   startUs,
   durationUs,
   content,
@@ -162,7 +179,6 @@ export const VolumeLine = memo(function VolumeLine({
   tone = 'music',
 }: VolumeLineProps) {
   const speech = useSpeech((s) => s.ranges);
-  const picked = useKeyPick((s) => s.picked);
   const press = useRef<Press | null>(null);
   const line = useRef<SVGPolylineElement>(null);
   const svg = useRef<SVGSVGElement>(null);
@@ -172,26 +188,33 @@ export const VolumeLine = memo(function VolumeLine({
   const drawn = (pts: [number, number][]) =>
     pts.map(([us, g]) => `${((us / durationUs) * width).toFixed(1)},${(levelY(g) * height).toFixed(1)}`).join(' ');
   const shown = drawn(points);
-  const xOf = (us: number) => (us / durationUs) * width;
+  const redraw = useRef<(keys: Key[] | null) => void>(() => undefined);
+  redraw.current = (next) =>
+    line.current?.setAttribute(
+      'points',
+      next ? drawn(levelPoints(durationUs, startUs, { ...content, volumeKeys: next }, speech)) : shown,
+    );
+  useEffect(() => {
+    const draw = (next: Key[] | null) => redraw.current(next);
+    previews.set(id, draw);
+    return () => {
+      if (previews.get(id) === draw) previews.delete(id);
+    };
+  }, [id]);
   const usAt = (clientX: number) => {
     const left = svg.current?.getBoundingClientRect().left ?? 0;
     return Math.min(durationUs, Math.max(0, Math.round(((clientX - left) / width) * durationUs)));
   };
   /** Each key's level moved by `dy` of the lane (a share of its height), as the line's drag moves it. */
-  const shifted = (dy: number) =>
-    keys.map((k) => ({ ...k, v: Math.round(levelAt(levelY(k.v) + dy) * 100) / 100 }));
+  const shifted = (from: Key[], dy: number) =>
+    from.map((k) => ({ ...k, v: Math.round(levelAt(levelY(k.v) + dy) * 100) / 100 }));
 
-  const onPointerDown = (e: PointerEvent<SVGElement>, point: number | null = null) => {
+  const onPointerDown = (e: PointerEvent<SVGElement>) => {
     if (e.button !== 0) return;
     // The block's own drag (a move) never starts from the line.
     e.stopPropagation();
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    if (point !== null) {
-      (e.currentTarget as SVGElement).focus?.({ preventScroll: true });
-      // Delete takes the picked point away, not its clip or sound.
-      useKeyPick.getState().pick({ kind: 'volume', target, tUs: point });
-    }
     press.current = {
       x: e.clientX,
       y: e.clientY,
@@ -199,7 +222,6 @@ export const VolumeLine = memo(function VolumeLine({
       duck: content.duck ?? 0,
       deep: e.altKey && content.duck !== undefined && !!duckOps,
       pointerId: e.pointerId,
-      point,
     };
   };
   /** Where the drag puts the volume (or the ducking depth, Option held). */
@@ -212,27 +234,14 @@ export const VolumeLine = memo(function VolumeLine({
     const volume = Math.round(levelAt(levelY(p.volume) + dy) * 100) / 100;
     return { volume, duck: p.duck, dy };
   };
-  /** The keys with the pressed point moved to where the pointer is. */
-  const pointMoved = (p: Press, clientX: number, clientY: number) => {
-    const was = keys.find((k) => k.tUs === p.point)!;
-    const dy = (clientY - p.y) / Math.max(1, height);
-    const v = Math.round(levelAt(levelY(was.v) + dy) * 100) / 100;
-    const moved = movedKey(keys, p.point!, p.point! + ((clientX - p.x) / width) * durationUs, durationUs);
-    return { keys: moved.map((k) => (keys.includes(k) ? k : { ...k, v })), toUs: moved.find((k) => !keys.includes(k))?.tUs ?? p.point!, v };
-  };
   const onPointerMove = (e: PointerEvent<SVGElement>) => {
     const p = press.current;
     if (!p || e.pointerId !== p.pointerId) return;
-    // Drawn straight onto the line: no render per move.
-    if (p.point !== null) {
-      const next = pointMoved(p, e.clientX, e.clientY).keys;
-      line.current?.setAttribute('points', drawn(levelPoints(durationUs, startUs, { ...content, volumeKeys: next }, speech)));
-      return;
-    }
     const next = dragged(p, e.clientY);
+    // Drawn straight onto the line: no render per move.
     const level =
       keys.length > 0 && !p.deep
-        ? { ...content, volumeKeys: shifted(next.dy) }
+        ? { ...content, volumeKeys: shifted(keys, next.dy) }
         : { ...content, volume: next.volume, duck: next.duck };
     line.current?.setAttribute('points', drawn(levelPoints(durationUs, startUs, level, speech)));
   };
@@ -245,12 +254,6 @@ export const VolumeLine = memo(function VolumeLine({
       if (!ok) line.current?.setAttribute('points', shown);
     };
     const click = Math.abs(e.clientX - p.x) < CLICK_SLOP && Math.abs(e.clientY - p.y) < CLICK_SLOP;
-    if (p.point !== null) {
-      if (click) return back(false);
-      const { toUs, v } = pointMoved(p, e.clientX, e.clientY);
-      void moveVolumeKey(target, p.point, toUs, v).then(back);
-      return;
-    }
     if (click && !p.deep) {
       // A key on the line where it was clicked, at its level there.
       const us = usAt(e.clientX);
@@ -260,28 +263,10 @@ export const VolumeLine = memo(function VolumeLine({
     const next = dragged(p, e.clientY);
     if (p.deep && duckOps && next.duck !== p.duck) void commitLatest('music.duck.undo', () => duckOps(next.duck)).then(back);
     else if (!p.deep && keys.length > 0 && next.dy !== 0)
-      void editVolumeKeys('volume.undo', target, (now) =>
-        now.map((k) => ({ ...k, v: Math.round(levelAt(levelY(k.v) + next.dy) * 100) / 100 })),
-      ).then(back);
+      void editVolumeKeys('volume.undo', target, (now) => shifted(now, next.dy)).then(back);
     else if (!p.deep && keys.length === 0 && next.volume !== p.volume)
       void commitLatest('volume.undo', () => volumeOps(next.volume)).then(back);
     else back(false);
-  };
-  const cancel = () => {
-    press.current = null;
-    line.current?.setAttribute('points', shown);
-  };
-  const onPointKey = (e: KeyboardEvent<SVGElement>, us: number) => {
-    if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-    // The key, not the clip or layer.
-    e.preventDefault();
-    e.stopPropagation();
-    void deleteVolumeKey(target, us);
-  };
-  const base = (us: number) => (content.muted ? 0 : keyLevel(keys, us, content.volume));
-  const pointY = (us: number) => {
-    const at = points.find(([t]) => t === us);
-    return levelY(at ? at[1] : base(us)) * height;
   };
   return (
     <svg
@@ -290,17 +275,20 @@ export const VolumeLine = memo(function VolumeLine({
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
-      aria-hidden={keys.length === 0 || undefined}
+      aria-hidden
       data-testid="volume-line"
     >
       <polyline ref={line} className="tl-volume-line" points={shown} />
       <polyline
         className="tl-volume-grip"
         points={shown}
-        onPointerDown={(e) => onPointerDown(e)}
+        onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={cancel}
+        onPointerCancel={() => {
+          press.current = null;
+          line.current?.setAttribute('points', shown);
+        }}
       >
         <title>
           {duckOps
@@ -316,37 +304,6 @@ export const VolumeLine = memo(function VolumeLine({
               })}
         </title>
       </polyline>
-      {keys.map((k) => (
-        <circle
-          key={k.tUs}
-          className="tl-volume-key"
-          data-picked={isPicked(picked, target.id, k.tUs) || undefined}
-          cx={xOf(k.tUs)}
-          cy={pointY(k.tUs)}
-          r={4}
-          tabIndex={0}
-          role="button"
-          aria-label={t({
-            id: 'volume.key.name',
-            message: `Volume key at ${formatPrecise(startUs + k.tUs)}, ${Math.round(k.v * 100)}%`,
-            comment: 'A point on a volume line; {0} is a time on the timeline, {1} its level',
-          })}
-          onPointerDown={(e) => onPointerDown(e, k.tUs)}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={cancel}
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => onPointKey(e, k.tUs)}
-        >
-          <title>
-            {t({
-              id: 'volume.key.tip',
-              message: 'Drag to move. Delete removes it.',
-              comment: 'Tooltip of a volume key’s point on the timeline',
-            })}
-          </title>
-        </circle>
-      ))}
     </svg>
   );
 });

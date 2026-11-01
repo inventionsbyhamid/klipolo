@@ -27,6 +27,7 @@ import { usToPx } from '../scale';
 import { TrimHandles } from './TrimHandles';
 import { DuckTag, VolumeLine } from './VolumeLine';
 import { KeyDiamonds } from './KeyDiamonds';
+import { VolumePoints } from './VolumePoints';
 
 /** The icon before an overlay's name (T for text, the picture for an image). */
 const ICON: Partial<Record<LayerKind, LucideIcon>> = { text: Type, image: Image, video: Film, audio: Music };
@@ -242,6 +243,7 @@ export const ItemBlock = memo(function ItemBlock({
             sound's, with its volume keys. */}
         {!tiny && (look === 'music' || (selected && look === 'sound')) && content.type === 'audio' && (
           <VolumeLine
+            id={id}
             startUs={startUs}
             durationUs={durationUs}
             content={content}
@@ -266,6 +268,21 @@ export const ItemBlock = memo(function ItemBlock({
           <TrimHandles selected={selected} onTrimPress={(e, edge) => onTrimPress(e, id, edge)} />
         )}
       </button>
+      {/* The line's keys, beside the block: each point a button of its own. */}
+      {!tiny && (look === 'music' || (selected && look === 'sound')) && content.type === 'audio' && (
+        <VolumePoints
+          id={id}
+          startUs={startUs}
+          durationUs={durationUs}
+          content={content}
+          target={{ kind: 'sound', id }}
+          pps={pps}
+          left={left}
+          width={width}
+          top={top}
+          height={height}
+        />
+      )}
       {!tiny && look === 'overlay' && motion?.keys && (
         <KeyDiamonds
           id={id}

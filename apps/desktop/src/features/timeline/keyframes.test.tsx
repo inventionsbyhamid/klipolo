@@ -144,6 +144,19 @@ describe('volume keys on the timeline', () => {
     expect(contentOf(apply.mock.calls[0]).volumeKeys).toEqual([key(4, 0.5)]);
   });
 
+  it('its keys are points beside the block, each a button named by its time and level', () => {
+    const id = sound([key(2, 0.5), key(6, 1)]);
+    renderWithProviders(<Timeline />);
+    const points = [...document.querySelectorAll<HTMLElement>('.tl-volume-key')];
+    expect(points).toHaveLength(2);
+    // Not inside the block's own button: each can take the focus, and a screen reader hears it.
+    const block = document.querySelector(`[data-block-id="${id}"]`)!;
+    expect(points.every((p) => p.tagName === 'BUTTON' && !block.contains(p))).toBe(true);
+    expect(points[0]).toHaveAccessibleName('Volume key at 0:02.0, 50%');
+    points[0].focus();
+    expect(document.activeElement).toBe(points[0]);
+  });
+
   it('its keys are points: a drag moves one, Delete takes it away, a drag of the line moves them all', async () => {
     sound([key(2, 0.5), key(6, 1)]);
     renderWithProviders(<Timeline />);

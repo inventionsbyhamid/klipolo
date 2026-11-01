@@ -1964,27 +1964,35 @@
   cursor: ns-resize;
 }
 
-/* A clip's or sound's volume line (selected), in its block's colour; its keys as points on it. */
-.tl-volume.is-clip .tl-volume-line {
-  stroke: var(--color-paper);
-}
-
+/* A clip's or sound's volume line (selected), in paper over its block. */
+.tl-volume.is-clip .tl-volume-line,
 .tl-volume.is-sound .tl-volume-line {
   stroke: var(--color-paper);
 }
 
+/* A volume line's keys: points on the line, beside the block in the lane (they follow its moves). */
+.tl-volume-keys {
+  position: absolute;
+  z-index: 7;
+  pointer-events: none;
+}
+
 .tl-volume-key {
-  fill: var(--color-paper);
-  stroke: var(--color-bay);
-  stroke-width: 1.5;
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  padding: 0;
+  border: 1.5px solid var(--color-bay);
+  border-radius: 50%;
+  background: var(--color-paper);
   cursor: move;
-  pointer-events: all;
+  pointer-events: auto;
 }
 
 .tl-volume-key:focus-visible {
-  outline: none;
-  stroke: var(--color-paper);
-  stroke-width: 3;
+  outline: 2px solid var(--color-paper);
+  outline-offset: 2px;
 }
 
 /* The tag rides the music piece's right edge, or the lanes' visible right while the piece runs past it. The band is
@@ -3488,6 +3496,14 @@
   gap: var(--space-3);
 }
 
+/* Volume keys: the key before the playhead, the key there and the key after, under the slider. */
+.volume-keys {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
 /* A recording clip's Sounds: a row per recorded sound, its name and mute, its volume, then its sync. */
 .sound-rows {
   display: grid;
@@ -3771,7 +3787,6 @@
 }
 
 .tl-volume-key[data-picked] {
-  fill: var(--color-bay);
-  stroke: var(--color-paper);
-  stroke-width: 2.5;
+  border: 2px solid var(--color-paper);
+  background: var(--color-bay);
 }
