@@ -46,6 +46,9 @@ describe('what analysis offers', () => {
     project.timeline.main = [broll, { ...broll, id: 'c', source: { type: 'asset', id: 'screen' } }];
     expect(ids(project)).toEqual(['screen', 'broll']);
     expect(voiceOf(project, 'screen')).toBeNull();
+    // A take's silent file on its own has no words to hear, and is never watched: nothing to offer.
+    project.timeline.main = [broll, { ...broll, id: 'c', source: { type: 'asset', id: 'camera' } }];
+    expect(ids(project)).toEqual(['broll']);
     project.timeline.main = [take];
     expect(ids(project)).toEqual(['mic']);
   });
@@ -89,8 +92,10 @@ describe('what analysis offers', () => {
     expect(analysable({ ...project, recordings: [...project.recordings] })).not.toBe(analysable(project));
   });
 
-  it('knows every file of a recording, analysed for its words only', () => {
-    for (const id of ['screen', 'camera', 'mic']) expect(recordingOf(fixtureProject(), id)).toBe('rec');
-    expect(recordingOf(fixtureProject(), 'broll')).toBeNull();
+  it('knows every file of a recording, and the same file imported again, analysed for its words only', () => {
+    const project = fixtureProject();
+    project.assets = [...project.assets, { ...project.assets[0], id: 'screen-again' }];
+    for (const id of ['screen', 'camera', 'mic', 'screen-again']) expect(recordingOf(project, id)).toBe('rec');
+    expect(recordingOf(project, 'broll')).toBeNull();
   });
 });

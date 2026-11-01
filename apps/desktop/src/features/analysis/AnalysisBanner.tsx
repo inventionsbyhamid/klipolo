@@ -59,6 +59,7 @@ function BannerIcon({ name }: { name: keyof typeof ICONS }) {
  */
 const useClips = useAnalysedClips;
 
+const NO_ASSETS: Asset[] = [];
 const NO_RECORDINGS: Project['recordings'] = [];
 
 /**
@@ -170,6 +171,7 @@ export function AnalysisBanner() {
   const error = useAnalysis((s) => s.error);
   const dismissed = useAnalysis((s) => s.dismissed);
   const busy = useAnalysis((s) => s.busy);
+  const assets = useProject((s) => s.snapshot?.project.assets ?? NO_ASSETS);
   const recordings = useProject((s) => s.snapshot?.project.recordings ?? NO_RECORDINGS);
   const needsKey = useNeedsKey();
 
@@ -252,7 +254,7 @@ export function AnalysisBanner() {
   }
   // Footage is watched only for a video imported on its own: a recording's files are analysed for their words only.
   const videos = clips.some(
-    (c) => c.kind === 'video' && !recordingOf({ recordings }, c.id) && estimate.clips.includes(c.id),
+    (c) => c.kind === 'video' && !recordingOf({ assets, recordings }, c.id) && estimate.clips.includes(c.id),
   );
   const refused = !!estimate.refusal;
   // Retry asks for the estimate again (the price may have changed), never starts a run unseen.
