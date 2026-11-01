@@ -12,8 +12,12 @@
 //!   none takes it away as Remove does. Each cut is fitted beside the transitions the cuts before it were just given,
 //!   as the model checks a batch's ops in order. With every cut asked for, a cut with no spare footage is left as it
 //!   is, and the reply says how many were.
+//! - `setClip` on a layer, as its own card changes it: a song (`m1`, every piece of it) takes a volume and mute, a video
+//!   layer (`v1`) a speed (a separated camera's being its clip's), a volume and mute, each on the layer's content.
+//!   Fit and Fill stay main clips', and a speed on music is refused.
 //!
-//! Undo labels: `chat.setClip {clip, change}` (`change` one of speed, volume, mute, unmute, fit, fill, or several), and
+//! Undo labels: `chat.setClip {clip, change, noun}` (`change` one of speed, volume, mute, unmute, fit, fill, or
+//! several; `noun` clip, sound for a song or video for a video layer, as the cards' mute labels name it), and
 //! `chat.setClip.note` with the page's own note (`timeline.refit {removed, shortened}`) when a speed refits
 //! transitions, as the card's `speed.undo.note` does; `chat.setTransition {after, change, count}` (`change` one of add,
 //! change, length, remove).
@@ -23,11 +27,12 @@ use std::collections::BTreeMap;
 use klipolo_model::Project;
 use klipolo_model::coded::{CodedError, ErrorParam};
 use klipolo_model::framing::effective_framing;
-use klipolo_model::ops::{ClipPatch, Op};
+use klipolo_model::media::music::runs;
+use klipolo_model::ops::{ClipPatch, ItemPatch, Op};
 use klipolo_model::project::FormatKind;
-use klipolo_model::query::clip_has_sound;
+use klipolo_model::query::{camera_clip_of, clip_has_sound, find_item, has_own_sound};
 use klipolo_model::time::Us;
-use klipolo_model::timeline::{Clip, Framing, FramingMode, Transition};
+use klipolo_model::timeline::{Clip, Framing, FramingMode, ItemContent, TrackKind, Transition};
 use klipolo_model::transitions::{
     MIN_TRANSITION_US, default_transition_us, max_transition_us, transition_length_us,
 };
@@ -86,6 +91,18 @@ pub(super) fn set_clip(
     clip: &ClipRef,
     change: &Change,
 ) -> Result<Edit, Refused> {
+    // A song or a video layer, as its own card changes it.
+    if let ClipRef::One(short) = clip {
+        if let Some(first) = c.inputs.refs.music(short) {
+            return set_song(work, short, first, change);
+        }
+        if let Some(id) = c.inputs.refs.video(short) {
+            return set_video(work, short, id, change);
+        }
+        if short.starts_with(['m', 'v']) {
+            return Err(to_model(format!("setClip: there is no layer {short}.")));
+        }
+    }
     let clips = named(c, work, "setClip", clip)?;
     let main = &work.timeline.main;
     // Volume and mute only where there is sound, as the card shows them.
@@ -152,20 +169,160 @@ pub(super) fn set_clip(
             });
         }
     }
-    let change = match changed.as_slice() {
+    Ok(Edit {
+        ops,
+        label: change_label(clip.word(), &changed, "clip"),
+    })
+}
+
+/// `setClip`'s label: the change (`several` for more than one), on what (`noun`, as the cards' mute labels name it:
+/// clip, sound for music, video for a video layer).
+fn change_label(short: &str, changed: &[&str], noun: &str) -> CodedError {
+    let change = match changed {
         [one] => *one,
         _ => "several",
     };
+    label(
+        "setClip",
+        vec![
+            ("clip", ErrorParam::from(short)),
+            ("change", ErrorParam::from(change)),
+            ("noun", ErrorParam::from(noun)),
+        ],
+    )
+}
+
+/// `what` once in `changed`.
+fn note_change<'a>(changed: &mut Vec<&'a str>, what: &'a str) {
+    if !changed.contains(&what) {
+        changed.push(what);
+    }
+}
+
+/// `setClip` on the song `short` names (its first piece `first`), as the music card does: its Volume on every piece of
+/// the song (`runContentOps`), and Mute on every piece (the layer's Mute, `toggleSoundMute`). No speed, and no Fit or
+/// Fill: the card has none.
+fn set_song(work: &Project, short: &str, first: &str, change: &Change) -> Result<Edit, Refused> {
+    if change.speed.is_some() || change.framing.is_some() {
+        return Err(to_model(format!(
+            "setClip: {short} is music: it takes a volume or mute, not a speed or Fit or Fill."
+        )));
+    }
+    let song = (work.timeline.tracks.iter())
+        .filter(|t| t.kind == TrackKind::Audio)
+        .flat_map(|t| runs(t).into_iter().map(move |run| &t.items[run]))
+        .find(|pieces| pieces.iter().any(|piece| piece.id == first));
+    let Some(pieces) = song else {
+        return Err(to_model("setClip: that music is gone.".to_owned()));
+    };
+    let mut changed: Vec<&str> = Vec::new();
+    let mut ops = Vec::new();
+    for piece in pieces {
+        let mut content = piece.content.clone();
+        let ItemContent::Audio { volume, muted, .. } = &mut content else {
+            continue;
+        };
+        if let Some(v) = change.volume {
+            if (pieces.iter())
+                .any(|p| matches!(p.content, ItemContent::Audio { volume, .. } if volume != v))
+            {
+                note_change(&mut changed, "volume");
+            }
+            *volume = v;
+        }
+        if let Some(m) = change.muted {
+            if (pieces.iter())
+                .any(|p| matches!(p.content, ItemContent::Audio { muted, .. } if muted != m))
+            {
+                note_change(&mut changed, if m { "mute" } else { "unmute" });
+            }
+            *muted = m;
+        }
+        ops.push(item_op(&piece.id, content));
+    }
+    // What it has already changes nothing, as the card's control does nothing when its value is picked again.
+    if changed.is_empty() {
+        ops.clear();
+    }
     Ok(Edit {
         ops,
-        label: label(
-            "setClip",
-            vec![
-                ("clip", ErrorParam::from(clip.word())),
-                ("change", ErrorParam::from(change)),
-            ],
-        ),
+        label: change_label(short, &changed, "sound"),
     })
+}
+
+/// `setClip` on the video layer `short` names (`id`), as the video layer card does: its Speed (a separated camera's is
+/// its clip's, `query::camera_clip_of`, so the lips stay in sync), and its Volume and Mute when its file has sound
+/// (`query::has_own_sound`), each on the layer's content (`contentOps`). No Fit or Fill: those are for main clips.
+fn set_video(work: &Project, short: &str, id: &str, change: &Change) -> Result<Edit, Refused> {
+    if change.framing.is_some() {
+        return Err(to_model(format!(
+            "setClip: {short} is a video layer: Fit and Fill are for clips on the main track."
+        )));
+    }
+    let Some((t, i)) = find_item(work, id) else {
+        return Err(to_model("setClip: that video layer is gone.".to_owned()));
+    };
+    let item = &work.timeline.tracks[t].items[i];
+    if (change.volume.is_some() || change.muted.is_some()) && !has_own_sound(work, item) {
+        return Err(to_model(format!(
+            "setClip: {short} has no sound, so it has no volume or mute."
+        )));
+    }
+    let mut changed: Vec<&str> = Vec::new();
+    let mut ops = Vec::new();
+    let mut content = item.content.clone();
+    let ItemContent::Video {
+        speed,
+        volume,
+        muted,
+        ..
+    } = &mut content
+    else {
+        return Err(to_model(format!("setClip: {short} is not a video layer.")));
+    };
+    match (change.speed, camera_clip_of(work, item)) {
+        (Some(s), Some(clip)) if work.timeline.main[clip].speed != s => {
+            ops.push(Op::UpdateClip {
+                id: work.timeline.main[clip].id.clone(),
+                patch: ClipPatch {
+                    speed: Some(s),
+                    ..ClipPatch::default()
+                },
+            });
+            note_change(&mut changed, "speed");
+        }
+        (Some(s), None) if *speed != s => {
+            *speed = s;
+            note_change(&mut changed, "speed");
+        }
+        _ => {}
+    }
+    if let Some(v) = change.volume.filter(|v| *v != *volume) {
+        *volume = v;
+        note_change(&mut changed, "volume");
+    }
+    if let Some(m) = change.muted.filter(|m| *m != *muted) {
+        *muted = m;
+        note_change(&mut changed, if m { "mute" } else { "unmute" });
+    }
+    if content != item.content {
+        ops.push(item_op(id, content));
+    }
+    Ok(Edit {
+        ops,
+        label: change_label(short, &changed, "video"),
+    })
+}
+
+/// The cards' op for a layer's new content (`itemOp(item, { content })`).
+fn item_op(id: &str, content: ItemContent) -> Op {
+    Op::UpdateItem {
+        id: id.to_owned(),
+        patch: ItemPatch {
+            content: Some(content),
+            ..ItemPatch::default()
+        },
+    }
 }
 
 /// `clip`'s framings with `mode` in each of `formats` where it is framed otherwise now, each built on its framing there

@@ -22,7 +22,7 @@ use klipolo_model::ops::{ClipPatch, Op, Origin};
 use klipolo_model::project::{Asset, AssetKind, FormatKind};
 use klipolo_model::speech::Speech;
 use klipolo_model::time::Us;
-use klipolo_model::timeline::{Clip, ClipSource, Framing, FramingMode, Transition};
+use klipolo_model::timeline::{Clip, ClipSource, Framing, FramingMode, ItemContent, Transition};
 use klipolo_model::{Project, apply_ops};
 use serde_json::json;
 
@@ -397,7 +397,11 @@ fn a_speed_is_the_clip_cards_edit_applied_at_once() {
     assert_eq!(label, "chat.setClip");
     assert_eq!(
         out.additions.unwrap().params,
-        params(&[("clip", "c2".into()), ("change", "speed".into())])
+        params(&[
+            ("clip", "c2".into()),
+            ("change", "speed".into()),
+            ("noun", "clip".into())
+        ])
     );
     assert_eq!(out.notes, Vec::<String>::new());
     // A speed it has already changes nothing, as picking it again in the card does.
@@ -437,6 +441,7 @@ fn a_speed_that_shortens_a_transition_says_so_in_its_label_and_the_reply() {
         params(&[
             ("clip", "c2".into()),
             ("change", "speed".into()),
+            ("noun", "clip".into()),
             ("note", refit(0, 1)),
         ])
     );
@@ -482,6 +487,7 @@ fn a_speed_that_leaves_a_transition_no_room_waits_for_the_person_and_says_why() 
         params(&[
             ("clip", "c2".into()),
             ("change", "speed".into()),
+            ("noun", "clip".into()),
             ("note", refit(1, 0)),
         ])
     );
@@ -517,7 +523,11 @@ fn volume_and_mute_are_the_cards_and_only_for_a_clip_with_sound() {
     assert_eq!(ops, [mute("a"), mute("b"), mute("c")]);
     assert_eq!(
         out.additions.unwrap().params,
-        params(&[("clip", "all".into()), ("change", "mute".into())])
+        params(&[
+            ("clip", "all".into()),
+            ("change", "mute".into()),
+            ("noun", "clip".into())
+        ])
     );
     assert!(!after.timeline.main[3].muted);
     // The b-roll alone has no Volume or Mute to set.
@@ -547,7 +557,11 @@ fn volume_and_mute_are_the_cards_and_only_for_a_clip_with_sound() {
     assert_eq!(ops, [card("a", several)]);
     assert_eq!(
         out.additions.unwrap().params,
-        params(&[("clip", "c1".into()), ("change", "several".into())])
+        params(&[
+            ("clip", "c1".into()),
+            ("change", "several".into()),
+            ("noun", "clip".into())
+        ])
     );
 }
 
@@ -589,7 +603,11 @@ fn fit_or_fill_is_the_cards_in_the_format_named_or_every_format() {
     assert_eq!(ops, [card("a", by_hand)]);
     assert_eq!(
         out.additions.unwrap().params,
-        params(&[("clip", "c1".into()), ("change", "fit".into())])
+        params(&[
+            ("clip", "c1".into()),
+            ("change", "fit".into()),
+            ("noun", "clip".into())
+        ])
     );
     // A clip's own framing in another format stays, and every format of the video gets Fit when none is named.
     let out = run(
@@ -860,8 +878,8 @@ fn the_context_shows_a_clips_volume_and_its_transition_and_the_prompt_the_tools(
     );
     let prompt = klipolo_chat::system_prompt();
     assert!(prompt.contains(
-        "setClip sets a clip's speed, volume, mute, or Fit or Fill; setTransition adds, changes or removes the \
-         transition at a cut. Use all for every clip or cut."
+        "setClip sets a clip's, song's (m1) or video layer's (v1) speed, volume, mute, or Fit or Fill; setTransition \
+         adds, changes or removes the transition at a cut. Use all for every clip or cut."
     ));
 }
 
@@ -967,4 +985,229 @@ fn a_new_kind_keeps_a_short_transition_where_a_new_one_would_not_fit() {
         params: Default::default(),
     };
     assert_eq!(ops, [set_transition_op("b", Some(push))]);
+}
+
+/// A video layer of `asset` from `start` for `length` seconds, in the middle of the frame.
+fn video_layer(id: &str, asset: &str, start: f64, length: f64) -> klipolo_model::timeline::Item {
+    use klipolo_model::layout::{Anchor, BoxN, Layout};
+    klipolo_model::timeline::Item {
+        id: id.into(),
+        start_us: secs(start),
+        duration_us: secs(length),
+        attach: None,
+        layout: Layout::new(
+            Anchor::Center,
+            BoxN {
+                x: 0.25,
+                y: 0.25,
+                w: 0.5,
+                h: 0.5,
+            },
+        ),
+        content: ItemContent::Video {
+            asset_id: asset.into(),
+            source_in_us: 0,
+            speed: 1.0,
+            volume: 1.0,
+            muted: false,
+            mirror: false,
+            tie: None,
+        },
+        effects: Vec::new(),
+    }
+}
+
+/// `clips()` under a 30 s song laid from the start to the video's end (so in pieces, one song: m1), a picture in
+/// picture with sound ("pip.mov", v1, 2 to 10 s) and a b-roll layer with none (v2, 20 to 25 s).
+fn with_layers() -> Project {
+    let mut p = clips();
+    let mut short_song = song();
+    short_song.duration_us = secs(30.0);
+    p.assets.push(short_song.clone());
+    p.assets.push(file("pip", 20.0, true));
+    let ops = klipolo_model::media::music::add_music_ops(
+        &p,
+        &short_song,
+        klipolo_model::media::music::MusicOpts::default(),
+    )
+    .unwrap();
+    let mut p = apply_ops(&p, &ops).unwrap();
+    let mut overlays = klipolo_model::timeline::Track::new(
+        klipolo_model::timeline::TrackKind::Overlay,
+        "Overlays",
+    );
+    overlays.items = vec![
+        video_layer("pip-1", "pip", 2.0, 8.0),
+        video_layer("broll-1", "broll", 20.0, 5.0),
+    ];
+    p.timeline.tracks.push(overlays);
+    apply_ops(&p, &[]).unwrap_or(p)
+}
+
+/// The song's pieces, in order.
+fn song_pieces(p: &Project) -> Vec<klipolo_model::timeline::Item> {
+    (p.timeline.tracks.iter())
+        .filter(|t| t.kind == klipolo_model::timeline::TrackKind::Audio)
+        .flat_map(|t| t.items.clone())
+        .collect()
+}
+
+/// The cards' op for a layer's content (`itemOp(item, { content })`).
+fn layer_op(id: &str, content: ItemContent) -> Op {
+    Op::UpdateItem {
+        id: id.into(),
+        patch: klipolo_model::ops::ItemPatch {
+            content: Some(content),
+            ..Default::default()
+        },
+    }
+}
+
+#[test]
+fn the_context_names_songs_and_video_layers() {
+    let p = with_layers();
+    let ctx = klipolo_chat::build_context(
+        &p,
+        &Speech::default(),
+        &HashMap::new(),
+        &HashMap::new(),
+        &View::default(),
+        &Library::default(),
+    );
+    let at = ctx.text.find("Layers:\n").expect("a Layers list");
+    let lines: Vec<&str> = ctx.text[at..].lines().skip(1).take(3).collect();
+    assert_eq!(
+        lines,
+        [
+            "m1 0.0-72.0 song.mp3 (music, volume 30%)",
+            "v1 2.0-10.0 pip.mov (video layer)",
+            "v2 20.0-25.0 broll.mov (video layer)",
+        ]
+    );
+    let refs = Refs::of(&p);
+    assert_eq!(refs.music("m1"), Some(song_pieces(&p)[0].id.as_str()));
+    assert_eq!(
+        (refs.video("v1"), refs.video("v2")),
+        (Some("pip-1"), Some("broll-1"))
+    );
+    assert_eq!(
+        (refs.music("m2"), refs.video("v01"), refs.clip("m1")),
+        (None, None, None)
+    );
+}
+
+#[test]
+fn a_songs_volume_and_mute_are_the_music_cards_on_every_piece() {
+    let p = with_layers();
+    let pieces = song_pieces(&p);
+    assert!(pieces.len() > 1, "a song laid in pieces");
+    // Volume: the music card sets it on every piece of the song (`runContentOps`).
+    let out = run(&p, &[("setClip", set_clip("m1", json!({"volume": 0.6})))]);
+    let (ops, _, after) = applied(&p, &out);
+    let by_hand: Vec<Op> = (pieces.iter())
+        .map(|piece| {
+            let mut content = piece.content.clone();
+            if let ItemContent::Audio { volume, .. } = &mut content {
+                *volume = 0.6;
+            }
+            layer_op(&piece.id, content)
+        })
+        .collect();
+    assert_eq!(ops, by_hand);
+    assert_eq!(after, apply_ops(&p, &by_hand).unwrap());
+    assert_eq!(
+        out.additions.unwrap().params,
+        params(&[
+            ("clip", "m1".into()),
+            ("change", "volume".into()),
+            ("noun", "sound".into()),
+        ])
+    );
+    // Mute: the layer's own switch on every piece (`toggleSoundMute`).
+    let out = run(&p, &[("setClip", set_clip("m1", json!({"muted": true})))]);
+    let (ops, _, _) = applied(&p, &out);
+    let by_hand: Vec<Op> = (pieces.iter())
+        .map(|piece| {
+            let mut content = piece.content.clone();
+            if let ItemContent::Audio { muted, .. } = &mut content {
+                *muted = true;
+            }
+            layer_op(&piece.id, content)
+        })
+        .collect();
+    assert_eq!(ops, by_hand);
+    // A volume it has changes nothing; a speed or framing isn't the music card's.
+    let out = run(&p, &[("setClip", set_clip("m1", json!({"volume": 0.3})))]);
+    assert_eq!((out.additions, out.unchanged), (None, vec![0]));
+    for asked in [json!({"speed": 2}), json!({"framing": "fit"})] {
+        let out = run(&p, &[("setClip", set_clip("m1", asked))]);
+        assert_eq!(
+            model_refusal(&out),
+            "setClip: m1 is music: it takes a volume or mute, not a speed or Fit or Fill."
+        );
+    }
+    let out = run(&p, &[("setClip", set_clip("m2", json!({"muted": true})))]);
+    assert_eq!(model_refusal(&out), "setClip: there is no layer m2.");
+}
+
+#[test]
+fn a_video_layers_speed_volume_and_mute_are_its_cards() {
+    let p = with_layers();
+    let pip = |change: fn(&mut f64, &mut f64, &mut bool)| {
+        let mut content = video_layer("pip-1", "pip", 2.0, 8.0).content;
+        if let ItemContent::Video {
+            speed,
+            volume,
+            muted,
+            ..
+        } = &mut content
+        {
+            change(speed, volume, muted);
+        }
+        layer_op("pip-1", content)
+    };
+    // Speed, on the layer's content as its card's Speed sets it (`contentOps`).
+    let out = run(&p, &[("setClip", set_clip("v1", json!({"speed": 0.5})))]);
+    let (ops, _, after) = applied(&p, &out);
+    let by_hand = pip(|speed, _, _| *speed = 0.5);
+    assert_eq!(ops, std::slice::from_ref(&by_hand));
+    assert_eq!(after, apply_ops(&p, &[by_hand]).unwrap());
+    assert_eq!(
+        out.additions.unwrap().params,
+        params(&[
+            ("clip", "v1".into()),
+            ("change", "speed".into()),
+            ("noun", "video".into()),
+        ])
+    );
+    // Volume and mute in one call: one op, as the two card changes leave it.
+    let out = run(
+        &p,
+        &[(
+            "setClip",
+            set_clip("v1", json!({"volume": 0.4, "muted": true})),
+        )],
+    );
+    let (ops, _, _) = applied(&p, &out);
+    assert_eq!(
+        ops,
+        [pip(|_, volume, muted| {
+            *volume = 0.4;
+            *muted = true;
+        })]
+    );
+    // Fit and Fill are for main clips; a layer whose file has no sound has no Volume or Mute.
+    let out = run(
+        &p,
+        &[("setClip", set_clip("v1", json!({"framing": "fit"})))],
+    );
+    assert_eq!(
+        model_refusal(&out),
+        "setClip: v1 is a video layer: Fit and Fill are for clips on the main track."
+    );
+    let out = run(&p, &[("setClip", set_clip("v2", json!({"muted": true})))]);
+    assert_eq!(
+        model_refusal(&out),
+        "setClip: v2 has no sound, so it has no volume or mute."
+    );
 }

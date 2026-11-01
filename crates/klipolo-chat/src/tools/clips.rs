@@ -1,5 +1,6 @@
-//! The clip tools: a clip's speed, volume, mute and Fit or Fill (`setClip`, the clip card's fields), and the transition
-//! at a cut (`setTransition`, Add transition and the transition card). Each is one entry of `TOOLS`; the words they
+//! The clip tools: a clip's speed, volume, mute and Fit or Fill (`setClip`, the clip card's fields; a song's volume and
+//! mute and a video layer's speed, volume and mute, their own cards' fields), and the transition at a cut
+//! (`setTransition`, Add transition and the transition card). Each is one entry of `TOOLS`; the words they
 //! take are here.
 //!
 //! They take exactly what the cards offer: a speed from `clip_settings::SPEEDS`, a volume from 0 to 2 in hundredths, a
@@ -167,10 +168,16 @@ impl Args {
 
 pub(super) const SET_CLIP: Tool = Tool {
     name: "setClip",
-    description: "Set a clip's speed, volume, mute, or Fit or Fill. Null keeps a value.",
+    description: "Set a clip's speed, volume, mute, or Fit or Fill; a song's volume or mute; a video layer's speed, \
+                  volume or mute. Null keeps a value.",
     parameters: || {
         vec![
-            ("clip", string("A clip's ref, such as c2, or all.")),
+            (
+                "clip",
+                string(
+                    "A ref: c2 for a clip, m1 for a song, v1 for a video layer, or all for every clip.",
+                ),
+            ),
             (
                 "speed",
                 nullable_number("0.5, 0.75, 1, 1.25, 1.5 or 2 (2 is twice as fast)."),
