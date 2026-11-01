@@ -186,6 +186,14 @@ describe('centring a one-sided sound', () => {
   });
 });
 
+/*
+ * `source-mix-parity.json` pins the ops chat's source tools compile to for each case's `call` (`muteSource`,
+ * `setSourceVolume`, `centreSource`, `which`, `videoSound`, `fillGaps`), on the projects it holds, with the loudness
+ * each file had (`peaks`). The lanes, the clip card and those tools must make the same change for the same request.
+ * The Rust test that writes the file lands with those tools; until then `klipolo-model`'s `source_mix_golden` test
+ * applies every case's ops to its project.
+ */
+
 /** Chat's words for a kind of recorded sound, as the lanes' roles. */
 const ROLE: Record<string, SourceRole> = { mic: 'mic', gameSound: 'gameAudio', computerSound: 'systemAudio' };
 
@@ -195,11 +203,11 @@ interface Case {
     args: { source: string; muted?: boolean; volume?: number; centred?: boolean };
   };
   ops: Op[];
-  /** The files' loudness per channel the app gave chat. */
+  /** How loud each file is on each channel, as the app tells chat. */
   peaks: { assetId: string; peaks: number[] }[];
 }
 
-/** The timeline's ops for one of chat's requests. */
+/** The timeline's ops for one of the pinned requests. */
 function lanesOps(project: Project, { call, peaks }: Case): Op[] {
   const role = ROLE[call.args.source];
   switch (call.name) {
@@ -217,9 +225,7 @@ function lanesOps(project: Project, { call, peaks }: Case): Op[] {
   }
 }
 
-describe('the timeline mixes and centres a kind of sound as chat does', () => {
-  // Rust is the truth: chat's source tools compile these requests on this project and write
-  // `source-mix-parity.json`.
+describe("the timeline mixes and centres a kind of sound as the pinned source tools' ops do", () => {
   const project = parity.project as unknown as Project;
   for (const c of parity.cases as unknown as Case[]) {
     it(`${c.call.name} ${JSON.stringify(c.call.args)}`, () => {
@@ -237,7 +243,7 @@ describe('a lane acts on its own source alone', () => {
     }[];
   }
 
-  it("lane n of a kind is chat's which: n, each recording's nth source of it", () => {
+  it("lane n of a kind is the request's which: n, each recording's nth source of it", () => {
     const { project, cases } = parity.twoMics as unknown as Golden;
     expect(cases.map((c) => c.call.args.which)).toEqual(['1', '2']);
     cases.forEach((c, nth) => {
@@ -245,7 +251,7 @@ describe('a lane acts on its own source alone', () => {
     });
   });
 
-  it("the Camera sound lane is chat's videoSound: synced cameras only, never a take's silent camera", () => {
+  it("the Camera sound lane is the request's videoSound: synced cameras only, never a take's silent camera", () => {
     const { project, cases } = parity.cameraSound as unknown as Golden;
     expect(cases).toHaveLength(3);
     for (const c of cases) {
@@ -258,9 +264,9 @@ describe('a lane acts on its own source alone', () => {
   });
 });
 
-describe("the Fill gaps switch is chat's fillGaps", () => {
-  // Rust's `fill` turns the first interview's fill off (its default); `fillOn` turns the second's on, whose default
-  // already fills (no op for it) and whose clip c8 has a mix of its own that gains it.
+describe("the Fill gaps switch makes the pinned fillGaps ops", () => {
+  // `fill` turns the first interview's fill off (its default); `fillOn` turns the second's on, whose default already
+  // fills (no op for it) and whose clip c8 has a mix of its own that gains it.
   const project = parity.cameraSound.project as unknown as Project;
   const golden = parity.cameraSound as unknown as Record<
     'fill' | 'fillOn',
@@ -275,7 +281,7 @@ describe("the Fill gaps switch is chat's fillGaps", () => {
   }
 
   it("fillMuted: the person's mute always wins", () => {
-    // Rust's `fill_muted`: the fill off and c1's camera sound muted by the person; turned on, only the default fills.
+    // The fill off and c1's camera sound muted by the person; turned on, only the default fills.
     const {
       project: p,
       call,

@@ -273,31 +273,31 @@ describe('the sound commands', () => {
   });
 });
 
-describe("the lanes and menus do what chat's source tools do", () => {
-  /** A part of the Rust-written golden as a snapshot. */
+describe("the lanes and menus make the pinned source tools' ops", () => {
+  /** A part of `source-mix-parity.json` (the ops chat's source tools compile to, `sourceMix.test.ts`) as a snapshot. */
   const golden = (part: { project: unknown }): Snapshot => ({
     project: structuredClone(part.project) as Project,
     history: { revision: 3, canUndo: true, canRedo: false, undoLabel: null, redoLabel: null },
   });
-  /** Chat's ops for one of the golden's requests. */
-  const chatOps = (name: string, args: Record<string, unknown>) =>
+  /** The pinned ops for one of the file's requests. */
+  const pinnedOps = (name: string, args: Record<string, unknown>) =>
     parity.cases.find(
       (c) =>
         c.call.name === name &&
         Object.entries(args).every(([key, value]) => (c.call.args as Record<string, unknown>)[key] === value),
     )!.ops;
 
-  it("two takes show one lane per kind, and the Mic lane's Mute is chat's mute my mic", async () => {
+  it("two takes show one lane per kind, and the Mic lane's Mute is the pinned mute my mic", async () => {
     show(golden(parity));
     expect(screen.getAllByRole('group', { name: 'Mic' })).toHaveLength(1);
     expect(screen.getAllByRole('group', { name: 'Game sound' })).toHaveLength(1);
     await userEvent.click(within(screen.getByRole('group', { name: 'Mic' })).getByRole('button', { name: 'Mute Mic' }));
     const { label, ops } = await lastApply();
     expect(label).toBe('undo.source.mute');
-    expect(ops).toEqual(chatOps('muteSource', { source: 'mic', muted: true }));
+    expect(ops).toEqual(pinnedOps('muteSource', { source: 'mic', muted: true }));
   });
 
-  it('two_mics_show_mic_and_mic_2_lanes_and_each_header_mutes_its_own', async () => {
+  it('two mics show Mic and Mic 2 lanes, and each header mutes its own', async () => {
     // A lav as the take's second mic (lav-2.wav): its lane takes the file's name.
     show(golden(parity.twoMics));
     expect(screen.getAllByRole('group', { name: 'Mic' })).toHaveLength(1);
@@ -321,20 +321,20 @@ describe("the lanes and menus do what chat's source tools do", () => {
     expect(screen.getByRole('menuitem', { name: /^Separate Mic 2/ })).toBeInTheDocument();
   });
 
-  it('the_camera_sound_lane_is_muted_by_default_and_unmutes_as_chat_does', async () => {
+  it('the Camera sound lane is muted by default and unmutes as the pinned ops do', async () => {
     show(golden(parity.cameraSound));
     // One lane for both interviews' cameras; the take, whose camera file has no sound, adds none.
     const lane = screen.getByRole('group', { name: 'Camera sound' });
     await userEvent.click(within(lane).getByRole('button', { name: 'Unmute Camera sound' }));
     const { label, ops } = await lastApply();
     expect(label).toBe('undo.source.unmute');
-    const chat = parity.cameraSound.cases.find(
+    const pinned = parity.cameraSound.cases.find(
       (c) => c.call.name === 'muteSource' && (c.call.args as { muted?: boolean }).muted === false,
     )!;
-    expect(ops).toEqual(chat.ops);
+    expect(ops).toEqual(pinned.ops);
   });
 
-  it("a camera's sound has its mute in this clip, never Separate, and Mute beside Unmute while it fills the gaps", async () => {
+  it("a camera's sound has a mute in this clip, never Separate, and Mute by Unmute while it fills gaps", async () => {
     show(golden(parity.cameraSound));
     fireEvent.contextMenu(screen.getByRole('button', { name: /^Recording 1, clip 1 of 4/ }));
     expect(await screen.findByRole('menuitem', { name: 'Unmute Camera sound in this clip' })).toBeInTheDocument();
