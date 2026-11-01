@@ -3631,3 +3631,15 @@
   outline: 2px solid var(--color-paper);
   outline-offset: 2px;
 }
+
+/* The key Delete takes away, picked last on the timeline: drawn inverted, as the selection's paper ring. */
+.tl-key[data-picked] {
+  border: 2px solid var(--color-paper);
+  background: var(--color-bay);
+}
+
+.tl-volume-key[data-picked] {
+  fill: var(--color-bay);
+  stroke: var(--color-paper);
+  stroke-width: 2.5;
+}

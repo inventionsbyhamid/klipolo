@@ -5,6 +5,7 @@ import { motionKeyTimes } from '../../../lib/keys';
 import { formatPrecise } from '../../../lib/time';
 import { deleteKeysAt, moveKeysAt } from '../../../state/keyEdits';
 import { itemNow } from '../../../state/latest';
+import { isPicked, useKeyPick } from '../../../state/keyPick';
 import { usePlayback } from '../../../state/playback';
 import { useSelection } from '../../../state/selection';
 import { registerFollower } from '../drag/registry';
@@ -46,6 +47,7 @@ export const KeyDiamonds = memo(function KeyDiamonds({
   locked,
 }: KeyDiamondsProps) {
   const ref = useCallback((el: HTMLDivElement | null) => registerFollower(id, el), [id]);
+  const picked = useKeyPick((s) => s.picked);
   const press = useRef<{ fromUs: number; x: number; pointerId: number; moved: boolean } | null>(null);
   const times = motionKeyTimes(motion);
   if (times.length === 0) return null;
@@ -53,6 +55,7 @@ export const KeyDiamonds = memo(function KeyDiamonds({
   const pick = (us: number) => {
     useSelection.getState().select(id);
     usePlayback.getState().seek(startUs + us);
+    useKeyPick.getState().pick({ kind: 'motion', itemId: id, tUs: us });
   };
   /** Where the press has dragged its key to, within the layer. */
   const dragged = (p: { fromUs: number; x: number }, clientX: number) => {
@@ -106,6 +109,7 @@ export const KeyDiamonds = memo(function KeyDiamonds({
           key={us}
           type="button"
           className="tl-key"
+          data-picked={isPicked(picked, id, us) || undefined}
           style={{ left: at(us) }}
           aria-label={t({
             id: 'timeline.key.name',

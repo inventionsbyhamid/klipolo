@@ -7,6 +7,7 @@ import type { Op } from '../../../bindings/Op';
 import { levelAt as keyLevel, movedKey } from '../../../lib/keys';
 import { formatPrecise } from '../../../lib/time';
 import { addVolumeKey, deleteVolumeKey, editVolumeKeys, moveVolumeKey, type Leveled } from '../../../state/keyEdits';
+import { isPicked, useKeyPick } from '../../../state/keyPick';
 import { registerFollower } from '../drag/registry';
 import { useSpeech } from '../media/speech';
 import { usToPx } from '../scale';
@@ -161,6 +162,7 @@ export const VolumeLine = memo(function VolumeLine({
   tone = 'music',
 }: VolumeLineProps) {
   const speech = useSpeech((s) => s.ranges);
+  const picked = useKeyPick((s) => s.picked);
   const press = useRef<Press | null>(null);
   const line = useRef<SVGPolylineElement>(null);
   const svg = useRef<SVGSVGElement>(null);
@@ -185,7 +187,11 @@ export const VolumeLine = memo(function VolumeLine({
     e.stopPropagation();
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    if (point !== null) (e.currentTarget as SVGElement).focus?.({ preventScroll: true });
+    if (point !== null) {
+      (e.currentTarget as SVGElement).focus?.({ preventScroll: true });
+      // Delete takes the picked point away, not its clip or sound.
+      useKeyPick.getState().pick({ kind: 'volume', target, tUs: point });
+    }
     press.current = {
       x: e.clientX,
       y: e.clientY,
@@ -314,6 +320,7 @@ export const VolumeLine = memo(function VolumeLine({
         <circle
           key={k.tUs}
           className="tl-volume-key"
+          data-picked={isPicked(picked, target.id, k.tUs) || undefined}
           cx={xOf(k.tUs)}
           cy={pointY(k.tUs)}
           r={4}

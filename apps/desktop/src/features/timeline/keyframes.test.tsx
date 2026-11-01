@@ -169,3 +169,25 @@ describe('volume keys on the timeline', () => {
     expect(louder[1].v).toBeGreaterThan(1);
   });
 });
+
+describe('a picked key', () => {
+  it('Delete takes the picked key away, and after a press elsewhere the selection again', async () => {
+    const { deletePickedKey, useKeyPick } = await import('../../state/keyPick');
+    moving();
+    renderWithProviders(<Timeline />);
+    const [first] = diamonds();
+    fireEvent.pointerDown(first, { button: 0, pointerId: 1, clientX: 150 });
+    fireEvent.pointerUp(first, { pointerId: 1, clientX: 150 });
+    expect(useKeyPick.getState().picked).toEqual({ kind: 'motion', itemId: 'title', tUs: 0.5 * S });
+    expect(first).toHaveAttribute('data-picked');
+    await act(async () => void deletePickedKey());
+    expect(apply.mock.calls[0][0]).toBe('keys.delete.undo');
+    expect(useKeyPick.getState().picked).toBeNull();
+    // A press on anything else lets a picked key go.
+    fireEvent.pointerDown(first, { button: 0, pointerId: 2, clientX: 150 });
+    fireEvent.pointerUp(first, { pointerId: 2, clientX: 150 });
+    fireEvent.pointerDown(document.body, { button: 0, pointerId: 3 });
+    expect(useKeyPick.getState().picked).toBeNull();
+    expect(deletePickedKey()).toBe(false);
+  });
+});
