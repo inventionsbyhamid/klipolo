@@ -34,7 +34,9 @@ mod runs;
 use std::path::Path;
 
 use klipolo_model::coded::CodedError;
-use klipolo_model::project::{Asset, Recording, RecordingSource, SourceMix, SourceRole, SourceRun};
+use klipolo_model::project::{
+    Asset, FormatKind, Recording, RecordingSource, SourceMix, SourceRole, SourceRun,
+};
 use klipolo_model::time::Us;
 use klipolo_model::timeline::{CameraLayout, Clip, ClipSource};
 
@@ -149,15 +151,16 @@ pub fn recording_from(
 }
 
 /// The whole take as one main-track clip, its camera (a bubble, or the main footage) mirrored as the recorder's "Mirror
-/// my camera" was; framing left to the defaults.
-pub fn clip_for(rec: &Recording, mirror: bool) -> Clip {
+/// my camera" was, its bubble round in the project's main format `primary` (`CameraLayout::for_primary`); framing left
+/// to the defaults.
+pub fn clip_for(rec: &Recording, mirror: bool, primary: FormatKind) -> Clip {
     let mut clip = Clip::new(
         ClipSource::Recording { id: rec.id.clone() },
         0,
         rec.duration_us(),
     );
     if rec.camera().is_some() || rec.camera_only() {
-        let camera = CameraLayout::default();
+        let camera = CameraLayout::for_primary(primary);
         clip.camera = Some(CameraLayout { mirror, ..camera });
     }
     clip

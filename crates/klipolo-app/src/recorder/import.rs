@@ -7,7 +7,8 @@
 //!    manifest's peaks. A take with nothing to edit stops here, with no project made, opened or changed.
 //! 3. The project is opened (`destination`). The recording's id is the take's, so a take already in it isn't added
 //!    again. A project made for the take goes again when the step is refused.
-//! 4. The clip is the whole take, last on the main track, its camera mirrored as "Mirror my camera" was (`clip_for`).
+//! 4. The clip is the whole take, last on the main track, its camera mirrored as "Mirror my camera" was and its bubble
+//!    round in the project's main format (`clip_for`).
 //! 5. `Imported { project }` goes to the take's journal and its `imported` mark is written.
 //!
 //! Then its clicks get their auto zoom as a second step, "Add auto zoom" (`zoom`), unless the take was in the project
@@ -125,8 +126,7 @@ fn add(
     recording: &Recording,
     mirror: bool,
 ) -> Result<(String, bool), Said> {
-    let clip = clip_for(recording, mirror);
-    let clip_id = clip.id.clone();
+    let mut clip_id = String::new();
     let mut there = None;
     // Built under the project's lock, so nothing lands between the look and the step.
     build_and_apply(sessions, Some(project), None, LABEL, |open| {
@@ -139,6 +139,9 @@ fn add(
             // No ops: no step.
             return Ok(Vec::new());
         }
+        // Its camera bubble round in the project's main format, whatever that is.
+        let clip = clip_for(recording, mirror, open.settings.primary_format);
+        clip_id.clone_from(&clip.id);
         Ok(vec![
             Op::AddAssets { assets },
             Op::AddRecording {
