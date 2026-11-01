@@ -145,6 +145,16 @@ fn only_an_imported_clip_plays_backward() {
     assert!(missing.is_err());
 }
 
+/// The file a reversed clip plays forward from can't be removed while the clip is there.
+#[test]
+fn a_reversed_clip_keeps_its_own_file() {
+    let p = apply_ops(&with_copy(), &[reverse("b", Some((0.0, 10.0)))]).unwrap();
+    assert_eq!(
+        apply_ops(&p, &[Op::RemoveAsset { id: "broll".into() }]).unwrap_err(),
+        refused("A reversed clip still needs this file to play forward again. Play it forward or remove the clip first.")
+    );
+}
+
 /// Reverse, then undo: the clip plays forward from its own file, exactly as before.
 #[test]
 fn reversing_then_undo_puts_the_clip_back() {

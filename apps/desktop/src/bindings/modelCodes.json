@@ -668,7 +668,7 @@
   },
   {
     "code": "model.reverse.lost",
-    "message": "A reversed clip's own file is missing from the project.",
+    "message": "A reversed clip still needs this file to play forward again. Play it forward or remove the clip first.",
     "params": []
   },
   {

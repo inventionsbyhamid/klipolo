@@ -157,7 +157,7 @@ pub const MESSAGES: Messages = &[
     ("model.reverse.outside", "That reversed copy doesn't hold this clip's footage."),
     ("model.reverse.noCopy", "This clip needs a reversed copy of its footage first."),
     ("model.reverse.already", "This clip already plays backward. Reverse it again to play it forward."),
-    ("model.reverse.lost", "A reversed clip's own file is missing from the project."),
+    ("model.reverse.lost", "A reversed clip still needs this file to play forward again. Play it forward or remove the clip first."),
     ("model.settings.fps", "fps must be 24, 25, 30, 50 or 60."),
     ("model.settings.formatCount", "Pick between one and three formats."),
     ("model.settings.duplicateFormat", "Each format can only be added once."),
