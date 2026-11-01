@@ -1,6 +1,6 @@
-//! The request SAM 3.1 takes for a video: one short noun phrase and the video by its uploaded file's id, answered once
-//! (not streamed) with every match's box and confidence on every frame. Masks come back as one bit a pixel, the
-//! smallest answer; the reader skips them.
+//! The request SAM 3.1 takes for a video: one short noun phrase and the video by its uploaded file's id, answered with
+//! every match's box and confidence on every frame. Masks come back as one bit a pixel, the smallest answer; the reader
+//! skips them. The caller sends it as it needs (Klipolo streams it: the relay forwards SAM video only streamed).
 
 use serde_json::{json, Value};
 
