@@ -1,7 +1,7 @@
 import { buttonColumn, clearFrom, type SafeAreaSpec } from './spec';
 
 /**
- * Instagram Reels, organic (Adaptly 2026): 210 top, 310 bottom, 0 left, 84 right at
+ * Instagram Reels, organic (Adaptly, 2026): 210 top, 310 bottom, 0 left, 84 right at
  * 1080 × 1920.
  */
 export const REELS: SafeAreaSpec = {

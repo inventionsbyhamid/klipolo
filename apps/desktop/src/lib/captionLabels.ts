@@ -1,8 +1,8 @@
 import type { MessageDescriptor } from '@lingui/core';
 import { msg } from '@lingui/core/macro';
 
-/** The undo labels of the Captions section, the canvas block, the captions lane, the word list
- * and the missing fonts' Replace. */
+/** The undo labels of the Captions section, the canvas block, the captions lane, the word list and the missing fonts'
+ * Replace. */
 export const CAPTION_LABELS = {
   'captions.on.undo': msg({
     id: 'captions.on.undo',

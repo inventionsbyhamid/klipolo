@@ -55,7 +55,7 @@ export function once<V>(inFlight: Map<string, Promise<V>>, key: string, load: ()
   return pending;
 }
 
-/** Decoded peak ranges in the webview: at most 64 (WebContent ≤ 350 MB), about 2 MB of stereo. */
+/** Decoded peak ranges in the webview: at most 64 (the webview process stays under 350 MB), about 2 MB of stereo. */
 const ranges = createLru<Int16Array>(64);
 const loading = new Map<string, Promise<Int16Array>>();
 /** A range of `path`'s peaks as of media version `version` of it: a rebuilt sound cache is read again, as infos are. */

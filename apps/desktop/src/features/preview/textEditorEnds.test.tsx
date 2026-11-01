@@ -95,8 +95,8 @@ describe('how a canvas edit ends', () => {
     const end = beginCommit();
     act(() => void useTextEdit.getState().finish());
     expect(heard.applied).toHaveLength(0);
-    // The project closes: the edit keeps its turn (the close waits for it), built once the merge has landed
-    // (sent at once, it would put back what the merge changed).
+    // The project closes: the edit keeps its turn (the close waits for it), built once the merge has landed (sent at
+    // once, it would put back what the merge changed).
     act(() => void flushBursts({ closing: true }));
     expect(heard.applied).toHaveLength(0);
     end();

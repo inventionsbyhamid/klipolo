@@ -4,8 +4,9 @@
 //! property required, a value that may be left unsaid nullable). The list never changes while an app is connected.
 //!
 //! Only a few words are an app's own (`apps_words`). Chat's model puts the person's words on screen, an app its own
-//! (`klipolo_chat::compile_for_app`), so `addText`'s text and `makeTitleCard` say so. Chat places a sticker once drawn,
-//! while an app's waits in Klipolo's chat for the person's Use, so `makeSticker` says that.
+//! (`klipolo_chat::compile_for_app`), so `addText`'s text and `makeTitleCard` say so. A sticker, chat's or an app's,
+//! waits once drawn in Klipolo's chat panel for the person's Use; an app's person may not be looking there, so an
+//! app's `makeSticker` says where it waits.
 
 use std::sync::LazyLock;
 

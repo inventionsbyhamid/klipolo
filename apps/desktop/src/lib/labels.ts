@@ -11,11 +11,11 @@ import { CAPTION_LOOKS } from './textLook';
 import { formatTime } from './time';
 
 /**
- * Every undo label the UI makes, by message id: `useProject.apply('text.add', ops)` stores the id, and
- * the Edit menu, ⌘K and the Undo chip word it here in the language shown, so a language switch rewords them at once
- * and chat's English-only planner reads the history in English. Chat's labels (`edit.*`) are added by the
- * generated catalogue (`addLabelSource`). The UI's ids never use a namespace Rust's codes use (`edit`, `chat`,
- * `model`, `project`…): a test holds them apart, so one id is never two messages.
+ * Every undo label the UI makes, by message id: `useProject.apply('text.add', ops)` stores the id, and the Edit menu,
+ * ⌘K and the Undo chip word it here in the language shown, so a language switch rewords them at once and chat's
+ * English-only planner reads the history in English. Chat's labels (`chat.<tool>`), other apps' (`mcp.*`) and the
+ * caption styles' come from their own tables (`addLabelSource`). The UI's ids never use a namespace Rust's codes use
+ * (`edit`, `chat`, `model`, `project`…): a test holds them apart, so one id is never two messages.
  */
 export const LABELS: Record<string, MessageDescriptor> = TABLE;
 
@@ -33,7 +33,7 @@ export function labelParts(label: Label): [LabelId, LabelParams | undefined] {
   return typeof label === 'string' ? [label, undefined] : [label.id, label.params];
 }
 
-/** Labels from elsewhere (chat adds its generated codes). */
+/** Labels from elsewhere: tables of their own, asked after the UI's. */
 const extra: Array<(id: string) => MessageDescriptor | undefined> = [];
 
 export function addLabelSource(source: (id: string) => MessageDescriptor | undefined) {

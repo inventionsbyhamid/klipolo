@@ -15,7 +15,7 @@ import { renderWithProviders } from '../../test/render';
 import { fixField, lit, nextRevision, pagesOf, said, setWordLooks, wordList as list } from '../../test/wordPages';
 import { CaptionWords } from './CaptionWords';
 
-/** The word list while its pages are on their way, and after edits (the round trip). */
+/** The word list while its pages are on their way, and after edits. */
 
 beforeEach(async () => {
   await resetCaptions();

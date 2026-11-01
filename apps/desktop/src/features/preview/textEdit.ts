@@ -187,14 +187,14 @@ export const useTextEdit = create<TextEditStore>()((set, get) => ({
     set({ session: null, closing });
     try {
       // Through the commit queue, so its op builds on a change still landing and what comes next builds on it. Kept at
-      // close (said as what it would be now, if the close can't wait for it), never sent ahead of its turn:
-      // a whole content built before a commit ahead of it lands would put that one back.
+      // close (said as what it would be now, if the close can't wait for it), never sent ahead of its turn: a whole
+      // content built before a commit ahead of it lands would put that one back.
       const result = await new Promise<'ok' | 'gone' | 'failed'>((resolve) => {
         const planned = changeOf(s, words);
         // Nothing to commit (the words as they were, or an empty new box): it stays so at its turn, so it settles now,
-        // and a close never leaves the title hidden behind it (Minor C).
+        // and a close never leaves the title hidden behind it.
         if (planned === null) return resolve('ok');
-        // A title gone meanwhile is kept too: at its turn its words go to the clipboard, said (Minor C).
+        // A title gone meanwhile is kept too: at its turn its words go to the clipboard, said.
         const hold = keepAtClose(planned?.label ?? 'text.edit.undo');
         // The close gave up on it (it was said): its words go to the clipboard.
         hold.drop = () => resolve('failed');
@@ -245,9 +245,8 @@ usePlayback.subscribe((s, prev) => {
 });
 
 // Closing the project (or quitting) finishes the edit first: its words go in their turn, kept at close, after any
-// finished edit still waiting its turn, and the close waits for them. Undo, redo and a chat change
-// don't end an edit: they can't start from the editor, and ending it mid-word would send the next keys to the editor's
-// shortcuts.
+// finished edit still waiting its turn, and the close waits for them. Undo, redo and a chat change don't end an edit:
+// they can't start from the editor, and ending it mid-word would send the next keys to the editor's shortcuts.
 registerBurst((closing) => {
   if (!closing) return false;
   const s = useTextEdit.getState().session;

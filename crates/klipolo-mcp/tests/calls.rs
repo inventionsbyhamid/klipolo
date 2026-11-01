@@ -696,8 +696,8 @@ fn the_summary_is_not_a_read_of_the_timeline() {
     let host = FakeHost::two_clips();
     let mcp = Mcp::new(host.clone());
     let agent = Agent::open(&mcp, "Agent");
-    // The summary shows no clip's times, as a tool or a resource: a call naming times still needs a read that shows
-    // them.
+    // The summary lists the clips with their times but no transcript or scenes, as a tool or a resource: a call naming
+    // times still needs a read of what is said and shown there.
     let summary = agent.call("getSummary", json!({}));
     assert_eq!(summary["isError"], false, "{summary}");
     assert_refused(&agent.cut(0.0, 13.0), READ_FIRST);

@@ -1,7 +1,7 @@
 import { buttonColumn, clearFrom, type SafeAreaSpec } from './spec';
 
 /**
- * YouTube Shorts, organic (Adaptly 2026): 120 top, 300 bottom, 0 left, 96 right at 1080 × 1920
+ * YouTube Shorts, organic (Adaptly, 2026): 120 top, 300 bottom, 0 left, 96 right at 1080 × 1920
  * (360 bottom with the description expanded).
  */
 export const SHORTS: SafeAreaSpec = {

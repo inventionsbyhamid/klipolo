@@ -2,9 +2,10 @@ import type { Snapshot } from '../bindings/Snapshot';
 import type { ApplyBase } from '../bridge/applyBase';
 
 /**
- * Where an edit's ops were built (refuse, never rebase): the project and revision of this window's copy then, and
- * how many changes from elsewhere it had seen. Every edit source takes it when it builds its ops: `useProject.apply` at
- * its call, a held key or toolbar burst at its press (`captureBase`), undo and redo at their turn.
+ * Where an edit's ops were built (Rust refuses a stale one, never rebases it): the project and revision of this
+ * window's copy then, and how many changes from elsewhere it had seen. Every edit source takes it when it builds its
+ * ops: `useProject.apply` at its call, a held key or toolbar burst at its press (`captureBase`), undo and redo at their
+ * turn.
  */
 export interface Built {
   projectId: string | null;

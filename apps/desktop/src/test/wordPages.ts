@@ -7,7 +7,7 @@ import { revisionPatch } from './fixtures';
 
 /**
  * The caption word list's mocked project for the tests of presses made while its words are being updated: pages of
- * follow-up): pages of words with the looks applied to them, answered as `captions_pages` answers and held on demand.
+ * words with the looks applied to them, answered as `captions_pages` answers and held on demand.
  */
 
 export type W = ReturnType<typeof word>;

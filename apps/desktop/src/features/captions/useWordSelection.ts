@@ -43,18 +43,18 @@ interface Resolved {
 
 /**
  * The word list's selection: an anchor and a focus, kept by key and page row, and the words the person picked for
- * picked for them.
+ * them.
  * - Its words come from the window's answer while they lie in it, else from an answer of its own (its rows and up to
  *   `PAD` pages each side, at most `MOST_PAGES`), so it never shrinks as the list scrolls.
  * - The words it had stay only while that answer of its own is on its way. It is `pending` while the words it holds
  *   are from an earlier revision than the project's now (`viewOf`: the window's answer's), or about to change: the
  *   look bar keeps its presses until then ("Updating…"), so none acts on words an edit has moved. Scrolling away from
  *   it asks its own answer again, but its words are still the revision's: no wait.
- * - After an edit, each of its words is found again by its file word (`findAgain`, indexed). It
- *   follows them while they are still one run (into a correction, and back to the words picked when it is undone)
- *   and lets go when a section moved away; the same two ends with other words between them are never taken as
- *   they are. When some can't be found it falls back on the words the person picked: a pick an edit overtook
- *, or words cut from inside it. Words not in the answers it has are asked for around its rows, then by the time
+ * - After an edit, each of its words is found again by its file word (`findAgain`, indexed). It follows them while
+ *   they are still one run (into a correction, and back to the words picked when it is undone) and lets go when a
+ *   section moved away; the same two ends with other words between them are never taken as they are. When some can't
+ *   be found it falls back on the words the person picked: a pick an edit overtook, or words cut from inside it. Words
+ *   not in the answers it has are asked for around its rows, then by the time they play (a re-paging moves pages, not
  *   time), before it lets go.
  * - A selection that would span more pages isn't extended, and says so (`tooLong`).
  * - `pickRow` picks a whole page's words, once the window's answer holds them (opened from the video).
