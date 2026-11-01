@@ -2439,6 +2439,13 @@
   gap: var(--space-4);
 }
 
+/* A note with its action under it (a camera that is its own layer now): the button at its own width. */
+.insp-note {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+}
+
 /* The transition card's Remove: a small secondary button at its own width, after the fields. */
 .insp-remove {
   justify-self: start;
