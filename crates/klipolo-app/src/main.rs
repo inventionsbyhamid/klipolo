@@ -238,6 +238,7 @@ fn main() {
             commands::media::media_add_music,
             commands::media::media_add_sound,
             commands::media::media_add_image,
+            commands::media::media_set_background,
             commands::media::media_place,
             commands::media::media_add_text,
             commands::media::media_update_item,
