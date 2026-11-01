@@ -49,9 +49,9 @@ fn source(id: &str, role: SourceRole, from_s: f64, to_s: f64, mix: SourceMix) ->
     }
 }
 
-/// The r9 shape at a larger scale: the camera over recording 0–500 s, muted at 50 % and filling gaps; the mic over
-/// recording 20 s to `mic_to_s`. Clips c1 (recording 10–100 s, from 0 on the timeline, fading in 1 s and out 2 s) and
-/// c2 (150–400 s, from 90 s).
+/// `sync_sound.rs`'s `r9` shape at a larger scale: the camera over recording 0–500 s, muted at 50 % and filling gaps;
+/// the mic over recording 20 s to `mic_to_s`. Clips c1 (recording 10–100 s, from 0 on the timeline, fading in 1 s and
+/// out 2 s) and c2 (150–400 s, from 90 s).
 fn gapped(mic_to_s: f64) -> Project {
     let mut p = Project::new("Gapped");
     p.assets = vec![

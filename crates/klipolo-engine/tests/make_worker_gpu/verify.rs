@@ -1,7 +1,7 @@
-//! `Verify`: the worker loads the folder the app wrote into its `in/` through the one folder
-//! reader, checks and measures it as `Compile` does and answers with the key it measured and the hardened text's hash;
-//! a folder that doesn't read is refused before anything runs, and a scene folder is checked as a submitted scene is
-//!. Its machine key and hardened text's hash are the app's own.
+//! `Verify`: the worker loads the folder the app wrote into its `in/` through the one folder reader, checks and
+//! measures it as `Compile` does and answers with the key it measured and the hardened text's hash; a folder that
+//! doesn't read is refused before anything runs, and a scene folder is checked as a submitted scene is. Its machine key
+//! and hardened text's hash are the app's own.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;

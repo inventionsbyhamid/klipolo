@@ -1,7 +1,7 @@
-//! Offscreen nodes on the GPU (lavapipe in CI): an offscreen node's target is only as big as its own box, so the designs
-//! The presets are made of fit the Normal class at 1080p (scenes have no Heavy); a normal-blend node goes back
-//! as a quad, with no ping-pong partner; `SceneBytes` agrees with what a fresh pool really allocated for the frame; a
-//! node moving through its motion keeps its target; and a turned glass card grabs its turned box.
+//! Scene targets' bounds on the GPU (lavapipe in CI): an offscreen node's target is only as big as its own box, so the
+//! designs the scene presets are made of fit the budget's Normal class at 1080p (scenes have no Heavy); a normal-blend
+//! node goes back as a quad, with no ping-pong partner; `SceneBytes` agrees with what a fresh pool really allocated for
+//! the frame; a node moving through its motion keeps its target; and a turned glass card grabs its turned box.
 
 mod support;
 use std::sync::Arc;
@@ -37,8 +37,8 @@ fn scene(nodes: &[String], timeline: &str) -> String {
 
 /// What scene layer `p` holds on its first frame at `t` on a fresh device, `size` pixels, against what the pool
 /// allocated for it: `SceneBytes` (its own target, at most `layer` bytes and only its box, its targets at their own
-/// their own sizes beyond it and the partner, and its scratch) must be the pool's every byte (the pool's own
-/// count, not `SceneBytes` itself).
+/// sizes beyond it and the partner, and its scratch) must be the pool's every byte (the pool's own count, not
+/// `SceneBytes` itself).
 async fn first_frame(
     (p, registry): (Project, Arc<klipolo_engine::registry::Registry>),
     t: f64,
@@ -65,9 +65,9 @@ fn normal(s: SceneSplit) -> bool {
     s.extra_targets <= 1 && s.extra_bytes <= 8 << 20
 }
 
-/// Requirement 5: at 1080p, a lone shadowed title, a masked group, a faded group around two shadowed titles and a glass
-/// lower third are Normal; a plain title holds nothing extra (Light, at preview size). Each offscreen target is its
-/// node's box, not a layer, and a faded group goes back as a quad (no partner), as a masked one does.
+/// At 1080p, a lone shadowed title, a masked group, a faded group around two shadowed titles and a glass lower third
+/// are Normal; a plain title holds nothing extra (Light, at preview size). Each offscreen target is its node's box, not
+/// a layer, and a faded group goes back as a quad (no partner), as a masked one does.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]
 async fn common_designs_fit_normal_at_1080p() {
@@ -103,10 +103,7 @@ async fn common_designs_fit_normal_at_1080p() {
         masked.targets < HD_LAYER,
         "its group, its mask, the mask's pass: {masked:?}"
     );
-    assert_eq!(
-        masked.partner, 0,
-        "a masked group is Normal: {masked:?}"
-    );
+    assert_eq!(masked.partner, 0, "masked, laid back as a quad: {masked:?}");
     assert!(
         normal(masked.split(HD_LAYER)),
         "a masked group is Normal: {masked:?}"
@@ -136,8 +133,8 @@ async fn common_designs_fit_normal_at_1080p() {
         "a glass lower third is Normal or Light: {glass:?}"
     );
 
-    // A class is measured at preview size: there a plain title holds nothing past its own share (its stencil and
-    // buffers within 4 MiB, even where a stencil is emulated at four bytes a pixel).
+    // The budget measures a class at preview size: there a plain title holds nothing past its own share (its stencil
+    // and buffers within 4 MiB, even where a stencil is emulated at four bytes a pixel).
     let plain = r##"{"id":"t","type":"text","text":"Plain title","box":[0.08,0.7,0.5,0.08],"size":64,"fill":"#FFFFFF"}"##;
     let (p, registry) = scene_project(&scene(&[plain.into()], ""), 2.0);
     let light = first_frame((p, registry), 1.0, PREVIEW, PREVIEW_LAYER).await;
@@ -156,8 +153,8 @@ async fn common_designs_fit_normal_at_1080p() {
 
 /// A lower third popping in with its card faded and its titles shadowed (a scale and a slide; the card offscreen, the
 /// titles' shadows baked): after its first frames, a node's target and the scene's own keep their size through its
-/// through its whole motion (the survey found their largest box), so no frame of it makes a target, a view, a stencil
-/// or a bind group (requirement 7).
+/// whole motion (the survey found their largest box), so no frame of it makes a target, a view, a stencil or a bind
+/// group.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]
 async fn a_popping_lower_third_makes_no_gpu_objects() {
@@ -198,7 +195,7 @@ fn popping() -> String {
     scene(&[card], timeline)
 }
 
-/// The numbers for the report (run by hand; the gate skips `scene_frame_costs*`): the popping lower third's drawer CPU
+/// Numbers to compare (run by hand; the gate skips `scene_frame_costs*`): the popping lower third's drawer CPU
 /// on its first frame (its survey with it) and a frame after, and a frame's passes, at 1280 × 720 over 2 s. lavapipe
 /// and a debug build: meaningful only against each other.
 #[tokio::test(flavor = "multi_thread")]
@@ -236,9 +233,8 @@ async fn scene_frame_costs_of_a_lower_third() {
     );
 }
 
-/// A glass card held turned 3° grabs, and blurs, its turned box, not the square its diagonal makes; one that
-/// spins keeps the square on every frame, quarter turns among them, so it
-/// makes no GPU object as it turns.
+/// A glass card held turned 3° grabs, and blurs, its turned box, not the square its diagonal makes; one that spins
+/// keeps the square on every frame, quarter turns among them, so it makes no GPU object as it turns.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]
 async fn a_turned_glass_card_grabs_its_turned_box() {

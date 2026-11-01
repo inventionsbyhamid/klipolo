@@ -80,7 +80,7 @@ fn a_take_keeps_one_set_of_facts_shares_its_track_and_counts_every_byte() {
         *take.facts(),
         TakeFacts::of_cursor(&track, &StillRuns::of(&track))
     );
-    // The dwells are kept once, inside the facts, which clone for C16 to add the activity.
+    // The dwells are kept once, inside the facts, which clone for the smart camera to add the activity.
     assert_eq!(take.dwells().len(), 1);
     assert!(std::ptr::eq(take.dwells(), take.facts().dwells.as_slice()));
     let with_activity = TakeFacts {
@@ -88,7 +88,7 @@ fn a_take_keeps_one_set_of_facts_shares_its_track_and_counts_every_byte() {
         ..(*take.facts()).clone()
     };
     assert_ne!(with_activity, *take.facts());
-    // The track is shared, so the glide reads it through `cursor_at` with no copy.
+    // The track is shared, so the smart camera's glide reads it through `cursor_at` with no copy.
     let mut p = Project::new("One");
     add_take(&mut p, 1, &path, CursorCapture::Separate);
     let starts = clip_starts(&p.timeline.main);
@@ -213,9 +213,9 @@ fn a_damaged_file_loads_what_it_can_and_the_loader_goes_on() {
 
 #[test]
 fn takes_pushed_past_the_budget_go_so_preview_holds_what_export_holds() {
-    // A budget of one and a half takes. A and B load; then C is put in front of them. C and A are what
-    // export would load (A is the one take past the budget), so B goes from the preview's cache: the budget is a hard
-    // cap, and preview draws the cursors export draws.
+    // A budget of one and a half takes. A and B load; then C is put in front of them. C and A are what export would
+    // load (A is the one take past the budget), so B goes from the preview's cache: the budget is a hard cap, and
+    // preview draws the cursors export draws.
     let dir = tempfile::tempdir().unwrap();
     let p = support::takes::cursor_takes(3, dir.path(), CursorCapture::Separate);
     let wants = wanted(&p);
@@ -257,8 +257,8 @@ fn every_wanted_takes_variants_are_ready_before_export_plans() {
 
 #[test]
 fn a_project_switch_frees_its_takes_off_the_calling_thread() {
-    // The actor clears the cache when the project switches. Ten minutes of motion is a track and a path
-    // of hundreds of KB each; they are freed on another thread, never the actor.
+    // The actor clears the cache when the project switches. Ten minutes of motion is a track and a path of hundreds of
+    // KB each; they are freed on another thread, never the actor.
     let dir = tempfile::tempdir().unwrap();
     let path = cursor_file(dir.path(), 1);
     write(&path, &gliding(Capture::Separate, 600.0));
@@ -275,8 +275,8 @@ fn a_project_switch_frees_its_takes_off_the_calling_thread() {
 
 #[test]
 fn a_take_no_longer_wanted_is_freed_off_the_calling_thread() {
-    // Two ten-minute takes in a budget of one and a half. When the
-    // project wants only the second, the first goes (no longer wanted, over the budget), freed on another thread.
+    // The project switch's rule on `want`'s path: two ten-minute takes in a budget of one and a half. When the project
+    // wants only the second, the first goes (no longer wanted, over the budget), freed on another thread.
     let dir = tempfile::tempdir().unwrap();
     let mut p = Project::new("Two");
     for k in 1..=2 {

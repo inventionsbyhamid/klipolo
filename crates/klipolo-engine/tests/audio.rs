@@ -327,8 +327,8 @@ fn audio_items_and_video_layers_join_the_mix() {
     );
 }
 
-/// A sound layer's own mute: of two sounds sharing a track, the muted one adds nothing and the
-/// other still plays; unmuting gives back the plan it had.
+/// A sound layer's own mute: of two sounds sharing a track, the muted one adds nothing and the other still plays;
+/// unmuting gives back the plan it had.
 #[test]
 fn a_muted_sound_layer_is_silent_beside_one_that_plays() {
     let sound = |id: &str, at: f64| Item {
@@ -806,8 +806,8 @@ fn mixer_block_cost() {
     }
 }
 
-/// While any track is soloed only soloed tracks are heard, beside the main track, which always plays; mute
-/// wins over solo; un-soloing gives back exactly the plan from before. Export plans its sound with `audio_plan` too.
+/// While any track is soloed only soloed tracks are heard, beside the main track, which always plays; mute wins over
+/// solo; un-soloing gives back exactly the plan from before. Export plans its sound with `audio_plan` too.
 #[test]
 fn solo_picks_the_sound_and_mute_still_wins() {
     let layer = |id: &str, content| Item {
@@ -937,11 +937,10 @@ fn noise(seed: u64, n: usize) -> f32 {
     (x >> 40) as f32 / (1u64 << 23) as f32 - 1.0
 }
 
-/// The preview levels from an estimate of the mix's loudness, export from its exact
-/// measurement, and both make the same gain decision within 0.5 dB. The project has what moves the
-/// estimate: a recording's mic (speech-like bursts and pauses) and system sound, fades, an equal-power crossfade, a
-/// split that plays through its cut, a music bed with the "voice" effect (rendered alone through it), and an overlay
-/// video's sound at 1.5×.
+/// The preview levels from an estimate of the mix's loudness, export from its exact measurement, and both make the same
+/// gain decision within 0.5 dB. The project has what moves the estimate: a recording's mic (speech-like bursts and
+/// pauses) and system sound, fades, an equal-power crossfade, a split that plays through its cut, a music bed with the
+/// "voice" effect (rendered alone through it), and an overlay video's sound at 1.5×.
 #[test]
 fn the_preview_and_export_make_the_same_gain_decision() {
     let dir = tempfile::tempdir().unwrap();
@@ -1213,9 +1212,9 @@ fn dissolves_over_continuous_footage_keep_the_preview_within_half_a_db() {
     }
 }
 
-/// An effected source's windows through its effect are rendered once and kept beside the
-/// caches, so a sound-changing edit elsewhere, or to its own volume, doesn't render a 10-minute voiceover through
-/// FFmpeg again; a trim of it does. The estimate stays within the I2 tolerance of the exact measure.
+/// An effected source's windows through its effect are rendered once and kept beside the caches, so a sound-changing
+/// edit elsewhere, or to its own volume, doesn't render a 10-minute voiceover through FFmpeg again; a trim of it does.
+/// The estimate stays within the 0.5 dB gain tolerance of the exact measure.
 #[test]
 fn an_edit_elsewhere_doesnt_render_an_effected_voiceover_again() {
     let dir = tempfile::tempdir().unwrap();

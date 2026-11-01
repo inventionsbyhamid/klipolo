@@ -1,9 +1,8 @@
-//! Scene strokes on the GPU (lavapipe in CI): a translucent stroke blends once where its own
-//! joins and crossings overlap; trim and dash cuts take the line's cap, so a round-capped zero-length dash is a
-//! dot and a draw-on ends without a jump; a scaling layer motion makes no mesh per frame; a fill lyon can't
-//! make within the cap is said, not dropped. A dash gap narrower than the caps is covered once
-//! (the stencils' own tests are in `scene_stencils_gpu.rs`). Goldens are compared within 2/255;
-//! `UPDATE_GOLDEN=1` writes them.
+//! Scene strokes on the GPU (lavapipe in CI): a translucent stroke blends once where its own joins and crossings
+//! overlap; trim and dash cuts take the line's cap, so a round-capped zero-length dash is a dot and a draw-on ends
+//! without a jump; a scaling layer motion makes no mesh per frame; a fill lyon can't make within the cap is said, not
+//! dropped; a dash gap narrower than the caps is covered once (the stencils' own tests are in `scene_stencils_gpu.rs`).
+//! Goldens are compared within 2/255; `UPDATE_GOLDEN=1` writes them.
 
 mod support;
 use std::sync::Arc;

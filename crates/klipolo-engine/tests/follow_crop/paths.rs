@@ -1,6 +1,6 @@
-//! How a take keeps its follow-crop paths: built from the raw track whatever the
-//! style's smoothing, built again when its screen activity grows (the key carries it), the old one kept by a context
-//! made before, and never more paths than a take holds.
+//! How a take keeps its follow-crop paths: built from the raw track whatever the style's smoothing, built again when
+//! its screen activity grows (the key carries it), the old one kept by a context made before, and never more paths than
+//! a take holds.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

@@ -1,11 +1,10 @@
-//! The scene geometry, in pixels (lavapipe in CI): goldens made
-//! before offscreen nodes drew into targets of their own box, and compared on every later commit within 2/255. A faded
+//! Scene geometry, in pixels (lavapipe in CI): goldens made before offscreen nodes drew into targets of their own box,
+//! and compared on every later commit within 2/255. A faded
 //! card around two shadowed titles (quads laid back into a box-sized parent); the lower third that pops in, mid-motion
 //! (targets whose top left follows a moving box); and a multiply group and a tilted group inside a faded group (the host
-//! pass into a box-sized parent). Two more were made earlier (the scene drew into the
-//! layer's whole target, every text shadow through the offscreen chain): the lower third that pops in with no panel
-//! behind it (the scene's own target is only its card's box), and a shadowed title fading in (its shadow baked, faded
-//! with it).
+//! pass into a box-sized parent). Two more were made while the scene drew into the layer's whole target, every text
+//! shadow through the offscreen chain: the lower third that pops in with no panel behind it (the scene's own target is
+//! only its card's box), and a shadowed title fading in (its shadow baked, faded with it).
 
 mod support;
 use std::sync::Arc;
@@ -85,7 +84,7 @@ async fn a_popping_lower_third_mid_motion() {
     golden(&scene(&[card], timeline), 0.35, "geometry-popping-0.35").await;
 }
 
-/// The lower third that pops in with nothing behind it, mid-motion: the scene draws into a target of
+/// The lower third that pops in with nothing behind it, mid-motion: the scene draws into a target of its card's box, as
 /// it drew into the layer's whole.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]
@@ -95,7 +94,7 @@ async fn a_popping_lower_third_on_its_own() {
     golden(&bare(&[card], timeline), 0.35, "geometry-popping-bare-0.35").await;
 }
 
-/// A title with an amber shadow (so it shows over nothing) fading in on its own, half way: its baked
+/// A title with an amber shadow (so it shows over nothing) fading in on its own, half way: its baked shadow fades with
 /// it, as the offscreen chain's did.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]
@@ -108,10 +107,9 @@ async fn a_shadowed_title_fading_in() {
     golden(&bare(&[title], timeline), 0.5, "geometry-shadow-fading-0.5").await;
 }
 
-/// The same title with its shadow blurred 40 px, which the text pass bakes small at step 2 (σ
-/// about 6.7 atlas texels at this size), against the frame an earlier version drew through the offscreen chain
-/// (`geometry-shadow-wide-0.5`, made there), within the small bake's 5/255 across the cell and the
-/// chain's own rounding.
+/// The same title with its shadow blurred 40 px, which the text pass bakes small at step 2 (σ about 6.7 atlas texels at
+/// this size), against the frame drawn through the offscreen chain (`geometry-shadow-wide-0.5`), within the small
+/// bake's 5/255 across the cell and the chain's own rounding.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]
 async fn a_wide_shadowed_title_fading_in() {

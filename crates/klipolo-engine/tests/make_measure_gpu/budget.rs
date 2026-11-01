@@ -1,6 +1,6 @@
-//! The measurement's time: a point stops once its p95 is surely Over, nothing is measured past the
-//! request's budget, an export size stops at a frame over the step limit, and the worker's own meter warms
-//! each size once per request and keeps that cold frame.
+//! The measurement's time: a point stops once its p95 is surely Over, nothing is measured past the request's budget, an
+//! export size stops at a frame over the step limit, and the worker's own meter warms each size once per request and
+//! keeps that cold frame.
 
 use std::time::{Duration, Instant};
 
