@@ -5,16 +5,17 @@
 //! rule: a call it refuses goes back to the model with the reason.
 //!
 //! A background only shows where a clip leaves the frame uncovered. So a call that names one that can be seen (blurred
-//! video, a colour, a gradient or a picture; not black) sets every main clip that fills the main format, and that
-//! Fill crops there (`framing::fill_crops`), to Fit in that format, as the clip card's Fit does (`clips::framed`), in
-//! the same undo step; with padding there is no need, as the padding shows the background round every clip. The reply
-//! says how many clips were set to Fit, and how many of them stopped following the cursor.
+//! video, a colour, a gradient or a picture; not black) sets every main clip to Fit in each of the video's formats
+//! where it fills the frame and Fill crops it (`framing::fill_crops`), as the clip card's Fit does (`clips::framed`),
+//! in the same undo step; with padding there is no need, as the padding shows the background round every clip. The
+//! reply says, per format (the main one first, the others named: "In the vertical version"), how many clips were set
+//! to Fit, and how many of them stopped following the cursor.
 
 use klipolo_model::Project;
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::framing::{effective_framing, fill_crops};
 use klipolo_model::ops::{ClipPatch, Op};
-use klipolo_model::project::BackgroundKind;
+use klipolo_model::project::{BackgroundKind, FormatKind};
 use klipolo_model::timeline::FramingMode;
 
 use super::clips::framed;
@@ -54,19 +55,37 @@ pub(super) fn set_background(
     if background != work.background {
         ops.push(Op::SetBackground { background });
     }
-    let mut fitted = Fitted::default();
+    let primary = work.settings.primary_format;
+    // The main format first, then the others in the video's order.
+    let formats: Vec<FormatKind> = std::iter::once(primary)
+        .chain(
+            work.settings
+                .formats
+                .iter()
+                .copied()
+                .filter(|&f| f != primary),
+        )
+        .collect();
+    let mut fitted: Vec<Fitted> = formats
+        .iter()
+        .map(|&format| Fitted::of(format, primary))
+        .collect();
     if shows {
-        let primary = work.settings.primary_format;
         for clip in &work.timeline.main {
-            let now = effective_framing(work, clip, primary);
-            if now.mode != FramingMode::Fill || !fill_crops(work, clip, primary) {
-                continue;
+            let mut fit = Vec::new();
+            for (k, &format) in formats.iter().enumerate() {
+                let now = effective_framing(work, clip, format);
+                if now.mode != FramingMode::Fill || !fill_crops(work, clip, format) {
+                    continue;
+                }
+                fit.push(format);
+                fitted[k].clips += 1;
+                fitted[k].followed += usize::from(now.follow.is_some());
             }
-            let Some(framing) = framed(work, clip, FramingMode::Fit, &[primary]) else {
+            // One change per clip, its formats together.
+            let Some(framing) = framed(work, clip, FramingMode::Fit, &fit) else {
                 continue;
             };
-            fitted.clips += 1;
-            fitted.followed += usize::from(now.follow.is_some());
             ops.push(Op::UpdateClip {
                 id: clip.id.clone(),
                 patch: ClipPatch {
@@ -80,24 +99,44 @@ pub(super) fn set_background(
         ops,
         label: label("setBackground", params),
     };
-    (edit, fitted.said())
+    let said: Vec<String> = fitted.into_iter().filter_map(Fitted::said).collect();
+    (edit, (!said.is_empty()).then(|| said.join(" ")))
 }
 
-/// The clips a background set to Fit, and how many of them followed the cursor before.
-#[derive(Clone, Copy, Debug, Default)]
+/// The clips a background set to Fit in one format, and how many of them followed the cursor there before; `version`
+/// names the format when it isn't the main one ("vertical").
+#[derive(Clone, Copy, Debug)]
 struct Fitted {
+    version: Option<&'static str>,
     clips: usize,
     followed: usize,
 }
 
 impl Fitted {
-    /// "A clip is set to Fit so the background shows round it.", "3 clips are set to Fit so the background shows round
-    /// them. One of them no longer follows the cursor."
+    fn of(format: FormatKind, primary: FormatKind) -> Self {
+        let version = (format != primary).then_some(match format {
+            FormatKind::Landscape => "landscape",
+            FormatKind::Portrait => "vertical",
+            FormatKind::Square => "square",
+        });
+        Self {
+            version,
+            clips: 0,
+            followed: 0,
+        }
+    }
+
+    /// "A clip is set to Fit so the background shows round it.", "In the vertical version, 3 clips are set to Fit so
+    /// the background shows round them. One of them no longer follows the cursor."
     fn said(self) -> Option<String> {
         let set = match self.clips {
             0 => return None,
-            1 => "A clip is set to Fit so the background shows round it.".to_owned(),
+            1 => "a clip is set to Fit so the background shows round it.".to_owned(),
             n => format!("{n} clips are set to Fit so the background shows round them."),
+        };
+        let set = match self.version {
+            Some(version) => format!("In the {version} version, {set}"),
+            None => capitalised(&set),
         };
         let follow = match (self.clips, self.followed) {
             (_, 0) => return Some(set),
@@ -108,4 +147,12 @@ impl Fitted {
         };
         Some(format!("{set} {follow}"))
     }
+}
+
+/// `text` with its first letter a capital.
+fn capitalised(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
 }

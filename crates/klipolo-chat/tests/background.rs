@@ -361,9 +361,9 @@ fn nothing_is_set_to_fit_where_the_background_already_shows_or_fill_crops_nothin
     ));
 }
 
-#[test]
-fn a_screen_take_that_followed_the_cursor_says_it_no_longer_does() {
-    let mut p = vertical(wide());
+/// `p` with a screen take that kept a cursor track (it fills and follows in 9:16 by default) after its clips, as clip
+/// "r", playing the wide file as its screen.
+fn with_screen_take(mut p: Project) -> Project {
     let screen = p.assets[0].clone();
     p.recordings = vec![Recording {
         id: "rec".into(),
@@ -395,6 +395,12 @@ fn a_screen_take_that_followed_the_cursor_says_it_no_longer_does() {
     let mut take = Clip::new(ClipSource::Recording { id: "rec".into() }, 0, 10_000_000);
     take.id = "r".into();
     p.timeline.main.push(take);
+    p
+}
+
+#[test]
+fn a_screen_take_that_followed_the_cursor_says_it_no_longer_does() {
+    let p = with_screen_take(vertical(wide()));
     let follows = effective_framing(&p, &p.timeline.main[1], FormatKind::Portrait);
     assert!(follows.mode == FramingMode::Fill && follows.follow.is_some());
     let out = compile(&p, &inputs(&p), &[call(BLUR)]);
@@ -402,6 +408,63 @@ fn a_screen_take_that_followed_the_cursor_says_it_no_longer_does() {
         out.notes,
         [
             "2 clips are set to Fit so the background shows round them. One of them no longer follows the cursor."
+        ]
+    );
+}
+
+/// `p` in 16:9 with a vertical version too.
+fn with_vertical_version(mut p: Project) -> Project {
+    p.settings.formats = vec![FormatKind::Landscape, FormatKind::Portrait];
+    p.settings.primary_format = FormatKind::Landscape;
+    p
+}
+
+#[test]
+fn every_version_where_fill_crops_is_set_to_fit_and_named() {
+    // A landscape talk with a vertical version: in 9:16 the wide clip fills, cropped, so the blur would be hidden there;
+    // in 16:9 it fills whole, so nothing changes there.
+    let p = with_vertical_version(wide());
+    let out = compile(&p, &inputs(&p), &[call(BLUR)]);
+    let additions = out.additions.expect("applied at once");
+    let [Op::SetBackground { .. }, Op::UpdateClip { id, patch }] = additions.ops.as_slice() else {
+        panic!("{:?}", additions.ops);
+    };
+    assert_eq!(id, "w");
+    let framing = patch.framing.as_ref().unwrap();
+    assert_eq!(framing[&FormatKind::Portrait].mode, FramingMode::Fit);
+    assert!(!framing.contains_key(&FormatKind::Landscape), "{framing:?}");
+    assert_eq!(
+        out.notes,
+        ["In the vertical version, a clip is set to Fit so the background shows round it."]
+    );
+    let after = apply_ops(&p, &additions.ops).unwrap();
+    let clip = &after.timeline.main[0];
+    assert_eq!(
+        effective_framing(&after, clip, FormatKind::Portrait).mode,
+        FramingMode::Fit
+    );
+    assert_eq!(
+        effective_framing(&after, clip, FormatKind::Landscape).mode,
+        FramingMode::Fill
+    );
+}
+
+#[test]
+fn a_vertical_version_that_followed_the_cursor_says_it_no_longer_does() {
+    // The screen take is fitted in 16:9 already and fills and follows in 9:16.
+    let mut p = with_screen_take(with_vertical_version(wide()));
+    p.timeline.main.remove(0);
+    let take = &p.timeline.main[0];
+    assert_eq!(
+        effective_framing(&p, take, FormatKind::Landscape).mode,
+        FramingMode::Fit
+    );
+    let out = compile(&p, &inputs(&p), &[call(BLUR)]);
+    assert_eq!(
+        out.notes,
+        [
+            "In the vertical version, a clip is set to Fit so the background shows round it. It no longer follows the \
+             cursor."
         ]
     );
 }
