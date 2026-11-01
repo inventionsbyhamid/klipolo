@@ -1,4 +1,6 @@
 import { act, fireEvent, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Layout } from '../../bindings/Layout';
 import type { Op } from '../../bindings/Op';
@@ -110,5 +112,12 @@ describe('the rotate knob', () => {
     const camera = screen.getByRole('button', { name: /^Camera/ });
     expect(camera.querySelector('[data-handle="se"]')).toBeInTheDocument();
     expect(knob(camera)).toBeNull();
+  });
+
+  it('a knob above a layer at the canvas top can be pressed through the preview header', () => {
+    const css = readFileSync(resolve(__dirname, '../../styles/app.css'), 'utf8');
+    const rule = (selector: string) => new RegExp(`(^|\\n)${selector} \\{([^}]*)\\}`).exec(css)?.[2] ?? '';
+    expect(rule('\\.stage-head')).toMatch(/pointer-events: none/);
+    expect(rule('\\.stage-head > :not\\(\\.spacer\\)')).toMatch(/pointer-events: auto/);
   });
 });
