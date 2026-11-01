@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Snapshot } from '../../bindings/Snapshot';
 import { fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
-import { twoTakesSnapshot } from '../../test/sounds';
+import { separated, twoTakesSnapshot } from '../../test/sounds';
 
 vi.mock('../../bridge/commands', () => ({ bridge: { apply: vi.fn(), undo: vi.fn() }, mediaUrl: (p: string) => p }));
 vi.mock('../../bridge/engine', () => ({
@@ -94,6 +94,23 @@ describe('the sound lanes under Video', () => {
     // c1's mic plays from its own layer: its part is dimmed, as a muted sound's is.
     expect(parts[0]).toHaveAttribute('data-muted', 'true');
     expect(parts[1]).not.toHaveAttribute('data-muted');
+  });
+});
+
+describe('a separated sound', () => {
+  it("sits under the sound lanes, named after its take's sound, drawn in the clip's blue with its waveform", () => {
+    const snap = twoTakesSnapshot();
+    // A plain sound effect on the same lane, for comparison.
+    snap.project.timeline.tracks[0].items.push(separated('whoosh', 's1', 30, 31));
+    show(snap);
+    const sounds = screen.getByRole('group', { name: 'Sound effects' });
+    const mic = sounds.querySelector<HTMLElement>('[data-block-id="c1-mic"]')!;
+    expect(mic.getAttribute('aria-label')).toMatch(/^Sound layer, Mic of Recording 1, /);
+    expect(mic).toHaveClass('is-recorded');
+    expect(mic.querySelector('canvas')).not.toBeNull();
+    const whoosh = sounds.querySelector<HTMLElement>('[data-block-id="whoosh"]')!;
+    expect(whoosh).not.toHaveClass('is-recorded');
+    expect(whoosh.querySelector('canvas')).toBeNull();
   });
 });
 
