@@ -48,10 +48,13 @@ describe('the four lanes', () => {
     const project = withMusicAndSound();
     useProject.setState({ snapshot: { ...fixtureSnapshot(), project }, pending: 0 });
     renderWithProviders(<Timeline />);
-    // Four lanes, top to bottom, each with its icon's name.
+    // Four lanes, top to bottom, each with its icon's name; under Video, the take's recorded sounds (its mic, and its
+    // screen file's own sound) have lanes of their own.
     expect(screen.getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual([
       'Overlays',
       'Video',
+      'Mic',
+      'Screen’s sound',
       'Sound effects',
       'Music',
     ]);

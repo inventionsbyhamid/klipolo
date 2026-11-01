@@ -18,6 +18,7 @@ import { setClipSpeed } from './clipSpeed';
 import { cardEscape } from './common';
 import { FramingField } from './FramingField';
 import { LookField } from './LookField';
+import { SourceMixTools } from './SourceMixTools';
 import { SpeedField } from './SpeedField';
 import { VolumeControls } from './VolumeControls';
 
@@ -27,7 +28,9 @@ import { VolumeControls } from './VolumeControls';
  * timeline's own commands; a main clip has no layer order) and a close button. Its fields: Fit or Fill in the format
  * shown, and the Fill focus while Fill crops (`FramingField`); Speed (0.5x to 2x, the clip's length follows); when
  * the clip has sound, Volume (0 to 200%) and Mute; its look (`LookField`, which opens the Looks view); its fades from
- * and to black (`ClipFadesField`); and a recording's camera (`ClipCameraFields`). Each change is one undo step.
+ * and to black (`ClipFadesField`); and for a recording clip its Sounds, each recorded sound's own mute, volume and sync
+ * and the camera's sync (`SourceMixTools`), then its camera's layout, shape, border and mirror (`ClipCameraFields`).
+ * Each change is one undo step.
  */
 export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind }) {
   const { t } = useLingui();
@@ -35,6 +38,8 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
   const project = useProject((s) => s.snapshot?.project);
   if (!project) return null;
   const title = sourceLabel(project, clip.source);
+  const source = clip.source;
+  const recording = source.type === 'recording' ? project.recordings.find((r) => r.id === source.id) : undefined;
   const close = () => useSelection.getState().select(null);
   const setSpeed = (speed: number) => setClipSpeed(clip, speed, title, `${formatNumber(locale, speed)}×`);
   return (
@@ -89,6 +94,7 @@ export function ClipInspector({ clip, format }: { clip: Clip; format: FormatKind
         )}
         <LookField clip={clip} />
         <ClipFadesField clip={clip} />
+        {recording && <SourceMixTools clip={clip} recording={recording} />}
         <ClipCameraFields project={project} clip={clip} format={format} />
       </div>
     </aside>
