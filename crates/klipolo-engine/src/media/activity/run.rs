@@ -1,12 +1,13 @@
 //! One screen file's pass: read what is on disk, decode only the chunks it misses, push their pictures through
 //! `Differ`, and append each chunk durably as it is made.
 //!
-//! **The file** (the contract, `klipolo_cursor::activity::file`): chunks append to `<stem>.activity.part`, each followed
-//! by an ordered sync, so a stop (a cancel, a hold, a crash, a power cut) loses at most the chunk being made. The part
-//! file is decoded with the screen file's own duration (the decoder's, the one its header stores), truncated to
-//! `append_at` (a new header when that is 0: another duration, or a damaged header), and the chunks `missing` lists are
-//! appended. Once every chunk is made it is renamed to `<stem>.activity`. A finished file that reads with a damaged
-//! chunk is moved back to the part file, and only that chunk is made again (the later copy is read).
+//! **The file** (the cursor crate's format, `klipolo_cursor::activity::file`): chunks append to
+//! `<stem>.activity.part`, each followed by an ordered sync, so a stop (a cancel, a hold, a crash, a power cut) loses
+//! at most the chunk being made. The part file is decoded with the screen file's own duration (the decoder's, the one
+//! its header stores), truncated to `append_at` (a new header when that is 0: another duration, or a damaged header),
+//! and the chunks `missing` lists are appended. Once every chunk is made it is renamed to `<stem>.activity`. A
+//! finished file that reads with a damaged chunk is moved back to the part file, and only that chunk is made again
+//! (the later copy is read).
 //!
 //! **One writer.** The part file is locked while a pass writes it (`lock_exclusive`), so an export's foreground pass
 //! (another process) and the editor's never append to it together: the second one is `Busy` and comes back.
@@ -17,7 +18,7 @@
 //!
 //! **A minute it can't read** (a picture fails: damaged data) is passed over: the decoder goes, the chunks after it are
 //! made from a decoder opened at their own start, and it stays missing for a later pass (`Partial`). A decoder that
-//! m5). A decoder that won't open again there (a drive gone) ends the pass at once, `Unreadable`.
+//! won't open again there (a drive gone) ends the pass at once, `Unreadable`.
 //! A file marked as one that can't be analysed (`files::failed_mark`) isn't opened.
 //!
 //! **Cost:** per tick one picture and one `Differ::push` (≈ 10 µs); per chunk an 8.4 KB append, a sync, and the
