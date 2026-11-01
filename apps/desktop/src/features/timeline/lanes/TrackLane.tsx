@@ -3,6 +3,7 @@ import type { Item } from '../../../bindings/Item';
 import type { Track } from '../../../bindings/Track';
 import { assetById, itemLabel, itemTitle, sourceLabel, type Sources } from '../../../lib/timeline';
 import { ItemBlock, type ItemLook } from '../blocks/ItemBlock';
+import type { PressRoll } from '../blocks/RollHandle';
 import type { PressBlock, PressTrim } from '../drag/useBlockDrag';
 import { LAYER_MIN_PX, SOUND_MIN_PX } from '../layout';
 import { itemFiles } from '../media/blockFiles';
@@ -23,6 +24,8 @@ export interface LineView {
   fromUs: number;
   toUs: number;
   selectedId: string | null;
+  /** Every selected block (a group's, or the one block): each draws selected. */
+  selection: ReadonlySet<string>;
   /** The pieces of the selected song (a run of music, `musicRunOf`): the others are highlighted with it, as one song. */
   runIds?: ReadonlySet<string>;
   /** The block in the Tab order (roving focus). */
@@ -32,6 +35,8 @@ export interface LineView {
   onPick: (id: string) => void;
   onPress: PressBlock;
   onTrimPress: PressTrim;
+  /** A press on a cut's roll handle: the Video lane's. */
+  onRollPress?: PressRoll;
 }
 
 /** A lane's pieces: bands are drawn first, so no band is ever over a block. */
@@ -95,8 +100,8 @@ export function linePieces(
         clipSound={item.content.type === 'audio' && assetById(o.sources, item.content.assetId)?.kind === 'video'}
         muted={track.kind === 'audio' && track.muted}
         pps={o.pps}
-        selected={item.id === o.selectedId}
-        inRun={item.id !== o.selectedId && (o.runIds?.has(item.id) ?? false)}
+        selected={o.selection.has(item.id)}
+        inRun={!o.selection.has(item.id) && (o.runIds?.has(item.id) ?? false)}
         tabbable={item.id === o.tabStopId}
         dimmed={track.hidden || (track.kind === 'audio' && track.muted)}
         locked={track.locked}
