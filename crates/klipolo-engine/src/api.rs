@@ -482,10 +482,10 @@ pub enum ExportEvent {
         notes: Option<Vec<Said>>,
     },
     /// Stopped with every finished part kept: the user paused, or `message` says why (a full disk, a hardware
-    /// failure). `export_resume` continues from there; `compatibility` is set when it may also finish in compatibility
-    /// mode (the hardware path kept failing).
+    /// failure: English from the engine, which the app may say as its own code). `export_resume` continues from there;
+    /// `compatibility` is set when it may also finish in compatibility mode (the hardware path kept failing).
     Paused {
-        message: Option<String>,
+        message: Option<Said>,
         compatibility: Option<ExportCompatibility>,
     },
     /// The export can't go on (`message` says why, such as a missing file: English, or a code such as

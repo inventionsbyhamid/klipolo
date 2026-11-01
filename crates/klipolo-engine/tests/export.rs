@@ -385,7 +385,7 @@ async fn a_repeating_hardware_failure_can_finish_in_compatibility_mode() {
     let (outcome, events) = run_short(&fake, batch(dir.path()).0).await;
     assert!(matches!(outcome, Outcome::Paused), "{events:?}");
     assert!(
-        matches!(events.last(), Some(ExportEvent::Paused { message: Some(m), compatibility: Some(_) })
+        matches!(events.last(), Some(ExportEvent::Paused { message: Some(Said::Text(m)), compatibility: Some(_) })
         if m == DECODE_FAILED)
     );
     let job = the_job(dir.path());
@@ -663,7 +663,7 @@ async fn a_disk_that_doesnt_answer_pauses_naming_the_file() {
         "{message}"
     );
     assert!(events.contains(&ExportEvent::Paused {
-        message: Some(message.clone()),
+        message: Some(Said::Text(message.clone())),
         compatibility: None,
     }));
     assert!(!events.iter().any(|e| matches!(e, ExportEvent::Retrying)));
