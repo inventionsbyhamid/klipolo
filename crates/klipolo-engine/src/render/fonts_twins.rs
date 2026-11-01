@@ -5,9 +5,9 @@
 //!   width, so a condensed title's Thai, Arabic or symbols would otherwise draw as boxes. Its glyphs are the face's own.
 //!   A twin of an installed CJK family is on the forbidden-fallback list with the family (`cjk_forbidden`);
 //! - **the emoji face at every weight.** cosmic-text matches the emoji face at any width and style (its PostScript name
-//!   says "Emoji") but only at the asked weight, and before, the face existed at 400 only: an emoji in a 900
-//!   title made it load the computer's other fonts one by one (its last stage) until it reached the emoji face. Now its
-//!   common fallback finds it at once, at every weight a fallback has; each record maps the same file, which fontdb
+//!   says "Emoji") but only at the asked weight: with the face at 400 only, an emoji in a 900 title would make it load
+//!   the computer's other fonts one by one (its last stage) until it reached the emoji face. With a record at every
+//!   weight a fallback has, its common fallback finds it at once; each record maps the same file, which fontdb
 //!   memory-maps once.
 
 use klipolo_fonts::index::FontIndex;

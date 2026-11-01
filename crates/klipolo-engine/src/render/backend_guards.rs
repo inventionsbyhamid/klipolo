@@ -36,8 +36,8 @@ impl GpuBackend {
         self.compositor.as_ref().map(|c| c.mode())
     }
 
-    /// The device was lost: every mark its compositor held is settled as a crash at that moment would settle it:
-    /// the effects under an acknowledged open mark, or drawn in the last 60 frames and 2 s, are named for
+    /// The device was lost: every mark its compositor held is settled as a crash at that moment would settle it: the
+    /// effects under an acknowledged open mark, or drawn in the last 60 frames and 2 s, are named for
     /// the app, which strikes them; marks asked for and never acknowledged close. With the events it hadn't handed over
     /// yet. The compositor goes with the device.
     pub(super) fn lost_compositor(&mut self) {
@@ -150,7 +150,7 @@ impl GpuBackend {
         }
     }
 
-    /// Sampling on or off (the [Mac] check).
+    /// Sampling on or off (the check run by hand on a Mac after a Mac build).
     #[doc(hidden)]
     pub fn set_sampling(&mut self, on: bool) {
         if let Some(c) = &mut self.compositor {
@@ -158,7 +158,7 @@ impl GpuBackend {
         }
     }
 
-    /// The time the sampler itself took so far (the [Mac] check).
+    /// The time the sampler itself took so far (the check run by hand on a Mac after a Mac build).
     #[doc(hidden)]
     pub fn sampler_cost(&self) -> std::time::Duration {
         self.compositor

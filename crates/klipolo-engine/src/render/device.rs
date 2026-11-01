@@ -10,9 +10,9 @@ use crate::vendor::cap::rendering::create_shared_device_with;
 
 /// What the preview says when the graphics card can't be used; the details go to the log (never raw wgpu text).
 pub const GPU_UNAVAILABLE: &str = "The preview can't use the graphics card.";
-/// Whether Metal's timestamps are trusted for the render worker's meter. Off until the [Mac] check's
-/// `make_mac` on an Apple-silicon Mac shows its timed frames agree with the wall clock; flipping it is a reviewed
-/// change. Until then the meter uses the fenced wall clock on Metal.
+/// Whether Metal's timestamps are trusted for the render worker's meter. Off until `make_mac`, run by hand on an
+/// Apple-silicon Mac after a Mac build, shows its timed frames agree with the wall clock; only that measurement should
+/// flip it. Until then the meter uses the fenced wall clock on Metal.
 pub const METAL_TIMESTAMPS_VERIFIED: bool = false;
 /// What the preview says when a frame hit a graphics error.
 pub const GPU_FAILED: &str = "The preview couldn't draw a frame.";
@@ -295,7 +295,7 @@ impl WorkDone {
     }
 }
 
-/// One thread per device that blocks in `device.poll(Wait)` while someone waits for submitted work (perf research
+/// One thread per device that blocks in `device.poll(Wait)` while someone waits for submitted work (no yield/sleep
 /// polling loops, no idle wakeups when nothing is in flight). It ends with the device.
 fn spawn_poller(device: wgpu::Device) -> mpsc::Sender<()> {
     let (tx, rx) = mpsc::channel::<()>();
