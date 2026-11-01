@@ -29,5 +29,8 @@ pub use cells::blur_sigmas;
 pub use drawer::{CaptionDrawer, CaptionStats, FORMAT_BYTES, MAX_IN_FLIGHT, PER_FORMAT};
 #[doc(hidden)]
 pub use testing::{TestAtlas, test_atlas, test_atlas_with, test_font_system};
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub use worker::HeldBuilds;
 #[doc(hidden)]
 pub use worker::{build_times, time_builds};

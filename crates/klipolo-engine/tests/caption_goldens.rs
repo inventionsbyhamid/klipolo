@@ -188,12 +188,17 @@ async fn ink_past_a_words_advance_is_drawn_whole() {
 }
 
 /// The render thread's cost of the captions per frame: the frame's state and the drawer's `prepare` for a kept page
-/// over 1,000 frames, the first frame of a page (it asks the build thread), and how long until the page shows. Run in
-/// release on lavapipe (CPU Vulkan): the figures are lavapipe's, not the Mac's.
+/// over 1,000 frames, the first frame's `prepare` of a page (it asks the build thread), and how long until the page
+/// shows. Run in release on lavapipe (CPU Vulkan): the figures are lavapipe's, not the Mac's. The first frame's
+/// submit is printed, not bounded: it is the frame's, not the captions', and on lavapipe it waits until the queue has
+/// run the work before it, a page build's included (Metal's doesn't wait for the GPU to run it). Pages are neither
+/// built nor freed on this thread: the four styles' pages pass the cache's four, so some are let go, and a page's
+/// atlas freed here panics.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU; run in release"]
 async fn a_caption_frame_costs_little() {
     let mut d = klipolo_engine::test_support::caption_drawer().await;
+    klipolo_engine::render::captions::forbid_builds_on_this_thread();
     for style in [
         "caption.bold",
         "caption.karaoke",
@@ -202,8 +207,8 @@ async fn a_caption_frame_costs_little() {
     ] {
         let c = d.time_frames(style, 5, 1_000);
         eprintln!(
-            "{style} (1080x1920, lavapipe), render thread per frame: state {:.1} µs, prepare {:.1} µs (slowest {:.1} µs); a new page's first frame {:.1} µs, shown {:.1} ms later (built on the build thread)",
-            c.state_us, c.prepare_us, c.slowest_us, c.first_us, c.shown_after_ms
+            "{style} (1080x1920, lavapipe), render thread per frame: state {:.1} µs, prepare {:.1} µs (slowest {:.1} µs); a new page's first frame {:.1} µs (its frame's submit {:.1} µs), shown {:.1} ms later (built on the build thread)",
+            c.state_us, c.prepare_us, c.slowest_us, c.first_us, c.first_submit_us, c.shown_after_ms
         );
         assert!(c.state_us < 1_000.0 && c.prepare_us < 5_000.0 && c.first_us < 20_000.0);
     }

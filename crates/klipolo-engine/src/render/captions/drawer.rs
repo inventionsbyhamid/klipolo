@@ -14,6 +14,10 @@
 //!   draws the page's last one, never another page's words. An export (`wait`) waits for the reply on the
 //!   same path, so preview == export holds. The asking
 //!   and keeping is `builds`.
+//! - **Nor freed on the render thread:** an atlas evicted, every one after a font change and the drawer's own when it
+//!   is dropped go back to the build thread, which frees them in order with its builds. Freeing a texture's view can
+//!   wait for the GPU's queue (lavapipe takes the queue's lock for it, and holds that lock while it runs a submission,
+//!   a page build's included), so a frame never frees one.
 //! - **Per frame:** the face is resolved only when the font, weight, style or fonts' generation change; the words' hash
 //!   is kept per page; the instances go into kept buffers (`draw`), uploaded only when they changed.
 //!   Nothing is allocated once warm.
@@ -50,10 +54,10 @@ pub struct CaptionStats {
     pub builds: u64,
     pub atlases: usize,
     pub atlas_bytes: u64,
-    /// Uploads of the frame's quads and uniform (only when they changed), and those made with a queue
-    /// write (a staging buffer of wgpu's own, made and freed each time; the quads use kept ones).
+    /// Uploads of the frame's quads and uniform (only when they changed), and the frames that made them through a
+    /// staging buffer of their own (made and freed for that frame, every kept one in flight).
     pub uploads: u64,
-    pub queue_writes: u64,
+    pub one_off_uploads: u64,
 }
 
 pub struct CaptionDrawer {
@@ -119,6 +123,13 @@ impl CaptionDrawer {
         self.builds
     }
 
+    /// Tests: holds the build thread before its next job until the returned hold is dropped (a minute at most).
+    #[cfg(feature = "test-support")]
+    #[doc(hidden)]
+    pub fn hold_builds(&self) -> super::HeldBuilds {
+        self.worker.hold()
+    }
+
     /// What the captions cost and hold (tests and the perf harness).
     #[doc(hidden)]
     pub fn stats(&self) -> CaptionStats {
@@ -128,13 +139,13 @@ impl CaptionDrawer {
             atlases: self.cache.0.len(),
             atlas_bytes: self.cache.bytes(),
             uploads: self.buffers.uploads,
-            queue_writes: self.buffers.queue_writes,
+            one_off_uploads: self.buffers.one_off_uploads,
         }
     }
 
     /// The frame `prepare` uploaded into is submitted: the staging buffers it copied from are mapped again.
     /// Every frame path calls it after its submit (`Compositor::frame_submitted`); one that didn't would keep them
-    /// from being reused, and past the kept ones uploads would fall back to queue writes.
+    /// from being reused, and past the kept ones each upload would make a staging buffer of its own.
     pub fn after_submit(&mut self) {
         self.buffers.after_submit();
     }
@@ -145,10 +156,11 @@ impl CaptionDrawer {
         self.buffers.forget_uploads();
     }
 
-    /// The shared fonts changed (`SharedFonts::refresh` returned true): every atlas and the face go, and a build asked
-    /// before is dropped when it lands (the build thread refreshes its own fonts before each build).
+    /// The shared fonts changed (`SharedFonts::refresh` returned true): every atlas (freed on the build thread) and the
+    /// face go, and a build asked before is dropped when it lands (the build thread refreshes its own fonts before each
+    /// build).
     pub fn fonts_changed(&mut self) {
-        self.cache.0.clear();
+        self.worker.free(std::mem::take(&mut self.cache.0));
         self.face = None;
         self.epoch += 1;
     }
@@ -157,12 +169,11 @@ impl CaptionDrawer {
     /// that shows are asked for if they aren't kept, and the frame's instances are uploaded. The preview (`!wait`)
     /// draws the page's last atlas while it is being built again, else nothing; an export waits for it. Returns the slot `draw` takes, or None when
     /// there is nothing to draw. Says `frame.fontMissing` for a stand-in face and `frame.cjkFontMissing` for CJK without
-    /// its Noto Sans, as titles do.
-    #[allow(clippy::too_many_arguments)]
+    /// its Noto Sans, as titles do. It takes no queue, so it never waits for the GPU's queue, where a page build's work
+    /// runs: only an export waits, for its page's reply.
     pub fn prepare(
         &mut self,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         layer: &CaptionLayer,
         out: (u32, u32),
@@ -207,8 +218,13 @@ impl CaptionDrawer {
             }
             None => return None,
         };
-        self.cache
-            .evict(layer.format, [Some(shown), next_key.map(|(_, k)| k)]);
+        let mut evicted = Vec::new();
+        self.cache.evict(
+            layer.format,
+            [Some(shown), next_key.map(|(_, k)| k)],
+            &mut evicted,
+        );
+        self.worker.free(evicted);
         let index = self.cache.find(&shown)?;
         let entry = &mut self.cache.0[index];
         entry.used = self.tick;
@@ -235,7 +251,7 @@ impl CaptionDrawer {
             return None;
         }
         self.buffers
-            .write(device, queue, encoder, &self.instances, &self.view);
+            .write(device, encoder, &self.instances, &self.view);
         self.drawn = Some((index, self.instances.len() as u32));
         Some(index)
     }
@@ -254,5 +270,12 @@ impl CaptionDrawer {
         pass.set_bind_group(0, &entry.bind, &[]);
         pass.set_vertex_buffer(0, buffer.slice(..));
         pass.draw(0..4, 0..n);
+    }
+}
+
+impl Drop for CaptionDrawer {
+    /// The atlases kept go to the build thread to free, as every other one does; the thread ends once it has them.
+    fn drop(&mut self) {
+        self.worker.free(std::mem::take(&mut self.cache.0));
     }
 }
