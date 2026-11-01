@@ -203,6 +203,7 @@ fn main() {
             commands::framing::clip_framing,
             commands::speaker::speaker_estimate,
             commands::speaker::speaker_follow,
+            commands::speaker::speaker_keep,
             project::project_reveal,
             project::projects_recent,
             media::media_import,
