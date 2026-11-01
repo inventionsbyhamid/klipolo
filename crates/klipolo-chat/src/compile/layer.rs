@@ -356,3 +356,26 @@ pub(super) fn set_song_sound(
         label: label("setLayer", vec![("layer", ErrorParam::from("music"))]),
     })
 }
+
+/// What a `setLayer` call names, resolved when it was tried: a layer, a song by its first piece, or a clip, and how the
+/// model named it. A call that waits for the removals is made again from it on that phase's copy (`again`).
+#[derive(Clone, Debug)]
+pub(crate) enum Target {
+    Layer(Id, String),
+    Song(String, String),
+    Clip(Id, String),
+}
+
+/// `setLayer`'s edit on `target` of `work`, `change` as the call gave it.
+pub(super) fn again(
+    c: &Compiler,
+    work: &Project,
+    target: &Target,
+    change: &LayerChange,
+) -> Result<Edit, Refused> {
+    match target {
+        Target::Layer(id, said) => set_layer(c, work, (id, said), change),
+        Target::Song(first, said) => set_song_sound(work, (first, said), change),
+        Target::Clip(id, said) => set_clip_fades(work, (id, said), change),
+    }
+}

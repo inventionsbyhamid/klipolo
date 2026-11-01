@@ -518,7 +518,14 @@ struct Animated {
 struct Done {
     edit: Edit,
     note: Option<String>,
-    effects: Option<effects::Target>,
+    again: Option<Again>,
+}
+
+/// What a layer tool's call named, resolved, so a call whose edit takes something away is made again in the removals
+/// phase on that phase's copy (later calls in the message may have changed the layer since).
+enum Again {
+    Effects(effects::Target),
+    Layer(layer::Target),
 }
 
 impl Done {
@@ -526,8 +533,16 @@ impl Done {
         Done {
             edit,
             note: None,
-            effects: None,
+            again: None,
         }
+    }
+
+    /// `edit` of a call to make again from `again` if it waits for the removals.
+    fn again(edit: Edit, again: Again) -> Option<Self> {
+        Some(Done {
+            again: Some(again),
+            ..Done::edit(edit)
+        })
     }
 }
 
@@ -543,6 +558,8 @@ enum Removal<'c> {
     Longer(Trim),
     /// `setEffects` taking an effect off: its target, resolved when it was tried, and its changes.
     Effects(effects::Target, &'c [EffectChange]),
+    /// `setLayer` taking something away (a layer, a song, a length): its target, resolved when it was tried, and its keys.
+    Layer(layer::Target, &'c crate::tools::LayerChange),
     /// A layer tool's edit that takes a layer away (`setLayer` remove), as it was made: its ops name the layer by id.
     Made(&'static str, Edit),
 }
@@ -801,15 +818,20 @@ impl Compiler<'_> {
                 };
                 let tried = (adding.try_edit(done.edit))
                     .map_err(|e| to_model(format!("{}: {e}", call.name())));
-                match (tried, done.effects) {
-                    // An effect taken off is a removal: proposed, as every removal is.
-                    (Ok(tried), Some(target)) if tried.removes => {
+                match (tried, done.again) {
+                    // An effect taken off, or a layer taken away or made shorter, is a removal: proposed, as every
+                    // removal is, and made again on the removals' copy.
+                    (Ok(tried), Some(Again::Effects(target))) if tried.removes => {
                         if let ToolCall::SetEffects { effects, .. } = call {
                             waiting.push((i, Removal::Effects(target, effects)));
                         }
                     }
-                    // A layer or a song taken away: proposed too, its ops as they were made (they name it by id).
-                    (Ok(tried), None) if tried.removes => {
+                    (Ok(tried), Some(Again::Layer(target))) if tried.removes => {
+                        if let ToolCall::SetLayer { change, .. } = call {
+                            waiting.push((i, Removal::Layer(target, change)));
+                        }
+                    }
+                    (Ok(tried), _) if tried.removes => {
                         waiting.push((i, Removal::Made(call.name(), tried.edit)));
                     }
                     (Ok(tried), _) => {
@@ -963,6 +985,7 @@ impl Compiler<'_> {
                 Removal::Effects(t, changes) => {
                     ("setEffects", effects::set_effects(work, &t, changes))
                 }
+                Removal::Layer(t, change) => ("setLayer", layer::again(self, work, &t, change)),
                 Removal::Made(name, edit) => (name, Ok(edit)),
             };
             let added = edit.and_then(|edit| {
@@ -1114,7 +1137,7 @@ impl Compiler<'_> {
             let edit = effects::set_effects(work, &target, changes);
             return Some(edit.map(|edit| {
                 Some(Done {
-                    effects: Some(target),
+                    again: Some(Again::Effects(target)),
                     ..Done::edit(edit)
                 })
             }));
@@ -1123,10 +1146,14 @@ impl Compiler<'_> {
         if let (ToolCall::SetLayer { change, .. }, LayerRef::One(r)) = (call, layer) {
             let refs = &self.inputs.refs;
             if let Some(id) = refs.clip(r) {
-                return Some(layer::set_clip_fades(work, (&id.to_owned(), r), change).map(done));
+                let target = layer::Target::Clip(id.to_owned(), r.clone());
+                let edit = layer::set_clip_fades(work, (&id.to_owned(), r), change);
+                return Some(edit.map(|edit| Done::again(edit, Again::Layer(target))));
             }
             if let Some(first) = refs.music(r) {
-                return Some(layer::set_song_sound(work, (first, r), change).map(done));
+                let target = layer::Target::Song(first.to_owned(), r.clone());
+                let edit = layer::set_song_sound(work, (first, r), change);
+                return Some(edit.map(|edit| Done::again(edit, Again::Layer(target))));
             }
         }
         let id = match self.animated_layer((tool, "change"), calls, layer, i, added) {
@@ -1154,7 +1181,8 @@ impl Compiler<'_> {
                 text_motion::animate_text(work, target, m).map(done)
             }
             ToolCall::SetLayer { change, .. } => {
-                layer::set_layer(self, work, target, change).map(done)
+                let again = Again::Layer(layer::Target::Layer(id.clone(), said.to_owned()));
+                layer::set_layer(self, work, target, change).map(|edit| Done::again(edit, again))
             }
             ToolCall::StyleText { change, .. } => style::style_text(self, work, target, change)
                 .map(|(edit, download)| {
@@ -1173,7 +1201,7 @@ impl Compiler<'_> {
                 let edit = effects::set_effects(work, &target, changes);
                 edit.map(|edit| {
                     Some(Done {
-                        effects: Some(target),
+                        again: Some(Again::Effects(target)),
                         ..Done::edit(edit)
                     })
                 })

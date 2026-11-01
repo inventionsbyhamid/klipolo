@@ -1309,3 +1309,40 @@ fn a_clip_takes_a_crop_and_its_sound_on_a_layer_of_its_own() {
     );
     assert!(refused_to_model(&out, 0).contains("separate is for imported clips"));
 }
+
+/// A setLayer that waits in the proposal (a shorter length) is made again on what the additions leave, so a later call
+/// in the same message (a float) survives Apply, and the box and the length apply too.
+#[test]
+fn a_waiting_set_layer_keeps_what_later_calls_in_the_message_did() {
+    let p = project();
+    let out = run(
+        &p,
+        &[
+            (
+                "setLayer",
+                set(
+                    "i1",
+                    json!([{"key": "box", "value": "0.7 0.05 0.25 0.25"}, {"key": "length", "value": 2}]),
+                ),
+            ),
+            (
+                "setMotion",
+                json!({"layer": "i1", "keys": null, "presets": "loop float"}),
+            ),
+        ],
+    );
+    assert_eq!(out.proposed_calls, [0]);
+    let added = applied(&p, &out);
+    let all = apply_ops(&added, &out.proposal.as_ref().expect("a proposal").tx.ops).unwrap();
+    let heart = picture(&all);
+    assert_eq!((heart.layout.rect.x, heart.duration_us), (0.7, secs(2.0)));
+    assert!(
+        heart
+            .layout
+            .motion
+            .as_ref()
+            .is_some_and(|m| m.looping.is_some()),
+        "the float survives Apply: {:?}",
+        heart.layout.motion
+    );
+}
