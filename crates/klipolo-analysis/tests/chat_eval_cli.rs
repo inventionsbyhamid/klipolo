@@ -85,11 +85,11 @@ async fn every_case_is_judged_and_the_cost_added_up_without_the_key() {
     assert!(stdout.contains("FAIL vertical"), "{stdout}");
     assert!(stdout.contains("     reply: Undone."), "{stdout}");
     assert!(
-        stdout.contains("1/27 passed (target 25); 27 model calls; total $0.04"),
+        stdout.contains("1/34 passed (target 32); 34 model calls; total $0.05"),
         "{stdout}"
     );
     assert!(!stdout.contains(KEY) && !stderr.contains(KEY));
-    assert_eq!(server.received_requests().await.unwrap().len(), 27);
+    assert_eq!(server.received_requests().await.unwrap().len(), 34);
 
     // One case on its own must pass.
     let out = run(&env, &["--only", "undo"]).await;
@@ -134,6 +134,17 @@ async fn without_a_key_nothing_is_sent() {
     assert_eq!(out.status.code(), Some(2), "{stdout}{stderr}");
     assert!(stderr.contains("Set MODEL_API_KEY."), "{stderr}");
     assert_eq!(server.received_requests().await.unwrap().len(), 0);
+}
+
+/// `setClip` on `clip` with `values`, every other value null.
+fn clip(clip: &str, values: Value) -> (&'static str, Value) {
+    let mut args = json!({
+        "clip": clip, "speed": null, "volume": null, "muted": null, "framing": null, "framingFormat": null,
+    });
+    for (k, v) in values.as_object().unwrap() {
+        args[k] = v.clone();
+    }
+    ("setClip", args)
 }
 
 /// The answer each case asks for, with times from clip A's transcript and scene log.
@@ -222,6 +233,23 @@ fn ideal(message: &str) -> Vec<(&'static str, Value)> {
             "makeTitleCard",
             json!({"title": "Day 1 in Lisbon", "prompt": "Lisbon street at golden hour", "atSec": null, "durationSec": null}),
         )],
+        // The clip tools, on clip A in clips (an intro of b-roll, a middle and an end) or beside a song's video.
+        "slow the intro down to half speed" => vec![clip("c1", json!({"speed": 0.5}))],
+        "speed up the middle part 1.5x" => vec![clip("c2", json!({"speed": 1.5}))],
+        "mute the b-roll" => vec![clip("c1", json!({"muted": true}))],
+        "turn the music clip down a bit" => vec![clip("c2", json!({"volume": 0.6}))],
+        "fill the vertical frame" => vec![clip(
+            "all",
+            json!({"framing": "fill", "framingFormat": "portrait"}),
+        )],
+        "add a crossfade between the two clips" => vec![(
+            "setTransition",
+            json!({"after": "c1", "kind": "dissolve", "durationSec": null}),
+        )],
+        "remove the transitions" => vec![(
+            "setTransition",
+            json!({"after": "all", "kind": "none", "durationSec": null}),
+        )],
         other => panic!("no ideal answer for {other:?}"),
     }
 }
@@ -246,18 +274,18 @@ async fn ideal_answers_pass_every_case() {
     ];
     let out = run(&env, &[]).await;
     let (stdout, stderr) = text(&out);
-    assert!(stdout.contains("27/27 passed"), "{stdout}{stderr}");
+    assert!(stdout.contains("34/34 passed"), "{stdout}{stderr}");
     // A case that allows more than one answer says which passed: the first for each (a question is the second).
     let sticker = &stdout[stdout.find("PASS plane-sticker").expect("the sticker case")..];
     assert!(
         sticker.contains("\n     passed on alternative #0 of 2\n"),
         "{stdout}"
     );
-    assert_eq!(stdout.matches("     passed on alternative ").count(), 3);
-    assert_eq!(stdout.matches("     passed on alternative #0").count(), 3);
+    assert_eq!(stdout.matches("     passed on alternative ").count(), 5);
+    assert_eq!(stdout.matches("     passed on alternative #0").count(), 5);
     assert_eq!(out.status.code(), Some(0));
     // One call each: clip A's missing filler words are told to the person, with no refusal round.
-    assert!(stdout.contains("27 model calls"), "{stdout}");
+    assert!(stdout.contains("34 model calls"), "{stdout}");
     assert!(
         stdout.contains("     reply: There are no filler words to remove."),
         "{stdout}"
