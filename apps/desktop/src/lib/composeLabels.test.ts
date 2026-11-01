@@ -8,6 +8,7 @@ describe("chat's labels for the tools that compose an edit", () => {
     expect(historyAction('undo', 'chat.animateText', { by: 'letter' })).toBe('Undo bring the words in letter by letter');
     expect(historyAction('redo', 'chat.animateText', { by: 'word' })).toBe('Redo bring the words in word by word');
     expect(historyAction('undo', 'chat.animateText', { by: 'line' })).toBe('Undo bring the words in line by line');
+    expect(historyAction('undo', 'chat.animateText', { by: 'none' })).toBe('Undo make the words plain again');
     expect(historyAction('undo', 'chat.setLayer', { layer: 'video' })).toBe('Undo change the video layer');
     expect(historyAction('undo', 'chat.setLayer', { layer: 'clip' })).toBe('Undo change the clip');
     expect(historyAction('undo', 'chat.setLayer', { layer: 'music' })).toBe('Undo change the music');

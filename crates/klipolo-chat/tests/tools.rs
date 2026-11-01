@@ -670,7 +670,7 @@ fn parses_each_tool_from_spike_shaped_calls() {
             "make each word pop in one by one",
             vec![AnimateText {
                 layer: LayerRef::One("t1".into()),
-                motion: TextMotion {
+                motion: Some(TextMotion {
                     unit: Unit::Word,
                     from: From {
                         scale: Some(0.0),
@@ -682,7 +682,7 @@ fn parses_each_tool_from_spike_shaped_calls() {
                     stagger_secs: None,
                     order: None,
                     exit: false,
-                },
+                }),
             }],
         ),
         (

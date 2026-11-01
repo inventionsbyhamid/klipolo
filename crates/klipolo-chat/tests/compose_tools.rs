@@ -515,7 +515,10 @@ fn animate_text_reads_its_keys_and_wants_a_value_to_start_from() {
             {"key": "exit", "value": true}
         ]}),
     );
-    let ToolCall::AnimateText { motion: m, .. } = parsed else {
+    let ToolCall::AnimateText {
+        motion: Some(m), ..
+    } = parsed
+    else {
         panic!("{parsed:?}");
     };
     assert_eq!(m.unit, Unit::Letter);
@@ -1450,4 +1453,51 @@ fn style_text_changes_the_words_to_the_persons_own() {
         panic!()
     };
     assert_eq!(text_motion::read(params).0, "Launch day");
+}
+
+/// animateText by none: animated words become plain words again, with their words and look, fading in as words do.
+#[test]
+fn animated_words_go_back_to_plain_words() {
+    let p = project();
+    let animated = applied(
+        &p,
+        &run(
+            &p,
+            &[(
+                "animateText",
+                json!({"layer": "t1", "set": [{"key": "opacity", "value": 0}]}),
+            )],
+        ),
+    );
+    let plain = run(
+        &animated,
+        &[(
+            "animateText",
+            json!({"layer": "t1", "set": [{"key": "by", "value": "none"}]}),
+        )],
+    );
+    assert_eq!(plain.additions.as_ref().unwrap().label, "chat.animateText");
+    let after = applied(&animated, &plain);
+    let ItemContent::Text { text, style } = &words(&after).content else {
+        panic!("{:?}", words(&after).content)
+    };
+    let ItemContent::Text { style: was, .. } = &words(&p).content else {
+        panic!()
+    };
+    assert_eq!((text.as_str(), style), ("Day one", was));
+    assert!(
+        words(&after)
+            .layout
+            .motion
+            .as_ref()
+            .is_some_and(|m| m.enter.is_some())
+    );
+    let out = run(
+        &p,
+        &[(
+            "animateText",
+            json!({"layer": "t1", "set": [{"key": "by", "value": "none"}]}),
+        )],
+    );
+    assert!(refused_to_model(&out, 0).contains("is plain words already"));
 }

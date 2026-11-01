@@ -8,9 +8,11 @@
 use klipolo_model::Project;
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::contrib::Catalog;
+use klipolo_model::contrib::builtin;
 use klipolo_model::ids::Id;
+use klipolo_model::media::text::TEXT_FADE_US;
 use klipolo_model::media::text_motion::{self, TextMotion, Unit};
-use klipolo_model::motion;
+use klipolo_model::motion::{self, MotionUse};
 use klipolo_model::ops::{ItemPatch, Op};
 use klipolo_model::scene::check_scene;
 use klipolo_model::timeline::ItemContent;
@@ -92,5 +94,50 @@ pub(super) fn animate_text(
                 }),
             )],
         ),
+    })
+}
+
+/// `animateText` by none on the words `id` of `work`, named `said`: animated words become plain words again, with
+/// their words and look, coming in and going out with a text layer's own fade where they have none.
+pub(super) fn plain_words(work: &Project, (id, said): (&Id, &str)) -> Result<Edit, Refused> {
+    let item = drawn(work, (id, said), "animateText")?;
+    let (text, style) = match &item.content {
+        ItemContent::Generator { source, params, .. } if source.as_str() == text_motion::SOURCE => {
+            let (text, style, _) = text_motion::read(params);
+            (text, style)
+        }
+        ItemContent::Text { .. } => {
+            return Err(to_model(format!(
+                "animateText: {said} is plain words already. Leave by none out."
+            )));
+        }
+        _ => {
+            return Err(to_model(format!(
+                "animateText: {said} is not animated words, so by none has nothing to undo."
+            )));
+        }
+    };
+    let mut layout = item.layout.clone();
+    let mut moves = layout.motion.take().unwrap_or_default();
+    let fade = || MotionUse {
+        preset: builtin::motion("fade"),
+        params: Default::default(),
+        duration_us: TEXT_FADE_US,
+        ease: None,
+    };
+    moves.enter = moves.enter.or_else(|| Some(fade()));
+    moves.exit = moves.exit.or_else(|| Some(fade()));
+    moves.fit(item.duration_us);
+    layout.motion = motion::kept(moves);
+    Ok(Edit {
+        ops: vec![Op::UpdateItem {
+            id: item.id.clone(),
+            patch: ItemPatch {
+                layout: Some(layout),
+                content: Some(ItemContent::Text { text, style }),
+                ..ItemPatch::default()
+            },
+        }],
+        label: label("animateText", vec![("by", ErrorParam::from("none"))]),
     })
 }

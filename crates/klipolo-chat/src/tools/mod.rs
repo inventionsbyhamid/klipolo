@@ -249,10 +249,11 @@ pub enum ToolCall {
         keys: Option<Vec<KeyIn>>,
         presets: Vec<PresetIn>,
     },
-    /// Bring the words `layer` names in by `motion.unit`, each from `motion.from`.
+    /// Bring the words `layer` names in by `motion.unit`, each from `motion.from`; None makes animated words plain words
+    /// again.
     AnimateText {
         layer: LayerRef,
-        motion: klipolo_model::media::text_motion::TextMotion,
+        motion: Option<klipolo_model::media::text_motion::TextMotion>,
     },
     /// Place, size, turn, fade, blend, round, crop, frame or reorder the layer `layer` names, or set the fades of the
     /// clip or song it names and the song's ducking.

@@ -40,7 +40,7 @@ pub const TEXT_KEYS: [&str; 11] = [
 
 pub(super) const ANIMATE_TEXT: Tool = Tool {
     name: "animateText",
-    description: "Words come in by letter, word or line. Keys: by (letter, word, line); where each unit starts: y \
+    description: "Words come in by letter, word or line. Keys: by (letter, word, line, or none for plain words); where each unit starts: y \
                   (px below), scale, opacity, rotation, blur (px); sec, stagger (s between units), ease, order (start, \
                   end, center, random), exit (true: they leave the same way).",
     parameters: || vec![layer_field(), ("set", schema("Keys to set."))],
@@ -57,10 +57,29 @@ pub(super) const ANIMATE_TEXT: Tool = Tool {
             order: None,
             exit: false,
         };
+        // by none: animated words become plain words again, and nothing else goes with it.
+        let none = |p: &super::sets::Pair| {
+            p.key == "by"
+                && (p.value.as_str()).is_some_and(|s| s.trim().eq_ignore_ascii_case("none"))
+        };
+        if set.iter().any(none) {
+            if set.len() > 1 {
+                return Err(a.error(
+                    "set",
+                    Problem::Unused {
+                        why: "sets more than by none, which makes the words plain again: leave the other keys out",
+                    },
+                ));
+            }
+            return Ok(ToolCall::AnimateText {
+                layer,
+                motion: None,
+            });
+        }
         for p in &set {
             match p.key {
                 "by" => {
-                    let word = p.word(a, &UNITS.map(|u| u.word()))?;
+                    let word = p.word(a, &["letter", "word", "line", "none"])?;
                     motion.unit = UNITS
                         .into_iter()
                         .find(|u| u.word() == word)
@@ -105,6 +124,9 @@ pub(super) const ANIMATE_TEXT: Tool = Tool {
                 },
             ));
         }
-        Ok(ToolCall::AnimateText { layer, motion })
+        Ok(ToolCall::AnimateText {
+            layer,
+            motion: Some(motion),
+        })
     },
 };

@@ -155,7 +155,7 @@ export const CHAT_LABELS: Record<string, MessageDescriptor> = {
   'chat.animateText': msg({
     id: 'chat.animateText',
     message:
-      '{by, select, letter {Bring the words in letter by letter} line {Bring the words in line by line} other {Bring the words in word by word}}',
+      '{by, select, letter {Bring the words in letter by letter} line {Bring the words in line by line} none {Make the words plain again} other {Bring the words in word by word}}',
     comment: 'Undo history entry: chat made words come in one letter, word or line at a time',
   }),
   'chat.setLayer': msg({

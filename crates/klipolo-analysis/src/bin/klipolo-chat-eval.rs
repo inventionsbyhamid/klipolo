@@ -958,7 +958,7 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
         }),
         ToolCall::AnimateText { layer, motion } => json!({
             "layer": layer_word(layer),
-            "set": text_motion_said(motion),
+            "set": motion.as_ref().map_or_else(|| vec![pair("by", json!("none"))], text_motion_said),
         }),
         ToolCall::SetLayer { layer, change } => json!({
             "layer": layer_word(layer),

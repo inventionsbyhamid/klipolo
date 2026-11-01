@@ -1177,9 +1177,10 @@ impl Compiler<'_> {
             ToolCall::SetMotion { keys, presets, .. } => {
                 motion::set_motion(work, target, keys.as_deref(), presets).map(done)
             }
-            ToolCall::AnimateText { motion: m, .. } => {
-                text_motion::animate_text(work, target, m).map(done)
-            }
+            ToolCall::AnimateText { motion: m, .. } => match m {
+                Some(m) => text_motion::animate_text(work, target, m).map(done),
+                None => text_motion::plain_words(work, target).map(done),
+            },
             ToolCall::SetLayer { change, .. } => {
                 let again = Again::Layer(layer::Target::Layer(id.clone(), said.to_owned()));
                 layer::set_layer(self, work, target, change).map(|edit| Done::again(edit, again))
