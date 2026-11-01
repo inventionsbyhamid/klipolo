@@ -290,8 +290,8 @@ async fn ensure<'h>(
     Ok(gpu.as_mut().expect("made above"))
 }
 
-/// The checks on the text, and the loop guards on its IR, so `ok` means nothing before the GPU refuses it.
-/// A shader that passed carries the guard's notes (`Checked::notes`).
+/// The untrusted shader's checks on the text, and the loop guards on its IR, so `ok` means nothing before the GPU
+/// refuses it. A shader that passed carries the guard's notes (`Checked::notes`).
 fn validate(id: u64, kind: WireKind, def: &ContribDef, body: &str) -> WorkerReply {
     let Some(kind) = kind.shader() else {
         return failed(id, Step::Parse, "a scene is checked with checkScene");

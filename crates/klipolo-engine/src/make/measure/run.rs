@@ -51,7 +51,7 @@ use covered::{Cut, costliest, cut_notes, inside, interior_keys, memory, numeric_
 use point::over;
 use state::{Point, Run};
 
-/// `draft` measured for `costly` (k8: the guard's list plus the padding's setting, or a scene's). An error is the GPU's
+/// `draft` measured for `costly` (the guard's list plus the padding's setting, or a scene's). An error is the GPU's
 /// (a lost device): the worker answers it as a failure.
 pub async fn measure(
     meter: &mut dyn Meter,

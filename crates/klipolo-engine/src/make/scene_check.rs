@@ -1,11 +1,10 @@
-//! A scene checked and measured in the render worker (the costly
-//! settings, R2-m4, R3-k8). What an agent submits (`CheckScene`) and what a library or project folder holds (`Verify`)
-//! take one path (`checked`): read with the total loader, a submission's `svg` nodes flattened into `path` nodes
-//! (`svgs`), written as the canonical bytes a library stores and a key covers (`normalise`, m1) and read again
-//! as stored (so what is saved is exactly what the main process will accept), checked against the built-ins and the
-//! generators its fills name (`inputs`: the app's `contribs.json`), and compiled. Its cost (`cost`) is the
-//! measurement with the scene as the draft layer and its costly settings ([`costly`]) at their costly end, then its
-//! CPU time a frame and its memory as the scene drawer holds it.
+//! A scene checked and measured in the render worker, with its costly settings. What an agent submits (`CheckScene`)
+//! and what a library or project folder holds (`Verify`) take one path (`checked`): read with the total loader, a
+//! submission's `svg` nodes flattened into `path` nodes (`svgs`), written as the canonical bytes a library stores and a
+//! key covers (`normalise`) and read again as stored (so what is saved is exactly what the main process will accept),
+//! checked against the built-ins and the generators its fills name (`inputs`: the app's `contribs.json`), and compiled.
+//! Its cost (`cost`) is the effects' measurement with the scene as the draft layer and its costly settings ([`costly`])
+//! at their costly end, then its CPU time a frame and its memory as the scene drawer holds it.
 
 mod checked;
 mod cost;
@@ -39,7 +38,7 @@ pub(crate) fn written(scene: &Scene) -> Result<Vec<u8>, Vec<SceneProblem>> {
     })
 }
 
-/// The settings of `scene` its cost grows with, each costly at its maximum (R2-m4): a number setting bound to a
+/// The settings of `scene` its cost grows with, each costly at its maximum: a number setting bound to a
 /// `repeat`'s `times`, an emitter's `burst` or `rate`, a `blur` or a text's `size`, and a table setting a `repeat` draws
 /// a row of (`rows`: costly at its most rows). An emitter's `life` takes numbers only, so no setting reaches it. In the
 /// scene's param order, each once.

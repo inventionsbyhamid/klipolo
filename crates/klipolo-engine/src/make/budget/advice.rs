@@ -96,7 +96,7 @@ pub(super) fn advise(
     if let Some(cpu) = m.cpu_us
         && v.by_cpu > v.by_time.max(v.by_memory)
     {
-        // As the memory line: Heavy only with a definition that may run at half size (N-m1).
+        // As the memory line: Heavy only with a definition that may run at half size.
         advice.push(format!(
             "{:.0} µs of CPU a frame makes it {}: Light allows {:.0} µs, Normal {:.0} µs; {} {:.0} µs.",
             cpu.p95,
@@ -183,7 +183,7 @@ fn heavy_allows(may_halve: bool) -> String {
 
 /// How far over the next class down it is, naming the loop that costs most (the one with the most trips) or the
 /// setting that bounds it. A definition that may run at half size is held to Heavy there: by its half-size figure, or,
-/// where a stop at full size ended it, by a quarter of that figure (`half_size_advice`'s estimate; N-m1). Only a
+/// where a stop at full size ended it, by a quarter of that figure (`half_size_advice`'s estimate). Only a
 /// generator or a filter that may not yet run at half size is told it could.
 fn loop_advice(
     ms: f64,

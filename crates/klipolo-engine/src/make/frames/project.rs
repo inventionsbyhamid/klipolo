@@ -4,7 +4,7 @@
 //! of the person's; video frames come from `FrozenStills`. The contributions are checked and hardened again here from
 //! their definition and source, drawn as their verified `runsAt` says, and every setting the project gives
 //! them is clamped to their envelope, as the preview draws them. Scenes are compiled here from their bytes: a library
-//! K4): a library or project one the app verified, and the draft being previewed only when this worker checked its key
+//! or project one the app verified, and the draft being previewed only when this worker checked its key
 //! this session (else it draws nothing, noted as being checked).
 
 use std::collections::HashMap;
