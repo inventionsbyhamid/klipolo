@@ -1847,6 +1847,34 @@
   color: var(--color-ink-disabled);
 }
 
+/* The play button, with the shuttle's speed on its top right corner while J or L plays backward or faster. */
+.play-wrap {
+  position: relative;
+  display: grid;
+}
+
+.rate-badge {
+  position: absolute;
+  top: -6px;
+  right: -10px;
+  pointer-events: none;
+}
+
+.rate-badge-tag {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 16px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--color-paper);
+  color: var(--color-navy);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-strong);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-height: 819px) {
   .play {
     width: 42px;

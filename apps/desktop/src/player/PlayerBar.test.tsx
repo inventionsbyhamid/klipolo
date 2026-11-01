@@ -78,6 +78,25 @@ describe('the player bar', () => {
     expect(snap).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('while playing backward or faster the play button shows which way and how fast, and says it', () => {
+    const { container } = renderWithProviders(<Editor />);
+    const badge = () => container.querySelector<HTMLElement>('.transport [data-rate-badge]')!;
+    expect(badge()).toHaveAttribute('role', 'status');
+    expect(badge()).toBeEmptyDOMElement();
+    act(() => usePlayback.setState({ playing: true, rate: 2 }));
+    expect(badge()).toHaveTextContent('Playing at 2×');
+    expect(badge().querySelector('[aria-hidden="true"]')).toHaveTextContent(/^2×$/);
+    act(() => usePlayback.setState({ rate: -2 }));
+    expect(badge()).toHaveTextContent('Playing backward at 2×');
+    act(() => usePlayback.setState({ rate: -1 }));
+    expect(badge()).toHaveTextContent('Playing backward at 1×');
+    // Forward at normal speed, or stopped: nothing.
+    act(() => usePlayback.setState({ rate: 1 }));
+    expect(badge()).toBeEmptyDOMElement();
+    act(() => usePlayback.setState({ playing: false, rate: 2 }));
+    expect(badge()).toBeEmptyDOMElement();
+  });
+
   it('the zoom slider says its value and steps 1 or 10 with the arrows', async () => {
     renderWithProviders(<Editor />);
     const slider = screen.getByRole('slider', { name: 'Timeline zoom' });

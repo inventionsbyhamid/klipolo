@@ -1,12 +1,14 @@
-import { t } from '@lingui/core/macro';
-import { Magnet } from 'lucide-react';
+import { select, t } from '@lingui/core/macro';
+import { FastForward, Magnet, Rewind } from 'lucide-react';
 import type { CSSProperties, KeyboardEvent, PointerEvent, ReactNode } from 'react';
 import { IconButton } from '../design/IconButton';
 import { Tooltip } from '../design/Tooltip';
 import { useCommands } from '../features/command-palette/useCommands';
 import { Timecode } from '../features/preview/Timecode';
 import { useZoomTarget, zoomRange, zoomTo, zoomViewUs } from '../features/timeline/commands';
+import { useIntlLocale } from '../i18n/react';
 import { Icon } from '../layout/Icon';
+import { formatNumber } from '../lib/format';
 import { useEngine } from '../state/engine';
 import { usePlayback } from '../state/playback';
 import { skip, useDurationUs } from '../state/transport';
@@ -79,6 +81,46 @@ function ZoomSlider() {
   );
 }
 
+/**
+ * While playing backward or faster (J and L shuttle), which way and how fast, e.g. 2×, on the play button's corner.
+ * Its live region stays mounted, so a screen reader hears each change.
+ */
+function RateBadge() {
+  const locale = useIntlLocale();
+  const playing = usePlayback((s) => s.playing);
+  const rate = usePlayback((s) => s.rate);
+  const shuttling = playing && rate !== 1;
+  const speed = formatNumber(locale, Math.abs(rate));
+  const badge = t({
+    id: 'playback.rateBadge',
+    message: `${speed}×`,
+    comment: 'The speed shown while playing backward or faster, e.g. 2×; {speed} is the number',
+  });
+  const Arrow = rate < 0 ? Rewind : FastForward;
+  return (
+    <span role="status" data-rate-badge className="rate-badge">
+      {shuttling && (
+        <>
+          <span aria-hidden className="rate-badge-tag">
+            <Arrow size={9} strokeWidth={2.5} />
+            {badge}
+          </span>
+          <span className="sr-only">
+            {t({
+              id: 'playback.rate',
+              message: select(rate < 0 ? 'backward' : 'forward', {
+                backward: `Playing backward at ${badge}`,
+                other: `Playing at ${badge}`,
+              }),
+              comment: '{badge} is a playback speed such as 2×',
+            })}
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
+
 /** A ghost button in the player bar, with its tooltip: what it does and its key, or why it is off. */
 function BarButton({
   icon,
@@ -112,10 +154,11 @@ function BarButton({
 }
 
 /**
- * The player bar: Split and Delete on the left, the transport centred on the window, the timeline's snapping switch, zoom
- * and Fit on the right. Split, Delete, snapping, the zoom and Fit run the same commands as their keys;
- * every control says what it does and its key in a tooltip. Loop and the volume come when they work: none
- * of its controls looks live and does nothing.
+ * The player bar: Split and Delete on the left, the transport centred on the window, the timeline's snapping switch,
+ * zoom and Fit on the right. Split, Delete, snapping, the zoom and Fit run the same commands as their
+ * keys; every control says what it does and its key in a tooltip. While J or L plays backward or faster, the play
+ * button shows which way and how fast. Loop and the volume come when they work: none of its controls
+ * looks live and does nothing.
  */
 export function PlayerBar() {
   const duration = useDurationUs();
@@ -171,17 +214,20 @@ export function PlayerBar() {
           disabled={!ready}
           onClick={() => skip(-5_000_000, duration)}
         />
-        <Tooltip label={playing ? 'Pause' : 'Play'} shortcut="Space" side="top">
-          <button
-            type="button"
-            className="play"
-            aria-label={playing ? 'Pause' : 'Play'}
-            disabled={!ready}
-            onClick={() => usePlayback.getState().toggle()}
-          >
-            {playing ? <Icon name="pause" /> : <Icon name="play" className="is-play" />}
-          </button>
-        </Tooltip>
+        <span className="play-wrap">
+          <Tooltip label={playing ? 'Pause' : 'Play'} shortcut="Space" side="top">
+            <button
+              type="button"
+              className="play"
+              aria-label={playing ? 'Pause' : 'Play'}
+              disabled={!ready}
+              onClick={() => usePlayback.getState().toggle()}
+            >
+              {playing ? <Icon name="pause" /> : <Icon name="play" className="is-play" />}
+            </button>
+          </Tooltip>
+          <RateBadge />
+        </span>
         <IconButton
           icon={<Icon name="fwd" />}
           label="Forward 5 seconds"
