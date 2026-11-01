@@ -7,8 +7,11 @@ import { useProject } from './project';
 /** The most projects Open recent lists. */
 export const OPEN_RECENT_MAX = 5;
 
-/** A list read this recently is still the list as the menu opens again; an older one is read again. */
-const FRESH_MS = 2_000;
+/**
+ * A list read this recently is still the list as the pointer comes back to the name or the menu opens again (a read
+ * parses up to 30 project files); an older one is read again. A project that went since says so when picked.
+ */
+const FRESH_MS = 10_000;
 
 /**
  * Open recent, in the project menu and the commands: up to `OPEN_RECENT_MAX` projects from the start screen's list

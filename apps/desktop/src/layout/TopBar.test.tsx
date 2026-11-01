@@ -453,4 +453,25 @@ describe('TopBar', () => {
     land(openedAs('Untitled project', 2));
     await waitFor(() => expect(useProject.getState().snapshot?.project.name).toBe('Untitled project'));
   });
+
+  it('hovering_the_name_again_reuses_a_read_from_the_last_few_seconds', async () => {
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    vi.mocked(projects.recent).mockResolvedValue([recentRow('Billing tutorial', true), recentRow('Kiln vlog')]);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    onTestFinished(() => now.mockRestore());
+    render(<TopBar />);
+    const name = screen.getByRole('button', { name: 'Billing tutorial' });
+    await userEvent.hover(name);
+    await waitFor(() => expect(useRecentProjects.getState().readFor).not.toBeNull());
+    await userEvent.unhover(name);
+    // A few seconds later: the same list, nothing read again.
+    now.mockReturnValue(1_008_000);
+    await userEvent.hover(name);
+    await userEvent.unhover(name);
+    expect(projects.recent).toHaveBeenCalledTimes(1);
+    // Later than that: read again.
+    now.mockReturnValue(1_011_000);
+    await userEvent.hover(name);
+    await waitFor(() => expect(projects.recent).toHaveBeenCalledTimes(2));
+  });
 });
