@@ -53,6 +53,15 @@ impl VtCodec {
     }
 }
 
+/// Klipolo: the colour tags an encoder writes (a reversed copy keeps its source's).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ColorTags {
+    pub range: color::Range,
+    pub space: color::Space,
+    pub primaries: color::Primaries,
+    pub transfer: color::TransferCharacteristic,
+}
+
 #[derive(Clone)]
 pub struct H264EncoderBuilder {
     input_config: VideoInfo,
@@ -64,6 +73,8 @@ pub struct H264EncoderBuilder {
     b_frames: usize,
     software_only: bool,
     hardware_only: bool,
+    /// Klipolo: the colour tags written (`with_color`); None writes BT.709 limited range.
+    color: Option<ColorTags>,
     /// Klipolo: extra AVOptions (name, value), set on the encoder before it opens (`with_options`).
     extra_options: Vec<(String, String)>,
 }
@@ -96,8 +107,15 @@ impl H264EncoderBuilder {
             b_frames: 0,
             software_only: false,
             hardware_only: false,
+            color: None,
             extra_options: Vec::new(),
         }
+    }
+
+    /// Klipolo: the colour tags to write instead of BT.709 limited range.
+    pub fn with_color(mut self, tags: ColorTags) -> Self {
+        self.color = Some(tags);
+        self
     }
 
     /// Klipolo: which VideoToolbox encoder (H.264 by default).
@@ -209,13 +227,27 @@ impl H264EncoderBuilder {
     }
 
     fn configure(&self, encoder: &mut encoder::video::Video) {
-        encoder.set_colorspace(color::Space::BT709);
-        encoder.set_color_range(color::Range::MPEG);
-        unsafe {
-            (*encoder.as_mut_ptr()).color_primaries =
-                ffmpeg::ffi::AVColorPrimaries::AVCOL_PRI_BT709;
-            (*encoder.as_mut_ptr()).color_trc =
-                ffmpeg::ffi::AVColorTransferCharacteristic::AVCOL_TRC_BT709;
+        match self.color {
+            // Klipolo: a source's own tags.
+            Some(tags) => {
+                encoder.set_colorspace(tags.space);
+                encoder.set_color_range(tags.range);
+                // SAFETY: plain fields of the context, set before it opens.
+                unsafe {
+                    (*encoder.as_mut_ptr()).color_primaries = tags.primaries.into();
+                    (*encoder.as_mut_ptr()).color_trc = tags.transfer.into();
+                }
+            }
+            None => {
+                encoder.set_colorspace(color::Space::BT709);
+                encoder.set_color_range(color::Range::MPEG);
+                unsafe {
+                    (*encoder.as_mut_ptr()).color_primaries =
+                        ffmpeg::ffi::AVColorPrimaries::AVCOL_PRI_BT709;
+                    (*encoder.as_mut_ptr()).color_trc =
+                        ffmpeg::ffi::AVColorTransferCharacteristic::AVCOL_TRC_BT709;
+                }
+            }
         }
         if let Some(bitrate) = self.bitrate {
             encoder.set_bit_rate(bitrate);
