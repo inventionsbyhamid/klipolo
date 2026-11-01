@@ -1,5 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixtureSnapshot } from '../../test/fixtures';
 import { renderWithProviders } from '../../test/render';
@@ -97,5 +99,19 @@ describe('Effects on the cards', () => {
     renderWithProviders(<Inspector format="landscape" />);
     expect(screen.getByRole('complementary')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Effects/ })).toBeNull();
+  });
+});
+
+describe('the Effects popover', () => {
+  it('lines up with the card’s right edge, at the card’s width, never taller than the room it has', async () => {
+    withLayers({ id: 'logo-layer', content: { type: 'image', assetId: 'logo' }, effects: [fx('fx', 'blur')] });
+    useSelection.setState({ selectedId: 'logo-layer' });
+    renderWithProviders(<Inspector format="landscape" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Effects 1' }));
+    expect(screen.getByRole('dialog', { name: 'Effects' })).toHaveAttribute('data-align', 'end');
+    const css = readFileSync(resolve(__dirname, '../../styles/app.css'), 'utf8');
+    const pop = /\.fx-pop \{([^}]*)\}/.exec(css)![1];
+    expect(pop).toMatch(/width: calc\(var\(--inspector-w\)/);
+    expect(pop).toMatch(/max-height: min\([^;]*var\(--radix-popover-content-available-height\)\)/);
   });
 });

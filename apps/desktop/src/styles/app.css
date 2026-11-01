@@ -2815,9 +2815,10 @@
   justify-self: start;
 }
 
-/* A card's Effects button, at its own width, with the count of effects on a pill. */
-.insp-effects {
-  justify-self: start;
+/* A card's Effects button, at its own width, with the count of effects on a pill, in a row as wide as the card's
+   fields: the popover lines up with the row's right edge. */
+.insp-effects-row {
+  display: flex;
 }
 
 .fx-count {
@@ -2829,11 +2830,10 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The Effects popover: the stack, scrolling when it is tall. */
+/* The Effects popover: the card's width, never taller than the room it has, the stack scrolling inside it. */
 .fx-pop {
-  width: 320px;
-  max-width: calc(100vw - 16px);
-  max-height: min(32rem, 70vh);
+  width: calc(var(--inspector-w) - 2 * var(--space-3));
+  max-height: min(32rem, 70vh, var(--radix-popover-content-available-height));
   overflow-y: auto;
   scrollbar-width: thin;
 }
