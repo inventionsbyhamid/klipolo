@@ -62,8 +62,8 @@ the relay.
 
 ## Try it
 
-**You need** a Mac with Apple Silicon or Intel, macOS 15 or later, and an
-internet connection for the AI features.
+**You need** a Mac with Apple Silicon or Intel and macOS 15 or later. Editing
+and export work offline. Analysis, chat and pictures need the internet.
 
 **Download** Klipolo from klipolo.com once the first build is out (Nov 4).
 
