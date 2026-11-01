@@ -154,6 +154,30 @@ ff -f lavfi -i "color=c=gray:size=320x180:rate=30:duration=2" \
    -vf "settb=1/30000,setpts=PTS+0.07/TB,geq=lum='16+8*mod(N\,25)':cb=128:cr=128,$TAG709" "${H264[@]}" -bf 0 \
    -fps_mode passthrough -enc_time_base:v 1:30000 -b:v 1M -g 15 -sc_threshold 0 -pix_fmt yuv420p "${BT709[@]}" \
    -c:a aac -b:a 128k "$OUT/video-starts-late.mp4"
+# Reverse: 2 s of 160x96 at 24 fps whose luma names the frame (16 + 4 × frame), with B-frames and a keyframe every 12
+# frames, so a reversed copy's windows start inside GOPs and B-frames reorder at their edges. Small, video only.
+if [ "$(uname)" = Darwin ]; then BFRAMES=(-c:v h264_videotoolbox -allow_sw 1 -profile:v high -bf 2)
+else BFRAMES=(-c:v libx264 -preset veryfast -profile:v high -bf 3 -sc_threshold 0 -x264-params open-gop=0:b-adapt=0); fi
+ff -f lavfi -i "color=c=gray:size=160x96:rate=24:duration=2" -vf "geq=lum='16+4*N':cb=128:cr=128,$TAG709" \
+   "${BFRAMES[@]}" -b:v 500k -g 12 -pix_fmt yuv420p "${BT709[@]}" -an "$OUT/reverse-bframes.mp4"
+# The same with a display matrix that turns it 90° clockwise, as a phone stores portrait video (shown 96x160).
+ff -display_rotation:v:0 -90 -i "$OUT/reverse-bframes.mp4" -c copy "$OUT/reverse-rotated.mov"
+# The same ramp at a variable frame rate: frame n at n/24 + 0.0004 n² s, so each frame lasts longer than the last.
+ff -f lavfi -i "color=c=gray:size=160x96:rate=24:duration=2" \
+   -vf "settb=1/24000,setpts='(N/24+0.0004*N*N)/TB',geq=lum='16+4*N':cb=128:cr=128,$TAG709" "${BFRAMES[@]}" \
+   -fps_mode passthrough -enc_time_base:v 1:24000 -b:v 500k -g 12 -pix_fmt yuv420p "${BT709[@]}" -an \
+   "$OUT/reverse-vfr.mov"
+# Full range BT.601, as some cameras and screen recorders tag theirs: a reversed copy keeps every tag.
+ff -f lavfi -i "color=c=gray:size=160x96:rate=24:duration=1" -vf "geq=lum='4+8*N':cb=128:cr=128" "${BFRAMES[@]}" \
+   -b:v 500k -g 12 -pix_fmt yuv420p -color_range pc -colorspace bt470bg -color_primaries bt470bg -color_trc smpte170m \
+   -an "$OUT/reverse-full-601.mp4"
+# HLG 10-bit HEVC, a phone's HDR: 1 s, small.
+ff -f lavfi -i "color=c=gray:size=160x96:rate=24:duration=1" \
+   -vf "geq=lum='16+8*N':cb=128:cr=128,format=yuv420p10le" "${HEVC10[@]}" -tag:v hvc1 -b:v 500k -g 12 \
+   -colorspace bt2020nc -color_primaries bt2020 -color_trc arib-std-b67 -an "$OUT/reverse-hlg.mov"
+# A long file for a short reverse: 120 s of 64x36 at 24 fps, a keyframe every 2 s. Tiny.
+ff -f lavfi -i "color=c=gray:size=64x36:rate=24:duration=120" -vf "geq=lum='16+mod(N\,200)':cb=128:cr=128,$TAG709" \
+   "${H264[@]}" -b:v 50k -g 48 -sc_threshold 0 -pix_fmt yuv420p "${BT709[@]}" -an "$OUT/reverse-long-120s.mp4"
 : > "$OUT/.complete"
 # Export benchmark (`--bench`): 60 s of noisy 1080p30 with peaky sound (quiet noise, loud beeps twice a
 # second), so the loudness gain and the true-peak limiter both work. About a minute to make.

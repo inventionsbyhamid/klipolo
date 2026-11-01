@@ -1,13 +1,14 @@
 //! A stretch of video written backward (`media::reversed`): its frames last first, each as long as it was, its sound
 //! backward too. The source is made here, one grey level a frame, so the copy's order can be read back frame by frame.
 
+mod support;
+
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use ffmpeg::format::Pixel;
 use ffmpeg::format::sample::{Sample, Type as SampleType};
-use ffmpeg::software::scaling;
 use ffmpeg::{ChannelLayout, Rational};
 use klipolo_engine::audio::decode;
 use klipolo_engine::export::codecs::encoder_name;
@@ -118,56 +119,89 @@ fn ramp(path: &Path, sound: bool) {
     output.write_trailer().unwrap();
 }
 
-/// Each frame's mean grey level, in the order the file shows them.
-fn levels(path: &Path) -> Vec<u8> {
+/// A file's picture as it decodes: each frame's mean luma (in 8-bit steps, read from the plane as stored, so a range
+/// or a bit depth is never converted on the way) and its start (µs from the first frame), in the order shown, and the
+/// stream's colour tags (range, matrix, primaries, transfer).
+struct Decoded {
+    levels: Vec<u8>,
+    starts: Vec<i64>,
+    tags: (
+        ffmpeg::color::Range,
+        ffmpeg::color::Space,
+        ffmpeg::color::Primaries,
+        ffmpeg::color::TransferCharacteristic,
+    ),
+}
+
+fn decode(path: &Path) -> Decoded {
     let mut input = ffmpeg::format::input(path).unwrap();
     let stream = input.streams().best(ffmpeg::media::Type::Video).unwrap();
-    let index = stream.index();
+    let (index, tb) = (stream.index(), stream.time_base());
     let mut decoder = ffmpeg::codec::context::Context::from_parameters(stream.parameters())
         .unwrap()
         .decoder()
         .video()
         .unwrap();
-    let mut out = Vec::new();
+    let tags = (
+        decoder.color_range(),
+        decoder.color_space(),
+        decoder.color_primaries(),
+        decoder.color_transfer_characteristic(),
+    );
+    let (mut levels, mut starts) = (Vec::new(), Vec::new());
     let mut frame = ffmpeg::frame::Video::empty();
-    let mut grey = ffmpeg::frame::Video::empty();
-    let mut scaler: Option<scaling::Context> = None;
-    let mut take = |decoder: &mut ffmpeg::decoder::Video, out: &mut Vec<u8>| {
+    let mut take = |decoder: &mut ffmpeg::decoder::Video| {
         while decoder.receive_frame(&mut frame).is_ok() {
-            let s = scaler.get_or_insert_with(|| {
-                scaling::Context::get(
-                    frame.format(),
-                    frame.width(),
-                    frame.height(),
-                    Pixel::GRAY8,
-                    frame.width(),
-                    frame.height(),
-                    scaling::Flags::BILINEAR,
-                )
-                .unwrap()
-            });
-            s.run(&frame, &mut grey).unwrap();
-            let (w, h, stride) = (
-                grey.width() as usize,
-                grey.height() as usize,
-                grey.stride(0),
+            let deep = matches!(
+                frame.format(),
+                Pixel::YUV420P10LE | Pixel::YUV422P10LE | Pixel::P010LE
             );
+            let (w, h, stride) = (
+                frame.width() as usize,
+                frame.height() as usize,
+                frame.stride(0),
+            );
+            let plane = frame.data(0);
             let sum: u64 = (0..h)
-                .flat_map(|y| grey.data(0)[y * stride..y * stride + w].iter())
-                .map(|&v| u64::from(v))
+                .map(|y| {
+                    let row = &plane[y * stride..];
+                    (0..w)
+                        .map(|x| match deep {
+                            true => {
+                                u64::from(u16::from_le_bytes([row[2 * x], row[2 * x + 1]]) >> 2)
+                            }
+                            false => u64::from(row[x]),
+                        })
+                        .sum::<u64>()
+                })
                 .sum();
-            out.push((sum / (w * h) as u64) as u8);
+            levels.push((sum / (w * h) as u64) as u8);
+            let pts = frame.timestamp().or_else(|| frame.pts()).unwrap();
+            starts.push((pts as f64 * f64::from(tb) * 1e6).round() as i64);
         }
     };
     for (s, packet) in input.packets() {
         if s.index() == index {
             decoder.send_packet(&packet).unwrap();
-            take(&mut decoder, &mut out);
+            take(&mut decoder);
         }
     }
     decoder.send_eof().unwrap();
-    take(&mut decoder, &mut out);
-    out
+    take(&mut decoder);
+    let first = starts.first().copied().unwrap_or(0);
+    for s in &mut starts {
+        *s -= first;
+    }
+    Decoded {
+        levels,
+        starts,
+        tags,
+    }
+}
+
+/// Each frame's mean luma, in the order the file shows them.
+fn levels(path: &Path) -> Vec<u8> {
+    decode(path).levels
 }
 
 fn spec(range: RangeUs) -> Reverse {
@@ -361,4 +395,213 @@ fn two_copies_at_once_never_share_a_partial() {
         .map(|e| e.file_name())
         .collect();
     assert_eq!(names.len(), 2, "{names:?}");
+}
+
+/// Five frames of 160 × 96 at a time: windows start inside the fixtures' 12-frame GOPs.
+fn small(range: RangeUs) -> Reverse {
+    Reverse {
+        buffer_bytes: 5 * 160 * 96 * 3 / 2,
+        ..spec(range)
+    }
+}
+
+fn range(start: i64, end: i64) -> RangeUs {
+    RangeUs { start, end }
+}
+
+/// The source's frames a range shows: the one on screen at its start, then each that starts inside it.
+fn shown(src: &Decoded, r: RangeUs) -> std::ops::Range<usize> {
+    let first = src
+        .starts
+        .partition_point(|&s| s <= r.start)
+        .saturating_sub(1);
+    first..src.starts.partition_point(|&s| s < r.end)
+}
+
+/// Exactly the frames, backward: a duplicated or lost frame is a step of 4 off, more than a codec's rounding.
+fn exactly(got: &[u8], want: &[u8]) -> bool {
+    got.len() == want.len() && got.iter().zip(want).all(|(a, b)| a.abs_diff(*b) <= 2)
+}
+
+#[test]
+#[ignore = "needs scripts/gen-engine-fixtures.sh"]
+fn a_b_frame_source_reverses_every_frame_at_every_window_edge() {
+    let dir = tempfile::tempdir().unwrap();
+    let src_path = support::fixture("reverse-bframes.mp4");
+    let src = decode(&src_path);
+    // The whole file, then 7 frames from every frame on: some window starts on every frame of a GOP, its last included.
+    let frame = |n: i64| n * 1_000_000 / 24;
+    let ranges =
+        std::iter::once(range(0, 2_000_000)).chain((0..41).map(|n| range(frame(n), frame(n + 7))));
+    for (k, r) in ranges.enumerate() {
+        let out = dir.path().join(format!("b{k}.mov"));
+        write(
+            &src_path,
+            &out,
+            &small(r),
+            &AtomicBool::new(false),
+            &mut |_| {},
+        )
+        .unwrap();
+        let want: Vec<u8> = src.levels[shown(&src, r)].iter().rev().copied().collect();
+        let got = levels(&out);
+        assert!(exactly(&got, &want), "{r:?}: got {got:?}, want {want:?}");
+    }
+}
+
+#[test]
+#[ignore = "needs scripts/gen-engine-fixtures.sh"]
+fn a_turned_clip_reverses_upright() {
+    let dir = tempfile::tempdir().unwrap();
+    let src_path = support::fixture("reverse-rotated.mov");
+    let out = dir.path().join("turned.mov");
+    let r = range(0, 2_000_000);
+    write(
+        &src_path,
+        &out,
+        &small(r),
+        &AtomicBool::new(false),
+        &mut |_| {},
+    )
+    .unwrap();
+    let probe = klipolo_engine::render::probe::probe_media(&out).unwrap();
+    assert_eq!((probe.width, probe.height, probe.rotation), (96, 160, 0));
+    let src = decode(&src_path);
+    let want: Vec<u8> = src.levels[shown(&src, r)].iter().rev().copied().collect();
+    assert!(exactly(&levels(&out), &want));
+}
+
+#[test]
+#[ignore = "needs scripts/gen-engine-fixtures.sh"]
+fn a_variable_rate_clip_keeps_each_frame_s_length() {
+    let dir = tempfile::tempdir().unwrap();
+    let src_path = support::fixture("reverse-vfr.mov");
+    let src = decode(&src_path);
+    let r = range(0, 3_000_000);
+    let out = dir.path().join("vfr.mov");
+    write(
+        &src_path,
+        &out,
+        &small(r),
+        &AtomicBool::new(false),
+        &mut |_| {},
+    )
+    .unwrap();
+    let copy = decode(&out);
+    let n = src.levels.len();
+    assert!(exactly(
+        &copy.levels,
+        &src.levels.iter().rev().copied().collect::<Vec<_>>()
+    ));
+    // Output frame i is source frame n - 1 - i, as long as it was (the source's last frame has no next to say how long
+    // it is: its length is the copy's choice).
+    let length = |starts: &[i64], i: usize| starts[i + 1] - starts[i];
+    for i in 1..n - 1 {
+        let (got, want) = (length(&copy.starts, i), length(&src.starts, n - 1 - i));
+        assert!(
+            (got - want).abs() <= 1_000,
+            "frame {i}: {got} µs, the source's {want} µs"
+        );
+    }
+}
+
+#[test]
+#[ignore = "needs scripts/gen-engine-fixtures.sh"]
+fn a_full_range_bt601_clip_keeps_its_values_and_its_tags() {
+    use ffmpeg::color::{Primaries, Range, Space, TransferCharacteristic};
+    let dir = tempfile::tempdir().unwrap();
+    let src_path = support::fixture("reverse-full-601.mp4");
+    let src = decode(&src_path);
+    let out = dir.path().join("full.mov");
+    write(
+        &src_path,
+        &out,
+        &small(range(0, 1_000_000)),
+        &AtomicBool::new(false),
+        &mut |_| {},
+    )
+    .unwrap();
+    let copy = decode(&out);
+    assert_eq!(
+        copy.tags,
+        (
+            Range::JPEG,
+            Space::BT470BG,
+            Primaries::BT470BG,
+            TransferCharacteristic::SMPTE170M
+        )
+    );
+    let want: Vec<u8> = src.levels.iter().rev().copied().collect();
+    assert!(
+        exactly(&copy.levels, &want),
+        "got {:?}, want {want:?}",
+        copy.levels
+    );
+}
+
+#[test]
+#[ignore = "needs scripts/gen-engine-fixtures.sh"]
+fn an_hdr_clip_is_written_as_hdr_or_refused() {
+    use ffmpeg::color::{Primaries, Space, TransferCharacteristic};
+    let dir = tempfile::tempdir().unwrap();
+    let src_path = support::fixture("reverse-hlg.mov");
+    let out = dir.path().join("hlg.mov");
+    let written = write(
+        &src_path,
+        &out,
+        &small(range(0, 1_000_000)),
+        &AtomicBool::new(false),
+        &mut |_| {},
+    );
+    match encoder_name(VideoCodec::HevcMain10) {
+        // Never flattened to 8-bit SDR.
+        None => {
+            assert_eq!(written.unwrap_err(), ReverseError::NoHdrEncoder);
+            assert!(!out.exists());
+        }
+        Some(_) => {
+            written.unwrap();
+            let copy = decode(&out);
+            assert_eq!(
+                (copy.tags.1, copy.tags.2, copy.tags.3),
+                (
+                    Space::BT2020NCL,
+                    Primaries::BT2020,
+                    TransferCharacteristic::ARIB_STD_B67
+                )
+            );
+            let src = decode(&src_path);
+            let want: Vec<u8> = src.levels.iter().rev().copied().collect();
+            assert!(exactly(&copy.levels, &want));
+        }
+    }
+}
+
+#[test]
+#[ignore = "needs scripts/gen-engine-fixtures.sh"]
+fn a_short_stretch_of_a_long_file_reads_only_near_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let src_path = support::fixture("reverse-long-120s.mp4");
+    let out = dir.path().join("short.mov");
+    let mut heard = Vec::new();
+    let r = range(100_000_000, 101_000_000);
+    let spec = Reverse {
+        buffer_bytes: 64 << 20,
+        ..spec(r)
+    };
+    let info = write(&src_path, &out, &spec, &AtomicBool::new(false), &mut |p| {
+        heard.push(p)
+    })
+    .unwrap();
+    // The file has 2,880 frames: a second and a GOP or two around the range, never the whole file.
+    assert!(
+        info.scanned_packets < 300,
+        "{} packets read",
+        info.scanned_packets
+    );
+    // The pill moves from the start: it hears 0 at once, before the first pass reads anything.
+    assert_eq!(heard.first(), Some(&0.0), "{heard:?}");
+    let src = decode(&src_path);
+    let want: Vec<u8> = src.levels[shown(&src, r)].iter().rev().copied().collect();
+    assert!(exactly(&levels(&out), &want));
 }
