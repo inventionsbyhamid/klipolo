@@ -40,6 +40,11 @@ export const engine = {
   play: (fromUs: number, rate: number, seq: number) => call<void>('engine_play', { fromUs, rate, seq }),
   /** Resolves with where playback stopped. */
   pause: () => call<number>('engine_pause'),
+  /**
+   * The socket presenter's measured time (ms) from a playing frame being sent to it arriving here (recent median): the
+   * engine renders frames that far ahead of the sound, so picture and sound line up.
+   */
+  presentDelay: (ms: number) => call<void>('engine_present_delay', { ms }),
   /** A dry run of `ops` on the open project at `baseRevision` (a drag, a slider): drawn at once, never committed. */
   preview: (projectId: string, baseRevision: number, ops: Op[]) =>
     call<void>('engine_preview', { projectId, baseRevision, ops }),

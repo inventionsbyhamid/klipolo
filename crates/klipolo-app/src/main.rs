@@ -188,6 +188,7 @@ fn main() {
             engine::engine_preview_clear,
             engine::engine_play,
             engine::engine_pause,
+            engine::engine_present_delay,
             engine::engine_set_editing,
             project::project_create,
             project::project_open,
