@@ -121,12 +121,16 @@
   --radius-xl: 18px;     /* dialogs */
   --radius-pill: 999px;  /* buttons, chips, segmented pills */
 
-  /* ---------- Elevation: dark UI lifts by surface color, shadows only for floating layers ---------- */
+  /* ---------- Elevation: the UI lifts by surface color, shadows only for floating layers ----------
+     The light theme's shadows are navy and fainter; its 1 px edge is a navy hairline where the dark's is a white one. */
   --shadow-0: none;
-  --shadow-1: 0 6px 18px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(255 255 255 / 0.06);   /* menus, popovers, tooltips */
-  --shadow-2: 0 14px 40px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(255 255 255 / 0.07);  /* toasts, floating inspector */
-  --shadow-3: 0 28px 80px rgb(0 0 0 / 0.65), 0 0 0 1px rgb(255 255 255 / 0.08);  /* dialogs */
-  --shadow-lift: 0 8px 22px rgb(0 0 0 / 0.5);                                     /* hovered play button on art */
+  --shadow-1: 0 6px 18px light-dark(rgb(18 26 51 / 0.16), rgb(0 0 0 / 0.45)),
+    0 0 0 1px light-dark(rgb(18 26 51 / 0.08), rgb(255 255 255 / 0.06));  /* menus, popovers, tooltips */
+  --shadow-2: 0 14px 40px light-dark(rgb(18 26 51 / 0.2), rgb(0 0 0 / 0.55)),
+    0 0 0 1px light-dark(rgb(18 26 51 / 0.08), rgb(255 255 255 / 0.07));  /* toasts, floating inspector */
+  --shadow-3: 0 28px 80px light-dark(rgb(18 26 51 / 0.26), rgb(0 0 0 / 0.65)),
+    0 0 0 1px light-dark(rgb(18 26 51 / 0.08), rgb(255 255 255 / 0.08));  /* dialogs */
+  --shadow-lift: 0 8px 22px light-dark(rgb(18 26 51 / 0.24), rgb(0 0 0 / 0.5)); /* hovered play button on art */
 
   /* ---------- Motion ---------- */
   --dur-instant: 80ms;   /* press feedback */
