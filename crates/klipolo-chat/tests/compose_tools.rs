@@ -1377,3 +1377,38 @@ fn a_waiting_set_layer_keeps_what_later_calls_in_the_message_did() {
         heart.layout.motion
     );
 }
+
+/// A colour, an angle or a point that doesn't fit says what does, as a range does.
+#[test]
+fn a_colour_angle_or_point_that_doesnt_fit_says_what_does() {
+    let p = project();
+    for (name, key, value, said) in [
+        (
+            "glow",
+            "color",
+            json!("gold"),
+            "setEffects: glow's color takes a hex like #FF8800.",
+        ),
+        (
+            "drop-shadow",
+            "angle",
+            json!(400),
+            "setEffects: drop-shadow's angle takes a number of degrees from -360 to 360.",
+        ),
+        (
+            "mask",
+            "center",
+            json!("3, 0.5"),
+            "setEffects: mask's center takes a point \"x,y\", each from -1 to 2.",
+        ),
+    ] {
+        let out = run(
+            &p,
+            &[(
+                "setEffects",
+                effect("i1", name, json!([{"key": key, "value": value}])),
+            )],
+        );
+        assert_eq!(refused_to_model(&out, 0), said, "{name}.{key}");
+    }
+}

@@ -118,15 +118,22 @@ fn setting(
                     "a number"
                 }
                 ParamKind::Bool { .. } => "true or false",
-                ParamKind::Color { .. } => "a hex colour like #FFD02E",
+                ParamKind::Color { .. } => "a hex like #FF8800",
                 ParamKind::Point { .. } => "a point such as \"0.5,0.5\"",
                 _ => "a value Klipolo can't set from chat",
             };
             return Err(wrong(what));
         }
     };
-    spec.check(&read, work)
-        .map_err(|_| wrong("a value inside its range"))?;
+    spec.check(&read, work).map_err(|_| {
+        wrong(&match &spec.kind {
+            ParamKind::Color { .. } => "a hex like #FF8800".to_owned(),
+            ParamKind::Angle { .. } => "a number of degrees from -360 to 360".to_owned(),
+            ParamKind::Point { .. } => "a point \"x,y\", each from -1 to 2".to_owned(),
+            ParamKind::Text { max_len, .. } => format!("text of at most {max_len} characters"),
+            _ => "a value inside its range".to_owned(),
+        })
+    })?;
     Ok(read)
 }
 
