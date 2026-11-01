@@ -268,20 +268,32 @@ pub fn uncached_usd(matcher: &dyn VoiceMatcher, cache: Option<&Dir>, windows: &[
         .sum()
 }
 
-/// The most asking about the voices of `turns` in `range` can cost, before anything is tracked: `MAX_WINDOWS` (or as
-/// many stretches alone as a voice has) of `WINDOW_US` for each voice.
-pub fn most_usd(matcher: &dyn VoiceMatcher, turns: &[VoiceTurn], range: RangeUs) -> f64 {
-    let mut count: BTreeMap<Voice, usize> = BTreeMap::new();
+/// The most asking about the voices of `turns` in `ranges` (the footage a file's clips play, together) can cost, before
+/// anything is tracked: a voice gets a window for each `WINDOW_MIN_US` it talks alone there (shots may cut a stretch
+/// into several), at most `MAX_WINDOWS`, each priced at `WINDOW_US`.
+pub fn most_usd(matcher: &dyn VoiceMatcher, turns: &[VoiceTurn], ranges: &[RangeUs]) -> f64 {
+    let mut plays: Vec<RangeUs> = ranges.iter().copied().filter(|r| r.end > r.start).collect();
+    plays.sort_by_key(|r| r.start);
+    let mut joined: Vec<RangeUs> = Vec::new();
+    for r in plays {
+        match joined.last_mut() {
+            Some(last) if r.start <= last.end => last.end = last.end.max(r.end),
+            _ => joined.push(r),
+        }
+    }
+    let mut count: BTreeMap<Voice, i64> = BTreeMap::new();
     for (voice, r) in alone(turns) {
-        let (a, b) = (r.start.max(range.start), r.end.min(range.end));
-        if b - a >= WINDOW_MIN_US {
-            *count.entry(voice).or_default() += 1;
+        for play in &joined {
+            let (a, b) = (r.start.max(play.start), r.end.min(play.end));
+            if b > a {
+                *count.entry(voice.clone()).or_default() += (b - a) / WINDOW_MIN_US;
+            }
         }
     }
     let one = matcher.estimate_usd(WINDOW_US as f64 / 1e6);
     count
         .values()
-        .map(|n| (*n).min(MAX_WINDOWS) as f64 * one)
+        .map(|n| (*n).clamp(0, MAX_WINDOWS as i64) as f64 * one)
         .sum()
 }
 

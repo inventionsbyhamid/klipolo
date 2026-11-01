@@ -510,10 +510,12 @@ impl Speaker {
             let src = PathBuf::from(&file);
             let dir = cache_dir(&self.cache_root, &src).await;
             if !cached {
-                usd += (targets.iter())
+                // Once for the file, over the footage all its clips play.
+                let plays: Vec<RangeUs> = (targets.iter())
                     .filter(|t| t.footage.path == file)
-                    .map(|t| voices::most_usd(matcher, &turns, t.footage.range))
-                    .sum::<f64>();
+                    .map(|t| t.footage.range)
+                    .collect();
+                usd += voices::most_usd(matcher, &turns, &plays);
                 continue;
             }
             let own: Vec<SubjectTrack> = match &dir {

@@ -76,7 +76,7 @@ fn a_real_two_person_walk_keeps_whoever_speaks() {
     let meta = Meta::new(
         MetaClient::direct(SecretString::from("test-meta-key-not-real")).with_ledger(None),
     );
-    let most = voices::most_usd(&meta, &turns, clip);
+    let most = voices::most_usd(&meta, &turns, &[clip]);
     let asked: f64 = (windows.iter())
         .map(|w| meta.estimate_usd((w.range.end - w.range.start) as f64 / 1e6))
         .sum();

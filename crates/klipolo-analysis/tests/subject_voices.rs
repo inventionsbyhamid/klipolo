@@ -413,11 +413,38 @@ fn a_voice_nobody_on_screen_has_is_no_ones_talk() {
 #[test]
 fn before_anything_is_tracked_the_price_is_at_most_three_windows_a_voice() {
     let spark = FakeSpark::new(Vec::new());
-    // A has three stretches alone of 2 s or more, B two (its "mm-hm" doesn't count).
-    let most = voices::most_usd(&spark, &interview(), range(0.0, 20.0));
-    assert!((most - PRICE * 5.0).abs() < 1e-9, "{most}");
-    // Only the footage the clip plays.
-    let most = voices::most_usd(&spark, &interview(), range(0.0, 9.0));
-    assert!((most - PRICE * 2.0).abs() < 1e-9, "{most}");
+    // A window needs 2 s alone: A's stretches could make 2 + 1 + 1 of them, B's 2 + 2; at most three each.
+    let most = voices::most_usd(&spark, &interview(), &[range(0.0, 20.0)]);
+    assert!((most - PRICE * 6.0).abs() < 1e-9, "{most}");
+    // Only the footage the clips play: A's 2 + 1, B's "mm-hm" none.
+    let most = voices::most_usd(&spark, &interview(), &[range(0.0, 9.0)]);
+    assert!((most - PRICE * 3.0).abs() < 1e-9, "{most}");
     assert_eq!(spark.asked(), 0);
+}
+
+#[test]
+fn the_price_before_tracking_covers_a_stretch_cut_by_shots_and_a_file_in_many_clips() {
+    let spark = FakeSpark::new(Vec::new());
+    // A talks alone for 20 s across two cuts: three shots, a window in each.
+    let turns = [turn(0.0, 20.0, 0, "A")];
+    let f = two_apart(20.0);
+    let w = voices::windows(
+        &timed(&f),
+        &[s(7.0), s(14.0)],
+        range(0.0, 20.0),
+        &turns,
+        PORTRAIT,
+    );
+    assert_eq!(w.len(), 3, "{w:?}");
+    let most = voices::most_usd(&spark, &turns, &[range(0.0, 20.0)]);
+    let asked: f64 = (w.iter())
+        .map(|w| spark.estimate_usd((w.range.end - w.range.start) as f64 / 1e6))
+        .sum();
+    assert!(asked <= most + 1e-12, "{asked} > {most}");
+    // One file cut into many clips is priced once: still at most three windows for its voice.
+    let pieces: Vec<RangeUs> = (0..10)
+        .map(|i| range(f64::from(i) * 2.0, f64::from(i) * 2.0 + 2.0))
+        .collect();
+    let most = voices::most_usd(&spark, &turns, &pieces);
+    assert!((most - PRICE * 3.0).abs() < 1e-9, "{most}");
 }
