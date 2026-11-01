@@ -125,7 +125,7 @@ fn their_zoom_at_the_whole_frame_is_not_an_out_and_ins_leg() {
         "(i) at 11.6 s: {:?}",
         p.view_at(11_600_000)
     );
-    check(&p, Rules::default(), 30_000_000, "a zoom-out before their whole-frame zoom");
+    check(&p, Rules::default(), 30_000_000, "out, then their zoom");
     // Their 1× zoom, then a click's shot 4 s later; typing before the click loses to it, and the zoom in
     // must not hide it.
     let fixed = [theirs(5_000_000, 8_000_000, (0.5, 0.5), 1.0)];
@@ -149,7 +149,7 @@ fn their_zoom_at_the_whole_frame_is_not_an_out_and_ins_leg() {
             p.view_at(t)
         );
     }
-    check(&p, Rules::default(), 30_000_000, "a zoom in after their whole-frame zoom");
+    check(&p, Rules::default(), 30_000_000, "their zoom, then in");
 }
 
 #[test]
@@ -164,5 +164,5 @@ fn the_gap_between_two_of_their_zooms_at_one_view_is_theirs() {
     for t in (5_000_000..12_000_000).step_by(100_000) {
         assert_eq!(p.view_at(t), fixed[0].view, "theirs at {t}");
     }
-    check(&p, Rules::default(), 30_000_000, "the gap between two of their zooms");
+    check(&p, Rules::default(), 30_000_000, "between their zooms");
 }

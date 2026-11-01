@@ -111,7 +111,7 @@ fn a_dropped_typing_span_stays_on_screen_while_it_lasts() {
     };
     let focus = [typing, click(13_000_000, 0.85, 0.85)];
     let p = plan(&input(30_000_000, &focus, &[], Rules::default()));
-    check(&p, Rules::default(), 30_000_000, "wide typing and a click elsewhere");
+    check(&p, Rules::default(), 30_000_000, "wide typing, a click");
     for t in (10_000_000..=20_000_000).step_by(100_000) {
         assert!(
             on_screen(&p, t, 0.45, 0.175),
