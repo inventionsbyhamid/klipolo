@@ -36,6 +36,23 @@ const FRAMING: Record<string, ClipFraming> = {
 vi.mock('../../bridge/framing', () => ({
   clipFraming: vi.fn((clipId: string) => Promise.resolve(FRAMING[clipId])),
 }));
+// The library's pictures, and a picture chosen on this Mac: Rust adds it to the project as the background.
+const { setBackground, choosePicture } = vi.hoisted(() => ({ setBackground: vi.fn(), choosePicture: vi.fn() }));
+vi.mock('../../bridge/library', () => ({
+  library: {
+    pack: vi.fn(() =>
+      Promise.resolve([
+        { id: 'sticker.confetti', name: 'Confetti', category: 'sticker', durationUs: 0, width: 512, height: 512, tags: [] },
+        { id: 'sound.whoosh', name: 'Whoosh', category: 'sound', durationUs: 900_000, width: 0, height: 0, tags: [] },
+      ]),
+    ),
+    setBackground,
+  },
+}));
+vi.mock('../../bridge/commands', async (actual) => ({
+  ...(await actual<typeof import('../../bridge/commands')>()),
+  bridge: { ...(await actual<typeof import('../../bridge/commands')>()).bridge, choosePicture },
+}));
 const { useProject } = await import('../../state/project');
 const { useSelection } = await import('../../state/selection');
 const { usePlayback } = await import('../../state/playback');
@@ -137,13 +154,60 @@ describe("the clip card's background", () => {
     expect(await screen.findByRole('button', { name: 'Background picture: logo.png' })).toBeInTheDocument();
   });
 
-  it('no picture is offered in a project without images', async () => {
+  it('a project without images offers Picture too: one from the library or a file chosen on this Mac', async () => {
     const snapshot = fixtureSnapshot();
     snapshot.project.assets = snapshot.project.assets.filter((a) => a.kind !== 'image');
     useProject.setState({ snapshot, pending: 0, apply });
+    const patch = { baseRevision: 3, history: snapshot.history, patch: {} };
+    setBackground.mockResolvedValue(patch);
     renderWithProviders(<Inspector format="landscape" />);
     await userEvent.click(await screen.findByRole('button', { name: 'Background: Black' }));
-    expect(screen.queryByRole('menuitemradio', { name: 'Picture' })).toBeNull();
+    await userEvent.click(screen.getByRole('menuitemradio', { name: 'Picture' }));
+    // Nothing is set until a picture is chosen: the project has none yet.
+    expect(apply).not.toHaveBeenCalled();
+    const picture = await screen.findByRole('button', { name: 'Background picture: Choose a picture' });
+    await userEvent.click(picture);
+    await waitFor(() =>
+      expect(screen.getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual([
+        'Confetti',
+        'Choose a file…',
+      ]),
+    );
+    await userEvent.click(screen.getByRole('menuitemradio', { name: 'Confetti' }));
+    await waitFor(() => expect(setBackground).toHaveBeenCalledWith({ type: 'pack', id: 'sticker.confetti' }));
+
+    // A file: the picker asks for one picture, and that file becomes the background.
+    const wall = { ...fixtureSnapshot().project.assets.find((a) => a.kind === 'image')!, id: 'wall', name: 'wall.jpg' };
+    choosePicture.mockResolvedValue({ assets: [wall], skipped: [] });
+    const pictureAgain = async () => {
+      await userEvent.click(await screen.findByRole('button', { name: 'Background: Black' }));
+      await userEvent.click(screen.getByRole('menuitemradio', { name: 'Picture' }));
+    };
+    await pictureAgain();
+    await userEvent.click(await screen.findByRole('button', { name: 'Background picture: Choose a picture' }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Choose a file…' }));
+    await waitFor(() => expect(setBackground).toHaveBeenLastCalledWith({ type: 'file', asset: wall }));
+    // A picker closed without a file sets nothing.
+    choosePicture.mockResolvedValue({ assets: [], skipped: [] });
+    setBackground.mockClear();
+    await pictureAgain();
+    await userEvent.click(await screen.findByRole('button', { name: 'Background picture: Choose a picture' }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Choose a file…' }));
+    await waitFor(() => expect(choosePicture).toHaveBeenCalledTimes(2));
+    expect(setBackground).not.toHaveBeenCalled();
+  });
+
+  it("a picture background lists the project's pictures, then the library's, then a file", async () => {
+    withProject({ kind: 'image', assetId: 'logo' });
+    renderWithProviders(<Inspector format="landscape" />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Background picture: logo.png' }));
+    await waitFor(() =>
+      expect(screen.getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual([
+        'logo.png',
+        'Confetti',
+        'Choose a file…',
+      ]),
+    );
   });
 
   it('a padding drag is one step on release', async () => {

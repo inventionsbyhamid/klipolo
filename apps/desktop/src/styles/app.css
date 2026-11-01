@@ -666,6 +666,11 @@
   grid-area: 1 / 2 / 2 / 3;
 }
 
+/* The panel takes the keyboard when a project opens (Space plays), never by Tab: no ring round the whole panel. */
+.stage:focus-visible {
+  outline: none;
+}
+
 /* With the native layer, the stage panel has no background of its own: the frame paints the panel colour around
    itself (its shadow, clipped by the panel's rounded corners), so the frame can stay a hole the layer shows through. */
 .stage.has-hole {
