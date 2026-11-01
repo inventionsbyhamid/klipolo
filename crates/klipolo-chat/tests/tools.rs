@@ -1277,7 +1277,7 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     assert!(prompt_tokens <= 900, "prompt {prompt_tokens} tokens");
-    // 3,304 measured with the clip tools (setClip, setTransition: about 410 of them) and setBackground (about 215),
+    // 3,296 measured with the clip tools (setClip, setTransition: about 410 of them) and setBackground (about 210),
     // every value nullable and described.
     assert!(tools_tokens <= 3_310, "tools {tools_tokens} tokens");
 }

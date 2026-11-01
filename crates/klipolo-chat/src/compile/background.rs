@@ -3,22 +3,31 @@
 //! background that comes out as it was adds no op. Its label always names a `kind`: the tool's word, or `same` when the
 //! call left it null (only the colours or the inset changed). Whether a colour is one the project takes is the model's
 //! rule: a call it refuses goes back to the model with the reason.
+//!
+//! A background only shows where a clip leaves the frame uncovered. So a call that names one that can be seen (blurred
+//! video, a colour, a gradient or a picture; not black) sets every main clip that fills the main format, and that
+//! Fill crops there (`framing::fill_crops`), to Fit in that format, as the clip card's Fit does (`clips::framed`), in
+//! the same undo step; with padding there is no need, as the padding shows the background round every clip. The reply
+//! says how many clips were set to Fit, and how many of them stopped following the cursor.
 
 use klipolo_model::Project;
 use klipolo_model::coded::ErrorParam;
-use klipolo_model::ops::Op;
+use klipolo_model::framing::{effective_framing, fill_crops};
+use klipolo_model::ops::{ClipPatch, Op};
 use klipolo_model::project::BackgroundKind;
+use klipolo_model::timeline::FramingMode;
 
+use super::clips::framed;
 use super::{Edit, label};
 use crate::tools::BackgroundChoice;
 
-/// The edit for `setBackground` on `work`.
+/// The edit for `setBackground` on `work`, with the reply's note on the clips it set to Fit (None when it set none).
 pub(super) fn set_background(
     work: &Project,
     kind: Option<BackgroundChoice>,
     (color, color_end): (Option<&str>, Option<&str>),
     padding: Option<f64>,
-) -> Edit {
+) -> (Edit, Option<String>) {
     let mut background = work.background.clone();
     if let Some(kind) = kind {
         background.kind = kind.kind();
@@ -39,12 +48,64 @@ pub(super) fn set_background(
     if let Some(padding) = padding {
         params.push(("padding", ErrorParam::Number(padding)));
     }
-    Edit {
-        ops: if background == work.background {
-            Vec::new()
-        } else {
-            vec![Op::SetBackground { background }]
-        },
+    let shows =
+        kind.is_some() && background.kind != BackgroundKind::None && background.padding <= 0.0;
+    let mut ops = Vec::new();
+    if background != work.background {
+        ops.push(Op::SetBackground { background });
+    }
+    let mut fitted = Fitted::default();
+    if shows {
+        let primary = work.settings.primary_format;
+        for clip in &work.timeline.main {
+            let now = effective_framing(work, clip, primary);
+            if now.mode != FramingMode::Fill || !fill_crops(work, clip, primary) {
+                continue;
+            }
+            let Some(framing) = framed(work, clip, FramingMode::Fit, &[primary]) else {
+                continue;
+            };
+            fitted.clips += 1;
+            fitted.followed += usize::from(now.follow.is_some());
+            ops.push(Op::UpdateClip {
+                id: clip.id.clone(),
+                patch: ClipPatch {
+                    framing: Some(framing),
+                    ..ClipPatch::default()
+                },
+            });
+        }
+    }
+    let edit = Edit {
+        ops,
         label: label("setBackground", params),
+    };
+    (edit, fitted.said())
+}
+
+/// The clips a background set to Fit, and how many of them followed the cursor before.
+#[derive(Clone, Copy, Debug, Default)]
+struct Fitted {
+    clips: usize,
+    followed: usize,
+}
+
+impl Fitted {
+    /// "A clip is set to Fit so the background shows round it.", "3 clips are set to Fit so the background shows round
+    /// them. One of them no longer follows the cursor."
+    fn said(self) -> Option<String> {
+        let set = match self.clips {
+            0 => return None,
+            1 => "A clip is set to Fit so the background shows round it.".to_owned(),
+            n => format!("{n} clips are set to Fit so the background shows round them."),
+        };
+        let follow = match (self.clips, self.followed) {
+            (_, 0) => return Some(set),
+            (1, _) => "It no longer follows the cursor.".to_owned(),
+            (n, k) if k == n => "They no longer follow the cursor.".to_owned(),
+            (_, 1) => "One of them no longer follows the cursor.".to_owned(),
+            (_, k) => format!("{k} of them no longer follow the cursor."),
+        };
+        Some(format!("{set} {follow}"))
     }
 }

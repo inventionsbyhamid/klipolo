@@ -10,10 +10,15 @@ use klipolo_chat::{
     build_context, compile,
 };
 use klipolo_model::coded::ErrorParam;
+use klipolo_model::cursor_style::{ClickSource, CursorCapture, RecordingCursor};
+use klipolo_model::framing::effective_framing;
 use klipolo_model::ops::Op;
-use klipolo_model::project::{Asset, AssetKind, BackgroundKind};
+use klipolo_model::project::{
+    Asset, AssetKind, BackgroundKind, FormatKind, Recording, RecordingKind, Settings, SourceRole,
+};
+use klipolo_model::recording::{RecordingSource, SourceMix, SourceRun};
 use klipolo_model::speech::Speech;
-use klipolo_model::timeline::{Clip, ClipSource};
+use klipolo_model::timeline::{Clip, ClipSource, Framing, FramingMode};
 use klipolo_model::{Project, apply_ops};
 
 fn read(arguments: &str) -> Result<ToolCall, klipolo_chat::ToolError> {
@@ -243,4 +248,160 @@ fn the_context_shows_a_background_once_there_is_one() {
     solid.background.kind = BackgroundKind::Solid;
     solid.background.color = "#1A2B3C".into();
     assert!(context(&solid).contains("Background: color #1A2B3C\n"));
+}
+
+/// `p` made vertical: 9:16 is its only format.
+fn vertical(mut p: Project) -> Project {
+    p.settings = Settings {
+        fps: 30,
+        formats: vec![FormatKind::Portrait],
+        primary_format: FormatKind::Portrait,
+    };
+    p
+}
+
+const BLUR: &str = r#"{"kind": "blur", "color": null, "colorEnd": null, "padding": null}"#;
+
+#[test]
+fn a_background_that_shows_sets_a_filled_clip_to_fit_in_the_same_step() {
+    let p = vertical(wide());
+    // A wide video fills 9:16 by default, so the blur would be hidden.
+    assert_eq!(
+        effective_framing(&p, &p.timeline.main[0], FormatKind::Portrait).mode,
+        FramingMode::Fill
+    );
+    let out = compile(&p, &inputs(&p), &[call(BLUR)]);
+    let additions = out.additions.expect("applied at once");
+    let [Op::SetBackground { .. }, Op::UpdateClip { id, patch }] = additions.ops.as_slice() else {
+        panic!("{:?}", additions.ops);
+    };
+    assert_eq!(id, "w");
+    let framing = patch.framing.as_ref().unwrap();
+    assert_eq!(framing[&FormatKind::Portrait].mode, FramingMode::Fit);
+    assert_eq!(
+        out.notes,
+        ["A clip is set to Fit so the background shows round it."]
+    );
+    // One undo step takes both back.
+    let after = apply_ops(&p, &additions.ops).unwrap();
+    assert_eq!(after.background.kind, BackgroundKind::Blur);
+    assert_eq!(
+        effective_framing(&after, &after.timeline.main[0], FormatKind::Portrait).mode,
+        FramingMode::Fit
+    );
+}
+
+#[test]
+fn a_colour_gradient_or_picture_does_the_same_and_black_does_not() {
+    let p = vertical(wide());
+    for args in [
+        r##"{"kind": "color", "color": "#FFD02E", "colorEnd": null, "padding": null}"##,
+        r##"{"kind": "gradient", "color": "#FFD02E", "colorEnd": "#121A33", "padding": null}"##,
+    ] {
+        let out = compile(&p, &inputs(&p), &[call(args)]);
+        let ops = out.additions.expect("applied").ops;
+        assert!(
+            matches!(ops.as_slice(), [_, Op::UpdateClip { .. }]),
+            "{args}: {ops:?}"
+        );
+    }
+    let mut blurred = p.clone();
+    blurred.background.kind = BackgroundKind::Blur;
+    let black = call(r#"{"kind": "none", "color": null, "colorEnd": null, "padding": null}"#);
+    let out = compile(&blurred, &inputs(&blurred), &[black]);
+    let ops = out.additions.expect("applied").ops;
+    assert!(
+        matches!(ops.as_slice(), [Op::SetBackground { .. }]),
+        "{ops:?}"
+    );
+    assert!(out.notes.is_empty());
+}
+
+#[test]
+fn nothing_is_set_to_fit_where_the_background_already_shows_or_fill_crops_nothing() {
+    // With padding, the background shows round every clip.
+    let p = vertical(wide());
+    let padded = call(r#"{"kind": "blur", "color": null, "colorEnd": null, "padding": 5}"#);
+    let out = compile(&p, &inputs(&p), &[padded]);
+    assert!(matches!(
+        out.additions.unwrap().ops.as_slice(),
+        [Op::SetBackground { .. }]
+    ));
+    assert!(out.notes.is_empty());
+    // A 16:9 video fills 16:9 whole: Fill crops nothing, so Fit would change nothing either.
+    let p = wide();
+    let out = compile(&p, &inputs(&p), &[call(BLUR)]);
+    assert!(matches!(
+        out.additions.unwrap().ops.as_slice(),
+        [Op::SetBackground { .. }]
+    ));
+    assert!(out.notes.is_empty());
+    // A clip already fitted stays as it is; only the colours changing sets nothing to Fit.
+    let mut fitted = vertical(wide());
+    fitted.timeline.main[0].framing.insert(
+        FormatKind::Portrait,
+        Framing {
+            mode: FramingMode::Fit,
+            focus_x: 0.5,
+            focus_y: 0.5,
+            follow: None,
+        },
+    );
+    let out = compile(&fitted, &inputs(&fitted), &[call(BLUR)]);
+    assert!(matches!(
+        out.additions.unwrap().ops.as_slice(),
+        [Op::SetBackground { .. }]
+    ));
+    let p = vertical(wide());
+    let colour = call(r##"{"kind": null, "color": "#FFFFFF", "colorEnd": null, "padding": null}"##);
+    let out = compile(&p, &inputs(&p), &[colour]);
+    assert!(matches!(
+        out.additions.unwrap().ops.as_slice(),
+        [Op::SetBackground { .. }]
+    ));
+}
+
+#[test]
+fn a_screen_take_that_followed_the_cursor_says_it_no_longer_does() {
+    let mut p = vertical(wide());
+    let screen = p.assets[0].clone();
+    p.recordings = vec![Recording {
+        id: "rec".into(),
+        kind: RecordingKind::Screen,
+        sources: vec![RecordingSource {
+            id: "wide".into(),
+            role: SourceRole::Screen,
+            label: "capture.source.screen".into(),
+            runs: vec![SourceRun {
+                asset_id: screen.id.clone(),
+                offset_us: 0,
+                duration_us: screen.duration_us,
+                drift_ppm: 0.0,
+                file_in_us: 0,
+            }],
+            nudge_us: 0,
+            mix: SourceMix::default(),
+            synced: None,
+        }],
+        primary: "wide".into(),
+        cursor: Some(RecordingCursor {
+            path: "/media/rec/cursor.jsonl".into(),
+            capture: CursorCapture::Separate,
+            clicks: ClickSource::Events,
+        }),
+        markers: Vec::new(),
+        game: None,
+    }];
+    let mut take = Clip::new(ClipSource::Recording { id: "rec".into() }, 0, 10_000_000);
+    take.id = "r".into();
+    p.timeline.main.push(take);
+    let follows = effective_framing(&p, &p.timeline.main[1], FormatKind::Portrait);
+    assert!(follows.mode == FramingMode::Fill && follows.follow.is_some());
+    let out = compile(&p, &inputs(&p), &[call(BLUR)]);
+    assert_eq!(
+        out.notes,
+        [
+            "2 clips are set to Fit so the background shows round them. One of them no longer follows the cursor."
+        ]
+    );
 }

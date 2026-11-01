@@ -327,7 +327,7 @@ fn item_op(id: &str, content: ItemContent) -> Op {
 
 /// `clip`'s framings with `mode` in each of `formats` where it is framed otherwise now, each built on its framing there
 /// as the engine draws it (the card's base), the other formats' kept; None when every one is `mode` already.
-fn framed(
+pub(super) fn framed(
     work: &Project,
     clip: &Clip,
     mode: FramingMode,

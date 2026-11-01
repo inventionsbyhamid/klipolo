@@ -88,24 +88,25 @@ fn colour(a: &mut Args, key: &str) -> Result<Option<String>, ToolError> {
 
 pub(super) const SET_BACKGROUND: Tool = Tool {
     name: "setBackground",
-    description: "What shows behind the video where it doesn't fill the frame (round a clip set to fit with \
-                  setClip), and an inset round it. blur is the usual look for vertical shorts. Null keeps a value.",
+    description: "What shows behind the video where it doesn't fill the frame, and an inset round it. Clips that \
+                  fill the frame are set to fit so it shows: no setClip needed. blur is the usual look for vertical \
+                  shorts. Null keeps a value.",
     parameters: || {
         vec![
             (
                 "kind",
                 nullable_words(
                     &BACKGROUNDS,
-                    "blur: the video itself blurred behind it. color: one colour. gradient: two. none: black.",
+                    "blur: the video itself, blurred. none: black.",
                 ),
             ),
             (
                 "color",
-                nullable_colour("Hex like #1A2B3C: the colour, or the gradient's first."),
+                nullable_colour("Hex like #1A2B3C; a gradient's first colour."),
             ),
             (
                 "colorEnd",
-                nullable_colour("Hex: the gradient's second colour."),
+                nullable_colour("Hex: a gradient's second colour."),
             ),
             (
                 "padding",

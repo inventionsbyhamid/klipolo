@@ -152,7 +152,8 @@ pub struct Compiled {
     /// The additions that went through but changed nothing (a format the video already has), by call index.
     pub unchanged: Vec<usize>,
     /// Klipolo's own sentences on what the additions did beyond what was asked, for the reply after what is said of
-    /// them: a new speed that shortens a transition ("A transition is shortened.", as the clip card says it).
+    /// them: a new speed that shortens a transition ("A transition is shortened.", as the clip card says it), a
+    /// background that sets clips to Fit so it shows ("A clip is set to Fit so the background shows round it.").
     pub notes: Vec<String>,
     /// Klipolo's own sentences on why a change the person asked for waits in `proposal`: a new speed that leaves a
     /// transition no room.
@@ -498,7 +499,8 @@ impl Compiler<'_> {
                 waiting.push((i, Removal::Moved(call)));
                 continue;
             }
-            // `setTransition`'s sentence on the cuts with no room, said once its edit is in.
+            // A sentence on what the edit did beyond what was asked, said once its edit is in: `setTransition`'s cuts
+            // with no room, `setBackground`'s clips set to Fit.
             let mut skipped: Option<String> = None;
             let addition = match call {
                 ToolCall::Undo => continue,
@@ -564,10 +566,21 @@ impl Compiler<'_> {
                 ToolCall::SplitAt { .. }
                 | ToolCall::SetFormat { .. }
                 | ToolCall::SetCaptions { .. }
-                | ToolCall::SetBackground { .. }
                 | ToolCall::FixCaptionWords { .. }
                 | ToolCall::SetClip { .. } => {
                     (self.addition(&adding.work, call), Removal::Moved(call))
+                }
+                ToolCall::SetBackground {
+                    kind,
+                    color,
+                    color_end,
+                    padding,
+                } => {
+                    let colours = (color.as_deref(), color_end.as_deref());
+                    let (edit, said) =
+                        background::set_background(&adding.work, *kind, colours, *padding);
+                    skipped = said;
+                    (Ok(edit), Removal::Moved(call))
                 }
                 ToolCall::SetTransition {
                     after,
@@ -762,7 +775,8 @@ impl Compiler<'_> {
                 *kind,
                 (color.as_deref(), color_end.as_deref()),
                 *padding,
-            )),
+            )
+            .0),
             ToolCall::FixCaptionWords { find, replace } => {
                 additions::fix_caption_words(self, work, find, replace)
             }
