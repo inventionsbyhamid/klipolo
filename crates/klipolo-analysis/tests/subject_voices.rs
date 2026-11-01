@@ -299,9 +299,7 @@ async fn voices_are_matched_priced_first_and_never_paid_for_twice() {
         "{before}"
     );
 
-    let matched = voices::match_voices(&spark, copy.clone(), &asking(&setup), &w)
-        .await
-        .unwrap();
+    let matched = voices::match_voices(&spark, copy.clone(), &asking(&setup), &w).await;
     assert_eq!(
         matched.voices,
         BTreeMap::from([
@@ -323,9 +321,7 @@ async fn voices_are_matched_priced_first_and_never_paid_for_twice() {
 
     // Again: all from the cache, at no charge.
     assert_eq!(voices::uncached_usd(&spark, Some(&setup.cache), &w), 0.0);
-    let again = voices::match_voices(&spark, copy, &asking(&setup), &w)
-        .await
-        .unwrap();
+    let again = voices::match_voices(&spark, copy, &asking(&setup), &w).await;
     assert_eq!(again.voices, matched.voices);
     assert_eq!(again.paid_usd, 0.0);
     assert_eq!(spark.asked(), 4);
@@ -344,17 +340,15 @@ async fn windows_that_disagree_ask_a_third_and_unclear_answers_are_kept_too() {
         (14.0, Heard::Person { person: 1 }),
         (16.0, Heard::Nobody),
     ]);
-    let matched = voices::match_voices(&spark, Arc::new(FakeCopy::default()), &asking(&setup), &w)
-        .await
-        .unwrap();
+    let matched =
+        voices::match_voices(&spark, Arc::new(FakeCopy::default()), &asking(&setup), &w).await;
     assert_eq!(matched.voices[&voice(0, "A")], Heard::Person { person: 1 });
     // B's two windows disagree: no one.
     assert!(!matched.voices.contains_key(&voice(0, "B")));
     assert_eq!(spark.asked(), 5);
     // The unclear answer was paid for: it is kept, and nothing is asked again.
-    let again = voices::match_voices(&spark, Arc::new(FakeCopy::default()), &asking(&setup), &w)
-        .await
-        .unwrap();
+    let again =
+        voices::match_voices(&spark, Arc::new(FakeCopy::default()), &asking(&setup), &w).await;
     assert_eq!(again.paid_usd, 0.0);
     assert_eq!(spark.asked(), 5);
 }
@@ -377,9 +371,8 @@ async fn a_long_files_parts_keep_their_own_voices() {
         (20.0, Heard::Person { person: 2 }),
         (30.0, Heard::Person { person: 1 }),
     ]);
-    let matched = voices::match_voices(&spark, Arc::new(FakeCopy::default()), &asking(&setup), &w)
-        .await
-        .unwrap();
+    let matched =
+        voices::match_voices(&spark, Arc::new(FakeCopy::default()), &asking(&setup), &w).await;
     assert_eq!(matched.voices[&voice(0, "A")], Heard::Person { person: 1 });
     assert_eq!(matched.voices[&voice(1, "A")], Heard::Person { person: 2 });
     // Who speaks when, in the clip's time (the file's plus 5 s here).

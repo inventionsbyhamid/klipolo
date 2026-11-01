@@ -55,11 +55,13 @@ pub struct Window {
     pub people: Vec<ScreenBox>,
 }
 
-/// What a file's voices were matched to: each voice the vote decided, and what asking cost now.
+/// What a file's voices were matched to: each voice the vote decided, what asking cost now, and why it stopped early
+/// (a copy or a call that failed: the voices after it are left unmatched).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Matched {
     pub voices: BTreeMap<Voice, Heard>,
     pub paid_usd: f64,
+    pub stopped: Option<String>,
 }
 
 /// One answer, as the cache keeps it.
@@ -270,13 +272,14 @@ pub fn most_usd(matcher: &dyn VoiceMatcher, turns: &[VoiceTurn], range: RangeUs)
 }
 
 /// Each voice of `windows` matched (see the module notes): cached answers read, the rest asked in turn until two
-/// agree, each answer cached as it comes. The first failure stops it; what was asked before stays cached.
+/// agree, each answer cached as it comes. The first failure stops it (`Matched::stopped`); what was asked before
+/// stays cached and counted.
 pub async fn match_voices(
     matcher: &dyn VoiceMatcher,
     copier: Arc<dyn SubjectCopy>,
     asking: &Asking<'_>,
     windows: &[Window],
-) -> Result<Matched, AnalysisError> {
+) -> Matched {
     let model = matcher.model().to_owned();
     let mut kept: Vec<Asked> = match asking.cache {
         Some(dir) => {
@@ -302,7 +305,13 @@ pub async fn match_voices(
                 heard.push(h);
                 continue;
             }
-            let answer = ask(matcher, copier.clone(), asking, window).await?;
+            let answer = match ask(matcher, copier.clone(), asking, window).await {
+                Ok(answer) => answer,
+                Err(e) => {
+                    matched.stopped = Some(format!("{}: {e}", e.user_message()));
+                    return matched;
+                }
+            };
             matched.paid_usd += answer.cost_usd;
             heard.push(answer.heard);
             kept.push(Asked {
@@ -321,7 +330,7 @@ pub async fn match_voices(
             matched.voices.insert(voice.clone(), h);
         }
     }
-    Ok(matched)
+    matched
 }
 
 /// One window copied small with its sound and asked about; the copy is removed once sent.
