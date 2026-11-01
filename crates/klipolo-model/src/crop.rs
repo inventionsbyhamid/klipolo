@@ -12,7 +12,9 @@ pub const MIN_KEPT: f64 = 0.1;
 /// How much is cut off each edge of a picture as it is shown (upright, and mirrored when it is drawn mirrored): left
 /// and right as shares of its width, top and bottom of its height. Each is 0 or more, and what is left is at least
 /// [`MIN_KEPT`] each way.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, TS, schemars::JsonSchema)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, TS, schemars::JsonSchema,
+)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct Crop {

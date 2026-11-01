@@ -87,7 +87,10 @@ fn a_cropped_layer_shows_what_is_left_contained_or_filling() {
     let c = crop(0.25, 0.0, 0.25, 0.0);
     let v = layer_at(&with_layer(SQUARE, false, Some(c), false), 1.0, Landscape);
     close(v.crop, bx(0.25, 0.0, 0.5, 1.0));
-    close(v.dest, bx(0.1 + 32.0 / 1920.0, 0.2, 512.0 / 1920.0, SQUARE.h));
+    close(
+        v.dest,
+        bx(0.1 + 32.0 / 1920.0, 0.2, 512.0 / 1920.0, SQUARE.h),
+    );
     // Filling the box, it is cut down a little more: 8:9 covering 1:1.
     let v = layer_at(&with_layer(SQUARE, true, Some(c), false), 1.0, Landscape);
     close(v.dest, SQUARE);

@@ -149,7 +149,10 @@ pub fn follow_crop_in(bounds: BoxN, base: BoxN, centre: (f64, f64), closer: f64)
     } else {
         1.0
     };
-    let (w, h) = ((base.w / closer).min(bounds.w), (base.h / closer).min(bounds.h));
+    let (w, h) = (
+        (base.w / closer).min(bounds.w),
+        (base.h / closer).min(bounds.h),
+    );
     let at = |c: f64, side: f64, lo: f64, room: f64| {
         let c = if c.is_finite() { c } else { lo + room / 2.0 };
         (c - side / 2.0).clamp(lo, lo + room - side)

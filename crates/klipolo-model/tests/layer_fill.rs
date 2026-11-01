@@ -25,7 +25,11 @@ fn with_layer(p: Project) -> Project {
     p
 }
 
-fn set_video(p: &Project, fill: bool, crop: Option<Crop>) -> Result<Project, klipolo_model::ModelError> {
+fn set_video(
+    p: &Project,
+    fill: bool,
+    crop: Option<Crop>,
+) -> Result<Project, klipolo_model::ModelError> {
     let mut content = p.timeline.tracks[0].items[0].content.clone();
     if let ItemContent::Video {
         fill: f, crop: c, ..
@@ -75,7 +79,10 @@ fn a_contained_uncropped_video_layer_leaves_both_out_of_the_file() {
     assert!(content.get("fill").is_none() && content.get("crop").is_none());
     let filled = set_video(&p, true, None).unwrap();
     let json = serde_json::to_value(&filled).unwrap();
-    assert_eq!(json["timeline"]["tracks"][0]["items"][0]["content"]["fill"], true);
+    assert_eq!(
+        json["timeline"]["tracks"][0]["items"][0]["content"]["fill"],
+        true
+    );
     let back: Project = serde_json::from_value(json).unwrap();
     assert_eq!(back, filled);
 }

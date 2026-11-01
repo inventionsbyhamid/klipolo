@@ -694,10 +694,7 @@ fn validate_content(p: &Project, content: &ItemContent, duration: Us) -> Result<
                 .ok_or_else(|| invalid(code!("model.layer.videoMissing")))?;
             check(in_range(*speed, 0.25, 4.0), code!("model.layer.speed"))?;
             check(in_range(*volume, 0.0, 2.0), code!("model.layer.volume"))?;
-            check(
-                crop.is_none_or(|c| c.is_valid()),
-                code!("model.layer.crop"),
-            )?;
+            check(crop.is_none_or(|c| c.is_valid()), code!("model.layer.crop"))?;
             check(
                 valid_time(*source_in_us)
                     && source_in_us.saturating_add(unscaled(duration, *speed))

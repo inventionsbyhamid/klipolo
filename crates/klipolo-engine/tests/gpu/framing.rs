@@ -28,7 +28,12 @@ const BLUE: [u8; 3] = [0, 0, 255];
 const GREY: [u8; 3] = [0x80, 0x80, 0x80];
 
 /// The phone clip as a layer in the frame's left half over grey.
-fn phone_layer(fill: bool, crop: Option<Crop>, effects: Vec<EffectInstance>, blend: Option<Blend>) -> Project {
+fn phone_layer(
+    fill: bool,
+    crop: Option<Crop>,
+    effects: Vec<EffectInstance>,
+    blend: Option<Blend>,
+) -> Project {
     let mut p = project();
     use_fixture(&mut p, "broll", "phone-portrait.mov", 1.0);
     let phone = p.assets.iter_mut().find(|a| a.id == "broll").unwrap();
@@ -106,28 +111,53 @@ async fn a_video_layer_draws_only_the_part_of_its_picture_it_shows() {
             frame
         };
         let side = if export { "export" } else { "preview" };
-        let check = |frame: &klipolo_engine::session::RenderedRgba, what: &str, want: &[((u32, u32), [u8; 3])]| {
+        let check = |frame: &klipolo_engine::session::RenderedRgba,
+                     what: &str,
+                     want: &[((u32, u32), [u8; 3])]| {
             for &((x, y), rgb) in want {
                 let got = pixel(&frame.bytes, frame.stride, x, y);
-                assert!(near(got, rgb, 14), "{side}, {what}: ({x}, {y}) is {got:?}, not {rgb:?}");
+                assert!(
+                    near(got, rgb, 14),
+                    "{side}, {what}: ({x}, {y}) is {got:?}, not {rgb:?}"
+                );
             }
         };
         // Contained whole (202×360 centred in the 320×360 half): red above, blue below, grey beside.
         let whole = render(phone_layer(false, None, Vec::new(), None)).await;
-        check(&whole, "whole", &[((160, 60), RED), ((160, 300), BLUE), ((20, 180), GREY)]);
+        check(
+            &whole,
+            "whole",
+            &[((160, 60), RED), ((160, 300), BLUE), ((20, 180), GREY)],
+        );
         // Cropped to its bottom half (720×640, 320×284 in the box): all blue, the red gone.
         let cropped = render(phone_layer(false, bottom_half(), Vec::new(), None)).await;
-        check(&cropped, "cropped", &[((160, 60), BLUE), ((160, 300), BLUE), ((160, 10), GREY)]);
+        check(
+            &cropped,
+            "cropped",
+            &[((160, 60), BLUE), ((160, 300), BLUE), ((160, 10), GREY)],
+        );
         // The same through an effect, and multiplied over white (which gives the layer back).
         let effected = render(phone_layer(false, bottom_half(), no_op_effect(), None)).await;
-        check(&effected, "cropped, with an effect", &[((160, 60), BLUE), ((160, 300), BLUE)]);
+        check(
+            &effected,
+            "cropped, with an effect",
+            &[((160, 60), BLUE), ((160, 300), BLUE)],
+        );
         let mut white = phone_layer(false, bottom_half(), Vec::new(), Some(Blend::Multiply));
         white.background.color = "#FFFFFF".into();
         let multiplied = render(white).await;
-        check(&multiplied, "cropped, multiplied", &[((160, 60), BLUE), ((160, 10), [255, 255, 255])]);
+        check(
+            &multiplied,
+            "cropped, multiplied",
+            &[((160, 60), BLUE), ((160, 10), [255, 255, 255])],
+        );
         // Filling the box: the middle of the picture covers it, the grey beside it gone.
         let filled = render(phone_layer(true, None, Vec::new(), None)).await;
-        check(&filled, "filled", &[((20, 60), RED), ((300, 300), BLUE), ((340, 180), GREY)]);
+        check(
+            &filled,
+            "filled",
+            &[((20, 60), RED), ((300, 300), BLUE), ((340, 180), GREY)],
+        );
     }
 }
 
@@ -166,14 +196,24 @@ async fn a_fitted_clip_has_its_own_picture_blurred_and_dimmed_round_it() {
                 .wait_for_assets()
         };
         let mut render = async |p: Project| {
-            let plan = frame_plan(&PlanContext::new(Arc::new(p)), secs(1.0), FormatKind::Portrait);
+            let plan = frame_plan(
+                &PlanContext::new(Arc::new(p)),
+                secs(1.0),
+                FormatKind::Portrait,
+            );
             let request = RenderRequest {
                 plan,
                 width: 360,
                 height: 640,
                 output: Output::Rgba,
             };
-            let frame = backend.render(request).await.unwrap().finish().await.unwrap();
+            let frame = backend
+                .render(request)
+                .await
+                .unwrap()
+                .finish()
+                .await
+                .unwrap();
             assert!(frame.warnings.is_empty(), "{:?}", frame.warnings);
             frame
         };
@@ -181,10 +221,21 @@ async fn a_fitted_clip_has_its_own_picture_blurred_and_dimmed_round_it() {
         let plain = render(fitted(BackgroundKind::None)).await;
         let at = |f: &klipolo_engine::session::RenderedRgba, x, y| pixel(&f.bytes, f.stride, x, y);
         // The 16:9 picture is 202 px tall in the middle; black above and below it.
-        assert!(near(at(&plain, 180, 320), blue, 6), "{side}: {:?}", at(&plain, 180, 320));
-        assert!(near(at(&plain, 180, 60), [0, 0, 0], 2), "{side}: {:?}", at(&plain, 180, 60));
+        assert!(
+            near(at(&plain, 180, 320), blue, 6),
+            "{side}: {:?}",
+            at(&plain, 180, 320)
+        );
+        assert!(
+            near(at(&plain, 180, 60), [0, 0, 0], 2),
+            "{side}: {:?}",
+            at(&plain, 180, 60)
+        );
         let blurred = render(fitted(BackgroundKind::Blur)).await;
-        assert!(near(at(&blurred, 180, 320), blue, 6), "{side}: the clip itself");
+        assert!(
+            near(at(&blurred, 180, 320), blue, 6),
+            "{side}: the clip itself"
+        );
         // Above, below and in the corners: the blue, dimmed, never black or bright.
         for (x, y) in [(180, 60), (180, 600), (1, 1), (358, 638)] {
             let [r, g, b] = at(&blurred, x, y);

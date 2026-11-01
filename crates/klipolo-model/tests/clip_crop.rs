@@ -56,18 +56,11 @@ fn a_clip_crop_leaves_a_tenth_of_the_picture_each_way() {
 fn a_split_clip_keeps_its_crop_on_both_pieces() {
     let p = fixture();
     let c = crop(0.0, 0.1, 0.0, 0.1);
-    let next = apply_ops(
-        &p,
-        &[
-            crop_clip("b", c),
-            Op::Split {
-                at_us: secs(25.0),
-            },
-        ],
-    )
-    .unwrap();
+    let next = apply_ops(&p, &[crop_clip("b", c), Op::Split { at_us: secs(25.0) }]).unwrap();
     assert_eq!(next.timeline.main.len(), 3);
-    assert!(next.timeline.main[1..].iter().all(|clip| clip.crop == Some(c)));
+    assert!(next.timeline.main[1..]
+        .iter()
+        .all(|clip| clip.crop == Some(c)));
 }
 
 #[test]

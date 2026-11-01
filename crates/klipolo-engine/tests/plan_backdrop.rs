@@ -99,7 +99,10 @@ fn it_is_cut_as_the_clip_is_cut_and_mirrored_as_it_is() {
     let back = role(&plan_at(&p, 25.0, Portrait), VideoRole::Backdrop).unwrap();
     close(
         back.crop,
-        within(c.kept(), cover_crop((16.0 / 9.0) * 0.5, 9.0 / 16.0, 0.5, 0.5)),
+        within(
+            c.kept(),
+            cover_crop((16.0 / 9.0) * 0.5, 9.0 / 16.0, 0.5, 0.5),
+        ),
     );
     // A mirrored camera-only take: mirrored behind as in front.
     let mut cam = blurred();

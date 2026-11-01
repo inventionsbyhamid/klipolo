@@ -31,10 +31,17 @@ fn framing(mode: FramingMode) -> Framing {
 }
 
 /// The main footage's crop and box at `t` in `format`.
-fn main_at(p: &Project, t: f64, format: FormatKind) -> (klipolo_model::layout::BoxN, klipolo_model::layout::BoxN) {
+fn main_at(
+    p: &Project,
+    t: f64,
+    format: FormatKind,
+) -> (klipolo_model::layout::BoxN, klipolo_model::layout::BoxN) {
     let plan = frame_plan(&ctx(p.clone()), secs(t), format);
     let v = videos(&plan);
-    let main = v.iter().find(|v| v.role == VideoRole::Main).expect("main footage");
+    let main = v
+        .iter()
+        .find(|v| v.role == VideoRole::Main)
+        .expect("main footage");
     (main.crop, main.dest)
 }
 
@@ -60,9 +67,18 @@ fn fill_covers_its_area_from_what_the_crop_leaves() {
     close(dest, FULL);
     let kept = bx(0.25, 0.1, 0.5, 0.9);
     let aspect = (16.0 / 9.0) * 0.5 / 0.9;
-    close(shown, within(kept, cover_crop(aspect, 9.0 / 16.0, 0.5, 0.5)));
-    assert!(shown.x >= 0.25 - 1e-9 && shown.x + shown.w <= 0.75 + 1e-9, "{shown:?}");
-    assert!((shown.y - 0.1).abs() < 1e-9 && (shown.h - 0.9).abs() < 1e-9, "{shown:?}");
+    close(
+        shown,
+        within(kept, cover_crop(aspect, 9.0 / 16.0, 0.5, 0.5)),
+    );
+    assert!(
+        shown.x >= 0.25 - 1e-9 && shown.x + shown.w <= 0.75 + 1e-9,
+        "{shown:?}"
+    );
+    assert!(
+        (shown.y - 0.1).abs() < 1e-9 && (shown.h - 0.9).abs() < 1e-9,
+        "{shown:?}"
+    );
     // The focus moves the crop inside what is left: all the way left starts at the cut.
     p.timeline.main[1].framing.insert(
         Portrait,
@@ -146,5 +162,8 @@ fn the_follow_crop_stays_inside_what_the_crop_leaves() {
     }
     // Without a crop it is the frame's follow-crop.
     let whole = follow_crop_in(FULL, base, (0.95, 0.5), 1.0);
-    close(whole, klipolo_engine::plan::framing::follow_crop(base, (0.95, 0.5), 1.0));
+    close(
+        whole,
+        klipolo_engine::plan::framing::follow_crop(base, (0.95, 0.5), 1.0),
+    );
 }

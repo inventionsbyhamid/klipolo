@@ -106,7 +106,8 @@ pub fn overlay_layers(
                     continue;
                 };
                 let time = source_in_us + unscaled(local_us, *speed);
-                let (rest, shown) = video_rect(rect, asset, *fill, crop.unwrap_or_default(), format);
+                let (rest, shown) =
+                    video_rect(rect, asset, *fill, crop.unwrap_or_default(), format);
                 let mv = moved(rest);
                 blur_in(registry, &item.id, &mv, clock, &mut fx);
                 out.push(Layer::Video(VideoLayer {
@@ -311,7 +312,10 @@ pub fn video_rect(
     let target = area_aspect(rect, format);
     let aspect = crop.aspect_of(aspect_of(asset.width, asset.height, target));
     if fill {
-        (rect, within(crop.kept(), cover_crop(aspect, target, 0.5, 0.5)))
+        (
+            rect,
+            within(crop.kept(), cover_crop(aspect, target, 0.5, 0.5)),
+        )
     } else {
         (fit_rect(rect, aspect, format), crop.kept())
     }
