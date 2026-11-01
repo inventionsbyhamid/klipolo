@@ -193,5 +193,11 @@
 
 /* Several colours at once: the colour wheel. */
 .color-compact-dot.mixed {
-  background: conic-gradient(#ff453a, #ff9f0a, #ffd02e, #32d74b, #0a84ff, #ff375f, #ff453a);
+  background: conic-gradient(
+    var(--color-hilite),
+    var(--color-lane-sfx),
+    var(--color-clip),
+    var(--color-lane-music),
+    var(--color-hilite)
+  );
 }
