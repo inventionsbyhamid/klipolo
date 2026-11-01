@@ -115,6 +115,7 @@ fn talk() -> (Project, Inputs, ChatContext) {
         analysis: HashMap::from([("talk".to_owned(), AnalysisState::Done)]),
         time_again: HashSet::new(),
         library: Library::default(),
+        fonts: Default::default(),
     };
     let ctx = build_context(
         &p,
