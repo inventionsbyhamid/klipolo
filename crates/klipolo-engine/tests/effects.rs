@@ -902,7 +902,7 @@ async fn half_res_blur_matches_full_res_and_costs_less() {
     // Two full-frame blurs (radius 24) over the bars fixture at 1280×720, 60 frames each way:
     // - mean absolute difference from a full-resolution render (downsampling off through
     //   `Headless::set_downsample(false)`) ≤ 2/255;
-    // - print the median ms per frame of both (render, GPU and readback), and of the bars alone, for the report.
+    // - print the median ms per frame of both (render, GPU and readback), and of the bars alone.
     let mut bars = project();
     let screen = bars.assets.iter_mut().find(|a| a.id == "screen").unwrap();
     screen.path = fixture("bars-30fps-0.5gop.mp4").display().to_string();

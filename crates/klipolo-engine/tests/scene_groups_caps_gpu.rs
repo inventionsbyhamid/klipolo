@@ -174,7 +174,7 @@ async fn a_warm_frame_of_everything_makes_no_gpu_objects() {
     assert_eq!(stats.held_frames, 0, "a backdrop is never held");
 }
 
-/// The numbers for the report (run by hand; the gate skips `scene_frame_costs*`): the busy scene's drawer CPU a frame
+/// Numbers to compare (run by hand; the gate skips `scene_frame_costs*`): the busy scene's drawer CPU a frame
 /// (and its first), and the frame's passes and the pixels its effect passes drew, over stripes, at 1280 × 720.
 /// lavapipe and a debug build: meaningful only against each other.
 #[tokio::test(flavor = "multi_thread")]

@@ -1,5 +1,5 @@
-//! A cursor take's budget at real scale, asserted in release: an hour of a tutorial take and
-//! an hour of continuous 250 Hz motion, each loaded and smoothed, with their times and bytes printed for the report.
+//! A cursor take's budget at real scale, asserted in release: an hour of a tutorial take and an hour of continuous 250
+//! Hz motion, each loaded and smoothed, with their times and bytes printed.
 //!
 //! `cargo test --release -p klipolo-engine --test cursor_budget -- --ignored --nocapture`
 

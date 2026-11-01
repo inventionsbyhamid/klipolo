@@ -233,7 +233,7 @@ async fn text_atlases_stay_within_their_budget() {
     );
 }
 
-/// What scene text costs, for the report (run by hand; the gate skips `scene_frame_costs`): building the lower third's
+/// What scene text costs (run by hand; the gate skips `scene_frame_costs`): building the lower third's
 /// text (layout and atlas) on its first frame, and the drawer's CPU time a frame for the counter and the rising letters
 /// while they move (lavapipe, debug: meaningful only against each other; the [Mac] check measures release on Metal).
 #[tokio::test(flavor = "multi_thread")]

@@ -198,7 +198,7 @@ fn popping() -> String {
     scene(&[card], timeline)
 }
 
-/// The numbers for the report (run by hand; the gate skips `scene_frame_costs*`): the popping lower third's drawer CPU
+/// Numbers to compare (run by hand; the gate skips `scene_frame_costs*`): the popping lower third's drawer CPU
 /// on its first frame (its survey with it) and a frame after, and a frame's passes, at 1280 × 720 over 2 s. lavapipe
 /// and a debug build: meaningful only against each other.
 #[tokio::test(flavor = "multi_thread")]
