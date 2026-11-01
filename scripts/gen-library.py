@@ -1316,7 +1316,7 @@ def outlined(shape, colour):
     return [(shape, BORDER, WHITE), (shape, 0.0, NAVY), (shape, -OUTLINE, colour)]
 
 
-def arc(cx, cy, rx, ry, start, end, step=6.0):
+def arc(cx, cy, rx, ry, start, end, step=2.0):
     """Points along an ellipse from `start` to `end` degrees (counterclockwise, y up, when `end` is the larger)."""
     n = max(1, int(abs(end - start) / step + 0.5))
     return [(cx + rx * cos((start + (end - start) * k / n) * PI / 180),
@@ -1396,8 +1396,8 @@ def pointer_arrow():
 def drawn_circle():
     """A red loop as if drawn round something with a marker: a little more than once round, not quite closing."""
     loop = []
-    for k in range(73):
-        s = k / 72
+    for k in range(201):
+        s = k / 200
         a = (100 + 400 * s) * PI / 180
         loop.append(((390 - 34 * s) * cos(a) + 10 - 22 * s, -(290 - 26 * s) * sin(a) + 14 * s))
     return bordered(Turned(Strokes([loop], 56.0), -8.0), RED)
