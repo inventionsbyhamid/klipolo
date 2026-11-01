@@ -14,7 +14,7 @@ use klipolo_analysis::providers::{
 };
 use klipolo_analysis::subject::voices::VoiceTurn;
 use klipolo_analysis::subject::{SubjectCopy, frames_for};
-use klipolo_app::speaker::{Speaker, Trackers, Voices};
+use klipolo_app::speaker::{LOW_CREDIT_VOICES, NOT_TRACKED, Speaker, Trackers, UNMATCHED, Voices};
 use klipolo_model::apply_ops;
 use klipolo_model::fill_focus::{FillFocus, FocusPath, Keep, Person, Voice};
 use klipolo_model::project::FormatKind::{Landscape, Portrait};
@@ -79,11 +79,22 @@ impl SubjectTracker for TwoPeople {
     }
 }
 
-/// Says the person on the left speaks before 80 s and from 100 s, the one on the right in between; or fails.
-#[derive(Default)]
+/// Says the person on the left speaks before 80 s and from 100 s, the one on the right in between; or fails from its
+/// `fail_from`th call (counting from 1), or says nothing clear.
 struct FakeSpark {
     asked: AtomicUsize,
-    fail: bool,
+    fail_from: usize,
+    unclear: bool,
+}
+
+impl Default for FakeSpark {
+    fn default() -> Self {
+        Self {
+            asked: AtomicUsize::new(0),
+            fail_from: usize::MAX,
+            unclear: false,
+        }
+    }
 }
 
 impl VoiceMatcher for FakeSpark {
@@ -101,8 +112,8 @@ impl VoiceMatcher for FakeSpark {
         _people: &'a [ScreenBox],
     ) -> BoxFuture<'a, Result<VoiceAnswer, ProviderError>> {
         Box::pin(async move {
-            self.asked.fetch_add(1, Ordering::SeqCst);
-            if self.fail {
+            let n = self.asked.fetch_add(1, Ordering::SeqCst) + 1;
+            if n >= self.fail_from {
                 return Err(ProviderError::new(
                     ProviderErrorKind::Failed,
                     "Meta failed.",
@@ -115,7 +126,11 @@ impl VoiceMatcher for FakeSpark {
                 1
             };
             Ok(VoiceAnswer {
-                heard: Heard::Person { person },
+                heard: if self.unclear {
+                    Heard::Unclear
+                } else {
+                    Heard::Person { person }
+                },
                 cost_usd: SPARK,
             })
         })
@@ -125,6 +140,7 @@ impl VoiceMatcher for FakeSpark {
 struct FakeTrackers {
     sam: Arc<TwoPeople>,
     spark: Option<Arc<FakeSpark>>,
+    credit_left: Option<f64>,
 }
 
 impl Trackers for FakeTrackers {
@@ -133,7 +149,7 @@ impl Trackers for FakeTrackers {
     }
 
     fn credit_left(&self) -> BoxFuture<'_, Option<f64>> {
-        Box::pin(async move { None })
+        Box::pin(async move { self.credit_left })
     }
 
     fn matcher(&self) -> BoxFuture<'_, Option<Arc<dyn VoiceMatcher>>> {
@@ -173,6 +189,7 @@ impl SubjectCopy for FakeCopy {
 /// The talk's transcript: A (part 0) to 80 s and from 100 s, B in between, in its sound time.
 struct Heard2 {
     asked: Mutex<Vec<String>>,
+    labels: (String, String),
 }
 
 impl Voices for Heard2 {
@@ -186,10 +203,11 @@ impl Voices for Heard2 {
                 label: label.into(),
             },
         };
+        let (a, b) = (&self.labels.0, &self.labels.1);
         vec![
-            turn(60.0, 80.0, "A"),
-            turn(80.0, 100.0, "B"),
-            turn(100.0, 120.0, "A"),
+            turn(60.0, 80.0, a),
+            turn(80.0, 100.0, b),
+            turn(100.0, 120.0, a),
         ]
     }
 }
@@ -201,8 +219,8 @@ struct Setup {
     spark: Arc<FakeSpark>,
 }
 
-/// A two-person talk (16:9) cut to 60 to 120 s, in a vertical version.
-fn setup(fail: bool) -> Setup {
+/// A two-person talk (16:9) cut to 60 to 120 s, in a vertical version, Spark failing from its `fail_from`th call.
+fn setup(fail_from: usize) -> Setup {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("talk.mp4");
     std::fs::write(&file, b"the talk's bytes").unwrap();
@@ -231,18 +249,29 @@ fn setup(fail: bool) -> Setup {
         project,
         sam: Arc::default(),
         spark: Arc::new(FakeSpark {
-            fail,
+            fail_from,
             ..FakeSpark::default()
         }),
     }
 }
 
 fn speaker(setup: &Setup, matcher: bool) -> Speaker {
+    speaker_with(setup, matcher, None, ("A", "B"))
+}
+
+/// The speaker following with Spark when `matcher`, an access code's `credit_left`, and the transcript's `labels`.
+fn speaker_with(
+    setup: &Setup,
+    matcher: bool,
+    credit_left: Option<f64>,
+    labels: (&str, &str),
+) -> Speaker {
     let root = setup._dir.path();
     Speaker::new(
         Arc::new(FakeTrackers {
             sam: setup.sam.clone(),
             spark: matcher.then(|| setup.spark.clone()),
+            credit_left,
         }),
         Arc::new(FakeCopy),
         root.join("analysis"),
@@ -251,6 +280,7 @@ fn speaker(setup: &Setup, matcher: bool) -> Speaker {
     )
     .with_voices(Arc::new(Heard2 {
         asked: Mutex::new(Vec::new()),
+        labels: (labels.0.to_owned(), labels.1.to_owned()),
     }))
 }
 
@@ -273,14 +303,14 @@ fn ids() -> Vec<String> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_two_person_clip_follows_whoever_speaks_priced_with_the_tracking() {
-    let setup = setup(false);
+    let setup = setup(usize::MAX);
     let speaker = speaker(&setup, true);
     let p = &setup.project;
-    // Before anything is tracked: the minute's frames, and at most a window for each of A's two stretches alone and
-    // B's one.
+    // Before anything is tracked: the minute's frames, and at most three windows for each voice (each talks alone for
+    // 20 s or more).
     let estimate = speaker.estimate(p, &ids(), &[Portrait], "person").await;
     assert!(
-        (estimate.usd - (ONE_MINUTE + 3.0 * SPARK)).abs() < 1e-9,
+        (estimate.usd - (ONE_MINUTE + 6.0 * SPARK)).abs() < 1e-9,
         "{estimate:?}"
     );
     assert_eq!(
@@ -338,7 +368,7 @@ async fn a_two_person_clip_follows_whoever_speaks_priced_with_the_tracking() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn who_the_card_keeps_is_made_from_the_cache_at_no_charge() {
-    let setup = setup(false);
+    let setup = setup(usize::MAX);
     let speaker = speaker(&setup, true);
     let p = &setup.project;
     speaker
@@ -370,13 +400,13 @@ async fn who_the_card_keeps_is_made_from_the_cache_at_no_charge() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn without_a_matcher_or_when_it_fails_the_follow_still_lands() {
-    for (matcher, fail) in [(false, false), (true, true)] {
-        let setup = setup(fail);
+    for (matcher, fail_from) in [(false, usize::MAX), (true, 1)] {
+        let setup = setup(fail_from);
         let speaker = speaker(&setup, matcher);
         let p = &setup.project;
         let estimate = speaker.estimate(p, &ids(), &[Portrait], "person").await;
         let want = if matcher {
-            ONE_MINUTE + 3.0 * SPARK
+            ONE_MINUTE + 6.0 * SPARK
         } else {
             ONE_MINUTE
         };
@@ -396,7 +426,7 @@ async fn without_a_matcher_or_when_it_fails_the_follow_still_lands() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn another_phrase_follows_that_and_asks_nobody_whose_voice_it_is() {
-    let setup = setup(false);
+    let setup = setup(usize::MAX);
     let speaker = speaker(&setup, true);
     let p = &setup.project;
     let estimate = speaker.estimate(p, &ids(), &[Portrait], "red car").await;
@@ -415,7 +445,7 @@ async fn another_phrase_follows_that_and_asks_nobody_whose_voice_it_is() {
 fn chat_reads_each_matched_voice_as_its_persons_number() {
     use klipolo_analysis::transcript::Turn;
     use klipolo_app::analysis::chat::{people_voices, person_turns};
-    let setup = setup(false);
+    let setup = setup(usize::MAX);
     let mut p = setup.project.clone();
     let voice = |part: u32, label: &str| Voice {
         part,
@@ -465,3 +495,70 @@ fn chat_reads_each_matched_voice_as_its_persons_number() {
     assert_eq!(said, want);
     assert!(people_voices(&p, "other").is_empty());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_match_that_stops_partway_follows_the_main_person_and_says_so() {
+    // A's two windows agree, then B's first call fails.
+    let setup = setup(3);
+    let speaker = speaker(&setup, true);
+    let p = &setup.project;
+    let followed = speaker
+        .follow(p, &ids(), &[Portrait], "person")
+        .await
+        .unwrap();
+    assert_eq!(setup.spark.asked.load(Ordering::SeqCst), 3);
+    assert_eq!(followed.note.as_deref(), Some(UNMATCHED));
+    // What was asked is paid for, and counted.
+    assert!(
+        (followed.paid_usd - (ONE_MINUTE + 2.0 * SPARK)).abs() < 1e-9,
+        "{}",
+        followed.paid_usd
+    );
+    // No voice is used: the main person all along, never a half state that stays on A.
+    let next = apply_ops(p, &followed.ops(p)).unwrap();
+    let (path, _, people) = focus(&next);
+    assert!((x(&path, 70.0) - x(&path, 90.0)).abs() < 1e-9, "{path:?}");
+    assert!(people.iter().all(|p| p.voices.is_empty()));
+    assert!(UNMATCHED.contains("main person") && !UNMATCHED.contains('\u{2014}'));
+}
+
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_card_keeps_from_the_tracking_alone_and_never_pays() {
+    // A follow whose matching stopped partway: the card's choices still work, from the cache, asking nothing.
+    let setup = setup(3);
+    let speaker = speaker(&setup, true);
+    let p = &setup.project;
+    let keeps = BTreeMap::from([("c1".to_owned(), Keep::Person { person: 2 })]);
+    // Nothing tracked yet: refused, and nothing sent.
+    assert_eq!(
+        speaker
+            .keep(p, &ids(), &[Portrait], &keeps)
+            .await
+            .unwrap_err(),
+        NOT_TRACKED
+    );
+    assert_eq!(setup.sam.calls.load(Ordering::SeqCst), 0);
+    speaker
+        .follow(p, &ids(), &[Portrait], "person")
+        .await
+        .unwrap();
+    let asked = setup.spark.asked.load(Ordering::SeqCst);
+    let spent = speaker.spent_usd();
+    for keep in [Keep::Person { person: 2 }, Keep::Both, Keep::Speaker] {
+        let keeps = BTreeMap::from([("c1".to_owned(), keep.clone())]);
+        let followed = speaker.keep(p, &ids(), &[Portrait], &keeps).await.unwrap();
+        assert_eq!(followed.paid_usd, 0.0);
+        let next = apply_ops(p, &followed.ops(p)).unwrap();
+        let (path, kept, _) = focus(&next);
+        assert_eq!(kept, keep);
+        if keep == (Keep::Person { person: 2 }) {
+            assert!((x(&path, 70.0) - 0.75).abs() < 0.03, "{path:?}");
+        }
+    }
+    assert_eq!(setup.spark.asked.load(Ordering::SeqCst), asked);
+    assert_eq!(setup.sam.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(speaker.spent_usd(), spent);
+}
+
+

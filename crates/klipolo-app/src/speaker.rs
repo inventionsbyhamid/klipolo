@@ -43,6 +43,12 @@ use crate::credentials::{AiMode, CODE_INACTIVE, Credentials};
 pub const PROGRESS_EVENT: &str = "speaker://progress";
 /// Said when the footage has nobody in it to follow.
 pub const NO_ONE: &str = "Klipolo couldn't find a person to follow in this clip.";
+/// Said when matching voices to people stopped partway: no voice is used.
+pub const UNMATCHED: &str =
+    "Klipolo couldn't tell who is speaking, so the crop follows the main person.";
+/// Said when who to keep can't be made from what was tracked before: the tracking isn't in the cache any more.
+pub const NOT_TRACKED: &str =
+    "This footage isn't tracked any more. Follow the speaker again first.";
 
 /// What following the speaker costs before it runs.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, TS)]
@@ -81,6 +87,8 @@ pub struct Followed {
     pub not_found: Vec<Id>,
     /// What the run cost (0 for footage tracked before).
     pub paid_usd: f64,
+    /// Why no voice could be matched to the people (`UNMATCHED`), to say to the person.
+    pub note: Option<String>,
 }
 
 impl Followed {
@@ -218,6 +226,13 @@ pub struct Speaker {
     voices: Option<Arc<dyn Voices>>,
 }
 
+/// Whether a run may pay (a follow), or only reads what was tracked and matched before (who to keep).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Pay,
+    CacheOnly,
+}
+
 /// A clip that can follow, and where.
 struct Target {
     id: Id,
@@ -301,11 +316,11 @@ impl Speaker {
             }
         };
         let to_send = self.uncached(&*tracker, &targets, phrase).await;
-        let matcher = self.matcher(phrase).await;
+        let (matcher, _) = self.matcher(phrase).await;
         let voices_usd = match &matcher {
             Some(m) => {
                 let cached = to_send.is_empty();
-                self.voices_usd(&**m, &*tracker, p, &targets, phrase, cached)
+                self.voices_usd(m, &*tracker, p, &targets, phrase, cached)
                     .await
             }
             None => 0.0,
@@ -338,32 +353,72 @@ impl Speaker {
         phrase: &str,
         keeps: &BTreeMap<Id, Keep>,
     ) -> Result<Followed, String> {
+        self.run(p, clip_ids, formats, phrase, keeps, Mode::Pay)
+            .await
+    }
+
+    /// Who `keeps` names kept in frame for its clips in `formats`, made only from what earlier follows tracked and
+    /// matched: nothing is sent, so it never pays (voices the cache doesn't settle are left unmatched). Refused
+    /// (`NOT_TRACKED`) when any of the footage isn't tracked in the cache any more.
+    pub async fn keep(
+        &self,
+        p: &Project,
+        clip_ids: &[Id],
+        formats: &[FormatKind],
+        keeps: &BTreeMap<Id, Keep>,
+    ) -> Result<Followed, String> {
+        self.run(p, clip_ids, formats, PERSON, keeps, Mode::CacheOnly)
+            .await
+    }
+
+    async fn run(
+        &self,
+        p: &Project,
+        clip_ids: &[Id],
+        formats: &[FormatKind],
+        phrase: &str,
+        keeps: &BTreeMap<Id, Keep>,
+        mode: Mode,
+    ) -> Result<Followed, String> {
+        let paying = mode == Mode::Pay;
         let targets = targets(p, clip_ids, formats);
         let tracker = self.trackers.tracker().await?;
         let _one_at_a_time = self.running.lock().await;
         let stretches = stretches(&targets, tracker.max_frames());
         let to_send = self.uncached(&*tracker, &targets, phrase).await;
-        let matcher = self.matcher(phrase).await;
-        let voices_usd = match &matcher {
-            Some(m) => {
-                let cached = to_send.is_empty();
-                self.voices_usd(&**m, &*tracker, p, &targets, phrase, cached)
-                    .await
-            }
-            None => 0.0,
+        if !paying && !to_send.is_empty() {
+            return Err(NOT_TRACKED.to_owned());
+        }
+        let (matcher, short_credit) = if paying {
+            self.matcher(phrase).await
+        } else {
+            (self.cache_matcher(phrase).await, false)
         };
-        if let Some(refusal) = self
-            .over_credit(price(&*tracker, &to_send) + voices_usd)
-            .await
-        {
-            return Err(refusal);
+        if paying {
+            let voices_usd = match &matcher {
+                Some(m) => {
+                    let cached = to_send.is_empty();
+                    self.voices_usd(m, &*tracker, p, &targets, phrase, cached)
+                        .await
+                }
+                None => 0.0,
+            };
+            if let Some(refusal) = self
+                .over_credit(price(&*tracker, &to_send) + voices_usd)
+                .await
+            {
+                return Err(refusal);
+            }
         }
         let ids: Vec<String> = targets.iter().map(|t| t.id.clone()).collect();
+        // Who to keep changes with no progress to show: nothing is sent.
         let tell = |pct: u8| {
-            (self.progress)(SpeakerProgress {
-                clip_ids: ids.clone(),
-                pct,
-            })
+            if paying {
+                (self.progress)(SpeakerProgress {
+                    clip_ids: ids.clone(),
+                    pct,
+                })
+            }
         };
         tell(0);
         // Each file's tracked stretches: a clip reads only its own file's.
@@ -397,36 +452,60 @@ impl Speaker {
         }
         // Each file's voices, matched to its people where they don't all fit.
         let mut heard: BTreeMap<String, (Vec<VoiceTurn>, BTreeMap<Voice, Heard>)> = BTreeMap::new();
-        if let Some(matcher) = &matcher {
+        let mut note: Option<String> = None;
+        if matcher.is_some() || short_credit {
             for (file, asset_id) in files(&targets) {
                 let turns = self.file_turns(p, &asset_id);
                 let own = tracks.get(&file).map_or(&[][..], Vec::as_slice);
                 let windows = windows_of(p, &targets, &file, own, &turns);
                 let mut matched = BTreeMap::new();
-                if !windows.is_empty() {
+                if !windows.is_empty() && note.is_none() {
                     let src = PathBuf::from(&file);
                     let dir = cache_dir(&self.cache_root, &src).await;
-                    let asking = Asking {
-                        src: &src,
-                        cache: dir.as_ref(),
-                        work: &self.work_root,
-                        cancel: Arc::new(AtomicBool::new(false)),
-                    };
-                    let found =
-                        voices::match_voices(&**matcher, self.copier.clone(), &asking, &windows)
-                            .await;
-                    paid += found.paid_usd;
-                    self.count(found.paid_usd);
-                    if let Some(why) = &found.stopped {
-                        tracing::warn!(%why, "matching voices stopped; the crop frames each shot's main subject");
+                    match (&matcher, paying) {
+                        (None, _) => {}
+                        (Some(m), false) => {
+                            let model = m.model().to_owned();
+                            matched = tokio::task::spawn_blocking(move || {
+                                voices::cached_voices(dir.as_ref(), &model, &windows)
+                            })
+                            .await
+                            .unwrap_or_default();
+                        }
+                        (Some(m), true) => {
+                            let asking = Asking {
+                                src: &src,
+                                cache: dir.as_ref(),
+                                work: &self.work_root,
+                                cancel: Arc::new(AtomicBool::new(false)),
+                            };
+                            let found =
+                                voices::match_voices(&**m, self.copier.clone(), &asking, &windows)
+                                    .await;
+                            paid += found.paid_usd;
+                            self.count(found.paid_usd);
+                            match &found.stopped {
+                                // No half state: a voice matched before the stop would hold the crop on its person.
+                                Some(why) => {
+                                    tracing::warn!(%why, "matching voices stopped; the crop follows each shot's main person");
+                                    note = Some(UNMATCHED.to_owned());
+                                }
+                                None => matched = found.voices,
+                            }
+                        }
                     }
-                    matched = found.voices;
                 }
                 heard.insert(file, (turns, matched));
+            }
+            if note.is_some() {
+                for (_, matched) in heard.values_mut() {
+                    matched.clear();
+                }
             }
         }
         let mut followed = Followed {
             paid_usd: paid,
+            note,
             ..Followed::default()
         };
         let none = (Vec::new(), BTreeMap::new());
@@ -467,8 +546,13 @@ impl Speaker {
         Ok(followed)
     }
 
-    /// The matcher, when following a person and there are voices to match.
-    async fn matcher(&self, phrase: &str) -> Option<Arc<dyn VoiceMatcher>> {
+    /// The matcher, when following a person and there are voices to match (and false: nothing holds it back).
+    async fn matcher(&self, phrase: &str) -> (Option<Arc<dyn VoiceMatcher>>, bool) {
+        (self.cache_matcher(phrase).await, false)
+    }
+
+    /// The matcher whose cached answers count, when following a person and there are voices: never called by a keep.
+    async fn cache_matcher(&self, phrase: &str) -> Option<Arc<dyn VoiceMatcher>> {
         if phrase != PERSON || self.voices.is_none() {
             return None;
         }
@@ -494,7 +578,7 @@ impl Speaker {
     /// (`cached`), else the most it can be.
     async fn voices_usd(
         &self,
-        matcher: &dyn VoiceMatcher,
+        matcher: &Arc<dyn VoiceMatcher>,
         tracker: &dyn SubjectTracker,
         p: &Project,
         targets: &[Target],
@@ -515,7 +599,7 @@ impl Speaker {
                     .filter(|t| t.footage.path == file)
                     .map(|t| t.footage.range)
                     .collect();
-                usd += voices::most_usd(matcher, &turns, &plays);
+                usd += voices::most_usd(&**matcher, &turns, &plays);
                 continue;
             }
             let own: Vec<SubjectTrack> = match &dir {
@@ -539,8 +623,7 @@ impl Speaker {
                 None => Vec::new(),
             };
             let windows = windows_of(p, targets, &file, &own, &turns);
-            let matcher_dir = dir.clone();
-            usd += voices::uncached_usd(matcher, matcher_dir.as_ref(), &windows);
+            usd += voices::uncached_usd(&**matcher, dir.as_ref(), &windows);
         }
         usd
     }
