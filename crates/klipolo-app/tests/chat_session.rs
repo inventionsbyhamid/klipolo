@@ -7,7 +7,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use klipolo_analysis::providers::images::{
@@ -123,6 +123,8 @@ struct Found {
     state: Mutex<AnalysisState>,
     analysis: Mutex<Arc<AssetAnalysis>>,
     levels: HashMap<String, Arc<Levels>>,
+    /// The preview's header offers Time words again for "talk.mov"'s rough words (`rough`).
+    time_again: AtomicBool,
 }
 
 impl Found {
@@ -134,6 +136,7 @@ impl Found {
                 ..AssetAnalysis::default()
             })),
             levels: HashMap::new(),
+            time_again: AtomicBool::new(false),
         })
     }
 
@@ -170,6 +173,21 @@ impl Found {
             ..AssetAnalysis::default()
         });
     }
+
+    /// Word timing failed for "uh": it was spread over its turn (confidence 0), so its time is a guess. `offered`: the
+    /// preview's header offers Time words again for the clip (timing again can help).
+    fn rough(&self, offered: bool) {
+        let mut words = Arc::unwrap_or_clone(transcript());
+        for w in words.words.iter_mut().filter(|w| w.text == "uh") {
+            w.confidence = 0.0;
+        }
+        *self.analysis.lock().unwrap() = Arc::new(AssetAnalysis {
+            transcript: Some(Arc::new(words)),
+            approximate: true,
+            ..AssetAnalysis::default()
+        });
+        self.time_again.store(offered, Ordering::SeqCst);
+    }
 }
 
 impl Findings for Found {
@@ -185,6 +203,10 @@ impl Findings for Found {
 
     fn levels(&self) -> HashMap<String, Arc<Levels>> {
         self.levels.clone()
+    }
+
+    fn time_again(&self, asset_id: &str) -> bool {
+        asset_id == "talk" && self.time_again.load(Ordering::SeqCst)
     }
 }
 
@@ -2333,6 +2355,32 @@ async fn ums_are_cut_while_the_scene_log_is_made_and_moments_wait() {
         r["text"],
         "Klipolo is still watching this clip (talk.mov). Ask me again when its analysis is done."
     );
+}
+
+#[tokio::test]
+async fn rough_fillers_point_at_time_words_again_only_while_the_preview_offers_it() {
+    let found = Found::done();
+    let model = Script::new(vec![
+        answer("", vec![fillers()]),
+        answer("", vec![fillers()]),
+    ]);
+    let chat = chat_with(model.clone(), found.clone(), Paying::key(model));
+    // Word timing failed for "uh", and timing again can help: the preview's header offers Time words again.
+    found.rough(true);
+    let r = reply(&chat.session.send(request("cut the ums")).await.unwrap());
+    assert_eq!(
+        r["text"],
+        "Some words in this clip (talk.mov) are only roughly timed, so I can't cut filler words exactly. Press Time \
+         words again above the video, then ask me."
+    );
+    // The words don't match their sound: timing again can't help, the header offers nothing, and nothing points there.
+    found.rough(false);
+    let r = reply(&chat.session.send(request("remove the ums")).await.unwrap());
+    assert_eq!(
+        r["text"],
+        "Some words in this clip (talk.mov) are only roughly timed, so I can't cut filler words exactly."
+    );
+    assert_eq!(chat.project.revision(), 0, "nothing was cut");
 }
 
 #[tokio::test]

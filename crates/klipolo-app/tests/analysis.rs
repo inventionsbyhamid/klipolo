@@ -23,6 +23,7 @@ use klipolo_app::analysis::{
     AnalysisDone, AnalysisEvent, AnalysisFailed, AnalysisState, AnalysisStep, AnalysisStopped,
     Asked, AssetState, FILE_MISSING, NEEDS_KEY,
 };
+use klipolo_app::chat::Findings;
 use klipolo_app::credentials::{
     Credentials, Endpoints, META_API_KEY, MemoryStore, RELAY_CODE, RELAY_TOKEN, SecretStore,
 };
@@ -1709,6 +1710,9 @@ async fn rough_words_say_why_and_whether_timing_them_again_can_help() {
         }))
     );
     assert_eq!(h.state.state_of("odd"), timed_roughly(ROUGH_WORDS, false));
+    // Chat points the person at Time words again only where the preview's header offers it.
+    assert!(Findings::time_again(&*h.state, "down"));
+    assert!(!Findings::time_again(&*h.state, "odd"));
     server.verify().await;
 }
 

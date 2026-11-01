@@ -61,12 +61,16 @@ pub fn inputs_for(
     let mut turns: HashMap<String, Vec<SpeakerTurn>> = HashMap::new();
     let mut scenes: HashMap<String, SceneLog> = HashMap::new();
     let mut analysis: HashMap<String, ChatAnalysis> = HashMap::new();
+    let mut time_again: HashSet<String> = HashSet::new();
     let levels = findings.levels();
     // Pictures have nothing to analyse; every video and sound file is asked once.
     let files = (project.assets.iter()).filter(|a| a.kind != AssetKind::Image);
     for asset in files {
         let id = &asset.id;
         analysis.insert(id.clone(), findings.state(id));
+        if findings.time_again(id) {
+            time_again.insert(id.clone());
+        }
         if let Some(level) = levels.get(id) {
             speech.levels.insert(id.clone(), level.clone());
         }
@@ -91,7 +95,7 @@ pub fn inputs_for(
         speech,
         scenes,
         analysis,
-        time_again: HashSet::new(),
+        time_again,
         library,
     };
     (inputs, turns)
