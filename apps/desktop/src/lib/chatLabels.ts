@@ -146,6 +146,35 @@ export const CHAT_LABELS: Record<string, MessageDescriptor> = {
     message: '{on, select, off {Remove the auto zooms} other {Zoom in on the clicks}}',
     comment: 'Undo history entry: chat zoomed in on a screen recording’s clicks, or took those zooms away',
   }),
+  'chat.setMotion': msg({
+    id: 'chat.setMotion',
+    message:
+      '{layer, select, words {Move the words} title {Move the title} video {Move the video layer} other {Move the picture}}',
+    comment: 'Undo history entry: chat set a layer’s keyframes or its enter, exit and loop animations',
+  }),
+  'chat.animateText': msg({
+    id: 'chat.animateText',
+    message:
+      '{by, select, letter {Bring the words in letter by letter} line {Bring the words in line by line} other {Bring the words in word by word}}',
+    comment: 'Undo history entry: chat made words come in one letter, word or line at a time',
+  }),
+  'chat.setLayer': msg({
+    id: 'chat.setLayer',
+    message:
+      '{layer, select, words {Change the words} title {Change the title} video {Change the video layer} clip {Change the clip} music {Change the music} other {Change the picture}}',
+    comment: 'Undo history entry: chat changed a layer’s place, size, look, order or fades',
+  }),
+  'chat.styleText': msg({
+    id: 'chat.styleText',
+    message: 'Restyle the words',
+    comment: 'Undo history entry: chat changed the font, size, colour or look of words on screen',
+  }),
+  'chat.setEffects': msg({
+    id: 'chat.setEffects',
+    message:
+      '{target, select, clip {Change the clip’s effects} words {Change the words’ effects} title {Change the title’s effects} video {Change the video layer’s effects} other {Change the picture’s effects}}',
+    comment: 'Undo history entry: chat added, changed, moved or removed an effect',
+  }),
   'chat.andMore': msg({
     id: 'chat.andMore',
     message: '{first}, and {more} more',
