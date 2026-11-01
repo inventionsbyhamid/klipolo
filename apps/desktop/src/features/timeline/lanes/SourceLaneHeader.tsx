@@ -49,10 +49,10 @@ interface SourceLaneHeaderProps {
 
 /**
  * A kind of recorded sound's lane header, in the gutter: its icon, which opens its volume (a slider in a popover,
- * committed on release), and Mute. Both act on that sound alone (each recording's `nth` source of `role`) in every
- * recording and every clip (`setKindMuted`, `kindVolumeOpsNow`), each one undo step. Muted shows when every
- * recording's is; the volume shown is the first's. The Mute button's name says what it does, so it has no pressed
- * state as well.
+ * committed on release), and Mute, in a toolbar named after the lane, so lanes with the same icon ("Mic", "Mic 2") are
+ * told apart. Both act on that sound alone (each recording's `nth` source of `role`) in every recording and every
+ * clip (`setKindMuted`, `kindVolumeOpsNow`), each one undo step. Muted shows when every recording's is; the volume
+ * shown is the first's. The Mute button's name says what it does, so it has no pressed state as well.
  */
 export function SourceLaneHeader({ role, nth, sources, name, param, separated }: SourceLaneHeaderProps) {
   const { t } = useLingui();
@@ -65,7 +65,7 @@ export function SourceLaneHeader({ role, nth, sources, name, param, separated }:
     comment: "A recorded sound's volume; {name} is e.g. Mic or Computer sound",
   });
   return (
-    <div className="tl-source-head" data-source-header>
+    <div role="toolbar" aria-label={name} className="tl-source-head" data-source-header>
       <Popover>
         <PopoverTrigger asChild>
           <IconButton
