@@ -119,12 +119,15 @@ fn transcript() -> Arc<Transcript> {
 
 /// What the analysis found: "talk.mov"'s words once they are in (done, or the scene log still being made), or nothing
 /// yet (`state`). Its words are one transcript until they are timed again (`retime`), as the analysis keeps them.
+/// Other files have words once a test gives them (`hear`).
 struct Found {
     state: Mutex<AnalysisState>,
     analysis: Mutex<Arc<AssetAnalysis>>,
     levels: HashMap<String, Arc<Levels>>,
     /// The preview's header offers Time words again for "talk.mov"'s rough words (`rough`).
     time_again: AtomicBool,
+    /// Other files' words, by asset id.
+    others: Mutex<HashMap<String, Arc<AssetAnalysis>>>,
 }
 
 impl Found {
@@ -137,6 +140,7 @@ impl Found {
             })),
             levels: HashMap::new(),
             time_again: AtomicBool::new(false),
+            others: Mutex::new(HashMap::new()),
         })
     }
 
@@ -188,13 +192,29 @@ impl Found {
         });
         self.time_again.store(offered, Ordering::SeqCst);
     }
+
+    /// File `asset_id`'s words come in, or come in again (heard, then timed): a new transcript each time.
+    fn hear(&self, asset_id: &str) {
+        self.others.lock().unwrap().insert(
+            asset_id.into(),
+            Arc::new(AssetAnalysis {
+                transcript: Some(transcript()),
+                ..AssetAnalysis::default()
+            }),
+        );
+    }
 }
 
 impl Findings for Found {
     fn found(&self, asset_id: &str) -> Option<Arc<AssetAnalysis>> {
         let state = *self.state.lock().unwrap();
-        let heard = matches!(state, AnalysisState::Done | AnalysisState::Watching);
-        (asset_id == "talk" && heard).then(|| self.analysis.lock().unwrap().clone())
+        if !matches!(state, AnalysisState::Done | AnalysisState::Watching) {
+            return None;
+        }
+        if asset_id == "talk" {
+            return Some(self.analysis.lock().unwrap().clone());
+        }
+        self.others.lock().unwrap().get(asset_id).cloned()
     }
 
     fn state(&self, _asset_id: &str) -> AnalysisState {
@@ -332,8 +352,13 @@ struct Chat {
 }
 
 fn chat_with(model: Arc<Script>, found: Arc<Found>, paying: Arc<Paying>) -> Chat {
+    chat_on(talk(), model, found, paying)
+}
+
+/// A chat on `project`.
+fn chat_on(project: Project, model: Arc<Script>, found: Arc<Found>, paying: Arc<Paying>) -> Chat {
     let project =
-        Arc::new(MemoryProjects::open(talk(), PathBuf::from("/tmp/talk.klipolo")).unwrap());
+        Arc::new(MemoryProjects::open(project, PathBuf::from("/tmp/talk.klipolo")).unwrap());
     let session = Arc::new(ChatSession::new(project.clone(), found, paying));
     Chat {
         session,
@@ -2357,6 +2382,117 @@ async fn ums_are_cut_while_the_scene_log_is_made_and_moments_wait() {
     );
 }
 
+/// A video file like "talk.mov", `seconds` long.
+fn video_file(id: &str, name: &str, seconds: f64) -> Asset {
+    Asset {
+        id: id.into(),
+        path: format!("/media/{name}"),
+        name: name.into(),
+        duration_us: secs(seconds),
+        ..talk().assets[0].clone()
+    }
+}
+
+/// "talk.mov" played whole, then "more.mov" (10 s) played whole, from 30 to 40 s.
+fn talk_then_more() -> Project {
+    let mut p = talk();
+    p.assets.push(video_file("more", "more.mov", 10.0));
+    let mut clip = Clip::new(ClipSource::Asset { id: "more".into() }, 0, secs(10.0));
+    clip.id = "m".into();
+    p.timeline.main.push(clip);
+    p
+}
+
+/// The model cuts from `from` to `to`, the person's selection.
+fn cut_selected(from: f64, to: f64) -> (Result<ModelResponse, ModelError>, ChatRequest) {
+    let range = RangeUs {
+        start: secs(from),
+        end: secs(to),
+    };
+    let call = format!(r#"{{"startSec": {from:.1}, "endSec": {to:.1}}}"#);
+    (
+        answer("", vec![fc("c", "cutRange", &call)]),
+        selecting("cut this", range),
+    )
+}
+
+#[tokio::test]
+async fn a_proposal_outlives_words_timed_again_in_files_it_doesnt_cut() {
+    // A song and a clip in the library, off the timeline, analysed with words of their own.
+    let mut p = talk();
+    p.assets.push(sound_file("song", "song.m4a", 60.0));
+    p.assets.push(video_file("spare", "spare.mov", 20.0));
+    let found = Found::done();
+    found.hear("song");
+    found.hear("spare");
+    let model = Script::new(vec![answer("", vec![fillers()])]);
+    let chat = chat_on(p, model.clone(), found.clone(), Paying::key(model));
+    let id = proposal_id(&chat.session.send(request("cut the ums")).await.unwrap());
+    // Their words are timed again: nothing the cuts stand on moved.
+    found.hear("song");
+    found.hear("spare");
+    chat.session.apply(&id).expect("applied");
+    assert_eq!(chat.project.revision(), 1);
+    assert!(!plays(&chat.project.project(), 0.6), "the um is cut");
+}
+
+#[tokio::test]
+async fn a_cut_outlives_another_clips_words_being_timed() {
+    let found = Found::done();
+    // "more.mov"'s turns are heard and its words are being timed: its words are rough for now.
+    found.hear("more");
+    let (cut, asked) = cut_selected(12.0, 18.0);
+    let model = Script::new(vec![cut]);
+    let chat = chat_on(
+        talk_then_more(),
+        model.clone(),
+        found.clone(),
+        Paying::key(model),
+    );
+    let id = proposal_id(&chat.session.send(asked).await.unwrap());
+    // Its words are timed: new words, none of them under the cut.
+    found.hear("more");
+    chat.session.apply(&id).expect("applied");
+    assert_eq!(chat.project.revision(), 1);
+}
+
+#[tokio::test]
+async fn a_cut_into_a_clip_with_no_words_yet_outlives_its_words_coming_in() {
+    let found = Found::done();
+    // From the end of "talk.mov" into "more.mov", which has no words yet.
+    let (cut, asked) = cut_selected(28.0, 32.0);
+    let model = Script::new(vec![cut]);
+    let chat = chat_on(
+        talk_then_more(),
+        model.clone(),
+        found.clone(),
+        Paying::key(model),
+    );
+    let id = proposal_id(&chat.session.send(asked).await.unwrap());
+    found.hear("more");
+    chat.session.apply(&id).expect("applied");
+    assert_eq!(chat.project.revision(), 1);
+}
+
+#[tokio::test]
+async fn a_cut_is_dropped_when_words_it_cuts_into_are_timed_again() {
+    let found = Found::done();
+    found.hear("more");
+    // From the end of "talk.mov" into "more.mov", made on its words as they were.
+    let (cut, asked) = cut_selected(28.0, 32.0);
+    let model = Script::new(vec![cut]);
+    let chat = chat_on(
+        talk_then_more(),
+        model.clone(),
+        found.clone(),
+        Paying::key(model),
+    );
+    let id = proposal_id(&chat.session.send(asked).await.unwrap());
+    found.hear("more");
+    assert_eq!(chat.session.apply(&id).unwrap_err(), CommitError::Moved);
+    assert_eq!(chat.project.revision(), 0, "nothing was cut");
+}
+
 #[tokio::test]
 async fn rough_fillers_point_at_time_words_again_only_while_the_preview_offers_it() {
     let found = Found::done();
@@ -2390,7 +2526,7 @@ async fn a_proposal_made_before_the_words_were_timed_again_is_dropped() {
     let chat = chat_with(model.clone(), found.clone(), Paying::key(model));
     let out = chat.session.send(request("cut the ums")).await.unwrap();
     let id = proposal_id(&out);
-    // "Time the words again" in Captions: new words at new times, the revision the same.
+    // Time words again above the video: new words at new times, the revision the same.
     found.retime();
     assert_eq!(chat.session.apply(&id).unwrap_err(), CommitError::Moved);
     assert_eq!(chat.project.revision(), 0, "nothing was cut");

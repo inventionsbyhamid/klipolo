@@ -10,9 +10,10 @@
 //!   carries what changed. **Removals** are a proposal, kept by id with the revision it applies to (the one after the
 //!   additions). One proposal is open at a time: a newer one replaces it, so red always means "will be cut". Apply
 //!   records the project its review made (`commit_reviewed`): one undo step. A proposal replaced, or one whose project
-//!   moved on from its revision (a hand edit, an undo), or whose words were timed again since (Captions' "Time the
-//!   words again": new words at new times, the revision the same), refuses Apply with `project.moved` and is dropped.
-//!   Discard changes nothing. The model's `undo` takes back the top step, on the revision it saw.
+//!   moved on from its revision (a hand edit, an undo), or whose cuts stand on words timed again since (Time words
+//!   again above the video, or word timing finishing: new words at new times, the revision the same), refuses Apply
+//!   with `project.moved` and is dropped. Words of a file it doesn't cut into leave it standing (`Words`). Discard
+//!   changes nothing. The model's `undo` takes back the top step, on the revision it saw.
 //! - **The project moved while the model answered** (a hand edit meanwhile): nothing of the answer is applied or
 //!   proposed, and the reply says so.
 //! - **Errors** never touch the project: each is one plain sentence (`ChatFailure`). No key or code is `NeedsKey`; a
@@ -45,7 +46,7 @@ use klipolo_chat::{
 use klipolo_model::coded::CodedError;
 use klipolo_model::history::SnapshotPatch;
 use klipolo_model::risk::Review;
-use klipolo_model::speech::{Speech, Transcript};
+use klipolo_model::speech::{Speech, Transcript, run_spans};
 use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::ClipSource;
 use klipolo_model::{Project, Transaction};
@@ -167,7 +168,7 @@ pub enum Decided {
 pub enum Gone {
     /// The project changed under it: an edit, an undo, a change chat or an app made.
     Changed,
-    /// The clip's words were timed again since (Captions).
+    /// Words under its cuts were timed again since.
     Retimed,
     /// Klipolo's chat made a newer proposal in its place.
     Replaced,
@@ -250,12 +251,13 @@ impl SlotGuard<'_> {
             tools,
             Some(client),
         );
+        let words = Words::read(&inputs, &now.project, &proposal.review.removals.ranges);
         self.slot.open = Some(Stored::new(
             &made,
             now.at.clone(),
             &proposal.tx,
             &proposal.review,
-            Words::read(&inputs),
+            words,
             Some(client.to_owned()),
         ));
         // A new one waits: what became of its earlier one no longer answers the app.
@@ -361,16 +363,24 @@ impl Stored {
     }
 }
 
-/// Each file's transcript as a message read it, by asset id (None: it had none yet). Words timed again since are a new
-/// transcript (`Findings::found`), even when the revision stayed: a proposal made on the old ones would cut where they
-/// were.
-struct Words(HashMap<String, Option<Arc<Transcript>>>);
+/// The words a proposal's cuts stand on, as the message read them: the transcript of each file under its cuts that had
+/// words then, by asset id. Words timed again since are a new transcript (`Findings::found`), even when the revision
+/// stayed: a cut made on the old ones would cut where they were. A cut's edges stand on the footage it cuts, so a file
+/// it doesn't cut into (off the timeline, a song, another clip) can't have placed one, and neither can a file that had
+/// no words yet: their words coming in or changing leave the proposal standing.
+struct Words(HashMap<String, Arc<Transcript>>);
 
 impl Words {
-    fn read(inputs: &Inputs) -> Self {
+    /// The words in `inputs` of the files under `cuts`, timeline ranges on `base` (the project the proposal applies to).
+    fn read(inputs: &Inputs, base: &Project, cuts: &[RangeUs]) -> Self {
+        let under = (run_spans(base).into_iter())
+            .filter(|s| (cuts.iter()).any(|c| c.start < s.end_us() && s.from_us() < c.end));
         Self(
-            (inputs.analysis.keys())
-                .map(|id| (id.clone(), inputs.speech.transcripts.get(id).cloned()))
+            under
+                .filter_map(|s| {
+                    let words = inputs.speech.transcripts.get(&s.asset)?.clone();
+                    Some((s.asset, words))
+                })
                 .collect(),
         )
     }
@@ -378,12 +388,8 @@ impl Words {
     /// Whether every file's words are still the ones read.
     fn still(&self, findings: &dyn Findings) -> bool {
         self.0.iter().all(|(id, read)| {
-            let now = findings.found(id).and_then(|f| f.transcript.clone());
-            match (read, &now) {
-                (Some(read), Some(now)) => Arc::ptr_eq(read, now),
-                (None, None) => true,
-                _ => false,
-            }
+            (findings.found(id).and_then(|f| f.transcript.clone()))
+                .is_some_and(|now| Arc::ptr_eq(read, &now))
         })
     }
 }
@@ -854,8 +860,8 @@ impl ChatSession {
                         &tools,
                         None,
                     );
-                    let stored =
-                        Stored::new(&made, at.clone(), &p.tx, &review, Words::read(inputs), None);
+                    let words = Words::read(inputs, &base, &review.removals.ranges);
+                    let stored = Stored::new(&made, at.clone(), &p.tx, &review, words, None);
                     landed.proposal = Some((id, made));
                     // A newer proposal replaces the one waiting, so red always means "will be cut".
                     if let Some(old) = slot.open.replace(stored) {
