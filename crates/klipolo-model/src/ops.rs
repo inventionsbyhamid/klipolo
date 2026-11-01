@@ -6,6 +6,7 @@ use ts_rs::TS;
 use crate::coded::ErrorParam;
 use crate::crop::Crop;
 use crate::cursor_style::CursorStyle;
+use crate::fill_focus::FillFocus;
 use crate::ids::Id;
 use crate::layout::Layout;
 use crate::params::ParamValue;
@@ -345,6 +346,10 @@ pub struct ClipPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub framing: Option<BTreeMap<FormatKind, Framing>>,
+    /// Replaces every format's Fill focus (`Clip::fill_focus`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub fill_focus: Option<BTreeMap<FormatKind, FillFocus>>,
     /// The footage's crop; a crop of nothing (`Crop::NONE`) takes it off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]

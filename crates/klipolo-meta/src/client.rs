@@ -274,7 +274,7 @@ pub(crate) async fn read_json<T: DeserializeOwned>(
 
 /// The error and its causes on one line, e.g. "error sending request for url
 /// (...): client error (Connect): Connection refused".
-fn network_error(error: &reqwest::Error, secrets: &[&str]) -> MetaError {
+pub(crate) fn network_error(error: &reqwest::Error, secrets: &[&str]) -> MetaError {
     let mut text = error.to_string();
     let mut source = error.source();
     while let Some(cause) = source {

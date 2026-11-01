@@ -118,8 +118,13 @@ fn main() {
                 credentials.clone(),
                 sounds,
             );
+            // Following the speaker, its tracked footage kept beside the analysis's in the same cache.
+            let speaker =
+                commands::speaker::load(app.handle(), credentials.clone(), analysis.cache_root());
             // Chat over the open project, what analysis found and the same credentials.
             let chat = commands::chat::load(app.handle(), credentials.clone(), analysis.clone());
+            // Chat's followSubject follows with the same speaker following, so its spend counts once.
+            chat.set_speaker(speaker.clone());
             // The person's view as the page last told it, which other apps' calls read as the person's.
             let view: ViewHandle = Arc::new(ViewState::default());
             // Another project opening (or this one closing) stops analysis, starts chat over, forgets the view and stops
@@ -146,6 +151,7 @@ fn main() {
             app.manage(mcp);
             app.manage(view);
             app.manage(analysis);
+            app.manage(speaker);
             app.manage(chat);
             // Exports: the folders they were written in are remembered in the app's data folder, so a kept job there
             // is listed after a relaunch.
@@ -211,6 +217,8 @@ fn main() {
             project::project_redo,
             project::project_snapshot,
             commands::framing::clip_framing,
+            commands::speaker::speaker_estimate,
+            commands::speaker::speaker_follow,
             project::project_reveal,
             project::projects_recent,
             media::media_import,

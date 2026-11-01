@@ -11,6 +11,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use super::analysis::AnalysisHandle;
 use super::chat::ChatHandle;
+use super::speaker::SpeakerHandle;
 
 /// The event every AI status change goes out on.
 pub(crate) const AI_STATUS_EVENT: &str = "ai-status";
@@ -49,9 +50,13 @@ fn store() -> Arc<dyn SecretStore> {
 
 /// `status` with what AI cost this session.
 fn with_session(app: &AppHandle, mut status: AiStatus) -> AiStatus {
+    // Following the speaker is footage analysis too: its SAM calls count with the analysis's.
     let analysis_usd = app
         .try_state::<AnalysisHandle>()
-        .map_or(0.0, |a| a.spent_usd());
+        .map_or(0.0, |a| a.spent_usd())
+        + app
+            .try_state::<SpeakerHandle>()
+            .map_or(0.0, |s| s.spent_usd());
     let chat = app
         .try_state::<ChatHandle>()
         .map(|c| c.spend())

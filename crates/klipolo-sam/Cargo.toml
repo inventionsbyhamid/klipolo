@@ -1,0 +1,13 @@
+[package]
+name = "klipolo-sam"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+license.workspace = true
+publish = false
+description = "SAM 3.1's video segmentation wire: the request for a noun phrase, and its per-frame output read into boxes"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"

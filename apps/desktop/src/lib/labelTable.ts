@@ -323,6 +323,21 @@ export const TABLE = {
     message: 'Change fill focus',
     comment: 'Undo history entry: which part of a filled video stays in view',
   }),
+  'clip.focus.speaker.undo': msg({
+    id: 'clip.focus.speaker.undo',
+    message: 'Follow the speaker',
+    comment: 'Undo history entry: a filled video keeps the person talking in view',
+  }),
+  'clip.focus.fixed.undo': msg({
+    id: 'clip.focus.fixed.undo',
+    message: 'Fix the fill focus',
+    comment: 'Undo history entry: a filled video keeps its focus where it was set',
+  }),
+  'clip.focus.center.undo': msg({
+    id: 'clip.focus.center.undo',
+    message: 'Centre the fill focus',
+    comment: 'Undo history entry: a filled video keeps its middle in view',
+  }),
   'crop.undo': msg({ id: 'crop.undo', message: 'Crop video', comment: 'Undo history entry: edges cut off a video' }),
   'crop.reset.undo': msg({
     id: 'crop.reset.undo',

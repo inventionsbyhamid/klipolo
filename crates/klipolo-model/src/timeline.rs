@@ -6,6 +6,7 @@ use ts_rs::TS;
 use crate::contrib::ContribId;
 use crate::crop::Crop;
 use crate::cursor_style::{CursorStyle, FocusKind, Follow};
+use crate::fill_focus::FillFocus;
 use crate::font::FontRef;
 use crate::ids::{new_id, Id};
 use crate::layout::{Anchor, BoxN, Layout};
@@ -261,6 +262,10 @@ pub struct Clip {
     /// Per-format framing. A format without an entry uses `framing::default_framing`.
     #[serde(default)]
     pub framing: BTreeMap<FormatKind, Framing>,
+    /// Per-format focus of a Fill crop beyond its framing's fixed point: the centre, or the speaker along a path
+    /// (`fill_focus`). A format without an entry keeps its framing's `focus_x` and `focus_y`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub fill_focus: BTreeMap<FormatKind, FillFocus>,
     /// The edges cut off its main footage before it is framed, in every format (a camera bubble keeps its whole
     /// picture); None keeps the whole picture. Never a crop of nothing (`Crop::is_none`), and left out of the JSON
     /// while None.
@@ -333,6 +338,7 @@ impl Clip {
             look: Look::default(),
             camera: None,
             framing: BTreeMap::new(),
+            fill_focus: BTreeMap::new(),
             crop: None,
             effects: Vec::new(),
             transition_out: None,
