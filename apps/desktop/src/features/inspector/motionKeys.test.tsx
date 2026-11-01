@@ -145,6 +145,13 @@ describe('Volume keys in the clip card', () => {
     expect(op.patch.volumeKeys).toEqual([key(0, 1), key(1, 0.75), key(4, 0)]);
   });
 
+  it('with keys, Volume is off while the playhead is outside the clip: it has no key to set there', () => {
+    clip([key(0, 1), key(4, 0)]);
+    usePlayback.setState({ playheadUs: 5 * S });
+    renderWithProviders(<Inspector format="landscape" />);
+    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveAttribute('aria-disabled', 'true');
+  });
+
   it('the volume keys before and after the playhead put the playhead on them', async () => {
     clip([key(0.5, 1), key(4, 0)]);
     usePlayback.setState({ playheadUs: 22 * S });

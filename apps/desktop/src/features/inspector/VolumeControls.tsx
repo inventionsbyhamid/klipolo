@@ -120,6 +120,8 @@ export function VolumeControls({
             format={percent}
             preview={false}
             ops={levelOps}
+            // With keys it sets the key at the playhead: off while the playhead is outside, where there is none to set.
+            disabled={keyed && !inside}
           />
           {muting && (
             <IconButton
