@@ -1,7 +1,6 @@
 import { useLingui } from '@lingui/react/macro';
 import { memo, useCallback, type PointerEvent } from 'react';
-import { rollId } from '../drag/editFrame';
-import { registerBlock } from '../drag/registry';
+import { registerBlock, rollId } from '../drag/registry';
 import { onBlockLostCapture, onBlockPointerCancel, onBlockPointerMove, onBlockPointerUp } from '../drag/useBlockDrag';
 import { usToPx } from '../scale';
 

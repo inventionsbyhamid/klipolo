@@ -12,16 +12,13 @@ import { editOps, editRoom, heldTo, type EditKind, type EditLimit } from '../mod
 import { showEditFrames } from '../../../state/editFrames';
 import { editPair } from '../media/editFrames';
 import { usToPx } from '../scale';
-import { shiftBlock, sizeBlock, slipBlock } from './registry';
+import { rollId, shiftBlock, sizeBlock, slipBlock } from './registry';
 import type { Gesture, Session } from './session';
 
 type Edit = Extract<Gesture, { kind: 'edit' }>;
 type Group = Extract<Gesture, { kind: 'group' }>;
 
 const NONE: readonly string[] = [];
-
-/** The roll handle on the cut after clip `clipId` (`RollHandle`), registered as a block so a roll can move it. */
-export const rollId = (clipId: string) => `roll:${clipId}`;
 
 /** "+0.5 s", "−1.0 s": a change in time, to a tenth. */
 function change(us: number): string {

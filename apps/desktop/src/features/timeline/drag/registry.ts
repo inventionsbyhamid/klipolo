@@ -53,6 +53,9 @@ export function blocksTouching(box: ScreenBox): string[] {
   return out;
 }
 
+/** The roll handle on the cut after clip `clipId` (`RollHandle`), registered as a block so a roll can move it. */
+export const rollId = (clipId: string) => `roll:${clipId}`;
+
 export function blockElement(id: string): HTMLElement | null {
   return blocks.get(id) ?? null;
 }

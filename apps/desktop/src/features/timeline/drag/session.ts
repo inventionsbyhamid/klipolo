@@ -15,7 +15,7 @@ import { useUi } from '../../../state/ui';
 import { gutterPx } from '../layout';
 import { mainIndex } from '../model/index';
 import { pxToUs } from '../scale';
-import { blockElement, clearShifts } from './registry';
+import { blockElement, clearShifts, rollId } from './registry';
 import type { LabelId, LabelParams } from '../../../lib/labels';
 import type { EditKind, EditRoom } from '../model/editRoom';
 
@@ -208,8 +208,15 @@ export function setLifted(ids: readonly string[], itemKind: TrackKind | null) {
   useDragState.setState({ itemKind });
 }
 
+/** The block a gesture lifts and draws dragged: a roll's is its handle, which leaves the two clips as they are. */
 export const draggedId = (g: Gesture) =>
-  g.kind === 'group' ? g.grabId : 'clipId' in g ? g.clipId : g.itemId;
+  g.kind === 'group'
+    ? g.grabId
+    : g.kind === 'edit' && g.edit === 'roll'
+      ? rollId(g.clipId)
+      : 'clipId' in g
+        ? g.clipId
+        : g.itemId;
 
 /** Puts down what `s` lifted; its shifts stay while they are being committed (until the new revision draws them). */
 export function lower(s: Session, keepShifts: boolean) {

@@ -1334,7 +1334,8 @@
   transition: opacity var(--dur-fast) var(--ease-out);
 }
 
-.tl-roll:hover::after {
+.tl-roll:hover::after,
+.tl-roll[data-dragging="true"]::after {
   opacity: 1;
 }
 
