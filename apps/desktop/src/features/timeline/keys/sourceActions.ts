@@ -6,21 +6,25 @@ import type { Project } from '../../../bindings/Project';
 import type { RecordingSource } from '../../../bindings/RecordingSource';
 import type { SourceMix } from '../../../bindings/SourceMix';
 import type { SourceRole } from '../../../bindings/SourceRole';
+import { media } from '../../../bridge/media';
 import { deepEqual } from '../../../lib/equal';
 import { labelText, type Label, type LabelId } from '../../../lib/labels';
 import { mixFor } from '../../../lib/recording';
 import { soundParam, sourceParam } from '../../../lib/sourceNames';
 import { findClip } from '../../../lib/timeline';
+import { keepAtClose } from '../../../state/commitQueue';
 import { keyBurst } from '../../../state/keyBurst';
 import { useProject } from '../../../state/project';
 import {
   changesNothing,
+  kindCentreOps,
   kindMuteOps,
   kindVolumeOps,
   mutedMix,
   onOwnTrack,
   silent,
   sourceOfKind,
+  type ChannelPeaks,
 } from './sourceMix';
 import { commit, editable } from './timelineActions';
 
@@ -115,6 +119,62 @@ export function kindVolumeOpsNow(role: SourceRole, volume: number, nth = 0): Op[
   if (!project) return [];
   const ops = kindVolumeOps(project, role, volume, nth);
   return changesNothing(project, ops) ? [] : ops;
+}
+
+/**
+ * How loud each file of every recording's sound of `role` is on each channel (a file nothing knows yet, or that fails,
+ * is left out).
+ */
+async function channelPeaksOf(project: Project, role: SourceRole, nth: number): Promise<ChannelPeaks> {
+  const ids = new Set(
+    project.recordings.flatMap((r) => sourceOfKind(r, role, nth)?.runs.map((run) => run.assetId) ?? []),
+  );
+  const found = await Promise.all(
+    [...ids].map(async (id): Promise<[string, number[]] | null> => {
+      const path = project.assets.find((a) => a.id === id)?.path;
+      const peaks = path ? await media.channelPeaks(path).catch(() => null) : null;
+      return peaks ? [id, peaks] : null;
+    }),
+  );
+  return new Map(found.filter((f) => f !== null));
+}
+
+/**
+ * The Centre switch: a kind of sound (each recording's `nth` of `role`) in every recording played in both ears from the
+ * side that carries it, or as recorded (`kindCentreOps`): each default and each clip's own setting, never a clip whose
+ * sound plays from its own track. Which side comes from how loud each file is on each channel, read before the change
+ * is built. It is kept for the close from the press: a close while that is read waits for it, in its turn, and says it
+ * if it can't, never dropping it unsaid.
+ */
+export async function setKindCentred(role: SourceRole, centred: boolean, nth = 0, name?: ErrorParam) {
+  const now = useProject.getState().snapshot?.project;
+  const id = centred ? 'undo.source.centre' : 'undo.source.asRecorded';
+  const label = (project: Project) => soundUndoLabel(id, name ?? firstName(project, role, nth));
+  const hold = now ? keepAtClose(label(now)) : null;
+  let peaks: ChannelPeaks;
+  try {
+    peaks = centred && now ? await channelPeaksOf(now, role, nth) : new Map();
+  } catch (error) {
+    hold?.release();
+    throw error;
+  }
+  keyBurst.after(
+    () => {
+      try {
+        // The close gave up on it (and said so): it never goes in after.
+        if (hold?.dropped) return;
+        const project = editable();
+        if (!project) return;
+        const ops = kindCentreOps(project, role, centred, peaks, nth);
+        if (ops.length === 0 || changesNothing(project, ops)) return;
+        step(label(project), ops);
+      } finally {
+        hold?.release();
+      }
+    },
+    undefined,
+    hold,
+  );
 }
 
 /** Why a clip's own mute and volume of `name` are off: it plays from its own track there (separated). */

@@ -16,8 +16,13 @@ vi.mock('../../bridge/engine', () => ({
 vi.mock('../../bridge/framing', () => ({
   clipFraming: vi.fn(() => new Promise(() => undefined)),
 }));
+vi.mock('../../bridge/media', () => ({
+  media: { peaksInfo: vi.fn(async () => null), channelPeaks: vi.fn(async () => null), thumbs: vi.fn(async () => null) },
+}));
 const { bridge } = await import('../../bridge/commands');
+const { media } = await import('../../bridge/media');
 const { useProject } = await import('../../state/project');
+const { useMedia } = await import('../../state/media');
 const { useSelection } = await import('../../state/selection');
 const { Inspector } = await import('./Inspector');
 
@@ -129,5 +134,78 @@ describe("a recording clip's Sounds", () => {
     act(() => useSelection.setState({ selectedId: 'b' }));
     renderWithProviders(<Inspector format="landscape" />);
     expect(screen.queryByRole('group', { name: 'Sounds' })).toBeNull();
+  });
+});
+
+describe("a two-sided sound's Centre switch", () => {
+  /** The sound cache says the mic's file has `channels` channels, and the file is loudest on its right. */
+  function twoSided(channels: number) {
+    vi.mocked(media.peaksInfo).mockImplementation(async (path) =>
+      path === '/media/m1' ? { channels, levels: 1, bucket: 256, frames: 48_000 } : null,
+    );
+    vi.mocked(media.channelPeaks).mockImplementation(async (path) => (path === '/media/m1' ? [0.001, 0.6] : null));
+    // A new media version: the header is read again, not taken from an earlier test's.
+    useMedia.getState().bump('/media/m1');
+  }
+
+  it('shows only for a sound with two channels', async () => {
+    twoSided(1);
+    const mono = row(card('c2'), 'mic');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(within(mono).queryByRole('switch', { name: 'Mic: centre' })).toBeNull();
+  });
+
+  it('plays the side that carries the sound in both ears, in every clip, in one step', async () => {
+    twoSided(2);
+    const mic = row(card('c2'), 'mic');
+    const centre = await within(mic).findByRole('switch', { name: 'Mic: centre' });
+    expect(centre).toHaveAttribute('aria-checked', 'false');
+    expect(within(mic).getByText('Plays a sound recorded on one side in both ears, in every clip.')).toBeInTheDocument();
+    await userEvent.click(centre);
+    const { label, ops } = await lastApply();
+    expect(label).toBe('undo.source.centre');
+    // r1's default and c2's own setting play from the right; c1's mic is on its own track and stays as it is; r2's
+    // mic has no file this cache knows, so it keeps the side it plays from (the first).
+    expect(ops).toEqual([
+      {
+        type: 'updateRecordingSource',
+        recordingId: 'r1',
+        sourceId: 'mic',
+        patch: { mix: { volume: 1, muted: false, effects: [], centreFrom: 1 } },
+      },
+      {
+        type: 'setClipSourceMix',
+        clipId: 'c2',
+        sourceId: 'mic',
+        mix: { volume: 0.6, muted: false, effects: [], centreFrom: 1 },
+      },
+      {
+        type: 'updateRecordingSource',
+        recordingId: 'r2',
+        sourceId: 'mic',
+        patch: { mix: { volume: 1, muted: false, effects: [], centreFrom: 0 } },
+      },
+    ]);
+  });
+
+  it('shows how this clip plays a centred sound, so it can be turned off, whatever the cache says', async () => {
+    twoSided(1);
+    const snap = twoTakesSnapshot();
+    snap.project.recordings[0].sources[1].mix.centreFrom = 1;
+    snap.project.timeline.main[1].sourceMix = { mic: { volume: 0.6, muted: false, effects: [], centreFrom: 1 } };
+    const centre = within(row(card('c2', snap), 'mic')).getByRole('switch', { name: 'Mic: centre' });
+    expect(centre).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(centre);
+    const { label, ops } = await lastApply();
+    expect(label).toBe('undo.source.asRecorded');
+    expect(ops.slice(0, 2)).toEqual([
+      {
+        type: 'updateRecordingSource',
+        recordingId: 'r1',
+        sourceId: 'mic',
+        patch: { mix: { volume: 1, muted: false, effects: [] } },
+      },
+      { type: 'setClipSourceMix', clipId: 'c2', sourceId: 'mic', mix: { volume: 0.6, muted: false, effects: [] } },
+    ]);
   });
 });

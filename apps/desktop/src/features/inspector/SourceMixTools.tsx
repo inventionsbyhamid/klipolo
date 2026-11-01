@@ -6,7 +6,7 @@ import type { Recording } from '../../bindings/Recording';
 import type { RecordingSource } from '../../bindings/RecordingSource';
 import { Button } from '../../design/Button';
 import { IconButton } from '../../design/IconButton';
-import { cameraSource, isVideoRole, mixFor, soundSources } from '../../lib/recording';
+import { cameraSource, isVideoRole, mixFor, nthOfRole, soundSources } from '../../lib/recording';
 import { soundName, soundParam, sourceName } from '../../lib/sourceNames';
 import { useProject } from '../../state/project';
 import {
@@ -18,6 +18,7 @@ import {
   soundUndoLabel,
 } from '../timeline/keys/sourceActions';
 import { onOwnTrack, silent } from '../timeline/keys/sourceMix';
+import { CentreSwitch } from './CentreSwitch';
 import { FillGapsSwitch } from './FillGapsSwitch';
 import { SourceSync } from './SourceSync';
 import { ToolSlider } from './ToolSlider';
@@ -28,7 +29,8 @@ const icon = (Icon: typeof Volume2) => <Icon size={18} strokeWidth={1.8} aria-hi
 /**
  * A recording clip's Sounds, in its card: each sound it can be heard from (`soundSources`: a camera's own sound too,
  * where its files carry one), each with its mute and volume in this clip (the clip's own mix; off, with why, where the
- * sound plays from its own track in the clip), a camera sound's Fill gaps switch, and a recorded sound's sync against
+ * sound plays from its own track in the clip), its Centre switch where it has two channels (every clip), a camera
+ * sound's Fill gaps switch, and a recorded sound's sync against
  * the picture for the whole recording (`SourceSync`); then the camera's sync. Each change is one undo step. Each row
  * is `data-source-row` (its source's id).
  */
@@ -176,6 +178,14 @@ function SourceRow({ clip, recording, source }: { clip: Clip; recording: Recordi
         preview={false}
       />
       {own && <p className="field-note">{reason}</p>}
+      <CentreSwitch
+        clip={clip}
+        source={source}
+        nth={nthOfRole(recording, source)}
+        name={name}
+        param={param}
+        own={own}
+      />
       {picture && (
         <FillGapsSwitch
           clip={clip}
