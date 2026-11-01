@@ -65,7 +65,8 @@ describe('text looks', () => {
   });
 
   it('two styles look the same when the colours, outline and shadow do', () => {
-    expect(sameLook(base, { ...base, size: 20 })).toBe(true);
+    const smaller: TextStyle = { ...base, size: 20 };
+    expect(sameLook(base, smaller)).toBe(true);
     expect(sameLook(base, { ...base, color: '#ffffff' })).toBe(true);
     expect(sameLook(base, { ...base, shadow: false })).toBe(false);
     expect(sameLook(base, { ...base, background: '#000000' })).toBe(false);
