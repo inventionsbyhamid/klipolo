@@ -95,8 +95,6 @@ export function frameEdit(s: Session, g: Edit, project: Project, dtUs: number): 
     shiftBlock(rollId(g.clipId), px);
     s.edgeUs = index.starts[i] + by;
   }
-  // The two frames that meet at the edit show beside the preview's (`EditFrames`).
-  showEditFrames(editPair(project, g.edit, i, by), g.edit === 'slip');
   s.ops = editOps(g.edit, g.clipId, by);
   s.dryOps = null;
   s.label = g.edit === 'roll' ? 'timeline.roll.undo' : g.edit === 'slip' ? 'timeline.slip.undo' : 'timeline.slide.undo';
@@ -111,6 +109,8 @@ export function frameEdit(s: Session, g: Edit, project: Project, dtUs: number): 
         : t({ id: 'timeline.slide.tip', message: `Slide ${amount}`, comment: 'Tip while sliding a clip' });
   const note = held === null ? '' : limitNote(held, heldName(project, g.edit, i, wanted, held));
   s.view.showTip(note ? `${edit} · ${note}` : edit, s.last.x);
+  // The two frames that meet at the edit show beside the preview's, with its change (`EditFrames`).
+  showEditFrames(editPair(project, g.edit, i, by), g.edit === 'slip', edit);
   s.said =
     g.edit === 'roll'
       ? t({ id: 'timeline.roll.said', message: `Rolled the cut after ${label} by ${amount}` })

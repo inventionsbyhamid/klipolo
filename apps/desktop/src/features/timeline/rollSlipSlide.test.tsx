@@ -81,7 +81,8 @@ describe('rolling a cut', () => {
     // The preview shows the frame at the new cut, the playhead left where it was.
     expect(vi.mocked(engine.seek).mock.calls.at(-1)?.[0]).toBe(19 * S);
     expect(usePlayback.getState().playheadUs).toBe(0);
-    // Beside it, the two frames that meet at the new cut.
+    // Beside it, the two frames that meet at the new cut, with the change.
+    expect(useEditFrames.getState().change).toBe('Roll +1.0 s');
     expect(useEditFrames.getState().pair).toEqual([
       { path: '/media/screen', fileUs: 21 * S - 33_333 },
       { path: '/media/broll', fileUs: 3 * S },

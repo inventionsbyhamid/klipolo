@@ -1269,7 +1269,7 @@
 /* A roll's, slip's or slide's two frames at the edit, side by side over the bottom of the preview while it is dragged. */
 .edit-frames {
   position: absolute;
-  bottom: 12px;
+  bottom: 36px;
   left: 50%;
   z-index: 20;
   display: flex;
@@ -1291,6 +1291,22 @@
   width: 168px;
   height: auto;
   aspect-ratio: 16 / 9;
+}
+
+.edit-frames-change {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: var(--radius-xs);
+  background: var(--color-night);
+  color: var(--color-ink);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transform: translateX(-50%);
 }
 
 .edit-frame figcaption {
