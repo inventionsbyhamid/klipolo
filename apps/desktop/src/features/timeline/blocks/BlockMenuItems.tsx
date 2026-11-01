@@ -65,13 +65,17 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
     }),
     off: onlyClip ? transitionLabels.needsTwo() : undefined,
   };
+  // A recording clip's sounds (`useSourceCommands`): their mutes in this clip, then Separate beside the camera's.
+  const sounds = commands.filter((c) => c.id.startsWith('source-mute:')).map((c) => ({ id: c.id }));
+  const separates = commands.filter((c) => c.id.startsWith('source-separate:')).map((c) => ({ id: c.id }));
   // `off`: listed, but off here, with why. No Paste effects: nothing shows a block's effects or takes them off.
   const groups: { id: string; label?: string; off?: string }[][] =
     kind === 'clip'
       ? [
           [split, ...(transitionAfter || onlyClip ? [addTransition] : [])],
           [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }],
-          hasCamera ? [{ id: 'separate-camera' }] : [],
+          sounds,
+          [...(hasCamera ? [{ id: 'separate-camera' }] : []), ...separates],
           [{ id: 'delete' }],
         ]
       : [

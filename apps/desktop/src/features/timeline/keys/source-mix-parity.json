@@ -1,0 +1,2453 @@
+{
+  "cameraSound": {
+    "cases": [
+      {
+        "call": {
+          "args": {
+            "muted": false,
+            "source": "videoSound"
+          },
+          "name": "muteSource"
+        },
+        "ops": [
+          {
+            "patch": {
+              "mix": {
+                "effects": [],
+                "fillsGaps": true,
+                "muted": false,
+                "volume": 1.0
+              }
+            },
+            "recordingId": "s-rec1",
+            "sourceId": "s-cam2",
+            "type": "updateRecordingSource"
+          },
+          {
+            "patch": {
+              "mix": {
+                "effects": [],
+                "fillsGaps": true,
+                "muted": false,
+                "volume": 1.0
+              }
+            },
+            "recordingId": "r-2",
+            "sourceId": "s-cam2",
+            "type": "updateRecordingSource"
+          }
+        ]
+      },
+      {
+        "call": {
+          "args": {
+            "muted": true,
+            "source": "videoSound"
+          },
+          "name": "muteSource"
+        },
+        "ops": [
+          {
+            "patch": {
+              "mix": {
+                "effects": [],
+                "muted": true,
+                "mutedByPerson": true,
+                "volume": 1.0
+              }
+            },
+            "recordingId": "s-rec1",
+            "sourceId": "s-cam2",
+            "type": "updateRecordingSource"
+          },
+          {
+            "patch": {
+              "mix": {
+                "effects": [],
+                "muted": true,
+                "mutedByPerson": true,
+                "volume": 1.0
+              }
+            },
+            "recordingId": "r-2",
+            "sourceId": "s-cam2",
+            "type": "updateRecordingSource"
+          },
+          {
+            "clipId": "c8",
+            "mix": {
+              "effects": [],
+              "muted": true,
+              "mutedByPerson": true,
+              "volume": 0.8
+            },
+            "sourceId": "s-cam2",
+            "type": "setClipSourceMix"
+          }
+        ]
+      },
+      {
+        "call": {
+          "args": {
+            "source": "videoSound",
+            "volume": 50
+          },
+          "name": "setSourceVolume"
+        },
+        "ops": [
+          {
+            "patch": {
+              "mix": {
+                "effects": [],
+                "fillsGaps": true,
+                "muted": true,
+                "volume": 0.5
+              }
+            },
+            "recordingId": "s-rec1",
+            "sourceId": "s-cam2",
+            "type": "updateRecordingSource"
+          },
+          {
+            "patch": {
+              "mix": {
+                "effects": [],
+                "fillsGaps": true,
+                "muted": true,
+                "volume": 0.5
+              }
+            },
+            "recordingId": "r-2",
+            "sourceId": "s-cam2",
+            "type": "updateRecordingSource"
+          },
+          {
+            "clipId": "c8",
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 0.5
+            },
+            "sourceId": "s-cam2",
+            "type": "setClipSourceMix"
+          }
+        ]
+      }
+    ],
+    "fill": {
+      "call": {
+        "args": {
+          "on": false,
+          "recording": "s-rec1"
+        },
+        "name": "fillGaps"
+      },
+      "ops": [
+        {
+          "patch": {
+            "mix": {
+              "effects": [],
+              "muted": true,
+              "volume": 1.0
+            }
+          },
+          "recordingId": "s-rec1",
+          "sourceId": "s-cam2",
+          "type": "updateRecordingSource"
+        }
+      ]
+    },
+    "fillMuted": {
+      "call": {
+        "args": {
+          "on": true,
+          "recording": "s-rec1"
+        },
+        "name": "fillGaps"
+      },
+      "ops": [
+        {
+          "patch": {
+            "mix": {
+              "effects": [],
+              "fillsGaps": true,
+              "muted": true,
+              "volume": 1.0
+            }
+          },
+          "recordingId": "s-rec1",
+          "sourceId": "s-cam2",
+          "type": "updateRecordingSource"
+        }
+      ],
+      "project": {
+        "assets": [
+          {
+            "durationUs": 600000000,
+            "fps": 30.0,
+            "hasAudio": true,
+            "height": 1080,
+            "id": "cam",
+            "kind": "video",
+            "name": "interview.mov",
+            "path": "/media/interview.mov",
+            "width": 1920
+          },
+          {
+            "durationUs": 700000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "mic",
+            "kind": "audio",
+            "name": "ZOOM0001.WAV",
+            "path": "/media/ZOOM0001.WAV",
+            "width": 0
+          },
+          {
+            "durationUs": 600000000,
+            "fps": 30.0,
+            "hasAudio": true,
+            "height": 1080,
+            "id": "cam2",
+            "kind": "video",
+            "name": "interview-2.mov",
+            "path": "/media/interview-2.mov",
+            "width": 1920
+          },
+          {
+            "durationUs": 700000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "mic2",
+            "kind": "audio",
+            "name": "ZOOM0002.WAV",
+            "path": "/media/ZOOM0002.WAV",
+            "width": 0
+          },
+          {
+            "durationUs": 1200000000,
+            "fps": 30.0,
+            "hasAudio": false,
+            "height": 1080,
+            "id": "g1",
+            "kind": "video",
+            "name": "ranked-game.mp4",
+            "path": "/media/ranked-game.mp4",
+            "width": 1920
+          },
+          {
+            "durationUs": 1200000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "g2",
+            "kind": "audio",
+            "name": "ranked-game-sound.caf",
+            "path": "/media/ranked-game-sound.caf",
+            "width": 0
+          },
+          {
+            "durationUs": 1200000000,
+            "fps": 0.0,
+            "hasAudio": true,
+            "height": 0,
+            "id": "g3",
+            "kind": "audio",
+            "name": "ranked-mic.caf",
+            "path": "/media/ranked-mic.caf",
+            "width": 0
+          },
+          {
+            "durationUs": 1200000000,
+            "fps": 30.0,
+            "hasAudio": false,
+            "height": 1080,
+            "id": "g4",
+            "kind": "video",
+            "name": "ranked-camera.mp4",
+            "path": "/media/ranked-camera.mp4",
+            "width": 1920
+          }
+        ],
+        "audio": {
+          "loudness": "youtube"
+        },
+        "background": {
+          "assetId": null,
+          "color": "#101114",
+          "colorEnd": null,
+          "kind": "none",
+          "padding": 0.0
+        },
+        "captions": {
+          "adSafe": false,
+          "enabled": false,
+          "place": {}
+        },
+        "cursor": {
+          "asRecorded": false,
+          "click": "ripple",
+          "clickColor": "#FFFFFF80",
+          "hidden": false,
+          "look": "recorded",
+          "motionBlur": 0.5,
+          "size": 1.25,
+          "smoothing": "medium"
+        },
+        "id": "f4",
+        "luts": [],
+        "name": "Interview",
+        "recordings": [
+          {
+            "id": "s-rec1",
+            "kind": "camera",
+            "markers": [],
+            "primary": "s-cam2",
+            "sources": [
+              {
+                "id": "s-cam2",
+                "label": "interview.mov",
+                "mix": {
+                  "effects": [],
+                  "muted": true,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "camera",
+                "runs": [
+                  {
+                    "assetId": "cam",
+                    "driftPpm": 0.0,
+                    "durationUs": 600000000,
+                    "offsetUs": 0
+                  }
+                ]
+              },
+              {
+                "id": "s-mic3",
+                "label": "ZOOM0001.WAV",
+                "mix": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "mic",
+                "runs": [
+                  {
+                    "assetId": "mic",
+                    "driftPpm": 50.0,
+                    "durationUs": 610000000,
+                    "fileInUs": 90000000,
+                    "offsetUs": 0
+                  }
+                ],
+                "synced": {
+                  "by": "sound",
+                  "level": "sure"
+                }
+              }
+            ]
+          },
+          {
+            "id": "r-2",
+            "kind": "camera",
+            "markers": [],
+            "primary": "s-cam2",
+            "sources": [
+              {
+                "id": "s-cam2",
+                "label": "interview-2.mov",
+                "mix": {
+                  "effects": [],
+                  "fillsGaps": true,
+                  "muted": true,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "camera",
+                "runs": [
+                  {
+                    "assetId": "cam2",
+                    "driftPpm": 0.0,
+                    "durationUs": 600000000,
+                    "offsetUs": 0
+                  }
+                ]
+              },
+              {
+                "id": "s-mic3",
+                "label": "ZOOM0002.WAV",
+                "mix": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "mic",
+                "runs": [
+                  {
+                    "assetId": "mic2",
+                    "driftPpm": 50.0,
+                    "durationUs": 610000000,
+                    "fileInUs": 90000000,
+                    "offsetUs": 0
+                  }
+                ],
+                "synced": {
+                  "by": "sound",
+                  "level": "sure"
+                }
+              }
+            ]
+          },
+          {
+            "game": {
+              "appId": "com.example.moonbase-rally",
+              "name": "Moonbase Rally"
+            },
+            "id": "r1",
+            "kind": "gameplay",
+            "markers": [
+              {
+                "atUs": 125000000,
+                "id": "m1",
+                "kind": "hotkey"
+              },
+              {
+                "atUs": 460000000,
+                "id": "m2",
+                "kind": "hotkey"
+              }
+            ],
+            "primary": "game",
+            "sources": [
+              {
+                "id": "game",
+                "label": "capture.source.game",
+                "mix": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "game",
+                "runs": [
+                  {
+                    "assetId": "g1",
+                    "driftPpm": 0.0,
+                    "durationUs": 1200000000,
+                    "offsetUs": 0
+                  }
+                ]
+              },
+              {
+                "id": "game-sound",
+                "label": "capture.source.gameSound",
+                "mix": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "gameAudio",
+                "runs": [
+                  {
+                    "assetId": "g2",
+                    "driftPpm": 0.0,
+                    "durationUs": 1200000000,
+                    "offsetUs": 0
+                  }
+                ]
+              },
+              {
+                "id": "mic",
+                "label": "capture.source.mic",
+                "mix": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "mic",
+                "runs": [
+                  {
+                    "assetId": "g3",
+                    "driftPpm": 0.0,
+                    "durationUs": 1200000000,
+                    "offsetUs": 0
+                  }
+                ]
+              },
+              {
+                "id": "cam",
+                "label": "capture.source.camera",
+                "mix": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 1.0
+                },
+                "nudgeUs": 0,
+                "role": "camera",
+                "runs": [
+                  {
+                    "assetId": "g4",
+                    "driftPpm": 0.0,
+                    "durationUs": 1200000000,
+                    "offsetUs": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "requires": [
+          "transitions@1"
+        ],
+        "settings": {
+          "formats": [
+            "landscape"
+          ],
+          "fps": 30,
+          "primaryFormat": "landscape"
+        },
+        "timeline": {
+          "main": [
+            {
+              "camera": null,
+              "effects": [],
+              "fadeInUs": 0,
+              "fadeOutUs": 0,
+              "framing": {},
+              "id": "c1",
+              "look": {
+                "lutId": null,
+                "lutStrength": 1.0,
+                "preset": null,
+                "strength": 1.0
+              },
+              "muted": false,
+              "source": {
+                "id": "s-rec1",
+                "type": "recording"
+              },
+              "sourceInUs": 10000000,
+              "sourceMix": {
+                "s-cam2": {
+                  "effects": [],
+                  "muted": true,
+                  "mutedByPerson": true,
+                  "volume": 1.0
+                }
+              },
+              "sourceOutUs": 100000000,
+              "speed": 1.0,
+              "transitionOut": {
+                "durationUs": 1000000,
+                "effect": "klipolo.builtin/transition.dissolve",
+                "params": {}
+              },
+              "volume": 1.0
+            },
+            {
+              "camera": null,
+              "effects": [],
+              "fadeInUs": 0,
+              "fadeOutUs": 0,
+              "framing": {},
+              "id": "c2",
+              "look": {
+                "lutId": null,
+                "lutStrength": 1.0,
+                "preset": null,
+                "strength": 1.0
+              },
+              "muted": false,
+              "source": {
+                "id": "s-rec1",
+                "type": "recording"
+              },
+              "sourceInUs": 150000000,
+              "sourceOutUs": 400000000,
+              "speed": 1.5,
+              "volume": 1.0
+            },
+            {
+              "camera": null,
+              "effects": [],
+              "fadeInUs": 0,
+              "fadeOutUs": 0,
+              "framing": {},
+              "id": "c8",
+              "look": {
+                "lutId": null,
+                "lutStrength": 1.0,
+                "preset": null,
+                "strength": 1.0
+              },
+              "muted": false,
+              "source": {
+                "id": "r-2",
+                "type": "recording"
+              },
+              "sourceInUs": 0,
+              "sourceMix": {
+                "s-cam2": {
+                  "effects": [],
+                  "muted": false,
+                  "volume": 0.8
+                }
+              },
+              "sourceOutUs": 60000000,
+              "speed": 1.0,
+              "volume": 1.0
+            },
+            {
+              "camera": null,
+              "effects": [],
+              "fadeInUs": 0,
+              "fadeOutUs": 0,
+              "framing": {},
+              "id": "c9",
+              "look": {
+                "lutId": null,
+                "lutStrength": 1.0,
+                "preset": null,
+                "strength": 1.0
+              },
+              "muted": false,
+              "source": {
+                "id": "r1",
+                "type": "recording"
+              },
+              "sourceInUs": 0,
+              "sourceOutUs": 60000000,
+              "speed": 1.0,
+              "volume": 1.0
+            }
+          ],
+          "tracks": [
+            {
+              "hidden": false,
+              "id": "T1",
+              "items": [
+                {
+                  "attach": {
+                    "clipId": "c2",
+                    "source": {
+                      "id": "s-rec1",
+                      "type": "recording"
+                    },
+                    "sourceUs": 195000000
+                  },
+                  "content": {
+                    "style": {
+                      "align": "center",
+                      "background": null,
+                      "color": "#FFFFFF",
+                      "font": {
+                        "family": "Inter",
+                        "source": {
+                          "type": "bundled"
+                        }
+                      },
+                      "italic": false,
+                      "outline": null,
+                      "shadow": true,
+                      "size": 56.0,
+                      "weight": 700
+                    },
+                    "text": "Dr Rao",
+                    "type": "text"
+                  },
+                  "durationUs": 3000000,
+                  "effects": [],
+                  "id": "t2",
+                  "layout": {
+                    "anchor": "topLeft",
+                    "opacity": 1.0,
+                    "overrides": {},
+                    "radius": 0.0,
+                    "rect": {
+                      "h": 0.1,
+                      "w": 0.4,
+                      "x": 0.05,
+                      "y": 0.05
+                    },
+                    "rotation": 0.0
+                  },
+                  "startUs": 120000000
+                }
+              ],
+              "kind": "overlay",
+              "locked": false,
+              "muted": false,
+              "name": "Titles"
+            },
+            {
+              "hidden": false,
+              "id": "T2",
+              "items": [],
+              "kind": "audio",
+              "locked": false,
+              "muted": false,
+              "name": "Sound"
+            }
+          ]
+        },
+        "version": 7
+      }
+    },
+    "fillOn": {
+      "call": {
+        "args": {
+          "on": true,
+          "recording": "r-2"
+        },
+        "name": "fillGaps"
+      },
+      "ops": [
+        {
+          "clipId": "c8",
+          "mix": {
+            "effects": [],
+            "fillsGaps": true,
+            "muted": false,
+            "volume": 0.8
+          },
+          "sourceId": "s-cam2",
+          "type": "setClipSourceMix"
+        }
+      ]
+    },
+    "project": {
+      "assets": [
+        {
+          "durationUs": 600000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "cam",
+          "kind": "video",
+          "name": "interview.mov",
+          "path": "/media/interview.mov",
+          "width": 1920
+        },
+        {
+          "durationUs": 700000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "mic",
+          "kind": "audio",
+          "name": "ZOOM0001.WAV",
+          "path": "/media/ZOOM0001.WAV",
+          "width": 0
+        },
+        {
+          "durationUs": 600000000,
+          "fps": 30.0,
+          "hasAudio": true,
+          "height": 1080,
+          "id": "cam2",
+          "kind": "video",
+          "name": "interview-2.mov",
+          "path": "/media/interview-2.mov",
+          "width": 1920
+        },
+        {
+          "durationUs": 700000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "mic2",
+          "kind": "audio",
+          "name": "ZOOM0002.WAV",
+          "path": "/media/ZOOM0002.WAV",
+          "width": 0
+        },
+        {
+          "durationUs": 1200000000,
+          "fps": 30.0,
+          "hasAudio": false,
+          "height": 1080,
+          "id": "g1",
+          "kind": "video",
+          "name": "ranked-game.mp4",
+          "path": "/media/ranked-game.mp4",
+          "width": 1920
+        },
+        {
+          "durationUs": 1200000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "g2",
+          "kind": "audio",
+          "name": "ranked-game-sound.caf",
+          "path": "/media/ranked-game-sound.caf",
+          "width": 0
+        },
+        {
+          "durationUs": 1200000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "g3",
+          "kind": "audio",
+          "name": "ranked-mic.caf",
+          "path": "/media/ranked-mic.caf",
+          "width": 0
+        },
+        {
+          "durationUs": 1200000000,
+          "fps": 30.0,
+          "hasAudio": false,
+          "height": 1080,
+          "id": "g4",
+          "kind": "video",
+          "name": "ranked-camera.mp4",
+          "path": "/media/ranked-camera.mp4",
+          "width": 1920
+        }
+      ],
+      "audio": {
+        "loudness": "youtube"
+      },
+      "background": {
+        "assetId": null,
+        "color": "#101114",
+        "colorEnd": null,
+        "kind": "none",
+        "padding": 0.0
+      },
+      "captions": {
+        "adSafe": false,
+        "enabled": false,
+        "place": {}
+      },
+      "cursor": {
+        "asRecorded": false,
+        "click": "ripple",
+        "clickColor": "#FFFFFF80",
+        "hidden": false,
+        "look": "recorded",
+        "motionBlur": 0.5,
+        "size": 1.25,
+        "smoothing": "medium"
+      },
+      "id": "f4",
+      "luts": [],
+      "name": "Interview",
+      "recordings": [
+        {
+          "id": "s-rec1",
+          "kind": "camera",
+          "markers": [],
+          "primary": "s-cam2",
+          "sources": [
+            {
+              "id": "s-cam2",
+              "label": "interview.mov",
+              "mix": {
+                "effects": [],
+                "fillsGaps": true,
+                "muted": true,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "camera",
+              "runs": [
+                {
+                  "assetId": "cam",
+                  "driftPpm": 0.0,
+                  "durationUs": 600000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "s-mic3",
+              "label": "ZOOM0001.WAV",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "mic",
+              "runs": [
+                {
+                  "assetId": "mic",
+                  "driftPpm": 50.0,
+                  "durationUs": 610000000,
+                  "fileInUs": 90000000,
+                  "offsetUs": 0
+                }
+              ],
+              "synced": {
+                "by": "sound",
+                "level": "sure"
+              }
+            }
+          ]
+        },
+        {
+          "id": "r-2",
+          "kind": "camera",
+          "markers": [],
+          "primary": "s-cam2",
+          "sources": [
+            {
+              "id": "s-cam2",
+              "label": "interview-2.mov",
+              "mix": {
+                "effects": [],
+                "fillsGaps": true,
+                "muted": true,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "camera",
+              "runs": [
+                {
+                  "assetId": "cam2",
+                  "driftPpm": 0.0,
+                  "durationUs": 600000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "s-mic3",
+              "label": "ZOOM0002.WAV",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "mic",
+              "runs": [
+                {
+                  "assetId": "mic2",
+                  "driftPpm": 50.0,
+                  "durationUs": 610000000,
+                  "fileInUs": 90000000,
+                  "offsetUs": 0
+                }
+              ],
+              "synced": {
+                "by": "sound",
+                "level": "sure"
+              }
+            }
+          ]
+        },
+        {
+          "game": {
+            "appId": "com.example.moonbase-rally",
+            "name": "Moonbase Rally"
+          },
+          "id": "r1",
+          "kind": "gameplay",
+          "markers": [
+            {
+              "atUs": 125000000,
+              "id": "m1",
+              "kind": "hotkey"
+            },
+            {
+              "atUs": 460000000,
+              "id": "m2",
+              "kind": "hotkey"
+            }
+          ],
+          "primary": "game",
+          "sources": [
+            {
+              "id": "game",
+              "label": "capture.source.game",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "game",
+              "runs": [
+                {
+                  "assetId": "g1",
+                  "driftPpm": 0.0,
+                  "durationUs": 1200000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "game-sound",
+              "label": "capture.source.gameSound",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "gameAudio",
+              "runs": [
+                {
+                  "assetId": "g2",
+                  "driftPpm": 0.0,
+                  "durationUs": 1200000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "mic",
+              "label": "capture.source.mic",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "mic",
+              "runs": [
+                {
+                  "assetId": "g3",
+                  "driftPpm": 0.0,
+                  "durationUs": 1200000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "cam",
+              "label": "capture.source.camera",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "camera",
+              "runs": [
+                {
+                  "assetId": "g4",
+                  "driftPpm": 0.0,
+                  "durationUs": 1200000000,
+                  "offsetUs": 0
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "requires": [
+        "transitions@1"
+      ],
+      "settings": {
+        "formats": [
+          "landscape"
+        ],
+        "fps": 30,
+        "primaryFormat": "landscape"
+      },
+      "timeline": {
+        "main": [
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "c1",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "s-rec1",
+              "type": "recording"
+            },
+            "sourceInUs": 10000000,
+            "sourceOutUs": 100000000,
+            "speed": 1.0,
+            "transitionOut": {
+              "durationUs": 1000000,
+              "effect": "klipolo.builtin/transition.dissolve",
+              "params": {}
+            },
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "c2",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "s-rec1",
+              "type": "recording"
+            },
+            "sourceInUs": 150000000,
+            "sourceOutUs": 400000000,
+            "speed": 1.5,
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "c8",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "r-2",
+              "type": "recording"
+            },
+            "sourceInUs": 0,
+            "sourceMix": {
+              "s-cam2": {
+                "effects": [],
+                "muted": false,
+                "volume": 0.8
+              }
+            },
+            "sourceOutUs": 60000000,
+            "speed": 1.0,
+            "volume": 1.0
+          },
+          {
+            "camera": null,
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "c9",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "r1",
+              "type": "recording"
+            },
+            "sourceInUs": 0,
+            "sourceOutUs": 60000000,
+            "speed": 1.0,
+            "volume": 1.0
+          }
+        ],
+        "tracks": [
+          {
+            "hidden": false,
+            "id": "T1",
+            "items": [
+              {
+                "attach": {
+                  "clipId": "c2",
+                  "source": {
+                    "id": "s-rec1",
+                    "type": "recording"
+                  },
+                  "sourceUs": 195000000
+                },
+                "content": {
+                  "style": {
+                    "align": "center",
+                    "background": null,
+                    "color": "#FFFFFF",
+                    "font": {
+                      "family": "Inter",
+                      "source": {
+                        "type": "bundled"
+                      }
+                    },
+                    "italic": false,
+                    "outline": null,
+                    "shadow": true,
+                    "size": 56.0,
+                    "weight": 700
+                  },
+                  "text": "Dr Rao",
+                  "type": "text"
+                },
+                "durationUs": 3000000,
+                "effects": [],
+                "id": "t2",
+                "layout": {
+                  "anchor": "topLeft",
+                  "opacity": 1.0,
+                  "overrides": {},
+                  "radius": 0.0,
+                  "rect": {
+                    "h": 0.1,
+                    "w": 0.4,
+                    "x": 0.05,
+                    "y": 0.05
+                  },
+                  "rotation": 0.0
+                },
+                "startUs": 120000000
+              }
+            ],
+            "kind": "overlay",
+            "locked": false,
+            "muted": false,
+            "name": "Titles"
+          },
+          {
+            "hidden": false,
+            "id": "T2",
+            "items": [],
+            "kind": "audio",
+            "locked": false,
+            "muted": false,
+            "name": "Sound"
+          }
+        ]
+      },
+      "version": 7
+    }
+  },
+  "cases": [
+    {
+      "call": {
+        "args": {
+          "muted": true,
+          "source": "mic"
+        },
+        "name": "muteSource"
+      },
+      "ops": [
+        {
+          "patch": {
+            "mix": {
+              "effects": [],
+              "muted": true,
+              "mutedByPerson": true,
+              "volume": 1.0
+            }
+          },
+          "recordingId": "r1",
+          "sourceId": "mic",
+          "type": "updateRecordingSource"
+        },
+        {
+          "clipId": "c2",
+          "mix": {
+            "effects": [],
+            "muted": true,
+            "mutedByPerson": true,
+            "volume": 0.6
+          },
+          "sourceId": "mic",
+          "type": "setClipSourceMix"
+        },
+        {
+          "patch": {
+            "mix": {
+              "centreFrom": 0,
+              "effects": [],
+              "muted": true,
+              "mutedByPerson": true,
+              "volume": 1.0
+            }
+          },
+          "recordingId": "r2",
+          "sourceId": "mic",
+          "type": "updateRecordingSource"
+        }
+      ],
+      "peaks": []
+    },
+    {
+      "call": {
+        "args": {
+          "muted": false,
+          "source": "mic"
+        },
+        "name": "muteSource"
+      },
+      "ops": [
+        {
+          "patch": {
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            }
+          },
+          "recordingId": "r1",
+          "sourceId": "mic",
+          "type": "updateRecordingSource"
+        },
+        {
+          "patch": {
+            "mix": {
+              "centreFrom": 0,
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            }
+          },
+          "recordingId": "r2",
+          "sourceId": "mic",
+          "type": "updateRecordingSource"
+        }
+      ],
+      "peaks": []
+    },
+    {
+      "call": {
+        "args": {
+          "source": "mic",
+          "volume": 60
+        },
+        "name": "setSourceVolume"
+      },
+      "ops": [
+        {
+          "patch": {
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 0.6
+            }
+          },
+          "recordingId": "r1",
+          "sourceId": "mic",
+          "type": "updateRecordingSource"
+        },
+        {
+          "clipId": "c2",
+          "mix": null,
+          "sourceId": "mic",
+          "type": "setClipSourceMix"
+        },
+        {
+          "patch": {
+            "mix": {
+              "centreFrom": 0,
+              "effects": [],
+              "muted": false,
+              "volume": 0.6
+            }
+          },
+          "recordingId": "r2",
+          "sourceId": "mic",
+          "type": "updateRecordingSource"
+        }
+      ],
+      "peaks": []
+    },
+    {
+      "call": {
+        "args": {
+          "muted": true,
+          "source": "gameSound"
+        },
+        "name": "muteSource"
+      },
+      "ops": [
+        {
+          "patch": {
+            "mix": {
+              "effects": [],
+              "muted": true,
+              "mutedByPerson": true,
+              "volume": 1.0
+            }
+          },
+          "recordingId": "r1",
+          "sourceId": "game-sound",
+          "type": "updateRecordingSource"
+        },
+        {
+          "patch": {
+            "mix": {
+              "effects": [],
+              "muted": true,
+              "mutedByPerson": true,
+              "volume": 0.5
+            }
+          },
+          "recordingId": "r2",
+          "sourceId": "game-sound",
+          "type": "updateRecordingSource"
+        },
+        {
+          "clipId": "c3",
+          "mix": null,
+          "sourceId": "game-sound",
+          "type": "setClipSourceMix"
+        }
+      ],
+      "peaks": []
+    },
+    {
+      "call": {
+        "args": {
+          "source": "gameSound",
+          "volume": 150
+        },
+        "name": "setSourceVolume"
+      },
+      "ops": [
+        {
+          "patch": {
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 1.5
+            }
+          },
+          "recordingId": "r1",
+          "sourceId": "game-sound",
+          "type": "updateRecordingSource"
+        },
+        {
+          "patch": {
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 1.5
+            }
+          },
+          "recordingId": "r2",
+          "sourceId": "game-sound",
+          "type": "updateRecordingSource"
+        },
+        {
+          "clipId": "c3",
+          "mix": {
+            "effects": [],
+            "muted": true,
+            "volume": 1.5
+          },
+          "sourceId": "game-sound",
+          "type": "setClipSourceMix"
+        }
+      ],
+      "peaks": []
+    },
+    {
+      "call": {
+        "args": {
+          "centred": true,
+          "source": "mic"
+        },
+        "name": "centreSource"
+      },
+      "ops": [
+        {
+          "patch": {
+            "mix": {
+              "centreFrom": 1,
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            }
+          },
+          "recordingId": "r1",
+          "sourceId": "mic",
+          "type": "updateRecordingSource"
+        },
+        {
+          "clipId": "c2",
+          "mix": {
+            "centreFrom": 1,
+            "effects": [],
+            "muted": false,
+            "volume": 0.6
+          },
+          "sourceId": "mic",
+          "type": "setClipSourceMix"
+        },
+        {
+          "patch": {
+            "mix": {
+              "centreFrom": 0,
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            }
+          },
+          "recordingId": "r2",
+          "sourceId": "mic",
+          "type": "updateRecordingSource"
+        }
+      ],
+      "peaks": [
+        {
+          "assetId": "g3",
+          "peaks": [
+            0.0,
+            0.5
+          ]
+        }
+      ]
+    },
+    {
+      "call": {
+        "args": {
+          "centred": false,
+          "source": "mic"
+        },
+        "name": "centreSource"
+      },
+      "ops": [
+        {
+          "patch": {
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            }
+          },
+          "recordingId": "r1",
+          "sourceId": "mic",
+          "type": "updateRecordingSource"
+        },
+        {
+          "patch": {
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            }
+          },
+          "recordingId": "r2",
+          "sourceId": "mic",
+          "type": "updateRecordingSource"
+        }
+      ],
+      "peaks": []
+    },
+    {
+      "call": {
+        "args": {
+          "centred": true,
+          "source": "gameSound"
+        },
+        "name": "centreSource"
+      },
+      "ops": [
+        {
+          "patch": {
+            "mix": {
+              "centreFrom": 0,
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            }
+          },
+          "recordingId": "r1",
+          "sourceId": "game-sound",
+          "type": "updateRecordingSource"
+        },
+        {
+          "patch": {
+            "mix": {
+              "centreFrom": 1,
+              "effects": [],
+              "muted": false,
+              "volume": 0.5
+            }
+          },
+          "recordingId": "r2",
+          "sourceId": "game-sound",
+          "type": "updateRecordingSource"
+        },
+        {
+          "clipId": "c3",
+          "mix": {
+            "centreFrom": 1,
+            "effects": [],
+            "muted": true,
+            "volume": 0.5
+          },
+          "sourceId": "game-sound",
+          "type": "setClipSourceMix"
+        }
+      ],
+      "peaks": [
+        {
+          "assetId": "g2",
+          "peaks": [
+            0.5,
+            0.5
+          ]
+        },
+        {
+          "assetId": "g6",
+          "peaks": [
+            0.25,
+            0.5
+          ]
+        }
+      ]
+    }
+  ],
+  "project": {
+    "assets": [
+      {
+        "durationUs": 1200000000,
+        "fps": 30.0,
+        "hasAudio": false,
+        "height": 1080,
+        "id": "g1",
+        "kind": "video",
+        "name": "ranked-game.mp4",
+        "path": "/media/ranked-game.mp4",
+        "width": 1920
+      },
+      {
+        "durationUs": 1200000000,
+        "fps": 0.0,
+        "hasAudio": true,
+        "height": 0,
+        "id": "g2",
+        "kind": "audio",
+        "name": "ranked-game-sound.caf",
+        "path": "/media/ranked-game-sound.caf",
+        "width": 0
+      },
+      {
+        "durationUs": 1200000000,
+        "fps": 0.0,
+        "hasAudio": true,
+        "height": 0,
+        "id": "g3",
+        "kind": "audio",
+        "name": "ranked-mic.caf",
+        "path": "/media/ranked-mic.caf",
+        "width": 0
+      },
+      {
+        "durationUs": 1200000000,
+        "fps": 30.0,
+        "hasAudio": false,
+        "height": 1080,
+        "id": "g4",
+        "kind": "video",
+        "name": "ranked-camera.mp4",
+        "path": "/media/ranked-camera.mp4",
+        "width": 1920
+      },
+      {
+        "durationUs": 600000000,
+        "fps": 60.0,
+        "hasAudio": false,
+        "height": 1080,
+        "id": "g5",
+        "kind": "video",
+        "name": "second-game.mp4",
+        "path": "/media/g5",
+        "width": 1920
+      },
+      {
+        "durationUs": 600000000,
+        "fps": 0.0,
+        "hasAudio": true,
+        "height": 0,
+        "id": "g6",
+        "kind": "audio",
+        "name": "second-game-sound.caf",
+        "path": "/media/g6",
+        "width": 0
+      },
+      {
+        "durationUs": 600000000,
+        "fps": 0.0,
+        "hasAudio": true,
+        "height": 0,
+        "id": "g7",
+        "kind": "audio",
+        "name": "second-mic.caf",
+        "path": "/media/g7",
+        "width": 0
+      }
+    ],
+    "audio": {
+      "loudness": "youtube"
+    },
+    "background": {
+      "assetId": null,
+      "color": "#101114",
+      "colorEnd": null,
+      "kind": "none",
+      "padding": 0.0
+    },
+    "captions": {
+      "adSafe": false,
+      "enabled": false,
+      "place": {}
+    },
+    "cursor": {
+      "asRecorded": false,
+      "click": "ripple",
+      "clickColor": "#FFFFFF80",
+      "hidden": false,
+      "look": "recorded",
+      "motionBlur": 0.5,
+      "size": 1.25,
+      "smoothing": "medium"
+    },
+    "id": "f3",
+    "luts": [],
+    "name": "Friday ranked session",
+    "recordings": [
+      {
+        "game": {
+          "appId": "com.example.moonbase-rally",
+          "name": "Moonbase Rally"
+        },
+        "id": "r1",
+        "kind": "gameplay",
+        "markers": [
+          {
+            "atUs": 125000000,
+            "id": "m1",
+            "kind": "hotkey"
+          },
+          {
+            "atUs": 460000000,
+            "id": "m2",
+            "kind": "hotkey"
+          }
+        ],
+        "primary": "game",
+        "sources": [
+          {
+            "id": "game",
+            "label": "capture.source.game",
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            },
+            "nudgeUs": 0,
+            "role": "game",
+            "runs": [
+              {
+                "assetId": "g1",
+                "driftPpm": 0.0,
+                "durationUs": 1200000000,
+                "offsetUs": 0
+              }
+            ]
+          },
+          {
+            "id": "game-sound",
+            "label": "capture.source.gameSound",
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            },
+            "nudgeUs": 0,
+            "role": "gameAudio",
+            "runs": [
+              {
+                "assetId": "g2",
+                "driftPpm": 0.0,
+                "durationUs": 1200000000,
+                "offsetUs": 0
+              }
+            ]
+          },
+          {
+            "id": "mic",
+            "label": "capture.source.mic",
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            },
+            "nudgeUs": 0,
+            "role": "mic",
+            "runs": [
+              {
+                "assetId": "g3",
+                "driftPpm": 0.0,
+                "durationUs": 1200000000,
+                "offsetUs": 0
+              }
+            ]
+          },
+          {
+            "id": "cam",
+            "label": "capture.source.camera",
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            },
+            "nudgeUs": 0,
+            "role": "camera",
+            "runs": [
+              {
+                "assetId": "g4",
+                "driftPpm": 0.0,
+                "durationUs": 1200000000,
+                "offsetUs": 0
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "r2",
+        "kind": "gameplay",
+        "markers": [],
+        "primary": "game",
+        "sources": [
+          {
+            "id": "game",
+            "label": "capture.source.game",
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            },
+            "nudgeUs": 0,
+            "role": "game",
+            "runs": [
+              {
+                "assetId": "g5",
+                "driftPpm": 0.0,
+                "durationUs": 600000000,
+                "offsetUs": 0
+              }
+            ]
+          },
+          {
+            "id": "game-sound",
+            "label": "capture.source.gameSound",
+            "mix": {
+              "effects": [],
+              "muted": false,
+              "volume": 0.5
+            },
+            "nudgeUs": 0,
+            "role": "gameAudio",
+            "runs": [
+              {
+                "assetId": "g6",
+                "driftPpm": 0.0,
+                "durationUs": 600000000,
+                "offsetUs": 0
+              }
+            ]
+          },
+          {
+            "id": "mic",
+            "label": "capture.source.mic",
+            "mix": {
+              "centreFrom": 0,
+              "effects": [],
+              "muted": false,
+              "volume": 1.0
+            },
+            "nudgeUs": 0,
+            "role": "mic",
+            "runs": [
+              {
+                "assetId": "g7",
+                "driftPpm": 0.0,
+                "durationUs": 600000000,
+                "offsetUs": 0
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "requires": [],
+    "settings": {
+      "formats": [
+        "landscape"
+      ],
+      "fps": 30,
+      "primaryFormat": "landscape"
+    },
+    "timeline": {
+      "main": [
+        {
+          "camera": {
+            "border": true,
+            "bubble": {
+              "anchor": "bottomRight",
+              "opacity": 1.0,
+              "overrides": {},
+              "radius": 0.0,
+              "rect": {
+                "h": 0.3556,
+                "w": 0.2,
+                "x": 0.76,
+                "y": 0.6044
+              },
+              "rotation": 0.0
+            },
+            "mirror": true,
+            "mode": "bubble",
+            "modeOverrides": {
+              "portrait": "splitBottom"
+            },
+            "shape": "circle"
+          },
+          "effects": [],
+          "fadeInUs": 0,
+          "fadeOutUs": 0,
+          "framing": {},
+          "id": "c1",
+          "look": {
+            "lutId": null,
+            "lutStrength": 1.0,
+            "preset": null,
+            "strength": 1.0
+          },
+          "muted": false,
+          "source": {
+            "id": "r1",
+            "type": "recording"
+          },
+          "sourceInUs": 0,
+          "sourceMix": {
+            "mic": {
+              "effects": [],
+              "muted": true,
+              "volume": 1.0
+            }
+          },
+          "sourceOutUs": 300000000,
+          "speed": 1.0,
+          "volume": 1.0
+        },
+        {
+          "camera": {
+            "border": true,
+            "bubble": {
+              "anchor": "bottomRight",
+              "opacity": 1.0,
+              "overrides": {},
+              "radius": 0.0,
+              "rect": {
+                "h": 0.3556,
+                "w": 0.2,
+                "x": 0.76,
+                "y": 0.6044
+              },
+              "rotation": 0.0
+            },
+            "mirror": true,
+            "mode": "bubble",
+            "modeOverrides": {
+              "portrait": "splitBottom"
+            },
+            "shape": "circle"
+          },
+          "effects": [],
+          "fadeInUs": 0,
+          "fadeOutUs": 0,
+          "framing": {},
+          "id": "c2",
+          "look": {
+            "lutId": null,
+            "lutStrength": 1.0,
+            "preset": null,
+            "strength": 1.0
+          },
+          "muted": false,
+          "source": {
+            "id": "r1",
+            "type": "recording"
+          },
+          "sourceInUs": 360000000,
+          "sourceMix": {
+            "mic": {
+              "effects": [],
+              "muted": false,
+              "volume": 0.6
+            }
+          },
+          "sourceOutUs": 720000000,
+          "speed": 1.0,
+          "volume": 1.0
+        },
+        {
+          "camera": null,
+          "effects": [],
+          "fadeInUs": 0,
+          "fadeOutUs": 0,
+          "framing": {},
+          "id": "c3",
+          "look": {
+            "lutId": null,
+            "lutStrength": 1.0,
+            "preset": null,
+            "strength": 1.0
+          },
+          "muted": false,
+          "source": {
+            "id": "r2",
+            "type": "recording"
+          },
+          "sourceInUs": 0,
+          "sourceMix": {
+            "game-sound": {
+              "effects": [],
+              "muted": true,
+              "volume": 0.5
+            }
+          },
+          "sourceOutUs": 120000000,
+          "speed": 1.0,
+          "volume": 1.0
+        }
+      ],
+      "tracks": [
+        {
+          "hidden": false,
+          "id": "c1-mic-track",
+          "items": [
+            {
+              "attach": {
+                "clipId": "c1",
+                "source": {
+                  "id": "r1",
+                  "type": "recording"
+                },
+                "sourceUs": 0
+              },
+              "content": {
+                "assetId": "g3",
+                "effect": null,
+                "fadeInUs": 0,
+                "fadeOutUs": 0,
+                "sourceInUs": 0,
+                "tie": {
+                  "recording": "r1",
+                  "source": "mic"
+                },
+                "type": "audio",
+                "volume": 1.0
+              },
+              "durationUs": 300000000,
+              "effects": [],
+              "id": "c1-mic",
+              "layout": {
+                "anchor": "center",
+                "opacity": 1.0,
+                "overrides": {},
+                "radius": 0.0,
+                "rect": {
+                  "h": 1.0,
+                  "w": 1.0,
+                  "x": 0.0,
+                  "y": 0.0
+                },
+                "rotation": 0.0
+              },
+              "startUs": 0
+            }
+          ],
+          "kind": "audio",
+          "locked": false,
+          "muted": false,
+          "name": "Audio 1"
+        }
+      ]
+    },
+    "version": 7
+  },
+  "twoMics": {
+    "cases": [
+      {
+        "call": {
+          "args": {
+            "muted": true,
+            "source": "mic",
+            "which": "1"
+          },
+          "name": "muteSource"
+        },
+        "ops": [
+          {
+            "patch": {
+              "mix": {
+                "effects": [],
+                "muted": true,
+                "mutedByPerson": true,
+                "volume": 1.0
+              }
+            },
+            "recordingId": "r1",
+            "sourceId": "mic",
+            "type": "updateRecordingSource"
+          }
+        ]
+      },
+      {
+        "call": {
+          "args": {
+            "muted": true,
+            "source": "mic",
+            "which": "2"
+          },
+          "name": "muteSource"
+        },
+        "ops": [
+          {
+            "patch": {
+              "mix": {
+                "effects": [],
+                "muted": true,
+                "mutedByPerson": true,
+                "volume": 1.0
+              }
+            },
+            "recordingId": "r1",
+            "sourceId": "mic-2",
+            "type": "updateRecordingSource"
+          }
+        ]
+      }
+    ],
+    "project": {
+      "assets": [
+        {
+          "durationUs": 1200000000,
+          "fps": 30.0,
+          "hasAudio": false,
+          "height": 1080,
+          "id": "g1",
+          "kind": "video",
+          "name": "ranked-game.mp4",
+          "path": "/media/ranked-game.mp4",
+          "width": 1920
+        },
+        {
+          "durationUs": 1200000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "g2",
+          "kind": "audio",
+          "name": "ranked-game-sound.caf",
+          "path": "/media/ranked-game-sound.caf",
+          "width": 0
+        },
+        {
+          "durationUs": 1200000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "g3",
+          "kind": "audio",
+          "name": "ranked-mic.caf",
+          "path": "/media/ranked-mic.caf",
+          "width": 0
+        },
+        {
+          "durationUs": 1200000000,
+          "fps": 30.0,
+          "hasAudio": false,
+          "height": 1080,
+          "id": "g4",
+          "kind": "video",
+          "name": "ranked-camera.mp4",
+          "path": "/media/ranked-camera.mp4",
+          "width": 1920
+        },
+        {
+          "durationUs": 1200000000,
+          "fps": 0.0,
+          "hasAudio": true,
+          "height": 0,
+          "id": "g8",
+          "kind": "audio",
+          "name": "lav-2.wav",
+          "path": "/media/lav-2.wav",
+          "width": 0
+        }
+      ],
+      "audio": {
+        "loudness": "youtube"
+      },
+      "background": {
+        "assetId": null,
+        "color": "#101114",
+        "colorEnd": null,
+        "kind": "none",
+        "padding": 0.0
+      },
+      "captions": {
+        "adSafe": false,
+        "enabled": false,
+        "place": {}
+      },
+      "cursor": {
+        "asRecorded": false,
+        "click": "ripple",
+        "clickColor": "#FFFFFF80",
+        "hidden": false,
+        "look": "recorded",
+        "motionBlur": 0.5,
+        "size": 1.25,
+        "smoothing": "medium"
+      },
+      "id": "f3",
+      "luts": [],
+      "name": "Friday ranked session",
+      "recordings": [
+        {
+          "game": {
+            "appId": "com.example.moonbase-rally",
+            "name": "Moonbase Rally"
+          },
+          "id": "r1",
+          "kind": "gameplay",
+          "markers": [
+            {
+              "atUs": 125000000,
+              "id": "m1",
+              "kind": "hotkey"
+            },
+            {
+              "atUs": 460000000,
+              "id": "m2",
+              "kind": "hotkey"
+            }
+          ],
+          "primary": "game",
+          "sources": [
+            {
+              "id": "game",
+              "label": "capture.source.game",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "game",
+              "runs": [
+                {
+                  "assetId": "g1",
+                  "driftPpm": 0.0,
+                  "durationUs": 1200000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "game-sound",
+              "label": "capture.source.gameSound",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "gameAudio",
+              "runs": [
+                {
+                  "assetId": "g2",
+                  "driftPpm": 0.0,
+                  "durationUs": 1200000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "mic",
+              "label": "capture.source.mic",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "mic",
+              "runs": [
+                {
+                  "assetId": "g3",
+                  "driftPpm": 0.0,
+                  "durationUs": 1200000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "cam",
+              "label": "capture.source.camera",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "camera",
+              "runs": [
+                {
+                  "assetId": "g4",
+                  "driftPpm": 0.0,
+                  "durationUs": 1200000000,
+                  "offsetUs": 0
+                }
+              ]
+            },
+            {
+              "id": "mic-2",
+              "label": "lav-2.wav",
+              "mix": {
+                "effects": [],
+                "muted": false,
+                "volume": 1.0
+              },
+              "nudgeUs": 0,
+              "role": "mic",
+              "runs": [
+                {
+                  "assetId": "g8",
+                  "driftPpm": 0.0,
+                  "durationUs": 1200000000,
+                  "offsetUs": 0
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "requires": [],
+      "settings": {
+        "formats": [
+          "landscape"
+        ],
+        "fps": 30,
+        "primaryFormat": "landscape"
+      },
+      "timeline": {
+        "main": [
+          {
+            "camera": {
+              "border": true,
+              "bubble": {
+                "anchor": "bottomRight",
+                "opacity": 1.0,
+                "overrides": {},
+                "radius": 0.0,
+                "rect": {
+                  "h": 0.3556,
+                  "w": 0.2,
+                  "x": 0.76,
+                  "y": 0.6044
+                },
+                "rotation": 0.0
+              },
+              "mirror": true,
+              "mode": "bubble",
+              "modeOverrides": {
+                "portrait": "splitBottom"
+              },
+              "shape": "circle"
+            },
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "c1",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "r1",
+              "type": "recording"
+            },
+            "sourceInUs": 0,
+            "sourceOutUs": 300000000,
+            "speed": 1.0,
+            "volume": 1.0
+          },
+          {
+            "camera": {
+              "border": true,
+              "bubble": {
+                "anchor": "bottomRight",
+                "opacity": 1.0,
+                "overrides": {},
+                "radius": 0.0,
+                "rect": {
+                  "h": 0.3556,
+                  "w": 0.2,
+                  "x": 0.76,
+                  "y": 0.6044
+                },
+                "rotation": 0.0
+              },
+              "mirror": true,
+              "mode": "bubble",
+              "modeOverrides": {
+                "portrait": "splitBottom"
+              },
+              "shape": "circle"
+            },
+            "effects": [],
+            "fadeInUs": 0,
+            "fadeOutUs": 0,
+            "framing": {},
+            "id": "c2",
+            "look": {
+              "lutId": null,
+              "lutStrength": 1.0,
+              "preset": null,
+              "strength": 1.0
+            },
+            "muted": false,
+            "source": {
+              "id": "r1",
+              "type": "recording"
+            },
+            "sourceInUs": 360000000,
+            "sourceOutUs": 720000000,
+            "speed": 1.0,
+            "volume": 1.0
+          }
+        ],
+        "tracks": []
+      },
+      "version": 7
+    }
+  }
+}

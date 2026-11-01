@@ -14,11 +14,16 @@ const DROPS: Record<string, 'main' | 'picture' | 'sound'> = {
 };
 
 interface LaneRowProps {
-  /** The lane's id as the keyboard walks it (`keys/laneOrder`): layers, main, sounds or music. */
+  /**
+   * The lane's id as the keyboard walks it (`keys/laneOrder`): layers, main, sounds or music; a recorded sound's lane
+   * is `source:<kind>`, which the keyboard and drops pass over.
+   */
   lane: string;
   /** The lane's icon in the gutter, and its name (the icon's tooltip, and the lane's name for screen readers). */
-  icon: IconName;
+  icon?: IconName;
   name: string;
+  /** What the gutter holds instead of the icon: a recorded sound's lane has its own controls there. */
+  header?: ReactNode;
   /** Nothing on it yet: a faint strip. */
   empty: boolean;
   /** A fixed height (px), or `grow`: the Video lane takes the timeline's spare height. */
@@ -33,7 +38,18 @@ interface LaneRowProps {
  * One lane of the timeline: its icon in the gutter, which stays put while the lanes scroll, then the lane. Click empty
  * lane to seek. While a file is dragged over it, it shows a dashed paper edge.
  */
-export function LaneRow({ lane, icon, name, empty, height, grow = false, width, onSeek, children }: LaneRowProps) {
+export function LaneRow({
+  lane,
+  icon,
+  name,
+  header,
+  empty,
+  height,
+  grow = false,
+  width,
+  onSeek,
+  children,
+}: LaneRowProps) {
   // The lane the file is held over, only: both audio lanes take a sound, so a sound's target names its lane (`row`).
   const dropOver = useDropIndicator(
     (s) =>
@@ -50,11 +66,14 @@ export function LaneRow({ lane, icon, name, empty, height, grow = false, width, 
       data-lane={lane}
     >
       <div className="tl-gutter" style={{ width: HEADER_PX }}>
-        <Tooltip label={name} side="right">
-          <span className="tl-ico" tabIndex={-1}>
-            <Icon name={icon} />
-          </span>
-        </Tooltip>
+        {header ??
+          (icon && (
+            <Tooltip label={name} side="right">
+              <span className="tl-ico" tabIndex={-1}>
+                <Icon name={icon} />
+              </span>
+            </Tooltip>
+          ))}
       </div>
       <div
         className={cn('tl-lane', empty && 'is-empty', dropOver && 'is-drop')}

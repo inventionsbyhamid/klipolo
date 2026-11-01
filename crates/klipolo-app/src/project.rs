@@ -102,6 +102,13 @@ pub(crate) fn uses_path(state: &ProjectSessionState, path: &str) -> bool {
     })
 }
 
+/// A copy of the open project, for a query that reads it off the lock (on a blocking thread); None when none is open.
+pub(crate) fn open_project(state: &ProjectSessionState) -> Option<Project> {
+    lock(state)
+        .as_ref()
+        .map(|open| open.document.project().clone())
+}
+
 /// The kind of the open project's file at `path`; None when it uses no such file.
 pub(crate) fn asset_kind(state: &ProjectSessionState, path: &str) -> Option<AssetKind> {
     lock(state).as_ref().and_then(|open| {
