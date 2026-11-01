@@ -139,6 +139,7 @@ fn main() {
             app.manage(analysis);
             app.manage(chat);
             app.manage(commands::export::state_at_launch());
+            app.manage(commands::reverse::ReverseJobs::default());
             // Editing copies of the open project's slow files, beside the thumbnails in the media cache. The preview
             // reads them once made; they wait while an export holds the slot.
             let proxies = app
@@ -226,6 +227,8 @@ fn main() {
             commands::media::media_update_item,
             commands::media::media_picture,
             commands::media::media_speech_ranges,
+            commands::reverse::clip_reverse,
+            commands::reverse::clip_reverse_stop,
             commands::media::library_pack,
             commands::library::library_marks,
             commands::library::library_set_favorite,
