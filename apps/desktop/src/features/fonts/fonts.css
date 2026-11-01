@@ -47,7 +47,7 @@
 
 .font-chip[aria-pressed="true"] {
   background: var(--color-paper);
-  color: var(--color-navy);
+  color: var(--color-on-paper);
 }
 
 .font-chip:focus-visible {
