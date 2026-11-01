@@ -294,7 +294,7 @@ mod tests {
         assert!(matches!(outcome, Outcome::Finished(_)), "{outcome:?}");
         assert_eq!(
             *finishes.drew.lock().unwrap(),
-            [job.project.clone()],
+            std::slice::from_ref(&job.project),
             "the frozen project"
         );
         assert_ne!(job.project.timeline, changed.timeline);

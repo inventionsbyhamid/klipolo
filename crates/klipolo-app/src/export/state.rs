@@ -401,7 +401,7 @@ mod tests {
         let state = ExportState::default();
         assert!(state.pause_for_quit().is_none(), "nothing runs");
         let stop = state.reserve(None).unwrap();
-        let mut released = state.pause_for_quit().expect("it runs");
+        let released = state.pause_for_quit().expect("it runs");
         assert!(*stop.borrow(), "no job yet: stopped");
         state.release();
         assert!(released.has_changed().is_err(), "released");
