@@ -3,12 +3,14 @@ import { useMemo, useState } from 'react';
 import type { Project } from '../../bindings/Project';
 import { AudioLane } from './lanes/AudioLane';
 import { audioLines } from './lanes/audioRole';
+import { LaneHeader } from './lanes/LaneHeader';
 import { LaneRow } from './lanes/LaneRow';
 import { LayersLane, layersLanePx } from './lanes/LayersLane';
 import { MainLane } from './lanes/MainLane';
 import { SourceLanes } from './lanes/SourceLanes';
 import type { LineView } from './lanes/TrackLane';
 import { CLIP_INNER_PX } from './layout';
+import { laneTracks, type LaneId } from './model/laneOps';
 import { createZoomRest } from './media/zoomRest';
 import { ViewportContext, ZoomRestContext } from './media/ViewportContext';
 import { MarkerFlags } from './MarkerFlags';
@@ -31,9 +33,11 @@ interface TimelineLanesProps {
 
 /**
  * The timeline's four lanes under the ruler, always shown: Overlays (text and images, packed in up to
- * three rows), Video (the clips, taking the spare height, with a recording's marker flags), Sounds and Music; and between Video and Sounds, one lane per
- * kind of sound the takes recorded (`SourceLanes`), only while a take has it. Empty lanes are a faint strip. It gives
- * the blocks' media the window it draws in and this timeline's zoom gestures to wait out (`media/BlockMedia`).
+ * three rows), Video (the clips, taking the spare height, with a recording's marker flags), Sounds and Music; and
+ * between Video and Sounds, one lane per kind of sound the takes recorded (`SourceLanes`), only while a take has it.
+ * Overlays, Sound effects and Music have their header while a track is on them (`LaneHeader`: options, Hide or Mute).
+ * Empty lanes are a faint strip. It gives the blocks' media the window it draws in and this timeline's zoom gestures
+ * to wait out (`media/BlockMedia`).
  */
 export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_INNER_PX, onSeek }: TimelineLanesProps) {
   const { t } = useLingui();
@@ -49,17 +53,28 @@ export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_IN
   const ghostWindow = { pps: view.pps, fromUs: view.fromUs, toUs: view.toUs };
   const sounds = audioLines(tracks);
   const sizes = useLaneSizes();
+  const names = {
+    layers: t({
+      id: 'timeline.lane.overlays',
+      message: 'Overlays',
+      comment: 'The lane of titles, pictures and video layers',
+    }),
+    sounds: t({ id: 'timeline.lane.sounds', message: 'Sound effects' }),
+    music: t({ id: 'timeline.lane.music', message: 'Music' }),
+  };
+  /** A lane with a track of its own has its header: its options, and Hide or Mute. */
+  const header = (lane: LaneId, icon: 'layers' | 'pulse' | 'music') =>
+    laneTracks(tracks, lane).length > 0 ? (
+      <LaneHeader lane={lane} name={names[lane]} icon={icon} tracks={tracks} />
+    ) : undefined;
   return (
     <ViewportContext value={drawWindow}>
       <ZoomRestContext value={zoomRest}>
         <LaneRow
           lane="layers"
           icon="layers"
-          name={t({
-            id: 'timeline.lane.overlays',
-            message: 'Overlays',
-            comment: 'The lane of titles, pictures and video layers',
-          })}
+          name={names.layers}
+          header={header('layers', 'layers')}
           empty={!tracks.some((track) => track.kind !== 'audio' && track.items.length > 0)}
           height={layersLanePx(tracks)}
           width={width}
@@ -100,7 +115,8 @@ export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_IN
         <LaneRow
           lane="sounds"
           icon="pulse"
-          name={t({ id: 'timeline.lane.sounds', message: 'Sound effects' })}
+          name={names.sounds}
+          header={header('sounds', 'pulse')}
           empty={sounds.sounds.items.length === 0}
           height={sizes.sounds}
           width={width}
@@ -119,7 +135,8 @@ export function TimelineLanes({ project, viewport, view, width, clipPx = CLIP_IN
         <LaneRow
           lane="music"
           icon="music"
-          name={t({ id: 'timeline.lane.music', message: 'Music' })}
+          name={names.music}
+          header={header('music', 'music')}
           empty={sounds.music.items.length === 0}
           height={sizes.music}
           width={width}

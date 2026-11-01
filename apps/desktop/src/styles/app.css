@@ -1345,16 +1345,37 @@
 }
 
 /* Its header in the 40 px gutter: the kind's icon, which opens its volume, and Mute. */
-.tl-source-head {
+.tl-source-head,
+.tl-lane-head {
   display: flex;
   align-items: center;
   gap: 1px;
 }
 
-.icon-btn.tl-source-btn {
+.icon-btn.tl-source-btn,
+.icon-btn.tl-lane-btn {
   width: 19px;
   height: 19px;
   border-radius: var(--radius-xs);
+}
+
+/* A lane's icon opens its options; a soloed or locked lane shows it on a small badge at the icon's corner. */
+.tl-lane-btn .ico {
+  width: 14px;
+  height: 14px;
+}
+
+.tl-lane-badge {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  display: flex;
+  gap: 1px;
+  padding: 1px;
+  border-radius: var(--radius-xs);
+  background: var(--color-paper);
+  color: var(--color-navy);
+  pointer-events: none;
 }
 
 .source-volume {
