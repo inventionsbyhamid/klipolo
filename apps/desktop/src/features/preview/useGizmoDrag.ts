@@ -143,8 +143,7 @@ export function useGizmoDrag(
         params: { layer: target.label },
       };
       // Through the commit queue, built at its turn on the layer as the project has it then, and kept at close: a
-      // change to it still on its way (Bold, an opacity) stays, and one pressed straight after builds on the move
-      //.
+      // change to it still on its way (Bold, an opacity) stays, and one pressed straight after builds on the move.
       void queueCommit(label, () => opsFor(latest), d.built, { keep: label }).landed.then((ok) => {
         if (!ok) clearPreview();
         // A quicker second drag may have settled since; it clears its own.
