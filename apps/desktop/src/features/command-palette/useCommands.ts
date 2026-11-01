@@ -13,6 +13,7 @@ import { useRange } from '../../state/range';
 import { transitionClipId, useSelection } from '../../state/selection';
 import { useUi } from '../../state/ui';
 import { switchFormat } from '../editor/formats';
+import { useEffectCommands } from '../inspector/useEffectCommands';
 import { importFiles } from '../media/useImportMedia';
 import { deleteBlock, deleteRange, removeTransition, useTimelineCommands } from '../timeline/commands';
 import { searchWords, type Command } from './command';
@@ -24,7 +25,8 @@ const FORMAT_KEYS: readonly FormatKind[] = ['landscape', 'portrait', 'square'];
 /**
  * Every editor action with its current label and availability. The keyboard shortcuts, the player bar and the
  * timeline's block menus run them, so all agree; each id is stable. Values that change every frame (the playhead) are
- * read when a command runs. The timeline's are in `useTimelineCommands`, the transport's in `useTransportCommands`.
+ * read when a command runs. The timeline's are in `useTimelineCommands`, the transport's in `useTransportCommands`,
+ * the effect stacks' in `useEffectCommands`.
  *
  * Each hook builds its entries once per language and per what they read: a play, a selection or a view change rebuilds
  * only the entries that show it.
@@ -38,6 +40,7 @@ export function useCommands(): Command[] {
   const proposalOpen = useChat((s) => openProposal(s.messages)?.message.id ?? null);
   const timeline = useTimelineCommands();
   const transport = useTransportCommands();
+  const effects = useEffectCommands();
 
   const own = useMemo(() => {
     if (!snapshot) return null;
@@ -165,7 +168,8 @@ export function useCommands(): Command[] {
   }, [t, snapshot, selectedId, range, proposalOpen]);
 
   return useMemo(
-    () => (own ? [...own.head, own.remove, ...transport, ...own.view, ...own.projectCommands, ...timeline] : []),
-    [own, transport, timeline],
+    () =>
+      own ? [...own.head, own.remove, ...transport, ...own.view, ...own.projectCommands, ...timeline, ...effects] : [],
+    [own, transport, timeline, effects],
   );
 }
