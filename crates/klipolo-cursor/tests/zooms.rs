@@ -1,4 +1,4 @@
-//! Auto zoom on a take's clicks: the camera plans the take once with the spec's rules, the plan is cut into pieces
+//! Auto zoom on a take's clicks: the camera plans the take once with its own rules, the plan is cut into pieces
 //! where the view rests on the whole frame, and each piece no zoom covers yet becomes an attached Auto zoom item.
 //! Facts are built by hand on the timeline.
 

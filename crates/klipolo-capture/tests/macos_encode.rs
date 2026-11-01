@@ -119,7 +119,7 @@ fn the_read_back_decodes_a_keyframe_from_the_stream_s_description() {
     }
 }
 
-/// Run once by hand on a Mac (quietly): the probe's real numbers and its time.
+/// Run by hand on a Mac after a Mac build (quietly): the probe's real numbers and its time.
 #[test]
 #[ignore]
 fn the_probe_finishes_within_five_seconds() {

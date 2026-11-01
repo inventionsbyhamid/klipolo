@@ -9,6 +9,7 @@ vi.mock('../bridge/ai', () => ({
 const { aiBridge } = await import('../bridge/ai');
 const { useAi } = await import('../ai/aiStatus');
 const { SettingsDialog } = await import('./SettingsDialog');
+const { useUi } = await import('../state/ui');
 
 const KEY = 'sk-meta-test-key-0123456789';
 const relay: AiStatus = { mode: 'relay', code: 'KLIP-TEST-0001', budgetUsd: 2, spentUsd: 0.06, active: true };
@@ -44,6 +45,20 @@ describe('SettingsDialog', () => {
     await userEvent.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(before).toHaveFocus();
+  });
+
+  it('has Appearance: System, Light or Dark, System until one is picked', async () => {
+    openOn(relay);
+    const section = screen.getByRole('region', { name: 'Appearance' });
+    const option = (name: string) => within(section).getByRole('radio', { name });
+    expect(option('System')).toHaveAttribute('aria-checked', 'true');
+    expect(option('Light')).toHaveAttribute('aria-checked', 'false');
+    expect(option('Dark')).toHaveAttribute('aria-checked', 'false');
+    await userEvent.click(option('Light'));
+    expect(useUi.getState().theme).toBe('light');
+    expect(option('Light')).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(option('System'));
+    expect(useUi.getState().theme).toBe('system');
   });
 
   it('has the editing copies switch, so copies turned off can be turned on again', async () => {

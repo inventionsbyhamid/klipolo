@@ -1,8 +1,8 @@
 //! A proposal in Klipolo's words: its title on the card ("Cut 14 pauses and 9 filler words") and a short tag over each
 //! cut ("um", "pause"), read from what it removes on the project it applies to. The title names what goes, never how
 //! long: the card says the total once under it ("23.4 s in total"). A proposal that removes no footage (a format
-//! dropped with what was placed for it) is titled by what it drops. "Keep only these" keeps the parts the person chose;
-//! another app's keepOnly keeps parts it suggests (the card names the app under its title).
+//! dropped with what was placed for it, a transition taken away) is titled by what it drops. "Keep only these" keeps
+//! the parts the person chose; another app's keepOnly keeps parts it suggests (the card names the app under its title).
 
 use klipolo_model::Project;
 use klipolo_model::project::FormatKind;
@@ -116,6 +116,10 @@ fn dropped(removals: &Removals) -> String {
     let layers = removals.items.len() + removals.shortened.len();
     if layers > 0 {
         return format!("Remove or shorten {}", count(layers, "layer", "layers"));
+    }
+    if !removals.transitions.is_empty() {
+        let n = removals.transitions.len();
+        return format!("Remove {}", count(n, "transition", "transitions"));
     }
     "Apply these changes".to_owned()
 }

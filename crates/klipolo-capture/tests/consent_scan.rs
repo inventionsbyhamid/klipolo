@@ -106,7 +106,7 @@ const CAPTURE_APIS: &[&str] = &[
 /// not even by a capture file.
 const CPAL_PROBES: &[&str] = &["input_devices(", "supported_input_configs("];
 
-/// The files that capture, once the person pressed Record or Check camera (the plan's file map): each OS's pipes, Cap's
+/// The files that capture, once the person pressed Record or Check camera: each OS's pipes, Cap's
 /// vendored capture code and the cpal microphone. Everything else (devices, permissions, apps, preflight, the probe,
 /// shells, the session) must not name a capture API.
 fn captures(file: &str) -> bool {

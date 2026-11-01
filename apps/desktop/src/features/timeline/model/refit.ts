@@ -1,6 +1,6 @@
-import { plural, t } from '@lingui/core/macro';
 import type { Clip } from '../../../bindings/Clip';
 import type { Project } from '../../../bindings/Project';
+import { labelText } from '../../../lib/labels';
 import { fittedTransitionsUs } from '../../../lib/transitions';
 
 /** How many transitions an edit removes (they no longer fit) and shortens, once the model refits them. */
@@ -70,26 +70,9 @@ export function speedNote(project: Project, id: string, speed: number): string {
 
 /**
  * What an edit does to transitions, as a sentence of its own ("A transition is removed.", "2 transitions are removed
- * and one is shortened."); empty when nothing changes. Edits say it after what they did, as a second sentence.
+ * and one is shortened."); empty when nothing changes. Edits say it after what they did, as a second sentence. Worded
+ * by its label (`timeline.refit`), which a chat change's undo label names as a value too, so both say it the same way.
  */
 export function refitNote({ removed, shortened }: Refit): string {
-  if (removed && shortened)
-    return t({
-      id: 'timeline.refit.both',
-      message: `${plural(removed, { 1: 'A transition is removed', other: '# transitions are removed' })} and ${plural(shortened, { 1: 'one is shortened', other: '# are shortened' })}.`,
-      comment: 'What an edit does to transitions, said after what it did',
-    });
-  if (removed)
-    return t({
-      id: 'timeline.refit.removes',
-      message: plural(removed, { 1: 'A transition is removed.', other: '# transitions are removed.' }),
-      comment: 'What an edit does to transitions, said after what it did',
-    });
-  if (shortened)
-    return t({
-      id: 'timeline.refit.shortens',
-      message: plural(shortened, { 1: 'A transition is shortened.', other: '# transitions are shortened.' }),
-      comment: 'What an edit does to transitions, said after what it did',
-    });
-  return '';
+  return labelText({ id: 'timeline.refit', params: { removed, shortened } });
 }

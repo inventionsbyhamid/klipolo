@@ -70,8 +70,14 @@ fn main() {
             }
         })
         .setup(move |app| {
+            // First, before the page loads: the window's colour is the saved theme's.
+            commands::appearance::at_launch(app.handle());
             let cache = app.path().app_cache_dir().ok();
             app.manage(EngineState::new(Some(warm), cache));
+            // The library's favorites and recently used items, for every project, in the app's config folder.
+            app.manage(commands::library::LibraryMarksState::new(
+                app.path().app_config_dir().ok(),
+            ));
             let projects = ProjectSessionState::default();
             // Klipolo's pack where this install has it; a project's pack files point here as it opens.
             projects.set_pack(
@@ -186,6 +192,7 @@ fn main() {
             project::project_reveal,
             project::projects_recent,
             media::media_import,
+            commands::appearance::appearance_set,
             commands::settings::settings_get,
             commands::settings::settings_set_key,
             commands::settings::settings_set_code,
@@ -218,6 +225,9 @@ fn main() {
             commands::media::media_picture,
             commands::media::media_speech_ranges,
             commands::media::library_pack,
+            commands::library::library_marks,
+            commands::library::library_set_favorite,
+            commands::library::library_mark_used,
             commands::fonts::fonts_bundled,
             commands::fonts::fonts_face,
             commands::captions::captions_pages,
@@ -273,6 +283,11 @@ fn main() {
                 // made keeps its finished segments: its worker sees the app go and is made on at the next launch.
                 commands::export::on_exit(app);
             }
+            // The system's appearance changed: the window's colour follows it while the theme is System.
+            RunEvent::WindowEvent {
+                event: WindowEvent::ThemeChanged(system),
+                ..
+            } => commands::appearance::system_changed(app, system),
             // Back in front: a source exported again elsewhere meanwhile must not keep showing its old editing copy.
             RunEvent::WindowEvent {
                 event: WindowEvent::Focused(true),

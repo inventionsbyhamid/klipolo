@@ -114,8 +114,14 @@ function useOtherRemovals(proposal: ChatProposal): string[] {
         }),
       }),
     );
-  if (r.effects.length > 0 || r.transitions.length > 0)
-    out.push(t({ id: 'chatPanel.proposal.effects', message: 'Takes some effects away.' }));
+  if (r.transitions.length > 0)
+    out.push(
+      t({
+        id: 'chatPanel.proposal.transitions',
+        message: plural(r.transitions.length, { one: 'Removes # transition.', other: 'Removes # transitions.' }),
+      }),
+    );
+  if (r.effects.length > 0) out.push(t({ id: 'chatPanel.proposal.effects', message: 'Takes some effects away.' }));
   return out;
 }
 
