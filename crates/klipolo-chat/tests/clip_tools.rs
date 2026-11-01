@@ -826,3 +826,32 @@ fn a_speed_and_a_transition_in_one_answer_are_one_step_in_call_order() {
     .unwrap();
     assert_eq!(after, by_hand);
 }
+
+#[test]
+fn the_context_shows_a_clips_volume_and_its_transition_and_the_prompt_the_tools() {
+    let mut p = with_dissolve(1.0);
+    p.timeline.main[0].volume = 0.5;
+    p.timeline.main[0].muted = true;
+    let ctx = klipolo_chat::build_context(
+        &p,
+        &Speech::default(),
+        &HashMap::new(),
+        &HashMap::new(),
+        &View::default(),
+        &Library::default(),
+    );
+    let lines: Vec<&str> = (ctx.text.lines()).filter(|l| l.starts_with('c')).collect();
+    assert_eq!(
+        lines,
+        [
+            "c1 0.0-10.0 talk.mov (file 0.0-10.0 of 60.0, volume 50%, muted)",
+            "c2 10.0-59.0 talk.mov (file 10.0-59.0 of 60.0, dissolve 2.0 s into c3)",
+            "c3 59.0-69.0 broll.mov (file 2.0-12.0 of 20.0)",
+        ]
+    );
+    let prompt = klipolo_chat::system_prompt();
+    assert!(prompt.contains(
+        "setClip sets a clip's speed, volume, mute, or Fit or Fill; setTransition adds, changes or removes the \
+         transition at a cut. Use all for every clip or cut."
+    ));
+}

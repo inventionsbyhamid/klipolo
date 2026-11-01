@@ -781,7 +781,8 @@ fn project_section(out: &mut String, p: &Project, starts: &[Us], brief: Brief) {
     }
 }
 
-/// One clip's line: `c2 13.0-144.0 interview.mov (file 24.0-155.0 of 155.0, speed 1.50x, muted)`; with
+/// One clip's line: `c2 13.0-144.0 interview.mov (file 24.0-155.0 of 155.0, speed 1.50x, volume 50%, muted,
+/// dissolve 0.5 s into c3)`: a speed, volume or transition only when it has one other than as recorded; with
 /// `plain_clips`, no file note.
 fn clip_line(out: &mut String, p: &Project, i: usize, start: Us, brief: Brief) {
     let clip = &p.timeline.main[i];
@@ -811,8 +812,23 @@ fn clip_line(out: &mut String, p: &Project, i: usize, start: Us, brief: Brief) {
     if clip.speed != 1.0 {
         notes.push(format!("speed {}x", speed(clip.speed)));
     }
+    if clip.volume != 1.0 {
+        notes.push(format!("volume {}%", (clip.volume * 100.0).round()));
+    }
     if clip.muted {
         notes.push("muted".to_owned());
+    }
+    if let Some(t) = &clip.transition_out
+        && i + 1 < p.timeline.main.len()
+    {
+        let kind = (t.effect.as_str())
+            .strip_prefix("klipolo.builtin/transition.")
+            .unwrap_or("transition");
+        notes.push(format!(
+            "{kind} {} s into {}",
+            secs(t.duration_us),
+            short_ref(i + 1)
+        ));
     }
     if !notes.is_empty() {
         let _ = write!(out, " ({})", notes.join(", "));
