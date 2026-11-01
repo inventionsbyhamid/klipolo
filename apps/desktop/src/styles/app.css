@@ -2225,6 +2225,18 @@
   line-height: var(--lh-xs);
 }
 
+/* The library's search, over its tab's files, and what it says when it finds none there. */
+.lib-search {
+  margin: var(--space-1) var(--space-6) var(--space-3);
+}
+
+.lib-none {
+  padding: var(--space-4) var(--space-4) 0;
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
 /* Images: a 3-column grid of pictures on a checkerboard (they may be see-through), each named under it. */
 .image-grid {
   display: grid;

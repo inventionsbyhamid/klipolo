@@ -11,11 +11,13 @@ import { renderWithProviders } from '../../test/render';
 /*
  * The Library's tabs: Clips, Music, Sounds and Images, your files first and then Klipolo's pack, each
  * row's "+" adding it at the playhead through the media commands, and a sound let go on the Music lane added as music.
+ * Its search finds a tab's items by name, tag and related word.
  */
 
 const answer = (): Promise<SnapshotPatch> => Promise.resolve(revisionPatch(4));
 const PACK: PackItem[] = [
   { id: 'whoosh', name: 'Whoosh', category: 'sound', durationUs: 900_000, width: 0, height: 0, tags: ['transition', 'swipe'] },
+  { id: 'impact', name: 'Impact', category: 'sound', durationUs: 400_000, width: 0, height: 0, tags: ['impact', 'hit'] },
   { id: 'soft-ambient', name: 'Soft ambient', category: 'music', durationUs: 16_000_000, width: 0, height: 0, tags: ['calm'] },
   { id: 'star', name: 'Star', category: 'sticker', durationUs: 0, width: 1024, height: 1024, tags: ['star', 'gold'] },
 ];
@@ -31,7 +33,8 @@ vi.mock('../../bridge/library', () => ({
     speechRanges: vi.fn(() => Promise.resolve([])),
   },
 }));
-vi.mock('../../bridge/commands', () => ({ bridge: {}, mediaUrl: (p: string) => p }));
+vi.mock('../../bridge/commands', () => ({ bridge: { apply: vi.fn() }, mediaUrl: (p: string) => p }));
+const { bridge } = await import('../../bridge/commands');
 const { library } = await import('../../bridge/library');
 const { useProject } = await import('../../state/project');
 const { usePlayback } = await import('../../state/playback');
@@ -39,6 +42,7 @@ const { useUi } = await import('../../state/ui');
 const { useSelection } = await import('../../state/selection');
 const { useAnnouncer } = await import('../timeline/announce');
 const { usePack, loadPack, forgetPictures } = await import('./shelves');
+const { useEditorShortcuts } = await import('../command-palette/useEditorShortcuts');
 const { addMedia } = await import('./addMedia');
 const { Library } = await import('../../layout/Library');
 
@@ -216,7 +220,7 @@ describe('the Library', () => {
     );
     // A pack sticker let go on the Overlays lane, likewise.
     const { dropPackItem } = await import('./place');
-    await act(() => dropPackItem(PACK[2], { lane: 'picture', trackId: null, atUs: 8_000_000 }));
+    await act(() => dropPackItem(PACK.find((i) => i.id === 'star')!, { lane: 'picture', trackId: null, atUs: 8_000_000 }));
     expect(library.place).toHaveBeenLastCalledWith([{ type: 'pack', id: 'star' }], 8_000_000, { type: 'auto' });
     // What went in is said: the answer adds nothing here, so nothing is announced or selected.
     expect(library.addSound).not.toHaveBeenCalled();
@@ -284,7 +288,78 @@ describe('the Library', () => {
     loadPack();
     await waitFor(() => expect(usePack.getState().asked).toBe(false));
     loadPack();
-    await waitFor(() => expect(usePack.getState().items).toHaveLength(3));
+    await waitFor(() => expect(usePack.getState().items).toHaveLength(PACK.length));
     expect(library.pack).toHaveBeenCalledTimes(2);
+  });
+
+  it('the search finds the tab’s own files and pack items by name, tag and related word', async () => {
+    useUi.setState({ libraryTab: 'sounds' });
+    renderWithProviders(<Library />);
+    const panel = screen.getByRole('tabpanel');
+    await screen.findByText('Impact');
+    const search = screen.getByRole('searchbox', { name: 'Search sounds' });
+    // By name: one of yours.
+    await userEvent.type(search, 'kiln');
+    expect(within(panel).getByText('kiln-door.wav')).toBeInTheDocument();
+    expect(within(panel).queryByText('tick.wav')).toBeNull();
+    expect(within(panel).queryByText('Whoosh')).toBeNull();
+    // By a tag: the pack's.
+    await userEvent.clear(search);
+    await userEvent.type(search, 'swipe');
+    expect(within(panel).getByText('Whoosh')).toBeInTheDocument();
+    expect(within(panel).queryByText('Impact')).toBeNull();
+    expect(within(panel).queryByText('Your sounds')).toBeNull();
+    // By a related word: "boom" is an impact.
+    await userEvent.clear(search);
+    await userEvent.type(search, 'boom');
+    expect(within(panel).getByText('Impact')).toBeInTheDocument();
+    expect(within(panel).queryByText('Whoosh')).toBeNull();
+    // Another tab keeps the words and searches its own.
+    act(() => useUi.setState({ libraryTab: 'music' }));
+    expect(screen.getByRole('searchbox', { name: 'Search music' })).toHaveValue('boom');
+    expect(screen.getByRole('tabpanel')).toHaveTextContent('No music matches “boom”.');
+  });
+
+  it('Escape clears the search, and a search that finds nothing says so in one line', async () => {
+    useUi.setState({ libraryTab: 'sounds' });
+    renderWithProviders(<Library />);
+    const panel = screen.getByRole('tabpanel');
+    await screen.findByText('Impact');
+    const search = screen.getByRole('searchbox', { name: 'Search sounds' });
+    await userEvent.type(search, 'spaceship');
+    expect(within(panel).queryAllByRole('listitem')).toHaveLength(0);
+    const none = within(panel).getByText('No sounds match “spaceship”.');
+    expect(none.tagName).toBe('P');
+    await userEvent.type(search, '{Escape}');
+    expect(search).toHaveValue('');
+    expect(search).toHaveFocus();
+    expect(within(panel).queryByText(/match/)).toBeNull();
+    expect(within(panel).getByText('kiln-door.wav')).toBeInTheDocument();
+    expect(within(panel).getByText('Impact')).toBeInTheDocument();
+    // Clips with no clips at all say there are none, whatever was typed.
+    const snapshot = useProject.getState().snapshot!;
+    act(() => useUi.setState({ libraryTab: 'clips' }));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search clips' }), 'zzz');
+    expect(screen.getByRole('tabpanel')).toHaveTextContent('No clips match “zzz”.');
+    snapshot.project.assets = snapshot.project.assets.filter((a) => a.kind !== 'video');
+    act(() => useProject.setState({ snapshot: structuredClone(snapshot) }));
+    expect(screen.getByRole('tabpanel')).toHaveTextContent('No clips yet');
+  });
+
+  it('typing in the search runs none of the editor’s keys', async () => {
+    useUi.setState({ libraryTab: 'sounds' });
+    useSelection.setState({ selectedId: 'title' });
+    function WithKeys() {
+      useEditorShortcuts();
+      return <Library />;
+    }
+    renderWithProviders(<WithKeys />);
+    const search = screen.getByRole('searchbox', { name: 'Search sounds' });
+    await userEvent.type(search, 's i o j l 1{ArrowLeft}{ArrowRight}{Backspace}{Delete}{Home}{Escape}');
+    await act(() => new Promise((r) => setTimeout(r, 40)));
+    expect(bridge.apply).not.toHaveBeenCalled();
+    expect(useSelection.getState().selectedId).toBe('title');
+    expect(usePlayback.getState()).toMatchObject({ playing: false, playheadUs: 2_000_000 });
+    expect(useUi.getState().libraryTab).toBe('sounds');
   });
 });

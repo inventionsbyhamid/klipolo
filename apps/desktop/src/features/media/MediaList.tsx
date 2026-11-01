@@ -11,6 +11,7 @@ import { addMedia } from './addMedia';
 import { AssetMenu } from './AssetMenu';
 import { AssetRow } from './AssetRow';
 import { addImage, addMusic, addPackItem, addSound, dropPackItem } from './place';
+import { searchLibrary, type Searchable } from './search';
 import { loadPack, packAsset, packAssetId, shelves, useNearView, usePack, usePicture, uses } from './shelves';
 
 /** On a Mac, Control-click is a right-click: it doesn't start a drag. */
@@ -112,13 +113,25 @@ function PackItems({ items, project }: { items: PackItem[]; project: Project }) 
   );
 }
 
+/** How the search reads a pack item: its tags, and "Built in". */
+function aboutPack(item: PackItem): Searchable {
+  const kind = item.category === 'sticker' ? 'image' : 'audio';
+  return { name: item.name, tags: item.tags, category: item.category, kind, collection: 'Built in' };
+}
+
+/** How the search reads one of the person's files on a tab: as `category`, from `collection` ("Your sounds"). */
+const aboutOwn =
+  (category: string, collection: string) =>
+  (asset: Asset): Searchable => ({ name: asset.name, tags: [], category, kind: asset.kind, collection });
+
 /**
  * What the Library shows on one tab: your files first, then Klipolo's pack where it has some. Clips are
  * the project's videos; Music and Sounds the sounds (by how they play, else by length) and the pack's beds and effects;
  * Images a 3-column grid of your pictures, those made with Muse Image, and the pack's stickers. Drag any row onto the
- * lane it belongs to; the "+" adds it at the playhead.
+ * lane it belongs to; the "+" adds it at the playhead. `query` (the panel's search) keeps the items it finds, best
+ * first (`search.ts`).
  */
-export function MediaList({ tab }: { tab: LibraryTab }) {
+export function MediaList({ tab, query }: { tab: LibraryTab; query: string }) {
   const { t } = useLingui();
   const project = useProject((s) => s.snapshot?.project);
   const pack = usePack((s) => s.items);
@@ -128,7 +141,19 @@ export function MediaList({ tab }: { tab: LibraryTab }) {
   const used = uses(project).any;
   const builtIn = t({ id: 'library.builtIn', message: 'Built in' });
   const free = t({ id: 'library.builtIn.free', message: 'Free to use' });
-  const ofPack = (category: PackItem['category']) => pack.filter((item) => item.category === category);
+  const ofPack = (category: PackItem['category']) =>
+    searchLibrary(
+      pack.filter((item) => item.category === category),
+      query,
+      aboutPack,
+    );
+  const asked = query.trim();
+  /** The one line a search that finds nothing on this tab shows. */
+  const none = (text: string) => (
+    <p className="lib-none" role="status">
+      {text}
+    </p>
+  );
   const row = (asset: Asset, art: 'music' | 'sound', add: () => void) => (
     <AssetRow
       key={asset.id}
@@ -155,9 +180,12 @@ export function MediaList({ tab }: { tab: LibraryTab }) {
           </p>
         </div>
       );
+    const clips = searchLibrary(own.clips, query, aboutOwn('video', 'Your clips'));
+    if (clips.length === 0)
+      return none(t({ id: 'library.clips.noMatch', message: `No clips match “${asked}”.`, comment: '{asked} is what the person searched for' }));
     return (
       <ul className="lib-list" aria-label={t({ id: 'library.clips', message: 'Your clips' })}>
-        {own.clips.map((clip) => (
+        {clips.map((clip) => (
           <AssetRow
             key={clip.id}
             asset={clip}
@@ -176,7 +204,11 @@ export function MediaList({ tab }: { tab: LibraryTab }) {
 
   if (tab === 'music' || tab === 'sounds') {
     const music = tab === 'music';
-    const mine = music ? own.music : own.sounds;
+    const mine = searchLibrary(
+      music ? own.music : own.sounds,
+      query,
+      aboutOwn(music ? 'music' : 'sound', music ? 'Your music' : 'Your sounds'),
+    );
     const packed = ofPack(music ? 'music' : 'sound');
     return (
       <>
@@ -203,6 +235,14 @@ export function MediaList({ tab }: { tab: LibraryTab }) {
             </ul>
           </>
         )}
+        {asked &&
+          mine.length === 0 &&
+          packed.length === 0 &&
+          none(
+            music
+              ? t({ id: 'library.music.noMatch', message: `No music matches “${asked}”.`, comment: '{asked} is what the person searched for' })
+              : t({ id: 'library.sounds.noMatch', message: `No sounds match “${asked}”.`, comment: '{asked} is what the person searched for' }),
+          )}
         <p className="lib-foot">
           {music
             ? t({
@@ -225,22 +265,24 @@ export function MediaList({ tab }: { tab: LibraryTab }) {
       onDrop={(target) => addMedia(asset.id, target)}
     />
   );
+  const images = searchLibrary(own.images, query, aboutOwn('photo', 'Your images'));
+  const made = searchLibrary(own.made, query, aboutOwn('photo', 'Made with Muse Image'));
   const stickers = ofPack('sticker');
   return (
     <>
-      {own.images.length > 0 && (
+      {images.length > 0 && (
         <>
           <Group id="lib-images-yours" title={t({ id: 'library.images.yours', message: 'Your images' })} />
           <ul className="image-grid" aria-labelledby="lib-images-yours">
-            {own.images.map(picture)}
+            {images.map(picture)}
           </ul>
         </>
       )}
-      {own.made.length > 0 && (
+      {made.length > 0 && (
         <>
           <Group id="lib-images-made" title={t({ id: 'library.images.made', message: 'Made with Muse Image' })} />
           <ul className="image-grid" aria-labelledby="lib-images-made">
-            {own.made.map(picture)}
+            {made.map(picture)}
           </ul>
         </>
       )}
@@ -252,6 +294,9 @@ export function MediaList({ tab }: { tab: LibraryTab }) {
           </ul>
         </>
       )}
+      {asked &&
+        images.length + made.length + stickers.length === 0 &&
+        none(t({ id: 'library.images.noMatch', message: `No images match “${asked}”.`, comment: '{asked} is what the person searched for' }))}
       <p className="lib-foot">
         {t({
           id: 'library.images.foot',
