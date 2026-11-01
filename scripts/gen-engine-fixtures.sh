@@ -76,8 +76,8 @@ ff -display_rotation:v:0 -90 -i "$OUT/phone-stored.mp4" -c copy "$OUT/phone-port
 ff -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=4" -c:a aac -b:a 128k "$OUT/tone-440.m4a"
 # The same as raw ADTS frames, which a test damages part-way (frames announcing no data: a run of damaged packets).
 ff -i "$OUT/tone-440.m4a" -c copy -f adts "$OUT/tone-440.aac"
-# Thumbnail scans: 130 s of 720p30 with a keyframe every second and a 440 Hz tone, so a file spans three
-# 64-slot sprite chunks and its audio pass cuts them.
+# Thumbnail scans: 130 s of 720p30 with a keyframe every second and a 440 Hz tone, so a file spans three 64-slot sprite
+# chunks and its audio pass cuts them.
 ff -f lavfi -i "testsrc2=size=1280x720:rate=30:duration=130" -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=130" \
    -vf "scale=out_color_matrix=bt709,$TAG709" "${H264[@]}" -b:v 2M -g 30 -pix_fmt yuv420p "${BT709[@]}" \
    -c:a aac -b:a 128k "$OUT/scan-130s-720p.mp4"
@@ -119,8 +119,8 @@ ff -f lavfi -i "color=c=gray:size=320x180:rate=24000/1001:duration=12" \
 ff -f lavfi -i "color=c=gray:size=320x180:rate=30:duration=2" \
    -vf "geq=lum='16+8*mod(N\,25)':cb=128:cr=128,$TAG709" "${H264[@]}" -b:v 1M -g 15 -sc_threshold 0 \
    -pix_fmt yuv420p "${BT709[@]}" -an "$OUT/luma-30fps-2s.mp4"
-# Editing copies: 20 s of 1080p30 with a keyframe every 10 s (at 0 and 10 s, like a screen recorder's
-# long GOP) and a 440 Hz tone, so it needs a copy and its copy must drop the sound.
+# Editing copies: 20 s of 1080p30 with a keyframe every 10 s (at 0 and 10 s, like a screen recorder's long GOP) and a
+# 440 Hz tone, so it needs a copy and its copy must drop the sound.
 ff -f lavfi -i "testsrc2=size=1920x1080:rate=30:duration=20" -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=20" \
    -vf "scale=out_color_matrix=bt709,$TAG709" "${H264[@]}" -b:v 6M -g 300 -sc_threshold 0 -pix_fmt yuv420p "${BT709[@]}" \
    -c:a aac -b:a 128k "$OUT/longgop-20s-1080p.mp4"
