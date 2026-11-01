@@ -24,6 +24,8 @@ const planned = vi.hoisted(
       bytes: (quality === 'standard' ? 80_000_000 : 140_000_000) * formats.length,
       seconds: 30,
       folder: 'Movies / Klipolo',
+      slowMaster: true,
+      canSaveCaptions: false,
     }),
 );
 vi.mock('../../bridge/exporter', () => ({
@@ -99,13 +101,21 @@ async function openAndExport() {
   emit(started);
 }
 
+/** What Rust plans once some clip's words are heard in full: a 16:9 video can also save its captions as a file. */
+const withWords = async (formats: string[], quality: string) => ({
+  ...(await planned(formats, quality)),
+  canSaveCaptions: true,
+});
+const heard = { state: 'done', approximate: false } as const;
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(exporter.plan).mockImplementation(planned as typeof exporter.plan);
   useProject.setState({ snapshot: fixtureSnapshot(), pending: 0, apply });
   useExport.getState().reset();
-  useExport.setState({ open: false, quality: 'high', folder: null });
+  useExport.setState({ open: false, quality: 'high', folder: null, captionFile: { save: false, kind: 'srt' } });
   useAnalysis.setState({ states: {} });
+  localStorage.clear();
 });
 
 describe('export dialog', () => {
@@ -167,12 +177,193 @@ describe('export dialog', () => {
     expect(exporter.start).toHaveBeenCalledWith(['landscape'], 'standard', expect.any(Function));
   });
 
+  it('offers Maximum and Master, says what each is for, and that Master is slower here', async () => {
+    renderExport();
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    const quality = within(dialog()).getByRole('radiogroup', { name: 'Quality' });
+    expect(within(quality).getAllByRole('radio').map((r) => r.textContent)).toEqual([
+      'Smaller file',
+      'High',
+      'Maximum',
+      'Master',
+    ]);
+    expect(screen.getByText('Best for YouTube and social.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Smaller file' }));
+    expect(screen.getByText('Smaller files that upload well.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Maximum' }));
+    expect(screen.getByText('Near-lossless HEVC for archiving.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Master' }));
+    expect(
+      await screen.findByText('ProRes for another editor. Very large files. Slower on this computer.'),
+    ).toBeInTheDocument();
+    expect(exporter.plan).toHaveBeenLastCalledWith(['landscape'], 'master');
+    // The arrow keys walk all four, round from the last to the first.
+    await userEvent.keyboard('{ArrowRight}');
+    expect(screen.getByRole('radio', { name: 'Smaller file' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Smaller file' })).toHaveFocus();
+    await userEvent.keyboard('{ArrowLeft}{ArrowLeft}');
+    expect(screen.getByRole('radio', { name: 'Maximum' })).toBeChecked();
+    await userEvent.keyboard('{ArrowRight}');
+    await userEvent.click(screen.getByRole('button', { name: 'Export 1 video' }));
+    expect(exporter.start).toHaveBeenCalledWith(['landscape'], 'master', expect.any(Function));
+  });
+
+  it('Master on a computer with a media engine says nothing about speed', async () => {
+    const fast = async (formats: string[], quality: string) => ({
+      ...(await planned(formats, quality)),
+      slowMaster: false,
+    });
+    vi.mocked(exporter.plan).mockImplementation(fast as typeof exporter.plan);
+    useExport.setState({ quality: 'master' });
+    renderExport();
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(await screen.findByText('ProRes for another editor. Very large files.')).toBeInTheDocument();
+    expect(screen.queryByText(/Slower on this computer/)).toBeNull();
+  });
+
+  it('offers a captions file beside a 16:9 video once words are heard, remembers it and sends it', async () => {
+    renderExport();
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await screen.findByText('1 video, about 140 MB');
+    expect(screen.queryByRole('switch', { name: 'Also save captions as a file' })).toBeNull();
+    // A clip's words come in while the dialog is open: it plans again and offers the file.
+    vi.mocked(exporter.plan).mockImplementation(withWords as typeof exporter.plan);
+    act(() => useAnalysis.setState({ states: { broll: heard } }));
+    const save = await screen.findByRole('switch', { name: 'Also save captions as a file' });
+    expect(save).not.toBeChecked();
+    const kind = () => within(dialog()).getByRole('radiogroup', { name: 'Captions file type' });
+    expect(within(kind()).getByRole('radio', { name: 'SRT' })).toBeChecked();
+    await userEvent.click(save);
+    expect(save).toBeChecked();
+    await userEvent.click(within(kind()).getByRole('radio', { name: 'WebVTT' }));
+    expect(within(kind()).getByRole('radio', { name: 'WebVTT' })).toBeChecked();
+    // Kept on this Mac for the next export, whatever the project.
+    expect(useExport.getState().captionFile).toEqual({ save: true, kind: 'vtt' });
+    expect(JSON.parse(localStorage.getItem('klipolo.captionFile') ?? 'null')).toEqual({ save: true, kind: 'vtt' });
+    // Only beside a 16:9 video.
+    const formats = within(dialog()).getByRole('group', { name: 'Formats' });
+    await userEvent.click(within(formats).getByRole('checkbox', { name: /^9:16/ }));
+    await userEvent.click(within(formats).getByRole('checkbox', { name: /^16:9/ }));
+    await waitFor(() => expect(screen.queryByRole('switch', { name: 'Also save captions as a file' })).toBeNull());
+    await userEvent.click(within(formats).getByRole('checkbox', { name: /^16:9/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Export 2 videos' }));
+    expect(exporter.start).toHaveBeenCalledWith(['landscape', 'portrait'], 'high', expect.any(Function), {
+      captionFile: 'vtt',
+    });
+  });
+
+  it('sends no captions file while none is offered, even when one was kept', async () => {
+    useExport.setState({ captionFile: { save: true, kind: 'srt' } });
+    renderExport();
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await screen.findByText('1 video, about 140 MB');
+    expect(screen.queryByRole('switch', { name: 'Also save captions as a file' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Export 1 video' }));
+    expect(exporter.start).toHaveBeenCalledWith(['landscape'], 'high', expect.any(Function));
+  });
+
+  it('a finished export lists its captions file with Show in Finder', async () => {
+    vi.mocked(exporter.plan).mockImplementation(withWords as typeof exporter.plan);
+    useExport.setState({ captionFile: { save: true, kind: 'srt' } });
+    renderExport();
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await screen.findByRole('switch', { name: 'Also save captions as a file', checked: true });
+    await userEvent.click(screen.getByRole('button', { name: 'Export 1 video' }));
+    expect(exporter.start).toHaveBeenCalledWith(['landscape'], 'high', expect.any(Function), { captionFile: 'srt' });
+    emit(started);
+    emit(
+      { type: 'fileReady', index: 0, path: landscape.path },
+      { type: 'fileReady', index: 1, path: '/m/Billing tutorial 16x9.srt' },
+      { type: 'finished' },
+    );
+    expect(screen.getByRole('heading', { name: 'Exported 1 video' })).toBeInTheDocument();
+    const row = screen.getByText('Billing tutorial 16x9.srt').closest('li')!;
+    expect(within(row).getByText('SRT captions')).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole('button', { name: 'Show in Finder' }));
+    expect(exporter.reveal).toHaveBeenCalledWith(1);
+  });
+
+  it('Try again asks for the captions file again only when the 16:9 video is made again', async () => {
+    vi.mocked(exporter.plan).mockImplementation(withWords as typeof exporter.plan);
+    useExport.setState({ captionFile: { save: true, kind: 'vtt' } });
+    renderExport();
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await screen.findByRole('switch', { name: 'Also save captions as a file', checked: true });
+    await userEvent.click(screen.getByRole('checkbox', { name: /^9:16/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Export 2 videos' }));
+    const both = { ...started, files: [landscape, portrait] } as ExportEvent;
+    emit(both, { type: 'failed', message: 'The export stopped.' });
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(exporter.start).toHaveBeenLastCalledWith(['landscape', 'portrait'], 'high', expect.any(Function), {
+      captionFile: 'vtt',
+    });
+    // The 16:9 video and its captions file are in place; only 9:16 is made again, with no captions file.
+    emit(both, { type: 'fileReady', index: 0, path: landscape.path }, { type: 'failed', message: 'The export stopped.' });
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(exporter.start).toHaveBeenLastCalledWith(['portrait'], 'high', expect.any(Function));
+  });
+
+  it('a captions file that couldn’t be saved is said plainly, and the video is ready', async () => {
+    await openAndExport();
+    emit(
+      { type: 'fileReady', index: 0, path: landscape.path },
+      { type: 'captionFileFailed', index: 0, diskFull: true },
+      { type: 'finished' },
+    );
+    const why =
+      'The captions file couldn’t be saved because the disk is full. Your video is ready. Free up space, then export again to save it.';
+    expect(screen.getByText(why)).toBeInTheDocument();
+    expect(screen.getByText('Billing tutorial 16x9.mp4')).toBeInTheDocument();
+    expect(status()).toHaveTextContent(`Exported 1 video. ${why}`);
+  });
+
+  it('a captions file that failed otherwise, or had nothing to save, says so', async () => {
+    await openAndExport();
+    emit(
+      { type: 'fileReady', index: 0, path: landscape.path },
+      { type: 'captionFileFailed', index: 0, diskFull: false },
+      { type: 'finished' },
+    );
+    expect(
+      screen.getByText('The captions file couldn’t be saved. Your video is ready. Export again to save it.'),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Export 1 video' }));
+    emit(started, { type: 'fileReady', index: 0, path: landscape.path }, { type: 'captionFileEmpty' }, {
+      type: 'finished',
+    });
+    const none = 'There were no captions to save: none of the transcribed words are in your video.';
+    expect(screen.getByText(none)).toBeInTheDocument();
+    expect(status()).toHaveTextContent(none);
+  });
+
+  it('a captions file that couldn’t be saved is in the toast when the dialog is closed', async () => {
+    await openAndExport();
+    act(() => useExport.getState().setOpen(false));
+    emit(
+      { type: 'fileReady', index: 0, path: landscape.path },
+      { type: 'captionFileFailed', index: 0, diskFull: false },
+      { type: 'finished' },
+    );
+    expect(useToasts.getState().toasts.at(-1)!.text).toBe(
+      'Exported 1 video. The captions file couldn’t be saved. Your video is ready. Export again to save it.',
+    );
+  });
+
   it('Change picks the folder the files go to, and the dialog says it', async () => {
     renderExport();
     await userEvent.click(screen.getByRole('button', { name: 'Export' }));
     expect(await within(dialog()).findByText('Movies / Klipolo')).toBeInTheDocument();
     vi.mocked(exporter.plan).mockImplementation((formats) =>
-      Promise.resolve({ files: [], bytes: 140_000_000 * formats.length, seconds: 30, folder: 'Desktop / Clips' }),
+      Promise.resolve({
+        files: [],
+        bytes: 140_000_000 * formats.length,
+        seconds: 30,
+        folder: 'Desktop / Clips',
+        slowMaster: false,
+        canSaveCaptions: false,
+      }),
     );
     await userEvent.click(screen.getByRole('button', { name: 'Change folder' }));
     expect(exporter.pickFolder).toHaveBeenCalled();

@@ -10,6 +10,7 @@
 //! export worker's fonts cost before frame 0, scanned or from its job's record (`fontstart.rs`);
 //! `… -- reverse [<file>]` what shuttle playback costs, backward and at 2× (`reverse.rs`); `… -- copy <file> [<copy>]`
 //! what an editing copy saves while the preview plays, with and without a picture-in-picture layer (`copy.rs`);
+//! `… -- analysis <video> <clip>` what analysis's decoding of a clip costs playback beside it (`analysis.rs`);
 //! `… -- --export-worker <job.json>` is the export worker itself (as the app runs it), and `… -- --proxy-worker
 //! <proxy.json>` the editing-copy worker.
 //!
@@ -31,6 +32,7 @@ use klipolo_model::project::FormatKind;
 use klipolo_model::time::Us;
 use tokio::sync::{mpsc, watch};
 
+mod analysis;
 mod copy;
 mod effects;
 mod export;
@@ -166,6 +168,7 @@ async fn harness() {
         Some("export") => return export::run(&args[1..]),
         Some("reverse") => return reverse::run(&args[1..]).await,
         Some("copy") => return copy::run(&args[1..]).await,
+        Some("analysis") => return analysis::run(&args[1..]).await,
         Some("export-job") => return export::write_job(&args[1..]),
         Some("vt-memory") => return vt_memory::run(&args[1..]).await,
         Some("fontstart") => return fontstart::run(&args[1..]),

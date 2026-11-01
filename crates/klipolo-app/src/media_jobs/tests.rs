@@ -1019,6 +1019,47 @@ fn a_source_put_back_is_picked_up_without_an_edit() {
     });
 }
 
+/// An export holds the thumbnail scans (`Hold::Export`), as playback does: a scan wanted while one runs waits, and is
+/// made once the export has let go of the export slot.
+#[test]
+#[ignore = "needs scripts/gen-engine-fixtures.sh"]
+fn an_export_holds_the_thumbnail_scans_until_it_ends() {
+    use klipolo_engine::media::store::{ThumbStore, Want};
+    use klipolo_platform::durable::Os;
+
+    tauri::async_runtime::block_on(async {
+        let dir = tempfile::tempdir().unwrap();
+        let video = crate::media::tests::fixture_set::fixture_dir().join("scan-130s-720p.mp4");
+        let worker = Arc::new(StandIn::default());
+        let jobs = scheduler(&dir.path().join("media/proxies"), &worker, &Arc::default());
+        let thumbs = ThumbStore::new(dir.path().join("thumbs"), Arc::new(Os));
+        let waits = Arc::new(Mutex::new(Vec::new()));
+        {
+            let waits = waits.clone();
+            thumbs.on_waiting(move |on| waits.lock().unwrap().push(on));
+        }
+        jobs.attach_preview(Arc::new(FakePreview::default()), Some(thumbs.clone()));
+        jobs.set_exporting(true);
+        // The driver takes the export in turn.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        thumbs.want(vec![Want {
+            path: video.to_string_lossy().into_owned(),
+            duration_us: 130_000_000,
+            at_us: 0,
+        }]);
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert!(!thumbs.scanning(), "nothing scans while an export runs");
+        assert_eq!(*waits.lock().unwrap(), [false, true], "the scan waits");
+
+        jobs.set_exporting(false);
+        eventually("the scan is made once the export ends", &jobs, || {
+            !thumbs.pending() && !thumbs.scanning()
+        })
+        .await;
+        assert_eq!(waits.lock().unwrap().last(), Some(&false));
+    });
+}
+
 /// The recorder's hold reaches copies, as the app's sink holds them at arming and lets them go once the take has landed
 /// (`recorder::hold_background`): the copy being made waits for the take, and is made on after it.
 #[test]
@@ -1041,14 +1082,14 @@ fn a_take_s_hold_pauses_copies_until_it_lets_go() {
         })
         .await;
 
-        crate::recorder::hold_background(None, Some(&jobs), true);
+        crate::recorder::hold_background(None, Some(&jobs), None, true);
         stops.notify_one();
         eventually("a's copy waits for the take", &jobs, || {
             reason_of(&jobs, &a).as_deref() == Some("copies.paused.recording")
         })
         .await;
 
-        crate::recorder::hold_background(None, Some(&jobs), false);
+        crate::recorder::hold_background(None, Some(&jobs), None, false);
         eventually("a's copy is made after the take", &jobs, || {
             preview.last().contains_key(&*a.to_string_lossy())
         })
