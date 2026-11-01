@@ -139,7 +139,7 @@ export function editRoom(project: Project, kind: EditKind, i: number): EditRoom 
   };
 }
 
-/** A recording's separated sound and camera (`tie`) held to their files, and layers on locked tracks that would move. */
+/** A recording's separated sound and camera (`tie`) held to their files, and the layers on locked tracks it moves. */
 function separatedRoom(
   project: Project,
   kind: EditKind,

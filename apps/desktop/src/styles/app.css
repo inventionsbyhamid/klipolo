@@ -1266,7 +1266,7 @@
   cursor: ew-resize;
 }
 
-/* A roll's, slip's or slide's two frames at the edit, side by side over the bottom of the preview while it is dragged. */
+/* A roll's, slip's or slide's two frames at the edit, side by side over the bottom of the preview while dragged. */
 .edit-frames {
   position: absolute;
   bottom: 36px;

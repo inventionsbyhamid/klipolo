@@ -30,7 +30,8 @@ export function clipUnderPlayhead(project: Project, playheadUs: number): number 
 
 /** Why a roll or slip by key went no further, said once per held key. */
 function heldSentence(held: EditLimit): string {
-  if (held === 'footage') return t({ id: 'timeline.edit.noMoreFootage', message: 'There is no more footage that way.' });
+  if (held === 'footage')
+    return t({ id: 'timeline.edit.noMoreFootage', message: 'There is no more footage that way.' });
   if (held === 'length') return t({ id: 'timeline.edit.tooShort', message: "A clip can't get any shorter." });
   if (held === 'transition')
     return t({ id: 'timeline.edit.transitionHolds', message: 'A transition needs the rest of that footage.' });

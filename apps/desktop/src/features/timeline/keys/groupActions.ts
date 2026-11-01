@@ -50,7 +50,10 @@ export function itemsWord(count: number): string {
 /** The sentence a refused group move says. */
 export function moveRefusal(why: MoveRefusal): string {
   return why === 'locked'
-    ? t({ id: 'timeline.group.lockedMove', message: "A layer in the selection is on a locked track, so they can't move." })
+    ? t({
+        id: 'timeline.group.lockedMove',
+        message: "A layer in the selection is on a locked track, so they can't move.",
+      })
     : why === 'kind'
       ? t({ id: 'timeline.group.kindMove', message: 'Each layer needs a track of its own kind there.' })
       : t({ id: 'timeline.group.startMove', message: "The selection can't move before the start of the video." });

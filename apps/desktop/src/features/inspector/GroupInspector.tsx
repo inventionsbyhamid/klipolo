@@ -33,9 +33,9 @@ const VOLUME = clipSettings.volume;
 
 /**
  * The card for several selected clips and layers ("3 items"): only the fields they all share. Volume and Mute when
- * every one of them makes sound (a mixed volume shows the first's until it is set), Effects when every one can carry
- * effects (Paste effects puts the copied stack on each), and in its more menu Copy, Duplicate and Delete. Each change is
- * one undo step for the whole group ("Mute 3 items").
+ * every one of them makes sound (volumes that differ show 100 % until one is set for all), Effects when every one can
+ * carry effects (Paste effects puts the copied stack on each), and in its more menu Copy, Duplicate and Delete. Each
+ * change is one undo step for the whole group ("Mute 3 items").
  */
 export function GroupInspector({ ids }: { ids: readonly string[] }) {
   const { t } = useLingui();
@@ -107,7 +107,9 @@ export function GroupInspector({ ids }: { ids: readonly string[] }) {
                 className="icon-btn-sm"
                 icon={muted ? VolumeX : Volume2}
                 label={t({ id: 'volume.mute', message: 'Mute' })}
-                tooltip={muted ? t({ id: 'volume.unmute', message: 'Unmute' }) : t({ id: 'volume.mute', message: 'Mute' })}
+                tooltip={
+                  muted ? t({ id: 'volume.unmute', message: 'Unmute' }) : t({ id: 'volume.mute', message: 'Mute' })
+                }
                 active={muted}
                 onClick={() => muteGroup(!muted)}
               />
@@ -115,7 +117,13 @@ export function GroupInspector({ ids }: { ids: readonly string[] }) {
           </Field>
         )}
         {effects && (
-          <Field label={t({ id: 'inspector.group.effects', message: 'Effects', comment: 'A field of the card for several items' })}>
+          <Field
+            label={t({
+              id: 'inspector.group.effects',
+              message: 'Effects',
+              comment: 'A field of the card for several items',
+            })}
+          >
             <Button
               size="sm"
               aria-disabled={!pastable || undefined}

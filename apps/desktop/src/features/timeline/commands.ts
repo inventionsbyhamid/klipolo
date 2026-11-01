@@ -4,7 +4,15 @@
  */
 export { duplicate } from './keys/clipboardActions';
 export { EditFrames } from './EditFrames';
-export { deleteGroup, duplicateGroup, copyGroup, itemsWord, muteGroup, pasteEffectsGroup, setGroupVolume } from './keys/groupActions';
+export {
+  copyGroup,
+  deleteGroup,
+  duplicateGroup,
+  itemsWord,
+  muteGroup,
+  pasteEffectsGroup,
+  setGroupVolume,
+} from './keys/groupActions';
 export { allEffects, allSound, countOf, groupMuted, groupVolume, groupVolumeOps, membersOf } from './keys/groupOps';
 export { trackStepOps } from './keys/keyOps';
 export { noteMutedTrack, stepTrack } from './keys/layerActions';

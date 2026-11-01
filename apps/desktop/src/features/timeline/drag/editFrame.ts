@@ -103,7 +103,11 @@ export function frameEdit(s: Session, g: Edit, project: Project, dtUs: number): 
   const label = g.label;
   const edit =
     g.edit === 'roll'
-      ? t({ id: 'timeline.roll.tip', message: `Roll ${amount}`, comment: 'Tip while rolling a cut; {amount} e.g. +0.5 s' })
+      ? t({
+          id: 'timeline.roll.tip',
+          message: `Roll ${amount}`,
+          comment: 'Tip while rolling a cut; {amount} e.g. +0.5 s',
+        })
       : g.edit === 'slip'
         ? t({ id: 'timeline.slip.tip', message: `Slip ${amount}`, comment: "Tip while slipping a clip's footage" })
         : t({ id: 'timeline.slide.tip', message: `Slide ${amount}`, comment: 'Tip while sliding a clip' });
@@ -152,7 +156,8 @@ export function frameGroup(s: Session, g: Group, project: Project, dtUs: number,
   const dt = snapToFrame(dtUs, s.fps);
   // With clips in it, the clips go together to a place on the main track, and its other layers as far as they did.
   const reorder = m.clips.length > 0 ? groupReorderOps(project, m, dt) : null;
-  const ops = reorder === null ? groupMoveOps(project, m, dt, rows) : typeof reorder === 'string' ? reorder : reorder.ops;
+  const ops =
+    reorder === null ? groupMoveOps(project, m, dt, rows) : typeof reorder === 'string' ? reorder : reorder.ops;
   s.dryOps = null;
   s.edgeUs = null;
   s.label = 'timeline.group.move';
