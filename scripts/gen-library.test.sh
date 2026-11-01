@@ -13,12 +13,18 @@ cd "$(dirname "$0")/.."
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-# Two runs at once, each a minute or two, by different numbers of processes.
-python3 -I scripts/gen-library.py --out "$tmp/a" >/dev/null &
+# Two runs at once, each a minute or two, by different numbers of processes; both must finish.
+python3 -I scripts/gen-library.py --out "$tmp/a" --workers 4 >/dev/null &
 a=$!
 python3 -I scripts/gen-library.py --out "$tmp/b" --workers 3 >/dev/null &
 b=$!
-wait "$a" && wait "$b"
+ran=0
+wait "$a" || ran=1
+wait "$b" || ran=1
+if [ "$ran" != 0 ]; then
+  echo "FAIL  scripts/gen-library.py stopped with an error"
+  exit 1
+fi
 
 status=0
 python3 -I - "$tmp/a" "$tmp/b" assets/library <<'PY' || status=1
