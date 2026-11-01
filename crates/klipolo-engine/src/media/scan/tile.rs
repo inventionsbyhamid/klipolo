@@ -223,7 +223,7 @@ impl Video {
 
 /// Relabels a JPEG-style frame (`yuvj4xxp`) as its plain layout at full range, the same bytes; true when it was one
 /// (the frame then says full range, so a second scaling of the same frame reads it as full range too).
-fn plain_layout(frame: &mut ffmpeg::frame::Video) -> bool {
+pub(crate) fn plain_layout(frame: &mut ffmpeg::frame::Video) -> bool {
     let plain = match frame.format() {
         Pixel::YUVJ420P => Pixel::YUV420P,
         Pixel::YUVJ422P => Pixel::YUV422P,
@@ -278,7 +278,13 @@ fn full_range_out(scaler: &mut scaling::Context, full_range_in: bool) {
 }
 
 /// Turns a `w × h` plane clockwise by `degrees` (90, 180 or 270) into `out`, tightly packed.
-fn turn(src: &[u8], stride: usize, (w, h): (usize, usize), degrees: u16, out: &mut Vec<u8>) {
+pub(crate) fn turn(
+    src: &[u8],
+    stride: usize,
+    (w, h): (usize, usize),
+    degrees: u16,
+    out: &mut Vec<u8>,
+) {
     out.clear();
     out.resize(w * h, 0);
     let at = |x: usize, y: usize| src[y * stride + x];
