@@ -1,46 +1,34 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import type { ThumbStrip } from '../../bindings/ThumbStrip';
 import type { ThumbTile } from '../../bindings/ThumbTile';
 import { mediaUrl } from '../../bridge/commands';
-import { media } from '../../bridge/media';
 import { useMediaVersion } from '../../state/media';
-
-/** Each file's thumbnail strip as last asked, with the media version it was asked at. */
-const strips = new Map<string, { version: number; strip: Promise<ThumbStrip | null> }>();
-
-/** `path`'s strip at media version `version`: asked once per version, and again later where it couldn't be had. */
-function stripAt(path: string, version: number): Promise<ThumbStrip | null> {
-  const had = strips.get(path);
-  if (had?.version === version) return had.strip;
-  const strip = media.thumbs(path).catch(() => {
-    if (strips.get(path)?.strip === strip) strips.delete(path);
-    return null;
-  });
-  strips.set(path, { version, strip });
-  return strip;
-}
+import { stripOf } from '../timeline/media/spriteCache';
 
 /**
  * The first thumbnail of the video at `path` (tile 0 of its strip's chunk 0, which the media scan writes first), asked
- * for once `near` (on screen or close to it) and again whenever the file's thumbnails change; null until it is
- * scanned, where there is no media cache, or for no file (`path` empty).
+ * for once `near` (on screen or close to it) and again whenever the file's thumbnails change. The strip is the one the
+ * timeline's filmstrips read (`stripOf`), asked for once for both. Null until it is scanned, where there is no media
+ * cache, or for no file (`path` empty); asked for another file, null until that one's is here.
  */
 export function useClipPicture(path: string, near = true): ThumbTile | null {
   const version = useMediaVersion(path || null);
-  const [tile, setTile] = useState<ThumbTile | null>(null);
+  const [shown, setShown] = useState<{ path: string; tile: ThumbTile } | null>(null);
   useEffect(() => {
     if (!near || !path) return;
     let live = true;
-    void stripAt(path, version).then((strip) => {
-      const first = strip?.chunks.find((chunk) => chunk.index === 0);
-      if (!live || !strip || !first) return;
-      setTile({ sprite: first.path, tileW: strip.tileW, tileH: strip.tileH, cols: strip.cols });
-    });
+    stripOf(path, version).then(
+      (strip) => {
+        const first = strip?.chunks.find((chunk) => chunk.index === 0);
+        if (!live || !strip || !first) return;
+        setShown({ path, tile: { sprite: first.path, tileW: strip.tileW, tileH: strip.tileH, cols: strip.cols } });
+      },
+      () => undefined,
+    );
     return () => {
       live = false;
     };
   }, [path, version, near]);
-  return tile;
+  return shown?.path === path ? shown.tile : null;
 }
 
 /**

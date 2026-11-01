@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ThumbStrip } from '../bindings/ThumbStrip';
@@ -136,6 +136,16 @@ describe('the folded library’s thumbnails', () => {
     expect(tile.style.height).toBe('100%');
     expect(clips[1].querySelector('.rail-tile')).toBeNull();
     expect(clips[1].querySelector('svg')).not.toBeNull();
+  });
+
+  it('a picture asked for another file shows none until that file’s is here', async () => {
+    const { useClipPicture } = await import('../features/media/clipPicture');
+    const { result, rerender } = renderHook(({ path }) => useClipPicture(path), {
+      initialProps: { path: '/media/screen' },
+    });
+    await waitFor(() => expect(result.current?.sprite).toBe('/thumbs/screen-0.jpg'));
+    rerender({ path: '/media/broll' });
+    expect(result.current).toBeNull();
   });
 
   it('a press adds the clip to the end as its row’s "+" does; Enter too', async () => {
