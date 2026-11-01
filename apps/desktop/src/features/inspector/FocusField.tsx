@@ -1,5 +1,5 @@
 import { useLingui } from '@lingui/react/macro';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { Clip } from '../../bindings/Clip';
 import type { FillFocus } from '../../bindings/FillFocus';
 import type { FormatKind } from '../../bindings/FormatKind';
@@ -64,6 +64,8 @@ export function FocusField({ clip, format, canFollow }: { clip: Clip; format: Fo
   const choice = focusChoice(clip, format);
   const estimate = useSpeakerEstimate(clip.id, format, canFollow);
   const running = useSpeakerRun(clip.id, format);
+  const noteId = useId();
+  const refused = choice !== 'speaker' && Boolean(estimate?.refusal);
   const pick = (next: FocusChoice) => {
     if (next === choice || running !== null) return;
     // Refused (no key or code, more than an access code's credit left): the note under the row says why.
@@ -77,6 +79,9 @@ export function FocusField({ clip, format, canFollow }: { clip: Clip; format: Fo
     value: 'speaker' as const,
     label: t({ id: 'clip.focusChoice.speaker', message: 'Speaker', comment: 'Focus: follow the person talking' }),
     tooltip: t({ id: 'clip.focusChoice.speaker.tip', message: 'Follow the speaker' }),
+    // Off while it can't be paid for: the note under the row says why.
+    disabled: refused,
+    describedBy: refused ? noteId : undefined,
   };
   const options = [
     ...(canFollow ? [speakerOption] : []),
@@ -113,7 +118,7 @@ export function FocusField({ clip, format, canFollow }: { clip: Clip; format: Fo
         />
       </Field>
       {note && (
-        <p className="field-note" role={running !== null ? 'status' : undefined}>
+        <p id={noteId} className="field-note" role={running !== null ? 'status' : undefined}>
           {note}
         </p>
       )}

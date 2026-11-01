@@ -156,7 +156,7 @@ describe('the Focus of a filled clip', () => {
     expect(screen.queryByText(/Follow the speaker,/)).toBeNull();
   });
 
-  it('a refusal is said instead of the price, and Speaker then sends nothing', async () => {
+  it('a refusal is said instead of the price, and Speaker is off and sends nothing', async () => {
     vi.mocked(speakerBridge.estimate).mockResolvedValue({
       usd: 0.024,
       clips: ['b'],
@@ -165,8 +165,11 @@ describe('the Focus of a filled clip', () => {
     });
     const user = userEvent.setup();
     renderWithProviders(<Inspector format="portrait" />);
-    expect(await screen.findByText('Add your Meta API key or access code in Settings.')).toBeInTheDocument();
-    await user.click(screen.getByRole('radio', { name: 'Speaker' }));
+    const note = await screen.findByText('Add your Meta API key or access code in Settings.');
+    const speaker = screen.getByRole('radio', { name: 'Speaker' });
+    expect(speaker).toBeDisabled();
+    expect(speaker).toHaveAttribute('aria-describedby', note.id);
+    await user.click(speaker);
     expect(speakerBridge.follow).not.toHaveBeenCalled();
   });
 
