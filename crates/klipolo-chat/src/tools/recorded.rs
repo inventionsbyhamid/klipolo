@@ -1,10 +1,13 @@
 //! The recording tools: how a recording's camera shows (`setCameraMode`), where its bubble sits and how it looks
-//! (`adjustCamera`), and the camera made a layer of its own (`detachCamera`). Each is one entry of `TOOLS`. The words
-//! they take are the model's own (`CameraMode`, `CameraShape`, `Anchor`, `FormatKind`), and the bubble's sizes and
-//! steps.
+//! (`adjustCamera`), the camera made a layer of its own (`detachCamera`), and its recorded sounds muted, turned up or
+//! down, or put on a track of their own (`muteSource`, `setSourceVolume`, `separateSound`). Each is one entry of
+//! `TOOLS`. The words they take are the model's own (`CameraMode`, `CameraShape`, `Anchor`, `FormatKind`), the
+//! bubble's sizes and steps, and the sounds by kind (`Sound`).
 //!
 //! Each takes `clips`, the refs of the clips it changes (`c2`, or `c3-c41` for a run as the context folds it), or null
-//! for every clip that has a camera; whether a ref names a clip is the compiler's to judge.
+//! for every clip that has the camera or the sound; whether a ref names a clip is the compiler's to judge.
+
+use std::ops::RangeInclusive;
 
 use klipolo_model::layout::Anchor;
 use klipolo_model::project::FormatKind;
@@ -13,8 +16,44 @@ use serde_json::{Value, json};
 
 use super::args::{Args, kind};
 use super::error::{Problem, ToolError};
-use super::schema::{Word, nullable_boolean, nullable_words, string, words};
+use super::schema::{Word, boolean, nullable_boolean, nullable_words, string, words};
 use super::{FORMATS, Tool, ToolCall};
+
+/// The volumes a recorded sound takes, in percent of how it was recorded: the model's 0 to 200 %.
+pub const SOURCE_VOLUMES: RangeInclusive<f64> = 0.0..=200.0;
+
+/// A recorded sound, by what it is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sound {
+    Mic,
+    /// The computer's own sound (a system audio source).
+    ComputerSound,
+    GameSound,
+    /// A picture source's own sound: the camera's, where its files carry sound.
+    VideoSound,
+}
+
+impl Sound {
+    /// The tool's word for it ("computerSound").
+    pub fn key(self) -> &'static str {
+        match self {
+            Sound::Mic => "mic",
+            Sound::ComputerSound => "computerSound",
+            Sound::GameSound => "gameSound",
+            Sound::VideoSound => "videoSound",
+        }
+    }
+
+    /// How the person reads it ("computer sound").
+    pub fn name(self) -> &'static str {
+        match self {
+            Sound::Mic => "mic",
+            Sound::ComputerSound => "computer sound",
+            Sound::GameSound => "game sound",
+            Sound::VideoSound => "camera sound",
+        }
+    }
+}
 
 /// The bubble's sizes: a share of a 16:9 frame's width, the same bubble in every format.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -55,6 +94,13 @@ impl BubbleChange {
     }
 }
 
+/// The sounds the tools offer, in the schema's order.
+pub const SOUNDS: [Sound; 4] = [
+    Sound::Mic,
+    Sound::ComputerSound,
+    Sound::GameSound,
+    Sound::VideoSound,
+];
 /// The ways a camera shows.
 pub const CAMERA_MODES: [CameraMode; 3] = [
     CameraMode::Bubble,
@@ -84,6 +130,12 @@ pub const BUBBLE_SIZES: [BubbleSize; 3] =
     [BubbleSize::Small, BubbleSize::Medium, BubbleSize::Large];
 /// The bubble's steps.
 pub const SIZE_STEPS: [SizeStep; 2] = [SizeStep::Bigger, SizeStep::Smaller];
+
+impl Word for Sound {
+    fn word(self) -> &'static str {
+        self.key()
+    }
+}
 
 impl Word for CameraMode {
     fn word(self) -> &'static str {
@@ -178,6 +230,37 @@ impl Args {
         }
         Ok((!refs.is_empty()).then_some(refs))
     }
+
+    /// Text, or None when it is null, left out or only spaces.
+    fn nullable_text(&mut self, key: &str) -> Result<Option<String>, ToolError> {
+        match self.map.get(key) {
+            None | Some(Value::Null) => {
+                self.map.remove(key);
+                Ok(None)
+            }
+            Some(_) => {
+                let text = self.label(key)?;
+                Ok((!text.is_empty()).then_some(text))
+            }
+        }
+    }
+
+    /// A percent within `bounds`, as the model's gain to two decimals (150 % is 1.5).
+    fn percent(&mut self, key: &str, bounds: &RangeInclusive<f64>) -> Result<f64, ToolError> {
+        let value = self.take(key)?;
+        let n = self.number(key, &value, "a number")?;
+        if !bounds.contains(&n) {
+            return Err(self.error(
+                key,
+                Problem::NotWithin {
+                    min: *bounds.start(),
+                    max: *bounds.end(),
+                    got: n,
+                },
+            ));
+        }
+        Ok(n.round() / 100.0)
+    }
 }
 
 /// `clips`, as every recording tool takes it.
@@ -190,6 +273,27 @@ fn clips(what: &str) -> (&'static str, Value) {
             "description": format!("Null for every clip {what}."),
         }),
     )
+}
+
+/// `source`, `which` and `clips`, as the sound tools take them.
+fn sound(rest: Vec<(&'static str, Value)>) -> Vec<(&'static str, Value)> {
+    let mut out = vec![(
+        "source",
+        words(
+            &SOUNDS,
+            "computerSound is the computer's sound; videoSound the camera's own sound.",
+        ),
+    )];
+    out.extend(rest);
+    out.push((
+        "which",
+        json!({
+            "type": ["string", "null"],
+            "description": "2 for mic 2, when a recording has several. Null for all.",
+        }),
+    ));
+    out.push(clips("with that sound"));
+    out
 }
 
 pub(super) const SET_CAMERA_MODE: Tool = Tool {
@@ -272,6 +376,55 @@ pub(super) const DETACH_CAMERA: Tool = Tool {
     parameters: || vec![clips("with a camera")],
     read: |a| {
         Ok(ToolCall::DetachCamera {
+            clips: a.clip_refs("clips")?,
+        })
+    },
+};
+
+pub(super) const MUTE_SOURCE: Tool = Tool {
+    name: "muteSource",
+    description: "Mute or unmute one recorded sound, everywhere or in some clips.",
+    parameters: || sound(vec![("muted", boolean("False unmutes it."))]),
+    read: |a| {
+        Ok(ToolCall::MuteSource {
+            source: a.word("source", &SOUNDS)?,
+            muted: a.flag("muted")?,
+            which: a.nullable_text("which")?,
+            clips: a.clip_refs("clips")?,
+        })
+    },
+};
+
+pub(super) const SET_SOURCE_VOLUME: Tool = Tool {
+    name: "setSourceVolume",
+    description: "Make one recorded sound louder or quieter, everywhere or in some clips.",
+    parameters: || {
+        sound(vec![(
+            "volume",
+            json!({
+                "type": "number",
+                "description": "Percent of how it was recorded, 0 to 200. 100 is as recorded, 50 half as loud.",
+            }),
+        )])
+    },
+    read: |a| {
+        Ok(ToolCall::SetSourceVolume {
+            source: a.word("source", &SOUNDS)?,
+            volume: a.percent("volume", &SOURCE_VOLUMES)?,
+            which: a.nullable_text("which")?,
+            clips: a.clip_refs("clips")?,
+        })
+    },
+};
+
+pub(super) const SEPARATE_SOUND: Tool = Tool {
+    name: "separateSound",
+    description: "Put one recorded sound on a track of its own, to trim and cut apart from the video.",
+    parameters: || sound(Vec::new()),
+    read: |a| {
+        Ok(ToolCall::SeparateSound {
+            source: a.word("source", &SOUNDS)?,
+            which: a.nullable_text("which")?,
             clips: a.clip_refs("clips")?,
         })
     },

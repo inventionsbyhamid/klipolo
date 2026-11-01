@@ -1,8 +1,9 @@
 //! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
 //! context was built from, out as edits.
 //! - Additions (`setFormat`, `setCaptions`, `fixCaptionWords`, `splitAt`, a trim that makes a clip longer, the media:
-//!   `addMusic`, `addSound`, `addText`, `addImage` and `makeTitleCard`'s title, and a recording's camera:
-//!   `setCameraMode`, `adjustCamera`, `detachCamera`) are one `Transaction` the app
+//!   `addMusic`, `addSound`, `addText`, `addImage` and `makeTitleCard`'s title, and a recording's camera and sounds:
+//!   `setCameraMode`, `adjustCamera`, `detachCamera`, `muteSource`, `setSourceVolume`, `separateSound`) are one
+//!   `Transaction` the app
 //!   applies at once: one undo step. An addition is judged by what its part does, not by its tool: one that takes
 //!   something away (the model's own `removals`, as a format dropped with what was placed in it) is compiled again with
 //!   the removals and proposed.
@@ -36,7 +37,7 @@
 //! `chat.andMore {first, more}` for a step of several calls. What a recording tool left as it was is a note for the
 //! person (`Compiled::notes`). Splitting by concern: `additions`, `removals`, `trim` (both), `media` (the library's
 //! music, sounds, words and pictures, and the pictures to draw), `recorded` (a recording's camera, in `cameras` and
-//! `bubble`), `map`.
+//! `bubble`, and its sounds, in `sources`), `map`.
 
 mod additions;
 mod bubble;
@@ -45,6 +46,7 @@ mod map;
 mod media;
 mod recorded;
 mod removals;
+mod sources;
 mod trim;
 
 use std::collections::{HashMap, HashSet};
@@ -564,7 +566,10 @@ impl Compiler<'_> {
                 }
                 ToolCall::SetCameraMode { .. }
                 | ToolCall::AdjustCamera { .. }
-                | ToolCall::DetachCamera { .. } => {
+                | ToolCall::DetachCamera { .. }
+                | ToolCall::MuteSource { .. }
+                | ToolCall::SetSourceVolume { .. }
+                | ToolCall::SeparateSound { .. } => {
                     let edit = recorded::compile(self, &adding.work, call).map(|noted| {
                         notes = noted.notes;
                         noted.edit
@@ -739,7 +744,10 @@ impl Compiler<'_> {
             } => media::add_image(self, work, file, (*size, *position), (*at_us, *duration_us)),
             ToolCall::SetCameraMode { .. }
             | ToolCall::AdjustCamera { .. }
-            | ToolCall::DetachCamera { .. } => {
+            | ToolCall::DetachCamera { .. }
+            | ToolCall::MuteSource { .. }
+            | ToolCall::SetSourceVolume { .. }
+            | ToolCall::SeparateSound { .. } => {
                 recorded::compile(self, work, call).map(|noted| noted.edit)
             }
             other => Err(to_model(format!("{}: not an addition.", other.name()))),

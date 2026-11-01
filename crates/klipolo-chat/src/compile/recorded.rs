@@ -1,17 +1,18 @@
 //! The recording tools, on the additions' working copy: a recording's camera (`cameras`, and the bubble's place and
-//! look in `bubble`).
+//! look in `bubble`) and its recorded sounds (`sources`).
 //!
 //! A call names clips by the context's refs (`c2`, or a run `c3-c41` as the context folds it), each resolved through
 //! the `Refs` the context was built with and then to its pieces in the working copy (`Map::pieces_of`), so a split
 //! earlier in the answer still leaves the clip named; none named is every clip.
 //!
 //! Each is an addition, applied at once in the answer's one undo step. What a call left as it was (a camera that is
-//! its own layer already, a hidden one) is a note for the person (`Noted::notes`), said after the
+//! its own layer already, a sound playing from its own track) is a note for the person (`Noted::notes`), said after the
 //! reply; a call that changes nothing but has a note is refused for the person with it, since nothing was done.
 //! Refusals the model can mend (a ref that names no clip, a bubble change that names nothing) go back to it; facts about
-//! the project (no camera, a format the video doesn't have) are said to the person.
+//! the project (no camera, no such sound, a format the video doesn't have) are said to the person.
 //!
-//! Undo labels: `chat.setCameraMode {mode}`, `chat.adjustCamera` and `chat.detachCamera`.
+//! Undo labels: `chat.setCameraMode {mode}`, `chat.adjustCamera`, `chat.detachCamera`, `chat.muteSource {source,
+//! mute}`, `chat.setSourceVolume {source, percent}` and `chat.separateSound {source}`, `source` the tool's word.
 
 use std::collections::HashSet;
 
@@ -20,7 +21,7 @@ use klipolo_model::ids::Id;
 use klipolo_model::project::FormatKind;
 use klipolo_model::timeline::ClipSource;
 
-use super::{Compiler, Edit, Refused, bubble, cameras, to_model, to_person};
+use super::{Compiler, Edit, Refused, bubble, cameras, sources, to_model, to_person};
 use crate::tools::ToolCall;
 
 /// A recording tool's edit, and what it left as it was, in sentences for the person.
@@ -49,6 +50,35 @@ pub(super) fn compile(c: &Compiler, work: &Project, call: &ToolCall) -> Result<N
             bubble::adjust(c, work, clips.as_deref(), change)
         }
         ToolCall::DetachCamera { clips } => cameras::detach(c, work, clips.as_deref()),
+        ToolCall::MuteSource {
+            source,
+            muted,
+            which,
+            clips,
+        } => sources::mute(
+            c,
+            work,
+            *source,
+            *muted,
+            (which.as_deref(), clips.as_deref()),
+        ),
+        ToolCall::SetSourceVolume {
+            source,
+            volume,
+            which,
+            clips,
+        } => sources::set_volume(
+            c,
+            work,
+            *source,
+            *volume,
+            (which.as_deref(), clips.as_deref()),
+        ),
+        ToolCall::SeparateSound {
+            source,
+            which,
+            clips,
+        } => sources::separate(c, work, *source, (which.as_deref(), clips.as_deref())),
         other => Err(to_model(format!("{}: not a recording tool.", other.name()))),
     }
 }

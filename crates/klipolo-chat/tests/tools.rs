@@ -5,14 +5,14 @@
 //! before `startSec`), `{}` for a tool without arguments, two calls in one answer. The spike's 12 requests come first,
 //! in this tool set's names and words (its `removeFillerWords` is `removeFillers`, `setCaptionStyle` with
 //! `karaoke_highlight` is `setCaptions` with `karaoke`, `setFormat` `9:16` is `portrait`); the rest cover the tools the
-//! spike did not have, then the media tools with times from the clip A context fixture, then a recording's camera
-//! last.
+//! spike did not have, then the media tools with times from the clip A context fixture, then a recording's camera and
+//! sounds last.
 
 use std::collections::BTreeSet;
 
 use klipolo_chat::tools::{
     BubbleChange, CHAT_CAPTION_STYLES, FunctionCall, Moment, PictureSize, Position, Problem,
-    SizeStep, TextPreset, ToolCall, tools,
+    SizeStep, Sound, TextPreset, ToolCall, tools,
 };
 use klipolo_model::captions::styles::{BuiltinCaptionStyle, CaptionStyles};
 use klipolo_model::layout::Anchor;
@@ -207,6 +207,9 @@ fn every_tool_schema_is_strict() {
             "setCameraMode",
             "adjustCamera",
             "detachCamera",
+            "muteSource",
+            "setSourceVolume",
+            "separateSound",
             "undo",
             "askUser",
             "cannotDo",
@@ -259,6 +262,12 @@ fn every_tool_schema_is_strict() {
             "adjustCamera.size",
             "adjustCamera.sizeStep",
             "detachCamera.clips",
+            "muteSource.clips",
+            "muteSource.which",
+            "setSourceVolume.clips",
+            "setSourceVolume.which",
+            "separateSound.clips",
+            "separateSound.which",
         ]
     );
 }
@@ -512,6 +521,32 @@ fn parses_each_tool_from_spike_shaped_calls() {
         (
             "separate the camera so I can cut it",
             vec![DetachCamera { clips: None }],
+        ),
+        (
+            "mute the mic in the second recording",
+            vec![MuteSource {
+                source: Sound::Mic,
+                muted: true,
+                which: None,
+                clips: Some(vec!["c3".into()]),
+            }],
+        ),
+        (
+            "turn the system sound down",
+            vec![SetSourceVolume {
+                source: Sound::ComputerSound,
+                volume: 0.5,
+                which: None,
+                clips: None,
+            }],
+        ),
+        (
+            "separate the sound",
+            vec![SeparateSound {
+                source: Sound::Mic,
+                which: None,
+                clips: None,
+            }],
         ),
     ];
     assert_eq!(fixture.answers.len(), expected.len());
@@ -1277,5 +1312,5 @@ fn the_prompt_is_one_fixed_text_and_small() {
     let tools_tokens = klipolo_chat::estimate_tokens(&serde_json::to_string(&tools()).unwrap());
     println!("prompt {prompt_tokens} tokens, tools {tools_tokens} tokens");
     assert!(prompt_tokens <= 900, "prompt {prompt_tokens} tokens");
-    assert!(tools_tokens <= 3_300, "tools {tools_tokens} tokens");
+    assert!(tools_tokens <= 3_900, "tools {tools_tokens} tokens");
 }

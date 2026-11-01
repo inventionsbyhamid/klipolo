@@ -1,5 +1,6 @@
-//! The recording tools: a recording's camera (`setCameraMode`, `adjustCamera`, `detachCamera`), read from the model's
-//! calls and compiled against a project made here, `two_takes()`:
+//! The recording tools: a recording's camera (`setCameraMode`, `adjustCamera`, `detachCamera`) and its recorded sounds
+//! (`muteSource`, `setSourceVolume`, `separateSound`), read from the model's calls and compiled against a project
+//! made here, `two_takes()`:
 //! - c1 (clip "a"): Recording 1, 0 to 30 s, with a screen, a camera, a mic and the computer's sound; its camera as a
 //!   take starts (a bubble at the bottom right, split under the screen in portrait);
 //! - c2 (clip "b"): "broll.mov", 30 to 40 s, an imported file;
@@ -14,10 +15,10 @@ use std::sync::Mutex;
 use std::task::{Context, Poll, Waker};
 
 use klipolo_chat::compile::Compiled;
-use klipolo_chat::tools::{BubbleChange, BubbleSize};
+use klipolo_chat::tools::{BubbleChange, BubbleSize, Sound};
 use klipolo_chat::{
     Audience, BoxFuture, FunctionCall, Inputs, LanguageModel, ModelError, ModelRequest,
-    ModelResponse, Refs, ToolCall, View, build_context, compile, plan,
+    ModelResponse, Problem, Refs, ToolCall, View, build_context, compile, plan,
 };
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::layout::{Anchor, BoxN};
@@ -27,7 +28,9 @@ use klipolo_model::project::{
     SourceRun,
 };
 use klipolo_model::time::Us;
-use klipolo_model::timeline::{CameraLayout, CameraMode, CameraShape, Clip, ClipSource};
+use klipolo_model::timeline::{
+    CameraLayout, CameraMode, CameraShape, Clip, ClipSource, ItemContent,
+};
 use klipolo_model::{Project, apply_ops};
 use serde_json::{Value, json};
 
@@ -202,6 +205,16 @@ fn camera<'p>(p: &'p Project, id: &str) -> &'p CameraLayout {
     clip(p, id).camera.as_ref().unwrap()
 }
 
+/// What clip `clip_id` plays of recording `rec`'s source `source`.
+fn mix<'p>(p: &'p Project, clip_id: &str, rec: &str, source: &str) -> &'p SourceMix {
+    let s = p.recording(rec).unwrap().source(source).unwrap();
+    clip(p, clip_id).mix_for(s)
+}
+
+fn default_mix<'p>(p: &'p Project, rec: &str, source: &str) -> &'p SourceMix {
+    &p.recording(rec).unwrap().source(source).unwrap().mix
+}
+
 fn label(out: &Compiled) -> (String, Option<Vec<(String, ErrorParam)>>) {
     let tx = out.additions.as_ref().unwrap();
     let params = (tx.params.clone()).map(|p| p.into_iter().collect::<Vec<_>>());
@@ -290,10 +303,79 @@ fn the_camera_words_are_the_models_own_names() {
 }
 
 #[test]
+fn the_sound_tools_read_a_kind_a_percent_and_which_one() {
+    assert_eq!(
+        call(
+            "muteSource",
+            json!({"source": "mic", "muted": true, "which": null, "clips": ["c3"]})
+        ),
+        ToolCall::MuteSource {
+            source: Sound::Mic,
+            muted: true,
+            which: None,
+            clips: Some(vec!["c3".into()]),
+        }
+    );
+    // The percent becomes the model's gain, to two decimals; which one is trimmed text.
+    assert_eq!(
+        call(
+            "setSourceVolume",
+            json!({"source": "computerSound", "volume": 62.5, "which": " 2 ", "clips": null})
+        ),
+        ToolCall::SetSourceVolume {
+            source: Sound::ComputerSound,
+            volume: 0.63,
+            which: Some("2".into()),
+            clips: None,
+        }
+    );
+    assert_eq!(
+        call(
+            "separateSound",
+            json!({"source": "gameSound", "which": "", "clips": null})
+        ),
+        ToolCall::SeparateSound {
+            source: Sound::GameSound,
+            which: None,
+            clips: None,
+        }
+    );
+    // The model allows 0 to 200 %: anything else is refused, never clamped.
+    let loud = ToolCall::parse(&function(
+        "setSourceVolume",
+        json!({"source": "mic", "volume": 250, "which": null, "clips": null}),
+    ))
+    .unwrap_err();
+    assert_eq!(loud.field.as_deref(), Some("volume"));
+    assert_eq!(
+        loud.to_string(),
+        "setSourceVolume: volume must be between 0 and 200, not 250."
+    );
+    let kind = ToolCall::parse(&function(
+        "muteSource",
+        json!({"source": "voice", "muted": true, "which": null, "clips": null}),
+    ))
+    .unwrap_err();
+    assert!(matches!(kind.problem, Problem::NotOneOf { .. }), "{kind}");
+    let refs = ToolCall::parse(&function(
+        "muteSource",
+        json!({"source": "mic", "muted": true, "which": null, "clips": "c1"}),
+    ))
+    .unwrap_err();
+    assert_eq!(
+        refs.to_string(),
+        "muteSource: clips must be a list or null, not text."
+    );
+}
+
+#[test]
 fn a_recording_tool_names_the_timeline_only_when_it_names_clips() {
     let every = call("detachCamera", json!({"clips": null}));
     assert!(!every.names_timeline());
-    let some = call("detachCamera", json!({"clips": ["c1"]}));
+    let some = call(
+        "muteSource",
+        json!({"source": "mic", "muted": true, "which": null, "clips": ["c1"]}),
+    );
     assert!(some.names_timeline());
 }
 
@@ -611,6 +693,227 @@ fn a_hidden_camera_stays_in_its_clip() {
     );
 }
 
+// ---- muteSource and setSourceVolume.
+
+fn mute(clips: Value, muted: bool) -> ToolCall {
+    call(
+        "muteSource",
+        json!({"source": "mic", "muted": muted, "which": null, "clips": clips}),
+    )
+}
+
+#[test]
+fn mute_the_mic_everywhere_mutes_every_recordings_mic() {
+    let p = two_takes();
+    let out = compiled(&p, &[mute(json!(null), true)]);
+    assert_eq!(
+        label(&out),
+        (
+            "chat.muteSource".to_owned(),
+            Some(vec![
+                ("mute".to_owned(), ErrorParam::from("on")),
+                ("source".to_owned(), ErrorParam::from("mic")),
+            ])
+        )
+    );
+    let done = apply_ops(&p, &out.additions.unwrap().ops).unwrap();
+    for rec in ["rec1", "rec2"] {
+        let m = default_mix(&done, rec, "mic");
+        assert!(m.muted && m.person_muted(), "{rec}");
+    }
+    // The computer's sound is as it was.
+    assert_eq!(default_mix(&done, "rec1", "system"), &SourceMix::default());
+}
+
+#[test]
+fn muting_the_mic_in_one_recording_leaves_the_other_recordings_unchanged() {
+    let p = two_takes();
+    let done = after(&p, &[mute(json!(["c3"]), true)]);
+    assert!(
+        mix(&done, "c", "rec2", "mic").muted,
+        "the second recording's clip"
+    );
+    // Its default and the first recording are as they were.
+    assert_eq!(
+        default_mix(&done, "rec2", "mic"),
+        default_mix(&p, "rec2", "mic")
+    );
+    assert_eq!(done.recording("rec1"), p.recording("rec1"));
+    assert_eq!(clip(&done, "a"), clip(&p, "a"));
+    // Unmuting it there takes the clip's own mix away: it follows the default again.
+    let back = after(&done, &[mute(json!(["c3"]), false)]);
+    assert!(clip(&back, "c").source_mix.is_empty());
+    assert_eq!(back, p);
+}
+
+#[test]
+fn turn_the_system_sound_down() {
+    let p = two_takes();
+    let volume = call(
+        "setSourceVolume",
+        json!({"source": "computerSound", "volume": 40, "which": null, "clips": null}),
+    );
+    let out = compiled(&p, std::slice::from_ref(&volume));
+    assert_eq!(
+        label(&out),
+        (
+            "chat.setSourceVolume".to_owned(),
+            Some(vec![
+                ("percent".to_owned(), ErrorParam::Number(40.0)),
+                ("source".to_owned(), ErrorParam::from("computerSound")),
+            ])
+        )
+    );
+    let done = after(&p, &[volume]);
+    assert_eq!(default_mix(&done, "rec1", "system").volume, 0.4);
+    assert_eq!(done.recording("rec2"), p.recording("rec2"));
+}
+
+#[test]
+fn everywhere_reaches_the_clips_with_a_mix_of_their_own() {
+    let p = after(&two_takes(), &[mute(json!(["c1"]), true)]);
+    assert!(mix(&p, "a", "rec1", "mic").muted);
+    // Unmuting everywhere unmutes it there too, and the clip follows the default again.
+    let done = after(&p, &[mute(json!(null), false)]);
+    assert!(!mix(&done, "a", "rec1", "mic").muted);
+    assert!(clip(&done, "a").source_mix.is_empty());
+}
+
+#[test]
+fn a_sound_the_video_lacks_is_said_to_the_person() {
+    let p = two_takes();
+    let game = call(
+        "muteSource",
+        json!({"source": "gameSound", "muted": true, "which": null, "clips": null}),
+    );
+    assert_eq!(
+        refused(&p, &[game]),
+        ("Your video has no game sound.".to_owned(), Audience::Person)
+    );
+    assert_eq!(
+        refused(&p, &[mute(json!(["c2"]), true)]),
+        (
+            "That clip is an imported file, not a recording, so it has no mic.".to_owned(),
+            Audience::Person
+        )
+    );
+    // The camera of a take has no sound of its own: Klipolo's picture files carry none.
+    let camera_sound = call(
+        "muteSource",
+        json!({"source": "videoSound", "muted": true, "which": null, "clips": null}),
+    );
+    assert_eq!(
+        refused(&p, &[camera_sound]).0,
+        "Your video has no camera sound."
+    );
+}
+
+#[test]
+fn which_mic_when_a_recording_has_two() {
+    let mut p = two_takes();
+    p.assets.push(asset("mic1b", AssetKind::Audio, 60.0, true));
+    p.recordings[0]
+        .sources
+        .push(source("mic-2", SourceRole::Mic, "mic1b", 60.0));
+    let second = call(
+        "muteSource",
+        json!({"source": "mic", "muted": true, "which": "2", "clips": ["c1"]}),
+    );
+    let done = after(&p, &[second]);
+    assert!(mix(&done, "a", "rec1", "mic-2").muted);
+    assert!(!mix(&done, "a", "rec1", "mic").muted);
+    let third = call(
+        "muteSource",
+        json!({"source": "mic", "muted": true, "which": "third", "clips": ["c1"]}),
+    );
+    assert_eq!(
+        refused(&p, &[third]),
+        ("Which mic: 1, 2?".to_owned(), Audience::Person)
+    );
+}
+
+// ---- separateSound.
+
+fn separate(source: &str, clips: Value) -> ToolCall {
+    call(
+        "separateSound",
+        json!({"source": source, "which": null, "clips": clips}),
+    )
+}
+
+#[test]
+fn separate_the_sound_puts_it_on_a_track_of_its_own() {
+    let p = two_takes();
+    let out = compiled(&p, &[separate("mic", json!(null))]);
+    assert_eq!(
+        label(&out),
+        (
+            "chat.separateSound".to_owned(),
+            Some(vec![("source".to_owned(), ErrorParam::from("mic"))])
+        )
+    );
+    let done = apply_ops(&p, &out.additions.unwrap().ops).unwrap();
+    for (file, clip_id, rec) in [("mic1", "a", "rec1"), ("mic2", "c", "rec2")] {
+        let layers = layers_of(&done, file);
+        assert_eq!(layers.len(), 1, "{file}");
+        assert!(matches!(layers[0].content, ItemContent::Audio { .. }));
+        // The clip no longer plays it, so it isn't heard twice.
+        assert!(mix(&done, clip_id, rec, "mic").muted);
+    }
+    // Again: already on its own track.
+    assert_eq!(
+        refused(&done, &[separate("mic", json!(null))]),
+        (
+            "The mic is already on its own track there.".to_owned(),
+            Audience::Person
+        )
+    );
+    // Its mix there is its layers' now: a mute everywhere leaves them, and says so.
+    let out = compiled(&done, &[mute(json!(["c1"]), false)]);
+    assert_eq!(
+        out.refusals[0].reason,
+        "Where the mic is on its own track, its layers stay as they are."
+    );
+}
+
+#[test]
+fn the_camera_sound_stays_with_its_picture() {
+    assert_eq!(
+        refused(&two_takes(), &[separate("videoSound", json!(null))]),
+        (
+            "The camera's sound stays with its picture. You can mute it or change its volume instead.".to_owned(),
+            Audience::Person
+        )
+    );
+}
+
+#[test]
+fn a_sped_up_clip_keeps_its_sound() {
+    let mut p = two_takes();
+    p.timeline.main[0].speed = 2.0;
+    let out = compiled(&p, &[separate("mic", json!(null))]);
+    assert_eq!(
+        out.additions.as_ref().unwrap().ops,
+        vec![Op::DetachSource {
+            clip_id: "c".into(),
+            source_id: "mic".into()
+        }]
+    );
+    assert_eq!(
+        out.notes,
+        vec![
+            "The sped-up clip at 0:00 was left as it is: separated sound plays at normal speed only."
+        ]
+    );
+    assert_eq!(
+        refused(&p, &[separate("mic", json!(["c1"]))]),
+        (
+            "Set the clip back to normal speed before separating its sound.".to_owned(),
+            Audience::Person
+        )
+    );
+}
+
 // ---- One answer, one step.
 
 #[test]
@@ -619,12 +922,14 @@ fn several_recording_changes_are_one_undo_step() {
     let calls = [
         mode(json!(null), "splitBottom", json!(null)),
         adjust(json!({"sizeStep": "bigger"})),
+        mute(json!(["c3"]), true),
     ];
     let out = compiled(&p, &calls);
     let tx = out.additions.as_ref().unwrap();
     assert_eq!(tx.label, "chat.andMore");
     assert_eq!(out.refusals, vec![]);
     let done = apply_ops(&p, &tx.ops).unwrap();
+    assert!(mix(&done, "c", "rec2", "mic").muted);
     assert_eq!(
         camera(&done, "c").mode_for(FormatKind::Portrait),
         CameraMode::SplitBottom

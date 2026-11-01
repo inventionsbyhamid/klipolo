@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use klipolo_chat::context::QUOTED_NOTE;
-use klipolo_chat::tools::{BubbleChange, PictureSize, Position, TextPreset};
+use klipolo_chat::tools::{BubbleChange, PictureSize, Position, Sound, TextPreset};
 use klipolo_chat::{
     ChatContext, FullTranscript, Library, LibraryItem, MediaKind, Moment, SceneLog, SpeakerTurn,
     ToolCall, View, build_context, full_transcript, timeline_key, tools,
@@ -649,6 +649,32 @@ fn every_call() -> Vec<(ToolCall, bool)> {
             true,
         ),
         (ToolCall::DetachCamera { clips: None }, false),
+        (
+            ToolCall::MuteSource {
+                source: Sound::Mic,
+                muted: true,
+                which: None,
+                clips: Some(vec!["c3".into()]),
+            },
+            true,
+        ),
+        (
+            ToolCall::SetSourceVolume {
+                source: Sound::ComputerSound,
+                volume: 0.5,
+                which: None,
+                clips: None,
+            },
+            false,
+        ),
+        (
+            ToolCall::SeparateSound {
+                source: Sound::Mic,
+                which: Some("2".into()),
+                clips: None,
+            },
+            false,
+        ),
         (ToolCall::Undo, false),
         (
             ToolCall::AskUser {

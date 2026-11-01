@@ -511,6 +511,10 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         ToolCall::TrimClip { .. } => "The clip is longer.",
         ToolCall::SetCameraMode { .. } | ToolCall::AdjustCamera { .. } => "The camera is changed.",
         ToolCall::DetachCamera { .. } => "The camera is its own layer now.",
+        ToolCall::MuteSource { muted: true, .. } => "The sound is muted.",
+        ToolCall::MuteSource { muted: false, .. } => "The sound is back on.",
+        ToolCall::SetSourceVolume { .. } => "The volume is changed.",
+        ToolCall::SeparateSound { .. } => "The sound is on its own track now.",
         ToolCall::Undo => "Undone.",
         // Shown on their own (moments, questions), or proposed.
         _ => return None,
@@ -569,6 +573,9 @@ fn task(tool: &str) -> &'static str {
         "setCameraMode" => "change the camera",
         "adjustCamera" => "adjust the camera",
         "detachCamera" => "separate the camera",
+        "muteSource" => "mute the sound",
+        "setSourceVolume" => "change the volume",
+        "separateSound" => "separate the sound",
         "undo" => "undo the last change",
         _ => "do part of this",
     }

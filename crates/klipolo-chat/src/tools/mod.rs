@@ -19,7 +19,7 @@
 //! sit together; the tests check every schema is strict and every reader reads the fields its schema lists. Splitting
 //! by concern: `schema` (the pieces of a schema, and the words a tool takes), `args` (a call's arguments read field by
 //! field), `error` (why a call couldn't be read), `media` (the media tools and their words), `recorded` (a recording's
-//! camera, and its words).
+//! camera and recorded sounds, and their words).
 
 mod args;
 mod error;
@@ -40,7 +40,7 @@ use serde_json::{Map, Value, json};
 use args::{Args, kind};
 pub use error::{Problem, ToolError};
 pub use media::{PictureSize, Position, TextPreset};
-pub use recorded::{BubbleChange, BubbleSize, SizeStep};
+pub use recorded::{BubbleChange, BubbleSize, SizeStep, Sound};
 use schema::{boolean, list, nullable_number, nullable_words, object, seconds, string, words};
 
 /// One tool call as the model made it, whichever provider ran the model: its adapter maps the provider's call into
@@ -153,6 +153,27 @@ pub enum ToolCall {
     },
     /// Make the cameras of `clips` (None: every clip with one) layers of their own.
     DetachCamera { clips: Option<Vec<String>> },
+    /// Mute or unmute the recorded `source` (the one `which` names when a recording has several, None: all of them) in
+    /// `clips`, or everywhere when None.
+    MuteSource {
+        source: Sound,
+        muted: bool,
+        which: Option<String>,
+        clips: Option<Vec<String>>,
+    },
+    /// Play the recorded `source` at `volume` (the model's gain: 1 is as recorded, at most 2), as `MuteSource` names it.
+    SetSourceVolume {
+        source: Sound,
+        volume: f64,
+        which: Option<String>,
+        clips: Option<Vec<String>>,
+    },
+    /// Put the recorded `source` of `clips` (None: every clip that plays it) on a track of its own.
+    SeparateSound {
+        source: Sound,
+        which: Option<String>,
+        clips: Option<Vec<String>>,
+    },
     /// Undo the last change.
     Undo,
     /// Ask the person `question` before doing anything more.
@@ -222,6 +243,9 @@ impl ToolCall {
             ToolCall::SetCameraMode { .. } => "setCameraMode",
             ToolCall::AdjustCamera { .. } => "adjustCamera",
             ToolCall::DetachCamera { .. } => "detachCamera",
+            ToolCall::MuteSource { .. } => "muteSource",
+            ToolCall::SetSourceVolume { .. } => "setSourceVolume",
+            ToolCall::SeparateSound { .. } => "separateSound",
             ToolCall::Undo => "undo",
             ToolCall::AskUser { .. } => "askUser",
             ToolCall::CannotDo { .. } => "cannotDo",
@@ -230,8 +254,8 @@ impl ToolCall {
 
     /// Whether the call names a timeline time or a clip ref, which hold only while the main track's clips stay where
     /// the context put them (`context::timeline_key`): a range, a split, a trim, a moment, a media tool's start when it
-    /// gives one (None is the playhead), or a camera tool's clips when it names them (None is every clip). Every tool
-    /// is listed, so a new one must say.
+    /// gives one (None is the playhead), or a recording tool's clips when it names them (None is every clip). Every
+    /// tool is listed, so a new one must say.
     pub fn names_timeline(&self) -> bool {
         match self {
             ToolCall::CutRange { .. }
@@ -247,7 +271,10 @@ impl ToolCall {
             | ToolCall::MakeTitleCard { at_us, .. } => at_us.is_some(),
             ToolCall::SetCameraMode { clips, .. }
             | ToolCall::AdjustCamera { clips, .. }
-            | ToolCall::DetachCamera { clips } => clips.is_some(),
+            | ToolCall::DetachCamera { clips }
+            | ToolCall::MuteSource { clips, .. }
+            | ToolCall::SetSourceVolume { clips, .. }
+            | ToolCall::SeparateSound { clips, .. } => clips.is_some(),
             ToolCall::RemoveSilences { .. }
             | ToolCall::RemoveFillers
             | ToolCall::SetFormat { .. }
@@ -575,6 +602,9 @@ const TOOLS: &[Tool] = &[
     recorded::SET_CAMERA_MODE,
     recorded::ADJUST_CAMERA,
     recorded::DETACH_CAMERA,
+    recorded::MUTE_SOURCE,
+    recorded::SET_SOURCE_VOLUME,
+    recorded::SEPARATE_SOUND,
     Tool {
         name: "undo",
         description: "Undo the last change.",
