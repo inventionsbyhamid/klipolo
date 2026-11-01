@@ -21,7 +21,7 @@ use klipolo_chat::{
     ModelResponse, Problem, Refs, ToolCall, View, build_context, compile, plan,
 };
 use klipolo_model::coded::ErrorParam;
-use klipolo_model::layout::{Anchor, BoxN};
+use klipolo_model::layout::{Anchor, BoxN, resolve_rect};
 use klipolo_model::ops::{Op, Origin};
 use klipolo_model::project::{
     Asset, AssetKind, FormatKind, Recording, RecordingKind, RecordingSource, SourceMix, SourceRole,
@@ -594,6 +594,48 @@ fn a_bubble_placed_for_one_format_keeps_the_others() {
     assert_eq!(bubble.rect, camera(&p, "c").bubble.rect, "landscape stays");
     let portrait = bubble.overrides[&FormatKind::Portrait];
     assert!((portrait.y - 0.04).abs() < 1e-9 && (portrait.x + portrait.w - 0.96).abs() < 1e-9);
+}
+
+#[test]
+fn a_bubble_moved_with_no_format_moves_in_every_format() {
+    // A vertical version made after the take: portrait is the main format, and landscape keeps a box of its own.
+    let vertical = call(
+        "setFormat",
+        json!({"format": "portrait", "keepOthers": true}),
+    );
+    let p = after(&two_takes(), &[vertical]);
+    assert!(
+        (camera(&p, "c").bubble.overrides).contains_key(&FormatKind::Landscape),
+        "landscape keeps its own box"
+    );
+    let done = after(
+        &p,
+        &[adjust(json!({"clips": ["c3"], "position": "topLeft"}))],
+    );
+    let bubble = &camera(&done, "c").bubble;
+    for f in [FormatKind::Landscape, FormatKind::Portrait] {
+        let r = resolve_rect(bubble, FormatKind::Portrait, f);
+        assert!(
+            (r.x - 0.04).abs() < 1e-9 && (r.y - 0.04).abs() < 1e-9,
+            "{f:?} shows it at the top left: {r:?}"
+        );
+    }
+}
+
+#[test]
+fn a_shape_for_one_format_leaves_its_box_free() {
+    let done = after(
+        &with_portrait(),
+        &[adjust(
+            json!({"clips": ["c3"], "shape": "square", "format": "portrait"}),
+        )],
+    );
+    let cam = camera(&done, "c");
+    assert_eq!(cam.shape, CameraShape::Square);
+    assert!(
+        cam.bubble.overrides.is_empty(),
+        "portrait still follows the main box"
+    );
 }
 
 #[test]

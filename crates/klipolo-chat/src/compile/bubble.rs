@@ -1,7 +1,9 @@
 //! `adjustCamera`: where the camera bubble sits, its size, shape, border and mirror, on the clips or on a camera that
 //! is its own layer.
 //! - The built-in bubbles move, resize and restyle. Their own box is relative to the primary format; with another
-//!   format named, that format keeps a box of its own (`Layout::overrides`), which keeps the corner it sits in.
+//!   format named, that format keeps a box of its own (`Layout::overrides`), which keeps the corner it sits in. With no
+//!   format named, every format moves: the own box, and each listed format's box of its own (one a new main format
+//!   gave the old one), each from where it is. A change of shape, border or mirror alone moves no box.
 //! - A camera that is its own layer moves and resizes as that layer, takes the shape as its corners and the mirror as
 //!   its own; it has no border, which a note says.
 //! - A camera that is its clip's footage takes only the mirror; a bubble change for it is noted, and refused when no
@@ -42,9 +44,10 @@ pub(super) fn adjust(
     if let Some(f) = a.format {
         has_format(work, f)?;
     }
-    let primary = work.settings.primary_format;
-    // The bubble's own box is relative to the primary format; another format keeps a box of its own.
-    let only = a.format.filter(|f| *f != primary);
+    let formats = (
+        work.settings.primary_format,
+        work.settings.formats.as_slice(),
+    );
     let named = named(c, work, TOOL, clips)?;
     let cams = find(work, TOOL, named.as_ref())?;
     let cams = if a.mirror.is_some() {
@@ -71,7 +74,7 @@ pub(super) fn adjust(
             continue;
         };
         let mut now = cam.clone();
-        now.bubble = placed(&cam.bubble, a, primary, only);
+        now.bubble = placed(&cam.bubble, a, formats);
         if let Some(shape) = a.shape {
             now.shape = shape;
         }
@@ -92,7 +95,7 @@ pub(super) fn adjust(
         else {
             continue;
         };
-        let mut layout = placed(&item.layout, a, primary, only);
+        let mut layout = placed(&item.layout, a, formats);
         if let Some(shape) = a.shape {
             layout.radius = match shape {
                 CameraShape::Circle => 0.5,
@@ -146,8 +149,32 @@ fn update_clip(id: &str, camera: klipolo_model::timeline::CameraLayout) -> Op {
     }
 }
 
-/// `layout` moved and sized as asked: its own box (relative to the primary format), or with `only`, that format's.
+/// `layout` moved and sized as asked, in the video's formats (`primary` first): with a format named, that format's box
+/// alone (the own box for the primary, else a box of its own); with none, the own box and each listed format's box of
+/// its own, so whichever format the person looks at, the bubble moves. Without a place or a size, as it was.
 fn placed(
+    layout: &Layout,
+    a: &BubbleChange,
+    (primary, formats): (FormatKind, &[FormatKind]),
+) -> Layout {
+    if a.position.is_none() && a.size.is_none() && a.size_step.is_none() {
+        return layout.clone();
+    }
+    match a.format {
+        Some(f) if f != primary => moved(layout, a, primary, Some(f)),
+        Some(_) => moved(layout, a, primary, None),
+        None => {
+            let own =
+                (formats.iter()).filter(|f| **f != primary && layout.overrides.contains_key(f));
+            own.fold(moved(layout, a, primary, None), |out, f| {
+                moved(&out, a, primary, Some(*f))
+            })
+        }
+    }
+}
+
+/// `layout` moved and sized as asked: its own box (relative to the primary format), or with `only`, that format's.
+fn moved(
     layout: &Layout,
     a: &BubbleChange,
     primary: FormatKind,
