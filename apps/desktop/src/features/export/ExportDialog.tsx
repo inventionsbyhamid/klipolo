@@ -21,7 +21,7 @@ import { ExportOutcome } from './ExportOutcome';
 import { ExportProgress } from './ExportProgress';
 import { FormatCards } from './FormatCards';
 import { ExportIcon } from './icons';
-import { FORMATS, videos } from './presets';
+import { FORMATS, roughly, videos } from './presets';
 import { QualityPicker } from './QualityPicker';
 import './export.css';
 
@@ -205,7 +205,12 @@ function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () =
         onToggle={toggle}
       />
       {view === 'choose' && (
-        <Options folder={plan?.folder ?? folder} slowMaster={plan?.slowMaster ?? false} captions={offerCaptions} />
+        <Options
+          folder={plan?.folder ?? folder}
+          slowMaster={plan?.slowMaster ?? false}
+          maximumAsH264={plan?.maximumAsH264 ?? false}
+          captions={offerCaptions}
+        />
       )}
       {view === 'choose' && making > 0 && <CaptionsNote count={making} />}
       {view === 'running' && <ExportProgress />}
@@ -214,11 +219,13 @@ function Working({ view, onClose }: { view: Exclude<View, 'done'>; onClose: () =
         <ChooseFoot
           count={checked.length}
           bytes={plan?.bytes ?? null}
+          seconds={plan?.seconds ?? 0}
           formats={checked}
           onClose={onClose}
           locale={locale}
           captions={making > 0}
-          offersCaptionFile={offerCaptions}
+          // Before the first plan, the kept choice goes as it is: Export pressed early never drops it.
+          offersCaptionFile={plan === null || offerCaptions}
         />
       )}
       {view === 'running' && <RunningFoot />}
@@ -263,15 +270,26 @@ function CaptionsNote({ count }: { count: number }) {
 }
 
 /**
- * Quality (what it is for under it; `slowMaster`: Master is slower here), the captions file once `captions` offers it,
+ * Quality (what it is for under it; `slowMaster`: Master is slower here; `maximumAsH264`: Maximum saves H.264 here), the
+ * captions file once `captions` offers it,
  * and where the files go.
  */
-function Options({ folder, slowMaster, captions }: { folder: string | null; slowMaster: boolean; captions: boolean }) {
+function Options({
+  folder,
+  slowMaster,
+  maximumAsH264,
+  captions,
+}: {
+  folder: string | null;
+  slowMaster: boolean;
+  maximumAsH264: boolean;
+  captions: boolean;
+}) {
   return (
     <dl className="ex-opts">
       <dt className="ex-dt-top">Quality</dt>
       <dd>
-        <QualityPicker slowMaster={slowMaster} />
+        <QualityPicker slowMaster={slowMaster} maximumAsH264={maximumAsH264} />
       </dd>
       {captions && (
         <>
@@ -304,6 +322,7 @@ function Options({ folder, slowMaster, captions }: { folder: string | null; slow
 function ChooseFoot({
   count,
   bytes,
+  seconds,
   formats,
   onClose,
   locale,
@@ -312,6 +331,8 @@ function ChooseFoot({
 }: {
   count: number;
   bytes: number | null;
+  /** About how long it takes on this computer (the plan's), 0 while unknown. */
+  seconds: number;
   formats: FormatKind[];
   onClose: () => void;
   locale: string;
@@ -325,7 +346,7 @@ function ChooseFoot({
   const summary = none
     ? 'Pick at least one format'
     : bytes !== null && bytes > 0
-      ? `${videos(count)}, about ${formatFileSize(locale, bytes)}`
+      ? sized(videos(count), formatFileSize(locale, bytes), seconds)
       : videos(count);
   return (
     <div className="dialog-foot">
@@ -415,4 +436,9 @@ function FailedFoot({ onClose }: { onClose: () => void }) {
       </Button>
     </div>
   );
+}
+
+/** "2 videos, about 280 MB. Takes about 4 minutes.", or without the time while it is unknown. */
+function sized(count: string, size: string, seconds: number): string {
+  return seconds > 0 ? `${count}, about ${size}. Takes ${roughly(seconds)}.` : `${count}, about ${size}`;
 }

@@ -28,7 +28,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use klipolo_engine::api::{ExportRequest, PlannedFile};
+use klipolo_engine::api::{ExportQuality, ExportRequest, PlannedFile};
 use klipolo_engine::export::contrib::JobContribs;
 use klipolo_engine::export::jobs::jobs_root;
 use klipolo_engine::export::runner::Batch;
@@ -65,6 +65,8 @@ pub struct ExportPlan {
     pub slow_master: bool,
     /// Some file of the project has its words heard in full: a landscape file can also save its captions as a file.
     pub can_save_captions: bool,
+    /// A Maximum plan on a computer with no 10-bit HEVC encoder: its files are H.264 at Maximum's higher bitrate.
+    pub maximum_as_h264: bool,
 }
 
 /// A file the last export put in place, as the finished dialog lists it.
@@ -105,13 +107,14 @@ pub fn folder_label(dir: &Path) -> String {
 
 /// What exporting `req`'s formats of `project` into `dir` writes and costs (`apple_silicon`: this Mac has a media
 /// engine), and whether a landscape file can also save its captions as a file (`speech`: what was heard in the project's
-/// files).
+/// files), and whether Maximum makes H.264 here (`hevc_main10`: this computer has a 10-bit HEVC encoder).
 pub fn plan(
     project: &Project,
     speech: &Speech,
     req: &ExportRequest,
     dir: &Path,
     apple_silicon: bool,
+    hevc_main10: bool,
 ) -> ExportPlan {
     let files = plan_files(project, &req.formats, req.quality, dir);
     let cost = estimate(
@@ -128,6 +131,7 @@ pub fn plan(
         folder: folder_label(dir),
         slow_master: !apple_silicon,
         can_save_captions: any_finished(speech, project),
+        maximum_as_h264: req.quality == ExportQuality::Maximum && !hevc_main10,
     }
 }
 
@@ -257,7 +261,7 @@ mod tests {
             &[FormatKind::Portrait, FormatKind::Landscape],
             ExportQuality::High,
         );
-        let planned = plan(&project, &speech, &two, dir.path(), false);
+        let planned = plan(&project, &speech, &two, dir.path(), false, true);
         let names: Vec<&str> = planned.files.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(names, ["Pages 16x9.mp4", "Pages 9x16.mp4"], "16:9 first");
         assert_eq!(
@@ -271,6 +275,7 @@ mod tests {
             &request(&[FormatKind::Landscape], ExportQuality::High),
             dir.path(),
             false,
+            true,
         );
         assert!(planned.bytes > one.bytes, "two files take more than one");
         let smaller = plan(
@@ -279,6 +284,7 @@ mod tests {
             &request(&[FormatKind::Landscape], ExportQuality::Standard),
             dir.path(),
             false,
+            true,
         );
         assert!(smaller.bytes < one.bytes, "Smaller file is smaller");
         assert_eq!(planned.folder, folder_label(dir.path()));
@@ -291,11 +297,11 @@ mod tests {
         let (project, speech) = klipolo_engine::test_support::captions_project("caption.bold", &[]);
         let dir = tempfile::tempdir().unwrap();
         let master = request(&[FormatKind::Landscape], ExportQuality::Master);
-        let intel = plan(&project, &speech, &master, dir.path(), false);
+        let intel = plan(&project, &speech, &master, dir.path(), false, true);
         assert!(intel.slow_master, "the CPU encodes ProRes here");
         assert!(intel.files[0].name.ends_with(".mov"), "Master writes .mov");
         assert!(
-            !plan(&project, &speech, &master, dir.path(), true).slow_master,
+            !plan(&project, &speech, &master, dir.path(), true, true).slow_master,
             "a media engine encodes it"
         );
     }
@@ -308,8 +314,9 @@ mod tests {
             klipolo_engine::test_support::captions_project("caption.bold", &[("Hello", 1.0, 1.4)]);
         let dir = tempfile::tempdir().unwrap();
         let req = request(&[FormatKind::Landscape], ExportQuality::High);
-        let offered =
-            |speech: &Speech| plan(&project, speech, &req, dir.path(), false).can_save_captions;
+        let offered = |speech: &Speech| {
+            plan(&project, speech, &req, dir.path(), false, true).can_save_captions
+        };
         assert!(offered(&speech));
         assert!(!offered(&Speech::default()), "nothing heard yet");
         let mut half = speech.clone();
@@ -324,6 +331,21 @@ mod tests {
             .transcripts
             .insert("other".into(), speech.transcripts["v"].clone());
         assert!(!offered(&elsewhere), "another project's file");
+    }
+
+    /// Maximum makes H.264 where there is no 10-bit HEVC encoder, and the plan says so; no other quality does.
+    #[test]
+    fn maximum_says_when_it_makes_h264_for_want_of_a_10_bit_hevc_encoder() {
+        let (project, speech) = klipolo_engine::test_support::captions_project("caption.bold", &[]);
+        let dir = tempfile::tempdir().unwrap();
+        let maximum = request(&[FormatKind::Landscape], ExportQuality::Maximum);
+        let planned = |req: &ExportRequest, hevc_main10: bool| {
+            plan(&project, &speech, req, dir.path(), false, hevc_main10).maximum_as_h264
+        };
+        assert!(planned(&maximum, false), "no HEVC 10-bit encoder here");
+        assert!(!planned(&maximum, true));
+        let high = request(&[FormatKind::Landscape], ExportQuality::High);
+        assert!(!planned(&high, false), "High is H.264 anyway");
     }
 
     #[test]

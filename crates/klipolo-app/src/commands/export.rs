@@ -11,8 +11,9 @@ use std::time::Duration;
 use klipolo_app::export::{
     self, ExportPlan, ExportState, ExportedFile, Releases, StartSteps, Started,
 };
-use klipolo_engine::api::{ExportEvent, ExportRequest};
+use klipolo_engine::api::{ExportEvent, ExportQuality, ExportRequest};
 use klipolo_engine::export::job::ExportJob;
+use klipolo_engine::export::quality;
 use klipolo_engine::export::runner::{Batch, ProcessLauncher, discard_job};
 use klipolo_engine::render::fonts;
 use klipolo_engine::session::ProjectFeed;
@@ -51,6 +52,13 @@ fn apple_silicon() -> bool {
     *FAST.get_or_init(|| export::apple_silicon(&klipolo_platform::caps::current()))
 }
 
+/// This computer has a 10-bit HEVC encoder for Maximum (asked once, and only when a plan is for Maximum: the probe opens
+/// a small encoder session, about 0.6 s on an Intel Mac).
+fn hevc_main10() -> bool {
+    static HEVC: OnceLock<bool> = OnceLock::new();
+    *HEVC.get_or_init(|| quality::probe_caps_for(&[ExportQuality::Maximum]).hevc_main10)
+}
+
 /// What exporting `req`'s formats of the open project writes and costs. Nothing is written.
 #[tauri::command(async)]
 pub(crate) fn export_plan(
@@ -65,6 +73,7 @@ pub(crate) fn export_plan(
         &req,
         &folder(&state)?,
         apple_silicon(),
+        req.quality != ExportQuality::Maximum || hevc_main10(),
     ))
 }
 
