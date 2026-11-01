@@ -232,6 +232,17 @@ pub fn sound_sources<'a>(
     r.sources.iter().filter(move |s| makes_sound(p, s))
 }
 
+/// Whether main clip `clip` has sound for the clip card's Volume and Mute (and chat's `setClip`): its file's, or its
+/// recording's sound sources (`sound_sources`). The page's `clipHasSound` reads the project the same way.
+pub fn clip_has_sound(p: &Project, clip: &Clip) -> bool {
+    match &clip.source {
+        ClipSource::Asset { id } => p.asset(id).is_some_and(|a| a.has_audio),
+        ClipSource::Recording { id } => {
+            (p.recording(id)).is_some_and(|r| sound_sources(p, r).next().is_some())
+        }
+    }
+}
+
 /// Where one run of a recording's source plays inside a clip: its timeline span and the run's own time at its start.
 #[derive(Debug, PartialEq, Eq)]
 pub struct RunInClip {
