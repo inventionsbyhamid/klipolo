@@ -82,8 +82,9 @@ export function LivePicture({ url }: { url: string | null }) {
 
 /**
  * The live picture of what Record records: the chosen screen or app, made for the preview box's own pixels
- * (`useLivePixels`) at 15 to 30 frames a second, fitted in the box over black. Nothing until its first frame; grey once
- * its frames stop coming. `name`: the screen's or the app's, as its card says.
+ * (`useLivePixels`) at 10 frames a second on an Intel Mac and up to 30 on Apple silicon, fitted in the box over
+ * black. Nothing until its first frame; grey once its frames stop coming. `name`: the screen's or the app's, as its
+ * card says.
  */
 export function LivePreview({ name }: { name: string }) {
   const url = useRecorderPreviews((s) => s.live);
