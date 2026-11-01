@@ -4,7 +4,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import type { DownloadedId } from '../bindings/DownloadedId';
 import type { FontRef } from '../bindings/FontRef';
 import { fonts } from '../bridge/fonts';
-import { forgetFamily, forgetPreview } from '../lib/fonts';
+import { forgetFamily, forgetInstalled, forgetPreview } from '../lib/fonts';
 
 /** How far a Google download has come (`fonts-download`). */
 export interface DownloadProgress {
@@ -162,13 +162,16 @@ export function fontsChanged(family: string) {
 let started = false;
 
 /**
- * Keeps the page in step with Rust's fonts: a family's fonts changing (`fonts-changed`, a download) makes its faces be
- * asked again, and `fonts-download` is a download's progress. Started by the first font menu.
+ * Keeps the page in step with Rust's fonts: a family's fonts changing (`fonts-changed`, a download or a removal)
+ * makes its faces be asked again, this Mac's fonts arriving (`fonts-scanned`) its installed fonts', and
+ * `fonts-download` is a download's progress. Started with the app.
  */
 export function startFontsFeed() {
   if (started) return;
   started = true;
   listen<{ family: string }>('fonts-changed', (e) => fontsChanged(e.payload.family)).catch(() => undefined);
+  // An installed font asked for before this Mac's fonts were read was answered with the stand-in: asked again.
+  listen('fonts-scanned', () => forgetInstalled()).catch(() => undefined);
   listen<{ family: string; done: number; total: number }>('fonts-download', (e) => {
     const { family, done, total } = e.payload;
     if (useFonts.getState().downloads[family])

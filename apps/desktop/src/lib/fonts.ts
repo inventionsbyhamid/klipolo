@@ -27,7 +27,7 @@ export function pageFamilyOf(font: FontRef): string {
 
 const keyOf = (f: FaceKey) => `${pageFamilyOf(f.font)}|${f.weight}|${f.italic ? 'i' : 'n'}`;
 /** Each face asked for, by key, with its family: what `forgetFamily` lets go. */
-const loading = new Map<string, { family: string; done: Promise<boolean> }>();
+const loading = new Map<string, { family: string; installed: boolean; done: Promise<boolean> }>();
 /** The faces in the page, by key. */
 const loaded = new Map<string, FontFace>();
 const listeners = new Set<() => void>();
@@ -68,7 +68,7 @@ export function ensureFace(face: FaceKey): Promise<boolean> {
       if (loading.get(key)?.done === done) loading.delete(key);
       return false;
     });
-  loading.set(key, { family: face.font.family, done });
+  loading.set(key, { family: face.font.family, installed: face.font.source.type === 'installed', done });
   return done;
 }
 
@@ -82,8 +82,20 @@ export function faceLoaded(face: FaceKey): boolean {
  * text drawn in a stand-in meanwhile is drawn in the font now.
  */
 export function forgetFamily(family: string): void {
+  forgetWhere((asked) => asked.family === family);
+}
+
+/**
+ * This Mac's fonts arrived (the scan): every installed font's face is asked for again, as one asked before them was
+ * answered with the stand-in.
+ */
+export function forgetInstalled(): void {
+  forgetWhere((asked) => asked.installed);
+}
+
+function forgetWhere(gone: (asked: { family: string; installed: boolean }) => boolean): void {
   for (const [key, asked] of loading) {
-    if (asked.family !== family) continue;
+    if (!gone(asked)) continue;
     loading.delete(key);
     const face = loaded.get(key);
     if (face) document.fonts.delete(face);

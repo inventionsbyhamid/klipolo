@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../bridge/fonts', () => ({ fonts: { face: vi.fn(), faceOf: vi.fn(), preview: vi.fn(), bundled: vi.fn() } }));
 const { fonts } = await import('../bridge/fonts');
-const { ensureFace, faceCss, faceLoaded, forgetFamily, ensurePreview, previewFamily } = await import('./fonts');
+const { ensureFace, faceCss, faceLoaded, forgetFamily, forgetInstalled, ensurePreview, previewFamily } = await import('./fonts');
 
 const inter = { font: { family: 'Inter', source: { type: 'bundled' as const } }, weight: 700, italic: false };
 const lato = { font: { family: 'Lato', source: { type: 'google' as const, version: 'v24' } }, weight: 400, italic: true };
@@ -71,5 +71,20 @@ describe('the page’s faces', () => {
     expect(await ensurePreview('Lobster')).toBe(false);
     expect(await ensurePreview('Lobster')).toBe(false);
     expect(fonts.preview).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('this Mac’s fonts arriving', () => {
+  it('asks for every installed font’s face again, and leaves the others', async () => {
+    const avenir = { font: { family: 'Avenir Next', source: { type: 'installed' as const } }, weight: 400, italic: false };
+    const anton = { font: { family: 'Anton', source: { type: 'bundled' as const } }, weight: 400, italic: false };
+    vi.mocked(fonts.faceOf).mockResolvedValue(new ArrayBuffer(8));
+    vi.mocked(fonts.face).mockResolvedValue(new ArrayBuffer(8));
+    await ensureFace(avenir);
+    await ensureFace(anton);
+    forgetInstalled();
+    expect(deleted.map((f) => f.family)).toEqual(['kf:i:Avenir Next']);
+    expect(faceLoaded(avenir)).toBe(false);
+    expect(faceLoaded(anton)).toBe(true);
   });
 });
