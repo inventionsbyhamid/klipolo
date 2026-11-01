@@ -12,8 +12,9 @@ use super::*;
 /// Version 7 pins batched, fenced timing (version 6) together with the scene measurement (`run/covered.rs` reads a
 /// draft's facts through `DraftLayer::facts()`; `Meter::scene_cpu` reports a scene's CPU time), which needed no version
 /// of its own.
-/// Re-pinned for the crates' rename to `klipolo-*` without a version: only names changed, so no stored verdict can.
-const PINNED: &str = "6c5c9cdc87332103b98a0bccd87169b5d7a672c81738bc67e746fac68ae86b0a";
+/// Re-pinned without a version for the crates' rename to `klipolo-*` and for comment-only rewording: no code changed,
+/// so no stored verdict can.
+const PINNED: &str = "0a8433c33b4a540fea1a6f04099c8a47eac58ec8eab0da8aa21c6b6818bd8e9f";
 
 #[test]
 fn the_measurement_version_is_pinned_to_the_table_and_the_sources() {
