@@ -14,14 +14,16 @@ interface VolumeControlsProps {
   volumeOps: (volume: number) => Op[];
   /**
    * Which layer it mutes (`id`), whether it is muted (as drawn, and `latest`: as the project has it when a press goes
-   * in), and the ops that leave it muted or not (its own switch, so its volume stays for when it plays again). A press
-   * is decided and built as it goes in, after a change still on its way (`commitToggle`).
+   * in), the ops that leave it muted or not (its own switch, so its volume stays for when it plays again), and what to
+   * do once a change has gone in (`landed`). A press is decided and built as it goes in, after a change still on its
+   * way (`commitToggle`).
    */
   mute?: {
     id: string;
     muted: boolean;
     latest: () => boolean;
     ops: (muted: boolean) => Op[];
+    landed?: (muted: boolean) => void;
   };
   /** What the layer is called in the undo labels: "video" makes "Mute video layer" (`volume.mute.undo`). */
   noun: 'clip' | 'video' | 'sound';
@@ -58,7 +60,11 @@ export function VolumeControls({ volume, volumeOps, mute: muting, noun }: Volume
             tooltip={muted ? t({ id: 'volume.unmute', message: 'Unmute' }) : mute}
             active={muted}
             onClick={() =>
-              void commitToggle(muting.latest, (on) => muteLabel(on, noun), muting.ops, { id: muting.id })
+              void commitToggle(muting.latest, (on) => muteLabel(on, noun), muting.ops, { id: muting.id }).then(
+                (on) => {
+                  if (on !== null) muting.landed?.(on);
+                },
+              )
             }
           />
         )}
