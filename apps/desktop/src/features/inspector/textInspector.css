@@ -47,7 +47,9 @@
   outline-offset: 2px;
 }
 
+/* A look's sample is shown as over video, dark in both themes, as the caption style cards are. */
 .text-look-sample {
+  color-scheme: dark;
   display: grid;
   place-items: center;
   height: 32px;
