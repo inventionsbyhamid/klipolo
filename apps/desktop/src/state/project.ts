@@ -101,7 +101,13 @@ export const useProject = create<ProjectStore>((set, get) => {
       change.baseRevision === current.history.revision ? applyPatch(current.project, change.patch) : null;
     // The opening stays: a patch is a change to this one.
     if (project)
-      return { project, history: change.history, readOnly: change.readOnly, opening: current.opening };
+      return {
+        project,
+        history: change.history,
+        readOnly: change.readOnly,
+        opening: current.opening,
+        listedAs: current.listedAs,
+      };
     // The project as Rust has it: it may hold changes this copy never saw (counted before and once it is here).
     changedElsewhere();
     const now = await bridge.snapshot();
@@ -266,3 +272,13 @@ export function captureBase(): Built {
 
 // Playback anchors its clock on the open project's frame grid.
 setFrameRateSource(() => useProject.getState().snapshot?.project.settings.fps ?? 30);
+
+/**
+ * The name the page shows for the open project: the one the start screen and Open recent list it by. That is its own
+ * name, or, for a project whose name another in the library shares (made before new projects took their file's number),
+ * its file's name (`listedAs`) until it is renamed. Its file isn't rewritten for it.
+ */
+export function shownName(snapshot: Snapshot): string {
+  const listed = snapshot.listedAs;
+  return listed && listed.name === snapshot.project.name ? listed.fileName : snapshot.project.name;
+}
