@@ -58,6 +58,10 @@ fn main() {
         .setup(move |app| {
             let cache = app.path().app_cache_dir().ok();
             app.manage(EngineState::new(Some(warm), cache));
+            // The library's favorites and recently used items, for every project, in the app's config folder.
+            app.manage(commands::library::LibraryMarksState::new(
+                app.path().app_config_dir().ok(),
+            ));
             let projects = ProjectSessionState::default();
             // Klipolo's pack where this install has it; a project's pack files point here as it opens.
             projects.set_pack(
@@ -201,6 +205,9 @@ fn main() {
             commands::media::media_picture,
             commands::media::media_speech_ranges,
             commands::media::library_pack,
+            commands::library::library_marks,
+            commands::library::library_set_favorite,
+            commands::library::library_mark_used,
             commands::fonts::fonts_bundled,
             commands::fonts::fonts_face,
             commands::captions::captions_pages,
