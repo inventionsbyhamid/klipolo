@@ -1,10 +1,9 @@
-//! A contribution's key (whose `Compiled` reply
-//! carries the key it measured, m11): defined once, used by drafts, the library, embedding, the worker and the verified
-//! store. SHA-256 over, for a shader, the effect ABI it was checked under (`EFFECT_ABI` and, 
-//! `EFFECT_ABI_MINOR`, so a minor ABI change checks every shader again), then the canonical JSON of the definition's
-//! rendering fields (`kind`, `params`, `padding`, `resolution`, `fps`, `downsample`, `protective`, in this struct's
-//! order; names, description, tags, blend and provenance don't change what is drawn), a `0x00` byte, then the source
-//! exactly as stored (WGSL bytes, or a scene's `scene.json` bytes, never re-serialised).
+//! A contribution's key (the worker's `Compiled` reply carries the key it measured): defined once, used by drafts, the
+//! library, embedding, the worker and the verified store. SHA-256 over, for a shader, the effect ABI it was checked
+//! under (`EFFECT_ABI` and `EFFECT_ABI_MINOR`, so a minor ABI change checks every shader again), then the canonical
+//! JSON of the definition's rendering fields (`kind`, `params`, `padding`, `resolution`, `fps`, `downsample`,
+//! `protective`, in this struct's order; names, description, tags, blend and provenance don't change what is drawn), a
+//! `0x00` byte, then the source exactly as stored (WGSL bytes, or a scene's `scene.json` bytes, never re-serialised).
 
 use klipolo_model::contrib::{ContribDef, ContribKind, DownsampleSpec, PaddingSpec, Resolution};
 use klipolo_model::params::ParamSpec;

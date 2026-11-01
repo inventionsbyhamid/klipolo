@@ -243,9 +243,9 @@ fn the_profile_closes_the_dtrace_helper_after_the_import() {
     assert!(deny > import);
 }
 
-/// The worker can't change a mode, BSD flags or an ACL in the folders it writes
-/// (one deny after their allow), so it can't lock the parent out of what it wrote. What it can still give at creation,
-/// the parent's walk fails closed on and its removal undoes.
+/// The worker can't change a mode, BSD flags or an ACL in the folders it writes (one deny after their allow), so it
+/// can't lock the parent out of what it wrote. What it can still give at creation, the parent's walk fails closed on
+/// and its removal undoes.
 #[test]
 fn the_profile_refuses_mode_flags_and_acl_changes_in_the_folders_it_writes() {
     let allow = PROFILE.find("(allow file-write* ").unwrap();

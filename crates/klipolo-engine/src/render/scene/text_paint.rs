@@ -1,5 +1,5 @@
-//! What a scene text node paints with beyond its node's fill (moved out of `text_nodes.rs`): each
-//! span's own colour and background, and the node's outline, resolved once with its instance's settings; and
+//! What a scene text node paints with beyond its node's fill: each span's own colour and background, and the node's
+//! outline, resolved once with its instance's settings; and what its pieces of one look draw with in a frame, once
 //! (`paint_entry`), its baked shadow with it.
 
 use klipolo_model::scene::Paint;

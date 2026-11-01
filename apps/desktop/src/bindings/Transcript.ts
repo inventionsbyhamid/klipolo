@@ -3,7 +3,7 @@ import type { Word } from "./Word";
 
 export type Transcript = { key: string, 
 /**
- * Whisper's language code ("en", "de", "ja").
+ * The language's ISO 639-1 style code ("en", "de", "ja").
  */
 language: string, 
 /**

@@ -1,5 +1,5 @@
 //! Recordings with runs: a take whose sources are files on the recording clock, and the facts of a file the recorder
-//! recorder wrote.
+//! wrote.
 
 use klipolo_cursor::format::{Capture, Line};
 use klipolo_cursor::{ClickSource, CursorTrack};

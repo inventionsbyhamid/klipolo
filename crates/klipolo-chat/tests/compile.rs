@@ -5,10 +5,10 @@
 //! - `broll(length)`: a file with no sound, played whole.
 //! - `three_clips()`: one 60 s file in three clips, to test refs, trims and calls that follow one another.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use klipolo_chat::compile::{ROUGH_FILLERS, STILL_WATCHING};
+use klipolo_chat::compile::{ROUGH_FILLERS, ROUGH_FILLERS_STAY, STILL_WATCHING};
 use klipolo_chat::evidence::typed_times;
 use klipolo_chat::{
     ANALYZE_FIRST, AnalysisState, Audience, FunctionCall, Inputs, Job, Library, Moment, Refs,
@@ -104,6 +104,7 @@ fn inputs(project: &Project, speech: Speech, message: &str) -> Inputs {
         analysis: (project.assets.iter())
             .map(|a| (a.id.clone(), AnalysisState::Done))
             .collect(),
+        time_again: HashSet::new(),
         library: Library::default(),
     }
 }
@@ -1603,11 +1604,10 @@ fn roughly_timed_fillers_are_never_cut() {
     speech
         .transcripts
         .insert("talk".into(), transcript(words, 30.0));
-    let out = compile(
-        &p,
-        &inputs(&p, speech, "remove the ums"),
-        &[call("removeFillers", "{}")],
-    );
+    let mut i = inputs(&p, speech, "remove the ums");
+    // The preview's header offers Time words again for the clip: the refusal points there.
+    i.time_again = HashSet::from(["talk".to_owned()]);
+    let out = compile(&p, &i, &[call("removeFillers", "{}")]);
     assert_eq!(out.proposal, None, "not even the timed um");
     assert_eq!(
         out.refusals,
@@ -1620,8 +1620,25 @@ fn roughly_timed_fillers_are_never_cut() {
     );
     assert_eq!(
         ROUGH_FILLERS,
-        "Some words in this clip are only roughly timed, so I can't cut filler words exactly. Time the words again \
-         in Captions, then ask me."
+        "Some words in this clip are only roughly timed, so I can't cut filler words exactly. Press Time words \
+         again above the video, then ask me."
+    );
+    // Not offered there (timing again can't help, or the clip's analysis isn't done): the refusal names no button.
+    i.time_again.clear();
+    let out = compile(&p, &i, &[call("removeFillers", "{}")]);
+    assert_eq!(out.proposal, None);
+    assert_eq!(
+        out.refusals,
+        vec![Refusal {
+            call_index: 0,
+            reason: ROUGH_FILLERS_STAY.into(),
+            audience: Audience::Person,
+            clip: Some("c1".into()),
+        }]
+    );
+    assert_eq!(
+        ROUGH_FILLERS_STAY,
+        "Some words in this clip are only roughly timed, so I can't cut filler words exactly."
     );
     // Rough words that aren't fillers don't stop it: only a filler's own time is cut.
     let (p, mut speech) = talk();

@@ -231,8 +231,7 @@ fn fill(subpaths: &[SubPath], rule: FillRule, tolerance: f64, mesh: &mut MeshDat
             }
         }),
     );
-    // A fill lyon can't make (or makes past the cap) leaves the node out, said, rather than drawing its stroke alone
-    //.
+    // A fill lyon can't make (or makes past the cap) leaves the node out, said, rather than drawing its stroke alone.
     if made.is_err() || buffers.vertices.len() > MAX_MESH_VERTICES {
         return None;
     }

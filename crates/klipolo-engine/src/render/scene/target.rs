@@ -37,7 +37,7 @@ enum On {
     Text,
 }
 
-/// One target a pass draws into: its view, its stencil (the same size) when its runs draw a translucent stroke (Task
+/// One target a pass draws into: its view, its stencil (the same size) when its runs draw a translucent stroke
 /// ([`needs_stencil`]), and its slot (`slots.rs`: where it sits in the layer's target; 0 the scene's own).
 #[derive(Clone, Copy)]
 pub(super) struct Onto<'a> {

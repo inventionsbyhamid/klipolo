@@ -240,7 +240,7 @@ impl EffectStage {
 
     /// Whether `n` more targets of `size` fit the frame's budget for layers' passes (free ones of that size first), as
     /// [`EffectStage::budgeted_target`] would hand them out; when they don't, said once as it says it (a
-    /// a scene's own blurs ask first, so a separable blur runs whole or not at all, and never take the
+    /// scene's own blurs ask first, so a separable blur runs whole or not at all, and never take the
     /// headroom kept for protective passes). O(targets).
     pub(crate) fn room_for(
         &mut self,
@@ -285,7 +285,7 @@ impl EffectStage {
     /// The target held as `id`, marked used this frame; None once the pool dropped it (idle, over budget or trimmed),
     /// and in a timed frame: the render worker's timed frames, and every copy of a batch, draw a still scene's passes
     /// rather than show its held picture, so a batch's slope is a whole frame's (`fresh`, as
-    /// note; `fresh`, as for a stepped generator's kept picture). The scene then lets its hold go.
+    /// for a stepped generator's kept picture). The scene then lets its hold go.
     pub fn held(&mut self, id: u64) -> Option<usize> {
         if self.fresh {
             return None;

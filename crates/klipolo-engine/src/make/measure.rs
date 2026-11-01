@@ -42,8 +42,8 @@ pub struct Sample {
     /// A batch whose copies didn't all encode the same passes: its time isn't K copies of one
     /// frame, so the meter doesn't take a slope from it.
     pub uneven: bool,
-    /// The render passes it encoded: a single frame's, or a batch's first copy's (a batch is compared
-    /// with the single frame it is differenced against). 0 where the meter doesn't count them.
+    /// The render passes it encoded: a single frame's, or a batch's first copy's (a batch is compared with the single
+    /// frame it is differenced against). 0 where the meter doesn't count them.
     pub passes: u32,
 }
 
@@ -113,7 +113,7 @@ pub trait Meter: Send {
     }
 
     /// The first (cold) frame at each size and scale this request warmed: what a first frame costs while its pipeline
-    /// compiles.
+    /// compiles (the cost's note on cold frames, `cold_note`).
     fn cold(&self) -> Vec<Cold> {
         Vec::new()
     }

@@ -1,6 +1,6 @@
-//! Scene clips on the GPU (lavapipe in CI): an image is clipped by its own clip and by every
-//! clipped node above it (a rounded card, a circle avatar, a wipe); nested clips intersect; a clip closed to
-//! nothing draws nothing, not a hairline; a shadow stays outside its box; a stroke's gradient turns by its own
+//! Scene clips on the GPU (lavapipe in CI): an image is clipped by its own clip and by every clipped node above it (a
+//! rounded card, a circle avatar, a wipe); nested clips intersect; a clip closed to nothing draws nothing, not a
+//! hairline; a shadow stays outside its box; a stroke's gradient turns by its own angle. Goldens are compared within
 //! 2/255; `UPDATE_GOLDEN=1` writes them.
 
 mod support;

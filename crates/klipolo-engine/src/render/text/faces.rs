@@ -72,7 +72,7 @@ impl Notes {
 /// without CJK takes the quick path: one family, nothing allocated for runs.
 ///
 /// `scanning`: an installed font drawn while the scan of this computer's fonts still runs (the provisional font system
-/// has none of them yet). It draws the stand-in for that moment, but says nothing: the scan, a moment later, has it
+/// has none of them yet). It draws the stand-in for that moment, but says nothing: the scan, a moment later, has it.
 /// A font still missing after the scan says so then.
 pub(crate) fn runs_and_notes(
     text: &str,

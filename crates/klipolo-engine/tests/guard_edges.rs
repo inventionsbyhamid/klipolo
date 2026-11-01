@@ -1,5 +1,4 @@
-//! The guard's remaining edges. Conservative where
-//! tracking is uncertain: the setting is costly at both ends.
+//! The guard's remaining edges. Conservative where tracking is uncertain: the setting is costly at both ends.
 
 use std::sync::mpsc;
 use std::time::Duration;

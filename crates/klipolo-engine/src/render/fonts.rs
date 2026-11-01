@@ -3,9 +3,9 @@
 //! - every bundled face, at its real weight and style (`kl:b:<family>`);
 //! - every downloaded family registered here (`register`), the same way (`kl:g:<family>:<version>`);
 //! - the fallback aliases at all nine weights in both styles, each pointing at its nearest real file:
-//!   `kl:fallback:latin` (Inter), `kl:fallback:notdef` (Adobe NotDef's boxes, the last CJK fallback) and a bundled
+//!   `kl:fallback:latin` (Inter) and `kl:fallback:notdef` (Adobe NotDef's boxes, the last CJK fallback). The CJK
 //!   aliases `kl:fallback:{sc,tc,jp,kr}` exist only once their Noto Sans is downloaded and registered here
-//!   `index.cjk(script)`, the downloaded Noto Sans SC, TC, JP or KR only, never a system face).
+//!   (`index().cjk(script)`, the downloaded Noto Sans SC, TC, JP or KR only, never a system face).
 //!
 //! This computer's own fonts are in every scanned font system under their own names (fontdb's scan, plus the files a
 //! font manager activated: `installed`), and in the engine's index once the scan publishes them. An export
@@ -202,7 +202,7 @@ pub struct FaceChoice {
 
 /// `resolve`'s answer as the engine shapes with it, with the CJK the face covers. A family with only italic faces is
 /// asked for upright, where it is registered too (`managed`): the system's script faces are upright, and cosmic-text
-/// only falls back to faces of the asked style, so its Khmer or Ethiopic never boxes. For
+/// only falls back to faces of the asked style, so its Thai or Devanagari never boxes. For
 /// the same reason a face that isn't normal width (an installed condensed one) is asked at normal width under its width
 /// twin's alias (`width_alias`): it draws its own glyphs, at its own width, and keeps the system's script
 /// faces for the letters it lacks.

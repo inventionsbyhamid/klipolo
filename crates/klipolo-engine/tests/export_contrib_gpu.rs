@@ -330,7 +330,7 @@ fn decoded(path: &std::path::Path, at: usize) -> (usize, i64, [f64; 3]) {
     (n, length, mean)
 }
 
-/// A project's length, end to end: an empty project with a Waves layer and a text, 0–10 s each, no
+/// A video as long as its layers, end to end: an empty project with a Waves layer and a text, 0–10 s each, no
 /// main clips, no media files and no sound sources, exports through a real job and the worker's own `export` (ProRes,
 /// the encoder Linux has): it finishes, its file is 10 s of frames, and the frame at 5 s isn't black.
 #[tokio::test(flavor = "multi_thread")]

@@ -1,6 +1,6 @@
 //! The taint rule of one expression (for the costly settings): from its operands' taints, the local variables', and a
-//! callee's summary for a call's result. Conservative where direction isn't certain:
-//! integer arithmetic and casts between signed and unsigned wrap, so they keep no direction.
+//! callee's summary for a call's result. Conservative where direction isn't certain: integer arithmetic and casts
+//! between signed and unsigned wrap, so they keep no direction.
 
 use std::collections::HashMap;
 

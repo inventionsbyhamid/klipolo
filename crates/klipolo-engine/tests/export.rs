@@ -504,7 +504,7 @@ fn a_redone_part_is_taken_off_the_progress_at_once() {
 #[tokio::test]
 async fn a_failure_with_nothing_to_redo_moves_on_to_compatibility_mode_by_itself() {
     // Every hardware part is done and the format is complete, but not joined: the automatic software run loses
-    // nothing, so no pause and no offer ("without finished parts to redo, SoftwareSafe runs automatically").
+    // nothing, so no pause and no offer (without finished parts to redo, SoftwareSafe runs automatically).
     let dir = tempfile::tempdir().unwrap();
     let fake = Fake::new(in_turn(vec![
         complete_then_fail_join(),
@@ -1544,8 +1544,8 @@ async fn a_stopped_export_goes_all_at_once_even_when_its_files_cant_all_be_delet
     assert!(list_jobs(&root).is_empty(), "nothing listed");
 }
 
-/// Quit pausing a job whose run hasn't started yet (Start over's new job, written a
-/// few ms before its run starts) pauses it the moment its run starts: it is kept and paused, its worker never launched.
+/// Quit pausing a job whose run hasn't started yet (Start over's new job, written a few ms before its run starts)
+/// pauses it the moment its run starts: it is kept and paused, its worker never launched.
 #[tokio::test]
 async fn a_job_paused_before_its_run_starts_pauses_as_it_starts() {
     use klipolo_engine::export::runner::{pause_when_it_runs, run_created};
@@ -1572,8 +1572,8 @@ async fn a_job_paused_before_its_run_starts_pauses_as_it_starts() {
     );
 }
 
-/// A Stop whose job can't be set aside (its folder held open elsewhere, here the name it
-/// would take already in use) keeps the job whole and says it paused with why, never stopped while it still lists.
+/// A Stop whose job can't be set aside (its folder held open elsewhere, here the name it would take already in use)
+/// keeps the job whole and says it paused with why, never stopped while it still lists.
 #[tokio::test]
 async fn a_stop_that_cant_set_its_job_aside_says_it_paused_and_keeps_it() {
     use klipolo_engine::export::jobs::discarded_name;
@@ -1609,8 +1609,8 @@ async fn a_stop_that_cant_set_its_job_aside_says_it_paused_and_keeps_it() {
     assert_eq!(the_job(dir.path()).state, JobState::Paused, "kept whole");
 }
 
-/// A pause queued for a run that never started (its start dropped the job, or the
-/// slot was released first) is let go with its slot, so a later run of that job starts as asked.
+/// A pause queued for a run that never started (its start dropped the job, or the slot was released first) is let go
+/// with its slot, so a later run of that job starts as asked.
 #[tokio::test]
 async fn a_pause_queued_for_a_run_that_never_started_is_let_go() {
     use klipolo_engine::export::runner::{forget_pause, pause_when_it_runs, run_created};

@@ -174,7 +174,7 @@ pub fn scene_time(scene: &CompiledScene, piece: PieceTime, local_us: Us, still: 
     piece_scene_time(piece, local_us, scene.duration, scene.segments)
 }
 
-/// Layer `item_id`'s settings `values` of scene `source`, held inside what its verdict measured (m4: its costly ones,
+/// Layer `item_id`'s settings `values` of scene `source`, held inside what its verdict measured (its costly ones,
 /// `scene_check::costly`), as `effects::clamped` holds a shader's, and kept between frames (`Table::scene_inputs`). A
 /// layer that had to be held is noted as being checked; the app measures it again.
 pub(super) fn inputs(

@@ -1,5 +1,5 @@
 //! A downloaded Google family as a font index holds it: what the download store's manifest
-//! records of its family, exact version, faces and coverage (moved out of `index.rs`),
+//! records of its family, exact version, faces and coverage (kept apart from `index.rs`, which stays short),
 //! and the index's lookups of them beyond the exact version: the CJK fallbacks and the menu's older downloads.
 
 use klipolo_model::font::{FontRef, FontSource};

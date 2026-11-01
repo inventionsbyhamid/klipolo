@@ -1,10 +1,9 @@
 //! The sandboxed render worker that checks, measures and previews agent-made effects and scenes: its JSON-lines
-//! Its JSON-lines protocol of bytes (`protocol`), its session folder (`session`), its own sandbox
-//! (`sandbox`), its loop (`worker`) and what a measurement found (`budget`).
-//! The work it does: the draft layer it draws (`draft`), the measurement (`measure`, stepped first by
-//! `steps`, at the settings `envelope` plans), its frames and their statistics (`frames`, `stats`), the output
-//! check's audit (`audit`), its GPU and fonts (`gpu`, `fonts`) and its sizes (`sizes`); SVG flattened into
-//! scene paths (`svg`); a scene's costly settings (`scene_check`).
+//! protocol of bytes (`protocol`), its session folder (`session`), its own sandbox (`sandbox`), its loop (`worker`)
+//! and what a measurement found (`budget`). The work it does: the draft layer it draws (`draft`), the measurement
+//! (`measure`, stepped first by `steps`, at the settings `envelope` plans), its frames and their statistics
+//! (`frames`, `stats`), the output check's audit (`audit`), its GPU and fonts (`gpu`, `fonts`) and its sizes
+//! (`sizes`); SVG flattened into scene paths (`svg`); a scene's checks and costly settings (`scene_check`).
 
 /// A line on the worker's log (stderr) that never panics: once the app is gone, the pipe it reads is closed and
 /// `eprintln!` would panic.

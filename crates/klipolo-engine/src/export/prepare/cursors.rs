@@ -14,10 +14,10 @@
 //!   the cursor.
 //! - **Shapes** (`cursor_shapes`, `prepare_cursors`; a pass's formats: `preload_formats`): before a pass's first
 //!   frame, every shape its clips draw goes in each format's atlas (none, and no cursor pass, when no clip draws
-//!   one), so frame 0 has the real shape, never the Arrow stand-in. A shape whose image doesn't decode is refused on its take
-//!   (`CursorTracks::refuse_shape`): every frame then plans the Arrow look there, as the preview does once its decoder
-//!   finds the same, so their pixels still match. The atlas says which failed (`CursorPass::failed`
-//!   n2), and the shapes it has no room for yet are decoded once here to check them, so every refusal is known before
+//!   one), so frame 0 has the real shape, never the Arrow stand-in. A shape whose image doesn't decode is refused on
+//!   its take (`CursorTracks::refuse_shape`): every frame then plans the Arrow look there, as the preview does once its
+//!   decoder finds the same, so their pixels still match. The atlas says which failed (`CursorPass::failed`), and the
+//!   shapes it has no room for yet are decoded once here to check them, so every refusal is known before
 //!   frame 1.
 //!
 //! **Cost:** the load is IO and smoothing, O(samples) a take, off the runtime's threads; the preload decodes each shape

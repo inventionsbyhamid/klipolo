@@ -21,13 +21,15 @@ ts-rs = { version = "12", features = ["no-serde-warnings"] }
 # JSON schemas for chat tools, MCP and the registry's op list.
 schemars = "1.2"
 # SIMD substring search for the one-field read of projects saved before the cursor record (already in the tree through
+# serde_json).
 memchr = "2"
 
 [features]
 # Tests only, and only in debug builds (`debug_assertions`): after every op of a batch, `apply_ops` checks its settled
-# project against the whole-project normalise as it is and as it was before batches settled incrementally. Release builds never compile it.
+# project against the whole-project normalise as it is and as it was before batches settled incrementally. Release
+# builds never compile it.
 verify-normalize = []
-# Counts batch applications (`apply_part`, which `apply_ops` goes through) per thread, for the app's one-apply test
+# Counts batch applications (`apply_part`, which `apply_ops` goes through) per thread, for the app's one-apply test.
 # Tests only: never in a release build.
 count-applies = []
 

@@ -2636,7 +2636,6 @@ dependencies = [
  "block2",
  "cidre",
  "dirs",
- "klipolo-speech-wire",
  "libc",
  "num_cpus",
  "objc2",
@@ -2659,10 +2658,6 @@ name = "klipolo-speech-wire"
 version = "0.1.0"
 dependencies = [
  "klipolo-model",
- "libc",
- "serde",
- "serde_json",
- "windows-sys 0.61.2",
 ]
 
 [[package]]

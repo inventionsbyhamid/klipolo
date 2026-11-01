@@ -24,7 +24,7 @@ pub fn recorder_command(exe: &Path) -> std::process::Command {
 
 /// `recorder_command` for an app inside a job that forbids breaking away: Windows refuses
 /// `CREATE_BREAKAWAY_FROM_JOB` there (`CreateProcess` fails with access denied), so the recorder stays in the job,
-/// and may end with it (review). Elsewhere it is `recorder_command`.
+/// and may end with it. Elsewhere it is `recorder_command`.
 pub fn recorder_command_in_job(exe: &Path) -> std::process::Command {
     let mut command = std::process::Command::new(exe);
     os::recorder_flags_in_job(&mut command);

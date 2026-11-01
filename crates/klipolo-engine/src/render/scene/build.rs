@@ -84,8 +84,7 @@ impl SceneDrawer {
             k: f64::from(px),
         };
         let meshes = Meshes::build(&mut src, &inst, &statics, drawn);
-        // Room for a frame's shapes and path draws: a mask's node drawn again in its segment, each live particle's
-        //.
+        // Room for a frame's shapes and path draws: a mask's node drawn again in its segment, each live particle's.
         let room = Room::of(&inst, &statics, &meshes);
         let again = if room.masks { 2 } else { 1 };
         let shapes = inst.len() * again + room.particles;

@@ -17,7 +17,7 @@ impl TextDrawer {
     /// `canvas`). Its layout and texture are asked of the title build thread (started now if it isn't), within the
     /// room the ceiling has now, less the builds already asked (never asked past the ceiling), at the
     /// resolution a cold build would take (full first while its box fits the ceiling, its ink then
-    /// checked against the room), unless it is held or asked already (its whole key: text, style and language, review
+    /// checked against the room), unless it is held or asked already (its whole key: text, style and language), or
     /// the thread has `MAX_IN_FLIGHT` builds to do (its first frame builds it then).
     pub fn ahead(
         &mut self,
@@ -142,7 +142,7 @@ impl TextDrawer {
                 None => return self.in_flight.clear(),
             };
             match reply {
-                // The frame's own title counts no build still in flight when it lands, as it wouldn't if built here
+                // The frame's own title counts no build still in flight when it lands, as it wouldn't if built here;
                 // the others land as `drain` keeps them.
                 Ok(Some(built)) if built.slot == *slot => self.install(built, true),
                 Ok(Some(built)) => self.install(built, false),

@@ -1,7 +1,7 @@
-//! Small targets on the GPU (lavapipe in CI): a lower third in a full-frame layer draws into a target only as big as
+//! A scene's own target on the GPU (lavapipe in CI): a lower third in a full-frame layer draws into a target only as
 //! big as its own box, so three of them at 4K hold a small share of the effect pool, and all three are held while they
 //! hold still; a scene's passes have a stencil only when they draw a translucent stroke; a shadowed title and role draw
-//! role draw their shadows in the text pass, with no offscreen pass.
+//! their shadows in the text pass, with no offscreen pass.
 
 mod support;
 use std::sync::Arc;
@@ -195,9 +195,9 @@ async fn a_glass_card_grabs_only_its_box() {
     );
 }
 
-/// The numbers for the report (run by hand; the gate skips `scene_frame_costs*`): the render thread's time at the
-/// start of the frame a 480-letter text lands on (its atlas uploaded on the build thread), at 4K in the
-/// preview, and the survey's own time. lavapipe and a debug build: meaningful only against each other.
+/// Numbers to compare (run by hand; the gate skips `scene_frame_costs*`): the render thread's time at the start of the
+/// frame a 480-letter text lands on (its atlas uploaded on the build thread), at 4K in the preview, and the survey's
+/// own time. lavapipe and a debug build: meaningful only against each other.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "run by hand: cargo test --test scene_root_gpu -- --ignored scene_frame_costs_of_a_text_landing"]
 async fn scene_frame_costs_of_a_text_landing() {

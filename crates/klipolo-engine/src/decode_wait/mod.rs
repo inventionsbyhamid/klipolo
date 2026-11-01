@@ -46,7 +46,7 @@ pub const EXPORT_WAIT: DecodeWait = DecodeWait::Progress {
 const SLICE: Duration = Duration::from_millis(500);
 
 /// A decoder's start (opening its file and decoding its first frame) gets at least this long: an open ticks nothing
-/// until it is done, and on a loaded Mac it took 1.7 s, the first frame 2.9 s more. This
+/// until it is done, and under heavy load it took 1.7 s, the first frame 2.9 s more. This
 /// was the fixed start limit before.
 pub const START_WINDOW: Duration = Duration::from_secs(30);
 

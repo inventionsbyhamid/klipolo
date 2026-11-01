@@ -1,6 +1,6 @@
-//! What problems say and how far the loader goes: agent text is escaped and
-//! capped, work stops at the problem cap, a refused walk skips the typed parse, a label with a dash takes an offset,
-//! table points and generator bindings fit, the schema doesn't offer image files, and `$$` writes a literal `$`.
+//! What problems say and how far the loader goes: agent text is escaped and capped, work stops at the problem cap, a
+//! refused walk skips the typed parse, a label with a dash takes an offset, table points and generator bindings fit,
+//! the schema doesn't offer image files, and `$$` writes a literal `$`.
 
 use klipolo_model::contrib::Catalog;
 use klipolo_model::scene::{check_scene, Scene, SceneProblem};

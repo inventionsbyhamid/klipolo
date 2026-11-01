@@ -1,6 +1,6 @@
 //! Bytes on the render worker's reply lines: a `Blob` is base64 text of at most `MAX_BLOB_BYTES` decoded,
-//! a `Key` a SHA-256 in hex. The worker fits every image to the cap (`fit_jpeg`, m6); the parent takes only a JPEG
-//! within the size it asked for and encodes it again itself (`reencode_jpeg`, m10), so what the UI or the library
+//! a `Key` a SHA-256 in hex. The worker fits every image to the cap (`fit_jpeg`); the parent takes only a JPEG
+//! within the size it asked for and encodes it again itself (`reencode_jpeg`), so what the UI or the library
 //! stores is never the worker's file.
 
 use std::io::Cursor;

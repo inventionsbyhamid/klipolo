@@ -75,8 +75,7 @@ impl DecoderPool {
                     &self.ask,
                 );
                 // Export's first open of a source is a chain of bounded steps (the stats, the reader's start, an FFmpeg
-                // start after it fails): the heartbeat hears it, so it can't fall silent past the parent's watchdog
-                //.
+                // start after it fails): the heartbeat hears it, so it can't fall silent past the parent's watchdog.
                 if self.patient {
                     self.beat.alive_while(opening).await
                 } else {

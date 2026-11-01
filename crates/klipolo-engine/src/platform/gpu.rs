@@ -1,14 +1,14 @@
 //! The GPU seam: the graphics API per OS, what kind of GPU the adapter is, and how export learns that
 //! submitted work finished. The adapter is still requested with `PowerPreference::LowPower` everywhere (the integrated
 //! GPU, where VideoToolbox's IOSurfaces live on a Mac); the per-job adapter policy (preview on the display's GPU,
-//! export on the encoder's) is W work.
+//! export on the encoder's) is still to come, with Windows.
 
 /// Apple's PCI vendor id.
 pub const APPLE_VENDOR: u32 = 0x106B;
 
 /// The instance every device is made from:
 /// - macOS: Metal;
-/// - Windows: DX12 (with FXC for now; a bundled DXC is W work);
+/// - Windows: DX12 (with FXC for now; a bundled DXC is still to come);
 /// - Linux: Vulkan, with GL as the last resort.
 ///
 /// Off macOS, `WGPU_BACKEND` narrows the choice (the Linux CI picks lavapipe with `WGPU_BACKEND=vulkan`).

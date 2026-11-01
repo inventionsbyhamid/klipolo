@@ -1,5 +1,5 @@
-//! A cursor take's budget at real scale, asserted in release: an hour of a tutorial take and
-//! an hour of continuous 250 Hz motion, each loaded and smoothed, with their times and bytes printed for the report.
+//! A cursor take's budget at real scale, asserted in release: an hour of a tutorial take and an hour of continuous 250
+//! Hz motion, each loaded and smoothed, with their times and bytes printed.
 //!
 //! `cargo test --release -p klipolo-engine --test cursor_budget -- --ignored --nocapture`
 
@@ -23,7 +23,7 @@ impl Rng {
 
 /// An hour of cursor: flicks to random places on a 1440 × 900 point screen, each 150–450 ms of minimum-jerk motion on
 /// whole and half points (as the real-motion fixture is). `typical`: moving a quarter of the time at 120 Hz, a beat
-/// 500 ms at rest and a click on about every other rest (one every 2.4 s); else 250 Hz of continuous motion.
+/// every 500 ms at rest and a click on about every other rest (one every 2.4 s); else 250 Hz of continuous motion.
 fn hour(typical: bool) -> String {
     let mut rng = Rng(7);
     let (step, mut t, end) = (
@@ -151,9 +151,9 @@ fn an_hours_take_loads_and_smooths_within_the_budget() {
             take.bytes(),
             BUDGET_BYTES / take.bytes(),
         );
-        // Memory (any build): 8 B a position; the path 4 B a step (1.73 MB an hour of motion
-        // measure: its steps) plus its segment table (16 B a segment, each at least 4/ω of steps, so at most a fifth
-        // more); a tutorial hour within 3 MB with its path; four of the largest within the budget.
+        // Memory (any build): 8 B a position; the path 4 B a step (1.73 MB an hour of motion, measured by its steps)
+        // plus its segment table (16 B a segment, each at least 4/ω of steps, so at most a fifth more); a tutorial hour
+        // within 3 MB with its path; four of the largest within the budget.
         assert!(take.track.bytes() <= samples * 8 + take.track.presses().len() * 64 + 4_096);
         assert!(medium.bytes() as f64 <= 1.73e6 * motion_h * 1.2);
         assert!(!typical || take.bytes() <= 3_000_000, "{}", take.bytes());
@@ -161,10 +161,9 @@ fn an_hours_take_loads_and_smooths_within_the_budget() {
         if cfg!(debug_assertions) {
             continue;
         }
-        // Time (release, on the i5): load ≤ 150 ms an hour of cursor data, asserted where it is
+        // Time (release, the target on an Intel i5): load ≤ 150 ms an hour of cursor data, asserted where it is
         // typical; an hour of continuous 250 Hz motion parses 900,000 lines, which a 2013 Xeon server does in about
-        // 0.42 s (measured on the i5), bounded here at 0.6 s. Smoothing ≤ 30 ms an hour of motion, with the take's
-        // rest scan.
+        // 0.42 s, bounded here at 0.6 s. Smoothing ≤ 30 ms an hour of motion, with the take's rest scan.
         let load_ms = if typical { 150 } else { 600 };
         assert!(load <= Duration::from_millis(load_ms), "load {load:?}");
         assert!(per_motion_h <= 30.0, "{per_motion_h} ms an hour of motion");

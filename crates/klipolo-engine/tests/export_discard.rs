@@ -1,5 +1,5 @@
-//! Discarding an unfinished export is all or nothing: its folder is first renamed,
-//! in the same `.jobs` folder, to a name the job list ignores, and only then deleted, in the background. A rename that
+//! Discarding an unfinished export is all or nothing: its folder is first renamed, in the same `.jobs` folder, to a
+//! name the job list ignores, and only then deleted, in the background. A rename that
 //! fails leaves the job exactly as it was (so Discard or Start over is refused with nothing lost), and what a crash
 //! left behind is swept at the next start.
 

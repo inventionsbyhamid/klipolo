@@ -37,7 +37,7 @@ pub struct FakeMeter {
     /// The cost a pixel reaches at the layer's end, rising evenly from `ns_per_pixel` at its start (a cost that grows
     /// over the layer).
     ns_at_end: Option<f64>,
-    /// A size whose frames fail (tests of the step a failure names, m2).
+    /// A size whose frames fail (tests of the step a failure names).
     fail_at: Option<(u32, u32)>,
     /// What the first frame at a size and scale costs more when it wasn't warmed first (a real GPU's pipeline compile
     /// and new targets), and the sizes and scales warmed this request.

@@ -48,7 +48,7 @@ export function ChatPanel() {
       focusComposer();
     }
   });
-  // Words timed again drop an open proposal (`useChat`): the panel follows `speech-changed`.
+  // Words timed again under an open proposal's cuts drop it (`useChat`): the panel follows `speech-changed`.
   useEffect(() => startSpeechFeed(), []);
   const expand = () => {
     wantFocus.current = true;

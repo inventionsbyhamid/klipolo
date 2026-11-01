@@ -1,5 +1,5 @@
 //! The GPU preview backend: decoder pool → compositor → RGBA or NV12 readback, or a native presenter's slot, plus the
-//!, plus the preview's sound and the timeline's thumbnails (`media`).
+//! preview's sound and the timeline's thumbnails (`media`).
 
 mod backend_guards;
 pub(crate) mod build_times;
@@ -234,8 +234,8 @@ impl GpuBackend {
         }
     }
 
-    /// Test hook: run effects on turned video as stored, not upright, to measure the upright pass
-    /// GPU test). Kept like `set_downsample`.
+    /// Test hook: run effects on turned video as stored, without the upright pass, to measure that pass (a GPU
+    /// test). Kept like `set_downsample`.
     #[doc(hidden)]
     pub fn set_upright(&mut self, on: bool) {
         self.upright = on;
@@ -324,7 +324,7 @@ impl GpuBackend {
         self.thumbs.clone()
     }
 
-    /// The sound cache playback, waveforms and transcription share, so the app keeps the running engine's (Sync, P6).
+    /// The sound cache playback, waveforms and transcription share, so the app keeps the running engine's (Sync).
     pub fn pcm_store(&self) -> Arc<PcmStore> {
         self.pcm.clone()
     }

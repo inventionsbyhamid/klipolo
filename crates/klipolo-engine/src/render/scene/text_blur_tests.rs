@@ -31,7 +31,7 @@ fn a_blurs_passes_take_a_few_fetches_at_any_deviation() {
     assert_eq!(Kernel::of(5.9).step, 1.0);
 }
 
-/// A heavy blur case at 1080p's peak (a letter's 100 × 150 cell, a deviation of 24 texels): the brute-force blur
+/// A blur-in title's letter at 1080p's peak (a letter's 100 × 150 cell, a deviation of 24 texels): the brute-force blur
 /// fetched 121 times a texel of a full-size region across and as often a fragment down, about 18 million a letter;
 /// drawn small its three passes take about 30 thousand, and the text pass reads each fragment once.
 #[test]

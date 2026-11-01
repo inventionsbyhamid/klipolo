@@ -421,7 +421,7 @@ pub struct EffectPatch {
     pub reset: Option<Vec<String>>,
 }
 
-/// Who asked for a change: undo labels, proposal routing (principle 3) and, for plugins, the audit trail.
+/// Who asked for a change: undo labels, proposal routing and, for plugins, the audit trail.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS, schemars::JsonSchema)]
 #[serde(
     tag = "type",

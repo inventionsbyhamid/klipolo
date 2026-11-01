@@ -1,14 +1,12 @@
-//! A word as an engine heard it, and `snap_to_speech`, which every engine's words go through (moved here from
-//! klipolo-speech, so whisper's worker and klipolo-asr share one rule): neither whisper's times nor Parakeet's
-//! 80 ms frames see pauses, so a word's start moves past silence to where its sound begins, and its end back to where
-//! its sound ends. O(samples) once for the snapping.
+//! A word as a recognizer heard it, and the rules that move its edges onto its sound. A recognizer's word times (on
+//! its own clock, or on 80 ms encoder steps) don't see pauses, so `snap_to_speech` moves a word's start past silence to
+//! where its sound begins, and its end back to where its sound ends; `refine_edges` then moves edges that sit on
+//! encoder steps onto the sound's own edges. O(samples) once for the snapping.
 
 use klipolo_model::time::Us;
-use serde::{Deserialize, Serialize};
 
 /// A word as the recognizer heard it, in the chunk's own time.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RawWord {
     pub text: String,
     pub start_us: Us,
@@ -27,10 +25,9 @@ const GAP_WINDOWS: usize = 25;
 /// Kept before a word's first loud window and after its last (a soft attack, a fading end).
 const MARGIN_WINDOWS: usize = 2;
 /// Digital silence (every sample 0) this long is a pause even inside a word: the pad a packed window puts between two
-/// pieces (klipolo-speech's `plan::PAD_US`, 200 ms, less a window at each edge it may only partly cover; its
-/// `tests/tokens.rs` keeps the two in step). No spoken word holds dead silence, so over noise or music, where the word
-/// before ends in sound, the next piece's first word still starts after its pad
-/// 1). A real closure (150 ms of zeros in a test's "laptop") stays shorter.
+/// pieces (200 ms, less a window at each edge it may only partly cover). No spoken word holds dead silence, so over
+/// noise or music, where the word before ends in sound, the next piece's first word still starts after its pad. A real
+/// closure (150 ms of zeros in a test's "laptop") stays shorter.
 pub const DEAD_PAUSE_US: Us = 180_000;
 const DEAD_WINDOWS: usize = (DEAD_PAUSE_US / WINDOW_US) as usize;
 /// A window's level when every sample in it is 0.
@@ -98,7 +95,7 @@ pub fn snap_to_speech(words: &mut [RawWord], samples: &[f32]) {
 pub const EDGE_HOP: usize = 80; // 5 ms at 16 kHz
 /// The least rise (or fall) of the envelope, in dB from the 10 ms before an edge to the 10 ms after it, that moves it.
 pub const RISE_DB: f32 = 6.0;
-/// Parakeet's encoder step: the most an edge moves either way.
+/// A recognizer's encoder step: the most an edge moves either way.
 const STEP_US: Us = 80_000;
 /// Kept before an onset and after an offset (a soft attack, a fading end).
 const MARGIN_US: Us = 10_000;
@@ -123,27 +120,28 @@ const HELD_FROM: usize = 6;
 const HELD_TO: usize = 10;
 /// y[n] = x[n] − 0.97·x[n−1]: a consonant's high frequencies count as much as a vowel's low ones.
 const PRE_EMPHASIS: f32 = 0.97;
-/// Where speech moves but no digital silence is (connected speech, a room, a bed), a start leads Parakeet's own time by
-/// this much. On LibriSpeech, Parakeet's starts are 20 ms late at the median and an envelope's rise is no
-/// better a start than its frame: the rise is a consonant's release or a vowel's onset, where a forced alignment puts
-/// the word's start before it. Leading by 10 ms scored best of the rules tried (median 40 ms, p90 140 ms, against
-/// 50 and 140 unrefined and 50 and 150 on the rise).
+/// Where speech moves but no digital silence is (connected speech, a room, a bed), a start leads the recognizer's own
+/// time by this much. On read speech, a recognizer's starts on 80 ms steps are 20 ms late at the median and an
+/// envelope's rise is no better a start than its step: the rise is a consonant's release or a vowel's onset, where a
+/// forced alignment puts the word's start before it. Leading by 10 ms scored best of the rules tried (median 40 ms,
+/// p90 140 ms, against 50 and 140 unrefined and 50 and 150 on the rise).
 pub const LEAD_US: Us = 10_000;
 
-/// Parakeet's word edges sit on 80 ms encoder steps. Each start moves to the strongest rise of the
-/// 5 ms log-energy envelope (pre-emphasised, so a consonant's onset counts) within one step either side, if that rise
-/// is at least `RISE_DB`; each end to the strongest fall. Never past the word before or after, never shorter than
-/// 30 ms. Runs after `snap_to_speech` (which handles pauses of 100 ms and more). O(samples) for the envelope, then
-/// O(32) per edge; one Vec of `samples / 80` floats (and one copy of it while the floor is found), and one bool a hop.
+/// Moves word edges that sit on a recognizer's 80 ms encoder steps onto the sound's own edges. Each start moves to the
+/// strongest rise of the 5 ms log-energy envelope (pre-emphasised, so a consonant's onset counts) within one step
+/// either side, if that rise is at least `RISE_DB`; each end to the strongest fall. Never past the word before or
+/// after, never shorter than 30 ms. Runs after `snap_to_speech` (which handles pauses of 100 ms and more). O(samples)
+/// for the envelope, then O(32) per edge; one Vec of `samples / 80` floats (and one copy of it while the floor is
+/// found), and one bool a hop.
 ///
 /// - **Only at digital silence.** A start moves to a rise only out of digital silence (every sample 0: a packed
-///   packed window's pad, a noise gate's zeros), and an end to a fall only into it: there the sound's own edge is
-///   unambiguous. Elsewhere, where a held rise shows speech moving, a start leads Parakeet's time by `LEAD_US`, and an
-///   end stays. LibriSpeech showed an envelope's rise in connected speech is no better than Parakeet's frame.
+///   window's pad, a noise gate's zeros), and an end to a fall only into it: there the sound's own edge is
+///   unambiguous. Elsewhere, where a held rise shows speech moving, a start leads the recognizer's time by `LEAD_US`,
+///   and an end stays: on read speech an envelope's rise in connected speech is no better a start than the step.
 /// - A rise is the mean of the two hops after an edge less the mean of the two before it, so an abrupt onset peaks at
 ///   its own hop and a 10 ms attack still counts in full; a fall is the reverse. Ties take the earliest rise and the
 ///   latest fall.
-/// - Two joined words (one's end at or past the next one's start, as Parakeet's pieces give them) share one edge,
+/// - Two joined words (one's end at or past the next one's start, as a recognizer's pieces give them) share one edge,
 ///   moved as the second word's start, and both words' edges move with it, each at most a step.
 /// - Only a held rise counts (`DROP_DB`): for 10–50 ms after the edge its sound stays within 6 dB of its onset's level
 ///   and over the dip. A click, a hi-hat, a clap or a snare (decays to about 40 ms) at least 40 ms before a word's

@@ -335,8 +335,9 @@ impl MediaJobs {
     }
 
     /// Analysis started (true) or stopped (false) decoding a clip on this Mac (its sound, its small copy): copies wait,
-    /// as analysis is the person's own action, so the two never decode video at once. After it stops, copies wait
-    /// `SETTLE` before starting again: the next clip's decode often follows at once.
+    /// as analysis is the person's own action. A copy under way pauses as analysis starts (the two may overlap for
+    /// about a frame while it stops), and none starts meanwhile. After it stops, copies wait `SETTLE` before starting
+    /// again: the next clip's decode often follows at once.
     pub fn set_analyzing(&self, analyzing: bool) {
         self.send(Msg::Analyzing(analyzing));
     }

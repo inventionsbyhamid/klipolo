@@ -3,7 +3,7 @@ import type { FormatKind } from "./FormatKind";
 import type { RangeUs } from "./RangeUs";
 
 /**
- * What a batch takes away, for the proposal card and the ghosted timeline (principle 3). `ranges` are main-track
+ * What a batch takes away, for the proposal card and the ghosted timeline. `ranges` are main-track
  * footage that goes, on the timeline as it was before the batch; the rest are ids from before the batch, in the
  * project's order. Not empty exactly when `risk_against` says Removal.
  */

@@ -205,8 +205,7 @@ impl SceneDrawer {
     }
 
     /// The frame's start: instances unused for a while go, their held targets back to `stage`; text builds that landed
-    /// are uploaded and kept now, before any frame uses an entry (none waits in the
-    /// channel while no scene draws).
+    /// are uploaded and kept now, before any frame uses an entry (none waits in the channel while no scene draws).
     pub fn begin_frame(
         &mut self,
         device: &wgpu::Device,

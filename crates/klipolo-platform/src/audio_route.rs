@@ -5,8 +5,8 @@
 //! to re-read the latency so the audio clock (and the picture) re-anchors. A listener only bumps a counter: CoreAudio
 //! is never called from inside it.
 //!
-//! Windows (W: `IMMNotificationClient`, `IAudioClient::GetStreamLatency`) and Linux (L: PipeWire, `snd_pcm_delay`)
-//! report no changes and no latency yet, so lip sync there is off by the device latency.
+//! Windows (later: `IMMNotificationClient`, `IAudioClient::GetStreamLatency`) and Linux (later: PipeWire,
+//! `snd_pcm_delay`) report no changes and no latency yet, so lip sync there is off by the device latency.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;

@@ -76,9 +76,8 @@ fn units_set_in_one_batch_place_tweens_as_one_by_one() {
     }
 }
 
-/// An instance past the track cap is decided once, when it is built: every frame is
-/// its settled still, whole, reading no tracks (shown with one diagnostic). A common scene reads a few
-/// dozen tracks a frame.
+/// An instance past the track cap is decided once, when it is built: every frame is its settled still, whole, reading
+/// no tracks (the renderer shows it with one diagnostic). A common scene reads a few dozen tracks a frame.
 #[test]
 fn an_instance_past_the_track_cap_draws_its_settled_still() {
     let tweens: Vec<&str> = (0..256)

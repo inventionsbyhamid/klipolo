@@ -21,7 +21,7 @@ pub struct ProxyPolicy {
     /// The copy's long side.
     pub long_side: u32,
     /// Whether this computer can make a copy at all (an H.264 encoder through `platform::encode`). False on Windows
-    /// (W) and Linux (L) until their encoders land: then nothing is queued that can only fail.
+    /// and Linux until their encoders land: then nothing is queued that can only fail.
     pub can_encode: bool,
 }
 

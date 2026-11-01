@@ -7,10 +7,10 @@ use klipolo_model::project::Project;
 use klipolo_model::speech::run_spans;
 
 /// Whether `after`'s pages can differ from `before`'s for the same speech: a committed revision's feed carries no ops,
-/// so it compares what pages are made from. Captions turned on or off, another style, look, size or case, other
+/// so it compares what pages are made from. Captions turned on or off, another style or look, other formats,
 /// fixes or looks (shared lists: a pointer compare while untouched), a different speech map (clips, speeds, source
 /// nudges and mixes, through `run_spans`: O(clips)), or a transition added or removed (it makes a split a cut, which
-/// which ends a page; O(clips)). Colours, fonts and places don't page. The app's caption pages for the
+/// ends a page; O(clips)). Colours, fonts and places don't page. The app's caption pages for the
 /// lane and the canvas keep their build by it too.
 pub fn pages_may_differ(before: &Project, after: &Project) -> bool {
     let (a, b) = (&before.captions, &after.captions);
@@ -88,8 +88,8 @@ pub(crate) fn may_move_captions(p: &Project, op: &Op) -> bool {
         | Op::AddMarker { .. }
         | Op::RemoveMarker { .. } => false,
         // A clip's own mix of a picture source decides whether the camera's words play over its gaps
-        // `speech::fill`), so its dry runs (a volume dragged to 0, a mute previewed) make their own cues
-        // m3); a mic's own mix moves no word. O(recordings × sources).
+        // (`speech::fill`), so its dry runs (a volume dragged to 0, a mute previewed) make their own cues; a mic's own
+        // mix moves no word. O(recordings × sources).
         Op::SetClipSourceMix { source_id, .. } => p
             .recordings
             .iter()

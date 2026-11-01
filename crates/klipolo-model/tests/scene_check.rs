@@ -1,5 +1,5 @@
-//! `scene@1`: a sample lower third and a kinetic title load and check, every
-//! cap is refused with its name, bindings, unknown keys, selectors, eases and path data are named with their JSON
+//! `scene@1`: a lower third and a kinetic title load and check, every cap is refused with its name, bindings, unknown
+//! keys, selectors, eases and path data are named with their JSON paths, fonts read a `FontRef`'s JSON, stored scenes
 //! refuse `svg` nodes, and the stored loader never panics.
 
 use klipolo_model::contrib::Catalog;

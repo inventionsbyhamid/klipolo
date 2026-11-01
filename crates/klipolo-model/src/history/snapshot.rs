@@ -20,8 +20,8 @@ pub struct Snapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub read_only: Option<String>,
-    /// Which opening of the project this is, when the host says (revisions restart at 0 on each): a change the host tells
-    /// of later, with no reply of its own, is matched to it by project, opening and revision.
+    /// Which opening of the project this is, when the host says (revisions restart at 0 on each): a change the host
+    /// tells of later, with no reply of its own, is matched to it by project, opening and revision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional, type = "number")]
     pub opening: Option<u64>,

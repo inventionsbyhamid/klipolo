@@ -97,7 +97,7 @@ impl PcmStore {
     }
 
     /// The files with a build in flight on this store, whoever runs it: its worker, a caller of `build`
-    /// transcription, an export on this store) or Sync. Sync counts the ones that aren't its own against its two
+    /// (transcription, an export on this store) or Sync. Sync counts the ones that aren't its own against its two
     /// decodes. One small allocation per call; Sync calls it every 50 ms at most.
     pub fn building(&self) -> Vec<String> {
         lock(&self.inner)

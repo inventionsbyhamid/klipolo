@@ -1,5 +1,5 @@
-//! What a scene says about itself, once per scene until the project closes (paths too
-//! detailed to draw, and text that can't be built).
+//! What a scene says about itself, once per scene until the project closes: what it left out, paths too detailed to
+//! draw, its text's notes, and text that can't be built.
 
 use std::sync::Arc;
 

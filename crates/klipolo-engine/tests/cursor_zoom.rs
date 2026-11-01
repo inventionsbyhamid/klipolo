@@ -1,5 +1,5 @@
-//! Auto zooms planned by the smart camera: an Auto zoom over cursor data
-//! is a camera run planned from the take's facts (the focus chat plans from too) with the person's Rect zooms inside
+//! Auto zooms planned by the smart camera: an Auto zoom over cursor data is a camera run planned from the take's facts
+//! (the focus chat plans from too) with the person's Rect zooms inside
 //! it as fixed shots and the raw cursor for its glide; elsewhere it looks at the centre on the springs. How the cursor
 //! files load (bounded, damaged, off the thread, within the budget) is `cursor_zoom/loads.rs`; an hour at real scale
 //! is `cursor_zoom/scale.rs`.

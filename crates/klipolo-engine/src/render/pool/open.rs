@@ -88,8 +88,8 @@ pub(super) enum CopyCheck {
 }
 
 /// Whether the copy at `copy` was made from `original` as the file is now, at decoder opens and,
-/// for an unchecked copy, each frame until its original answers. Nothing here runs on the engine's task:
-/// the original's stat did, and a dropped volume holding an original froze the preview for every source with a
+/// for an unchecked copy, each frame until its original answers. Nothing here runs on the engine's task (the
+/// original's stat once did, and a dropped volume holding an original froze the preview for every source with a
 /// copy): the original's stat and the copy's are `file_id`'s (bounded by `ask`, one per path in flight, the redraw
 /// signal registered when one is given up on), and the copy's record, a small file beside it, is read on the blocking
 /// pool within the same limit.

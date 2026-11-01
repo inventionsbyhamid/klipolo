@@ -259,7 +259,7 @@ impl ContribDef {
     }
 }
 
-/// Every installed contribution. Built-ins now; plugin definitions would come in with [`Catalog::with`].
+/// Every installed contribution. Built-ins now; plugin definitions come later, through [`Catalog::with`].
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Catalog {
     defs: BTreeMap<ContribId, ContribDef>,

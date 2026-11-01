@@ -2,8 +2,8 @@
 //! the app's process so a later start knows a leftover. `in/` is written only by the parent (`profile.json`, then the
 //! inputs of each request: project snapshots, contributions, SVGs, stills, the font list); `out/` and `tmp/` are the
 //! worker's, the only folders its sandbox lets it write. The parent deletes the whole folder once the worker has
-//! exited, and at the next start whatever an earlier run left, stopping a worker it left running first (`sweep`, m6).
-//! `in/` holds one request's inputs at a time (`clear_inputs`, m7), and the parent measures what the worker
+//! exited, and at the next start whatever an earlier run left, stopping a worker it left running first (`sweep`).
+//! `in/` holds one request's inputs at a time (`clear_inputs`), and the parent measures what the worker
 //! wrote (`written`).
 
 use std::io::{self, Read};

@@ -1,5 +1,5 @@
-//! System memory pressure: the OS backend records the level, and the decoder pool
-//! and the compositor read it each frame:
+//! System memory pressure: the OS backend records the level, and the decoder pool and the compositor read it each
+//! frame:
 //! - warning: the decoder budget halves, nothing is warmed ahead, and images and LUTs the frame doesn't draw go;
 //! - critical: also only the current frame's decoders stay open.
 //!
@@ -9,8 +9,8 @@
 //!
 //! The open project's undo history also shrinks to 50 steps at a warning, as soon as the level changes (`on_change`).
 //!
-//! macOS listens with a dispatch source. Windows (W: `CreateMemoryResourceNotification`, the DXGI budget) and Linux
-//! (L: PSI) stay Normal for now.
+//! macOS listens with a dispatch source. Windows (later: `CreateMemoryResourceNotification`, the DXGI budget) and Linux
+//! (later: PSI) stay Normal for now.
 
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Mutex, PoisonError};

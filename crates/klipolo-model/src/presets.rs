@@ -1,6 +1,6 @@
-//! The shipped shader and motion graphic presets: data folders under `presets/<local id>/`, in
-//! exactly the shape a version in a person's library has (`contrib.json` beside `effect.wgsl` or `scene.json`), embedded
-//! at build time. Their ids are `klipolo.builtin/<local id>`. The model's built-in catalogue reads each `contrib.json`
+//! The shipped shader and motion graphic presets: data folders under `presets/<local id>/`, in exactly the shape a
+//! version in a person's library has (`contrib.json` beside `effect.wgsl` or `scene.json`), embedded at build time.
+//! Their ids are `klipolo.builtin/<local id>`. The model's built-in catalogue reads each `contrib.json`
 //! (`contrib::builtin`), and the engine the same folders' `effect.wgsl` or `scene.json`
 //! (`klipolo_engine::registry::presets`), so both read the same bytes. `SHADER_PRESETS` are the shader effects;
 //! `SCENE_PRESETS` are the title templates.

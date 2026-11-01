@@ -1,4 +1,4 @@
-//! A node's properties: one flat set of optional fields, each named as B10 (CSS and SVG) names it. Which of them a
+//! A node's properties: one flat set of optional fields, each named as CSS and SVG name it. Which of them a
 //! node type takes is [`super::keys`]'s table; the loader refuses any other key with a close name.
 
 use std::collections::BTreeMap;

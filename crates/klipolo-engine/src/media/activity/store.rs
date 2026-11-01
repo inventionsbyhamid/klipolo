@@ -90,7 +90,7 @@ impl ActivityStore {
         store
     }
 
-    /// A store of its own on `root` with no background pass and no thumbnails before it (an export, another process:
+    /// A store of its own on `root` with no background pass and no thumbnails before it (an export, another
     /// process): `ensure` reads and makes files in the folder it shares with the editor's store.
     pub fn detached(root: PathBuf, opener: Opener) -> Arc<ActivityStore> {
         Self::with_thumbs(root, Weak::new(), opener)

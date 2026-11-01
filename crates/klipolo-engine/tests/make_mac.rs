@@ -1,8 +1,7 @@
-//! The render worker's measurement on the Mac's own GPU (run by hand): the
-//! worker's device on the real adapter, whether it has timestamp queries, the waves preset's cost, and a heavy but legal
-//! body (a loop of 4,096 trips of ~60 operations, just under the static cap) that must stop at or before the preview
-//! step, never drawn as one long frame. And the budget table's calibration, with the shader
-//! presets' claimed classes.
+//! The render worker's measurement on the Mac's own GPU (run by hand on a Mac after a Mac build): the worker's device
+//! on the real adapter, whether it has timestamp queries, the waves preset's cost, and a heavy but legal body (a loop
+//! of 4,096 trips of ~60 operations, just under the static cap) that must stop at or before the preview step, never
+//! drawn as one long frame. And the budget table's calibration, with the shader presets' claimed classes.
 //!
 //! Every test here is `#[ignore]`d and run only on the Mac (`-- --ignored`); the file compiles on every platform, so CI
 //! type-checks and lints it.
@@ -68,13 +67,12 @@ async fn the_worker_measures_on_the_real_gpu_and_stops_a_heavy_body_early() {
     );
 }
 
-/// The budget table's calibration (run by hand after a Mac build, and its report
-/// carries the table): the built-in blur at radius 12, vignette and gradient, and the sample waves and sparkle
-/// bodies, measured as the worker measures a draft on this GPU (`measure` with `GpuMeter`, its settings at their costly
-/// ends and probes) and classed by `classify`. The table in `Budget` changes only by explicit choice. Where the timing
-/// is fenced (Iris Plus), each row also shows the deciding point's batches at preview size
-/// and 2): their frames (fewest–most), the median single frame and batch, whether they told Light, and whether the
-/// baseline was steady. Expected on Iris Plus: the vignette Light, or
+/// The budget table's calibration (run by hand on a Mac after a Mac build; it prints the table): the built-in blur at
+/// radius 12, vignette and gradient, and the sample waves and sparkle bodies, measured as the worker measures a draft
+/// on this GPU (`measure` with `GpuMeter`, its settings at their costly ends and probes) and classed by `classify`. The
+/// table in `Budget` changes only after a hand run. Where the timing is fenced (Iris Plus), each row also shows the
+/// deciding point's batches at preview size: their frames (fewest–most), the median single frame and batch, whether
+/// they told Light, and whether the baseline was steady. Expected on Iris Plus: the vignette Light, or
 /// Normal with its p95 within ~0.1 ms of 0.5 (its figure sits near the limit, and the p95 of 8 samples is their most);
 /// the gradient Normal, since a generator's figure includes compositing its own picture (~0.4 ms there) beside its pass.
 #[tokio::test(flavor = "multi_thread")]
@@ -158,11 +156,11 @@ async fn the_budget_table_is_calibrated_on_this_gpu() {
     }
 }
 
-/// The [Mac] step (run by hand after a Mac build): every shader preset, measured as the worker
-/// measures a draft on this GPU (`DraftLayer::builtin` at its defaults, then each costly setting at its costly end, as
-/// the guard reads the preset under an agent's id; a built-in has no facts of its own) and classed by `classify` (time
-/// and memory, each kind's own share), meets the class it claims (`SHADER_CLAIMED`). A preset over its
-/// claim is reworked before it merges; a claim changes only by explicit choice.
+/// Run by hand on a Mac after a Mac build: every shader preset, measured as the worker measures a draft on this GPU
+/// (`DraftLayer::builtin` at its defaults, then each costly setting at its costly end, as the guard reads the preset
+/// under an agent's id; a built-in has no facts of its own) and classed by `classify` (time and memory, each kind's own
+/// share), meets the class it claims (`SHADER_CLAIMED`). A preset over its claim is reworked before it merges; a claim
+/// changes only with a note saying why.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Mac only: the shader presets' classes on Iris Plus"]
 async fn every_shader_preset_meets_its_claimed_class_on_this_gpu() {
@@ -259,7 +257,7 @@ fn fenced_columns(fenced: Option<&klipolo_engine::make::budget::Fenced>) -> (Str
     (batches, format!("{resolved}{steady}"))
 }
 
-/// A generator whose loop runs 4, 16, 32 and 64 times, measured as the worker
+/// Run by hand on a Mac after a Mac build: a generator whose loop runs 4, 16, 32 and 64 times, measured as the worker
 /// measures a draft. Where the timing is fenced, the batches' figures must rise with the work, roughly in proportion
 /// (single fenced frames couldn't tell them apart). Prints each figure, class and the batches' frames.
 #[tokio::test(flavor = "multi_thread")]
@@ -440,7 +438,7 @@ async fn time_the_capped_draft(name: &str, main: u32, gated_sin: bool) {
     assert!(total < COMPILE_BUDGET, "{name}: {total:?}");
 }
 
-/// The [Mac] check (N3-v): the capped draft with a body near 1.5 ms on Iris Plus
+/// Run by hand on a Mac after a Mac build: the capped draft with a body near 1.5 ms on Iris Plus
 /// (8 trips of the sweep's loop and 2 more at the defaults), where a fenced point's first sample shows it over Light and
 /// the rest take short batches.
 #[tokio::test(flavor = "multi_thread")]
@@ -457,10 +455,10 @@ async fn a_light_draft_at_the_setting_caps_fits_the_compile_budget() {
     time_the_capped_draft("a light draft at the caps, ~0.65 ms", 2, false).await;
 }
 
-/// The app's preview (`Interactive`) on the main device draws 300 frames with one checked
-/// filter, sampled every 30th frame as the preview samples it. Prints whether the main device has timestamp queries
-/// (expected on Iris Plus) and the sampling's own cost a frame (expected under 0.05 ms), measured inside the sampler and
-/// as the difference to 300 frames drawn with sampling off.
+/// Run by hand on a Mac after a Mac build: the app's preview (`Interactive`) on the main device draws 300 frames with
+/// one checked filter, sampled every 30th frame as the preview samples it. Prints whether the main device has timestamp
+/// queries (expected on Iris Plus) and the sampling's own cost a frame (expected under 0.05 ms), measured inside the
+/// sampler and as the difference to 300 frames drawn with sampling off.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Mac only: the preview's sampling on Iris Plus"]
 async fn the_preview_samples_a_checked_filter_cheaply_on_this_gpu() {

@@ -61,8 +61,8 @@ pub struct Batches {
     pub resolved: bool,
     /// Whether the baseline's slopes were steady.
     pub baseline_steady: bool,
-    /// Settled because a sample was over Light by more than twice its resolution, not by Light's precision
-    /// 3, m-h): `resolved` then says only that the point isn't Light.
+    /// Settled because a sample was over Light by more than twice its resolution, not by Light's precision: `resolved`
+    /// then says only that the point isn't Light.
     #[serde(default)]
     pub over_light: bool,
 }

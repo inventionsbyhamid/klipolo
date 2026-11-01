@@ -1,5 +1,5 @@
 //! Process plumbing for the out-of-process export worker: whether stdin is the parent's pipe, the one-worker-per-job
-//! per-job lock, the worker's command, and whether another process (named by its id in a temporary file) still runs.
+//! lock, the worker's command, and whether another process (named by its id in a temporary file) still runs.
 //!
 //! And for model servers: a child's memory, its start time (a pidfile keeps it, so a sweep never stops a process
 //! that reused the id), stopping it, and background priority while it warms up. `Forward`: what of a worker's stderr
@@ -74,7 +74,7 @@ pub fn worker_command(exe: &Path) -> tokio::process::Command {
 /// A process's memory: `footprint` is what Activity Monitor shows on macOS (`phys_footprint`, which leaves out clean
 /// memory-mapped model weights); `resident` is its resident set.
 /// - macOS: `proc_pid_rusage(RUSAGE_INFO_V2)`'s `ri_phys_footprint` and `ri_resident_size`;
-/// - Linux: `/proc/<pid>/status`'s `VmRSS` for both (L: the footprint from `smaps_rollup`'s anonymous PSS);
+/// - Linux: `/proc/<pid>/status`'s `VmRSS` for both (not yet: the footprint from `smaps_rollup`'s anonymous PSS);
 /// - Windows: `GetProcessMemoryInfo`'s `PrivateUsage` (the private commit: Task Manager's "Commit size", not its
 ///   "Memory" column, which is the private working set) and `WorkingSetSize`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -111,12 +111,12 @@ pub fn boot_id() -> Option<String> {
 }
 
 /// When `pid` started, in µs since 1970: stable for the process's life, so a pidfile stores it (with `boot_id`) and a
-/// later sweep never stops a different process that reused the id. None when gone or unknown (Windows until W).
+/// later sweep never stops a different process that reused the id. None when gone or unknown (Windows, for now).
 /// - macOS: `proc_pidinfo(PROC_PIDTBSDINFO)`'s start;
 /// - Linux: `/proc/<pid>/stat` field 22 (clock ticks since boot) after `/proc/stat`'s `btime` (the boot, in s since
 ///   1970, read once per run), as psutil does: so 10 ms steps, and a clock set between two runs changes it, which
 ///   only makes a sweep miss;
-/// - Windows (W: `GetProcessTimes`' creation time): None.
+/// - Windows (not yet: `GetProcessTimes`' creation time): None.
 ///
 /// A process that has exited keeps its start time until its parent reaps it.
 pub fn start_time(pid: u32) -> Option<u64> {
@@ -124,8 +124,8 @@ pub fn start_time(pid: u32) -> Option<u64> {
 }
 
 /// Whether the process a pidfile recorded (its id, start time and boot) still runs: the same boot, the same start, and
-/// not exited. A reused id, a pidfile from before a reboot, an exited process, or one the OS won't describe (Windows
-/// until W) never matches.
+/// not exited. A reused id, a pidfile from before a reboot, an exited process, or one the OS won't describe (Windows,
+/// for now) never matches.
 pub fn still_running(pid: u32, started: u64, boot: &str) -> bool {
     pid != 0 && boot_id().is_some_and(|now| now == boot) && crate::imp::still_running(pid, started)
 }
@@ -140,8 +140,8 @@ pub fn still_running(pid: u32, started: u64, boot: &str) -> bool {
 ///
 /// The backends:
 /// - macOS and Linux: `SIGTERM`, then `SIGKILL`;
-/// - Windows (W: `OpenProcess`, `GetProcessTimes` and `TerminateProcess` on the same handle, so the check can't race;
-///   sidecars live in a Job Object there): `Unsupported`.
+/// - Windows (not yet: `OpenProcess`, `GetProcessTimes` and `TerminateProcess` on the same handle, so the check can't
+///   race; sidecars live in a Job Object there): `Unsupported`.
 pub fn terminate(pid: u32, started: u64) -> io::Result<()> {
     one_process(pid)?;
     crate::imp::terminate(pid, started)
@@ -151,7 +151,7 @@ pub fn terminate(pid: u32, started: u64) -> io::Result<()> {
 /// critical memory pressure), so the load ends now rather than after it. Only the process that started at `started`,
 /// checked right before the signal; one that has exited or whose id now names another start is left alone (`Ok`).
 /// - macOS and Linux: `SIGKILL`;
-/// - Windows (W: `TerminateProcess` on a handle whose `GetProcessTimes` matched): `Unsupported`.
+/// - Windows (not yet: `TerminateProcess` on a handle whose `GetProcessTimes` matched): `Unsupported`.
 pub fn kill(pid: u32, started: u64) -> io::Result<()> {
     one_process(pid)?;
     crate::imp::kill(pid, started)
@@ -171,38 +171,20 @@ pub fn exe_path(pid: u32) -> Option<std::path::PathBuf> {
 
 /// Background priority for a child while it does work nobody is waiting on (a model warming up): on macOS the
 /// darwin background band (CPU and I/O throttled); off again before a person's request. A no-op on Linux and Windows
-/// until L and W. Only for the process that started at `started`, checked first:
+/// for now. Only for the process that started at `started`, checked first:
 /// - `NotFound`: it has exited, or the id now names another process;
 /// - `InvalidInput`: process 0 (which `setpriority` takes for this process) or an id beyond the OS's range;
 /// - `PermissionDenied`: its start can't be read (another user's process).
 ///
 /// The backends:
 /// - macOS: `setpriority(PRIO_DARWIN_PROCESS, pid, PRIO_DARWIN_BG or 0)`;
-/// - Linux (L: raising the priority back needs `CAP_SYS_NICE`, so `ioprio` and a cgroup's `cpu.weight` instead): the
-///   check, then nothing;
-/// - Windows (W: `SetPriorityClass(IDLE_PRIORITY_CLASS)` and EcoQoS through `SetProcessInformation`, on a handle
+/// - Linux (not yet; raising the priority back needs `CAP_SYS_NICE`, so `ioprio` and a cgroup's `cpu.weight` instead):
+///   the check, then nothing;
+/// - Windows (not yet: `SetPriorityClass(IDLE_PRIORITY_CLASS)` and EcoQoS through `SetProcessInformation`, on a handle
 ///   whose `GetProcessTimes` matched): nothing.
 pub fn set_background(pid: u32, started: u64, on: bool) -> io::Result<()> {
     one_process(pid)?;
     crate::imp::set_background(pid, started, on)
-}
-
-/// The nice value `lower_self` gives: below normal, as utility work is, never the OS's lowest.
-pub use klipolo_speech_wire::lower::LOWERED_NICE;
-
-/// This process below normal CPU priority, for good (utility, no longer the OS's
-/// lowest): for work nobody waits on frame by frame. The speech worker asks for it once its model is loaded, before it
-/// starts any other thread, so every thread it starts later (whisper's included) inherits it. Playback is protected
-/// by the speech driver's hold on late frames, not by starving the worker: at the lowest priority every editor thread
-/// preempted whisper's threads, and the others spun waiting for them. The speech wire's `lower::lower`, which
-/// klipolo-asr calls itself:
-/// - macOS: nice `LOWERED_NICE` for the process and utility QoS for the calling thread (never the darwin background
-///   band, which also throttles disk reads);
-/// - Linux: nice `LOWERED_NICE` (or nicer, if it already is) and `SCHED_BATCH` for the calling thread, which the
-///   threads it starts inherit (raising nice back needs `CAP_SYS_NICE`, hence for good);
-/// - Windows: `BELOW_NORMAL_PRIORITY_CLASS` for the process.
-pub fn lower_self() -> io::Result<()> {
-    klipolo_speech_wire::lower::lower()
 }
 
 /// Process 0 is never one process to signal or reprioritise: `kill` and `setpriority` take it for the caller.

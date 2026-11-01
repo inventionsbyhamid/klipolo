@@ -5,7 +5,7 @@
 //! - macOS: `F_BARRIERFSYNC` (ordered after every earlier write, about 3 ms) or `F_FULLFSYNC`; the barrier orders the
 //!   rename after the data, so the folder needs no sync;
 //! - Linux: `fdatasync` or `fsync`, then an `fsync` of the folder (the rename isn't durable until then);
-//! - Windows: `FlushFileBuffers` either way; NTFS journals the rename (W adds retries for antivirus locks).
+//! - Windows: `FlushFileBuffers` either way; NTFS journals the rename (retries for antivirus locks are still to come).
 //!
 //! The steps go through `Steps`, so tests record them or inject a full disk (`fake::RecordingDurable`).
 
@@ -86,7 +86,7 @@ pub fn classify_errno(errno: i32) -> DiskReason {
 
 /// `a` and `b` (or their nearest existing folders) are on one volume, so a full disk fills both (None: unknown).
 /// - macOS and Linux: the device number (`st_dev`);
-/// - W: `GetVolumeInformationByHandleW`'s serial number; unknown until then.
+/// - Windows (later: `GetVolumeInformationByHandleW`'s serial number): unknown until then.
 pub fn same_volume(a: &Path, b: &Path) -> Option<bool> {
     let volume = |path: &Path| {
         let existing = path.ancestors().find(|p| p.exists())?;

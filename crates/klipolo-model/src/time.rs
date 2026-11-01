@@ -121,8 +121,8 @@ pub fn ripple_map(ranges: &[RangeUs], t: Us) -> Us {
     t.saturating_sub(removed)
 }
 
-/// Merged, sorted ranges being removed, with the length removed before each: every lookup is a binary search (perf
-/// audit #16), so a batch with R ranges over C clips and L layers costs O((C + L) log R) instead of O((C + L) × R).
+/// Merged, sorted ranges being removed, with the length removed before each: every lookup is a binary search, so a
+/// batch with R ranges over C clips and L layers costs O((C + L) log R) instead of O((C + L) × R).
 /// Memory: three words a range (24 B), 120 KB for 5,000.
 #[derive(Clone, Debug)]
 pub struct Ripple {

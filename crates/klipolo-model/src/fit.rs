@@ -1,12 +1,11 @@
 //! Drift fitting: an audio run's offset and clock drift from its anchors.
 //!
-//! Moved unchanged from `klipolo-capture::drift`: the recorder's audio runs and Sync's anchors share it.
-//! `fit_shared` fits one device's several files with one slope.
+//! The recorder's audio runs and Sync's anchors share it. `fit_shared` fits one device's several files with one slope.
 //!
 //! PCM carries no timestamps, so once a second an audio run logs an `Anchor`: the session time of one of its frames.
 //! An audio device's clock differs from the host's by ±10–100 ppm (100 ppm is 360 ms an hour), so the run's frames are
-//! fitted to a line, `frame = rate × (1 + drift) × (t − offset)`, and the engine resamples by that ratio, so sources
-//! sources stay within 10 ms of each other after an hour once corrected.
+//! fitted to a line, `frame = rate × (1 + drift) × (t − offset)`, and the engine resamples by that ratio. Once
+//! corrected, sources stay within 10 ms of each other after an hour.
 //!
 //! The line is ordinary least squares of `frame` on `session_us`, made robust: an anchor whose residual exceeds
 //! `max(3 × the median absolute residual, 1 ms of frames)` (a late callback, a bad stamp) is dropped and the line is

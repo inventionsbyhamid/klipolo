@@ -1,7 +1,7 @@
-//! What a scene holds on the GPU: `SceneBytes` counts the
-//! targets its passes held of the pool beyond its own and the lay's ping-pong partner (the backdrop's grab and copies
-//! among them), each at its own size, and its letters' scratch and its fills at theirs, so its split lands in the
-//! classes (`scene_bounds_gpu.rs` checks it against the pool);
+//! What a scene holds on the GPU: `SceneBytes` counts the targets its passes held of the pool beyond its own and the
+//! lay's ping-pong partner (the backdrop's grab and copies among them), each at its own size, and its letters' scratch
+//! and its fills at theirs, so its split lands in the budget classes (`scene_bounds_gpu.rs` checks it against the
+//! pool);
 //! and a glass card under its layer's motion keeps one grab size, so it makes no GPU object once warm.
 
 mod support;
@@ -55,10 +55,10 @@ async fn held(json: &str, t: f64, under: bool) -> klipolo_engine::render::scene:
     h.scene_stats()
 }
 
-/// Three faded sibling groups hold one target at a time (the pool hands the next the
-/// one the last laid back), and only one of their own box's size, laid back as quads (no partner); two
-/// masked ones hold their box's group, mask and masked targets (m9: each mask drawn just before its lay-back), laid
-/// back as quads too. Its text is the scene's too, and the peak follows all of it.
+/// Three faded sibling groups hold one target at a time (the pool hands the next the one the last laid back), only one
+/// of their own box's size, laid back as quads (no partner); two masked ones hold their box's group, mask and masked
+/// targets (each mask drawn just before its lay-back), laid back as quads too. Its text is the scene's too, and the
+/// peak follows all of it.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]
 async fn scene_memory_is_counted() {
@@ -102,10 +102,10 @@ async fn scene_memory_is_counted() {
     );
 }
 
-/// The classes from the split. A blur-in title holds no extra target, only its letters' scratch at its row
-/// class (two targets, as the blur is drawn small: 2 MiB): Normal. A glass card holds one, its blurred copy (the grab goes with the blur that reads it last, and
-/// the scene's own target takes its place). A
-/// generator fill is extra bytes at its own size, never a layer target.
+/// The budget classes from the split. A blur-in title holds no extra target, only its letters' scratch at its row class
+/// (two targets, as the blur is drawn small: 2 MiB): Normal. A glass card holds one, its blurred copy (the grab goes
+/// with the blur that reads it last, and the scene's own target takes its place). A generator fill is extra bytes at
+/// its own size, never a layer target.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]
 async fn a_scenes_split_lands_in_its_budget_class() {

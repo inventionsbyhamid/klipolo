@@ -1,5 +1,5 @@
 //! Processes on Linux, from `/proc`: another process's start and state, its memory and executable, this boot's id, and
-//! background priority (L), and the processes running from a folder.
+//! background priority (later), and the processes running from a folder.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -53,8 +53,8 @@ pub(super) fn kib(text: &str, name: &str) -> Option<u64> {
     value.trim().strip_suffix("kB")?.trim().parse().ok()
 }
 
-/// `/proc/<pid>/status`'s `VmRSS` for both figures (L: the footprint from `smaps_rollup`'s anonymous PSS). None for a
-/// zombie, which has no `VmRSS` line.
+/// `/proc/<pid>/status`'s `VmRSS` for both figures (later: the footprint from `smaps_rollup`'s anonymous PSS). None for
+/// a zombie, which has no `VmRSS` line.
 pub(crate) fn process_memory(pid: u32) -> Option<crate::process::ProcessMemory> {
     crate::unix::one_pid(pid).ok()?;
     let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
@@ -71,7 +71,7 @@ pub(crate) fn own_anonymous_memory() -> Option<u64> {
     Some(kib(&status, "RssAnon")? * 1024)
 }
 
-/// The check (`verify`), then nothing. L: raising the priority back needs `CAP_SYS_NICE`, so
+/// The check (`verify`), then nothing. Later: raising the priority back needs `CAP_SYS_NICE`, so
 /// `ioprio_set(IOPRIO_CLASS_IDLE)` and a cgroup's `cpu.weight` instead.
 pub(crate) fn set_background(pid: u32, started: u64, _on: bool) -> io::Result<()> {
     crate::unix::verify(pid, started).map(|_| ())

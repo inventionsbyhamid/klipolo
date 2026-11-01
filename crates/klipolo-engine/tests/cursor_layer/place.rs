@@ -160,8 +160,8 @@ fn a_clip_with_its_own_hidden_style_draws_no_cursor_and_its_neighbour_does() {
 #[test]
 fn a_heal_gap_shows_one_cursor_the_held_one_then_the_healed_runs() {
     // The live switch failed: the recorder healed with a new screen run from 5 s whose frames show the cursor. Across
-    // the gap the footage holds its nearest frame: the first run's last (no cursor) up to the middle,
-    // The healed run's first (with its cursor) after it. Never two cursors, never none.
+    // the gap the footage holds its nearest frame: the first run's last (no cursor) up to the middle, the healed run's
+    // first (with its cursor) after it. Never two cursors, never none.
     let dir = tempfile::tempdir().unwrap();
     let mut lines = take(rest(0.5, 0.5, 0.0, 3.0));
     lines.push(Line::Burned { t: secs(5.0) });

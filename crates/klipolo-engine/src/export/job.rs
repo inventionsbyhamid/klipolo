@@ -134,7 +134,7 @@ pub struct ExportJob {
     #[serde(default)]
     pub allow_missing_cursor: bool,
     /// The screen the export last asked about, because it can't be read now (`ErrorCode::ActivityUnreadable`): the
-    /// C19b): the person's "Export without it" is this screen's.
+    /// person's "Export without it" is this screen's.
     #[serde(default)]
     pub activity_asked: Option<String>,
     /// The screens the person chose to export without, each on its own question: each is tried once, then planned with

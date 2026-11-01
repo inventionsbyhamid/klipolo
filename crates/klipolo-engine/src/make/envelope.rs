@@ -1,13 +1,12 @@
 //! What a measurement covers: the settings it is measured at, and the
 //! envelope it bounds. A costly number narrows to a range; a costly bool or choice keeps the values that measured
-//! within class (`allowed`), never a narrowed range; a colour or point that decides work (`End::Probe`)
-//! is measured at its probe set and never bounded: the worst probe counts toward the class.
+//! within class (`allowed`), never a narrowed range; a colour or point that decides work (`End::Probe`) is measured
+//! at its probe set and never bounded: the worst probe counts toward the class.
 //! Everything else is unbounded. The engine draws a checked contribution clamped to its envelope (`clamp`): a number
 //! past its range at the range's end, a bool or choice outside its values at its default.
 //!
 //! A number costly at both ends, or one that bounds a loop, is also measured inside its range, at 25, 50 and 75 % of
-//! The range the envelope covers: the measured p95 over every point
-//! decides the class, with no static floor.
+//! the range the envelope covers: the measured p95 over every point decides the class, with no static floor.
 //!
 //! How many settings are measured is bounded: at most `MAX_CORNERS` corner measurements (the defaults, the worst number
 //! corners, each narrowing step, each bool or choice value) and `MAX_PROBES` probe combinations per request. The probed
@@ -41,7 +40,7 @@ pub const MAX_OPTIONS: usize = 8;
 /// has 9 probes besides its default and a colour 5 or 6, and a request's own value adds one, so the combinations
 /// (`probe_combos`) are at most 10.
 pub const MAX_PROBES: usize = 16;
-/// Where inside its range a number costly at both ends, or bounding a loop, is also measured (R3-k9).
+/// Where inside its range a number costly at both ends, or bounding a loop, is also measured.
 pub const INTERIOR: [f64; 3] = [0.25, 0.5, 0.75];
 /// The narrowing steps: 50 %, then 25 % of the way from the default to the costly end.
 pub const NARROWING: [f64; 2] = [0.5, 0.25];
@@ -69,7 +68,7 @@ pub struct Plan {
     pub values: Vec<(String, u32)>,
     /// Each probed colour's and point's probe set, its first value `base`'s (`probe_values`).
     pub probed: Vec<(String, Vec<ParamValue>)>,
-    /// The numbers costly at both ends: they are also measured inside their range (`INTERIOR`, R3-k9).
+    /// The numbers costly at both ends: they are also measured inside their range (`INTERIOR`).
     pub interior: Vec<String>,
 }
 
@@ -88,7 +87,7 @@ pub fn costly_list(def: &ContribDef, costly: &[CostlyParam]) -> Vec<CostlyParam>
     list
 }
 
-/// The corners of `def` for `costly` (k8: a costly list, so scenes use it too), the defaults first, at most
+/// The corners of `def` for `costly` (a costly list, so scenes use it too), the defaults first, at most
 /// `MAX_CORNERS`: the worst number corners, then each bool and choice value on the first of them (or the defaults).
 pub fn corners(def: &ContribDef, costly: &[CostlyParam]) -> Vec<Params> {
     let p = plan(def, costly, &Params::new());

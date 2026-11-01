@@ -535,7 +535,7 @@ fn out_of_range_layer_times_are_refused() {
     }
 }
 
-// --- More bugs fixed ---
+// --- Regression cases ---
 
 #[test]
 fn split_music_keeps_its_fades_at_the_outer_ends() {

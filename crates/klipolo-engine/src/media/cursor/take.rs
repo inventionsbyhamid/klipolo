@@ -7,8 +7,7 @@
 //!
 //! **One source of truth.** The facts are `TakeFacts::of_cursor`'s (line 171): the dwells live only
 //! there. The track is shared (`Arc`), so `timeline::cursor_at` reads it with no copy. The still runs
-//! are `StillRuns::of`'s, which ends the last one at a burn-in (it also keeps typing from
-//! running past it).
+//! are `StillRuns::of`'s, which ends the last one at a burn-in (it also keeps typing from running past it).
 //!
 //! **Memory** (`bytes`): the track (8 B a position), the facts (a few KB), the shared rest scan (16 B a rest, held only
 //! while a path is) and each variant (4 B a step of motion, ≤ 1.73 MB an hour). The cache's budget counts
@@ -40,7 +39,7 @@ pub struct TakeCursor {
     pub shape_files: Vec<Option<Arc<str>>>,
     /// The shapes whose image turned out not to decode (bit i: `track.shapes()[i]`, at most `MAX_SHAPES` = 64), set by
     /// export's preload and the preview's decoder alike (`refuse_shape`): both then plan the Arrow look there. An
-    /// concern 6). An atomic, so a frame reads it with no lock and no allocation.
+    /// atomic, so a frame reads it with no lock and no allocation.
     refused: AtomicU64,
     /// The take's folder (shape paths are joined to it, then checked to stay inside it).
     pub dir: PathBuf,
@@ -50,7 +49,7 @@ pub struct TakeCursor {
     pub(super) known: Mutex<(u64, Arc<TakeFacts>)>,
     /// One path per crop its clips follow with (`follow`), at most `want::MAX_FOLLOWS`.
     pub(super) follows: Mutex<Variants<FollowKey, Arc<FollowPath>>>,
-    /// Found with the first smoothed path, shared by the take's others, and let go with the last
+    /// Found with the first smoothed path, shared by the take's others, and let go with the last (a take that draws no
     /// path counts what a freshly loaded one does).
     rests: Mutex<Option<Arc<Rests>>>,
     variants: Mutex<Variants<Smoothing, Arc<SmoothedPath>>>,

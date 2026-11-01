@@ -1,10 +1,10 @@
-//! One open decoder of the pool, where its frames are asked for, and how a frame its decoder stalls on is recovered
+//! One open decoder of the pool, where its frames are asked for, and how a frame its decoder stalls on is recovered:
 //! the file is asked about off the engine's task, then the reader is opened again once, at the
 //! keyframe before the frame (the stuck one is let go, never cancelled from this thread: a reader's own queues race a
 //! cancel), then the frame is decoded in software from that keyframe; only then is it "couldn't be read".
 //! The preview runs the same steps on its fixed deadline, so one passing stall doesn't leave a file on the CPU; its
-//! reopen comes back after a quiet spell, and a stalled still that a newer seek replaced isn't waited for again
-//!. Asking about the file and opening a decoder keep the export heartbeat's beat.
+//! reopen comes back after a quiet spell, and a stalled still that a newer seek replaced isn't waited for again.
+//! Asking about the file and opening a decoder keep the export heartbeat's beat.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -270,9 +270,9 @@ mod tests {
     use crate::plan::frame_start_us;
     use crate::vendor::cap::rendering::decoder::time_to_frame;
 
-    /// The stalled export (1080p30 from 23.976 fps): output frames 263 and 1103 asked for the middles of film frames
-    /// 210 and 881 (8.7796 s and 36.7659 s, as the log shows), and those times map back to those frames. The stalls
-    /// were the reader's, not the mapping's.
+    /// An export that stalled (1080p30 from 23.976 fps): output frames 263 and 1103 asked for the middles of film
+    /// frames 210 and 881 (8.7796 s and 36.7659 s, as the log shows), and those times map back to those frames. The
+    /// stalls were the reader's, not the mapping's.
     #[test]
     fn the_owners_stalled_requests_map_to_film_frames_210_and_881() {
         let film = 24_000.0 / 1_001.0;

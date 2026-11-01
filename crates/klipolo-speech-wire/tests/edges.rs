@@ -1,5 +1,5 @@
 //! `refine_edges`: a recognizer's word edges, which sit on its 80 ms encoder steps, move onto the sound's own onsets
-//! onsets and offsets, at most one step, never across a neighbour. Synthetic 16 kHz signals only.
+//! and offsets, at most one step, never across a neighbour. Synthetic 16 kHz signals only.
 
 use klipolo_speech_wire::words::{refine_edges, RawWord};
 
@@ -63,7 +63,7 @@ fn noise(secs: f64, db: f64) -> Vec<f32> {
 #[test]
 fn a_start_moves_to_its_onset_within_one_80_ms_step() {
     let x = bursts(2.0, &[(1.05, 1.60)]);
-    let mut w = vec![raw("go", 1.00, 1.60)]; // Parakeet's step put it at 1.00
+    let mut w = vec![raw("go", 1.00, 1.60)]; // the recognizer's step put it at 1.00
     refine_edges(&mut w, &x);
     assert!(
         (w[0].start_us - 1_040_000).abs() <= 5_000,
@@ -82,7 +82,7 @@ fn an_end_moves_back_to_its_offset() {
 
 #[test]
 fn edges_never_cross_a_neighbour_or_move_more_than_one_step() {
-    // sound 0.95–1.30 s and 1.32–1.80 s; Parakeet's steps put "a" at 1.00–1.40 and "b" at 1.40–1.80
+    // sound 0.95–1.30 s and 1.32–1.80 s; the recognizer's steps put "a" at 1.00–1.40 and "b" at 1.40–1.80
     let x = bursts(2.0, &[(0.95, 1.30), (1.32, 1.80)]);
     let before = vec![raw("a", 1.00, 1.40), raw("b", 1.40, 1.80)];
     let mut w = before.clone();
@@ -110,7 +110,7 @@ fn steady_noise_moves_nothing() {
     assert_eq!(w, before);
 }
 
-/// Two joined words (one shared edge, as Parakeet's pieces give them): the second's onset is earlier than its step
+/// Two joined words (one shared edge, as a recognizer's pieces give them): the second's onset is earlier than its step
 /// said, so the edge they share moves back to it, the first word's end with it.
 #[test]
 fn a_shared_edge_moves_to_the_second_words_onset() {
@@ -125,10 +125,10 @@ fn a_shared_edge_moves_to_the_second_words_onset() {
     assert_eq!(w[0].end_us, w[1].start_us, "still joined");
 }
 
-/// In a packed window, a joined piece's first word follows the 200 ms pad (digital silence) and the
-/// span's widened start (noise before the voice). Parakeet's step put it a step early, over that noise. The voice's
-/// rise out of noise is no digital silence, so the start leads its step by 10 ms (Step 6), never into the pad; the
-/// remap clamps a start still earlier to its piece's start.
+/// In a packed window, a joined piece's first word follows the 200 ms pad (digital silence) and the span's widened
+/// start (noise before the voice). The recognizer's step put it a step early, over that noise. The voice's rise out of
+/// noise is no digital silence, so the start leads its step by 10 ms (`LEAD_US`), never into the pad; the remap clamps
+/// a start still earlier to its piece's start.
 #[test]
 fn a_joined_pieces_first_word_over_noise_leads_its_step_and_never_enters_the_pad() {
     // 0–0.6 s the piece before (a voice), 0.6–0.8 s the pad, 0.8–0.98 s noise at −35 dBFS, 0.98–1.5 s the voice.
@@ -141,11 +141,11 @@ fn a_joined_pieces_first_word_over_noise_leads_its_step_and_never_enters_the_pad
     assert_eq!(w[1].start_us, 890_000);
 }
 
-/// In connected speech (no digital silence: a voice over a quiet room), a joined edge leads Parakeet's time
-/// by 10 ms instead of moving to the envelope's rise, which LibriSpeech showed lands after the word's start (a
-/// consonant's release, a vowel's onset).
+/// In connected speech (no digital silence: a voice over a quiet room), a joined edge leads the recognizer's time by
+/// 10 ms instead of moving to the envelope's rise, which on read speech lands after the word's start (a consonant's
+/// release, a vowel's onset).
 #[test]
-fn a_joined_edge_in_connected_speech_leads_parakeets_time_not_the_rise() {
+fn a_joined_edge_in_connected_speech_leads_the_recognizers_time_not_the_rise() {
     let mut x = noise(2.0, -60.0);
     voice(&mut x, &[(0.30, 0.86), (0.92, 1.50)], -20.0);
     let mut w = vec![raw("a", 0.30, 0.98), raw("b", 0.98, 1.50)];
@@ -158,7 +158,7 @@ fn a_joined_edge_in_connected_speech_leads_parakeets_time_not_the_rise() {
 }
 
 /// The envelope is one pass over the samples and each edge looks at 33 hops: a minute of sound with 170 words is
-/// refined in well under a millisecond a second of sound even in a debug build (the report states the release cost).
+/// refined in well under a millisecond a second of sound even in a debug build (a release build is faster still).
 #[test]
 fn a_minute_with_170_words_is_refined_in_one_pass() {
     let x = noise(60.0, -30.0);
@@ -209,7 +209,7 @@ fn voice(x: &mut [f32], ranges: &[(f64, f64)], dbfs: f64) {
 /// Adds a beat's hits at each time: 150 ms of white noise decaying with time constant `tau` (seconds; a click or a
 /// tight hi-hat about 0.005–0.010, a loose hat or a clap about 0.020, a snare 0.040 and more), at `dbfs` RMS over its
 /// first 30 ms. A hit is broadband, so pre-emphasis keeps it while it lowers a voice. Its tail runs well past the
-/// 10–50 ms a rise must hold for (30 ms buffers ended where the old hold window began).
+/// 10–50 ms a rise must hold for, so the hold sees all of its decay.
 fn hits(x: &mut [f32], at: &[f64], dbfs: f64, tau: f64) {
     let mut r = Lcg(0xbea7);
     let n = (0.150 * RATE) as usize;
@@ -230,8 +230,8 @@ fn hits(x: &mut [f32], at: &[f64], dbfs: f64, tau: f64) {
 /// A beat under the voice (8th notes at 120 BPM, each hit 15 dB under the voice), over a quiet room and
 /// over a steady bed 20 dB under the voice, for a tight hat (an 8 ms decay), a loose hat or clap (20 ms) and a snare
 /// (40 ms). The hit in the dip 60 ms before the second word, inside the two words' shared edge's window, never takes
-/// the edge: no digital silence there, so the voice's held rise leads Parakeet's time by 10 ms (Step 6), or the edge
-/// stays at its step when the hit's tail hides that rise.
+/// the edge: no digital silence there, so the voice's held rise leads the recognizer's time by 10 ms (`LEAD_US`), or
+/// the edge stays at its step when the hit's tail hides that rise.
 #[test]
 fn a_hit_of_a_beat_in_the_dip_between_two_words_is_no_onset() {
     for bed in [-60.0, -40.0] {
@@ -257,7 +257,7 @@ fn a_hit_of_a_beat_in_the_dip_between_two_words_is_no_onset() {
 }
 
 /// The same words without the beat: a real word's onset after a gap still counts as a held rise (the hold guard never
-/// takes a word for a hit), so the joined edge moves: it leads Parakeet's time by 10 ms (Step 6).
+/// takes a word for a hit), so the joined edge moves: it leads the recognizer's time by 10 ms (`LEAD_US`).
 #[test]
 fn without_the_beat_the_words_onset_still_moves_the_edge() {
     let mut x = noise(2.0, -60.0);
@@ -283,9 +283,9 @@ fn a_clap_elsewhere_in_the_window_never_hides_a_quiet_onset() {
     );
 }
 
-/// The hard case of the one above: Parakeet's step puts the first word 150 ms early, so only the pad's
-/// end is within a step. It may move there (a rise out of digital silence is a rise, as the tests need),
-/// but never into the pad past the margin, and never more than a step; the remap clamps it to its piece's start.
+/// The hard case of the packed window above: the recognizer's step puts the first word 150 ms early, so only the pad's
+/// end is within a step. It may move there (a rise out of digital silence is a rise), but never into the pad past the
+/// margin, and never more than a step; the remap clamps it to its piece's start.
 #[test]
 fn a_first_word_more_than_a_step_early_moves_at_most_onto_its_pads_end() {
     let mut x = tones(2.0, &[(0.0, 0.6), (0.98, 1.5)], 1_000.0, -20.0);

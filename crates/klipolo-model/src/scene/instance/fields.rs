@@ -1,6 +1,6 @@
 //! The renderer's static fields of an instance node: texts, colours, numbers, lengths, points, images and
 //! fonts, each read with the node's settings, repeat index and row. A number from a table row has no range the check
-//! can hold it to (a table's values are unbounded), so every number and length is held here to its field's range
+//! can hold it to (a table's values are unbounded), so every number and length is held here to its field's range,
 //! named by a [`Field`] so no misspelling can leave one unclamped.
 
 use super::super::check::range_of;
@@ -92,7 +92,7 @@ impl SceneInstance {
         Some([f.clamp(lo, hi), px.clamp(-MAX_PX, MAX_PX)])
     }
 
-    /// A polyline's points, fractions of its box: as written (within ±10 boxes), or a table setting's rows as a chart
+    /// A polyline's points, fractions of its box: as written (within ±10 boxes), or a table setting's rows as a chart:
     /// row `i` of `n` at `x = i / (n − 1)`, its first number `v` at `y = 1 − (v − min) / (max − min)`, so
     /// the line rises with its values (level in the middle when they are all equal).
     pub fn points_of(&self, node: usize, points: &Points) -> Vec<[f64; 2]> {
@@ -188,7 +188,7 @@ impl SceneInstance {
     }
 
     /// The latest moment before any of its exits starts, else the scene's end: where its still is drawn (the hold
-    /// hold point).
+    /// point).
     pub fn hold_time(&self) -> f64 {
         super::hold::hold_point(self)
     }

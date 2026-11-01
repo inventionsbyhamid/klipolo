@@ -13,8 +13,8 @@ use klipolo_model::project::{Project, Recording};
 use crate::media::cursor::{CursorTracks, TakeCursor, take_paths};
 
 /// The takes a context plans with, by cursor file (sorted), each with its facts and their activity's fingerprint as
-/// they were when it was taken, so its camera keys and plans read one state (a context made while playing reuses it:
-/// The last one).
+/// they were when it was taken, so its camera keys and plans read one state (a context made while playing reuses
+/// it).
 #[derive(Default)]
 pub struct Takes(Vec<Entry>);
 

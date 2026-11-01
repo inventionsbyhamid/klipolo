@@ -52,8 +52,7 @@ pub(super) enum AttemptResult {
     },
 }
 
-/// One run of the worker on `job`. `noted`: the notes this job's run said already, so a retry doesn't say them again
-///.
+/// One run of the worker on `job`. `noted`: the notes this job's run said already, so a retry doesn't say them again.
 pub(super) async fn run_attempt(
     launcher: &dyn Launcher,
     job: &ExportJob,

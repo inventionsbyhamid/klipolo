@@ -22,7 +22,7 @@ use crate::registry::ShaderEffect;
 use crate::render::effects::{EffectStage, FrameInfo};
 
 /// What the frame's own passes draw with besides the scene's pass: the group passes, the scene's blur (a twin of the
-/// built-in blur that isn't protective: m3), where the scene's own target sits in the layer's (`root`: only as big as
+/// built-in blur that isn't protective), where the scene's own target sits in the layer's (`root`: only as big as
 /// what it draws), and the quad lay-back with the instance's slots bound for it.
 pub(super) struct With<'a> {
     pub pass: &'a Pass<'a>,

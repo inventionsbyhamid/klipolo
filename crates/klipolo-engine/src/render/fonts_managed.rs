@@ -7,8 +7,7 @@
 //!   to faces of the asked style, and the system's script faces are upright;
 //! - **fallbacks at every weight a face has.** The fallback aliases exist at 100–900 and at each other weight an
 //!   installed or downloaded face has (an installed 350), since cosmic-text matches exact weights only. They are
-//!   They are normal width only: now every face is asked at normal width (`twins`), so the
-//!   copies at each installed width went.
+//!   normal width only: every face is asked at normal width (`twins`).
 //!
 //! The width twins and the emoji face at every weight are made in `twins`.
 

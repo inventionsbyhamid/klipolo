@@ -97,7 +97,7 @@ fn captions_follow_the_camera_over_a_true_gap() {
         ("mic".to_owned(), secs(20.0), secs(100.0)),
     ];
     assert_eq!(voice(&q), gapped);
-    // The camera's words over the gap map through its sound time: its picture's time less the file's sound lead
+    // The camera's words over the gap map through its sound time: its picture's time less the file's sound lead;
     // 40 ms here.
     let mut led = common::imported();
     let cam = led.assets.iter_mut().find(|a| a.id == "cam").unwrap();

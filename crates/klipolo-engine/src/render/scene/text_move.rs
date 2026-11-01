@@ -1,5 +1,5 @@
 //! Where a frame's text pieces stand: a node's text placed once a frame
-//! (`Placing`: its place, its rest pose's whole-pixel shift, its fit and its animated size, the same for every piece:
+//! (`Placing`: its place, its rest pose's whole-pixel shift, its fit and its animated size, the same for every piece),
 //! then each piece moved by its split unit, letter spacing and line height. Arithmetic only.
 
 use klipolo_model::scene::eval::NodeState;

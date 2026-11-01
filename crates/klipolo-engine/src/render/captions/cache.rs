@@ -30,7 +30,6 @@ pub(super) struct Key {
     pub(super) generation: u64,
     /// Whether the system font scan was done: until the template is set, a font system made at the scan's own
     /// generation holds the managed faces only, so a page built then mustn't be taken for one built after.
-    /// fix).
     pub(super) scanned: bool,
 }
 

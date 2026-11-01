@@ -164,6 +164,7 @@ impl crate::render::GpuBackend {
     }
 
     /// Test hook: some cursor shape the preview asked for hasn't arrived yet (the export cursor pixel test waits for
+    /// them).
     #[doc(hidden)]
     pub fn cursor_shapes_waiting(&self) -> bool {
         let pass = self.compositor.as_ref().and_then(|c| c.cursor.as_ref());

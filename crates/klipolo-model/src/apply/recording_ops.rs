@@ -1,6 +1,6 @@
 //! Recording sources and markers: a source's label, default mix and sync nudge; a clip's override of one source's mix;
-//! source's mix; markers on the recording clock. None of them moves a clip; a sync change slips the source's separated
-//! layers (sound and camera). Ranges (a mix's volume, a nudge, a label's length, a marker inside its recording) are checked by
+//! markers on the recording clock. None of them moves a clip; a sync change slips the source's separated layers (sound
+//! and camera). Ranges (a mix's volume, a nudge, a label's length, a marker inside its recording) are checked by
 //! validation after the batch.
 
 use crate::error::{invalid, not_found, Result};

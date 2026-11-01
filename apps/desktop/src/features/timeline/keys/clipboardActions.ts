@@ -6,6 +6,7 @@ import { keyBurst } from '../../../state/keyBurst';
 import { usePlayback } from '../../../state/playback';
 import { useProject } from '../../../state/project';
 import { announce } from '../announce';
+import { refitNote, removeRefit } from '../model/refit';
 import { copySelection, duplicateOps, pasteEffectsOps, pasteOps } from './clipboardOps';
 import { deleteOps } from './keyOps';
 import { blockLabel, commit, editable, selectNew } from './timelineActions';
@@ -18,22 +19,34 @@ export function copy(id: string) {
   announce(t({ id: 'timeline.key.copied', message: `Copied ${label}` }));
 }
 
-/** ⌘X: copy, then the delete command's ops, as one undo step called Cut. */
+/**
+ * ⌘X: copy, then the delete command's ops, as one undo step called Cut. A clip cut out says what it does to the
+ * transitions around it, as Delete does.
+ */
 export function cut(id: string) {
   keyBurst.after(() => {
     const project = editable();
     const ops = project ? deleteOps(project, id) : [];
     if (!project || ops.length === 0 || !copySelection(project, id)) return;
     const label = blockLabel(project, id);
-    commit(
-      'undo.cut',
-      ops,
-      t({
-        id: 'timeline.key.cut',
-        message: `Cut ${label}`,
-        comment: 'Screen-reader note: the block was cut',
-      }),
-    );
+    const i = project.timeline.main.findIndex((clip) => clip.id === id);
+    const note = i < 0 ? '' : refitNote(removeRefit(project, i));
+    if (!note)
+      return commit(
+        'undo.cut',
+        ops,
+        t({
+          id: 'timeline.key.cut',
+          message: `Cut ${label}`,
+          comment: 'Screen-reader note: the block was cut',
+        }),
+      );
+    const said = t({
+      id: 'timeline.key.cutNote',
+      message: `Cut ${label}. ${note}`,
+      comment: 'Screen-reader note; {note} is a sentence on what it does to transitions, e.g. “A transition is removed.”',
+    });
+    commit({ id: 'undo.cut.note', params: { note } }, ops, said);
   });
 }
 

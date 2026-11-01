@@ -41,7 +41,7 @@ pub fn on_screen(p: &Plan, t: Us, x: f32, y: f32) -> bool {
 
 /// Seeded person's zooms over `[0, span_us)`: 1.25–3×, 1.5–4 s long, each view inside the frame, starting 3 s or more
 /// from the span's ends. Most lie 6–30 s apart; one in three follows the one before 1–3 s later at nearly its view
-///, so the move between them is short and never has to be squeezed.
+/// so the move between them is short and never has to be squeezed.
 pub fn random_fixed(seed: u64, span_us: Us) -> Vec<Fixed> {
     let mut rng = Rng::new(seed ^ 0xF1_3ED);
     let mut out: Vec<Fixed> = Vec::new();

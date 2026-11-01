@@ -1,5 +1,5 @@
 //! Taints (for the costly settings): which settings (`params.<key>`) and arguments reach a value, and whether the
-//! rises or falls with each. Conservative: where the direction isn't certain
+//! value rises or falls with each. Conservative: where the direction isn't certain
 //! the sign is unknown, so the setting is measured at both ends (`expr` has the rule per expression).
 
 use naga::Handle;

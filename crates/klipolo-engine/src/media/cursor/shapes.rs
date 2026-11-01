@@ -1,7 +1,7 @@
 //! A take's shape images, checked as it loads. An image is usable when, links
 //! followed, it is inside the take's own `cursors/` folder, is a regular file (a pipe or a device is never opened), and
-//! its PNG header says at most 256 × 256. Only the 24-byte header is read here; the image is decoded later. An unusable shape draws the
-//! Arrow look.
+//! its PNG header says at most 256 × 256. Only the 24-byte header is read: the cursor atlas decodes. An unusable shape
+//! draws the Arrow look.
 //!
 //! The reader already refuses a shape whose file isn't exactly `cursors/<digits>.png`; this catches what the name
 //! can't: a link out of the take, a missing or damaged file, an image larger than it says. Cost: at most 64 shapes,

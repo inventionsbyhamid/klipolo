@@ -1,6 +1,7 @@
-//! What numbering frames from the stream's start means for copies and jobs made before it: decoders then numbered a source's frames
-//! from the file's 0, so where the picture starts later, an older copy's frames (and an older job's finished segments)
-//! are that many frames late against the source, which every decoder now numbers from its picture's start.
+//! What numbering frames from the video stream's start means for copies and jobs made before it: decoders then
+//! numbered a source's frames from the file's 0, so where the picture starts later, an older copy's frames (and an
+//! older job's finished segments) are that many frames late against the source, which every decoder now numbers from
+//! its picture's start.
 
 use std::path::Path;
 

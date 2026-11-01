@@ -8,7 +8,8 @@
 //!   files (recordings' `mp4` and `caf`, editing copies, proxies and export segments in `mp4`/`mov`) need `mov` (HEIC
 //!   and AVIF too), `matroska`, `avi`, `mp3`, `wav`, `aac`, `flac`, `ogg`, `caf`, `gif`, `apng` (an animated PNG: it
 //!   wins over `png_pipe` for one), the single-image pipes (`tiff_pipe` for a TIFF) and `image2`. A file whose
-//!   `subfile`, `sdp`, `rtsp`, `tty`…) is refused before that demuxer reads anything;
+//!   contents pick any other demuxer (`concat`, `hls`, `subfile`, `sdp`, `rtsp`, `tty`…) is refused before that
+//!   demuxer reads anything;
 //! - `pattern_type=none`: `image2` (which wins for most JPEG photos, by their extension) reads the file named, never a
 //!   numbered sequence or a glob;
 //! - `protocol_whitelist=file`: nothing reaches the network or another protocol;
@@ -17,7 +18,7 @@
 //! - `ignore_loop=1`: `apng` reads an endlessly looping file's frames once (its default, stated the same way).
 //!
 //! The guard's options are set after a caller's `extra`, so `extra` can't loosen any of them.
-//! Test code may open files directly; `tests/media_open.rs` fails on any other direct open. That scan reads Rust only
+//! Test code may open files directly; `tests/media_open.rs` fails on any other direct open. That scan reads Rust
 //! only: a C, ObjC or Swift file calling `avformat_open_input`, or a filter graph built from project or
 //! agent text with a filter that opens inputs by name (`movie`, `amovie`, `subtitles`), is reviewed by hand. Today
 //! there is neither (the one filter graph's chains are `&'static str`).
@@ -71,7 +72,7 @@ where
 }
 
 /// Whether `e`, from opening `path` here, refuses the file for good: it will never open, however often it is tried.
-/// follow-up Guard 1). EINVAL is the guard's refusals and other refusals of the file or its name: FFmpeg 9 fails
+/// EINVAL is the guard's refusals and other refusals of the file or its name: FFmpeg 9 fails
 /// contents that pick a demuxer outside `DEMUXERS` (`libavformat/demux.c`, `avformat_open_input`: "Format not on
 /// whitelist") and a name that picks a protocol other than `file` (`libavformat/avio.c`, `ffurl_connect`: "Protocol …
 /// not on whitelist") with it, and a demuxer's header checks or a name that wants a number too.

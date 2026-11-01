@@ -78,8 +78,8 @@ impl FramesSpec {
         matches!(self.source, FrameSource::Project { .. })
     }
 
-    /// Why B5 doesn't allow these frames, if it doesn't: 1 to 9 finite times of 0 or more, a long edge of 256 to
-    /// 1024 px. The client refuses them before sending, and the worker does too.
+    /// Why the protocol doesn't allow these frames, if it doesn't: 1 to 9 finite times of 0 or more, a long edge of 256
+    /// to 1024 px. The client refuses them before sending, and the worker does too.
     pub fn refusal(&self) -> Option<&'static str> {
         if self.times.is_empty()
             || self.times.len() > super::MAX_FRAMES

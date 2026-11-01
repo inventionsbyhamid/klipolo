@@ -21,7 +21,6 @@ pub use crate::synced::{SyncLevel, Synced, SyncedBy};
 /// contribution's time), and settings hold fonts as `FontRef`s and tables as rows. Format 6: the captions
 /// name a style, a look, a colour, a font and a place per format. Format 5: a text names its font and where
 /// it comes from (`FontRef`). Format 4 made recordings sources with runs. Older files are refused, never migrated.
-///.
 pub const PROJECT_VERSION: u32 = 7;
 
 #[derive(
@@ -111,7 +110,7 @@ pub struct Asset {
     /// reader takes: playback, transcripts, waveforms, and Sync with its hand marks.
     ///
     /// None means never probed: a video imported before the lead was read, filled from the probe when its project
-    /// files and images stay None (no lead). Left out of the JSON while None.
+    /// opens; sound files and images stay None (no lead). Left out of the JSON while None.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub audio_lead_us: Option<Us>,
@@ -124,8 +123,7 @@ pub struct Asset {
     pub made_with: Option<String>,
 }
 
-/// The furthest a file's sound may start from its picture: past it the probe takes a broken stream start, not a lead
-///.
+/// The furthest a file's sound may start from its picture: past it the probe takes a broken stream start, not a lead.
 pub const MAX_AUDIO_LEAD_US: Us = 500_000;
 
 impl Asset {

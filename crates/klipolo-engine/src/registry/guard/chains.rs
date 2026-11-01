@@ -6,7 +6,7 @@ use super::{Diagnostic, MAX_CHAIN, MAX_NESTING, MAX_REPORTED};
 /// Over the code's tokens: bracket nesting plus the `else if` chains around each point (each `else if` one level: naga
 /// recurses once per level), and operators and selectors (`.member`, `.xy`, `[i]`) between `;`, `{` and `}`. A type's
 /// template brackets (`array<vec2<f32>, 64>`), the minus of a negative number, a number's point and an exponent's sign
-/// (`1.5e-3`, `1.5e+3`, `1.e-3`) aren't links: naga doesn't recurse on them (reviews m-c, m7), so a
+/// (`1.5e-3`, `1.5e+3`, `1.e-3`) aren't links: naga doesn't recurse on them, so a
 /// constant table fits. Brackets inside a template count like any other.
 pub(super) fn structure(body: &str, toks: &[(usize, &str)], out: &mut Vec<Diagnostic>) {
     const OPERATORS: &str = "+-*/%&|^<>=!~";

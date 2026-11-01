@@ -105,9 +105,9 @@ impl Lower {
     }
 }
 
-/// The most tracks a frame reads for one property's run of `g` tracks, `c` of them chained
-/// The run, then for each chained read a shorter run before it, at most `CHAIN_DEPTH` deep. The checker
-/// (`scene.tooManyTracks`) and each instance count with it.
+/// The most tracks a frame reads for one property's run of `g` tracks, `c` of them chained: the run, then for each
+/// chained read a shorter run before it, at most `CHAIN_DEPTH` deep. The checker (`scene.tooManyTracks`) and each
+/// instance count with it.
 pub(crate) fn run_reads(g: usize, c: usize) -> usize {
     let deep = c.min(usize::from(CHAIN_DEPTH)).min(g.saturating_sub(1));
     (0..=deep).map(|d| g - d).sum::<usize>() * usize::from(g > 0)

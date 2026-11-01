@@ -1,5 +1,5 @@
-//! The public quiet-sound accessor: spans of a file's sound whose every channel stays below a
-//! level, read from the sound cache's 100 ms energy windows.
+//! The public quiet-sound accessor: spans of a file's sound whose every channel stays below a level, read from the
+//! sound cache's 100 ms energy windows.
 
 use std::io::Write;
 use std::path::Path;

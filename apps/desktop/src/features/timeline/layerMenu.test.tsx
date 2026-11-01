@@ -76,11 +76,11 @@ beforeEach(() => {
 });
 
 describe("a layer's block menu", () => {
-  it('a video layer with sound has Mute video, which sets its own switch and keeps its volume', async () => {
+  it('a video layer with sound has Mute video layer, which sets its own switch and keeps its volume', async () => {
     useProject.setState({ snapshot: withVideo(), pending: 0 });
     renderWithProviders(<Timeline />);
     await openMenu(/^Video layer, pip\.mp4/);
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Mute video' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Mute video layer' }));
     await frames();
     expect(bridge.apply).toHaveBeenCalledWith({
       label: 'volume.mute.undo',
@@ -96,11 +96,11 @@ describe("a layer's block menu", () => {
     expect(screen.getByRole('status')).toHaveTextContent('Muted pip.mp4');
   });
 
-  it('a muted video layer says Unmute video; one without sound has no Mute', async () => {
+  it('a muted video layer says Unmute video layer; one without sound has no Mute', async () => {
     useProject.setState({ snapshot: withVideo({ muted: true }), pending: 0 });
     const { unmount } = renderWithProviders(<Timeline />);
     await openMenu(/^Video layer, pip\.mp4/);
-    expect(screen.getByRole('menuitem', { name: 'Unmute video' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Unmute video layer' })).toBeInTheDocument();
     fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
     unmount();
     useProject.setState({ snapshot: withVideo({ silent: true }), pending: 0 });
@@ -115,7 +115,7 @@ describe("a layer's block menu", () => {
     useProject.setState({ snapshot, pending: 0 });
     renderWithProviders(<Timeline />);
     await openMenu(/^Video layer, pip\.mp4/);
-    expect(screen.getByRole('menuitem', { name: 'Unmute video' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('menuitem', { name: 'Unmute video layer' })).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('a picture layer can be brought forward or sent back, off where no track of its kind is there', async () => {

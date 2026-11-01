@@ -44,7 +44,7 @@ pub const MESSAGES: Messages = &[
     // The caption settings (`captions::settings`): `id` is the style as written, `name` a contribution id.
     ("model.captions.styleBadId", "The captions name an invalid style ({id})."),
     ("model.captions.styleWrongKind", "{name} isn't a caption style."),
-    // A caption style file (`CaptionStyleDef::from_json`): built-ins at start, P1's packs when installed.
+    // A caption style file (`CaptionStyleDef::from_json`): built-ins at start, packs when installed.
     ("model.captions.styleNeedsNewer", "This caption style needs a newer version of Klipolo."),
     ("model.captions.styleUnreadable", "This caption style file can't be used: {reason}"),
     ("model.captions.look", "That caption look isn't part of this style."),

@@ -1,6 +1,6 @@
-//! An export draws the downloaded fonts the app had: the job records the
-//! downloaded families the app registered, and its worker registers them before frame 0, a Google family and a
-//! Noto Sans JP, whose faces are then the Japanese fallback. Its own binary: the engine's fonts are once a process.
+//! An export draws the downloaded fonts the app had: the job records the downloaded families the app registered, and
+//! its worker registers them before frame 0, a Google family and a Noto Sans JP, whose faces are then the Japanese
+//! fallback. Its own binary: the engine's fonts are once a process.
 
 use std::sync::Arc;
 

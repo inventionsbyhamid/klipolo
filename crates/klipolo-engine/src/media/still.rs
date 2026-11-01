@@ -1,4 +1,4 @@
-//! Sprites and posters as JPEG through the encoder seam (`CodecRole::Still`: FFmpeg's own LGPL `mjpeg` on every OS).
+//! Sprites as JPEG through the encoder seam (`CodecRole::Still`: FFmpeg's own LGPL `mjpeg` on every OS).
 
 use ffmpeg::format::Pixel;
 

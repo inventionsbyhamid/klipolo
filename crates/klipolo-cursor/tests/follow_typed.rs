@@ -1,6 +1,6 @@
-//! The part typed lately. A typed line longer than the
-//! crop is followed where it is typed. Playing media inside the typing box is never followed, nor is a
-//! second place changing beside the text. Typing inside playing media counts once a click lands there.
+//! The part typed lately. A typed line longer than the crop is followed where it is typed. Playing media inside the
+//! typing box is never followed, nor is a second place changing beside the text. Typing inside playing media counts
+//! once a click lands there.
 
 mod common;
 
@@ -60,8 +60,8 @@ fn shows(p: &FollowPath, crop: Crop, t: Us, cell: u8) {
 
 #[test]
 fn a_long_typed_line_is_followed_where_it_is_typed_not_at_its_middle() {
-    // The line alone, while the cursor rests on the left: its span's box is wider than the crop and than a
-    // quarter of the picture.
+    // The line alone, while the cursor rests on the left: its span's box (the activity track's) is wider than the crop
+    // and than a quarter of the picture.
     let crop = vertical(1.0);
     let track = resting_left();
     let a = activity_of(&line_typed(|_| None));
@@ -86,7 +86,7 @@ fn a_long_typed_line_is_followed_where_it_is_typed_not_at_its_middle() {
 #[test]
 fn playing_media_inside_a_large_typing_box_is_never_followed() {
     // An animation inside the paragraph's box plays from the start (a GIF: 4 × 2 cells changing every tick, larger
-    // than a keystroke, so first in each tick), and C5 found it playing.
+    // than a keystroke, so first in each tick), and the activity track found it playing.
     let crop = vertical(1.0);
     let track = resting_left();
     let gif = cells(30, 20, 4, 2);
@@ -183,8 +183,8 @@ fn slow_typing_keeps_the_crop_on_its_line_though_a_counter_changes_far_off() {
     }
 }
 
-/// The m3 take with the new line typed a cell every `per_cell` ticks: its follow path, and the new line's newest
-/// column at a time from 5 s on.
+/// The far-line take above with the new line typed a cell every `per_cell` ticks: its follow path, and the new line's
+/// newest column at a time from 5 s on.
 fn jump_with_a_counter(crop: Crop, per_cell: u8) -> (FollowPath, impl Fn(Us) -> u8) {
     let track = resting_left();
     let tick = |k: u8| {

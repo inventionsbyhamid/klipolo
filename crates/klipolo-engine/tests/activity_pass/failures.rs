@@ -1,8 +1,7 @@
-//! What the pass does with a screen it can't read: a
-//! minute whose pictures can't be read is passed over and the minutes after it are made (a later pass makes it), and
-//! the editor holds them as export does; a drive gone mid-pass ends the pass at once; a file that can't be read now is
-//! never marked; one marked as a file that can't be analysed (an export couldn't) is planned without by every store
-//! sharing the folder, the editor's too.
+//! What the pass does with a screen it can't read: a minute whose pictures can't be read is passed over and the minutes
+//! after it are made (a later pass makes it), and the editor holds them as export does; a drive gone mid-pass ends the
+//! pass at once; a file that can't be read now is never marked; one marked as a file that can't be analysed (an export
+//! couldn't) is planned without by every store sharing the folder, the editor's too.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -78,8 +77,8 @@ fn a_file_an_export_couldnt_analyse_is_planned_without_by_the_editor_too() {
     assert_eq!(log.opened_at(), vec![0]);
 }
 
-/// The editor held minute 0 when an export passed over minute 1 and made minute 2. Its next
-/// look holds minutes 0 and 2 as well, so the preview plans with the same activity as the exported file.
+/// The editor held minute 0 when an export passed over minute 1 and made minute 2. Its next look holds minutes 0 and 2
+/// as well, so the preview plans with the same activity as the exported file.
 #[test]
 fn the_editor_holds_the_minutes_an_export_made_past_one_it_couldnt_read() {
     let dir = tempfile::tempdir().unwrap();
@@ -117,8 +116,8 @@ fn the_editor_holds_the_minutes_an_export_made_past_one_it_couldnt_read() {
     assert_eq!(print(held), print(exported));
 }
 
-/// A screen that can't be read now (an OS error) is never marked by the editor's pass: it gives up
-/// for this opening only, and the next opening analyses it.
+/// A screen that can't be read now (an OS error) is never marked by the editor's pass: it gives up for this opening
+/// only, and the next opening analyses it.
 #[test]
 fn a_screen_that_cant_be_read_now_is_never_marked() {
     let dir = tempfile::tempdir().unwrap();
@@ -139,8 +138,8 @@ fn a_screen_that_cant_be_read_now_is_never_marked() {
     );
 }
 
-/// A drive gone mid-pass (its pictures fail, then no decoder opens) ends the pass after one try
-/// at the next minute, not one try and one warning a minute left.
+/// A drive gone mid-pass (its pictures fail, then no decoder opens) ends the pass after one try at the next minute, not
+/// one try and one warning a minute left.
 #[test]
 fn a_drive_gone_mid_pass_ends_the_pass() {
     let dir = tempfile::tempdir().unwrap();

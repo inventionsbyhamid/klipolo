@@ -198,7 +198,7 @@ pub fn near(a: [u8; 3], b: [u8; 3], by: u8) -> bool {
     a.iter().zip(&b).all(|(x, y)| x.abs_diff(*y) <= by)
 }
 
-/// The capped draft the [Mac] checks time (`make_mac`) and lavapipe checks the caps of.
+/// The capped draft the Mac checks time (`make_mac`) and lavapipe checks the caps of.
 /// A draft at the setting caps: two numbers costly at both ends (`c`, `d`), a choice of 9 (`mode`) and two bools (`x`,
 /// `y`) ask for 14 combinations, capped at 12 with the defaults; a point (`at`) probed at its 9 positions (with `c`
 /// and `d` inside their ranges), and a colour (`tint`). Its body runs `main` trips of the sweep's loop (~0.1 ms each on

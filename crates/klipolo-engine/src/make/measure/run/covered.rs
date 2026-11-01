@@ -12,7 +12,7 @@ use crate::make::protocol::SizeName;
 use crate::make::sizes::preview_size;
 use crate::registry::ShaderKind;
 
-/// The numbers measured inside their range (R3-k9): those costly at both ends, and those that bound a loop.
+/// The numbers measured inside their range: those costly at both ends, and those that bound a loop.
 pub(super) fn interior_keys(draft: &DraftLayer, both: &[String]) -> Vec<String> {
     let mut keys = both.to_vec();
     if let Some(facts) = draft.facts() {

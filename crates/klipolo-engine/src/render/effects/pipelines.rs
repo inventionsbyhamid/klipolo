@@ -246,7 +246,7 @@ pub(super) fn input_group(
 
 /// naga first (readable errors), then wgpu, whose default shader modules keep bounds and loop checks on, as
 /// untrusted WGSL needs. A shader that isn't built in compiles only as its hardened module
-/// `guard::harden`: the shared loop counter and the sanitising entry), which `ShaderEffect::compilable` verifies
+/// (`guard::harden`: the shared loop counter and the sanitising entry), which `ShaderEffect::compilable` verifies
 /// first; its loop bound doesn't rely on wgpu's. wgpu runs inside error scopes: a module or pipeline it refuses after naga
 /// passed (a backend or driver limit) fails only this effect and never reaches the device's fault handler, which would
 /// fail the frame. Scopes are one stack per device, so the pair holds the device's lock (`dev.scopes`): this runs on

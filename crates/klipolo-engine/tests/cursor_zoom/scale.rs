@@ -1,4 +1,4 @@
-//! Auto zooms at real scale (the Algorithms rule), in release: an hour-long one, its plan and glide and a frame's window
+//! Auto zooms at real scale, in release: an hour-long one, its plan and glide and a frame's window
 //! over it; and two hours cut into 1,500 clips, planned off the actor, with an edit elsewhere reusing the plan.
 
 use std::io::Write;

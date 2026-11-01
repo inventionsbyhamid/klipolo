@@ -101,8 +101,7 @@ impl CursorAtlas {
     }
 
     /// Queues a shape's PNG for decoding on the decoder's thread (once: again only after it was let go). One refused
-    /// already is handed back once more (`take_refused`): its take may have been loaded again since, and forgotten it
-    ///.
+    /// already is handed back once more (`take_refused`): its take may have been loaded again since, and forgotten it.
     pub fn request(&mut self, take: Arc<str>, shape: u16, png: Arc<str>) {
         let key = (take.clone(), shape);
         if let Some(e) = self.slots.get(&key) {

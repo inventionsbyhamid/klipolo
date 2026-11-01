@@ -1,5 +1,5 @@
-//! The Linux backend (until L): the clock, durable files, process plumbing and the install place are real; QoS, power,
-//! memory pressure, the audio route and the network path are stubs that change nothing (each names its L
+//! The Linux backend, for now: the clock, durable files, process plumbing and the install place are real; QoS, power,
+//! memory pressure, the audio route and the network path are stubs that change nothing (each names its later
 //! counterpart).
 
 use std::fs::File;
@@ -33,17 +33,17 @@ pub(crate) fn host_ns() -> u64 {
     ts.tv_sec as u64 * 1_000_000_000 + ts.tv_nsec as u64
 }
 
-/// L: `nice` and `ioprio_set` for utility work, `SCHED_IDLE` for background work, rtkit for audio.
+/// Later: `nice` and `ioprio_set` for utility work, `SCHED_IDLE` for background work, rtkit for audio.
 pub(crate) fn set_qos(_qos: Qos) {}
 
-/// L: an ioprio and nice boost of the waited-on thread while the caller waits.
+/// Later: an ioprio and nice boost of the waited-on thread while the caller waits.
 pub(crate) struct Lent;
 
 pub(crate) fn lend<T>(_thread: &std::thread::JoinHandle<T>, _qos: Qos) -> Lent {
     Lent
 }
 
-/// L: a logind (or portal) `Inhibit("idle:sleep")`.
+/// Later: a logind (or portal) `Inhibit("idle:sleep")`.
 pub struct Activity;
 
 pub(crate) fn begin_activity(_reason: &str) -> Activity {
@@ -56,27 +56,27 @@ pub(crate) fn begin_capture(reason: &str) -> Activity {
     begin_activity(reason)
 }
 
-/// L: power-profiles-daemon's `PerformanceDegraded`, else the thermal zones' trip points (`power::Thermal`).
+/// Later: power-profiles-daemon's `PerformanceDegraded`, else the thermal zones' trip points (`power::Thermal`).
 pub(crate) fn thermal() -> crate::power::Thermal {
     crate::power::Thermal::Nominal
 }
 
-/// L: PSI triggers on `/proc/pressure/memory`. The level stays Normal.
+/// Later: PSI triggers on `/proc/pressure/memory`. The level stays Normal.
 pub(crate) fn watch_pressure() {}
 
-/// L: NetworkManager's `Metered` property and its `PropertiesChanged` signal (D-Bus). Nothing to watch yet, so
+/// Later: NetworkManager's `Metered` property and its `PropertiesChanged` signal (D-Bus). Nothing to watch yet, so
 /// `network::path` stays online, neither constrained nor expensive.
 pub(crate) fn watch_net_path() {}
 
-/// L: power-profiles-daemon's `ActiveProfile` is "power-saver". False until then.
+/// Later: power-profiles-daemon's `ActiveProfile` is "power-saver". False until then.
 pub(crate) fn low_power() -> bool {
     false
 }
 
-/// L: logind's `PrepareForSleep(false)` signal. Nothing to watch yet: `power::on_wake` listeners never run.
+/// Later: logind's `PrepareForSleep(false)` signal. Nothing to watch yet: `power::on_wake` listeners never run.
 pub(crate) fn watch_wake() {}
 
-/// L: the PipeWire registry (or PulseAudio `subscribe`). Reports no changes.
+/// Later: the PipeWire registry (or PulseAudio `subscribe`). Reports no changes.
 #[derive(Default)]
 pub struct RouteWatch;
 
@@ -88,7 +88,7 @@ impl RouteWatch {
     pub fn follow(&mut self) {}
 }
 
-/// L: `pw_stream_get_time_n` or `snd_pcm_delay`.
+/// Later: `pw_stream_get_time_n` or `snd_pcm_delay`.
 pub(crate) fn hardware_latency() -> Duration {
     Duration::ZERO
 }
@@ -146,8 +146,8 @@ pub(crate) fn is_trash_name(name: &std::ffi::OsStr) -> bool {
         })
 }
 
-/// L: an `O_PATH` descriptor, read back through `/proc/self/fd` (`folder::HeldFolder`). None yet: folders are followed
-/// by their path.
+/// Later: an `O_PATH` descriptor, read back through `/proc/self/fd` (`folder::HeldFolder`). None yet: folders are
+/// followed by their path.
 pub(crate) enum Held {}
 
 pub(crate) fn hold_folder(_path: &Path) -> io::Result<Option<Held>> {
@@ -234,7 +234,7 @@ pub(crate) fn os_version() -> String {
     }
 }
 
-/// The Dock menu's counterpart isn't built yet (L: `dock`'s module doc), so there is nothing to install.
+/// The Dock menu's counterpart isn't built yet (`dock`'s module doc), so there is nothing to install.
 pub(crate) fn install_dock_menu(_items: crate::dock::DockItems, _click: crate::dock::DockClick) {
     tracing::debug!("dock: no app icon menu on this OS yet");
 }

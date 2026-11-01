@@ -1,5 +1,5 @@
-//! A Sync again's removal alarm measured where the sound is heard: inside the
-//! recording's pictures, with the drift's own slack.
+//! A Sync again's removal alarm, measured where the sound is heard: inside the recording's pictures, with the drift's
+//! own slack.
 
 use klipolo_model::apply::apply_ops;
 use klipolo_model::ops::{Op, OpRisk, Origin, SourcePatch, Transaction};

@@ -35,7 +35,7 @@ pub(super) struct Walk<'a> {
     pub sum: Summary,
     /// Loops around the statement being walked.
     pub depth: usize,
-    /// Conditions with an arm that leaves early, with their branch: costly at both ends when the function holds work
+    /// Conditions with an arm that leaves early, with their branch: costly at both ends when the function holds work,
     /// and deciding the function's work in the tally.
     pub leaving: Vec<(Ex, Span)>,
     /// One of the prelude's helpers (`kl_*`): when it holds no loops or samples, its early exits count only their own

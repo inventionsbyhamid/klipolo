@@ -1,8 +1,7 @@
-//! The fonts a project uses that aren't here: never silent. A font is
-//! missing exactly when the one resolver answers a stand-in (only the project's exact Google version
-//! counts), so the preflight, the engine and the webview agree. Chinese, Japanese or Korean text whose Noto Sans isn't
-//! downloaded is missing too, for the scripts the engine's runs ask for (`cjk_segments`), less what the
-//! text's own face covers (a picked Hiragino draws its own kanji).
+//! The fonts a project uses that aren't here: never silent. A font is missing exactly when the one resolver answers a
+//! stand-in (only the project's exact Google version counts), so the preflight, the engine and the webview agree.
+//! Chinese, Japanese or Korean text whose Noto Sans isn't downloaded is missing too, for the scripts the engine's runs
+//! ask for (`cjk_segments`), less what the text's own face covers (a picked Hiragino draws its own kanji).
 //!
 //! Each missing font says where it is used (its layers, the captions), which weights, what its download takes when
 //! Google still serves that exact version, and the version Google serves now when it doesn't ("Use {family}

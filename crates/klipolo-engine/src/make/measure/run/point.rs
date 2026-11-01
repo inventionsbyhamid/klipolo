@@ -1,7 +1,6 @@
 //! One combination measured (`Run::point`, a probe), its frames less the baseline (`frames_at`; in batches where the
 //! timing is fenced, `batched`), and the worst point at an export size. A point stops as soon as its p95 is surely over its limit, and
-//! nothing is measured past the run's deadline; an export size stops at a frame over the step limit
-//!.
+//! nothing is measured past the run's deadline; an export size stops at a frame over the step limit.
 
 use std::sync::Arc;
 use std::time::Instant;

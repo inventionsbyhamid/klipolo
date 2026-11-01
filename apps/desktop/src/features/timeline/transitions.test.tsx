@@ -587,6 +587,36 @@ describe('the cut markers and the clips around them', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/^Deleted broll\.mp4$/);
   });
 
+  it('Command X on a clip says what it does to the transitions it touched, as Delete does', async () => {
+    // The last clip: the dissolve into it has nowhere to go.
+    useProject.setState({ snapshot: withDissolve() });
+    useSelection.setState({ selectedId: 'b' });
+    renderWithProviders(
+      <>
+        <Timeline />
+        <ShortcutsHarness />
+      </>,
+    );
+    fireEvent.keyDown(window, { key: 'x', metaKey: true });
+    await frames();
+    expect(bridge.apply).toHaveBeenLastCalledWith({
+      label: 'undo.cut.note',
+      params: { note: 'A transition is removed.' },
+      ops: [{ type: 'removeClip', id: 'b' }],
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('Cut broll.mp4. A transition is removed.');
+    expect(labelText({ id: 'undo.cut.note', params: { note: 'A transition is removed.' } })).toBe(
+      'Cut. A transition is removed.',
+    );
+    // A clip with no transition at either cut: only what it did.
+    useProject.setState({ snapshot: fixtureSnapshot() });
+    act(() => useSelection.getState().select('b'));
+    fireEvent.keyDown(window, { key: 'x', metaKey: true });
+    await frames();
+    expect(bridge.apply).toHaveBeenLastCalledWith({ label: 'undo.cut', ops: [{ type: 'removeClip', id: 'b' }] });
+    expect(screen.getByRole('status')).toHaveTextContent(/^Cut broll\.mp4$/);
+  });
+
   it('a type this build lacks reads "Missing transition" once, its id as the tooltip', () => {
     const s = withDissolve();
     s.project.timeline.main[0].transitionOut!.effect = 'com.acme/fancy';

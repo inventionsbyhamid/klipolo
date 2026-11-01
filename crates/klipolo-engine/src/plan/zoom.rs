@@ -34,7 +34,7 @@ pub type ZoomItem = (Us, Us, f64, ZoomTarget);
 /// How long the springs take to come to rest after a run's last zoom ends.
 pub const SETTLE_US: Us = 2_000_000;
 /// A rebuild that needs more spring steps than this (125 per second of run; a camera run counts the same) is computed
-/// rule) is computed off the actor; smaller ones (dragging one zoom) cost well under a millisecond.
+/// off the actor; smaller ones (dragging one zoom) cost well under a millisecond.
 pub const INLINE_STEPS: usize = 4_000;
 const CAMERA_STEPS_PER_SEC: usize = 125;
 

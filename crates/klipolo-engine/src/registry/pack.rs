@@ -1,13 +1,13 @@
-//! Reading a contribution's version folder: the person's library
-//! (`load_version_dir`), a project's copies (`embedded`: through folder handles), the render worker's copy of what the
-//! app sent and an export job's folders (`load_folder_as`). Every reader ends in [`load_files`]: only `contrib.json`,
-//! `effect.wgsl` or `scene.json`, `thumb.jpg` and `hashes.json`, each within its size, never through a symbolic link at
-//! any level, and only when every file's SHA-256 matches `hashes.json`. The folder's names and the definition's id are
-//! well formed and agree; the names in the definition are already clean (they are cleaned when saved, never here) and
-//! its settings' text holds no hidden characters (a setting's key not even one the worker's taming would change); a
-//! protective definition or a built-in id is refused, and so is a definition past the caps (`def`). A scene's bytes
-//! are read here and parsed only once this computer verified them. The registry built from what was
-//! loaded is `with_contributions`, its shaders from `ShaderCache`, each with its verdict on it (`verdict`).
+//! Reading a contribution's version folder: the person's library (`load_version_dir`), a project's copies (`embedded`:
+//! through folder handles), the render worker's copy of what the app sent and an export job's folders
+//! (`load_folder_as`). Every reader ends in [`load_files`]: only `contrib.json`, `effect.wgsl` or `scene.json`,
+//! `thumb.jpg` and `hashes.json`, each within its size, never through a symbolic link at any level, and only when every
+//! file's SHA-256 matches `hashes.json`. The folder's names and the definition's id are well formed and agree; the
+//! names in the definition are already clean (they are cleaned when saved, never here) and its settings' text holds no
+//! hidden characters (a setting's key not even one the worker's taming would change); a protective definition or a
+//! built-in id is refused, and so is a definition past the definition caps (`def`). A scene's bytes are read here and
+//! parsed only once this computer verified them. The registry built from what was loaded is `with_contributions`, its
+//! shaders from `ShaderCache`, each with its verdict on it (`verdict`).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

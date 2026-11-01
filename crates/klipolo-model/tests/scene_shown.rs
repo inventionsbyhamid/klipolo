@@ -1,7 +1,6 @@
-//! What a scene can show, counted as upper bounds: an `amount` stagger
-//! spreads over every member it selects; yoyo with an odd repeat ends on the start values; split words and the
-//! character caps count every text a node can show (holds, counters, scrambles, text keys and tween text values);
-//! blur sources add up; and the remaining numbers are ranged.
+//! What a scene can show, counted as upper bounds: an `amount` stagger spreads over every member it selects; yoyo with
+//! an odd repeat ends on the start values; split words and the character caps count every text a node can show (holds,
+//! counters, scrambles, text keys and tween text values); blur sources add up; and the remaining numbers are ranged.
 
 use klipolo_model::contrib::Catalog;
 use klipolo_model::scene::{check_scene, Scene, SceneFacts, SceneProblem};

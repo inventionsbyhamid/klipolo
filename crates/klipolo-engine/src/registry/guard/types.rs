@@ -1,6 +1,6 @@
 //! What the module rules read from each type, in one pass in arena order, where a type's parts come before it: how
-//! many scalars it holds and how deep it nests. A deep fan-out of structs or a long `alias` chain costs one step a type
-//!.
+//! many scalars it holds and how deep it nests. A deep fan-out of structs or a long `alias` chain costs one step a
+//! type.
 
 use naga::{ArraySize, Handle, Module, Type, TypeInner};
 

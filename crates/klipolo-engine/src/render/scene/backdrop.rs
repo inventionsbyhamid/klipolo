@@ -85,7 +85,7 @@ pub(super) fn push(
 /// This frame's backdrop nodes' copies of the frame under the layer (`under`): each blurred by its own Gaussian into a
 /// pooled target of the grab's size (the scene's own blur, while the frame's budget has room: else drawn unblurred,
 /// said as the stage says an effect left out), or the grab itself when it doesn't blur, into `out`; None without one.
-/// The last blurred use reads the grab as its input, which lets it go (a glass card holds one target, 
+/// The last blurred use reads the grab as its input, which lets it go (a glass card holds one target,
 /// not two). What they hold the stage counts (`EffectStage::watch`).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn run(

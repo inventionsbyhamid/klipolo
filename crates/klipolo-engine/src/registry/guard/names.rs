@@ -1,8 +1,8 @@
-//! Names naga's WGSL writer would rewrite (moved into the scan so it holds before naga
-//! parses). The writer, which makes the text a device compiles (`harden`), keeps only ASCII letters,
-//! digits and single underscores in a name and drops a trailing `_`, so `fn max_` or `fn maäx` would come back as
-//! `fn max` and take WGSL's own `max` calls in that text. And a non-ASCII name such as `℘` isn't counted as a
-//! selector by every reader: refusing it before the parse keeps member chains in the scan's sight.
+//! Names naga's WGSL writer would rewrite (checked in the scan, so the rule holds before naga parses). The writer,
+//! which makes the text a device compiles (`harden`), keeps only ASCII letters, digits and single underscores in a name
+//! and drops a trailing `_`, so `fn max_` or `fn maäx` would come back as `fn max` and take WGSL's own `max` calls in
+//! that text. And a non-ASCII name such as `℘` isn't counted as a selector by every reader: refusing it before the
+//! parse keeps member chains in the scan's sight.
 
 use klipolo_model::text_safety::invisible;
 

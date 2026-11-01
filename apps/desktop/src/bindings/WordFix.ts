@@ -2,6 +2,6 @@
 
 /**
  * A person's correction of the words heard in `[start_us, end_us)` of `asset_id` (its sound time): captions, the
- * Script view and chat's snippets read `text` instead (the transcript-derived text override).
+ * Script view and chat's snippets read `text` instead (a text override on what the transcript heard).
  */
 export type WordFix = { assetId: string, startUs: number, endUs: number, text: string, };

@@ -22,17 +22,16 @@
 //!   project's own heap, and each layer op beyond the first adds at most 10 allocations (a move) or 20 (a new layer),
 //!   none of them growing with the project.
 //!
-//! `speed_runs_that_bump`: "speed every clip up 4×" on a crowded project, where each 4 s clip
-//! holds two 1 s titles 0.1 s apart, so every op bumps a title and the run can't be laid out once. Before batching it
-//! took 787 ms at 1,500 clips and 2,085 ms at 2,400 on a 2013 Xeon, a whole pass per op; after the first version,
-//! which planned the run again after every op, 1,994 ms and 5,228 ms. Played on lanes (`apply::speed_lanes`) it is
-//! linear: budget ≤ 40 ms at 1,500 clips and ≤ 64 ms at 2,400 (10.9 ms and 18.4 ms there), with the result equal
-//! to applying the ops one batch each. With free labels on the titles' track as well (one every 16 clips), the lanes
-//! refused the track and the run went op by op: 554 ms at 1,500 clips. On lanes each op also checks the
-//! free labels a moved layer can reach (past the first layer anchored in its clip or later): 14.6 ms at 1,500 clips
-//! and 25.8 ms at 2,400 (94 and 150 labels), and with 300 labels at 1,500 clips 15.7 ms in clip order and 19.8 ms in
-//! reverse (the Xeon, load 11), within the same budgets. Checking every label past the op's clip's start instead took
-//! 45.8 ms for the 300 labels in clip order.
+//! `speed_runs_that_bump`: "speed every clip up 4×" on a crowded project, where each 4 s clip holds two 1 s titles 0.1
+//! s apart, so every op bumps a title and the run can't be laid out once. A whole pass per op took 787 ms at 1,500
+//! clips and 2,085 ms at 2,400 on a 2013 Xeon; planning the run again after every op, 1,994 ms and 5,228 ms. Played on
+//! lanes (`apply::speed_lanes`) it is linear: budget ≤ 40 ms at 1,500 clips and ≤ 64 ms at 2,400 (10.9 ms and 18.4 ms
+//! there), with the result equal to applying the ops one batch each. With free labels on the titles' track as well (one
+//! every 16 clips), the lanes once refused the track and the run went op by op: 554 ms at 1,500 clips. On lanes each op
+//! also checks the free labels a moved layer can reach (past the first layer anchored in its clip or later): 14.6 ms at
+//! 1,500 clips and 25.8 ms at 2,400 (94 and 150 labels), and with 300 labels at 1,500 clips 15.7 ms in clip order and
+//! 19.8 ms in reverse (the Xeon, load 11), within the same budgets. Checking every label past the op's clip's start
+//! instead took 45.8 ms for the 300 labels in clip order.
 
 use std::alloc::{GlobalAlloc, Layout as AllocLayout, System};
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
@@ -198,7 +197,7 @@ fn title(text: &str) -> ItemContent {
     }
 }
 
-/// A 2-hour project, and the ids of its 200 titles.
+/// The 2-hour project, and the ids of its 200 titles.
 fn two_hour_project() -> (Project, Vec<String>) {
     let mut p = Project::new("Two hours");
     p.id = uuid(0, 0);

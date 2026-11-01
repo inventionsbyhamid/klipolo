@@ -1,7 +1,6 @@
-//! What Delete… may do on Windows: recycle, never destroy. The Shell tells a progress sink
-//! before each delete whether it will recycle the item (`TSF_DELETE_RECYCLE_IF_POSSIBLE` in `PreDeleteItem`'s flags);
-//! one that won't (too big for the Recycle Bin, a drive without one) is refused. Compiled on Windows, and everywhere for
-//! its test.
+//! What Delete… may do on Windows: recycle, never destroy. The Shell tells a progress sink before each delete whether
+//! it will recycle the item (`TSF_DELETE_RECYCLE_IF_POSSIBLE` in `PreDeleteItem`'s flags); one that won't (too big for
+//! the Recycle Bin, a drive without one) is refused. Compiled on Windows, and everywhere for its test.
 
 /// `TSF_DELETE_RECYCLE_IF_POSSIBLE` (`TRANSFER_SOURCE_FLAGS`): the Shell will put the item in the Recycle Bin.
 const RECYCLE_IF_POSSIBLE: u32 = 0x80;

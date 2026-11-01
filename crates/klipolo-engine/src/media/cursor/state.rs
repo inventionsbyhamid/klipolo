@@ -54,7 +54,7 @@ impl State {
 
     /// Keeps the takes within the budget: while they pass it, those no longer wanted go, least recently used first;
     /// then every wanted take the loader wouldn't load now goes (the wanted takes before it pass the budget), so the
-    /// m2), so the budget is a hard cap and the preview holds what export's `load_all` would. What goes comes back, as
+    /// budget is a hard cap and the preview holds what export's `load_all` would. What goes comes back, as
     /// `put`'s. O(wanted × takes).
     pub(super) fn trim(&mut self, budget: usize) -> Gone {
         let mut gone = Gone::default();

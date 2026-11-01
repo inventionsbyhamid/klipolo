@@ -135,8 +135,8 @@ async fn a_batch_draws_its_copies_in_one_submission() {
 }
 
 /// The cost keeps what the batches measured (the raw times, so a later trusted run can compare): 8 sample times at
-/// at preview size, the first a single frame and a batch of 17, the rest batches of 7 once the first showed the body
-/// over Light, the baseline's too (all at the full span, steady); 1080p's likewise.
+/// preview size, the first a single frame and a batch of 17, the rest batches of 7 once the first showed the body over
+/// Light, the baseline's too (all at the full span, steady); 1080p's likewise.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]
 async fn a_fenced_cost_keeps_its_batches() {
@@ -307,7 +307,7 @@ async fn every_copy_of_a_batch_draws_a_stepped_generators_pass() {
     );
 }
 
-/// The capped draft the [Mac] checks time really reaches the caps under fenced timing (Iris-like
+/// The capped draft the Mac checks time really reaches the caps under fenced timing (Iris-like
 /// 1.5 ms steps; a ~1.5 ms body): its defaults are within class, so 12 combinations and its probes are measured (each
 /// stepped from 16 × 16), the corner cap is noted, nothing ran out, and the envelope holds the ranges of `c` and `d`
 /// and the choices of `mode`, `x` and `y`.

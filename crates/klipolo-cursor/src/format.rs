@@ -9,8 +9,8 @@
 //! not finite, or a shape definition whose file isn't exactly `cursors/<digits>.png` or whose image is larger than
 //! 256 × 256.
 //!
-//! **Format 1** (the first versions: `{"t":…, "x":…, "y":…, "b":1}` once per frame, no `k`) is never a `Line`. The track
-//! still reads it as positions and presses, so takes recorded before format 2 keep their cursor.
+//! **Format 1** (the first recorder builds: `{"t":…,"x":…,"y":…,"b":1}` once per frame, no `k`) is never a `Line`. The
+//! track still reads it as positions and presses, so takes recorded before format 2 keep their cursor.
 
 use serde::{Deserialize, Serialize};
 

@@ -1,5 +1,4 @@
-//! Window helpers over the raw path (the Auto zooms read the mean; now the camera plans them): the
-//! mean over a window ending at a time, and the place held at a time.
+//! Window helpers over the raw path: the mean over a window ending at a time, and the place held at a time.
 //!
 //! **On time, not on samples.** The recorder thins moves a straight line reproduces, so a
 //! track can hold two places for a whole glide. The mean is therefore taken over the raw path itself (linear between

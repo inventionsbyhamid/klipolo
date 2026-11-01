@@ -101,8 +101,8 @@ pub fn reset_text_texture_peak() {
 /// [`MAX_TEXT_BYTES`], in the preview; [`EXPORT_TEXT_BYTES`] in an export). A code: an export stops on it, so a text is
 /// never missing from a finished export.
 pub const TEXT_OVER_BUDGET: &str = crate::api::FRAME_TEXTS_SOFTER;
-/// How long a text that didn't fit, or a softened one whose sharper layout didn't, waits before it is tried again
-///: never a layout every frame.
+/// How long a text that didn't fit, or a softened one whose sharper layout didn't, waits before it is tried again:
+/// never a layout every frame.
 const RETRY_AFTER: std::time::Duration = std::time::Duration::from_secs(1);
 /// How many times a text has been laid out (shaped) in this process (a diagnostic: the ceiling's test checks that a
 /// steady frame lays nothing out).
@@ -161,8 +161,7 @@ enum Attempt {
 struct Drawn {
     key: Key,
     layout: Layout,
-    /// Its texture and the part of the layout it holds; None while none of it shows (its layout is kept
-    /// M-2).
+    /// Its texture and the part of the layout it holds; None while none of it shows (its layout is kept).
     drawn: Option<(Window, wgpu::Texture)>,
     /// The drawer's frame count when this text was last prepared (or, built ahead, when it landed).
     frame: u64,
@@ -356,8 +355,8 @@ impl TextDrawer {
         }
     }
 
-    /// How long a frame waits for a build asked ahead before building it itself (tests: so the late
-    /// path runs whatever the machine's speed).
+    /// How long a frame waits for a build asked ahead before building it itself (tests, so the late path runs whatever
+    /// the machine's speed).
     #[doc(hidden)]
     pub fn wait_at_most(&mut self, wait: Duration) {
         self.wait = wait;
@@ -403,11 +402,11 @@ impl TextDrawer {
         }
     }
 
-    /// Starts a frame once its texts are marked (`in_frame`): the builds that landed are kept, and textures of texts
-    /// no longer kept go (`RETAIN_FRAMES`, `PREBUILT_FRAMES`). Only this frame's texts need room under the drawer's
+    /// Starts a frame once its texts are marked (`in_frame`): the builds that landed are kept, and textures of texts no
+    /// longer kept go (`RETAIN_FRAMES`, `PREBUILT_FRAMES`). Only this frame's texts need room under the drawer's
     /// ceiling (96 MiB in the preview, [`EXPORT_TEXT_BYTES`] in an export): those kept for other texts give theirs up
-    /// first (`make_room`), so a cut never softens the new scene's texts for the last one's, nor fails an export for it
-    ///.
+    /// first (`make_room`), so a cut never softens the new scene's texts for the last one's, nor fails an export for
+    /// it.
     ///
     /// A refused text's wait is kept while the frame has it, and the softer note can be said again.
     pub fn begin_frame(&mut self) {

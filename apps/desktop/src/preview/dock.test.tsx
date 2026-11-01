@@ -130,6 +130,19 @@ describe('the dock holds still through a timeline press', () => {
     await frames();
     expect(docked()).toBe(true);
   });
+
+  it('a release lost to another app lets the dock follow the selection once the window loses focus', async () => {
+    renderWithProviders(<Editor />);
+    const a = block(/^screen\.mp4/);
+    press(a, 100);
+    expect(useSelection.getState().selectedId).toBe('a');
+    expect(docked()).toBe(false);
+    // Command Tab with the button held: the release goes to the other app, and this window only sees its blur.
+    fireEvent.blur(window);
+    await frames();
+    expect(useDockHold.getState().press).toBe(false);
+    expect(docked()).toBe(true);
+  });
 });
 
 describe('the dock holds still while the keyboard walks the Video lane', () => {

@@ -219,8 +219,8 @@ fn a_shape_file_outside_cursors_or_too_large_is_refused() {
 
 #[test]
 fn a_version_one_file_keeps_its_positions_and_presses() {
-    // The first versions wrote one line per frame, the buttons held as bits: takes made then keep
-    // their cursor. These are that writer's exact lines.
+    // The first recorder builds wrote one line per frame, the buttons held as bits: takes recorded then keep their
+    // cursor. These are that writer's exact lines.
     let v1 = concat!(
         r#"{"t":0,"x":0.1,"y":0.2}"#,
         "\n",

@@ -4,7 +4,7 @@
 //! read per texel of its cell, whatever its blur: a blur of 256 took seconds at full resolution. Each small tap weighs
 //! what the built-in blur's kernel weighs over the atlas texels it spans (`binned`), so it ends where that kernel ends
 //! and sums to one as it does; its deviation is that kernel's less what the box sample and the binning add. Drawn so,
-//! it is the full-size shadow within about 5/255 across the whole cell (about 4.6/255 at worst, 
+//! it is the full-size shadow within about 5/255 across the whole cell (about 4.6/255 at worst,
 //! one reach in from the silhouette's edge, where the small kernel's last bin and the bilinear read just catch the
 //! blank edge; at most a 1.8 % dip of the shadow's alpha; sampling the Gaussian tap by tap there was up to 7/255 off:
 //! its end fell half a small texel past the kernel's). A Gaussian under six texels is blurred texel for texel, as
@@ -181,7 +181,7 @@ mod tests {
     }
 
     /// Drawn small, a shadow is the one drawn texel for texel within 5/255 at every atlas texel of its cell (the whole
-    /// check: the whole grid, not sample points): a 40 × 40 square under Gaussians of 12 and 24 texels, and a
+    /// grid, not sample points): a 40 × 40 square under Gaussians of 12 and 24 texels, and a
     /// 400 × 100 one under 24, read back bilinearly as the text pass reads it, against the exact separable sum.
     #[test]
     fn a_small_shadow_is_the_full_size_one() {

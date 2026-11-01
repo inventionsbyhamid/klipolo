@@ -4,7 +4,7 @@
 //!
 //! - **Made once.** The files are the editor's own cache (`ExportJob::activity_dir`): what the editor or an earlier
 //!   run analysed is read, never decoded again; the rest is made now (`ActivityStore::ensure`) off the runtime's
-//!   threads, telling the parent how far it is (`WorkerLine::Analysing`, the spec's "Analysing the screen…").
+//!   threads, telling the parent how far it is (`WorkerLine::Analysing`, "Analysing the screen…").
 //! - **Stoppable.** A pause or a stop ends it within a tick (the decoder checks between packets), keeping every whole
 //!   minute made: a chunk is appended whole and synced, so nothing half-made is kept, and the job resumes from there.
 //! - **Never plans differently from the editor without saying so.** A minute whose pictures can't be read is passed

@@ -239,7 +239,7 @@ mod tests {
     use super::*;
 
     /// A scene's blur is the built-in blur's own passes (the same text, so the same pipeline), and neither pass is
-    /// protective; m10: every pass the drawer runs is a built-in.
+    /// protective; every pass the drawer runs is a built-in.
     #[test]
     fn a_scenes_blur_isnt_protective() {
         let builtin = crate::registry::Registry::builtin().blur().clone();

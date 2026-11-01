@@ -36,7 +36,7 @@ pub fn free_path(dir: &Path, base: &str, ext: &str, taken: &HashSet<PathBuf>) ->
         .expect("an unused name")
 }
 
-/// One file per format, in landscape, portrait, square order, at its D22 size; Master files are `.mov`.
+/// One file per format, in landscape, portrait, square order, at its quality's size; Master files are `.mov`.
 pub fn plan_files(
     project: &Project,
     formats: &[FormatKind],
