@@ -9,7 +9,7 @@
 //! **The ladder.** Each next shot B is placed after the last kept A, trying in order: a glide; the glide with both
 //! views widened in steps of 0.05 toward `min_scale`; an out-and-in, widened the same way; a merge into one wider
 //! shot; dropping the lower-priority shot (weight, then the later). A gap of `out_gap_us`, or centres over `out_dist`
-//! apart, zoom out and in first (rule 5). Widening A places A again after its own predecessor first. Scales only fall
+//! apart, zoom out and in first. Widening A places A again after its own predecessor first. Scales only fall
 //! and shots only go, so the stack work is linear amortised.
 
 use super::ease::{PEAK, between, pan_peak};

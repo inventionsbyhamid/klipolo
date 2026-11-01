@@ -230,8 +230,8 @@ pub(crate) fn prepare(
         .collect();
     all.sort_by_key(|(f, _)| (f.at, f.until));
     let (focus, only_seen): (Vec<Focus>, Vec<bool>) = all.into_iter().unzip();
-    // A zoom of the person's with no scale of 1 or more, or no number for its centre, is left out (the
-    // model keeps 1–5×, and `plan` is public).
+    // A zoom of the person's with no scale of 1 or more, or no number for its centre, is left out (the model keeps
+    // 1–5×, and `plan` is public).
     let real =
         |v: View| v.scale >= 1.0 && v.scale.is_finite() && v.cx.is_finite() && v.cy.is_finite();
     let fine = |f: &&Fixed| f.from < f.to && f.to > start && f.from < end && real(f.view);

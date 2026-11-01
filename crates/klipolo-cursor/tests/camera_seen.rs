@@ -1,6 +1,5 @@
-//! No action happens off screen: an action whose shot was dropped
-//! still lies inside the view at its time. With a strength under the widest shot, the repair's round cap
-//! and inputs with no number or no end.
+//! No action happens off screen: an action whose shot was dropped still lies inside the view at its time. With a
+//! strength under the widest shot, the repair's round cap and inputs with no number or no end.
 
 mod common;
 
@@ -9,7 +8,7 @@ use klipolo_cursor::camera::*;
 
 #[test]
 fn a_far_click_a_second_after_another_is_never_off_screen() {
-    // The review's trace: the second click can't share a view with the first and comes too soon to move to, so its
+    // The second click can't share a view with the first and comes too soon to move to, so its
     // shot is dropped; the camera must still show it, and the third click still gets its zoom.
     let clicks = [
         (10_000_000, 0.2, 0.3),
@@ -35,8 +34,8 @@ fn a_far_click_a_second_after_another_is_never_off_screen() {
 
 #[test]
 fn a_dense_tutorial_shows_every_click_at_every_spacing() {
-    // Clicks alternating across the screen, from 4 s down to 1 s apart, for 2 minutes. The
-    // lines printed are the report's table.
+    // Clicks alternating across the screen, from 4 s down to 1 s apart, for 2 minutes. The lines printed are a table
+    // of how many shots each spacing keeps.
     let rules = |max_scale| Rules {
         max_scale,
         ..Rules::default()
@@ -96,7 +95,7 @@ fn a_strength_under_the_widest_shot_still_zooms() {
 
 #[test]
 fn a_dropped_typing_span_stays_on_screen_while_it_lasts() {
-    // The failing trace: typing too wide to frame over 10–20 s, and a click elsewhere at 13 s. A typing span
+    // Typing too wide to frame over 10–20 s, and a click elsewhere at 13 s. A typing span
     // is checked while it lasts (a pause only at its start).
     let rect = klipolo_cursor::Rect01 {
         x: 0.10,
@@ -112,7 +111,7 @@ fn a_dropped_typing_span_stays_on_screen_while_it_lasts() {
     };
     let focus = [typing, click(13_000_000, 0.85, 0.85)];
     let p = plan(&input(30_000_000, &focus, &[], Rules::default()));
-    check(&p, Rules::default(), 30_000_000, "the m1 trace");
+    check(&p, Rules::default(), 30_000_000, "wide typing and a click elsewhere");
     for t in (10_000_000..=20_000_000).step_by(100_000) {
         assert!(
             on_screen(&p, t, 0.45, 0.175),

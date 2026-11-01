@@ -92,8 +92,8 @@ fn a_media_region_is_no_focus_unless_clicked() {
 
 #[test]
 fn the_kinds_a_narrowed_using_leaves_out_stay_on_screen_through_the_glide() {
-    // A smart zoom on clicks only. Typing beside the click, inside the shot's view, while the
-    // cursor walks off to the right edge: the glide follows the cursor, but never so far that the typing leaves the view.
+    // A smart zoom on clicks only. Typing beside the click, inside the shot's view, while the cursor walks off to the
+    // right edge: the glide follows the cursor, but never so far that the typing leaves the view.
     use klipolo_cursor::camera::{Input, Rules, check_plan, keep_from, plan, plan_keeping};
     let f = TimelineFacts {
         clicks: vec![ClickAt {
