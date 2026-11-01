@@ -235,6 +235,21 @@ describe('Reverse', () => {
     );
   });
 
+  it('shows two clips being reversed in one pill, with their progress together and one stop for both', async () => {
+    renderWithProviders(<ReversingPill />);
+    act(() => {
+      const jobs = useReversing.getState();
+      jobs.start('b', 'broll.mp4');
+      jobs.start('c', 'intro.mov');
+      jobs.progress('b', 0.5);
+      jobs.progress('c', 0.2);
+    });
+    expect(screen.getByRole('status', { name: 'Reversing 2 clips, 35%' })).toHaveTextContent('Reversing 2 clips');
+    await userEvent.click(screen.getByRole('button', { name: 'Stop reversing' }));
+    expect(reverser.stop).toHaveBeenCalledWith('b');
+    expect(reverser.stop).toHaveBeenCalledWith('c');
+  });
+
   it('throws away a copy the model refuses', async () => {
     vi.mocked(bridge.apply).mockRejectedValue(new Error('That clip no longer exists.'));
     const finish = await startReverse();
