@@ -33,7 +33,7 @@ use klipolo_model::project::{
     Asset, AssetKind, Project, Recording, RecordingKind, RecordingSource, SourceMix, SourceRole,
     SourceRun,
 };
-use klipolo_model::speech::{Levels, Speech, Word, WordKind};
+use klipolo_model::speech::{Levels, Speech, Word, WordKind, run_spans, spoken};
 use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::{Clip, ClipSource};
 use serde_json::{Value, json};
@@ -2720,4 +2720,72 @@ async fn every_file_of_a_recording_is_analysed_for_words_only() {
         assert!(!watched(&h.events_for(id)), "{id}");
     }
     assert_eq!(media.copies.load(Ordering::SeqCst), 0, "no small copy");
+}
+
+/// A take's captions are its voice's words where the take plays them: a transcript on its mic's file (cached, as an
+/// earlier analysis left it) lands on the timeline through the clip's run (`speech::run_spans`), counting the mic's
+/// late start and the clip before the take. The screen and the camera, never asked for, have no words.
+#[tokio::test(flavor = "multi_thread")]
+async fn captions_follow_a_recording_clip() {
+    // A clip imported on its own plays before the take.
+    const INTRO_US: Us = 2_000_000;
+    let server = MockServer::start().await;
+    nothing_else(&server).await;
+    let h = harness(&server, MemoryStore::default(), FakeMedia::whole(SECONDS));
+    let screen = asset(
+        "screen",
+        AssetKind::Video,
+        &h.clip("screen.mov", 1),
+        SECONDS,
+    );
+    let camera = asset(
+        "camera",
+        AssetKind::Video,
+        &h.clip("camera.mov", 2),
+        SECONDS,
+    );
+    let mic_file = h.clip("mic.m4a", 3);
+    let mic = asset("mic", AssetKind::Audio, &mic_file, SECONDS);
+    let heard = cached_transcript();
+    h.cache_dir(&mic_file).store("transcript", &heard).unwrap();
+    let mut project = take(&screen, &camera, Some(&mic));
+    project.assets.push(asset(
+        "intro",
+        AssetKind::Video,
+        &h.clip("intro.mov", 4),
+        2.0,
+    ));
+    let intro = Clip::new(ClipSource::Asset { id: "intro".into() }, 0, INTRO_US);
+    project.timeline.main.insert(0, intro);
+
+    h.state
+        .start(&project, std::slice::from_ref(&mic))
+        .await
+        .finished()
+        .await;
+    server.verify().await;
+
+    let speech = h.last_speech();
+    assert_eq!(speech.transcripts.keys().collect::<Vec<_>>(), ["mic"]);
+    let take_clip = &project.timeline.main[1].id;
+    let spans = run_spans(&project);
+    assert!(
+        spans
+            .iter()
+            .any(|s| &s.clip == take_clip && s.asset == "mic"),
+        "{spans:?}"
+    );
+    let words = spoken(&project, &speech);
+    let said: Vec<(&str, Us, Us)> = words
+        .shown(&project, &speech)
+        .filter(|(w, _)| w.kind == WordKind::Word)
+        .map(|(w, text)| (text, w.start_us, w.end_us))
+        .collect();
+    let later = MIC_LATE_US + INTRO_US;
+    let expected: Vec<(&str, Us, Us)> = (heard.transcript.words.iter())
+        .filter(|w| w.kind == WordKind::Word)
+        .map(|w| (w.text.as_str(), w.start_us + later, w.end_us + later))
+        .collect();
+    assert_eq!(expected.len(), 3);
+    assert_eq!(said, expected);
 }
