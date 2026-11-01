@@ -5,8 +5,8 @@
 //! - `klipolo://proposal` (`getProposal`): JSON, what became of this app's proposal (`ProposalOutcome`).
 //!
 //! All built from the host's snapshot when read; nothing is kept but what the session read (`Seen`). Reading the
-//! summary, the context or the transcript records the project and its `timeline_key`, which a call naming times or
-//! clip refs needs to match.
+//! context or the transcript, which show the timeline, records the project and its `timeline_key`, which a call naming
+//! times or clip refs needs to match. The summary doesn't: an app reads the timeline before it names times.
 
 use klipolo_chat::{build_context, full_transcript, timeline_key};
 use klipolo_model::time::{MAX_TIME_US, Us, secs_to_us};
@@ -77,7 +77,7 @@ pub fn known(uri: &str) -> bool {
 /// Resource `uri` for `session`: its MIME type and text; None when there is no such resource.
 pub fn read(host: &dyn Host, session: &mut Session, uri: &str) -> Option<(&'static str, String)> {
     let read = match uri {
-        SUMMARY => summary(host, session),
+        SUMMARY => summary(host),
         CONTEXT => context(host, session),
         TRANSCRIPT => transcript(host, session, None, None),
         PROPOSAL => return Some((JSON, proposal(host, session).to_string())),
@@ -97,11 +97,15 @@ pub fn read(host: &dyn Host, session: &mut Session, uri: &str) -> Option<(&'stat
     Some((TEXT, read.text))
 }
 
-/// The open project, recording what `session` read; `NO_PROJECT` when none is open.
+/// The open project; `NO_PROJECT` when none is open.
+fn open(host: &dyn Host) -> Result<Snapshot, Read> {
+    host.snapshot()
+        .ok_or_else(|| Read::refused(words::NO_PROJECT))
+}
+
+/// The open project, recording that `session` read its timeline; `NO_PROJECT` when none is open.
 fn seen(host: &dyn Host, session: &mut Session) -> Result<Snapshot, Read> {
-    let snap = host
-        .snapshot()
-        .ok_or_else(|| Read::refused(words::NO_PROJECT))?;
+    let snap = open(host)?;
     session.seen = Some(Seen {
         project_id: snap.project.id.clone(),
         key: timeline_key(&snap.project),
@@ -122,8 +126,9 @@ fn chat_context(snap: &Snapshot) -> klipolo_chat::ChatContext {
     )
 }
 
-pub fn summary(host: &dyn Host, session: &mut Session) -> Read {
-    match seen(host, session) {
+/// The summary, which doesn't count as reading the timeline (`seen` is left as it was).
+pub fn summary(host: &dyn Host) -> Read {
+    match open(host) {
         Ok(snap) => {
             let ctx = chat_context(&snap);
             let part = |heading| ctx.section(heading).unwrap_or_default();

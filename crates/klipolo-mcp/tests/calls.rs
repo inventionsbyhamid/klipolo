@@ -10,7 +10,7 @@ mod agent;
 #[path = "support/fake_host.rs"]
 mod fake_host;
 
-use agent::{Agent, assert_refused, outcome, text};
+use agent::{Agent, assert_refused, outcome, request, text};
 use fake_host::FakeHost;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -18,7 +18,7 @@ use std::sync::Arc;
 use klipolo_chat::{AnalysisState, FunctionCall, Job, Moment, Proposal, ToolCall, View, compile};
 use klipolo_mcp::Host;
 use klipolo_mcp::call::from_app;
-use klipolo_mcp::rpc::Mcp;
+use klipolo_mcp::rpc::{Handled, Mcp};
 use klipolo_mcp::words::{
     DECIDED, DONE, KLIPOLO_CHAT, MOVED, NO_CREDIT, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS,
     NOTHING_TO_UNDO, OVER_SHARE, OWN_CHANGED, OWN_MOVED, OWN_WAITING, PROPOSED_NO_FOOTAGE,
@@ -677,6 +677,34 @@ fn time_call_before_reading_is_refused() {
     // Once read, the cut is proposed.
     agent.read();
     assert_eq!(outcome(&agent.cut(0.0, 13.0)), "proposed");
+}
+
+#[test]
+fn the_summary_is_not_a_read_of_the_timeline() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    // The summary shows no clip's times, as a tool or a resource: a call naming times still needs a read that shows
+    // them.
+    let summary = agent.call("getSummary", json!({}));
+    assert_eq!(summary["isError"], false, "{summary}");
+    assert_refused(&agent.cut(0.0, 13.0), READ_FIRST);
+    let uri = json!({"uri": "klipolo://project/summary"});
+    match mcp.handle(Some(&agent.session), request(9, "resources/read", uri)) {
+        Handled::Reply { body, .. } => {
+            assert!(body["result"]["contents"][0]["text"].is_string(), "{body}")
+        }
+        other => panic!("expected a reply, got {other:?}"),
+    }
+    assert_refused(&agent.cut(0.0, 13.0), READ_FIRST);
+    // Nor does it bring a read the person's cut made stale up to date.
+    agent.read();
+    let before = person_cuts(&host);
+    agent.call("getSummary", json!({}));
+    assert_refused(&agent.cut(0.0, 13.0), STALE);
+    assert_eq!(host.revision(), before);
+    agent.read();
+    assert_eq!(outcome(&agent.cut(0.0, 12.0)), "proposed");
 }
 
 #[test]

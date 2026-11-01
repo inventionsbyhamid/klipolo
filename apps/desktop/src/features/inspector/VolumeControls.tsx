@@ -23,7 +23,7 @@ interface VolumeControlsProps {
     latest: () => boolean;
     ops: (muted: boolean) => Op[];
   };
-  /** What the layer is called in the undo labels: "video" makes "Mute video" (`volume.mute.undo`). */
+  /** What the layer is called in the undo labels: "video" makes "Mute video layer" (`volume.mute.undo`). */
   noun: 'clip' | 'video' | 'sound';
 }
 

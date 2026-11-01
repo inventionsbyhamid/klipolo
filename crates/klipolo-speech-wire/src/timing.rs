@@ -1,22 +1,19 @@
-//! How close a transcript is to its reference, for the benches and the timing gate (nothing here runs in a
-//! job):
+//! How close a transcript is to its reference, for measuring the timing rules (only `fillers`, each language's
+//! hesitations, runs in the app, where analysis finds filler sounds with it):
 //! - `score`: word starts against labels (a forced alignment, or a synthetic set's construction). Words are matched to
 //!   labels by the longest common subsequence of their normalised texts (lowercased letters and digits), so a word
 //!   heard wrongly, added or dropped is left out rather than shifting every match after it. Only starts are scored,
 //!   because a caption's highlight starts on them; ends are measured too, to be printed.
-//! - `wer` and `wer_normalised`: the word error rate, plain (moved here from klipolo-asr so every bench shares
-//!   one) or with fillers dropped and numbers written one way, which is the one a timing comparison or
-//!   a per-language choice reads.
+//! - `wer` and `wer_normalised`: the word error rate, plain or with fillers dropped and numbers written one way, which
+//!   is the one a timing comparison or a per-language choice reads.
 
 use klipolo_model::speech::route::base_language;
 use klipolo_model::time::Us;
-use serde::{Deserialize, Serialize};
 
 use crate::words::RawWord;
 
 /// One reference word: its text and where its sound starts and ends.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Label {
     pub text: String,
     pub start_us: Us,
@@ -154,8 +151,8 @@ pub fn wer(reference: &str, hypothesis: &str) -> f64 {
     edit_rate(&words(reference), &words(hypothesis))
 }
 
-/// `wer` after both texts are normalised the same way, for `language` (a Whisper code; a tag such as `en-US` counts as
-/// its base language):
+/// `wer` after both texts are normalised the same way, for `language` (a language code such as `en`; a tag such as
+/// `en-US` counts as its base language):
 /// - that language's own hesitations are dropped (`fillers`), never a word of another language: "um" and "er" are
 ///   German words, "er" a Dutch one;
 /// - an apostrophe inside a word is dropped ("don't" is "dont");

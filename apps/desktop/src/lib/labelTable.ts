@@ -41,6 +41,11 @@ export const TABLE = {
     comment: 'Command and undo history entry',
   }),
   'undo.cut': msg({ id: 'undo.cut', message: 'Cut', comment: 'Command and undo history entry' }),
+  'undo.cut.note': msg({
+    id: 'undo.cut.note',
+    message: 'Cut. {note}',
+    comment: 'Undo history entry; {note} says what it did to transitions, e.g. “A transition is removed.”',
+  }),
   'undo.paste': msg({ id: 'undo.paste', message: 'Paste', comment: 'Command and undo history entry' }),
   'undo.duplicate': msg({
     id: 'undo.duplicate',
@@ -333,13 +338,13 @@ export const TABLE = {
   'volume.undo': msg({ id: 'volume.undo', message: 'Change volume', comment: 'Undo history entry' }),
   'volume.mute.undo': msg({
     id: 'volume.mute.undo',
-    message: '{noun, select, clip {Mute clip} video {Mute video} sound {Mute sound} other {Mute layer}}',
+    message: '{noun, select, clip {Mute clip} video {Mute video layer} sound {Mute sound} other {Mute layer}}',
     comment: 'Undo history entry',
   }),
   'volume.unmute.undo': msg({
     id: 'volume.unmute.undo',
     message:
-      '{noun, select, clip {Unmute clip} video {Unmute video} sound {Unmute sound} other {Unmute layer}}',
+      '{noun, select, clip {Unmute clip} video {Unmute video layer} sound {Unmute sound} other {Unmute layer}}',
     comment: 'Undo history entry',
   }),
   'sound.effect.undo': msg({
@@ -380,12 +385,12 @@ export const TABLE = {
   }),
   'media.mirror.undo': msg({
     id: 'media.mirror.undo',
-    message: 'Mirror video',
+    message: 'Mirror video layer',
     comment: 'Undo history entry',
   }),
   'media.unmirror.undo': msg({
     id: 'media.unmirror.undo',
-    message: 'Unmirror video',
+    message: 'Unmirror video layer',
     comment: 'Undo history entry',
   }),
   // Effects: `{effect}` is the contribution id, worded as its name (`contribNames`).
@@ -428,25 +433,25 @@ export const TABLE = {
   'gizmo.move.undo': msg({
     id: 'gizmo.move.undo',
     message:
-      '{layer, select, text {Move text} image {Move image} video {Move video} camera {Move camera} other {Move layer}}',
+      '{layer, select, text {Move text} image {Move image} video {Move video layer} camera {Move camera} other {Move layer}}',
     comment: 'Undo history entry',
   }),
   'gizmo.resize.undo': msg({
     id: 'gizmo.resize.undo',
     message:
-      '{layer, select, text {Resize text} image {Resize image} video {Resize video} camera {Resize camera} other {Resize layer}}',
+      '{layer, select, text {Resize text} image {Resize image} video {Resize video layer} camera {Resize camera} other {Resize layer}}',
     comment: 'Undo history entry',
   }),
   'gizmo.rotate.undo': msg({
     id: 'gizmo.rotate.undo',
     message:
-      '{layer, select, text {Rotate text} image {Rotate image} video {Rotate video} camera {Rotate camera} other {Rotate layer}}',
+      '{layer, select, text {Rotate text} image {Rotate image} video {Rotate video layer} camera {Rotate camera} other {Rotate layer}}',
     comment: 'Undo history entry',
   }),
   'gizmo.nudge.undo': msg({
     id: 'gizmo.nudge.undo',
     message:
-      '{layer, select, text {Nudge text} image {Nudge image} video {Nudge video} camera {Nudge camera} other {Nudge layer}}',
+      '{layer, select, text {Nudge text} image {Nudge image} video {Nudge video layer} camera {Nudge camera} other {Nudge layer}}',
     comment: 'Undo history entry: the layer was moved with the arrow keys',
   }),
   // The timeline: drags, tracks and transitions.
