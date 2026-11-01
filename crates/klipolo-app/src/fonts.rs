@@ -113,6 +113,13 @@ impl Fonts {
         let _ = tokio::time::timeout(Duration::from_secs(30), ready.wait_for(|done| *done)).await;
     }
 
+    /// Waits while Google's catalogue decodes at start-up (at most `SCAN_WAIT`): a download asked for at once still
+    /// finds its family.
+    pub async fn catalogue_ready(&self) {
+        let mut ready = self.catalogue_ready.subscribe();
+        let _ = tokio::time::timeout(SCAN_WAIT, ready.wait_for(|done| *done)).await;
+    }
+
     /// Waits for this computer's fonts, the catalogue and the downloads (at most `SCAN_WAIT` for all): a search
     /// before them would miss this computer's fonts or Google's. Once they are in, nothing waits.
     pub async fn after_scan(&self) {

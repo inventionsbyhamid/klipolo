@@ -210,6 +210,7 @@ pub async fn download(
     italic: bool,
 ) -> Result<FontRef, CodedError> {
     allowed(&*host)?;
+    fonts.catalogue_ready().await;
     let fam = find(fonts, family)?;
     if let Some(v) = version.filter(|v| *v != fam.version) {
         return Err(version_gone(&fam.family, v));
@@ -267,6 +268,7 @@ pub async fn preview(
     family: &str,
 ) -> Result<Vec<u8>, CodedError> {
     allowed(host)?;
+    fonts.catalogue_ready().await;
     let fam = find(fonts, family)?;
     let cache = downloads
         .0
