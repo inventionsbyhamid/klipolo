@@ -5,7 +5,7 @@
 //! - It runs only on the person's press (the capture rule: a press is an explicit
 //!   start, and the eyedropper isn't capture). Nothing samples on its own, and it is no tool: chat, plugins and MCP
 //!   apps can't start it.
-//! - macOS: `NSColorSampler`. Windows gets the webview's `EyeDropper` in W, and Linux has none: both say it isn't
+//! - macOS: `NSColorSampler`. Windows will get the webview's `EyeDropper`, and Linux has none: both say it isn't
 //!   supported, so the UI shows no eyedropper there.
 
 /// This computer has an eyedropper.

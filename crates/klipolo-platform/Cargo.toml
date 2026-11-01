@@ -40,7 +40,7 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 # The wake observer's block and the eyedropper's (the version the lockfile already has).
 block2 = "0.6"
 # The fonts a font manager activated through CoreText (`fonts::activated_font_files`); the versions the lockfile
-# lockfile already has.
+# already has.
 objc2-core-text = { version = "0.3", default-features = false, features = ["std", "CTFontManager"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFURL"] }
 

@@ -1,6 +1,6 @@
-//! The render worker's sandbox on Linux: `Unsupported` until L (Landlock: reads of the session folder, the bundle and
-//! the font folders, writes to the session's `tmp/` and `out/`, and no network, from the same parameters), so the app
-//! sends this worker no agent code.
+//! The render worker's sandbox on Linux: `Unsupported` for now (later, Landlock: reads of the session folder, the
+//! bundle and the font folders, writes to the session's `tmp/` and `out/`, and no network, from the same parameters),
+//! so the app sends this worker no agent code.
 
 use crate::process::sandbox::{Applied, SandboxProfile, parameters};
 
@@ -32,8 +32,8 @@ pub(crate) fn file_size_limit() -> Option<u64> {
     (ok && r.rlim_cur != libc::RLIM_INFINITY).then_some(r.rlim_cur)
 }
 
-/// The owner's access on a folder (Linux has no flags a user can set that stop a removal, and no ACL its sandbox would
-/// allow at L).
+/// The owner's access on a folder (Linux has no flags a user can set that stop a removal, and no ACL its later sandbox
+/// would allow).
 pub(crate) fn unlock(path: &std::path::Path) {
     crate::unix::owner_all(path);
 }

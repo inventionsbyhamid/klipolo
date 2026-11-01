@@ -3,16 +3,16 @@
 //! everywhere:
 //! - macOS: `statfs` (a read-only volume; APFS, whose `RENAME_SWAP` swaps a bundle atomically) and `access(W_OK)` on
 //!   the bundle and its folder; a translocated copy by its path;
-//! - Windows (W): the per-user install folder's writability, NTFS rename semantics. Until then `place` answers
+//! - Windows (later): the per-user install folder's writability, NTFS rename semantics. Until then `place` answers
 //!   `Unknown`: the `process::running_from` stub can't see processes, so an install would otherwise take "nothing
 //!   runs" for an answer;
-//! - Linux: `$APPIMAGE`'s writability; a Flatpak (`$FLATPAK_ID`) is managed (L: deb and rpm too).
+//! - Linux: `$APPIMAGE`'s writability; a Flatpak (`$FLATPAK_ID`) is managed (later: deb and rpm too).
 
 use std::cmp::Ordering;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
-// Move to Applications' steps: only macOS has the move (W's installer and L's package places the app).
+// Move to Applications' steps: only macOS has the move (on Windows and Linux the installer or package places the app).
 #[cfg(any(target_os = "macos", test))]
 pub(crate) mod moving;
 
@@ -94,7 +94,7 @@ pub fn bundle() -> Option<PathBuf> {
 }
 
 /// Where `bundle` sits, read from the OS, then `classify`. `Unknown` when the OS can't describe its volume (it is
-/// gone), and on Windows until W (tests can set it: `fake::set_install_place`).
+/// gone), and on Windows for now (tests can set it: `fake::set_install_place`).
 pub fn place(bundle: &Path) -> InstallPlace {
     #[cfg(any(test, feature = "fake"))]
     if let Some(place) = crate::fake::install_place_override() {
@@ -110,14 +110,14 @@ pub enum MoveError {
     NewerInstalled(String),
     /// Another app named Klipolo.app is there: it stays, and nothing was copied.
     NameTaken,
-    /// This account may not write /Applications, where a Klipolo already is (an administrator's copy): nothing is copied
+    /// This account may not write /Applications, where a Klipolo already is (an administrator's copy): nothing is
     /// copied to ~/Applications beside it, so there are never two. The person opens that one.
     InApplications,
     /// The copy couldn't take its place, and the older Klipolo it replaced couldn't be put back: that one is in the
     /// Trash, where Put Back works (logged).
     LeftInTrash(io::Error),
-    /// Copying, the Trash or the rename failed; nothing else changed (an older Klipolo is where it was). W and L:
-    /// `Unsupported`.
+    /// Copying, the Trash or the rename failed; nothing else changed (an older Klipolo is where it was). Windows and
+    /// Linux: `Unsupported`.
     Io(io::Error),
 }
 

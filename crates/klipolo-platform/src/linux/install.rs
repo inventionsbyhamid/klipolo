@@ -1,5 +1,5 @@
-//! Where Klipolo runs from on Linux (until L): an AppImage (`$APPIMAGE`), judged by `statvfs` and `access`; a Flatpak
-//! (`$FLATPAK_ID`) is managed. L: deb and rpm installs (managed too), and AppImage's own updater.
+//! Where Klipolo runs from on Linux, for now: an AppImage (`$APPIMAGE`), judged by `statvfs` and `access`; a Flatpak
+//! (`$FLATPAK_ID`) is managed. Later: deb and rpm installs (managed too), and AppImage's own updater.
 
 use std::ffi::{CString, OsString};
 use std::io;
@@ -21,8 +21,8 @@ pub(crate) fn bundle() -> Option<PathBuf> {
 }
 
 /// `statvfs`'s `ST_RDONLY` and `access(W_OK)` on the bundle and its folder. One file system's `rename(2)` replaces a
-/// file atomically, so the swap is atomic wherever the copy is writable (L: FUSE and exFAT mounts). Unknown when the
-/// volume can't be read, unless the copy is managed.
+/// file atomically, so the swap is atomic wherever the copy is writable (later: FUSE and exFAT mounts). Unknown when
+/// the volume can't be read, unless the copy is managed.
 pub(crate) fn install_place(bundle: &Path) -> InstallPlace {
     let managed = set("FLATPAK_ID").is_some();
     let Some(read_only) = read_only(bundle) else {
@@ -38,7 +38,7 @@ pub(crate) fn install_place(bundle: &Path) -> InstallPlace {
         read_only_volume: read_only,
         managed,
         atomic_swap: true,
-        // L: `chattr +i` and network mounts.
+        // Later: `chattr +i` and network mounts.
         locked: false,
         network: false,
     };

@@ -1,6 +1,5 @@
-//! Klipolo's OS services. Each
-//! module exposes one API; the backend for the OS this build targets implements it:
-//! - `macos`: today's code, moved here unchanged;
+//! Klipolo's OS services. Each module exposes one API; the backend for the OS this build targets implements it:
+//! - `macos`: the full backend;
 //! - `windows` and `linux`: compiling stubs that degrade honestly (no QoS, no activity, normal memory pressure, no
 //!   route changes), plus the simple real clock, durable-file and process code;
 //! - `fake`: test doubles (a settable clock, recorded durable writes, capabilities).

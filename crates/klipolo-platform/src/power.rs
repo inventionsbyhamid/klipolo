@@ -1,9 +1,8 @@
 //! Keeps the OS from napping or idle-sleeping the process while an export runs (`begin`) or a take records
 //! (`begin_capture`), and says how hot the computer runs, how much battery it has left, whether Low Power Mode is on
 //! and when the computer wakes (update downloads and uploads wait in Low Power Mode, and a wake is a moment to check).
-//! check).
-//! macOS: an NSProcessInfo activity (the spike saw ~10× slowdowns when App-Napped). Windows (W:
-//! `PowerSetRequest`) and Linux (L: a logind or portal inhibit) hold nothing yet.
+//! macOS: an NSProcessInfo activity (an App-Napped process measured ~10× slower). Windows (later: `PowerSetRequest`)
+//! and Linux (later: a logind or portal inhibit) hold nothing yet.
 
 use std::sync::{Arc, Once};
 
@@ -31,9 +30,10 @@ pub fn begin_capture(reason: &str) -> Activity {
 
 /// How hot the computer runs. Background work (editing copies) pauses at `Serious` or worse.
 /// - macOS: `NSProcessInfo.thermalState`.
-/// - Windows (W): no public thermal state; the effective power mode (`PowerRegisterForEffectivePowerModeNotifications`)
-///   maps battery saver to `Fair`. Stub: `Nominal`.
-/// - Linux (L): power-profiles-daemon's `PerformanceDegraded`, else the thermal zones' trip points. Stub: `Nominal`.
+/// - Windows (later): no public thermal state; the effective power mode
+///   (`PowerRegisterForEffectivePowerModeNotifications`) maps battery saver to `Fair`. Stub: `Nominal`.
+/// - Linux (later): power-profiles-daemon's `PerformanceDegraded`, else the thermal zones' trip points. Stub:
+///   `Nominal`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Thermal {
     Nominal,
@@ -81,9 +81,9 @@ pub fn battery() -> Option<Battery> {
     None
 }
 
-/// Low Power Mode (macOS 12+: `NSProcessInfo.isLowPowerModeEnabled`); Windows battery saver (W); power-profiles-daemon's
-/// `power-saver` (L): the OS slows the computer down to save its battery. False when unknown (tests can set it:
-/// `fake::set_low_power`).
+/// Low Power Mode (macOS 12+: `NSProcessInfo.isLowPowerModeEnabled`); later Windows battery saver and
+/// power-profiles-daemon's `power-saver` on Linux: the OS slows the computer down to save its battery. False when
+/// unknown (tests can set it: `fake::set_low_power`).
 pub fn low_power() -> bool {
     #[cfg(any(test, feature = "fake"))]
     if let Some(on) = crate::fake::low_power_override() {
@@ -95,8 +95,8 @@ pub fn low_power() -> bool {
 static WAKE: Listeners<dyn Fn() + Send + Sync> = Listeners::new();
 
 /// `f` runs after the computer wakes from sleep (macOS `NSWorkspaceDidWakeNotification`, on the main thread where
-/// AppKit posts it: keep it short; W: `RegisterSuspendResumeNotification`; L: logind `PrepareForSleep(false)`). Stubs
-/// never call it (tests can: `fake::wake`).
+/// AppKit posts it: keep it short; later Windows `RegisterSuspendResumeNotification` and Linux logind
+/// `PrepareForSleep(false)`). Stubs never call it (tests can: `fake::wake`).
 pub fn on_wake(f: impl Fn() + Send + Sync + 'static) {
     WAKE.add(Arc::new(f));
     static WATCHING: Once = Once::new();
