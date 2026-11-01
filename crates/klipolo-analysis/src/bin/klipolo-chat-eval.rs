@@ -1078,8 +1078,23 @@ fn layer_said(c: &klipolo_chat::tools::LayerChange) -> Vec<Value> {
         ("corners", c.corners),
         ("fadeIn", c.fade_in_us.map(s)),
         ("fadeOut", c.fade_out_us.map(s)),
+        ("start", c.start_us.map(s)),
+        ("length", c.length_us.map(s)),
     ] {
         out.extend(value.map(|v| pair(key, json!(v))));
+    }
+    out.extend(c.crop.map(|k| {
+        let said = if k.is_none() {
+            "none".to_owned()
+        } else {
+            format!("{} {} {} {}", k.left, k.top, k.right, k.bottom)
+        };
+        pair("crop", json!(said))
+    }));
+    for (key, on) in [("remove", c.remove), ("separate", c.separate)] {
+        if on {
+            out.push(pair(key, json!(true)));
+        }
     }
     out.extend(c.blend.map(|b| pair("blend", json!(word(&b)))));
     out.extend(c.fill.map(|f| pair("fill", json!(f))));

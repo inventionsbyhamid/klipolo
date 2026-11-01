@@ -132,7 +132,7 @@ fn music<'l>(c: &'l Compiler, asked: &str) -> Result<&'l LibraryItem, Refused> {
 /// Where a media call's time plays in `work`: the playhead when the model gave none, else its time standing on the
 /// evidence (`Evidence::moment`) or refused, naming `field`. A time past the main track's end keeps its distance from
 /// it. Nothing starts at the video's end or past it (refused, so no layer ever makes the video longer).
-fn start(
+pub(super) fn start(
     c: &Compiler,
     work: &Project,
     tool: &str,

@@ -23,12 +23,16 @@ pub enum Order {
 }
 
 /// The keys `setLayer` takes.
-pub const LAYER_KEYS: [&str; 11] = [
-    "box", "rotation", "opacity", "corners", "blend", "crop", "fill", "order", "fadeIn", "fadeOut",
-    "duck",
+pub const LAYER_KEYS: [&str; 15] = [
+    "box", "rotation", "opacity", "corners", "blend", "crop", "fill", "order", "start", "length",
+    "remove", "fadeIn", "fadeOut", "duck", "separate",
 ];
 /// How long a fade may be, in seconds.
 pub const FADE_SECS: (f64, f64) = (0.0, 10.0);
+/// How long a layer may be made, in seconds.
+pub const LENGTH_SECS: (f64, f64) = (0.1, 3600.0);
+/// The latest a layer may start, in seconds.
+const LONGEST: f64 = (klipolo_model::time::MAX_TIME_US / klipolo_model::time::US_PER_SEC) as f64;
 const BLENDS: [(&str, Blend); 5] = [
     ("normal", Blend::Normal),
     ("multiply", Blend::Multiply),
@@ -62,13 +66,21 @@ pub struct LayerChange {
     pub fade_in_us: Option<Us>,
     pub fade_out_us: Option<Us>,
     pub duck: Option<bool>,
+    /// Where a layer starts, in timeline time as the context shows it, and how long it lasts.
+    pub start_us: Option<Us>,
+    pub length_us: Option<Us>,
+    /// Take the layer (or the song) away: a removal, proposed.
+    pub remove: bool,
+    /// Put an imported clip's sound on a layer of its own.
+    pub separate: bool,
 }
 
 pub(super) const SET_LAYER: Tool = Tool {
     name: "setLayer",
     description: "A layer's or clip's card fields. Keys: box (\"x y w h\", frame shares from the top left), \
                   rotation, opacity, corners (0 to 0.5), blend (normal, multiply, screen, add, overlay), order (forward, \
-                  back); video layers: crop (\"l t r b\" or none), fill; clips and music: fadeIn, fadeOut (s); music: duck.",
+                  back), start (timeline s), length (s), remove; video layers: crop (\"l t r b\" or none), fill; clips: crop, \
+                  separate (its sound); clips and music: fadeIn, fadeOut (s); music: duck.",
     parameters: || vec![layer_field(), ("set", schema("Keys to set."))],
     read: |a| {
         let layer = a.layer_ref("layer")?;
@@ -132,6 +144,13 @@ pub(super) const SET_LAYER: Tool = Tool {
                 "fadeIn" => change.fade_in_us = Some(secs_to_us(p.number(a, FADE_SECS)?)),
                 "fadeOut" => change.fade_out_us = Some(secs_to_us(p.number(a, FADE_SECS)?)),
                 "duck" => change.duck = Some(p.flag(a)?),
+                "start" => {
+                    let secs = p.number(a, (0.0, LONGEST))?;
+                    change.start_us = Some(secs_to_us(secs));
+                }
+                "length" => change.length_us = Some(secs_to_us(p.number(a, LENGTH_SECS)?)),
+                "remove" => change.remove = p.flag(a)?,
+                "separate" => change.separate = p.flag(a)?,
                 _ => {
                     change.order = Some(match p.word(a, &["forward", "back"])? {
                         "forward" => Order::Forward,

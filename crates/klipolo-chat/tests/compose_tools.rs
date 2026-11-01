@@ -879,7 +879,7 @@ fn fades_and_ducking_go_on_clips_and_music() {
             set("c1", json!([{"key": "opacity", "value": 0.5}])),
         )],
     );
-    assert!(refused_to_model(&out, 0).contains("takes only fadeIn and fadeOut"));
+    assert!(refused_to_model(&out, 0).contains("takes only crop, separate, fadeIn and fadeOut"));
     let out = run(
         &p,
         &[(
@@ -888,7 +888,7 @@ fn fades_and_ducking_go_on_clips_and_music() {
         )],
     );
     assert!(
-        refused_to_model(&out, 0).contains("is music, which takes only fadeIn, fadeOut and duck")
+        refused_to_model(&out, 0).contains("is music, which takes only fadeIn, fadeOut, duck and remove")
     );
 }
 
@@ -1182,4 +1182,105 @@ fn the_context_says_animated_words_keys_and_effects() {
             "m1 0.0-30.0 lofi.mp3 (music, volume 30%)",
         ]
     );
+}
+
+#[test]
+fn a_layer_moves_to_a_time_the_context_shows_lasts_as_long_as_asked_and_its_removal_is_proposed() {
+    let p = project();
+    let out = run(
+        &p,
+        &[(
+            "setLayer",
+            set(
+                "i1",
+                json!([{"key": "start", "value": 0}, {"key": "length", "value": 8}]),
+            ),
+        )],
+    );
+    let after = applied(&p, &out);
+    let heart = picture(&after);
+    assert_eq!((heart.start_us, heart.duration_us), (0, secs(8.0)));
+    // A shorter layer loses what it showed: proposed, as every removal is.
+    let shorter = run(
+        &p,
+        &[(
+            "setLayer",
+            set("i1", json!([{"key": "length", "value": 2.5}])),
+        )],
+    );
+    assert_eq!(shorter.proposed_calls, [0]);
+    // A start nothing in the context stands on goes back to the model.
+    let out = run(
+        &p,
+        &[(
+            "setLayer",
+            set("i1", json!([{"key": "start", "value": 17.3}])),
+        )],
+    );
+    assert!(refused_to_model(&out, 0).contains("setLayer: start 17.3 is not within 0.3 s of"));
+    let gone = run(
+        &p,
+        &[(
+            "setLayer",
+            set("i1", json!([{"key": "remove", "value": true}])),
+        )],
+    );
+    assert!(gone.additions.is_none());
+    assert_eq!(gone.proposed_calls, [0]);
+    assert_eq!(gone.proposal.as_ref().unwrap().tx.label, "chat.removeLayer");
+    let out = run(
+        &p,
+        &[(
+            "setLayer",
+            set(
+                "i1",
+                json!([{"key": "remove", "value": true}, {"key": "opacity", "value": 1}]),
+            ),
+        )],
+    );
+    assert!(refused_to_model(&out, 0).contains("remove takes a layer away, so it goes alone"));
+    let music = run(
+        &p,
+        &[(
+            "setLayer",
+            set("m1", json!([{"key": "remove", "value": true}])),
+        )],
+    );
+    assert_eq!(music.proposed_calls, [0]);
+    let start = call("setLayer", set("i1", json!([{"key": "start", "value": 0}])));
+    assert!(start.names_timeline());
+}
+
+#[test]
+fn a_clip_takes_a_crop_and_its_sound_on_a_layer_of_its_own() {
+    let p = project();
+    let out = run(
+        &p,
+        &[(
+            "setLayer",
+            set(
+                "c1",
+                json!([{"key": "crop", "value": "0.1 0 0.1 0"}, {"key": "separate", "value": true}]),
+            ),
+        )],
+    );
+    let after = applied(&p, &out);
+    let clip = &after.timeline.main[0];
+    assert_eq!(clip.crop.unwrap().left, 0.1);
+    assert!(clip.muted, "its sound plays from its own layer now");
+    let sound = layer(&after, |i| i.id.starts_with("c-sound"));
+    assert!(matches!(sound.content, ItemContent::Audio { .. }));
+    let out = run(
+        &p,
+        &[("setLayer", set("c1", json!([{"key": "start", "value": 0}])))],
+    );
+    assert!(refused_to_model(&out, 0).contains("trimClip or cutRange"));
+    let out = run(
+        &p,
+        &[(
+            "setLayer",
+            set("i1", json!([{"key": "separate", "value": true}])),
+        )],
+    );
+    assert!(refused_to_model(&out, 0).contains("separate is for imported clips"));
 }

@@ -13,22 +13,46 @@ use klipolo_model::ids::Id;
 use klipolo_model::layout::anchor_for_rect;
 use klipolo_model::media::music::{MUSIC_DUCK_DB, runs};
 use klipolo_model::motion::Blend;
-use klipolo_model::ops::{ClipPatch, ItemPatch, Op};
+use klipolo_model::ops::{ClipPatch, Edge, ItemPatch, Op};
 use klipolo_model::timeline::{ItemContent, TrackKind};
 
 use super::animate::noun;
 use super::motion::drawn;
-use super::{Edit, Refused, label, to_model};
+use super::{Compiler, Edit, Refused, label, to_model};
 use crate::tools::{LayerChange, Order};
 
 /// `setLayer` on the layer `id` of `work`, named `said`: its layout and a video layer's crop and framing in one
-/// `UpdateItem`, then its move up or down the stack.
+/// `UpdateItem`, then its move up or down the stack, to a new start (a time the context shows, as a media tool's start
+/// is checked) and to a new length. Taking it away (`remove`) goes alone: a removal the compiler proposes.
 pub(super) fn set_layer(
+    c: &Compiler,
     work: &Project,
     (id, said): (&Id, &str),
     change: &LayerChange,
 ) -> Result<Edit, Refused> {
     let item = drawn(work, (id, said), "setLayer")?;
+    if change.remove {
+        if *change
+            != (LayerChange {
+                remove: true,
+                ..LayerChange::default()
+            })
+        {
+            return Err(to_model(
+                "setLayer: remove takes a layer away, so it goes alone: leave the other keys out."
+                    .to_owned(),
+            ));
+        }
+        return Ok(Edit {
+            ops: vec![Op::RemoveItem { id: id.clone() }],
+            label: label("removeLayer", vec![("layer", ErrorParam::from(noun(item)))]),
+        });
+    }
+    if change.separate {
+        return Err(to_model(format!(
+            "setLayer: separate is for imported clips (c1), and {said} is a layer. Leave it out."
+        )));
+    }
     if change.fade_in_us.is_some() || change.fade_out_us.is_some() || change.duck.is_some() {
         return Err(to_model(format!(
             "setLayer: fadeIn, fadeOut and duck are for clips and music, and {said} is a layer. Fade a layer in or \
@@ -93,6 +117,25 @@ pub(super) fn set_layer(
     if let Some(order) = change.order {
         ops.push(step(work, id, said, order)?);
     }
+    let start = match change.start_us {
+        Some(at) => {
+            let now = super::media::start(c, work, "setLayer", "start", Some(at))?;
+            ops.push(Op::MoveItem {
+                id: id.clone(),
+                track_id: None,
+                start_us: now,
+            });
+            now
+        }
+        None => item.start_us,
+    };
+    if let Some(length) = change.length_us {
+        ops.push(Op::TrimItem {
+            id: id.clone(),
+            edge: Edge::End,
+            at_us: start.saturating_add(length),
+        });
+    }
     let edit = Edit {
         ops,
         label: label("setLayer", vec![("layer", ErrorParam::from(noun(item)))]),
@@ -135,7 +178,7 @@ fn step(work: &Project, id: &Id, said: &str, order: Order) -> Result<Op, Refused
 }
 
 /// What `change` sets beyond a clip's or a song's fades and ducking, by key, for a refusal.
-fn beyond_sound(change: &LayerChange, duck: bool) -> Option<&'static str> {
+fn beyond_sound(change: &LayerChange, song: bool) -> Option<&'static str> {
     let c = change;
     [
         (c.rect.is_some(), "box"),
@@ -143,17 +186,22 @@ fn beyond_sound(change: &LayerChange, duck: bool) -> Option<&'static str> {
         (c.opacity.is_some(), "opacity"),
         (c.corners.is_some(), "corners"),
         (c.blend.is_some(), "blend"),
-        (c.crop.is_some(), "crop"),
+        (c.crop.is_some() && song, "crop"),
         (c.fill.is_some(), "fill"),
         (c.order.is_some(), "order"),
-        (c.duck.is_some() && !duck, "duck"),
+        (c.start_us.is_some(), "start"),
+        (c.length_us.is_some(), "length"),
+        (c.remove && !song, "remove"),
+        (c.separate && song, "separate"),
+        (c.duck.is_some() && !song, "duck"),
     ]
     .into_iter()
     .find_map(|(set, key)| set.then_some(key))
 }
 
 /// `setLayer` on the main track's clip `id`, named `said`: its fades, as the clip card's Fade in and Fade out set
-/// them. A fade where a transition already blends the cut is refused, as the card refuses it.
+/// them, its crop, and its sound put on a layer of its own (an imported clip's, as Separate sound does). A fade where a
+/// transition already blends the cut is refused, as the card refuses it.
 pub(super) fn set_clip_fades(
     work: &Project,
     (id, said): (&Id, &str),
@@ -161,8 +209,8 @@ pub(super) fn set_clip_fades(
 ) -> Result<Edit, Refused> {
     if let Some(key) = beyond_sound(change, false) {
         return Err(to_model(format!(
-            "setLayer: {said} is a clip, which takes only fadeIn and fadeOut here, not {key}. Use setClip for its \
-             speed, volume or framing."
+            "setLayer: {said} is a clip, which takes only crop, separate, fadeIn and fadeOut here, not {key}. Use \
+             setClip for its speed, volume or framing, trimClip or cutRange for its length."
         )));
     }
     let main = &work.timeline.main;
@@ -194,18 +242,36 @@ pub(super) fn set_clip_fades(
             crate::context::secs(length)
         )));
     }
-    let ops = if (fade_in, fade_out) == (clip.fade_in_us, clip.fade_out_us) {
-        Vec::new()
-    } else {
-        vec![Op::UpdateClip {
+    let crop = change
+        .crop
+        .filter(|c| (!c.is_none()).then_some(*c) != clip.crop);
+    let fades = (fade_in, fade_out) != (clip.fade_in_us, clip.fade_out_us);
+    let mut ops = Vec::new();
+    if fades || crop.is_some() {
+        ops.push(Op::UpdateClip {
             id: id.clone(),
             patch: ClipPatch {
-                fade_in_us: change.fade_in_us,
-                fade_out_us: change.fade_out_us,
+                fade_in_us: change.fade_in_us.filter(|_| fades),
+                fade_out_us: change.fade_out_us.filter(|_| fades),
+                crop,
                 ..ClipPatch::default()
             },
-        }]
-    };
+        });
+    }
+    if change.separate {
+        let imported = matches!(
+            clip.source,
+            klipolo_model::timeline::ClipSource::Asset { .. }
+        );
+        if !imported {
+            return Err(to_model(format!(
+                "setLayer: {said} is a recording, whose sounds separateSound puts on tracks of their own."
+            )));
+        }
+        ops.push(Op::DetachSound {
+            clip_id: id.clone(),
+        });
+    }
     Ok(Edit {
         ops,
         label: label("setLayer", vec![("layer", ErrorParam::from("clip"))]),
@@ -221,7 +287,7 @@ pub(super) fn set_song_sound(
 ) -> Result<Edit, Refused> {
     if let Some(key) = beyond_sound(change, true) {
         return Err(to_model(format!(
-            "setLayer: {said} is music, which takes only fadeIn, fadeOut and duck here, not {key}."
+            "setLayer: {said} is music, which takes only fadeIn, fadeOut, duck and remove here, not {key}."
         )));
     }
     let song = (work.timeline.tracks.iter())
@@ -231,6 +297,26 @@ pub(super) fn set_song_sound(
     let Some(pieces) = song else {
         return Err(to_model(format!("setLayer: {said} is gone.")));
     };
+    if change.remove {
+        if *change
+            != (LayerChange {
+                remove: true,
+                ..LayerChange::default()
+            })
+        {
+            return Err(to_model(
+                "setLayer: remove takes the music away, so it goes alone: leave the other keys out.".to_owned(),
+            ));
+        }
+        return Ok(Edit {
+            ops: (pieces.iter())
+                .map(|piece| Op::RemoveItem {
+                    id: piece.id.clone(),
+                })
+                .collect(),
+            label: label("removeLayer", vec![("layer", ErrorParam::from("music"))]),
+        });
+    }
     let last = pieces.len() - 1;
     let mut ops = Vec::new();
     for (k, piece) in pieces.iter().enumerate() {

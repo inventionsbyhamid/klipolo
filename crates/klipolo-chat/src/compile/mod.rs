@@ -541,6 +541,8 @@ enum Removal<'c> {
     Longer(Trim),
     /// `setEffects` taking an effect off: its target, resolved when it was tried, and its changes.
     Effects(effects::Target, &'c [EffectChange]),
+    /// A layer tool's edit that takes a layer away (`setLayer` remove), as it was made: its ops name the layer by id.
+    Made(&'static str, Edit),
 }
 
 struct Compiler<'a> {
@@ -804,6 +806,10 @@ impl Compiler<'_> {
                             waiting.push((i, Removal::Effects(target, effects)));
                         }
                     }
+                    // A layer or a song taken away: proposed too, its ops as they were made (they name it by id).
+                    (Ok(tried), None) if tried.removes => {
+                        waiting.push((i, Removal::Made(call.name(), tried.edit)));
+                    }
                     (Ok(tried), _) => {
                         if let Some(said) = done.note.filter(|_| tried.after.is_some()) {
                             notes.push((i, said));
@@ -955,6 +961,7 @@ impl Compiler<'_> {
                 Removal::Effects(t, changes) => {
                     ("setEffects", effects::set_effects(work, &t, changes))
                 }
+                Removal::Made(name, edit) => (name, Ok(edit)),
             };
             let added = edit.and_then(|edit| {
                 let mut tried =
@@ -1144,7 +1151,9 @@ impl Compiler<'_> {
             ToolCall::AnimateText { motion: m, .. } => {
                 text_motion::animate_text(work, target, m).map(done)
             }
-            ToolCall::SetLayer { change, .. } => layer::set_layer(work, target, change).map(done),
+            ToolCall::SetLayer { change, .. } => {
+                layer::set_layer(self, work, target, change).map(done)
+            }
             ToolCall::StyleText { change, .. } => style::style_text(self, work, target, change)
                 .map(|(edit, download)| {
                     Some(Done {
