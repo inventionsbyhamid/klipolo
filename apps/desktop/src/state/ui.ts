@@ -1,12 +1,11 @@
 import { create } from 'zustand';
 import type { FormatKind } from '../bindings/FormatKind';
 import type { Theme } from '../bindings/Theme';
-import type { SafeAreaId } from '../lib/safeAreas';
+import { SAFE_AREA_IDS, type SafeAreaId } from '../lib/safeAreas';
 
 /**
- * The view settings the editor reads: the timeline's zoom and snapping, the format the preview shows, and the theme. Panel
- * widths and heights live in Klipolo's layout (the CSS grid's variables), not here. The timeline always shows its four
- * lanes (`timelineExpanded` is never on).
+ * The view settings the editor reads: the timeline's zoom, snapping and track view, the format the preview shows, and
+ * the theme. Panel widths and heights live in Klipolo's layout (the CSS grid's variables), not here.
  */
 interface UiStore {
   /** Timeline zoom: pixels per second of video. Any zoom pays a fit still owed (`fitOwed`): the person's stays. */
@@ -21,14 +20,16 @@ interface UiStore {
   /** Dragged blocks snap to the playhead, cuts and edges. */
   snapping: boolean;
   setSnapping: (snapping: boolean) => void;
-  readonly timelineExpanded: false;
+  /** Show all tracks: every track in a row of its own with its header, instead of the four lanes. */
+  timelineExpanded: boolean;
+  setTimelineExpanded: (expanded: boolean) => void;
   /** The format the preview shows; null: the project's primary one. */
   previewFormat: FormatKind | null;
   setPreviewFormat: (format: FormatKind | null) => void;
   /** Bumped by Command K: the chat panel opens and puts the cursor in its composer. */
   chatFocus: number;
   focusChat: () => void;
-  /** The 9:16 safe area the preview shows ("Show safe area"), or off. */
+  /** The 9:16 safe area the preview shows (the safe area menu), or off. Kept on this Mac, with `lastSafeArea`. */
   safeArea: SafeAreaId;
   /** The area shown last (what a drag in 9:16 shows and snaps to while it's off). */
   lastSafeArea: SafeAreaId;
@@ -53,6 +54,35 @@ export type LibraryTab = 'clips' | 'music' | 'sounds' | 'images';
 
 /** Where the Auto copies switch is kept (local storage: `off` when the person turned it off). */
 const AUTO_COPIES = 'klipolo.autoCopies';
+
+/** Where the safe area choice is kept (local storage): the area shown and the one chosen last, as JSON. */
+const SAFE_AREA = 'klipolo.safeArea';
+
+type SafeAreaKept = Pick<UiStore, 'safeArea' | 'lastSafeArea'>;
+
+/** The safe area as the person left it: each part as kept when it's one Klipolo knows, else off and all platforms. */
+function keptSafeArea(): SafeAreaKept {
+  const kept: SafeAreaKept = { safeArea: 'off', lastSafeArea: 'all' };
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(SAFE_AREA) ?? 'null');
+    if (!saved || typeof saved !== 'object') return kept;
+    const { safeArea, lastSafeArea } = saved as Record<string, unknown>;
+    if (SAFE_AREA_IDS.includes(safeArea as SafeAreaId)) kept.safeArea = safeArea as SafeAreaId;
+    if (lastSafeArea !== 'off' && SAFE_AREA_IDS.includes(lastSafeArea as SafeAreaId))
+      kept.lastSafeArea = lastSafeArea as SafeAreaId;
+  } catch {
+    // Unreadable or refused: as the first time.
+  }
+  return kept;
+}
+
+function keepSafeArea(kept: SafeAreaKept) {
+  try {
+    localStorage.setItem(SAFE_AREA, JSON.stringify(kept));
+  } catch {
+    // Storage refused: the choice holds for this session.
+  }
+}
 
 /** The Auto copies switch as the person left it; on when nothing was kept, or storage is refused. */
 function keptAutoCopies(): boolean {
@@ -88,14 +118,18 @@ export const useUi = create<UiStore>((set) => ({
   snapping: true,
   setSnapping: (snapping) => set({ snapping }),
   timelineExpanded: false,
+  setTimelineExpanded: (timelineExpanded) => set({ timelineExpanded }),
   previewFormat: null,
   setPreviewFormat: (previewFormat) => set({ previewFormat }),
   chatFocus: 0,
   focusChat: () => set((s) => ({ chatFocus: s.chatFocus + 1 })),
-  safeArea: 'off',
-  lastSafeArea: 'all',
+  ...keptSafeArea(),
   setSafeArea: (safeArea) =>
-    set((s) => ({ safeArea, lastSafeArea: safeArea === 'off' ? s.lastSafeArea : safeArea })),
+    set((s) => {
+      const next = { safeArea, lastSafeArea: safeArea === 'off' ? s.lastSafeArea : safeArea };
+      keepSafeArea(next);
+      return next;
+    }),
   libraryTab: 'clips',
   setLibraryTab: (libraryTab) => set({ libraryTab }),
   autoCopies: keptAutoCopies(),

@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react';
 import { ToggleGroup } from 'radix-ui';
 import { cn } from './cn';
 import { Tooltip } from './Tooltip';
@@ -7,6 +8,8 @@ interface SegmentedOption<T extends string> {
   label: string;
   /** Says more than the label, e.g. what "Fill" does. */
   tooltip?: string;
+  /** Drawn instead of the label, which then names the option and is its tooltip. */
+  icon?: LucideIcon;
   /** Can't be chosen now (a fade longer than the clip); `describedBy` names the note that says why. */
   disabled?: boolean;
   /** Id of a note that explains the option, e.g. why it is off. */
@@ -26,7 +29,7 @@ interface SegmentedProps<T extends string> {
 
 /**
  * A segmented control: a raised track with 3 px padding, small options in ink-soft, the checked one a paper
- * pill with on-paper text. A radio group: the arrow keys move.
+ * pill with on-paper text. A radio group: the arrow keys move. An option with an icon shows it alone, named by its label.
  */
 export function Segmented<T extends string>({
   label,
@@ -45,15 +48,23 @@ export function Segmented<T extends string>({
       onValueChange={(next) => next && onChange(next as T)}
       className={cn('seg seg-sm', fill && 'seg-fill')}
     >
-      {options.map(({ value: option, label: name, tooltip, disabled: off, describedBy }) => {
+      {options.map(({ value: option, label: name, tooltip, icon: OptionIcon, disabled: off, describedBy }) => {
         // Styled from aria-checked, not data-state: a tooltip trigger sets its own data-state on the same element.
         const item = (
-          <ToggleGroup.Item key={option} value={option} disabled={off} aria-describedby={describedBy}>
-            {name}
+          <ToggleGroup.Item
+            key={option}
+            value={option}
+            disabled={off}
+            aria-describedby={describedBy}
+            aria-label={OptionIcon ? name : undefined}
+            className={OptionIcon ? 'seg-icon' : undefined}
+          >
+            {OptionIcon ? <OptionIcon size={14} strokeWidth={1.8} aria-hidden /> : name}
           </ToggleGroup.Item>
         );
-        return tooltip ? (
-          <Tooltip key={option} label={tooltip}>
+        const tip = tooltip ?? (OptionIcon ? name : undefined);
+        return tip ? (
+          <Tooltip key={option} label={tip}>
             {item}
           </Tooltip>
         ) : (

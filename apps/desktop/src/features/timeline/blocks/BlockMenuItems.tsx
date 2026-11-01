@@ -3,9 +3,19 @@ import { useLingui } from '@lingui/react/macro';
 import { Fragment } from 'react';
 import { ContextMenuItem, ContextMenuSeparator } from '../../../design/ContextMenu';
 import { recordingCameras } from '../../../lib/camera';
-import { findClip, findItem, hasOwnSound, itemLabel, sourceLabel } from '../../../lib/timeline';
+import {
+  clipLabel,
+  clipReverseState,
+  clipSoundState,
+  findClip,
+  findItem,
+  hasOwnSound,
+  isFreeze,
+  itemLabel,
+} from '../../../lib/timeline';
 import { useProject } from '../../../state/project';
 import { useSelection } from '../../../state/selection';
+import { useUi } from '../../../state/ui';
 import type { Command } from '../../command-palette/command';
 import { useCommands } from '../../command-palette/useCommands';
 import { transitionLabels } from '../keys/transitionActions';
@@ -16,7 +26,7 @@ export function blockMenuLabel(id: string): string | undefined {
   if (!project) return undefined;
   const found = findItem(project, id);
   const clip = found ? null : findClip(project, id);
-  const label = found ? itemLabel(project, found.item) : clip ? sourceLabel(project, clip.source) : null;
+  const label = found ? itemLabel(project, found.item) : clip ? clipLabel(project, clip) : null;
   if (label === null) return undefined;
   return t({
     id: 'timeline.menu.name',
@@ -34,6 +44,7 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const { t } = useLingui();
   const commands = useCommands();
   const project = useProject((s) => s.snapshot?.project);
+  const expanded = useUi((s) => s.timelineExpanded);
   const byId = new Map(commands.map((c) => [c.id, c]));
   const found = project ? findItem(project, blockId) : null;
   // A clip with one after it and no transition into it yet (one it has is selected at its cut). A video's only clip
@@ -43,7 +54,12 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const transitionAfter = at >= 0 && at + 1 < main.length && !main[at].transitionOut;
   const onlyClip = at === 0 && main.length === 1;
   // A recording clip with a camera beside its footage: Separate camera (off, saying why, once it is a layer).
-  const hasCamera = at >= 0 && !!project && !!main[at].camera && recordingCameras(project, main[at]).length > 0;
+  const hasCamera =
+    at >= 0 && !!project && !!main[at].camera && !isFreeze(main[at]) && recordingCameras(project, main[at]).length > 0;
+  // An imported clip whose file has sound: Separate sound (off, saying why, once it is a layer or while sped up).
+  const hasSound = at >= 0 && !!project && clipSoundState(project, at) !== 'none';
+  // An imported clip plays backward, or forward again: Reverse (off, saying why, while its sound is in a layer).
+  const turns = at >= 0 && !!project && ['backward', 'forward', 'separated'].includes(clipReverseState(project, at));
 
   // A sound layer, or a video layer whose file has sound, has Mute.
   const mutes = !!project && !!found && hasOwnSound(project, found.item);
@@ -55,6 +71,8 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const order = [
     { id: 'track-up', label: picture ? t({ id: 'timeline.menu.forward', message: 'Bring forward' }) : undefined },
     { id: 'track-down', label: picture ? t({ id: 'timeline.menu.back', message: 'Send back' }) : undefined },
+    // While every track shows, a layer can go onto a track of its own.
+    ...(expanded ? [{ id: 'layer-new-track' }] : []),
   ];
   const addTransition = {
     id: 'add-transition',
@@ -72,10 +90,19 @@ export function BlockMenuItems({ blockId, kind }: { blockId: string; kind: 'clip
   const groups: { id: string; label?: string; off?: string }[][] =
     kind === 'clip'
       ? [
-          [split, ...(transitionAfter || onlyClip ? [addTransition] : [])],
+          [
+            split,
+            { id: 'freeze-frame' },
+            ...(turns ? [{ id: 'reverse' }] : []),
+            ...(transitionAfter || onlyClip ? [addTransition] : []),
+          ],
           [{ id: 'copy' }, { id: 'cut' }, { id: 'duplicate' }, { id: 'paste-effects' }],
           sounds,
-          [...(hasCamera ? [{ id: 'separate-camera' }] : []), ...separates],
+          [
+            ...(hasCamera ? [{ id: 'separate-camera' }] : []),
+            ...(hasSound ? [{ id: 'separate-sound' }] : []),
+            ...separates,
+          ],
           [{ id: 'delete' }],
         ]
       : [

@@ -13,6 +13,7 @@ import { MediaJobsFeed } from './features/media-jobs/MediaJobsFeed';
 import { RecordDialog } from './features/record/RecordDialog';
 import { StartScreen } from './features/start/StartScreen';
 import { followSpeech } from './features/timeline/media/speech';
+import { startFontsFeed } from './state/fonts';
 import { useEngineSession } from './features/preview/useEngineSession';
 import { Timeline } from './features/timeline/Timeline';
 import { Chat } from './layout/Chat';
@@ -131,6 +132,8 @@ export function App() {
     followEditorView();
     // What other apps do shows in chat, named for each app.
     void followApps();
+    // Downloaded and installed fonts: a download, a removal or this Mac's fonts arriving redraws the texts in them.
+    startFontsFeed();
     // The Music lane's dips: where someone speaks, asked again as the project changes.
     followSpeech();
     // Development builds only: Control Shift P a stand-in chat, Control Shift W sample words (`dev/devChat`).

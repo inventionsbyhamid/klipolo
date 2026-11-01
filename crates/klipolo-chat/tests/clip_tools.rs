@@ -321,6 +321,7 @@ fn inputs(p: &Project) -> Inputs {
         time_again: HashSet::new(),
         cursor: None,
         library: Library::default(),
+        fonts: Default::default(),
     }
 }
 

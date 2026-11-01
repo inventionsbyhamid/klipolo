@@ -564,7 +564,7 @@ impl Writer<'_> {
 }
 
 /// One picture packet into the MP4 (stream 0), in its time base.
-fn write_packet(
+pub(crate) fn write_packet(
     packet: &mut Packet,
     output: &mut Output,
     from: Rational,
@@ -579,7 +579,7 @@ fn write_packet(
 /// software with FFmpeg's frame threads, `threads` of them at most (0: on every core). Threads are set before the
 /// decoder opens, so the hardware try goes without them; should the hardware not start, the first frame says so and
 /// `write` makes the copy again here.
-fn open_decoder(
+pub(crate) fn open_decoder(
     params: &ffmpeg::codec::Parameters,
     tb: Rational,
     hardware: bool,
@@ -612,7 +612,7 @@ fn open_decoder(
 
 /// The decoded frame as a software frame of our own: a hardware frame downloaded, else the decoder's frame itself (moved
 /// out, no copy; the decoder fills an empty one next).
-fn take_software(frame: &mut ffmpeg::frame::Video) -> ffmpeg::frame::Video {
+pub(crate) fn take_software(frame: &mut ffmpeg::frame::Video) -> ffmpeg::frame::Video {
     // SAFETY: a plain field of a live frame.
     let on_gpu = unsafe { !(*frame.as_ptr()).hw_frames_ctx.is_null() };
     if on_gpu {
@@ -699,9 +699,24 @@ fn feed_sound(
 }
 
 /// Turns an NV12 picture `degrees` clockwise (90, 180 or 270) into `dst` (its sides swapped for a quarter turn).
-fn turn_nv12(src: &ffmpeg::frame::Video, dst: &mut ffmpeg::frame::Video, degrees: u16) {
+pub(crate) fn turn_nv12(src: &ffmpeg::frame::Video, dst: &mut ffmpeg::frame::Video, degrees: u16) {
+    turn_planes(src, dst, degrees, [1, 2]);
+}
+
+/// Turns a P010 picture (10-bit NV12: two bytes a sample) `degrees` clockwise into `dst`, as `turn_nv12`.
+pub(crate) fn turn_p010(src: &ffmpeg::frame::Video, dst: &mut ffmpeg::frame::Video, degrees: u16) {
+    turn_planes(src, dst, degrees, [2, 4]);
+}
+
+/// Turns a two-plane 4:2:0 picture whose luma and chroma pixels are `px` bytes each.
+fn turn_planes(
+    src: &ffmpeg::frame::Video,
+    dst: &mut ffmpeg::frame::Video,
+    degrees: u16,
+    px: [usize; 2],
+) {
     let (w, h) = (src.width() as usize, src.height() as usize);
-    for (plane, size, px) in [(0, (w, h), 1), (1, (w / 2, h / 2), 2)] {
+    for (plane, size, px) in [(0, (w, h), px[0]), (1, (w / 2, h / 2), px[1])] {
         let (src_stride, dst_stride) = (src.stride(plane), dst.stride(plane));
         turn_plane(
             src.data(plane),
@@ -715,7 +730,7 @@ fn turn_nv12(src: &ffmpeg::frame::Video, dst: &mut ffmpeg::frame::Video, degrees
     }
 }
 
-/// Turns a plane of `size` (width, height) pixels of `px` bytes each (1 or 2) `degrees` clockwise into `dst`.
+/// Turns a plane of `size` (width, height) pixels of `px` bytes each (1, 2 or 4) `degrees` clockwise into `dst`.
 fn turn_plane(
     src: &[u8],
     src_stride: usize,
@@ -725,10 +740,10 @@ fn turn_plane(
     dst: &mut [u8],
     dst_stride: usize,
 ) {
-    if px == 2 {
-        turn::<2>(src, src_stride, size, degrees, dst, dst_stride);
-    } else {
-        turn::<1>(src, src_stride, size, degrees, dst, dst_stride);
+    match px {
+        4 => turn::<4>(src, src_stride, size, degrees, dst, dst_stride),
+        2 => turn::<2>(src, src_stride, size, degrees, dst, dst_stride),
+        _ => turn::<1>(src, src_stride, size, degrees, dst, dst_stride),
     }
 }
 
@@ -766,9 +781,8 @@ fn turn<const PX: usize>(
             // SAFETY: x < w and y < h, so the source byte lies inside the source plane, and the turned pixel inside the
             // destination plane of `dw` × `dh`: both checked by the asserts above.
             unsafe {
-                *d = *s;
-                if PX == 2 {
-                    *d.wrapping_add(1) = *s.wrapping_add(1);
+                for b in 0..PX {
+                    *d.wrapping_add(b) = *s.wrapping_add(b);
                 }
             }
             s = s.wrapping_add(PX);

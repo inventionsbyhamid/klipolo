@@ -51,8 +51,13 @@ pub fn shapes_in(
         }
         let nudge = rec.screen().map_or(0, |s| s.nudge_us);
         let at = |t: Us| (clip.source_in_us + unscaled(t - start, clip.speed)).max(0) - nudge;
+        // A freeze frame shows the cursor's shape at its frame only.
+        let (from_us, to_us) = match clip.freeze_at_us {
+            Some(frame) => (frame.max(0) - nudge, frame.max(0) - nudge + 1),
+            None => (at(lo), at(hi)),
+        };
         cursors.with_take(&cursor.path, |key, take| {
-            for shape in take.track.shape_ids_in(at(lo), at(hi)) {
+            for shape in take.track.shape_ids_in(from_us, to_us) {
                 let Some(file) = take.shape_file(shape) else {
                     continue;
                 };

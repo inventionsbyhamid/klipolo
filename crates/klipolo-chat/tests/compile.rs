@@ -108,6 +108,7 @@ fn inputs(project: &Project, speech: Speech, message: &str) -> Inputs {
         time_again: HashSet::new(),
         cursor: None,
         library: Library::default(),
+        fonts: Default::default(),
     }
 }
 
@@ -1514,6 +1515,56 @@ fn split_snaps_to_evidence_but_is_never_refused() {
         anywhere.additions.expect("a split").ops,
         vec![Op::Split { at_us: secs(17.3) }]
     );
+}
+
+#[test]
+fn a_freeze_holds_the_frame_at_its_time_or_the_playhead_for_two_seconds_by_default() {
+    let p = broll(30.0);
+    let i = inputs(&p, Speech::default(), "freeze at 12 for 3 seconds");
+    let at = compile(
+        &p,
+        &i,
+        &[call("freezeFrame", r#"{"atSec": 12.1, "durationSec": 3}"#)],
+    );
+    let additions = at.additions.expect("a freeze applies at once");
+    assert_eq!(
+        additions.ops,
+        vec![Op::FreezeFrame {
+            at_us: secs(12.0),
+            duration_us: secs(3.0)
+        }]
+    );
+    assert_eq!(additions.label, "chat.freezeFrame");
+    let mut i = inputs(&p, Speech::default(), "freeze here");
+    i.view.playhead_us = secs(7.0);
+    let here = compile(
+        &p,
+        &i,
+        &[call(
+            "freezeFrame",
+            r#"{"atSec": null, "durationSec": null}"#,
+        )],
+    );
+    assert_eq!(
+        here.additions.expect("a freeze").ops,
+        vec![Op::FreezeFrame {
+            at_us: secs(7.0),
+            duration_us: secs(2.0)
+        }]
+    );
+    // At the video's end: its last frame.
+    i.view.playhead_us = secs(30.0);
+    let end = compile(
+        &p,
+        &i,
+        &[call(
+            "freezeFrame",
+            r#"{"atSec": null, "durationSec": null}"#,
+        )],
+    );
+    assert_eq!(end.refusals, vec![]);
+    let after = apply_ops(&p, &end.additions.expect("a freeze").ops).unwrap();
+    assert_eq!(main_track_duration(&after.timeline.main), secs(32.0));
 }
 
 #[test]

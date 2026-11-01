@@ -52,6 +52,8 @@ fn main() {
         std::process::exit(klipolo_capture::worker::main(&args));
     }
     log::install();
+    // This build, as its export jobs record it, read now: a program replaced while Klipolo runs is never taken for it.
+    let _ = klipolo_engine::export::job::this_build();
     // The engine's fonts, once: the bundled folder in the app's resources (or the repository's in a dev build).
     if let Err(e) = fonts::configure(FontDirs {
         bundled: klipolo_fonts::bundled::bundled_dir(),
@@ -74,6 +76,8 @@ fn main() {
             commands::appearance::at_launch(app.handle());
             let cache = app.path().app_cache_dir().ok();
             app.manage(EngineState::new(Some(warm), cache));
+            // The Font menu's fonts: Google's catalogue and the downloads, each read off the main thread.
+            commands::fonts::start(app);
             // The library's favorites and recently used items, for every project, in the app's config folder.
             app.manage(commands::library::LibraryMarksState::new(
                 app.path().app_config_dir().ok(),
@@ -100,6 +104,8 @@ fn main() {
             app.manage(projects);
             // Screen recording: off in a test run (`KLIPOLO_TEST`), where it makes no backend and launches no worker.
             app.manage(recorder::RecorderState::new(app.handle()));
+            // While a take records, the Dock icon's menu pauses, marks a moment or stops it.
+            recorder::install_dock(app.handle());
             // How Klipolo pays for Meta's models (the Keychain), and this Mac's id with the relay (app support).
             let support = app.path().data_dir().ok().map(|dir| dir.join("Klipolo"));
             let credentials = commands::settings::load(support.as_deref());
@@ -116,14 +122,17 @@ fn main() {
             let chat = commands::chat::load(app.handle(), credentials.clone(), analysis.clone());
             // The person's view as the page last told it, which other apps' calls read as the person's.
             let view: ViewHandle = Arc::new(ViewState::default());
-            // Another project opening (or this one closing) stops analysis, starts chat over and forgets the view, once
-            // the switch is sure.
+            // Another project opening (or this one closing) stops analysis, starts chat over, forgets the view and stops
+            // the clips being reversed, once the switch is sure.
+            let reversing = commands::reverse::ReverseJobs::default();
+            app.manage(reversing.clone());
             let (stopping, forgetting, unseen) = (analysis.clone(), chat.clone(), view.clone());
             app.state::<ProjectSessionState>()
                 .on_switch(Arc::new(move || {
                     stopping.project_changed();
                     forgetting.project_changed();
                     unseen.forget();
+                    reversing.stop_all();
                 }));
             // Other apps (MCP) edit through chat's tools and its proposal slot, listening at launch when the person
             // left it on.
@@ -138,7 +147,10 @@ fn main() {
             app.manage(view);
             app.manage(analysis);
             app.manage(chat);
-            app.manage(commands::export::state_at_launch());
+            // Exports: the folders they were written in are remembered in the app's data folder, so a kept job there
+            // is listed after a relaunch.
+            let data = app.path().app_data_dir().ok();
+            app.manage(commands::export::state_at_launch(data.as_deref()));
             // Editing copies of the open project's slow files, beside the thumbnails in the media cache. The preview
             // reads them once made; they wait while an export holds the slot.
             let proxies = app
@@ -188,6 +200,7 @@ fn main() {
             engine::engine_preview_clear,
             engine::engine_play,
             engine::engine_pause,
+            engine::engine_present_delay,
             engine::engine_set_editing,
             project::project_create,
             project::project_open,
@@ -233,18 +246,44 @@ fn main() {
             commands::media::media_update_item,
             commands::media::media_picture,
             commands::media::media_speech_ranges,
+            commands::reverse::clip_reverse,
+            commands::reverse::clip_reverse_stop,
+            commands::reverse::clip_reverse_discard,
             commands::media::library_pack,
             commands::library::library_marks,
             commands::library::library_set_favorite,
             commands::library::library_mark_used,
             commands::fonts::fonts_bundled,
             commands::fonts::fonts_face,
+            commands::fonts::fonts_face_of,
+            commands::fonts::fonts_search,
+            commands::fonts::fonts_browse,
+            commands::fonts::fonts_browse_rows,
+            commands::fonts::fonts_row,
+            commands::fonts::fonts_google,
+            commands::fonts::fonts_consent,
+            commands::fonts::fonts_set_google,
+            commands::fonts::fonts_download,
+            commands::fonts::fonts_cancel,
+            commands::fonts::fonts_preview,
+            commands::fonts::fonts_downloaded,
+            commands::fonts::fonts_remove,
+            commands::fonts::fonts_reveal,
+            commands::fonts::fonts_catalogue,
+            commands::fonts::fonts_missing,
+            commands::fonts::fonts_cjk,
+            commands::fonts::fonts_cjk_download,
+            commands::screen_color::screen_color_pick,
             commands::captions::captions_pages,
             commands::captions::captions_find,
             commands::captions::dev_fixture_speech,
             commands::export::export_plan,
             commands::export::export_start,
             commands::export::export_cancel,
+            commands::export::export_jobs,
+            commands::export::export_pause,
+            commands::export::export_resume,
+            commands::export::export_discard,
             commands::export::export_reveal,
             commands::export::export_open,
             commands::export::export_share,
@@ -291,8 +330,9 @@ fn main() {
                 if let Some(mcp) = app.try_state::<McpState>() {
                     mcp.stop();
                 }
-                // Every edit is on the disk, then a running export stops, before the app goes. An editing copy being
-                // made keeps its finished segments: its worker sees the app go and is made on at the next launch.
+                // Every edit is on the disk, then a running export pauses to resume next time, before the app goes. An
+                // editing copy being made keeps its finished segments: its worker sees the app go and is made on at the
+                // next launch.
                 commands::export::on_exit(app);
             }
             // The system's appearance changed: the window's colour follows it while the theme is System.

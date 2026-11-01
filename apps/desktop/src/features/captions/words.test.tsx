@@ -97,6 +97,21 @@ describe('caption words', () => {
     expect(txs[1].ops[0]).toEqual({ type: 'fixWords', assetId: 'mic', startUs: 2 * S, endUs: 2.8 * S, text: 'free!' });
   });
 
+  it('colors the words picked in one step, and the style’s own puts their color back', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CaptionWords format="portrait" />);
+    expect(screen.queryByRole('button', { name: /^Word color/ })).toBeNull();
+    await user.click(within(await list()).getByRole('option', { name: 'BYE' }));
+    await user.click(screen.getByRole('button', { name: 'Word color: Style’s color' }));
+    const popover = screen.getByRole('dialog', { name: 'Word color' });
+    await user.click(within(within(popover).getByRole('group', { name: 'Klipolo' })).getByRole('option', { name: 'Yellow' }));
+    await waitFor(() => expect(txs).toHaveLength(1));
+    expect(txs[0].label).toBe('captions.look.undo');
+    expect(txs[0].ops).toEqual([
+      { type: 'setWordLook', assetId: 'mic', ranges: [{ start: 7 * S, end: 7.8 * S }], look: { color: '#FFD02E' } },
+    ]);
+  });
+
   it('fixes every place a word shows in one step, or just this one (Fix all)', async () => {
     const user = userEvent.setup();
     renderWithProviders(<CaptionWords format="portrait" />);

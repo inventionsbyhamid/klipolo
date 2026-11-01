@@ -150,6 +150,8 @@ const MIXES_KEPT = 32;
  */
 export function clipMediaFiles(sources: Sources, clip: Clip): BlockFiles | null {
   const files = clipFiles(sources, clip.source);
+  // A freeze frame draws its frame only: it plays no sound.
+  if (clip.freezeAtUs !== undefined && clip.freezeAtUs !== null) return files && stillFiles(files);
   const rec = clip.source.type === 'recording' ? indexOf(sources).recordings.get(clip.source.id) : undefined;
   if (!files?.runs || !files.soundIds || !rec) return files;
   const mixes = files.soundIds.map((id) => {
@@ -175,6 +177,21 @@ export function clipMediaFiles(sources: Sources, clip: Clip): BlockFiles | null 
     };
     out = { ...files, runs, soundIds: heard.map((i) => files.soundIds![i]) };
     byMix.set(key, out);
+  }
+  return out;
+}
+
+/** A source's files without their sounds (a freeze frame's), the same object for the same files. */
+const stills = new WeakMap<BlockFiles, BlockFiles>();
+function stillFiles(files: BlockFiles): BlockFiles {
+  let out = stills.get(files);
+  if (!out) {
+    out = {
+      ...files,
+      peakPaths: [],
+      ...(files.runs && { runs: { film: files.runs.film, sounds: [] }, soundIds: [] }),
+    };
+    stills.set(files, out);
   }
   return out;
 }

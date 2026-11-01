@@ -12,8 +12,15 @@ const UNKNOWN_PX = 48;
 /** A ghost's inset from its row's top and bottom. */
 const INSET_PX = 4;
 
-/** The lane a target is on, among the lanes in `lanes` (the timeline's scrolled content): the one under the pointer. */
+/**
+ * The lane a target is on, among the lanes in `lanes` (the timeline's scrolled content): the one under the pointer; a
+ * track's own row, while every track shows.
+ */
 function rowOf(lanes: Element, target: DropTarget): HTMLElement | null {
+  if (target.lane !== 'main' && target.trackId !== null) {
+    const row = lanes.querySelector<HTMLElement>(`[data-track-id="${CSS.escape(target.trackId)}"]`);
+    if (row) return row;
+  }
   const lane = target.lane === 'main' ? 'main' : target.lane === 'sound' ? (target.row ?? 'sounds') : 'layers';
   return lanes.querySelector(`[data-lane="${lane}"]`);
 }

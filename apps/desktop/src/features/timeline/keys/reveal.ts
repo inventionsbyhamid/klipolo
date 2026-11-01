@@ -1,11 +1,11 @@
-import { HEADER_PX } from '../layout';
+import { gutterPx } from '../layout';
 import { usToPx } from '../scale';
 import { placeOf, type Lane } from './laneOrder';
 
 /** Scrolls the lanes to block `id` when it's out of view: its start a third of the way in (and its row into view). */
 export function reveal(scroller: HTMLElement, lanes: Lane[], id: string, pps: number) {
   const at = placeOf(lanes, id);
-  const view = scroller.clientWidth - HEADER_PX;
+  const view = scroller.clientWidth - gutterPx();
   if (!at || view <= 0) return;
   const start = usToPx(lanes[at[0]].starts[at[1]], pps);
   const end = usToPx(lanes[at[0]].ends[at[1]], pps);

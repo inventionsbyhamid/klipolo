@@ -4,7 +4,7 @@ import type { Project } from '../../../bindings/Project';
 import { activeIntlLocale } from '../../../i18n';
 import { formatSeconds } from '../../../lib/format';
 import { formatPrecise, frameIndexAt, frameStartUs, snapToFrame } from '../../../lib/time';
-import { clipDurationUs, findItem, itemLabel, sourceLabel } from '../../../lib/timeline';
+import { clipDurationUs, clipLabel, findItem, itemLabel } from '../../../lib/timeline';
 import { useUi } from '../../../state/ui';
 import { LAYER_MIN_PX } from '../layout';
 import { mainIndex } from '../model/index';
@@ -33,7 +33,7 @@ export function trimGesture(project: Project, id: string, edge: Edge): Trim | nu
   }
   const clip = project.timeline.main.find((c) => c.id === id);
   return clip
-    ? { kind: 'trim', target: 'clip', clipId: id, edge, label: sourceLabel(project, clip.source) }
+    ? { kind: 'trim', target: 'clip', clipId: id, edge, label: clipLabel(project, clip) }
     : null;
 }
 
@@ -88,8 +88,8 @@ function tell(s: Session, g: Trim, lengthUs: number, changeUs: number, note = ''
  * One frame of a trim: the pressed edge goes where the pointer is (`dtUs` from where it was pressed), on the frame
  * grid, snapping like a move, and held to the media and (a layer) its neighbours on the track by the pure builders
  * chat's tools use too. The block is drawn at its new size; a main clip's end trim slides the clips after it and
- * their attached layers (ids in `now`), as the model's ripple will. Sets `s.ops`, `s.label`, `s.said` and the edge
- * frame the preview shows (`s.edgeUs`). False: the block is gone.
+ * their attached layers (ids in `now`), as the model's ripple will. Sets `s.ops`, `s.label`, `s.said`, the edge
+ * frame the preview shows (`s.edgeUs`) and the dry run that shows it (`s.dryOps`). False: the block is gone.
  *
  * An edge (a clip's or a layer's) never snaps back to where it began, as a moved layer never snaps to its own edges:
  * a trim of a few pixels stays a trim.
@@ -148,8 +148,13 @@ function trimClipFrame(
   const trimmed = { ...main[i], [field]: sourceUs };
   const note = deltaUs ? refitNote(trimRefit(project, i, trimmed)) : '';
   // The preview shows the edge in the dry run: the clip's new first frame (the track closes up, so it still starts
-  // where it did), or its new last one.
+  // where it did), or its new last one. It is the clip's own frame, never a transition's blend: the dry run leaves out
+  // the transition at that edge, one decode instead of two (the commit keeps it).
   s.edgeUs = g.edge === 'start' ? startUs : frameBefore(startUs + clipDurationUs(trimmed), s.fps);
+  const before = g.edge === 'start' ? main[i - 1] : main[i];
+  s.dryOps = before?.transitionOut
+    ? [...s.ops, { type: 'setTransition', clipId: before.id, transition: null }]
+    : null;
   tell(s, g, endUs - startUs + change, change, note);
   return true;
 }
@@ -175,6 +180,7 @@ function trimItemFrame(
   sizeBlock(g.itemId, usToPx(start, s.pps), Math.max(usToPx(end - start, s.pps), LAYER_MIN_PX));
   s.view.showGuide(edge.guide !== null && atUs === edge.guide ? edge.guide : null);
   s.ops = atUs === from ? [] : [{ type: 'trimItem', id: g.itemId, edge: g.edge, atUs }];
+  s.dryOps = null;
   s.label = 'timeline.trim.layer.undo';
   // The preview shows the edge: the layer's new first frame, or its new last one.
   s.edgeUs = g.edge === 'start' ? atUs : frameBefore(atUs, s.fps);

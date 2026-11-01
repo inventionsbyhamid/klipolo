@@ -895,7 +895,13 @@ fn clip_lines<'p>(
     while i < main.len() {
         // With `clip_runs`, clips i..j play one file (or recording) back to back: one line for them all.
         let mut j = i + 1;
-        while brief.clip_runs && j < main.len() && main[j].source == main[i].source {
+        // A freeze frame is a line of its own: it plays none of its file.
+        while brief.clip_runs
+            && j < main.len()
+            && main[j].source == main[i].source
+            && !main[i].is_freeze()
+            && !main[j].is_freeze()
+        {
             j += 1;
         }
         if j - i > 1 {
@@ -1068,7 +1074,8 @@ fn motion_notes(item: &Item) -> Vec<String> {
 /// One clip's line: `c2 13.0-144.0 interview.mov (file 24.0-155.0 of 155.0, speed 1.50x, volume 50%, muted,
 /// dissolve 0.5 s into c3)`: a speed, volume or transition only when it has one other than as recorded; or a
 /// recording's `c1 0.0-30.0 Recording 1 (speed 2x; camera hidden; sounds mic muted)` (`c4 ... Recording 1 (as c1)` when
-/// it reads as an earlier one); with `plain_clips`, no file notes and no camera or sounds.
+/// it reads as an earlier one); with `plain_clips`, no file notes and no camera or sounds. A freeze frame:
+/// `c3 20.0-22.0 interview.mov (freeze frame of 5.0)`.
 fn clip_line<'p>(
     out: &mut String,
     (p, recordings, told): (&'p Project, &Recordings<'p>, &mut Told<'p>),
@@ -1086,6 +1093,11 @@ fn clip_line<'p>(
         secs(end),
         source_name(p, clip)
     );
+    // A freeze frame: the moment of its file (or take) it holds, and nothing else to say.
+    if let Some(frame) = clip.freeze_at_us {
+        let _ = writeln!(out, " (freeze frame of {})", secs(frame));
+        return;
+    }
     let mut notes = Vec::new();
     if !brief.plain_clips
         && let ClipSource::Asset { id } = &clip.source
@@ -1451,7 +1463,8 @@ fn scene_pieces<'a>(
     // Each (file, item)'s latest piece: its index in `out` and where in the file it ends.
     let mut latest: HashMap<(&str, usize), (usize, Us)> = HashMap::new();
     for (clip, &clip_start) in p.timeline.main.iter().zip(starts) {
-        let ClipSource::Asset { id } = &clip.source else {
+        // A freeze frame plays none of its file's scenes.
+        let (ClipSource::Asset { id }, false) = (&clip.source, clip.is_freeze()) else {
             continue;
         };
         let Some(log) = scenes.get(id) else {

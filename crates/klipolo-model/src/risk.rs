@@ -84,6 +84,8 @@ pub fn op_risk(op: &Op) -> OpRisk {
         | Op::InsertClip { .. }
         | Op::MoveClip { .. }
         | Op::Split { .. }
+        | Op::FreezeFrame { .. }
+        | Op::ReverseClip { .. }
         | Op::UpdateClip { .. }
         | Op::AddItem { .. }
         | Op::UpdateItem { .. }
@@ -91,6 +93,7 @@ pub fn op_risk(op: &Op) -> OpRisk {
         | Op::SplitItem { .. }
         | Op::SetAttach { .. }
         | Op::DetachSource { .. }
+        | Op::DetachSound { .. }
         // A source's name, or its files re-timed with every file kept: nothing goes.
         | Op::UpdateRecordingSource { .. }
         // The same footage at the same place, and a new source.

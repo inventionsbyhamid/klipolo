@@ -12,8 +12,9 @@ import { blockLabel, commit, editable } from './timelineActions';
 import { setTrackFlag } from './trackActions';
 
 /*
- * A layer's track, clip and mute, and a recording's camera (`useTimelineCommands`): each built like `timelineActions`'
- * edits, from the project when it runs, as one undo step through `useProject.apply`, said in the live region.
+ * A layer's track, clip and mute, a recording's camera and an imported clip's sound (`useTimelineCommands`): each
+ * built like `timelineActions`' edits, from the project when it runs, as one undo step through `useProject.apply`,
+ * said in the live region.
  */
 
 /** ⌥↑ / ⌥↓: layer `id` onto the track above (1) or below (−1). */
@@ -78,6 +79,21 @@ export function separateCamera(clipId: string) {
       message: `The camera of ${label} is now its own layer`,
     });
     commit('undo.separateCamera', [{ type: 'detachSource', clipId, sourceId: camera.id }], said);
+  });
+}
+
+/** Separate sound: imported clip `clipId`'s own sound becomes a layer of its own under it (`detachSound`). */
+export function separateSound(clipId: string) {
+  keyBurst.after(() => {
+    const project = editable();
+    if (!project) return;
+    const label = blockLabel(project, clipId);
+    const said = t({
+      id: 'timeline.key.soundSeparated',
+      message: `The sound of ${label} is now its own layer`,
+      comment: "Screen-reader note; {label} is an imported clip's name",
+    });
+    commit('undo.sound.separate', [{ type: 'detachSound', clipId }], said);
   });
 }
 

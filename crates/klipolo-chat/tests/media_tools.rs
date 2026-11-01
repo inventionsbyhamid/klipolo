@@ -216,6 +216,7 @@ fn inputs(p: &Project, message: &str) -> Inputs {
         time_again: HashSet::new(),
         cursor: None,
         library: library(),
+        fonts: Default::default(),
     }
 }
 
@@ -2119,4 +2120,65 @@ fn music_and_words_added_beside_a_cut_end_with_the_cut_video() {
         assert_eq!(end(&after), (secs(25.0), secs(2.0)), "{calls:?}");
         assert_eq!(proposal.review.after, after, "{calls:?}");
     }
+}
+
+/// Fonts by name as the app names them: Klipolo's Anton, and Google's Poppins, not downloaded yet.
+fn font_names() -> klipolo_chat::FontNames {
+    use klipolo_model::font::{FontRef, FontSource};
+    klipolo_chat::FontNames::new(Arc::new(|name: &str, _weight, italic| {
+        let font = match name.to_lowercase().as_str() {
+            "anton" => FontRef::bundled("Anton"),
+            "poppins" => FontRef {
+                family: "Poppins".into(),
+                source: FontSource::Google {
+                    version: "v23".into(),
+                },
+            },
+            _ => return None,
+        };
+        let here = font.family == "Anton";
+        Some(klipolo_chat::NamedFont {
+            font,
+            weight: if here { 400 } else { 700 },
+            italic,
+            download_bytes: (!here).then_some(2_890_000),
+        })
+    }))
+}
+
+#[test]
+fn add_text_names_a_font_and_never_downloads_one_by_itself() {
+    let p = project();
+    let mut i = inputs(&p, "put a title 'Day 1 in Lisbon' in Anton");
+    i.fonts = font_names();
+    let titled = |font: &str| {
+        compile(
+            &p,
+            &i,
+            &[call(
+                "addText",
+                json!({"text": "Day 1 in Lisbon", "preset": "title", "atSec": 0.0, "durationSec": null, "font": font}),
+            )],
+        )
+    };
+    let out = titled("Anton");
+    let ItemContent::Text { style, .. } = the_layer(&p, &out).content else {
+        panic!("a text layer")
+    };
+    assert_eq!((style.font.family.as_str(), style.weight), ("Anton", 400));
+    assert!(out.notes.is_empty());
+    // A Google font not here yet: named all the same, and the reply says it shows in Inter until it is downloaded.
+    let out = titled("Poppins");
+    let ItemContent::Text { style, .. } = the_layer(&p, &out).content else {
+        panic!("a text layer")
+    };
+    assert_eq!(style.font.family, "Poppins");
+    assert_eq!(
+        out.notes,
+        [
+            "Poppins isn't on this Mac yet, so the words show in Inter until you download it over the preview."
+        ]
+    );
+    let out = titled("Nowhere Sans");
+    assert!(refused_to_model(&out, 0).contains("no font is named \"Nowhere Sans\""));
 }

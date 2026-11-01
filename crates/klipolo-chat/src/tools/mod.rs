@@ -89,6 +89,11 @@ pub enum ToolCall {
     TrimClip { clip: String, edge: Edge, to_us: Us },
     /// Split the clip playing at `at_us` in two.
     SplitAt { at_us: Us },
+    /// Hold the frame shown at `at_us` (None: the playhead) still for `duration_us` (None: `FREEZE_DEFAULT_US`).
+    FreezeFrame {
+        at_us: Option<Us>,
+        duration_us: Option<Us>,
+    },
     /// Set the clip `clip` names (or every clip) to play at `speed` (one of `clip_settings::SPEEDS`), at `volume`
     /// (`clip_settings::is_volume`), muted or not, and framed `framing.0` in the format `framing.1` (None: every
     /// format the video has); None leaves each as it is, and at least one is set. Speed, volume and mute are the clip
@@ -153,6 +158,8 @@ pub enum ToolCall {
         at_us: Option<Us>,
         duration_us: Option<Us>,
         animation: Option<Entrance>,
+        /// A font by name; None: the preset's.
+        font: Option<String>,
     },
     /// Show the library's picture `file`; None for what the person left unsaid.
     AddImage {
@@ -278,6 +285,7 @@ impl ToolCall {
             ToolCall::RemoveFillers => "removeFillers",
             ToolCall::TrimClip { .. } => "trimClip",
             ToolCall::SplitAt { .. } => "splitAt",
+            ToolCall::FreezeFrame { .. } => "freezeFrame",
             ToolCall::SetClip { .. } => "setClip",
             ToolCall::SetTransition { .. } => "setTransition",
             ToolCall::SetBackground { .. } => "setBackground",
@@ -338,7 +346,8 @@ impl ToolCall {
             | ToolCall::AddText { at_us, .. }
             | ToolCall::AddImage { at_us, .. }
             | ToolCall::MakeSticker { at_us, .. }
-            | ToolCall::MakeTitleCard { at_us, .. } => at_us.is_some(),
+            | ToolCall::MakeTitleCard { at_us, .. }
+            | ToolCall::FreezeFrame { at_us, .. } => at_us.is_some(),
             ToolCall::SetCameraMode { clips, .. }
             | ToolCall::AdjustCamera { clips, .. }
             | ToolCall::DetachCamera { clips }
@@ -406,6 +415,10 @@ const EDGES: [Edge; 2] = [Edge::Start, Edge::End];
 
 /// The pause lengths `removeSilences` takes, in seconds.
 pub const PAUSE_SECS: RangeInclusive<f64> = 0.3..=10.0;
+
+/// How long `freezeFrame` may hold a frame, in seconds, and how long it holds one when the person gave no length.
+pub const FREEZE_SECS: RangeInclusive<f64> = 0.1..=60.0;
+pub const FREEZE_DEFAULT_US: Us = 2_000_000;
 
 /// The most words a noun phrase for `blurObjects` or `followSubject` may have.
 pub const MAX_PHRASE_WORDS: usize = 8;
@@ -531,6 +544,32 @@ const TOOLS: &[Tool] = &[
         read: |a| {
             Ok(ToolCall::SplitAt {
                 at_us: a.time("atSec")?,
+            })
+        },
+    },
+    Tool {
+        name: "freezeFrame",
+        description: "Freeze the frame at this time: it holds still, silent, then the video plays on.",
+        parameters: || {
+            vec![
+                (
+                    "atSec",
+                    nullable_number("Timeline seconds. Null for the playhead."),
+                ),
+                (
+                    "durationSec",
+                    nullable_number(&format!(
+                        "Seconds it holds, {} to {}. Null for 2.",
+                        FREEZE_SECS.start(),
+                        FREEZE_SECS.end()
+                    )),
+                ),
+            ]
+        },
+        read: |a| {
+            Ok(ToolCall::FreezeFrame {
+                at_us: a.nullable_time("atSec")?,
+                duration_us: a.nullable_length("durationSec", &FREEZE_SECS)?,
             })
         },
     },

@@ -517,6 +517,7 @@ fn done(call: &ToolCall) -> Option<&'static str> {
         ToolCall::SetBackground { .. } => "The background is changed.",
         ToolCall::FixCaptionWords { .. } => "The words are fixed.",
         ToolCall::SplitAt { .. } => "The clip is split.",
+        ToolCall::FreezeFrame { .. } => "The frame holds still there.",
         ToolCall::SetClip {
             clip: crate::tools::ClipRef::All,
             ..
@@ -575,6 +576,7 @@ fn task(tool: &str) -> &'static str {
         "removeFillers" => "remove the filler words",
         "trimClip" => "trim the clip",
         "splitAt" => "split the clip",
+        "freezeFrame" => "hold that frame",
         "setClip" => "change the clip",
         "setTransition" => "change the transition",
         "setFormat" => "change the format",

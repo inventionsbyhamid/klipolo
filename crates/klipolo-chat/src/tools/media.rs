@@ -13,7 +13,8 @@ use klipolo_model::media::text::{TEMPLATE_US, TEXT_US};
 
 use super::animate::ENTRANCES;
 use super::schema::{
-    Word, list, nullable_boolean, nullable_number, nullable_words, seconds, string, words,
+    Word, list, nullable_boolean, nullable_number, nullable_string, nullable_words, seconds,
+    string, words,
 };
 use super::{Tool, ToolCall};
 
@@ -258,6 +259,10 @@ pub(super) const ADD_TEXT: Tool = Tool {
             at_sec(),
             duration_sec(TEXT_SECS),
             ("animation", nullable_words(&ENTRANCES, "Null: fade.")),
+            (
+                "font",
+                nullable_string("A font by name, e.g. Poppins; null: the preset's."),
+            ),
         ]
     },
     read: |a| {
@@ -267,6 +272,7 @@ pub(super) const ADD_TEXT: Tool = Tool {
             at_us: a.nullable_time("atSec")?,
             duration_us: a.nullable_length("durationSec", &OVERLAY_SECS)?,
             animation: a.nullable_word("animation", &ENTRANCES)?,
+            font: a.optional_text("font")?,
         })
     },
 };

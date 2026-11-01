@@ -47,6 +47,7 @@ use klipolo_model::query::{anchor_at, main_track_duration, resolve_attach, video
 use klipolo_model::speech::WordKind;
 use klipolo_model::text_safety::clean_shown;
 use klipolo_model::time::{MIN_DURATION_US, Us};
+use klipolo_model::timeline::ItemContent;
 use klipolo_model::validate::MAX_TEXT;
 use klipolo_model::{Project, apply_ops};
 
@@ -55,7 +56,7 @@ use crate::context::{secs, within_video};
 use crate::evidence::TOLERANCE_US;
 use crate::library::{Found, LibraryItem, MediaKind, is_generic};
 use crate::sanitize;
-use crate::tools::{Entrance, PictureSize, Position, TextPreset};
+use crate::tools::{Entrance, PictureSize, Position, TextPreset, ToolCall};
 
 /// The most names a refusal lists, then how many more there are: as many as Library shows of a kind.
 const LISTED: usize = crate::context::LIBRARY_NAMES;
@@ -408,6 +409,7 @@ pub(super) fn add_text(
     preset: TextPreset,
     (at, duration): (Option<Us>, Option<Us>),
     animation: Option<Entrance>,
+    font: Option<&str>,
 ) -> Result<Edit, Refused> {
     let words = if c.by_app {
         apps_words(("addText", "text"), text)?
@@ -420,7 +422,7 @@ pub(super) fn add_text(
         })?
     };
     let start = start(c, work, "addText", "atSec", at)?;
-    // Kinetic words are the kinetic title template, near the top whatever the preset.
+    // Kinetic words are the kinetic title template, near the top whatever the preset, in its own font.
     if animation == Some(Entrance::Kinetic) {
         let (ops, _) = title_ops(
             work,
@@ -455,6 +457,9 @@ pub(super) fn add_text(
             }
         }
     }
+    if let Some(name) = font {
+        in_font(c, &mut ops, name)?;
+    }
     Ok(Edit {
         ops: lasting(ops, length(work, start, duration, TEXT_US)),
         label: label(
@@ -465,6 +470,46 @@ pub(super) fn add_text(
             ],
         ),
     })
+}
+
+/// The new text in the font `name` names, at its face nearest the preset's weight and style; refused to the model when
+/// no font has that name. A Google font not on this computer is named all the same: it is never downloaded by itself
+/// (`font_note` says so, and the person downloads it).
+fn in_font(c: &Compiler, ops: &mut [Op], name: &str) -> Result<(), Refused> {
+    for op in ops {
+        let Op::AddItem { item, .. } = op else {
+            continue;
+        };
+        let ItemContent::Text { style, .. } = &mut item.content else {
+            continue;
+        };
+        let named = c.inputs.fonts.named(name, style.weight, style.italic).ok_or_else(|| {
+            to_model(format!(
+                "addText: no font is named {name:?}, here or at Google. Leave font out for the preset's."
+            ))
+        })?;
+        style.font = named.font;
+        style.weight = named.weight;
+        style.italic = named.italic;
+    }
+    Ok(())
+}
+
+/// What the reply says of `addText`'s font when it isn't on this computer yet (a Google font): it shows in Inter until
+/// the person downloads it, which the missing-fonts note over the preview offers. None for any other call or font.
+pub(super) fn font_note(c: &Compiler, call: &ToolCall) -> Option<String> {
+    let ToolCall::AddText {
+        font: Some(name), ..
+    } = call
+    else {
+        return None;
+    };
+    let named = c.inputs.fonts.named(name, 400, false)?;
+    named.download_bytes?;
+    let family = named.font.family;
+    Some(format!(
+        "{family} isn't on this Mac yet, so the words show in Inter until you download it over the preview."
+    ))
 }
 
 pub(super) fn add_image(

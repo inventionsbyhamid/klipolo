@@ -53,8 +53,12 @@ const VOICE_ROLES: [SourceRole; 6] = [
 /// source by `VOICE_ROLES` with a file that has sound, each with its drift as the rate and the source's nudge in its
 /// offset; an imported file with sound is its own voice (one run, rate 1). A run counts in its file's sound time, as
 /// its transcript and levels do: a picture file's sound lead comes off its file time (`Asset::lead_us`).
-/// Over a recording clip's true gaps, a picture source whose sound fills them is the voice there.
+/// Over a recording clip's true gaps, a picture source whose sound fills them is the voice there. A freeze frame has no
+/// voice: its range is only its length.
 pub fn voice_runs(p: &Project, clip: &Clip) -> Vec<VoiceRun> {
+    if clip.is_freeze() {
+        return Vec::new();
+    }
     let sounding = |id: &Id| p.asset(id).is_some_and(|a| a.has_audio);
     let clipped = |asset: &Id, from: Us, to: Us, offset_us: Us, rate: f64, file_in_us: Us| {
         let (rec_from, rec_to) = (clip.source_in_us.max(from), clip.source_out_us.min(to));

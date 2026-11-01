@@ -31,9 +31,14 @@ describe('call', () => {
   it('says what to do next when an export or a new project fails', async () => {
     const { codedMessage } = await import('./call');
     const said = (code: string) => codedMessage({ code, params: {} });
-    expect(said('exports.diskFull')).toBe('The disk is full. Free up space, then try again.');
+    // An export that stops keeps what it finished: what to do is resume it.
+    expect(said('exports.diskFull')).toBe('The disk is full. Free up space, then resume.');
     expect(said('exports.decodeFailed')).toBe(
-      "A clip couldn't be read. Try again. If it happens again, check that every clip plays in the preview.",
+      "A clip couldn't be decoded with hardware. Resume to try again, or finish in compatibility mode.",
+    );
+    expect(said('exports.unreadable')).toBe("This export's files can't be read. Discard it and export again.");
+    expect(said('exports.otherBuild')).toBe(
+      'Another version of Klipolo made this export, so it can’t resume. Start over or discard it.',
     );
     expect(said('project.createFailed')).toBe("Klipolo couldn't create the project. Check the disk, then try again.");
   });

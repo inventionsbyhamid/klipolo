@@ -426,6 +426,7 @@ fn run(args: &Args) -> Result<bool, String> {
             cursor: (!set.clicks.is_empty())
                 .then(|| Arc::new(Clicks::of(&set.clicks)) as Arc<dyn CursorTakes>),
             library: library.clone(),
+            fonts: Default::default(),
         };
         let planned = runtime.block_on(plan(
             &model,
@@ -736,6 +737,9 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             json!({"clip": clip, "edge": word(edge), "toSec": s(*to_us)})
         }
         ToolCall::SplitAt { at_us } => json!({"atSec": s(*at_us)}),
+        ToolCall::FreezeFrame { at_us, duration_us } => {
+            json!({"atSec": at_us.map(s), "durationSec": duration_us.map(s)})
+        }
         ToolCall::SetClip {
             clip,
             speed,
@@ -804,12 +808,14 @@ fn tool_json(call: &ToolCall) -> (String, Value) {
             at_us,
             duration_us,
             animation,
+            font,
         } => json!({
             "text": text,
             "preset": preset.key(),
             "atSec": at_us.map(s),
             "durationSec": duration_us.map(s),
             "animation": animation.map(|x| x.key()),
+            "font": font,
         }),
         ToolCall::Animate {
             layer,
@@ -1059,7 +1065,8 @@ mod tests {
             ("addSound", json!({"name": "whoosh", "atSec": [12.8, 23.0]})),
             (
                 "addText",
-                json!({"text": "Day 1", "preset": "title", "atSec": 0.0, "durationSec": 3.0, "animation": "pop"}),
+                json!({"text": "Day 1", "preset": "title", "atSec": 0.0, "durationSec": 3.0, "animation": "pop",
+                       "font": "Poppins"}),
             ),
             (
                 "animate",

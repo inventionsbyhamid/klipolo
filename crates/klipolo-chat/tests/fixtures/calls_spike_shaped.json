@@ -173,12 +173,16 @@
       "calls": [{"name": "separateSound", "call_id": "call_37", "arguments": "{\"source\": \"mic\", \"which\": null, \"clips\": null}"}]
     },
     {
+      "request": "freeze here for two seconds",
+      "calls": [{"name": "freezeFrame", "call_id": "call_38", "arguments": "{\"atSec\": null, \"durationSec\": 2}"}]
+    },
+    {
       "request": "zoom in on my clicks",
-      "calls": [{"name": "autoZoom", "call_id": "call_38", "arguments": "{\"on\": true, \"scale\": null}"}]
+      "calls": [{"name": "autoZoom", "call_id": "call_44", "arguments": "{\"on\": true, \"scale\": null}"}]
     },
     {
       "request": "make the heart pop in with a pop sound",
-      "calls": [{"name": "animate", "call_id": "call_39", "arguments": "{\"sound\": \"Pop\", \"layer\": \"i1\", \"enter\": \"pop\", \"exit\": null, \"emphasis\": null}"}]
+      "calls": [{"name": "animate", "call_id": "call_45", "arguments": "{\"sound\": \"Pop\", \"layer\": \"i1\", \"enter\": \"pop\", \"exit\": null, \"emphasis\": null}"}]
     }
   ]
 }

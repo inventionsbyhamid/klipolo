@@ -158,6 +158,19 @@
   text-overflow: ellipsis;
 }
 
+/* A quiet badge under the line: the project has an unfinished export to resume. */
+.start-badge {
+  align-self: flex-start;
+  margin-top: var(--space-2);
+  padding: 1px var(--space-3);
+  border-radius: var(--radius-pill);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  white-space: nowrap;
+}
+
 /* ---------- Loading, failed, empty ---------- */
 
 .start-note,

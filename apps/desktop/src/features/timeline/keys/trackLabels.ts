@@ -1,9 +1,13 @@
 import { select, t } from '@lingui/core/macro';
 import type { Track } from '../../../bindings/Track';
-import { labelText, type LabelId } from '../../../lib/labels';
+import { labelText, type Label, type LabelId } from '../../../lib/labels';
+import type { LaneId } from '../model/laneOps';
 import type { TrackToggle } from '../model/trackOps';
 
-/* What a track's toggles say: in its header (naming the track), and in its menu, the palette and the undo history. */
+/*
+ * What a track's toggles say: in its header (naming the track), and in its menu, the palette and the undo history; and
+ * a lane's, naming the lane.
+ */
 
 /**
  * The undo label of track `track`'s toggle for `field`, which is also what the toggle says it does: "Hide track",
@@ -91,5 +95,66 @@ export function trackStateName(state: TrackState): string {
     }),
     comment:
       'A track header’s badge for what the track is (hidden from the video, muted, soloed: only soloed tracks play, locked against edits)',
+  });
+}
+
+/** Each lane's name as a label's value (`{lane}`), worded wherever the label is read. */
+const LANE_NAMES: Record<LaneId, LabelId> = {
+  layers: 'timeline.lane.overlays',
+  sounds: 'timeline.lane.sounds',
+  music: 'timeline.lane.music',
+};
+
+/** Lane `lane`'s name in the language shown: "Overlays", "Sound effects", "Music". */
+export const laneName = (lane: LaneId): string => labelText(LANE_NAMES[lane]);
+
+/**
+ * The undo label of lane `lane`'s toggle for `field` that ends in `value`, which is also what the toggle says it does:
+ * "Hide Overlays" (`value` true), "Unmute Music" (false).
+ */
+export function laneToggleLabel(lane: LaneId, field: TrackToggle, value: boolean): Label {
+  const ids: Record<TrackToggle, [LabelId, LabelId]> = {
+    hidden: ['timeline.lane.hide', 'timeline.lane.show'],
+    muted: ['timeline.lane.mute', 'timeline.lane.unmute'],
+    solo: ['timeline.lane.solo', 'timeline.lane.unsolo'],
+    locked: ['timeline.lane.lock', 'timeline.lane.unlock'],
+  };
+  return { id: ids[field][value ? 0 : 1], params: { lane: { code: LANE_NAMES[lane], params: {} } } };
+}
+
+/**
+ * What a track or lane named `name` is now that its `field` is `value`, for the live region: "Music is muted",
+ * "Overlay 1 is shown".
+ */
+export function toggledSaid(name: string, field: TrackToggle, value: boolean): string {
+  const state =
+    field === 'hidden'
+      ? value
+        ? 'hidden'
+        : 'shown'
+      : field === 'muted'
+        ? value
+          ? 'muted'
+          : 'unmuted'
+        : field === 'solo'
+          ? value
+            ? 'soloed'
+            : 'unsoloed'
+          : value
+            ? 'locked'
+            : 'unlocked';
+  return t({
+    id: 'timeline.track.toggled',
+    message: select(state, {
+      hidden: `${name} is hidden`,
+      shown: `${name} is shown`,
+      muted: `${name} is muted`,
+      unmuted: `${name} is unmuted`,
+      soloed: `${name} is soloed: only soloed tracks play`,
+      unsoloed: `${name} is no longer soloed`,
+      locked: `${name} is locked`,
+      other: `${name} is unlocked`,
+    }),
+    comment: 'Screen-reader note after a track’s toggle; {name} is the track’s name',
   });
 }

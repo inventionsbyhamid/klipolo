@@ -116,6 +116,7 @@ fn talk() -> (Project, Inputs, ChatContext) {
         time_again: HashSet::new(),
         cursor: None,
         library: Library::default(),
+        fonts: Default::default(),
     };
     let ctx = build_context(
         &p,

@@ -15,7 +15,7 @@ mod cut;
 mod intra;
 #[cfg(test)]
 mod tests;
-mod tile;
+pub(crate) mod tile;
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;

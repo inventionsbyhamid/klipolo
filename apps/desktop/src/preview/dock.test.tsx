@@ -4,10 +4,10 @@ import { fixtureSnapshot } from '../test/fixtures';
 import { renderWithProviders } from '../test/render';
 
 /*
- * The card docks beside the frame while a clip, a layer or a transition is selected, and the frame gives it room. A
- * press on the timeline selects at once, so the dock waits for the release: the frame never changes size under the
- * edge frame a trim shows, or under the pointer of a move. A keyboard walk along the lanes passes bare cuts, which
- * select nothing, so the dock waits until the walk settles.
+ * The card shows at the frame's right while a clip, a layer or a transition is selected (the frame keeps its size:
+ * stageSize.test.tsx). A press on the timeline selects at once, so the dock waits for the release: the card never comes
+ * up over the edge frame a trim shows, or under the pointer of a move. A keyboard walk along the lanes passes bare
+ * cuts, which select nothing, so the dock waits until the walk settles.
  */
 
 vi.mock('../bridge/commands', () => ({ bridge: { apply: vi.fn() }, mediaUrl: (p: string) => p }));

@@ -61,27 +61,28 @@ fn a_browse_says_its_sections_counts_and_sends_only_the_rows_asked_for() {
         ..BrowseAsk::default()
     };
     let b = browse(&ix, &ask);
+    // The 12 bundled families come first, then the project's and the recent picks, this computer's and Google's.
     assert_eq!(
         b.sections,
         [
+            (Section::Bundled, 12),
             (Section::Project, 2),
             (Section::Recent, 1),
-            (Section::Bundled, 12),
             (Section::Installed, 300),
             (Section::Google, google_rows),
         ]
     );
     assert_eq!(
         b.value,
-        Some(2),
-        "the chosen font's first row: Recent's Inter"
+        Some(0),
+        "the chosen font's first row: the bundled Inter"
     );
-    let rows = browse_rows(&ix, &ask, 0, 4);
+    let rows = browse_rows(&ix, &ask, 11, 15);
     assert_eq!(
         rows.iter().map(|r| r.family.as_str()).collect::<Vec<_>>(),
-        ["Anton", "Lato", "Inter", "Inter"]
+        ["JetBrains Mono", "Anton", "Lato", "Inter"]
     );
-    assert_eq!(rows[1].state, RowState::Downloaded);
+    assert_eq!(rows[2].state, RowState::Downloaded);
     let last = 2 + 1 + 12 + 300 + google_rows;
     let tail = browse_rows(&ix, &ask, last - 1, last + 50);
     assert_eq!(tail.len(), 1, "never past the end");

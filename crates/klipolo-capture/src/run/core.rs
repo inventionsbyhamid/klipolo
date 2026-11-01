@@ -73,6 +73,8 @@ pub(super) struct Countdown {
     pub(super) held_note: Option<CodedError>,
     /// A system alert is on the screen (`SessionCore::system_alert`): held until it goes.
     pub(super) alert: bool,
+    /// The gate's question (or a mic rule's) was said in this countdown, so an alert's end says it again as it stands.
+    pub(super) asked_aloud: bool,
     /// Whether the last status went out while held, so a hold or its end sends a new one.
     pub(super) held_shown: bool,
 }

@@ -101,6 +101,7 @@ pub fn inputs_for(
         library,
         // A take's clicks are read only when `autoZoom` asks.
         cursor: Some(Arc::new(CursorFiles)),
+        fonts: crate::fonts::names(),
     };
     (inputs, turns)
 }

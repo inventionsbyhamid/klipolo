@@ -1,13 +1,15 @@
 import type { Clip } from '../bindings/Clip';
 import { builtinId } from './contrib';
 import { recordingDurationUs } from './recording';
-import { clipDurationUs, playedUs, primaryAsset, type Sources } from './timeline';
+import { clipDurationUs, isFreeze, playedUs, primaryAsset, type Sources } from './timeline';
 import { US_PER_SEC } from './time';
 
 /** Mirrors `klipolo_model::transitions` (pinned by transition-parity.json). */
 export const MIN_TRANSITION_US = 100_000;
 export const MAX_TRANSITION_US = 5_000_000;
 export const DEFAULT_TRANSITION_US = 500_000;
+/** The longest time the model stores (`time::MAX_TIME_US`): 24 hours. */
+const MAX_TIME_US = 86_400_000_000;
 
 /** What a new transition is (⌘T, a cut's Add transition): every editor's default. */
 export const TRANSITION_DISSOLVE = builtinId('transition.dissolve');
@@ -21,8 +23,9 @@ export function splitDuration(d: number): [number, number] {
 }
 
 /** How long a clip's source is (a file, or a recording's take: `source_duration_us`): how far its edges can be
- * trimmed out. */
+ * trimmed out. A freeze frame's range is only its length: it may run as long as the model stores. */
 export function sourceLength(project: Sources, clip: Clip): number {
+  if (isFreeze(clip)) return MAX_TIME_US;
   const source = clip.source;
   if (source.type === 'asset') return primaryAsset(project, source)?.durationUs ?? clip.sourceOutUs;
   const recording = project.recordings.find((r) => r.id === source.id);
@@ -32,6 +35,8 @@ export function sourceLength(project: Sources, clip: Clip): number {
 /** The footage, played at the clip's speed, before clip `index`'s in point and after its out point. */
 export function handles(project: Footage, index: number): { before: number; after: number } {
   const clip = project.timeline.main[index];
+  // A freeze frame holds its frame however long a transition needs.
+  if (isFreeze(clip)) return { before: MAX_TRANSITION_US, after: MAX_TRANSITION_US };
   return {
     before: playedUs(Math.max(0, clip.sourceInUs), clip.speed),
     after: playedUs(Math.max(0, sourceLength(project, clip) - clip.sourceOutUs), clip.speed),

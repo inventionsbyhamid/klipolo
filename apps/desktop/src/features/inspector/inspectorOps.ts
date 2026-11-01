@@ -2,7 +2,6 @@ import type { Anchor } from '../../bindings/Anchor';
 import type { FormatKind } from '../../bindings/FormatKind';
 import type { Layout } from '../../bindings/Layout';
 import type { Motion } from '../../bindings/Motion';
-import type { TextStyle } from '../../bindings/TextStyle';
 import { builtinId } from '../../lib/contrib';
 import { layoutPatchFor } from '../../lib/geometry';
 import { FORMAT_SIZE, resolveRect } from '../../lib/layout';
@@ -122,22 +121,8 @@ export function withAnimation(
   return kept(motion);
 }
 
-/** A text's background choice: none, a box behind the words, or a shadow under them. */
-export type Backdrop = 'none' | 'box' | 'shadow';
-
-/** The box behind the words: the design's navy at 86 %. */
-export const BOX_COLOR = '#121A33DB';
-
-export function backdropOf(style: TextStyle): Backdrop {
-  if (style.background) return 'box';
-  return style.shadow ? 'shadow' : 'none';
-}
-
-export function backdropStyle(style: TextStyle, backdrop: Backdrop): TextStyle {
-  if (backdrop === 'box') return { ...style, background: style.background ?? BOX_COLOR, shadow: false };
-  if (backdrop === 'shadow') return { ...style, background: null, shadow: true };
-  return { ...style, background: null, shadow: false };
-}
+/** The box behind the words (the Highlight field's navy, and the Box look's) lives with the other text looks. */
+export { BOX_COLOR } from '../../lib/textLook';
 
 /** The Position grid's places (`placedAt`) live in `lib/placement`, which places a new video layer at one too. */
 export { placedAt };

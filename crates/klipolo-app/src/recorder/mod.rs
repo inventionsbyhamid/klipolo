@@ -13,6 +13,8 @@
 //!   background media work waits from arming until the take has landed.
 //! - **Quitting during a take** (`quitting`, `app_quit`): the exit is held, the take stopped, and Klipolo exits once it
 //!   has landed, or after 30 s.
+//! - **The Dock icon's menu** (`dock`): while a take records, Pause or Resume, "Mark this moment" and "Stop and save",
+//!   the menu-bar item's own, for when the item is hidden behind the notch.
 //! - **Setup** (`setup`, `config`): the Record dialog's data from the backend without capture or prompts, and a take's
 //!   config from the person's options and the app's fixed choices.
 //! - **The permission steps** (`permissions`, `screen_reopen`, `relaunch`): Allow screen recording, Reopen Klipolo
@@ -31,6 +33,7 @@ mod check;
 pub mod commands;
 mod config;
 mod destination;
+mod dock;
 mod env;
 mod events;
 mod frames;
@@ -68,6 +71,8 @@ mod tests;
 #[cfg(test)]
 mod tests_check;
 #[cfg(test)]
+mod tests_dock;
+#[cfg(test)]
 mod tests_end;
 #[cfg(test)]
 mod tests_import;
@@ -90,6 +95,7 @@ mod tests_zoom;
 
 pub use active::release_on_exit;
 pub use app_quit::guard_quit;
+pub(crate) use dock::install as install_dock;
 pub use previews::{follow_window, page_loads};
 pub use relaunch::relaunch_on_exit;
 #[cfg(test)]

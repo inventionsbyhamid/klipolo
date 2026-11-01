@@ -167,6 +167,7 @@ fn inputs(p: &Project, message: &str) -> Inputs {
             .collect(),
         time_again: HashSet::new(),
         cursor: None,
+        fonts: Default::default(),
         library: library(),
     }
 }

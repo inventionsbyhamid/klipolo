@@ -157,6 +157,37 @@
       "annotations": {
         "readOnlyHint": false
       },
+      "description": "Freeze the frame at this time: it holds still, silent, then the video plays on.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "atSec": {
+            "description": "Timeline seconds. Null for the playhead.",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "durationSec": {
+            "description": "Seconds it holds, 0.1 to 60. Null for 2.",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "atSec",
+          "durationSec"
+        ],
+        "type": "object"
+      },
+      "name": "freezeFrame"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": false
+      },
       "description": "Set a clip's speed, volume, mute, or Fit or Fill; a song's volume or mute; a video layer's speed, volume or mute. Null keeps a value.",
       "inputSchema": {
         "additionalProperties": false,
@@ -616,6 +647,13 @@
               "null"
             ]
           },
+          "font": {
+            "description": "A font by name, e.g. Poppins; null: the preset's.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "preset": {
             "description": "title: big, at the top. lower-third: a name or label at the bottom left. plain: in the middle. caption: at the bottom.",
             "enum": [
@@ -636,7 +674,8 @@
           "preset",
           "atSec",
           "durationSec",
-          "animation"
+          "animation",
+          "font"
         ],
         "type": "object"
       },

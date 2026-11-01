@@ -1,8 +1,8 @@
 //! The compiler: the model's tool calls, as `tools` read them, against the project snapshot the message's context was
 //! built from, out as edits.
-//! - Additions (`setFormat`, `setCaptions`, `setBackground`, `fixCaptionWords`, `splitAt`, a trim that makes a clip
-//!   longer, the clip tools `setClip` and `setTransition`, the media: `addMusic`, `addSound`, `addText`, `addImage`,
-//!   `makeTitleCard`'s title and a layer's animation (`animate`), and a recording's camera and sounds:
+//! - Additions (`setFormat`, `setCaptions`, `setBackground`, `fixCaptionWords`, `splitAt`, `freezeFrame`, a trim that
+//!   makes a clip longer, the clip tools `setClip` and `setTransition`, the media: `addMusic`, `addSound`, `addText`,
+//!   `addImage`, `makeTitleCard`'s title and a layer's animation (`animate`), and a recording's camera and sounds:
 //!   `setCameraMode`, `adjustCamera`, `detachCamera`, `muteSource`, `setSourceVolume`, `separateSound`, and zooms on
 //!   its clicks: `autoZoom`) are one `Transaction` the app applies at once: one undo step. An addition is judged by
 //!   what its part does, not by its tool: one that takes something away (the model's own `removals`, as a format
@@ -62,6 +62,7 @@ use std::sync::Arc;
 
 use klipolo_cursor::timeline::TakeFacts;
 use klipolo_model::coded::{CodedError, ErrorParam};
+use klipolo_model::font::FontRef;
 use klipolo_model::ids::Id;
 use klipolo_model::media::music::refit_music_ops;
 use klipolo_model::motion::Motion;
@@ -149,12 +150,55 @@ pub struct Inputs {
     pub library: Library,
     /// Each recording's cursor facts, for `autoZoom`; None knows no clicks.
     pub cursor: Option<Arc<dyn CursorTakes>>,
+    /// What `addText`'s `font` names: the app's fonts (none where nothing names fonts).
+    pub fonts: FontNames,
 }
 
 /// A recording's cursor facts on its own clock (its clicks), as the app reads them from its take's cursor file: what
 /// `autoZoom` plans zooms from. None when it kept no cursor, or its file can't be read.
 pub trait CursorTakes: Send + Sync + std::fmt::Debug {
     fn facts(&self, recording: &Recording) -> Option<Arc<TakeFacts>>;
+}
+
+/// A font a name is: the font, the face of it nearest the weight and style asked for, and what downloading it takes
+/// while it isn't on this computer (a Google font: never downloaded by itself, the person downloads it).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NamedFont {
+    pub font: FontRef,
+    pub weight: u16,
+    pub italic: bool,
+    pub download_bytes: Option<u64>,
+}
+
+/// The app's font names: `(name, weight, italic)` to the font it is, from Klipolo's fonts, this computer's, those
+/// downloaded and Google's catalogue (while Google Fonts is on). None knows no font.
+#[derive(Clone, Default)]
+pub struct FontNames(Option<Arc<FontNamer>>);
+
+/// What names a font for `FontNames`.
+pub type FontNamer = dyn Fn(&str, u16, bool) -> Option<NamedFont> + Send + Sync;
+
+impl FontNames {
+    pub fn new(namer: Arc<FontNamer>) -> Self {
+        Self(Some(namer))
+    }
+
+    /// The font `name` is, its face nearest `weight` and `italic`; None when no font has that name.
+    pub fn named(&self, name: &str, weight: u16, italic: bool) -> Option<NamedFont> {
+        self.0
+            .as_ref()
+            .and_then(|namer| namer(name, weight, italic))
+    }
+}
+
+impl std::fmt::Debug for FontNames {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.is_some() {
+            "FontNames"
+        } else {
+            "FontNames(none)"
+        })
+    }
 }
 
 /// What one message's calls compiled to.
@@ -621,6 +665,7 @@ impl Compiler<'_> {
                     }
                 }
                 ToolCall::SplitAt { .. }
+                | ToolCall::FreezeFrame { .. }
                 | ToolCall::SetFormat { .. }
                 | ToolCall::SetCaptions { .. }
                 | ToolCall::FixCaptionWords { .. }
@@ -778,6 +823,10 @@ impl Compiler<'_> {
                         added.push((i, Added::Item(id)));
                     }
                     adding.keep(tried, i);
+                    // A font still to download is named: never downloaded by itself, and the reply says so.
+                    if let Some(said) = media::font_note(self, call) {
+                        notes.push((i, said));
+                    }
                     // The title is in: its background is drawn for it.
                     if let (Some(title_id), ToolCall::MakeTitleCard { prompt, .. }) =
                         (title_id, call)
@@ -989,6 +1038,9 @@ impl Compiler<'_> {
     fn addition(&self, work: &Project, call: &ToolCall) -> Result<Edit, Refused> {
         match call {
             ToolCall::SplitAt { at_us } => additions::split_at(self, work, *at_us),
+            ToolCall::FreezeFrame { at_us, duration_us } => {
+                additions::freeze_frame(self, work, *at_us, *duration_us)
+            }
             ToolCall::SetFormat {
                 format,
                 keep_others,
@@ -1022,6 +1074,7 @@ impl Compiler<'_> {
                 at_us,
                 duration_us,
                 animation,
+                font,
             } => media::add_text(
                 self,
                 work,
@@ -1029,6 +1082,7 @@ impl Compiler<'_> {
                 *preset,
                 (*at_us, *duration_us),
                 *animation,
+                font.as_deref(),
             ),
             ToolCall::AddImage {
                 file,
