@@ -4,10 +4,12 @@ import { SearchField } from '../design/SearchField';
 import { SpriteIcon } from '../design/SpriteIcon';
 import { CaptionsPanel } from '../features/captions/CaptionsPanel';
 import { LooksPanel } from '../features/looks/LooksPanel';
+import { ClipRail } from '../features/media/ClipRail';
 import { MediaList } from '../features/media/MediaList';
 import { useImportMedia } from '../features/media/useImportMedia';
 import { useCaptionsView, type LeftView } from '../state/captionsView';
 import { useLibraryPanel } from '../state/libraryPanel';
+import { recordYourScreen } from '../state/recorder';
 import { useUi, type LibraryTab } from '../state/ui';
 import { Icon } from './Icon';
 
@@ -18,12 +20,14 @@ export const LIBRARY_BODY_ID = 'library-body';
 
 /**
  * The library panel: the Library, Captions and Looks view tabs, Add files, Record your screen (the
- * shown, and the filter pills Clips, Music, Sounds and Images over the files of each (yours first, then Klipolo's
- * pack). The search keeps its words from tab to tab. The pills scroll sideways in a narrow panel, with a fade at the
- * right edge. The arrow keys move between them. Its Captions tab shows the Captions view in its place,
- * and its Looks tab the looks (`LooksPanel`). Its head's Collapse library, Command B (or Control Command S), or a
- * double click on its edge folds it to its rail (`useLibraryPanel`), whose Open library (or the edge) opens it again;
- * folded, it stays mounted (`hidden` and `inert`), and a fold with the keyboard inside puts it on the rail.
+ * Record dialog, as from the start screen and Shift Command R), a search over the tab shown, and the filter pills
+ * Clips, Music, Sounds and Images over the files of each (yours first, then Klipolo's pack). The search keeps its words
+ * from tab to tab. The pills scroll sideways in a narrow panel, with a fade at the right edge. The arrow keys move
+ * between them. Its Captions tab shows the Captions view in its place, and its Looks tab the looks
+ * (`LooksPanel`). Its head's Collapse library, Command B (or Control Command S), or a double click on its edge folds it
+ * to its rail (`useLibraryPanel`): Open library (or the edge) opens it again, Add files is kept, and the clips'
+ * thumbnails do what their rows do (`ClipRail`). Folded, it stays mounted (`hidden` and `inert`), and a fold with the
+ * keyboard inside puts it on the rail.
  */
 export function Library() {
   const { t } = useLingui();
@@ -93,30 +97,36 @@ export function Library() {
       />
       {collapsed && (
         <div className="library-rail">
-          <button
-            ref={rail}
-            type="button"
-            className="icon-btn"
-            aria-label={t({ id: 'library.open', message: 'Open library' })}
-            title={t({ id: 'library.open.tip', message: 'Open library (Command B)' })}
-            aria-expanded={false}
-            aria-controls={LIBRARY_BODY_ID}
-            onClick={() => {
-              wantFocus.current = true;
-              useLibraryPanel.getState().setCollapsed(false);
-            }}
-          >
-            <SpriteIcon name="expand-panel" className="is-mirrored" />
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label={t({ id: 'library.addFiles', message: 'Add files' })}
-            title={t({ id: 'library.addFiles.tip', message: 'Add files (Command O)' })}
-            onClick={() => void importMedia()}
-          >
-            <Icon name="plus" />
-          </button>
+          <div className="rail-actions">
+            {/* WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable. */}
+            <button
+              ref={rail}
+              type="button"
+              tabIndex={0}
+              className="icon-btn"
+              aria-label={t({ id: 'library.open', message: 'Open library' })}
+              title={t({ id: 'library.open.tip', message: 'Open library (Command B)' })}
+              aria-expanded={false}
+              aria-controls={LIBRARY_BODY_ID}
+              onClick={() => {
+                wantFocus.current = true;
+                useLibraryPanel.getState().setCollapsed(false);
+              }}
+            >
+              <SpriteIcon name="expand-panel" className="is-mirrored" />
+            </button>
+            <button
+              type="button"
+              tabIndex={0}
+              className="icon-btn"
+              aria-label={t({ id: 'library.addFiles', message: 'Add files' })}
+              title={t({ id: 'library.addFiles.tip', message: 'Add files (Command O)' })}
+              onClick={() => void importMedia()}
+            >
+              <Icon name="plus" />
+            </button>
+          </div>
+          <ClipRail />
         </div>
       )}
       <div
@@ -141,7 +151,10 @@ export function Library() {
             {viewTab('captions', captionsLabel)}
             {viewTab('looks', looksLabel)}
           </div>
+          {/* WebKit leaves plain buttons out of Tab order unless Full Keyboard Access is on: every control is reachable. */}
           <button
+            type="button"
+            tabIndex={0}
             className="icon-btn"
             aria-label={t({ id: 'library.addFiles', message: 'Add files' })}
             title={t({ id: 'library.addFiles.tip', message: 'Add files (Command O)' })}
@@ -151,6 +164,17 @@ export function Library() {
           </button>
           <button
             type="button"
+            tabIndex={0}
+            className="icon-btn"
+            aria-label={t({ id: 'library.record', message: 'Record your screen' })}
+            title={t({ id: 'library.record.tip', message: 'Record your screen (Shift Command R)' })}
+            onClick={recordYourScreen}
+          >
+            <Icon name="record" />
+          </button>
+          <button
+            type="button"
+            tabIndex={0}
             className="icon-btn"
             aria-label={t({ id: 'library.collapse', message: 'Collapse library' })}
             title={t({ id: 'library.collapse.tip', message: 'Collapse library (Command B)' })}

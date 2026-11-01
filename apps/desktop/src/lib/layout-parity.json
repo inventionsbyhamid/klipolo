@@ -1,4 +1,81 @@
 {
+  "cameraDefaults": [
+    {
+      "camera": {
+        "border": true,
+        "bubble": {
+          "anchor": "bottomRight",
+          "opacity": 1.0,
+          "overrides": {},
+          "radius": 0.0,
+          "rect": {
+            "h": 0.3556,
+            "w": 0.2,
+            "x": 0.76,
+            "y": 0.6044
+          },
+          "rotation": 0.0
+        },
+        "mirror": true,
+        "mode": "bubble",
+        "modeOverrides": {
+          "portrait": "splitBottom"
+        },
+        "shape": "circle"
+      },
+      "primary": "landscape"
+    },
+    {
+      "camera": {
+        "border": true,
+        "bubble": {
+          "anchor": "bottomRight",
+          "opacity": 1.0,
+          "overrides": {},
+          "radius": 0.0,
+          "rect": {
+            "h": 0.2,
+            "w": 0.3556,
+            "x": 0.6044,
+            "y": 0.76
+          },
+          "rotation": 0.0
+        },
+        "mirror": true,
+        "mode": "bubble",
+        "modeOverrides": {
+          "portrait": "splitBottom"
+        },
+        "shape": "circle"
+      },
+      "primary": "portrait"
+    },
+    {
+      "camera": {
+        "border": true,
+        "bubble": {
+          "anchor": "bottomRight",
+          "opacity": 1.0,
+          "overrides": {},
+          "radius": 0.0,
+          "rect": {
+            "h": 0.3556,
+            "w": 0.3556,
+            "x": 0.6044,
+            "y": 0.6044
+          },
+          "rotation": 0.0
+        },
+        "mirror": true,
+        "mode": "bubble",
+        "modeOverrides": {
+          "portrait": "splitBottom"
+        },
+        "shape": "circle"
+      },
+      "primary": "square"
+    }
+  ],
   "cameras": [
     {
       "camera": {

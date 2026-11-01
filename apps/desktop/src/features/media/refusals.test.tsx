@@ -73,6 +73,26 @@ describe('a drop on a lane that won’t take it', () => {
     expect(texts()).toEqual(['Pictures go on the Overlays lane.']);
   });
 
+  it('a whole recording lands on the Video lane only: let go on Overlays or a sound lane, it says so', () => {
+    const screenFile = fixtureSnapshot().project.assets.find((a) => a.id === 'screen') as Asset;
+    const take = { ...screenFile, name: 'Recording 1' };
+    const onDrop = vi.fn();
+    const letGo = (y: number) => {
+      beginMediaDrag({ pointerId: 1, clientX: 100, clientY: y } as never, take, onDrop, 'main');
+      fireEvent.pointerMove(window, { pointerId: 1, clientX: 140, clientY: y });
+      fireEvent.pointerUp(window, { pointerId: 1, clientX: 140, clientY: y });
+    };
+    // Overlays would take a video, but not a whole recording; the Sounds lane takes no video at all.
+    letGo(30);
+    letGo(125);
+    expect(onDrop).not.toHaveBeenCalled();
+    expect(texts()).toEqual(['Recordings go on the Video lane.', 'Recordings go on the Video lane.']);
+    // On the Video lane it lands, at the cut nearest the pointer (the first, this near the start).
+    letGo(80);
+    expect(onDrop).toHaveBeenCalledWith({ lane: 'main', index: 0 });
+    expect(texts()).toHaveLength(2);
+  });
+
   it('a sound from Finder let go on the Overlays lane says it goes on Sound effects or Music, and imports nothing', async () => {
     renderHook(() => useFinderDrop());
     await act(() => Promise.resolve());

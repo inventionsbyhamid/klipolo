@@ -1,7 +1,8 @@
 //! Pins TS `resolveRect`/`cameraRect`/`containRect`/`pictureRect`/`videoRect`/`textScale` (apps/desktop/src/lib/layout.ts) to
 //! Rust: gizmos hit-test with the TS functions, the engine draws with these. Also `shownFromUs`
 //! (apps/desktop/src/lib/timeline.ts): where the editor puts the playhead to show a layer, past a title's intro
-//! animation. And `fullFrame` and `titleLayout` (`lib/layout.ts`) and the 9:16 safe area (`lib/safeAreas`). Regenerate with
+//! animation. And `fullFrame` and `titleLayout` (`lib/layout.ts`), the 9:16 safe area (`lib/safeAreas`), and the camera a
+//! take's clip starts with (`cameraLayoutFor` in `lib/defaults.ts`). Regenerate with
 //! `KLIPOLO_UPDATE_PARITY=1 cargo test -p klipolo-engine --test parity`.
 
 use std::fs;
@@ -296,6 +297,11 @@ fn build() -> Value {
             })
         })
         .collect();
+    // The camera a take's clip starts with in each main format (`lib/defaults.ts cameraLayoutFor`).
+    let camera_defaults: Vec<Value> = FORMATS
+        .iter()
+        .map(|&primary| json!({ "primary": primary, "camera": CameraLayout::for_primary(primary) }))
+        .collect();
     sorted_keys(json!({
         "rects": rects,
         "cameras": cameras,
@@ -307,6 +313,7 @@ fn build() -> Value {
         "fullFrame": full_frame,
         "portraitClear": portrait_clear,
         "titleText": title_text,
+        "cameraDefaults": camera_defaults,
     }))
 }
 

@@ -163,6 +163,13 @@ const PATHS = {
       <circle className="ico-fill" cx="18" cy="12" r="1.5" />
     </>
   ),
+  /** Record your screen: a ring with a filled 8 px dot, in the control's ink (never red). */
+  record: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle className="ico-fill" cx="12" cy="12" r="4" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof PATHS;
