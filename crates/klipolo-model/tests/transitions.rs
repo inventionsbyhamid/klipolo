@@ -9,7 +9,10 @@ use klipolo_model::params::ParamValue;
 use klipolo_model::query::clip_starts;
 use klipolo_model::time::{RangeUs, Us};
 use klipolo_model::timeline::Transition;
-use klipolo_model::transitions::{max_transition_us, windows, TransitionWindow};
+use klipolo_model::transitions::{
+    default_transition_us, max_transition_us, transition_length_us, windows, TransitionWindow,
+    MIN_TRANSITION_US,
+};
 use klipolo_model::{apply_ops, ModelError, Project};
 
 fn dissolve(seconds: f64) -> Transition {
@@ -464,9 +467,19 @@ fn unrefitted(p: &Project, op: &Op) -> Project {
     raw
 }
 
+/// The frame rates the parity cases put a transition's length on the grid of: whole frames at each come out differently
+/// (24 fps can't make 0.1 s; 25 and 60 make half a second exactly; 30's frames are 33 333 or 33 334 µs).
+const GRID_FPS: [u32; 4] = [24, 25, 30, 60];
+/// The lengths the parity cases ask each cut for, in µs: none, under 0.1 s, the shortest, odd lengths, the default, the
+/// longest a transition takes, and past it.
+const ASKED_US: [Us; 8] = [
+    0, 90_000, 100_000, 333_333, 500_000, 1_234_567, 5_000_000, 7_000_000,
+];
+
 /// The UI mirror (`apps/desktop/src/lib/transitions.ts`) is checked against these cases: the longest transition at
-/// every cut, every transition's window, and the lengths `normalize` refits an edit's transitions to
-/// (`fittedTransitionsUs`).
+/// every cut, every transition's window, the lengths `normalize` refits an edit's transitions to
+/// (`fittedTransitionsUs`), and on the frame grid at each of `GRID_FPS` a new transition's length at every cut
+/// (`defaultTransitionUs`) and each of `ASKED_US` as the length a cut takes (`transitionLengthUs`).
 #[test]
 fn the_ui_mirror_has_the_same_limits() {
     // "b" plays broll 2–8 s (2 s spare after it), "c" broll 5–10 s; a 2 s dissolve joins "b" and "c".
@@ -541,9 +554,25 @@ fn the_ui_mirror_has_the_same_limits() {
                     })
                 })
                 .collect();
-            sorted_keys(
-                serde_json::json!({ "project": p, "max": max, "windows": windows, "fitted": fitted }),
-            )
+            let grid: Vec<_> = GRID_FPS
+                .iter()
+                .map(|&fps| {
+                    let defaults: Vec<Us> = (0..p.timeline.main.len())
+                        .map(|i| default_transition_us(&p, i, fps))
+                        .collect();
+                    let lengths: Vec<Vec<Us>> = (max.iter())
+                        .map(|&m| {
+                            (ASKED_US.iter())
+                                .map(|&us| transition_length_us(us, m, fps))
+                                .collect()
+                        })
+                        .collect();
+                    serde_json::json!({ "fps": fps, "defaults": defaults, "lengths": lengths })
+                })
+                .collect();
+            sorted_keys(serde_json::json!({
+                "project": p, "max": max, "windows": windows, "fitted": fitted, "grid": grid,
+            }))
         })
         .collect();
     assert_golden(
@@ -551,4 +580,37 @@ fn the_ui_mirror_has_the_same_limits() {
             .join("../../apps/desktop/src/lib/transition-parity.json"),
         &cases,
     );
+}
+
+#[test]
+fn a_new_transition_is_half_a_second_on_the_frame_grid_or_the_longest_that_fits() {
+    // "a" has 40 s after its out point, "b" 2 s before its in point: up to 4 s fit.
+    let p = with_handles();
+    assert_eq!(default_transition_us(&p, 0, 30), 500_000);
+    assert_eq!(default_transition_us(&p, 0, 24), 500_000);
+    // The last clip has no cut; a cut with no spare footage takes none.
+    assert_eq!(default_transition_us(&p, 1, 30), 0);
+    assert_eq!(default_transition_us(&fixture(), 0, 30), 0);
+    // Only 0.2 s of footage before "b": 0.4 s (and a µs) fit, so 12 frames at 30 fps.
+    let mut short = with_handles();
+    short.timeline.main[1].source_in_us = secs(0.2);
+    assert_eq!(max_transition_us(&short, 0), 400_001);
+    assert_eq!(default_transition_us(&short, 0, 30), 400_000);
+    // At 24 fps 9 frames last 0.375 s.
+    assert_eq!(default_transition_us(&short, 0, 24), 375_000);
+}
+
+#[test]
+fn a_length_lands_on_a_whole_frame_within_the_cuts_room() {
+    // 0.5 s and odd lengths go to the nearest frame: 0.333333 s is 10 frames at 30 fps (333 333 µs).
+    assert_eq!(transition_length_us(500_000, secs(4.0), 30), 500_000);
+    assert_eq!(transition_length_us(333_333, secs(4.0), 30), 333_333);
+    assert_eq!(transition_length_us(1_234_567, secs(4.0), 30), 1_233_333);
+    // Never under the first frame count of at least 0.1 s (3 frames at 30 fps, 125 ms at 24), never past the room.
+    assert_eq!(transition_length_us(90_000, secs(4.0), 30), 100_000);
+    assert_eq!(transition_length_us(MIN_TRANSITION_US, secs(4.0), 24), 125_000);
+    assert_eq!(transition_length_us(5_000_000, 400_001, 30), 400_000);
+    // No room for one frame of 0.1 s: nothing fits.
+    assert_eq!(transition_length_us(500_000, 110_000, 24), 0);
+    assert_eq!(transition_length_us(500_000, 0, 30), 0);
 }
