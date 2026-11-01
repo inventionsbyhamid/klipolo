@@ -654,6 +654,131 @@ fn start_paid_without_key_or_code_is_no_credit() {
     assert!(r.told().is_empty(), "nothing asked for");
 }
 
+/// Sees one person at 0.3 on every frame of a copy (the copy holds its frame count).
+struct OnePerson;
+
+impl klipolo_analysis::providers::SubjectTracker for OnePerson {
+    fn model(&self) -> &str {
+        "fake-sam"
+    }
+
+    fn max_frames(&self) -> u64 {
+        15_000
+    }
+
+    fn estimate_usd(&self, frames: u64) -> f64 {
+        frames.max(50) as f64 * 0.0002
+    }
+
+    fn track<'a>(
+        &'a self,
+        video: &'a std::path::Path,
+        _phrase: &'a str,
+    ) -> BoxFuture<
+        'a,
+        Result<klipolo_analysis::providers::Tracking, klipolo_analysis::providers::ProviderError>,
+    > {
+        use klipolo_analysis::providers::{TrackedBox, TrackedFrame, Tracking};
+        Box::pin(async move {
+            let frames: u32 = std::fs::read_to_string(video).unwrap().parse().unwrap();
+            let person = TrackedBox {
+                id: 1,
+                left: 0.2,
+                top: 0.1,
+                right: 0.4,
+                bottom: 1.0,
+                confidence: Some(0.9),
+            };
+            Ok(Tracking {
+                frames: (0..frames)
+                    .map(|frame| TrackedFrame {
+                        frame,
+                        boxes: vec![person],
+                    })
+                    .collect(),
+                frames_billed: u64::from(frames),
+                cost_usd: f64::from(frames.max(50)) * 0.0002,
+            })
+        })
+    }
+}
+
+struct PaysOnePerson;
+
+impl klipolo_app::speaker::Trackers for PaysOnePerson {
+    fn tracker(
+        &self,
+    ) -> BoxFuture<'_, Result<Arc<dyn klipolo_analysis::providers::SubjectTracker>, String>> {
+        Box::pin(async {
+            Ok(Arc::new(OnePerson) as Arc<dyn klipolo_analysis::providers::SubjectTracker>)
+        })
+    }
+
+    fn credit_left(&self) -> BoxFuture<'_, Option<f64>> {
+        Box::pin(async { None })
+    }
+}
+
+/// Writes the frame count as the copy.
+struct CountingCopy;
+
+impl klipolo_analysis::subject::SubjectCopy for CountingCopy {
+    fn copy(
+        &self,
+        _src: &std::path::Path,
+        range: RangeUs,
+        fps: f64,
+        out: &std::path::Path,
+        _cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<Vec<klipolo_model::time::Us>, klipolo_analysis::VideoError> {
+        let frames = klipolo_analysis::subject::frames_for(range.end - range.start, fps);
+        std::fs::write(out, frames.to_string()).unwrap();
+        Ok(vec![])
+    }
+}
+
+/// Another app's `followSubject` runs as chat's: priced, tracked, and landed as one undo step the app made, told to
+/// the page. The speaker is a person to SAM.
+#[test]
+fn an_apps_follow_subject_tracks_and_lands_as_its_own_step() {
+    let r = Rig::new();
+    let dir = tempfile::tempdir().unwrap();
+    r.chat
+        .set_speaker(Arc::new(klipolo_app::speaker::Speaker::new(
+            Arc::new(PaysOnePerson),
+            Arc::new(CountingCopy),
+            dir.path().join("analysis"),
+            dir.path().join("work"),
+            Arc::new(|_| {}),
+        )));
+    let follow = Job::Follow {
+        description: "the speaker".into(),
+    };
+    // Two stretches of one file 11 s apart: 13 s (billed as 50 frames) and 131.04 s (263 frames).
+    let usd = r.host.estimate_usd(&follow);
+    assert!((usd - (50.0 + 263.0) * 0.0002).abs() < 1e-9, "{usd}");
+    assert_eq!(r.host.start_paid("Example Client", &follow), Ok(()));
+    let (maker, label, params) = r.newest_step().unwrap();
+    assert_eq!(maker, Maker::App("Example Client".into()));
+    assert_eq!(label, "chat.followSubject");
+    assert_eq!(params, json!({"description": "person"}));
+    let p = r.project();
+    for clip in &p.timeline.main {
+        assert!(
+            matches!(
+                clip.fill_focus
+                    .get(&klipolo_model::project::FormatKind::Portrait),
+                Some(klipolo_model::fill_focus::FillFocus::Speaker { .. })
+            ),
+            "{:?}",
+            clip.fill_focus
+        );
+    }
+    let told = r.told();
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(told[0]["reply"]["reply"]["applied"].is_object(), "{told:?}");
+}
+
 /// An access code whose relay credit is below the estimate, or turned off, refuses before any picture is asked for;
 /// with credit, the picture is asked for as chat asks, its prompt cleaned and capped.
 #[test]
