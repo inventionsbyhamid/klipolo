@@ -201,3 +201,17 @@ describe('a quick second change builds on the first', () => {
     });
   });
 });
+
+describe('an effect row', () => {
+  it('two effects this build lacks are told apart, each Remove naming its own', () => {
+    const missing = (id: string, effect: string) => ({ id, effect, enabled: true, params: {} });
+    renderWithProviders(
+      <EffectStack
+        target={{ type: 'clip', id: 'a' }}
+        effects={[missing('m1', 'com.example.neon/glow'), missing('m2', 'com.example.neon/haze')]}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Remove missing effect (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove missing effect (2)' })).toBeInTheDocument();
+  });
+});

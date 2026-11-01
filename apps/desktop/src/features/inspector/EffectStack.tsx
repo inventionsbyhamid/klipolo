@@ -5,7 +5,7 @@ import type { EffectTarget } from '../../bindings/EffectTarget';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../design/Menu';
 import { Tooltip } from '../../design/Tooltip';
 import { Icon } from '../../layout/Icon';
-import { builtinsOf, contribLabel } from '../../lib/contrib';
+import { builtinsOf, contribLabel, contribLabelInSentence } from '../../lib/contrib';
 import { addEffect, effectName, MAX_EFFECTS, removeEffect } from './effectOps';
 import { EffectRow } from './EffectRow';
 
@@ -56,20 +56,27 @@ export function EffectStack({ target, effects }: EffectStackProps) {
     });
   };
 
-  /** Each effect's name; two of a kind are numbered ("Vignette (1)", "Vignette (2)") so each control says which. */
-  const kinds = new Map<string, number>();
-  for (const fx of effects) kinds.set(fx.effect, (kinds.get(fx.effect) ?? 0) + 1);
+  /**
+   * Each effect's name, and the same inside a sentence ("Remove missing effect"); two that read the same are numbered
+   * ("Vignette (1)", "Vignette (2)"; two effects this build lacks too) so each control says which.
+   */
+  const shown = effects.map((fx) => effectName(fx.effect));
+  const count = new Map<string, number>();
+  for (const name of shown) count.set(name, (count.get(name) ?? 0) + 1);
   const seen = new Map<string, number>();
-  const names = effects.map((fx) => {
-    const name = effectName(fx.effect);
-    if ((kinds.get(fx.effect) ?? 0) < 2) return name;
-    const n = (seen.get(fx.effect) ?? 0) + 1;
-    seen.set(fx.effect, n);
-    return t({
+  const numbered = (name: string, n: number) =>
+    t({
       id: 'effect.numbered',
       message: `${name} (${n})`,
       comment: 'An effect used more than once on a clip or layer, numbered in stack order: e.g. Vignette (2)',
     });
+  const names = effects.map((fx, i) => {
+    const name = shown[i];
+    const sentence = contribLabelInSentence(fx.effect, 'effect');
+    if ((count.get(name) ?? 0) < 2) return { name, sentence };
+    const n = (seen.get(name) ?? 0) + 1;
+    seen.set(name, n);
+    return { name: numbered(name, n), sentence: numbered(sentence, n) };
   });
 
   const fullNote = t({ id: 'effect.add.full', message: 'A clip or layer can have up to eight effects' });
@@ -83,7 +90,8 @@ export function EffectStack({ target, effects }: EffectStackProps) {
               stack={stack}
               fx={fx}
               index={index}
-              name={names[index]}
+              name={names[index].name}
+              sentence={names[index].sentence}
               onRemove={() => remove(fx, index)}
             />
           ))}

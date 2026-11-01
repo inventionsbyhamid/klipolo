@@ -7,7 +7,6 @@ import { Toggle } from '../../design/Toggle';
 import { Tooltip } from '../../design/Tooltip';
 import { Icon } from '../../layout/Icon';
 import { BUILTINS } from '../../lib/contrib';
-import { labelText } from '../../lib/labels';
 import { commitToggle } from '../../state/commit';
 import { effectsNow } from '../../state/latest';
 import { effectLabels, moveEffect, updateEffectOp, type Stack } from './effectOps';
@@ -19,6 +18,8 @@ interface EffectRowProps {
   index: number;
   /** Its name in the stack ("Vignette (2)" when there are two). */
   name: string;
+  /** The same inside a sentence ("missing effect (2)"), for the labels that name it. */
+  sentence: string;
   /** Remove it (the stack moves focus on once it's gone). */
   onRemove: () => void;
 }
@@ -28,7 +29,7 @@ interface EffectRowProps {
  * "Show … settings", and a menu to move it up or down the stack (which runs top to bottom) or remove it. An effect this
  * build doesn't have shows "Missing effect" (its id as a tooltip) and can only be removed.
  */
-export function EffectRow({ stack, fx, index, name, onRemove }: EffectRowProps) {
+export function EffectRow({ stack, fx, index, name, sentence, onRemove }: EffectRowProps) {
   const { t } = useLingui();
   const [open, setOpen] = useState(false);
   const def = BUILTINS.find((d) => d.id === fx.effect && d.kind === 'effect');
@@ -44,7 +45,7 @@ export function EffectRow({ stack, fx, index, name, onRemove }: EffectRowProps) 
           <IconButton
             className="icon-btn-sm"
             icon={<Icon name="trash" />}
-            label={labelText(effectLabels.remove(fx.effect))}
+            label={t({ id: 'effect.remove.named', message: `Remove ${sentence}`, comment: '{sentence}: e.g. missing effect (2)' })}
             onClick={onRemove}
           />
         </div>
@@ -57,7 +58,13 @@ export function EffectRow({ stack, fx, index, name, onRemove }: EffectRowProps) 
   return (
     <li {...ids} className="fx-row">
       <div className="fx-head">
-        <Tooltip label={labelText(effectLabels.turn(fx.effect, !fx.enabled))}>
+        <Tooltip
+          label={
+            fx.enabled
+              ? t({ id: 'effect.turnOff.named', message: `Turn ${sentence} off`, comment: '{sentence}: e.g. Vignette (2)' })
+              : t({ id: 'effect.turnOn.named', message: `Turn ${sentence} on`, comment: '{sentence}: e.g. Vignette (2)' })
+          }
+        >
           <Toggle
             aria-label={name}
             checked={fx.enabled}
