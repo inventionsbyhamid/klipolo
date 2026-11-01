@@ -342,7 +342,7 @@ fn a_resumed_writer_appends_after_a_torn_line_and_keeps_its_line_files() {
     assert_eq!(anchors.len(), 2, "run 1's anchor kept, run 2's added");
 }
 
-/// Owner or controller, on the Mac and quietly: the real cost of the tick with three 30 Mb/s streams.
+/// Run by hand on a Mac after a Mac build (quietly): the real cost of the tick with three 30 Mb/s streams.
 #[test]
 #[ignore]
 fn tick_cost_with_three_30_mbps_streams() {

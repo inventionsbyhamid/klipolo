@@ -25,7 +25,7 @@ interface SegmentedProps<T extends string> {
 
 /**
  * A segmented control: a raised track with 3 px padding, small options in ink-soft, the checked one a paper
- * pill with navy text. A radio group: the arrow keys move. An option with an icon shows it alone, named by its label.
+ * pill with on-paper text. A radio group: the arrow keys move. An option with an icon shows it alone, named by its label.
  */
 export function Segmented<T extends string>({
   label,

@@ -51,6 +51,12 @@ pub enum Problem {
     },
     /// More than one short noun phrase: a list, or over `MAX_PHRASE_WORDS` words.
     NotOnePhrase,
+    /// A number between two of the steps it moves in (a volume of 0.333 where it moves in hundredths).
+    OffStep { step: f64, got: f64 },
+    /// A value the call can't use with the others as given: `why` says what it goes with.
+    Unused { why: &'static str },
+    /// A call that changes nothing: none of `fields` is set.
+    NoChange { fields: &'static str },
 }
 
 impl fmt::Display for ToolError {
@@ -108,6 +114,14 @@ impl fmt::Display for ToolError {
                 "{tool}: {field} must be one short noun phrase naming one thing, at most {MAX_PHRASE_WORDS} words; \
                  call {tool} once for each thing."
             ),
+            Problem::OffStep { step, got } => write!(
+                f,
+                "{tool}: {field} must be in steps of {}{}.",
+                said_secs(*step),
+                given(*got)
+            ),
+            Problem::Unused { why } => write!(f, "{tool}: {field} {why}."),
+            Problem::NoChange { fields } => write!(f, "{tool}: set at least one of {fields}."),
         }
     }
 }

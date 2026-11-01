@@ -234,7 +234,7 @@ export function TextInspector({
         <Toggle
           id={shadowId}
           checked={style.shadow}
-          onChange={() =>
+          onCheckedChange={() =>
             void commitToggle(
               () => contentNow(item.id, content).style.shadow,
               (on) => (on ? 'text.shadow.add.undo' : 'text.shadow.remove.undo'),

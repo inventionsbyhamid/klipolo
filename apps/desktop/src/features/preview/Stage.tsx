@@ -16,9 +16,6 @@ import { GizmoLayer } from './GizmoLayer';
 import { sceneStartUs } from './sceneStart';
 import { useSettledSize } from './useSettledSize';
 
-/** `--color-night` as 0xRRGGBB: the window shows it around the native layer for a frame or two while it resizes. */
-const NIGHT = 0x070a14;
-
 /** The largest box with the given aspect ratio that fits inside `container`. */
 export function fitBox(container: { width: number; height: number }, aspect: [number, number]) {
   const ratio = aspect[0] / aspect[1];
@@ -70,7 +67,8 @@ function useViewSync(frame: RefObject<HTMLDivElement | null>, info: EngineInfo |
 /**
  * The native presenter's hole: the frame box is transparent, the engine's layer sits under the webview exactly there,
  * and everything else still draws above it in HTML. Its rect goes to Rust at most once per animation frame, on layout,
- * resize and display changes.
+ * resize and display changes. It leaves the window's own colour (what shows around the layer for a frame or two while
+ * the window resizes) to the theme: Rust paints it with the theme's canvas (`setAppearance`).
  */
 function useNativeHole(frame: RefObject<HTMLDivElement | null>, on: boolean) {
   useEffect(() => {
@@ -86,7 +84,7 @@ function useNativeHole(frame: RefObject<HTMLDivElement | null>, on: boolean) {
       if (!forced && key === last) return;
       forced = false;
       last = key;
-      void engine.setRect(rect && { ...rect, backdrop: NIGHT }).catch(() => undefined);
+      void engine.setRect(rect && { ...rect, backdrop: null }).catch(() => undefined);
     };
     const request = (force = false) => {
       forced ||= force;

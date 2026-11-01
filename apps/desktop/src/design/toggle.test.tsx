@@ -9,7 +9,7 @@ function Row({ start = false, disabled = false }: { start?: boolean; disabled?: 
   const [on, setOn] = useState(start);
   return (
     <div>
-      <Toggle id="mirror" checked={on} onChange={setOn} disabled={disabled} />
+      <Toggle id="mirror" checked={on} onCheckedChange={setOn} disabled={disabled} />
       <label htmlFor="mirror">Mirror my camera</label>
     </div>
   );
@@ -21,6 +21,8 @@ describe('Toggle', () => {
     const toggle = screen.getByRole('switch', { name: 'Mirror my camera' });
     expect(toggle).toHaveAttribute('aria-checked', 'true');
     expect(toggle).toHaveClass('toggle');
+    // The knob is an element of its own, so the theme's tokens colour it.
+    expect(toggle.querySelector('.toggle-knob')).not.toBeNull();
   });
 
   it('toggle_flips_on_a_click_on_it_or_its_label_and_with_space', async () => {

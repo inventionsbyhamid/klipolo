@@ -12,4 +12,9 @@ durationUs: number,
 /**
  * Stickers; 0 for sounds and music.
  */
-width: number, height: number, };
+width: number, height: number, 
+/**
+ * Words for what it is or suits ("transition", "swipe"), as the manifest lists them: the library's search and
+ * chat find it by them too.
+ */
+tags: Array<string>, };

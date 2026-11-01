@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import type { FormatKind } from '../bindings/FormatKind';
+import type { Theme } from '../bindings/Theme';
 import type { SafeAreaId } from '../lib/safeAreas';
 
 /**
- * The view settings the editor reads: the timeline's zoom and snapping, and the format the preview shows. Panel
+ * The view settings the editor reads: the timeline's zoom and snapping, the format the preview shows, and the theme. Panel
  * widths and heights live in Klipolo's layout (the CSS grid's variables), not here. The timeline always shows its four
  * lanes (`timelineExpanded` is never on).
  */
@@ -42,6 +43,9 @@ interface UiStore {
    */
   autoCopies: boolean;
   setAutoCopies: (on: boolean) => void;
+  /** Settings' Appearance: the system's (the default), or always light or always dark. Kept on this Mac. */
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
 }
 
 /** The Library's tabs: your clips, music, sounds and images. */
@@ -56,6 +60,23 @@ function keptAutoCopies(): boolean {
     return localStorage.getItem(AUTO_COPIES) !== 'off';
   } catch {
     return true;
+  }
+}
+
+/** Where the theme is kept (local storage), read before the first paint so the page never shows another for a frame. */
+const THEME = 'klipolo.theme';
+const THEMES: readonly Theme[] = ['system', 'light', 'dark'];
+
+/**
+ * The theme as the person left it; the system's when nothing was kept, a value this Klipolo doesn't know, or storage is
+ * refused.
+ */
+function keptTheme(): Theme {
+  try {
+    const kept = localStorage.getItem(THEME);
+    return THEMES.find((theme) => theme === kept) ?? 'system';
+  } catch {
+    return 'system';
   }
 }
 
@@ -85,5 +106,14 @@ export const useUi = create<UiStore>((set) => ({
       // Storage refused: the switch holds for this session.
     }
     set({ autoCopies });
+  },
+  theme: keptTheme(),
+  setTheme: (theme) => {
+    try {
+      localStorage.setItem(THEME, theme);
+    } catch {
+      // Storage refused: the theme holds for this session.
+    }
+    set({ theme });
   },
 }));

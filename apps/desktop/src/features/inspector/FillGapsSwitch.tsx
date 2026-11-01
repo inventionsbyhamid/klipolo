@@ -70,7 +70,7 @@ export function FillGapsSwitch({
           })}
           aria-describedby={mutedHere ? hint : (said ?? hint)}
           checked={on}
-          onChange={(next) => setFillGaps(recording.id, next)}
+          onCheckedChange={(next) => setFillGaps(recording.id, next)}
         />
       </div>
       {(mutedHere || !said) && (
