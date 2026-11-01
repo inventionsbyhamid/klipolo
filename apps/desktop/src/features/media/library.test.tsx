@@ -88,6 +88,7 @@ beforeEach(() => {
   useUi.setState({ libraryTab: 'clips' });
   usePack.setState({ items: [], asked: false });
   useMarks.setState({ marks: {}, asked: false });
+  useToasts.setState({ toasts: [] });
   forgetPictures();
 });
 
@@ -416,6 +417,21 @@ describe('the Library', () => {
     act(() => useUi.setState({ libraryTab: 'clips' }));
     await userEvent.click(screen.getByRole('button', { name: 'Favorite broll.mp4' }));
     expect(library.setFavorite).toHaveBeenLastCalledWith('file:/media/broll', true);
+  });
+
+  it('an answer with no marks reads as none, and a save that answers none keeps the star', async () => {
+    useUi.setState({ libraryTab: 'sounds' });
+    vi.mocked(library.marks).mockResolvedValueOnce(null as never);
+    vi.mocked(library.setFavorite).mockResolvedValueOnce(null as never);
+    renderWithProviders(<Library />);
+    const star = await screen.findByRole('button', { name: 'Favorite Impact' });
+    await waitFor(() => expect(library.marks).toHaveBeenCalled());
+    await act(() => Promise.resolve());
+    expect(screen.getByText('kiln-door.wav')).toBeInTheDocument();
+    await userEvent.click(star);
+    await act(() => Promise.resolve());
+    expect(screen.getByRole('button', { name: 'Favorite Impact' })).toHaveAttribute('aria-pressed', 'true');
+    expect(useToasts.getState().toasts).toHaveLength(0);
   });
 
   it('a star that couldn’t be saved is taken back, and says so', async () => {

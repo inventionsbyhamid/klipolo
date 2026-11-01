@@ -17,13 +17,16 @@ export const fileKey = (path: string) => `file:${path}`;
 
 export const useMarks = create<{ marks: LibraryMarks; asked: boolean }>(() => ({ marks: {}, asked: false }));
 
-/** The marks as Rust keeps them, read once per page (asked again by the next library tab when they couldn't be). */
+/**
+ * The marks as Rust keeps them, read once per page (asked again by the next library tab when they couldn't be); an
+ * answer with none reads as none.
+ */
 export function loadMarks() {
   if (useMarks.getState().asked) return;
   useMarks.setState({ asked: true });
   void library
     .marks()
-    .then((marks) => useMarks.setState({ marks }))
+    .then((marks) => useMarks.setState({ marks: marks ?? {} }))
     .catch(() => useMarks.setState({ asked: false }));
 }
 
@@ -43,7 +46,7 @@ export function setFavorite(key: string, on: boolean) {
   put(key, { favorite: on, usedMs: was?.usedMs ?? 0 });
   library
     .setFavorite(key, on)
-    .then((saved) => put(key, saved[key]))
+    .then((saved) => saved && put(key, saved[key]))
     .catch((error: unknown) => {
       put(key, { favorite: was?.favorite ?? false, usedMs: useMarks.getState().marks[key]?.usedMs ?? 0 });
       toast.error(errorMessage(error));
@@ -56,7 +59,7 @@ export function markUsed(key: string) {
   // Not kept for the next project when it can't be saved; this one still lists it first.
   library
     .markUsed(key)
-    .then((saved) => put(key, saved[key]))
+    .then((saved) => saved && put(key, saved[key]))
     .catch(() => undefined);
 }
 
