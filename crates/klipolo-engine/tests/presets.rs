@@ -1,8 +1,7 @@
 //! The shipped shader presets: data folders in exactly the shape a library version
 //! has, listed where the model and the engine read them, and each one passing the rules agents' code meets when it is
 //! given an agent's id: the guard, the hardening and the loader's definition checks, small by construction (loops of
-//! constant bound ≤ 8, at most 9 samples a pixel). The class each claims is the one it measures on the Intel Mac
-//!.
+//! constant bound ≤ 8, at most 9 samples a pixel). The class each claims is the one it measures on the Intel Mac.
 
 use klipolo_engine::make::budget::CostClass;
 use klipolo_engine::registry::pack::{check_definition, names_clean, setting_text_clean};

@@ -2,7 +2,7 @@
 //! 16² before any big frame, the worst corners narrowing the envelope, bools and choices measured at every value,
 //! colours at their probes (`probes`), the time budget, the export stop, the worker's own GPU meter (`budget`),
 //! fenced timing in batches (`fenced`), and every copy of a batch paying its passes where the renderer keeps results
-//! results between frames (`caches`).
+//! between frames (`caches`).
 //! `FakeMeter` makes the numbers the same on any GPU (lavapipe in CI).
 
 #[path = "make_measure_gpu/budget.rs"]
@@ -161,7 +161,7 @@ async fn bools_and_choices_are_measured_at_every_value_and_never_narrowed() {
     assert_eq!(env.ranges["detail"], (0.0, 0.5));
 }
 
-/// Colour probes: a colour that decides work is measured at its probe set, never narrowed or
+/// A colour that decides work is measured at its probe set, never narrowed or
 /// left out, and the worst probe counts: here pure red takes the costly arm, so the shader is Over.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU (lavapipe in CI)"]

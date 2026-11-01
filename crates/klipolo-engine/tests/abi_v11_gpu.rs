@@ -1,6 +1,6 @@
-//! Effect ABI v1.1 on the GPU: a static generator draws once and is reused, a half-size
-//! one takes a quarter of the memory and lands where the full-size one does, a stepped one draws once a step, and a
-//! split piece draws what the whole layer drew at the same place in the contribution's time.
+//! Effect ABI v1.1 on the GPU: a static generator draws once and is reused, a half-size one takes a quarter of the
+//! memory and lands where the full-size one does, a stepped one draws once a step, and a split piece draws what the
+//! whole layer drew at the same place in the contribution's time.
 
 mod support;
 use klipolo_model::contrib::Resolution;

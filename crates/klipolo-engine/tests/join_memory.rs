@@ -1,4 +1,4 @@
-//! The join's memory, in a test binary of its own: it measures this whole process's footprint, so no other test may
+//! The join's memory, in a test binary of its own: it measures this whole process's footprint, so no other test may run
 //! beside it (in `export.rs` it shared the process with about 30 tests running in parallel).
 mod support;
 

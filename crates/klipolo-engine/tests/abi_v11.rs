@@ -1,6 +1,6 @@
-//! Effect ABI v1.1 in the plan: a generator's time follows its piece of the layer
-//! and holds on its `fps` steps, a generator whose picture repeats carries a cache key, a half-size one says so,
-//! and the definitions that ask for these, or for a downsample, are checked.
+//! Effect ABI v1.1 in the frame plan: a generator's time follows its piece of the layer and holds on its `fps` steps, a
+//! generator whose picture repeats carries a cache key, a half-size one says so, and the definitions that ask for
+//! these, or for a downsample, are checked.
 
 mod support;
 use klipolo_engine::plan::generator_time;
@@ -76,8 +76,8 @@ fn landscape(
     )
 }
 
-/// The second piece of a split generator layer, and the filter on it, see the time, progress and frame the whole
-/// layer saw at the same place in the contribution's time.
+/// The second piece of a split generator layer, and the filter on it, see the time, progress and frame the whole layer
+/// saw at the same place in the contribution's time.
 #[test]
 fn a_split_generator_layer_and_its_filters_continue_the_wholes_time() {
     let moving = generator_def("moving", None, None);
@@ -144,9 +144,9 @@ fn static_and_stepped_generators_carry_a_cache_key_and_half_size_says_so() {
     assert_eq!(at(&moving, 10.0, 1.04).source.step_fps, 0.0, "smooth");
 }
 
-/// The fields v1.1 adds to `KlFrame` (`fps`, `duration`, `resolution`, `step_fps`) hold for a layer's
-/// whole length, so reading them alone draws the same every frame; stepped and piece time reach a shader only as
-/// `kl.time`, `kl.progress` and `kl.frame`, which the guard's `animates` sees.
+/// The fields v1.1 adds to `KlFrame` (`fps`, `duration`, `resolution`, `step_fps`) hold for a layer's whole length, so
+/// reading them alone draws the same every frame; stepped and piece time reach a shader only as `kl.time`,
+/// `kl.progress` and `kl.frame`, which the guard's `animates` sees.
 #[test]
 fn the_new_kl_fields_hold_over_a_layer_and_time_stays_visible_to_the_guard() {
     let def = generator_def("g", None, Some(12));
@@ -208,8 +208,8 @@ fn fps_and_resolution_are_a_generators_and_fps_is_one_to_sixty() {
     );
 }
 
-/// A filter that isn't built in may run at half size from a px setting of at least 4 px; any other rule is
-/// refused, saying why.
+/// A filter that isn't built in may run at half size from a px setting of at least 4 px; any other rule is refused,
+/// saying why.
 #[test]
 fn a_non_built_in_filter_downsamples_only_from_a_px_setting_of_4_px_or_more() {
     let soft = |unit: Option<ParamUnit>, at_least_px: f32| ContribDef {
@@ -263,10 +263,10 @@ fn plan_at(
     generator_of(&plan).clone()
 }
 
-/// Wherever on the project's frame grid a stepped generator starts, at 24, 30 and 60 fps, its steps at half
-/// the project's rate hold exactly two frames each and its `kl.frame` rises with each step; an unstepped one's
-/// `kl.frame` counts its frames on the 30 fps grain clock exactly. Local time is a difference of two rounded frame
-/// starts, so it can fall 1 µs short of a boundary they share.
+/// Wherever on the project's frame grid a stepped generator starts, at 24, 30 and 60 fps, its steps at half the
+/// project's rate hold exactly two frames each and its `kl.frame` rises with each step; an unstepped one's `kl.frame`
+/// counts its frames on the 30 fps grain clock exactly. Local time is a difference of two rounded frame starts, so it
+/// can fall 1 µs short of a boundary they share.
 #[test]
 fn steps_and_frames_hold_evenly_wherever_the_layer_starts() {
     for (rate, step) in [(24u32, 12u32), (30, 15), (60, 30)] {
@@ -310,9 +310,9 @@ fn steps_and_frames_hold_evenly_wherever_the_layer_starts() {
                 runs.iter().all(|&r| r == 2),
                 "{rate} fps, {step} fps steps, from frame {start}: holds {runs:?}"
             );
-            // An unstepped generator's `kl.frame` is exactly its frames since the layer began
-            // on the 30 fps grain clock, `(n − start) · 30 / rate`, at every rate, so dropping the frame's slack fails
-            // here at 24 and 60 fps too.
+            // An unstepped generator's `kl.frame` is exactly its frames since the layer began on the 30 fps grain
+            // clock, `(n − start) · 30 / rate`, at every rate, so dropping the frame's slack fails here at 24 and 60
+            // fps too.
             let smooth: Vec<Option<u32>> = frames
                 .clone()
                 .map(|n| {
@@ -332,9 +332,9 @@ fn steps_and_frames_hold_evenly_wherever_the_layer_starts() {
     }
 }
 
-/// A split keeps the seed. Both pieces of a generator layer split by the editor (`Op::SplitItem`, which
-/// gives the second piece an id of its own) seed their passes, the generator's and its filters', as the whole layer
-/// did, so `kl.seed` and `kl_rand` patterns continue across the cut.
+/// A split keeps the seed. Both pieces of a generator layer split by the editor (`Op::SplitItem`, which gives the
+/// second piece an id of its own) seed their passes, the generator's and its filters', as the whole layer did, so
+/// `kl.seed` and `kl_rand` patterns continue across the cut.
 #[test]
 fn a_split_keeps_the_whole_layers_seed() {
     let moving = generator_def("moving", None, Some(12));
@@ -369,8 +369,8 @@ fn a_split_keeps_the_whole_layers_seed() {
     }
 }
 
-/// A generator's `kl.frame`, and its filters', count on the 30 fps grain clock every other layer's grain
-/// counts on, whatever the project's frame rate, so grain refreshes at 30 Hz on every layer.
+/// A generator's `kl.frame`, and its filters', count on the 30 fps grain clock every other layer's grain counts on,
+/// whatever the project's frame rate, so grain refreshes at 30 Hz on every layer.
 #[test]
 fn generator_frames_count_on_the_grain_clock_at_any_project_rate() {
     let moving = generator_def("moving", None, None);

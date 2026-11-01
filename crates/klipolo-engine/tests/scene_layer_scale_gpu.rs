@@ -1,6 +1,5 @@
-//! A scene under its layer's scaling motion on the GPU (the first commit; lavapipe in
-//! CI): its pixel sizes follow the layer's scale, as its text does, so a box that mixes a fraction and pixels keeps its
-//! share of the design through a pop.
+//! A scene under its layer's scaling motion on the GPU (lavapipe in CI): its pixel sizes follow the layer's scale, as
+//! its text does, so a box that mixes a fraction and pixels keeps its share of the design through a pop.
 
 mod support;
 use std::sync::Arc;

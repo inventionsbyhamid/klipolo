@@ -4,7 +4,7 @@
 //! look at the new module. It took [pause 1.5 s] uh a long time."), then nothing is said, so a cut from 12.3 to 19.7 s
 //! stands on nothing and is refused back to the model.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::future::Future;
 use std::pin::pin;
 use std::sync::{Arc, Mutex};
@@ -120,6 +120,7 @@ fn inputs(project: &Project, speech: Speech) -> Inputs {
         analysis: (project.assets.iter())
             .map(|a| (a.id.clone(), AnalysisState::Done))
             .collect(),
+        time_again: HashSet::new(),
         library: Library::default(),
     }
 }

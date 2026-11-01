@@ -1,5 +1,5 @@
-//! Captions in the frame plan (24 and 26; pure planning, no GPU): the page on screen as a `Layer::Caption`
-//! over everything else, its words' state from its style (the frame), its style's face and place.
+//! Captions in the frame plan (pure planning, no GPU): the page on screen as a `Layer::Caption` over everything else,
+//! its words' state from its style (the caption frame), its style's face and place.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -123,8 +123,8 @@ fn mix_at(secs: f64) -> [u8; 3] {
     [m(255.0, 255.0), m(255.0, 212.0), m(255.0, 0.0)]
 }
 
-/// A word-reveal style's page (Bold) shows from its first word's start less the lead, never before the page before
-/// it ends.
+/// A word-reveal style's page (Bold) shows from its first word's start less the lead, never before the page before it
+/// ends.
 #[test]
 fn a_page_shows_from_its_lead_but_never_over_the_page_before() {
     let pages = Pages::one_page("v", s(1.0), s(2.0), &[("Hi", s(1.0), s(1.3))]);

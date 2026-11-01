@@ -1,6 +1,6 @@
-//! A mirrored video layer is drawn mirrored, on each path an overlay video takes: plain (the
-//! image quad's flip), with effects (flipped in the effect stage's first pass, so the effects act on the picture as
-//! shown) and overlay-blended (the read-below pass), in preview and in export.
+//! A mirrored video layer is drawn mirrored, on each path an overlay video takes: plain (the image quad's flip), with
+//! effects (flipped in the effect stage's first pass, so the effects act on the picture as shown) and overlay-blended
+//! (the read-below pass), in preview and in export.
 //!
 //! The layer fills the frame with the bars fixture, so a mirrored render's pixel at x must be the unmirrored render's
 //! at `W - 1 - x`. The fixture isn't symmetric, which the checks first make sure of.

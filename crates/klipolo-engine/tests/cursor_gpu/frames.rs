@@ -155,7 +155,8 @@ async fn a_separate_take_draws_its_cursor_through_the_compositor() {
         near(rgb(&drawn, x - 6.0, y + size / 2.0), [0x1E, 0x64, 0xDC], 6),
         "the footage beside it"
     );
-    // Hidden, and burned in (every take): no cursor at all, pixel for pixel the same frame.
+    // Hidden, and burned in (as every take was before the cursor was captured apart): no cursor at all, pixel for
+    // pixel the same frame.
     let mut hidden = p.clone();
     hidden.cursor.hidden = true;
     let mut burned = p.clone();

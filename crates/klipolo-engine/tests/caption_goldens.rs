@@ -1,7 +1,7 @@
 //! The preview test every caption style needs: one frame of a sample page, compared with its golden.
 //! A new style file without a golden fails here; `UPDATE_GOLDEN=1` writes it. Look at the image before committing it.
 //! Also: the export path draws what the preview does (run in the Linux gate), at two sizes for a glow blurred at half
-//!, and a glyph's ink past its advance is never cut.
+//! size, and a glyph's ink past its advance is never cut.
 
 use klipolo_model::captions::styles::BUILTIN_FILES;
 
@@ -66,9 +66,9 @@ async fn every_built_in_style_draws_like_its_golden() {
     }
 }
 
-/// I17 (in the gate): each style's frame drawn through `ExportJob::create` (frozen `Captions`, the job's fonts folder),
-/// the worker's start-up, context and renderer matches the preview's. Arcade again at 1080 × 1920, where its glow's
-/// blur (σ about 21 px) runs at half size, so both paths are pinned there too.
+/// Run in the Linux gate: each style's frame drawn through `ExportJob::create` (frozen `Captions`, the job's fonts
+/// folder), the worker's start-up, context and renderer matches the preview's. Arcade again at 1080 × 1920, where its
+/// glow's blur (σ about 21 px) runs at half size, so both paths are pinned there too.
 #[tokio::test(flavor = "multi_thread")]
 async fn export_and_preview_draw_the_same_caption_frame() {
     let Some(_gpu) = klipolo_engine::test_support::adapter_or_skip().await else {
@@ -187,9 +187,9 @@ async fn ink_past_a_words_advance_is_drawn_whole() {
     assert!(outside > 255, "the j's tail left of its box: {outside}");
 }
 
-/// The render thread's cost of the captions per frame (the report): the frame's state and the
-/// drawer's `prepare` for a kept page over 1,000 frames, the first frame of a page (it asks the build thread), and how
-/// long until the page shows. Run in release on lavapipe (CPU Vulkan): the figures are lavapipe's, not the Mac's.
+/// The render thread's cost of the captions per frame: the frame's state and the drawer's `prepare` for a kept page
+/// over 1,000 frames, the first frame of a page (it asks the build thread), and how long until the page shows. Run in
+/// release on lavapipe (CPU Vulkan): the figures are lavapipe's, not the Mac's.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU; run in release"]
 async fn a_caption_frame_costs_little() {
@@ -214,9 +214,8 @@ async fn a_caption_frame_costs_little() {
     );
 }
 
-/// A page's outlined silhouette is one glyph a letter (the letter grown by the outline):
-/// each of Bold's three words takes three glyph areas (its fill; its outline, and its fill again over it), where the
-/// stamps took about 50.
+/// A page's outlined silhouette is one glyph a letter (the letter grown by the outline): each of Bold's three words
+/// takes three glyph areas (its fill; its outline, and its fill again over it), where the stamps took about 50.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs a GPU"]
 async fn a_caption_outline_is_one_glyph_a_letter() {

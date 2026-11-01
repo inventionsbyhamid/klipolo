@@ -1,7 +1,6 @@
-//! A measurement the time cut is answered Over with finite figures, the
-//! class is decided per point and the worst point decides, the Over advice quotes the deciding figure
-//!, and the time cut of 2160p is noted. No half-size time is measured that
-//! nothing reads.
+//! A measurement the time cut is answered Over with finite figures, the class is decided per point and the worst point
+//! decides, the Over advice quotes the deciding figure, and the time cut of 2160p is noted. No half-size time is
+//! measured that nothing reads.
 
 use std::time::Duration;
 

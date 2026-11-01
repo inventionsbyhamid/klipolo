@@ -1,5 +1,5 @@
-//! The settings analysis is conservative and bounded. Where
-//! tracking is uncertain a setting is costly at both ends, so it is measured at both.
+//! The settings analysis is conservative and bounded. Where tracking is uncertain a setting is costly at both ends, so
+//! the measurement times it at both.
 
 use std::sync::mpsc;
 use std::time::Duration;

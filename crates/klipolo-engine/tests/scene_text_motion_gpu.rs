@@ -1,8 +1,8 @@
-//! Scene text under layer motion and off the render thread (lavapipe in CI): a scaling layer
-//! lays its text out once and the title scales with its card; a layer scaled from nothing or far up stays bounded
-//!; a wrapped title split by lines fades in line by line, its units taken by the instance that draws it;
-//! text is built on its own thread, the preview drawing without it until it lands and an export waiting. Every
-//! test takes the GPU turn (`gpu_turn`): they count GPU objects, layouts and builds, which the others would make.
+//! Scene text under layer motion and off the render thread (lavapipe in CI): a scaling layer lays its text out once and
+//! the title scales with its card; a layer scaled from nothing or far up stays bounded; a wrapped title split by lines
+//! fades in line by line, its units taken by the instance that draws it; text is built on its own thread, the preview
+//! drawing without it until it lands and an export waiting. Every test takes the GPU turn (`gpu_turn`): they count GPU
+//! objects, layouts and builds, which the others would make.
 
 mod support;
 use support::*;

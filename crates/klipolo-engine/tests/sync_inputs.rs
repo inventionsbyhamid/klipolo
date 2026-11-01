@@ -66,7 +66,7 @@ fn first_loud_frame(fixture_name: &str) -> usize {
         .unwrap()
 }
 
-/// The sound cache's frame 0 is where the probe's sound start is, so `audio_lead_us` places the cache
+/// The sound cache's frame 0 is where the probe's sound start is, so `audio_lead_us` places the cache (a late stream
 /// keeps its AAC priming in both). lead-40ms.mp4's tone begins 61.333 ms after its picture
 /// and its stream 40 ms after it: 1,024 frames in. aac-in-mov.mov's edit list skips the priming: frame 0. Either tone
 /// is a 440 Hz sine from 0, which first reaches a quarter of its peak `RISE` frames in.

@@ -13,7 +13,7 @@ use klipolo_chat::{AnalysisState as ChatAnalysis, BoxFuture, LanguageModel};
 use klipolo_model::speech::Levels;
 
 use super::session::NEEDS_KEY;
-use crate::analysis::{AnalysisState, AssetAnalysis};
+use crate::analysis::{AnalysisState, AnalysisStep, AssetAnalysis, AssetState};
 use crate::credentials::Credentials;
 
 /// Whether a message can go to the model now.
@@ -135,6 +135,14 @@ pub trait Findings: Send + Sync {
 
     /// The sound levels found, by asset id: pauses are read from them.
     fn levels(&self) -> HashMap<String, Arc<Levels>>;
+
+    /// Whether the preview's header offers Time words again for `asset_id`'s rough words: its analysis is done, timing
+    /// them again can help (word timing failed, stopped or didn't finish, not words that don't match their sound), and
+    /// no file's words are being timed (the header shows its spinner then). Chat's refusal of rough filler words points
+    /// there only then. None by default.
+    fn time_again(&self, _asset_id: &str) -> bool {
+        false
+    }
 }
 
 impl Findings for AnalysisState {
@@ -148,6 +156,29 @@ impl Findings for AnalysisState {
 
     fn levels(&self) -> HashMap<String, Arc<Levels>> {
         self.speech().levels.clone()
+    }
+
+    fn time_again(&self, asset_id: &str) -> bool {
+        let offered = matches!(
+            self.state_of(asset_id),
+            AssetState::Done {
+                time_again: true,
+                ..
+            }
+        );
+        // The header's note, as the page shows it: the spinner in the button's place while any file's words are timed.
+        let timing = || {
+            (self.states().iter()).any(|s| {
+                matches!(
+                    s.state,
+                    AssetState::Running {
+                        step: AnalysisStep::Words,
+                        ..
+                    }
+                )
+            })
+        };
+        offered && !timing()
     }
 }
 

@@ -136,6 +136,7 @@ export function proposal(id: string, baseRevision: number, parts: Partial<ChatPr
     },
     removedUs: 0,
     tags: [],
+    files: [],
     ...parts,
   };
 }

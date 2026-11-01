@@ -1,5 +1,5 @@
-//! A cost says what decided its class, so a card compares `decidedMs` with `budgetMs` only
-//! when the time did (never "0.3 of 2.0 ms" next to Over), and a cut carries no figure presented as measured.
+//! A cost says what decided its class, so a card compares `decidedMs` with `budgetMs` only when the time did (never
+//! "0.3 of 2.0 ms" next to Over), and a cut carries no figure presented as measured.
 
 use klipolo_engine::make::budget::DecidedBy;
 

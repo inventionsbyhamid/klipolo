@@ -79,9 +79,13 @@ analysis is done.";
 /// A clip whose scene log Klipolo is still making, which the call needs.
 pub const WATCHING: &str = "Klipolo is still watching this clip ({clip}). Try again in a minute, once its analysis is \
 done.";
-/// Filler words in a clip whose words are only roughly timed: a cut would take real words.
+/// Filler words in a clip whose words are only roughly timed: a cut would take real words. Said while the preview's
+/// header offers Time words again for the clip.
 pub const ROUGH_WORDS: &str = "Some words in this clip ({clip}) are only roughly timed, so Klipolo can't cut filler \
-words exactly. Ask the person to time the words again in Klipolo's Captions panel, then try again.";
+words exactly. Ask the person to press Time words again above the video in Klipolo, then try again.";
+/// `ROUGH_WORDS` when the header doesn't offer Time words again for the clip (timing again can't help, or its analysis
+/// or another file's word timing isn't done): it names no button.
+pub const ROUGH_WORDS_STAY: &str = "Some words in this clip ({clip}) are only roughly timed, so Klipolo can't cut filler words exactly.";
 /// What a time must stand on, after "a word, a pause, a scene, a clip's start or end": an app's own words never count.
 pub const TIMES_FROM: &str = ", the person's selection or playhead in Klipolo, or the video's start or end. Use a \
 time from getContext or getTranscript.";

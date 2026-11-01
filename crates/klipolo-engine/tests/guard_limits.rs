@@ -92,7 +92,7 @@ fn a_test_or_a_step_hoisted_out_of_the_loop_is_no_bound() {
     for (; i < 4; i = s + 1) { c += 0.1; }
     return vec4<f32>(c);";
     assert_eq!(trips(hoisted_step), None, "`i` sticks at 1");
-    // The review's attack: about a thousand loop-free operations a step, read as one step before.
+    // A crafted attack: about a thousand loop-free operations a step, once read as one step.
     let attack = "fn w0(x: f32) -> f32 { return sin(x) * 1.01 + cos(x) * 0.99 + x * 0.5 + 0.25; }
 fn w1(x: f32) -> f32 { return w0(w0(w0(w0(w0(w0(w0(w0(w0(w0(x)))))))))); }
 fn w2(x: f32) -> f32 { return w1(w1(w1(w1(w1(w1(w1(w1(w1(w1(x)))))))))); }

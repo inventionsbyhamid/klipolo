@@ -12,6 +12,9 @@ mod fake_host;
 
 use agent::{Agent, assert_refused, outcome, request, text};
 use fake_host::FakeHost;
+use std::collections::HashSet;
+use std::sync::Arc;
+
 use klipolo_chat::{AnalysisState, FunctionCall, Job, Moment, Proposal, ToolCall, View, compile};
 use klipolo_mcp::Host;
 use klipolo_mcp::call::from_app;
@@ -19,14 +22,15 @@ use klipolo_mcp::rpc::{Handled, Mcp};
 use klipolo_mcp::words::{
     DECIDED, DONE, KLIPOLO_CHAT, MOVED, NO_CREDIT, NO_MOMENTS, NOT_PROPOSED, NOT_YOURS,
     NOTHING_TO_UNDO, OVER_SHARE, OWN_CHANGED, OWN_MOVED, OWN_WAITING, PROPOSED_NO_FOOTAGE,
-    PUSHES_OUT, READ_FIRST, REDO_WAITS, STALE, STARTED, UNCHANGED, UNDO_DROPPED, UNDONE,
-    WAITING_OTHER, fill,
+    PUSHES_OUT, READ_FIRST, REDO_WAITS, ROUGH_WORDS_STAY, STALE, STARTED, UNCHANGED, UNDO_DROPPED,
+    UNDONE, WAITING_OTHER, fill,
 };
 use klipolo_model::Transaction;
 use klipolo_model::coded::ErrorParam;
 use klipolo_model::history::{HistoryLimits, Maker};
 use klipolo_model::ops::{Op, Origin};
 use klipolo_model::project::FormatKind;
+use klipolo_model::speech::WordKind;
 use klipolo_model::time::RangeUs;
 use klipolo_model::timeline::ItemContent;
 use serde_json::{Value, json};
@@ -433,6 +437,38 @@ fn still_listening_refusal_names_the_clip() {
 }
 
 #[test]
+fn rough_filler_refusal_asks_the_person_to_time_the_words_again() {
+    let host = FakeHost::two_clips();
+    let mcp = Mcp::new(host.clone());
+    let agent = Agent::open(&mcp, "Agent");
+    {
+        // The first word, heard as "um", was spread over its turn when word timing failed: its time is a guess.
+        let mut s = host.state();
+        let t = Arc::make_mut(s.speech.transcripts.get_mut("clip-a").unwrap());
+        let w = &mut t.words[0];
+        (w.text, w.kind, w.confidence) = ("um".into(), WordKind::Filler, 0.0);
+    }
+    // The preview offers Time words again for the clip: the app asks the person to press it.
+    host.state().time_again = HashSet::from(["clip-a".to_owned()]);
+    assert_refused(
+        &agent.call("removeFillers", json!({})),
+        "Some words in this clip (c1) are only roughly timed, so Klipolo can't cut filler words exactly. Ask the \
+         person to press Time words again above the video in Klipolo, then try again.",
+    );
+    // Not offered (timing again can't help, or another file's words are being timed): no button is named.
+    host.state().time_again = HashSet::new();
+    assert_refused(
+        &agent.call("removeFillers", json!({})),
+        "Some words in this clip (c1) are only roughly timed, so Klipolo can't cut filler words exactly.",
+    );
+    assert_eq!(
+        fill(ROUGH_WORDS_STAY, &[("clip", "c1")]),
+        "Some words in this clip (c1) are only roughly timed, so Klipolo can't cut filler words exactly."
+    );
+    assert!(host.state().slot.is_none());
+}
+
+#[test]
 fn parse_error_names_the_field() {
     let host = FakeHost::two_clips();
     let mcp = Mcp::new(host.clone());
@@ -567,6 +603,7 @@ fn agent_words_are_exact() {
         LISTENING,
         WATCHING,
         ROUGH_WORDS,
+        ROUGH_WORDS_STAY,
         TIMES_FROM,
         NO_PROMPT,
         DROPPED_CHANGED,

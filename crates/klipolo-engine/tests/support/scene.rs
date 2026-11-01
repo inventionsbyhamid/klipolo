@@ -1,4 +1,4 @@
-//! The test helpers for `scene@1` and its renderer.
+//! Test helpers for `scene@1` and its renderer: helpers for these go here.
 
 use std::sync::Arc;
 
@@ -219,7 +219,6 @@ pub fn scene_golden(name: &str, img: &image::RgbaImage) {
     let (within, mean) = klipolo_engine::test_support::compare(img, &want, 2);
     if let Some(out) = std::env::var_os("GOLDEN_OUT") {
         // The frame drawn and where it differs from the golden, sixteen times over, into that folder.
-        // at), into that folder.
         let out = std::path::Path::new(&out);
         std::fs::create_dir_all(out).unwrap();
         img.save(out.join(format!("{name}.png"))).unwrap();

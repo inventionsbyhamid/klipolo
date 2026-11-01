@@ -1,5 +1,5 @@
 //! The cursor shapes behind the pixel test: a refused shape stays refused when its take is loaded again, nothing is
-//! m3), nothing is made for cursors where no clip draws one, and an export pass puts every shape in each of its
+//! made for cursors where no clip draws one, and an export pass puts every shape in each of its formats' atlases before
 //! its first frame. They need a GPU (lavapipe in CI).
 
 use std::sync::Arc;

@@ -6,8 +6,9 @@
 //! - `removeSilences`: the pauses in the sound (`timeline_pauses`, from the loudness levels) longer than the length
 //!   asked, `PAUSE_US` when none was.
 //! - `removeFillers`: every filler word, each cut as `word_cut` pads it. None is cut while any is only roughly timed
-//!   (its word's confidence 0: spread over its turn when word timing failed): the person is told to time the words
-//!   again (`ROUGH_FILLERS`), naming the clip.
+//!   (its word's confidence 0: spread over its turn when word timing failed), naming the clip: the person is told to
+//!   press Time words again when the preview's header offers it for that clip (`ROUGH_FILLERS`), else only why
+//!   (`ROUGH_FILLERS_STAY`).
 //!
 //! The pauses and fillers are found on the working copy itself, so they need no mapping. Nothing to remove is told to
 //! the person (`NO_FILLERS`, "There are no pauses longer than 1.0 s to remove."): asking the model again could not
@@ -22,7 +23,8 @@ use klipolo_model::speech::{PAUSE_US, Speech, Spoken, SpokenWord, WordKind, spok
 use klipolo_model::time::{RangeUs, Us, kept_parts, merge_ranges};
 
 use super::{
-    Audience, Compiler, Edit, NO_FILLERS, ROUGH_FILLERS, Refused, label, to_model, to_person, us,
+    Audience, Compiler, Edit, NO_FILLERS, ROUGH_FILLERS, ROUGH_FILLERS_STAY, Refused, label,
+    to_model, to_person, us,
 };
 use crate::context::secs;
 use crate::tools::ToolCall;
@@ -131,8 +133,14 @@ fn remove_fillers(c: &Compiler, work: &Project) -> Result<Edit, Refused> {
     if let Some(rough) =
         (fillers.iter().map(|&i| &words.words[i])).find(|w| guessed(&words, w, speech))
     {
+        // Said with the button only while the preview's header offers it for the clip.
+        let reason = if c.inputs.time_again.contains(words.asset(rough)) {
+            ROUGH_FILLERS
+        } else {
+            ROUGH_FILLERS_STAY
+        };
         return Err(Refused {
-            reason: ROUGH_FILLERS.to_owned(),
+            reason: reason.to_owned(),
             audience: Audience::Person,
             clip: c.inputs.refs.ref_of(&words.spans[rough.span as usize].clip),
         });

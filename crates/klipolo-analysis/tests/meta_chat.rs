@@ -5,7 +5,7 @@
 //! The project is "talk.mov", 30 s, played whole: "Hello there friends." is said from 0.5 to 2.0 s and nothing after,
 //! so a cut from 12.3 to 19.7 s stands on nothing and goes back to the model.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -113,6 +113,7 @@ fn talk() -> (Project, Inputs, ChatContext) {
         speech,
         scenes: HashMap::new(),
         analysis: HashMap::from([("talk".to_owned(), AnalysisState::Done)]),
+        time_again: HashSet::new(),
         library: Library::default(),
     };
     let ctx = build_context(

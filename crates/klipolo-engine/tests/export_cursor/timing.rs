@@ -1,4 +1,4 @@
-//! What the cursor costs an export, measured (run by hand, in release; the Mac's figures come from a Mac run):
+//! What the cursor costs an export, measured (run by hand, in release; the Mac's figures come from a run on a Mac):
 //! - a frame drawn with the cursor layer against the same frame without it, relative, under 3 %;
 //! - the preparation before frame 1 for a 2-hour take: loading and smoothing it, and putting its shapes in the atlas.
 //!
@@ -60,7 +60,7 @@ async fn export_overhead_with_the_cursor_layer_is_under_3_percent() {
 #[ignore = "a measurement at real scale: needs a GPU; run in release"]
 fn preparing_a_2_hour_take_before_frame_1_is_bounded() {
     // A 2-hour tutorial take: a 1.5 s glide every 6 s with a click at its end and a new shape each time (12 of them),
-    // at rest between: 25 % moving at 120 Hz, as the speed test.
+    // at rest between: 25 % moving at 120 Hz, as the cursor layer's speed test.
     let dir = tempfile::tempdir().unwrap();
     let shapes: Vec<Shape> = (0..12)
         .map(|id| Shape {

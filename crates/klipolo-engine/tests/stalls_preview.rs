@@ -1,4 +1,4 @@
-//! On a Mac: the preview's AVAssetReader stalls. It keeps Cap's fixed deadline and opens a stalled reader
+//! On a Mac: the preview's AVAssetReader stalls. It keeps its fixed deadline and opens a stalled reader
 //! again before decoding in software. Run on a Mac: `cargo test -p klipolo-engine --features trial --test stalls_preview
 //! -- --include-ignored --test-threads=2`.
 #![cfg(all(feature = "trial", target_os = "macos"))]

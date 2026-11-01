@@ -142,9 +142,9 @@ fn a_shape_mask_on_the_footage_masks_the_cursor_too() {
 
 #[test]
 fn a_burned_in_take_never_reads_the_cursor_cache() {
-    // Every take was burned in (and still is on Windows and Linux), so its frames must cost what they did
-    // before the cursor layer: the plan returns before the cache's lock. A separate take reads it once
-    // a frame.
+    // Every take was burned in before the cursor was captured apart (and still is on Windows and Linux), so its frames
+    // must cost what they did before the cursor layer: the plan returns before the cache's lock. A separate take reads
+    // it once a frame.
     let dir = tempfile::tempdir().unwrap();
     let mut lines = take(rest(0.5, 0.5, 0.0, 8.0));
     lines[0] = crate::support::takes::header(Capture::Burned);
