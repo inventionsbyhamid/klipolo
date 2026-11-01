@@ -936,7 +936,12 @@ mod tests {
         );
         assert!(first.asset.has_audio && first.asset.duration_us > 60_000_000);
         // The pack as its manifest lists it, each file where the manifest says.
-        assert_eq!(library.items.len(), 1 + 16);
+        let pack = dir.join(set.pack.as_deref().unwrap());
+        let manifest: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(pack).unwrap()).unwrap();
+        let listed = manifest["items"].as_array().unwrap().len();
+        assert!(listed > 16, "the pack lists {listed} items");
+        assert_eq!(library.items.len(), 1 + listed);
         let whoosh = (library.items.iter()).find(|i| i.name == "Whoosh").unwrap();
         assert_eq!((whoosh.kind, whoosh.pack), (MediaKind::Sound, true));
         assert_eq!(whoosh.asset.duration_us, 900_000);
